@@ -1528,6 +1528,21 @@ def _build_graph(result, ctx, resolved, all_java, bean_methods, by_key):
         if cls in nodes:
             add_edge(mid, cls, "declared-in")
 
+    # expression --calls--> method / --reads--> bean class, so an expression node itself
+    # links to what it invokes (e.g. ${myService.doWork(...)} -> the method node).
+    bean_fqn = {r["value"]: r["targetFqn"] for r in resolved if r["kind"] == "bean" and r.get("targetFqn")}
+    for expr in ctx["expr_use"]:
+        enode = f"expression:{expr}"
+        if enode not in nodes:
+            continue
+        body = re.sub(r"^[#$]\{|\}$", "", expr)
+        for cm in METHOD_CALL_FULL_RE.finditer(body):
+            fqn = bean_fqn.get(cm.group(1))
+            if not fqn:
+                continue
+            mid = f"method:{fqn}#{cm.group(2)}"
+            add_edge(enode, mid if mid in nodes else f"java:{fqn}", "calls")
+
     # model -> external (unresolved beans/classes/platform) so "what it touches" is complete
     ext_seen = set()
     for r in result.get("unresolvedRefs", []):
