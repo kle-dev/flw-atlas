@@ -745,7 +745,9 @@ def parse_service(data, ctx, ffile):
             "tableName": doc.get("tableName"),
             "referencedLiquibaseModelKey": doc.get("referencedLiquibaseModelKey"),
             "referenceKey": doc.get("referenceKey"),
-            "columns": [c.get("columnName") or c.get("name") for c in (doc.get("columnMappings") or [])],
+            "columns": [{"name": c.get("name") or c.get("columnName"),
+                         "columnName": c.get("columnName"), "type": c.get("type")}
+                        for c in (doc.get("columnMappings") or [])],
             "operations": []}
     for op in doc.get("operations", []) or []:
         if not isinstance(op, dict):
@@ -2439,7 +2441,7 @@ function describe(n){
   else if(n.type==='decision'){ add('Hit policy',d.hitPolicy); add('Rules',d.ruleCount); add('Inputs',(d.inputs||[]).join(', ')); add('Outputs',(d.outputs||[]).join(', ')); }
   else if(n.type==='form'||n.type==='page'){ add('Fields',(d.fields||[]).length); add('Outcomes',(d.outcomes||[]).map(o=>o.value).filter(Boolean).join(', ')); }
   else if(n.type==='dataObject'){ add('Type',d.dataObjectType); add('Data source',d.sourceId); add('Backing service',d.service); add('Data dictionary',d.dictionary); add('Columns',(d.fields||[]).length); }
-  else if(n.type==='service'){ add('Type',d.type); add('Base URL',d.baseUrl); add('Auth',d.auth); add('Table',d.tableName); add('Liquibase model',d.referencedLiquibaseModelKey); add('Columns',(d.columns||[]).join(', ')); add('Operations',(d.operations||[]).length); }
+  else if(n.type==='service'){ add('Type',d.type); add('Base URL',d.baseUrl); add('Auth',d.auth); add('Table',d.tableName); add('Liquibase model',d.referencedLiquibaseModelKey); add('Columns',(d.columns||[]).length); add('Operations',(d.operations||[]).length); }
   else if(n.type==='agent'){ add('Vendor / model',(d.aiVendor||'')+' / '+(d.modelName||'')); add('Temperature',d.temperature); add('API endpoint',String(d.enableApiEndpoint)); add('Knowledge base',d.knowledgeBase); }
   else if(n.type==='channel'){ add('Direction',d.channelType); add('Type',d.type); add('Topics',(d.topics||[]).join(', ')); add('Destination',d.destination); }
   else if(n.type==='event'){ add('Payload',(d.payload||[]).join(', ')); add('Correlation',(d.correlation||[]).join(', ')); }
@@ -2463,6 +2465,13 @@ function detailExtra(n){
   if(n.type==='service' && (d.operations||[]).length){
     h+='<h3 class="rel">Operations</h3><div class="oplist">'+
       d.operations.map(o=>'<div class="oprow"><span class="verb" style="color:'+color("endpoint")+'">'+esc(o.method||'?')+'</span><span>'+esc(o.fullUrl||o.url||'')+'</span><span class="muted">'+esc(o.key||'')+'</span></div>').join('')+'</div>';
+  }
+  if(n.type==='service' && (d.columns||[]).length){
+    h+='<h3 class="rel">Columns / field mappings ('+d.columns.length+')</h3><div class="oplist">'+
+      d.columns.map(c=>'<div class="oprow"><span>'+esc(c.name||'')+'</span>'+
+        (c.columnName&&c.columnName!==c.name?'<span class="muted">'+esc(c.columnName)+'</span>':'')+
+        (c.type?'<span class="mono" style="margin-left:auto;color:var(--ink-faint);font-size:10px">'+esc(c.type)+'</span>':'')+
+        '</div>').join('')+'</div>';
   }
   if(n.type==='java' && (d.endpoints||[]).length){
     h+='<h3 class="rel">Endpoints served</h3><div class="oplist">'+
@@ -2597,6 +2606,7 @@ function searchText(n){
   let s=n.label+' '+n.key+' '+(n.file||'')+' '+n.type;
   if(n.type==='dataObject') s+=' '+(d.fields||[]).join(' ')+' '+
     (d.columns||[]).map(c=>(c.label||'')+' '+(c.type||'')).join(' ');
+  if(n.type==='service') s+=' '+(d.columns||[]).map(c=>(c.name||'')+' '+(c.columnName||'')+' '+(c.type||'')).join(' ');
   return s.toLowerCase();
 }
 function doSearch(){
