@@ -736,6 +736,30 @@ def parse_agent(data, ctx, ffile):
     return info
 
 
+def _operation_params(stype, oc):
+    """Best-effort list of the input parameters an operation requires.
+    database: the explicit inputParameterName of each query/sort column.
+    rest / expression / script / ai / mcp: the variable identifiers referenced via
+    ${ } / #{ } anywhere in the operation config (url, body, headers, expression, …)."""
+    names, seen = [], set()
+
+    def addn(n):
+        if n and n not in seen and n not in FLOWABLE_CONTEXT and n not in JAVA_LITERALS:
+            seen.add(n)
+            names.append(n)
+
+    if stype == "database":
+        for grp in ("queryColumns", "sortColumns"):
+            for c in (oc.get(grp) or []):
+                if isinstance(c, dict):
+                    addn(c.get("inputParameterName"))
+    else:
+        for ex in EXPR_RE.findall(json.dumps(oc)):
+            for v in re.findall(r"[#$]\{\s*([A-Za-z_]\w*)", ex):
+                addn(v)
+    return names
+
+
 def parse_service(data, ctx, ffile):
     doc = json.loads(data)
     cfg = doc.get("config") or {}
@@ -757,7 +781,8 @@ def parse_service(data, ctx, ffile):
         if base and full and not str(full).startswith("http"):
             full = base.rstrip("/") + "/" + str(full).lstrip("/")
         info["operations"].append({"key": op.get("key"), "name": op.get("name"),
-                                   "method": oc.get("method"), "url": oc.get("url"), "fullUrl": full})
+                                   "method": oc.get("method"), "url": oc.get("url"), "fullUrl": full,
+                                   "params": _operation_params(doc.get("type"), oc)})
         if oc.get("method") or oc.get("url"):
             ctx["rest_calls"].append({"source": doc.get("key"), "sourceFile": ffile,
                                      "where": op.get("key"), "method": oc.get("method") or "?",
@@ -2488,7 +2513,12 @@ function detailExtra(n){
   const d=n.data||{}; let h='';
   if(n.type==='service' && (d.operations||[]).length){
     h+='<h3 class="rel">Operations</h3><div class="oplist">'+
-      d.operations.map(o=>'<div class="oprow"><span class="verb" style="color:'+color("endpoint")+'">'+esc(o.method||'?')+'</span><span>'+esc(o.fullUrl||o.url||'')+'</span><span class="muted">'+esc(o.key||'')+'</span></div>').join('')+'</div>';
+      d.operations.map(o=>'<div class="oprow" style="flex-wrap:wrap">'+
+        (o.method?'<span class="verb" style="color:'+color("endpoint")+'">'+esc(o.method)+'</span>':'')+
+        '<span>'+esc(o.fullUrl||o.url||o.name||'')+'</span>'+
+        '<span class="muted" style="margin-left:auto">'+esc(o.key||'')+'</span>'+
+        ((o.params&&o.params.length)?'<div style="flex-basis:100%;font-size:10px;color:var(--ink-faint);padding:3px 0 0 2px">params: '+o.params.map(esc).join(', ')+'</div>':'')+
+        '</div>').join('')+'</div>';
   }
   if(n.type==='service' && (d.columns||[]).length){
     h+='<h3 class="rel">Columns / field mappings ('+d.columns.length+')</h3><div class="oplist">'+
