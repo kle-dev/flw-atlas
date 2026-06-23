@@ -157,6 +157,34 @@ def ext_el(el):
     return el.find("extensionElements")
 
 
+# Flowable Design stores work-/start-form model references as extension elements
+# (e.g. <flowable:workformkey>KEY</flowable:workformkey> on a case plan model,
+# process, start event or task) rather than as the runtime flowable:formKey
+# attribute. Surface them too, otherwise a form linked only this way looks "unused".
+DESIGN_FORM_TAGS = {"workformkey": "work-form", "startformkey": "start-form", "formkey": "form"}
+
+
+def design_form_keys(el):
+    """[(rel, formKey), ...] for forms referenced via Flowable Design extension
+    elements directly under `el`'s <extensionElements>."""
+    ext = ext_el(el)
+    if ext is None:
+        return []
+    out = []
+    for tag, rel in DESIGN_FORM_TAGS.items():
+        v = child_text(ext, tag)
+        if v:
+            out.append((rel, v))
+    return out
+
+
+def inout_form_keys(mappings):
+    """Literal form keys pushed into a child scope's form via an in/out mapping,
+    e.g. <flowable:in sourceExpression="DEMO-F062" target="formKey"/>."""
+    return [m.get("source") for m in (mappings or [])
+            if m.get("source") and "formkey" in (m.get("target") or "").lower()]
+
+
 def read_fields(el) -> dict:
     fields, ext = {}, ext_el(el)
     if ext is None:
@@ -355,6 +383,10 @@ def parse_bpmn(data, ctx, ffile):
 
         for el in proc.iter():
             tag, eid, ename = el.tag, el.get("id"), el.get("name")
+            # forms linked via Design extension elements (work-/start-form) on the
+            # process, a start event, a task — anywhere in the tree
+            for rel, fk in design_form_keys(el):
+                add_ref(ctx, pkey, "bpmn", ffile, rel, "form", fk)
             mi = el.find("multiInstanceLoopCharacteristics")
             if mi is not None and tag not in ("process",):
                 info["multiInstance"].append(
@@ -417,9 +449,12 @@ def parse_bpmn(data, ctx, ffile):
                 add_ref(ctx, pkey, "bpmn", ffile, "ruleTask-decision", "decision", dref)
             elif tag == "callActivity":
                 called = el.get("calledElement")
+                io = read_in_out(el)
                 info["callActivities"].append({"id": eid, "name": ename, "calledElement": called,
-                                                "inOut": read_in_out(el)})
+                                                "inOut": io})
                 add_ref(ctx, pkey, "bpmn", ffile, "callActivity", "process", called)
+                for fk in inout_form_keys(io):
+                    add_ref(ctx, pkey, "bpmn", ffile, "task-form-mapping", "form", fk)
             elif tag in ("subProcess", "transaction", "adhocSubProcess"):
                 info["subProcesses"].append({"id": eid, "name": ename, "type": tag,
                                              "eventSubProcess": el.get("triggeredByEvent") == "true"})
@@ -509,6 +544,12 @@ def _cmmn_def(ctx, case_key, ffile, el):
             d["scriptFormat"] = el.get("scriptFormat")
             d["script"] = read_fields(el).get("script")
             collect_script_vars(ctx, d["script"], [case_key])
+    # Forms linked via Design extension elements or pushed in through an in-mapping
+    # (e.g. a process/case task that sets the child's formKey to a literal form key).
+    for rel, fk in design_form_keys(el):
+        add_ref(ctx, case_key, "cmmn", ffile, rel, "form", fk)
+    for fk in inout_form_keys(d.get("inOut")):
+        add_ref(ctx, case_key, "cmmn", ffile, "task-form-mapping", "form", fk)
     d["listeners"] = read_listeners(el)
     collect_listener_refs(ctx, case_key, "cmmn", ffile, d["listeners"])
     return d
@@ -560,8 +601,12 @@ def parse_cmmn(data, ctx, ffile):
                 "sentries": [], "milestones": [], "eventListeners": [], "modelRefs": []}
         add_access(ctx, ckey, "case", "start", "start",
                    case.get("candidateStarterGroups"), case.get("candidateStarterUsers"))
-        if plan is not None and plan.get("formKey"):
-            add_ref(ctx, ckey, "cmmn", ffile, "start-form", "form", plan.get("formKey"))
+        if plan is not None:
+            if plan.get("formKey"):
+                add_ref(ctx, ckey, "cmmn", ffile, "start-form", "form", plan.get("formKey"))
+            # case work form / start form referenced via Design extension elements
+            for rel, fk in design_form_keys(plan):
+                add_ref(ctx, ckey, "cmmn", ffile, rel, "form", fk)
         # case-level extension references
         ext = ext_el(case) if case is not None else None
         if ext is not None:
@@ -631,8 +676,11 @@ def parse_form(data, ctx, ffile):
     doc = json.loads(data)
     meta = doc.get("metadata", {})
     key = meta.get("key")
+    # .page models share this parser but are a distinct model type — don't let them
+    # default to "form" (that mislabels dashboards and drags them into "Forms · unused").
+    default_type = "page" if str(ffile).lower().endswith(".page") else "form"
     info = {"key": key, "name": meta.get("name"), "file": ffile,
-            "modelType": meta.get("modelType", "form"), "fields": [], "outcomes": [],
+            "modelType": meta.get("modelType") or default_type, "fields": [], "outcomes": [],
             "dataSources": [], "subforms": []}
 
     for oc in doc.get("outcomes", []) or []:
@@ -1312,6 +1360,9 @@ def extract(root):
         if m and m.group(1) not in MUSTACHE_IGNORE:
             variables.add(m.group(1))
 
+    # ---- Schema coverage: Liquibase column -> service mapping -> data object field ----
+    _schema_coverage(result)
+
     # ---- Build a navigable graph (nodes + edges) for the HTML explorer ----
     graph = _build_graph(result, ctx, resolved, all_java, bean_methods, by_key)
 
@@ -1374,6 +1425,132 @@ def _liquibase_key(path):
     base = re.sub(r"^liquibase-", "", base)
     base = re.sub(r"\.data\.changelog\.xml$|\.changelog\.xml$|\.xml$|\.sql$", "", base, flags=re.I)
     return base
+
+
+def _loose(s):
+    """Loose column-identity key: lowercase, drop every non-alphanumeric. Bridges
+    the SQL <-> logical naming gap so the same field lines up across layers, e.g.
+    CREW_ID_  ==  crewId  ==  crew_id  ==  crewid."""
+    return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+
+
+def _schema_coverage(result):
+    """Line up every column across the three layers of the data chain
+    (Liquibase changelog -> service column mapping -> data object field) and flag
+    any Liquibase column that is not carried through to the service and/or to a
+    backing data object.
+
+    Attaches `schemaCoverage` to each service (the join hub: it points at its
+    Liquibase changelog via referencedLiquibaseModelKey/tableName and is referenced
+    back by its data objects) and `coverage` to each referenced Liquibase changelog
+    (so the changelog view can highlight orphan columns directly)."""
+    lb_by_key = {lb["key"]: lb for lb in result["liquibase"]}
+    lb_by_table = {}
+    for lb in result["liquibase"]:
+        for t in (lb.get("tables") or []):
+            lb_by_table.setdefault(t.upper(), lb)
+    dos_by_service = {}
+    for d in result["dataObjects"]:
+        if d.get("service"):
+            dos_by_service.setdefault(d["service"], []).append(d)
+    # consumed[lb_key] = {"service": {loose names}, "dataObject": {loose names}}
+    consumed = {}
+
+    for s in result["services"]:
+        rk = s.get("referencedLiquibaseModelKey")
+        lb = lb_by_key.get(rk) if rk else None
+        if lb is None and s.get("tableName"):
+            lb = lb_by_table.get(s["tableName"].upper())
+
+        svc_table = (s.get("tableName") or "").upper() or None
+        lb_cols = []
+        if lb:
+            for c in (lb.get("columns") or []):
+                if svc_table and c.get("table") and c["table"].upper() != svc_table:
+                    continue
+                lb_cols.append(c)
+            if svc_table and not lb_cols:        # table name didn't line up — show the lot
+                lb_cols = list(lb.get("columns") or [])
+
+        svc_by_loose = {}
+        for c in (s.get("columns") or []):
+            sql = c.get("columnName") or c.get("name")
+            if sql:
+                svc_by_loose.setdefault(_loose(sql), c)
+
+        dos = dos_by_service.get(s.get("key"), [])
+        do_by_loose = {}                          # loose name -> [(do_key, field), ...]
+        for d in dos:
+            for f in (d.get("columns") or []):
+                if f.get("name"):
+                    do_by_loose.setdefault(_loose(f["name"]), []).append((d.get("key"), f))
+
+        def do_hits_for(*names):
+            seen, hits = set(), []
+            for nm in names:
+                if not nm:
+                    continue
+                for dk, f in do_by_loose.get(_loose(nm), []):
+                    k = (dk, f.get("name"))
+                    if k not in seen:
+                        seen.add(k)
+                        hits.append({"do": dk, "field": f.get("name"), "type": f.get("type")})
+            return hits
+
+        rows, seen_svc = [], set()
+        for c in lb_cols:                          # Liquibase = source of truth
+            sql = c.get("name") or ""
+            key = _loose(sql)
+            svc = svc_by_loose.get(key)
+            if svc:
+                seen_svc.add(key)
+            hits = do_hits_for(sql, svc.get("name") if svc else None)
+            status = "ok" if (svc and hits) else ("no-dataobject" if svc else "no-service")
+            rows.append({"sql": sql, "table": c.get("table"), "sqlType": c.get("type"),
+                         "inLiquibase": True, "inService": bool(svc),
+                         "service": (svc.get("name") if svc else None),
+                         "serviceCol": (svc.get("columnName") if svc else None),
+                         "serviceType": (svc.get("type") if svc else None),
+                         "dataObjects": hits, "status": status})
+
+        if lb:                                     # service mappings with no schema column
+            for c in (s.get("columns") or []):
+                sql = c.get("columnName") or c.get("name") or ""
+                if not sql or _loose(sql) in seen_svc:
+                    continue
+                rows.append({"sql": sql, "table": None, "sqlType": None,
+                             "inLiquibase": False, "inService": True,
+                             "service": c.get("name"), "serviceCol": c.get("columnName"),
+                             "serviceType": c.get("type"),
+                             "dataObjects": do_hits_for(c.get("name"), c.get("columnName")),
+                             "status": "extra-service"})
+
+        if lb:
+            cc = consumed.setdefault(lb["key"], {"service": set(), "dataObject": set()})
+            for r in rows:
+                if r["inLiquibase"] and r["inService"]:
+                    cc["service"].add(_loose(r["sql"]))
+                if r["inLiquibase"] and r["dataObjects"]:
+                    cc["dataObject"].add(_loose(r["sql"]))
+
+        if not rows:
+            continue
+        s["schemaCoverage"] = {
+            "liquibase": lb["key"] if lb else None,
+            "table": s.get("tableName"),
+            "dataObjects": [d.get("key") for d in dos],
+            "rows": rows,
+            "counts": {"total": len(rows),
+                       "ok": sum(r["status"] == "ok" for r in rows),
+                       "noService": sum(r["status"] == "no-service" for r in rows),
+                       "noDataObject": sum(r["status"] == "no-dataobject" for r in rows),
+                       "extra": sum(r["status"] == "extra-service" for r in rows)}}
+
+    for lb in result["liquibase"]:
+        cc = consumed.get(lb["key"])
+        if cc:
+            lb["coverage"] = {"service": sorted(cc["service"]),
+                              "dataObject": sorted(cc["dataObject"])}
 
 
 def _vars_in_expr(expr):
@@ -1446,7 +1623,8 @@ def _build_graph(result, ctx, resolved, all_java, bean_methods, by_key):
         add_node("action", a.get("key"), a.get("name"), a.get("file"), a)
     for lb in result["liquibase"]:
         add_node("liquibase", lb.get("key"), os.path.basename(lb["file"]), lb["file"],
-                 {"tables": lb.get("tables"), "columns": lb.get("columns")})
+                 {"tables": lb.get("tables"), "columns": lb.get("columns"),
+                  "coverage": lb.get("coverage")})
     for o in result["others"]:
         add_node(o.get("modelType", "other"), o.get("key"), o.get("name"), o.get("file"), o)
 
@@ -2323,6 +2501,45 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .tag{font-family:var(--mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;
     border:1px solid var(--line2);border-radius:4px;padding:1px 6px;color:var(--ink-dim)}
   .muted{color:var(--ink-faint)}
+
+  /* schema coverage (Liquibase -> service -> data object) */
+  .covmeta{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-family:var(--mono);
+    font-size:11px;color:var(--ink-dim);margin:8px 0}
+  .covbadges{margin:6px 0 4px}
+  .cov-badge{display:inline-block;font-family:var(--mono);font-size:10px;border-radius:999px;
+    padding:2px 9px;margin:0 6px 6px 0;border:1px solid var(--line2);color:var(--ink-dim)}
+  .cov-badge.cov-bad{color:#ff7a93;border-color:rgba(255,122,147,.45)}
+  .cov-badge.cov-warn{color:#f4b942;border-color:rgba(244,185,66,.45)}
+  .cov-badge.cov-info{color:#5b9cff;border-color:rgba(91,156,255,.45)}
+  .cov-badge.cov-good{color:#9ad07a;border-color:rgba(154,208,122,.45)}
+  .covwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;margin:8px 0}
+  table.cov{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:11.5px}
+  table.cov th{text-align:left;font-weight:500;color:var(--ink-faint);background:var(--panel2);
+    padding:7px 11px;border-bottom:1px solid var(--line2);font-size:10px;
+    letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+  table.cov td{padding:6px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+  table.cov tr:last-child td{border-bottom:none}
+  table.cov tr.cov-bad td{background:rgba(255,122,147,.08)}
+  table.cov tr.cov-warn td{background:rgba(244,185,66,.07)}
+  table.cov tr.cov-info td{background:rgba(91,156,255,.06)}
+  table.cov .miss{color:#ff9aab}
+  table.cov .arrow{color:var(--ink-faint)}
+  .covlegend{display:flex;flex-wrap:wrap;gap:14px;font-size:10.5px;color:var(--ink-faint);margin:4px 0 8px}
+  .covlegend span{display:inline-flex;align-items:center;gap:5px}
+  .covdot{display:inline-block;width:7px;height:7px;border-radius:50%;flex:none}
+  .oprow.cov-bad{box-shadow:inset 3px 0 0 #ff7a93}
+  .oprow.cov-warn{box-shadow:inset 3px 0 0 #f4b942}
+
+  /* operation input parameters — aligned grid, one cell per param */
+  .parms{flex-basis:100%;margin-top:7px}
+  .parms .lbl{display:block;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--ink-faint);margin:0 0 5px 1px}
+  .parmgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;
+    background:var(--line2);border:1px solid var(--line2);border-radius:6px;overflow:hidden}
+  .parmgrid .pc{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+    background:var(--panel);padding:4px 10px;min-width:0}
+  .parmgrid .pn{color:var(--ink-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .parmgrid .pt{color:var(--ink-faint);flex:none}
 </style>
 </head>
 <body>
@@ -2365,6 +2582,9 @@ const TM = {
 };
 const SECTIONS = ['Models','Integration','Code','Expressions','Variables','Access','Other'];
 const color = t => getComputedStyle(document.body).getPropertyValue('--c-'+t).trim() || '#8aa0b4';
+const COVC = {good:'#9ad07a', warn:'#f4b942', bad:'#ff7a93', info:'#5b9cff'};
+const covColor = k => COVC[k] || '#8aa0b4';
+const looseCol = s => String(s==null?'':s).toLowerCase().replace(/[^a-z0-9]/g,'');
 
 // adjacency
 const outM = new Map(), incM = new Map();
@@ -2477,7 +2697,8 @@ function describe(n){
   else if(n.type==='decision'){ add('Hit policy',d.hitPolicy); add('Rules',d.ruleCount); add('Inputs',(d.inputs||[]).join(', ')); add('Outputs',(d.outputs||[]).join(', ')); }
   else if(n.type==='form'||n.type==='page'){ add('Fields',(d.fields||[]).length); add('Outcomes',(d.outcomes||[]).map(o=>o.value).filter(Boolean).join(', ')); }
   else if(n.type==='dataObject'){ add('Type',d.dataObjectType); add('Data source',d.sourceId); add('Backing service',d.service); add('Data dictionary',d.dictionary); add('Columns',(d.fields||[]).length); }
-  else if(n.type==='service'){ add('Type',d.type); add('Base URL',d.baseUrl); add('Auth',d.auth); add('Table',d.tableName); add('Liquibase model',d.referencedLiquibaseModelKey); add('Columns',(d.columns||[]).length); add('Operations',(d.operations||[]).length); }
+  else if(n.type==='service'){ add('Type',d.type); add('Base URL',d.baseUrl); add('Auth',d.auth); add('Table',d.tableName); add('Liquibase model',d.referencedLiquibaseModelKey); add('Columns',(d.columns||[]).length); add('Operations',(d.operations||[]).length);
+    if(d.schemaCoverage){ const c=d.schemaCoverage.counts||{}; const g=(c.noService||0)+(c.noDataObject||0); if(g) add('Schema gaps',g+' of '+(c.total||0)+' columns'); } }
   else if(n.type==='agent'){ add('Vendor / model',(d.aiVendor||'')+' / '+(d.modelName||'')); add('Temperature',d.temperature); add('API endpoint',String(d.enableApiEndpoint)); add('Knowledge base',d.knowledgeBase); }
   else if(n.type==='channel'){ add('Direction',d.channelType); add('Type',d.type); add('Topics',(d.topics||[]).join(', ')); add('Destination',d.destination); }
   else if(n.type==='event'){ add('Payload',(d.payload||[]).join(', ')); add('Correlation',(d.correlation||[]).join(', ')); }
@@ -2504,10 +2725,48 @@ function detailExtra(n){
         (o.method?'<span class="verb" style="color:'+color("endpoint")+'">'+esc(o.method)+'</span>':'')+
         '<span>'+esc(o.fullUrl||o.url||o.name||'')+'</span>'+
         '<span class="muted" style="margin-left:auto">'+esc(o.key||'')+'</span>'+
-        ((o.params&&o.params.length)?'<div style="flex-basis:100%;font-size:10px;color:var(--ink-faint);padding:3px 0 0 2px">params: '+o.params.map(p=>'<span style="color:var(--ink-dim)">'+esc(p.name)+'</span>'+(p.type?' '+esc(p.type):'')).join(', ')+'</div>':'')+
+        ((o.params&&o.params.length)?'<div class="parms"><span class="lbl">params ('+o.params.length+')</span>'+
+          '<div class="parmgrid">'+o.params.map(p=>'<div class="pc"><span class="pn">'+esc(p.name)+'</span>'+
+            (p.type?'<span class="pt">'+esc(p.type)+'</span>':'')+'</div>').join('')+'</div></div>':'')+
         '</div>').join('')+'</div>';
   }
-  if(n.type==='service' && (d.columns||[]).length){
+  if(n.type==='service' && d.schemaCoverage && (d.schemaCoverage.rows||[]).length){
+    const sc=d.schemaCoverage, ct=sc.counts||{};
+    h+='<h3 class="rel">Schema coverage — Liquibase → Service → DataObject</h3>';
+    // source changelog + backing data objects (clickable)
+    let meta='';
+    if(sc.liquibase){ const lc=nodeChip('liquibase:'+sc.liquibase); if(lc) meta+='<span class="muted">changelog</span>'+lc; }
+    (sc.dataObjects||[]).forEach(k=>{ const dc=nodeChip('dataObject:'+k); if(dc) meta+=dc; });
+    if(meta) h+='<div class="covmeta">'+meta+'</div>';
+    // gap summary
+    let badges='';
+    if(ct.noService) badges+='<span class="cov-badge cov-bad">'+ct.noService+' not mapped in service</span>';
+    if(ct.noDataObject) badges+='<span class="cov-badge cov-warn">'+ct.noDataObject+' not in data object</span>';
+    if(ct.extra) badges+='<span class="cov-badge cov-info">'+ct.extra+' not in Liquibase</span>';
+    if(ct.ok) badges+='<span class="cov-badge cov-good">'+ct.ok+' mapped through</span>';
+    if(badges) h+='<div class="covbadges">'+badges+'</div>';
+    const rowCls={'no-service':'cov-bad','no-dataobject':'cov-warn','extra-service':'cov-info','ok':''};
+    const miss='<span class="miss">✗ not mapped</span>';
+    h+='<div class="covwrap"><table class="cov"><thead><tr>'+
+       '<th>Liquibase column</th><th>Service mapping</th><th>Data object field</th></tr></thead><tbody>';
+    sc.rows.forEach(r=>{
+      const lbCell = r.inLiquibase
+        ? '<span>'+esc(r.sql)+'</span>'+(r.sqlType?' <span class="muted">'+esc(r.sqlType)+'</span>':'')
+        : '<span class="miss">— not in changelog</span>';
+      const svCell = r.inService
+        ? '<span>'+esc(r.service||r.serviceCol||'')+'</span>'+
+          (r.serviceCol&&looseCol(r.serviceCol)!==looseCol(r.service||'')?' <span class="muted">'+esc(r.serviceCol)+'</span>':'')+
+          (r.serviceType?' <span class="muted">'+esc(r.serviceType)+'</span>':'')
+        : miss;
+      const doCell = (r.dataObjects&&r.dataObjects.length)
+        ? r.dataObjects.map(x=>'<span>'+esc(x.field)+'</span>'+
+            ((sc.dataObjects||[]).length>1?' <span class="muted">'+esc(x.do)+'</span>':'')).join(', ')
+        : (r.inLiquibase||r.inService?miss:'');
+      h+='<tr class="'+(rowCls[r.status]||'')+'"><td>'+lbCell+'</td><td>'+svCell+'</td><td>'+doCell+'</td></tr>';
+    });
+    h+='</tbody></table></div>';
+  }
+  else if(n.type==='service' && (d.columns||[]).length){
     h+='<h3 class="rel">Columns / field mappings ('+d.columns.length+')</h3><div class="oplist">'+
       d.columns.map(c=>'<div class="oprow"><span>'+esc(c.name||'')+'</span>'+
         (c.columnName&&c.columnName!==c.name?'<span class="muted">'+esc(c.columnName)+'</span>':'')+
@@ -2537,13 +2796,24 @@ function detailExtra(n){
         '</div>').join('')+'</div>';
   }
   if(n.type==='liquibase' && (d.columns||[]).length){
+    const cov=d.coverage;                    // present only when a service references this changelog
+    const inS=cov?new Set(cov.service||[]):null, inD=cov?new Set(cov.dataObject||[]):null;
+    const stOf=k=>!inS.has(k)?'bad':(!inD.has(k)?'warn':'good');
+    const stTitle={bad:'not mapped by any service',warn:'mapped in service, but no data object field',good:'mapped through to a data object'};
     const byT={}; d.columns.forEach(c=>{ (byT[c.table||'(table)']=byT[c.table||'(table)']||[]).push(c); });
-    h+='<h3 class="rel">Columns ('+d.columns.length+')</h3>';
+    h+='<h3 class="rel">Columns ('+d.columns.length+')'+(cov?' — mapping coverage':'')+'</h3>';
+    if(cov) h+='<div class="covlegend">'+
+      '<span><span class="covdot" style="background:'+covColor('bad')+'"></span>not in service</span>'+
+      '<span><span class="covdot" style="background:'+covColor('warn')+'"></span>not in data object</span>'+
+      '<span><span class="covdot" style="background:'+covColor('good')+'"></span>mapped through</span></div>';
     Object.keys(byT).forEach(t=>{
       h+='<div style="margin:6px 0 12px"><div class="muted mono" style="margin-bottom:4px">'+esc(t)+'</div><div class="oplist">'+
-        byT[t].map(c=>'<div class="oprow"><span>'+esc(c.name)+'</span>'+
+        byT[t].map(c=>{ const st=cov?stOf(looseCol(c.name)):null;
+          return '<div class="oprow'+(st==='bad'?' cov-bad':st==='warn'?' cov-warn':'')+'">'+
+          (cov?'<span class="covdot" title="'+stTitle[st]+'" style="background:'+covColor(st)+'"></span>':'')+
+          '<span>'+esc(c.name)+'</span>'+
           (c.type?'<span class="mono" style="margin-left:auto;color:var(--ink-faint);font-size:10px">'+esc(c.type)+'</span>':'')+
-          '</div>').join('')+'</div></div>';
+          '</div>'; }).join('')+'</div></div>';
     });
   }
   if((n.type==='expression'||n.type==='binding') && (d.usedBy||[]).length){
