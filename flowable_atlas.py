@@ -1854,12 +1854,29 @@ def _build_graph(result, ctx, resolved, all_java, bean_methods, by_key):
         elif re.search(r"dataObjectDefinitionKey=|/query/", rc["url"]):
             continue   # represented by queries-dataObject / runs-query edges instead
         else:
-            nid = f"external:{rc['url']}"
+            url = rc["url"]
+            # Classify the target — only genuinely third-party URLs are "external".
+            #  * endpoints.* is the Flowable platform REST API (e.g. endpoints.dataObject
+            #    -> the Data Object API), reached via the configured `endpoints` context.
+            #  * a #/ fragment is in-app navigation: a normal app URL with a client route
+            #    appended (e.g. #/case-view/case/{{$item.id}}), not a REST call at all.
+            data = {"method": rc.get("method")}
+            if "#/" in url or url.lstrip().startswith("#"):
+                data["route"] = True
+                rel = "navigates-to"
+            elif re.search(r"(?:^|[/{$\s])endpoints\.", url):
+                data["platform"] = True
+                data["flowableApi"] = True
+                rel = "rest-call"
+            else:
+                data["external_url"] = True
+                rel = "rest-call"
+            nid = f"external:{url}"
             if nid not in ext_seen:
                 ext_seen.add(nid)
-                nodes[nid] = {"id": nid, "type": "external", "label": rc["url"], "key": rc["url"],
-                              "file": None, "data": {"external_url": True, "method": rc.get("method")}}
-            add_edge(s, nid, "rest-call")
+                nodes[nid] = {"id": nid, "type": "external", "label": url, "key": url,
+                              "file": None, "data": data}
+            add_edge(s, nid, rel)
 
     # group -> model (access)
     for a in ctx["access"]:
@@ -2596,6 +2613,13 @@ const color = t => getComputedStyle(document.body).getPropertyValue('--c-'+t).tr
 const COVC = {good:'#9ad07a', warn:'#f4b942', bad:'#ff7a93', info:'#5b9cff'};
 const covColor = k => COVC[k] || '#8aa0b4';
 const looseCol = s => String(s==null?'':s).toLowerCase().replace(/[^a-z0-9]/g,'');
+// external nodes split into Flowable API / navigation routes / real third-party deps.
+const nodeColor = n => (n && n.type==='external')
+  ? (n.data&&n.data.flowableApi?color('endpoint'):n.data&&n.data.route?color('page'):color('external'))
+  : color(n?n.type:'');
+const nodeKind = n => (n.type!=='external')
+  ? (TM[n.type]?TM[n.type][0]:n.type)
+  : (n.data.flowableApi?'Flowable API':n.data.route?'Navigation route':'External / library');
 
 // adjacency
 const outM = new Map(), incM = new Map();
@@ -2637,6 +2661,13 @@ function categories(){
       Object.keys(scopes).sort().forEach(s=>cats.push({
         id:'variable::'+s, label:'Variable · '+s, sec:'Variables',
         color:color('variable'), count:scopes[s], match:n=>n.type==='variable' && (n.data.scopes||[]).includes(s)}));
+    } else if(t==='external'){
+      // external nodes are not all "library": split out Flowable platform API calls
+      // (endpoints.*) and in-app navigation routes (#/...) from real third-party deps.
+      [{id:'external::api',  label:'Flowable API',        sec:'Integration', color:color('endpoint'), match:n=>n.type==='external'&&n.data.flowableApi},
+       {id:'external::route',label:'Navigation · routes', sec:'Other',       color:color('page'),     match:n=>n.type==='external'&&n.data.route},
+       {id:'external::lib',  label:'External / library',  sec:'Other',       color:color('external'), match:n=>n.type==='external'&&!n.data.flowableApi&&!n.data.route}
+      ].forEach(c=>{ const count=byType.external.filter(c.match).length; if(count) cats.push(Object.assign({count}, c)); });
     } else {
       const m = TM[t]||[t,'Other'];
       cats.push({id:t,label:m[0],sec:m[1],color:color(t),count:byType[t].length,match:n=>n.type===t});
@@ -2678,7 +2709,7 @@ function renderList(){
   items.slice(0,600).forEach((n,i)=>{
     const el=document.createElement('div'); el.className='item'+(state.sel===n.id?' on':'');
     el.style.animationDelay=Math.min(i*8,300)+'ms';
-    el.innerHTML='<span class="dot" style="margin-top:5px;background:'+color(n.type)+'"></span>'+
+    el.innerHTML='<span class="dot" style="margin-top:5px;background:'+nodeColor(n)+'"></span>'+
       '<div class="meta"><div class="nm">'+esc(n.label)+'</div><div class="sub">'+esc(n.key)+'</div></div>';
     el.onclick=()=>select(n.id,true);
     wrap.appendChild(el);
@@ -2693,8 +2724,8 @@ function renderList(){
 function relName(r){ return r; }
 function nodeChip(id){
   const n=byId.get(id); if(!n) return '';
-  return '<span class="nc" data-id="'+enc(id)+'"><span class="dot" style="background:'+color(n.type)+'"></span>'+
-    '<span class="nm">'+esc(n.label)+'</span><span class="ty">'+n.type+'</span></span>';
+  return '<span class="nc" data-id="'+enc(id)+'"><span class="dot" style="background:'+nodeColor(n)+'"></span>'+
+    '<span class="nm">'+esc(n.label)+'</span><span class="ty">'+esc(nodeKind(n))+'</span></span>';
 }
 function groupRels(arr){ const g={}; (arr||[]).forEach(x=>{ (g[x.rel]=g[x.rel]||new Set()).add(x.id); }); return g; }
 
@@ -2723,7 +2754,7 @@ function describe(n){
   else if(n.type==='expression'||n.type==='binding'){ add('Used by', (d.usedBy||[]).length+' model(s)'); }
   else if(n.type==='variable'){ add('Scope',(d.scopes||[]).join(', ')); add('Used in', (d.usages||[]).length+' model(s)'); }
   else if(n.type==='string'){ add('Used in', (d.usages||[]).length+' model(s)'); }
-  else if(n.type==='external'){ add('Kind',d.platform?'Flowable platform bean':(d.external_url?'External URL':d.kind||'external')); }
+  else if(n.type==='external'){ add('Kind',d.flowableApi?'Flowable platform API':d.route?'In-app navigation route':d.platform?'Flowable platform bean':(d.external_url?'External URL':d.kind||'external')); if(d.method&&d.method!=='(button)') add('Method',d.method); }
   else { Object.keys(d).forEach(k=>{ const v=d[k]; if(typeof v==='string'||typeof v==='number') add(k,v); }); }
   return rows;
 }
@@ -2880,7 +2911,7 @@ function renderDetail(){
   h+='<div class="crumbs">'+(state.hist.length?'<button id="back">← back</button>':'')+
      '<span class="trail">'+trail+(trail?' › ':'')+'<b style="color:var(--ink)">'+esc(n.label)+'</b></span></div>';
   h+='<div class="dbody">';
-  h+='<span class="chip"><span class="dot" style="background:'+color(n.type)+'"></span>'+(TM[n.type]?TM[n.type][0]:n.type)+'</span>';
+  h+='<span class="chip"><span class="dot" style="background:'+nodeColor(n)+'"></span>'+esc(nodeKind(n))+'</span>';
   h+='<div class="dtitle">'+esc(n.label)+'</div>';
   h+='<div class="dkey mono">'+esc(n.key)+'</div>';
   if(n.file) h+='<div class="dfile" title="click to copy" data-copy="'+enc(n.file)+'">'+esc(n.file)+'</div>';
@@ -2951,8 +2982,8 @@ function doSearch(){
   resList = nodes.filter(n=>searchText(n).includes(v))
                  .sort((a,b)=> a.label.length-b.label.length).slice(0,40);
   results.innerHTML = resList.map((n,i)=>'<div class="r'+(i===resSel?' sel':'')+'" data-id="'+enc(n.id)+'">'+
-    '<span class="dot" style="background:'+color(n.type)+'"></span><span class="nm">'+esc(n.label)+'</span>'+
-    '<span class="ty mono" style="color:var(--ink-faint);font-size:10px">'+n.type+'</span>'+
+    '<span class="dot" style="background:'+nodeColor(n)+'"></span><span class="nm">'+esc(n.label)+'</span>'+
+    '<span class="ty mono" style="color:var(--ink-faint);font-size:10px">'+esc(nodeKind(n))+'</span>'+
     '<span class="mono" style="margin-left:auto;color:var(--ink-faint);font-size:10px">'+esc(n.key)+'</span></div>').join('')
     || '<div class="r muted">no matches</div>';
   results.classList.add('on');
