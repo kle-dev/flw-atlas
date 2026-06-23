@@ -2530,14 +2530,25 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .oprow.cov-bad{box-shadow:inset 3px 0 0 #ff7a93}
   .oprow.cov-warn{box-shadow:inset 3px 0 0 #f4b942}
 
-  /* operation input parameters — aligned grid, one cell per param */
-  .parms{flex-basis:100%;margin-top:7px}
-  .parms .lbl{display:block;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
-    color:var(--ink-faint);margin:0 0 5px 1px}
-  .parmgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;
-    background:var(--line2);border:1px solid var(--line2);border-radius:6px;overflow:hidden}
+  /* operations — each collapsible, params reveal as a single-column list */
+  details.op,.op.flat{border:1px solid var(--line);border-radius:8px;margin:6px 0;
+    background:var(--panel);overflow:hidden}
+  details.op>summary,.op.flat{display:flex;align-items:center;gap:10px;padding:8px 12px;
+    font-family:var(--mono);font-size:11.5px;color:var(--ink)}
+  details.op>summary{cursor:pointer;list-style:none}
+  details.op>summary::-webkit-details-marker{display:none}
+  details.op>summary:before{content:"▸";color:var(--ink-faint);flex:none;font-size:10px}
+  details.op[open]>summary:before{content:"▾"}
+  .op.flat:before{content:"·";color:var(--ink-faint);flex:none;font-size:10px}
+  details.op>summary:hover{background:#12171c}
+  details.op[open]>summary{border-bottom:1px solid var(--line)}
+  .opname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .opcount{margin-left:auto;flex:none;color:var(--ink-faint);font-size:10px;
+    border:1px solid var(--line2);border-radius:999px;padding:1px 8px}
+  .opkey{flex:none;color:var(--ink-faint)}
+  .parmgrid{display:grid;grid-template-columns:1fr;gap:1px;background:var(--line)}
   .parmgrid .pc{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
-    background:var(--panel);padding:4px 10px;min-width:0}
+    background:var(--panel);padding:5px 12px;min-width:0;font-family:var(--mono);font-size:11.5px}
   .parmgrid .pn{color:var(--ink-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .parmgrid .pt{color:var(--ink-faint);flex:none}
 </style>
@@ -2720,15 +2731,18 @@ function describe(n){
 function detailExtra(n){
   const d=n.data||{}; let h='';
   if(n.type==='service' && (d.operations||[]).length){
-    h+='<h3 class="rel">Operations</h3><div class="oplist">'+
-      d.operations.map(o=>'<div class="oprow" style="flex-wrap:wrap">'+
-        (o.method?'<span class="verb" style="color:'+color("endpoint")+'">'+esc(o.method)+'</span>':'')+
-        '<span>'+esc(o.fullUrl||o.url||o.name||'')+'</span>'+
-        '<span class="muted" style="margin-left:auto">'+esc(o.key||'')+'</span>'+
-        ((o.params&&o.params.length)?'<div class="parms"><span class="lbl">params ('+o.params.length+')</span>'+
+    h+='<h3 class="rel">Operations ('+d.operations.length+')</h3>'+
+      d.operations.map(o=>{
+        const verb=o.method?'<span class="verb" style="color:'+color("endpoint")+'">'+esc(o.method)+'</span>':'';
+        const title='<span class="opname">'+esc(o.fullUrl||o.url||o.name||'')+'</span>';
+        const key='<span class="opkey">'+esc(o.key||'')+'</span>';
+        const np=(o.params||[]).length;
+        if(!np) return '<div class="op flat">'+verb+title+'<span class="opcount">no params</span>'+key+'</div>';
+        return '<details class="op"><summary>'+verb+title+
+          '<span class="opcount">'+np+' param'+(np>1?'s':'')+'</span>'+key+'</summary>'+
           '<div class="parmgrid">'+o.params.map(p=>'<div class="pc"><span class="pn">'+esc(p.name)+'</span>'+
-            (p.type?'<span class="pt">'+esc(p.type)+'</span>':'')+'</div>').join('')+'</div></div>':'')+
-        '</div>').join('')+'</div>';
+            (p.type?'<span class="pt">'+esc(p.type)+'</span>':'')+'</div>').join('')+'</div></details>';
+      }).join('');
   }
   if(n.type==='service' && d.schemaCoverage && (d.schemaCoverage.rows||[]).length){
     const sc=d.schemaCoverage, ct=sc.counts||{};
