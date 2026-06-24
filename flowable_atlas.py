@@ -1262,6 +1262,14 @@ def extract(root):
             result.setdefault("javaByRole", {}).setdefault(role, []).append(jc)
 
     # Liquibase changelogs (link data objects / services by key-in-content).
+    # Parse each into ordered change-ops, then replay every changelog in
+    # apply-order so renameColumn/dropColumn/modifyDataType are honoured: a column
+    # renamed (or dropped) in a later file — e.g. under v2/ — is no longer flagged
+    # "not mapped" against the table an earlier file (v1/) created. Each file-node
+    # then carries the *effective* columns of the tables it touches, not just the
+    # columns as first declared. Apply-order follows a master changelog's
+    # <include>/<includeAll>, else a natural path sort.
+    lb_files = []
     for path in xmls:
         rel = os.path.relpath(path, root) if os.path.isdir(root) else os.path.basename(path)
         try:
@@ -1271,9 +1279,28 @@ def extract(root):
             continue
         if "databaseChangeLog" not in txt and "<changeSet" not in txt and "createTable" not in txt.lower():
             continue
-        tables = sorted(set(re.findall(r'tableName="([^"]+)"', txt)))
-        result["liquibase"].append({"key": _liquibase_key(rel), "file": rel, "tables": tables,
-                                    "columns": _liquibase_columns(txt)})
+        lb_files.append({"path": path, "rel": rel, "txt": txt, "ops": _liquibase_ops(txt),
+                         "tables": sorted(set(re.findall(r'tableName="([^"]+)"', txt)))})
+
+    if lb_files:
+        schema_of, alias_of = {}, {}                        # per replay-group, keyed by file id
+        for grp in _liquibase_groups(lb_files, root):
+            schema, alias = _liquibase_replay(grp)
+            for lf in grp:
+                schema_of[id(lf)], alias_of[id(lf)] = schema, alias
+        for lf in lb_files:
+            schema, alias = schema_of.get(id(lf), {}), alias_of.get(id(lf), {})
+            touched, seen_t = [], set()                     # tables this file has schema ops on
+            for op in lf["ops"]:
+                t = op.get("table") or op.get("newTable")
+                if t and t.upper() not in seen_t:
+                    seen_t.add(t.upper())
+                    touched.append(t)
+            cols = []
+            for t in touched:
+                cols.extend(schema.get(alias.get(t.upper(), t.upper()), []))
+            result["liquibase"].append({"key": _liquibase_key(lf["rel"]), "file": lf["rel"],
+                                        "tables": lf["tables"], "columns": cols})
 
     # Dedupe: the same model is often present both as loose files and inside a
     # -bar.zip; collapse identical refs / rest-calls / model entries.
@@ -1395,27 +1422,232 @@ def _container_of(path):
     return path.rsplit("/", 1)[0] if "/" in path else "."
 
 
-_LB_TABLE_BLOCK_RE = re.compile(r'<(?:createTable|addColumn)\b([^>]*)>(.*?)</(?:createTable|addColumn)>', re.S)
+_LB_BLOCK_RE = re.compile(r'<(createTable|addColumn)\b([^>]*?)>(.*?)</\1\s*>', re.S)
 _LB_COLUMN_RE = re.compile(r'<column\b([^>]*?)/?>')
+_LB_RENAMECOL_RE = re.compile(r'<renameColumn\b([^>]*?)/?>', re.S)
+_LB_DROPCOL_RE = re.compile(r'<dropColumn\b([^>]*?)(?:/>|>(.*?)</dropColumn\s*>)', re.S)
+_LB_MODIFYTYPE_RE = re.compile(r'<modifyDataType\b([^>]*?)/?>', re.S)
+_LB_RENAMETABLE_RE = re.compile(r'<renameTable\b([^>]*?)/?>', re.S)
+_LB_DROPTABLE_RE = re.compile(r'<dropTable\b([^>]*?)/?>', re.S)
+_LB_INCLUDE_RE = re.compile(r'<include(All)?\b([^>]*?)/?>', re.I | re.S)
 
 
-def _liquibase_columns(txt):
-    """Extract (table, column, type) triples from createTable/addColumn blocks of a
-    Liquibase changelog. Types may be raw (BIGINT) or property placeholders
-    (${varchar.type}(255)). Columns inside insert/update data blocks are ignored
-    (they carry no type), so only real schema columns are returned."""
-    cols = []
-    for m in _LB_TABLE_BLOCK_RE.finditer(txt):
-        tn = re.search(r'tableName="([^"]+)"', m.group(1))
-        table = tn.group(1) if tn else None
-        for cm in _LB_COLUMN_RE.finditer(m.group(2)):
-            attrs = cm.group(1)
-            name = re.search(r'\bname="([^"]+)"', attrs)
-            typ = re.search(r'\btype="([^"]+)"', attrs)
-            if name:
-                cols.append({"table": table, "name": name.group(1),
-                             "type": typ.group(1) if typ else None})
-    return cols
+def _lb_attr(s, name):
+    """Read a single XML attribute value out of a tag's attribute string."""
+    m = re.search(r'\b' + re.escape(name) + r'\s*=\s*"([^"]*)"', s or "")
+    return m.group(1) if m else None
+
+
+def _natural_key(s):
+    """Sort key that orders embedded numbers numerically, so v2 < v10 (and
+    KYC-L2 < KYC-L10) instead of the lexical v10 < v2."""
+    return [int(p) if p.isdigit() else p.lower() for p in re.split(r'(\d+)', s or "")]
+
+
+def _liquibase_ops(txt):
+    """Parse a Liquibase changelog into an ordered list of schema change-ops,
+    preserving document order so they can be replayed to compute a table's
+    *effective* columns. Beyond createTable/addColumn this also understands
+    renameColumn, dropColumn, modifyDataType, renameTable and dropTable — the
+    operations that mutate an already-created table. Columns inside insert/update
+    data blocks carry no type and are not matched, so only schema columns flow in.
+    Types may be raw (BIGINT) or property placeholders (${varchar.type}(255))."""
+    found = []
+    for m in _LB_BLOCK_RE.finditer(txt):
+        cols = []
+        for cm in _LB_COLUMN_RE.finditer(m.group(3)):
+            nm = _lb_attr(cm.group(1), "name")
+            if nm:
+                cols.append({"name": nm, "type": _lb_attr(cm.group(1), "type")})
+        if cols:
+            found.append((m.start(), {"op": m.group(1),
+                                      "table": _lb_attr(m.group(2), "tableName"),
+                                      "columns": cols}))
+    for m in _LB_RENAMECOL_RE.finditer(txt):
+        a = m.group(1)
+        old, new = _lb_attr(a, "oldColumnName"), _lb_attr(a, "newColumnName")
+        if old and new:
+            found.append((m.start(), {"op": "renameColumn", "table": _lb_attr(a, "tableName"),
+                                      "oldName": old, "newName": new,
+                                      "type": _lb_attr(a, "columnDataType")}))
+    for m in _LB_DROPCOL_RE.finditer(txt):
+        a, body = m.group(1), m.group(2) or ""
+        names = []
+        single = _lb_attr(a, "columnName")          # attribute form
+        if single:
+            names.append(single)
+        for cm in _LB_COLUMN_RE.finditer(body):     # nested <column name=".."/> form
+            nm = _lb_attr(cm.group(1), "name")
+            if nm:
+                names.append(nm)
+        if names:
+            found.append((m.start(), {"op": "dropColumn", "table": _lb_attr(a, "tableName"),
+                                      "columns": names}))
+    for m in _LB_MODIFYTYPE_RE.finditer(txt):
+        a = m.group(1)
+        col = _lb_attr(a, "columnName")
+        if col:
+            found.append((m.start(), {"op": "modifyDataType", "table": _lb_attr(a, "tableName"),
+                                      "column": col, "type": _lb_attr(a, "newDataType")}))
+    for m in _LB_RENAMETABLE_RE.finditer(txt):
+        a = m.group(1)
+        old, new = _lb_attr(a, "oldTableName"), _lb_attr(a, "newTableName")
+        if old and new:
+            found.append((m.start(), {"op": "renameTable", "oldTable": old, "newTable": new}))
+    for m in _LB_DROPTABLE_RE.finditer(txt):
+        t = _lb_attr(m.group(1), "tableName")
+        if t:
+            found.append((m.start(), {"op": "dropTable", "table": t}))
+    found.sort(key=lambda x: x[0])
+    return [op for _, op in found]
+
+
+def _liquibase_groups(files, root):
+    """Partition changelog files into replay groups, each an apply-ordered list.
+
+    Files reached from a master changelog via <include>/<includeAll> form ONE
+    ordered group that shares a schema — this is the v1/v2/v3 case, where a
+    renameColumn/dropColumn in a later file (e.g. under v2/) acts on a table that
+    an earlier file (v1/) created. Every other file is its own singleton group.
+
+    Scoping by the master's include chain (rather than globally by table name) is
+    deliberate: standalone changelogs — e.g. several Flowable service-registry
+    model exports that each independently `createTable` the same physical table at
+    different revisions — must NOT be merged, or one revision's columns leak into
+    another. include paths match by path suffix, which is robust to
+    classpath:/relativeToChangelogFile resolution differences. v2 < v10 ordering
+    within a group comes from the natural sort."""
+    by_base = {}
+    for f in files:
+        by_base.setdefault(os.path.basename(f["path"]), []).append(f)
+
+    def clean(p):
+        return re.sub(r'^classpath\*?:', '', p or '').replace('\\', '/').strip('/').lower()
+
+    nat = lambda fs: sorted(fs, key=lambda x: _natural_key(x["rel"]))
+
+    def closure(master):                                    # apply-ordered include chain
+        ordered, seen = [], set()
+
+        def walk(f):
+            if id(f) in seen:
+                return
+            seen.add(id(f))
+            for m in _LB_INCLUDE_RE.finditer(f["txt"]):
+                a = m.group(2)
+                if m.group(1):                              # <includeAll path="dir">
+                    pdir = clean(_lb_attr(a, "path") or _lb_attr(a, "dir") or "")
+                    if not pdir:
+                        continue
+                    kids = [g for g in files if id(g) != id(f)
+                            and os.path.dirname(g["path"]).replace('\\', '/').lower().endswith(pdir)]
+                    for g in nat(kids):
+                        walk(g)
+                else:                                       # <include file="x.xml">
+                    ref = clean(_lb_attr(a, "file"))
+                    if not ref:
+                        continue
+                    g = next((x for x in files
+                              if x["path"].replace('\\', '/').lower().endswith(ref)), None)
+                    if g is None:
+                        b = by_base.get(os.path.basename(ref))
+                        g = b[0] if b else None
+                    if g:
+                        walk(g)
+            ordered.append(f)                               # master itself after its includes
+
+        walk(master)
+        return ordered
+
+    masters = [f for f in files if _LB_INCLUDE_RE.search(f["txt"])]
+    assigned, groups = set(), []
+    for master in nat(masters):
+        if id(master) in assigned:                          # already pulled in by an outer master
+            continue
+        grp = [f for f in closure(master) if id(f) not in assigned]
+        if grp:
+            assigned.update(id(f) for f in grp)
+            groups.append(grp)
+    for f in nat(files):                                    # standalone files: one per group
+        if id(f) not in assigned:
+            assigned.add(id(f))
+            groups.append([f])
+    return groups
+
+
+def _liquibase_replay(files):
+    """Replay change-ops across the ordered changelog files to compute each
+    table's effective columns. Returns (schema, alias): schema maps an
+    upper-cased table name to its surviving columns (renames applied, drops
+    removed, types modified); alias maps any historical table name to its final
+    name (for renameTable). Column identity uses _loose() so SQL/logical naming
+    differences don't double-count."""
+    schema, alias = {}, {}
+
+    def cur(tu):                                            # follow renameTable chain
+        seen = set()
+        while tu in alias and tu not in seen:
+            seen.add(tu)
+            tu = alias[tu]
+        return tu
+
+    for lf in files:
+        for op in lf.get("ops", []):
+            kind = op["op"]
+            if kind in ("createTable", "addColumn"):
+                tu = cur((op.get("table") or "").upper())
+                lst = schema.setdefault(tu, [])
+                idx = {c["_k"]: c for c in lst}
+                for col in op["columns"]:
+                    k = _loose(col["name"])
+                    if k in idx:
+                        if col.get("type"):
+                            idx[k]["type"] = col["type"]
+                        continue
+                    c = {"name": col["name"], "type": col.get("type"),
+                         "table": op.get("table"), "_k": k}
+                    idx[k] = c
+                    lst.append(c)
+            elif kind == "renameColumn":
+                tu = cur((op.get("table") or "").upper())
+                lst = schema.get(tu)
+                ok, nk = _loose(op["oldName"]), _loose(op["newName"])
+                hit = next((c for c in lst if c["_k"] == ok), None) if lst else None
+                if hit:
+                    hit["name"], hit["_k"] = op["newName"], nk
+                    if op.get("type"):
+                        hit["type"] = op["type"]
+                else:                                       # old col unknown — surface the new one
+                    schema.setdefault(tu, []).append({"name": op["newName"], "type": op.get("type"),
+                                                      "table": op.get("table"), "_k": nk})
+            elif kind == "dropColumn":
+                tu = cur((op.get("table") or "").upper())
+                lst = schema.get(tu)
+                if lst:
+                    drop = {_loose(n) for n in op["columns"]}
+                    schema[tu] = [c for c in lst if c["_k"] not in drop]
+            elif kind == "modifyDataType":
+                tu = cur((op.get("table") or "").upper())
+                lst = schema.get(tu)
+                if lst and op.get("type"):
+                    k = _loose(op["column"])
+                    for c in lst:
+                        if c["_k"] == k:
+                            c["type"] = op["type"]
+            elif kind == "renameTable":
+                old, new = cur(op["oldTable"].upper()), op["newTable"].upper()
+                if old in schema:
+                    lst = schema.pop(old)
+                    for c in lst:
+                        c["table"] = op["newTable"]
+                    schema[new] = schema.get(new, []) + lst
+                alias[old] = new
+            elif kind == "dropTable":
+                schema.pop(cur((op.get("table") or "").upper()), None)
+
+    out = {t: [{"name": c["name"], "type": c["type"], "table": c["table"]} for c in lst]
+           for t, lst in schema.items()}
+    return out, {k: cur(k) for k in alias}
 
 
 def _liquibase_key(path):
