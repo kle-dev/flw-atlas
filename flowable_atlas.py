@@ -1299,8 +1299,14 @@ def extract(root):
             cols = []
             for t in touched:
                 cols.extend(schema.get(alias.get(t.upper(), t.upper()), []))
+            # effectiveTables = the tables that actually survive the replay (rename
+            # applied, dropped tables gone), taken from the surviving columns so a
+            # renameTable follows to its new name and a history table created
+            # alongside stays a distinct entry.
+            eff_tables = sorted({c["table"] for c in cols if c.get("table")})
             result["liquibase"].append({"key": _liquibase_key(lf["rel"]), "file": lf["rel"],
-                                        "tables": lf["tables"], "columns": cols})
+                                        "tables": lf["tables"], "effectiveTables": eff_tables,
+                                        "columns": cols})
 
     # Dedupe: the same model is often present both as loose files and inside a
     # -bar.zip; collapse identical refs / rest-calls / model entries.
@@ -1389,6 +1395,10 @@ def extract(root):
 
     # ---- Schema coverage: Liquibase column -> service mapping -> data object field ----
     _schema_coverage(result)
+    # ---- Flag each changelog as the live definition of its table(s) vs a
+    #      superseded/orphan revision (several changelogs often recreate the same
+    #      physical table at different revisions). ----
+    _mark_liquibase_authority(result)
 
     # ---- Build a navigable graph (nodes + edges) for the HTML explorer ----
     graph = _build_graph(result, ctx, resolved, all_java, bean_methods, by_key)
@@ -1679,7 +1689,7 @@ def _schema_coverage(result):
     lb_by_key = {lb["key"]: lb for lb in result["liquibase"]}
     lb_by_table = {}
     for lb in result["liquibase"]:
-        for t in (lb.get("tables") or []):
+        for t in (lb.get("effectiveTables") or lb.get("tables") or []):
             lb_by_table.setdefault(t.upper(), lb)
     dos_by_service = {}
     for d in result["dataObjects"]:
@@ -1785,6 +1795,62 @@ def _schema_coverage(result):
                               "dataObject": sorted(cc["dataObject"])}
 
 
+def _mark_liquibase_authority(result):
+    """Flag each changelog as the LIVE (authoritative) definition of its table(s)
+    or a SUPERSEDED / ORPHAN revision.
+
+    Projects routinely carry several changelogs that each `createTable` the same
+    physical table at different revisions (e.g. KYC-D06 / KYC-D06Schema /
+    KYC-D06SchemaNew all create SHOPPING_LIST_). The authoritative one is the
+    revision a service / data object actually references via
+    referencedLiquibaseModelKey (or, lacking that, a service whose tableName
+    matches); the rest are superseded. Table identity is by NAME — taken from
+    effectiveTables, so renameTable follows to the new name and a history table
+    created alongside (same columns, different name) is never mistaken for a copy.
+
+    Sets lb["authority"] = {status, referencedBy, supersededBy}, where status is
+    'live', 'superseded' (another, referenced changelog owns the same table) or
+    'orphan' (nothing references it and no live sibling claims its table). Only the
+    SERVICE is a reliable signal: a service binds a changelog explicitly via
+    referencedLiquibaseModelKey, or implicitly via a matching tableName. Data
+    objects don't reference changelogs directly (they hang off a service), so they
+    are not used here. Changelogs that define no surviving table (a master that
+    only includes others, or data-only inserts) get no authority mark."""
+    explicit = {}                                       # lb key -> [referencing service keys]
+    svc_by_table = {}                                   # TABLE -> [service keys] (tableName match)
+    for s in result.get("services", []):
+        rk = s.get("referencedLiquibaseModelKey")
+        if rk:
+            explicit.setdefault(rk, []).append(s.get("key"))
+        tn = s.get("tableName")
+        if tn:
+            svc_by_table.setdefault(tn.upper(), []).append(s.get("key"))
+
+    def eff(lb):
+        return {t.upper() for t in (lb.get("effectiveTables") or [])}
+
+    owner_of_table = {}                                 # TABLE -> [lb keys a service binds by key]
+    for lb in result.get("liquibase", []):
+        if explicit.get(lb["key"]):
+            for t in eff(lb):
+                owner_of_table.setdefault(t, []).append(lb["key"])
+
+    for lb in result.get("liquibase", []):
+        tbls = eff(lb)
+        if not tbls:                                    # defines no table -> nothing to rank
+            continue
+        refs = sorted(set(explicit.get(lb["key"], [])))
+        owners = sorted({o for t in tbls for o in owner_of_table.get(t, []) if o != lb["key"]})
+        if refs:
+            status, by = "live", refs
+        elif owners:                                    # a service-bound sibling owns this table
+            status, by = "superseded", []
+        else:
+            tbl_refs = sorted({sk for t in tbls for sk in svc_by_table.get(t, [])})
+            status, by = ("live", tbl_refs) if tbl_refs else ("orphan", [])
+        lb["authority"] = {"status": status, "referencedBy": by, "supersededBy": owners}
+
+
 def _vars_in_expr(expr):
     """Variable identifiers used in a ${...}/#{...} expression (not beans/functions/context)."""
     body = re.sub(r"^[#$]\{|\}$", "", expr)
@@ -1855,8 +1921,9 @@ def _build_graph(result, ctx, resolved, all_java, bean_methods, by_key):
         add_node("action", a.get("key"), a.get("name"), a.get("file"), a)
     for lb in result["liquibase"]:
         add_node("liquibase", lb.get("key"), os.path.basename(lb["file"]), lb["file"],
-                 {"tables": lb.get("tables"), "columns": lb.get("columns"),
-                  "coverage": lb.get("coverage")})
+                 {"tables": lb.get("tables"), "effectiveTables": lb.get("effectiveTables"),
+                  "columns": lb.get("columns"), "coverage": lb.get("coverage"),
+                  "authority": lb.get("authority")})
     for o in result["others"]:
         add_node(o.get("modelType", "other"), o.get("key"), o.get("name"), o.get("file"), o)
 
@@ -2180,7 +2247,7 @@ def _build_graph(result, ctx, resolved, all_java, bean_methods, by_key):
     lb_by_key = {lb["key"]: f"liquibase:{lb['key']}" for lb in result["liquibase"]}
     lb_by_table = {}
     for lb in result["liquibase"]:
-        for t in (lb.get("tables") or []):
+        for t in (lb.get("effectiveTables") or lb.get("tables") or []):
             lb_by_table.setdefault(t.upper(), set()).add(f"liquibase:{lb['key']}")
     for n in nodes.values():
         if n["type"] == "service":
@@ -2761,6 +2828,15 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .cov-badge.cov-warn{color:#f4b942;border-color:rgba(244,185,66,.45)}
   .cov-badge.cov-info{color:#5b9cff;border-color:rgba(91,156,255,.45)}
   .cov-badge.cov-good{color:#9ad07a;border-color:rgba(154,208,122,.45)}
+  .authb{display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:.04em;text-transform:uppercase;
+    border-radius:999px;padding:1px 7px;margin-left:7px;border:1px solid var(--line2);vertical-align:middle}
+  .authb-live{color:#9ad07a;border-color:rgba(154,208,122,.5)}
+  .authb-old{color:#f4b942;border-color:rgba(244,185,66,.5)}
+  .authb-orphan{color:#ff7a93;border-color:rgba(255,122,147,.5)}
+  .authnote{font-size:11.5px;line-height:1.5;border-radius:8px;padding:8px 11px;margin:10px 0;border:1px solid var(--line2)}
+  .authnote-old{color:#f4b942;background:rgba(244,185,66,.07);border-color:rgba(244,185,66,.35)}
+  .authnote-orphan{color:#ff7a93;background:rgba(255,122,147,.07);border-color:rgba(255,122,147,.35)}
+  .authnote .nc{margin-top:4px}
   .covwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;margin:8px 0}
   table.cov{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:11.5px}
   table.cov th{text-align:left;font-weight:500;color:var(--ink-faint);background:var(--panel2);
@@ -2942,7 +3018,7 @@ function renderList(){
     const el=document.createElement('div'); el.className='item'+(state.sel===n.id?' on':'');
     el.style.animationDelay=Math.min(i*8,300)+'ms';
     el.innerHTML='<span class="dot" style="margin-top:5px;background:'+nodeColor(n)+'"></span>'+
-      '<div class="meta"><div class="nm">'+esc(n.label)+'</div><div class="sub">'+esc(n.key)+'</div></div>';
+      '<div class="meta"><div class="nm">'+esc(n.label)+authBadge(n)+'</div><div class="sub">'+esc(n.key)+'</div></div>';
     el.onclick=()=>select(n.id,true);
     wrap.appendChild(el);
   });
@@ -2960,6 +3036,16 @@ function nodeChip(id){
     '<span class="nm">'+esc(n.label)+'</span><span class="ty">'+esc(nodeKind(n))+'</span></span>';
 }
 function groupRels(arr){ const g={}; (arr||[]).forEach(x=>{ (g[x.rel]=g[x.rel]||new Set()).add(x.id); }); return g; }
+// Small badge marking a changelog as the live definition of its table vs a superseded/orphan revision.
+function authBadge(n){
+  if(n.type!=='liquibase') return '';
+  const a=(n.data||{}).authority; if(!a||!a.status) return '';
+  if(a.status==='live'){ const by=(a.referencedBy||[]).join(', ');
+    return '<span class="authb authb-live" title="Live / authoritative'+(by?' — referenced by '+esc(by):'')+'">live</span>'; }
+  if(a.status==='superseded'){ const by=(a.supersededBy||[]).join(', ');
+    return '<span class="authb authb-old" title="Superseded — the same table is provided by '+esc(by||'a referenced changelog')+'">superseded</span>'; }
+  return '<span class="authb authb-orphan" title="Orphan — not referenced by any service or data object">orphan</span>';
+}
 
 function describe(n){
   const d=n.data||{}, rows=[];
@@ -2982,7 +3068,11 @@ function describe(n){
   else if(n.type==='query'){ add('Source index',d.sourceIndex); add('Parameters',(d.parameters||[]).join(', ')); add('Filters by groups',(d.groups||[]).length); }
   else if(n.type==='action'){ add('Bot',d.botKey); add('Form',d.formKey); add('Triggers signal',d.signalName); add('Scope',d.scopeType); }
   else if(n.type==='bot'){ add('Kind',d.platform?'Flowable platform bot':'project-defined bot'); }
-  else if(n.type==='liquibase'){ add('Tables',(d.tables||[]).join(', ')); add('Columns',(d.columns||[]).length); }
+  else if(n.type==='liquibase'){ const a=d.authority||{};
+    add('Status', a.status==='live'?'live (authoritative)':a.status==='superseded'?'superseded revision':a.status==='orphan'?'orphan — unreferenced':undefined);
+    if((a.referencedBy||[]).length) add('Referenced by',(a.referencedBy||[]).join(', '));
+    if((a.supersededBy||[]).length) add('Live definition',(a.supersededBy||[]).join(', '));
+    add('Tables',(d.effectiveTables||d.tables||[]).join(', ')); add('Columns',(d.columns||[]).length); }
   else if(n.type==='expression'||n.type==='binding'){ add('Used by', (d.usedBy||[]).length+' model(s)'); }
   else if(n.type==='variable'){ add('Scope',(d.scopes||[]).join(', ')); add('Used in', (d.usages||[]).length+' model(s)'); }
   else if(n.type==='string'){ add('Used in', (d.usages||[]).length+' model(s)'); }
@@ -3072,6 +3162,13 @@ function detailExtra(n){
         (c.type?'<span class="mono" style="margin-left:auto;color:var(--ink-faint);font-size:10px">'+esc(c.type)+'</span>':'')+
         '</div>').join('')+'</div>';
   }
+  if(n.type==='liquibase'){
+    const a=d.authority||{};
+    if(a.status==='superseded'){ const chips=(a.supersededBy||[]).map(k=>nodeChip('liquibase:'+k)).join('');
+      h+='<div class="authnote authnote-old">⚠ Superseded revision — the live definition of <b>'+esc((d.effectiveTables||[]).join(', '))+'</b> is referenced elsewhere. These columns reflect an older revision of the same table.'+(chips?'<div>'+chips+'</div>':'')+'</div>'; }
+    else if(a.status==='orphan'){
+      h+='<div class="authnote authnote-orphan">⚠ Orphan changelog — no service or data object references it. It may be dead/legacy or referenced only at runtime.</div>'; }
+  }
   if(n.type==='liquibase' && (d.columns||[]).length){
     const cov=d.coverage;                    // present only when a service references this changelog
     const inS=cov?new Set(cov.service||[]):null, inD=cov?new Set(cov.dataObject||[]):null;
@@ -3144,7 +3241,7 @@ function renderDetail(){
      '<span class="trail">'+trail+(trail?' › ':'')+'<b style="color:var(--ink)">'+esc(n.label)+'</b></span></div>';
   h+='<div class="dbody">';
   h+='<span class="chip"><span class="dot" style="background:'+nodeColor(n)+'"></span>'+esc(nodeKind(n))+'</span>';
-  h+='<div class="dtitle">'+esc(n.label)+'</div>';
+  h+='<div class="dtitle">'+esc(n.label)+authBadge(n)+'</div>';
   h+='<div class="dkey mono">'+esc(n.key)+'</div>';
   if(n.file) h+='<div class="dfile" title="click to copy" data-copy="'+enc(n.file)+'">'+esc(n.file)+'</div>';
   const rows=describe(n);
