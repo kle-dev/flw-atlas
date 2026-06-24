@@ -550,6 +550,11 @@ def _cmmn_def(ctx, case_key, ffile, el):
         add_ref(ctx, case_key, "cmmn", ffile, rel, "form", fk)
     for fk in inout_form_keys(d.get("inOut")):
         add_ref(ctx, case_key, "cmmn", ffile, "task-form-mapping", "form", fk)
+    # A Case Page task (stencil CasePageTask) exposes tabs via <flowable:page-element>;
+    # a tab can render a specific form, which makes that form used (not orphaned).
+    for pe in el.iter("page-element"):
+        for attr in ("formKey", "formReference", "formRef", "formKeyExpression"):
+            add_ref(ctx, case_key, "cmmn", ffile, "casePage-form", "form", pe.get(attr))
     d["listeners"] = read_listeners(el)
     collect_listener_refs(ctx, case_key, "cmmn", ffile, d["listeners"])
     return d
@@ -718,6 +723,10 @@ def parse_form(data, ctx, ffile):
                        "dataObjectDataTableViewFormKey"):
                 if es.get(fk):
                     add_ref(ctx, key, info["modelType"], ffile, fk, "form", es[fk])
+            # a data table's expandable detail row renders a form (expandablePanel)
+            if es.get("expandablePanel"):
+                add_ref(ctx, key, info["modelType"], ffile, "datatable-detail-form",
+                        "form", es["expandablePanel"])
         u = n.get("url")
         if isinstance(u, str) and u.strip():
             ctx["rest_calls"].append({"source": key, "sourceFile": ffile, "where": n.get("id"),
@@ -935,6 +944,10 @@ def parse_generic(data, ctx, ffile, mtype):
         # template -> the form it renders into
         if mtype == "template" and doc.get("formKey"):
             add_ref(ctx, doc.get("key"), mtype, ffile, "template-form", "form", doc.get("formKey"))
+        # document model -> the form(s) used to create / edit / view its instances
+        if mtype == "document" and isinstance(doc.get("forms"), dict):
+            for op, fk in doc["forms"].items():
+                add_ref(ctx, doc.get("key"), mtype, ffile, f"document-{op}-form", "form", fk)
     return out
 
 
