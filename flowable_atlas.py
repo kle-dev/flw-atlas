@@ -585,7 +585,10 @@ def _cmmn_walk(ctx, case_key, ffile, stage, all_defs=None, seen=None):
                 rn = ic.find(r)
                 if rn is not None:
                     rules[r] = child_text(rn, "condition") or True
-        target = defs.get(pi.get("definitionRef")) or all_defs.get(pi.get("definitionRef"))
+        ref = pi.get("definitionRef")
+        target = defs.get(ref)
+        if target is None:   # not in this scope — resolve case-wide (avoid Element truthiness)
+            target = all_defs.get(ref)
         if target is None:
             node["children"].append({"id": pi.get("id"), "name": pi.get("name"),
                                     "type": "planItem(?)", "rules": rules})
