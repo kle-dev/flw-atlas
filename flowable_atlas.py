@@ -560,8 +560,16 @@ def _cmmn_def(ctx, case_key, ffile, el):
     return d
 
 
-def _cmmn_walk(ctx, case_key, ffile, stage):
+def _cmmn_walk(ctx, case_key, ffile, stage, all_defs=None, seen=None):
     defs = {c.get("id"): c for c in stage if c.get("id")}
+    # CMMN resolves a planItem's definitionRef against the whole case, not just the
+    # current scope's direct children. Flowable Design, for instance, keeps a Case
+    # Page task's definition at case-plan-model level while the planItem that places
+    # it sits inside a plan fragment — so a scope-local lookup misses it and the task
+    # (and its formKey) is never read. Fall back to a case-wide index.
+    if all_defs is None:
+        all_defs = {el.get("id"): el for el in stage.iter() if el.get("id")}
+    seen = seen or set()
     node = {"id": stage.get("id"), "name": stage.get("name"), "type": stage.tag,
             "autoComplete": stage.get("autoComplete"), "children": [], "criteria": []}
     for pi in stage.findall("planItem"):
@@ -577,12 +585,14 @@ def _cmmn_walk(ctx, case_key, ffile, stage):
                 rn = ic.find(r)
                 if rn is not None:
                     rules[r] = child_text(rn, "condition") or True
-        target = defs.get(pi.get("definitionRef"))
+        target = defs.get(pi.get("definitionRef")) or all_defs.get(pi.get("definitionRef"))
         if target is None:
             node["children"].append({"id": pi.get("id"), "name": pi.get("name"),
                                     "type": "planItem(?)", "rules": rules})
         elif target.tag in ("stage", "planFragment"):
-            child = _cmmn_walk(ctx, case_key, ffile, target)
+            if target.get("id") in seen:   # guard against pathological scope cycles
+                continue
+            child = _cmmn_walk(ctx, case_key, ffile, target, all_defs, seen | {target.get("id")})
             child["rules"] = rules
             node["children"].append(child)
         else:
