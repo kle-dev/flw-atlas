@@ -1304,9 +1304,16 @@ def extract(root):
             # renameTable follows to its new name and a history table created
             # alongside stays a distinct entry.
             eff_tables = sorted({c["table"] for c in cols if c.get("table")})
+            # serviceDefinitionReferences: Flowable writes the service key(s) that
+            # back this changelog straight into the changelog as a property. It is
+            # the authoritative changelog<->service link and survives table renames
+            # (a stale service may still carry the pre-rename tableName).
+            svc_refs = sorted({tok for v in re.findall(
+                r'name="serviceDefinitionReferences"\s+value="([^"]*)"', lf["txt"])
+                for tok in re.split(r"[,\s]+", v) if tok})
             result["liquibase"].append({"key": _liquibase_key(lf["rel"]), "file": lf["rel"],
                                         "tables": lf["tables"], "effectiveTables": eff_tables,
-                                        "columns": cols})
+                                        "serviceRefs": svc_refs, "columns": cols})
 
     # Dedupe: the same model is often present both as loose files and inside a
     # -bar.zip; collapse identical refs / rest-calls / model entries.
@@ -1687,10 +1694,17 @@ def _schema_coverage(result):
     back by its data objects) and `coverage` to each referenced Liquibase changelog
     (so the changelog view can highlight orphan columns directly)."""
     lb_by_key = {lb["key"]: lb for lb in result["liquibase"]}
+    # Index changelogs by BOTH current and historical table names (the union of
+    # effectiveTables and the raw tableName= occurrences), so a service still
+    # resolves whether it carries the post-rename name or the original one.
     lb_by_table = {}
     for lb in result["liquibase"]:
-        for t in (lb.get("effectiveTables") or lb.get("tables") or []):
+        for t in set(lb.get("effectiveTables") or []) | set(lb.get("tables") or []):
             lb_by_table.setdefault(t.upper(), lb)
+    lb_by_svcref = {}                                   # service key -> changelog (authoritative)
+    for lb in result["liquibase"]:
+        for sk in (lb.get("serviceRefs") or []):
+            lb_by_svcref.setdefault(sk, lb)
     dos_by_service = {}
     for d in result["dataObjects"]:
         if d.get("service"):
@@ -1701,7 +1715,9 @@ def _schema_coverage(result):
     for s in result["services"]:
         rk = s.get("referencedLiquibaseModelKey")
         lb = lb_by_key.get(rk) if rk else None
-        if lb is None and s.get("tableName"):
+        if lb is None:                                  # authoritative back-reference
+            lb = lb_by_svcref.get(s.get("key"))
+        if lb is None and s.get("tableName"):           # current or pre-rename table name
             lb = lb_by_table.get(s["tableName"].upper())
 
         svc_table = (s.get("tableName") or "").upper() or None
@@ -1808,43 +1824,59 @@ def _mark_liquibase_authority(result):
     effectiveTables, so renameTable follows to the new name and a history table
     created alongside (same columns, different name) is never mistaken for a copy.
 
-    Sets lb["authority"] = {status, referencedBy, supersededBy}, where status is
-    'live', 'superseded' (another, referenced changelog owns the same table) or
-    'orphan' (nothing references it and no live sibling claims its table). Only the
-    SERVICE is a reliable signal: a service binds a changelog explicitly via
-    referencedLiquibaseModelKey, or implicitly via a matching tableName. Data
-    objects don't reference changelogs directly (they hang off a service), so they
-    are not used here. Changelogs that define no surviving table (a master that
-    only includes others, or data-only inserts) get no authority mark."""
-    explicit = {}                                       # lb key -> [referencing service keys]
+    Sets lb["authority"] = {status, referencedBy, supersededBy}, with status:
+    'live', 'superseded' (a forward-bound sibling owns the same table) or 'orphan'.
+
+    Signals, by strength:
+      1. FORWARD binding — a service's referencedLiquibaseModelKey points HERE.
+         This is what the service actually runs against, so it owns its table(s).
+      2. BACK reference — the changelog's own serviceDefinitionReferences names a
+         real service. Reliable for linking and enough to keep a changelog 'live'
+         when no forward-bound sibling competes (e.g. a dead, renamed table whose
+         service still carries the old name), but it does NOT outrank a forward
+         binding — several stale revisions often carry the same service key.
+      3. tableName match — weakest fallback.
+    Table identity is by NAME, from effectiveTables, so renameTable follows to the
+    new name and a history table (same columns, different name) is never a copy.
+    Changelogs that define no surviving table and are unreferenced get no mark."""
+    forward = {}                                        # lb key -> [services binding it forward]
     svc_by_table = {}                                   # TABLE -> [service keys] (tableName match)
     for s in result.get("services", []):
         rk = s.get("referencedLiquibaseModelKey")
         if rk:
-            explicit.setdefault(rk, []).append(s.get("key"))
+            forward.setdefault(rk, []).append(s.get("key"))
         tn = s.get("tableName")
         if tn:
             svc_by_table.setdefault(tn.upper(), []).append(s.get("key"))
+    svc_keys = {s.get("key") for s in result.get("services", []) if s.get("key")}
+    backref = {}                                        # lb key -> [services it names back]
+    for lb in result.get("liquibase", []):
+        for sk in (lb.get("serviceRefs") or []):
+            if sk in svc_keys:
+                backref.setdefault(lb["key"], []).append(sk)
 
     def eff(lb):
         return {t.upper() for t in (lb.get("effectiveTables") or [])}
 
-    owner_of_table = {}                                 # TABLE -> [lb keys a service binds by key]
+    forward_owner = {}                                  # TABLE -> [lb keys bound forward]
     for lb in result.get("liquibase", []):
-        if explicit.get(lb["key"]):
+        if forward.get(lb["key"]):
             for t in eff(lb):
-                owner_of_table.setdefault(t, []).append(lb["key"])
+                forward_owner.setdefault(t, []).append(lb["key"])
 
     for lb in result.get("liquibase", []):
         tbls = eff(lb)
-        if not tbls:                                    # defines no table -> nothing to rank
+        fwd = sorted(set(forward.get(lb["key"], [])))
+        back = sorted(set(backref.get(lb["key"], [])))
+        if not tbls and not fwd and not back:           # defines no table, unreferenced -> skip
             continue
-        refs = sorted(set(explicit.get(lb["key"], [])))
-        owners = sorted({o for t in tbls for o in owner_of_table.get(t, []) if o != lb["key"]})
-        if refs:
-            status, by = "live", refs
-        elif owners:                                    # a service-bound sibling owns this table
+        owners = sorted({o for t in tbls for o in forward_owner.get(t, []) if o != lb["key"]})
+        if fwd:                                         # the service runs against this one
+            status, by = "live", fwd
+        elif owners:                                    # a forward-bound sibling owns this table
             status, by = "superseded", []
+        elif back:                                      # own back-reference, no live competitor
+            status, by = "live", back
         else:
             tbl_refs = sorted({sk for t in tbls for sk in svc_by_table.get(t, [])})
             status, by = ("live", tbl_refs) if tbl_refs else ("orphan", [])
@@ -2240,20 +2272,26 @@ def _build_graph(result, ctx, resolved, all_java, bean_methods, by_key):
                               "data": {"platform": True}}
             add_edge(anode, bid, "bot")
 
-    # service / data object -> liquibase changelog, via AUTHORITATIVE signals only
-    # (the model's referencedLiquibaseModelKey and tableName, or the data object's
-    # own schema changelog filename) — NOT loose key-in-text, which picks up wrong
-    # copy-pasted headers like <property serviceDefinitionReferences value=...>.
+    # service / data object -> liquibase changelog, via AUTHORITATIVE signals only:
+    # the model's referencedLiquibaseModelKey, the changelog's own
+    # serviceDefinitionReferences back-pointer, a tableName match (current OR
+    # pre-rename name), or the data object's own schema changelog filename — NOT
+    # loose key-in-text.
     lb_by_key = {lb["key"]: f"liquibase:{lb['key']}" for lb in result["liquibase"]}
     lb_by_table = {}
+    lb_by_svcref = {}
     for lb in result["liquibase"]:
-        for t in (lb.get("effectiveTables") or lb.get("tables") or []):
+        for t in set(lb.get("effectiveTables") or []) | set(lb.get("tables") or []):
             lb_by_table.setdefault(t.upper(), set()).add(f"liquibase:{lb['key']}")
+        for sk in (lb.get("serviceRefs") or []):
+            lb_by_svcref.setdefault(sk, set()).add(f"liquibase:{lb['key']}")
     for n in nodes.values():
         if n["type"] == "service":
             rk = n["data"].get("referencedLiquibaseModelKey")
             if rk and rk in lb_by_key:
                 add_edge(n["id"], lb_by_key[rk], "schema")
+            for lid in lb_by_svcref.get(n["key"], ()):  # changelog names this service
+                add_edge(n["id"], lid, "schema")
             tn = n["data"].get("tableName")
             if tn:
                 for lid in lb_by_table.get(tn.upper(), ()):
