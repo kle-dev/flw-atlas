@@ -740,6 +740,12 @@ def parse_form(data, ctx, ffile):
             if es.get("expandablePanel"):
                 add_ref(ctx, key, info["modelType"], ffile, "datatable-detail-form",
                         "form", es["expandablePanel"])
+            # a button / action component that triggers an Action model — records the
+            # form/page as a consumer so the Action shows where it is used (and via that
+            # form, which other forms/references it pulls in).
+            if es.get("actionDefinitionKey"):
+                add_ref(ctx, key, info["modelType"], ffile, "triggers-action",
+                        "action", es["actionDefinitionKey"])
         u = n.get("url")
         if isinstance(u, str) and u.strip():
             ctx["rest_calls"].append({"source": key, "sourceFile": ffile, "where": n.get("id"),
@@ -1381,7 +1387,7 @@ def extract(root):
                                                   "service", "agent", "dataObject", "dataDictionary",
                                                   "channel", "event", "template", "sla", "securityPolicy",
                                                   "knowledgeBase", "query", "sequence", "masterData",
-                                                  "document", "variableExtractor", "dashboardComponent"):
+                                                  "action", "document", "variableExtractor", "dashboardComponent"):
             norm = kind.split(":", 1)[1] if kind.startswith("model:") else kind
             norm = {"bpmn": "process", "cmmn": "case"}.get(norm, norm)
             target = model_index.get((norm, val))
