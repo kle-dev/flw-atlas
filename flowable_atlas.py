@@ -180,7 +180,7 @@ def design_form_keys(el):
 
 def inout_form_keys(mappings):
     """Literal form keys pushed into a child scope's form via an in/out mapping,
-    e.g. <flowable:in sourceExpression="KYC-F062" target="formKey"/>."""
+    e.g. <flowable:in sourceExpression="DEMO-F062" target="formKey"/>."""
     return [m.get("source") for m in (mappings or [])
             if m.get("source") and "formkey" in (m.get("target") or "").lower()]
 
@@ -1489,7 +1489,7 @@ def _lb_attr(s, name):
 
 def _natural_key(s):
     """Sort key that orders embedded numbers numerically, so v2 < v10 (and
-    KYC-L2 < KYC-L10) instead of the lexical v10 < v2."""
+    DEMO-L2 < DEMO-L10) instead of the lexical v10 < v2."""
     return [int(p) if p.isdigit() else p.lower() for p in re.split(r'(\d+)', s or "")]
 
 
@@ -1848,8 +1848,8 @@ def _mark_liquibase_authority(result):
     or a SUPERSEDED / ORPHAN revision.
 
     Projects routinely carry several changelogs that each `createTable` the same
-    physical table at different revisions (e.g. KYC-D06 / KYC-D06Schema /
-    KYC-D06SchemaNew all create SHOPPING_LIST_). The authoritative one is the
+    physical table at different revisions (e.g. DEMO-D06 / DEMO-D06Schema /
+    DEMO-D06SchemaNew all create SHOPPING_LIST_). The authoritative one is the
     revision a service / data object actually references via
     referencedLiquibaseModelKey (or, lacking that, a service whose tableName
     matches); the rest are superseded. Table identity is by NAME — taken from
