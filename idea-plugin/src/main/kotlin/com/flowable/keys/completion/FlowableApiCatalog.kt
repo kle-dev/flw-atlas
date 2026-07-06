@@ -209,10 +209,14 @@ object FlowableApiCatalog {
         }
 
         // ---------------------------------------------------------------- TASK-DEFINITION KEY / ACTIVITY ID
-        vocab("org.flowable.task.api.TaskInfoQuery", "taskDefinitionKey", 0, Vocabulary.USER_TASK)
-        vocab("org.flowable.task.api.TaskInfoQuery", "taskDefinitionKeyLike", 0, Vocabulary.USER_TASK)
-        vocab("org.flowable.engine.runtime.ExecutionQuery", "activityId", 0, Vocabulary.ACTIVITY)
-        vocab("org.flowable.engine.history.HistoricActivityInstanceQuery", "activityId", 0, Vocabulary.ACTIVITY)
+        // Scoped to the sibling processDefinitionKey / caseDefinitionKey in the same query chain when
+        // present (→ only that model's task/activity ids), else the project-wide union.
+        val procCaseScope = listOf("processDefinitionKey", "caseDefinitionKey")
+        val procScope = listOf("processDefinitionKey")
+        vocab("org.flowable.task.api.TaskInfoQuery", "taskDefinitionKey", 0, Vocabulary.USER_TASK, procCaseScope, listOf(PROCESS, CASE))
+        vocab("org.flowable.task.api.TaskInfoQuery", "taskDefinitionKeyLike", 0, Vocabulary.USER_TASK, procCaseScope, listOf(PROCESS, CASE))
+        vocab("org.flowable.engine.runtime.ExecutionQuery", "activityId", 0, Vocabulary.ACTIVITY, procScope, listOf(PROCESS))
+        vocab("org.flowable.engine.history.HistoricActivityInstanceQuery", "activityId", 0, Vocabulary.ACTIVITY, procScope, listOf(PROCESS))
 
         // ---------------------------------------------------------------- MEMBER positions (cascade)
         // DMN: variable(name, value) offers the decision's input/output variables, resolved from
@@ -239,8 +243,14 @@ object FlowableApiCatalog {
     private fun MutableList<ApiSite>.value(fqn: String, method: String, keyMethod: String, operationMethod: String, keyIsService: Boolean = false) =
         add(ValueSite(fqn, method, 0, keyMethod, operationMethod, keyIsService))
 
-    private fun MutableList<ApiSite>.vocab(fqn: String, method: String, argIndex: Int, vocabulary: Vocabulary) =
-        add(VocabularySite(fqn, method, argIndex, vocabulary))
+    private fun MutableList<ApiSite>.vocab(
+        fqn: String,
+        method: String,
+        argIndex: Int,
+        vocabulary: Vocabulary,
+        scopeKeyMethods: List<String> = emptyList(),
+        scopeTypes: List<ModelType> = emptyList(),
+    ) = add(VocabularySite(fqn, method, argIndex, vocabulary, scopeKeyMethods, scopeTypes))
 
     private fun MutableList<ApiSite>.member(fqn: String, method: String, argIndex: Int, keyMethod: String, memberKind: MemberKind, keyArgIndex: Int = 0) =
         add(MemberSite(fqn, method, argIndex, keyMethod, keyArgIndex, memberKind))

@@ -6,7 +6,7 @@ The installable plugin ZIP, committed so you can install it after a `git pull`
 ## Install (on any machine)
 
 1. IntelliJ IDEA **2026.1+** → **Settings → Plugins → ⚙ → Install Plugin from Disk…**
-2. Select `flowable-keys-0.1.0.zip`
+2. Select `flowable-keys-0.2.0.zip`
 3. **Restart**
 
 > Do **not** open `idea-plugin/` as a Gradle project just to use the plugin.
@@ -16,14 +16,14 @@ The installable plugin ZIP, committed so you can install it after a `git pull`
 
 ## This build
 
-- Version: **0.1.0**
-- SHA-256: `a0ae65b2a39eb5a14f078ca5a413c2f69ea83782f1ccb946551f94960fbe6b1e`
+- Version: **0.2.0**
+- SHA-256: `ad0442e7aa46402513536b6a3db92bb158247133fb12ac68330c01b5489b42fd`
 
 ## Refreshing this ZIP after code changes
 
 ```bash
 cd ..                       # into idea-plugin/
 ./gradlew buildPlugin
-cp build/distributions/flowable-keys-0.1.0.zip dist/
-# then commit dist/flowable-keys-0.1.0.zip
+cp build/distributions/flowable-keys-0.2.0.zip dist/
+# then commit dist/flowable-keys-0.2.0.zip
 ```

@@ -8,6 +8,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.find.findUsages.FindUsagesOptions
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.components.service
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
@@ -50,6 +51,7 @@ class FlowableModelUsageSearcher : CustomUsageSearcher() {
             }
 
             ProjectFileIndex.getInstance(project).iterateContent { file ->
+                ProgressManager.checkCanceled()
                 if (!file.isDirectory && !ModelFiles.isExcluded(file.path)) {
                     when {
                         ModelFiles.typeOf(file) != null ->

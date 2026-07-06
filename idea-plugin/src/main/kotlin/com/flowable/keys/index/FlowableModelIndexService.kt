@@ -6,6 +6,7 @@ import com.flowable.keys.model.ModelType
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.vfs.VirtualFile
@@ -102,6 +103,10 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
     fun decisionVariablesOf(decisionKey: String): List<String> =
         index().membersOf(decisionKey, ModelType.DECISION)?.decisionVariables.orEmpty()
 
+    /** Members of a single model resolved by [key], trying each of [types] in turn (first hit wins). */
+    fun scopedMembers(key: String, types: List<ModelType>): ModelMembers? =
+        types.firstNotNullOfOrNull { index().membersOf(key, it) }
+
     /** Payload + correlation parameter names of an event (for event-payload completion). */
     fun payloadOf(eventKey: String): List<String> =
         index().membersOf(eventKey, ModelType.EVENT)?.payload.orEmpty()
@@ -167,6 +172,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
         }
 
         ProjectFileIndex.getInstance(project).iterateContent { file ->
+            ProgressManager.checkCanceled()   // let a long scan be interrupted (e.g. during completion)
             if (!file.isDirectory && !ModelFiles.isExcluded(file.path)) {
                 val type = ModelFiles.typeOf(file)
                 when {
