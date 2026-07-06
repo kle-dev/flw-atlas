@@ -32,22 +32,37 @@ dataObjectRuntimeService.createDataObjectInstanceQuery()
   (`caseDefinitionKey(<caret>)` — inserts a quoted key). Flowable keys are ranked to the top.
 - ✅ **Press completion twice** (Ctrl+Space, Ctrl+Space) inside any string / argument to list
   **all** model keys of every type — not just the ones matching the current API method.
-- ✅ Search candidates by **key or by name** (name words are matched too).
+- ✅ Search candidates by **key or by name** (name words are matched too), and by **any infix** of
+  the key — typing `0061` at `definitionKey("<caret>")` matches `KYC-DO-0061` (start / word-boundary
+  matches still rank first). See `FlowableInfixMatcher`.
 - ✅ **Generate a model-constants class** — Tools → "Flowable: Generate Model Constants" writes a
   Java class holding every model key as a `public static final String`, grouped into a nested class
   per model type (e.g. `FlowableModelKeys.Process.DEMO_P001`, with the model name in Javadoc). The
   class is then **kept in sync automatically** (debounced) whenever a model is added / removed /
   renamed / edited (`ModelConstantsAutoRefresher`; opt-out by deleting the class — refresh only
   updates a class that still exists). Target FQCN is remembered per project (`ModelConstantsSettings`).
+- ✅ **Generate a typed data-object bean** — Alt-Enter on a data-object `definitionKey("…")` literal
+  writes a Java POJO from the model's `fieldMappings`, so query results map onto a bean instead of the
+  generic `DataObjectInstanceVariableContainer` (`GenerateDataObjectBeanIntention`,
+  `DataObjectBeanGenerator`).
 - ✅ **More completion domains** (toggle in settings): BPMN **message** / **signal** names
   (`startProcessInstanceByMessage`, `signalEventReceived`), process/case **variable** names
   (`get/setVariable(id, "<caret>")` — arg 1), **task-definition keys** (`taskDefinitionKey`) and
   **activity ids** (`activityId`), plus **DMN decision variables** (`ExecuteDecisionBuilder.variable`,
-  resolved from the sibling `decisionKey`).
+  resolved from the sibling `decisionKey`). `taskDefinitionKey` / `activityId` are **scoped to the
+  sibling `processDefinitionKey` / `caseDefinitionKey`** in the same query chain when present (only
+  that model's ids), falling back to the project-wide union otherwise.
 - ✅ **Broken-key inspection**: a model key that matches no indexed key of the expected type is
   flagged (only when that type has indexed keys), with a **quick fix** to the closest known key.
 - ✅ **Navigation**: Ctrl-click / Go-To-Declaration on a key literal jumps to the model file
   (`FlowableKeyReferenceContributor`); Find Usages works; hover / Ctrl-Q shows type, name and file.
+- ✅ **Model → model key references in BPMN/CMMN XML**: the key references that live *inside* the
+  models — `callActivity calledElement`, `flowable:formKey`, `decisionRef` /
+  `decisionTableReferenceKey`, CMMN `caseRef` / `processRef` — get the same **completion**,
+  **Ctrl-click navigation** and **broken-key inspection** (with quick fix) as Java call sites, so a
+  `calledElement="MISSING-PROC"` is caught before deployment. Namespace-agnostic, only inside model
+  XML. See `FlowableXmlKeyCatalog`, `FlowableXmlKeyCompletionContributor`,
+  `FlowableXmlKeyReferenceContributor`, `FlowableXmlBrokenKeyInspection`.
 - ✅ **Liquibase coverage inspection**: a `<column>` in a `*.data.changelog.xml` that is not mapped in
   the backing `database` `.service` model (matched loosely, `CREW_ID_` ≈ `crewId`) is flagged as
   "not defined in the model" — resolved via `serviceDefinitionReferences` / `referencedLiquibaseModelKey`
@@ -57,13 +72,20 @@ dataObjectRuntimeService.createDataObjectInstanceQuery()
   table of the backing `database` `.service` model (`LiquibaseColumnCompletionContributor`).
 - ✅ **Settings** (Settings → Tools → Flowable Keys): toggle the extra completions and opt into
   indexing the Flowable Design `*-models/` workspace JSON.
-- ✅ Tests pass against IntelliJ IDEA 2026.1 (**51** total): `FlowableCompletionTest` (16) +
-  `FlowableFeaturesTest` (10, new features) + `LiquibaseChangelogTest` (7) + `JsonUtilTest` (6) +
-  `ModelExtractionTest` (3) + generation/usage tests.
+- ✅ Tests pass against IntelliJ IDEA 2026.1 (**67** total): `FlowableCompletionTest` (16) +
+  `FlowableFeaturesTest` (13) + `FlowableInfixAndXmlTest` (8, infix + scoped vocab + XML cross-refs) +
+  `LiquibaseChangelogTest` (8) + `JsonUtilTest` (6) + `DataObjectBeanGeneratorTest` (4) +
+  `ModelExtractionTest` / `ModelConstantsGeneratorTest` / `ModelUsageScannerTest` /
+  `FlowableImplicitUsageTest` (3 each).
+
+Robustness: the full project scan (`FlowableModelIndexService.build`, `FlowableModelUsageSearcher`)
+now honours `ProgressManager.checkCanceled()`, so a long scan can be interrupted (e.g. during
+completion) instead of blocking.
 
 Possible follow-ups: cross-file Liquibase include replay (v1→v2 directories), an event-payload
-completion call-site (no stable Java builder today), and migrating the index storage to
-`FileBasedIndex`.
+completion call-site (no stable Java builder today), migrating the index storage to `FileBasedIndex`
+(incremental / persisted, so a model save no longer drops the whole cache), and gutter icons + rename
+refactoring for model keys.
 
 ## Requirements / compatibility
 
@@ -86,14 +108,14 @@ Toolchain notes (all matter for a 2026.1 target):
   the local JDK 21; adjust if yours is elsewhere).
 
 ```bash
-./gradlew buildPlugin        # → build/distributions/flowable-keys-0.1.0.zip (installable)
+./gradlew buildPlugin        # → build/distributions/flowable-keys-0.2.0.zip (installable)
 ./gradlew test               # 6 functional completion tests
 ./gradlew runIde             # sandbox IDE with the plugin; open any Flowable project
 ```
 
 ## Install (from disk)
 
-1. `./gradlew buildPlugin` → `build/distributions/flowable-keys-0.1.0.zip`.
+1. `./gradlew buildPlugin` → `build/distributions/flowable-keys-0.2.0.zip`.
 2. In IntelliJ IDEA: **Settings → Plugins → ⚙ → Install Plugin from Disk…** → pick the zip.
 3. Restart. Open a Flowable project and type a key argument at any of the API call sites above.
 

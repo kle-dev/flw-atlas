@@ -73,7 +73,8 @@ class FlowableJavaCompletionContributor : CompletionContributor() {
             val ctx = resolveContext(position) ?: return
 
             val site = matchSite(ctx)
-            val base = result.withPrefixMatcher(ctx.prefix)
+            // Infix matching: typing "0061" matches "KYC-DO-0061" (a mid-key fragment), not just a prefix.
+            val base = result.withPrefixMatcher(FlowableInfixMatcher(ctx.prefix))
             val results = base.withRelevanceSorter(flowableFirstSorter(parameters, base.prefixMatcher))
             val service = position.project.service<FlowableModelIndexService>()
             val showAll = parameters.invocationCount >= 2
@@ -88,7 +89,7 @@ class FlowableJavaCompletionContributor : CompletionContributor() {
                 is ValueSite -> addValueFields(results, service, ctx.call!!, site, position.project, ctx.quote)
 
                 is VocabularySite ->
-                    if (FlowableKeysSettings.getInstance().extraCompletions) addVocabulary(results, service, site, ctx.quote)
+                    if (FlowableKeysSettings.getInstance().extraCompletions) addVocabulary(results, service, ctx.call, site, position.project, ctx.quote)
 
                 is MemberSite ->
                     if (FlowableKeysSettings.getInstance().extraCompletions) addMembers(results, service, ctx.call!!, site, position.project, ctx.quote)
@@ -221,21 +222,54 @@ class FlowableJavaCompletionContributor : CompletionContributor() {
             return FluentChain.constantStringArg(keyCall, argIndex, project)
         }
 
-        /** Project-wide vocabulary (messages, signals, variables, task keys, activity ids). */
+        /**
+         * A vocabulary (messages, signals, variables, task keys, activity ids). Narrowed to a single
+         * model when the site is scoped and the chain carries the sibling key; otherwise the
+         * project-wide union.
+         */
         private fun addVocabulary(
             result: CompletionResultSet,
             service: FlowableModelIndexService,
+            call: PsiMethodCallExpression?,
             site: VocabularySite,
+            project: Project,
             quote: Boolean,
         ) {
-            val values = when (site.vocabulary) {
+            val scoped = scopedVocabulary(service, call, site, project)
+            val values: Collection<String> = scoped?.values ?: when (site.vocabulary) {
                 Vocabulary.MESSAGE -> service.messages()
                 Vocabulary.SIGNAL -> service.signals()
                 Vocabulary.VARIABLE -> service.variables()
                 Vocabulary.USER_TASK -> service.userTaskIds()
                 Vocabulary.ACTIVITY -> service.activityIds()
             }
-            for (v in values) result.addElement(prioritized(memberLookup(v, site.vocabulary.display, quote)))
+            val typeText = scoped?.let { site.vocabulary.display + " · " + it.modelKey } ?: site.vocabulary.display
+            for (v in values) result.addElement(prioritized(memberLookup(v, typeText, quote)))
+        }
+
+        /** One model's members carried alongside the key it was resolved from (for the type text). */
+        private class ScopedValues(val modelKey: String, val values: List<String>)
+
+        /**
+         * If [site] is scoped and the chain carries one of its sibling key calls, resolve that model's
+         * members for the vocabulary; null otherwise (→ caller uses the project-wide union).
+         */
+        private fun scopedVocabulary(
+            service: FlowableModelIndexService,
+            call: PsiMethodCallExpression?,
+            site: VocabularySite,
+            project: Project,
+        ): ScopedValues? {
+            if (site.scopeKeyMethods.isEmpty() || call == null) return null
+            val key = site.scopeKeyMethods.firstNotNullOfOrNull { m -> resolveKey(call, m, project) } ?: return null
+            val members = service.scopedMembers(key, site.scopeTypes) ?: return null
+            val values = when (site.vocabulary) {
+                Vocabulary.USER_TASK -> members.userTaskIds
+                Vocabulary.ACTIVITY -> members.activityIds
+                Vocabulary.VARIABLE -> members.variables
+                else -> return null
+            }
+            return values.ifEmpty { null }?.let { ScopedValues(key, it) }
         }
 
         /** Members (DMN decision variables / event payload) of the model resolved from the sibling key. */
@@ -311,16 +345,8 @@ class FlowableJavaCompletionContributor : CompletionContributor() {
             return b
         }
 
-        /** Key/name plus name-word tokens, so the item is findable by key OR by (part of the) name. */
-        private fun searchTokens(key: String, name: String?): Set<String> {
-            val tokens = LinkedHashSet<String>()
-            tokens.add(key)
-            if (!name.isNullOrBlank()) {
-                tokens.add(name)
-                name.split(' ', '-', '_', '.').filter { it.isNotBlank() }.forEach { tokens.add(it) }
-            }
-            return tokens
-        }
+        /** Key/name plus name/key word tokens, so the item is findable by key OR by (part of the) name. */
+        private fun searchTokens(key: String, name: String?): Set<String> = KeyLookup.searchTokens(key, name)
     }
 
     /**
