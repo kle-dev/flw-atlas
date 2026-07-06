@@ -12,6 +12,7 @@ import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.InputValidator
 import com.intellij.openapi.ui.Messages
+import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiFileFactory
@@ -64,12 +65,32 @@ class GenerateDataObjectBeanIntention : PsiElementBaseIntentionAction() {
             },
         )?.trim()?.takeIf { it.isNotBlank() } ?: return
 
-        dir.findFile("$className.java")?.let { existing ->
-            existing.virtualFile?.let { FileEditorManager.getInstance(project).openFile(it, true) }
+        val source = DataObjectBeanGenerator.generate(pkg, className, key, info.fieldMappings)
+
+        val existing = dir.findFile("$className.java")
+        if (existing != null) {
+            val overwrite = Messages.showYesNoDialog(
+                project,
+                "Class '$className' already exists. Overwrite it with the regenerated bean (builder + mapper)?",
+                "Generate Flowable Data-Object Bean",
+                Messages.getQuestionIcon(),
+            )
+            if (overwrite != Messages.YES) {
+                existing.virtualFile?.let { FileEditorManager.getInstance(project).openFile(it, true) }
+                return
+            }
+            WriteCommandAction.runWriteCommandAction(project) {
+                val docManager = PsiDocumentManager.getInstance(project)
+                docManager.getDocument(existing)?.let { doc ->
+                    doc.setText(source)
+                    docManager.commitDocument(doc)
+                    CodeStyleManager.getInstance(project).reformat(existing)
+                }
+                existing.virtualFile?.let { FileEditorManager.getInstance(project).openFile(it, true) }
+            }
             return
         }
 
-        val source = DataObjectBeanGenerator.generate(pkg, className, key, info.fieldMappings)
         WriteCommandAction.runWriteCommandAction(project) {
             val psi = PsiFileFactory.getInstance(project).createFileFromText("$className.java", JavaFileType.INSTANCE, source)
             val added = dir.add(psi) as? PsiFile

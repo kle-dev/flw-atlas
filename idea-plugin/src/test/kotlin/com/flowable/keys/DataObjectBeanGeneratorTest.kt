@@ -37,6 +37,18 @@ class DataObjectBeanGeneratorTest {
         assertTrue("typed getLocalDate: $src", src.contains("bean.setDue(container.getLocalDate(\"due\"));"))
     }
 
+    @Test fun generates_fluent_builder() {
+        val src = DataObjectBeanGenerator.generate(
+            null, "Order", "KYC-D010",
+            listOf(DataField("label", "STRING"), DataField("count", "LONG")),
+        )
+        assertTrue("builder() factory: $src", src.contains("public static Builder builder() {"))
+        assertTrue("Builder class: $src", src.contains("public static final class Builder {"))
+        assertTrue("fluent setter: $src", src.contains("public Builder label(String label) {"))
+        assertTrue("returns this: $src", src.contains("return this;"))
+        assertTrue("build(): $src", src.contains("public Order build() {"))
+    }
+
     @Test fun no_package_line_for_default_package() {
         val src = DataObjectBeanGenerator.generate(null, "Bean", "K", listOf(DataField("a", "STRING")))
         assertTrue(!src.contains("package "))

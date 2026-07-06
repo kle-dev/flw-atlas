@@ -51,6 +51,18 @@ object DataObjectBeanGenerator {
                 append("    public void set").append(cap).append('(').append(p.type).append(' ').append(p.field).append(") {\n")
                 append("        this.").append(p.field).append(" = ").append(p.field).append(";\n    }\n\n")
             }
+
+            // Fluent builder.
+            append("    public static Builder builder() {\n        return new Builder();\n    }\n\n")
+            append("    public static final class Builder {\n")
+            append("        private final ").append(className).append(" bean = new ").append(className).append("();\n\n")
+            for (p in props) {
+                append("        public Builder ").append(p.field).append('(').append(p.type).append(' ').append(p.field).append(") {\n")
+                append("            bean.").append(p.field).append(" = ").append(p.field).append(";\n")
+                append("            return this;\n        }\n\n")
+            }
+            append("        public ").append(className).append(" build() {\n            return bean;\n        }\n    }\n")
+
             append("}\n")
         }
     }
