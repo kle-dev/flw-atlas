@@ -2,6 +2,8 @@ package com.flowable.keys
 
 import com.flowable.keys.inspection.FlowableBrokenKeyInspection
 import com.flowable.keys.liquibase.LiquibaseCoverageInspection
+import com.intellij.openapi.ui.TestDialogManager
+import com.intellij.openapi.ui.TestInputDialog
 import com.intellij.psi.PsiFile
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 
@@ -237,5 +239,39 @@ class FlowableFeaturesTest : BasePlatformTestCase() {
         )
         val infos = myFixture.doHighlighting()
         assertFalse("mapped columns must not be flagged", infos.any { (it.description ?: "").contains("is not mapped") })
+    }
+
+    fun testDataObjectBeanIntentionGeneratesTypedPojo() {
+        myFixture.addFileToProject(
+            "com/flowable/dataobject/api/runtime/DataObjectInstanceVariableContainerQuery.java",
+            "package com.flowable.dataobject.api.runtime; public interface DataObjectInstanceVariableContainerQuery { " +
+                "DataObjectInstanceVariableContainerQuery definitionKey(String key); }",
+        )
+        myFixture.addFileToProject(
+            "models/DEMO-D010.data",
+            """{"key":"DEMO-D010","name":"Shopping List","dataObjectType":"serviceRegistryDataObject",
+                "fieldMappings":[{"name":"label","type":"STRING"},{"name":"region","type":"STRING"}]}""",
+        )
+        myFixture.configureByText(
+            "T.java",
+            "class T { void m(com.flowable.dataobject.api.runtime.DataObjectInstanceVariableContainerQuery q) { " +
+                "q.definitionKey(\"DEMO-D0<caret>10\"); } }",
+        )
+        val intention = myFixture.findSingleIntention("Generate Java bean for this Flowable data object")
+        assertNotNull("bean intention should be offered", intention)
+        // The intention asks for the class name; stub the input dialog to a custom name.
+        TestDialogManager.setTestInputDialog { _ -> "MyOrderDto" }
+        try {
+            myFixture.launchAction(intention)
+        } finally {
+            TestDialogManager.setTestInputDialog(TestInputDialog.DEFAULT)
+        }
+
+        val bean = myFixture.findFileInTempDir("MyOrderDto.java")
+        assertNotNull("bean file should be created with the chosen name", bean)
+        val text = String(bean!!.contentsToByteArray(), Charsets.UTF_8)
+        assertTrue("bean class: $text", text.contains("public class MyOrderDto"))
+        assertTrue("typed field: $text", text.contains("private String label;"))
+        assertTrue("mapper: $text", text.contains("fromContainer(DataObjectInstanceVariableContainer container)"))
     }
 }

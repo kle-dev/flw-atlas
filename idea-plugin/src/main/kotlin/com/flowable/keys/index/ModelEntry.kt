@@ -93,8 +93,14 @@ data class DataObjectInfo(
     val key: String,
     val dataObjectType: String?,
     val referencedServiceDefinitionModelKey: String?,
-    val fields: List<String>,
+    val fieldMappings: List<DataField>,
 ) {
+    /** Field names only (kept for callers that don't need the types). */
+    val fields: List<String> get() = fieldMappings.map { it.name }
+
     val isTableBacked: Boolean
         get() = dataObjectType == "serviceRegistryDataObject" || dataObjectType == "databaseSchemaDataObject"
 }
+
+/** One `fieldMappings[]` entry of a `.data` model: the logical field [name] and its logical [type]. */
+data class DataField(val name: String, val type: String?)

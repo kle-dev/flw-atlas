@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.flowable.keys</id>
     <name>Flowable Keys</name>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
     <vendor email="kevin.klever@flowable.com" url="https://www.flowable.com">Flowable</vendor>
 
     <description><![CDATA[
@@ -12,7 +12,8 @@
         you keep in the repo: the artifacts you exported from Design (the app <code>.zip</code> /
         deployment <code>-bar</code>, holding <code>.bpmn/.cmmn/.dmn/.form/.data/.service/…</code>) or the
         Flowable Design <code>*-models</code> workspace — then completes the matching key at every Flowable
-        API call site, searchable by <b>key or by name</b>.</p>
+        API call site, searchable by <b>key, by name, or by any fragment</b> (type <code>0061</code> to get
+        <code>KYC-DO-0061</code>).</p>
 
         <h3>What you get</h3>
         <ul>
@@ -27,9 +28,19 @@
               resolved), and <code>value("…", …)</code> completes that operation's input fields. DMN
               <code>variable("…", …)</code> offers the decision's input/output variables.</li>
           <li><b>More than keys</b> — completion for message &amp; signal names, process variables,
-              task-definition keys and activity IDs.</li>
-          <li><b>Broken-key inspection</b> — an unknown key is flagged inline with a
+              task-definition keys and activity IDs. Task/activity completion is <b>scoped</b> to the
+              <code>processDefinitionKey</code> / <code>caseDefinitionKey</code> in the same query chain
+              when present, so you see only that model's ids.</li>
+          <li><b>Model &rarr; model references in BPMN/CMMN XML</b> — the keys that live inside the models
+              themselves (<code>callActivity calledElement</code>, <code>flowable:formKey</code>,
+              <code>decisionRef</code>, CMMN <code>caseRef</code> / <code>processRef</code>) get the same
+              completion, Ctrl/Cmd-click navigation and broken-key inspection as Java call sites — so a
+              <code>calledElement</code> pointing at a missing process is caught before deployment.</li>
+          <li><b>Broken-key inspection</b> — an unknown key (in Java or model XML) is flagged inline with a
               <i>"did you mean …?"</i> quick-fix to the closest real key.</li>
+          <li><b>Generate a typed data-object bean</b> — Alt/Option-Enter on a data-object
+              <code>definitionKey("…")</code> writes a Java POJO from the model's field mappings, so query
+              results map onto a bean instead of the generic container.</li>
           <li><b>Liquibase aware</b> — inside a changelog it completes <code>&lt;column&gt;</code> names
               and <code>tableName</code> from the backing service model, and flags columns that no
               backing Flowable model defines.</li>
@@ -55,6 +66,32 @@
         models and start typing.</p>
     ]]></description>
 
+    <change-notes><![CDATA[
+        <h3>0.2.0</h3>
+        <ul>
+          <li><b>Infix key search</b> — completion now matches any fragment of a key, so typing
+              <code>0061</code> at <code>definitionKey("…")</code> proposes <code>KYC-DO-0061</code>
+              (start / word-boundary matches still rank first).</li>
+          <li><b>Scoped task/activity completion</b> — <code>taskDefinitionKey</code> /
+              <code>activityId</code> are narrowed to the sibling
+              <code>processDefinitionKey</code> / <code>caseDefinitionKey</code> in the same query chain,
+              falling back to the project-wide union otherwise.</li>
+          <li><b>Model &rarr; model references in BPMN/CMMN XML</b> — completion, Ctrl/Cmd-click
+              navigation and a broken-key inspection (with quick fix) for <code>calledElement</code>,
+              <code>flowable:formKey</code>, <code>decisionRef</code>,
+              <code>decisionTableReferenceKey</code>, CMMN <code>caseRef</code> / <code>processRef</code>.</li>
+          <li><b>Generate a typed data-object bean</b> — Alt/Option-Enter on a data-object
+              <code>definitionKey("…")</code> writes a Java POJO from the model's field mappings.</li>
+          <li>Long project scans now honour cancellation (no UI stall while indexing / finding usages).</li>
+        </ul>
+        <h3>0.1.0</h3>
+        <ul>
+          <li>Initial release: context-aware Flowable model-key completion, cascade completion,
+              broken-key inspection, key navigation &amp; Find Usages, model-constants generation, and
+              Liquibase changelog awareness.</li>
+        </ul>
+    ]]></change-notes>
+
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.modules.java</depends>
     <!-- XML PSI for the Liquibase-changelog coverage inspection. -->
@@ -74,6 +111,11 @@
         <completion.contributor
                 language="XML"
                 implementationClass="com.flowable.keys.liquibase.LiquibaseColumnCompletionContributor"/>
+        <!-- BPMN/CMMN model XML: complete model keys at cross-reference attributes
+             (calledElement, flowable:formKey, decisionRef, caseRef, processRef, …). -->
+        <completion.contributor
+                language="XML"
+                implementationClass="com.flowable.keys.completion.FlowableXmlKeyCompletionContributor"/>
         <localInspection
                 language="JAVA"
                 shortName="FlowableValueField"
@@ -90,10 +132,23 @@
                 enabledByDefault="true"
                 level="WARNING"
                 implementationClass="com.flowable.keys.inspection.FlowableBrokenKeyInspection"/>
+        <!-- BPMN/CMMN model XML: an unknown model key at a cross-reference attribute (broken deployment). -->
+        <localInspection
+                language="XML"
+                shortName="FlowableXmlBrokenKey"
+                displayName="Unknown Flowable model key (model XML)"
+                groupName="Flowable"
+                enabledByDefault="true"
+                level="WARNING"
+                implementationClass="com.flowable.keys.inspection.FlowableXmlBrokenKeyInspection"/>
         <!-- Ctrl-click a key literal → jump to the model file; Find Usages works too. -->
         <psi.referenceContributor
                 language="JAVA"
                 implementation="com.flowable.keys.navigation.FlowableKeyReferenceContributor"/>
+        <!-- Ctrl-click a model key in BPMN/CMMN XML (calledElement, formKey, decisionRef, …) → the model file. -->
+        <psi.referenceContributor
+                language="XML"
+                implementation="com.flowable.keys.navigation.FlowableXmlKeyReferenceContributor"/>
         <!-- Hover / Ctrl-Q on a key literal → model type, name and file. -->
         <lang.documentationProvider
                 language="JAVA"
@@ -107,6 +162,12 @@
                 enabledByDefault="true"
                 level="WARNING"
                 implementationClass="com.flowable.keys.liquibase.LiquibaseCoverageInspection"/>
+        <!-- Alt-Enter on a data-object definitionKey → generate a typed Java bean from its fields. -->
+        <intentionAction>
+            <language>JAVA</language>
+            <className>com.flowable.keys.intention.GenerateDataObjectBeanIntention</className>
+            <category>Flowable</category>
+        </intentionAction>
         <!-- Don't report Java referenced from models (delegates, ${bean.method()}, listeners) as unused. -->
         <implicitUsageProvider implementation="com.flowable.keys.usage.FlowableImplicitUsageProvider"/>
         <!-- Find Usages / Ctrl-B on a delegate class or ${bean.method()} shows the model files that use it. -->

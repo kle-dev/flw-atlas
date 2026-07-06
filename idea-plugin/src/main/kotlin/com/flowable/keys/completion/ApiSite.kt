@@ -59,14 +59,22 @@ enum class Vocabulary(val display: String) {
 }
 
 /**
- * The argument is a value from a project-wide [vocabulary] — e.g. a message/signal name, a process
- * variable name, a task-definition key or an activity id. Offered as the union across all models.
+ * The argument is a value from a [vocabulary] — e.g. a message/signal name, a process variable
+ * name, a task-definition key or an activity id.
+ *
+ * By default it is offered as the union across all models. When [scopeKeyMethods] is non-empty and
+ * the same fluent chain carries one of those key calls (e.g. `processDefinitionKey("X")`), the
+ * vocabulary is narrowed to the members of that single model (of one of [scopeTypes]) — so
+ * `…processDefinitionKey("X").taskDefinitionKey("<caret>")` offers only process X's task keys. Falls
+ * back to the project-wide union when no such sibling key is present.
  */
 data class VocabularySite(
     override val receiverFqn: String,
     override val methodName: String,
     override val argIndex: Int,
     val vocabulary: Vocabulary,
+    val scopeKeyMethods: List<String> = emptyList(),
+    val scopeTypes: List<ModelType> = emptyList(),
 ) : ApiSite()
 
 /**

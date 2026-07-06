@@ -1,6 +1,7 @@
 package com.flowable.keys.model
 
 import com.flowable.keys.index.ColumnMapping
+import com.flowable.keys.index.DataField
 import com.flowable.keys.index.DataObjectInfo
 import com.flowable.keys.index.OperationInfo
 import com.flowable.keys.index.ParamInfo
@@ -131,13 +132,15 @@ object JsonUtil {
         root ?: return null
         val key = str(root, "key") ?: return null
         val fields = (root["fieldMappings"] as? List<*>).orEmpty().mapNotNull { fAny ->
-            (fAny as? Map<*, *>)?.get("name") as? String
+            val f = fAny as? Map<*, *> ?: return@mapNotNull null
+            val name = f["name"] as? String ?: return@mapNotNull null
+            DataField(name, f["type"] as? String)
         }
         return DataObjectInfo(
             key = key,
             dataObjectType = str(root, "dataObjectType"),
             referencedServiceDefinitionModelKey = str(root, "referencedServiceDefinitionModelKey"),
-            fields = fields,
+            fieldMappings = fields,
         )
     }
 }
