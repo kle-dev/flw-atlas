@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.flowable.keys</id>
     <name>Flowable Keys</name>
-    <version>0.2.0</version>
+    <version>0.2.1</version>
     <vendor email="kevin.klever@flowable.com" url="https://www.flowable.com">Flowable</vendor>
 
     <description><![CDATA[
