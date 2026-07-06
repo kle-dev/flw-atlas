@@ -1,0 +1,49 @@
+<link rel="stylesheet" href="ide.css">
+<div class="win">
+  <div class="title">
+    <span class="tl"><i class="r"></i><i class="y"></i><i class="g"></i></span>
+    <span class="proj">flowable-demo — <b>ProcessLauncher.java</b></span>
+    <span class="run"><span class="play">▶</span><span class="cfg">Application ▾</span></span>
+  </div>
+  <div class="body">
+    <div class="strip">
+      <svg class="on" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4" stroke-linecap="round"/></svg>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="9" r="2.4"/><path d="M6 8.4v7.2M8.2 6.6C13 7 15.6 8 15.6 8" stroke-linecap="round"/></svg>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h10M4 18h13"/></svg>
+    </div>
+    <div class="tree">
+      <div class="ttl">Project</div>
+      <div class="row"><span class="caret-tri">▾</span><span class="ic folder"><svg width="15" height="15" viewBox="0 0 24 24" fill="#9aa0a6"><path d="M3 7a2 2 0 0 1 2-2h3.6l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>com.example.app</div>
+      <div class="row" style="padding-left:22px;"><span class="caret-tri" style="visibility:hidden">▸</span><span class="ic j">J</span>CaseStarter</div>
+      <div class="row sel" style="padding-left:22px;"><span class="caret-tri" style="visibility:hidden">▸</span><span class="ic j">J</span>ProcessLauncher</div>
+      <div class="row"><span class="caret-tri">▾</span><span class="ic folder"><svg width="15" height="15" viewBox="0 0 24 24" fill="#9aa0a6"><path d="M3 7a2 2 0 0 1 2-2h3.6l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>bpmn-models</div>
+      <div class="row" style="padding-left:22px;"><span class="caret-tri" style="visibility:hidden">▸</span><span class="ic p">P</span>order-fulfilment.bpmn</div>
+      <div class="row" style="padding-left:22px;"><span class="caret-tri" style="visibility:hidden">▸</span><span class="ic p">P</span>invoice-approval.bpmn</div>
+      <div class="row"><span class="caret-tri">▸</span><span class="ic folder"><svg width="15" height="15" viewBox="0 0 24 24" fill="#9aa0a6"><path d="M3 7a2 2 0 0 1 2-2h3.6l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>cmmn-models</div>
+      <div class="row"><span class="caret-tri">▸</span><span class="ic folder"><svg width="15" height="15" viewBox="0 0 24 24" fill="#9aa0a6"><path d="M3 7a2 2 0 0 1 2-2h3.6l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>dmn-models</div>
+    </div>
+    <div class="editor">
+      <div class="tabs"><div class="tab"><span class="ic j" style="width:14px;height:14px;">J</span>ProcessLauncher.java</div></div>
+      <div class="edscroll">
+        <div class="gutter"><span>07</span><span>08</span><span>09</span><span>10</span><span>11</span><span>12</span><span>13</span><span>14</span><span>15</span><span>16</span></div>
+        <div class="code"><span class="ln"><span class="kw">public</span> <span class="ty">String</span> <span class="fn">launch</span>(<span class="ty">String</span> orderId) {</span><span class="ln">    <span class="c">// typo — no such process key exists in this project</span></span><span class="ln">    <span class="kw">return</span> runtimeService</span><span class="ln">            .<span class="m">startProcessInstanceByKey</span>(<span class="s">"</span><span class="s squiggle warnbg">order-p999</span><span class="s">"</span>)</span><span class="ln">            .<span class="m">getId</span>();</span><span class="ln">}</span><span class="ln"> </span><span class="ln"> </span><span class="ln"> </span><span class="ln"> </span>
+          <div class="tooltip" style="top:112px; left:360px; width:430px;">
+            <div><svg width="14" height="14" viewBox="0 0 24 24" fill="#e0888a" style="vertical-align:-2px;"><path d="M12 2 1 21h22L12 2zm0 6l6.5 11h-13L12 8zm-1 4v3h2v-3h-2zm0 4v2h2v-2h-2z"/></svg>
+              <b style="color:#e0a3a3;">'order-p999'</b> is not a known Process key — did you mean <b style="color:#6aab73;">'ORDER-P001'</b>?</div>
+            <div style="margin-top:11px; display:flex; gap:9px; align-items:center; padding-top:10px; border-top:1px solid #4b4e55;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="#f5bf4f"><path d="M9 21h6v-1.5H9V21zm3-19a7 7 0 0 0-4 12.8V17h8v-3.2A7 7 0 0 0 12 2z"/></svg>
+              <span style="color:#5c9eff;">Replace with '<b style="color:#5c9eff;">ORDER-P001</b>'</span>
+              <span class="kbd" style="margin-left:auto;">⌥ ⏎</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="status">
+        <span class="badge">⎇ main</span>
+        <span class="badge" style="color:#e0888a;">1 warning — Unknown Flowable model key</span>
+        <span class="r badge">10:41 · UTF-8 · Java</span>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,47 @@
+<link rel="stylesheet" href="ide.css">
+<style>.deref{ color:#dfe1e5; text-decoration:underline; text-decoration-color:#5c9eff; text-underline-offset:3px; }</style>
+<div class="win">
+  <div class="title">
+    <span class="tl"><i class="r"></i><i class="y"></i><i class="g"></i></span>
+    <span class="proj">flowable-demo — <b>DecisionRunner.java</b></span>
+    <span class="run"><span class="play">▶</span><span class="cfg">Application ▾</span></span>
+  </div>
+  <div class="body">
+    <div class="strip">
+      <svg class="on" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4" stroke-linecap="round"/></svg>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="9" r="2.4"/><path d="M6 8.4v7.2M8.2 6.6C13 7 15.6 8 15.6 8" stroke-linecap="round"/></svg>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h10M4 18h13"/></svg>
+    </div>
+    <div class="tree">
+      <div class="ttl">Project</div>
+      <div class="row"><span class="caret-tri">▾</span><span class="ic folder"><svg width="15" height="15" viewBox="0 0 24 24" fill="#9aa0a6"><path d="M3 7a2 2 0 0 1 2-2h3.6l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>com.example.app</div>
+      <div class="row sel" style="padding-left:22px;"><span class="caret-tri" style="visibility:hidden">▸</span><span class="ic j">J</span>DecisionRunner</div>
+      <div class="row"><span class="caret-tri">▾</span><span class="ic folder"><svg width="15" height="15" viewBox="0 0 24 24" fill="#9aa0a6"><path d="M3 7a2 2 0 0 1 2-2h3.6l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>dmn-models</div>
+      <div class="row" style="padding-left:22px;"><span class="caret-tri" style="visibility:hidden">▸</span><span class="ic d">D</span>discount-eligibility.dmn.json</div>
+      <div class="row" style="padding-left:22px;"><span class="caret-tri" style="visibility:hidden">▸</span><span class="ic d">D</span>shipping-tier.dmn.json</div>
+      <div class="row"><span class="caret-tri">▸</span><span class="ic folder"><svg width="15" height="15" viewBox="0 0 24 24" fill="#9aa0a6"><path d="M3 7a2 2 0 0 1 2-2h3.6l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>bpmn-models</div>
+      <div class="row"><span class="caret-tri">▸</span><span class="ic folder"><svg width="15" height="15" viewBox="0 0 24 24" fill="#9aa0a6"><path d="M3 7a2 2 0 0 1 2-2h3.6l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>cmmn-models</div>
+    </div>
+    <div class="editor">
+      <div class="tabs"><div class="tab"><span class="ic j" style="width:14px;height:14px;">J</span>DecisionRunner.java</div></div>
+      <div class="edscroll">
+        <div class="gutter"><span>18</span><span>19</span><span>20</span><span>21</span><span>22</span><span>23</span><span>24</span><span>25</span><span>26</span><span>27</span></div>
+        <div class="code"><span class="ln"><span class="kw">public</span> <span class="ty">BigDecimal</span> <span class="fn">evaluate</span>(<span class="ty">Map</span>&lt;<span class="ty">String</span>, <span class="ty">Object</span>&gt; vars) {</span><span class="ln">    <span class="kw">return</span> dmnDecisionService.<span class="m">createExecuteDecisionBuilder</span>()</span><span class="ln">            .<span class="m">decisionKey</span>(<span class="s">"</span><span class="deref">discountEligibility</span><span class="s">"</span>)</span><span class="ln">            .<span class="m">variables</span>(vars)</span><span class="ln">            .<span class="m">executeWithSingleResult</span>();</span><span class="ln">}</span><span class="ln"> </span><span class="ln"> </span><span class="ln"> </span><span class="ln"> </span>
+          <div class="docpop" style="top:108px; left:236px; min-width:340px;">
+            <div class="h"><span class="picn d" style="width:18px;height:18px;">D</span><span class="lbl">Decision model</span></div>
+            <div class="name">Discount Eligibility</div>
+            <div class="kvp">key <span class="s">discountEligibility</span></div>
+            <div class="kvp">2 inputs · 1 output · latest version</div>
+            <div class="path">↳ dmn-models/discount-eligibility.dmn.json</div>
+          </div>
+        </div>
+      </div>
+      <div class="status">
+        <span class="badge">⎇ main</span>
+        <span class="badge">Flowable Keys · ⌘-click to open model · F1 for docs</span>
+        <span class="r badge">20:26 · UTF-8 · Java</span>
+      </div>
+    </div>
+  </div>
+</div>

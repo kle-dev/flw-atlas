@@ -1,0 +1,10 @@
+.gradle/
+build/
+out/
+*.iml
+.idea/
+.DS_Store
+
+# IntelliJ Platform Gradle plugin caches
+.intellijPlatform/
+.kotlin/
