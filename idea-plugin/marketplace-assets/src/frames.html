@@ -1,0 +1,86 @@
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1120px; height:520px; overflow:hidden; background:#12141a; }
+  body { font-family: ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace; font-size:15px; line-height:1.85; -webkit-font-smoothing:antialiased; }
+  .card { width:1120px; height:520px; background:#1e1f22; display:flex; flex-direction:column; }
+  .top { height:40px; background:#2b2d30; display:flex; align-items:center; padding:0 16px; gap:9px; border-bottom:1px solid #16171a; }
+  .top i{ width:12px;height:12px;border-radius:50%; } .top .r{background:#ec6a5e;} .top .y{background:#f5bf4f;} .top .g{background:#61c554;}
+  .top .tab{ margin-left:16px; font-family:-apple-system,sans-serif; font-size:13px; color:#dfe1e5; display:flex; gap:8px; align-items:center; }
+  .jf{ width:15px;height:15px;border-radius:4px;background:linear-gradient(135deg,#f97a53,#e0447a);display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;font-family:-apple-system,sans-serif; }
+  .edit{ flex:1; display:flex; position:relative; }
+  .gutter{ width:52px; text-align:right; padding:18px 12px 0 0; color:#4b4e55; font-variant-numeric:tabular-nums; }
+  .gutter span{ display:block; }
+  .code{ flex:1; padding:18px 0 0 12px; white-space:pre; position:relative; color:#dfe1e5; }
+  .ln{ display:block; }
+  .kw{color:#cf8e6d;} .s{color:#6aab73;} .num{color:#2aacb8;} .c{color:#7a7e85;} .m{color:#dfe1e5;} .fn{color:#56a8f5;} .ty{color:#dfe1e5;}
+  .caret{ display:inline-block; width:2px; height:1.15em; background:#dfe1e5; vertical-align:-3px; margin:0 -1px; }
+  .popup{ position:absolute; background:#2b2d30; border:1px solid #43454a; border-radius:8px; box-shadow:0 24px 54px -14px rgba(0,0,0,.8); overflow:hidden; min-width:440px; padding:4px 0; }
+  .prow{ display:flex; align-items:center; gap:11px; padding:7px 15px 7px 12px; color:#bcc2cc; white-space:nowrap; font-size:14.5px; }
+  .prow.sel{ background:#2e436e; } .prow .key{ color:#d9dee6; } .prow.sel .key{ color:#fff; }
+  .prow .key b{ color:#5c9eff; font-weight:700; }
+  .prow .hint{ margin-left:auto; padding-left:36px; color:#7a7e85; font-family:-apple-system,sans-serif; font-size:13px; }
+  .picn{ width:17px;height:17px;border-radius:4px;background:#7a5cff;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;font-family:-apple-system,sans-serif; }
+  .badge{ position:absolute; left:12px; bottom:14px; font-family:-apple-system,sans-serif; font-size:12px; color:#7a7e85; }
+  .badge b{ color:#9aa4b2; font-weight:600; }
+</style>
+<div class="card">
+  <div class="top"><i class="r"></i><i class="y"></i><i class="g"></i><span class="tab"><span class="jf">J</span>CaseStarter.java</span></div>
+  <div class="edit">
+    <div class="gutter"><span>12</span><span>13</span><span>14</span><span>15</span><span>16</span></div>
+    <div class="code" id="code"></div>
+  </div>
+</div>
+<script>
+  var CASES = [
+    {k:'customerOnboarding', n:'Customer Onboarding'},
+    {k:'contractReview',     n:'Contract Review'},
+    {k:'refundRequest',      n:'Refund Request'},
+    {k:'disputeResolution',  n:'Dispute Resolution'},
+    {k:'accountUpdate',      n:'Account Update'}
+  ];
+  function hl(text, q){
+    if(!q) return text;
+    var i = text.toLowerCase().indexOf(q.toLowerCase());
+    if(i<0) return text;
+    return text.slice(0,i)+'<b>'+text.slice(i,i+q.length)+'</b>'+text.slice(i+q.length);
+  }
+  // filter by key OR name-substring (case-insensitive)
+  function filt(q){
+    if(!q) return CASES.slice();
+    var lq=q.toLowerCase();
+    return CASES.filter(function(c){ return c.k.toLowerCase().indexOf(lq)>=0 || c.n.toLowerCase().indexOf(lq)>=0; });
+  }
+  function popup(q, selIdx){
+    var items = filt(q);
+    var rows = items.map(function(c,idx){
+      return '<div class="prow'+(idx===selIdx?' sel':'')+'"><span class="picn">C</span>'+
+             '<span class="key">'+hl(c.k,q)+'</span><span class="hint">Case · '+c.n+'</span></div>';
+    }).join('');
+    return '<div class="popup" style="top:44px; left:236px;">'+rows+'</div>';
+  }
+  // frame states
+  var F = [
+    {typed:'', pop:null, caret:true, badge:'Type a key — or a word from its <b>name</b>'},
+    {typed:'', pop:{q:'',sel:0}, caret:false, badge:'Every case model in your project'},
+    {typed:'', pop:{q:'',sel:0}, caret:false, badge:'Every case model in your project'},
+    {typed:'re', pop:{q:'re',sel:1}, caret:false, badge:'Filtered by key <b>or</b> name'},
+    {typed:'re', pop:{q:'re',sel:1}, caret:false, badge:'Filtered by key <b>or</b> name'},
+    {typed:'refundRequest', pop:null, caret:true, badge:'Inserted — no typos, no copy-paste'},
+    {typed:'refundRequest', pop:null, caret:true, badge:'Inserted — no typos, no copy-paste'}
+  ];
+  function render(i){
+    var st = F[i] || F[0];
+    var inner = st.typed + (st.caret?'<span class="caret"></span>':'');
+    var code =
+      '<span class="ln"><span class="kw">return</span> cmmnRuntimeService.<span class="m">createCaseInstanceBuilder</span>()</span>'+
+      '<span class="ln">        .<span class="m">caseDefinitionKey</span>(<span class="s">"</span>'+inner+'<span class="s">"</span>)</span>'+
+      '<span class="ln">        .<span class="m">variable</span>(<span class="s">"customerId"</span>, customerId)</span>'+
+      '<span class="ln">        .<span class="m">start</span>();</span>'+
+      '<span class="ln"> </span>';
+    var el = document.getElementById('code');
+    el.innerHTML = code + (st.pop ? popup(st.pop.q, st.pop.sel) : '') +
+      '<div class="badge">'+st.badge+'</div>';
+  }
+  var f = parseInt((location.search.match(/f=(\d+)/)||[])[1] || '0', 10);
+  render(f);
+</script>

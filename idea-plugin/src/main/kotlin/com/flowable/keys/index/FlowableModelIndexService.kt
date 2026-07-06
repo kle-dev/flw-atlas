@@ -1,0 +1,191 @@
+package com.flowable.keys.index
+
+import com.flowable.keys.model.JsonUtil
+import com.flowable.keys.model.ModelFiles
+import com.flowable.keys.model.ModelType
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.ProjectFileIndex
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.vfs.VirtualFileManager
+import com.intellij.openapi.vfs.newvfs.BulkFileListener
+import com.intellij.openapi.vfs.newvfs.events.VFileEvent
+
+/**
+ * Project-wide index of Flowable model keys and the query facade used by the completion
+ * contributors. Backed by a cached full scan of the project's content roots; invalidated
+ * when any model file changes. The public API (keysOfType / find / operationsOf /
+ * inputParametersOf) is intentionally storage-agnostic so the backing store can later be
+ * swapped for a FileBasedIndex without touching callers.
+ */
+@Service(Service.Level.PROJECT)
+class FlowableModelIndexService(private val project: Project) : Disposable {
+
+    @Volatile
+    private var cached: FlowableIndex? = null
+
+    init {
+        project.messageBus.connect(this).subscribe(
+            VirtualFileManager.VFS_CHANGES,
+            object : BulkFileListener {
+                override fun after(events: MutableList<out VFileEvent>) {
+                    if (events.any { ModelFiles.isModelPath(it.path) }) cached = null
+                }
+            },
+        )
+    }
+
+    /** The current index, building it (under a read action) on first use / after invalidation. */
+    fun index(): FlowableIndex {
+        cached?.let { return it }
+        val built = ReadAction.compute<FlowableIndex, RuntimeException> { build() }
+        cached = built
+        return built
+    }
+
+    /** Force a rebuild and return the fresh index. */
+    fun refresh(): FlowableIndex {
+        cached = null
+        return index()
+    }
+
+    /** Drop the cached index so it is rebuilt lazily on next use (cheap; safe on the EDT). */
+    fun invalidate() {
+        cached = null
+    }
+
+    fun keysOfType(type: ModelType): List<ModelEntry> = index().keysOfType(type)
+
+    fun find(key: String): List<ModelEntry> = index().find(key)
+
+    /** Operations available on a data object, resolved via its backing service model. */
+    fun operationsOf(dataObjectKey: String): List<OperationInfo> {
+        val dataFile = index().find(dataObjectKey, ModelType.DATA_OBJECT)?.file ?: return emptyList()
+        val serviceKey = ReadAction.compute<String?, RuntimeException> {
+            JsonUtil.topLevelString(dataFile, "referencedServiceDefinitionModelKey")
+        } ?: return emptyList()
+        return operationsOfService(serviceKey)
+    }
+
+    /** Operations declared directly on a service model. */
+    fun operationsOfService(serviceKey: String): List<OperationInfo> {
+        val serviceFile = index().find(serviceKey, ModelType.SERVICE)?.file ?: return emptyList()
+        return ReadAction.compute<List<OperationInfo>, RuntimeException> {
+            JsonUtil.readOperations(serviceFile)
+        }
+    }
+
+    /** Input value fields required by a data object's operation. */
+    fun inputParametersOf(dataObjectKey: String, operationKey: String): List<ParamInfo> =
+        operationsOf(dataObjectKey).firstOrNull { it.key == operationKey }?.inputParameters.orEmpty()
+
+    // ---- member vocabularies (non-key completion domains) ------------------------------
+
+    /** Project-wide process/case variable names. */
+    fun variables(): Set<String> = index().variables
+
+    /** BPMN message names (for startProcessInstanceByMessage / messageEventReceived). */
+    fun messages(): Set<String> = index().messages
+
+    /** BPMN signal names (for signalEventReceived). */
+    fun signals(): Set<String> = index().signals
+
+    /** userTask ids (for taskDefinitionKey). */
+    fun userTaskIds(): Set<String> = index().userTaskIds
+
+    /** Flow-node ids (for activityId). */
+    fun activityIds(): Set<String> = index().activityIds
+
+    /** DMN input/output variable names of a decision (for ExecuteDecisionBuilder.variable). */
+    fun decisionVariablesOf(decisionKey: String): List<String> =
+        index().membersOf(decisionKey, ModelType.DECISION)?.decisionVariables.orEmpty()
+
+    /** Payload + correlation parameter names of an event (for event-payload completion). */
+    fun payloadOf(eventKey: String): List<String> =
+        index().membersOf(eventKey, ModelType.EVENT)?.payload.orEmpty()
+
+    // ---- Liquibase-coverage support (read on demand) -----------------------------------
+
+    /** The physical-table mapping of a `.service` model, or null if not a database service / not found. */
+    fun serviceTableOf(serviceKey: String): ServiceTable? {
+        val file = index().find(serviceKey, ModelType.SERVICE)?.file ?: return null
+        return ReadAction.compute<ServiceTable?, RuntimeException> { JsonUtil.readServiceTable(file) }
+    }
+
+    /** The logical field mapping of a `.data` model, or null if not found. */
+    fun dataObjectInfoOf(dataObjectKey: String): DataObjectInfo? {
+        val file = index().find(dataObjectKey, ModelType.DATA_OBJECT)?.file ?: return null
+        return ReadAction.compute<DataObjectInfo?, RuntimeException> { JsonUtil.readDataObject(file) }
+    }
+
+    /** All indexed database `.service` models (for the Liquibase-coverage inspection). */
+    fun allServiceTables(): List<ServiceTable> = ReadAction.compute<List<ServiceTable>, RuntimeException> {
+        index().keysOfType(ModelType.SERVICE).mapNotNull { JsonUtil.readServiceTable(it.file) }
+    }
+
+    /** All indexed `.data` models. */
+    fun allDataObjects(): List<DataObjectInfo> = ReadAction.compute<List<DataObjectInfo>, RuntimeException> {
+        index().keysOfType(ModelType.DATA_OBJECT).mapNotNull { JsonUtil.readDataObject(it.file) }
+    }
+
+    override fun dispose() {
+        cached = null
+    }
+
+    // ---- scanning ----------------------------------------------------------------------
+
+    private fun build(): FlowableIndex {
+        val byKey = HashMap<String, MutableList<ModelEntry>>()
+        val referencedIdentifiers = HashSet<String>()
+        val referencedClassFqns = HashSet<String>()
+        val variables = HashSet<String>()
+        val messages = HashSet<String>()
+        val signals = HashSet<String>()
+        val userTaskIds = HashSet<String>()
+        val activityIds = HashSet<String>()
+        // Index one model's content, associating its entry with [navFile] for navigation
+        // (a loose file, or a navigable entry inside a .bar/.zip archive).
+        fun processModel(fileName: String, bytes: ByteArray, type: ModelType, navFile: VirtualFile) {
+            try {
+                for (raw in ModelExtraction.extract(fileName, bytes, type)) {
+                    val entry = ModelEntry(raw.key, raw.name ?: raw.key, type, navFile, raw.members)
+                    byKey.getOrPut(raw.key) { ArrayList() }.add(entry)
+                    raw.members.let { m ->
+                        variables.addAll(m.variables)
+                        messages.addAll(m.messages)
+                        signals.addAll(m.signals)
+                        userTaskIds.addAll(m.userTaskIds)
+                        activityIds.addAll(m.activityIds)
+                    }
+                }
+                ModelExpressionScanner.scan(String(bytes, Charsets.UTF_8), referencedIdentifiers, referencedClassFqns)
+            } catch (e: Exception) {
+                // unreadable / not valid — skip this model
+            }
+        }
+
+        ProjectFileIndex.getInstance(project).iterateContent { file ->
+            if (!file.isDirectory && !ModelFiles.isExcluded(file.path)) {
+                val type = ModelFiles.typeOf(file)
+                when {
+                    type != null ->
+                        runCatching { file.contentsToByteArray() }.getOrNull()
+                            ?.let { processModel(file.name, it, type, file) }
+                    // Look inside .bar/.zip archives (real-world deployment; unpacked folder optional).
+                    ArchiveModelScanner.isArchive(file) ->
+                        ArchiveModelScanner.scan(file) { name, bytes, entryType, entryFile ->
+                            processModel(name, bytes, entryType, entryFile)
+                        }
+                }
+            }
+            true
+        }
+        return FlowableIndex(
+            byKey, referencedIdentifiers, referencedClassFqns,
+            variables = variables, messages = messages, signals = signals,
+            userTaskIds = userTaskIds, activityIds = activityIds,
+        )
+    }
+}

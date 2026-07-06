@@ -26,3 +26,7 @@ email/
 .DS_Store
 __pycache__/
 *.pyc
+
+# Exception: committed Marketplace media for the IntelliJ plugin (intentional content)
+!idea-plugin/marketplace-assets/*.png
+!idea-plugin/marketplace-assets/*.gif

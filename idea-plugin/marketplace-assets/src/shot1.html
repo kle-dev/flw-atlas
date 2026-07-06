@@ -1,0 +1,102 @@
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1280px; height:800px; overflow:hidden; }
+  body {
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    background:#1e1f22; color:#dfe1e5; font-size:13.5px; line-height:1.72;
+    -webkit-font-smoothing:antialiased;
+  }
+  .win { width:1280px; height:800px; display:flex; flex-direction:column; background:#2b2d30; }
+  .title { height:38px; display:flex; align-items:center; padding:0 14px; gap:8px; background:#2b2d30; border-bottom:1px solid #1e1f22; }
+  .tl { display:flex; gap:8px; }
+  .tl i { width:12px; height:12px; border-radius:50%; display:block; }
+  .tl .r{background:#ec6a5e;} .tl .y{background:#f5bf4f;} .tl .g{background:#61c554;}
+  .title .proj { margin-left:14px; font-family:-apple-system,"Segoe UI",sans-serif; font-size:13px; color:#b4b8bf; }
+  .title .proj b { color:#dfe1e5; font-weight:600; }
+  .title .run { margin-left:auto; display:flex; align-items:center; gap:14px; color:#7a7e85; }
+  .title .run .play { color:#61c554; font-size:12px; }
+  .title .run .cfg { font-family:-apple-system,sans-serif; font-size:12px; color:#b4b8bf; border:1px solid #43454a; border-radius:6px; padding:3px 10px; }
+  .body { flex:1; display:flex; min-height:0; }
+  .strip { width:40px; background:#2b2d30; border-right:1px solid #1e1f22; display:flex; flex-direction:column; align-items:center; padding-top:12px; gap:18px; color:#6b7079; }
+  .strip .on { color:#dfe1e5; }
+  .tree { width:236px; background:#2b2d30; border-right:1px solid #1e1f22; font-family:-apple-system,"Segoe UI",sans-serif; font-size:13px; padding:8px 0; overflow:hidden; }
+  .tree .ttl { padding:4px 14px 8px; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#7a7e85; }
+  .row { display:flex; align-items:center; gap:7px; padding:3px 12px 3px 0; color:#c7cbd1; white-space:nowrap; }
+  .row.sel { background:#2e436e; }
+  .ic { width:15px; height:15px; border-radius:3px; display:inline-flex; align-items:center; justify-content:center; font-size:8px; font-weight:800; color:#fff; font-family:-apple-system,sans-serif; flex:none; }
+  .ic.folder{ background:none; }
+  .ic.p{background:#3f7dd6;} .ic.c{background:#7a5cff;} .ic.d{background:#d68a3f;} .ic.f{background:#3faf7a;} .ic.j{background:linear-gradient(135deg,#f97a53,#e0447a);}
+  .caret-tri { color:#7a7e85; font-size:9px; width:10px; display:inline-block; text-align:center; }
+  .editor { flex:1; display:flex; flex-direction:column; min-width:0; background:#1e1f22; }
+  .tabs { height:34px; display:flex; align-items:stretch; background:#2b2d30; border-bottom:1px solid #1e1f22; }
+  .tab { display:flex; align-items:center; gap:8px; padding:0 16px; font-family:-apple-system,sans-serif; font-size:13px; color:#dfe1e5; background:#1e1f22; border-right:1px solid #2b2d30; border-top:2px solid #3574f0; }
+  .edscroll { flex:1; display:flex; position:relative; overflow:hidden; }
+  .gutter { width:52px; text-align:right; padding:14px 12px 0 0; color:#4b4e55; user-select:none; font-variant-numeric:tabular-nums; background:#1e1f22; }
+  .gutter span{ display:block; }
+  .code { flex:1; padding:14px 0 0 10px; white-space:pre; position:relative; }
+  .ln { display:block; min-height:1.72em; }
+  .kw{color:#cf8e6d;} .s{color:#6aab73;} .num{color:#2aacb8;} .c{color:#7a7e85;}
+  .m{color:#dfe1e5;} .fn{color:#56a8f5;} .ty{color:#dfe1e5;} .jd{color:#5f9a5f;} .fld{color:#c77dbb;}
+  .caret{ display:inline-block; width:2px; height:1.15em; background:#dfe1e5; vertical-align:-3px; margin:0 -1px; }
+  .popup{ position:absolute; background:#2b2d30; border:1px solid #43454a; border-radius:8px; box-shadow:0 22px 50px -12px rgba(0,0,0,.75); overflow:hidden; min-width:430px; font-size:13px; white-space:normal; padding:4px 0; }
+  .prow{ display:flex; align-items:center; gap:10px; padding:6px 14px 6px 11px; color:#bcc2cc; white-space:nowrap; }
+  .prow.sel{ background:#2e436e; }
+  .prow .key{ color:#d9dee6; } .prow.sel .key{ color:#fff; }
+  .prow .key b{ color:#5c9eff; font-weight:700; }
+  .prow .hint{ margin-left:auto; padding-left:34px; color:#7a7e85; font-family:-apple-system,sans-serif; font-size:12px; }
+  .picn{ width:16px;height:16px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;font-family:-apple-system,sans-serif;flex:none; }
+  .picn.c{background:#7a5cff;} .picn.p{background:#3f7dd6;}
+  .status{ height:24px; background:#2b2d30; border-top:1px solid #1e1f22; display:flex; align-items:center; padding:0 14px; gap:16px; font-family:-apple-system,sans-serif; font-size:11.5px; color:#7a7e85; }
+  .status .r{ margin-left:auto; }
+  .badge{ display:inline-flex; align-items:center; gap:6px; color:#8a8f98; }
+</style>
+<div class="win">
+  <div class="title">
+    <span class="tl"><i class="r"></i><i class="y"></i><i class="g"></i></span>
+    <span class="proj">flowable-demo — <b>CaseStarter.java</b></span>
+    <span class="run"><span class="play">▶</span><span class="cfg">Application ▾</span></span>
+  </div>
+  <div class="body">
+    <div class="strip">
+      <svg class="on" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4" stroke-linecap="round"/></svg>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="9" r="2.4"/><path d="M6 8.4v7.2M8.2 6.6C13 7 15.6 8 15.6 8" stroke-linecap="round"/></svg>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h10M4 18h13"/></svg>
+    </div>
+    <div class="tree">
+      <div class="ttl">Project</div>
+      <div class="row"><span class="caret-tri">▾</span><span class="ic folder"><svg width="15" height="15" viewBox="0 0 24 24" fill="#9aa0a6"><path d="M3 7a2 2 0 0 1 2-2h3.6l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>src/main/java</div>
+      <div class="row" style="padding-left:22px;"><span class="caret-tri">▾</span><span class="ic folder"><svg width="15" height="15" viewBox="0 0 24 24" fill="#9aa0a6"><path d="M3 7a2 2 0 0 1 2-2h3.6l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>com.example.app</div>
+      <div class="row sel" style="padding-left:40px;"><span class="caret-tri" style="visibility:hidden">▸</span><span class="ic j">J</span>CaseStarter</div>
+      <div class="row" style="padding-left:40px;"><span class="caret-tri" style="visibility:hidden">▸</span><span class="ic j">J</span>ProcessLauncher</div>
+      <div class="row"><span class="caret-tri">▾</span><span class="ic folder"><svg width="15" height="15" viewBox="0 0 24 24" fill="#9aa0a6"><path d="M3 7a2 2 0 0 1 2-2h3.6l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>cmmn-models</div>
+      <div class="row" style="padding-left:22px;"><span class="caret-tri" style="visibility:hidden">▸</span><span class="ic c">C</span>customer-onboarding.cmmn.json</div>
+      <div class="row" style="padding-left:22px;"><span class="caret-tri" style="visibility:hidden">▸</span><span class="ic c">C</span>contract-review.cmmn.json</div>
+      <div class="row" style="padding-left:22px;"><span class="caret-tri" style="visibility:hidden">▸</span><span class="ic c">C</span>refund-request.cmmn.json</div>
+      <div class="row"><span class="caret-tri">▸</span><span class="ic folder"><svg width="15" height="15" viewBox="0 0 24 24" fill="#9aa0a6"><path d="M3 7a2 2 0 0 1 2-2h3.6l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>bpmn-models</div>
+      <div class="row"><span class="caret-tri">▸</span><span class="ic folder"><svg width="15" height="15" viewBox="0 0 24 24" fill="#9aa0a6"><path d="M3 7a2 2 0 0 1 2-2h3.6l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>dmn-models</div>
+    </div>
+    <div class="editor">
+      <div class="tabs">
+        <div class="tab"><span class="ic j" style="width:14px;height:14px;">J</span>CaseStarter.java</div>
+      </div>
+      <div class="edscroll">
+        <div class="gutter"><span>11</span><span>12</span><span>13</span><span>14</span><span>15</span><span>16</span><span>17</span><span>18</span><span>19</span><span>20</span><span>21</span></div>
+        <div class="code"><span class="ln"><span class="kw">public</span> <span class="ty">String</span> <span class="fn">startOnboarding</span>(<span class="ty">String</span> customerId) {</span><span class="ln">    <span class="c">// start the onboarding case for a new customer</span></span><span class="ln">    <span class="kw">return</span> cmmnRuntimeService.<span class="m">createCaseInstanceBuilder</span>()</span><span class="ln">            .<span class="m">caseDefinitionKey</span>(<span class="s">"</span><span class="caret"></span><span class="s">"</span>)</span><span class="ln">            .<span class="m">variable</span>(<span class="s">"customerId"</span>, customerId)</span><span class="ln">            .<span class="m">start</span>()</span><span class="ln">            .<span class="m">getId</span>();</span><span class="ln">}</span><span class="ln"> </span><span class="ln"> </span><span class="ln"> </span>
+          <div class="popup" style="top:96px; left:250px;">
+            <div class="prow sel"><span class="picn c">C</span><span class="key">customerOnboarding</span><span class="hint">Case · Customer Onboarding</span></div>
+            <div class="prow"><span class="picn c">C</span><span class="key">contractReview</span><span class="hint">Case · Contract Review</span></div>
+            <div class="prow"><span class="picn c">C</span><span class="key">refundRequest</span><span class="hint">Case · Refund Request</span></div>
+            <div class="prow"><span class="picn c">C</span><span class="key">disputeResolution</span><span class="hint">Case · Dispute Resolution</span></div>
+            <div class="prow"><span class="picn c">C</span><span class="key">accountUpdate</span><span class="hint">Case · Account Update</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="status">
+        <span class="badge">⎇ main</span>
+        <span class="badge">Flowable Keys: 42 models indexed</span>
+        <span class="r badge">14:4 · UTF-8 · Java</span>
+      </div>
+    </div>
+  </div>
+</div>
