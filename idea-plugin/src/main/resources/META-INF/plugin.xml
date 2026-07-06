@@ -1,0 +1,139 @@
+<idea-plugin>
+    <id>com.flowable.keys</id>
+    <name>Flowable Keys</name>
+    <version>0.1.0</version>
+    <vendor email="kevin.klever@flowable.com" url="https://www.flowable.com">Flowable</vendor>
+
+    <description><![CDATA[
+        <p><b>Stop guessing Flowable model keys — and stop copy-pasting them from Design.</b></p>
+
+        <p>Flowable Keys makes the <b>model keys</b> in your Java code first-class, IDE-aware references —
+        resolved against the models that actually live in your project. It indexes every Flowable model
+        you keep in the repo: the artifacts you exported from Design (the app <code>.zip</code> /
+        deployment <code>-bar</code>, holding <code>.bpmn/.cmmn/.dmn/.form/.data/.service/…</code>) or the
+        Flowable Design <code>*-models</code> workspace — then completes the matching key at every Flowable
+        API call site, searchable by <b>key or by name</b>.</p>
+
+        <h3>What you get</h3>
+        <ul>
+          <li><b>Context-aware key completion</b> at every Flowable API position that takes a model key —
+              process, case, decision, form, event, channel, data object, master data, service, action,
+              agent, knowledge base, template, security policy, query, variable extractor, sequence, SLA,
+              dashboard component, data dictionary, page and unified work definitions. Both
+              <code>org.flowable.*</code> and <code>com.flowable.*</code>.</li>
+          <li><b>Cascade completion</b> for fluent chains — <code>operation("…")</code> completes the
+              operations of the data object / service resolved from the sibling
+              <code>definitionKey(…)</code> / <code>serviceKey(…)</code> (constant references are
+              resolved), and <code>value("…", …)</code> completes that operation's input fields. DMN
+              <code>variable("…", …)</code> offers the decision's input/output variables.</li>
+          <li><b>More than keys</b> — completion for message &amp; signal names, process variables,
+              task-definition keys and activity IDs.</li>
+          <li><b>Broken-key inspection</b> — an unknown key is flagged inline with a
+              <i>"did you mean …?"</i> quick-fix to the closest real key.</li>
+          <li><b>Liquibase aware</b> — inside a changelog it completes <code>&lt;column&gt;</code> names
+              and <code>tableName</code> from the backing service model, and flags columns that no
+              backing Flowable model defines.</li>
+          <li><b>Go to definition &amp; Find Usages</b> — Ctrl/Cmd-click a key literal to jump straight to
+              the model file; hover for its type, name and location. Find Usages on a delegate class or
+              an <code>${bean.method()}</code> expression lists the model files that reference it.</li>
+          <li><b>Generate model constants</b> — one action writes a typed Java class
+              (<code>FlowableModelKeys.Process.ORDER_FULFILMENT</code>, model name in Javadoc) and keeps
+              it in sync automatically as models are added, renamed or removed.</li>
+        </ul>
+
+        <h3>How it feels</h3>
+        <ul>
+          <li><code>runtimeService.startProcessInstanceByKey("&lt;caret&gt;")</code> → your process keys.</li>
+          <li><code>cmmnRuntimeService.createCaseInstanceBuilder().caseDefinitionKey("&lt;caret&gt;")</code> → your case keys.</li>
+          <li><code>dataObjectRuntimeService.createDataObjectInstanceQuery().definitionKey(KEY).operation("&lt;caret&gt;")</code>
+              → that data object's operations; <code>.value("&lt;caret&gt;", …)</code> → the operation's fields.</li>
+          <li>Press completion twice to list <b>all</b> model keys of every type, regardless of the call site.</li>
+        </ul>
+
+        <p>Fires inside string literals and at bare arguments alike (inserting a quoted key), with Flowable
+        keys ranked to the top. Zero configuration — open a project that contains your exported Flowable
+        models and start typing.</p>
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.java</depends>
+    <!-- XML PSI for the Liquibase-changelog coverage inspection. -->
+    <depends>com.intellij.modules.xml</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Services (FlowableModelIndexService, ModelConstantsService/Settings) are @Service — no registration needed. -->
+        <applicationConfigurable
+                parentId="tools"
+                id="com.flowable.keys.settings"
+                displayName="Flowable Keys"
+                instance="com.flowable.keys.settings.FlowableKeysConfigurable"/>
+        <completion.contributor
+                language="JAVA"
+                implementationClass="com.flowable.keys.completion.FlowableJavaCompletionContributor"/>
+        <!-- Liquibase changelog: complete <column name="…"> / tableName from the backing service model. -->
+        <completion.contributor
+                language="XML"
+                implementationClass="com.flowable.keys.liquibase.LiquibaseColumnCompletionContributor"/>
+        <localInspection
+                language="JAVA"
+                shortName="FlowableValueField"
+                displayName="Invalid Flowable data-object value field"
+                groupName="Flowable"
+                enabledByDefault="true"
+                level="WARNING"
+                implementationClass="com.flowable.keys.inspection.FlowableValueFieldInspection"/>
+        <localInspection
+                language="JAVA"
+                shortName="FlowableBrokenKey"
+                displayName="Unknown Flowable model key"
+                groupName="Flowable"
+                enabledByDefault="true"
+                level="WARNING"
+                implementationClass="com.flowable.keys.inspection.FlowableBrokenKeyInspection"/>
+        <!-- Ctrl-click a key literal → jump to the model file; Find Usages works too. -->
+        <psi.referenceContributor
+                language="JAVA"
+                implementation="com.flowable.keys.navigation.FlowableKeyReferenceContributor"/>
+        <!-- Hover / Ctrl-Q on a key literal → model type, name and file. -->
+        <lang.documentationProvider
+                language="JAVA"
+                implementationClass="com.flowable.keys.navigation.FlowableKeyDocumentationProvider"/>
+        <!-- Liquibase changelog column not mapped in the backing Flowable service/data-object model. -->
+        <localInspection
+                language="XML"
+                shortName="FlowableLiquibaseCoverage"
+                displayName="Liquibase column not defined in Flowable model"
+                groupName="Flowable"
+                enabledByDefault="true"
+                level="WARNING"
+                implementationClass="com.flowable.keys.liquibase.LiquibaseCoverageInspection"/>
+        <!-- Don't report Java referenced from models (delegates, ${bean.method()}, listeners) as unused. -->
+        <implicitUsageProvider implementation="com.flowable.keys.usage.FlowableImplicitUsageProvider"/>
+        <!-- Find Usages / Ctrl-B on a delegate class or ${bean.method()} shows the model files that use it. -->
+        <customUsageSearcher implementation="com.flowable.keys.usage.FlowableModelUsageSearcher"/>
+    </extensions>
+
+    <projectListeners>
+        <!-- Regenerates the model-constants class when models are added/removed/edited. -->
+        <listener class="com.flowable.keys.generate.ModelConstantsAutoRefresher"
+                  topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
+    </projectListeners>
+
+    <actions>
+        <group id="Flowable.Menu"
+               text="Flowable Keys"
+               description="Flowable Keys actions"
+               popup="true">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+
+            <action id="Flowable.GenerateModelConstants"
+                    class="com.flowable.keys.action.GenerateModelConstantsAction"
+                    text="Generate Model Constants"
+                    description="Generate a Java class with all Flowable model keys as constants (kept in sync)"/>
+            <action id="Flowable.DumpKeyIndex"
+                    class="com.flowable.keys.action.DumpFlowableIndexAction"
+                    text="Dump Key Index"
+                    description="Scan the project and list all indexed Flowable model keys"/>
+        </group>
+    </actions>
+</idea-plugin>
