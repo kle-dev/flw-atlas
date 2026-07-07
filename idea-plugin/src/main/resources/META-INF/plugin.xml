@@ -1,34 +1,38 @@
 <idea-plugin>
     <id>com.flowable.atlas</id>
     <name>Flowable Atlas</name>
-    <version>0.3.0</version>
+    <version>0.4.0</version>
     <vendor email="kevin.klever@flowable.com" url="https://www.flowable.com">Flowable</vendor>
 
     <description><![CDATA[
-        <p><b>Stop guessing Flowable model keys — and stop copy-pasting them from Design.</b></p>
+        <p><b>The complete Flowable companion for IntelliJ IDEA.</b> Flowable Atlas turns the model keys
+        and expressions scattered across your Java code and Flowable models into first-class, IDE-aware
+        references — completed, validated and navigable — and maps your whole project into a single
+        interactive explorer. Everything is resolved against the models that <i>actually live in your
+        repository</i>, so a wrong key or a broken expression is caught in the editor, long before
+        deployment.</p>
 
-        <p>Flowable Atlas makes the <b>model keys</b> in your Java code first-class, IDE-aware references —
-        resolved against the models that actually live in your project. It indexes every Flowable model
-        you keep in the repo: the artifacts you exported from Design (the app <code>.zip</code> /
-        deployment <code>-bar</code>, holding <code>.bpmn/.cmmn/.dmn/.form/.data/.service/…</code>) or the
-        Flowable Design <code>*-models</code> workspace — then completes the matching key at every Flowable
-        API call site, searchable by <b>key, by name, or by any fragment</b> (type <code>0061</code> to get
-        <code>KYC-DO-0061</code>).</p>
+        <p>Zero configuration: open a project that contains the Flowable models you exported from Design
+        (the app <code>.zip</code> / deployment <code>-bar</code>, holding
+        <code>.bpmn / .cmmn / .dmn / .form / .data / .service / …</code>) or the Flowable Design
+        <code>*-models</code> workspace, and start typing. The plugin indexes every model and puts that
+        knowledge to work across three areas.</p>
 
-        <h3>What you get</h3>
+        <h3>1 &middot; Model-key intelligence</h3>
         <ul>
           <li><b>Context-aware key completion</b> at every Flowable API position that takes a model key —
               process, case, decision, form, event, channel, data object, master data, service, action,
               agent, knowledge base, template, security policy, query, variable extractor, sequence, SLA,
               dashboard component, data dictionary, page and unified work definitions. Both
-              <code>org.flowable.*</code> and <code>com.flowable.*</code>.</li>
+              <code>org.flowable.*</code> and <code>com.flowable.*</code>. Search by <b>key, by name, or by
+              any fragment</b> — type <code>0061</code> to get <code>KYC-DO-0061</code>.</li>
           <li><b>Cascade completion</b> for fluent chains — <code>operation("…")</code> completes the
               operations of the data object / service resolved from the sibling
               <code>definitionKey(…)</code> / <code>serviceKey(…)</code> (constant references are
               resolved), and <code>value("…", …)</code> completes that operation's input fields. DMN
               <code>variable("…", …)</code> offers the decision's input/output variables.</li>
           <li><b>More than keys</b> — completion for message &amp; signal names, process variables,
-              task-definition keys and activity IDs. Task/activity completion is <b>scoped</b> to the
+              task-definition keys and activity IDs, <b>scoped</b> to the
               <code>processDefinitionKey</code> / <code>caseDefinitionKey</code> in the same query chain
               when present, so you see only that model's ids.</li>
           <li><b>Model &rarr; model references in BPMN/CMMN XML</b> — the keys that live inside the models
@@ -38,24 +42,47 @@
               <code>calledElement</code> pointing at a missing process is caught before deployment.</li>
           <li><b>Broken-key inspection</b> — an unknown key (in Java or model XML) is flagged inline with a
               <i>"did you mean …?"</i> quick-fix to the closest real key.</li>
-          <li><b>Generate a typed data-object bean</b> — Alt/Option-Enter on a data-object
-              <code>definitionKey("…")</code> writes a Java POJO from the model's field mappings, so query
-              results map onto a bean instead of the generic container.</li>
+          <li><b>Navigation &amp; Find Usages</b> — Ctrl/Cmd-click a key literal to jump straight to the
+              model file; hover for its type, name and location. Find Usages on a delegate class or an
+              <code>${bean.method()}</code> expression lists the model files that reference it.</li>
+          <li><b>Code generation</b> — generate a typed Java constants class
+              (<code>FlowableModelKeys.Process.ORDER_FULFILMENT</code>, model name in Javadoc) that stays
+              in sync as models are added, renamed or removed; or, with Alt/Option-Enter on a data-object
+              <code>definitionKey("…")</code>, a typed Java bean built from the model's field mappings.</li>
           <li><b>Liquibase aware</b> — inside a changelog it completes <code>&lt;column&gt;</code> names
               and <code>tableName</code> from the backing service model, and flags columns that no
               backing Flowable model defines.</li>
-          <li><b>Go to definition &amp; Find Usages</b> — Ctrl/Cmd-click a key literal to jump straight to
-              the model file; hover for its type, name and location. Find Usages on a delegate class or
-              an <code>${bean.method()}</code> expression lists the model files that reference it.</li>
-          <li><b>Generate model constants</b> — one action writes a typed Java class
-              (<code>FlowableModelKeys.Process.ORDER_FULFILMENT</code>, model name in Javadoc) and keeps
-              it in sync automatically as models are added, renamed or removed.</li>
-          <li><b>Generate the Atlas explorer</b> — Tools → Flowable Atlas → <i>Generate Atlas Explorer</i>
-              maps your whole project (models + Java + Liquibase) into a single self-contained,
-              offline, interactive HTML page. Save it into the project and open it in your browser or
-              right inside the IDE (embedded viewer). Or switch the scope in Settings to write <b>all
-              Atlas artifacts</b> at once — summary &amp; overview Markdown, the graph JSON, the explorer
-              HTML and a CLAUDE.md primer — into a folder. Requires a Python 3 interpreter on the machine.</li>
+        </ul>
+
+        <h3>2 &middot; Flowable expression language support</h3>
+        <ul>
+          <li><b>Both dialects, first-class</b> — the backend JUEL dialect (<code>${…}</code> /
+              <code>#{…}</code>) and the frontend form dialect (<code>{{…}}</code>) each get syntax
+              highlighting, rainbow parentheses and brace matching.</li>
+          <li><b>Live validation</b> — structural syntax errors, and unknown functions, namespaces or
+              <code>flw.*</code> members, are flagged against a catalog of the real, verified Flowable
+              function set.</li>
+          <li><b>Expression completion</b> — functions, engine root objects, and your project's own
+              process/case variables and form fields.</li>
+          <li><b>Recognised inline, everywhere expressions live</b> — BPMN/CMMN/DMN XML,
+              <code>.form</code> / <code>.page</code> JSON, and (optionally) Java string literals — so the
+              highlighting, validation and completion follow you into the models you edit.</li>
+          <li><b>Expression Playground</b> (the <i>Flowable Expressions</i> tool window) — type an
+              expression, pick backend or frontend, and get instant validation and completion; scope
+              completion to one model; evaluate a frontend expression live against a pasted JSON payload;
+              or evaluate a backend expression against a running app through the Flowable Inspect REST API
+              (connection auto-detected from the project's Spring configuration).</li>
+        </ul>
+
+        <h3>3 &middot; Atlas explorer</h3>
+        <ul>
+          <li><b>Map your whole project</b> — Tools → Flowable Atlas → <i>Generate Atlas Explorer</i> turns
+              your models + Java + Liquibase into a single self-contained, offline, interactive HTML page.
+              Save it into the project and open it in your browser or right inside the IDE (embedded
+              viewer), then click through every relationship in both directions. Or switch the scope in
+              Settings to write <b>all Atlas artifacts</b> at once — summary &amp; overview Markdown, the
+              graph JSON, the explorer HTML and a CLAUDE.md primer for AI agents — into a folder. Requires
+              a Python 3 interpreter on the machine.</li>
         </ul>
 
         <h3>How it feels</h3>
@@ -67,12 +94,26 @@
           <li>Press completion twice to list <b>all</b> model keys of every type, regardless of the call site.</li>
         </ul>
 
-        <p>Fires inside string literals and at bare arguments alike (inserting a quoted key), with Flowable
-        keys ranked to the top. Zero configuration — open a project that contains your exported Flowable
-        models and start typing.</p>
+        <p>Completion fires inside string literals and at bare arguments alike (inserting a quoted key),
+        with Flowable keys ranked to the top — no setup beyond opening a project that contains your
+        Flowable models.</p>
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.4.0</h3>
+        <ul>
+          <li><b>Flowable expression language support</b> — first-class editor support for both the
+              backend JUEL dialect (<code>${…}</code> / <code>#{…}</code>) and the frontend form dialect
+              (<code>{{…}}</code>): syntax highlighting, rainbow parentheses, brace matching, live
+              validation (syntax + unknown functions/namespaces/<code>flw.*</code> members against the
+              verified Flowable catalog) and completion of functions, root objects and the project's
+              variables/form-fields. Expressions are recognised inline in BPMN/CMMN/DMN XML,
+              <code>.form</code>/<code>.page</code> JSON and (optionally) Java strings.</li>
+          <li><b>Expression Playground</b> — a <i>Flowable Expressions</i> tool window to try an
+              expression with live validation and completion, evaluate a frontend expression against a
+              pasted JSON payload, or evaluate a backend expression against a running app via the
+              Flowable Inspect REST API (connection auto-detected from the project's Spring config).</li>
+        </ul>
         <h3>0.3.0</h3>
         <ul>
           <li><b>Renamed to Flowable Atlas</b> (formerly Flowable Keys) — the plugin now also
@@ -116,6 +157,8 @@
     <depends>com.intellij.modules.java</depends>
     <!-- XML PSI for the Liquibase-changelog coverage inspection. -->
     <depends>com.intellij.modules.xml</depends>
+    <!-- JSON PSI for form-model {{…}} expression injection and the .form → JSON association. -->
+    <depends>com.intellij.modules.json</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- Services (FlowableModelIndexService, ModelConstantsService/Settings) are @Service — no registration needed. -->
@@ -196,6 +239,60 @@
         <notificationGroup id="Flowable Atlas" displayType="BALLOON"/>
         <!-- Render a *.explorer.html as an embedded (JCEF) "Atlas Explorer" tab after the default editor. -->
         <fileEditorProvider implementation="com.flowable.atlas.explorer.AtlasFileEditorProvider"/>
+
+        <!-- ==================== Flowable Expression support ==================== -->
+        <!-- Two dialects of one expression language: backend ${…}/#{…} (JUEL) and frontend {{…}} (flw.*). -->
+        <fileType name="Flowable Backend Expression"
+                  language="FlowableBackendExpr"
+                  implementationClass="com.flowable.atlas.expr.lang.FlowableBackendExprFileType"
+                  fieldName="INSTANCE"
+                  extensions="flowable-be"/>
+        <fileType name="Flowable Frontend Expression"
+                  language="FlowableFrontendExpr"
+                  implementationClass="com.flowable.atlas.expr.lang.FlowableFrontendExprFileType"
+                  fieldName="INSTANCE"
+                  extensions="flowable-fe"/>
+        <lang.parserDefinition language="FlowableBackendExpr"
+                  implementationClass="com.flowable.atlas.expr.lang.FlowableBackendExprParserDefinition"/>
+        <lang.parserDefinition language="FlowableFrontendExpr"
+                  implementationClass="com.flowable.atlas.expr.lang.FlowableFrontendExprParserDefinition"/>
+        <!-- Token coloring (parentheses, brackets, strings, operators, …) for both dialects. -->
+        <lang.syntaxHighlighterFactory language="FlowableBackendExpr"
+                  implementationClass="com.flowable.atlas.expr.lang.FlowableExprSyntaxHighlighterFactory"/>
+        <lang.syntaxHighlighterFactory language="FlowableFrontendExpr"
+                  implementationClass="com.flowable.atlas.expr.lang.FlowableExprSyntaxHighlighterFactory"/>
+        <!-- Match () and [] — caret on a brace highlights its partner, unmatched braces are flagged. -->
+        <lang.braceMatcher language="FlowableBackendExpr"
+                  implementationClass="com.flowable.atlas.expr.lang.FlowableExprBraceMatcher"/>
+        <lang.braceMatcher language="FlowableFrontendExpr"
+                  implementationClass="com.flowable.atlas.expr.lang.FlowableExprBraceMatcher"/>
+        <!-- Syntax / unknown-function squiggles for both dialects (playground + injected fragments). -->
+        <annotator language="FlowableBackendExpr"
+                  implementationClass="com.flowable.atlas.expr.annotator.FlowableExpressionAnnotator"/>
+        <annotator language="FlowableFrontendExpr"
+                  implementationClass="com.flowable.atlas.expr.annotator.FlowableExpressionAnnotator"/>
+        <!-- Rainbow parentheses: colour each round-paren nesting level differently. -->
+        <annotator language="FlowableBackendExpr"
+                  implementationClass="com.flowable.atlas.expr.annotator.FlowableExprRainbowParenAnnotator"/>
+        <annotator language="FlowableFrontendExpr"
+                  implementationClass="com.flowable.atlas.expr.annotator.FlowableExprRainbowParenAnnotator"/>
+        <!-- Completion of functions, root objects and the project's variables/form-fields. -->
+        <completion.contributor language="FlowableBackendExpr"
+                  implementationClass="com.flowable.atlas.expr.completion.FlowableExpressionCompletionContributor"/>
+        <completion.contributor language="FlowableFrontendExpr"
+                  implementationClass="com.flowable.atlas.expr.completion.FlowableExpressionCompletionContributor"/>
+        <!-- Inject the expression languages inline wherever expressions live in the repo. -->
+        <multiHostInjector implementation="com.flowable.atlas.expr.inject.FlowableXmlExpressionInjector"/>
+        <multiHostInjector implementation="com.flowable.atlas.expr.inject.FlowableJsonExpressionInjector"/>
+        <multiHostInjector implementation="com.flowable.atlas.expr.inject.FlowableJavaExpressionInjector"/>
+        <!-- Treat Flowable form models (.form) as JSON so their {{…}} strings become injection hosts. -->
+        <fileType name="JSON" extensions="form"/>
+        <!-- The Expression Playground: type an expression, get validation + completion. -->
+        <toolWindow id="Flowable Expressions"
+                    anchor="bottom"
+                    secondary="true"
+                    icon="/META-INF/pluginIcon.svg"
+                    factoryClass="com.flowable.atlas.expr.toolwindow.FlowableExpressionToolWindowFactory"/>
     </extensions>
 
     <projectListeners>

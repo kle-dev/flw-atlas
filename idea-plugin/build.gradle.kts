@@ -9,7 +9,7 @@ plugins {
 }
 
 group = "com.flowable.atlas"
-version = "0.3.0"
+version = "0.4.0"
 
 repositories {
     mavenCentral()
@@ -27,6 +27,10 @@ dependencies {
 
         // Java PSI — required by the Java completion contributor.
         bundledPlugin("com.intellij.java")
+
+        // JSON PSI — required for injecting the frontend expression language into form-model JSON
+        // ({{…}} inside JsonStringLiteral) and for treating .form files as JSON.
+        bundledPlugin("com.intellij.modules.json")
 
         // Functional tests (BasePlatformTestCase + completion fixtures).
         testFramework(TestFrameworkType.Platform)

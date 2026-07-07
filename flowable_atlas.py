@@ -1943,6 +1943,726 @@ def _var_in_mustache(ph):
     return root
 
 
+# ===========================================================================
+# Flowable expression validator — a faithful Python port of the IntelliJ
+# plugin's Kotlin validator (idea-plugin/src/main/kotlin/com/flowable/atlas/
+# expr/). Keep in sync with, in order:
+#   - lang/ExpressionLexer.kt              -> _expr_tokenize
+#   - parse/ExprParser.kt + parse/ExprAst.kt -> _ExprParser (structural errors)
+#   - catalog/FlowableExpressionCatalog.kt -> the _BACKEND_* / _FRONTEND_* tables
+#   - inspection/Suggestions.kt            -> _closest / _levenshtein
+#   - ExpressionValidator.kt               -> validate_expression
+# validate_expression(body, dialect) returns a list of problem dicts
+#   {"start", "end", "message", "severity": "error"|"warning", "quickFix"}
+# (empty list == valid), with offsets pointing into `body`.
+# ===========================================================================
+
+BACKEND = "backend"
+FRONTEND = "frontend"
+_FRONTEND_NS = "flw"
+
+# --- token kinds (mirror lang/ExpressionLexer.kt TokType) ---
+(_IDENT, _NUMBER, _STRING, _STRING_BAD, _DOT, _COLON, _COMMA, _LPAREN, _RPAREN,
+ _LBRACKET, _RBRACKET, _PIPE, _ARROW, _OP, _BAD) = range(15)
+
+
+class _Tok:
+    __slots__ = ("type", "start", "end", "text")
+
+    def __init__(self, type, start, end, text):
+        self.type = type
+        self.start = start
+        self.end = end
+        self.text = text
+
+
+_THREE_CHAR_OPS = {"===", "!=="}
+_TWO_CHAR_OPS = {"==", "!=", "<=", ">=", "&&", "||"}
+_ONE_CHAR_OPS = set("+-*/%<>!?=")
+
+
+def _is_ident_start(c):
+    return c.isalpha() or c == "_" or c == "$"
+
+
+def _is_ident_part(c):
+    return c.isalnum() or c == "_" or c == "$"
+
+
+def _expr_tokenize(text):
+    """Port of ExpressionLexer.tokenize — whitespace-skipping, offsets preserved."""
+    out = []
+    i = 0
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c.isspace():
+            i += 1
+        elif c == "'" or c == '"':
+            start = i
+            i += 1
+            terminated = False
+            while i < n:
+                ch = text[i]
+                if ch == "\\" and i + 1 < n:
+                    i += 2
+                    continue
+                if ch == c:
+                    i += 1
+                    terminated = True
+                    break
+                if ch == "\n":
+                    break
+                i += 1
+            out.append(_Tok(_STRING if terminated else _STRING_BAD, start, i, text[start:i]))
+        elif _is_ident_start(c):
+            start = i
+            i += 1
+            while i < n and _is_ident_part(text[i]):
+                i += 1
+            out.append(_Tok(_IDENT, start, i, text[start:i]))
+        elif c.isdigit():
+            start = i
+            i += 1
+            while i < n and (text[i].isdigit() or text[i] == "."):
+                i += 1
+            out.append(_Tok(_NUMBER, start, i, text[start:i]))
+        else:
+            three = text[i:i + 3]
+            two = text[i:i + 2]
+            if three in _THREE_CHAR_OPS:
+                out.append(_Tok(_OP, i, i + 3, three)); i += 3
+            elif two == "|>":
+                out.append(_Tok(_PIPE, i, i + 2, two)); i += 2
+            elif two == "->" or two == "=>":
+                out.append(_Tok(_ARROW, i, i + 2, two)); i += 2
+            elif two in _TWO_CHAR_OPS:
+                out.append(_Tok(_OP, i, i + 2, two)); i += 2
+            elif c == ".":
+                out.append(_Tok(_DOT, i, i + 1, ".")); i += 1
+            elif c == ":":
+                out.append(_Tok(_COLON, i, i + 1, ":")); i += 1
+            elif c == ",":
+                out.append(_Tok(_COMMA, i, i + 1, ",")); i += 1
+            elif c == "(":
+                out.append(_Tok(_LPAREN, i, i + 1, "(")); i += 1
+            elif c == ")":
+                out.append(_Tok(_RPAREN, i, i + 1, ")")); i += 1
+            elif c == "[":
+                out.append(_Tok(_LBRACKET, i, i + 1, "[")); i += 1
+            elif c == "]":
+                out.append(_Tok(_RBRACKET, i, i + 1, "]")); i += 1
+            elif c in _ONE_CHAR_OPS:
+                out.append(_Tok(_OP, i, i + 1, c)); i += 1
+            else:
+                out.append(_Tok(_BAD, i, i + 1, c)); i += 1
+    return out
+
+
+# --- parser (port of parse/ExprParser.kt) ---
+
+class _ParseError(Exception):
+    def __init__(self, message, start, end):
+        super().__init__(message)
+        self.message = message
+        self.start = start
+        self.end = end
+
+
+class _Node:
+    """Minimal AST node — only the fields the parser's own control flow needs."""
+    __slots__ = ("kind", "start", "end", "name", "items", "elements")
+
+    def __init__(self, kind, start, end, name=None, items=None, elements=None):
+        self.kind = kind
+        self.start = start
+        self.end = end
+        self.name = name
+        self.items = items
+        self.elements = elements
+
+
+_WORD_BINARY = {"or": "||", "and": "&&", "eq": "==", "ne": "!=",
+                "lt": "<", "gt": ">", "le": "<=", "ge": ">=", "div": "/", "mod": "%"}
+_WORD_UNARY = {"not", "empty"}
+_WORD_LITERAL = {"true", "false", "null"}
+_BINARY_PREC = {"||": 1, "&&": 2, "==": 3, "!=": 3, "===": 3, "!==": 3,
+                "<": 4, ">": 4, "<=": 4, ">=": 4, "+": 5, "-": 5,
+                "*": 6, "/": 6, "%": 6, "|>": 7}
+_UNARY_OPS = {"!", "-", "+"}
+
+
+def _dialect_display(backend):
+    return "Backend (${…})" if backend else "Frontend ({{…}})"
+
+
+class _ExprParser:
+    def __init__(self, toks, text_len, dialect):
+        self._toks = toks
+        self._pos = 0
+        self._text_len = text_len
+        self._backend = dialect == BACKEND
+        self._arrow_text = "->" if self._backend else "=>"
+
+    def _peek(self):
+        return self._toks[self._pos] if self._pos < len(self._toks) else None
+
+    def _peek_at(self, k):
+        j = self._pos + k
+        return self._toks[j] if 0 <= j < len(self._toks) else None
+
+    def _advance(self):
+        t = self._toks[self._pos]
+        self._pos += 1
+        return t
+
+    def _eof_offset(self):
+        return self._toks[-1].end if self._toks else self._text_len
+
+    def _err_tok(self, t, msg):
+        if t is None:
+            raise _ParseError(msg, self._eof_offset(), self._eof_offset())
+        raise _ParseError(msg, t.start, t.end)
+
+    def _err_node(self, n, msg):
+        raise _ParseError(msg, n.start, n.end)
+
+    def parse_top(self):
+        if self._peek() is None:
+            self._err_tok(None, "Expected an expression")
+        node = self._parse_expression()
+        extra = self._peek()
+        if extra is not None:
+            self._err_tok(extra, "Unexpected '%s' — expected an operator or end of expression" % extra.text)
+        return self._require_not_params(node)
+
+    def _parse_expression(self):
+        left = self._parse_ternary()
+        arrow = self._peek()
+        if arrow is not None and arrow.type == _ARROW:
+            if arrow.text != self._arrow_text:
+                self._err_tok(arrow, "'%s' is not valid here (%s uses '%s')"
+                              % (arrow.text, _dialect_display(self._backend), self._arrow_text))
+            self._advance()
+            params = self._extract_params(left)
+            body = self._parse_expression()
+            return _Node("arrow", left.start, body.end, elements=params)
+        return left
+
+    def _parse_ternary(self):
+        cond = self._parse_binary(0)
+        q = self._peek()
+        if q is not None and q.type == _OP and q.text == "?":
+            self._advance()
+            then = self._parse_expression()
+            colon = self._peek()
+            if colon is None or colon.type != _COLON:
+                self._err_tok(colon if colon is not None else q, "Expected ':' in ternary expression")
+            self._advance()
+            otherwise = self._parse_expression()
+            return _Node("ternary", cond.start, otherwise.end)
+        return cond
+
+    def _peek_binary_op(self):
+        t = self._peek()
+        if t is None:
+            return None
+        if t.type == _PIPE:
+            return ("|>", _BINARY_PREC["|>"])
+        if t.type == _OP and t.text in _BINARY_PREC and not (self._backend and t.text in ("===", "!==")):
+            return (t.text, _BINARY_PREC[t.text])
+        if self._backend and t.type == _IDENT and t.text in _WORD_BINARY:
+            sym = _WORD_BINARY[t.text]
+            return (sym, _BINARY_PREC[sym])
+        return None
+
+    def _parse_binary(self, min_prec):
+        left = self._parse_unary()
+        while True:
+            ob = self._peek_binary_op()
+            if ob is None:
+                break
+            op, prec = ob
+            if prec < min_prec:
+                break
+            op_tok = self._advance()
+            nxt = self._peek()
+            if nxt is None:
+                self._err_tok(op_tok, "Expression ends unexpectedly after '%s'" % op_tok.text)
+            if nxt.type in (_RPAREN, _RBRACKET, _COMMA):
+                self._err_tok(op_tok, "'%s' is missing its right operand" % op_tok.text)
+            right = self._parse_binary(prec + 1)
+            left = _Node("pipe" if op == "|>" else "binary", left.start, right.end)
+        return left
+
+    def _parse_unary(self):
+        t = self._peek()
+        if t is not None and ((t.type == _OP and t.text in _UNARY_OPS) or
+                              (self._backend and t.type == _IDENT and t.text in _WORD_UNARY)):
+            self._advance()
+            operand = self._parse_unary()
+            return _Node("unary", t.start, operand.end)
+        return self._parse_postfix()
+
+    def _parse_postfix(self):
+        node = self._parse_primary()
+        while True:
+            t = self._peek()
+            if t is None:
+                break
+            if t.type == _DOT:
+                self._advance()
+                name = self._peek()
+                if name is None or name.type != _IDENT:
+                    self._err_tok(name if name is not None else t, "Expected a name after '.'")
+                self._advance()
+                node = _Node("member", node.start, name.end, name=name.text)
+            elif t.type == _LBRACKET:
+                self._advance()
+                self._parse_expression()
+                close = self._peek()
+                if close is None or close.type != _RBRACKET:
+                    self._err_tok(close if close is not None else t, "Unclosed '['")
+                end = self._advance().end
+                node = _Node("index", node.start, end)
+            elif t.type == _LPAREN:
+                _args, end = self._parse_arg_list()
+                node = _Node("call", node.start, end)
+            else:
+                break
+        return node
+
+    def _parse_primary(self):
+        t = self._peek()
+        if t is None:
+            self._err_tok(None, "Expected an expression")
+        tt = t.type
+        if tt == _NUMBER or tt == _STRING:
+            self._advance()
+            return _Node("lit", t.start, t.end)
+        if tt == _STRING_BAD:
+            self._err_tok(t, "Unterminated string literal")
+        if tt == _IDENT:
+            return self._parse_ident_or_call(t)
+        if tt == _LPAREN:
+            return self._parse_paren_or_params()
+        if tt == _LBRACKET:
+            if not self._backend:
+                return self._parse_array_literal()
+            self._err_tok(t, "Array literals are not supported in backend expressions — use listOf(…)")
+        if tt == _OP:
+            self._err_tok(t, "'%s' is missing its left operand" % t.text)
+        if tt == _PIPE:
+            self._err_tok(t, "'|>' is missing its left operand")
+        if tt == _ARROW:
+            self._err_tok(t, "'%s' is missing its parameter" % t.text)
+        if tt == _DOT:
+            self._err_tok(t, "Expected an expression before '.'")
+        if tt == _RPAREN:
+            self._err_tok(t, "Unmatched ')'")
+        if tt == _RBRACKET:
+            self._err_tok(t, "Unmatched ']'")
+        if tt == _COLON:
+            self._err_tok(t, "Unexpected ':'")
+        if tt == _COMMA:
+            self._err_tok(t, "Unexpected ','")
+        self._err_tok(t, "Unexpected character '%s'" % t.text)  # _BAD
+
+    def _parse_ident_or_call(self, t):
+        if (self._peek_at(1) is not None and self._peek_at(1).type == _COLON and
+                self._peek_at(2) is not None and self._peek_at(2).type == _IDENT and
+                self._peek_at(3) is not None and self._peek_at(3).type == _LPAREN):
+            ns = self._advance()   # prefix
+            self._advance()        # ':'
+            self._advance()        # name
+            _args, end = self._parse_arg_list()
+            return _Node("nscall", ns.start, end)
+        self._advance()
+        if t.text in _WORD_LITERAL:
+            return _Node("lit", t.start, t.end)
+        return _Node("ident", t.start, t.end, name=t.text)
+
+    def _parse_paren_or_params(self):
+        open_ = self._advance()  # '('
+        p = self._peek()
+        if p is not None and p.type == _RPAREN:
+            end = self._advance().end
+            return _Node("parenparams", open_.start, end, items=[])
+        first = self._parse_expression()
+        p = self._peek()
+        if p is not None and p.type == _COMMA:
+            items = [first]
+            while self._peek() is not None and self._peek().type == _COMMA:
+                self._advance()
+                items.append(self._parse_expression())
+            close = self._peek()
+            if close is None or close.type != _RPAREN:
+                self._err_tok(close if close is not None else open_, "Unclosed '('")
+            end = self._advance().end
+            return _Node("parenparams", open_.start, end, items=items)
+        close = self._peek()
+        if close is None or close.type != _RPAREN:
+            self._err_tok(close if close is not None else open_, "Unclosed '('")
+        self._advance()
+        return first
+
+    def _parse_array_literal(self):
+        open_ = self._advance()  # '['
+        elements = []
+        p = self._peek()
+        if p is None or p.type != _RBRACKET:
+            elements.append(self._parse_expression())
+            while self._peek() is not None and self._peek().type == _COMMA:
+                self._advance()
+                if self._peek() is not None and self._peek().type == _RBRACKET:
+                    break  # trailing comma tolerated
+                elements.append(self._parse_expression())
+        close = self._peek()
+        if close is None or close.type != _RBRACKET:
+            self._err_tok(close if close is not None else open_, "Unclosed '['")
+        end = self._advance().end
+        return _Node("array", open_.start, end, elements=elements)
+
+    def _parse_arg_list(self):
+        open_ = self._advance()  # '('
+        args = []
+        p = self._peek()
+        if p is not None and p.type == _RPAREN:
+            return [], self._advance().end
+        while True:
+            here = self._peek()
+            if here is None:
+                self._err_tok(open_, "Unclosed '('")
+            if here.type in (_COMMA, _RPAREN):
+                self._err_tok(here, "Empty argument")
+            args.append(self._parse_expression())
+            sep = self._peek()
+            st = sep.type if sep is not None else None
+            if st == _COMMA:
+                self._advance()
+                nx = self._peek()
+                if nx is not None and nx.type == _RPAREN:
+                    self._err_tok(nx, "Empty argument")
+            elif st == _RPAREN:
+                return args, self._advance().end
+            elif st is None:
+                self._err_tok(open_, "Unclosed '('")
+            else:
+                self._err_tok(sep, "Expected ',' or ')' in argument list")
+
+    def _extract_params(self, node):
+        if node.kind == "ident":
+            return [node.name]
+        if node.kind == "parenparams":
+            names = []
+            for it in node.items:
+                if it.kind == "ident":
+                    names.append(it.name)
+                else:
+                    self._err_node(it, "Arrow parameters must be plain names")
+            return names
+        if node.kind == "array":
+            names = []
+            for it in node.elements:
+                if it.kind == "ident":
+                    names.append(it.name)
+                else:
+                    self._err_node(it, "Arrow parameters must be plain names")
+            return names
+        self._err_node(node, "Invalid arrow parameters")
+
+    def _require_not_params(self, node):
+        if node.kind == "parenparams":
+            self._err_node(node, "Unexpected ',' — a comma is only allowed inside a call or array")
+        return node
+
+
+def _expr_parse_error(body, dialect):
+    """Return (message, start, end) of the first structural syntax error, or None if valid."""
+    toks = _expr_tokenize(body)
+    try:
+        _ExprParser(toks, len(body), dialect).parse_top()
+        return None
+    except _ParseError as e:
+        return (e.message, e.start, e.end)
+
+
+# --- catalog (port of catalog/FlowableExpressionCatalog.kt) ---
+
+_IDENTITY_LINK_NAMES = [
+    "getAssignee", "setAssignee", "removeAssignee", "getOwner", "setOwner", "removeOwner",
+    "addCandidateUser", "addCandidateUsers", "addCandidateGroup", "addCandidateGroups",
+    "removeCandidateUser", "removeCandidateUsers", "removeCandidateGroup", "removeCandidateGroups",
+    "addParticipantUser", "addParticipantUsers", "addParticipantGroup", "addParticipantGroups",
+    "removeParticipantUser", "removeParticipantUsers", "removeParticipantGroup", "removeParticipantGroups",
+    "addWatcherUser", "addWatcherUsers", "addWatcherGroup", "addWatcherGroups",
+    "removeWatcherUser", "removeWatcherUsers", "removeWatcherGroup", "removeWatcherGroups",
+]
+_BUSINESS_NAMES = ["getBusinessKey", "setBusinessKey", "getBusinessStatus", "setBusinessStatus"]
+
+# Canonical prefix -> every accepted local name (canonical + aliases).
+_BACKEND_FUNCTIONS = {
+    "variables": ["get", "getOrDefault", "contains", "containsAny", "containsAll",
+                  "notContains", "notContainsAny", "notContainsAll",
+                  "equals", "eq", "notEquals", "ne", "exists", "exist",
+                  "isEmpty", "empty", "isNotEmpty", "notEmpty",
+                  "lowerThan", "lessThan", "lt", "lowerThanOrEquals", "lessThanOrEquals", "lte",
+                  "greaterThan", "gt", "greaterThanOrEquals", "gte", "base64", "makeTransient"],
+    "date": ["format", "now", "toDate", "addDate", "subtractDate"],
+    "task": ["get"] + _IDENTITY_LINK_NAMES,
+    "bpmn": _BUSINESS_NAMES + ["copyLocalVariable", "copyLocalVariableToParent",
+                               "replaceVariableInList", "triggerCaseEvaluation"] + _IDENTITY_LINK_NAMES,
+    "cmmn": ["isPlanItemCompleted", "isStageCompletable"] + _BUSINESS_NAMES +
+            ["copyVariable", "copyLocalVariable", "replaceVariableInList", "triggerCaseEvaluation"]
+            + _IDENTITY_LINK_NAMES,
+    "collection": ["allOf", "anyOf", "noneOf", "notAllOf", "containsAny", "contains",
+                   "notContainsAny", "notContains"],
+    "json": ["object", "array", "arrayWithSize", "addToArray"],
+    "content": ["getContentItem", "getContentItemData", "getMetadataValues", "getMetadataValue",
+                "getRenditionItem", "getRenditionByType", "getRenditionItemData", "getRenditionItemDataByType"],
+    "userInfo": ["findUserInfo", "findBooleanUserInfo"],
+    "template": ["createMessage"],
+    "conversationStatus": ["unreadCountForUser", "unreadCountPerConversation"],
+    "sequence": ["nextNumber", "next", "nextValue"],
+}
+
+_BACKEND_NO_PREFIX = ["listOf", "mapOf", "markdownToHtml", "findUser", "findUserAccount",
+                      "isUserInAllGroups", "isUserInAnyGroup", "isUserInNoGroup",
+                      "findGroupMemberUserIds", "findGroupMemberEmails", "setPlatformUserInfo",
+                      "setUserState", "setUserSubState", "setUserStateAndSubState",
+                      "setUserAccountState", "setUserAccountSubState", "setUserAccountStateAndSubState"]
+
+_PREFIX_ALIASES = {
+    "variables": "variables", "vars": "variables", "var": "variables",
+    "date": "date", "task": "task", "cmmn": "cmmn", "collection": "collection",
+    "json": "json", "bpmn": "bpmn", "content": "content", "userInfo": "userInfo",
+    "template": "template", "conversationStatus": "conversationStatus",
+    "sequence": "sequence", "seq": "sequence",
+}
+
+_FRONTEND_MEMBERS = ["sum", "avg", "count", "min", "max", "dotProd", "join",
+                     "mapAttr", "find", "findAll", "merge", "add", "forceCollectionSize",
+                     "in", "keys", "values", "remove", "array", "data",
+                     "now", "currentDate", "secondsOfDay", "timeZone", "parseDate", "formatDate",
+                     "formatTime", "dateAdd", "dateSubtract", "startOf", "isBefore", "isAfter",
+                     "sameDate", "formattedDurationFromNow", "formattedTimeLapseBetween", "durationBetween",
+                     "round", "floor", "ceil", "abs", "parseInt", "parseFloat",
+                     "encode", "encodeURI", "encodeURIComponent", "JSON", "numberFormat",
+                     "sanitizeHtml", "escapeHtml", "exists", "notExists",
+                     # Work/platform-injected members — NOT part of the base @flowable/forms
+                     # FunctionsFactory. The Work runtime merges these onto `flw` at eval time via
+                     # additionalData.flw (useGlobalResolver in flowable-shared) and Form.tsx.
+                     "getUser", "getMasterDataInstance", "getMasterDataInstanceByKey",
+                     "getDataObjectInstance", "translateWorkObject", "stringify",
+                     "validate", "setActiveTab", "getActiveTab"]
+_FRONTEND_MEMBER_SET = set(_FRONTEND_MEMBERS)
+
+
+def _resolve_prefix(prefix):
+    return _PREFIX_ALIASES.get(prefix)
+
+
+def _backend_prefixes():
+    return list(_PREFIX_ALIASES.keys())
+
+
+def _backend_names_for_prefix(prefix):
+    canonical = _resolve_prefix(prefix)
+    if canonical is None:
+        return []
+    return _BACKEND_FUNCTIONS.get(canonical, [])
+
+
+def _is_backend_function(prefix, name):
+    if prefix is None:
+        return name in _BACKEND_NO_PREFIX
+    return name in _backend_names_for_prefix(prefix)
+
+
+def _is_frontend_member(name):
+    return name in _FRONTEND_MEMBER_SET
+
+
+# --- "did you mean" (port of inspection/Suggestions.kt) ---
+
+def _levenshtein(a, b):
+    prev = list(range(len(b) + 1))
+    for i in range(1, len(a) + 1):
+        cur = [i] + [0] * len(b)
+        ai = a[i - 1]
+        for j in range(1, len(b) + 1):
+            cost = 0 if ai == b[j - 1] else 1
+            cur[j] = min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost)
+        prev = cur
+    return prev[len(b)]
+
+
+def _closest(value, candidates):
+    threshold = max(2, len(value) // 3)
+    best = None
+    best_d = None
+    for c in candidates:
+        d = _levenshtein(value, c)
+        if d <= threshold and (best_d is None or d < best_d):
+            best = c
+            best_d = d
+    return best
+
+
+# --- validator (port of ExpressionValidator.kt) ---
+
+def _expr_strip_outer_wrapper(body):
+    """If body is entirely wrapped in {{ }} / ${ } / #{ }, return (inner, start_shift)."""
+    start = -1
+    for i, ch in enumerate(body):
+        if not ch.isspace():
+            start = i
+            break
+    if start < 0:
+        return body, 0
+    end = start
+    for i in range(len(body) - 1, -1, -1):
+        if not body[i].isspace():
+            end = i + 1
+            break
+    core = body[start:end]
+    for open_, close in (("{{", "}}"), ("${", "}"), ("#{", "}")):
+        if len(core) >= len(open_) + len(close) and core.startswith(open_) and core.endswith(close):
+            inner_start = start + len(open_)
+            inner_end = end - len(close)
+            return body[inner_start:inner_end], inner_start
+    return body, 0
+
+
+def _tok_type_at(toks, i):
+    return toks[i].type if 0 <= i < len(toks) else None
+
+
+def _hint(suggestion):
+    return (" — did you mean '%s'?" % suggestion) if suggestion else ""
+
+
+def _problem(t, message, severity, quick_fix=None):
+    return {"start": t.start, "end": t.end, "message": message, "severity": severity, "quickFix": quick_fix}
+
+
+def _problem_range(start, end, message, severity, quick_fix=None):
+    return {"start": start, "end": end, "message": message, "severity": severity, "quickFix": quick_fix}
+
+
+def _check_dialect_operators(toks, dialect, out):
+    if dialect == BACKEND:
+        for t in toks:
+            if t.type == _PIPE:
+                out.append(_problem(t, "'|>' is a frontend-only pipe operator", "warning"))
+
+
+def _check_functions(toks, dialect, out):
+    n = len(toks)
+    for i in range(n):
+        t = toks[i]
+        # Backend namespaced call: IDENT ':' IDENT '('
+        if (t.type == _IDENT and _tok_type_at(toks, i + 1) == _COLON and
+                _tok_type_at(toks, i + 2) == _IDENT and _tok_type_at(toks, i + 3) == _LPAREN):
+            prefix = t
+            name = toks[i + 2]
+            if dialect == FRONTEND:
+                if _resolve_prefix(prefix.text) is not None:
+                    out.append(_problem_range(
+                        prefix.start, name.end,
+                        "'%s:%s' is backend function syntax; frontend expressions use flw.%s(…)"
+                        % (prefix.text, name.text, name.text), "warning"))
+                continue
+            canonical = _resolve_prefix(prefix.text)
+            if canonical is None:
+                suggestion = _closest(prefix.text, _backend_prefixes())
+                out.append(_problem(prefix, "Unknown function namespace '%s'%s"
+                                    % (prefix.text, _hint(suggestion)), "warning", suggestion))
+            elif not _is_backend_function(prefix.text, name.text):
+                suggestion = _closest(name.text, _backend_names_for_prefix(prefix.text))
+                out.append(_problem(name, "Unknown function '%s:%s'%s"
+                                    % (prefix.text, name.text, _hint(suggestion)), "warning", suggestion))
+            continue
+        # Frontend member call: flw '.' IDENT
+        if (dialect == FRONTEND and t.type == _IDENT and t.text == _FRONTEND_NS and
+                _tok_type_at(toks, i + 1) == _DOT and _tok_type_at(toks, i + 2) == _IDENT):
+            member = toks[i + 2]
+            if not _is_frontend_member(member.text):
+                suggestion = _closest(member.text, _FRONTEND_MEMBERS)
+                out.append(_problem(member, "Unknown flw function 'flw.%s'%s"
+                                    % (member.text, _hint(suggestion)), "warning", suggestion))
+
+
+def validate_expression(body, dialect):
+    """Faithful port of ExpressionValidator.validate. Returns a list of problem dicts (empty == valid)."""
+    inner, shift = _expr_strip_outer_wrapper(body)
+    # An empty interpolation (`{{}}`, `${}`) or blank body is a runtime no-op — the frontend
+    # silently ignores an expression that yields nothing — so there is nothing to flag.
+    if not inner.strip():
+        return []
+    toks = _expr_tokenize(inner)
+    problems = []
+    err = _expr_parse_error(inner, dialect)          # Layer 1 — structural syntax (ERROR)
+    if err is not None:
+        msg, s, e = err
+        problems.append(_problem_range(s, e, msg, "error"))
+    _check_dialect_operators(toks, dialect, problems)  # Layer 2 — semantic (WARNING)
+    _check_functions(toks, dialect, problems)
+    if shift:
+        for p in problems:
+            p["start"] += shift
+            p["end"] += shift
+    problems.sort(key=lambda p: p["start"])
+    return problems
+
+
+# Model types that render ${…} as Freemarker (e.g. ${x?json_string}, ${x!default}) rather than
+# JUEL — query models, content/email templates, document templates. Their expressions must NOT be
+# validated as JUEL; the IntelliJ plugin likewise never injects the expression language into them.
+_FREEMARKER_MODEL_TYPES = {"query", "template", "document"}
+
+
+def _decode_json_string_escapes(s):
+    """Reverse the backslash escaping that survives when an expression is harvested from a JSON
+    model (.form / .page): `\\"` → `"`, `\\\\` → `\\`, `\\n` → newline, etc. The harvester captures
+    raw file text, but the browser evaluates the JSON-decoded string — so `{{x["a"]}}` reaches us as
+    `{{x[\\"a\\"]}}` and must be decoded before it parses. A no-op when there is no backslash."""
+    if "\\" not in s:
+        return s
+    out = []
+    i = 0
+    n = len(s)
+    simple = {'"': '"', "\\": "\\", "/": "/", "n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f"}
+    while i < n:
+        c = s[i]
+        if c == "\\" and i + 1 < n:
+            out.append(simple.get(s[i + 1], s[i + 1]))
+            i += 2
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
+def validate_harvested_expr(text, dialect):
+    """Validate a harvested expression/binding node. Returns a list of problems (empty == valid),
+    or None when the harvester likely truncated the body — EXPR_RE / MUSTACHE_RE stop at the first
+    '}', so a nested object/map literal (`${f({'a':1})}`) leaves a stray '{' after the wrapper is
+    stripped; such a body cannot be validated reliably, so it is skipped rather than mis-flagged.
+
+    The body is decoded to what the engine actually parses: XML entities (`&quot;` → `"`,
+    `&amp;&amp;` → `&&`) from BPMN/CMMN attribute & element text, then JSON backslash escapes
+    (`\\"` → `"`) from .form / .page JSON models."""
+    body = _decode_json_string_escapes(html.unescape(text))
+    inner, _shift = _expr_strip_outer_wrapper(body)
+    if "{" in inner:
+        return None
+    problems = validate_expression(body, dialect)
+    for p in problems:
+        p["snippet"] = body[p["start"]:p["end"]] if 0 <= p["start"] < p["end"] <= len(body) else ""
+    return problems
+
+
 def _build_graph(result, ctx, resolved, all_java, bean_methods, by_key):
     nodes, key_to_node = {}, {}
 
@@ -2056,10 +2776,19 @@ def _build_graph(result, ctx, resolved, all_java, bean_methods, by_key):
 
     # --- expression / binding nodes (with the models that use them) ---
     def _usage_nodes(ntype, usage):
+        dialect = BACKEND if ntype == "expression" else FRONTEND
         for text, keys in usage.items():
             used = sorted({key_to_node[k] for k in keys if k in key_to_node})
             if used:
-                add_node(ntype, text, text, None, {"usedBy": used})
+                data = {"usedBy": used}
+                # Skip expressions that live only in Freemarker contexts (query/template/document
+                # models) — ${x?json_string} etc. is not JUEL and would only produce false errors.
+                used_types = {nodes[uid]["type"] for uid in used if uid in nodes}
+                if not used_types.issubset(_FREEMARKER_MODEL_TYPES):
+                    problems = validate_harvested_expr(text, dialect)   # None == not validated (truncated)
+                    if problems:
+                        data["problems"] = problems
+                add_node(ntype, text, text, None, data)
     _usage_nodes("expression", ctx["expr_use"])     # backend  ${ } / #{ }
     _usage_nodes("binding", ctx["mustache_use"])     # frontend {{ }}
 
@@ -2761,7 +3490,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     --c-sequence:#8aa0b4;--c-action:#6fe0a8;--c-document:#8aa0b4;--c-variableExtractor:#8aa0b4;
     --c-securityPolicy:#ffb3c0;--c-group:#d8b75a;--c-external:#6b7480;--c-masterData:#ff7a93;
     --c-knowledgeBase:#b694ff;--c-sla:#c9a26b;--c-dashboardComponent:#6fe0a8;
-    --c-action:#6fe0a8;--c-bot:#ff6fd8;--c-liquibase:#7aa0ff;--c-expression:#b08cff;--c-binding:#5fd0e0;--c-variable:#ffd27f;--c-string:#9ad07a;--c-method:#9fb8ff;
+    --c-action:#6fe0a8;--c-bot:#ff6fd8;--c-liquibase:#7aa0ff;--c-expression:#b08cff;--c-binding:#5fd0e0;--c-variable:#ffd27f;--c-string:#9ad07a;--c-method:#9fb8ff;--c-invalidExpr:#ff6b6b;
   }
   *{box-sizing:border-box}
   html,body{height:100%;margin:0}
@@ -3055,6 +3784,11 @@ function categories(){
   const unusedForms = nodes.filter(isUnusedForm);
   if(unusedForms.length) cats.push({id:'unused-form', label:'Forms · unused', sec:'Models',
     color:color('form'), count:unusedForms.length, match:isUnusedForm});
+  // a review list: expressions/bindings the validator flagged (structural errors + semantic warnings)
+  const hasProblem = n => (n.type==='expression'||n.type==='binding') && (n.data.problems||[]).length;
+  const invalidExprs = nodes.filter(hasProblem);
+  if(invalidExprs.length) cats.push({id:'invalid-expr', label:'Invalid / suspect ⚠', sec:'Expressions',
+    color:color('invalidExpr'), count:invalidExprs.length, match:hasProblem});
   cats.sort((a,b)=> (SECTIONS.indexOf(a.sec)-SECTIONS.indexOf(b.sec)) || a.label.localeCompare(b.label));
   return cats;
 }
@@ -3143,7 +3877,9 @@ function describe(n){
     if((a.referencedBy||[]).length) add('Referenced by',(a.referencedBy||[]).join(', '));
     if((a.supersededBy||[]).length) add('Live definition',(a.supersededBy||[]).join(', '));
     add('Tables',(d.effectiveTables||d.tables||[]).join(', ')); add('Columns',(d.columns||[]).length); }
-  else if(n.type==='expression'||n.type==='binding'){ add('Used by', (d.usedBy||[]).length+' model(s)'); }
+  else if(n.type==='expression'||n.type==='binding'){ add('Used by', (d.usedBy||[]).length+' model(s)');
+    const pr=d.problems||[]; if(pr.length){ const ec=pr.filter(p=>p.severity==='error').length, wc=pr.length-ec;
+      add('Problems',[ec?ec+' error'+(ec>1?'s':''):'', wc?wc+' warning'+(wc>1?'s':''):''].filter(Boolean).join(', ')); } }
   else if(n.type==='variable'){ add('Scope',(d.scopes||[]).join(', ')); add('Used in', (d.usages||[]).length+' model(s)'); }
   else if(n.type==='string'){ add('Used in', (d.usages||[]).length+' model(s)'); }
   else if(n.type==='external'){ add('Kind',d.flowableApi?'Flowable platform API':d.route?'In-app navigation route':d.platform?'Flowable platform bean':(d.external_url?'External URL':d.kind||'external')); if(d.method&&d.method!=='(button)') add('Method',d.method); }
@@ -3259,6 +3995,18 @@ function detailExtra(n){
           (c.type?'<span class="mono" style="margin-left:auto;color:var(--ink-faint);font-size:10px">'+esc(c.type)+'</span>':'')+
           '</div>'; }).join('')+'</div></div>';
     });
+  }
+  if((n.type==='expression'||n.type==='binding') && (d.problems||[]).length){
+    h+='<h3 class="rel">Problems ('+d.problems.length+')</h3><div class="oplist">'+
+      d.problems.map(p=>{
+        const isErr=p.severity==='error';
+        const col=isErr?'#ff6b6b':'#f4b942';
+        const snip=p.snippet||'';
+        return '<div class="oprow"><span class="verb" style="color:'+col+'">'+(isErr?'error':'warning')+'</span>'+
+          '<span style="flex:1">'+esc(p.message)+'</span>'+
+          (snip?'<span class="mono" style="color:var(--ink-faint);font-size:10px">'+esc(snip)+'</span>':'')+
+          '</div>';
+      }).join('')+'</div>';
   }
   if((n.type==='expression'||n.type==='binding') && (d.usedBy||[]).length){
     h+='<h3 class="rel">Used by ('+d.usedBy.length+')</h3><div class="nodechips">'+d.usedBy.map(nodeChip).join('')+'</div>';
@@ -3407,9 +4155,11 @@ function dec(s){ return decodeURIComponent(s); }
 // ---------- boot ----------
 document.getElementById('proj').textContent=DATA.project;
 const st=DATA.stats;
+const invalidN=nodes.filter(n=>(n.data.problems||[]).length).length;
 document.getElementById('stats').innerHTML=
   '<span><b>'+nodes.length+'</b> nodes</span><span><b>'+edges.length+'</b> links</span>'+
-  '<span><b>'+(st.models||0)+'</b> models</span><span><b>'+(st.java||0)+'</b> java</span><span><b>'+(st.groups||0)+'</b> groups</span>';
+  '<span><b>'+(st.models||0)+'</b> models</span><span><b>'+(st.java||0)+'</b> java</span><span><b>'+(st.groups||0)+'</b> groups</span>'+
+  (invalidN?'<span style="color:#ff6b6b"><b>'+invalidN+'</b> invalid</span>':'');
 state.cat = (CATS.find(c=>c.id==='process')||CATS[0]||{}).id;
 renderRail(); renderList(); renderDetail();
 const hash=location.hash?decodeURIComponent(location.hash.slice(1)):'';
