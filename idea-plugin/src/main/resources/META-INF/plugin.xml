@@ -1,7 +1,10 @@
-<idea-plugin>
+<!-- require-restart: the plugin registers languages / file types / parser definitions (the two
+     expression dialects) which cannot be loaded dynamically, so force IntelliJ to prompt for a
+     restart on install / update / uninstall instead of silently half-loading. -->
+<idea-plugin require-restart="true">
     <id>com.flowable.atlas</id>
     <name>Flowable Atlas</name>
-    <version>0.4.0</version>
+    <version>0.4.1</version>
     <vendor email="kevin.klever@flowable.com" url="https://www.flowable.com">Flowable</vendor>
 
     <description><![CDATA[
@@ -100,6 +103,18 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.4.1</h3>
+        <ul>
+          <li><b>Requires an IDE restart on install / update</b> — the plugin registers languages,
+              file types and parser definitions (the two expression dialects) that cannot be loaded
+              dynamically, so IntelliJ now prompts for a restart instead of silently half-loading
+              (which left the Flowable Expressions tool window and its stripe icon missing).</li>
+          <li><b>Open the Expression Playground from the menu</b> — Tools → Flowable Atlas →
+              <i>Open Expression Playground</i> shows the Flowable Expressions tool window directly,
+              independent of the tool-window stripe button.</li>
+          <li><b>Fixed the tool-window icon</b> — a correctly sized (16&times;16) icon that renders
+              reliably across display scalings, instead of the oversized plugin icon.</li>
+        </ul>
         <h3>0.4.0</h3>
         <ul>
           <li><b>Flowable expression language support</b> — first-class editor support for both the
@@ -291,7 +306,7 @@
         <toolWindow id="Flowable Expressions"
                     anchor="bottom"
                     secondary="true"
-                    icon="/META-INF/pluginIcon.svg"
+                    icon="/META-INF/expr-toolwindow.svg"
                     factoryClass="com.flowable.atlas.expr.toolwindow.FlowableExpressionToolWindowFactory"/>
     </extensions>
 
@@ -312,6 +327,10 @@
                     class="com.flowable.atlas.action.GenerateAtlasExplorerAction"
                     text="Generate Atlas Explorer"
                     description="Map the whole project into a self-contained interactive Atlas HTML page (open in browser or in the IDE)"/>
+            <action id="Flowable.OpenExpressionPlayground"
+                    class="com.flowable.atlas.action.OpenExpressionPlaygroundAction"
+                    text="Open Expression Playground"
+                    description="Show the Flowable Expressions tool window to validate and evaluate backend/frontend expressions"/>
             <separator/>
             <action id="Flowable.GenerateModelConstants"
                     class="com.flowable.atlas.action.GenerateModelConstantsAction"

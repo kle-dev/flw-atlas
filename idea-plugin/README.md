@@ -148,14 +148,14 @@ Toolchain notes (all matter for a 2026.1 target):
   the local JDK 21; adjust if yours is elsewhere).
 
 ```bash
-./gradlew buildPlugin        # → build/distributions/flowable-atlas-0.4.0.zip (installable)
+./gradlew buildPlugin        # → build/distributions/flowable-atlas-0.4.1.zip (installable)
 ./gradlew test               # functional + unit tests
 ./gradlew runIde             # sandbox IDE with the plugin; open any Flowable project
 ```
 
 ## Install (from disk)
 
-1. `./gradlew buildPlugin` → `build/distributions/flowable-atlas-0.4.0.zip`.
+1. `./gradlew buildPlugin` → `build/distributions/flowable-atlas-0.4.1.zip`.
 2. In IntelliJ IDEA: **Settings → Plugins → ⚙ → Install Plugin from Disk…** → pick the zip.
 3. Restart. Open a Flowable project, then either generate the Atlas explorer
    (**Tools → Flowable Atlas → Generate Atlas Explorer**), open the **Flowable Expressions** tool
