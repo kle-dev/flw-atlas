@@ -8,8 +8,8 @@ plugins {
     id("org.jetbrains.intellij.platform") version "2.17.0"
 }
 
-group = "com.flowable.keys"
-version = "0.2.1"
+group = "com.flowable.atlas"
+version = "0.3.0"
 
 repositories {
     mavenCentral()
@@ -51,4 +51,16 @@ intellijPlatform {
 kotlin {
     // Compile to Java 21 bytecode so the plugin runs on a JBR/JDK 21 target system.
     jvmToolchain(21)
+}
+
+// Bundle the Atlas generator (the repo-root Python script) into the plugin as a resource under
+// /atlas/flowable_atlas.py, so "Generate Atlas Explorer" runs the exact same generator as the CLI.
+// Single source of truth: the script stays in the repo root; this copy keeps the plugin in sync.
+tasks.processResources {
+    val atlasScript = projectDir.parentFile.resolve("flowable_atlas.py")
+    if (atlasScript.exists()) {
+        from(atlasScript) { into("atlas") }
+    } else {
+        logger.warn("flowable_atlas.py not found at ${atlasScript.path} — the Atlas explorer generator will not be bundled.")
+    }
 }

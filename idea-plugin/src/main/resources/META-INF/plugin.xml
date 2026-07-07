@@ -1,13 +1,13 @@
 <idea-plugin>
-    <id>com.flowable.keys</id>
-    <name>Flowable Keys</name>
-    <version>0.2.1</version>
+    <id>com.flowable.atlas</id>
+    <name>Flowable Atlas</name>
+    <version>0.3.0</version>
     <vendor email="kevin.klever@flowable.com" url="https://www.flowable.com">Flowable</vendor>
 
     <description><![CDATA[
         <p><b>Stop guessing Flowable model keys — and stop copy-pasting them from Design.</b></p>
 
-        <p>Flowable Keys makes the <b>model keys</b> in your Java code first-class, IDE-aware references —
+        <p>Flowable Atlas makes the <b>model keys</b> in your Java code first-class, IDE-aware references —
         resolved against the models that actually live in your project. It indexes every Flowable model
         you keep in the repo: the artifacts you exported from Design (the app <code>.zip</code> /
         deployment <code>-bar</code>, holding <code>.bpmn/.cmmn/.dmn/.form/.data/.service/…</code>) or the
@@ -50,6 +50,12 @@
           <li><b>Generate model constants</b> — one action writes a typed Java class
               (<code>FlowableModelKeys.Process.ORDER_FULFILMENT</code>, model name in Javadoc) and keeps
               it in sync automatically as models are added, renamed or removed.</li>
+          <li><b>Generate the Atlas explorer</b> — Tools → Flowable Atlas → <i>Generate Atlas Explorer</i>
+              maps your whole project (models + Java + Liquibase) into a single self-contained,
+              offline, interactive HTML page. Save it into the project and open it in your browser or
+              right inside the IDE (embedded viewer). Or switch the scope in Settings to write <b>all
+              Atlas artifacts</b> at once — summary &amp; overview Markdown, the graph JSON, the explorer
+              HTML and a CLAUDE.md primer — into a folder. Requires a Python 3 interpreter on the machine.</li>
         </ul>
 
         <h3>How it feels</h3>
@@ -67,6 +73,20 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.3.0</h3>
+        <ul>
+          <li><b>Renamed to Flowable Atlas</b> (formerly Flowable Keys) — the plugin now also
+              produces the Atlas explorer, not just model-key tooling.</li>
+          <li><b>Generate Atlas Explorer</b> — Tools → Flowable Atlas → <i>Generate Atlas Explorer</i>
+              runs the bundled Atlas generator over your project and writes a single self-contained,
+              interactive HTML page. Choose where to save it in the project, then open it in the
+              external browser or in an embedded in-IDE viewer. Any <code>*.explorer.html</code> in the
+              project also opens in the embedded viewer. Requires Python 3.8+ (auto-detected, or set the
+              interpreter in Settings → Tools → Flowable Atlas).</li>
+          <li><b>All artifacts option</b> — a <i>Generate</i> scope in Settings → Tools → Flowable Atlas
+              switches the action from "explorer HTML only" to writing the full Atlas set (summary.md,
+              overview.md, graph.json, explorer.html, CLAUDE.md) into a folder you pick.</li>
+        </ul>
         <h3>0.2.0</h3>
         <ul>
           <li><b>Infix key search</b> — completion now matches any fragment of a key, so typing
@@ -101,21 +121,21 @@
         <!-- Services (FlowableModelIndexService, ModelConstantsService/Settings) are @Service — no registration needed. -->
         <applicationConfigurable
                 parentId="tools"
-                id="com.flowable.keys.settings"
-                displayName="Flowable Keys"
-                instance="com.flowable.keys.settings.FlowableKeysConfigurable"/>
+                id="com.flowable.atlas.settings"
+                displayName="Flowable Atlas"
+                instance="com.flowable.atlas.settings.FlowableAtlasConfigurable"/>
         <completion.contributor
                 language="JAVA"
-                implementationClass="com.flowable.keys.completion.FlowableJavaCompletionContributor"/>
+                implementationClass="com.flowable.atlas.completion.FlowableJavaCompletionContributor"/>
         <!-- Liquibase changelog: complete <column name="…"> / tableName from the backing service model. -->
         <completion.contributor
                 language="XML"
-                implementationClass="com.flowable.keys.liquibase.LiquibaseColumnCompletionContributor"/>
+                implementationClass="com.flowable.atlas.liquibase.LiquibaseColumnCompletionContributor"/>
         <!-- BPMN/CMMN model XML: complete model keys at cross-reference attributes
              (calledElement, flowable:formKey, decisionRef, caseRef, processRef, …). -->
         <completion.contributor
                 language="XML"
-                implementationClass="com.flowable.keys.completion.FlowableXmlKeyCompletionContributor"/>
+                implementationClass="com.flowable.atlas.completion.FlowableXmlKeyCompletionContributor"/>
         <localInspection
                 language="JAVA"
                 shortName="FlowableValueField"
@@ -123,7 +143,7 @@
                 groupName="Flowable"
                 enabledByDefault="true"
                 level="WARNING"
-                implementationClass="com.flowable.keys.inspection.FlowableValueFieldInspection"/>
+                implementationClass="com.flowable.atlas.inspection.FlowableValueFieldInspection"/>
         <localInspection
                 language="JAVA"
                 shortName="FlowableBrokenKey"
@@ -131,7 +151,7 @@
                 groupName="Flowable"
                 enabledByDefault="true"
                 level="WARNING"
-                implementationClass="com.flowable.keys.inspection.FlowableBrokenKeyInspection"/>
+                implementationClass="com.flowable.atlas.inspection.FlowableBrokenKeyInspection"/>
         <!-- BPMN/CMMN model XML: an unknown model key at a cross-reference attribute (broken deployment). -->
         <localInspection
                 language="XML"
@@ -140,19 +160,19 @@
                 groupName="Flowable"
                 enabledByDefault="true"
                 level="WARNING"
-                implementationClass="com.flowable.keys.inspection.FlowableXmlBrokenKeyInspection"/>
+                implementationClass="com.flowable.atlas.inspection.FlowableXmlBrokenKeyInspection"/>
         <!-- Ctrl-click a key literal → jump to the model file; Find Usages works too. -->
         <psi.referenceContributor
                 language="JAVA"
-                implementation="com.flowable.keys.navigation.FlowableKeyReferenceContributor"/>
+                implementation="com.flowable.atlas.navigation.FlowableKeyReferenceContributor"/>
         <!-- Ctrl-click a model key in BPMN/CMMN XML (calledElement, formKey, decisionRef, …) → the model file. -->
         <psi.referenceContributor
                 language="XML"
-                implementation="com.flowable.keys.navigation.FlowableXmlKeyReferenceContributor"/>
+                implementation="com.flowable.atlas.navigation.FlowableXmlKeyReferenceContributor"/>
         <!-- Hover / Ctrl-Q on a key literal → model type, name and file. -->
         <lang.documentationProvider
                 language="JAVA"
-                implementationClass="com.flowable.keys.navigation.FlowableKeyDocumentationProvider"/>
+                implementationClass="com.flowable.atlas.navigation.FlowableKeyDocumentationProvider"/>
         <!-- Liquibase changelog column not mapped in the backing Flowable service/data-object model. -->
         <localInspection
                 language="XML"
@@ -161,38 +181,47 @@
                 groupName="Flowable"
                 enabledByDefault="true"
                 level="WARNING"
-                implementationClass="com.flowable.keys.liquibase.LiquibaseCoverageInspection"/>
+                implementationClass="com.flowable.atlas.liquibase.LiquibaseCoverageInspection"/>
         <!-- Alt-Enter on a data-object definitionKey → generate a typed Java bean from its fields. -->
         <intentionAction>
             <language>JAVA</language>
-            <className>com.flowable.keys.intention.GenerateDataObjectBeanIntention</className>
+            <className>com.flowable.atlas.intention.GenerateDataObjectBeanIntention</className>
             <category>Flowable</category>
         </intentionAction>
         <!-- Don't report Java referenced from models (delegates, ${bean.method()}, listeners) as unused. -->
-        <implicitUsageProvider implementation="com.flowable.keys.usage.FlowableImplicitUsageProvider"/>
+        <implicitUsageProvider implementation="com.flowable.atlas.usage.FlowableImplicitUsageProvider"/>
         <!-- Find Usages / Ctrl-B on a delegate class or ${bean.method()} shows the model files that use it. -->
-        <customUsageSearcher implementation="com.flowable.keys.usage.FlowableModelUsageSearcher"/>
+        <customUsageSearcher implementation="com.flowable.atlas.usage.FlowableModelUsageSearcher"/>
+        <!-- Balloon shown after generating the Atlas explorer (open in browser / open in IDE). -->
+        <notificationGroup id="Flowable Atlas" displayType="BALLOON"/>
+        <!-- Render a *.explorer.html as an embedded (JCEF) "Atlas Explorer" tab after the default editor. -->
+        <fileEditorProvider implementation="com.flowable.atlas.explorer.AtlasFileEditorProvider"/>
     </extensions>
 
     <projectListeners>
         <!-- Regenerates the model-constants class when models are added/removed/edited. -->
-        <listener class="com.flowable.keys.generate.ModelConstantsAutoRefresher"
+        <listener class="com.flowable.atlas.generate.ModelConstantsAutoRefresher"
                   topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
     </projectListeners>
 
     <actions>
         <group id="Flowable.Menu"
-               text="Flowable Keys"
-               description="Flowable Keys actions"
+               text="Flowable Atlas"
+               description="Flowable Atlas actions"
                popup="true">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
 
+            <action id="Flowable.GenerateAtlasExplorer"
+                    class="com.flowable.atlas.action.GenerateAtlasExplorerAction"
+                    text="Generate Atlas Explorer"
+                    description="Map the whole project into a self-contained interactive Atlas HTML page (open in browser or in the IDE)"/>
+            <separator/>
             <action id="Flowable.GenerateModelConstants"
-                    class="com.flowable.keys.action.GenerateModelConstantsAction"
+                    class="com.flowable.atlas.action.GenerateModelConstantsAction"
                     text="Generate Model Constants"
                     description="Generate a Java class with all Flowable model keys as constants (kept in sync)"/>
             <action id="Flowable.DumpKeyIndex"
-                    class="com.flowable.keys.action.DumpFlowableIndexAction"
+                    class="com.flowable.atlas.action.DumpFlowableIndexAction"
                     text="Dump Key Index"
                     description="Scan the project and list all indexed Flowable model keys"/>
         </group>
