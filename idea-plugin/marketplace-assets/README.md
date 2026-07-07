@@ -1,4 +1,4 @@
-# Flowable Keys — JetBrains Marketplace assets
+# Flowable Atlas — JetBrains Marketplace assets
 
 Ready-to-upload media for the plugin's Marketplace listing. All content uses a neutral
 demo project (`flowable-demo` / `com.example.app`) — **no customer data**.

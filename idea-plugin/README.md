@@ -1,7 +1,16 @@
-# Flowable Keys — IntelliJ IDEA Plugin
+# Flowable Atlas — IntelliJ IDEA Plugin
 
-Context-aware auto-complete for **Flowable model keys** at Flowable **public-API call sites in
-Java** — searchable by **key or name**:
+*(formerly “Flowable Keys”)*
+
+Two things in one IDE plugin for Flowable projects:
+
+1. **Generate the Atlas explorer** — Tools → **Flowable Atlas → Generate Atlas Explorer** maps the
+   whole project (models + Java + Liquibase) into a single self-contained, offline, interactive HTML
+   page. Save it into the project, then open it in your browser or in an embedded in-IDE viewer. It
+   runs the bundled `flowable_atlas.py` generator, so the output is identical to the standalone
+   `atlas` CLI. Requires a **Python 3.8+** interpreter (auto-detected, or set it in Settings).
+2. **Context-aware key tooling** — completion, navigation, inspections and constant generation for
+   **Flowable model keys**, searchable by **key or name**:
 
 ```java
 cmmnRuntimeService.createCaseInstanceBuilder().caseDefinitionKey("<caret>");         // → case keys
@@ -17,6 +26,17 @@ dataObjectRuntimeService.createDataObjectInstanceQuery()
 
 ## Status — v1
 
+- ✅ **Atlas explorer generation** — Tools → Flowable Atlas → **Generate Atlas Explorer** runs the
+  bundled Atlas generator (`flowable_atlas.py`, shipped as a plugin resource) via a located Python 3
+  interpreter, writing a self-contained `*.explorer.html` to a location you choose (a Save dialog,
+  defaulting into the project's `atlas-output/`). On success a balloon offers **Open in browser** and
+  **Open in IDE**; any `*.explorer.html` in the project also opens in an embedded JCEF **Atlas
+  Explorer** editor tab. A **Generate** scope in settings (`AtlasArtifactScope`) switches between
+  *Explorer HTML only* (`--html` to a chosen file) and *All artifacts* (`--all` into a chosen folder:
+  `summary.md`, `overview.md`, `graph.json`, `explorer.html`, `CLAUDE.md`). Python is auto-detected
+  (`python3` / `python` on PATH) or set explicitly in Settings → Tools → Flowable Atlas. See
+  `AtlasGeneratorService`, `PythonLocator`, `AtlasScript`, `GenerateAtlasExplorerAction`,
+  `AtlasFileEditorProvider`.
 - ✅ **Model index** (`FlowableModelIndexService`): scans the project for every Flowable model
   file — deployment `…-bar/` artifacts (`.bpmn/.cmmn/.dmn/.form/.action/.data/.service/…`) **and**
   the Flowable Design `*-models/` workspace — and extracts each model's `key` + `name`.
@@ -70,8 +90,10 @@ dataObjectRuntimeService.createDataObjectInstanceQuery()
 - ✅ **Liquibase column completion**: inside a changelog, `<column name="…">` (in `<insert>` /
   `<createTable>` / `<update>` / `<addColumn>`) and `tableName="…"` complete with the physical columns /
   table of the backing `database` `.service` model (`LiquibaseColumnCompletionContributor`).
-- ✅ **Settings** (Settings → Tools → Flowable Keys): toggle the extra completions and opt into
-  indexing the Flowable Design `*-models/` workspace JSON.
+- ✅ **Settings** (Settings → Tools → Flowable Atlas): toggle the extra completions, opt into
+  indexing the Flowable Design `*-models/` workspace JSON, choose the Atlas **Generate** scope
+  (explorer only vs. all artifacts), and set the Python 3 interpreter used for the Atlas explorer
+  (empty = auto-detect).
 - ✅ Tests pass against IntelliJ IDEA 2026.1 (**67** total): `FlowableCompletionTest` (16) +
   `FlowableFeaturesTest` (13) + `FlowableInfixAndXmlTest` (8, infix + scoped vocab + XML cross-refs) +
   `LiquibaseChangelogTest` (8) + `JsonUtilTest` (6) + `DataObjectBeanGeneratorTest` (4) +
@@ -108,15 +130,17 @@ Toolchain notes (all matter for a 2026.1 target):
   the local JDK 21; adjust if yours is elsewhere).
 
 ```bash
-./gradlew buildPlugin        # → build/distributions/flowable-keys-0.2.0.zip (installable)
-./gradlew test               # 6 functional completion tests
+./gradlew buildPlugin        # → build/distributions/flowable-atlas-0.3.0.zip (installable)
+./gradlew test               # functional + unit tests
 ./gradlew runIde             # sandbox IDE with the plugin; open any Flowable project
 ```
 
 ## Install (from disk)
 
-1. `./gradlew buildPlugin` → `build/distributions/flowable-keys-0.2.0.zip`.
+1. `./gradlew buildPlugin` → `build/distributions/flowable-atlas-0.3.0.zip`.
 2. In IntelliJ IDEA: **Settings → Plugins → ⚙ → Install Plugin from Disk…** → pick the zip.
-3. Restart. Open a Flowable project and type a key argument at any of the API call sites above.
+3. Restart. Open a Flowable project, then either generate the Atlas explorer
+   (**Tools → Flowable Atlas → Generate Atlas Explorer**) or start typing a key argument at any of
+   the API call sites above.
 
-Verify indexing via **Tools → "Flowable: Dump Key Index"**.
+Verify indexing via **Tools → Flowable Atlas → Dump Key Index**.
