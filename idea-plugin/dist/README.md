@@ -1,4 +1,4 @@
-# Flowable Keys — prebuilt plugin
+# Flowable Atlas — prebuilt plugin
 
 The installable plugin ZIP, committed so you can install it after a `git pull`
 **without building anything**.
@@ -6,7 +6,7 @@ The installable plugin ZIP, committed so you can install it after a `git pull`
 ## Install (on any machine)
 
 1. IntelliJ IDEA **2026.1+** → **Settings → Plugins → ⚙ → Install Plugin from Disk…**
-2. Select `flowable-keys-0.2.1.zip`
+2. Select `flowable-atlas-0.3.0.zip`
 3. **Restart**
 
 > Do **not** open `idea-plugin/` as a Gradle project just to use the plugin.
@@ -16,14 +16,18 @@ The installable plugin ZIP, committed so you can install it after a `git pull`
 
 ## This build
 
-- Version: **0.2.1**
-- SHA-256: `4412e65814cb8df94d2fbf01ba0d5d11ae4a535d6e571d429f56e5bef8976b91`
+- Version: **0.3.0**
+- SHA-256: `3e7a5d2908e6295bef42b169b8c3d38420b52a34bc9b8291bf92d12b99b70eab`
+
+Bundles the Atlas generator (`flowable_atlas.py`). **Generate Atlas Explorer**
+(Tools → Flowable Atlas) additionally needs a **Python 3.8+** interpreter on the machine
+(auto-detected, or set it in Settings → Tools → Flowable Atlas).
 
 ## Refreshing this ZIP after code changes
 
 ```bash
 cd ..                       # into idea-plugin/
 ./gradlew buildPlugin
-cp build/distributions/flowable-keys-0.2.1.zip dist/
-# then commit dist/flowable-keys-0.2.1.zip
+cp build/distributions/flowable-atlas-0.3.0.zip dist/
+# then commit dist/flowable-atlas-0.3.0.zip
 ```

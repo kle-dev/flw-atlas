@@ -7,4 +7,4 @@ pluginManagement {
     }
 }
 
-rootProject.name = "flowable-keys"
+rootProject.name = "flowable-atlas"
