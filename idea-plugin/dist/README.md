@@ -6,7 +6,7 @@ The installable plugin ZIP, committed so you can install it after a `git pull`
 ## Install (on any machine)
 
 1. IntelliJ IDEA **2026.1+** → **Settings → Plugins → ⚙ → Install Plugin from Disk…**
-2. Select `flowable-atlas-0.3.0.zip`
+2. Select `flowable-atlas-0.4.0.zip`
 3. **Restart**
 
 > Do **not** open `idea-plugin/` as a Gradle project just to use the plugin.
@@ -16,8 +16,8 @@ The installable plugin ZIP, committed so you can install it after a `git pull`
 
 ## This build
 
-- Version: **0.3.0**
-- SHA-256: `3e7a5d2908e6295bef42b169b8c3d38420b52a34bc9b8291bf92d12b99b70eab`
+- Version: **0.4.0**
+- SHA-256: `a8430e629806f92b94414852d47c3b5dd42a3227472d924fab892a634dd2dfce`
 
 Bundles the Atlas generator (`flowable_atlas.py`). **Generate Atlas Explorer**
 (Tools → Flowable Atlas) additionally needs a **Python 3.8+** interpreter on the machine
@@ -28,6 +28,6 @@ Bundles the Atlas generator (`flowable_atlas.py`). **Generate Atlas Explorer**
 ```bash
 cd ..                       # into idea-plugin/
 ./gradlew buildPlugin
-cp build/distributions/flowable-atlas-0.3.0.zip dist/
-# then commit dist/flowable-atlas-0.3.0.zip
+cp build/distributions/flowable-atlas-0.4.0.zip dist/
+# then commit dist/flowable-atlas-0.4.0.zip
 ```
