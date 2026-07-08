@@ -242,6 +242,64 @@ object CustomFunctionExtractor {
         }
     }
 
+    /**
+     * True when an object entry's VALUE is an object literal or a function (arrow / `function` /
+     * method shorthand) — distinguishes a real `additionalData` registration (namespaces of
+     * functions) from an incidental one such as a React `<Form additionalData={{…}}>` prop, whose
+     * values are data/identifiers (`currentUser: props.currentUser`).
+     */
+    private fun entryValueIsFnOrObj(masked: String, orig: String, s: Int, e: Int): Boolean {
+        val (key, kind) = entryKeyAndKind(masked, orig, s, e)
+        if (key == null) return false
+        if (kind is Kind.Obj) return true
+        val seg = masked.substring(s, e)
+        if ("=>" in seg || Regex("""\bfunction\b""").containsMatchIn(seg)) return true
+        val lead = s + (seg.length - seg.trimStart().length)
+        val m = IDENT_KEY.find(orig.substring(lead, e))
+        if (m != null) {
+            var j = lead + m.value.length
+            while (j < e && masked[j].isWhitespace()) j++
+            if (j < e && masked[j] == '(') return true  // method shorthand
+        }
+        return false
+    }
+
+    /** A plausible `additionalData` registration has ≥1 member whose value is an object or function.
+     *  Guards the low-confidence `additionalData: { … }` property case (empty/data objects rejected). */
+    private fun objectIsRegistrationShaped(masked: String, orig: String, open: Int, close: Int): Boolean {
+        for (span in objectEntries(masked, open, close))
+            if (entryValueIsFnOrObj(masked, orig, span.first, span.last + 1)) return true
+        return false
+    }
+
+    /**
+     * (open, close, highConfidence) of `additionalData` object literals the primary anchors miss —
+     * chiefly the compiled Rollup bundle (`var additionalData = { … }`, from
+     * `export default { …, additionalData }`) and nested config (`externals: { additionalData: {…} }`).
+     * A leading-dot `.additionalData = {…}` is left to the primary pass. High confidence = a
+     * `var/let/const additionalData =` declaration (never a JSX prop, which is always `additionalData:`).
+     */
+    private fun fallbackAdditionalDataSpans(masked: String): List<Triple<Int, Int, Boolean>> {
+        val out = ArrayList<Triple<Int, Int, Boolean>>()
+        for (m in Regex("""\badditionalData\b""").findAll(masked)) {
+            val p = m.range.first
+            var b = p - 1
+            while (b >= 0 && masked[b].isWhitespace()) b--
+            if (b >= 0 && masked[b] == '.') continue
+            var j = m.range.last + 1
+            while (j < masked.length && masked[j].isWhitespace()) j++
+            if (j >= masked.length || (masked[j] != '=' && masked[j] != ':')) continue
+            j++
+            while (j < masked.length && masked[j].isWhitespace()) j++
+            if (j >= masked.length || masked[j] != '{') continue
+            val close = matchBrace(masked, j)
+            if (close == -1) continue
+            val high = Regex("""\b(?:var|let|const)\s+$""").containsMatchIn(masked.substring(0, p))
+            out += Triple(j, close, high)
+        }
+        return out
+    }
+
     private fun resolveImport(fromFile: File, binding: String, orig: String): File? {
         val b = Regex.escape(binding)
         val pats = listOf(
@@ -303,6 +361,21 @@ object CustomFunctionExtractor {
                 }
             }
         }
+        // (3) Fallback for compiled bundles / nested config: `var additionalData = { … }` (Rollup output
+        //     of `export default { …, additionalData }`) or a bare `additionalData: { … }` property. The
+        //     property case is guarded so a React `<Form additionalData={{…}}>` prop isn't mistaken for a
+        //     registration. Absorbs every distinct span (a bundle may inline more than one).
+        if (!handled) {
+            val absorbed = HashSet<Int>()
+            for ((o, c, high) in fallbackAdditionalDataSpans(masked)) {
+                if (o in absorbed) continue
+                if (!high && !objectIsRegistrationShaped(masked, orig, o, c)) continue
+                absorbAdditionalDataObject(masked, orig, o, c, cat, rel)
+                absorbed += o
+                handled = true
+            }
+            if (handled) cat.sources += rel
+        }
         return handled
     }
 
@@ -331,7 +404,8 @@ object CustomFunctionExtractor {
                 if (!f.isFile || SRC_EXT.none { f.name.endsWith(it) }) return@forEach
                 if (++count > MAX_FILES || f.length() > MAX_SIZE) return@forEach
                 val head = runCatching { f.readText() }.getOrNull() ?: return@forEach
-                if ("additionalData" in head && ("export default" in head || ".additionalData" in head || "externals" in head))
+                if ("additionalData" in head && ("export default" in head || ".additionalData" in head ||
+                        "externals" in head || Regex("""additionalData\s*[:=]\s*\{""").containsMatchIn(head)))
                     hits += f
             }
         return hits
