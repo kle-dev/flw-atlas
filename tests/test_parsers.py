@@ -6,7 +6,7 @@ import flowable_atlas as fa
 
 def _ctx():
     """Fresh parse context matching what extract() hands to the parsers."""
-    return {"refs": [], "rest_calls": [], "expr": set(), "mustache": set(),
+    return {"refs": [], "dynamic_refs": [], "rest_calls": [], "expr": set(), "mustache": set(),
             "delegate_classes": set(), "access": [], "groups": set(),
             "expr_use": {}, "mustache_use": {}, "var_use": {}, "script_var_use": {},
             "query_meta": {}}
@@ -23,6 +23,11 @@ def test_model_type_for():
     assert fa.model_type_for("x.form") == "form"
     assert fa.model_type_for("x.txt") is None
     assert fa.model_type_for("noext") is None
+    # extensions match case-insensitively (real exports vary in casing)
+    assert fa.model_type_for("x.masterData") == "masterData"
+    assert fa.model_type_for("x.knowledgeBase") == "knowledgeBase"
+    assert fa.model_type_for("x.KNOWLEDGEBASE") == "knowledgeBase"
+    assert fa.model_type_for("x.dashboardComponent") == "dashboardComponent"
 
 
 def test_parse_bpmn_tasks_and_refs():

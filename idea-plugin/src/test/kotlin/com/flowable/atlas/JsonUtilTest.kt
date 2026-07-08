@@ -42,9 +42,25 @@ class JsonUtilTest {
     }
 
     @Test fun readForm_collects_field_ids() {
-        val json = """{"metadata":{"key":"F1"},"fields":[{"id":"first","type":"text"},{"id":"last","type":"text"}]}"""
+        val json = """{"metadata":{"key":"F1"},"fields":[{"id":"first","type":"text","label":"First"},
+            {"id":"last","type":"text","label":"Last"}]}"""
         val form = JsonUtil.readForm(bytes(json))
         assertTrue("fields: ${form.fields}", form.fields.containsAll(listOf("first", "last")))
+    }
+
+    @Test fun readForm_ignores_unlabeled_containers() {
+        // layout containers carry id+type but no label — their ids are not form fields
+        // (same predicate as flowable_atlas.py parse_form)
+        val json = """{"metadata":{"key":"F1"},"rows":[[{"id":"col1","type":"container",
+            "rows":[[{"id":"name","type":"text","label":"Name"}]]}]]}"""
+        val form = JsonUtil.readForm(bytes(json))
+        assertEquals(listOf("name"), form.fields)
+    }
+
+    @Test fun readDataObject_masterData_variables_become_fields() {
+        val json = """{"key":"md","dataObjectType":"masterData","variables":{"level":"Level","color":"Color"}}"""
+        val d = JsonUtil.readDataObject(bytes(json))!!
+        assertEquals(listOf("level", "color"), d.fields)
     }
 
     @Test fun readEventPayload_reads_names() {

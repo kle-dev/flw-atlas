@@ -214,6 +214,30 @@ def test_custom_functions_become_cross_referenced_graph_nodes(tmp_path):
     assert "customFunction:flw.formatIban" in used
     assert "customFunction:greet" not in used                    # not called by this form
 
+    # the binding itself references the custom functions it calls (not only its form)
+    b = nodes.get("binding:{{ flowkyc.findCommonAttribute(customer) }}")
+    assert b is not None and b["data"]["calls"] == ["customFunction:flowkyc.findCommonAttribute"]
+    assert b["id"] in fc["data"]["bindings"]                     # and the fn links back to the binding
+
+
+def test_custom_function_signatures_are_extracted_and_shown(tmp_path):
+    # Arguments are surfaced in the node label + data.signature — from inline arrows / methods /
+    # function expressions, and (compiled bundle) from an identifier resolved to its declaration.
+    _write(tmp_path, "static/ext/custom.js",
+           "(function (g, f){ g.flowable.externals = f(); }(this, function (){\n"
+           "  function findCommon(customer, docs){ return customer; }\n"
+           "  var additionalData = { flowkyc: { findCommon: findCommon, calc: (a, b) => a + b },\n"
+           "                         flw: { formatIban: function(iban){ return iban; } } };\n"
+           "  return { additionalData: additionalData };\n"
+           "}));\n")
+    cat = fa.extract_custom_functions(str(tmp_path))
+    assert cat["signatures"]["flowkyc.findCommon"] == "customer, docs"   # resolved from `function findCommon(…)`
+    assert cat["signatures"]["flowkyc.calc"] == "a, b"                   # inline arrow
+    assert cat["signatures"]["flw.formatIban"] == "iban"                # inline function expression
+    r = fa.extract(str(tmp_path))
+    nodes = {n["id"]: n for n in r["graph"]["nodes"]}
+    assert nodes["customFunction:flowkyc.findCommon"]["label"] == "flowkyc.findCommon(customer, docs)"
+
 
 def test_no_custom_functions_flag_disables_discovery(tmp_path):
     _write(tmp_path, "fe/index.tsx",

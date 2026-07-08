@@ -31,6 +31,7 @@ enum class ModelType(val id: String, val display: String) {
     MASTER_DATA("masterData", "Master Data"),
     DASHBOARD_COMPONENT("dashboardComponent", "Dashboard Component"),
     DOCUMENT("document", "Document"),
+    PALETTE("palette", "Palette"),
     APP("app", "App");
 
     companion object {
@@ -45,7 +46,7 @@ enum class ModelType(val id: String, val display: String) {
             ".policy" to SECURITY_POLICY, ".extractor" to VARIABLE_EXTRACTOR,
             ".knowledgebase" to KNOWLEDGE_BASE, ".masterdata" to MASTER_DATA,
             ".dashboardcomponent" to DASHBOARD_COMPONENT, ".document" to DOCUMENT,
-            ".app" to APP,
+            ".palette" to PALETTE, ".app" to APP,
         )
 
         /** Flowable Design workspace subfolders (they hold per-model `.json` files) → type. */

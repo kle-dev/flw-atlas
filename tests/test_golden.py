@@ -64,3 +64,55 @@ def test_liquibase_coverage_links_service(result):
     lb = result["liquibase"][0]
     assert lb["tables"] == ["cust_customer"]
     assert lb["authority"]["referencedBy"] == ["customerService"]
+
+
+def test_masterdata_fields_extracted(result):
+    md = next(d for d in result["dataObjects"] if d["key"] == "priorityMD")
+    assert md["fields"] == ["level", "color"], "masterData `variables` map must become fields"
+    assert md["keyField"] == "key" and md["subType"] == "priority"
+    assert md["columns"][0]["label"] == "Level"
+
+
+def test_dmn_servicetask_ref_resolves(result):
+    hits = [r for r in result["resolvedRefs"] if r["from"] == "orderProcess"
+            and r["kind"] == "decision" and r["value"] == "orderDecision"]
+    assert hits, "serviceTask flowable:type=dmn must link the process to its decision"
+
+
+def test_policy_list_shape_indexed(result):
+    assert "securityPolicy:orderPolicy" in result["modelIndex"]
+    pol = next(p for p in result["policies"] if p["key"] == "orderPolicy")
+    perms = {p["key"]: p["roles"] for p in pol["permissions"]}
+    assert perms == {"read": ["sales"], "update": ["backoffice"]}
+
+
+def test_dataobject_relation_edge(result):
+    assert any(e["s"] == "dataObject:customerDO" and e["t"] == "dataObject:priorityMD"
+               and e["rel"] == "relates-to" for e in result["graph"]["edges"]), \
+        "object-relation field mappings must become dataObject->dataObject edges"
+
+
+def test_dataobject_table_denormalized(result):
+    do = next(d for d in result["dataObjects"] if d["key"] == "customerDO")
+    assert do["serviceTableName"] == "cust_customer"
+    assert do["serviceType"] == "db"
+
+
+def test_external_node_for_unresolved_refs(result):
+    by_id = {n["id"]: n for n in result["graph"]["nodes"]}
+    assert "external:notifierBean" in by_id, "unresolved beans must surface as external nodes"
+    missing = by_id.get("external:fulfilmentProcess")
+    assert missing and missing["data"].get("missingModel"), \
+        "a referenced-but-undefined model key must surface as a missing-model node"
+
+
+def test_receive_event_ref_resolves(result):
+    hits = [r for r in result["resolvedRefs"] if r["from"] == "orderProcess"
+            and r["rel"] == "receives-event" and r["value"] == "orderShipped"]
+    assert hits, "receiveTask <flowable:eventType> must link the process to its event"
+
+
+def test_event_correlation_from_payload(result):
+    ev = next(e for e in result["events"] if e["key"] == "orderShipped")
+    assert ev["correlation"] == ["orderId"]
+    assert ev["payload"] == ["orderId", "carrier"]

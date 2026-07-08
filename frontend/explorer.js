@@ -83,7 +83,8 @@ function categories(){
       // (endpoints.*) and in-app navigation routes (#/...) from real third-party deps.
       [{id:'external::api',  label:'Flowable API',        sec:'Integration', color:color('endpoint'), match:n=>n.type==='external'&&n.data.flowableApi},
        {id:'external::route',label:'Navigation · routes', sec:'Other',       color:color('page'),     match:n=>n.type==='external'&&n.data.route},
-       {id:'external::lib',  label:'External / library',  sec:'Other',       color:color('external'), match:n=>n.type==='external'&&!n.data.flowableApi&&!n.data.route}
+       {id:'external::missing',label:'Missing model refs',sec:'Other',       color:color('external'), match:n=>n.type==='external'&&n.data.missingModel},
+       {id:'external::lib',  label:'External / library',  sec:'Other',       color:color('external'), match:n=>n.type==='external'&&!n.data.flowableApi&&!n.data.route&&!n.data.missingModel}
       ].forEach(c=>{ const count=byType.external.filter(c.match).length; if(count) cats.push(Object.assign({count}, c)); });
     } else {
       const m = TM[t]||[t,'Other'];
@@ -250,7 +251,7 @@ function describe(n){
   else if(n.type==='form'||n.type==='page'){ add('Fields',(d.fields||[]).length); add('Outcomes',(d.outcomes||[]).map(o=>o.value).filter(Boolean).join(', ')); }
   else if(n.type==='dataObject'){ add('Type',d.dataObjectType); add('Data source',d.sourceId); add('Backing service',d.service);
     // When backed by a service, surface that service's physical table here and link the name back to the service node.
-    const svc=d.service&&byId.get('service:'+d.service), tbl=svc&&(svc.data||{}).tableName;
+    const svc=d.service&&byId.get('service:'+d.service), tbl=d.serviceTableName||(svc&&(svc.data||{}).tableName);
     if(tbl) rows.push(['Table',{html:'<span class="vlink" data-id="'+enc('service:'+d.service)+'" tabindex="0" role="link" title="Provided by service '+esc(d.service)+'">'+esc(tbl)+'</span>'}]);
     add('Data dictionary',d.dictionary); add('Columns',(d.fields||[]).length); }
   else if(n.type==='service'){ add('Type',d.type); add('Base URL',d.baseUrl); add('Auth',d.auth); add('Table',d.tableName); add('Liquibase model',d.referencedLiquibaseModelKey); add('Columns',(d.columns||[]).length); add('Operations',(d.operations||[]).length);
@@ -276,8 +277,9 @@ function describe(n){
   else if(n.type==='string'){ add('Used in', (d.usages||[]).length+' model(s)'); }
   else if(n.type==='customFunction'){
     add('Kind', d.kind==='namespace'?('namespace '+d.namespace+'.*'):d.kind==='flw'?'flw.* member':'top-level');
+    add('Signature', d.member+'('+(d.signature!=null?d.signature:'…')+')');
     add('Registered in',(d.sources||[]).join(', ')); add('Used by', (d.usedBy||[]).length+' form(s) / model(s)'); }
-  else if(n.type==='external'){ add('Kind',d.flowableApi?'Flowable platform API':d.route?'In-app navigation route':d.platform?'Flowable platform bean':(d.external_url?'External URL':d.kind||'external')); if(d.method&&d.method!=='(button)') add('Method',d.method); }
+  else if(n.type==='external'){ add('Kind',d.flowableApi?'Flowable platform API':d.route?'In-app navigation route':d.platform?'Flowable platform bean':d.missingModel?'Missing model reference ('+(d.kind||'model')+')':(d.external_url?'External URL':d.kind||'external')); if(d.method&&d.method!=='(button)') add('Method',d.method); }
   else { Object.keys(d).forEach(k=>{ const v=d[k]; if(typeof v==='string'||typeof v==='number') add(k,v); }); }
   return rows;
 }
@@ -360,6 +362,7 @@ function detailExtra(n){
   if(n.type==='dataObject' && (d.columns||[]).length){
     h+='<h3 class="rel">Columns / field mappings ('+d.columns.length+')</h3><div class="oplist">'+
       d.columns.map(c=>'<div class="oprow"><span>'+esc(c.name)+'</span><span class="muted">'+esc(c.label||'')+'</span>'+
+        (c.refDataObject?'<span class="vlink" data-id="'+enc('dataObject:'+c.refDataObject)+'" tabindex="0" role="link">→ '+esc(c.refDataObject)+(c.relationship?' ('+esc(c.relationship)+')':'')+'</span>':'')+
         (c.type?'<span class="mono" style="margin-left:auto;color:var(--ink-faint);font-size:10px">'+esc(c.type)+'</span>':'')+
         '</div>').join('')+'</div>';
   }
@@ -405,6 +408,14 @@ function detailExtra(n){
   }
   if((n.type==='expression'||n.type==='binding'||n.type==='customFunction') && (d.usedBy||[]).length){
     h+='<h3 class="rel">Used by ('+d.usedBy.length+')</h3><div class="nodechips">'+d.usedBy.map(nodeChip).join('')+'</div>';
+  }
+  // a frontend binding links to the custom function(s) it calls; a custom function links back to the
+  // exact bindings that call it (in addition to the forms/models under "Used by").
+  if(n.type==='binding' && (d.calls||[]).length){
+    h+='<h3 class="rel">Calls custom functions 🧩 ('+d.calls.length+')</h3><div class="nodechips">'+d.calls.map(nodeChip).join('')+'</div>';
+  }
+  if(n.type==='customFunction' && (d.bindings||[]).length){
+    h+='<h3 class="rel">Called in bindings ('+d.bindings.length+')</h3><div class="nodechips">'+d.bindings.map(nodeChip).join('')+'</div>';
   }
   if(n.type==='customFunction' && !(d.usedBy||[]).length){
     h+='<div class="authnote authnote-orphan">Registered via <b>externals.additionalData</b> but no <code>{{…}}</code> binding in the scanned models calls it.</div>';
@@ -573,7 +584,7 @@ let resSel=-1, resList=[];
 function searchText(n){
   const d=n.data||{};
   let s=n.label+' '+n.key+' '+(n.file||'')+' '+n.type;
-  if(n.type==='dataObject') s+=' '+(d.fields||[]).join(' ')+' '+
+  if(n.type==='dataObject') s+=' '+(d.fields||[]).join(' ')+' '+(d.serviceTableName||'')+' '+
     (d.columns||[]).map(c=>(c.label||'')+' '+(c.type||'')).join(' ');
   if(n.type==='service') s+=' '+(d.columns||[]).map(c=>(c.name||'')+' '+(c.columnName||'')+' '+(c.type||'')).join(' ');
   if(n.type==='liquibase') s+=' '+(d.columns||[]).map(c=>(c.name||'')+' '+(c.type||'')).join(' ');

@@ -162,6 +162,43 @@
   "customFunctions": null,
   "dataObjects": [
     {
+      "_uses": {
+        "variable": [
+          "variable:color",
+          "variable:level"
+        ]
+      },
+      "columns": [
+        {
+          "label": "Color",
+          "name": "color",
+          "type": null
+        },
+        {
+          "label": "Level",
+          "name": "level",
+          "type": null
+        }
+      ],
+      "dataObjectType": "masterData",
+      "dictionary": null,
+      "fields": [
+        "color",
+        "level"
+      ],
+      "file": "data/priority.data",
+      "idField": "key",
+      "key": "priorityMD",
+      "keyField": "key",
+      "name": "Priority",
+      "nameField": "name",
+      "service": null,
+      "sourceId": "JSON",
+      "subType": "priority",
+      "supportsNameFiltering": true,
+      "type": "internal"
+    },
+    {
       "columns": [
         {
           "label": "Id",
@@ -172,22 +209,46 @@
           "label": "Name",
           "name": "customerName",
           "type": "string"
+        },
+        {
+          "label": "Priority",
+          "name": "priority",
+          "refDataObject": "priorityMD",
+          "relationship": "one-to-one",
+          "type": "DATA-OBJECT"
         }
       ],
       "dataObjectType": "lookup",
       "dictionary": null,
       "fields": [
         "customerName",
-        "id"
+        "id",
+        "priority"
       ],
       "file": "data/customer.data",
       "key": "customerDO",
       "name": "Customer",
       "service": "customerService",
+      "serviceTableName": "cust_customer",
+      "serviceType": "db",
       "sourceId": null
     }
   ],
-  "decisions": [],
+  "decisions": [
+    {
+      "file": "decisions/order-decision.dmn",
+      "hitPolicy": "FIRST",
+      "inputs": [
+        "total"
+      ],
+      "key": "orderDecision",
+      "name": "Order decision",
+      "outputs": [
+        "approved"
+      ],
+      "ruleCount": 1
+    }
+  ],
   "delegateClasses": [],
   "diagnostics": [
     {
@@ -197,6 +258,7 @@
     }
   ],
   "dictionaries": [],
+  "dynamicRefs": [],
   "endpoints": [
     {
       "controller": "CustomerController",
@@ -208,7 +270,20 @@
       "path": "/api/customers"
     }
   ],
-  "events": [],
+  "events": [
+    {
+      "correlation": [
+        "orderId"
+      ],
+      "file": "events/order-shipped.event",
+      "key": "orderShipped",
+      "name": "Order shipped",
+      "payload": [
+        "carrier",
+        "orderId"
+      ]
+    }
+  ],
   "expressions": [
     "${demoBean.run(execution)}",
     "${notifierBean}",
@@ -285,6 +360,11 @@
         "t": "service:customerService"
       },
       {
+        "rel": "callActivity",
+        "s": "process:orderProcess",
+        "t": "external:fulfilmentProcess"
+      },
+      {
         "rel": "calls run()",
         "s": "process:orderProcess",
         "t": "java:com.example.DemoBean"
@@ -355,6 +435,16 @@
         "t": "dataObject:customerDO"
       },
       {
+        "rel": "receives-event",
+        "s": "process:orderProcess",
+        "t": "event:orderShipped"
+      },
+      {
+        "rel": "relates-to",
+        "s": "dataObject:customerDO",
+        "t": "dataObject:priorityMD"
+      },
+      {
         "rel": "rest-call",
         "s": "form:orderForm",
         "t": "endpoint:GET /api/customers"
@@ -365,6 +455,11 @@
         "t": "endpoint:GET /api/customers"
       },
       {
+        "rel": "ruleTask-decision",
+        "s": "process:orderProcess",
+        "t": "decision:orderDecision"
+      },
+      {
         "rel": "schema",
         "s": "service:customerService",
         "t": "liquibase:001-customer"
@@ -373,6 +468,11 @@
         "rel": "serves",
         "s": "java:com.example.CustomerController",
         "t": "endpoint:GET /api/customers"
+      },
+      {
+        "rel": "serviceTask-delegate",
+        "s": "process:orderProcess",
+        "t": "external:notifierBean"
       },
       {
         "rel": "start",
@@ -510,8 +610,20 @@
           "listeners": [],
           "multiInstance": [],
           "name": "Order Process",
-          "otherTasks": [],
-          "ruleTasks": [],
+          "otherTasks": [
+            {
+              "id": "waitShipped",
+              "name": "Wait for shipment",
+              "type": "receiveTask"
+            }
+          ],
+          "ruleTasks": [
+            {
+              "decisionRef": "orderDecision",
+              "id": "decideTask",
+              "name": "Decide approval"
+            }
+          ],
           "scriptTasks": [],
           "serviceTasks": [
             {
@@ -531,6 +643,15 @@
               "name": "Calculate total",
               "resultVariable": "total",
               "type": null
+            },
+            {
+              "class": null,
+              "delegateExpression": null,
+              "expression": null,
+              "id": "decideTask",
+              "name": "Decide approval",
+              "resultVariable": null,
+              "type": "dmn"
             }
           ],
           "subProcesses": [],
@@ -600,6 +721,50 @@
         "key": "demoApp",
         "label": "Demo App",
         "type": "app"
+      },
+      {
+        "data": {
+          "_uses": {
+            "variable": [
+              "variable:color",
+              "variable:level"
+            ]
+          },
+          "columns": [
+            {
+              "label": "Color",
+              "name": "color",
+              "type": null
+            },
+            {
+              "label": "Level",
+              "name": "level",
+              "type": null
+            }
+          ],
+          "dataObjectType": "masterData",
+          "dictionary": null,
+          "fields": [
+            "color",
+            "level"
+          ],
+          "file": "data/priority.data",
+          "idField": "key",
+          "key": "priorityMD",
+          "keyField": "key",
+          "name": "Priority",
+          "nameField": "name",
+          "service": null,
+          "sourceId": "JSON",
+          "subType": "priority",
+          "supportsNameFiltering": true,
+          "type": "internal"
+        },
+        "file": "data/priority.data",
+        "id": "dataObject:priorityMD",
+        "key": "priorityMD",
+        "label": "Priority",
+        "type": "dataObject"
       },
       {
         "data": {
@@ -902,18 +1067,28 @@
               "label": "Name",
               "name": "customerName",
               "type": "string"
+            },
+            {
+              "label": "Priority",
+              "name": "priority",
+              "refDataObject": "priorityMD",
+              "relationship": "one-to-one",
+              "type": "DATA-OBJECT"
             }
           ],
           "dataObjectType": "lookup",
           "dictionary": null,
           "fields": [
             "customerName",
-            "id"
+            "id",
+            "priority"
           ],
           "file": "data/customer.data",
           "key": "customerDO",
           "name": "Customer",
           "service": "customerService",
+          "serviceTableName": "cust_customer",
+          "serviceType": "db",
           "sourceId": null
         },
         "file": "data/customer.data",
@@ -935,6 +1110,96 @@
         "key": "GET /api/customers",
         "label": "GET /api/customers",
         "type": "endpoint"
+      },
+      {
+        "data": {
+          "correlation": [
+            "orderId"
+          ],
+          "file": "events/order-shipped.event",
+          "key": "orderShipped",
+          "name": "Order shipped",
+          "payload": [
+            "carrier",
+            "orderId"
+          ]
+        },
+        "file": "events/order-shipped.event",
+        "id": "event:orderShipped",
+        "key": "orderShipped",
+        "label": "Order shipped",
+        "type": "event"
+      },
+      {
+        "data": {
+          "file": "decisions/order-decision.dmn",
+          "hitPolicy": "FIRST",
+          "inputs": [
+            "total"
+          ],
+          "key": "orderDecision",
+          "name": "Order decision",
+          "outputs": [
+            "approved"
+          ],
+          "ruleCount": 1
+        },
+        "file": "decisions/order-decision.dmn",
+        "id": "decision:orderDecision",
+        "key": "orderDecision",
+        "label": "Order decision",
+        "type": "decision"
+      },
+      {
+        "data": {
+          "file": "policies/case.policy",
+          "key": "orderPolicy",
+          "name": "Order policy",
+          "permissions": [
+            {
+              "key": "read",
+              "label": "Read",
+              "roles": [
+                "sales"
+              ]
+            },
+            {
+              "key": "update",
+              "label": "Update",
+              "roles": [
+                "backoffice"
+              ]
+            }
+          ],
+          "type": "case"
+        },
+        "file": "policies/case.policy",
+        "id": "securityPolicy:orderPolicy",
+        "key": "orderPolicy",
+        "label": "Order policy",
+        "type": "securityPolicy"
+      },
+      {
+        "data": {
+          "kind": "bean",
+          "platform": false
+        },
+        "file": null,
+        "id": "external:notifierBean",
+        "key": "notifierBean",
+        "label": "notifierBean",
+        "type": "external"
+      },
+      {
+        "data": {
+          "kind": "process",
+          "missingModel": true
+        },
+        "file": null,
+        "id": "external:fulfilmentProcess",
+        "key": "fulfilmentProcess",
+        "label": "fulfilmentProcess",
+        "type": "external"
       },
       {
         "data": {
@@ -989,6 +1254,52 @@
         "id": "variable:appVar",
         "key": "appVar",
         "label": "appVar",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "scopes": [
+            "dataObject"
+          ],
+          "usages": [
+            {
+              "model": "dataObject:priorityMD",
+              "snippets": [
+                "(declared / mapped)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "dataObject:priorityMD"
+          ]
+        },
+        "file": null,
+        "id": "variable:color",
+        "key": "color",
+        "label": "color",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "scopes": [
+            "dataObject"
+          ],
+          "usages": [
+            {
+              "model": "dataObject:priorityMD",
+              "snippets": [
+                "(declared / mapped)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "dataObject:priorityMD"
+          ]
+        },
+        "file": null,
+        "id": "variable:level",
+        "key": "level",
+        "label": "level",
         "type": "variable"
       },
       {
@@ -1305,15 +1616,42 @@
     "app:demoApp": "apps/demo.app",
     "case:reviewCase": "cases/review.cmmn",
     "dataObject:customerDO": "data/customer.data",
+    "dataObject:priorityMD": "data/priority.data",
+    "decision:orderDecision": "decisions/order-decision.dmn",
+    "event:orderShipped": "events/order-shipped.event",
     "form:orderForm": "forms/order-form.form",
     "process:orderProcess": "processes/order.bpmn",
+    "securityPolicy:orderPolicy": "policies/case.policy",
     "service:customerService": "services/customer.service"
   },
   "others": [],
   "placeholders": [
     "{{amount}}"
   ],
-  "policies": [],
+  "policies": [
+    {
+      "file": "policies/case.policy",
+      "key": "orderPolicy",
+      "name": "Order policy",
+      "permissions": [
+        {
+          "key": "read",
+          "label": "Read",
+          "roles": [
+            "sales"
+          ]
+        },
+        {
+          "key": "update",
+          "label": "Update",
+          "roles": [
+            "backoffice"
+          ]
+        }
+      ],
+      "type": "case"
+    }
+  ],
   "processes": [
     {
       "_uses": {
@@ -1371,8 +1709,20 @@
       "listeners": [],
       "multiInstance": [],
       "name": "Order Process",
-      "otherTasks": [],
-      "ruleTasks": [],
+      "otherTasks": [
+        {
+          "id": "waitShipped",
+          "name": "Wait for shipment",
+          "type": "receiveTask"
+        }
+      ],
+      "ruleTasks": [
+        {
+          "decisionRef": "orderDecision",
+          "id": "decideTask",
+          "name": "Decide approval"
+        }
+      ],
       "scriptTasks": [],
       "serviceTasks": [
         {
@@ -1392,6 +1742,15 @@
           "name": "Calculate total",
           "resultVariable": "total",
           "type": null
+        },
+        {
+          "class": null,
+          "delegateExpression": null,
+          "expression": null,
+          "id": "decideTask",
+          "name": "Decide approval",
+          "resultVariable": null,
+          "type": "dmn"
         }
       ],
       "subProcesses": [],
@@ -1407,6 +1766,16 @@
     }
   ],
   "resolvedRefs": [
+    {
+      "from": "customerDO",
+      "fromFile": "data/customer.data",
+      "fromType": "dataObject",
+      "kind": "dataObject",
+      "rel": "relates-to",
+      "target": "data/priority.data",
+      "targetType": "model",
+      "value": "priorityMD"
+    },
     {
       "from": "customerDO",
       "fromFile": "data/customer.data",
@@ -1477,6 +1846,26 @@
       "targetFqn": "com.example.DemoBean",
       "targetType": "bean",
       "value": "demoBean"
+    },
+    {
+      "from": "orderProcess",
+      "fromFile": "processes/order.bpmn",
+      "fromType": "bpmn",
+      "kind": "decision",
+      "rel": "ruleTask-decision",
+      "target": "decisions/order-decision.dmn",
+      "targetType": "model",
+      "value": "orderDecision"
+    },
+    {
+      "from": "orderProcess",
+      "fromFile": "processes/order.bpmn",
+      "fromType": "bpmn",
+      "kind": "event",
+      "rel": "receives-event",
+      "target": "events/order-shipped.event",
+      "targetType": "model",
+      "value": "orderShipped"
     },
     {
       "from": "orderProcess",
@@ -1644,12 +2033,12 @@
   ],
   "stats": {
     "archives": 0,
-    "edges": 25,
+    "edges": 30,
     "endpoints": 1,
     "groups": 3,
     "java": 2,
-    "models": 7,
-    "nodes": 22
+    "models": 11,
+    "nodes": 30
   },
   "unresolvedRefs": [
     {
