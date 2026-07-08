@@ -20,7 +20,7 @@ object FlwLibrary {
 
     private fun call(f: (List<Any?>) -> Any?): FlwCallable = FlwCallable { f(it) }
     private fun arg(args: List<Any?>, i: Int): Any? = args.getOrNull(i)
-    private fun unsupported(name: String): FlwCallable = call { throw EvalException("flw.$name is not available in the payload preview (it depends on the running form/locale)") }
+    private fun unsupported(name: String): FlwCallable = call { throw PreviewUnavailableException("flw.$name is not available in the payload preview (it depends on the running form/locale)") }
 
     private fun asCallable(v: Any?, ctx: String): FlwCallable =
         v as? FlwCallable ?: throw EvalException("$ctx expects a function argument")

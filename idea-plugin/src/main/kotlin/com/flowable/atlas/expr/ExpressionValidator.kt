@@ -1,5 +1,6 @@
 package com.flowable.atlas.expr
 
+import com.flowable.atlas.expr.catalog.CustomFunctionCatalog
 import com.flowable.atlas.expr.catalog.FlowableExpressionCatalog
 import com.flowable.atlas.expr.lang.ExpressionLexer
 import com.flowable.atlas.expr.lang.Tok
@@ -50,8 +51,8 @@ data class ExprProblem(
  */
 object ExpressionValidator {
 
-    fun validate(body: String, dialect: ExpressionDialect): List<ExprProblem> =
-        (validateSyntax(body, dialect) + validateSemantics(body, dialect)).sortedBy { it.startOffset }
+    fun validate(body: String, dialect: ExpressionDialect, custom: CustomFunctionCatalog? = null): List<ExprProblem> =
+        (validateSyntax(body, dialect) + validateSemantics(body, dialect, custom)).sortedBy { it.startOffset }
 
     /**
      * Layer 1 — structural syntax only, via the real per-dialect parser (single source of truth for
@@ -80,13 +81,13 @@ object ExpressionValidator {
      * allowlist are user-controllable (the hand-maintained catalog can lag behind a project's
      * custom JUEL functions).
      */
-    fun validateSemantics(body: String, dialect: ExpressionDialect): List<ExprProblem> {
+    fun validateSemantics(body: String, dialect: ExpressionDialect, custom: CustomFunctionCatalog? = null): List<ExprProblem> {
         val (inner, shift) = stripOuterWrapper(body)
         if (inner.isBlank()) return emptyList()
         val toks = ExpressionLexer.tokenize(inner)
         val problems = ArrayList<ExprProblem>()
         checkDialectOperators(toks, dialect, problems)
-        checkFunctions(toks, dialect, problems)
+        checkFunctions(toks, dialect, problems, custom)
         return shifted(problems, shift)
     }
 
@@ -104,8 +105,32 @@ object ExpressionValidator {
         }
     }
 
-    private fun checkFunctions(toks: List<Tok>, dialect: ExpressionDialect, out: MutableList<ExprProblem>) {
+    private fun checkFunctions(toks: List<Tok>, dialect: ExpressionDialect, out: MutableList<ExprProblem>,
+                               custom: CustomFunctionCatalog? = null) {
+        val customFlw = custom?.flw ?: emptySet()
+        val customNs = custom?.namespaces ?: emptyMap()
         for (i in toks.indices) {
+            // Custom namespace call: <ns> '.' IDENT '(' where <ns> was registered via
+            // externals.additionalData (e.g. `flowkyc.findCommonAttribute(x)`). We know the exact
+            // member set, so an unknown member with a near-match is a real typo → suspect.
+            if (dialect == ExpressionDialect.FRONTEND && toks[i].type == TokType.IDENT &&
+                customNs.containsKey(toks[i].text) &&
+                toks.getOrNull(i + 1)?.type == TokType.DOT &&
+                toks.getOrNull(i + 2)?.type == TokType.IDENT &&
+                toks.getOrNull(i + 3)?.type == TokType.LPAREN
+            ) {
+                val ns = toks[i].text
+                val member = toks[i + 2]
+                val members = customNs.getValue(ns)
+                if (member.text !in members) {
+                    val suggestion = Suggestions.closest(member.text, members)
+                    if (suggestion != null) {
+                        out += warning(member, "Unknown function '$ns.${member.text}'${hint(suggestion)}", suggestion,
+                            kind = ExprProblemKind.UNKNOWN_FUNCTION, subject = "$ns.${member.text}")
+                    }
+                }
+                continue
+            }
             // Backend namespaced call: IDENT ':' IDENT '('
             if (toks[i].type == TokType.IDENT &&
                 toks.getOrNull(i + 1)?.type == TokType.COLON &&
@@ -142,11 +167,18 @@ object ExpressionValidator {
                 toks.getOrNull(i + 2)?.type == TokType.IDENT
             ) {
                 val member = toks[i + 2]
-                if (!FlowableExpressionCatalog.isFrontendMember(member.text)) {
-                    val names = FlowableExpressionCatalog.frontendMembers().map { it.name }
+                if (!FlowableExpressionCatalog.isFrontendMember(member.text) && member.text !in customFlw) {
+                    val names = FlowableExpressionCatalog.frontendMembers().map { it.name } + customFlw
                     val suggestion = Suggestions.closest(member.text, names)
-                    out += warning(member, "Unknown flw function 'flw.${member.text}'${hint(suggestion)}", suggestion,
-                        kind = ExprProblemKind.UNKNOWN_FUNCTION, subject = "flw.${member.text}")
+                    // A member with no near-match to any known flw function is most likely a *custom*
+                    // function a project injected onto `flw` via `flowable.externals.additionalData.flw`
+                    // (see useGlobalResolver / hookEvalExpression). If we extracted that source
+                    // (customFlw) the name is known and validates cleanly; otherwise it's invisible to
+                    // us, so we don't flag it. Only a plausible typo (`flw.sim` → `sum`) is surfaced.
+                    if (suggestion != null) {
+                        out += warning(member, "Unknown flw function 'flw.${member.text}'${hint(suggestion)}", suggestion,
+                            kind = ExprProblemKind.UNKNOWN_FUNCTION, subject = "flw.${member.text}")
+                    }
                 }
             }
         }

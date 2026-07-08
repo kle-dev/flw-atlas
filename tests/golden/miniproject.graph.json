@@ -159,6 +159,7 @@
     }
   ],
   "channels": [],
+  "customFunctions": null,
   "dataObjects": [
     {
       "columns": [

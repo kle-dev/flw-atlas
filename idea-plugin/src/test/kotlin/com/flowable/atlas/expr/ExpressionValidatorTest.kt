@@ -81,6 +81,24 @@ class ExpressionValidatorTest {
     }
 
     @Test
+    fun topLevelCustomFunctionIsNotFlagged() {
+        // Custom JS functions provided via `flowable.externals.additionalData` are spread into the
+        // frontend expression scope as top-level identifiers — they resolve at runtime but are
+        // invisible to us, so a bare call (or a call through a custom object) must never be flagged.
+        assertTrue(frontend("myCustomFn(order)").isEmpty())
+        assertTrue(frontend("myLib.doThing(order)").isEmpty())
+        assertTrue(frontend("{{ computeRiskScore(\$payload) }}").isEmpty())
+    }
+
+    @Test
+    fun unknownFlwMemberWithoutNearMatchIsLenient() {
+        // `additionalData.flw` can carry custom functions too. A `flw.<x>` with no near-match to any
+        // known member is treated as one of those (not flagged); only a plausible typo is surfaced.
+        assertTrue(frontend("flw.computeRiskScore(order)").isEmpty())
+        assertTrue(frontend("flw.sim(items)").any { it.severity == ExprSeverity.WARNING }) // typo → still suspect
+    }
+
+    @Test
     fun pipeInBackendIsWarned() {
         assertTrue(backend("a |> b").any { it.message.contains("frontend-only pipe") })
     }
