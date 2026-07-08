@@ -1,0 +1,1684 @@
+{
+  "access": [
+    {
+      "action": "assign",
+      "groups": [
+        "auditors"
+      ],
+      "model": "reviewCase",
+      "modelType": "case",
+      "scope": "task:reviewTask",
+      "users": []
+    },
+    {
+      "action": "assign",
+      "groups": [
+        "backoffice"
+      ],
+      "model": "orderProcess",
+      "modelType": "process",
+      "scope": "task:approveTask",
+      "users": []
+    },
+    {
+      "action": "open-app",
+      "groups": [
+        "backoffice",
+        "sales"
+      ],
+      "model": "demoApp",
+      "modelType": "app",
+      "scope": "app",
+      "users": []
+    },
+    {
+      "action": "query",
+      "groups": [
+        "sales"
+      ],
+      "model": "customerDO",
+      "modelType": "dataObject",
+      "scope": "definition",
+      "users": []
+    },
+    {
+      "action": "start",
+      "groups": [
+        "auditors"
+      ],
+      "model": "reviewCase",
+      "modelType": "case",
+      "scope": "start",
+      "users": []
+    },
+    {
+      "action": "start",
+      "groups": [
+        "sales"
+      ],
+      "model": "orderProcess",
+      "modelType": "process",
+      "scope": "start",
+      "users": []
+    }
+  ],
+  "actions": [],
+  "agents": [],
+  "apps": [
+    {
+      "_uses": {
+        "variable": [
+          "variable:appVar"
+        ]
+      },
+      "childModels": [
+        {
+          "key": "customerDO",
+          "type": "dataObject"
+        },
+        {
+          "key": "customerService",
+          "type": "service"
+        },
+        {
+          "key": "orderForm",
+          "type": "form"
+        },
+        {
+          "key": "orderProcess",
+          "type": "bpmn"
+        },
+        {
+          "key": "reviewCase",
+          "type": "cmmn"
+        }
+      ],
+      "description": "Miniature fixture app for the atlas test suite",
+      "file": "apps/demo.app",
+      "groupsAccess": "sales,backoffice",
+      "key": "demoApp",
+      "name": "Demo App",
+      "pages": [],
+      "paletteDefinitionCategory": null,
+      "theme": null,
+      "usersAccess": null,
+      "variables": [
+        {
+          "key": "appVar",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "beanIndex": [
+    "demoBean"
+  ],
+  "beans": [
+    "demoBean"
+  ],
+  "cases": [
+    {
+      "candidateStarterGroups": "auditors",
+      "documentation": null,
+      "eventListeners": [],
+      "file": "cases/review.cmmn",
+      "initiatorVariableName": null,
+      "key": "reviewCase",
+      "milestones": [],
+      "modelRefs": [],
+      "name": "Review Case",
+      "planModel": {
+        "autoComplete": null,
+        "children": [
+          {
+            "assignee": null,
+            "candidateGroups": "auditors",
+            "formKey": "orderForm",
+            "id": "reviewTask",
+            "listeners": [],
+            "name": "Review order",
+            "rules": {},
+            "type": "humanTask"
+          },
+          {
+            "id": "startOrder",
+            "inOut": [],
+            "listeners": [],
+            "name": "Start order",
+            "processRef": "orderProcess",
+            "rules": {},
+            "type": "processTask"
+          }
+        ],
+        "criteria": [],
+        "id": "planModel",
+        "name": "Review plan",
+        "type": "casePlanModel"
+      },
+      "sentries": []
+    }
+  ],
+  "channels": [],
+  "dataObjects": [
+    {
+      "columns": [
+        {
+          "label": "Id",
+          "name": "id",
+          "type": "string"
+        },
+        {
+          "label": "Name",
+          "name": "customerName",
+          "type": "string"
+        }
+      ],
+      "dataObjectType": "lookup",
+      "dictionary": null,
+      "fields": [
+        "customerName",
+        "id"
+      ],
+      "file": "data/customer.data",
+      "key": "customerDO",
+      "name": "Customer",
+      "service": "customerService",
+      "sourceId": null
+    }
+  ],
+  "decisions": [],
+  "delegateClasses": [],
+  "diagnostics": [
+    {
+      "kind": "parse",
+      "message": "(form) Expecting property name enclosed in double quotes: line 2 column 1 (char 37)",
+      "path": "broken.form"
+    }
+  ],
+  "dictionaries": [],
+  "endpoints": [
+    {
+      "controller": "CustomerController",
+      "controllerFqn": "com.example.CustomerController",
+      "file": "src/main/java/com/example/CustomerController.java",
+      "handler": "customers",
+      "http": "GET",
+      "line": 9,
+      "path": "/api/customers"
+    }
+  ],
+  "events": [],
+  "expressions": [
+    "${demoBean.run(execution)}",
+    "${notifierBean}",
+    "${total > 100}",
+    "${vars:bogus(}"
+  ],
+  "forms": [
+    {
+      "_uses": {
+        "binding": [
+          "binding:{{amount}}"
+        ],
+        "variable": [
+          "variable:amount"
+        ]
+      },
+      "dataSources": [
+        {
+          "kind": "rest",
+          "url": "/api/customers"
+        }
+      ],
+      "fields": [
+        {
+          "id": "amount",
+          "label": "Amount",
+          "required": true,
+          "type": "number",
+          "value": null
+        },
+        {
+          "id": "customer",
+          "label": "Customer",
+          "required": false,
+          "type": "select",
+          "value": null
+        },
+        {
+          "id": "totalDisplay",
+          "label": "Total",
+          "required": false,
+          "type": "text",
+          "value": "{{amount}}"
+        }
+      ],
+      "file": "forms/order-form.form",
+      "key": "orderForm",
+      "modelType": "form",
+      "name": "Order Form",
+      "outcomes": [
+        {
+          "label": "Approve",
+          "value": "approve"
+        }
+      ],
+      "subforms": []
+    }
+  ],
+  "graph": {
+    "edges": [
+      {
+        "rel": "assign",
+        "s": "group:auditors",
+        "t": "case:reviewCase"
+      },
+      {
+        "rel": "assign",
+        "s": "group:backoffice",
+        "t": "process:orderProcess"
+      },
+      {
+        "rel": "backed-by-service",
+        "s": "dataObject:customerDO",
+        "t": "service:customerService"
+      },
+      {
+        "rel": "calls run()",
+        "s": "process:orderProcess",
+        "t": "java:com.example.DemoBean"
+      },
+      {
+        "rel": "calls",
+        "s": "expression:${demoBean.run(execution)}",
+        "t": "method:com.example.DemoBean#run"
+      },
+      {
+        "rel": "calls",
+        "s": "process:orderProcess",
+        "t": "method:com.example.DemoBean#run"
+      },
+      {
+        "rel": "contains",
+        "s": "app:demoApp",
+        "t": "case:reviewCase"
+      },
+      {
+        "rel": "contains",
+        "s": "app:demoApp",
+        "t": "dataObject:customerDO"
+      },
+      {
+        "rel": "contains",
+        "s": "app:demoApp",
+        "t": "form:orderForm"
+      },
+      {
+        "rel": "contains",
+        "s": "app:demoApp",
+        "t": "process:orderProcess"
+      },
+      {
+        "rel": "contains",
+        "s": "app:demoApp",
+        "t": "service:customerService"
+      },
+      {
+        "rel": "declared-in",
+        "s": "method:com.example.DemoBean#run",
+        "t": "java:com.example.DemoBean"
+      },
+      {
+        "rel": "humanTask-form",
+        "s": "case:reviewCase",
+        "t": "form:orderForm"
+      },
+      {
+        "rel": "open-app",
+        "s": "group:backoffice",
+        "t": "app:demoApp"
+      },
+      {
+        "rel": "open-app",
+        "s": "group:sales",
+        "t": "app:demoApp"
+      },
+      {
+        "rel": "processTask",
+        "s": "case:reviewCase",
+        "t": "process:orderProcess"
+      },
+      {
+        "rel": "query",
+        "s": "group:sales",
+        "t": "dataObject:customerDO"
+      },
+      {
+        "rel": "rest-call",
+        "s": "form:orderForm",
+        "t": "endpoint:GET /api/customers"
+      },
+      {
+        "rel": "rest-call",
+        "s": "service:customerService",
+        "t": "endpoint:GET /api/customers"
+      },
+      {
+        "rel": "schema",
+        "s": "service:customerService",
+        "t": "liquibase:001-customer"
+      },
+      {
+        "rel": "serves",
+        "s": "java:com.example.CustomerController",
+        "t": "endpoint:GET /api/customers"
+      },
+      {
+        "rel": "start",
+        "s": "group:auditors",
+        "t": "case:reviewCase"
+      },
+      {
+        "rel": "start",
+        "s": "group:sales",
+        "t": "process:orderProcess"
+      },
+      {
+        "rel": "start-form",
+        "s": "process:orderProcess",
+        "t": "form:orderForm"
+      },
+      {
+        "rel": "userTask-form",
+        "s": "process:orderProcess",
+        "t": "form:orderForm"
+      }
+    ],
+    "nodes": [
+      {
+        "data": {
+          "_uses": {
+            "binding": [
+              "binding:{{amount}}"
+            ],
+            "variable": [
+              "variable:amount"
+            ]
+          },
+          "dataSources": [
+            {
+              "kind": "rest",
+              "url": "/api/customers"
+            }
+          ],
+          "fields": [
+            {
+              "id": "amount",
+              "label": "Amount",
+              "required": true,
+              "type": "number",
+              "value": null
+            },
+            {
+              "id": "customer",
+              "label": "Customer",
+              "required": false,
+              "type": "select",
+              "value": null
+            },
+            {
+              "id": "totalDisplay",
+              "label": "Total",
+              "required": false,
+              "type": "text",
+              "value": "{{amount}}"
+            }
+          ],
+          "file": "forms/order-form.form",
+          "key": "orderForm",
+          "modelType": "form",
+          "name": "Order Form",
+          "outcomes": [
+            {
+              "label": "Approve",
+              "value": "approve"
+            }
+          ],
+          "subforms": []
+        },
+        "file": "forms/order-form.form",
+        "id": "form:orderForm",
+        "key": "orderForm",
+        "label": "Order Form",
+        "type": "form"
+      },
+      {
+        "data": {
+          "_uses": {
+            "expression": [
+              "expression:${demoBean.run(execution)}",
+              "expression:${notifierBean}",
+              "expression:${total > 100}",
+              "expression:${vars:bogus(}"
+            ],
+            "variable": [
+              "variable:total"
+            ]
+          },
+          "callActivities": [
+            {
+              "calledElement": "fulfilmentProcess",
+              "id": "callSub",
+              "inOut": [],
+              "name": "Fulfil"
+            }
+          ],
+          "candidateStarterGroups": "sales",
+          "conditions": [
+            {
+              "condition": "${total > 100}",
+              "from": "calcTask",
+              "to": "approveTask"
+            },
+            {
+              "condition": "${vars:bogus(}",
+              "from": "approveTask",
+              "to": "notifyTask"
+            }
+          ],
+          "documentation": "Handles an order from entry to approval.",
+          "events": [
+            {
+              "def": null,
+              "id": "end",
+              "name": null,
+              "type": "endEvent",
+              "value": null
+            },
+            {
+              "def": null,
+              "id": "start",
+              "name": null,
+              "type": "startEvent",
+              "value": null
+            }
+          ],
+          "file": "processes/order.bpmn",
+          "gateways": [],
+          "key": "orderProcess",
+          "listeners": [],
+          "multiInstance": [],
+          "name": "Order Process",
+          "otherTasks": [],
+          "ruleTasks": [],
+          "scriptTasks": [],
+          "serviceTasks": [
+            {
+              "class": null,
+              "delegateExpression": "${notifierBean}",
+              "expression": null,
+              "id": "notifyTask",
+              "name": "Notify",
+              "resultVariable": null,
+              "type": null
+            },
+            {
+              "class": null,
+              "delegateExpression": null,
+              "expression": "${demoBean.run(execution)}",
+              "id": "calcTask",
+              "name": "Calculate total",
+              "resultVariable": "total",
+              "type": null
+            }
+          ],
+          "subProcesses": [],
+          "userTasks": [
+            {
+              "assignee": null,
+              "candidateGroups": "backoffice",
+              "formKey": "orderForm",
+              "id": "approveTask",
+              "name": "Approve order"
+            }
+          ]
+        },
+        "file": "processes/order.bpmn",
+        "id": "process:orderProcess",
+        "key": "orderProcess",
+        "label": "Order Process",
+        "type": "process"
+      },
+      {
+        "data": {
+          "_uses": {
+            "variable": [
+              "variable:appVar"
+            ]
+          },
+          "childModels": [
+            {
+              "key": "customerDO",
+              "type": "dataObject"
+            },
+            {
+              "key": "customerService",
+              "type": "service"
+            },
+            {
+              "key": "orderForm",
+              "type": "form"
+            },
+            {
+              "key": "orderProcess",
+              "type": "bpmn"
+            },
+            {
+              "key": "reviewCase",
+              "type": "cmmn"
+            }
+          ],
+          "description": "Miniature fixture app for the atlas test suite",
+          "file": "apps/demo.app",
+          "groupsAccess": "sales,backoffice",
+          "key": "demoApp",
+          "name": "Demo App",
+          "pages": [],
+          "paletteDefinitionCategory": null,
+          "theme": null,
+          "usersAccess": null,
+          "variables": [
+            {
+              "key": "appVar",
+              "type": "string"
+            }
+          ]
+        },
+        "file": "apps/demo.app",
+        "id": "app:demoApp",
+        "key": "demoApp",
+        "label": "Demo App",
+        "type": "app"
+      },
+      {
+        "data": {
+          "_uses": {
+            "variable": [
+              "variable:total"
+            ]
+          },
+          "beanNames": [
+            "demoBean"
+          ],
+          "botKey": null,
+          "calledMethods": [
+            "run"
+          ],
+          "endpoints": [],
+          "file": "src/main/java/com/example/DemoBean.java",
+          "fqn": "com.example.DemoBean",
+          "interfaces": [],
+          "line": 6,
+          "methods": [
+            {
+              "line": 12,
+              "name": "setVariable",
+              "params": 2
+            },
+            {
+              "line": 8,
+              "name": "run",
+              "params": 1
+            }
+          ],
+          "package": "com.example",
+          "roles": [
+            "component"
+          ]
+        },
+        "file": "src/main/java/com/example/DemoBean.java",
+        "id": "java:com.example.DemoBean",
+        "key": "com.example.DemoBean",
+        "label": "DemoBean",
+        "type": "java"
+      },
+      {
+        "data": {
+          "auth": null,
+          "baseUrl": null,
+          "columns": [
+            {
+              "columnName": "id_",
+              "name": "id",
+              "type": "string"
+            },
+            {
+              "columnName": "name_",
+              "name": "customerName",
+              "type": "string"
+            }
+          ],
+          "file": "services/customer.service",
+          "key": "customerService",
+          "name": "Customer Service",
+          "operations": [
+            {
+              "fullUrl": "/api/customers",
+              "key": "findAll",
+              "method": "GET",
+              "name": "Find all",
+              "params": [],
+              "url": "/api/customers"
+            }
+          ],
+          "referenceKey": null,
+          "referencedLiquibaseModelKey": null,
+          "schemaCoverage": {
+            "counts": {
+              "extra": 0,
+              "noDataObject": 0,
+              "noService": 1,
+              "ok": 2,
+              "total": 3
+            },
+            "dataObjects": [
+              "customerDO"
+            ],
+            "liquibase": "001-customer",
+            "rows": [
+              {
+                "dataObjects": [],
+                "inLiquibase": true,
+                "inService": false,
+                "service": null,
+                "serviceCol": null,
+                "serviceType": null,
+                "sql": "orphan_col_",
+                "sqlType": "varchar(255)",
+                "status": "no-service",
+                "table": "cust_customer"
+              },
+              {
+                "dataObjects": [
+                  {
+                    "do": "customerDO",
+                    "field": "customerName",
+                    "type": "string"
+                  }
+                ],
+                "inLiquibase": true,
+                "inService": true,
+                "service": "customerName",
+                "serviceCol": "name_",
+                "serviceType": "string",
+                "sql": "name_",
+                "sqlType": "varchar(255)",
+                "status": "ok",
+                "table": "cust_customer"
+              },
+              {
+                "dataObjects": [
+                  {
+                    "do": "customerDO",
+                    "field": "id",
+                    "type": "string"
+                  }
+                ],
+                "inLiquibase": true,
+                "inService": true,
+                "service": "id",
+                "serviceCol": "id_",
+                "serviceType": "string",
+                "sql": "id_",
+                "sqlType": "varchar(64)",
+                "status": "ok",
+                "table": "cust_customer"
+              }
+            ],
+            "table": "cust_customer"
+          },
+          "tableName": "cust_customer",
+          "type": "db"
+        },
+        "file": "services/customer.service",
+        "id": "service:customerService",
+        "key": "customerService",
+        "label": "Customer Service",
+        "type": "service"
+      },
+      {
+        "data": {
+          "authority": {
+            "referencedBy": [
+              "customerService"
+            ],
+            "status": "live",
+            "supersededBy": []
+          },
+          "columns": [
+            {
+              "name": "id_",
+              "table": "cust_customer",
+              "type": "varchar(64)"
+            },
+            {
+              "name": "name_",
+              "table": "cust_customer",
+              "type": "varchar(255)"
+            },
+            {
+              "name": "orphan_col_",
+              "table": "cust_customer",
+              "type": "varchar(255)"
+            }
+          ],
+          "coverage": {
+            "dataObject": [
+              "id",
+              "name"
+            ],
+            "service": [
+              "id",
+              "name"
+            ]
+          },
+          "effectiveTables": [
+            "cust_customer"
+          ],
+          "tables": [
+            "cust_customer"
+          ]
+        },
+        "file": "db/changelog/001-customer.xml",
+        "id": "liquibase:001-customer",
+        "key": "001-customer",
+        "label": "001-customer.xml",
+        "type": "liquibase"
+      },
+      {
+        "data": {
+          "beanNames": [],
+          "botKey": null,
+          "calledMethods": [],
+          "endpoints": [
+            {
+              "handler": "customers",
+              "http": "GET",
+              "line": 9,
+              "path": "/api/customers"
+            }
+          ],
+          "file": "src/main/java/com/example/CustomerController.java",
+          "fqn": "com.example.CustomerController",
+          "interfaces": [],
+          "line": 7,
+          "methods": [
+            {
+              "line": 10,
+              "name": "customers",
+              "params": 0
+            }
+          ],
+          "package": "com.example",
+          "roles": [
+            "controller"
+          ]
+        },
+        "file": "src/main/java/com/example/CustomerController.java",
+        "id": "java:com.example.CustomerController",
+        "key": "com.example.CustomerController",
+        "label": "CustomerController",
+        "type": "java"
+      },
+      {
+        "data": {
+          "candidateStarterGroups": "auditors",
+          "documentation": null,
+          "eventListeners": [],
+          "file": "cases/review.cmmn",
+          "initiatorVariableName": null,
+          "key": "reviewCase",
+          "milestones": [],
+          "modelRefs": [],
+          "name": "Review Case",
+          "planModel": {
+            "autoComplete": null,
+            "children": [
+              {
+                "assignee": null,
+                "candidateGroups": "auditors",
+                "formKey": "orderForm",
+                "id": "reviewTask",
+                "listeners": [],
+                "name": "Review order",
+                "rules": {},
+                "type": "humanTask"
+              },
+              {
+                "id": "startOrder",
+                "inOut": [],
+                "listeners": [],
+                "name": "Start order",
+                "processRef": "orderProcess",
+                "rules": {},
+                "type": "processTask"
+              }
+            ],
+            "criteria": [],
+            "id": "planModel",
+            "name": "Review plan",
+            "type": "casePlanModel"
+          },
+          "sentries": []
+        },
+        "file": "cases/review.cmmn",
+        "id": "case:reviewCase",
+        "key": "reviewCase",
+        "label": "Review Case",
+        "type": "case"
+      },
+      {
+        "data": {
+          "class": "com.example.DemoBean",
+          "declaredIn": "java:com.example.DemoBean",
+          "name": "run"
+        },
+        "file": null,
+        "id": "method:com.example.DemoBean#run",
+        "key": "com.example.DemoBean#run",
+        "label": "DemoBean.run()",
+        "type": "method"
+      },
+      {
+        "data": {
+          "columns": [
+            {
+              "label": "Id",
+              "name": "id",
+              "type": "string"
+            },
+            {
+              "label": "Name",
+              "name": "customerName",
+              "type": "string"
+            }
+          ],
+          "dataObjectType": "lookup",
+          "dictionary": null,
+          "fields": [
+            "customerName",
+            "id"
+          ],
+          "file": "data/customer.data",
+          "key": "customerDO",
+          "name": "Customer",
+          "service": "customerService",
+          "sourceId": null
+        },
+        "file": "data/customer.data",
+        "id": "dataObject:customerDO",
+        "key": "customerDO",
+        "label": "Customer",
+        "type": "dataObject"
+      },
+      {
+        "data": {
+          "controller": "CustomerController",
+          "handler": "customers",
+          "http": "GET",
+          "line": 9,
+          "path": "/api/customers"
+        },
+        "file": "src/main/java/com/example/CustomerController.java",
+        "id": "endpoint:GET /api/customers",
+        "key": "GET /api/customers",
+        "label": "GET /api/customers",
+        "type": "endpoint"
+      },
+      {
+        "data": {
+          "problems": [
+            {
+              "end": 12,
+              "kind": "unknown-function",
+              "message": "Unknown function 'vars:bogus'",
+              "quickFix": null,
+              "severity": "warning",
+              "snippet": "bogus",
+              "start": 7,
+              "subject": "vars:bogus"
+            },
+            {
+              "end": 13,
+              "message": "Unclosed '('",
+              "quickFix": null,
+              "severity": "error",
+              "snippet": "(",
+              "start": 12
+            }
+          ],
+          "usedBy": [
+            "process:orderProcess"
+          ]
+        },
+        "file": null,
+        "id": "expression:${vars:bogus(}",
+        "key": "${vars:bogus(}",
+        "label": "${vars:bogus(}",
+        "type": "expression"
+      },
+      {
+        "data": {
+          "scopes": [
+            "app"
+          ],
+          "usages": [
+            {
+              "model": "app:demoApp",
+              "snippets": [
+                "(app variable)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "app:demoApp"
+          ]
+        },
+        "file": null,
+        "id": "variable:appVar",
+        "key": "appVar",
+        "label": "appVar",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "scopes": [
+            "form"
+          ],
+          "usages": [
+            {
+              "model": "form:orderForm",
+              "snippets": [
+                "{{amount}}"
+              ]
+            }
+          ],
+          "usedBy": [
+            "form:orderForm"
+          ]
+        },
+        "file": null,
+        "id": "variable:amount",
+        "key": "amount",
+        "label": "amount",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "scopes": [
+            "java",
+            "process"
+          ],
+          "usages": [
+            {
+              "model": "java:com.example.DemoBean",
+              "snippets": [
+                "(Java: set/getVariable)"
+              ]
+            },
+            {
+              "model": "process:orderProcess",
+              "snippets": [
+                "${total > 100}",
+                "(declared / mapped)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "java:com.example.DemoBean",
+            "process:orderProcess"
+          ]
+        },
+        "file": null,
+        "id": "variable:total",
+        "key": "total",
+        "label": "total",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:orderForm"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{amount}}",
+        "key": "{{amount}}",
+        "label": "{{amount}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "process:orderProcess"
+          ]
+        },
+        "file": null,
+        "id": "expression:${demoBean.run(execution)}",
+        "key": "${demoBean.run(execution)}",
+        "label": "${demoBean.run(execution)}",
+        "type": "expression"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "process:orderProcess"
+          ]
+        },
+        "file": null,
+        "id": "expression:${notifierBean}",
+        "key": "${notifierBean}",
+        "label": "${notifierBean}",
+        "type": "expression"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "process:orderProcess"
+          ]
+        },
+        "file": null,
+        "id": "expression:${total > 100}",
+        "key": "${total > 100}",
+        "label": "${total > 100}",
+        "type": "expression"
+      },
+      {
+        "data": {},
+        "file": null,
+        "id": "group:auditors",
+        "key": "auditors",
+        "label": "auditors",
+        "type": "group"
+      },
+      {
+        "data": {},
+        "file": null,
+        "id": "group:backoffice",
+        "key": "backoffice",
+        "label": "backoffice",
+        "type": "group"
+      },
+      {
+        "data": {},
+        "file": null,
+        "id": "group:sales",
+        "key": "sales",
+        "label": "sales",
+        "type": "group"
+      }
+    ]
+  },
+  "groups": [
+    "auditors",
+    "backoffice",
+    "sales"
+  ],
+  "javaBeans": [],
+  "javaByRole": {
+    "component": [
+      {
+        "beanNames": [
+          "demoBean"
+        ],
+        "botKey": null,
+        "deps": [],
+        "endpoints": [],
+        "file": "src/main/java/com/example/DemoBean.java",
+        "fqn": "com.example.DemoBean",
+        "interfaces": [],
+        "isController": false,
+        "isGlue": false,
+        "line": 6,
+        "methods": [
+          {
+            "line": 12,
+            "name": "setVariable",
+            "params": 2
+          },
+          {
+            "line": 8,
+            "name": "run",
+            "params": 1
+          }
+        ],
+        "package": "com.example",
+        "primary": "DemoBean",
+        "roles": [
+          "component"
+        ],
+        "strings": [
+          "demoBean",
+          "total"
+        ],
+        "types": [
+          "DemoBean"
+        ],
+        "vars": [
+          "total"
+        ]
+      }
+    ],
+    "controller": [
+      {
+        "beanNames": [],
+        "botKey": null,
+        "deps": [],
+        "endpoints": [
+          {
+            "handler": "customers",
+            "http": "GET",
+            "line": 9,
+            "path": "/api/customers"
+          }
+        ],
+        "file": "src/main/java/com/example/CustomerController.java",
+        "fqn": "com.example.CustomerController",
+        "interfaces": [],
+        "isController": true,
+        "isGlue": false,
+        "line": 7,
+        "methods": [
+          {
+            "line": 10,
+            "name": "customers",
+            "params": 0
+          }
+        ],
+        "package": "com.example",
+        "primary": "CustomerController",
+        "roles": [
+          "controller"
+        ],
+        "strings": [
+          "/api/customers",
+          "[]"
+        ],
+        "types": [
+          "CustomerController"
+        ],
+        "vars": []
+      }
+    ]
+  },
+  "javaControllers": [
+    {
+      "beanNames": [],
+      "botKey": null,
+      "deps": [],
+      "endpoints": [
+        {
+          "handler": "customers",
+          "http": "GET",
+          "line": 9,
+          "path": "/api/customers"
+        }
+      ],
+      "file": "src/main/java/com/example/CustomerController.java",
+      "fqn": "com.example.CustomerController",
+      "interfaces": [],
+      "isController": true,
+      "isGlue": false,
+      "line": 7,
+      "methods": [
+        {
+          "line": 10,
+          "name": "customers",
+          "params": 0
+        }
+      ],
+      "package": "com.example",
+      "primary": "CustomerController",
+      "roles": [
+        "controller"
+      ],
+      "strings": [
+        "/api/customers",
+        "[]"
+      ],
+      "types": [
+        "CustomerController"
+      ],
+      "vars": []
+    }
+  ],
+  "javaGlue": [],
+  "liquibase": [
+    {
+      "authority": {
+        "referencedBy": [
+          "customerService"
+        ],
+        "status": "live",
+        "supersededBy": []
+      },
+      "columns": [
+        {
+          "name": "id_",
+          "table": "cust_customer",
+          "type": "varchar(64)"
+        },
+        {
+          "name": "name_",
+          "table": "cust_customer",
+          "type": "varchar(255)"
+        },
+        {
+          "name": "orphan_col_",
+          "table": "cust_customer",
+          "type": "varchar(255)"
+        }
+      ],
+      "coverage": {
+        "dataObject": [
+          "id",
+          "name"
+        ],
+        "service": [
+          "id",
+          "name"
+        ]
+      },
+      "effectiveTables": [
+        "cust_customer"
+      ],
+      "file": "db/changelog/001-customer.xml",
+      "key": "001-customer",
+      "serviceRefs": [],
+      "tables": [
+        "cust_customer"
+      ]
+    }
+  ],
+  "modelIndex": {
+    "app:demoApp": "apps/demo.app",
+    "case:reviewCase": "cases/review.cmmn",
+    "dataObject:customerDO": "data/customer.data",
+    "form:orderForm": "forms/order-form.form",
+    "process:orderProcess": "processes/order.bpmn",
+    "service:customerService": "services/customer.service"
+  },
+  "others": [],
+  "placeholders": [
+    "{{amount}}"
+  ],
+  "policies": [],
+  "processes": [
+    {
+      "_uses": {
+        "expression": [
+          "expression:${demoBean.run(execution)}",
+          "expression:${notifierBean}",
+          "expression:${total > 100}",
+          "expression:${vars:bogus(}"
+        ],
+        "variable": [
+          "variable:total"
+        ]
+      },
+      "callActivities": [
+        {
+          "calledElement": "fulfilmentProcess",
+          "id": "callSub",
+          "inOut": [],
+          "name": "Fulfil"
+        }
+      ],
+      "candidateStarterGroups": "sales",
+      "conditions": [
+        {
+          "condition": "${total > 100}",
+          "from": "calcTask",
+          "to": "approveTask"
+        },
+        {
+          "condition": "${vars:bogus(}",
+          "from": "approveTask",
+          "to": "notifyTask"
+        }
+      ],
+      "documentation": "Handles an order from entry to approval.",
+      "events": [
+        {
+          "def": null,
+          "id": "end",
+          "name": null,
+          "type": "endEvent",
+          "value": null
+        },
+        {
+          "def": null,
+          "id": "start",
+          "name": null,
+          "type": "startEvent",
+          "value": null
+        }
+      ],
+      "file": "processes/order.bpmn",
+      "gateways": [],
+      "key": "orderProcess",
+      "listeners": [],
+      "multiInstance": [],
+      "name": "Order Process",
+      "otherTasks": [],
+      "ruleTasks": [],
+      "scriptTasks": [],
+      "serviceTasks": [
+        {
+          "class": null,
+          "delegateExpression": "${notifierBean}",
+          "expression": null,
+          "id": "notifyTask",
+          "name": "Notify",
+          "resultVariable": null,
+          "type": null
+        },
+        {
+          "class": null,
+          "delegateExpression": null,
+          "expression": "${demoBean.run(execution)}",
+          "id": "calcTask",
+          "name": "Calculate total",
+          "resultVariable": "total",
+          "type": null
+        }
+      ],
+      "subProcesses": [],
+      "userTasks": [
+        {
+          "assignee": null,
+          "candidateGroups": "backoffice",
+          "formKey": "orderForm",
+          "id": "approveTask",
+          "name": "Approve order"
+        }
+      ]
+    }
+  ],
+  "resolvedRefs": [
+    {
+      "from": "customerDO",
+      "fromFile": "data/customer.data",
+      "fromType": "dataObject",
+      "kind": "service",
+      "rel": "backed-by-service",
+      "target": "services/customer.service",
+      "targetType": "model",
+      "value": "customerService"
+    },
+    {
+      "from": "demoApp",
+      "fromFile": "apps/demo.app",
+      "fromType": "app",
+      "kind": "model:bpmn",
+      "rel": "contains",
+      "target": "processes/order.bpmn",
+      "targetType": "model",
+      "value": "orderProcess"
+    },
+    {
+      "from": "demoApp",
+      "fromFile": "apps/demo.app",
+      "fromType": "app",
+      "kind": "model:cmmn",
+      "rel": "contains",
+      "target": "cases/review.cmmn",
+      "targetType": "model",
+      "value": "reviewCase"
+    },
+    {
+      "from": "demoApp",
+      "fromFile": "apps/demo.app",
+      "fromType": "app",
+      "kind": "model:dataObject",
+      "rel": "contains",
+      "target": "data/customer.data",
+      "targetType": "model",
+      "value": "customerDO"
+    },
+    {
+      "from": "demoApp",
+      "fromFile": "apps/demo.app",
+      "fromType": "app",
+      "kind": "model:form",
+      "rel": "contains",
+      "target": "forms/order-form.form",
+      "targetType": "model",
+      "value": "orderForm"
+    },
+    {
+      "from": "demoApp",
+      "fromFile": "apps/demo.app",
+      "fromType": "app",
+      "kind": "model:service",
+      "rel": "contains",
+      "target": "services/customer.service",
+      "targetType": "model",
+      "value": "customerService"
+    },
+    {
+      "from": "orderProcess",
+      "fromFile": "processes/order.bpmn",
+      "fromType": "bpmn",
+      "kind": "bean",
+      "rel": "calls run()",
+      "target": "src/main/java/com/example/DemoBean.java:6 (com.example.DemoBean)",
+      "targetFqn": "com.example.DemoBean",
+      "targetType": "bean",
+      "value": "demoBean"
+    },
+    {
+      "from": "orderProcess",
+      "fromFile": "processes/order.bpmn",
+      "fromType": "bpmn",
+      "kind": "form",
+      "rel": "start-form",
+      "target": "forms/order-form.form",
+      "targetType": "model",
+      "value": "orderForm"
+    },
+    {
+      "from": "orderProcess",
+      "fromFile": "processes/order.bpmn",
+      "fromType": "bpmn",
+      "kind": "form",
+      "rel": "userTask-form",
+      "target": "forms/order-form.form",
+      "targetType": "model",
+      "value": "orderForm"
+    },
+    {
+      "from": "reviewCase",
+      "fromFile": "cases/review.cmmn",
+      "fromType": "cmmn",
+      "kind": "form",
+      "rel": "humanTask-form",
+      "target": "forms/order-form.form",
+      "targetType": "model",
+      "value": "orderForm"
+    },
+    {
+      "from": "reviewCase",
+      "fromFile": "cases/review.cmmn",
+      "fromType": "cmmn",
+      "kind": "process",
+      "rel": "processTask",
+      "target": "processes/order.bpmn",
+      "targetType": "model",
+      "value": "orderProcess"
+    }
+  ],
+  "restCalls": [
+    {
+      "kind": "form-query",
+      "matches": [
+        "GET /api/customers -> CustomerController#customers (src/main/java/com/example/CustomerController.java:9)"
+      ],
+      "method": "GET",
+      "source": "orderForm",
+      "sourceFile": "forms/order-form.form",
+      "url": "/api/customers",
+      "where": "customer"
+    },
+    {
+      "kind": "service-op",
+      "matches": [
+        "GET /api/customers -> CustomerController#customers (src/main/java/com/example/CustomerController.java:9)"
+      ],
+      "method": "GET",
+      "source": "customerService",
+      "sourceFile": "services/customer.service",
+      "url": "/api/customers",
+      "where": "findAll"
+    }
+  ],
+  "services": [
+    {
+      "auth": null,
+      "baseUrl": null,
+      "columns": [
+        {
+          "columnName": "id_",
+          "name": "id",
+          "type": "string"
+        },
+        {
+          "columnName": "name_",
+          "name": "customerName",
+          "type": "string"
+        }
+      ],
+      "file": "services/customer.service",
+      "key": "customerService",
+      "name": "Customer Service",
+      "operations": [
+        {
+          "fullUrl": "/api/customers",
+          "key": "findAll",
+          "method": "GET",
+          "name": "Find all",
+          "params": [],
+          "url": "/api/customers"
+        }
+      ],
+      "referenceKey": null,
+      "referencedLiquibaseModelKey": null,
+      "schemaCoverage": {
+        "counts": {
+          "extra": 0,
+          "noDataObject": 0,
+          "noService": 1,
+          "ok": 2,
+          "total": 3
+        },
+        "dataObjects": [
+          "customerDO"
+        ],
+        "liquibase": "001-customer",
+        "rows": [
+          {
+            "dataObjects": [],
+            "inLiquibase": true,
+            "inService": false,
+            "service": null,
+            "serviceCol": null,
+            "serviceType": null,
+            "sql": "orphan_col_",
+            "sqlType": "varchar(255)",
+            "status": "no-service",
+            "table": "cust_customer"
+          },
+          {
+            "dataObjects": [
+              {
+                "do": "customerDO",
+                "field": "customerName",
+                "type": "string"
+              }
+            ],
+            "inLiquibase": true,
+            "inService": true,
+            "service": "customerName",
+            "serviceCol": "name_",
+            "serviceType": "string",
+            "sql": "name_",
+            "sqlType": "varchar(255)",
+            "status": "ok",
+            "table": "cust_customer"
+          },
+          {
+            "dataObjects": [
+              {
+                "do": "customerDO",
+                "field": "id",
+                "type": "string"
+              }
+            ],
+            "inLiquibase": true,
+            "inService": true,
+            "service": "id",
+            "serviceCol": "id_",
+            "serviceType": "string",
+            "sql": "id_",
+            "sqlType": "varchar(64)",
+            "status": "ok",
+            "table": "cust_customer"
+          }
+        ],
+        "table": "cust_customer"
+      },
+      "tableName": "cust_customer",
+      "type": "db"
+    }
+  ],
+  "stats": {
+    "archives": 0,
+    "edges": 25,
+    "endpoints": 1,
+    "groups": 3,
+    "java": 2,
+    "models": 7,
+    "nodes": 22
+  },
+  "unresolvedRefs": [
+    {
+      "from": "orderProcess",
+      "fromFile": "processes/order.bpmn",
+      "fromType": "bpmn",
+      "kind": "bean",
+      "rel": "serviceTask-delegate",
+      "target": null,
+      "targetFqn": null,
+      "targetType": "bean",
+      "value": "notifierBean"
+    },
+    {
+      "from": "orderProcess",
+      "fromFile": "processes/order.bpmn",
+      "fromType": "bpmn",
+      "kind": "process",
+      "rel": "callActivity",
+      "target": null,
+      "targetType": "model",
+      "value": "fulfilmentProcess"
+    }
+  ],
+  "variables": [
+    "amount",
+    "notifierBean",
+    "total"
+  ],
+  "warnings": [
+    "parse broken.form: (form) Expecting property name enclosed in double quotes: line 2 column 1 (char 37)"
+  ]
+}
