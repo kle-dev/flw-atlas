@@ -2997,12 +2997,13 @@ def _entry_key_and_value_kind(masked, orig, s, e):
 
 
 def _paren_text(masked, orig, open_paren):
-    """Text between `masked[open_paren]=='('` and its match, whitespace-collapsed (read from orig so
-    real names survive masking); None if unbalanced."""
+    """Text between `masked[open_paren]=='('` and its match, whitespace-collapsed and comma-spaced
+    (read from orig so real names survive masking); None if unbalanced. Minified sources have no
+    spaces, so `e,t,r` reads back as `e, t, r`."""
     close = _match_brace(masked, open_paren)
     if close == -1:
         return None
-    return re.sub(r"\s+", " ", orig[open_paren + 1:close].strip())
+    return re.sub(r"\s*,\s*", ", ", re.sub(r"\s+", " ", orig[open_paren + 1:close].strip()))
 
 
 def _resolve_fn_signature(masked, orig, name):
@@ -3191,6 +3192,125 @@ def _object_is_registration_shaped(masked, orig, brace_open, brace_close):
     return False
 
 
+def _resolve_ident_object(masked, orig, name):
+    """Find `name = { … }` (any declarator position) whose object is a plausible additionalData
+    registration (registration-shaped), and return its (open, close). Handles the common minified
+    bundle shape where the config is a local var — `var …,a={flowkyc:{…}}` referenced by
+    `return {…, additionalData:a}`. Prefers a shaped object over incidental `name={…}` assignments
+    (catch-block `a={error:e}`, etc.)."""
+    for m in re.finditer(r"\b" + re.escape(name) + r"\s*=\s*", masked):
+        j = m.end()
+        if j < len(masked) and masked[j] == "{":
+            close = _match_brace(masked, j)
+            if close != -1 and _object_is_registration_shaped(masked, orig, j, close):
+                return (j, close)
+    return None
+
+
+def _split_top_level_commas(s):
+    """Split on commas not nested inside () [] {} <> (so a type like `Record<string, number>` or a
+    default `= [1, 2]` stays one parameter)."""
+    out, depth, start = [], 0, 0
+    for i, c in enumerate(s):
+        if c in "([{<":
+            depth += 1
+        elif c in ")]}>":
+            depth = max(0, depth - 1)
+        elif c == "," and depth == 0:
+            out.append(s[start:i]); start = i + 1
+    out.append(s[start:])
+    return out
+
+
+def _clean_param_list(raw):
+    """Reduce a raw TS/JS parameter list to comma-separated bare names (drop type annotations and
+    defaults; keep `...rest` and a trailing `?` for optional): `allItems: any[], path: string,
+    identifierPath?: string` → `allItems, path, identifierPath?`."""
+    names = []
+    for seg in _split_top_level_commas(raw):
+        seg = seg.strip()
+        if not seg:
+            continue
+        m = re.match(r"(\.\.\.)?\s*([A-Za-z_$][\w$]*)\s*(\??)", seg)
+        names.append((m.group(1) or "") + m.group(2) + (m.group(3) or "") if m else seg)
+    return ", ".join(names)
+
+
+def _scan_source_signatures(src, sigs):
+    """Record {funcName: cleaned params} for top-level function / const-arrow / const-function defs in
+    one (original, non-minified) source file. First definition wins."""
+    masked = _ts_mask(src)
+
+    def rec(name, open_paren):
+        raw = _paren_text(masked, src, open_paren)
+        if raw is not None:
+            sigs.setdefault(name, _clean_param_list(raw))
+
+    for m in re.finditer(r"\bfunction\s+([A-Za-z_$][\w$]*)\s*\(", masked):
+        rec(m.group(1), m.end() - 1)
+    for m in re.finditer(r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*", masked):
+        name, j = m.group(1), m.end()
+        fm = re.match(r"function\b\s*(?:[A-Za-z_$][\w$]*\s*)?", masked[j:])
+        if fm and j + fm.end() < len(masked) and masked[j + fm.end()] == "(":
+            rec(name, j + fm.end())
+        elif j < len(masked) and masked[j] == "(":
+            rec(name, j)
+        else:
+            am = re.match(r"([A-Za-z_$][\w$]*)\s*=>", masked[j:])
+            if am:
+                sigs.setdefault(name, am.group(1))
+
+
+def _find_sourcemap(bundle_path, text):
+    """The sibling sourcemap of a bundle: the last `sourceMappingURL=` comment (if a readable file),
+    else `<bundle>.map`. None when there isn't one."""
+    url = None
+    for m in re.finditer(r"sourceMappingURL=([^\s'\"]+)", text):
+        url = m.group(1)
+    if url and not url.startswith("data:"):
+        cand = os.path.normpath(os.path.join(os.path.dirname(bundle_path), url))
+        if os.path.isfile(cand):
+            return cand
+    cand = bundle_path + ".map"
+    return cand if os.path.isfile(cand) else None
+
+
+def _signatures_from_sourcemap(bundle_path, text):
+    """Real {funcName: params} scanned from a bundle's sourcemap `sourcesContent` (the embedded
+    original sources) — recovers the parameter names that minification renamed to `e,t,r`."""
+    mp = _find_sourcemap(bundle_path, text)
+    if not mp:
+        return {}
+    try:
+        if os.path.getsize(mp) > 20_000_000:
+            return {}
+        with open(mp, "r", encoding="utf-8", errors="replace") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    sigs = {}
+    for content in (data.get("sourcesContent") or []):
+        if isinstance(content, str) and len(content) < 2_000_000:
+            _scan_source_signatures(content, sigs)
+    return sigs
+
+
+def _apply_source_signatures(cat, smap):
+    """Override extracted signatures with the real (source) ones, matched by member simple name."""
+    if not smap:
+        return
+    def upd(display, name):
+        if smap.get(name):
+            cat["signatures"][display] = smap[name]
+    for ns, members in cat["namespaces"].items():
+        for mm in members:
+            upd(f"{ns}.{mm}", mm)
+    for mm in cat["flw"]:
+        upd(f"flw.{mm}", mm)
+    for mm in cat["top_level"]:
+        upd(mm, mm)
+
+
 def _fallback_additional_data_spans(masked):
     """Yield (brace_open, brace_close, high_confidence) for `additionalData` object literals that the
     primary anchors miss — chiefly the compiled Rollup bundle in `static/ext/custom.js`
@@ -3287,8 +3407,20 @@ def _absorb_from_file(path, cat, seen, root):
             _absorb_additional_data_object(masked, orig, o, c, cat, rel)
             absorbed.add(o)
             handled = True
+        # (3b) `additionalData: <identifier>` → resolve the identifier to its object assignment. This is
+        #      the minified-bundle shape: `var …,a={flowkyc:{…}}` … `return {…, additionalData:a}`.
+        if not handled:
+            for m in re.finditer(r"\badditionalData\b\s*[:=]\s*([A-Za-z_$][\w$]*)", masked):
+                span = _resolve_ident_object(masked, orig, m.group(1))
+                if span:
+                    _absorb_additional_data_object(masked, orig, span[0], span[1], cat, rel)
+                    handled = True
+                    break
         if handled:
             cat["sources"].append(rel)
+    # Recover real parameter names from a bundle's sourcemap (minification renamed them to e,t,r).
+    if handled:
+        _apply_source_signatures(cat, _signatures_from_sourcemap(path, orig))
     return handled
 
 

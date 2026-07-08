@@ -1,5 +1,7 @@
 package com.flowable.atlas.expr
 
+import com.flowable.atlas.expr.catalog.CustomFunctionCatalog
+import com.flowable.atlas.expr.catalog.FlowableCustomFunctions
 import com.intellij.codeInsight.lookup.LookupElementPresentation
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 
@@ -88,6 +90,66 @@ class FlowableExpressionCompletionTest : BasePlatformTestCase() {
         assertEquals("non-class identifier → referenced, not bean", "referenced", typeOf("order"))
         // `now` is a catalog function local name and must be excluded from the referenced-identifier dump.
         assertTrue("catalog function must not show as bean", typeOf("now") != "bean")
+    }
+
+    private fun seedCustomFunctions() {
+        FlowableCustomFunctions.getInstance(project).setForTest(
+            CustomFunctionCatalog(
+                namespaces = mapOf("flowkyc" to setOf("findCommon", "sortByDate")),
+                flw = setOf("formatIban"),
+                topLevel = setOf("greet"),
+                sources = listOf("ext/custom.js"),
+                diagnostics = emptyList(),
+                signatures = mapOf(
+                    "flowkyc.findCommon" to "customer, docs",
+                    "flw.formatIban" to "iban",
+                    "greet" to "name",
+                ),
+            ),
+        )
+    }
+
+    fun testCustomFunctionListsParametersAsTailText() {
+        seedCustomFunctions()
+        myFixture.configureByText("t.flowable-fe", "flowkyc.<caret>")
+        myFixture.completeBasic()
+        val el = myFixture.lookupElements?.firstOrNull { it.lookupString == "findCommon" }
+        assertNotNull(el)
+        val p = LookupElementPresentation(); el!!.renderElement(p)
+        assertEquals("(customer, docs)", p.tailText)
+    }
+
+    fun testCustomFunctionInsertsParameterList() {
+        seedCustomFunctions()
+        myFixture.configureByText("t.flowable-fe", "flowkyc.findC<caret>")
+        myFixture.completeBasic()   // unique match → auto-inserts, running the params insert handler
+        assertEquals("flowkyc.findCommon(customer, docs)", myFixture.editor.document.text)
+    }
+
+    fun testCustomFunctionsOfferedAtFrontendRoot() {
+        seedCustomFunctions()
+        myFixture.configureByText("t.flowable-fe", "<caret>")
+        myFixture.completeBasic()
+        val items = myFixture.lookupElementStrings ?: emptyList()
+        assertTrue("custom namespace", items.contains("flowkyc"))
+        assertTrue("custom top-level fn", items.contains("greet"))
+    }
+
+    fun testCustomNamespaceMembersOfferedAfterDot() {
+        seedCustomFunctions()
+        myFixture.configureByText("t.flowable-fe", "flowkyc.<caret>")
+        myFixture.completeBasic()
+        val items = myFixture.lookupElementStrings ?: emptyList()
+        assertTrue(items.containsAll(listOf("findCommon", "sortByDate")))
+    }
+
+    fun testCustomFlwMemberOfferedAlongsideBuiltins() {
+        seedCustomFunctions()
+        myFixture.configureByText("t.flowable-fe", "flw.<caret>")
+        myFixture.completeBasic()
+        val items = myFixture.lookupElementStrings ?: emptyList()
+        assertTrue("custom flw member", items.contains("formatIban"))
+        assertTrue("built-in flw member still offered", items.contains("sum"))
     }
 
     fun testProjectVariablesOfferedAtRoot() {

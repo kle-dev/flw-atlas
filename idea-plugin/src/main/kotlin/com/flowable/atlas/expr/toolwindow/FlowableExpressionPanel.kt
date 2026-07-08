@@ -1,5 +1,6 @@
 package com.flowable.atlas.expr.toolwindow
 
+import com.flowable.atlas.expr.ExprSeverity
 import com.flowable.atlas.expr.ExpressionDialect
 import com.flowable.atlas.expr.ExpressionScope
 import com.flowable.atlas.expr.ExpressionValidator
@@ -23,6 +24,7 @@ import com.intellij.openapi.ui.ComboBox
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.ui.JBColor
 import com.intellij.ui.LanguageTextField
+import com.intellij.util.ui.JBUI
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPasswordField
 import com.intellij.ui.components.JBScrollPane
@@ -32,6 +34,7 @@ import java.awt.BorderLayout
 import java.awt.CardLayout
 import java.awt.Dimension
 import java.awt.FlowLayout
+import java.awt.Font
 import javax.swing.BorderFactory
 import javax.swing.BoxLayout
 import javax.swing.ButtonGroup
@@ -58,8 +61,15 @@ class FlowableExpressionPanel(private val project: Project) : JPanel(BorderLayou
     private var dialect = ExpressionDialect.BACKEND
     private val wrapper = JBLabel()
 
-    // The inspections don't run in a LanguageTextField, so the playground surfaces semantic
-    // findings (unknown functions, dialect misuse — allowlist-filtered) in this status line.
+    // Annotator squiggles don't reliably paint in a LanguageTextField, so the playground surfaces
+    // the first structural syntax error here with a caret pointing at the exact offset (e.g. the
+    // unclosed '(' for a missing ')'), and semantic findings (unknown functions, dialect misuse —
+    // allowlist-filtered) on the line below.
+    private val syntax = JBTextArea(2, 40).apply {
+        isEditable = false; isOpaque = false; foreground = JBColor.RED
+        font = Font(Font.MONOSPACED, Font.PLAIN, JBLabel().font.size)
+        border = BorderFactory.createEmptyBorder()
+    }
     private val semantics = JBLabel().apply { foreground = JBColor.ORANGE }
     private val scopeCombo = ComboBox<ScopeItem>()
     private val center = JPanel(BorderLayout())
@@ -114,6 +124,7 @@ class FlowableExpressionPanel(private val project: Project) : JPanel(BorderLayou
         add(center, BorderLayout.CENTER)
         add(JPanel().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            add(syntax)
             add(semantics)
             add(wrapper)
         }, BorderLayout.SOUTH)
@@ -210,9 +221,29 @@ class FlowableExpressionPanel(private val project: Project) : JPanel(BorderLayou
 
     private fun showCard() = (cards.layout as CardLayout).show(cards, dialect.name)
 
+    /**
+     * A real multi-line code editor for the expression body — a [LanguageTextField] in multi-line
+     * mode with both scrollbars enabled, so long expressions scroll instead of being clipped. Reuses
+     * the dialect's highlighting (incl. rainbow parens), completion and annotator.
+     */
     private fun createField(text: String): LanguageTextField =
         LanguageTextField(languageOf(dialect), project, text, false).apply {
-            preferredSize = Dimension(600, 120)
+            preferredSize = Dimension(600, 160)
+            border = JBUI.Borders.customLine(JBColor.border(), 1)
+            addSettingsProvider { editor ->
+                editor.setVerticalScrollbarVisible(true)
+                editor.setHorizontalScrollbarVisible(true)
+                editor.setBorder(JBUI.Borders.empty(4))
+                editor.settings.apply {
+                    isLineNumbersShown = false
+                    isFoldingOutlineShown = false
+                    isLineMarkerAreaShown = false
+                    isUseSoftWraps = false            // long expressions scroll horizontally
+                    isCaretRowShown = false
+                    additionalLinesCount = 1
+                    additionalColumnsCount = 2
+                }
+            }
             addDocumentListener(object : DocumentListener {
                 override fun documentChanged(event: DocumentEvent) {
                     reevaluateFrontend()
@@ -221,14 +252,38 @@ class FlowableExpressionPanel(private val project: Project) : JPanel(BorderLayou
             })
         }
 
-    /** Semantic findings for the current text (syntax squiggles come from the annotator). */
+    /** Semantic findings for the current text, plus the syntax-error pointer (both refreshed here
+     *  since annotator squiggles don't reliably paint in the embedded field). */
     private fun updateSemanticStatus() {
+        updateSyntaxStatus()
         val allowlist = FlowableAtlasProjectSettings.getInstance(project)
         val custom = FlowableCustomFunctions.getInstance(project).catalog()
         val problems = ExpressionValidator.validateSemantics(field.text, dialect, custom)
             .filterNot { allowlist.isAllowlisted(it) }
         semantics.text = problems.joinToString("   ·   ") { it.message }
         semantics.isVisible = problems.isNotEmpty()
+    }
+
+    /**
+     * Show the first structural syntax error with a caret under the exact offset — e.g. for a missing
+     * ')' the caret sits on the unclosed '(' so the user sees *where* to fix without hunting. A window
+     * around the offset keeps it readable for long expressions; tabs/newlines become single spaces so
+     * the caret stays aligned.
+     */
+    private fun updateSyntaxStatus() {
+        val text = field.text
+        val err = ExpressionValidator.validateSyntax(text, dialect)
+            .firstOrNull { it.severity == ExprSeverity.ERROR }
+        if (err == null) { syntax.isVisible = false; syntax.text = ""; return }
+        val off = err.startOffset.coerceIn(0, text.length)
+        val from = maxOf(0, off - 30)
+        val to = minOf(text.length, off + 30)
+        val lead = if (from > 0) "…" else ""
+        val flat = text.substring(from, to).map { if (it == '\n' || it == '\t') ' ' else it }.joinToString("")
+        val window = lead + flat + (if (to < text.length) "…" else "")
+        val caretCol = lead.length + (off - from)
+        syntax.text = window + "\n" + " ".repeat(caretCol) + "^ " + err.message
+        syntax.isVisible = true
     }
 
     /** Frontend: evaluate the expression against the pasted payload and show the result or error. */

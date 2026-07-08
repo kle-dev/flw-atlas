@@ -1,6 +1,8 @@
 """Custom frontend functions: extract a project's `flowable.externals.additionalData`
 catalog from readable source and validate `<ns>.member(...)` / `flw.<custom>` calls precisely
 instead of staying blanket-lenient (see extract_custom_functions in flowable_atlas.py)."""
+import json
+
 import flowable_atlas as fa
 
 
@@ -88,6 +90,45 @@ def test_nested_externals_additionaldata_property(tmp_path):
            "} } };\n")
     cat = fa.extract_custom_functions(str(tmp_path))
     assert cat is not None and cat["namespaces"]["acme"] == {"doThing", "calc"}
+
+
+def test_extracts_from_minified_bundle_with_local_var_config(tmp_path):
+    # Minified UMD (the real KYC shape): the config is a local var referenced as `additionalData:a`,
+    # and functions are inline with minified param names. Names + arity must still be read; the
+    # parameter text is comma-spaced for display (`e,t,r` → `e, t, r`).
+    _write(tmp_path, "static/ext/custom.js",
+           '!function(e,t){e.flowable.externals=t()}(this,function(){"use strict";'
+           'var n={ubsInboxItem:function(e){return e}},'
+           'a={flowkyc:{findCommonAttribute:function(e,t,r){return e},'
+           'camelCaseToDashCase:function(e,t){return e},checkValidEmail:checkValidEmail}};'
+           'return{formComponents:n,additionalData:a}});\n')
+    cat = fa.extract_custom_functions(str(tmp_path))
+    assert cat is not None
+    assert set(cat["namespaces"]["flowkyc"]) >= {"findCommonAttribute", "camelCaseToDashCase", "checkValidEmail"}
+    assert cat["signatures"]["flowkyc.findCommonAttribute"] == "e, t, r"
+    assert cat["signatures"]["flowkyc.camelCaseToDashCase"] == "e, t"
+
+
+def test_recovers_real_param_names_from_sourcemap(tmp_path):
+    # A minified bundle drops real parameter names (→ e,t,r). When a sibling sourcemap embeds the
+    # original sources, recover the real names from it.
+    _write(tmp_path, "static/ext/custom.js",
+           '!function(e,t){e.flowable.externals=t()}(this,function(){"use strict";'
+           'var a={flowkyc:{findCommonAttribute:function(e,t,r){return e},'
+           'camelCaseToDashCase:function(e,t){return e}}};'
+           'return{additionalData:a}});\n'
+           '//# sourceMappingURL=custom.js.map\n')
+    _write(tmp_path, "static/ext/custom.js.map", json.dumps({
+        "version": 3,
+        "sources": ["find-common-attribute.ts", "camel-case-to-dash-case.ts"],
+        "sourcesContent": [
+            "export function findCommonAttribute(allItems: any[], path: string, identifierPath?: string) { return allItems[0]; }",
+            "export function camelCaseToDashCase(str: string, toUpperCase: boolean = false) { return str; }",
+        ],
+    }))
+    cat = fa.extract_custom_functions(str(tmp_path))
+    assert cat["signatures"]["flowkyc.findCommonAttribute"] == "allItems, path, identifierPath?"
+    assert cat["signatures"]["flowkyc.camelCaseToDashCase"] == "str, toUpperCase"
 
 
 def test_react_form_additionaldata_prop_alone_is_not_a_registration(tmp_path):
