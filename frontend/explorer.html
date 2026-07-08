@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flowable Atlas</title>
+<style>
+/*__ATLAS_CSS__*/</style>
+</head>
+<body>
+<header>
+  <div class="brand"><div class="mark">Flowable&nbsp;<b>Atlas</b></div><div class="proj mono" id="proj"></div></div>
+  <div class="search">
+    <span class="ic" aria-hidden="true">⌕</span>
+    <input id="q" placeholder="Search everything — keys, files, classes, groups…" autocomplete="off"
+           role="combobox" aria-expanded="false" aria-controls="results" aria-autocomplete="list" aria-label="Search all nodes">
+    <span class="hint" aria-hidden="true">/</span>
+    <div class="results" id="results" role="listbox" aria-label="Search results"></div>
+  </div>
+  <div class="stats" id="stats"></div>
+  <button id="themebtn" class="tbtn" aria-label="Switch color theme"></button>
+  <div class="diagpanel" id="diagpanel"></div>
+</header>
+<div class="layout">
+  <div class="col"><nav class="rail" id="rail" aria-label="Categories"></nav></div>
+  <div class="col"><div id="list"></div></div>
+  <main class="col detail" id="detail" aria-label="Node details"></main>
+</div>
+<script type="application/json" id="atlas-data">__ATLAS_DATA__</script>
+<script>
+/*__ATLAS_JS__*/</script>
+</body>
+</html>

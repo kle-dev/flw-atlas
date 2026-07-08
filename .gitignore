@@ -30,3 +30,11 @@ __pycache__/
 # Exception: committed Marketplace media for the IntelliJ plugin (intentional content)
 !idea-plugin/marketplace-assets/*.png
 !idea-plugin/marketplace-assets/*.gif
+
+# Exception: golden test references (deliberately committed regression baselines)
+!tests/golden/*.summary.md
+!tests/golden/*.overview.md
+!tests/golden/*.graph.json
+
+# Test caches
+.pytest_cache/

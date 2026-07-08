@@ -54,6 +54,28 @@ python3 flowable_atlas.py <project>                         # full Markdown repo
 python3 flowable_atlas.py <project> --all   -o ./out        # all artifacts (what ./atlas does)
 ```
 
+Useful flags:
+
+- `-v` / `-vv` — progress and per-file diagnostics on stderr; `-q` silences the summary line.
+- `--expr-allowlist myfns,util:format,flw.custom` — expression-function namespaces/functions your
+  project registers itself; "unknown function" findings about them are suppressed instead of shown
+  as *suspect* in the explorer.
+
+Every run ends with a one-line health check on stderr (`… 412 resolved / 23 unresolved refs · ⚠ 3
+parse issue(s)`), and parse/read failures surface in **all** artifacts: a `diagnostics` list in
+`graph.json`, a warning banner in the summary, the Warnings section of the overview, and a
+clickable **⚠ parse issues** badge in the explorer header — so missing data is never silent.
+
+## Development
+
+- The explorer frontend lives in `frontend/explorer.{html,css,js}` (editable, lintable). After
+  changing it, run `python3 tools/embed_frontend.py` to refresh the embedded copies inside
+  `flowable_atlas.py` (the distributed single file). A pytest guard fails on drift.
+- Tests: `python3 -m pytest` — golden tests against `tests/fixtures/miniproject`, parser unit
+  tests, CLI contract tests (the artifact names the IDEA plugin depends on), and the expression
+  validator parity suite shared with the IntelliJ plugin.
+- Regenerate goldens after an intended output change: `ATLAS_UPDATE_GOLDEN=1 python3 -m pytest`.
+
 ## For LLMs / agents
 
 - Start with **`--summary`** (small, high-signal) as first context.

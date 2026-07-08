@@ -36,12 +36,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import html
 import re
 import sys
 import zipfile
 import xml.etree.ElementTree as ET
+
+log = logging.getLogger("flowable_atlas")
 
 # ---------------------------------------------------------------------------
 # Discovery configuration
@@ -977,6 +980,32 @@ PARSERS = {
     "dataObject": parse_data_object, "securityPolicy": parse_policy, "action": parse_action,
 }
 
+# Canonical model-kind registry: (model type, result bucket, normalized node type).
+# THE single place tying a parsed model type to its result bucket and graph type —
+# the bucket lists, dedupe, reference resolution and graph building all derive from
+# it, so adding a model kind is exactly one entry here (+ a PARSERS entry).
+MODEL_KINDS = [
+    ("app",            "apps",         "app"),
+    ("bpmn",           "processes",    "process"),
+    ("cmmn",           "cases",        "case"),
+    ("dmn",            "decisions",    "decision"),
+    ("form",           "forms",        "form"),
+    ("page",           "forms",        "page"),
+    ("agent",          "agents",       "agent"),
+    ("service",        "services",     "service"),
+    ("channel",        "channels",     "channel"),
+    ("event",          "events",       "event"),
+    ("dataDictionary", "dictionaries", "dataDictionary"),
+    ("dataObject",     "dataObjects",  "dataObject"),
+    ("securityPolicy", "policies",     "securityPolicy"),
+    ("action",         "actions",      "action"),
+]
+MODEL_BUCKET = {mtype: bucket for mtype, bucket, _ in MODEL_KINDS}
+# unique bucket names in declaration order (+ the two non-parser buckets)
+MODEL_BUCKETS = tuple(dict.fromkeys(b for _, b, _ in MODEL_KINDS)) + ("liquibase", "others")
+# {"bpmn": "process", "cmmn": "case"} — model types whose graph/index type differs
+NORMALIZE_TYPE = {mtype: norm for mtype, _, norm in MODEL_KINDS if mtype != norm}
+
 
 # ---------------------------------------------------------------------------
 # Java parsing
@@ -1161,16 +1190,22 @@ def discover(root):
     return models, archives, javas, xmls
 
 
-def extract(root):
+def extract(root, expr_allowlist=None):
     ctx = {"refs": [], "rest_calls": [], "expr": set(), "mustache": set(),
            "delegate_classes": set(), "access": [], "groups": set(),
            "expr_use": {}, "mustache_use": {}, "var_use": {}, "script_var_use": {},
            "query_meta": {}}
-    result = {"apps": [], "processes": [], "cases": [], "decisions": [], "forms": [],
-              "agents": [], "services": [], "channels": [], "events": [], "dictionaries": [],
-              "dataObjects": [], "policies": [], "actions": [], "liquibase": [], "others": [],
-              "javaBeans": [], "javaControllers": [], "javaGlue": [], "endpoints": [], "warnings": []}
+    result = {bucket: [] for bucket in MODEL_BUCKETS}
+    result.update({"javaBeans": [], "javaControllers": [], "javaGlue": [], "endpoints": [],
+                   "warnings": [], "diagnostics": []})
     model_index, by_key = {}, {}
+
+    def _diag(kind, path, message):
+        """One channel for every 'something went wrong with this file' event:
+        a structured record (all output formats) + the legacy warning string."""
+        result["diagnostics"].append({"kind": kind, "path": path, "message": str(message)})
+        result["warnings"].append(f"{kind} {path}: {message}")
+        log.info("diagnostic: %s %s: %s", kind, path, message)
 
     def dispatch(mtype, data, label):
         raw = data.decode("utf-8", "replace") if isinstance(data, bytes) else data
@@ -1190,10 +1225,7 @@ def extract(root):
                 mkeys = [obj.get("key")]
             else:
                 parsed = parser(data, ctx, label)
-                bucket = {"app": "apps", "bpmn": "processes", "cmmn": "cases", "dmn": "decisions",
-                          "form": "forms", "page": "forms", "agent": "agents", "service": "services",
-                          "channel": "channels", "event": "events", "dataDictionary": "dictionaries",
-                          "dataObject": "dataObjects", "securityPolicy": "policies", "action": "actions"}[mtype]
+                bucket = MODEL_BUCKET[mtype]
                 if isinstance(parsed, list):
                     result[bucket].extend(parsed)
                     for p in parsed:
@@ -1214,7 +1246,7 @@ def extract(root):
                     for b, meth in calls:
                         add_ref(ctx, k, mtype, label, f"calls {meth}()", "bean", b)
         except Exception as e:  # noqa: BLE001
-            result["warnings"].append(f"parse {label} ({mtype}): {e}")
+            _diag("parse", label, f"({mtype}) {e}")
         # Attribute every ${...} / {{...}} occurrence to the model(s) in this file.
         for k in mkeys:
             if not k:
@@ -1240,12 +1272,14 @@ def extract(root):
 
     def _index(mtype, obj, label, key=None):
         key = key if key is not None else (obj.get("key") if isinstance(obj, dict) else None)
-        norm = {"bpmn": "process", "process": "process", "cmmn": "case"}.get(mtype, mtype)
+        norm = NORMALIZE_TYPE.get(mtype, mtype)
         if key:
             model_index[(norm, key)] = label
             by_key.setdefault(key, []).append((norm, label))
 
     models, archives, javas, xmls = discover(root)
+    log.info("discovered %d model files, %d archives, %d java files, %d xml/sql candidates",
+             len(models), len(archives), len(javas), len(xmls))
 
     for path in models:
         rel = os.path.relpath(path, root) if os.path.isdir(root) else os.path.basename(path)
@@ -1253,7 +1287,7 @@ def extract(root):
             with open(path, "rb") as fh:
                 dispatch(model_type_for(os.path.basename(path)), fh.read(), rel)
         except Exception as e:  # noqa: BLE001
-            result["warnings"].append(f"read {rel}: {e}")
+            _diag("read", rel, e)
 
     for arc in archives:
         rel = os.path.relpath(arc, root) if os.path.isdir(root) else os.path.basename(arc)
@@ -1266,7 +1300,11 @@ def extract(root):
                     if mt:
                         dispatch(mt, zf.read(name), f"{rel}!{name}")
         except Exception as e:  # noqa: BLE001
-            result["warnings"].append(f"archive {rel}: {e}")
+            _diag("archive", rel, e)
+
+    log.info("parsed models: %d processes, %d cases, %d forms, %d services, %d data objects",
+             len(result["processes"]), len(result["cases"]), len(result["forms"]),
+             len(result["services"]), len(result["dataObjects"]))
 
     # Java
     bean_index, class_index, fqn_index, all_java = {}, {}, {}, {}
@@ -1276,7 +1314,7 @@ def extract(root):
             with open(path, "r", encoding="utf-8", errors="replace") as fh:
                 jc = parse_java(fh.read(), rel)
         except Exception as e:  # noqa: BLE001
-            result["warnings"].append(f"java {rel}: {e}")
+            _diag("java", rel, e)
             continue
         for b in jc["beanNames"]:
             bean_index.setdefault(b, jc)
@@ -1307,7 +1345,8 @@ def extract(root):
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as fh:
                 txt = fh.read()
-        except Exception:
+        except Exception as e:  # noqa: BLE001
+            _diag("read", rel, e)
             continue
         if "databaseChangeLog" not in txt and "<changeSet" not in txt and "createTable" not in txt.lower():
             continue
@@ -1361,9 +1400,7 @@ def extract(root):
 
     ctx["refs"] = _dedupe(ctx["refs"], lambda r: (r["from"], r["rel"], r["kind"], r["value"]))
     ctx["rest_calls"] = _dedupe(ctx["rest_calls"], lambda rc: (rc["source"], rc.get("where"), rc["url"]))
-    for bucket in ("apps", "processes", "cases", "decisions", "forms", "agents",
-                   "services", "channels", "events", "dictionaries", "dataObjects",
-                   "policies", "actions", "liquibase", "others"):
+    for bucket in MODEL_BUCKETS:
         result[bucket] = _dedupe(result[bucket], lambda o: o.get("key") or id(o))
     ctx["access"] = _dedupe(ctx["access"], lambda a: (a["model"], a["scope"], a["action"],
                                                       tuple(a["groups"]), tuple(a["users"])))
@@ -1389,7 +1426,7 @@ def extract(root):
                                                   "knowledgeBase", "query", "sequence", "masterData",
                                                   "action", "document", "variableExtractor", "dashboardComponent"):
             norm = kind.split(":", 1)[1] if kind.startswith("model:") else kind
-            norm = {"bpmn": "process", "cmmn": "case"}.get(norm, norm)
+            norm = NORMALIZE_TYPE.get(norm, norm)
             target = model_index.get((norm, val))
             if target is None and val in by_key:
                 target = by_key[val][0][1]
@@ -1439,8 +1476,11 @@ def extract(root):
     #      physical table at different revisions). ----
     _mark_liquibase_authority(result)
 
+    log.info("resolved %d refs, %d unresolved", len(resolved), len(unresolved))
+
     # ---- Build a navigable graph (nodes + edges) for the HTML explorer ----
-    graph = _build_graph(result, ctx, resolved, all_java, bean_methods, by_key)
+    graph = _build_graph(result, ctx, resolved, all_java, bean_methods, by_key, expr_allowlist)
+    log.info("graph: %d nodes, %d edges", len(graph["nodes"]), len(graph["edges"]))
 
     result.update({
         "modelIndex": {f"{k[0]}:{k[1]}": v for k, v in model_index.items()},
@@ -2542,8 +2582,12 @@ def _hint(suggestion):
     return (" — did you mean '%s'?" % suggestion) if suggestion else ""
 
 
-def _problem(t, message, severity, quick_fix=None):
-    return {"start": t.start, "end": t.end, "message": message, "severity": severity, "quickFix": quick_fix}
+def _problem(t, message, severity, quick_fix=None, kind=None, subject=None):
+    p = {"start": t.start, "end": t.end, "message": message, "severity": severity, "quickFix": quick_fix}
+    if kind:
+        p["kind"] = kind
+        p["subject"] = subject
+    return p
 
 
 def _problem_range(start, end, message, severity, quick_fix=None):
@@ -2577,11 +2621,13 @@ def _check_functions(toks, dialect, out):
             if canonical is None:
                 suggestion = _closest(prefix.text, _backend_prefixes())
                 out.append(_problem(prefix, "Unknown function namespace '%s'%s"
-                                    % (prefix.text, _hint(suggestion)), "warning", suggestion))
+                                    % (prefix.text, _hint(suggestion)), "warning", suggestion,
+                                    kind="unknown-namespace", subject=prefix.text))
             elif not _is_backend_function(prefix.text, name.text):
                 suggestion = _closest(name.text, _backend_names_for_prefix(prefix.text))
                 out.append(_problem(name, "Unknown function '%s:%s'%s"
-                                    % (prefix.text, name.text, _hint(suggestion)), "warning", suggestion))
+                                    % (prefix.text, name.text, _hint(suggestion)), "warning", suggestion,
+                                    kind="unknown-function", subject=f"{prefix.text}:{name.text}"))
             continue
         # Frontend member call: flw '.' IDENT
         if (dialect == FRONTEND and t.type == _IDENT and t.text == _FRONTEND_NS and
@@ -2590,7 +2636,8 @@ def _check_functions(toks, dialect, out):
             if not _is_frontend_member(member.text):
                 suggestion = _closest(member.text, _FRONTEND_MEMBERS)
                 out.append(_problem(member, "Unknown flw function 'flw.%s'%s"
-                                    % (member.text, _hint(suggestion)), "warning", suggestion))
+                                    % (member.text, _hint(suggestion)), "warning", suggestion,
+                                    kind="unknown-function", subject=f"flw.{member.text}"))
 
 
 def validate_expression(body, dialect):
@@ -2644,6 +2691,21 @@ def _decode_json_string_escapes(s):
     return "".join(out)
 
 
+def expr_problem_allowlisted(p, allow):
+    """True when a catalog finding refers to a namespace/function the user declared as
+    project-provided (--expr-allowlist ns,ns:fn,flw.member). Allowlisting a namespace
+    covers every function under it; structural syntax errors are never suppressed."""
+    subj = p.get("subject")
+    if not subj or p.get("severity") == "error":
+        return False
+    if subj in allow:
+        return True
+    for sep in (":", "."):
+        if sep in subj and subj.split(sep, 1)[0] in allow:
+            return True
+    return False
+
+
 def validate_harvested_expr(text, dialect):
     """Validate a harvested expression/binding node. Returns a list of problems (empty == valid),
     or None when the harvester likely truncated the body — EXPR_RE / MUSTACHE_RE stop at the first
@@ -2663,7 +2725,7 @@ def validate_harvested_expr(text, dialect):
     return problems
 
 
-def _build_graph(result, ctx, resolved, all_java, bean_methods, by_key):
+def _build_graph(result, ctx, resolved, all_java, bean_methods, by_key, expr_allowlist=None):
     nodes, key_to_node = {}, {}
 
     def add_node(ntype, key, label, file, data):
@@ -2676,33 +2738,17 @@ def _build_graph(result, ctx, resolved, all_java, bean_methods, by_key):
         key_to_node.setdefault(key, nid)
         return nid
 
-    # --- model nodes from buckets ---
-    for a in result["apps"]:
-        add_node("app", a.get("key"), a.get("name"), a.get("file"), a)
-    for p in result["processes"]:
-        add_node("process", p.get("key"), p.get("name"), p.get("file"), p)
-    for c in result["cases"]:
-        add_node("case", c.get("key"), c.get("name"), c.get("file"), c)
-    for d in result["decisions"]:
-        add_node("decision", d.get("key"), d.get("name"), d.get("file"), d)
-    for f in result["forms"]:
-        add_node(f.get("modelType", "form"), f.get("key"), f.get("name"), f.get("file"), f)
-    for d in result["dataObjects"]:
-        add_node("dataObject", d.get("key"), d.get("name"), d.get("file"), d)
-    for s in result["services"]:
-        add_node("service", s.get("key"), s.get("name"), s.get("file"), s)
-    for a in result["agents"]:
-        add_node("agent", a.get("key"), a.get("name"), a.get("file"), a)
-    for c in result["channels"]:
-        add_node("channel", c.get("key"), c.get("name"), c.get("file"), c)
-    for e in result["events"]:
-        add_node("event", e.get("key"), e.get("name"), e.get("file"), e)
-    for d in result["dictionaries"]:
-        add_node("dataDictionary", d.get("key"), d.get("name"), d.get("file"), d)
-    for p in result["policies"]:
-        add_node("securityPolicy", p.get("key"), p.get("name"), p.get("file"), p)
-    for a in result["actions"]:
-        add_node("action", a.get("key"), a.get("name"), a.get("file"), a)
+    # --- model nodes from buckets. Node type comes from the registry; forms/pages
+    # carry their own modelType (a .page must not be labelled "form"). The explicit
+    # order is semantic: key_to_node is first-wins, so on a key collision across
+    # kinds the earlier bucket claims the key. ---
+    _node_type = {b: n for _, b, n in MODEL_KINDS}
+    for bucket in ("apps", "processes", "cases", "decisions", "forms", "dataObjects",
+                   "services", "agents", "channels", "events", "dictionaries",
+                   "policies", "actions"):
+        for o in result[bucket]:
+            ntype = o.get("modelType", "form") if bucket == "forms" else _node_type[bucket]
+            add_node(ntype, o.get("key"), o.get("name"), o.get("file"), o)
     for lb in result["liquibase"]:
         add_node("liquibase", lb.get("key"), os.path.basename(lb["file"]), lb["file"],
                  {"tables": lb.get("tables"), "effectiveTables": lb.get("effectiveTables"),
@@ -2711,10 +2757,12 @@ def _build_graph(result, ctx, resolved, all_java, bean_methods, by_key):
     for o in result["others"]:
         add_node(o.get("modelType", "other"), o.get("key"), o.get("name"), o.get("file"), o)
 
-    # all model keys (for CODE -> MODEL references: Java string literals == a model key)
+    # all model keys (for CODE -> MODEL references: Java string literals == a model key);
+    # liquibase keys are file-derived, not model keys, so that bucket stays out
     model_keys = set()
-    for bucket in ("apps", "processes", "cases", "decisions", "forms", "dataObjects", "services",
-                   "agents", "channels", "events", "dictionaries", "policies", "actions", "others"):
+    for bucket in MODEL_BUCKETS:
+        if bucket == "liquibase":
+            continue
         for o in result[bucket]:
             if o.get("key"):
                 model_keys.add(o["key"])
@@ -2786,6 +2834,9 @@ def _build_graph(result, ctx, resolved, all_java, bean_methods, by_key):
                 used_types = {nodes[uid]["type"] for uid in used if uid in nodes}
                 if not used_types.issubset(_FREEMARKER_MODEL_TYPES):
                     problems = validate_harvested_expr(text, dialect)   # None == not validated (truncated)
+                    if problems and expr_allowlist:
+                        problems = [p for p in problems
+                                    if not expr_problem_allowlisted(p, expr_allowlist)]
                     if problems:
                         data["problems"] = problems
                 add_node(ntype, text, text, None, data)
@@ -3115,7 +3166,7 @@ def render(result, root):
             L.append(f"- palette: `{a.get('paletteDefinitionCategory')}`, "
                      f"variables: {len(a.get('variables', []))}, models: {len(a.get('childModels', []))}")
             for cm in a.get("childModels", []):
-                norm = {"bpmn": "process", "cmmn": "case"}.get(cm.get("type"), cm.get("type"))
+                norm = NORMALIZE_TYPE.get(cm.get("type"), cm.get("type"))
                 loc = result["modelIndex"].get(f"{norm}:{cm.get('key')}")
                 L.append(f"    - {cm.get('type')} `{cm.get('key')}`" + (f" → `{loc}`" if loc else " → _(not found)_"))
             L.append("")
@@ -3443,9 +3494,11 @@ def render(result, root):
         L.append("\n</details>\n")
 
     if result["warnings"]:
-        hdr(14, "Warnings")
-        for w in result["warnings"][:50]:
+        hdr(14, f"Warnings ({len(result['warnings'])})")
+        for w in result["warnings"][:200]:
             L.append(f"- {w}")
+        if len(result["warnings"]) > 200:
+            L.append(f"- … (+{len(result['warnings']) - 200} more — see `diagnostics` in graph.json)")
     return "\n".join(L)
 
 
@@ -3470,704 +3523,35 @@ def _render_stage(node, L, depth):
 # ---------------------------------------------------------------------------
 # Interactive HTML explorer (self-contained, offline, no external libs)
 # ---------------------------------------------------------------------------
-HTML_TEMPLATE = r"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Flowable Atlas</title>
-<style>
-  :root{
-    --bg:#0a0c0f; --panel:#101418; --panel2:#0d1115; --line:#1d242c; --line2:#2a333d;
-    --ink:#e7edf3; --ink-dim:#9aa7b4; --ink-faint:#66727f; --accent:#34e0c0;
-    --mono:"SFMono-Regular",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
-    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,sans-serif;
-    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
-    --c-app:#e6edf3;--c-process:#34e0c0;--c-case:#4cc9f0;--c-decision:#b694ff;
-    --c-form:#f4b942;--c-page:#e89b3b;--c-dataObject:#ff7a93;--c-dataDictionary:#ff9eb0;
-    --c-service:#5b9cff;--c-agent:#ff6fd8;--c-channel:#9be15d;--c-event:#ff9f45;
-    --c-endpoint:#56c2d6;--c-java:#b8c0cc;--c-query:#8aa0b4;--c-template:#c9a26b;
-    --c-sequence:#8aa0b4;--c-action:#6fe0a8;--c-document:#8aa0b4;--c-variableExtractor:#8aa0b4;
-    --c-securityPolicy:#ffb3c0;--c-group:#d8b75a;--c-external:#6b7480;--c-masterData:#ff7a93;
-    --c-knowledgeBase:#b694ff;--c-sla:#c9a26b;--c-dashboardComponent:#6fe0a8;
-    --c-action:#6fe0a8;--c-bot:#ff6fd8;--c-liquibase:#7aa0ff;--c-expression:#b08cff;--c-binding:#5fd0e0;--c-variable:#ffd27f;--c-string:#9ad07a;--c-method:#9fb8ff;--c-invalidExpr:#ff6b6b;
-  }
-  *{box-sizing:border-box}
-  html,body{height:100%;margin:0}
-  body{
-    background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:13px;
-    background-image:
-      radial-gradient(1200px 600px at 80% -10%, rgba(52,224,192,.06), transparent 60%),
-      linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px);
-    background-size:auto, 32px 32px, 32px 32px;
-  }
-  ::-webkit-scrollbar{width:10px;height:10px}
-  ::-webkit-scrollbar-thumb{background:#222b34;border-radius:6px;border:2px solid var(--bg)}
-  ::-webkit-scrollbar-thumb:hover{background:#2f3a45}
-  .mono{font-family:var(--mono)}
-  a{color:inherit}
-
-  header{
-    position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:18px;
-    padding:0 18px;height:54px;border-bottom:1px solid var(--line);
-    background:rgba(10,12,15,.82);backdrop-filter:blur(10px);
-  }
-  .brand{display:flex;align-items:baseline;gap:10px;white-space:nowrap}
-  .brand .mark{font-family:var(--serif);font-size:20px;letter-spacing:.04em;color:var(--ink)}
-  .brand .mark b{color:var(--accent);font-weight:600}
-  .brand .proj{font-family:var(--mono);font-size:11px;color:var(--ink-dim);
-    border:1px solid var(--line2);padding:2px 8px;border-radius:999px}
-  .search{flex:1;position:relative;max-width:520px;margin:0 auto}
-  .search input{
-    width:100%;background:var(--panel2);border:1px solid var(--line2);color:var(--ink);
-    font-family:var(--mono);font-size:12px;padding:8px 12px 8px 32px;border-radius:8px;outline:none}
-  .search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(52,224,192,.12)}
-  .search .ic{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--ink-faint)}
-  .search .hint{position:absolute;right:10px;top:50%;transform:translateY(-50%);
-    color:var(--ink-faint);font-family:var(--mono);font-size:10px;border:1px solid var(--line2);
-    border-radius:4px;padding:1px 5px}
-  .results{position:absolute;top:42px;left:0;right:0;background:var(--panel);
-    border:1px solid var(--line2);border-radius:8px;max-height:60vh;overflow:auto;
-    box-shadow:0 16px 50px rgba(0,0,0,.5);display:none}
-  .results.on{display:block}
-  .results .r{display:flex;align-items:center;gap:9px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--line)}
-  .results .r:hover,.results .r.sel{background:#161b21}
-  .stats{display:flex;gap:14px;color:var(--ink-dim);font-family:var(--mono);font-size:11px;white-space:nowrap}
-  .stats b{color:var(--ink)}
-
-  .layout{display:grid;grid-template-columns:230px 330px 1fr;height:calc(100vh - 54px)}
-  .col{overflow:auto;border-right:1px solid var(--line)}
-  .col.detail{border-right:none}
-
-  /* left rail */
-  .rail{padding:14px 8px}
-  .rail .sec{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
-    color:var(--ink-faint);padding:14px 12px 6px}
-  .cat{display:flex;align-items:center;gap:9px;padding:6px 12px;border-radius:7px;cursor:pointer;color:var(--ink-dim)}
-  .cat:hover{background:#141a20;color:var(--ink)}
-  .cat.on{background:#152028;color:var(--ink)}
-  .cat.on .dot{box-shadow:0 0 0 3px rgba(255,255,255,.06)}
-  .cat .lbl{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .cat .n{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
-  .dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--ink-faint)}
-
-  /* list column */
-  .listhead{position:sticky;top:0;background:var(--panel2);border-bottom:1px solid var(--line);padding:10px;z-index:5}
-  .listhead .t{font-family:var(--mono);font-size:11px;color:var(--ink-dim);margin-bottom:8px;display:flex;justify-content:space-between}
-  .listhead input{width:100%;background:#0a0e12;border:1px solid var(--line2);color:var(--ink);
-    font-family:var(--mono);font-size:12px;padding:6px 9px;border-radius:6px;outline:none}
-  .listhead input:focus{border-color:var(--accent)}
-  .item{display:flex;align-items:flex-start;gap:9px;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--line);
-    animation:rise .25s ease both}
-  .item:hover{background:#12171c}
-  .item.on{background:#15202a;box-shadow:inset 3px 0 0 var(--accent)}
-  .item .meta{min-width:0}
-  .item .nm{color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .item .sub{font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  @keyframes rise{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
-
-  /* detail */
-  .detail{padding:0}
-  .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--ink-faint);gap:10px;text-align:center}
-  .empty .big{font-family:var(--serif);font-size:30px;color:var(--ink-dim)}
-  .crumbs{position:sticky;top:0;background:rgba(10,12,15,.82);backdrop-filter:blur(8px);
-    border-bottom:1px solid var(--line);padding:8px 18px;display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;z-index:6}
-  .crumbs button{background:var(--panel);border:1px solid var(--line2);color:var(--ink-dim);
-    border-radius:6px;padding:3px 9px;cursor:pointer;font-family:var(--mono);font-size:11px}
-  .crumbs button:hover{color:var(--ink);border-color:var(--accent)}
-  .crumbs .trail{color:var(--ink-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .dbody{padding:22px 26px;max-width:1000px}
-  .chip{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;
-    border:1px solid var(--line2);border-radius:999px;padding:2px 9px;color:var(--ink-dim)}
-  .dtitle{font-family:var(--serif);font-size:30px;line-height:1.15;margin:12px 0 4px}
-  .dkey{font-family:var(--mono);font-size:12px;color:var(--accent)}
-  .dfile{font-family:var(--mono);font-size:11px;color:var(--ink-faint);margin-top:6px;cursor:copy}
-  .dfile:hover{color:var(--ink-dim)}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1px;
-    background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:18px 0}
-  .cell{background:var(--panel);padding:10px 12px}
-  .cell .k{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
-  .cell .v{margin-top:3px;color:var(--ink);word-break:break-word}
-  .cell .v.mono{font-family:var(--mono);font-size:11.5px}
-  h3.rel{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;
-    color:var(--ink-dim);margin:24px 0 10px;display:flex;align-items:center;gap:8px}
-  h3.rel:before{content:"";flex:none;width:14px;height:1px;background:var(--line2)}
-  .relgrp{margin:0 0 14px}
-  .relgrp .lab{font-family:var(--mono);font-size:11px;color:var(--ink-faint);margin:0 0 6px}
-  .nodechips{display:flex;flex-wrap:wrap;gap:7px}
-  .nc{display:inline-flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line2);
-    border-radius:8px;padding:5px 10px;cursor:pointer;max-width:380px}
-  .nc:hover{border-color:var(--accent);background:#13191f;transform:translateY(-1px)}
-  .nc .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .nc .ty{font-family:var(--mono);font-size:9.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em}
-  .oplist{border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:8px 0}
-  details.uses{border:1px solid var(--line);border-radius:8px;margin:6px 0;background:var(--panel)}
-  details.uses>summary{cursor:pointer;padding:8px 12px;font-family:var(--mono);font-size:11px;color:var(--ink-dim);list-style:none}
-  details.uses>summary::-webkit-details-marker{display:none}
-  details.uses>summary:before{content:"▸ ";color:var(--ink-faint)}
-  details.uses[open]>summary:before{content:"▾ "}
-  details.uses>summary:hover{color:var(--ink)}
-  details.uses[open]>summary{border-bottom:1px solid var(--line);color:var(--ink)}
-  details.uses .nodechips{padding:10px 12px}
-  .oprow{display:flex;gap:10px;padding:7px 12px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:11.5px}
-  .oprow:last-child{border-bottom:none}
-  .verb{font-weight:600;min-width:48px}
-  .tag{font-family:var(--mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;
-    border:1px solid var(--line2);border-radius:4px;padding:1px 6px;color:var(--ink-dim)}
-  .muted{color:var(--ink-faint)}
-
-  /* schema coverage (Liquibase -> service -> data object) */
-  .covmeta{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-family:var(--mono);
-    font-size:11px;color:var(--ink-dim);margin:8px 0}
-  .covbadges{margin:6px 0 4px}
-  .cov-badge{display:inline-block;font-family:var(--mono);font-size:10px;border-radius:999px;
-    padding:2px 9px;margin:0 6px 6px 0;border:1px solid var(--line2);color:var(--ink-dim)}
-  .cov-badge.cov-bad{color:#ff7a93;border-color:rgba(255,122,147,.45)}
-  .cov-badge.cov-warn{color:#f4b942;border-color:rgba(244,185,66,.45)}
-  .cov-badge.cov-info{color:#5b9cff;border-color:rgba(91,156,255,.45)}
-  .cov-badge.cov-good{color:#9ad07a;border-color:rgba(154,208,122,.45)}
-  .authb{display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:.04em;text-transform:uppercase;
-    border-radius:999px;padding:1px 7px;margin-left:7px;border:1px solid var(--line2);vertical-align:middle}
-  .authb-live{color:#9ad07a;border-color:rgba(154,208,122,.5)}
-  .authb-old{color:#f4b942;border-color:rgba(244,185,66,.5)}
-  .authb-orphan{color:#ff7a93;border-color:rgba(255,122,147,.5)}
-  .authnote{font-size:11.5px;line-height:1.5;border-radius:8px;padding:8px 11px;margin:10px 0;border:1px solid var(--line2)}
-  .authnote-old{color:#f4b942;background:rgba(244,185,66,.07);border-color:rgba(244,185,66,.35)}
-  .authnote-orphan{color:#ff7a93;background:rgba(255,122,147,.07);border-color:rgba(255,122,147,.35)}
-  .authnote .nc{margin-top:4px}
-  .covwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;margin:8px 0}
-  table.cov{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:11.5px}
-  table.cov th{text-align:left;font-weight:500;color:var(--ink-faint);background:var(--panel2);
-    padding:7px 11px;border-bottom:1px solid var(--line2);font-size:10px;
-    letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
-  table.cov td{padding:6px 11px;border-bottom:1px solid var(--line);vertical-align:top}
-  table.cov tr:last-child td{border-bottom:none}
-  table.cov tr.cov-bad td{background:rgba(255,122,147,.08)}
-  table.cov tr.cov-warn td{background:rgba(244,185,66,.07)}
-  table.cov tr.cov-info td{background:rgba(91,156,255,.06)}
-  table.cov .miss{color:#ff9aab}
-  table.cov .arrow{color:var(--ink-faint)}
-  .covlegend{display:flex;flex-wrap:wrap;gap:14px;font-size:10.5px;color:var(--ink-faint);margin:4px 0 8px}
-  .covlegend span{display:inline-flex;align-items:center;gap:5px}
-  .covdot{display:inline-block;width:7px;height:7px;border-radius:50%;flex:none}
-  .oprow.cov-bad{box-shadow:inset 3px 0 0 #ff7a93}
-  .oprow.cov-warn{box-shadow:inset 3px 0 0 #f4b942}
-
-  /* operations — each collapsible, params reveal as a single-column list */
-  details.op,.op.flat{border:1px solid var(--line);border-radius:8px;margin:6px 0;
-    background:var(--panel);overflow:hidden}
-  details.op>summary,.op.flat{display:flex;align-items:center;gap:10px;padding:8px 12px;
-    font-family:var(--mono);font-size:11.5px;color:var(--ink)}
-  details.op>summary{cursor:pointer;list-style:none}
-  details.op>summary::-webkit-details-marker{display:none}
-  details.op>summary:before{content:"▸";color:var(--ink-faint);flex:none;font-size:10px}
-  details.op[open]>summary:before{content:"▾"}
-  .op.flat:before{content:"·";color:var(--ink-faint);flex:none;font-size:10px}
-  details.op>summary:hover{background:#12171c}
-  details.op[open]>summary{border-bottom:1px solid var(--line)}
-  .opname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .opcount{margin-left:auto;flex:none;color:var(--ink-faint);font-size:10px;
-    border:1px solid var(--line2);border-radius:999px;padding:1px 8px}
-  .opkey{flex:none;color:var(--ink-faint)}
-  .parmgrid{display:grid;grid-template-columns:1fr;gap:1px;background:var(--line)}
-  .parmgrid .pc{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
-    background:var(--panel);padding:5px 12px;min-width:0;font-family:var(--mono);font-size:11.5px}
-  .parmgrid .pn{color:var(--ink-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .parmgrid .pt{color:var(--ink-faint);flex:none}
-</style>
-</head>
-<body>
-<header>
-  <div class="brand"><div class="mark">Flowable&nbsp;<b>Atlas</b></div><div class="proj mono" id="proj"></div></div>
-  <div class="search">
-    <span class="ic">⌕</span>
-    <input id="q" placeholder="Search everything — keys, files, classes, groups…" autocomplete="off">
-    <span class="hint">/</span>
-    <div class="results" id="results"></div>
-  </div>
-  <div class="stats" id="stats"></div>
-</header>
-<div class="layout">
-  <div class="col"><div class="rail" id="rail"></div></div>
-  <div class="col"><div id="list"></div></div>
-  <div class="col detail" id="detail"></div>
-</div>
-<script>
-const DATA = __ATLAS_DATA__;
-const nodes = DATA.nodes, edges = DATA.edges;
-const byId = new Map(nodes.map(n => [n.id, n]));
-const TM = {
-  app:['Apps','Models'],process:['Processes','Models'],case:['Cases','Models'],
-  decision:['Decisions','Models'],form:['Forms','Models'],page:['Pages','Models'],
-  dataObject:['Data objects','Models'],dataDictionary:['Data dictionaries','Models'],
-  masterData:['Master data','Models'],
-  service:['Service models','Integration'],agent:['Agents / bots','Integration'],
-  channel:['Channels','Integration'],event:['Events','Integration'],knowledgeBase:['Knowledge bases','Integration'],
-  endpoint:['REST endpoints','Code'],java:['Java classes','Code'],method:['Java methods','Code'],liquibase:['Liquibase changelogs','Code'],
-  action:['Actions','Integration'],bot:['Bots','Integration'],
-  query:['Queries','Other'],template:['Templates','Other'],sequence:['Sequences','Other'],
-  document:['Documents','Other'],variableExtractor:['Variable extractors','Other'],
-  sla:['SLAs','Other'],dashboardComponent:['Dashboard widgets','Other'],
-  securityPolicy:['Security policies','Access'],group:['User groups','Access'],
-  variable:['Variables','Variables'],
-  expression:['Backend expressions ${ }','Expressions'],binding:['Frontend bindings {{ }}','Expressions'],
-  string:['String literals','Expressions'],
-  external:['External / library','Other'],
-};
-const SECTIONS = ['Models','Integration','Code','Expressions','Variables','Access','Other'];
-const color = t => getComputedStyle(document.body).getPropertyValue('--c-'+t).trim() || '#8aa0b4';
-const COVC = {good:'#9ad07a', warn:'#f4b942', bad:'#ff7a93', info:'#5b9cff'};
-const covColor = k => COVC[k] || '#8aa0b4';
-const looseCol = s => String(s==null?'':s).toLowerCase().replace(/[^a-z0-9]/g,'');
-// external nodes split into Flowable API / navigation routes / real third-party deps.
-const nodeColor = n => (n && n.type==='external')
-  ? (n.data&&n.data.flowableApi?color('endpoint'):n.data&&n.data.route?color('page'):color('external'))
-  : color(n?n.type:'');
-const nodeKind = n => (n.type!=='external')
-  ? (TM[n.type]?TM[n.type][0]:n.type)
-  : (n.data.flowableApi?'Flowable API':n.data.route?'Navigation route':'External / library');
-
-// adjacency
-const outM = new Map(), incM = new Map();
-const push = (m,k,v)=>{ if(!m.has(k)) m.set(k,[]); m.get(k).push(v); };
-edges.forEach(e=>{ push(outM,e.s,{rel:e.rel,id:e.t}); push(incM,e.t,{rel:e.rel,id:e.s}); });
-
-// bean name -> java node id (for direct links from ${bean.method()} expressions)
-const beanToNode = new Map();
-nodes.filter(n=>n.type==='java').forEach(n=>{
-  (n.data.beanNames||[]).forEach(b=>beanToNode.set(b,n.id));
-  const dc=n.label.charAt(0).toLowerCase()+n.label.slice(1);
-  if(!beanToNode.has(dc)) beanToNode.set(dc,n.id);
-});
-
-// a form is "unused / unlinked" when nothing functionally references it — i.e. it
-// has no incoming edge other than app 'contains' membership (every form sits in an
-// app, so that edge alone does not count as being used).
-const isUnusedForm = n => n.type==='form' && !(incM.get(n.id)||[]).some(e=>e.rel!=='contains');
-
-// state
-let state = {cat:null, sel:null, hist:[], filter:''};
-
-// ---------- categories ----------
-function categories(){
-  const byType = {};
-  nodes.forEach(n => (byType[n.type] = byType[n.type]||[]).push(n));
-  const cats = [];
-  Object.keys(byType).forEach(t=>{
-    if(t==='java'){
-      const roles = {};
-      byType.java.forEach(n=>(n.data.roles||[]).forEach(r=>roles[r]=(roles[r]||0)+1));
-      Object.keys(roles).sort().forEach(r=>cats.push({
-        id:'java::'+r, label:'Java · '+r, sec:'Code', color:color('java'), count:roles[r],
-        match:n=>n.type==='java' && (n.data.roles||[]).includes(r)}));
-    } else if(t==='variable'){
-      // group variables by the model type(s) that use them (process / form / case / java …)
-      const scopes = {};
-      byType.variable.forEach(n=>(n.data.scopes||[]).forEach(s=>scopes[s]=(scopes[s]||0)+1));
-      Object.keys(scopes).sort().forEach(s=>cats.push({
-        id:'variable::'+s, label:'Variable · '+s, sec:'Variables',
-        color:color('variable'), count:scopes[s], match:n=>n.type==='variable' && (n.data.scopes||[]).includes(s)}));
-    } else if(t==='external'){
-      // external nodes are not all "library": split out Flowable platform API calls
-      // (endpoints.*) and in-app navigation routes (#/...) from real third-party deps.
-      [{id:'external::api',  label:'Flowable API',        sec:'Integration', color:color('endpoint'), match:n=>n.type==='external'&&n.data.flowableApi},
-       {id:'external::route',label:'Navigation · routes', sec:'Other',       color:color('page'),     match:n=>n.type==='external'&&n.data.route},
-       {id:'external::lib',  label:'External / library',  sec:'Other',       color:color('external'), match:n=>n.type==='external'&&!n.data.flowableApi&&!n.data.route}
-      ].forEach(c=>{ const count=byType.external.filter(c.match).length; if(count) cats.push(Object.assign({count}, c)); });
-    } else {
-      const m = TM[t]||[t,'Other'];
-      cats.push({id:t,label:m[0],sec:m[1],color:color(t),count:byType[t].length,match:n=>n.type===t});
-    }
-  });
-  // a review list: forms that nothing links to (orphaned UI models worth pruning)
-  const unusedForms = nodes.filter(isUnusedForm);
-  if(unusedForms.length) cats.push({id:'unused-form', label:'Forms · unused', sec:'Models',
-    color:color('form'), count:unusedForms.length, match:isUnusedForm});
-  // a review list: expressions/bindings the validator flagged (structural errors + semantic warnings)
-  const hasProblem = n => (n.type==='expression'||n.type==='binding') && (n.data.problems||[]).length;
-  const invalidExprs = nodes.filter(hasProblem);
-  if(invalidExprs.length) cats.push({id:'invalid-expr', label:'Invalid / suspect ⚠', sec:'Expressions',
-    color:color('invalidExpr'), count:invalidExprs.length, match:hasProblem});
-  cats.sort((a,b)=> (SECTIONS.indexOf(a.sec)-SECTIONS.indexOf(b.sec)) || a.label.localeCompare(b.label));
-  return cats;
+# The explorer frontend lives in frontend/{explorer.html,explorer.css,explorer.js} — edit those
+# files, then run `python3 tools/embed_frontend.py` to refresh the embedded copies below (a
+# single-file copy of this script has no frontend/ directory next to it). tests/test_embed.py
+# fails when the two drift apart.
+# --- BEGIN GENERATED FRONTEND (tools/embed_frontend.py) ---
+_EMBEDDED_FRONTEND = {
+    'explorer.html': '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>Flowable Atlas</title>\n<style>\n/*__ATLAS_CSS__*/</style>\n</head>\n<body>\n<header>\n  <div class="brand"><div class="mark">Flowable&nbsp;<b>Atlas</b></div><div class="proj mono" id="proj"></div></div>\n  <div class="search">\n    <span class="ic" aria-hidden="true">⌕</span>\n    <input id="q" placeholder="Search everything — keys, files, classes, groups…" autocomplete="off"\n           role="combobox" aria-expanded="false" aria-controls="results" aria-autocomplete="list" aria-label="Search all nodes">\n    <span class="hint" aria-hidden="true">/</span>\n    <div class="results" id="results" role="listbox" aria-label="Search results"></div>\n  </div>\n  <div class="stats" id="stats"></div>\n  <button id="themebtn" class="tbtn" aria-label="Switch color theme"></button>\n  <div class="diagpanel" id="diagpanel"></div>\n</header>\n<div class="layout">\n  <div class="col"><nav class="rail" id="rail" aria-label="Categories"></nav></div>\n  <div class="col"><div id="list"></div></div>\n  <main class="col detail" id="detail" aria-label="Node details"></main>\n</div>\n<script type="application/json" id="atlas-data">__ATLAS_DATA__</script>\n<script>\n/*__ATLAS_JS__*/</script>\n</body>\n</html>\n',
+    'explorer.css': '  /* ------------------------------------------------------------------ */\n  /* Theme tokens. Dark is the default; the light palette overrides via  */\n  /* [data-theme=light], which boot-JS resolves from the OS preference   */\n  /* (prefers-color-scheme) or the user\'s toggle (persisted).            */\n  /* ------------------------------------------------------------------ */\n  :root{\n    --bg:#0a0c0f; --panel:#101418; --panel2:#0d1115; --line:#1d242c; --line2:#2a333d;\n    --ink:#e7edf3; --ink-dim:#9aa7b4; --ink-faint:#66727f; --accent:#34e0c0;\n    --hover:#141a20; --active:#15202a; --input:#0a0e12;\n    --glass:rgba(10,12,15,.82); --scroll:#222b34; --scroll-hover:#2f3a45;\n    --grid-line:rgba(255,255,255,.018); --glow:rgba(52,224,192,.06);\n    --shadow:rgba(0,0,0,.5); --focus:rgba(52,224,192,.12);\n    --mono:"SFMono-Regular",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;\n    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,sans-serif;\n    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;\n    --c-app:#e6edf3;--c-process:#34e0c0;--c-case:#4cc9f0;--c-decision:#b694ff;\n    --c-form:#f4b942;--c-page:#e89b3b;--c-dataObject:#ff7a93;--c-dataDictionary:#ff9eb0;\n    --c-service:#5b9cff;--c-agent:#ff6fd8;--c-channel:#9be15d;--c-event:#ff9f45;\n    --c-endpoint:#56c2d6;--c-java:#b8c0cc;--c-query:#8aa0b4;--c-template:#c9a26b;\n    --c-sequence:#8aa0b4;--c-action:#6fe0a8;--c-document:#8aa0b4;--c-variableExtractor:#8aa0b4;\n    --c-securityPolicy:#ffb3c0;--c-group:#d8b75a;--c-external:#6b7480;--c-masterData:#ff7a93;\n    --c-knowledgeBase:#b694ff;--c-sla:#c9a26b;--c-dashboardComponent:#6fe0a8;\n    --c-bot:#ff6fd8;--c-liquibase:#7aa0ff;--c-expression:#b08cff;--c-binding:#5fd0e0;\n    --c-variable:#ffd27f;--c-string:#9ad07a;--c-method:#9fb8ff;\n    --c-invalidExpr:#ff6b6b;--c-suspectExpr:#e0b34a;\n    --cov-good:#9ad07a;--cov-warn:#f4b942;--cov-bad:#ff7a93;--cov-info:#5b9cff;--cov-miss:#ff9aab;\n  }\n  :root[data-theme=light]{\n    --bg:#f2f4f7; --panel:#ffffff; --panel2:#e9edf2; --line:#dbe1e8; --line2:#c4cdd7;\n    --ink:#182230; --ink-dim:#46566a; --ink-faint:#718093; --accent:#0c8f77;\n    --hover:#eaeef3; --active:#dff0ea; --input:#f7f9fb;\n    --glass:rgba(245,247,250,.85); --scroll:#c6cfd9; --scroll-hover:#aeb9c6;\n    --grid-line:rgba(16,32,48,.035); --glow:rgba(12,143,119,.05);\n    --shadow:rgba(30,45,60,.22); --focus:rgba(12,143,119,.15);\n    --c-app:#33465c;--c-process:#0c8f77;--c-case:#0e7fae;--c-decision:#7a4fd8;\n    --c-form:#a87508;--c-page:#a8650f;--c-dataObject:#d23b5e;--c-dataDictionary:#bb566f;\n    --c-service:#2f66c8;--c-agent:#b52f96;--c-channel:#4d8f1f;--c-event:#bd6412;\n    --c-endpoint:#1f7f8f;--c-java:#5a6b80;--c-query:#647a8e;--c-template:#8f6b32;\n    --c-sequence:#647a8e;--c-action:#1f9a5e;--c-document:#647a8e;--c-variableExtractor:#647a8e;\n    --c-securityPolicy:#c04a64;--c-group:#8f7a1e;--c-external:#75808d;--c-masterData:#d23b5e;\n    --c-knowledgeBase:#7a4fd8;--c-sla:#8f6b32;--c-dashboardComponent:#1f9a5e;\n    --c-bot:#b52f96;--c-liquibase:#3b5fd0;--c-expression:#7a56d6;--c-binding:#1f87a0;\n    --c-variable:#a26f0d;--c-string:#4d8f1f;--c-method:#4c68c0;\n    --c-invalidExpr:#d43b4f;--c-suspectExpr:#a87b12;\n    --cov-good:#3d8f2f;--cov-warn:#a87b12;--cov-bad:#d23b5e;--cov-info:#2f66c8;--cov-miss:#d23b5e;\n  }\n  *{box-sizing:border-box}\n  html,body{height:100%;margin:0}\n  body{\n    background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:13px;\n    background-image:\n      radial-gradient(1200px 600px at 80% -10%, var(--glow), transparent 60%),\n      linear-gradient(var(--grid-line) 1px, transparent 1px),\n      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);\n    background-size:auto, 32px 32px, 32px 32px;\n  }\n  ::-webkit-scrollbar{width:10px;height:10px}\n  ::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:6px;border:2px solid var(--bg)}\n  ::-webkit-scrollbar-thumb:hover{background:var(--scroll-hover)}\n  .mono{font-family:var(--mono)}\n  a{color:inherit}\n  :focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-radius:4px}\n\n  header{\n    position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:18px;\n    padding:0 18px;height:54px;border-bottom:1px solid var(--line);\n    background:var(--glass);backdrop-filter:blur(10px);\n  }\n  .brand{display:flex;align-items:baseline;gap:10px;white-space:nowrap}\n  .brand .mark{font-family:var(--serif);font-size:20px;letter-spacing:.04em;color:var(--ink)}\n  .brand .mark b{color:var(--accent);font-weight:600}\n  .brand .proj{font-family:var(--mono);font-size:11px;color:var(--ink-dim);\n    border:1px solid var(--line2);padding:2px 8px;border-radius:999px}\n  .search{flex:1;position:relative;max-width:520px;margin:0 auto}\n  .search input{\n    width:100%;background:var(--panel2);border:1px solid var(--line2);color:var(--ink);\n    font-family:var(--mono);font-size:12px;padding:8px 12px 8px 32px;border-radius:8px;outline:none}\n  .search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--focus)}\n  .search .ic{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--ink-faint)}\n  .search .hint{position:absolute;right:10px;top:50%;transform:translateY(-50%);\n    color:var(--ink-faint);font-family:var(--mono);font-size:10px;border:1px solid var(--line2);\n    border-radius:4px;padding:1px 5px}\n  .results{position:absolute;top:42px;left:0;right:0;background:var(--panel);\n    border:1px solid var(--line2);border-radius:8px;max-height:60vh;overflow:auto;\n    box-shadow:0 16px 50px var(--shadow);display:none}\n  .results.on{display:block}\n  .results .r{display:flex;align-items:center;gap:9px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--line)}\n  .results .r:hover,.results .r.sel{background:var(--hover)}\n  .stats{display:flex;gap:14px;color:var(--ink-dim);font-family:var(--mono);font-size:11px;white-space:nowrap;align-items:center}\n  .stats b{color:var(--ink)}\n  .tbtn{background:var(--panel);border:1px solid var(--line2);color:var(--ink-dim);cursor:pointer;\n    border-radius:6px;padding:3px 8px;font-size:12px;line-height:1}\n  .tbtn:hover{color:var(--ink);border-color:var(--accent)}\n  #diagbtn{color:var(--c-suspectExpr);cursor:pointer;border:1px solid transparent;border-radius:6px;padding:2px 6px}\n  #diagbtn:hover{border-color:var(--c-suspectExpr)}\n  .diagpanel{display:none;position:absolute;top:52px;right:18px;width:min(560px,90vw);max-height:50vh;overflow:auto;\n    background:var(--panel);border:1px solid var(--line2);border-radius:10px;box-shadow:0 18px 40px var(--shadow);z-index:60}\n  .diagpanel.on{display:block}\n  .dp-head{padding:10px 12px;color:var(--ink-dim);font-size:11px;border-bottom:1px solid var(--line)}\n  .dp-row{display:flex;gap:10px;align-items:baseline;padding:8px 12px;border-bottom:1px solid var(--line);font-size:11px}\n  .dp-kind{color:var(--c-suspectExpr);font-family:var(--mono);flex:none}\n  .dp-path{color:var(--ink);flex:none;max-width:40%;overflow:hidden;text-overflow:ellipsis}\n  .dp-msg{color:var(--ink-dim)}\n\n  .layout{display:grid;grid-template-columns:230px 330px 1fr;height:calc(100vh - 54px)}\n  .col{overflow:auto;border-right:1px solid var(--line)}\n  .col.detail{border-right:none}\n\n  /* left rail */\n  .rail{padding:14px 8px}\n  .rail .sec{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;\n    color:var(--ink-faint);padding:14px 12px 6px}\n  .cat{display:flex;align-items:center;gap:9px;padding:6px 12px;border-radius:7px;cursor:pointer;color:var(--ink-dim)}\n  .cat:hover{background:var(--hover);color:var(--ink)}\n  .cat.on{background:var(--active);color:var(--ink)}\n  .cat.on .dot{box-shadow:0 0 0 3px var(--focus)}\n  .cat .lbl{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}\n  .cat .n{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}\n  .dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--ink-faint)}\n\n  /* list column */\n  .listhead{position:sticky;top:0;background:var(--panel2);border-bottom:1px solid var(--line);padding:10px;z-index:5}\n  .listhead .t{font-family:var(--mono);font-size:11px;color:var(--ink-dim);margin-bottom:8px;display:flex;justify-content:space-between}\n  .listhead input{width:100%;background:var(--input);border:1px solid var(--line2);color:var(--ink);\n    font-family:var(--mono);font-size:12px;padding:6px 9px;border-radius:6px;outline:none}\n  .listhead input:focus{border-color:var(--accent)}\n  .item{display:flex;align-items:flex-start;gap:9px;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--line);\n    animation:rise .25s ease both}\n  .item:hover{background:var(--hover)}\n  .item.on{background:var(--active);box-shadow:inset 3px 0 0 var(--accent)}\n  .item .meta{min-width:0}\n  .item .nm{color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}\n  .item .sub{font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}\n  .sentinel{height:1px}\n  @keyframes rise{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}\n  @media (prefers-reduced-motion: reduce){ .item{animation:none} }\n\n  /* detail */\n  .detail{padding:0}\n  .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--ink-faint);gap:10px;text-align:center}\n  .empty .big{font-family:var(--serif);font-size:30px;color:var(--ink-dim)}\n  .crumbs{position:sticky;top:0;background:var(--glass);backdrop-filter:blur(8px);\n    border-bottom:1px solid var(--line);padding:8px 18px;display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;z-index:6}\n  .crumbs button{background:var(--panel);border:1px solid var(--line2);color:var(--ink-dim);\n    border-radius:6px;padding:3px 9px;cursor:pointer;font-family:var(--mono);font-size:11px}\n  .crumbs button:hover{color:var(--ink);border-color:var(--accent)}\n  .crumbs .trail{color:var(--ink-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n  .crumbs #permalink{margin-left:auto;flex:none}\n  .dbody{padding:22px 26px;max-width:1000px}\n  .chip{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;\n    border:1px solid var(--line2);border-radius:999px;padding:2px 9px;color:var(--ink-dim)}\n  .dtitle{font-family:var(--serif);font-size:30px;line-height:1.15;margin:12px 0 4px}\n  .dkey{font-family:var(--mono);font-size:12px;color:var(--accent)}\n  .dfile{font-family:var(--mono);font-size:11px;color:var(--ink-faint);margin-top:6px;cursor:copy}\n  .dfile:hover{color:var(--ink-dim)}\n  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1px;\n    background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:18px 0}\n  .cell{background:var(--panel);padding:10px 12px}\n  .cell .k{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}\n  .cell .v{margin-top:3px;color:var(--ink);word-break:break-word}\n  .cell .v.mono{font-family:var(--mono);font-size:11.5px}\n  h3.rel{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;\n    color:var(--ink-dim);margin:24px 0 10px;display:flex;align-items:center;gap:8px}\n  h3.rel:before{content:"";flex:none;width:14px;height:1px;background:var(--line2)}\n  .relgrp{margin:0 0 14px}\n  .relgrp .lab{font-family:var(--mono);font-size:11px;color:var(--ink-faint);margin:0 0 6px}\n  .nodechips{display:flex;flex-wrap:wrap;gap:7px}\n  .nc{display:inline-flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line2);\n    border-radius:8px;padding:5px 10px;cursor:pointer;max-width:380px}\n  .nc:hover{border-color:var(--accent);background:var(--hover);transform:translateY(-1px)}\n  .nc .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}\n  .nc .ty{font-family:var(--mono);font-size:9.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em}\n  .oplist{border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:8px 0}\n  details.uses{border:1px solid var(--line);border-radius:8px;margin:6px 0;background:var(--panel)}\n  details.uses>summary{cursor:pointer;padding:8px 12px;font-family:var(--mono);font-size:11px;color:var(--ink-dim);list-style:none}\n  details.uses>summary::-webkit-details-marker{display:none}\n  details.uses>summary:before{content:"▸ ";color:var(--ink-faint)}\n  details.uses[open]>summary:before{content:"▾ "}\n  details.uses>summary:hover{color:var(--ink)}\n  details.uses[open]>summary{border-bottom:1px solid var(--line);color:var(--ink)}\n  details.uses .nodechips{padding:10px 12px}\n  .oprow{display:flex;gap:10px;padding:7px 12px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:11.5px}\n  .oprow:last-child{border-bottom:none}\n  .verb{font-weight:600;min-width:48px}\n  .tag{font-family:var(--mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;\n    border:1px solid var(--line2);border-radius:4px;padding:1px 6px;color:var(--ink-dim)}\n  .muted{color:var(--ink-faint)}\n\n  /* schema coverage (Liquibase -> service -> data object) */\n  .covmeta{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-family:var(--mono);\n    font-size:11px;color:var(--ink-dim);margin:8px 0}\n  .covbadges{margin:6px 0 4px}\n  .cov-badge{display:inline-block;font-family:var(--mono);font-size:10px;border-radius:999px;\n    padding:2px 9px;margin:0 6px 6px 0;border:1px solid var(--line2);color:var(--ink-dim)}\n  .cov-badge.cov-bad{color:var(--cov-bad);border-color:var(--cov-bad)}\n  .cov-badge.cov-warn{color:var(--cov-warn);border-color:var(--cov-warn)}\n  .cov-badge.cov-info{color:var(--cov-info);border-color:var(--cov-info)}\n  .cov-badge.cov-good{color:var(--cov-good);border-color:var(--cov-good)}\n  .authb{display:inline-block;font-family:var(--mono);font-size:9px;letter-spacing:.04em;text-transform:uppercase;\n    border-radius:999px;padding:1px 7px;margin-left:7px;border:1px solid var(--line2);vertical-align:middle}\n  .authb-live{color:var(--cov-good);border-color:var(--cov-good)}\n  .authb-old{color:var(--cov-warn);border-color:var(--cov-warn)}\n  .authb-orphan{color:var(--cov-bad);border-color:var(--cov-bad)}\n  .authnote{font-size:11.5px;line-height:1.5;border-radius:8px;padding:8px 11px;margin:10px 0;border:1px solid var(--line2)}\n  .authnote-old{color:var(--cov-warn);background:rgba(244,185,66,.07);border-color:var(--cov-warn)}\n  .authnote-orphan{color:var(--cov-bad);background:rgba(255,122,147,.07);border-color:var(--cov-bad)}\n  .authnote .nc{margin-top:4px}\n  .covwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;margin:8px 0}\n  table.cov{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:11.5px}\n  table.cov th{text-align:left;font-weight:500;color:var(--ink-faint);background:var(--panel2);\n    padding:7px 11px;border-bottom:1px solid var(--line2);font-size:10px;\n    letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}\n  table.cov td{padding:6px 11px;border-bottom:1px solid var(--line);vertical-align:top}\n  table.cov tr:last-child td{border-bottom:none}\n  table.cov tr.cov-bad td{background:rgba(255,122,147,.08)}\n  table.cov tr.cov-warn td{background:rgba(244,185,66,.07)}\n  table.cov tr.cov-info td{background:rgba(91,156,255,.06)}\n  table.cov .miss{color:var(--cov-miss)}\n  table.cov .arrow{color:var(--ink-faint)}\n  .covlegend{display:flex;flex-wrap:wrap;gap:14px;font-size:10.5px;color:var(--ink-faint);margin:4px 0 8px}\n  .covlegend span{display:inline-flex;align-items:center;gap:5px}\n  .covdot{display:inline-block;width:7px;height:7px;border-radius:50%;flex:none}\n  .oprow.cov-bad{box-shadow:inset 3px 0 0 var(--cov-bad)}\n  .oprow.cov-warn{box-shadow:inset 3px 0 0 var(--cov-warn)}\n\n  /* operations — each collapsible, params reveal as a single-column list */\n  details.op,.op.flat{border:1px solid var(--line);border-radius:8px;margin:6px 0;\n    background:var(--panel);overflow:hidden}\n  details.op>summary,.op.flat{display:flex;align-items:center;gap:10px;padding:8px 12px;\n    font-family:var(--mono);font-size:11.5px;color:var(--ink)}\n  details.op>summary{cursor:pointer;list-style:none}\n  details.op>summary::-webkit-details-marker{display:none}\n  details.op>summary:before{content:"▸";color:var(--ink-faint);flex:none;font-size:10px}\n  details.op[open]>summary:before{content:"▾"}\n  .op.flat:before{content:"·";color:var(--ink-faint);flex:none;font-size:10px}\n  details.op>summary:hover{background:var(--hover)}\n  details.op[open]>summary{border-bottom:1px solid var(--line)}\n  .opname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n  .opcount{margin-left:auto;flex:none;color:var(--ink-faint);font-size:10px;\n    border:1px solid var(--line2);border-radius:999px;padding:1px 8px}\n  .opkey{flex:none;color:var(--ink-faint)}\n  .parmgrid{display:grid;grid-template-columns:1fr;gap:1px;background:var(--line)}\n  .parmgrid .pc{display:flex;justify-content:space-between;align-items:baseline;gap:10px;\n    background:var(--panel);padding:5px 12px;min-width:0;font-family:var(--mono);font-size:11.5px}\n  .parmgrid .pn{color:var(--ink-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n  .parmgrid .pt{color:var(--ink-faint);flex:none}\n\n  /* ------------------------------------------------------------------ */\n  /* Responsive: ≤1100px the rail collapses to dot-only chips (tooltips  */\n  /* carry the labels); ≤800px the columns stack and the page scrolls.   */\n  /* ------------------------------------------------------------------ */\n  @media (max-width:1100px){\n    .layout{grid-template-columns:56px 280px 1fr}\n    .rail{padding:14px 4px}\n    .rail .sec{padding:10px 0 2px;text-align:center;letter-spacing:0;overflow:hidden;white-space:nowrap}\n    .cat{justify-content:center;padding:8px 6px}\n    .cat .lbl,.cat .n{display:none}\n    .brand .proj{display:none}\n    .stats>span{display:none}\n    .stats>#diagbtn{display:inline}\n  }\n  @media (max-width:800px){\n    html,body{height:auto}\n    header{flex-wrap:wrap;height:auto;min-height:54px;padding:8px 12px;gap:10px}\n    .search{order:3;flex-basis:100%;max-width:none;margin:0}\n    .layout{display:flex;flex-direction:column;height:auto}\n    .col{border-right:none;border-bottom:1px solid var(--line);max-height:42vh}\n    .col.detail{max-height:none;border-bottom:none}\n    .rail{display:flex;flex-wrap:wrap;gap:2px;padding:8px}\n    .rail .sec{display:none}\n    .cat{padding:6px 10px}\n    .cat .lbl,.cat .n{display:inline}\n    .dbody{padding:16px 14px}\n  }\n',
+    'explorer.js': '// Data arrives as a JSON island (<script type="application/json" id="atlas-data">):\n// JSON.parse is faster than a JS literal for large payloads and needs no JS escaping.\nconst DATA = JSON.parse(document.getElementById(\'atlas-data\').textContent);\nconst nodes = DATA.nodes, edges = DATA.edges;\nconst byId = new Map(nodes.map(n => [n.id, n]));\nconst TM = {\n  app:[\'Apps\',\'Models\'],process:[\'Processes\',\'Models\'],case:[\'Cases\',\'Models\'],\n  decision:[\'Decisions\',\'Models\'],form:[\'Forms\',\'Models\'],page:[\'Pages\',\'Models\'],\n  dataObject:[\'Data objects\',\'Models\'],dataDictionary:[\'Data dictionaries\',\'Models\'],\n  masterData:[\'Master data\',\'Models\'],\n  service:[\'Service models\',\'Integration\'],agent:[\'Agents / bots\',\'Integration\'],\n  channel:[\'Channels\',\'Integration\'],event:[\'Events\',\'Integration\'],knowledgeBase:[\'Knowledge bases\',\'Integration\'],\n  endpoint:[\'REST endpoints\',\'Code\'],java:[\'Java classes\',\'Code\'],method:[\'Java methods\',\'Code\'],liquibase:[\'Liquibase changelogs\',\'Code\'],\n  action:[\'Actions\',\'Integration\'],bot:[\'Bots\',\'Integration\'],\n  query:[\'Queries\',\'Other\'],template:[\'Templates\',\'Other\'],sequence:[\'Sequences\',\'Other\'],\n  document:[\'Documents\',\'Other\'],variableExtractor:[\'Variable extractors\',\'Other\'],\n  sla:[\'SLAs\',\'Other\'],dashboardComponent:[\'Dashboard widgets\',\'Other\'],\n  securityPolicy:[\'Security policies\',\'Access\'],group:[\'User groups\',\'Access\'],\n  variable:[\'Variables\',\'Variables\'],\n  expression:[\'Backend expressions ${ }\',\'Expressions\'],binding:[\'Frontend bindings {{ }}\',\'Expressions\'],\n  string:[\'String literals\',\'Expressions\'],\n  external:[\'External / library\',\'Other\'],\n};\nconst SECTIONS = [\'Models\',\'Integration\',\'Code\',\'Expressions\',\'Variables\',\'Access\',\'Other\'];\n// Colors are emitted as var() references, not resolved values: the browser resolves them\n// at paint time, so a theme switch restyles everything without any re-render (and there is\n// no getComputedStyle per node, which used to force a style recalculation in large lists).\nconst color = t => \'var(--c-\'+t+\', #8aa0b4)\';\nconst covColor = k => \'var(--cov-\'+k+\', #8aa0b4)\';\nconst debounce = (fn,ms) => { let t; return function(){ clearTimeout(t); t=setTimeout(()=>fn.apply(this,arguments),ms); }; };\nconst looseCol = s => String(s==null?\'\':s).toLowerCase().replace(/[^a-z0-9]/g,\'\');\n// external nodes split into Flowable API / navigation routes / real third-party deps.\nconst nodeColor = n => (n && n.type===\'external\')\n  ? (n.data&&n.data.flowableApi?color(\'endpoint\'):n.data&&n.data.route?color(\'page\'):color(\'external\'))\n  : color(n?n.type:\'\');\nconst nodeKind = n => (n.type!==\'external\')\n  ? (TM[n.type]?TM[n.type][0]:n.type)\n  : (n.data.flowableApi?\'Flowable API\':n.data.route?\'Navigation route\':\'External / library\');\n\n// adjacency\nconst outM = new Map(), incM = new Map();\nconst push = (m,k,v)=>{ if(!m.has(k)) m.set(k,[]); m.get(k).push(v); };\nedges.forEach(e=>{ push(outM,e.s,{rel:e.rel,id:e.t}); push(incM,e.t,{rel:e.rel,id:e.s}); });\n\n// bean name -> java node id (for direct links from ${bean.method()} expressions)\nconst beanToNode = new Map();\nnodes.filter(n=>n.type===\'java\').forEach(n=>{\n  (n.data.beanNames||[]).forEach(b=>beanToNode.set(b,n.id));\n  const dc=n.label.charAt(0).toLowerCase()+n.label.slice(1);\n  if(!beanToNode.has(dc)) beanToNode.set(dc,n.id);\n});\n\n// a form is "unused / unlinked" when nothing functionally references it — i.e. it\n// has no incoming edge other than app \'contains\' membership (every form sits in an\n// app, so that edge alone does not count as being used).\nconst isUnusedForm = n => n.type===\'form\' && !(incM.get(n.id)||[]).some(e=>e.rel!==\'contains\');\n\n// state — navigation history lives in the URL hash (browser back/forward just works);\n// `trail` only remembers recently visited labels for the breadcrumb display.\nlet state = {cat:null, sel:null, trail:[], filter:\'\'};\n\n// ---------- categories ----------\nfunction categories(){\n  const byType = {};\n  nodes.forEach(n => (byType[n.type] = byType[n.type]||[]).push(n));\n  const cats = [];\n  Object.keys(byType).forEach(t=>{\n    if(t===\'java\'){\n      const roles = {};\n      byType.java.forEach(n=>(n.data.roles||[]).forEach(r=>roles[r]=(roles[r]||0)+1));\n      Object.keys(roles).sort().forEach(r=>cats.push({\n        id:\'java::\'+r, label:\'Java · \'+r, sec:\'Code\', color:color(\'java\'), count:roles[r],\n        match:n=>n.type===\'java\' && (n.data.roles||[]).includes(r)}));\n    } else if(t===\'variable\'){\n      // group variables by the model type(s) that use them (process / form / case / java …)\n      const scopes = {};\n      byType.variable.forEach(n=>(n.data.scopes||[]).forEach(s=>scopes[s]=(scopes[s]||0)+1));\n      Object.keys(scopes).sort().forEach(s=>cats.push({\n        id:\'variable::\'+s, label:\'Variable · \'+s, sec:\'Variables\',\n        color:color(\'variable\'), count:scopes[s], match:n=>n.type===\'variable\' && (n.data.scopes||[]).includes(s)}));\n    } else if(t===\'external\'){\n      // external nodes are not all "library": split out Flowable platform API calls\n      // (endpoints.*) and in-app navigation routes (#/...) from real third-party deps.\n      [{id:\'external::api\',  label:\'Flowable API\',        sec:\'Integration\', color:color(\'endpoint\'), match:n=>n.type===\'external\'&&n.data.flowableApi},\n       {id:\'external::route\',label:\'Navigation · routes\', sec:\'Other\',       color:color(\'page\'),     match:n=>n.type===\'external\'&&n.data.route},\n       {id:\'external::lib\',  label:\'External / library\',  sec:\'Other\',       color:color(\'external\'), match:n=>n.type===\'external\'&&!n.data.flowableApi&&!n.data.route}\n      ].forEach(c=>{ const count=byType.external.filter(c.match).length; if(count) cats.push(Object.assign({count}, c)); });\n    } else {\n      const m = TM[t]||[t,\'Other\'];\n      cats.push({id:t,label:m[0],sec:m[1],color:color(t),count:byType[t].length,match:n=>n.type===t});\n    }\n  });\n  // a review list: forms that nothing links to (orphaned UI models worth pruning)\n  const unusedForms = nodes.filter(isUnusedForm);\n  if(unusedForms.length) cats.push({id:\'unused-form\', label:\'Forms · unused\', sec:\'Models\',\n    color:color(\'form\'), count:unusedForms.length, match:isUnusedForm});\n  // Review lists for flagged expressions/bindings. Structural syntax errors make an\n  // expression *invalid*; catalog findings (unknown function/namespace — the catalog may\n  // simply not know a project-registered function) only make it *suspect*.\n  const isExprN = n => n.type===\'expression\'||n.type===\'binding\';\n  const hasErr = n => isExprN(n) && (n.data.problems||[]).some(p=>p.severity===\'error\');\n  const hasWarnOnly = n => isExprN(n) && (n.data.problems||[]).length && !(n.data.problems||[]).some(p=>p.severity===\'error\');\n  const invalidExprs = nodes.filter(hasErr);\n  if(invalidExprs.length) cats.push({id:\'invalid-expr\', label:\'Invalid — syntax ⚠\', sec:\'Expressions\',\n    color:color(\'invalidExpr\'), count:invalidExprs.length, match:hasErr});\n  const suspectExprs = nodes.filter(hasWarnOnly);\n  if(suspectExprs.length) cats.push({id:\'suspect-expr\', label:\'Suspect — review\', sec:\'Expressions\',\n    color:color(\'suspectExpr\'), count:suspectExprs.length, match:hasWarnOnly});\n  cats.sort((a,b)=> (SECTIONS.indexOf(a.sec)-SECTIONS.indexOf(b.sec)) || a.label.localeCompare(b.label));\n  return cats;\n}\nconst CATS = categories();\n\nfunction renderRail(){\n  const rail = document.getElementById(\'rail\'); rail.innerHTML=\'\';\n  let cur=\'\';\n  CATS.forEach(c=>{\n    if(c.sec!==cur){ cur=c.sec; const h=document.createElement(\'div\'); h.className=\'sec\'; h.textContent=cur; rail.appendChild(h); }\n    const on = state.cat===c.id;\n    const el=document.createElement(\'div\'); el.className=\'cat\'+(on?\' on\':\'\');\n    el.setAttribute(\'role\',\'button\');\n    el.setAttribute(\'aria-pressed\', on?\'true\':\'false\');\n    el.tabIndex = 0;                              // every category is tabbable; arrows also work\n    el.title = c.label+\' (\'+c.count+\')\';          // label survives the collapsed ≤1100px rail\n    el.innerHTML=\'<span class="dot" style="background:\'+c.color+\'"></span><span class="lbl">\'+esc(c.label)+\'</span><span class="n">\'+c.count+\'</span>\';\n    const activate=()=>{ state.cat=c.id; state.filter=\'\'; renderRail(); renderList(); };\n    el.onclick=activate;\n    el.onkeydown=e=>{\n      if(e.key===\'Enter\'||e.key===\' \'){ e.preventDefault(); activate(); }\n      else if(e.key===\'ArrowDown\'||e.key===\'ArrowUp\'){\n        e.preventDefault();\n        const cats=[...rail.querySelectorAll(\'.cat\')];\n        const i=cats.indexOf(el)+(e.key===\'ArrowDown\'?1:-1);\n        if(cats[i]) cats[i].focus();\n      }\n    };\n    rail.appendChild(el);\n  });\n}\n\nfunction renderList(){\n  const cat = CATS.find(c=>c.id===state.cat);\n  const list = document.getElementById(\'list\'); list.innerHTML=\'\';\n  if(!cat) return;\n  const head=document.createElement(\'div\'); head.className=\'listhead\';\n  head.innerHTML=\'<div class="t"><span>\'+esc(cat.label)+\'</span><span class="muted">\'+cat.count+\'</span></div>\'+\n    \'<input id="lf" placeholder="filter \'+esc(cat.label.toLowerCase())+\'…" aria-label="Filter list">\';\n  list.appendChild(head);\n  const wrap=document.createElement(\'div\'); wrap.id=\'listitems\';\n  wrap.setAttribute(\'role\',\'listbox\');\n  wrap.setAttribute(\'aria-label\',cat.label);\n  list.appendChild(wrap);\n  renderItems(cat, wrap);\n  // The input lives outside the re-rendered items wrap, so typing never loses focus.\n  const lf=document.getElementById(\'lf\'); lf.value=state.filter;\n  lf.oninput=debounce(()=>{ state.filter=lf.value; renderItems(cat, wrap); },120);\n  // Arrow/Enter keyboard navigation over the items (roving focus).\n  wrap.onkeydown=e=>{\n    const els=[...wrap.querySelectorAll(\'.item[data-id]\')];\n    const i=els.indexOf(document.activeElement);\n    if(e.key===\'ArrowDown\'||e.key===\'ArrowUp\'){\n      e.preventDefault();\n      const j=e.key===\'ArrowDown\'?Math.min(i+1,els.length-1):Math.max(i-1,0);\n      if(els[j]) els[j].focus();\n    } else if(e.key===\'Home\'&&els[0]){ e.preventDefault(); els[0].focus(); }\n    else if(e.key===\'End\'&&els[els.length-1]){ e.preventDefault(); els[els.length-1].focus(); }\n    else if((e.key===\'Enter\'||e.key===\' \')&&i>=0){ e.preventDefault(); select(els[i].dataset.id); }\n  };\n}\n\n// Incremental rendering: 200 rows at a time, the IntersectionObserver on a trailing\n// sentinel appends the next chunk when it scrolls into view — every item of a large\n// category is reachable by scrolling (the old hard cap cut off at 600).\nconst LIST_CHUNK=200;\nlet _listIO=null;\nfunction renderItems(cat, wrap){\n  if(_listIO){ _listIO.disconnect(); _listIO=null; }\n  wrap.innerHTML=\'\';\n  let items = nodes.filter(cat.match);\n  const f = state.filter.toLowerCase();\n  if(f) items = items.filter(n => (n.label+\' \'+n.key+\' \'+(n.file||\'\')).toLowerCase().includes(f));\n  items.sort((a,b)=>a.label.localeCompare(b.label));\n  const sentinel=document.createElement(\'div\'); sentinel.className=\'sentinel\';\n  wrap.appendChild(sentinel);\n  let idx=0;\n  function makeItem(n,i){\n    const el=document.createElement(\'div\'); el.className=\'item\'+(state.sel===n.id?\' on\':\'\');\n    el.dataset.id=n.id;\n    el.setAttribute(\'role\',\'option\');\n    el.setAttribute(\'aria-selected\', state.sel===n.id?\'true\':\'false\');\n    el.tabIndex=-1;\n    el.style.animationDelay=Math.min(i*8,300)+\'ms\';\n    el.innerHTML=\'<span class="dot" style="margin-top:5px;background:\'+nodeColor(n)+\'"></span>\'+\n      \'<div class="meta"><div class="nm">\'+esc(n.label)+authBadge(n)+\'</div><div class="sub">\'+esc(n.key)+\'</div></div>\';\n    el.onclick=()=>select(n.id);\n    return el;\n  }\n  function append(){\n    const slice=items.slice(idx, idx+LIST_CHUNK);\n    slice.forEach((n,i)=>wrap.insertBefore(makeItem(n,i), sentinel));\n    if(idx===0 && wrap.querySelector(\'.item\')) wrap.querySelector(\'.item\').tabIndex=0;\n    idx+=slice.length;\n    if(idx>=items.length){ if(_listIO){ _listIO.disconnect(); _listIO=null; } sentinel.remove(); }\n  }\n  _listIO=new IntersectionObserver(es=>{ if(es.some(e=>e.isIntersecting)) append(); },\n                                   {root: wrap.closest(\'.col\'), rootMargin:\'600px\'});\n  _listIO.observe(sentinel);\n  append();\n}\n\n// Selection within the current category only toggles classes — no full list rebuild.\nfunction syncListSelection(){\n  let hit=null;\n  document.querySelectorAll(\'#list .item[data-id]\').forEach(el=>{\n    const on = el.dataset.id===state.sel;\n    el.classList.toggle(\'on\', on);\n    el.setAttribute(\'aria-selected\', on?\'true\':\'false\');\n    if(on) hit=el;\n  });\n  if(hit) hit.scrollIntoView({block:\'nearest\'});\n}\n\n// ---------- detail ----------\nfunction relName(r){ return r; }\nfunction nodeChip(id){\n  const n=byId.get(id); if(!n) return \'\';\n  return \'<span class="nc" data-id="\'+enc(id)+\'" tabindex="0" role="link"><span class="dot" style="background:\'+nodeColor(n)+\'"></span>\'+\n    \'<span class="nm">\'+esc(n.label)+\'</span><span class="ty">\'+esc(nodeKind(n))+\'</span></span>\';\n}\nfunction groupRels(arr){ const g={}; (arr||[]).forEach(x=>{ (g[x.rel]=g[x.rel]||new Set()).add(x.id); }); return g; }\n// Small badge marking a changelog as the live definition of its table vs a superseded/orphan revision.\nfunction authBadge(n){\n  if(n.type!==\'liquibase\') return \'\';\n  const a=(n.data||{}).authority; if(!a||!a.status) return \'\';\n  if(a.status===\'live\'){ const by=(a.referencedBy||[]).join(\', \');\n    return \'<span class="authb authb-live" title="Live / authoritative\'+(by?\' — referenced by \'+esc(by):\'\')+\'">live</span>\'; }\n  if(a.status===\'superseded\'){ const by=(a.supersededBy||[]).join(\', \');\n    return \'<span class="authb authb-old" title="Superseded — the same table is provided by \'+esc(by||\'a referenced changelog\')+\'">superseded</span>\'; }\n  return \'<span class="authb authb-orphan" title="Orphan — not referenced by any service or data object">orphan</span>\';\n}\n\nfunction describe(n){\n  const d=n.data||{}, rows=[];\n  const add=(k,v)=>{ if(v!==undefined&&v!==null&&v!==\'\'&&!(Array.isArray(v)&&!v.length)) rows.push([k,v]); };\n  if(n.type===\'process\'){ add(\'Starter groups\',d.candidateStarterGroups); add(\'User tasks\',(d.userTasks||[]).length);\n    add(\'Service tasks\',(d.serviceTasks||[]).length); add(\'Call activities\',(d.callActivities||[]).length);\n    add(\'Documentation\',d.documentation); }\n  else if(n.type===\'case\'){ add(\'Starter groups\',d.candidateStarterGroups); add(\'Initiator var\',d.initiatorVariableName); add(\'Documentation\',d.documentation); }\n  else if(n.type===\'decision\'){ add(\'Hit policy\',d.hitPolicy); add(\'Rules\',d.ruleCount); add(\'Inputs\',(d.inputs||[]).join(\', \')); add(\'Outputs\',(d.outputs||[]).join(\', \')); }\n  else if(n.type===\'form\'||n.type===\'page\'){ add(\'Fields\',(d.fields||[]).length); add(\'Outcomes\',(d.outcomes||[]).map(o=>o.value).filter(Boolean).join(\', \')); }\n  else if(n.type===\'dataObject\'){ add(\'Type\',d.dataObjectType); add(\'Data source\',d.sourceId); add(\'Backing service\',d.service); add(\'Data dictionary\',d.dictionary); add(\'Columns\',(d.fields||[]).length); }\n  else if(n.type===\'service\'){ add(\'Type\',d.type); add(\'Base URL\',d.baseUrl); add(\'Auth\',d.auth); add(\'Table\',d.tableName); add(\'Liquibase model\',d.referencedLiquibaseModelKey); add(\'Columns\',(d.columns||[]).length); add(\'Operations\',(d.operations||[]).length);\n    if(d.schemaCoverage){ const c=d.schemaCoverage.counts||{}; const g=(c.noService||0)+(c.noDataObject||0); if(g) add(\'Schema gaps\',g+\' of \'+(c.total||0)+\' columns\'); } }\n  else if(n.type===\'agent\'){ add(\'Vendor / model\',(d.aiVendor||\'\')+\' / \'+(d.modelName||\'\')); add(\'Temperature\',d.temperature); add(\'API endpoint\',String(d.enableApiEndpoint)); add(\'Knowledge base\',d.knowledgeBase); }\n  else if(n.type===\'channel\'){ add(\'Direction\',d.channelType); add(\'Type\',d.type); add(\'Topics\',(d.topics||[]).join(\', \')); add(\'Destination\',d.destination); }\n  else if(n.type===\'event\'){ add(\'Payload\',(d.payload||[]).join(\', \')); add(\'Correlation\',(d.correlation||[]).join(\', \')); }\n  else if(n.type===\'java\'){ add(\'Package\',d.package); add(\'Roles\',(d.roles||[]).join(\', \')); add(\'Bot key\',d.botKey); add(\'Implements\',(d.interfaces||[]).join(\', \')); add(\'Methods\',(d.methods||[]).length); add(\'Called from models\',(d.calledMethods||[]).join(\', \')); }\n  else if(n.type===\'endpoint\'){ add(\'Method\',d.http); add(\'Path\',d.path); add(\'Handler\',(d.controller||\'\')+\'#\'+(d.handler||\'\')); }\n  else if(n.type===\'method\'){ add(\'Method\',(d.name||\'\')+\'()\'); add(\'Declared in\',d.class); }\n  else if(n.type===\'query\'){ add(\'Source index\',d.sourceIndex); add(\'Parameters\',(d.parameters||[]).join(\', \')); add(\'Filters by groups\',(d.groups||[]).length); }\n  else if(n.type===\'action\'){ add(\'Bot\',d.botKey); add(\'Form\',d.formKey); add(\'Triggers signal\',d.signalName); add(\'Scope\',d.scopeType); }\n  else if(n.type===\'bot\'){ add(\'Kind\',d.platform?\'Flowable platform bot\':\'project-defined bot\'); }\n  else if(n.type===\'liquibase\'){ const a=d.authority||{};\n    add(\'Status\', a.status===\'live\'?\'live (authoritative)\':a.status===\'superseded\'?\'superseded revision\':a.status===\'orphan\'?\'orphan — unreferenced\':undefined);\n    if((a.referencedBy||[]).length) add(\'Referenced by\',(a.referencedBy||[]).join(\', \'));\n    if((a.supersededBy||[]).length) add(\'Live definition\',(a.supersededBy||[]).join(\', \'));\n    add(\'Tables\',(d.effectiveTables||d.tables||[]).join(\', \')); add(\'Columns\',(d.columns||[]).length); }\n  else if(n.type===\'expression\'||n.type===\'binding\'){ add(\'Used by\', (d.usedBy||[]).length+\' model(s)\');\n    const pr=d.problems||[]; if(pr.length){ const ec=pr.filter(p=>p.severity===\'error\').length, wc=pr.length-ec;\n      add(\'Problems\',[ec?ec+\' error\'+(ec>1?\'s\':\'\'):\'\', wc?wc+\' warning\'+(wc>1?\'s\':\'\'):\'\'].filter(Boolean).join(\', \')); } }\n  else if(n.type===\'variable\'){ add(\'Scope\',(d.scopes||[]).join(\', \')); add(\'Used in\', (d.usages||[]).length+\' model(s)\'); }\n  else if(n.type===\'string\'){ add(\'Used in\', (d.usages||[]).length+\' model(s)\'); }\n  else if(n.type===\'external\'){ add(\'Kind\',d.flowableApi?\'Flowable platform API\':d.route?\'In-app navigation route\':d.platform?\'Flowable platform bean\':(d.external_url?\'External URL\':d.kind||\'external\')); if(d.method&&d.method!==\'(button)\') add(\'Method\',d.method); }\n  else { Object.keys(d).forEach(k=>{ const v=d[k]; if(typeof v===\'string\'||typeof v===\'number\') add(k,v); }); }\n  return rows;\n}\n\nfunction detailExtra(n){\n  const d=n.data||{}; let h=\'\';\n  if(n.type===\'service\' && (d.operations||[]).length){\n    h+=\'<h3 class="rel">Operations (\'+d.operations.length+\')</h3>\'+\n      d.operations.map(o=>{\n        const verb=o.method?\'<span class="verb" style="color:\'+color("endpoint")+\'">\'+esc(o.method)+\'</span>\':\'\';\n        const title=\'<span class="opname">\'+esc(o.fullUrl||o.url||o.name||\'\')+\'</span>\';\n        const key=\'<span class="opkey">\'+esc(o.key||\'\')+\'</span>\';\n        const np=(o.params||[]).length;\n        if(!np) return \'<div class="op flat">\'+verb+title+\'<span class="opcount">no params</span>\'+key+\'</div>\';\n        return \'<details class="op"><summary>\'+verb+title+\n          \'<span class="opcount">\'+np+\' param\'+(np>1?\'s\':\'\')+\'</span>\'+key+\'</summary>\'+\n          \'<div class="parmgrid">\'+o.params.map(p=>\'<div class="pc"><span class="pn">\'+esc(p.name)+\'</span>\'+\n            (p.type?\'<span class="pt">\'+esc(p.type)+\'</span>\':\'\')+\'</div>\').join(\'\')+\'</div></details>\';\n      }).join(\'\');\n  }\n  if(n.type===\'service\' && d.schemaCoverage && (d.schemaCoverage.rows||[]).length){\n    const sc=d.schemaCoverage, ct=sc.counts||{};\n    h+=\'<h3 class="rel">Schema coverage — Liquibase → Service → DataObject</h3>\';\n    // source changelog + backing data objects (clickable)\n    let meta=\'\';\n    if(sc.liquibase){ const lc=nodeChip(\'liquibase:\'+sc.liquibase); if(lc) meta+=\'<span class="muted">changelog</span>\'+lc; }\n    (sc.dataObjects||[]).forEach(k=>{ const dc=nodeChip(\'dataObject:\'+k); if(dc) meta+=dc; });\n    if(meta) h+=\'<div class="covmeta">\'+meta+\'</div>\';\n    // gap summary\n    let badges=\'\';\n    if(ct.noService) badges+=\'<span class="cov-badge cov-bad">\'+ct.noService+\' not mapped in service</span>\';\n    if(ct.noDataObject) badges+=\'<span class="cov-badge cov-warn">\'+ct.noDataObject+\' not in data object</span>\';\n    if(ct.extra) badges+=\'<span class="cov-badge cov-info">\'+ct.extra+\' not in Liquibase</span>\';\n    if(ct.ok) badges+=\'<span class="cov-badge cov-good">\'+ct.ok+\' mapped through</span>\';\n    if(badges) h+=\'<div class="covbadges">\'+badges+\'</div>\';\n    const rowCls={\'no-service\':\'cov-bad\',\'no-dataobject\':\'cov-warn\',\'extra-service\':\'cov-info\',\'ok\':\'\'};\n    const miss=\'<span class="miss">✗ not mapped</span>\';\n    h+=\'<div class="covwrap"><table class="cov"><thead><tr>\'+\n       \'<th>Liquibase column</th><th>Service mapping</th><th>Data object field</th></tr></thead><tbody>\';\n    sc.rows.forEach(r=>{\n      const lbCell = r.inLiquibase\n        ? \'<span>\'+esc(r.sql)+\'</span>\'+(r.sqlType?\' <span class="muted">\'+esc(r.sqlType)+\'</span>\':\'\')\n        : \'<span class="miss">— not in changelog</span>\';\n      const svCell = r.inService\n        ? \'<span>\'+esc(r.service||r.serviceCol||\'\')+\'</span>\'+\n          (r.serviceCol&&looseCol(r.serviceCol)!==looseCol(r.service||\'\')?\' <span class="muted">\'+esc(r.serviceCol)+\'</span>\':\'\')+\n          (r.serviceType?\' <span class="muted">\'+esc(r.serviceType)+\'</span>\':\'\')\n        : miss;\n      const doCell = (r.dataObjects&&r.dataObjects.length)\n        ? r.dataObjects.map(x=>\'<span>\'+esc(x.field)+\'</span>\'+\n            ((sc.dataObjects||[]).length>1?\' <span class="muted">\'+esc(x.do)+\'</span>\':\'\')).join(\', \')\n        : (r.inLiquibase||r.inService?miss:\'\');\n      h+=\'<tr class="\'+(rowCls[r.status]||\'\')+\'"><td>\'+lbCell+\'</td><td>\'+svCell+\'</td><td>\'+doCell+\'</td></tr>\';\n    });\n    h+=\'</tbody></table></div>\';\n  }\n  else if(n.type===\'service\' && (d.columns||[]).length){\n    h+=\'<h3 class="rel">Columns / field mappings (\'+d.columns.length+\')</h3><div class="oplist">\'+\n      d.columns.map(c=>\'<div class="oprow"><span>\'+esc(c.name||\'\')+\'</span>\'+\n        (c.columnName&&c.columnName!==c.name?\'<span class="muted">\'+esc(c.columnName)+\'</span>\':\'\')+\n        (c.type?\'<span class="mono" style="margin-left:auto;color:var(--ink-faint);font-size:10px">\'+esc(c.type)+\'</span>\':\'\')+\n        \'</div>\').join(\'\')+\'</div>\';\n  }\n  if(n.type===\'java\' && (d.endpoints||[]).length){\n    h+=\'<h3 class="rel">Endpoints served</h3><div class="oplist">\'+\n      d.endpoints.map(e=>\'<div class="oprow"><span class="verb" style="color:\'+color("endpoint")+\'">\'+esc(e.http)+\'</span><span>\'+esc(e.path)+\'</span><span class="muted">\'+esc(e.handler)+\'() :\'+e.line+\'</span></div>\').join(\'\')+\'</div>\';\n  }\n  if(n.type===\'java\' && (d.methods||[]).length){\n    const cm=new Set(d.calledMethods||[]);\n    h+=\'<h3 class="rel">Declared methods (\'+d.methods.length+\')</h3><div class="oplist">\'+\n      d.methods.slice(0,80).map(m=>\'<div class="oprow"><span>\'+esc(m.name)+\'(\'+m.params+\')</span><span class="muted">:\'+m.line+(cm.has(m.name)?\'  ◀ called by models\':\'\')+\'</span></div>\').join(\'\')+\'</div>\';\n  }\n  if((n.type===\'process\') && (d.serviceTasks||[]).length){\n    const st=d.serviceTasks.filter(s=>s.class||s.delegateExpression||s.expression||s.type);\n    if(st.length) h+=\'<h3 class="rel">Service tasks</h3><div class="oplist">\'+\n      st.map(s=>\'<div class="oprow"><span class="muted" style="min-width:150px">\'+esc(s.name||s.id)+\'</span>\'+\n        \'<span style="flex:1">\'+esc(s.class||s.delegateExpression||s.expression||s.type||\'\')+\'</span>\'+\n        implLink(s)+\'</div>\').join(\'\')+\'</div>\';\n  }\n  if(n.type===\'dataObject\' && (d.columns||[]).length){\n    h+=\'<h3 class="rel">Columns / field mappings (\'+d.columns.length+\')</h3><div class="oplist">\'+\n      d.columns.map(c=>\'<div class="oprow"><span>\'+esc(c.name)+\'</span><span class="muted">\'+esc(c.label||\'\')+\'</span>\'+\n        (c.type?\'<span class="mono" style="margin-left:auto;color:var(--ink-faint);font-size:10px">\'+esc(c.type)+\'</span>\':\'\')+\n        \'</div>\').join(\'\')+\'</div>\';\n  }\n  if(n.type===\'liquibase\'){\n    const a=d.authority||{};\n    if(a.status===\'superseded\'){ const chips=(a.supersededBy||[]).map(k=>nodeChip(\'liquibase:\'+k)).join(\'\');\n      h+=\'<div class="authnote authnote-old">⚠ Superseded revision — the live definition of <b>\'+esc((d.effectiveTables||[]).join(\', \'))+\'</b> is referenced elsewhere. These columns reflect an older revision of the same table.\'+(chips?\'<div>\'+chips+\'</div>\':\'\')+\'</div>\'; }\n    else if(a.status===\'orphan\'){\n      h+=\'<div class="authnote authnote-orphan">⚠ Orphan changelog — no service or data object references it. It may be dead/legacy or referenced only at runtime.</div>\'; }\n  }\n  if(n.type===\'liquibase\' && (d.columns||[]).length){\n    const cov=d.coverage;                    // present only when a service references this changelog\n    const inS=cov?new Set(cov.service||[]):null, inD=cov?new Set(cov.dataObject||[]):null;\n    const stOf=k=>!inS.has(k)?\'bad\':(!inD.has(k)?\'warn\':\'good\');\n    const stTitle={bad:\'not mapped by any service\',warn:\'mapped in service, but no data object field\',good:\'mapped through to a data object\'};\n    const byT={}; d.columns.forEach(c=>{ (byT[c.table||\'(table)\']=byT[c.table||\'(table)\']||[]).push(c); });\n    h+=\'<h3 class="rel">Columns (\'+d.columns.length+\')\'+(cov?\' — mapping coverage\':\'\')+\'</h3>\';\n    if(cov) h+=\'<div class="covlegend">\'+\n      \'<span><span class="covdot" style="background:\'+covColor(\'bad\')+\'"></span>not in service</span>\'+\n      \'<span><span class="covdot" style="background:\'+covColor(\'warn\')+\'"></span>not in data object</span>\'+\n      \'<span><span class="covdot" style="background:\'+covColor(\'good\')+\'"></span>mapped through</span></div>\';\n    Object.keys(byT).forEach(t=>{\n      h+=\'<div style="margin:6px 0 12px"><div class="muted mono" style="margin-bottom:4px">\'+esc(t)+\'</div><div class="oplist">\'+\n        byT[t].map(c=>{ const st=cov?stOf(looseCol(c.name)):null;\n          return \'<div class="oprow\'+(st===\'bad\'?\' cov-bad\':st===\'warn\'?\' cov-warn\':\'\')+\'">\'+\n          (cov?\'<span class="covdot" title="\'+stTitle[st]+\'" style="background:\'+covColor(st)+\'"></span>\':\'\')+\n          \'<span>\'+esc(c.name)+\'</span>\'+\n          (c.type?\'<span class="mono" style="margin-left:auto;color:var(--ink-faint);font-size:10px">\'+esc(c.type)+\'</span>\':\'\')+\n          \'</div>\'; }).join(\'\')+\'</div></div>\';\n    });\n  }\n  if((n.type===\'expression\'||n.type===\'binding\') && (d.problems||[]).length){\n    h+=\'<h3 class="rel">Problems (\'+d.problems.length+\')</h3><div class="oplist">\'+\n      d.problems.map(p=>{\n        const isErr=p.severity===\'error\';\n        const col=isErr?color(\'invalidExpr\'):color(\'suspectExpr\');\n        const snip=p.snippet||\'\';\n        return \'<div class="oprow"><span class="verb" style="color:\'+col+\'">\'+(isErr?\'error\':\'warning\')+\'</span>\'+\n          \'<span style="flex:1">\'+esc(p.message)+\'</span>\'+\n          (snip?\'<span class="mono" style="color:var(--ink-faint);font-size:10px">\'+esc(snip)+\'</span>\':\'\')+\n          \'</div>\';\n      }).join(\'\')+\'</div>\';\n  }\n  if((n.type===\'expression\'||n.type===\'binding\') && (d.usedBy||[]).length){\n    h+=\'<h3 class="rel">Used by (\'+d.usedBy.length+\')</h3><div class="nodechips">\'+d.usedBy.map(nodeChip).join(\'\')+\'</div>\';\n  }\n  if((n.type===\'variable\'||n.type===\'string\') && (d.usages||[]).length){\n    h+=\'<h3 class="rel">Used in (\'+d.usages.length+\' models) — effective occurrences</h3>\';\n    d.usages.forEach(u=>{\n      h+=\'<div style="margin:6px 0 12px">\'+nodeChip(u.model)+\n         \'<div class="oplist" style="margin-top:5px">\'+\n         (u.snippets||[]).map(s=>\'<div class="oprow"><span class="mono">\'+esc(s)+\'</span></div>\').join(\'\')+\n         \'</div></div>\';\n    });\n  }\n  // Reverse direction: a model lists all the variables/expressions/strings it uses (collapsible).\n  if(d._uses){\n    const ord=[[\'variable\',\'Variables\'],[\'expression\',\'Backend expressions ${ }\'],\n               [\'binding\',\'Frontend bindings {{ }}\'],[\'string\',\'String literals\']];\n    let parts=\'\';\n    ord.forEach(([t,lbl])=>{ const ids=(d._uses||{})[t]; if(ids&&ids.length)\n      parts+=\'<details class="uses"><summary>\'+lbl+\' (\'+ids.length+\')</summary><div class="nodechips">\'+ids.map(nodeChip).join(\'\')+\'</div></details>\'; });\n    if(parts) h+=\'<h3 class="rel">Uses — variables &amp; expressions</h3>\'+parts;\n  }\n  return h;\n}\n\n// ---------- neighborhood graph (ego view: selected node + 1-hop neighbors) ----------\nconst GRAPH_MAX_NEIGHBORS = 26;\nfunction neighborhoodSvg(n){\n  // Collect unique neighbors with direction + relation (a node can appear on both sides).\n  const seen=new Map();\n  (outM.get(n.id)||[]).forEach(e=>{ if(byId.get(e.id)&&!seen.has(e.id)) seen.set(e.id,{id:e.id,rel:e.rel,dir:\'out\'}); });\n  (incM.get(n.id)||[]).forEach(e=>{ if(byId.get(e.id)&&!seen.has(e.id)) seen.set(e.id,{id:e.id,rel:e.rel,dir:\'in\'}); });\n  const all=[...seen.values()];\n  if(!all.length) return \'\';\n  const shown=all.slice(0,GRAPH_MAX_NEIGHBORS);\n  const W=680,H=340,CX=W/2,CY=H/2,RX=CX-130,RY=CY-40;\n  const trunc=(s,len)=>s.length>len?s.slice(0,len-1)+\'…\':s;\n  let g=\'\';\n  shown.forEach((e,i)=>{\n    const nn=byId.get(e.id);\n    const a=-Math.PI/2 + i*2*Math.PI/shown.length;\n    const x=CX+RX*Math.cos(a), y=CY+RY*Math.sin(a);\n    const dash=e.dir===\'in\'?\' stroke-dasharray="4 3"\':\'\';\n    g+=\'<line x1="\'+CX+\'" y1="\'+CY+\'" x2="\'+x.toFixed(1)+\'" y2="\'+y.toFixed(1)+\'" stroke="var(--line2)" stroke-width="1"\'+dash+\'><title>\'+esc(e.rel)+(e.dir===\'in\'?\' (incoming)\':\'\')+\'</title></line>\';\n    const anchor=Math.cos(a)>0.25?\'start\':Math.cos(a)<-0.25?\'end\':\'middle\';\n    const tx=x+(anchor===\'start\'?9:anchor===\'end\'?-9:0), ty=y+(anchor===\'middle\'?(Math.sin(a)>0?16:-10):4);\n    g+=\'<g class="gn" data-id="\'+enc(e.id)+\'" tabindex="0" role="link" style="cursor:pointer">\'+\n       \'<title>\'+esc(nn.label)+\' — \'+esc(e.rel)+\'</title>\'+\n       \'<circle cx="\'+x.toFixed(1)+\'" cy="\'+y.toFixed(1)+\'" r="5" fill="\'+nodeColor(nn)+\'"/>\'+\n       \'<text x="\'+tx.toFixed(1)+\'" y="\'+ty.toFixed(1)+\'" text-anchor="\'+anchor+\'" font-size="10" font-family="var(--mono)" fill="var(--ink-dim)">\'+esc(trunc(nn.label,26))+\'</text></g>\';\n  });\n  // center node on top of the lines\n  g+=\'<circle cx="\'+CX+\'" cy="\'+CY+\'" r="8" fill="\'+nodeColor(n)+\'" stroke="var(--bg)" stroke-width="2"/>\'+\n     \'<text x="\'+CX+\'" y="\'+(CY+22)+\'" text-anchor="middle" font-size="11" font-weight="600" font-family="var(--mono)" fill="var(--ink)">\'+esc(trunc(n.label,32))+\'</text>\';\n  const more=all.length>shown.length?\'<div class="muted" style="font-size:10.5px;margin:2px 0 6px">showing \'+shown.length+\' of \'+all.length+\' neighbors — the full list is below</div>\':\'\';\n  return \'<details class="uses" open><summary>Neighborhood — solid: uses, dashed: used by</summary>\'+\n    \'<div style="padding:4px 10px 8px">\'+more+\n    \'<svg viewBox="0 0 \'+W+\' \'+H+\'" style="width:100%;max-width:820px;display:block" role="img" aria-label="Relationship graph of \'+esc(n.label)+\'">\'+g+\'</svg></div></details>\';\n}\n\n// Resolve a service-task implementation to a clickable Java node chip + method.\nfunction implLink(s){\n  if(s.class){ const id=\'java:\'+s.class; if(byId.get(id)) return jchip(id, s.class); return \'\'; }\n  const ex=s.expression||s.delegateExpression||\'\';\n  const m=ex.match(/[#$]\\{\\s*([A-Za-z_]\\w*)(?:\\s*\\.\\s*([A-Za-z_]\\w*)\\s*\\()?/);\n  if(m){ const id=beanToNode.get(m[1]); if(id) return jchip(id,(byId.get(id).label)+(m[2]?\'.\'+m[2]+\'()\':\'\')); }\n  return \'\';\n}\nfunction jchip(id,label){\n  return \'<span class="nc" data-id="\'+enc(id)+\'" tabindex="0" role="link" style="flex:none"><span class="dot" style="background:\'+color(\'java\')+\'"></span><span class="nm">\'+esc(label)+\'</span></span>\';\n}\n\nfunction renderDetail(){\n  const det=document.getElementById(\'detail\');\n  if(!state.sel || !byId.get(state.sel)){\n    det.innerHTML=\'<div class="empty"><div class="big">Flowable Atlas</div><div>Pick a category on the left, then an item.<br>Click any relationship to travel the graph.</div></div>\';\n    return;\n  }\n  const n=byId.get(state.sel);\n  const out=groupRels(outM.get(n.id)), inc=groupRels(incM.get(n.id));\n  let h=\'\';\n  // crumbs — display only; navigation is the browser history (each select() pushes a hash entry)\n  const trail = state.trail.slice(-4).map(id=>{const x=byId.get(id);return x?esc(x.label):\'\';}).filter(Boolean).join(\' › \');\n  h+=\'<div class="crumbs">\'+(state.trail.length?\'<button id="back">← back</button>\':\'\')+\n     \'<span class="trail">\'+trail+(trail?\' › \':\'\')+\'<b style="color:var(--ink)">\'+esc(n.label)+\'</b></span>\'+\n     \'<button id="permalink" title="Copy a shareable link to this node">🔗 copy link</button></div>\';\n  h+=\'<div class="dbody">\';\n  h+=\'<span class="chip"><span class="dot" style="background:\'+nodeColor(n)+\'"></span>\'+esc(nodeKind(n))+\'</span>\';\n  h+=\'<div class="dtitle">\'+esc(n.label)+authBadge(n)+\'</div>\';\n  h+=\'<div class="dkey mono">\'+esc(n.key)+\'</div>\';\n  if(n.file) h+=\'<div class="dfile" title="click to copy" data-copy="\'+enc(n.file)+\'">\'+esc(n.file)+\'</div>\';\n  const rows=describe(n);\n  if(rows.length){ h+=\'<div class="grid">\'+rows.map(r=>\'<div class="cell"><div class="k">\'+esc(r[0])+\'</div><div class="v mono">\'+esc(String(r[1]))+\'</div></div>\').join(\'\')+\'</div>\'; }\n  h+=neighborhoodSvg(n);\n  h+=detailExtra(n);\n  // outgoing\n  const ok=Object.keys(out).sort();\n  if(ok.length){ h+=\'<h3 class="rel">Uses / references (\'+ok.reduce((a,k)=>a+out[k].size,0)+\')</h3>\';\n    ok.forEach(rel=>{ h+=\'<div class="relgrp"><div class="lab">\'+esc(rel)+\'</div><div class="nodechips">\'+[...out[rel]].map(nodeChip).join(\'\')+\'</div></div>\'; }); }\n  // incoming\n  const ik=Object.keys(inc).sort();\n  if(ik.length){ h+=\'<h3 class="rel">Used by / referenced from (\'+ik.reduce((a,k)=>a+inc[k].size,0)+\')</h3>\';\n    ik.forEach(rel=>{ h+=\'<div class="relgrp"><div class="lab">\'+esc(rel)+\'</div><div class="nodechips">\'+[...inc[rel]].map(nodeChip).join(\'\')+\'</div></div>\'; }); }\n  if(!ok.length && !ik.length) h+=\'<p class="muted" style="margin-top:18px">No relationships recorded for this node.</p>\';\n  h+=\'</div>\';\n  det.innerHTML=h;\n  det.scrollTop=0;\n  const b=document.getElementById(\'back\'); if(b) b.onclick=()=>history.back();\n  const pl=document.getElementById(\'permalink\');\n  if(pl) pl.onclick=()=>{\n    const url=location.href;\n    const done=()=>{ pl.textContent=\'✓ link copied\'; setTimeout(()=>{ pl.textContent=\'🔗 copy link\'; },1500); };\n    if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done,()=>prompt(\'Copy link:\',url));\n    else prompt(\'Copy link:\',url);   // clipboard API is unavailable on file:// in some browsers\n  };\n  det.querySelectorAll(\'.nc, .gn\').forEach(c=>{\n    c.onclick=()=>select(dec(c.dataset.id));\n    c.onkeydown=e=>{ if(e.key===\'Enter\'||e.key===\' \'){ e.preventDefault(); select(dec(c.dataset.id)); } };\n  });\n  const fp=det.querySelector(\'.dfile\'); if(fp) fp.onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(dec(fp.dataset.copy)); fp.textContent=\'✓ copied — \'+dec(fp.dataset.copy); };\n}\n\n// Navigation: select() only moves the URL hash; the hashchange listener renders. That makes\n// the hash the single source of truth — browser back/forward, bookmarks and copied links all\n// go through the same path (the old internal back-stack competed with browser history).\nfunction select(id){\n  if(!byId.get(id)) return;\n  if(state.sel===id) return;\n  if(dec(location.hash.slice(1))===id) applySelection(id);\n  else location.hash=encodeURIComponent(id);\n}\n\nfunction applySelection(id){\n  if(!byId.get(id)) return;\n  if(state.sel && state.sel!==id){ state.trail.push(state.sel); state.trail=state.trail.slice(-8); }\n  state.sel=id;\n  const n=byId.get(id);\n  // Keep the current category if it already contains this node (so clicking within\n  // e.g. "Java · delegate" stays there) — only re-sync when it doesn\'t match.\n  const cur=CATS.find(c=>c.id===state.cat);\n  let catChanged=false;\n  if(!cur || !cur.match(n)){\n    let cat;\n    if(n.type===\'java\'){\n      const prio=[\'controller\',\'delegate\',\'listener\',\'bot\',\'service\',\'repository\',\'configuration\',\'component\',\'other\'];\n      const r=(n.data.roles||[]).slice().sort((a,b)=>prio.indexOf(a)-prio.indexOf(b))[0];\n      cat=CATS.find(c=>c.id===\'java::\'+r);\n    } else if(n.type===\'variable\'){\n      cat=CATS.find(c=>c.id===\'variable::\'+(n.data.scopes||[])[0]);\n    }\n    cat=cat||CATS.find(c=>c.id===n.type);\n    if(cat && cat.id!==state.cat){ state.cat=cat.id; catChanged=true; }\n  }\n  if(catChanged){ renderRail(); renderList(); syncListSelection(); }\n  else syncListSelection();\n  renderDetail();\n}\n\n// ---------- search ----------\nconst q=document.getElementById(\'q\'), results=document.getElementById(\'results\');\nlet resSel=-1, resList=[];\n// search haystack: base identity plus a few type-specific extras. A DataObject\'s\n// fields/columns are not nodes of their own, so without this a field name like\n// \'crewId\' (or its label / type) would never surface its data object.\nfunction searchText(n){\n  const d=n.data||{};\n  let s=n.label+\' \'+n.key+\' \'+(n.file||\'\')+\' \'+n.type;\n  if(n.type===\'dataObject\') s+=\' \'+(d.fields||[]).join(\' \')+\' \'+\n    (d.columns||[]).map(c=>(c.label||\'\')+\' \'+(c.type||\'\')).join(\' \');\n  if(n.type===\'service\') s+=\' \'+(d.columns||[]).map(c=>(c.name||\'\')+\' \'+(c.columnName||\'\')+\' \'+(c.type||\'\')).join(\' \');\n  if(n.type===\'liquibase\') s+=\' \'+(d.columns||[]).map(c=>(c.name||\'\')+\' \'+(c.type||\'\')).join(\' \');\n  return s.toLowerCase();\n}\nfunction doSearch(){\n  const v=q.value.trim().toLowerCase();\n  if(!v){ results.classList.remove(\'on\'); return; }\n  resList = nodes.filter(n=>searchText(n).includes(v))\n                 .sort((a,b)=> a.label.length-b.label.length).slice(0,40);\n  results.innerHTML = resList.map((n,i)=>\'<div class="r\'+(i===resSel?\' sel\':\'\')+\'" id="sr-\'+i+\'" role="option" aria-selected="\'+(i===resSel)+\'" data-id="\'+enc(n.id)+\'">\'+\n    \'<span class="dot" style="background:\'+nodeColor(n)+\'"></span><span class="nm">\'+esc(n.label)+\'</span>\'+\n    \'<span class="ty mono" style="color:var(--ink-faint);font-size:10px">\'+esc(nodeKind(n))+\'</span>\'+\n    \'<span class="mono" style="margin-left:auto;color:var(--ink-faint);font-size:10px">\'+esc(n.key)+\'</span></div>\').join(\'\')\n    || \'<div class="r muted">no matches</div>\';\n  results.classList.add(\'on\');\n  q.setAttribute(\'aria-expanded\',\'true\');\n  if(resSel>=0) q.setAttribute(\'aria-activedescendant\',\'sr-\'+resSel); else q.removeAttribute(\'aria-activedescendant\');\n  results.querySelectorAll(\'.r[data-id]\').forEach(r=>r.onclick=()=>{ select(dec(r.dataset.id)); closeSearch(); });\n}\nfunction closeSearch(){ results.classList.remove(\'on\'); q.setAttribute(\'aria-expanded\',\'false\'); q.removeAttribute(\'aria-activedescendant\'); q.blur(); resSel=-1; }\nq.addEventListener(\'input\',debounce(()=>{ resSel=-1; doSearch(); },120));\nq.addEventListener(\'keydown\',e=>{\n  if(e.key===\'ArrowDown\'){ resSel=Math.min(resSel+1,resList.length-1); doSearch(); e.preventDefault(); }\n  else if(e.key===\'ArrowUp\'){ resSel=Math.max(resSel-1,0); doSearch(); e.preventDefault(); }\n  else if(e.key===\'Enter\' && resList[resSel]){ select(resList[resSel].id); closeSearch(); }\n  else if(e.key===\'Escape\'){ closeSearch(); }\n});\ndocument.addEventListener(\'keydown\',e=>{ if(e.key===\'/\' && document.activeElement!==q){ e.preventDefault(); q.focus(); } });\ndocument.addEventListener(\'click\',e=>{ if(!e.target.closest(\'.search\')) results.classList.remove(\'on\'); });\n\n// ---------- utils ----------\nfunction esc(s){ return String(s==null?\'\':s).replace(/[&<>"]/g,c=>({\'&\':\'&amp;\',\'<\':\'&lt;\',\'>\':\'&gt;\',\'"\':\'&quot;\'}[c])); }\nfunction enc(s){ return encodeURIComponent(s); }\nfunction dec(s){ return decodeURIComponent(s); }\n\n// ---------- theme ----------\n// Preference cycle: auto (follow the OS) → light → dark. JS always resolves the effective\n// theme onto <html data-theme=…>, so the CSS needs only one light-override block; because\n// all node colors are emitted as var() references, a switch restyles without re-rendering.\nfunction themePref(){ let p=null; try{ p=localStorage.getItem(\'atlas-theme\'); }catch(e){} return p||\'auto\'; }\nfunction applyThemePref(){\n  const pref=themePref();\n  const sys=matchMedia(\'(prefers-color-scheme: light)\').matches?\'light\':\'dark\';\n  document.documentElement.dataset.theme = pref===\'auto\'?sys:pref;\n  const b=document.getElementById(\'themebtn\');\n  if(b){ b.textContent = pref===\'auto\'?\'◐\':(pref===\'light\'?\'☀\':\'☾\');\n         b.title=\'Theme: \'+pref+\' — click to switch\'; }\n}\ndocument.getElementById(\'themebtn\').onclick=()=>{\n  const next={auto:\'light\', light:\'dark\', dark:\'auto\'}[themePref()];\n  try{ localStorage.setItem(\'atlas-theme\', next); }catch(e){}   // private mode / file:// quirks\n  applyThemePref();\n};\nmatchMedia(\'(prefers-color-scheme: light)\').addEventListener(\'change\',applyThemePref);\napplyThemePref();\n\n// ---------- diagnostics (parse/read failures of the generator run) ----------\nconst diags=DATA.diagnostics||[];\nfunction renderDiagBadge(){\n  if(!diags.length) return \'\';\n  return \'<span id="diagbtn" title="Files the generator could not fully analyze — the map may be incomplete">⚠ <b>\'+diags.length+\'</b> parse issue\'+(diags.length>1?\'s\':\'\')+\'</span>\';\n}\nfunction toggleDiagPanel(){\n  const p=document.getElementById(\'diagpanel\');\n  if(p.classList.contains(\'on\')){ p.classList.remove(\'on\'); return; }\n  p.innerHTML=\'<div class="dp-head">Files that could not be fully analyzed — their models/relations may be missing from this map.</div>\'+\n    diags.map(d=>\'<div class="dp-row"><span class="dp-kind">\'+esc(d.kind)+\'</span>\'+\n      \'<span class="dp-path mono">\'+esc(d.path)+\'</span>\'+\n      \'<span class="dp-msg">\'+esc(d.message)+\'</span></div>\').join(\'\');\n  p.classList.add(\'on\');\n}\n\n// ---------- boot ----------\ndocument.getElementById(\'proj\').textContent=DATA.project;\nconst st=DATA.stats;\nconst invalidN=nodes.filter(n=>(n.data.problems||[]).some(p=>p.severity===\'error\')).length;\nconst suspectN=nodes.filter(n=>(n.data.problems||[]).length && !(n.data.problems||[]).some(p=>p.severity===\'error\')).length;\ndocument.getElementById(\'stats\').innerHTML=\n  \'<span><b>\'+nodes.length+\'</b> nodes</span><span><b>\'+edges.length+\'</b> links</span>\'+\n  \'<span><b>\'+(st.models||0)+\'</b> models</span><span><b>\'+(st.java||0)+\'</b> java</span><span><b>\'+(st.groups||0)+\'</b> groups</span>\'+\n  (invalidN?\'<span style="color:\'+color(\'invalidExpr\')+\'"><b>\'+invalidN+\'</b> invalid</span>\':\'\')+\n  (suspectN?\'<span style="color:\'+color(\'suspectExpr\')+\'"><b>\'+suspectN+\'</b> suspect</span>\':\'\')+\n  renderDiagBadge();\nconst db=document.getElementById(\'diagbtn\'); if(db) db.onclick=toggleDiagPanel;\ndocument.addEventListener(\'click\',e=>{ const p=document.getElementById(\'diagpanel\');\n  if(p && p.classList.contains(\'on\') && !e.target.closest(\'#diagpanel\') && !e.target.closest(\'#diagbtn\')) p.classList.remove(\'on\'); });\nstate.cat = (CATS.find(c=>c.id===\'process\')||CATS[0]||{}).id;\nrenderRail(); renderList(); renderDetail();\nconst hash=location.hash?decodeURIComponent(location.hash.slice(1)):\'\';\nif(hash && byId.get(hash)) applySelection(hash);\nwindow.addEventListener(\'hashchange\',()=>{ const h=dec(location.hash.slice(1)); if(h&&byId.get(h)&&h!==state.sel) applySelection(h); });\n',
 }
-const CATS = categories();
+# --- END GENERATED FRONTEND ---
 
-function renderRail(){
-  const rail = document.getElementById('rail'); rail.innerHTML='';
-  let cur='';
-  CATS.forEach(c=>{
-    if(c.sec!==cur){ cur=c.sec; const h=document.createElement('div'); h.className='sec'; h.textContent=cur; rail.appendChild(h); }
-    const el=document.createElement('div'); el.className='cat'+(state.cat===c.id?' on':'');
-    el.innerHTML='<span class="dot" style="background:'+c.color+'"></span><span class="lbl">'+c.label+'</span><span class="n">'+c.count+'</span>';
-    el.onclick=()=>{ state.cat=c.id; state.filter=''; renderRail(); renderList(); };
-    rail.appendChild(el);
-  });
-}
 
-function renderList(){
-  const cat = CATS.find(c=>c.id===state.cat);
-  const list = document.getElementById('list'); list.innerHTML='';
-  if(!cat) return;
-  const head=document.createElement('div'); head.className='listhead';
-  head.innerHTML='<div class="t"><span>'+cat.label+'</span><span class="muted">'+cat.count+'</span></div><input id="lf" placeholder="filter '+cat.label.toLowerCase()+'…">';
-  list.appendChild(head);
-  let items = nodes.filter(cat.match);
-  const f = state.filter.toLowerCase();
-  if(f) items = items.filter(n => (n.label+' '+n.key+' '+(n.file||'')).toLowerCase().includes(f));
-  items.sort((a,b)=>a.label.localeCompare(b.label));
-  const wrap=document.createElement('div');
-  items.slice(0,600).forEach((n,i)=>{
-    const el=document.createElement('div'); el.className='item'+(state.sel===n.id?' on':'');
-    el.style.animationDelay=Math.min(i*8,300)+'ms';
-    el.innerHTML='<span class="dot" style="margin-top:5px;background:'+nodeColor(n)+'"></span>'+
-      '<div class="meta"><div class="nm">'+esc(n.label)+authBadge(n)+'</div><div class="sub">'+esc(n.key)+'</div></div>';
-    el.onclick=()=>select(n.id,true);
-    wrap.appendChild(el);
-  });
-  if(items.length>600){ const m=document.createElement('div'); m.className='item muted'; m.textContent='… +'+(items.length-600)+' more (use search)'; wrap.appendChild(m); }
-  list.appendChild(wrap);
-  const lf=document.getElementById('lf'); lf.value=state.filter;
-  lf.oninput=()=>{ state.filter=lf.value; renderList(); const x=document.getElementById('lf'); x.focus(); x.setSelectionRange(x.value.length,x.value.length); };
-}
+def _frontend_asset(name):
+    """Text of a frontend asset: read from frontend/ next to this script when present (dev mode,
+    instant iteration without re-embedding), else from the embedded copy (single-file mode)."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend", name)
+    if os.path.isfile(path):
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+    return _EMBEDDED_FRONTEND[name]
 
-// ---------- detail ----------
-function relName(r){ return r; }
-function nodeChip(id){
-  const n=byId.get(id); if(!n) return '';
-  return '<span class="nc" data-id="'+enc(id)+'"><span class="dot" style="background:'+nodeColor(n)+'"></span>'+
-    '<span class="nm">'+esc(n.label)+'</span><span class="ty">'+esc(nodeKind(n))+'</span></span>';
-}
-function groupRels(arr){ const g={}; (arr||[]).forEach(x=>{ (g[x.rel]=g[x.rel]||new Set()).add(x.id); }); return g; }
-// Small badge marking a changelog as the live definition of its table vs a superseded/orphan revision.
-function authBadge(n){
-  if(n.type!=='liquibase') return '';
-  const a=(n.data||{}).authority; if(!a||!a.status) return '';
-  if(a.status==='live'){ const by=(a.referencedBy||[]).join(', ');
-    return '<span class="authb authb-live" title="Live / authoritative'+(by?' — referenced by '+esc(by):'')+'">live</span>'; }
-  if(a.status==='superseded'){ const by=(a.supersededBy||[]).join(', ');
-    return '<span class="authb authb-old" title="Superseded — the same table is provided by '+esc(by||'a referenced changelog')+'">superseded</span>'; }
-  return '<span class="authb authb-orphan" title="Orphan — not referenced by any service or data object">orphan</span>';
-}
 
-function describe(n){
-  const d=n.data||{}, rows=[];
-  const add=(k,v)=>{ if(v!==undefined&&v!==null&&v!==''&&!(Array.isArray(v)&&!v.length)) rows.push([k,v]); };
-  if(n.type==='process'){ add('Starter groups',d.candidateStarterGroups); add('User tasks',(d.userTasks||[]).length);
-    add('Service tasks',(d.serviceTasks||[]).length); add('Call activities',(d.callActivities||[]).length);
-    add('Documentation',d.documentation); }
-  else if(n.type==='case'){ add('Starter groups',d.candidateStarterGroups); add('Initiator var',d.initiatorVariableName); add('Documentation',d.documentation); }
-  else if(n.type==='decision'){ add('Hit policy',d.hitPolicy); add('Rules',d.ruleCount); add('Inputs',(d.inputs||[]).join(', ')); add('Outputs',(d.outputs||[]).join(', ')); }
-  else if(n.type==='form'||n.type==='page'){ add('Fields',(d.fields||[]).length); add('Outcomes',(d.outcomes||[]).map(o=>o.value).filter(Boolean).join(', ')); }
-  else if(n.type==='dataObject'){ add('Type',d.dataObjectType); add('Data source',d.sourceId); add('Backing service',d.service); add('Data dictionary',d.dictionary); add('Columns',(d.fields||[]).length); }
-  else if(n.type==='service'){ add('Type',d.type); add('Base URL',d.baseUrl); add('Auth',d.auth); add('Table',d.tableName); add('Liquibase model',d.referencedLiquibaseModelKey); add('Columns',(d.columns||[]).length); add('Operations',(d.operations||[]).length);
-    if(d.schemaCoverage){ const c=d.schemaCoverage.counts||{}; const g=(c.noService||0)+(c.noDataObject||0); if(g) add('Schema gaps',g+' of '+(c.total||0)+' columns'); } }
-  else if(n.type==='agent'){ add('Vendor / model',(d.aiVendor||'')+' / '+(d.modelName||'')); add('Temperature',d.temperature); add('API endpoint',String(d.enableApiEndpoint)); add('Knowledge base',d.knowledgeBase); }
-  else if(n.type==='channel'){ add('Direction',d.channelType); add('Type',d.type); add('Topics',(d.topics||[]).join(', ')); add('Destination',d.destination); }
-  else if(n.type==='event'){ add('Payload',(d.payload||[]).join(', ')); add('Correlation',(d.correlation||[]).join(', ')); }
-  else if(n.type==='java'){ add('Package',d.package); add('Roles',(d.roles||[]).join(', ')); add('Bot key',d.botKey); add('Implements',(d.interfaces||[]).join(', ')); add('Methods',(d.methods||[]).length); add('Called from models',(d.calledMethods||[]).join(', ')); }
-  else if(n.type==='endpoint'){ add('Method',d.http); add('Path',d.path); add('Handler',(d.controller||'')+'#'+(d.handler||'')); }
-  else if(n.type==='method'){ add('Method',(d.name||'')+'()'); add('Declared in',d.class); }
-  else if(n.type==='query'){ add('Source index',d.sourceIndex); add('Parameters',(d.parameters||[]).join(', ')); add('Filters by groups',(d.groups||[]).length); }
-  else if(n.type==='action'){ add('Bot',d.botKey); add('Form',d.formKey); add('Triggers signal',d.signalName); add('Scope',d.scopeType); }
-  else if(n.type==='bot'){ add('Kind',d.platform?'Flowable platform bot':'project-defined bot'); }
-  else if(n.type==='liquibase'){ const a=d.authority||{};
-    add('Status', a.status==='live'?'live (authoritative)':a.status==='superseded'?'superseded revision':a.status==='orphan'?'orphan — unreferenced':undefined);
-    if((a.referencedBy||[]).length) add('Referenced by',(a.referencedBy||[]).join(', '));
-    if((a.supersededBy||[]).length) add('Live definition',(a.supersededBy||[]).join(', '));
-    add('Tables',(d.effectiveTables||d.tables||[]).join(', ')); add('Columns',(d.columns||[]).length); }
-  else if(n.type==='expression'||n.type==='binding'){ add('Used by', (d.usedBy||[]).length+' model(s)');
-    const pr=d.problems||[]; if(pr.length){ const ec=pr.filter(p=>p.severity==='error').length, wc=pr.length-ec;
-      add('Problems',[ec?ec+' error'+(ec>1?'s':''):'', wc?wc+' warning'+(wc>1?'s':''):''].filter(Boolean).join(', ')); } }
-  else if(n.type==='variable'){ add('Scope',(d.scopes||[]).join(', ')); add('Used in', (d.usages||[]).length+' model(s)'); }
-  else if(n.type==='string'){ add('Used in', (d.usages||[]).length+' model(s)'); }
-  else if(n.type==='external'){ add('Kind',d.flowableApi?'Flowable platform API':d.route?'In-app navigation route':d.platform?'Flowable platform bean':(d.external_url?'External URL':d.kind||'external')); if(d.method&&d.method!=='(button)') add('Method',d.method); }
-  else { Object.keys(d).forEach(k=>{ const v=d[k]; if(typeof v==='string'||typeof v==='number') add(k,v); }); }
-  return rows;
-}
-
-function detailExtra(n){
-  const d=n.data||{}; let h='';
-  if(n.type==='service' && (d.operations||[]).length){
-    h+='<h3 class="rel">Operations ('+d.operations.length+')</h3>'+
-      d.operations.map(o=>{
-        const verb=o.method?'<span class="verb" style="color:'+color("endpoint")+'">'+esc(o.method)+'</span>':'';
-        const title='<span class="opname">'+esc(o.fullUrl||o.url||o.name||'')+'</span>';
-        const key='<span class="opkey">'+esc(o.key||'')+'</span>';
-        const np=(o.params||[]).length;
-        if(!np) return '<div class="op flat">'+verb+title+'<span class="opcount">no params</span>'+key+'</div>';
-        return '<details class="op"><summary>'+verb+title+
-          '<span class="opcount">'+np+' param'+(np>1?'s':'')+'</span>'+key+'</summary>'+
-          '<div class="parmgrid">'+o.params.map(p=>'<div class="pc"><span class="pn">'+esc(p.name)+'</span>'+
-            (p.type?'<span class="pt">'+esc(p.type)+'</span>':'')+'</div>').join('')+'</div></details>';
-      }).join('');
-  }
-  if(n.type==='service' && d.schemaCoverage && (d.schemaCoverage.rows||[]).length){
-    const sc=d.schemaCoverage, ct=sc.counts||{};
-    h+='<h3 class="rel">Schema coverage — Liquibase → Service → DataObject</h3>';
-    // source changelog + backing data objects (clickable)
-    let meta='';
-    if(sc.liquibase){ const lc=nodeChip('liquibase:'+sc.liquibase); if(lc) meta+='<span class="muted">changelog</span>'+lc; }
-    (sc.dataObjects||[]).forEach(k=>{ const dc=nodeChip('dataObject:'+k); if(dc) meta+=dc; });
-    if(meta) h+='<div class="covmeta">'+meta+'</div>';
-    // gap summary
-    let badges='';
-    if(ct.noService) badges+='<span class="cov-badge cov-bad">'+ct.noService+' not mapped in service</span>';
-    if(ct.noDataObject) badges+='<span class="cov-badge cov-warn">'+ct.noDataObject+' not in data object</span>';
-    if(ct.extra) badges+='<span class="cov-badge cov-info">'+ct.extra+' not in Liquibase</span>';
-    if(ct.ok) badges+='<span class="cov-badge cov-good">'+ct.ok+' mapped through</span>';
-    if(badges) h+='<div class="covbadges">'+badges+'</div>';
-    const rowCls={'no-service':'cov-bad','no-dataobject':'cov-warn','extra-service':'cov-info','ok':''};
-    const miss='<span class="miss">✗ not mapped</span>';
-    h+='<div class="covwrap"><table class="cov"><thead><tr>'+
-       '<th>Liquibase column</th><th>Service mapping</th><th>Data object field</th></tr></thead><tbody>';
-    sc.rows.forEach(r=>{
-      const lbCell = r.inLiquibase
-        ? '<span>'+esc(r.sql)+'</span>'+(r.sqlType?' <span class="muted">'+esc(r.sqlType)+'</span>':'')
-        : '<span class="miss">— not in changelog</span>';
-      const svCell = r.inService
-        ? '<span>'+esc(r.service||r.serviceCol||'')+'</span>'+
-          (r.serviceCol&&looseCol(r.serviceCol)!==looseCol(r.service||'')?' <span class="muted">'+esc(r.serviceCol)+'</span>':'')+
-          (r.serviceType?' <span class="muted">'+esc(r.serviceType)+'</span>':'')
-        : miss;
-      const doCell = (r.dataObjects&&r.dataObjects.length)
-        ? r.dataObjects.map(x=>'<span>'+esc(x.field)+'</span>'+
-            ((sc.dataObjects||[]).length>1?' <span class="muted">'+esc(x.do)+'</span>':'')).join(', ')
-        : (r.inLiquibase||r.inService?miss:'');
-      h+='<tr class="'+(rowCls[r.status]||'')+'"><td>'+lbCell+'</td><td>'+svCell+'</td><td>'+doCell+'</td></tr>';
-    });
-    h+='</tbody></table></div>';
-  }
-  else if(n.type==='service' && (d.columns||[]).length){
-    h+='<h3 class="rel">Columns / field mappings ('+d.columns.length+')</h3><div class="oplist">'+
-      d.columns.map(c=>'<div class="oprow"><span>'+esc(c.name||'')+'</span>'+
-        (c.columnName&&c.columnName!==c.name?'<span class="muted">'+esc(c.columnName)+'</span>':'')+
-        (c.type?'<span class="mono" style="margin-left:auto;color:var(--ink-faint);font-size:10px">'+esc(c.type)+'</span>':'')+
-        '</div>').join('')+'</div>';
-  }
-  if(n.type==='java' && (d.endpoints||[]).length){
-    h+='<h3 class="rel">Endpoints served</h3><div class="oplist">'+
-      d.endpoints.map(e=>'<div class="oprow"><span class="verb" style="color:'+color("endpoint")+'">'+esc(e.http)+'</span><span>'+esc(e.path)+'</span><span class="muted">'+esc(e.handler)+'() :'+e.line+'</span></div>').join('')+'</div>';
-  }
-  if(n.type==='java' && (d.methods||[]).length){
-    const cm=new Set(d.calledMethods||[]);
-    h+='<h3 class="rel">Declared methods ('+d.methods.length+')</h3><div class="oplist">'+
-      d.methods.slice(0,80).map(m=>'<div class="oprow"><span>'+esc(m.name)+'('+m.params+')</span><span class="muted">:'+m.line+(cm.has(m.name)?'  ◀ called by models':'')+'</span></div>').join('')+'</div>';
-  }
-  if((n.type==='process') && (d.serviceTasks||[]).length){
-    const st=d.serviceTasks.filter(s=>s.class||s.delegateExpression||s.expression||s.type);
-    if(st.length) h+='<h3 class="rel">Service tasks</h3><div class="oplist">'+
-      st.map(s=>'<div class="oprow"><span class="muted" style="min-width:150px">'+esc(s.name||s.id)+'</span>'+
-        '<span style="flex:1">'+esc(s.class||s.delegateExpression||s.expression||s.type||'')+'</span>'+
-        implLink(s)+'</div>').join('')+'</div>';
-  }
-  if(n.type==='dataObject' && (d.columns||[]).length){
-    h+='<h3 class="rel">Columns / field mappings ('+d.columns.length+')</h3><div class="oplist">'+
-      d.columns.map(c=>'<div class="oprow"><span>'+esc(c.name)+'</span><span class="muted">'+esc(c.label||'')+'</span>'+
-        (c.type?'<span class="mono" style="margin-left:auto;color:var(--ink-faint);font-size:10px">'+esc(c.type)+'</span>':'')+
-        '</div>').join('')+'</div>';
-  }
-  if(n.type==='liquibase'){
-    const a=d.authority||{};
-    if(a.status==='superseded'){ const chips=(a.supersededBy||[]).map(k=>nodeChip('liquibase:'+k)).join('');
-      h+='<div class="authnote authnote-old">⚠ Superseded revision — the live definition of <b>'+esc((d.effectiveTables||[]).join(', '))+'</b> is referenced elsewhere. These columns reflect an older revision of the same table.'+(chips?'<div>'+chips+'</div>':'')+'</div>'; }
-    else if(a.status==='orphan'){
-      h+='<div class="authnote authnote-orphan">⚠ Orphan changelog — no service or data object references it. It may be dead/legacy or referenced only at runtime.</div>'; }
-  }
-  if(n.type==='liquibase' && (d.columns||[]).length){
-    const cov=d.coverage;                    // present only when a service references this changelog
-    const inS=cov?new Set(cov.service||[]):null, inD=cov?new Set(cov.dataObject||[]):null;
-    const stOf=k=>!inS.has(k)?'bad':(!inD.has(k)?'warn':'good');
-    const stTitle={bad:'not mapped by any service',warn:'mapped in service, but no data object field',good:'mapped through to a data object'};
-    const byT={}; d.columns.forEach(c=>{ (byT[c.table||'(table)']=byT[c.table||'(table)']||[]).push(c); });
-    h+='<h3 class="rel">Columns ('+d.columns.length+')'+(cov?' — mapping coverage':'')+'</h3>';
-    if(cov) h+='<div class="covlegend">'+
-      '<span><span class="covdot" style="background:'+covColor('bad')+'"></span>not in service</span>'+
-      '<span><span class="covdot" style="background:'+covColor('warn')+'"></span>not in data object</span>'+
-      '<span><span class="covdot" style="background:'+covColor('good')+'"></span>mapped through</span></div>';
-    Object.keys(byT).forEach(t=>{
-      h+='<div style="margin:6px 0 12px"><div class="muted mono" style="margin-bottom:4px">'+esc(t)+'</div><div class="oplist">'+
-        byT[t].map(c=>{ const st=cov?stOf(looseCol(c.name)):null;
-          return '<div class="oprow'+(st==='bad'?' cov-bad':st==='warn'?' cov-warn':'')+'">'+
-          (cov?'<span class="covdot" title="'+stTitle[st]+'" style="background:'+covColor(st)+'"></span>':'')+
-          '<span>'+esc(c.name)+'</span>'+
-          (c.type?'<span class="mono" style="margin-left:auto;color:var(--ink-faint);font-size:10px">'+esc(c.type)+'</span>':'')+
-          '</div>'; }).join('')+'</div></div>';
-    });
-  }
-  if((n.type==='expression'||n.type==='binding') && (d.problems||[]).length){
-    h+='<h3 class="rel">Problems ('+d.problems.length+')</h3><div class="oplist">'+
-      d.problems.map(p=>{
-        const isErr=p.severity==='error';
-        const col=isErr?'#ff6b6b':'#f4b942';
-        const snip=p.snippet||'';
-        return '<div class="oprow"><span class="verb" style="color:'+col+'">'+(isErr?'error':'warning')+'</span>'+
-          '<span style="flex:1">'+esc(p.message)+'</span>'+
-          (snip?'<span class="mono" style="color:var(--ink-faint);font-size:10px">'+esc(snip)+'</span>':'')+
-          '</div>';
-      }).join('')+'</div>';
-  }
-  if((n.type==='expression'||n.type==='binding') && (d.usedBy||[]).length){
-    h+='<h3 class="rel">Used by ('+d.usedBy.length+')</h3><div class="nodechips">'+d.usedBy.map(nodeChip).join('')+'</div>';
-  }
-  if((n.type==='variable'||n.type==='string') && (d.usages||[]).length){
-    h+='<h3 class="rel">Used in ('+d.usages.length+' models) — effective occurrences</h3>';
-    d.usages.forEach(u=>{
-      h+='<div style="margin:6px 0 12px">'+nodeChip(u.model)+
-         '<div class="oplist" style="margin-top:5px">'+
-         (u.snippets||[]).map(s=>'<div class="oprow"><span class="mono">'+esc(s)+'</span></div>').join('')+
-         '</div></div>';
-    });
-  }
-  // Reverse direction: a model lists all the variables/expressions/strings it uses (collapsible).
-  if(d._uses){
-    const ord=[['variable','Variables'],['expression','Backend expressions ${ }'],
-               ['binding','Frontend bindings {{ }}'],['string','String literals']];
-    let parts='';
-    ord.forEach(([t,lbl])=>{ const ids=(d._uses||{})[t]; if(ids&&ids.length)
-      parts+='<details class="uses"><summary>'+lbl+' ('+ids.length+')</summary><div class="nodechips">'+ids.map(nodeChip).join('')+'</div></details>'; });
-    if(parts) h+='<h3 class="rel">Uses — variables &amp; expressions</h3>'+parts;
-  }
-  return h;
-}
-
-// Resolve a service-task implementation to a clickable Java node chip + method.
-function implLink(s){
-  if(s.class){ const id='java:'+s.class; if(byId.get(id)) return jchip(id, s.class); return ''; }
-  const ex=s.expression||s.delegateExpression||'';
-  const m=ex.match(/[#$]\{\s*([A-Za-z_]\w*)(?:\s*\.\s*([A-Za-z_]\w*)\s*\()?/);
-  if(m){ const id=beanToNode.get(m[1]); if(id) return jchip(id,(byId.get(id).label)+(m[2]?'.'+m[2]+'()':'')); }
-  return '';
-}
-function jchip(id,label){
-  return '<span class="nc" data-id="'+enc(id)+'" style="flex:none"><span class="dot" style="background:'+color('java')+'"></span><span class="nm">'+esc(label)+'</span></span>';
-}
-
-function renderDetail(){
-  const det=document.getElementById('detail');
-  if(!state.sel || !byId.get(state.sel)){
-    det.innerHTML='<div class="empty"><div class="big">Flowable Atlas</div><div>Pick a category on the left, then an item.<br>Click any relationship to travel the graph.</div></div>';
-    return;
-  }
-  const n=byId.get(state.sel);
-  const out=groupRels(outM.get(n.id)), inc=groupRels(incM.get(n.id));
-  let h='';
-  // crumbs
-  const trail = state.hist.slice(-4).map(id=>{const x=byId.get(id);return x?esc(x.label):'';}).filter(Boolean).join(' › ');
-  h+='<div class="crumbs">'+(state.hist.length?'<button id="back">← back</button>':'')+
-     '<span class="trail">'+trail+(trail?' › ':'')+'<b style="color:var(--ink)">'+esc(n.label)+'</b></span></div>';
-  h+='<div class="dbody">';
-  h+='<span class="chip"><span class="dot" style="background:'+nodeColor(n)+'"></span>'+esc(nodeKind(n))+'</span>';
-  h+='<div class="dtitle">'+esc(n.label)+authBadge(n)+'</div>';
-  h+='<div class="dkey mono">'+esc(n.key)+'</div>';
-  if(n.file) h+='<div class="dfile" title="click to copy" data-copy="'+enc(n.file)+'">'+esc(n.file)+'</div>';
-  const rows=describe(n);
-  if(rows.length){ h+='<div class="grid">'+rows.map(r=>'<div class="cell"><div class="k">'+esc(r[0])+'</div><div class="v mono">'+esc(String(r[1]))+'</div></div>').join('')+'</div>'; }
-  h+=detailExtra(n);
-  // outgoing
-  const ok=Object.keys(out).sort();
-  if(ok.length){ h+='<h3 class="rel">Uses / references ('+ok.reduce((a,k)=>a+out[k].size,0)+')</h3>';
-    ok.forEach(rel=>{ h+='<div class="relgrp"><div class="lab">'+esc(rel)+'</div><div class="nodechips">'+[...out[rel]].map(nodeChip).join('')+'</div></div>'; }); }
-  // incoming
-  const ik=Object.keys(inc).sort();
-  if(ik.length){ h+='<h3 class="rel">Used by / referenced from ('+ik.reduce((a,k)=>a+inc[k].size,0)+')</h3>';
-    ik.forEach(rel=>{ h+='<div class="relgrp"><div class="lab">'+esc(rel)+'</div><div class="nodechips">'+[...inc[rel]].map(nodeChip).join('')+'</div></div>'; }); }
-  if(!ok.length && !ik.length) h+='<p class="muted" style="margin-top:18px">No relationships recorded for this node.</p>';
-  h+='</div>';
-  det.innerHTML=h;
-  det.scrollTop=0;
-  const b=document.getElementById('back'); if(b) b.onclick=()=>{ const prev=state.hist.pop(); if(prev) select(prev,false); };
-  det.querySelectorAll('.nc').forEach(c=>c.onclick=()=>select(dec(c.dataset.id),true));
-  const fp=det.querySelector('.dfile'); if(fp) fp.onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(dec(fp.dataset.copy)); fp.textContent='✓ copied — '+dec(fp.dataset.copy); };
-}
-
-function select(id, pushHist){
-  if(!byId.get(id)) return;
-  if(pushHist && state.sel && state.sel!==id) state.hist.push(state.sel);
-  state.sel=id;
-  const n=byId.get(id);
-  // Keep the current category if it already contains this node (so clicking within
-  // e.g. "Java · delegate" stays there) — only re-sync when it doesn't match.
-  const cur=CATS.find(c=>c.id===state.cat);
-  if(!cur || !cur.match(n)){
-    let cat;
-    if(n.type==='java'){
-      const prio=['controller','delegate','listener','bot','service','repository','configuration','component','other'];
-      const r=(n.data.roles||[]).slice().sort((a,b)=>prio.indexOf(a)-prio.indexOf(b))[0];
-      cat=CATS.find(c=>c.id==='java::'+r);
-    } else if(n.type==='variable'){
-      cat=CATS.find(c=>c.id==='variable::'+(n.data.scopes||[])[0]);
-    }
-    cat=cat||CATS.find(c=>c.id===n.type);
-    if(cat) state.cat=cat.id;
-  }
-  location.hash=encodeURIComponent(id);
-  renderRail(); renderList(); renderDetail();
-  // scroll selected list item into view
-  const on=document.querySelector('.item.on'); if(on) on.scrollIntoView({block:'nearest'});
-}
-
-// ---------- search ----------
-const q=document.getElementById('q'), results=document.getElementById('results');
-let resSel=-1, resList=[];
-// search haystack: base identity plus a few type-specific extras. A DataObject's
-// fields/columns are not nodes of their own, so without this a field name like
-// 'crewId' (or its label / type) would never surface its data object.
-function searchText(n){
-  const d=n.data||{};
-  let s=n.label+' '+n.key+' '+(n.file||'')+' '+n.type;
-  if(n.type==='dataObject') s+=' '+(d.fields||[]).join(' ')+' '+
-    (d.columns||[]).map(c=>(c.label||'')+' '+(c.type||'')).join(' ');
-  if(n.type==='service') s+=' '+(d.columns||[]).map(c=>(c.name||'')+' '+(c.columnName||'')+' '+(c.type||'')).join(' ');
-  if(n.type==='liquibase') s+=' '+(d.columns||[]).map(c=>(c.name||'')+' '+(c.type||'')).join(' ');
-  return s.toLowerCase();
-}
-function doSearch(){
-  const v=q.value.trim().toLowerCase();
-  if(!v){ results.classList.remove('on'); return; }
-  resList = nodes.filter(n=>searchText(n).includes(v))
-                 .sort((a,b)=> a.label.length-b.label.length).slice(0,40);
-  results.innerHTML = resList.map((n,i)=>'<div class="r'+(i===resSel?' sel':'')+'" data-id="'+enc(n.id)+'">'+
-    '<span class="dot" style="background:'+nodeColor(n)+'"></span><span class="nm">'+esc(n.label)+'</span>'+
-    '<span class="ty mono" style="color:var(--ink-faint);font-size:10px">'+esc(nodeKind(n))+'</span>'+
-    '<span class="mono" style="margin-left:auto;color:var(--ink-faint);font-size:10px">'+esc(n.key)+'</span></div>').join('')
-    || '<div class="r muted">no matches</div>';
-  results.classList.add('on');
-  results.querySelectorAll('.r[data-id]').forEach(r=>r.onclick=()=>{ select(dec(r.dataset.id),true); closeSearch(); });
-}
-function closeSearch(){ results.classList.remove('on'); q.blur(); resSel=-1; }
-q.addEventListener('input',()=>{ resSel=-1; doSearch(); });
-q.addEventListener('keydown',e=>{
-  if(e.key==='ArrowDown'){ resSel=Math.min(resSel+1,resList.length-1); doSearch(); e.preventDefault(); }
-  else if(e.key==='ArrowUp'){ resSel=Math.max(resSel-1,0); doSearch(); e.preventDefault(); }
-  else if(e.key==='Enter' && resList[resSel]){ select(resList[resSel].id,true); closeSearch(); }
-  else if(e.key==='Escape'){ closeSearch(); }
-});
-document.addEventListener('keydown',e=>{ if(e.key==='/' && document.activeElement!==q){ e.preventDefault(); q.focus(); } });
-document.addEventListener('click',e=>{ if(!e.target.closest('.search')) results.classList.remove('on'); });
-
-// ---------- utils ----------
-function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-function enc(s){ return encodeURIComponent(s); }
-function dec(s){ return decodeURIComponent(s); }
-
-// ---------- boot ----------
-document.getElementById('proj').textContent=DATA.project;
-const st=DATA.stats;
-const invalidN=nodes.filter(n=>(n.data.problems||[]).length).length;
-document.getElementById('stats').innerHTML=
-  '<span><b>'+nodes.length+'</b> nodes</span><span><b>'+edges.length+'</b> links</span>'+
-  '<span><b>'+(st.models||0)+'</b> models</span><span><b>'+(st.java||0)+'</b> java</span><span><b>'+(st.groups||0)+'</b> groups</span>'+
-  (invalidN?'<span style="color:#ff6b6b"><b>'+invalidN+'</b> invalid</span>':'');
-state.cat = (CATS.find(c=>c.id==='process')||CATS[0]||{}).id;
-renderRail(); renderList(); renderDetail();
-const hash=location.hash?decodeURIComponent(location.hash.slice(1)):'';
-if(hash && byId.get(hash)) select(hash,false);
-window.addEventListener('hashchange',()=>{ const h=decodeURIComponent(location.hash.slice(1)); if(h&&byId.get(h)&&h!==state.sel) select(h,false); });
-</script>
-</body>
-</html>"""
+def _compose_template():
+    """The full explorer HTML page (CSS/JS inlined; __ATLAS_DATA__ still unresolved)."""
+    t = _frontend_asset("explorer.html")
+    t = t.replace("/*__ATLAS_CSS__*/", _frontend_asset("explorer.css"))
+    t = t.replace("/*__ATLAS_JS__*/", _frontend_asset("explorer.js"))
+    return t.rstrip("\n")
 
 
 def summary_render(result, root):
@@ -4192,6 +3576,11 @@ def summary_render(result, root):
     L.append(f"_{st['models']} model files · {st['java']} Java files · {st.get('nodes',0)} nodes · "
              f"{st.get('edges',0)} relationships · {st.get('groups',0)} user groups. "
              f"Compact summary — use `--json` for the full graph, or open the HTML explorer._\n")
+    diags = result.get("diagnostics") or []
+    if diags:
+        L.append(f"⚠ **{len(diags)} file(s) could not be fully analyzed** (parse/read failures) — "
+                 f"the map below may be incomplete. Details: `diagnostics` in graph.json / "
+                 f"Warnings section of the overview.\n")
 
     # Apps
     app_models = {}
@@ -4532,10 +3921,11 @@ def claude_render(result, root):
 def html_render(result, root):
     payload = {"project": os.path.basename(os.path.abspath(root)) or "project",
                "stats": result["stats"],
+               "diagnostics": result.get("diagnostics", []),
                "nodes": result["graph"]["nodes"],
                "edges": result["graph"]["edges"]}
     data = json.dumps(payload, ensure_ascii=False, default=list).replace("</", "<\\/")
-    return HTML_TEMPLATE.replace("__ATLAS_DATA__", data)
+    return _compose_template().replace("__ATLAS_DATA__", data)
 
 
 # ---------------------------------------------------------------------------
@@ -4548,8 +3938,8 @@ def _open_file(path):
         if shutil.which(opener):
             try:
                 subprocess.Popen([opener, path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as e:  # noqa: BLE001
+                log.warning("could not open %s with %s: %s", path, opener, e)
             return
 
 
@@ -4560,24 +3950,47 @@ def main(argv=None):
                     "interactive HTML explorer, an LLM overview and a traversable graph.")
     ap.add_argument("path", help="Project directory, or a single .zip/.bar archive")
     ap.add_argument("-o", "--output", help="Output file (single mode) or output DIRECTORY (with --all)")
-    ap.add_argument("--all", action="store_true",
-                    help="Write all four artifacts in one run (summary + overview + graph json + html explorer)")
-    ap.add_argument("--json", action="store_true", help="Emit the full traversable graph as JSON")
-    ap.add_argument("--html", action="store_true", help="Emit the self-contained interactive HTML explorer")
-    ap.add_argument("--summary", action="store_true", help="Emit a compact (~few KB) LLM-first overview")
-    ap.add_argument("--claude", action="store_true",
-                    help="Emit a CLAUDE.md (Flowable primer + this project's discovered facts) for AI agents")
+    fmt = ap.add_mutually_exclusive_group()
+    fmt.add_argument("--all", action="store_true",
+                     help="Write all artifacts in one run (summary + overview + graph json + html explorer + CLAUDE.md)")
+    fmt.add_argument("--json", action="store_true", help="Emit the full traversable graph as JSON")
+    fmt.add_argument("--html", action="store_true", help="Emit the self-contained interactive HTML explorer")
+    fmt.add_argument("--summary", action="store_true", help="Emit a compact (~few KB) LLM-first overview")
+    fmt.add_argument("--claude", action="store_true",
+                     help="Emit a CLAUDE.md (Flowable primer + this project's discovered facts) for AI agents")
     ap.add_argument("--stdout", action="store_true", help="Print to stdout instead of writing a file")
     ap.add_argument("--open", dest="open_", action="store_true", help="Open the HTML explorer when done")
+    ap.add_argument("--expr-allowlist", default="", metavar="NS[,NS:FN,flw.member]",
+                    help="Comma-separated expression-function namespaces/functions the project "
+                         "provides itself (e.g. 'myfns,util:format,flw.custom') — matching "
+                         "'unknown function' findings are suppressed instead of flagged as suspect")
+    ap.add_argument("-v", "--verbose", action="count", default=0,
+                    help="Progress + per-file diagnostics on stderr (-vv for debug)")
+    ap.add_argument("-q", "--quiet", action="store_true", help="Suppress the summary line on stderr")
     args = ap.parse_args(argv)
+
+    level = logging.WARNING
+    if args.verbose >= 2:
+        level = logging.DEBUG
+    elif args.verbose == 1:
+        level = logging.INFO
+    elif args.quiet:
+        level = logging.ERROR
+    logging.basicConfig(stream=sys.stderr, level=level, format="%(message)s")
 
     if not os.path.exists(args.path):
         print(f"error: path not found: {args.path}", file=sys.stderr)
         return 2
 
-    result = extract(args.path)
+    allow = {t.strip() for t in args.expr_allowlist.split(",") if t.strip()}
+    result = extract(args.path, expr_allowlist=allow or None)
     s = result["stats"]
     name = os.path.splitext(os.path.basename(os.path.abspath(args.path.rstrip("/"))))[0] or "project"
+    n_diag = len(result.get("diagnostics") or [])
+    status = (f"{s['models']} models · {s['java']} java · {s.get('nodes', 0)} nodes · "
+              f"{s.get('edges', 0)} links · {len(result['resolvedRefs'])} resolved / "
+              f"{len(result['unresolvedRefs'])} unresolved refs"
+              + (f" · ⚠ {n_diag} parse issue(s), see -v" if n_diag else ""))
 
     if args.all:
         outdir = args.output or "."
@@ -4595,10 +4008,10 @@ def main(argv=None):
             with open(p, "w", encoding="utf-8") as fh:
                 fh.write(content)
             written.append(p)
-        print(f"Flowable Atlas — {name}: {s['models']} models · {s['java']} java · "
-              f"{s.get('nodes', 0)} nodes · {s.get('edges', 0)} links", file=sys.stderr)
-        for p in written:
-            print(f"  ✓ {p}", file=sys.stderr)
+        if not args.quiet:
+            print(f"Flowable Atlas — {name}: {status}", file=sys.stderr)
+            for p in written:
+                print(f"  ✓ {p}", file=sys.stderr)
         if args.open_:
             _open_file(next(p for p in written if p.endswith(".html")))
         return 0
@@ -4625,10 +4038,8 @@ def main(argv=None):
         target = os.path.join(base, "CLAUDE.md" if args.claude else f"APP_OVERVIEW.{ext}")
     with open(target, "w", encoding="utf-8") as fh:
         fh.write(out)
-    print(f"wrote {target} — {s['models']} models, {s['java']} java files, "
-          f"{s.get('nodes', 0)} nodes / {s.get('edges', 0)} links, "
-          f"{len(result['resolvedRefs'])} resolved / {len(result['unresolvedRefs'])} unresolved refs",
-          file=sys.stderr)
+    if not args.quiet:
+        print(f"wrote {target} — {status}", file=sys.stderr)
     if args.open_ and ext == "html":
         _open_file(target)
     return 0
