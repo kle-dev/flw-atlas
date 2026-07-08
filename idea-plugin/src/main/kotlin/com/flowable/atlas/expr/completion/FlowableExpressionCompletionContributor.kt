@@ -9,6 +9,7 @@ import com.flowable.atlas.expr.ExpressionDialect
 import com.flowable.atlas.expr.ExpressionScope
 import com.flowable.atlas.expr.catalog.ExprFunction
 import com.flowable.atlas.expr.catalog.ExprRoot
+import com.flowable.atlas.expr.catalog.FlowableCustomFunctions
 import com.flowable.atlas.expr.catalog.FlowableExpressionCatalog
 import com.flowable.atlas.expr.lang.dialectOf
 import com.flowable.atlas.index.FlowableModelIndexService
@@ -58,7 +59,7 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
                 is ExprCompletionContext.AfterNamespace ->
                     if (dialect == ExpressionDialect.BACKEND) addFunctions(out, FlowableExpressionCatalog.backendFunctionsForPrefix(ctx.namespace), dialect, ctx.namespace)
                 is ExprCompletionContext.AfterDot -> when (dialect) {
-                    ExpressionDialect.FRONTEND -> addFrontendMembers(out, ctx.receiver)
+                    ExpressionDialect.FRONTEND -> addFrontendMembers(out, ctx.receiver, parameters.position.project)
                     ExpressionDialect.BACKEND -> addBackendMembers(out, ctx.receiver, parameters.position.project)
                 }
             }
@@ -90,8 +91,23 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
                 addReferencedIdentifiers(out, service, parameters.position.project)
             }
 
+            if (dialect == ExpressionDialect.FRONTEND) addCustomRoot(out, parameters.position.project)
+
             val varLabel = if (dialect == ExpressionDialect.FRONTEND) "field" else "variable"
             for (v in scopeVariables(parameters, dialect, service)) out.addElement(variableLookup(v, varLabel))
+        }
+
+        /** Project custom functions (externals.additionalData) at the frontend root: each namespace
+         *  (`flowkyc` → `flowkyc.` + re-popup) and each bare top-level helper. `flw.*` custom members
+         *  are offered after `flw.` (see [addFrontendMembers]). */
+        private fun addCustomRoot(out: CompletionResultSet, project: com.intellij.openapi.project.Project) {
+            val cat = FlowableCustomFunctions.getInstance(project).catalog() ?: return
+            for (ns in cat.namespaces.keys.sorted())
+                out.addElement(
+                    LookupElementBuilder.create(ns).withTypeText("custom 🧩", true)
+                        .withTailText("  $ns.…", true).withInsertHandler(DotInsertHandler),
+                )
+            for (fn in cat.topLevel.sorted()) out.addElement(customFnLookup(fn, cat.signatureOf(fn)))
         }
 
         /**
@@ -131,11 +147,11 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
             }
         }
 
-        private fun addFrontendMembers(out: CompletionResultSet, receiver: String) {
+        private fun addFrontendMembers(out: CompletionResultSet, receiver: String, project: com.intellij.openapi.project.Project) {
             val members = when (receiver) {
                 FlowableExpressionCatalog.FRONTEND_NS -> FlowableExpressionCatalog.frontendMembers()
                 in FlowableExpressionCatalog.frontendNestingMembers -> FlowableExpressionCatalog.frontendSubMembers(receiver)
-                else -> return
+                else -> emptyList()
             }
             for (f in members) {
                 val nestsFurther = receiver == FlowableExpressionCatalog.FRONTEND_NS && f.name in FlowableExpressionCatalog.frontendNestingMembers
@@ -145,6 +161,21 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
                 f.doc?.let { b = b.withTailText("  $it", true) }
                 out.addElement(b)
             }
+            // Project custom members: `flw.<custom>` and `<namespace>.<member>` from externals.additionalData.
+            val cat = FlowableCustomFunctions.getInstance(project).catalog() ?: return
+            val qualify = if (receiver == FlowableExpressionCatalog.FRONTEND_NS) "flw." else "$receiver."
+            val custom = if (receiver == FlowableExpressionCatalog.FRONTEND_NS) cat.flw else cat.namespaces[receiver]
+            custom?.sorted()?.forEach { out.addElement(customFnLookup(it, cat.signatureOf(qualify + it))) }
+        }
+
+        /** A custom-function lookup that lists its parameters as tail text and, on selection, inserts
+         *  `(params)` with the parameters selected so they're easy to fill in. */
+        private fun customFnLookup(name: String, params: String?): LookupElement {
+            var b = LookupElementBuilder.create(name).withTypeText("custom 🧩", true)
+                .withInsertHandler(if (params.isNullOrEmpty()) CallInsertHandler else CustomParamsInsertHandler(params))
+                .withLookupStrings(KeyLookup.searchTokens(name, null))
+            if (params != null) b = b.withTailText("($params)", true)
+            return b
         }
 
         // ---- lookup element builders ----
@@ -213,6 +244,19 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
             val tail = context.tailOffset
             if (charAt(context, tail) != '(') context.document.insertString(tail, "()")
             context.editor.caretModel.moveToOffset(tail + 1)
+            context.commitDocument()
+        }
+    }
+
+    /** Inserts `(param0, param1)` and selects the parameter text, so the needed arguments are shown
+     *  and easy to replace with actual values. */
+    private class CustomParamsInsertHandler(private val params: String) : InsertHandler<LookupElement> {
+        override fun handleInsert(context: InsertionContext, item: LookupElement) {
+            val tail = context.tailOffset
+            if (charAt(context, tail) == '(') { context.editor.caretModel.moveToOffset(tail + 1); context.commitDocument(); return }
+            context.document.insertString(tail, "($params)")
+            context.editor.caretModel.moveToOffset(tail + 1)
+            context.editor.selectionModel.setSelection(tail + 1, tail + 1 + params.length)
             context.commitDocument()
         }
     }

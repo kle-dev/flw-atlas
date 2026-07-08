@@ -1,5 +1,6 @@
 package com.flowable.atlas.expr.catalog
 
+import com.flowable.atlas.model.MiniJson
 import java.io.File
 
 /**
@@ -19,8 +20,14 @@ data class CustomFunctionCatalog(
     val topLevel: Set<String>,
     val sources: List<String>,
     val diagnostics: List<String>,
+    /** Best-effort parameter text per display name (`ns.member`, `flw.member`, or top-level name),
+     *  e.g. `"customer, docs"` — for completion tail text / insertion. Absent when not a function. */
+    val signatures: Map<String, String> = emptyMap(),
 ) {
     fun isEmpty(): Boolean = namespaces.isEmpty() && flw.isEmpty() && topLevel.isEmpty()
+
+    /** Parameter list of a callable by display name (`ns.member` / `flw.member` / top-level), or null. */
+    fun signatureOf(display: String): String? = signatures[display]
 
     fun summary(): String {
         val parts = ArrayList<String>()
@@ -32,7 +39,7 @@ data class CustomFunctionCatalog(
     }
 
     companion object {
-        val EMPTY = CustomFunctionCatalog(emptyMap(), emptySet(), emptySet(), emptyList(), emptyList())
+        val EMPTY = CustomFunctionCatalog(emptyMap(), emptySet(), emptySet(), emptyList(), emptyList(), emptyMap())
     }
 }
 
@@ -70,9 +77,10 @@ object CustomFunctionExtractor {
         val topLevel = HashSet<String>()
         val sources = ArrayList<String>()
         val diagnostics = ArrayList<String>()
+        val signatures = HashMap<String, String>()
         fun build() = CustomFunctionCatalog(
             namespaces.mapValues { it.value.toSet() }, flw.toSet(), topLevel.toSet(),
-            sources.toList(), diagnostics.toList(),
+            sources.toList(), diagnostics.toList(), signatures.toMap(),
         )
     }
 
@@ -182,15 +190,75 @@ object CustomFunctionExtractor {
         return key to Kind.Plain
     }
 
-    private fun memberNames(masked: String, orig: String, open: Int, close: Int, diag: MutableList<String>, ctx: String): Set<String> {
+    private fun memberNames(
+        masked: String, orig: String, open: Int, close: Int, diag: MutableList<String>, ctx: String,
+        sigs: MutableMap<String, String>? = null, prefix: String = "",
+    ): Set<String> {
         val names = HashSet<String>()
         for (span in objectEntries(masked, open, close)) {
             val (key, kind) = entryKeyAndKind(masked, orig, span.first, span.last + 1)
-            if (key != null) names += key
-            else if (kind is Kind.Spread || kind is Kind.Computed)
+            if (key != null) {
+                names += key
+                if (sigs != null) memberSignature(masked, orig, span.first, span.last + 1)?.let { sigs[prefix + key] = it }
+            } else if (kind is Kind.Spread || kind is Kind.Computed)
                 diag += "$ctx: unresolved ${if (kind is Kind.Spread) "spread" else "computed"} entry (members may be incomplete)"
         }
         return names
+    }
+
+    // ---- signature (parameter list) extraction — parity with flowable_atlas.py ----
+
+    /** Text between `masked[openParen]=='('` and its match, whitespace-collapsed and comma-spaced
+     *  (read from orig); null if unbalanced. Minified sources have no spaces, so `e,t,r` → `e, t, r`. */
+    private fun parenText(masked: String, orig: String, openParen: Int): String? {
+        val close = matchBrace(masked, openParen)
+        if (close == -1) return null
+        return orig.substring(openParen + 1, close).trim()
+            .replace(Regex("""\s+"""), " ").replace(Regex("""\s*,\s*"""), ", ")
+    }
+
+    /** Params of a same-file `function name(…)`, `… name = function(…)`, `… name = (…) =>`, or
+     *  `… name = x =>` declaration — for compiled bundles where a member is an identifier ref. */
+    private fun resolveFnSignature(masked: String, orig: String, name: String): String? {
+        val n = Regex.escape(name)
+        val pats = listOf(
+            Regex("""\bfunction\s+$n\s*\("""),
+            Regex("""\b(?:var|let|const)\s+$n\s*=\s*function\b\s*(?:[A-Za-z_$][\w$]*\s*)?\("""),
+            Regex("""\b(?:var|let|const)\s+$n\s*=\s*\("""),
+        )
+        for (p in pats) p.find(masked)?.let { return parenText(masked, orig, it.range.last) }  // '(' is the last matched char
+        return Regex("""\b(?:var|let|const)\s+$n\s*=\s*([A-Za-z_$][\w$]*)\s*=>""").find(masked)?.groupValues?.get(1)
+    }
+
+    /** Params of a value expression starting at [j]: a function/arrow literal, or a resolvable identifier ref. */
+    private fun valueSignature(masked: String, orig: String, j: Int, end: Int): String? {
+        if (j >= end) return null
+        val tail = masked.substring(j, end)
+        Regex("""^function\b\s*(?:[A-Za-z_$][\w$]*\s*)?""").find(tail)?.let { fm ->
+            val k = j + fm.value.length
+            return if (k < end && masked[k] == '(') parenText(masked, orig, k) else null
+        }
+        if (masked[j] == '(') return parenText(masked, orig, j)
+        Regex("""^([A-Za-z_$][\w$]*)\s*=>""").find(tail)?.let { return it.groupValues[1] }
+        return Regex("""^([A-Za-z_$][\w$]*)\s*$""").find(tail)?.let { resolveFnSignature(masked, orig, it.groupValues[1]) }
+    }
+
+    /** Best-effort parameter text of an object entry whose value is a function; null when it isn't. */
+    private fun memberSignature(masked: String, orig: String, s: Int, e: Int): String? {
+        val (key, kind) = entryKeyAndKind(masked, orig, s, e)
+        if (key == null || kind is Kind.Obj) return null
+        val seg = masked.substring(s, e)
+        val lead = s + (seg.length - seg.trimStart().length)
+        val m = IDENT_KEY.find(orig.substring(lead, e)) ?: return null
+        var j = lead + m.value.length
+        while (j < e && masked[j].isWhitespace()) j++
+        if (j < e && masked[j] == '(') return parenText(masked, orig, j)   // method shorthand
+        if (j < e && masked[j] == ':') {
+            j++
+            while (j < e && masked[j].isWhitespace()) j++
+            return valueSignature(masked, orig, j, e)
+        }
+        return null
     }
 
     private fun findExportDefaultObject(masked: String): Pair<Int, Int>? {
@@ -233,11 +301,12 @@ object CustomFunctionExtractor {
                 continue
             }
             if (kind is Kind.Obj) {
-                val members = memberNames(masked, orig, kind.open, kind.close, cat.diagnostics, "$ctx.$key")
+                val members = memberNames(masked, orig, kind.open, kind.close, cat.diagnostics, "$ctx.$key", cat.signatures, "$key.")
                 if (key == "flw") cat.flw += members
                 else cat.namespaces.getOrPut(key) { HashSet() } += members
             } else {
                 cat.topLevel += key
+                memberSignature(masked, orig, span.first, span.last + 1)?.let { cat.signatures[key] = it }
             }
         }
     }
@@ -272,6 +341,20 @@ object CustomFunctionExtractor {
         return false
     }
 
+    /** (open, close) of a registration-shaped `name = { … }` assignment — resolves the minified-bundle
+     *  shape where the config is a local var: `var …,a={flowkyc:{…}}` referenced by
+     *  `return {…, additionalData:a}`. Skips incidental `name={…}` (e.g. a catch-block `a={error:e}`). */
+    private fun resolveIdentObject(masked: String, orig: String, name: String): Pair<Int, Int>? {
+        for (m in Regex("""\b${Regex.escape(name)}\s*=\s*""").findAll(masked)) {
+            val j = m.range.last + 1
+            if (j < masked.length && masked[j] == '{') {
+                val close = matchBrace(masked, j)
+                if (close != -1 && objectIsRegistrationShaped(masked, orig, j, close)) return j to close
+            }
+        }
+        return null
+    }
+
     /**
      * (open, close, highConfidence) of `additionalData` object literals the primary anchors miss —
      * chiefly the compiled Rollup bundle (`var additionalData = { … }`, from
@@ -298,6 +381,78 @@ object CustomFunctionExtractor {
             out += Triple(j, close, high)
         }
         return out
+    }
+
+    // ---- real parameter names from a bundle's sourcemap (minification renames them to e,t,r) ----
+
+    /** Split on commas not nested inside () [] {} <> (so `Record<string, number>` stays one param). */
+    private fun splitTopLevelCommas(s: String): List<String> {
+        val out = ArrayList<String>(); var depth = 0; var start = 0
+        for (i in s.indices) {
+            when (s[i]) {
+                '(', '[', '{', '<' -> depth++
+                ')', ']', '}', '>' -> if (depth > 0) depth--
+                ',' -> if (depth == 0) { out += s.substring(start, i); start = i + 1 }
+            }
+        }
+        out += s.substring(start)
+        return out
+    }
+
+    /** Raw TS/JS param list → comma-separated bare names (drop types/defaults; keep `...` and `?`). */
+    private fun cleanParamList(raw: String): String {
+        val re = Regex("""^(\.\.\.)?\s*([A-Za-z_$][\w$]*)\s*(\??)""")
+        return splitTopLevelCommas(raw).mapNotNull { seg ->
+            val t = seg.trim()
+            if (t.isEmpty()) null else re.find(t)?.let { it.groupValues[1] + it.groupValues[2] + it.groupValues[3] } ?: t
+        }.joinToString(", ")
+    }
+
+    /** Record {funcName: cleaned params} for top-level function / const-arrow / const-function defs. */
+    private fun scanSourceSignatures(src: String, sigs: MutableMap<String, String>) {
+        val masked = mask(src)
+        fun rec(name: String, openParen: Int) {
+            if (name !in sigs) parenText(masked, src, openParen)?.let { sigs[name] = cleanParamList(it) }
+        }
+        for (m in Regex("""\bfunction\s+([A-Za-z_$][\w$]*)\s*\(""").findAll(masked)) rec(m.groupValues[1], m.range.last)
+        for (m in Regex("""\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*""").findAll(masked)) {
+            val name = m.groupValues[1]; val j = m.range.last + 1
+            val fm = Regex("""^function\b\s*(?:[A-Za-z_$][\w$]*\s*)?""").find(masked.substring(j))
+            when {
+                fm != null && j + fm.value.length < masked.length && masked[j + fm.value.length] == '(' -> rec(name, j + fm.value.length)
+                j < masked.length && masked[j] == '(' -> rec(name, j)
+                else -> Regex("""^([A-Za-z_$][\w$]*)\s*=>""").find(masked.substring(j))?.let { if (name !in sigs) sigs[name] = it.groupValues[1] }
+            }
+        }
+    }
+
+    private fun findSourcemap(bundle: File, text: String): File? {
+        var url: String? = null
+        for (m in Regex("""sourceMappingURL=([^\s'"]+)""").findAll(text)) url = m.groupValues[1]
+        if (url != null && !url!!.startsWith("data:")) {
+            val cand = File(bundle.parentFile, url!!).normalize()
+            if (cand.isFile) return cand
+        }
+        val sibling = File(bundle.path + ".map")
+        return if (sibling.isFile) sibling else null
+    }
+
+    private fun signaturesFromSourceMap(bundle: File, text: String): Map<String, String> {
+        val mp = findSourcemap(bundle, text) ?: return emptyMap()
+        if (mp.length() > 20_000_000L) return emptyMap()
+        val data = runCatching { MiniJson.parseOrNull(mp.readText()) }.getOrNull() as? Map<*, *> ?: return emptyMap()
+        val contents = data["sourcesContent"] as? List<*> ?: return emptyMap()
+        val sigs = HashMap<String, String>()
+        for (c in contents) if (c is String && c.length < 2_000_000) scanSourceSignatures(c, sigs)
+        return sigs
+    }
+
+    private fun applySourceSignatures(cat: Cat, smap: Map<String, String>) {
+        if (smap.isEmpty()) return
+        fun upd(display: String, name: String) { smap[name]?.let { cat.signatures[display] = it } }
+        cat.namespaces.forEach { (ns, members) -> members.forEach { upd("$ns.$it", it) } }
+        cat.flw.forEach { upd("flw.$it", it) }
+        cat.topLevel.forEach { upd(it, it) }
     }
 
     private fun resolveImport(fromFile: File, binding: String, orig: String): File? {
@@ -374,8 +529,20 @@ object CustomFunctionExtractor {
                 absorbed += o
                 handled = true
             }
+            // (3b) `additionalData: <identifier>` → resolve to its object assignment (minified bundle:
+            //      `var …,a={flowkyc:{…}}` … `return {…, additionalData:a}`).
+            if (!handled) {
+                for (m in Regex("""\badditionalData\b\s*[:=]\s*([A-Za-z_$][\w$]*)""").findAll(masked)) {
+                    val span = resolveIdentObject(masked, orig, m.groupValues[1]) ?: continue
+                    absorbAdditionalDataObject(masked, orig, span.first, span.second, cat, rel)
+                    handled = true
+                    break
+                }
+            }
             if (handled) cat.sources += rel
         }
+        // Recover real parameter names from a bundle's sourcemap (minification renamed them to e,t,r).
+        if (handled) applySourceSignatures(cat, signaturesFromSourceMap(path, orig))
         return handled
     }
 
