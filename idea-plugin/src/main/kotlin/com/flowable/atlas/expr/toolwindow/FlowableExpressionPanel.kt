@@ -2,14 +2,16 @@ package com.flowable.atlas.expr.toolwindow
 
 import com.flowable.atlas.expr.ExpressionDialect
 import com.flowable.atlas.expr.ExpressionScope
+import com.flowable.atlas.expr.ExpressionValidator
 import com.flowable.atlas.expr.eval.EvalResult
 import com.flowable.atlas.expr.eval.FrontendExpressionEvaluator
-import com.flowable.atlas.expr.eval.MiniJson
+import com.flowable.atlas.model.MiniJson
 import com.flowable.atlas.expr.inspect.InspectClient
 import com.flowable.atlas.expr.inspect.InspectConnectionDetector
 import com.flowable.atlas.expr.lang.languageOf
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
+import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.flowable.atlas.settings.FlowableAtlasSettings
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
@@ -54,6 +56,10 @@ class FlowableExpressionPanel(private val project: Project) : JPanel(BorderLayou
 
     private var dialect = ExpressionDialect.BACKEND
     private val wrapper = JBLabel()
+
+    // The inspections don't run in a LanguageTextField, so the playground surfaces semantic
+    // findings (unknown functions, dialect misuse — allowlist-filtered) in this status line.
+    private val semantics = JBLabel().apply { foreground = JBColor.ORANGE }
     private val scopeCombo = ComboBox<ScopeItem>()
     private val center = JPanel(BorderLayout())
     private var field = createField("")
@@ -105,7 +111,11 @@ class FlowableExpressionPanel(private val project: Project) : JPanel(BorderLayou
 
         add(bar, BorderLayout.NORTH)
         add(center, BorderLayout.CENTER)
-        add(wrapper, BorderLayout.SOUTH)
+        add(JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            add(semantics)
+            add(wrapper)
+        }, BorderLayout.SOUTH)
 
         payloadArea.document.addDocumentListener(object : SwingDocumentListener {
             override fun insertUpdate(e: SwingDocumentEvent) = reevaluateFrontend()
@@ -120,6 +130,7 @@ class FlowableExpressionPanel(private val project: Project) : JPanel(BorderLayou
         applyScope()
         showCard()
         reevaluateFrontend()
+        updateSemanticStatus()
         applyDetectedConnection(force = false)
     }
 
@@ -193,6 +204,7 @@ class FlowableExpressionPanel(private val project: Project) : JPanel(BorderLayou
         applyScope()
         showCard()
         reevaluateFrontend()
+        updateSemanticStatus()
     }
 
     private fun showCard() = (cards.layout as CardLayout).show(cards, dialect.name)
@@ -201,9 +213,21 @@ class FlowableExpressionPanel(private val project: Project) : JPanel(BorderLayou
         LanguageTextField(languageOf(dialect), project, text, false).apply {
             preferredSize = Dimension(600, 120)
             addDocumentListener(object : DocumentListener {
-                override fun documentChanged(event: DocumentEvent) = reevaluateFrontend()
+                override fun documentChanged(event: DocumentEvent) {
+                    reevaluateFrontend()
+                    updateSemanticStatus()
+                }
             })
         }
+
+    /** Semantic findings for the current text (syntax squiggles come from the annotator). */
+    private fun updateSemanticStatus() {
+        val allowlist = FlowableAtlasProjectSettings.getInstance(project)
+        val problems = ExpressionValidator.validateSemantics(field.text, dialect)
+            .filterNot { allowlist.isAllowlisted(it) }
+        semantics.text = problems.joinToString("   ·   ") { it.message }
+        semantics.isVisible = problems.isNotEmpty()
+    }
 
     /** Frontend: evaluate the expression against the pasted payload and show the result or error. */
     private fun reevaluateFrontend() {

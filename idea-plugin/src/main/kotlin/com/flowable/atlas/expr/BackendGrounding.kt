@@ -44,18 +44,8 @@ object BackendGrounding {
     }
 
     /** Strip a single `${ … }` / `#{ … }` wrapper if the whole body is wrapped; return (inner, startShift). */
-    private fun stripOuterWrapper(body: String): Pair<String, Int> {
-        val start = body.indexOfFirst { !it.isWhitespace() }
-        if (start < 0) return body to 0
-        val end = body.indexOfLast { !it.isWhitespace() } + 1
-        val core = body.substring(start, end)
-        for (open in listOf("\${", "#{")) {
-            if (core.length >= open.length + 1 && core.startsWith(open) && core.endsWith("}")) {
-                return body.substring(start + open.length, end - 1) to (start + open.length)
-            }
-        }
-        return body to 0
-    }
+    private fun stripOuterWrapper(body: String): Pair<String, Int> =
+        ExprWrappers.stripOuter(body, ExprWrappers.BACKEND)
 
     /**
      * Grounding findings for [body]: a warning per root reference that [isKnown] rejects. [suggest]
@@ -67,7 +57,8 @@ object BackendGrounding {
             .map {
                 val fix = suggest(it.name)
                 val hint = fix?.let { s -> " — did you mean '$s'?" } ?: ""
-                ExprProblem(it.start, it.end, "'${it.name}' is not a known variable, bean, or root object$hint", ExprSeverity.WARNING, fix)
+                ExprProblem(it.start, it.end, "'${it.name}' is not a known variable, bean, or root object$hint",
+                    ExprSeverity.WARNING, fix, ExprProblemKind.UNKNOWN_ROOT, subject = it.name)
             }
 
     private fun collect(node: ExprNode, locals: Set<String>, out: MutableList<RootRef>) {

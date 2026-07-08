@@ -1,5 +1,6 @@
 package com.flowable.atlas.explorer
 
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.CapturingProcessHandler
 import com.intellij.openapi.components.Service
@@ -17,6 +18,8 @@ import java.nio.file.Path
  */
 @Service(Service.Level.PROJECT)
 class AtlasGeneratorService(private val project: Project) {
+
+    private val LOG = logger<AtlasGeneratorService>()
 
     /** Suffixes of the artifacts Atlas writes in `--all` mode (used to locate what was produced). */
     private val allArtifactSuffixes =
@@ -79,6 +82,7 @@ class AtlasGeneratorService(private val project: Project) {
                 else -> onSuccess(log)
             }
         } catch (e: Exception) {
+            LOG.warn("Atlas generator failed", e)
             Outcome.Failure("Failed to run the Atlas generator: ${e.message}", "")
         }
     }

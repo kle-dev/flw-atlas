@@ -1,5 +1,6 @@
 package com.flowable.atlas.usage
 
+import com.intellij.openapi.diagnostic.logger
 import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.intellij.codeInsight.daemon.ImplicitUsageProvider
@@ -15,6 +16,8 @@ import com.intellij.psi.PsiMethod
  * as "unused" just because no other Java code calls them.
  */
 class FlowableImplicitUsageProvider : ImplicitUsageProvider {
+
+    private val LOG = logger<FlowableImplicitUsageProvider>()
 
     override fun isImplicitUsage(element: PsiElement): Boolean {
         val index = indexOrNull(element) ?: return false
@@ -37,6 +40,7 @@ class FlowableImplicitUsageProvider : ImplicitUsageProvider {
         return try {
             element.project.service<FlowableModelIndexService>().index()
         } catch (e: Exception) {
+            LOG.debug("index unavailable for implicit-usage check", e)
             null
         }
     }

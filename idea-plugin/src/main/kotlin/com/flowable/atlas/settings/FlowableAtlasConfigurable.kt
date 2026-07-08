@@ -23,9 +23,8 @@ class FlowableAtlasConfigurable : Configurable {
 
     private var root: JPanel? = null
     private val extra = JBCheckBox("Enable extra completions (messages, signals, variables, task/activity keys, DMN variables)")
-    private val exprValidation = JBCheckBox("Validate Flowable expressions (playground + injected \${…} / {{…}} in models)")
+    private val exprValidation = JBCheckBox("Validate Flowable expression syntax (playground + injected \${…} / {{…}} in models)")
     private val injectJava = JBCheckBox("Also validate expressions in Java String literals that contain \${…} / #{…}")
-    private val backendGrounding = JBCheckBox("Ground backend expressions against the project (warn on unknown variables / beans)")
     private val indexDesign = JBCheckBox("Index Flowable Design workspace models (per-model .json under *-models/ folders)")
     private val naming = JComboBox(ConstantNaming.entries.toTypedArray())
     private val format = JComboBox(ConstantFormat.entries.toTypedArray())
@@ -45,7 +44,8 @@ class FlowableAtlasConfigurable : Configurable {
             add(leftAligned(extra))
             add(leftAligned(exprValidation))
             add(leftAligned(injectJava))
-            add(leftAligned(backendGrounding))
+            add(leftAligned(JLabel("Unknown-function warnings & codebase grounding: Settings → Editor → Inspections → Flowable.")))
+            add(leftAligned(JLabel("Project-provided functions can be allowlisted via Alt-Enter → \"Add … to Flowable expression allowlist\".")))
             add(leftAligned(indexDesign))
             add(leftAligned(JLabel("Generated model constants (Tools → Generate Model Constants):")))
             add(labeledRow("Identifier:", naming))
@@ -65,7 +65,6 @@ class FlowableAtlasConfigurable : Configurable {
         return extra.isSelected != s.extraCompletions ||
             exprValidation.isSelected != s.expressionValidation ||
             injectJava.isSelected != s.injectJavaExpressions ||
-            backendGrounding.isSelected != s.backendCodebaseGrounding ||
             indexDesign.isSelected != s.indexDesignWorkspace ||
             naming.selectedItem != s.constantNaming ||
             format.selectedItem != s.constantFormat ||
@@ -79,7 +78,6 @@ class FlowableAtlasConfigurable : Configurable {
         s.extraCompletions = extra.isSelected
         s.expressionValidation = exprValidation.isSelected
         s.injectJavaExpressions = injectJava.isSelected
-        s.backendCodebaseGrounding = backendGrounding.isSelected
         s.indexDesignWorkspace = indexDesign.isSelected
         s.constantNaming = naming.selectedItem as ConstantNaming
         s.constantFormat = format.selectedItem as ConstantFormat
@@ -98,7 +96,6 @@ class FlowableAtlasConfigurable : Configurable {
         extra.isSelected = s.extraCompletions
         exprValidation.isSelected = s.expressionValidation
         injectJava.isSelected = s.injectJavaExpressions
-        backendGrounding.isSelected = s.backendCodebaseGrounding
         indexDesign.isSelected = s.indexDesignWorkspace
         naming.selectedItem = s.constantNaming
         format.selectedItem = s.constantFormat

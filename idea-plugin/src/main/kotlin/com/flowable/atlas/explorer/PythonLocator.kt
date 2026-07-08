@@ -1,5 +1,6 @@
 package com.flowable.atlas.explorer
 
+import com.intellij.openapi.diagnostic.logger
 import com.flowable.atlas.settings.FlowableAtlasSettings
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.configurations.PathEnvironmentVariableUtil
@@ -10,6 +11,8 @@ import com.intellij.execution.util.ExecUtil
  * explicit path from settings, otherwise probes `python3` then `python` on the PATH.
  */
 object PythonLocator {
+
+    private val LOG = logger<PythonLocator>()
 
     /** Either a usable interpreter ([exe] + [version]) or an [error] explaining what's missing. */
     data class Result(val exe: String?, val version: String?, val error: String?) {
@@ -50,6 +53,7 @@ object PythonLocator {
         val text = (out.stdout + " " + out.stderr).trim()   // some pythons print --version to stderr
         Regex("""(\d+)\.(\d+)(?:\.\d+)?""").find(text)?.value
     } catch (e: Exception) {
+        LOG.debug("python probe failed", e)
         null
     }
 

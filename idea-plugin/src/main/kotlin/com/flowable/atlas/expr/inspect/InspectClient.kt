@@ -1,6 +1,7 @@
 package com.flowable.atlas.expr.inspect
 
-import com.flowable.atlas.expr.eval.MiniJson
+import com.intellij.openapi.diagnostic.logger
+import com.flowable.atlas.model.MiniJson
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -20,6 +21,8 @@ import java.util.Base64
  * Request/response (de)serialisation is pure and unit-tested; [evaluate] performs the network call.
  */
 object InspectClient {
+
+    private val LOG = logger<InspectClient>()
 
     enum class ScopeType(val wire: String) { BPMN("bpmn"), CMMN("cmmn"), TASK("task") }
 
@@ -89,6 +92,7 @@ object InspectClient {
                 else -> Outcome.Failed("HTTP ${resp.statusCode()}: ${resp.body().take(200)}")
             }
         } catch (e: Exception) {
+            LOG.warn("Inspect evaluation failed", e)
             Outcome.Failed(e.message ?: e.javaClass.simpleName)
         }
     }
