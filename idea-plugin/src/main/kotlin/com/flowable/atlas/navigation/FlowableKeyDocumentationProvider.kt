@@ -2,6 +2,7 @@ package com.flowable.atlas.navigation
 
 import com.flowable.atlas.completion.SiteMatching
 import com.flowable.atlas.index.FlowableModelIndexService
+import com.flowable.atlas.model.ModelType
 import com.intellij.lang.documentation.AbstractDocumentationProvider
 import com.intellij.openapi.components.service
 import com.intellij.psi.PsiElement
@@ -33,8 +34,27 @@ class FlowableKeyDocumentationProvider : AbstractDocumentationProvider() {
         return buildString {
             append("<b>").append(escape(key)).append("</b> &mdash; ").append(first.type.display)
             if (first.name != key) append("<br/>").append(escape(first.name))
+            tableLine(service, first.type, key)?.let { append("<br/>").append(it) }
             append("<br/><small>").append(escape(first.file.presentableUrl)).append("</small>")
             if (entries.size > 1) append("<br/><small>+ ").append(entries.size - 1).append(" more file(s)</small>")
+        }
+    }
+
+    /**
+     * The physical table behind the key: read directly for a service key, or via the backing
+     * service for a data object key. Lazy per-hover — two small file reads at most.
+     */
+    private fun tableLine(service: FlowableModelIndexService, type: ModelType, key: String): String? {
+        val table = when (type) {
+            ModelType.SERVICE -> service.serviceTableOf(key)
+            ModelType.DATA_OBJECT -> service.dataObjectInfoOf(key)
+                ?.referencedServiceDefinitionModelKey?.let { service.serviceTableOf(it) }
+            else -> null
+        } ?: return null
+        val name = table.tableName ?: return null
+        return buildString {
+            append("Table: <b>").append(escape(name)).append("</b>")
+            table.type?.let { append(" <small>(").append(escape(it)).append(")</small>") }
         }
     }
 

@@ -1,6 +1,6 @@
 # Flowable project — `miniproject` (quick overview)
 
-_7 model files · 2 Java files · 22 nodes · 25 relationships · 3 user groups. Compact summary — use `--json` for the full graph, or open the HTML explorer._
+_11 model files · 2 Java files · 30 nodes · 30 relationships · 3 user groups. Compact summary — use `--json` for the full graph, or open the HTML explorer._
 
 ⚠ **1 file(s) could not be fully analyzed** (parse/read failures) — the map below may be incomplete. Details: `diagnostics` in graph.json / Warnings section of the overview.
 
@@ -8,9 +8,9 @@ _7 model files · 2 Java files · 22 nodes · 25 relationships · 3 user groups.
 - **Demo App** (`demoApp`) — 5 models
 
 ## Inventory
-Models: 1 process · 1 case · 1 form · 1 dataObject · 1 service · 1 liquibase
+Models: 1 process · 1 case · 1 decision · 1 form · 2 dataObject · 1 service · 1 event · 1 securityPolicy · 1 liquibase
 Java: 1 controller · 1 component
-Variables: 3 (grouped by scope: process / form / case / java / …)
+Variables: 5 (grouped by scope: process / form / case / java / …)
 Expressions: 4 backend ${ } · 1 frontend {{ }} · 0 string literals
 
 ## Entry points — who can start what
@@ -23,6 +23,9 @@ Expressions: 4 backend ${ } · 1 frontend {{ }} · 0 string literals
 ## Integrations — services
 - `customerService` Customer Service (db → cust_customer)
 
+## Integrations — messaging / AI
+Events: orderShipped
+
 ## Hotspots — most-referenced (central) artifacts
 - process `orderProcess` — Order Process (referenced by 3)
 - form `orderForm` — Order Form (referenced by 3)
@@ -33,7 +36,9 @@ Expressions: 4 backend ${ } · 1 frontend {{ }} · 0 string literals
 - app `demoApp` — Demo App (referenced by 2)
 - service `customerService` — Customer Service (referenced by 1)
 - liquibase `001-customer` — 001-customer.xml (referenced by 1)
-- dataObject `customerDO` — Customer (referenced by 1)
+- external `notifierBean`  (referenced by 1)
+- external `fulfilmentProcess`  (referenced by 1)
+- event `orderShipped` — Order shipped (referenced by 1)
 
 ## External surface
 - Review (unresolved in project — likely missing/external): bean:notifierBean, process:fulfilmentProcess

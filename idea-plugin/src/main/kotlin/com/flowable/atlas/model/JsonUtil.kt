@@ -81,7 +81,10 @@ object JsonUtil {
         when (node) {
             is Map<*, *> -> {
                 val id = node["id"] as? String
-                if (id != null && node["type"] != null) fields.add(id)
+                // A real form field carries id + type + label (same predicate as
+                // flowable_atlas.py parse_form) — plain containers have no label,
+                // and their ids must not leak into the variables vocabulary.
+                if (id != null && node.containsKey("type") && node.containsKey("label")) fields.add(id)
                 (node["outcomes"] as? List<*>)?.forEach { o ->
                     when (o) {
                         is String -> outcomes.add(o)
@@ -143,7 +146,9 @@ object JsonUtil {
             val f = fAny as? Map<*, *> ?: return@mapNotNull null
             val name = f["name"] as? String ?: return@mapNotNull null
             DataField(name, f["type"] as? String)
-        }
+        } + ((root["variables"] as? Map<*, *>).orEmpty().keys.mapNotNull { it as? String }
+            // masterData-shaped data objects keep their fields in a `variables` map
+            .map { DataField(it, null) })
         return DataObjectInfo(
             key = key,
             dataObjectType = str(root, "dataObjectType"),
