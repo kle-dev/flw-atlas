@@ -145,12 +145,9 @@ class FlowableJavaCompletionContributor : CompletionContributor() {
             val method = call.resolveMethod() ?: return null
             val declaring = method.containingClass ?: return null
             return FlowableApiCatalog.sitesForMethod(method.name).firstOrNull { s ->
-                s.argIndex == ctx.argIndex && isReceiver(declaring, s.receiverFqn)
+                s.argIndex == ctx.argIndex && SiteMatching.isReceiver(declaring, s.receiverFqn)
             }
         }
-
-        private fun isReceiver(declaring: PsiClass, fqn: String): Boolean =
-            declaring.qualifiedName == fqn || InheritanceUtil.isInheritor(declaring, fqn)
 
         private fun addKeys(result: CompletionResultSet, service: FlowableModelIndexService, site: KeySite, quote: Boolean) {
             val seen = HashSet<String>()
@@ -395,9 +392,4 @@ class FlowableJavaCompletionContributor : CompletionContributor() {
 /** Marks a lookup element as a Flowable key so the relevance sorter can rank it first. */
 private val FLOWABLE_KEY_MARKER: Key<Boolean> = Key.create("com.flowable.atlas.completion.flowableKeyItem")
 
-/** Add several lookup strings at once. */
-private fun LookupElementBuilder.withLookupStrings(strings: Set<String>): LookupElementBuilder {
-    var builder = this
-    for (s in strings) builder = builder.withLookupString(s)
-    return builder
-}
+

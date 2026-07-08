@@ -1,5 +1,6 @@
 package com.flowable.atlas.expr.completion
 
+import com.flowable.atlas.completion.withLookupStrings
 import com.flowable.atlas.completion.FlowableInfixMatcher
 import com.flowable.atlas.completion.KeyLookup
 import com.flowable.atlas.expr.ExprCompletionContext
@@ -244,9 +245,3 @@ private fun charAt(context: InsertionContext, offset: Int): Char? {
     return if (offset in 0 until seq.length) seq[offset] else null
 }
 
-/** Add several lookup strings at once. */
-private fun LookupElementBuilder.withLookupStrings(strings: Set<String>): LookupElementBuilder {
-    var builder = this
-    for (s in strings) builder = builder.withLookupString(s)
-    return builder
-}

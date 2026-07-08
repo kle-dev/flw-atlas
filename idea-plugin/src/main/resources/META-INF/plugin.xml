@@ -281,11 +281,28 @@
                   implementationClass="com.flowable.atlas.expr.lang.FlowableExprBraceMatcher"/>
         <lang.braceMatcher language="FlowableFrontendExpr"
                   implementationClass="com.flowable.atlas.expr.lang.FlowableExprBraceMatcher"/>
-        <!-- Syntax / unknown-function squiggles for both dialects (playground + injected fragments). -->
+        <!-- Structural syntax squiggles for both dialects (playground + injected fragments). -->
         <annotator language="FlowableBackendExpr"
                   implementationClass="com.flowable.atlas.expr.annotator.FlowableExpressionAnnotator"/>
         <annotator language="FlowableFrontendExpr"
                   implementationClass="com.flowable.atlas.expr.annotator.FlowableExpressionAnnotator"/>
+        <!-- Semantic expression findings as real inspections: severity/enablement per profile, project
+             allowlist via quick fix. No language attribute — the two dialects share no registered base
+             language; the implementations bail out immediately on any non-expression file. -->
+        <localInspection
+                shortName="FlowableExprUnknownFunction"
+                displayName="Unknown Flowable expression function or namespace"
+                groupName="Flowable"
+                enabledByDefault="true"
+                level="WARNING"
+                implementationClass="com.flowable.atlas.expr.inspection.FlowableExprUnknownFunctionInspection"/>
+        <localInspection
+                shortName="FlowableExprGrounding"
+                displayName="Expression root is not a known variable, bean, or root object"
+                groupName="Flowable"
+                enabledByDefault="false"
+                level="WEAK WARNING"
+                implementationClass="com.flowable.atlas.expr.inspection.FlowableExprGroundingInspection"/>
         <!-- Rainbow parentheses: colour each round-paren nesting level differently. -->
         <annotator language="FlowableBackendExpr"
                   implementationClass="com.flowable.atlas.expr.annotator.FlowableExprRainbowParenAnnotator"/>

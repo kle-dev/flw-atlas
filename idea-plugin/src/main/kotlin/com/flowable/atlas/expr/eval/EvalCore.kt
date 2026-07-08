@@ -1,5 +1,7 @@
 package com.flowable.atlas.expr.eval
 
+import com.flowable.atlas.model.MiniJson
+
 /** A runtime evaluation failure (unknown function, calling a non-function, unsupported operator, …). */
 class EvalException(message: String) : RuntimeException(message)
 

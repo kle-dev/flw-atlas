@@ -3,17 +3,16 @@ package com.flowable.atlas.expr
 import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 
+/**
+ * The annotator reports structural syntax errors only; semantic findings (unknown functions,
+ * dialect misuse) moved to [com.flowable.atlas.expr.inspection.FlowableExprUnknownFunctionInspection]
+ * — see FlowableExprUnknownFunctionInspectionTest.
+ */
 class FlowableExpressionAnnotatorTest : BasePlatformTestCase() {
 
-    fun testUnknownBackendFunctionIsFlaggedWithDidYouMeanFix() {
-        // Caret inside the flagged name so the quick fix is offered at the caret.
-        myFixture.configureByText("t.flowable-be", "date:no<caret>ww()")
-        val infos = myFixture.doHighlighting()
-        assertTrue(infos.any { it.description?.contains("Unknown function") == true })
-
-        val fix = myFixture.findSingleIntention("Replace with 'now'")
-        myFixture.launchAction(fix)
-        assertEquals("date:now()", myFixture.file.text)
+    fun testUnbalancedParenIsError() {
+        myFixture.configureByText("t.flowable-be", "date:now(")
+        assertTrue(myFixture.doHighlighting().any { it.severity == HighlightSeverity.ERROR })
     }
 
     fun testValidBackendExpressionHasNoHighlights() {
@@ -25,18 +24,14 @@ class FlowableExpressionAnnotatorTest : BasePlatformTestCase() {
         )
     }
 
-    fun testPipeInBackendIsWarned() {
-        myFixture.configureByText("t.flowable-be", "a |> b")
-        assertTrue(myFixture.doHighlighting().any { it.description?.contains("frontend-only pipe") == true })
+    fun testUnknownFunctionIsNotAnAnnotatorConcern() {
+        // Semantic findings must NOT come from the annotator (they'd be unsuppressable there).
+        myFixture.configureByText("t.flowable-be", "date:noww()")
+        assertFalse(myFixture.doHighlighting().any { it.description?.contains("Unknown function") == true })
     }
 
-    fun testUnbalancedParenIsError() {
-        myFixture.configureByText("t.flowable-be", "date:now(")
+    fun testUnterminatedStringIsError() {
+        myFixture.configureByText("t.flowable-be", "a == 'oops")
         assertTrue(myFixture.doHighlighting().any { it.severity == HighlightSeverity.ERROR })
-    }
-
-    fun testFrontendUnknownMemberIsFlagged() {
-        myFixture.configureByText("t.flowable-fe", "flw.sim(items)")
-        assertTrue(myFixture.doHighlighting().any { it.description?.contains("flw.sim") == true })
     }
 }

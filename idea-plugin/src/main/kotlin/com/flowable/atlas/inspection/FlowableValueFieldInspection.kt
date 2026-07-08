@@ -1,5 +1,6 @@
 package com.flowable.atlas.inspection
 
+import com.flowable.atlas.completion.SiteMatching
 import com.flowable.atlas.completion.FluentChain
 import com.flowable.atlas.completion.FlowableApiCatalog
 import com.flowable.atlas.completion.ValueSite
@@ -44,7 +45,7 @@ class FlowableValueFieldInspection : LocalInspectionTool() {
                 val declaring = method.containingClass ?: return
                 val site = FlowableApiCatalog.sitesForMethod(method.name)
                     .filterIsInstance<ValueSite>()
-                    .firstOrNull { it.argIndex == 0 && isReceiver(declaring.qualifiedName, declaring, it.receiverFqn) }
+                    .firstOrNull { it.argIndex == 0 && SiteMatching.isReceiver(declaring, it.receiverFqn) }
                     ?: return
 
                 val project = literal.project
@@ -73,9 +74,6 @@ class FlowableValueFieldInspection : LocalInspectionTool() {
             }
         }
     }
-
-    private fun isReceiver(declaringFqn: String?, declaring: com.intellij.psi.PsiClass, fqn: String): Boolean =
-        declaringFqn == fqn || InheritanceUtil.isInheritor(declaring, fqn)
 
     /** Replaces the flagged value field with a valid input value of the operation. */
     private class ReplaceFieldFix(private val replacement: String) : LocalQuickFix {

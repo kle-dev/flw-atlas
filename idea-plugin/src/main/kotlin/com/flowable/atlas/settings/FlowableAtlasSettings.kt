@@ -22,16 +22,14 @@ class FlowableAtlasSettings : PersistentStateComponent<FlowableAtlasSettings.Sta
         var indexDesignWorkspace: Boolean = false,
         /** Offer the extra completion domains (messages, signals, variables, task/activity, DMN variables). */
         var extraCompletions: Boolean = true,
-        /** Report syntax / unknown-function problems in Flowable expressions (playground + injected). */
+        /**
+         * Report structural syntax errors in Flowable expressions (playground + injected). Semantic
+         * findings (unknown functions, grounding) are inspections — Settings → Editor → Inspections →
+         * Flowable — with per-profile severity and a project allowlist.
+         */
         var expressionValidation: Boolean = true,
         /** Inject the backend expression language into Java String literals that carry `${…}` / `#{…}`. */
         var injectJavaExpressions: Boolean = false,
-        /**
-         * Ground backend expressions against the open project: warn when a root identifier is not a
-         * known variable, referenced bean, or engine root object. Opt-in — process variables can be set
-         * at runtime without appearing in any model, so this is a hint, not an error.
-         */
-        var backendCodebaseGrounding: Boolean = false,
         /** How generated model-constant identifiers are derived. */
         var constantNaming: ConstantNaming = ConstantNaming.NAME_AND_KEY,
         /** Whether generated model constants are a class of Strings or an enum. */
@@ -72,10 +70,6 @@ class FlowableAtlasSettings : PersistentStateComponent<FlowableAtlasSettings.Sta
     var injectJavaExpressions: Boolean
         get() = state.injectJavaExpressions
         set(value) { state.injectJavaExpressions = value }
-
-    var backendCodebaseGrounding: Boolean
-        get() = state.backendCodebaseGrounding
-        set(value) { state.backendCodebaseGrounding = value }
 
     var constantNaming: ConstantNaming
         get() = state.constantNaming

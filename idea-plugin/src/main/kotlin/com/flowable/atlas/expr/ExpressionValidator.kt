@@ -9,6 +9,20 @@ import com.flowable.atlas.inspection.Suggestions
 
 enum class ExprSeverity { ERROR, WARNING }
 
+/** What category of finding a problem is — inspections use this for allowlist matching. */
+enum class ExprProblemKind {
+    /** Structural syntax error (unbalanced parens, unterminated string, …). Never suppressible. */
+    SYNTAX,
+    /** Valid syntax used in the wrong dialect (`|>` in backend, `ns:fn()` in frontend). */
+    DIALECT_MISUSE,
+    /** `ns:fn()` with a namespace the catalog does not know. */
+    UNKNOWN_NAMESPACE,
+    /** `ns:fn()` / `flw.member` where the namespace is known but the function is not. */
+    UNKNOWN_FUNCTION,
+    /** Codebase grounding: a root identifier that is no known variable/bean/root. */
+    UNKNOWN_ROOT,
+}
+
 /** A problem found in an expression body; offsets are relative to the body text passed to [ExpressionValidator.validate]. */
 data class ExprProblem(
     val startOffset: Int,
@@ -17,6 +31,9 @@ data class ExprProblem(
     val severity: ExprSeverity,
     /** If set, the flagged range can be replaced with this text via a "did you mean" quick fix. */
     val quickFix: String? = null,
+    val kind: ExprProblemKind = ExprProblemKind.SYNTAX,
+    /** The catalog subject of the finding — `ns`, `ns:fn` or `flw.member` — for allowlisting. */
+    val subject: String? = null,
 )
 
 /**
@@ -33,7 +50,16 @@ data class ExprProblem(
  */
 object ExpressionValidator {
 
-    fun validate(body: String, dialect: ExpressionDialect): List<ExprProblem> {
+    fun validate(body: String, dialect: ExpressionDialect): List<ExprProblem> =
+        (validateSyntax(body, dialect) + validateSemantics(body, dialect)).sortedBy { it.startOffset }
+
+    /**
+     * Layer 1 — structural syntax only, via the real per-dialect parser (single source of truth for
+     * what is a syntax error). These are grammar facts, never configuration: the annotator reports
+     * them unconditionally (also inside the playground's [com.intellij.ui.LanguageTextField], where
+     * inspections do not run).
+     */
+    fun validateSyntax(body: String, dialect: ExpressionDialect): List<ExprProblem> {
         // Be forgiving in the playground: the field wants the expression *body*, but users naturally
         // type the wrapper too (`{{ … }}` / `${ … }`). Validate the inner part when a full wrapper is
         // present. Injected fragments are already delimiter-free, so this never strips them.
@@ -41,44 +67,39 @@ object ExpressionValidator {
         // An empty interpolation (`{{}}`, `${}`) or blank body is a runtime no-op — the frontend
         // silently ignores an expression that yields nothing — so there is nothing to flag.
         if (inner.isBlank()) return emptyList()
-        val toks = ExpressionLexer.tokenize(inner)
         val problems = ArrayList<ExprProblem>()
-        // Layer 1 — structural syntax, via the real per-dialect parser (single source of truth for
-        // what is a syntax error). Function existence & dialect fit are separate semantic checks below.
         ExprParser.parse(inner, dialect).error?.let {
             problems += ExprProblem(it.start, it.end, it.message, ExprSeverity.ERROR)
         }
-        // Layer 2 — semantic, token-based: dialect-only operators and the function catalog.
+        return shifted(problems, shift)
+    }
+
+    /**
+     * Layers 2+3 — semantic, token-based findings: dialect-only operators and the function catalog.
+     * Reported through the `localInspection`s so severity, enablement, scopes and the project
+     * allowlist are user-controllable (the hand-maintained catalog can lag behind a project's
+     * custom JUEL functions).
+     */
+    fun validateSemantics(body: String, dialect: ExpressionDialect): List<ExprProblem> {
+        val (inner, shift) = stripOuterWrapper(body)
+        if (inner.isBlank()) return emptyList()
+        val toks = ExpressionLexer.tokenize(inner)
+        val problems = ArrayList<ExprProblem>()
         checkDialectOperators(toks, dialect, problems)
         checkFunctions(toks, dialect, problems)
-        return problems
-            .map { if (shift == 0) it else it.copy(startOffset = it.startOffset + shift, endOffset = it.endOffset + shift) }
-            .sortedBy { it.startOffset }
+        return shifted(problems, shift)
     }
 
-    /** If [body] is entirely wrapped in a `{{ … }}` / `${ … }` / `#{ … }` pair, return the inner text
-     *  and its start offset in [body]; otherwise return ([body], 0). */
-    private fun stripOuterWrapper(body: String): Pair<String, Int> {
-        val start = body.indexOfFirst { !it.isWhitespace() }
-        if (start < 0) return body to 0
-        val end = body.indexOfLast { !it.isWhitespace() } + 1
-        val core = body.substring(start, end)
-        for ((open, close) in WRAPPERS) {
-            if (core.length >= open.length + close.length && core.startsWith(open) && core.endsWith(close)) {
-                val innerStart = start + open.length
-                val innerEnd = end - close.length
-                return body.substring(innerStart, innerEnd) to innerStart
-            }
-        }
-        return body to 0
-    }
+    private fun shifted(problems: List<ExprProblem>, shift: Int): List<ExprProblem> =
+        if (shift == 0) problems
+        else problems.map { it.copy(startOffset = it.startOffset + shift, endOffset = it.endOffset + shift) }
 
-    private val WRAPPERS = listOf("{{" to "}}", "\${" to "}", "#{" to "}")
+    private fun stripOuterWrapper(body: String): Pair<String, Int> = ExprWrappers.stripOuter(body)
 
     private fun checkDialectOperators(toks: List<Tok>, dialect: ExpressionDialect, out: MutableList<ExprProblem>) {
         if (dialect == ExpressionDialect.BACKEND) {
             for (t in toks) if (t.type == TokType.PIPE) {
-                out += warning(t, "'|>' is a frontend-only pipe operator")
+                out += warning(t, "'|>' is a frontend-only pipe operator", kind = ExprProblemKind.DIALECT_MISUSE)
             }
         }
     }
@@ -96,18 +117,21 @@ object ExpressionValidator {
                 if (dialect == ExpressionDialect.FRONTEND) {
                     if (FlowableExpressionCatalog.resolvePrefix(prefix.text) != null) {
                         out += warning(prefix.start, name.end,
-                            "'${prefix.text}:${name.text}' is backend function syntax; frontend expressions use flw.${name.text}(…)")
+                            "'${prefix.text}:${name.text}' is backend function syntax; frontend expressions use flw.${name.text}(…)",
+                            kind = ExprProblemKind.DIALECT_MISUSE)
                     }
                     continue
                 }
                 val canonical = FlowableExpressionCatalog.resolvePrefix(prefix.text)
                 if (canonical == null) {
                     val suggestion = Suggestions.closest(prefix.text, FlowableExpressionCatalog.backendPrefixes())
-                    out += warning(prefix, "Unknown function namespace '${prefix.text}'${hint(suggestion)}", suggestion)
+                    out += warning(prefix, "Unknown function namespace '${prefix.text}'${hint(suggestion)}", suggestion,
+                        kind = ExprProblemKind.UNKNOWN_NAMESPACE, subject = prefix.text)
                 } else if (!FlowableExpressionCatalog.isBackendFunction(prefix.text, name.text)) {
                     val names = FlowableExpressionCatalog.backendFunctionsForPrefix(prefix.text).flatMap { it.allNames }
                     val suggestion = Suggestions.closest(name.text, names)
-                    out += warning(name, "Unknown function '${prefix.text}:${name.text}'${hint(suggestion)}", suggestion)
+                    out += warning(name, "Unknown function '${prefix.text}:${name.text}'${hint(suggestion)}", suggestion,
+                        kind = ExprProblemKind.UNKNOWN_FUNCTION, subject = "${prefix.text}:${name.text}")
                 }
                 continue
             }
@@ -121,7 +145,8 @@ object ExpressionValidator {
                 if (!FlowableExpressionCatalog.isFrontendMember(member.text)) {
                     val names = FlowableExpressionCatalog.frontendMembers().map { it.name }
                     val suggestion = Suggestions.closest(member.text, names)
-                    out += warning(member, "Unknown flw function 'flw.${member.text}'${hint(suggestion)}", suggestion)
+                    out += warning(member, "Unknown flw function 'flw.${member.text}'${hint(suggestion)}", suggestion,
+                        kind = ExprProblemKind.UNKNOWN_FUNCTION, subject = "flw.${member.text}")
                 }
             }
         }
@@ -129,8 +154,10 @@ object ExpressionValidator {
 
     private fun hint(suggestion: String?): String = suggestion?.let { " — did you mean '$it'?" } ?: ""
 
-    private fun warning(t: Tok, message: String, quickFix: String? = null) =
-        ExprProblem(t.start, t.end, message, ExprSeverity.WARNING, quickFix)
-    private fun warning(start: Int, end: Int, message: String, quickFix: String? = null) =
-        ExprProblem(start, end, message, ExprSeverity.WARNING, quickFix)
+    private fun warning(t: Tok, message: String, quickFix: String? = null,
+                        kind: ExprProblemKind = ExprProblemKind.SYNTAX, subject: String? = null) =
+        ExprProblem(t.start, t.end, message, ExprSeverity.WARNING, quickFix, kind, subject)
+    private fun warning(start: Int, end: Int, message: String, quickFix: String? = null,
+                        kind: ExprProblemKind = ExprProblemKind.SYNTAX, subject: String? = null) =
+        ExprProblem(start, end, message, ExprSeverity.WARNING, quickFix, kind, subject)
 }
