@@ -105,6 +105,20 @@ class ExpressionValidatorTest(unittest.TestCase):
         self.assertIn("flw.sim", w[0]["message"])
         self.assertEqual(w[0]["quickFix"], "sum")
 
+    def test_top_level_custom_function_is_not_flagged(self):
+        # Custom JS functions provided via `flowable.externals.additionalData` are spread into the
+        # frontend expression scope as top-level identifiers — they resolve at runtime but are
+        # invisible to us, so a bare call (or a call through a custom object) must never be flagged.
+        self.assertEqual(frontend("myCustomFn(order)"), [])
+        self.assertEqual(frontend("myLib.doThing(order)"), [])
+        self.assertEqual(frontend("{{ computeRiskScore($payload) }}"), [])
+
+    def test_unknown_flw_member_without_near_match_is_lenient(self):
+        # `additionalData.flw` can carry custom functions too. A `flw.<x>` with no near-match to any
+        # known member is treated as one of those (not flagged); only a plausible typo is surfaced.
+        self.assertEqual(frontend("flw.computeRiskScore(order)"), [])
+        self.assertTrue(has(frontend("flw.sim(items)"), "warning"))  # typo → still suspect
+
     def test_pipe_in_backend_is_warned(self):
         self.assertTrue(has(backend("a |> b"), contains="frontend-only pipe"))
 
