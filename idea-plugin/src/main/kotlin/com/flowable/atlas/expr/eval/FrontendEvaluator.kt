@@ -1,5 +1,7 @@
 package com.flowable.atlas.expr.eval
 
+import com.flowable.atlas.expr.ExprWrappers
+import com.flowable.atlas.model.MiniJson
 import com.flowable.atlas.expr.ExpressionDialect
 import com.flowable.atlas.expr.parse.ArrayNode
 import com.flowable.atlas.expr.parse.ArrowNode
@@ -50,10 +52,8 @@ object FrontendExpressionEvaluator {
         }
     }
 
-    private fun stripWrapper(body: String): String {
-        val t = body.trim()
-        return if (t.length >= 4 && t.startsWith("{{") && t.endsWith("}}")) t.substring(2, t.length - 2).trim() else t
-    }
+    private fun stripWrapper(body: String): String =
+        ExprWrappers.stripOuter(body, ExprWrappers.FRONTEND).first.trim()
 
     private fun buildContext(payload: Any?): Map<String, Any?> {
         val ctx = LinkedHashMap<String, Any?>()

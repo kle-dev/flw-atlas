@@ -7,6 +7,7 @@ import com.flowable.atlas.index.OperationInfo
 import com.flowable.atlas.index.ParamInfo
 import com.flowable.atlas.index.RawModel
 import com.flowable.atlas.index.ServiceTable
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.vfs.VirtualFile
 
 /**
@@ -15,11 +16,18 @@ import com.intellij.openapi.vfs.VirtualFile
  */
 object JsonUtil {
 
+    private val LOG = logger<JsonUtil>()
+
     private fun parseMap(bytes: ByteArray): Map<*, *>? =
-        MiniJson.parse(String(bytes, Charsets.UTF_8)) as? Map<*, *>
+        MiniJson.parseOrNull(String(bytes, Charsets.UTF_8)) as? Map<*, *>
 
     private fun parseMap(file: VirtualFile): Map<*, *>? =
-        try { parseMap(file.contentsToByteArray()) } catch (e: Exception) { null }
+        try {
+            parseMap(file.contentsToByteArray())
+        } catch (e: Exception) {
+            LOG.debug("unreadable model json ${file.path}", e)
+            null
+        }
 
     private fun str(map: Map<*, *>?, field: String): String? = map?.get(field) as? String
 

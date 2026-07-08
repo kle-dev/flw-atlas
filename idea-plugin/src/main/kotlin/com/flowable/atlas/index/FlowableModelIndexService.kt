@@ -4,6 +4,7 @@ import com.flowable.atlas.model.JsonUtil
 import com.flowable.atlas.model.ModelFiles
 import com.flowable.atlas.model.ModelType
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.progress.ProgressManager
@@ -21,6 +22,8 @@ import com.intellij.openapi.vfs.newvfs.events.VFileEvent
  * inputParametersOf) is intentionally storage-agnostic so the backing store can later be
  * swapped for a FileBasedIndex without touching callers.
  */
+private val LOG = logger<FlowableModelIndexService>()
+
 @Service(Service.Level.PROJECT)
 class FlowableModelIndexService(private val project: Project) : Disposable {
 
@@ -167,7 +170,9 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
                 }
                 ModelExpressionScanner.scan(String(bytes, Charsets.UTF_8), referencedIdentifiers, referencedClassFqns)
             } catch (e: Exception) {
-                // unreadable / not valid — skip this model
+                // unreadable / not valid — skip this model, but leave a trace: a systematically
+                // mis-parsed model type would otherwise silently never be indexed
+                LOG.debug("skipping unindexable model $fileName", e)
             }
         }
 

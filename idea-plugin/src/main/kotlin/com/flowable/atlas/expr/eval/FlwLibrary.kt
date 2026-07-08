@@ -1,5 +1,6 @@
 package com.flowable.atlas.expr.eval
 
+import com.flowable.atlas.model.MiniJson
 import com.flowable.atlas.expr.eval.Values.asList
 import com.flowable.atlas.expr.eval.Values.asMap
 import com.flowable.atlas.expr.eval.Values.truthy
