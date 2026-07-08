@@ -4,7 +4,7 @@
 <idea-plugin require-restart="true">
     <id>com.flowable.atlas</id>
     <name>Flowable Atlas</name>
-    <version>0.6.0</version>
+    <version>0.7.0</version>
     <vendor email="kevin.klever@flowable.com" url="https://www.flowable.com">Flowable</vendor>
 
     <description><![CDATA[
@@ -103,6 +103,24 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.7.0</h3>
+        <ul>
+          <li><b>Rainbow parentheses render again in frontend <code>{{…}}</code> (and backend
+              <code>${…}</code>) expressions</b> — each nesting level of <code>( )</code> is coloured
+              so a matching pair shares a colour and a missing one stands out. The colours are now
+              forced onto the annotation instead of relying on a colour-scheme default that silently
+              stopped rendering after a platform upgrade, so they show reliably in the playground and
+              inline in <code>.form</code> / model fragments.</li>
+          <li><b>Custom functions are found in compiled frontend bundles</b> — a project that ships only
+              the built <code>static/ext/custom.js</code> (Rollup UMD: <code>var additionalData = {…}</code>)
+              or a nested <code>externals: { additionalData: {…} }</code> config now has its
+              <code>externals.additionalData</code> functions read too, not just uncompiled source. A React
+              <code>&lt;Form additionalData={…}&gt;</code> prop is not mistaken for a registration.</li>
+          <li><b>Custom functions are cross-referenced in the Atlas Explorer</b> — each project custom
+              function (a <code>flowkyc.*</code> namespace member, an extra <code>flw.*</code> member, or a
+              top-level helper) is a first-class node: it lists the forms/models whose <code>{{…}}</code>
+              bindings call it, and each form lists the custom functions it uses (navigable both ways).</li>
+        </ul>
         <h3>0.6.0</h3>
         <ul>
           <li><b>Project custom functions are read from source and validated precisely</b> — functions a

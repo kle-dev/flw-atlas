@@ -21,7 +21,7 @@
     --c-securityPolicy:#ffb3c0;--c-group:#d8b75a;--c-external:#6b7480;--c-masterData:#ff7a93;
     --c-knowledgeBase:#b694ff;--c-sla:#c9a26b;--c-dashboardComponent:#6fe0a8;
     --c-bot:#ff6fd8;--c-liquibase:#7aa0ff;--c-expression:#b08cff;--c-binding:#5fd0e0;
-    --c-variable:#ffd27f;--c-string:#9ad07a;--c-method:#9fb8ff;
+    --c-variable:#ffd27f;--c-string:#9ad07a;--c-method:#9fb8ff;--c-customFunction:#4fd6c0;
     --c-invalidExpr:#ff6b6b;--c-suspectExpr:#e0b34a;
     --cov-good:#9ad07a;--cov-warn:#f4b942;--cov-bad:#ff7a93;--cov-info:#5b9cff;--cov-miss:#ff9aab;
   }
@@ -40,7 +40,7 @@
     --c-securityPolicy:#c04a64;--c-group:#8f7a1e;--c-external:#75808d;--c-masterData:#d23b5e;
     --c-knowledgeBase:#7a4fd8;--c-sla:#8f6b32;--c-dashboardComponent:#1f9a5e;
     --c-bot:#b52f96;--c-liquibase:#3b5fd0;--c-expression:#7a56d6;--c-binding:#1f87a0;
-    --c-variable:#a26f0d;--c-string:#4d8f1f;--c-method:#4c68c0;
+    --c-variable:#a26f0d;--c-string:#4d8f1f;--c-method:#4c68c0;--c-customFunction:#0e9d84;
     --c-invalidExpr:#d43b4f;--c-suspectExpr:#a87b12;
     --cov-good:#3d8f2f;--cov-warn:#a87b12;--cov-bad:#d23b5e;--cov-info:#2f66c8;--cov-miss:#d23b5e;
   }

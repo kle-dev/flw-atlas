@@ -18,7 +18,7 @@ const TM = {
   securityPolicy:['Security policies','Access'],group:['User groups','Access'],
   variable:['Variables','Variables'],
   expression:['Backend expressions ${ }','Expressions'],binding:['Frontend bindings {{ }}','Expressions'],
-  string:['String literals','Expressions'],
+  string:['String literals','Expressions'],customFunction:['Custom functions 🧩','Expressions'],
   external:['External / library','Other'],
 };
 const SECTIONS = ['Models','Integration','Code','Expressions','Variables','Access','Other'];
@@ -274,6 +274,9 @@ function describe(n){
       add('Problems',[ec?ec+' error'+(ec>1?'s':''):'', wc?wc+' warning'+(wc>1?'s':''):''].filter(Boolean).join(', ')); } }
   else if(n.type==='variable'){ add('Scope',(d.scopes||[]).join(', ')); add('Used in', (d.usages||[]).length+' model(s)'); }
   else if(n.type==='string'){ add('Used in', (d.usages||[]).length+' model(s)'); }
+  else if(n.type==='customFunction'){
+    add('Kind', d.kind==='namespace'?('namespace '+d.namespace+'.*'):d.kind==='flw'?'flw.* member':'top-level');
+    add('Registered in',(d.sources||[]).join(', ')); add('Used by', (d.usedBy||[]).length+' form(s) / model(s)'); }
   else if(n.type==='external'){ add('Kind',d.flowableApi?'Flowable platform API':d.route?'In-app navigation route':d.platform?'Flowable platform bean':(d.external_url?'External URL':d.kind||'external')); if(d.method&&d.method!=='(button)') add('Method',d.method); }
   else { Object.keys(d).forEach(k=>{ const v=d[k]; if(typeof v==='string'||typeof v==='number') add(k,v); }); }
   return rows;
@@ -400,8 +403,11 @@ function detailExtra(n){
           '</div>';
       }).join('')+'</div>';
   }
-  if((n.type==='expression'||n.type==='binding') && (d.usedBy||[]).length){
+  if((n.type==='expression'||n.type==='binding'||n.type==='customFunction') && (d.usedBy||[]).length){
     h+='<h3 class="rel">Used by ('+d.usedBy.length+')</h3><div class="nodechips">'+d.usedBy.map(nodeChip).join('')+'</div>';
+  }
+  if(n.type==='customFunction' && !(d.usedBy||[]).length){
+    h+='<div class="authnote authnote-orphan">Registered via <b>externals.additionalData</b> but no <code>{{…}}</code> binding in the scanned models calls it.</div>';
   }
   if((n.type==='variable'||n.type==='string') && (d.usages||[]).length){
     h+='<h3 class="rel">Used in ('+d.usages.length+' models) — effective occurrences</h3>';
@@ -415,7 +421,8 @@ function detailExtra(n){
   // Reverse direction: a model lists all the variables/expressions/strings it uses (collapsible).
   if(d._uses){
     const ord=[['variable','Variables'],['expression','Backend expressions ${ }'],
-               ['binding','Frontend bindings {{ }}'],['string','String literals']];
+               ['binding','Frontend bindings {{ }}'],['customFunction','Custom functions 🧩'],
+               ['string','String literals']];
     let parts='';
     ord.forEach(([t,lbl])=>{ const ids=(d._uses||{})[t]; if(ids&&ids.length)
       parts+='<details class="uses"><summary>'+lbl+' ('+ids.length+')</summary><div class="nodechips">'+ids.map(nodeChip).join('')+'</div></details>'; });

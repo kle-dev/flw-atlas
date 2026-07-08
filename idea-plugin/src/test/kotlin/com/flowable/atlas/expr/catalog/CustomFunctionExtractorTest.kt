@@ -70,6 +70,43 @@ class CustomFunctionExtractorTest {
         assertEquals(setOf("foo", "bar"), cat.namespaces["acme"])
     }
 
+    @Test fun extractsFromCompiledRollupBundle() {
+        // static/ext/custom.js compiled UMD: `export default { …, additionalData }` becomes
+        // `var additionalData = { … }`. Member KEYS survive minification; the React <Form> prop must not.
+        write("src/main/resources/static/ext/custom.js",
+            "(function (global, factory) {\n" +
+                "  global.flowable.externals = factory(global.flowable.React);\n" +
+                "}(this, function (React) { 'use strict';\n" +
+                "  function findCommon(x){ return x; }\n" +
+                "  var additionalData = { flowkyc: { findCommon: findCommon, sortByDate: sortByDate },\n" +
+                "                         flw: { formatIban: function(s){ return s; } }, bareFn: function(){ return 2; } };\n" +
+                "  var index = { applications: [], additionalData: additionalData };\n" +
+                "  React.createElement(Form, { config: c, additionalData: { currentUser: props.user } });\n" +
+                "  return index;\n" +
+                "}));\n")
+        val cat = CustomFunctionExtractor.extract(tmp.root)!!
+        assertEquals(setOf("findCommon", "sortByDate"), cat.namespaces["flowkyc"])
+        assertEquals(setOf("formatIban"), cat.flw)
+        assertTrue("bareFn" in cat.topLevel)
+        assertTrue("currentUser" !in cat.topLevel)   // React <Form> prop is data, not a registration
+    }
+
+    @Test fun nestedExternalsAdditionalDataProperty() {
+        write("static/ext/custom.js",
+            "window.flowable = { externals: { additionalData: {\n" +
+                "  acme: { doThing: function(){}, calc: () => 1 },\n" +
+                "} } };\n")
+        val cat = CustomFunctionExtractor.extract(tmp.root)!!
+        assertEquals(setOf("doThing", "calc"), cat.namespaces["acme"])
+    }
+
+    @Test fun reactFormAdditionalDataPropAloneIsNotARegistration() {
+        write("static/ext/custom.js",
+            "React.createElement(Form, { config: c, additionalData: { currentUser: props.user, " +
+                "count: state.count }, lang: 'en' });\n")
+        assertNull(CustomFunctionExtractor.extract(tmp.root))
+    }
+
     @Test fun spreadIsRecordedAsDiagnosticNotGuessed() {
         write("src/custom.ts",
             "const base = {};\n" +

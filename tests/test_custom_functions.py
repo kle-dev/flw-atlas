@@ -54,6 +54,51 @@ def test_direct_externals_assignment(tmp_path):
     assert cat["namespaces"]["acme"] == {"foo", "bar"}
 
 
+def test_extracts_from_compiled_rollup_bundle(tmp_path):
+    # static/ext/custom.js is usually a compiled UMD bundle: `export default { …, additionalData }`
+    # becomes `var additionalData = { … }`, referenced by `var index = { …, additionalData }`.
+    # The member KEYS survive minification even though the function refs are renamed.
+    _write(tmp_path, "src/main/resources/static/ext/custom.js",
+           "(function (global, factory) {\n"
+           "  global.flowable.externals = factory(global.flowable.React);\n"
+           "}(this, function (React) { 'use strict';\n"
+           "  function findCommon(x){ return x; }\n"
+           "  function formatIban(s){ return s; }\n"
+           "  var additionalData = { flowkyc: { findCommon: findCommon, sortByDate: sortByDate },\n"
+           "                         flw: { formatIban: formatIban }, bareFn: function(){ return 2; } };\n"
+           "  var index = { applications: [], additionalData: additionalData };\n"
+           "  React.createElement(Form, { config: form70, additionalData: { currentUser: props.user } });\n"
+           "  return index;\n"
+           "}));\n")
+    cat = fa.extract_custom_functions(str(tmp_path))
+    assert cat is not None
+    assert cat["namespaces"]["flowkyc"] == {"findCommon", "sortByDate"}
+    assert cat["flw"] == {"formatIban"}
+    assert "bareFn" in cat["top_level"]
+    # the React <Form additionalData={{…}}> prop is DATA, not a registration → not picked up
+    assert "currentUser" not in cat["top_level"]
+
+
+def test_nested_externals_additionaldata_property(tmp_path):
+    # Hand-written global config: `flowable.externals = { additionalData: { … } }` (a property, not
+    # a `.additionalData =` assignment) — extracted because a namespace member gives it away.
+    _write(tmp_path, "static/ext/custom.js",
+           "window.flowable = { externals: { additionalData: {\n"
+           "  acme: { doThing: function(){}, calc: () => 1 },\n"
+           "} } };\n")
+    cat = fa.extract_custom_functions(str(tmp_path))
+    assert cat is not None and cat["namespaces"]["acme"] == {"doThing", "calc"}
+
+
+def test_react_form_additionaldata_prop_alone_is_not_a_registration(tmp_path):
+    # A file whose only `additionalData` is a React <Form> prop (values are data/identifiers) must
+    # NOT be mistaken for a custom-function registration.
+    _write(tmp_path, "static/ext/custom.js",
+           "React.createElement(Form, { config: c, additionalData: { currentUser: props.user, "
+           "count: state.count }, lang: 'en' });\n")
+    assert fa.extract_custom_functions(str(tmp_path)) is None
+
+
 def test_spread_is_recorded_as_diagnostic_not_guessed(tmp_path):
     _write(tmp_path, "src/custom.ts",
            'const base = {};\n'
@@ -138,6 +183,36 @@ def test_extract_auto_discovers_and_validates(tmp_path):
     typo = nodes.get("binding:{{ flowkyc.findComonAttribute(x) }}")
     assert ok is not None and "problems" not in ok["data"]
     assert typo is not None and any("did you mean" in p["message"] for p in typo["data"]["problems"])
+
+
+def test_custom_functions_become_cross_referenced_graph_nodes(tmp_path):
+    # (a) Custom functions are first-class nodes; each links to the forms that call it, and each form
+    # lists the custom functions it uses (bidirectional).
+    _write(tmp_path, "fe/index.tsx",
+           'import additionalData from "./additionaldata";\nexport default { additionalData };\n')
+    _write(tmp_path, "fe/additionaldata/index.ts",
+           'export default { flowkyc: { findCommonAttribute: () => 1 }, '
+           'flw: { formatIban: (s) => s }, greet: () => "hi" };\n')
+    _write(tmp_path, "models/reg.form",
+           '{"metadata":{"key":"regForm","modelType":"form"},'
+           '"rows":[[{"id":"a","type":"text","value":"{{ flowkyc.findCommonAttribute(customer) }}"},'
+           '{"id":"b","type":"text","value":"{{ flw.formatIban(iban) }}"}]]}')
+    r = fa.extract(str(tmp_path))
+    nodes = {n["id"]: n for n in r["graph"]["nodes"]}
+
+    # a node per callable, including the unused top-level `greet`
+    fc = nodes.get("customFunction:flowkyc.findCommonAttribute")
+    assert fc is not None and fc["data"]["kind"] == "namespace" and fc["data"]["namespace"] == "flowkyc"
+    assert "form:regForm" in fc["data"]["usedBy"]                 # forward: fn -> form
+    assert nodes.get("customFunction:flw.formatIban")["data"]["usedBy"] == ["form:regForm"]
+    greet = nodes.get("customFunction:greet")
+    assert greet is not None and greet["data"]["usedBy"] == []    # listed even though unused
+
+    # reverse: the form lists the custom functions it uses
+    used = nodes["form:regForm"]["data"].get("_uses", {}).get("customFunction", [])
+    assert "customFunction:flowkyc.findCommonAttribute" in used
+    assert "customFunction:flw.formatIban" in used
+    assert "customFunction:greet" not in used                    # not called by this form
 
 
 def test_no_custom_functions_flag_disables_discovery(tmp_path):
