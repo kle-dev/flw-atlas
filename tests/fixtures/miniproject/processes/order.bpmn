@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://flowable.org/test">
+  <process id="orderProcess" name="Order Process" flowable:candidateStarterGroups="sales">
+    <documentation>Handles an order from entry to approval.</documentation>
+    <startEvent id="start" flowable:formKey="orderForm"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="calcTask"/>
+    <serviceTask id="calcTask" name="Calculate total"
+                 flowable:expression="${demoBean.run(execution)}"
+                 flowable:resultVariableName="total"/>
+    <sequenceFlow id="f2" sourceRef="calcTask" targetRef="approveTask">
+      <conditionExpression xsi:type="tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${total &gt; 100}</conditionExpression>
+    </sequenceFlow>
+    <userTask id="approveTask" name="Approve order"
+              flowable:candidateGroups="backoffice" flowable:formKey="orderForm"/>
+    <sequenceFlow id="f3" sourceRef="approveTask" targetRef="notifyTask">
+      <conditionExpression xsi:type="tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${vars:bogus(}</conditionExpression>
+    </sequenceFlow>
+    <serviceTask id="notifyTask" name="Notify"
+                 flowable:delegateExpression="${notifierBean}"/>
+    <sequenceFlow id="f4" sourceRef="notifyTask" targetRef="callSub"/>
+    <callActivity id="callSub" name="Fulfil" calledElement="fulfilmentProcess"/>
+    <sequenceFlow id="f5" sourceRef="callSub" targetRef="end"/>
+    <endEvent id="end"/>
+  </process>
+</definitions>

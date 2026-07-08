@@ -1,0 +1,11 @@
+{
+  "key": "customerDO",
+  "name": "Customer",
+  "dataObjectType": "lookup",
+  "referencedServiceDefinitionModelKey": "customerService",
+  "fieldMappings": [
+    {"name": "id", "label": "Id", "type": "string"},
+    {"name": "customerName", "label": "Name", "type": "string"}
+  ],
+  "definitionIdentityLinks": {"query": {"groups": ["sales"]}}
+}
