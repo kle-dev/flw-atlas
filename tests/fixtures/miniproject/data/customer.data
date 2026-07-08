@@ -5,7 +5,9 @@
   "referencedServiceDefinitionModelKey": "customerService",
   "fieldMappings": [
     {"name": "id", "label": "Id", "type": "string"},
-    {"name": "customerName", "label": "Name", "type": "string"}
+    {"name": "customerName", "label": "Name", "type": "string"},
+    {"name": "priority", "label": "Priority", "type": "DATA-OBJECT",
+     "dataObjectModelKey": "priorityMD", "dataObjectModelRelationshipType": "one-to-one"}
   ],
   "definitionIdentityLinks": {"query": {"groups": ["sales"]}}
 }

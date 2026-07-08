@@ -21,7 +21,21 @@
                  flowable:delegateExpression="${notifierBean}"/>
     <sequenceFlow id="f4" sourceRef="notifyTask" targetRef="callSub"/>
     <callActivity id="callSub" name="Fulfil" calledElement="fulfilmentProcess"/>
-    <sequenceFlow id="f5" sourceRef="callSub" targetRef="end"/>
+    <sequenceFlow id="f5" sourceRef="callSub" targetRef="decideTask"/>
+    <serviceTask id="decideTask" name="Decide approval" flowable:type="dmn">
+      <extensionElements>
+        <flowable:field name="decisionTableReferenceKey">
+          <flowable:string>orderDecision</flowable:string>
+        </flowable:field>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="f6" sourceRef="decideTask" targetRef="waitShipped"/>
+    <receiveTask id="waitShipped" name="Wait for shipment">
+      <extensionElements>
+        <flowable:eventType>orderShipped</flowable:eventType>
+      </extensionElements>
+    </receiveTask>
+    <sequenceFlow id="f7" sourceRef="waitShipped" targetRef="end"/>
     <endEvent id="end"/>
   </process>
 </definitions>
