@@ -209,6 +209,11 @@ object FlowableExpressionCatalog {
         // The Work runtime merges these onto `flw` at eval time via `additionalData.flw`
         // (`useGlobalResolver` in flowable-shared) and `Form.tsx`. They call the backend / drive the
         // running form, so they cannot be evaluated in the payload preview (see [FlwLibrary]).
+        // A project can inject *further* custom functions we can't enumerate — onto `flw` (via
+        // `flowable.externals.additionalData.flw`) or as top-level identifiers (any other
+        // `externals.additionalData` key, spread into the scope by `hookEvalExpression`). The validator
+        // stays lenient about them (a no-near-match `flw.<x>` isn't flagged; top-level calls never are)
+        // and the preview reports them as "not available" rather than invalid.
         fn(null, "getUser", doc = "Work: user object for a userId (async, cached)"),
         fn(null, "getMasterDataInstance", doc = "Work: master data instance by id"),
         fn(null, "getMasterDataInstanceByKey", doc = "Work: master data instance by instance+definition key"),

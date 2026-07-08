@@ -3,7 +3,14 @@ package com.flowable.atlas.expr.eval
 import com.flowable.atlas.model.MiniJson
 
 /** A runtime evaluation failure (unknown function, calling a non-function, unsupported operator, …). */
-class EvalException(message: String) : RuntimeException(message)
+open class EvalException(message: String) : RuntimeException(message)
+
+/**
+ * The expression is *valid* but cannot be evaluated in a static payload preview — it depends on the
+ * running form/locale (`flw.getUser`, date/locale members) or on a custom function a project injected
+ * via `flowable.externals.additionalData`. Surfaced as [EvalResult.Unavailable] (neutral), not an error.
+ */
+class PreviewUnavailableException(message: String) : EvalException(message)
 
 /** A callable value — a `flw.*` function or an arrow lambda. */
 fun interface FlwCallable {
@@ -17,6 +24,8 @@ class FlwNamespace(val name: String, val members: Map<String, Any?>)
 sealed interface EvalResult {
     data class Ok(val value: Any?) : EvalResult
     data class Err(val message: String) : EvalResult
+    /** Valid, but not evaluable in a static preview (running-form / locale / custom-injected function). */
+    data class Unavailable(val message: String) : EvalResult
 }
 
 /**

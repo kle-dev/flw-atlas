@@ -22,9 +22,12 @@ import com.flowable.atlas.expr.parse.UnaryNode
  * Evaluates a **frontend** expression against a pasted form payload — the "copy the payload in and see
  * the result" mode. It parses with [ExprParser], builds the same evaluation context shape the browser
  * uses (`{ …defaultAdditionalData, …payload }`, see `flw/FProps.ts`), and walks the AST with JS-flavoured
- * semantics ([Values]) and the pure [FlwLibrary] functions. Any parse or runtime failure is returned as
- * [EvalResult.Err] with a human message; the real form runtime silently yields `undefined`, so surfacing
- * the specific failure is strictly more useful.
+ * semantics ([Values]) and the pure [FlwLibrary] functions. A parse or runtime failure is returned as
+ * [EvalResult.Err] with a human message (the real form runtime silently yields `undefined`, so surfacing
+ * the specific failure is strictly more useful). Expressions that are *valid* but can't be evaluated in a
+ * static preview — running-form/locale members, or a custom function injected via
+ * `flowable.externals.additionalData` — return [EvalResult.Unavailable] so they read as "not previewable
+ * here", never as invalid.
  */
 object FrontendExpressionEvaluator {
 
@@ -45,6 +48,8 @@ object FrontendExpressionEvaluator {
 
         return try {
             EvalResult.Ok(Evaluator(buildContext(payload)).eval(ast))
+        } catch (e: PreviewUnavailableException) {
+            EvalResult.Unavailable(e.message ?: "Not available in the payload preview")
         } catch (e: EvalException) {
             EvalResult.Err(e.message ?: "Evaluation error")
         } catch (e: Exception) {
@@ -142,7 +147,16 @@ object FrontendExpressionEvaluator {
             val args = n.args.map { eval(it) }
             return when (val callee = n.callee) {
                 is MemberNode -> {
-                    val recv = eval(callee.receiver)
+                    val receiver = callee.receiver
+                    // `custom.doThing(…)` where `custom` is an unresolved top-level identifier is most
+                    // likely a custom object provided via `flowable.externals.additionalData` — invisible
+                    // to a static preview, so report it as unavailable rather than "undefined".
+                    if (receiver is IdentNode && !context.containsKey(receiver.name)) {
+                        throw PreviewUnavailableException(
+                            "'${receiver.name}.${callee.name}(…)' is not available in the payload preview — " +
+                                "'${receiver.name}' may be a custom object provided by externals.additionalData")
+                    }
+                    val recv = eval(receiver)
                     if (recv is FlwNamespace) {
                         when (val m = recv.members[callee.name]) {
                             is FlwCallable -> m.call(args)
@@ -151,9 +165,16 @@ object FrontendExpressionEvaluator {
                         }
                     } else callBuiltinMethod(recv, callee.name, args)
                 }
-                is IdentNode -> {
-                    val target = context[callee.name]
-                    if (target is FlwCallable) target.call(args)
+                is IdentNode -> when (val target = context[callee.name]) {
+                    is FlwCallable -> target.call(args)
+                    // An identifier that isn't in scope at all is most likely a custom function injected
+                    // via `flowable.externals.additionalData` (spread into the top-level scope by
+                    // `hookEvalExpression`) — valid at runtime, just not previewable here. A name that
+                    // *is* in scope but resolved to a non-function value is a genuine error.
+                    else -> if (!context.containsKey(callee.name))
+                        throw PreviewUnavailableException(
+                            "'${callee.name}(…)' is not available in the payload preview — " +
+                                "it may be a custom function provided by externals.additionalData")
                     else throw EvalException("'${callee.name}' is not a function")
                 }
                 else -> {

@@ -248,7 +248,11 @@ function describe(n){
   else if(n.type==='case'){ add('Starter groups',d.candidateStarterGroups); add('Initiator var',d.initiatorVariableName); add('Documentation',d.documentation); }
   else if(n.type==='decision'){ add('Hit policy',d.hitPolicy); add('Rules',d.ruleCount); add('Inputs',(d.inputs||[]).join(', ')); add('Outputs',(d.outputs||[]).join(', ')); }
   else if(n.type==='form'||n.type==='page'){ add('Fields',(d.fields||[]).length); add('Outcomes',(d.outcomes||[]).map(o=>o.value).filter(Boolean).join(', ')); }
-  else if(n.type==='dataObject'){ add('Type',d.dataObjectType); add('Data source',d.sourceId); add('Backing service',d.service); add('Data dictionary',d.dictionary); add('Columns',(d.fields||[]).length); }
+  else if(n.type==='dataObject'){ add('Type',d.dataObjectType); add('Data source',d.sourceId); add('Backing service',d.service);
+    // When backed by a service, surface that service's physical table here and link the name back to the service node.
+    const svc=d.service&&byId.get('service:'+d.service), tbl=svc&&(svc.data||{}).tableName;
+    if(tbl) rows.push(['Table',{html:'<span class="vlink" data-id="'+enc('service:'+d.service)+'" tabindex="0" role="link" title="Provided by service '+esc(d.service)+'">'+esc(tbl)+'</span>'}]);
+    add('Data dictionary',d.dictionary); add('Columns',(d.fields||[]).length); }
   else if(n.type==='service'){ add('Type',d.type); add('Base URL',d.baseUrl); add('Auth',d.auth); add('Table',d.tableName); add('Liquibase model',d.referencedLiquibaseModelKey); add('Columns',(d.columns||[]).length); add('Operations',(d.operations||[]).length);
     if(d.schemaCoverage){ const c=d.schemaCoverage.counts||{}; const g=(c.noService||0)+(c.noDataObject||0); if(g) add('Schema gaps',g+' of '+(c.total||0)+' columns'); } }
   else if(n.type==='agent'){ add('Vendor / model',(d.aiVendor||'')+' / '+(d.modelName||'')); add('Temperature',d.temperature); add('API endpoint',String(d.enableApiEndpoint)); add('Knowledge base',d.knowledgeBase); }
@@ -487,7 +491,7 @@ function renderDetail(){
   h+='<div class="dkey mono">'+esc(n.key)+'</div>';
   if(n.file) h+='<div class="dfile" title="click to copy" data-copy="'+enc(n.file)+'">'+esc(n.file)+'</div>';
   const rows=describe(n);
-  if(rows.length){ h+='<div class="grid">'+rows.map(r=>'<div class="cell"><div class="k">'+esc(r[0])+'</div><div class="v mono">'+esc(String(r[1]))+'</div></div>').join('')+'</div>'; }
+  if(rows.length){ h+='<div class="grid">'+rows.map(r=>'<div class="cell"><div class="k">'+esc(r[0])+'</div><div class="v mono">'+(r[1]&&r[1].html!==undefined?r[1].html:esc(String(r[1])))+'</div></div>').join('')+'</div>'; }
   h+=neighborhoodSvg(n);
   h+=detailExtra(n);
   // outgoing
@@ -510,7 +514,7 @@ function renderDetail(){
     if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done,()=>prompt('Copy link:',url));
     else prompt('Copy link:',url);   // clipboard API is unavailable on file:// in some browsers
   };
-  det.querySelectorAll('.nc, .gn').forEach(c=>{
+  det.querySelectorAll('.nc, .gn, .vlink').forEach(c=>{
     c.onclick=()=>select(dec(c.dataset.id));
     c.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); select(dec(c.dataset.id)); } };
   });
@@ -628,12 +632,37 @@ function renderDiagBadge(){
 }
 function toggleDiagPanel(){
   const p=document.getElementById('diagpanel');
+  document.getElementById('cfnpanel').classList.remove('on');  // panels share the top-right anchor
   if(p.classList.contains('on')){ p.classList.remove('on'); return; }
   p.innerHTML='<div class="dp-head">Files that could not be fully analyzed — their models/relations may be missing from this map.</div>'+
     diags.map(d=>'<div class="dp-row"><span class="dp-kind">'+esc(d.kind)+'</span>'+
       '<span class="dp-path mono">'+esc(d.path)+'</span>'+
       '<span class="dp-msg">'+esc(d.message)+'</span></div>').join('');
   p.classList.add('on');
+}
+
+// ---------- custom frontend functions (externals.additionalData) ----------
+const cfns=DATA.customFunctions;
+const cfnTotal=cfns?Object.values(cfns.namespaces).reduce((a,m)=>a+m.length,0)+cfns.flw.length+cfns.topLevel.length:0;
+function renderCustomBadge(){
+  if(!cfns||!cfnTotal) return '';
+  return '<span id="cfnbtn" title="Project custom functions from flowable.externals.additionalData — read from source and validated precisely">🧩 <b>'+cfnTotal+'</b> custom fn'+(cfnTotal>1?'s':'')+'</span>';
+}
+function chips(names){ return '<div class="cf-mem">'+names.map(n=>'<span>'+esc(n)+'</span>').join('')+'</div>'; }
+function toggleCustomPanel(){
+  const p=document.getElementById('cfnpanel');
+  document.getElementById('diagpanel').classList.remove('on');  // panels share the top-right anchor
+  if(p.classList.contains('on')){ p.classList.remove('on'); return; }
+  let h='<div class="dp-head">Custom functions the project injects via <b>flowable.externals.additionalData</b>. '+
+    'Read from source, so calls to them validate precisely (a close typo is flagged; unknown names are not).'+
+    (cfns.sources.length?' Source: <span class="mono">'+esc(cfns.sources.join(', '))+'</span>':'')+'</div>';
+  Object.keys(cfns.namespaces).sort().forEach(ns=>{
+    h+='<div class="cf-ns"><b>'+esc(ns)+'.*</b> <span class="cf-src">('+cfns.namespaces[ns].length+')</span>'+chips(cfns.namespaces[ns])+'</div>';
+  });
+  if(cfns.flw.length) h+='<div class="cf-ns"><b>flw.*</b> <span class="cf-src">(+'+cfns.flw.length+' custom)</span>'+chips(cfns.flw)+'</div>';
+  if(cfns.topLevel.length) h+='<div class="cf-ns"><b>top-level</b> <span class="cf-src">('+cfns.topLevel.length+')</span>'+chips(cfns.topLevel)+'</div>';
+  (cfns.diagnostics||[]).forEach(d=>{ h+='<div class="dp-row"><span class="dp-kind">note</span><span class="dp-msg">'+esc(d)+'</span></div>'; });
+  p.innerHTML=h; p.classList.add('on');
 }
 
 // ---------- boot ----------
@@ -646,10 +675,15 @@ document.getElementById('stats').innerHTML=
   '<span><b>'+(st.models||0)+'</b> models</span><span><b>'+(st.java||0)+'</b> java</span><span><b>'+(st.groups||0)+'</b> groups</span>'+
   (invalidN?'<span style="color:'+color('invalidExpr')+'"><b>'+invalidN+'</b> invalid</span>':'')+
   (suspectN?'<span style="color:'+color('suspectExpr')+'"><b>'+suspectN+'</b> suspect</span>':'')+
+  renderCustomBadge()+
   renderDiagBadge();
 const db=document.getElementById('diagbtn'); if(db) db.onclick=toggleDiagPanel;
-document.addEventListener('click',e=>{ const p=document.getElementById('diagpanel');
-  if(p && p.classList.contains('on') && !e.target.closest('#diagpanel') && !e.target.closest('#diagbtn')) p.classList.remove('on'); });
+const cb=document.getElementById('cfnbtn'); if(cb) cb.onclick=toggleCustomPanel;
+document.addEventListener('click',e=>{
+  const p=document.getElementById('diagpanel');
+  if(p && p.classList.contains('on') && !e.target.closest('#diagpanel') && !e.target.closest('#diagbtn')) p.classList.remove('on');
+  const c=document.getElementById('cfnpanel');
+  if(c && c.classList.contains('on') && !e.target.closest('#cfnpanel') && !e.target.closest('#cfnbtn')) c.classList.remove('on'); });
 state.cat = (CATS.find(c=>c.id==='process')||CATS[0]||{}).id;
 renderRail(); renderList(); renderDetail();
 const hash=location.hash?decodeURIComponent(location.hash.slice(1)):'';

@@ -3,6 +3,7 @@ package com.flowable.atlas.expr.inspection
 import com.flowable.atlas.expr.ExprProblem
 import com.flowable.atlas.expr.ExprProblemKind
 import com.flowable.atlas.expr.ExpressionValidator
+import com.flowable.atlas.expr.catalog.FlowableCustomFunctions
 import com.flowable.atlas.expr.lang.FlowableExprFile
 import com.flowable.atlas.expr.lang.dialectOf
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
@@ -30,7 +31,8 @@ class FlowableExprUnknownFunctionInspection : LocalInspectionTool() {
         if (file !is FlowableExprFile) return null
         val dialect = dialectOf(file.language) ?: return null
         val allowlist = FlowableAtlasProjectSettings.getInstance(file.project)
-        val problems = ExpressionValidator.validateSemantics(file.text, dialect)
+        val custom = FlowableCustomFunctions.getInstance(file.project).catalog()
+        val problems = ExpressionValidator.validateSemantics(file.text, dialect, custom)
             .filterNot { allowlist.isAllowlisted(it) }
         if (problems.isEmpty()) return null
         return problems.map { toDescriptor(it, file, manager, isOnTheFly) }.toTypedArray()

@@ -3,6 +3,7 @@ package com.flowable.atlas.expr.toolwindow
 import com.flowable.atlas.expr.ExpressionDialect
 import com.flowable.atlas.expr.ExpressionScope
 import com.flowable.atlas.expr.ExpressionValidator
+import com.flowable.atlas.expr.catalog.FlowableCustomFunctions
 import com.flowable.atlas.expr.eval.EvalResult
 import com.flowable.atlas.expr.eval.FrontendExpressionEvaluator
 import com.flowable.atlas.model.MiniJson
@@ -223,7 +224,8 @@ class FlowableExpressionPanel(private val project: Project) : JPanel(BorderLayou
     /** Semantic findings for the current text (syntax squiggles come from the annotator). */
     private fun updateSemanticStatus() {
         val allowlist = FlowableAtlasProjectSettings.getInstance(project)
-        val problems = ExpressionValidator.validateSemantics(field.text, dialect)
+        val custom = FlowableCustomFunctions.getInstance(project).catalog()
+        val problems = ExpressionValidator.validateSemantics(field.text, dialect, custom)
             .filterNot { allowlist.isAllowlisted(it) }
         semantics.text = problems.joinToString("   ·   ") { it.message }
         semantics.isVisible = problems.isNotEmpty()
@@ -237,6 +239,9 @@ class FlowableExpressionPanel(private val project: Project) : JPanel(BorderLayou
         when (val r = FrontendExpressionEvaluator.evaluate(expr, payloadArea.text)) {
             is EvalResult.Ok -> { frontendResult.foreground = JBColor.foreground(); frontendResult.text = render(r.value) }
             is EvalResult.Err -> { frontendResult.foreground = JBColor.RED; frontendResult.text = r.message }
+            // Valid, just not previewable statically (running-form/locale or custom externals.additionalData
+            // function) — neutral gray, so it never reads as an invalid expression.
+            is EvalResult.Unavailable -> { frontendResult.foreground = JBColor.GRAY; frontendResult.text = r.message }
         }
     }
 

@@ -19,6 +19,12 @@ class FrontendEvaluatorTest {
         return (r as EvalResult.Err).message
     }
 
+    private fun unavailable(expr: String, payload: String? = null): String {
+        val r = FrontendExpressionEvaluator.evaluate(expr, payload)
+        assertTrue("expected 'unavailable' for '$expr' but got: $r", r is EvalResult.Unavailable)
+        return (r as EvalResult.Unavailable).message
+    }
+
     @Test fun arithmetic() {
         assertEquals(6.0, value("5 + 1"))
         assertEquals("ab", value("'a' + 'b'"))
@@ -78,7 +84,20 @@ class FrontendEvaluatorTest {
     }
 
     @Test fun unsupportedEnvFunctionIsHonest() {
-        assertTrue(error("flw.timeZone()").contains("not available in the payload preview"))
+        assertTrue(unavailable("flw.timeZone()").contains("not available in the payload preview"))
+    }
+
+    @Test fun customExternalsFunctionIsUnavailableNotError() {
+        // A bare call to a function we don't ship is treated as a custom function injected via
+        // `flowable.externals.additionalData`: valid at runtime, just not previewable statically.
+        // It must read as "unavailable" (neutral), never as an invalid expression.
+        assertTrue(unavailable("myCustomFn(order)", """{"order":[]}""").contains("externals.additionalData"))
+        assertTrue(unavailable("myLib.doThing(x)", "{}").contains("externals.additionalData"))
+    }
+
+    @Test fun callingAnInScopeNonFunctionValueIsStillAnError() {
+        // The name *is* in scope but resolved to a non-function value — a genuine mistake, stays an error.
+        assertTrue(error("name(x)", """{"name":"Kevin","x":1}""").contains("not a function"))
     }
 
     @Test fun jsonRoundTrip() {
