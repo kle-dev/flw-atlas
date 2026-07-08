@@ -103,6 +103,29 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.5.0</h3>
+        <ul>
+          <li><b>Expression warnings are now real inspections</b> — unknown function / namespace /
+              <code>flw.*</code> findings and the opt-in codebase grounding moved from a fixed
+              annotator to <i>Settings → Editor → Inspections → Flowable</i>: severity is adjustable,
+              they can be disabled per profile/scope, and they appear in <i>Inspect Code</i>.
+              Structural syntax errors are still flagged directly.</li>
+          <li><b>Project allowlist for custom functions</b> — Alt-Enter on a finding offers
+              <i>Add … to Flowable expression allowlist</i>: functions/namespaces your project
+              registers itself (which the built-in catalog cannot know) are silenced project-wide.
+              Stored in <code>.idea/flowableAtlas.xml</code>, shareable via VCS. The
+              "ground backend expressions" checkbox moved into the (default-off) grounding inspection.</li>
+          <li><b>Expression Playground</b> shows semantic findings (allowlist-aware) in a status line.</li>
+          <li><b>Modernized Atlas Explorer</b> (bundled generator) — light/dark theme with toggle,
+              responsive layout, keyboard &amp; screen-reader support, no more 600-item list cap
+              (incremental scrolling), working browser back/forward + a copy-link button, an SVG
+              neighborhood graph per node, and a <i>⚠ parse issues</i> badge that lists files the
+              generator could not fully analyze. Structural syntax errors and "unknown function"
+              findings are now separate <i>Invalid</i> / <i>Suspect</i> categories, and
+              <code>--expr-allowlist</code> suppresses findings for project-provided functions.</li>
+          <li>Internals: diagnostics logging at previously silent failure points (model indexing,
+              generator, Inspect client), consolidated JSON/wrapper helpers.</li>
+        </ul>
         <h3>0.4.1</h3>
         <ul>
           <li><b>Requires an IDE restart on install / update</b> — the plugin registers languages,
