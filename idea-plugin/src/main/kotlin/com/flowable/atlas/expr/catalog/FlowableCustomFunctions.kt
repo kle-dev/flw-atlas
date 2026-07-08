@@ -34,6 +34,13 @@ class FlowableCustomFunctions(private val project: Project) {
         synchronized(this) { computed = false; cached = null }
     }
 
+    /** Seed the catalog directly, bypassing the filesystem walk (the extractor reads real files,
+     *  which the in-memory test VFS does not provide). */
+    @org.jetbrains.annotations.TestOnly
+    fun setForTest(catalog: CustomFunctionCatalog?) {
+        synchronized(this) { cached = catalog; computed = true }
+    }
+
     companion object {
         fun getInstance(project: Project): FlowableCustomFunctions =
             project.getService(FlowableCustomFunctions::class.java)

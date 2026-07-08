@@ -19,9 +19,10 @@ class FlowableExprBraceMatcher : PairedBraceMatcher {
     override fun getCodeConstructStart(file: PsiFile?, openingBraceOffset: Int): Int = openingBraceOffset
 
     companion object {
-        private val PAIRS = arrayOf(
-            BracePair(FlowableExprTokenTypes.LPAREN, FlowableExprTokenTypes.RPAREN, true),
-            BracePair(FlowableExprTokenTypes.LBRACKET, FlowableExprTokenTypes.RBRACKET, false),
-        )
+        // Parens are level-tagged for rainbow colouring; a matching `(` / `)` share a level, so pair
+        // each level with itself. `()` is structural so it drives the strongest matching.
+        private val PAIRS = Array(FlowableExprTokenTypes.PAREN_LEVELS) { i ->
+            BracePair(FlowableExprTokenTypes.LPAREN_LEVELS[i], FlowableExprTokenTypes.RPAREN_LEVELS[i], true)
+        } + BracePair(FlowableExprTokenTypes.LBRACKET, FlowableExprTokenTypes.RBRACKET, false)
     }
 }

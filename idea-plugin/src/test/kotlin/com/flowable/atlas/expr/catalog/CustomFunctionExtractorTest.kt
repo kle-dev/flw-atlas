@@ -91,6 +91,23 @@ class CustomFunctionExtractorTest {
         assertTrue("currentUser" !in cat.topLevel)   // React <Form> prop is data, not a registration
     }
 
+    @Test fun extractsParameterSignatures() {
+        // Parity with test_custom_functions.py: signatures come from inline arrows / method shorthands /
+        // function expressions, and (compiled bundle) from an identifier resolved to its declaration.
+        write("src/main/resources/static/ext/custom.js",
+            "(function (g, f){ g.flowable.externals = f(); }(this, function (){\n" +
+                "  function findCommon(customer, docs){ return customer; }\n" +
+                "  var additionalData = { flowdemo: { findCommon: findCommon, calc: (a, b) => a + b },\n" +
+                "                         flw: { formatIban: function(iban){ return iban; } }, greet: (name) => name };\n" +
+                "  return { additionalData: additionalData };\n" +
+                "}));\n")
+        val cat = CustomFunctionExtractor.extract(tmp.root)!!
+        assertEquals("customer, docs", cat.signatures["flowdemo.findCommon"])   // resolved from `function findCommon(…)`
+        assertEquals("a, b", cat.signatures["flowdemo.calc"])                   // inline arrow
+        assertEquals("iban", cat.signatures["flw.formatIban"])                 // inline function expression
+        assertEquals("name", cat.signatures["greet"])                         // top-level arrow
+    }
+
     @Test fun nestedExternalsAdditionalDataProperty() {
         write("static/ext/custom.js",
             "window.flowable = { externals: { additionalData: {\n" +
@@ -98,6 +115,37 @@ class CustomFunctionExtractorTest {
                 "} } };\n")
         val cat = CustomFunctionExtractor.extract(tmp.root)!!
         assertEquals(setOf("doThing", "calc"), cat.namespaces["acme"])
+    }
+
+    @Test fun extractsFromMinifiedBundleWithLocalVarConfig() {
+        // Real DEMO shape: minified UMD where the config is a local var referenced as `additionalData:a`.
+        write("static/ext/custom.js",
+            "!function(e,t){e.flowable.externals=t()}(this,function(){\"use strict\";" +
+                "var n={ubsInboxItem:function(e){return e}}," +
+                "a={flowdemo:{findCommonAttribute:function(e,t,r){return e}," +
+                "camelCaseToDashCase:function(e,t){return e},checkValidEmail:checkValidEmail}};" +
+                "return{formComponents:n,additionalData:a}});\n")
+        val cat = CustomFunctionExtractor.extract(tmp.root)!!
+        assertTrue(cat.namespaces.getValue("flowdemo").containsAll(setOf("findCommonAttribute", "camelCaseToDashCase", "checkValidEmail")))
+        assertEquals("e, t, r", cat.signatures["flowdemo.findCommonAttribute"])
+        assertEquals("e, t", cat.signatures["flowdemo.camelCaseToDashCase"])
+    }
+
+    @Test fun recoversRealParamNamesFromSourcemap() {
+        // Minified bundle → params are e,t,r; the sibling sourcemap embeds the original sources, so the
+        // real names are recovered from it.
+        write("static/ext/custom.js",
+            "!function(e,t){e.flowable.externals=t()}(this,function(){\"use strict\";" +
+                "var a={flowdemo:{findCommonAttribute:function(e,t,r){return e}," +
+                "camelCaseToDashCase:function(e,t){return e}}};" +
+                "return{additionalData:a}});\n//# sourceMappingURL=custom.js.map\n")
+        write("static/ext/custom.js.map",
+            "{\"version\":3,\"sources\":[\"a.ts\",\"b.ts\"],\"sourcesContent\":[" +
+                "\"export function findCommonAttribute(allItems: any[], path: string, identifierPath?: string){return allItems[0];}\"," +
+                "\"export function camelCaseToDashCase(str: string, toUpperCase: boolean = false){return str;}\"]}")
+        val cat = CustomFunctionExtractor.extract(tmp.root)!!
+        assertEquals("allItems, path, identifierPath?", cat.signatures["flowdemo.findCommonAttribute"])
+        assertEquals("str, toUpperCase", cat.signatures["flowdemo.camelCaseToDashCase"])
     }
 
     @Test fun reactFormAdditionalDataPropAloneIsNotARegistration() {

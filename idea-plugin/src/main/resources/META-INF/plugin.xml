@@ -4,7 +4,7 @@
 <idea-plugin require-restart="true">
     <id>com.flowable.atlas</id>
     <name>Flowable Atlas</name>
-    <version>0.7.1</version>
+    <version>0.7.2</version>
     <vendor email="kevin.klever@flowable.com" url="https://www.flowable.com">Flowable</vendor>
 
     <description><![CDATA[
@@ -103,6 +103,33 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.7.2</h3>
+        <ul>
+          <li><b>Rainbow parentheses now work in the Expression Playground field too</b> — the paren
+              colouring moved from an annotator into the syntax highlighter (the highlighting lexer tags
+              each round paren with a colour). Annotator highlights do not reliably paint in the
+              playground's embedded editor field; syntax-highlighter colours do, so parentheses are now
+              coloured in the playground and in inline <code>${…}</code> / <code>{{…}}</code> fragments
+              alike. Colouring is <b>per pair</b>: each opening <code>(</code> takes the next colour and
+              its matching <code>)</code> reuses it, so neighbouring pairs are visually distinct while a
+              pair's <code>(</code>/<code>)</code> always match.</li>
+          <li><b>Playground field is a proper scrollable editor</b> — the expression field is now a
+              multi-line code editor with vertical and horizontal scrollbars, so long expressions can be
+              scrolled and edited comfortably instead of being clipped.</li>
+          <li><b>Syntax errors point at the exact spot</b> — the playground now shows the first
+              structural error with a caret under the offending offset (e.g. the unclosed <code>(</code>
+              for a missing <code>)</code>), so you see where to fix without hunting. (Annotator squiggles
+              don't reliably paint in the embedded field, so the position is surfaced directly.)</li>
+          <li><b>Autocomplete for project custom functions, with parameters</b> — the extracted
+              <code>externals.additionalData</code> functions are offered in completion: custom namespaces
+              and top-level helpers at the root, namespace members after <code>ns.</code>, and custom
+              <code>flw.*</code> members after <code>flw.</code>. Each lists its parameter names and, on
+              selection, inserts <code>(params)</code> with the parameters selected so they're easy to fill
+              in. Real names are read from the source — including from a compiled bundle's
+              <b>sourcemap</b> (<code>*.js.map</code> <code>sourcesContent</code>), so even a minified
+              <code>custom.js</code> yields <code>findCommonAttribute(allItems, path, identifierPath?)</code>
+              instead of <code>(e, t, r)</code>.</li>
+        </ul>
         <h3>0.7.1</h3>
         <ul>
           <li><b>Custom functions show their arguments</b> — each custom-function node in the Atlas
@@ -375,11 +402,10 @@
                 enabledByDefault="false"
                 level="WEAK WARNING"
                 implementationClass="com.flowable.atlas.expr.inspection.FlowableExprGroundingInspection"/>
-        <!-- Rainbow parentheses: colour each round-paren nesting level differently. -->
-        <annotator language="FlowableBackendExpr"
-                  implementationClass="com.flowable.atlas.expr.annotator.FlowableExprRainbowParenAnnotator"/>
-        <annotator language="FlowableFrontendExpr"
-                  implementationClass="com.flowable.atlas.expr.annotator.FlowableExprRainbowParenAnnotator"/>
+        <!-- Rainbow parentheses are done in the syntax highlighter (FlowableExprSyntaxHighlighter):
+             the highlighting lexer tags each round paren with its nesting level and each level gets
+             a distinct colour. This paints in every surface, including the playground's embedded
+             editor field where an annotator would not. -->
         <!-- Completion of functions, root objects and the project's variables/form-fields. -->
         <completion.contributor language="FlowableBackendExpr"
                   implementationClass="com.flowable.atlas.expr.completion.FlowableExpressionCompletionContributor"/>
