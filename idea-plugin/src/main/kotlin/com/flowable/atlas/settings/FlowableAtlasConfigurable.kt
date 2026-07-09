@@ -5,10 +5,8 @@ import com.flowable.atlas.generate.ConstantFormat
 import com.flowable.atlas.generate.ConstantNaming
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.intellij.openapi.components.service
-import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.project.ProjectManager
-import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.ui.components.JBCheckBox
 import java.awt.Component
 import java.awt.FlowLayout
@@ -28,12 +26,6 @@ class FlowableAtlasConfigurable : Configurable {
     private val indexDesign = JBCheckBox("Index Flowable Design workspace models (per-model .json under *-models/ folders)")
     private val naming = JComboBox(ConstantNaming.entries.toTypedArray())
     private val format = JComboBox(ConstantFormat.entries.toTypedArray())
-    private val pythonPath = TextFieldWithBrowseButton().apply {
-        addBrowseFolderListener(
-            null,
-            FileChooserDescriptorFactory.createSingleFileDescriptor().withTitle("Select Python 3 Interpreter"),
-        )
-    }
     private val artifactScope = JComboBox(AtlasArtifactScope.entries.toTypedArray())
 
     override fun getDisplayName(): String = "Flowable Atlas"
@@ -52,8 +44,6 @@ class FlowableAtlasConfigurable : Configurable {
             add(labeledRow("Format:", format))
             add(leftAligned(JLabel("Atlas explorer (Tools → Generate Atlas Explorer):")))
             add(labeledRow("Generate:", artifactScope))
-            add(labeledRow("Python 3 interpreter:", pythonPath))
-            add(leftAligned(JLabel("Leave empty to auto-detect python3 / python on PATH.")))
         }
         root = panel
         reset()
@@ -68,7 +58,6 @@ class FlowableAtlasConfigurable : Configurable {
             indexDesign.isSelected != s.indexDesignWorkspace ||
             naming.selectedItem != s.constantNaming ||
             format.selectedItem != s.constantFormat ||
-            pythonPath.text.trim() != s.pythonInterpreterPath ||
             artifactScope.selectedItem != s.atlasArtifactScope
     }
 
@@ -81,7 +70,6 @@ class FlowableAtlasConfigurable : Configurable {
         s.indexDesignWorkspace = indexDesign.isSelected
         s.constantNaming = naming.selectedItem as ConstantNaming
         s.constantFormat = format.selectedItem as ConstantFormat
-        s.pythonInterpreterPath = pythonPath.text.trim()
         s.atlasArtifactScope = artifactScope.selectedItem as AtlasArtifactScope
         if (reindex) {
             // The design-workspace toggle changes what gets indexed; drop cached indexes.
@@ -99,7 +87,6 @@ class FlowableAtlasConfigurable : Configurable {
         indexDesign.isSelected = s.indexDesignWorkspace
         naming.selectedItem = s.constantNaming
         format.selectedItem = s.constantFormat
-        pythonPath.text = s.pythonInterpreterPath
         artifactScope.selectedItem = s.atlasArtifactScope
     }
 

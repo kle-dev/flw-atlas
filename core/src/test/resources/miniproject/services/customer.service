@@ -1,0 +1,13 @@
+{
+  "key": "customerService",
+  "name": "Customer Service",
+  "type": "db",
+  "tableName": "cust_customer",
+  "columnMappings": [
+    {"name": "id", "columnName": "id_", "type": "string"},
+    {"name": "customerName", "columnName": "name_", "type": "string"}
+  ],
+  "operations": [
+    {"key": "findAll", "name": "Find all", "config": {"method": "GET", "url": "/api/customers"}}
+  ]
+}

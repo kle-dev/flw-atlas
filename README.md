@@ -8,7 +8,7 @@ Map **any** Flowable project (app models **+** Java code) into:
 - 🕸️ **`<project>.graph.json`** — the full traversable model↔code graph for agents/LLMs to query.
 - 🤖 **`<project>.CLAUDE.md`** — drop-in context for AI agents: a generic Flowable primer **+** this project's auto-discovered facts (apps, inventory, where models/Java live, key conventions, entry points, build). Copy it into your project root as `CLAUDE.md` so an agent understands Flowable *and* this app. (See `CLAUDE.template.md` for the generic, hand-editable version.)
 
-No dependencies — just **Python 3**. Works on a project directory, on loose model files, and on exported `.zip` / `.bar` archives.
+A single self-contained **JVM** tool — no third-party dependencies, just a **JRE 21+**. The `./atlas` launcher runs the standalone CLI fat-jar (building it on first run). Works on a project directory, on loose model files, and on exported `.zip` / `.bar` archives.
 
 The HTML explorer links each process's service tasks straight to the Java class & method (e.g. `${myService.doWork(...)}` → `MyService.doWork()`), and lets you click through every relationship in both directions.
 
@@ -18,7 +18,7 @@ The HTML explorer links each process's service tasks straight to the Java class 
 ./atlas /path/to/your-flowable-project
 ```
 
-That analyzes the project, writes all four artifacts to `./atlas-output/<project>/`, and opens the HTML explorer in your browser.
+That analyzes the project, writes all five artifacts to `./atlas-output/<project>/`, and opens the HTML explorer in your browser. The first run builds the CLI fat-jar via Gradle; subsequent runs reuse it.
 
 Optional output directory and flags:
 
@@ -45,13 +45,16 @@ Whatever can't be resolved in the project (Flowable platform beans, external RES
 
 ## Advanced — single artifacts
 
+`./atlas` always writes the full `--all` set. For a single artifact, run the CLI fat-jar directly
+(`cli/build/libs/*-all.jar`, built by `./atlas` on first run or `./gradlew :cli:shadowJar`):
+
 ```bash
-python3 flowable_atlas.py <project> --summary --stdout     # compact overview to stdout
-python3 flowable_atlas.py <project> --html  -o explorer.html
-python3 flowable_atlas.py <project> --json  -o graph.json
-python3 flowable_atlas.py <project> --claude               # writes a ready-to-use CLAUDE.md
-python3 flowable_atlas.py <project>                         # full Markdown report (default)
-python3 flowable_atlas.py <project> --all   -o ./out        # all artifacts (what ./atlas does)
+java -jar cli/build/libs/*-all.jar <project> --summary --stdout   # compact overview to stdout
+java -jar cli/build/libs/*-all.jar <project> --html  -o explorer.html
+java -jar cli/build/libs/*-all.jar <project> --json  -o graph.json
+java -jar cli/build/libs/*-all.jar <project> --claude             # writes a ready-to-use CLAUDE.md
+java -jar cli/build/libs/*-all.jar <project>                       # full Markdown report (default)
+java -jar cli/build/libs/*-all.jar <project> --all   -o ./out      # all artifacts (what ./atlas does)
 ```
 
 Useful flags:
@@ -68,13 +71,15 @@ clickable **⚠ parse issues** badge in the explorer header — so missing data 
 
 ## Development
 
-- The explorer frontend lives in `frontend/explorer.{html,css,js}` (editable, lintable). After
-  changing it, run `python3 tools/embed_frontend.py` to refresh the embedded copies inside
-  `flowable_atlas.py` (the distributed single file). A pytest guard fails on drift.
-- Tests: `python3 -m pytest` — golden tests against `tests/fixtures/miniproject`, parser unit
-  tests, CLI contract tests (the artifact names the IDEA plugin depends on), and the expression
-  validator parity suite shared with the IntelliJ plugin.
-- Regenerate goldens after an intended output change: `ATLAS_UPDATE_GOLDEN=1 python3 -m pytest`.
+The tool is a Gradle multi-module JVM project: `:core` (the pure-Kotlin engine — parsing, graph,
+expression validation, rendering), `:cli` (the standalone fat-jar `./atlas` runs) and `:idea-plugin`
+(the IntelliJ plugin, which consumes `:core` in-process).
+
+- The explorer frontend lives in `frontend/explorer.{html,css,js}` (editable, lintable) and is bundled
+  into `:core` as resources (`core/src/main/resources/frontend/`).
+- Build & test everything: `./gradlew build`. This runs the `:core` golden tests against
+  `tests/fixtures/miniproject`, the parser unit tests, the `:cli` contract tests (the artifact names
+  the IDEA plugin depends on) and the shared expression-validator parity suite.
 
 ## For LLMs / agents
 
@@ -83,4 +88,4 @@ clickable **⚠ parse issues** badge in the explorer header — so missing data 
 
 ## Requirements
 
-Python 3.8+. No third-party packages.
+A **JRE 21+** to run `./atlas` (a JDK 21+ to build from source). No third-party packages.

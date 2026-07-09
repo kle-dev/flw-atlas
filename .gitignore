@@ -20,6 +20,14 @@ screenshots/
 # Email/distribution bundles (regenerable)
 email/
 
+# Gradle / Kotlin / IntelliJ-Platform build output (all modules: core, cli, idea-plugin)
+.gradle/
+build/
+out/
+*.iml
+.intellijPlatform/
+.kotlin/
+
 # Editor / OS / Python
 .idea/
 .vscode/

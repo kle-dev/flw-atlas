@@ -1,12 +1,10 @@
 package com.flowable.atlas.explorer
 
-import com.flowable.atlas.settings.FlowableAtlasConfigurable
 import com.intellij.ide.BrowserUtil
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vfs.VirtualFile
@@ -54,9 +52,6 @@ object AtlasExplorerNotifier {
             .getNotificationGroup(GROUP_ID)
             .createNotification("Flowable Atlas generation failed", message, NotificationType.ERROR)
 
-        notification.addAction(NotificationAction.createSimple("Configure Python…") {
-            ShowSettingsUtil.getInstance().showSettingsDialog(project, FlowableAtlasConfigurable::class.java)
-        })
         if (log.isNotBlank()) {
             notification.addAction(NotificationAction.createSimple("Show details") {
                 Messages.showInfoMessage(project, log.take(4000), "Flowable Atlas — Generator Output")

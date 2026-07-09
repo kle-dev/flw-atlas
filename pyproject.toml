@@ -1,4 +1,0 @@
-[tool.pytest.ini_options]
-# Dev-only config — the tool itself stays stdlib-only, Python 3.8+.
-testpaths = ["tests", "test_flowable_atlas_expr.py"]
-pythonpath = ["."]

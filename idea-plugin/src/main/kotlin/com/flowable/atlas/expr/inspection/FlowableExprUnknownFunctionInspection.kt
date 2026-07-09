@@ -46,8 +46,9 @@ class FlowableExprUnknownFunctionInspection : LocalInspectionTool() {
     ): ProblemDescriptor {
         val fixes = ArrayList<LocalQuickFix>(2)
         p.quickFix?.let { fixes += ReplaceExprRangeFix(it) }
-        if (p.subject != null && p.kind != ExprProblemKind.DIALECT_MISUSE) {
-            fixes += AddToExpressionAllowlistFix(p.subject, p.kind)
+        val subject = p.subject   // local capture: subject is a val from another module (:core), not smart-castable
+        if (subject != null && p.kind != ExprProblemKind.DIALECT_MISUSE) {
+            fixes += AddToExpressionAllowlistFix(subject, p.kind)
         }
         return manager.createProblemDescriptor(
             file,

@@ -82,7 +82,7 @@ object JsonUtil {
             is Map<*, *> -> {
                 val id = node["id"] as? String
                 // A real form field carries id + type + label (same predicate as
-                // flowable_atlas.py parse_form) — plain containers have no label,
+                // the original flowable_atlas parse_form) — plain containers have no label,
                 // and their ids must not leak into the variables vocabulary.
                 if (id != null && node.containsKey("type") && node.containsKey("label")) fields.add(id)
                 (node["outcomes"] as? List<*>)?.forEach { o ->

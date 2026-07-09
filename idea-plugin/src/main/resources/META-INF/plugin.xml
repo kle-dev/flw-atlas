@@ -84,8 +84,8 @@
               Save it into the project and open it in your browser or right inside the IDE (embedded
               viewer), then click through every relationship in both directions. Or switch the scope in
               Settings to write <b>all Atlas artifacts</b> at once — summary &amp; overview Markdown, the
-              graph JSON, the explorer HTML and a CLAUDE.md primer for AI agents — into a folder. Requires
-              a Python 3 interpreter on the machine.</li>
+              graph JSON, the explorer HTML and a CLAUDE.md primer for AI agents — into a folder.
+              Generation runs entirely in-process — no external tools required.</li>
         </ul>
 
         <h3>How it feels</h3>
@@ -236,8 +236,7 @@
               runs the bundled Atlas generator over your project and writes a single self-contained,
               interactive HTML page. Choose where to save it in the project, then open it in the
               external browser or in an embedded in-IDE viewer. Any <code>*.explorer.html</code> in the
-              project also opens in the embedded viewer. Requires Python 3.8+ (auto-detected, or set the
-              interpreter in Settings → Tools → Flowable Atlas).</li>
+              project also opens in the embedded viewer.</li>
           <li><b>All artifacts option</b> — a <i>Generate</i> scope in Settings → Tools → Flowable Atlas
               switches the action from "explorer HTML only" to writing the full Atlas set (summary.md,
               overview.md, graph.json, explorer.html, CLAUDE.md) into a folder you pick.</li>
