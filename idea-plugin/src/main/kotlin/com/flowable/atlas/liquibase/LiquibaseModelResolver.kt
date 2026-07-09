@@ -1,7 +1,7 @@
 package com.flowable.atlas.liquibase
 
 import com.flowable.atlas.index.FlowableModelIndexService
-import com.flowable.atlas.index.ServiceTable
+import com.flowable.atlas.parsing.ServiceTable
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 

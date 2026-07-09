@@ -35,6 +35,7 @@ _Scanned 11 model files, 0 archives, 2 Java files, 1 REST endpoints. Generated b
     - 📁 **casePlanModel** Review plan
         - humanTask Review order formKey=`orderForm`
         - processTask Start order processRef=`orderProcess`
+        - task Lookup customer serviceModelKey=`customerService`
 
 ## 4. Decisions (DMN)
 
@@ -46,8 +47,12 @@ _Scanned 11 model files, 0 archives, 2 Java files, 1 REST endpoints. Generated b
 - `customer` [select] Customer
 - `amount` [number] Amount *(req)*
 - `totalDisplay` [text] Total ← `{{amount}}`
+- `lookupCustomer` [button] Lookup customer
+- `customerRecord` [select] Customer record
 - outcomes: `approve`
 - 🔌 data source: {'kind': 'rest', 'url': '/api/customers'}
+- 🔌 data source: {'kind': 'service', 'key': 'customerService', 'op': 'findAll'}
+- 🔌 data source: {'kind': 'dataObject', 'key': 'customerDO', 'op': 'findAll'}
 
 ## 5b. Data objects
 
@@ -81,12 +86,15 @@ _Scanned 11 model files, 0 archives, 2 Java files, 1 REST endpoints. Generated b
 - `orderProcess` [calls run()] `demoBean` → src/main/java/com/example/DemoBean.java:6 (com.example.DemoBean)
 
 ### Model → Model
+- `orderForm` —field-service→ service `customerService` (`services/customer.service`)
+- `orderForm` —field-dataObject→ dataObject `customerDO` (`data/customer.data`)
 - `orderProcess` —start-form→ form `orderForm` (`forms/order-form.form`)
 - `orderProcess` —userTask-form→ form `orderForm` (`forms/order-form.form`)
 - `orderProcess` —ruleTask-decision→ decision `orderDecision` (`decisions/order-decision.dmn`)
 - `orderProcess` —receives-event→ event `orderShipped` (`events/order-shipped.event`)
 - `reviewCase` —humanTask-form→ form `orderForm` (`forms/order-form.form`)
 - `reviewCase` —processTask→ process `orderProcess` (`processes/order.bpmn`)
+- `reviewCase` —serviceMapping→ service `customerService` (`services/customer.service`)
 - `customerDO` —backed-by-service→ service `customerService` (`services/customer.service`)
 - `customerDO` —relates-to→ dataObject `priorityMD` (`data/priority.data`)
 - `demoApp` —contains→ model:bpmn `orderProcess` (`processes/order.bpmn`)

@@ -103,7 +103,7 @@ class BackendModelParsersTest {
         assertEquals("casePlanModel", planModel["type"])
 
         val kids = listOfMaps(planModel["children"])
-        assertEquals(listOf("reviewTask", "startOrder"), kids.map { it["id"] })
+        assertEquals(listOf("reviewTask", "startOrder", "lookupTask"), kids.map { it["id"] })
 
         // human task leaf
         val reviewTask = kids[0]
@@ -117,6 +117,11 @@ class BackendModelParsersTest {
         assertEquals("processTask", startOrder["type"])
         assertEquals("orderProcess", startOrder["processRef"])
 
+        // service-mapping task leaf resolves its service model + operation
+        val lookupTask = kids[2]
+        assertEquals("customerService", lookupTask["serviceModelKey"])
+        assertEquals("findAll", lookupTask["operationKey"])
+
         // no sentries / milestones / event listeners in this case
         assertEquals(emptyList<Any?>(), c["sentries"])
         assertEquals(emptyList<Any?>(), c["milestones"])
@@ -128,7 +133,14 @@ class BackendModelParsersTest {
         assertTrue(r.containsAll(setOf(
             Triple("humanTask-form", "form", "orderForm"),
             Triple("processTask", "process", "orderProcess"),
+            Triple("serviceMapping", "service", "customerService"),
         )))
+
+        // the service mapping also records an operation-level usage (reviewCase -> customerService#findAll)
+        assertTrue(ctx.opUse.any {
+            it["consumer"] == "reviewCase" && it["targetKind"] == "service" &&
+                it["targetKey"] == "customerService" && it["op"] == "findAll"
+        })
 
         // starter/candidate groups feed the group index
         assertTrue(ctx.groups.contains("auditors"))

@@ -52,7 +52,7 @@ class CliTest {
         val written = MiniJson.parse(File(out, "miniproject.graph.json").readText())
         val golden = MiniJson.parse(goldenFile("miniproject.graph.json").readText())
         assertEquals(
-            "graph.json (normalized) differs from tests/golden/miniproject.graph.json",
+            "graph.json (normalized) differs from core/src/test/resources/golden/miniproject.graph.json",
             canonical(golden), canonical(written),
         )
     }
@@ -82,7 +82,7 @@ class CliTest {
         }
 
     private fun goldenFile(name: String): File =
-        File(repoRoot(), "tests/golden/$name").also { check(it.isFile) { "golden not found at $it" } }
+        File(repoRoot(), "core/src/test/resources/golden/$name").also { check(it.isFile) { "golden not found at $it" } }
 
     /** Walk up from the test working dir (the module dir under Gradle) to the repo root. */
     private fun repoRoot(): File {

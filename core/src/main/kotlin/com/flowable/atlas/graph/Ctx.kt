@@ -19,6 +19,10 @@ class Ctx {
     val groups = LinkedHashSet<String>()
     val exprUse = LinkedHashMap<String, MutableSet<String>>()
     val mustacheUse = LinkedHashMap<String, MutableSet<String>>()
+    /** Service-operation usages: a consumer model invokes `operationKey` on a `service` or `dataObject`.
+     *  Resolved to a service (via the data object's backing service) and inverted into
+     *  `serviceOperation` nodes by [GraphBuilder]. Mirrors the shape of [refs]. */
+    val opUse = ArrayList<MutableMap<String, Any?>>()
     val varUse = LinkedHashMap<String, MutableSet<String>>()
     val scriptVarUse = LinkedHashMap<String, MutableSet<String>>()
     val queryMeta = LinkedHashMap<String, MutableMap<String, Any?>>()
@@ -39,6 +43,19 @@ class Ctx {
             "from" to frm, "fromType" to ftype, "fromFile" to ffile,
             "rel" to rel, "kind" to kind, "value" to v,
         ))
+    }
+
+    /** Record that [consumer] invokes operation [opKey] on a service ([targetKind] = "service") or a
+     *  data object ([targetKind] = "dataObject", resolved to its backing service later). Dynamic
+     *  (`${…}`/`{{…}}`) target/operation keys are skipped — they can't be tied to one operation. */
+    fun addOpUse(consumer: Any?, targetKind: String, targetKey: Any?, opKey: Any?) {
+        if (consumer == null || targetKey == null || opKey == null) return
+        val c = consumer.toString().trim()
+        val tk = targetKey.toString().trim()
+        val ok = opKey.toString().trim()
+        if (c.isEmpty() || tk.isEmpty() || ok.isEmpty()) return
+        if (listOf(tk, ok).any { it.contains("\${") || it.contains("{{") }) return
+        opUse.add(linkedMapOf("consumer" to c, "targetKind" to targetKind, "targetKey" to tk, "op" to ok))
     }
 
     /** Record a "who can do what" entry; literal group names feed the index. */
