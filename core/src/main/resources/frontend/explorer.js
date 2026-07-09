@@ -8,7 +8,7 @@ const TM = {
   decision:['Decisions','Models'],form:['Forms','Models'],page:['Pages','Models'],
   dataObject:['Data objects','Models'],dataDictionary:['Data dictionaries','Models'],
   masterData:['Master data','Models'],
-  service:['Service models','Integration'],agent:['Agents / bots','Integration'],
+  service:['Service models','Integration'],serviceOperation:['Service operations','Integration'],agent:['Agents / bots','Integration'],
   channel:['Channels','Integration'],event:['Events','Integration'],knowledgeBase:['Knowledge bases','Integration'],
   endpoint:['REST endpoints','Code'],java:['Java classes','Code'],method:['Java methods','Code'],liquibase:['Liquibase changelogs','Code'],
   action:['Actions','Integration'],bot:['Bots','Integration'],
@@ -256,6 +256,11 @@ function describe(n){
     add('Data dictionary',d.dictionary); add('Columns',(d.fields||[]).length); }
   else if(n.type==='service'){ add('Type',d.type); add('Base URL',d.baseUrl); add('Auth',d.auth); add('Table',d.tableName); add('Liquibase model',d.referencedLiquibaseModelKey); add('Columns',(d.columns||[]).length); add('Operations',(d.operations||[]).length);
     if(d.schemaCoverage){ const c=d.schemaCoverage.counts||{}; const g=(c.noService||0)+(c.noDataObject||0); if(g) add('Schema gaps',g+' of '+(c.total||0)+' columns'); } }
+  else if(n.type==='serviceOperation'){
+    if(d.service) rows.push(['Service',{html:'<span class="vlink" data-id="'+enc('service:'+d.service)+'" tabindex="0" role="link" title="Defined by service '+esc(d.service)+'">'+esc(d.service)+'</span>'}]);
+    add('Name',d.name); add('Method',d.method); add('URL',d.fullUrl||d.url);
+    add('Params',(d.params||[]).map(p=>p.name+(p.type?': '+p.type:'')).join(', '));
+    add('Used by', (d.usedBy||[]).length+' model(s)'); }
   else if(n.type==='agent'){ add('Vendor / model',(d.aiVendor||'')+' / '+(d.modelName||'')); add('Temperature',d.temperature); add('API endpoint',String(d.enableApiEndpoint)); add('Knowledge base',d.knowledgeBase); }
   else if(n.type==='channel'){ add('Direction',d.channelType); add('Type',d.type); add('Topics',(d.topics||[]).join(', ')); add('Destination',d.destination); }
   else if(n.type==='event'){ add('Payload',(d.payload||[]).join(', ')); add('Correlation',(d.correlation||[]).join(', ')); }
@@ -263,7 +268,13 @@ function describe(n){
   else if(n.type==='endpoint'){ add('Method',d.http); add('Path',d.path); add('Handler',(d.controller||'')+'#'+(d.handler||'')); }
   else if(n.type==='method'){ add('Method',(d.name||'')+'()'); add('Declared in',d.class); }
   else if(n.type==='query'){ add('Source index',d.sourceIndex); add('Parameters',(d.parameters||[]).join(', ')); add('Filters by groups',(d.groups||[]).length); }
-  else if(n.type==='action'){ add('Bot',d.botKey); add('Form',d.formKey); add('Triggers signal',d.signalName); add('Scope',d.scopeType); }
+  else if(n.type==='action'){
+    // Link the bot name to its Java bot class when the graph resolved one (action --bot--> java:<fqn>);
+    // platform / synthetic bots have no class, so they stay plain text.
+    const be=(outM.get(n.id)||[]).find(e=>e.rel==='bot');
+    if(be && be.id.indexOf('java:')===0 && byId.get(be.id)) rows.push(['Bot',{html:jchip(be.id, d.botKey||byId.get(be.id).label)}]);
+    else add('Bot',d.botKey);
+    add('Form',d.formKey); add('Triggers signal',d.signalName); add('Scope',d.scopeType); }
   else if(n.type==='bot'){ add('Kind',d.platform?'Flowable platform bot':'project-defined bot'); }
   else if(n.type==='liquibase'){ const a=d.authority||{};
     add('Status', a.status==='live'?'live (authoritative)':a.status==='superseded'?'superseded revision':a.status==='orphan'?'orphan — unreferenced':undefined);
@@ -291,7 +302,11 @@ function detailExtra(n){
       d.operations.map(o=>{
         const verb=o.method?'<span class="verb" style="color:'+color("endpoint")+'">'+esc(o.method)+'</span>':'';
         const title='<span class="opname">'+esc(o.fullUrl||o.url||o.name||'')+'</span>';
-        const key='<span class="opkey">'+esc(o.key||'')+'</span>';
+        // link the key to the operation's own node (its "where used" page)
+        const opid='serviceOperation:'+n.key+'#'+(o.key||'');
+        const key=(o.key&&byId.get(opid))
+          ? '<span class="opkey vlink" data-id="'+enc(opid)+'" tabindex="0" role="link" title="Show where '+esc(o.key)+' is used">'+esc(o.key)+'</span>'
+          : '<span class="opkey">'+esc(o.key||'')+'</span>';
         const np=(o.params||[]).length;
         if(!np) return '<div class="op flat">'+verb+title+'<span class="opcount">no params</span>'+key+'</div>';
         return '<details class="op"><summary>'+verb+title+
@@ -406,8 +421,11 @@ function detailExtra(n){
           '</div>';
       }).join('')+'</div>';
   }
-  if((n.type==='expression'||n.type==='binding'||n.type==='customFunction') && (d.usedBy||[]).length){
+  if((n.type==='expression'||n.type==='binding'||n.type==='customFunction'||n.type==='serviceOperation') && (d.usedBy||[]).length){
     h+='<h3 class="rel">Used by ('+d.usedBy.length+')</h3><div class="nodechips">'+d.usedBy.map(nodeChip).join('')+'</div>';
+  }
+  if(n.type==='serviceOperation' && !(d.usedBy||[]).length){
+    h+='<div class="authnote authnote-orphan">No service button, data-object field or CMMN service mapping in the scanned models calls this operation.</div>';
   }
   // a frontend binding links to the custom function(s) it calls; a custom function links back to the
   // exact bindings that call it (in addition to the forms/models under "Used by").
@@ -433,7 +451,7 @@ function detailExtra(n){
   if(d._uses){
     const ord=[['variable','Variables'],['expression','Backend expressions ${ }'],
                ['binding','Frontend bindings {{ }}'],['customFunction','Custom functions 🧩'],
-               ['string','String literals']];
+               ['serviceOperation','Service operations'],['string','String literals']];
     let parts='';
     ord.forEach(([t,lbl])=>{ const ids=(d._uses||{})[t]; if(ids&&ids.length)
       parts+='<details class="uses"><summary>'+lbl+' ('+ids.length+')</summary><div class="nodechips">'+ids.map(nodeChip).join('')+'</div></details>'; });

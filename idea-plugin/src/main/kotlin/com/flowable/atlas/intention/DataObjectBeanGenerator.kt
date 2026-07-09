@@ -1,6 +1,6 @@
 package com.flowable.atlas.intention
 
-import com.flowable.atlas.index.DataField
+import com.flowable.atlas.parsing.DataField
 
 /**
  * Deterministic String → Java-source generator for a typed POJO mapping a Flowable data object's

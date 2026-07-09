@@ -7,8 +7,8 @@ import java.io.File
  * The self-contained, offline interactive HTML explorer.
  *
  * Port of `flowable_atlas.py` `html_render` + `_compose_template` + `_frontend_asset`. Instead of
- * Python's `repr()`-embedded `_EMBEDDED_FRONTEND`, the three frontend files are bundled into `:core`
- * resources (`/frontend/explorer.{html,css,js}`, copied from the repo's `frontend/`) and read at
+ * Python's `repr()`-embedded `_EMBEDDED_FRONTEND`, the three frontend files are the editable source
+ * in `:core` resources (`core/src/main/resources/frontend/explorer.{html,css,js}`) and read at
  * runtime via the classloader. Composition matches Python exactly: inline the CSS into the
  * `/*__ATLAS_CSS__*/` marker, the JS into `/*__ATLAS_JS__*/`, `rstrip` trailing newlines, then
  * substitute the graph-JSON island into `__ATLAS_DATA__`.

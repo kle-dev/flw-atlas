@@ -1,11 +1,12 @@
-package com.flowable.atlas.index
+package com.flowable.atlas.parsing
 
 /**
  * Locates, within a model file's text, the exact offset ranges where a Java symbol is referenced —
  * inside an EL expression `${...}` / `#{...}` (bean/method names) or a `class` / `delegateExpression`
- * / `expression` attribute (delegate FQN). Used by the "find usages in models" searcher.
+ * / `expression` attribute (delegate FQN). Used by the "find usages in models" searcher. Pure text
+ * scanning (no I/O, no IntelliJ).
  */
-object ModelUsageScanner {
+object ModelUsageLocator {
 
     private val EXPRESSION = Regex("[#$]\\{([^}]*)}")
     private val CLASS_ATTR = Regex("(?:class|delegateExpression|expression)\\s*=\\s*\"([^\"]*)\"")

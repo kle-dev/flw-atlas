@@ -9,7 +9,7 @@ import java.io.File
  * The cross-language golden harness for the Kotlin generator port (Phase 1).
  *
  * Runs `:core`'s [Atlas.extract] over the same `miniproject` fixture the Python suite uses and asserts
- * each **implemented** result section matches the committed `tests/golden/miniproject.graph.json`
+ * each **implemented** result section matches the committed `core/src/test/resources/golden/miniproject.graph.json`
  * (compared through [GoldenNormalize], exactly as Python's `test_graph_golden` does). Sections are
  * added to [IMPLEMENTED_SECTIONS] as their parsers are ported, so the suite stays green while the port
  * grows and immediately flags any regression in an already-ported section.
@@ -26,7 +26,7 @@ class GoldenExtractionTest {
         for (section in IMPLEMENTED_SECTIONS) {
             val mine = GoldenNormalize.canonicalTree(result[section])
             val expected = golden[section]
-            assertEquals("result section '$section' differs from tests/golden/miniproject.graph.json", expected, mine)
+            assertEquals("result section '$section' differs from core/src/test/resources/golden/miniproject.graph.json", expected, mine)
         }
     }
 
@@ -37,7 +37,7 @@ class GoldenExtractionTest {
     @Test
     fun wholeResultMatchesGolden() {
         val mine = GoldenNormalize.canonicalTree(result)
-        assertEquals("full result differs from tests/golden/miniproject.graph.json", golden, mine)
+        assertEquals("full result differs from core/src/test/resources/golden/miniproject.graph.json", golden, mine)
     }
 
     private fun fixtureDir(): File {

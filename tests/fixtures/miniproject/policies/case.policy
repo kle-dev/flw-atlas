@@ -1,9 +1,0 @@
-{
-  "key": "orderPolicy",
-  "name": "Order policy",
-  "type": "case",
-  "permissionMappings": [
-    {"key": "read", "definition": {"label": "Read", "permissionValues": {"sales": true, "backoffice": false}}},
-    {"key": "update", "definition": {"label": "Update", "permissionValues": {"backoffice": true}}}
-  ]
-}

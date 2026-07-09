@@ -4,7 +4,7 @@
 <idea-plugin require-restart="true">
     <id>com.flowable.atlas</id>
     <name>Flowable Atlas</name>
-    <version>0.7.2</version>
+    <version>0.7.3</version>
     <vendor email="kevin.klever@flowable.com" url="https://www.flowable.com">Flowable</vendor>
 
     <description><![CDATA[
@@ -103,6 +103,19 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.7.3</h3>
+        <ul>
+          <li><b>Service operations are now first-class in the Explorer</b> — every service-registry
+              operation (e.g. <code>findByPodId</code>) gets its own node under a new
+              <b>Service operations</b> category, with a <b>“Used by”</b> list of every form service
+              button, data-object field and CMMN service mapping that calls it. Data-object references
+              are resolved through their backing service, so usages reached via a data object and via the
+              service aggregate onto the same operation. Operation keys are searchable, and each operation
+              in a service's Operations list links to its own where-used page.</li>
+          <li><b>Bot name links to its Java bot class</b> — in an action's detail, the Bot field is now a
+              clickable chip that navigates to the backing Java bot class node (platform bots stay plain
+              text).</li>
+        </ul>
         <h3>0.7.2</h3>
         <ul>
           <li><b>Rainbow parentheses now work in the Expression Playground field too</b> — the paren

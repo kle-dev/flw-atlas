@@ -3,10 +3,9 @@ package com.flowable.atlas.graph
 import com.flowable.atlas.model.MiniJson
 
 /**
- * Kotlin twin of the Python golden test's `normalize()` (tests/conftest.py): recursively sort object
- * keys and sort every list by its canonical JSON. This removes discovery/hash-order noise so the
- * `:core` extract output can be compared against the same committed `tests/golden/miniproject.graph.json`
- * that the Python suite uses.
+ * Kotlin twin of the Python golden test's `normalize()`: recursively sort object keys and sort every
+ * list by its canonical JSON. This removes discovery/hash-order noise so the `:core` extract output can
+ * be compared against the committed `core/src/test/resources/golden/miniproject.graph.json` baseline.
  */
 object GoldenNormalize {
 

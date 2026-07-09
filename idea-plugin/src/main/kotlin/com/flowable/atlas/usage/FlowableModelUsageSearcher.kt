@@ -2,8 +2,8 @@ package com.flowable.atlas.usage
 
 import com.flowable.atlas.index.ArchiveModelScanner
 import com.flowable.atlas.index.FlowableModelIndexService
-import com.flowable.atlas.index.ModelUsageScanner
 import com.flowable.atlas.model.ModelFiles
+import com.flowable.atlas.parsing.ModelUsageLocator
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.find.findUsages.FindUsagesOptions
 import com.intellij.openapi.application.ReadAction
@@ -42,7 +42,7 @@ class FlowableModelUsageSearcher : CustomUsageSearcher() {
 
             fun reportUsages(vf: VirtualFile, text: String) {
                 if (names.none { text.contains(it) }) return
-                val ranges = ModelUsageScanner.findUsages(text, names)
+                val ranges = ModelUsageLocator.findUsages(text, names)
                 if (ranges.isEmpty()) return
                 val psiFile = psiManager.findFile(vf) ?: return
                 for (r in ranges) {

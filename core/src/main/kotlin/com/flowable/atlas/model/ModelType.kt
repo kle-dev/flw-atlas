@@ -34,9 +34,25 @@ enum class ModelType(val id: String, val display: String) {
     PALETTE("palette", "Palette"),
     APP("app", "App");
 
+    /**
+     * The batch pipeline's parser-key (pre-normalization): `bpmn`/`cmmn`/`dmn` for the XML models,
+     * otherwise the same as [id]. This is the single source for [parsing.ModelKinds.EXT_TO_TYPE].
+     */
+    val parserKey: String
+        get() = when (this) {
+            PROCESS -> "bpmn"
+            CASE -> "cmmn"
+            DECISION -> "dmn"
+            else -> id
+        }
+
     companion object {
-        /** Deployment-artifact extensions → type. Compound suffixes (`.bpmn20.xml`) come first. */
-        private val EXTENSIONS: List<Pair<String, ModelType>> = listOf(
+        /**
+         * Deployment-artifact extensions → type. Compound suffixes (`.bpmn20.xml`) come first so
+         * [byExtension] matches them before the single-segment `.bpmn`. This is THE canonical
+         * extension registry; [parsing.ModelKinds] derives its parser-key table from it.
+         */
+        val EXTENSIONS: List<Pair<String, ModelType>> = listOf(
             ".bpmn20.xml" to PROCESS, ".cmmn.xml" to CASE, ".dmn.xml" to DECISION,
             ".bpmn" to PROCESS, ".cmmn" to CASE, ".dmn" to DECISION,
             ".form" to FORM, ".page" to PAGE, ".data" to DATA_OBJECT,
@@ -62,7 +78,10 @@ enum class ModelType(val id: String, val display: String) {
             "variable-extractor-models" to VARIABLE_EXTRACTOR, "document-models" to DOCUMENT,
         )
 
-        private val XML_EXTENSIONS = listOf(".bpmn20.xml", ".cmmn.xml", ".dmn.xml", ".bpmn", ".cmmn", ".dmn")
+        /** The three compound XML suffixes (matched before their single-segment forms). */
+        val COMPOUND_EXTENSIONS: List<String> = listOf(".bpmn20.xml", ".cmmn.xml", ".dmn.xml")
+
+        private val XML_EXTENSIONS = COMPOUND_EXTENSIONS + listOf(".bpmn", ".cmmn", ".dmn")
 
         /** Type of a deployment artifact by its file name, or null if not a known model extension. */
         fun byExtension(fileName: String): ModelType? {

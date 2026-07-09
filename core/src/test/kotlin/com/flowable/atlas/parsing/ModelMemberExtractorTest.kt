@@ -1,13 +1,12 @@
-package com.flowable.atlas
+package com.flowable.atlas.parsing
 
-import com.flowable.atlas.index.ModelExtraction
 import com.flowable.atlas.model.ModelType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Unit tests for the StAX-based member extraction (pure, no IDE fixture needed). */
-class ModelExtractionTest {
+class ModelMemberExtractorTest {
 
     private fun bytes(s: String) = s.toByteArray(Charsets.UTF_8)
 
@@ -26,7 +25,7 @@ class ModelExtractionTest {
               </process>
             </definitions>
         """.trimIndent()
-        val models = ModelExtraction.extract("P1.bpmn20.xml", bytes(xml), ModelType.PROCESS)
+        val models = ModelMemberExtractor.extract("P1.bpmn20.xml", bytes(xml), ModelType.PROCESS)
         assertEquals(1, models.size)
         val m = models.single()
         assertEquals("P1", m.key)
@@ -49,7 +48,7 @@ class ModelExtractionTest {
               </decision>
             </definitions>
         """.trimIndent()
-        val m = ModelExtraction.extract("D1.dmn", bytes(xml), ModelType.DECISION).single()
+        val m = ModelMemberExtractor.extract("D1.dmn", bytes(xml), ModelType.DECISION).single()
         assertEquals("D1", m.key)
         assertTrue("decision vars: ${m.members.decisionVariables}", m.members.decisionVariables.contains("age"))
         assertTrue("decision vars: ${m.members.decisionVariables}", m.members.decisionVariables.contains("result"))
@@ -62,7 +61,7 @@ class ModelExtractionTest {
               <process id="B"><userTask id="tb"/></process>
             </definitions>
         """.trimIndent()
-        val models = ModelExtraction.extract("multi.bpmn20.xml", bytes(xml), ModelType.PROCESS)
+        val models = ModelMemberExtractor.extract("multi.bpmn20.xml", bytes(xml), ModelType.PROCESS)
         assertEquals(setOf("A", "B"), models.map { it.key }.toSet())
         assertEquals(listOf("ta"), models.first { it.key == "A" }.members.userTaskIds)
         assertEquals(listOf("tb"), models.first { it.key == "B" }.members.userTaskIds)

@@ -2,8 +2,8 @@ package com.flowable.atlas.completion
 
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.index.ModelEntry
-import com.flowable.atlas.index.OperationInfo
-import com.flowable.atlas.index.ParamInfo
+import com.flowable.atlas.parsing.OperationInfo
+import com.flowable.atlas.parsing.ParamInfo
 import com.flowable.atlas.model.ModelType
 import com.flowable.atlas.settings.FlowableAtlasSettings
 import com.intellij.codeInsight.completion.CompletionContributor

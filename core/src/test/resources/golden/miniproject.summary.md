@@ -1,6 +1,6 @@
 # Flowable project — `miniproject` (quick overview)
 
-_11 model files · 2 Java files · 30 nodes · 30 relationships · 3 user groups. Compact summary — use `--json` for the full graph, or open the HTML explorer._
+_11 model files · 2 Java files · 31 nodes · 33 relationships · 3 user groups. Compact summary — use `--json` for the full graph, or open the HTML explorer._
 
 ⚠ **1 file(s) could not be fully analyzed** (parse/read failures) — the map below may be incomplete. Details: `diagnostics` in graph.json / Warnings section of the overview.
 
@@ -27,18 +27,18 @@ Expressions: 4 backend ${ } · 1 frontend {{ }} · 0 string literals
 Events: orderShipped
 
 ## Hotspots — most-referenced (central) artifacts
+- service `customerService` — Customer Service (referenced by 3)
 - process `orderProcess` — Order Process (referenced by 3)
 - form `orderForm` — Order Form (referenced by 3)
 - endpoint `GET /api/customers`  (referenced by 3)
 - method `com.example.DemoBean#run` — DemoBean.run() (referenced by 2)
 - java `com.example.DemoBean` — DemoBean (referenced by 2)
+- dataObject `customerDO` — Customer (referenced by 2)
 - case `reviewCase` — Review Case (referenced by 2)
 - app `demoApp` — Demo App (referenced by 2)
-- service `customerService` — Customer Service (referenced by 1)
 - liquibase `001-customer` — 001-customer.xml (referenced by 1)
 - external `notifierBean`  (referenced by 1)
 - external `fulfilmentProcess`  (referenced by 1)
-- event `orderShipped` — Order shipped (referenced by 1)
 
 ## External surface
 - Review (unresolved in project — likely missing/external): bean:notifierBean, process:fulfilmentProcess

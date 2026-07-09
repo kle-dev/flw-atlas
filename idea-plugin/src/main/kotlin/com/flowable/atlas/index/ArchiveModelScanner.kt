@@ -1,6 +1,7 @@
 package com.flowable.atlas.index
 
 import com.flowable.atlas.model.ModelFiles
+import com.flowable.atlas.model.ModelPaths
 import com.flowable.atlas.model.ModelType
 import com.intellij.openapi.vfs.JarFileSystem
 import com.intellij.openapi.vfs.VfsUtilCore
@@ -16,10 +17,8 @@ import com.intellij.openapi.vfs.VirtualFileVisitor
  */
 object ArchiveModelScanner {
 
-    private val ARCHIVE_EXTENSIONS = setOf("bar", "zip")
-
     fun isArchive(file: VirtualFile): Boolean =
-        !file.isDirectory && file.extension?.lowercase() in ARCHIVE_EXTENSIONS
+        !file.isDirectory && ModelPaths.isArchive(file.name)
 
     /** Invoke [consume] for every model entry (name, content, type, navigable file) inside [archive]. */
     fun scan(archive: VirtualFile, consume: (String, ByteArray, ModelType, VirtualFile) -> Unit) {

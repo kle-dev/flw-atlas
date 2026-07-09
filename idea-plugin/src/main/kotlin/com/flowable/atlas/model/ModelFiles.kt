@@ -9,13 +9,7 @@ import com.intellij.openapi.vfs.VirtualFile
  */
 object ModelFiles {
 
-    // Ported from the original flowable_atlas EXCLUDE_DIRS.
-    private val EXCLUDE_DIRS = setOf(
-        "target", "build", "node_modules", ".git", ".idea", ".gradle", "dist",
-        "out", "bin", ".mvn", "coverage", "__pycache__", ".vscode", "test-classes",
-    )
-
-    fun isExcluded(path: String): Boolean = path.split('/').any { it in EXCLUDE_DIRS }
+    fun isExcluded(path: String): Boolean = ModelPaths.isExcluded(path)
 
     private fun designIndexingEnabled(): Boolean =
         try { FlowableAtlasSettings.getInstance().indexDesignWorkspace } catch (e: Exception) { false }

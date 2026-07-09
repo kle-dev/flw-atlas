@@ -1,6 +1,7 @@
 package com.flowable.atlas.index
 
 import com.flowable.atlas.model.ModelType
+import com.flowable.atlas.parsing.ModelMembers
 
 /**
  * An immutable snapshot of all Flowable models found in the project, keyed by model key.

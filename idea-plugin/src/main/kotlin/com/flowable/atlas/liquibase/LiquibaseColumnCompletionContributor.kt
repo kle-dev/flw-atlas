@@ -1,6 +1,6 @@
 package com.flowable.atlas.liquibase
 
-import com.flowable.atlas.index.ServiceTable
+import com.flowable.atlas.parsing.ServiceTable
 import com.intellij.codeInsight.completion.CompletionContributor
 import com.intellij.codeInsight.completion.CompletionParameters
 import com.intellij.codeInsight.completion.CompletionProvider

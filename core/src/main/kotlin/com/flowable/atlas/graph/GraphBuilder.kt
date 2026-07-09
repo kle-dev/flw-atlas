@@ -320,8 +320,46 @@ object GraphBuilder {
             }
         }
 
+        // --- service-operation nodes (where each operation is used) ---
+        // Invert Ctx.opUse (consumer -> service/dataObject + operation) into operation -> consumer node
+        // ids, resolving data-object references to their backing service, then promote every operation of
+        // every service to its own node carrying that `usedBy` list (mirrors the custom-function block).
+        run {
+            val doToService = LinkedHashMap<String, String>()
+            for (o in bucketList("dataObjects")) {
+                val dobj = o as Map<String, Any?>
+                val svc = dobj["service"]
+                if (truthy(dobj["key"]) && truthy(svc)) doToService[dobj["key"].toString()] = svc.toString()
+            }
+            val opUsedBy = LinkedHashMap<String, LinkedHashSet<String>>()
+            for (u in ctx.opUse) {
+                val op = u["op"]?.toString() ?: continue
+                val targetKey = u["targetKey"]?.toString() ?: continue
+                val svcKey = if (u["targetKind"] == "dataObject") doToService[targetKey] else targetKey
+                if (svcKey == null) continue
+                val consumerNode = kn(u["consumer"]) ?: continue
+                opUsedBy.getOrPut("$svcKey#$op") { LinkedHashSet() }.add(consumerNode)
+            }
+            for (o in bucketList("services")) {
+                val svc = o as Map<String, Any?>
+                val svcKey = svc["key"] ?: continue
+                for (opAny in (svc["operations"] as? List<*> ?: emptyList<Any?>())) {
+                    val op = opAny as? Map<String, Any?> ?: continue
+                    val opKey = op["key"] ?: continue
+                    addNode(
+                        "serviceOperation", "$svcKey#$opKey", opKey, null,
+                        linkedMapOf(
+                            "service" to svcKey, "operation" to opKey, "name" to op["name"],
+                            "method" to op["method"], "url" to op["url"], "fullUrl" to op["fullUrl"],
+                            "params" to op["params"], "usedBy" to (opUsedBy["$svcKey#$opKey"]?.sorted() ?: emptyList<String>()),
+                        ),
+                    )
+                }
+            }
+        }
+
         // Reverse direction: attach to each model the artifacts it uses (vars/exprs/...).
-        val artifactTypes = setOf("variable", "expression", "binding", "string", "customFunction")
+        val artifactTypes = setOf("variable", "expression", "binding", "string", "customFunction", "serviceOperation")
         for (n in nodes.values.toList()) {
             if (n["type"] !in artifactTypes) continue
             val data = n["data"] as? Map<String, Any?> ?: continue

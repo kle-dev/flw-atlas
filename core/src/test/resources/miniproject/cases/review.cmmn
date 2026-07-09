@@ -6,9 +6,15 @@
     <casePlanModel id="planModel" name="Review plan">
       <planItem id="pi_review" definitionRef="reviewTask"/>
       <planItem id="pi_order" definitionRef="startOrder"/>
+      <planItem id="pi_lookup" definitionRef="lookupTask"/>
       <humanTask id="reviewTask" name="Review order"
                  flowable:candidateGroups="auditors" flowable:formKey="orderForm"/>
       <processTask id="startOrder" name="Start order" processRef="orderProcess"/>
+      <task id="lookupTask" name="Lookup customer">
+        <extensionElements>
+          <flowable:serviceMapping serviceModelKey="customerService" operationKey="findAll"/>
+        </extensionElements>
+      </task>
     </casePlanModel>
   </case>
 </definitions>
