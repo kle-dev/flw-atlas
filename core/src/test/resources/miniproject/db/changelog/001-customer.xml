@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog">
+  <changeSet id="1" author="fixture">
+    <createTable tableName="cust_customer">
+      <column name="id_" type="varchar(64)"/>
+      <column name="name_" type="varchar(255)"/>
+      <column name="orphan_col_" type="varchar(255)"/>
+    </createTable>
+  </changeSet>
+</databaseChangeLog>

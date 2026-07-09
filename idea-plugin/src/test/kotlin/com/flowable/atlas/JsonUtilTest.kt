@@ -50,7 +50,7 @@ class JsonUtilTest {
 
     @Test fun readForm_ignores_unlabeled_containers() {
         // layout containers carry id+type but no label — their ids are not form fields
-        // (same predicate as flowable_atlas.py parse_form)
+        // (same predicate as the original flowable_atlas parse_form)
         val json = """{"metadata":{"key":"F1"},"rows":[[{"id":"col1","type":"container",
             "rows":[[{"id":"name","type":"text","label":"Name"}]]}]]}"""
         val form = JsonUtil.readForm(bytes(json))

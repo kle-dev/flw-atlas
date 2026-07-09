@@ -38,8 +38,8 @@ class FlowableExpressionAnnotator : Annotator {
             val severity = if (p.severity == ExprSeverity.ERROR) HighlightSeverity.ERROR else HighlightSeverity.WARNING
             var builder = holder.newAnnotation(severity, p.message)
                 .range(TextRange(p.startOffset, p.endOffset))
-            if (p.quickFix != null) {
-                builder = builder.withFix(ReplaceExprTextFix(p.startOffset, p.endOffset, p.quickFix))
+            p.quickFix?.let { qf ->   // local capture: quickFix is a val from another module (:core), not smart-castable
+                builder = builder.withFix(ReplaceExprTextFix(p.startOffset, p.endOffset, qf))
             }
             builder.create()
         }

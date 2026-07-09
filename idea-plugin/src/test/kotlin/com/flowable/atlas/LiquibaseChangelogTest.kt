@@ -6,7 +6,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Unit tests for the Liquibase changelog parsing/replay ported from flowable_atlas.py. */
+/** Unit tests for the Liquibase changelog parsing/replay ported from the original flowable_atlas tool. */
 class LiquibaseChangelogTest {
 
     private val createTableXml = """

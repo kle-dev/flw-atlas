@@ -1,22 +1,24 @@
 #!/usr/bin/env bash
 #
-# Flowable Atlas — one-command launcher.
+# Flowable Atlas — one-command launcher (JVM edition).
 #
 #   ./atlas <project-dir-or-zip> [output-dir]
 #
-# Analyzes any Flowable project (models + Java) and writes 4 artifacts into the
+# Analyzes any Flowable project (models + Java) and writes 5 artifacts into the
 # output dir (default: ./atlas-output/<project>/), then opens the HTML explorer.
 #
 #   <project>.explorer.html   interactive, human-friendly explorer (opens automatically)
 #   <project>.summary.md      compact LLM-first overview (~few KB)
 #   <project>.overview.md     full human/LLM Markdown report
 #   <project>.graph.json      full traversable model+code graph
+#   <project>.CLAUDE.md       AI-agent context (Flowable primer + this project's facts)
 #
+# This runs the standalone Kotlin CLI fat-jar (the successor to flowable_atlas.py).
 # Pass any extra flags after the paths to override (e.g. --no-open, see below).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PY="${PYTHON:-python3}"
+JAVA="${JAVA:-java}"
 
 if [[ $# -lt 1 || "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   cat <<EOF
@@ -37,16 +39,31 @@ Outputs (in the output dir, default ./atlas-output/<project>/):
   <project>.graph.json      traversable graph (for agents/LLMs)
   <project>.CLAUDE.md       AI-agent context (Flowable primer + this project's facts)
 
-Advanced (run the Python directly for single artifacts):
-  $PY "$SCRIPT_DIR/flowable_atlas.py" <project> --summary --stdout
-  $PY "$SCRIPT_DIR/flowable_atlas.py" <project> --json -o graph.json
-  $PY "$SCRIPT_DIR/flowable_atlas.py" <project> --claude        # writes CLAUDE.md
+Advanced (run the fat-jar directly for single artifacts):
+  $JAVA -jar <cli-all.jar> <project> --summary --stdout
+  $JAVA -jar <cli-all.jar> <project> --json -o graph.json
+  $JAVA -jar <cli-all.jar> <project> --claude        # writes CLAUDE.md
 EOF
   exit 0
 fi
 
-if ! command -v "$PY" >/dev/null 2>&1; then
-  echo "error: python3 not found. Install Python 3 (or set PYTHON=/path/to/python)." >&2
+if ! command -v "$JAVA" >/dev/null 2>&1; then
+  echo "error: java not found. Install a JDK 21+ (or set JAVA=/path/to/java)." >&2
+  exit 1
+fi
+
+# Locate the Shadow fat-jar; build it on first run (or if the build dir was cleaned).
+find_jar() {
+  ls -t "$SCRIPT_DIR"/cli/build/libs/*-all.jar 2>/dev/null | head -n 1
+}
+JAR="$(find_jar || true)"
+if [[ -z "${JAR:-}" ]]; then
+  echo "▶ Building the Flowable Atlas CLI (first run) …" >&2
+  (cd "$SCRIPT_DIR" && ./gradlew --console=plain -q :cli:shadowJar)
+  JAR="$(find_jar || true)"
+fi
+if [[ -z "${JAR:-}" ]]; then
+  echo "error: could not find or build the CLI fat-jar under cli/build/libs/." >&2
   exit 1
 fi
 
@@ -72,5 +89,5 @@ for a in "$@"; do
 done
 
 echo "▶ Flowable Atlas: analyzing '$TARGET' → '$OUTDIR'"
-"$PY" "$SCRIPT_DIR/flowable_atlas.py" "$TARGET" --all -o "$OUTDIR" $OPEN_FLAG "${EXTRA[@]+"${EXTRA[@]}"}"
+"$JAVA" -jar "$JAR" "$TARGET" --all -o "$OUTDIR" $OPEN_FLAG "${EXTRA[@]+"${EXTRA[@]}"}"
 echo "✓ Done. Open: $OUTDIR/$NAME.explorer.html"

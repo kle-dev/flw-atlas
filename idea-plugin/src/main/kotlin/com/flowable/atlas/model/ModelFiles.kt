@@ -9,7 +9,7 @@ import com.intellij.openapi.vfs.VirtualFile
  */
 object ModelFiles {
 
-    // Ported from flowable_atlas.py EXCLUDE_DIRS (~line 61).
+    // Ported from the original flowable_atlas EXCLUDE_DIRS.
     private val EXCLUDE_DIRS = setOf(
         "target", "build", "node_modules", ".git", ".idea", ".gradle", "dist",
         "out", "bin", ".mvn", "coverage", "__pycache__", ".vscode", "test-classes",

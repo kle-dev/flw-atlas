@@ -1,0 +1,8 @@
+{
+  "key": "orderShipped",
+  "name": "Order shipped",
+  "payload": [
+    {"name": "orderId", "type": "string", "correlationParameter": true},
+    {"name": "carrier", "type": "string"}
+  ]
+}
