@@ -52,13 +52,18 @@ if ! command -v "$JAVA" >/dev/null 2>&1; then
   exit 1
 fi
 
-# Locate the Shadow fat-jar; build it on first run (or if the build dir was cleaned).
+# Locate the self-contained Shadow fat-jar. Search order lets an offline/foreign machine run Atlas
+# with just Java 21 + a copied jar (no Gradle/Maven/network): an explicit $ATLAS_JAR, a jar shipped
+# next to this script or under ./lib/, then the local Gradle build output.
 find_jar() {
-  ls -t "$SCRIPT_DIR"/cli/build/libs/*-all.jar 2>/dev/null | head -n 1
+  if [[ -n "${ATLAS_JAR:-}" && -e "${ATLAS_JAR:-}" ]]; then echo "$ATLAS_JAR"; return; fi
+  ls -t "$SCRIPT_DIR"/*-all.jar "$SCRIPT_DIR"/lib/*-all.jar "$SCRIPT_DIR"/cli/build/libs/*-all.jar 2>/dev/null | head -n 1
 }
 JAR="$(find_jar || true)"
 if [[ -z "${JAR:-}" ]]; then
-  echo "▶ Building the Flowable Atlas CLI (first run) …" >&2
+  echo "▶ No prebuilt Atlas jar found — building it (first run). This needs network access to Maven" >&2
+  echo "  Central + the Gradle Plugin Portal. On an offline/locked-down machine, instead copy a" >&2
+  echo "  prebuilt cli-<version>-all.jar next to this script (or set ATLAS_JAR=/path/to.jar)." >&2
   (cd "$SCRIPT_DIR" && ./gradlew --console=plain -q :cli:shadowJar)
   JAR="$(find_jar || true)"
 fi
