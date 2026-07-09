@@ -107,9 +107,9 @@ A **Generate** scope in Settings switches between *Explorer HTML only* and *All 
 writing the full set into a chosen folder: `summary.md`, `overview.md`, `graph.json`, `explorer.html`
 and a `CLAUDE.md` primer for AI agents.
 
-Under the hood the action runs the bundled `flowable_atlas.py` generator, so the output is identical
-to the standalone `atlas` CLI. It requires a **Python 3.8+** interpreter, auto-detected (`python3` /
-`python` on PATH) or set explicitly in Settings.
+Under the hood the action runs the shared Atlas engine **in-process** (the same pure-JVM `:core`
+module the standalone `atlas` CLI uses), so the output is identical to the CLI — no external tools,
+interpreters or subprocesses required.
 
 ## Settings
 
@@ -119,8 +119,7 @@ to the standalone `atlas` CLI. It requires a **Python 3.8+** interpreter, auto-d
 - toggle expression validation, inline injection into Java strings, and backend codebase grounding;
 - opt into indexing the Flowable Design `*-models/` workspace JSON;
 - choose how model constants are generated (naming scheme; String class vs. enum);
-- choose the Atlas **Generate** scope (explorer only vs. all artifacts) and set the Python 3 interpreter
-  used for it (empty = auto-detect);
+- choose the Atlas **Generate** scope (explorer only vs. all artifacts);
 - pre-fill the Inspect connection (base URL and username) for the Expression Playground.
 
 Verify indexing any time via **Tools → Flowable Atlas → Dump Key Index**.
@@ -130,8 +129,8 @@ Verify indexing any time via **Tools → Flowable Atlas → Dump Key Index**.
 - Target IDE: **IntelliJ IDEA 2026.1+** (`since-build 261`, open until-build). Needs the Java plugin
   (bundled in Community and Ultimate).
 - Runs on **JDK/JBR 21+** (compiled to Java 21 bytecode).
-- The Atlas explorer generation additionally requires a **Python 3.8+** interpreter on the machine
-  (no third-party packages).
+- The Atlas explorer generation runs entirely **in-process** (the bundled `:core` engine) — no
+  external interpreter or subprocess required.
 
 ## Build
 

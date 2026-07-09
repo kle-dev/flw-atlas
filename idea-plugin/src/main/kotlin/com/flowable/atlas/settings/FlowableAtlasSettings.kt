@@ -34,11 +34,6 @@ class FlowableAtlasSettings : PersistentStateComponent<FlowableAtlasSettings.Sta
         var constantNaming: ConstantNaming = ConstantNaming.NAME_AND_KEY,
         /** Whether generated model constants are a class of Strings or an enum. */
         var constantFormat: ConstantFormat = ConstantFormat.CLASS,
-        /**
-         * Explicit path to a Python 3 interpreter for the Atlas explorer generator.
-         * Empty = auto-detect `python3` / `python` on PATH.
-         */
-        var pythonInterpreterPath: String = "",
         /** Which Atlas artifacts the "Generate Atlas Explorer" action produces. */
         var atlasArtifactScope: AtlasArtifactScope = AtlasArtifactScope.EXPLORER_ONLY,
         /** Base URL of a running Flowable app for the playground's "Evaluate against app" (Inspect). */
@@ -78,10 +73,6 @@ class FlowableAtlasSettings : PersistentStateComponent<FlowableAtlasSettings.Sta
     var constantFormat: ConstantFormat
         get() = state.constantFormat
         set(value) { state.constantFormat = value }
-
-    var pythonInterpreterPath: String
-        get() = state.pythonInterpreterPath
-        set(value) { state.pythonInterpreterPath = value }
 
     var atlasArtifactScope: AtlasArtifactScope
         get() = state.atlasArtifactScope
