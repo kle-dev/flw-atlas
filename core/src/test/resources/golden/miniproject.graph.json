@@ -118,6 +118,11 @@
   ],
   "cases": [
     {
+      "_uses": {
+        "serviceOperation": [
+          "serviceOperation:customerService#findAll"
+        ]
+      },
       "candidateStarterGroups": "auditors",
       "documentation": null,
       "eventListeners": [],
@@ -139,6 +144,17 @@
             "name": "Review order",
             "rules": {},
             "type": "humanTask"
+          },
+          {
+            "formKey": null,
+            "id": "lookupTask",
+            "listeners": [],
+            "name": "Lookup customer",
+            "operationKey": "findAll",
+            "rules": {},
+            "serviceModelKey": "customerService",
+            "serviceTaskType": null,
+            "type": "task"
           },
           {
             "id": "startOrder",
@@ -296,11 +312,24 @@
         "binding": [
           "binding:{{amount}}"
         ],
+        "serviceOperation": [
+          "serviceOperation:customerService#findAll"
+        ],
         "variable": [
           "variable:amount"
         ]
       },
       "dataSources": [
+        {
+          "key": "customerDO",
+          "kind": "dataObject",
+          "op": "findAll"
+        },
+        {
+          "key": "customerService",
+          "kind": "service",
+          "op": "findAll"
+        },
         {
           "kind": "rest",
           "url": "/api/customers"
@@ -319,6 +348,20 @@
           "label": "Customer",
           "required": false,
           "type": "select",
+          "value": null
+        },
+        {
+          "id": "customerRecord",
+          "label": "Customer record",
+          "required": false,
+          "type": "select",
+          "value": null
+        },
+        {
+          "id": "lookupCustomer",
+          "label": "Lookup customer",
+          "required": false,
+          "type": "button",
           "value": null
         },
         {
@@ -410,6 +453,16 @@
         "t": "java:com.example.DemoBean"
       },
       {
+        "rel": "field-dataObject",
+        "s": "form:orderForm",
+        "t": "dataObject:customerDO"
+      },
+      {
+        "rel": "field-service",
+        "s": "form:orderForm",
+        "t": "service:customerService"
+      },
+      {
         "rel": "humanTask-form",
         "s": "case:reviewCase",
         "t": "form:orderForm"
@@ -470,6 +523,11 @@
         "t": "endpoint:GET /api/customers"
       },
       {
+        "rel": "serviceMapping",
+        "s": "case:reviewCase",
+        "t": "service:customerService"
+      },
+      {
         "rel": "serviceTask-delegate",
         "s": "process:orderProcess",
         "t": "external:notifierBean"
@@ -502,11 +560,24 @@
             "binding": [
               "binding:{{amount}}"
             ],
+            "serviceOperation": [
+              "serviceOperation:customerService#findAll"
+            ],
             "variable": [
               "variable:amount"
             ]
           },
           "dataSources": [
+            {
+              "key": "customerDO",
+              "kind": "dataObject",
+              "op": "findAll"
+            },
+            {
+              "key": "customerService",
+              "kind": "service",
+              "op": "findAll"
+            },
             {
               "kind": "rest",
               "url": "/api/customers"
@@ -525,6 +596,20 @@
               "label": "Customer",
               "required": false,
               "type": "select",
+              "value": null
+            },
+            {
+              "id": "customerRecord",
+              "label": "Customer record",
+              "required": false,
+              "type": "select",
+              "value": null
+            },
+            {
+              "id": "lookupCustomer",
+              "label": "Lookup customer",
+              "required": false,
+              "type": "button",
               "value": null
             },
             {
@@ -670,6 +755,69 @@
         "key": "orderProcess",
         "label": "Order Process",
         "type": "process"
+      },
+      {
+        "data": {
+          "_uses": {
+            "serviceOperation": [
+              "serviceOperation:customerService#findAll"
+            ]
+          },
+          "candidateStarterGroups": "auditors",
+          "documentation": null,
+          "eventListeners": [],
+          "file": "cases/review.cmmn",
+          "initiatorVariableName": null,
+          "key": "reviewCase",
+          "milestones": [],
+          "modelRefs": [],
+          "name": "Review Case",
+          "planModel": {
+            "autoComplete": null,
+            "children": [
+              {
+                "assignee": null,
+                "candidateGroups": "auditors",
+                "formKey": "orderForm",
+                "id": "reviewTask",
+                "listeners": [],
+                "name": "Review order",
+                "rules": {},
+                "type": "humanTask"
+              },
+              {
+                "formKey": null,
+                "id": "lookupTask",
+                "listeners": [],
+                "name": "Lookup customer",
+                "operationKey": "findAll",
+                "rules": {},
+                "serviceModelKey": "customerService",
+                "serviceTaskType": null,
+                "type": "task"
+              },
+              {
+                "id": "startOrder",
+                "inOut": [],
+                "listeners": [],
+                "name": "Start order",
+                "processRef": "orderProcess",
+                "rules": {},
+                "type": "processTask"
+              }
+            ],
+            "criteria": [],
+            "id": "planModel",
+            "name": "Review plan",
+            "type": "casePlanModel"
+          },
+          "sentries": []
+        },
+        "file": "cases/review.cmmn",
+        "id": "case:reviewCase",
+        "key": "reviewCase",
+        "label": "Review Case",
+        "type": "case"
       },
       {
         "data": {
@@ -998,53 +1146,6 @@
       },
       {
         "data": {
-          "candidateStarterGroups": "auditors",
-          "documentation": null,
-          "eventListeners": [],
-          "file": "cases/review.cmmn",
-          "initiatorVariableName": null,
-          "key": "reviewCase",
-          "milestones": [],
-          "modelRefs": [],
-          "name": "Review Case",
-          "planModel": {
-            "autoComplete": null,
-            "children": [
-              {
-                "assignee": null,
-                "candidateGroups": "auditors",
-                "formKey": "orderForm",
-                "id": "reviewTask",
-                "listeners": [],
-                "name": "Review order",
-                "rules": {},
-                "type": "humanTask"
-              },
-              {
-                "id": "startOrder",
-                "inOut": [],
-                "listeners": [],
-                "name": "Start order",
-                "processRef": "orderProcess",
-                "rules": {},
-                "type": "processTask"
-              }
-            ],
-            "criteria": [],
-            "id": "planModel",
-            "name": "Review plan",
-            "type": "casePlanModel"
-          },
-          "sentries": []
-        },
-        "file": "cases/review.cmmn",
-        "id": "case:reviewCase",
-        "key": "reviewCase",
-        "label": "Review Case",
-        "type": "case"
-      },
-      {
-        "data": {
           "class": "com.example.DemoBean",
           "declaredIn": "java:com.example.DemoBean",
           "name": "run"
@@ -1178,6 +1279,26 @@
         "key": "orderPolicy",
         "label": "Order policy",
         "type": "securityPolicy"
+      },
+      {
+        "data": {
+          "fullUrl": "/api/customers",
+          "method": "GET",
+          "name": "Find all",
+          "operation": "findAll",
+          "params": [],
+          "service": "customerService",
+          "url": "/api/customers",
+          "usedBy": [
+            "case:reviewCase",
+            "form:orderForm"
+          ]
+        },
+        "file": null,
+        "id": "serviceOperation:customerService#findAll",
+        "key": "customerService#findAll",
+        "label": "findAll",
+        "type": "serviceOperation"
       },
       {
         "data": {
@@ -1837,6 +1958,26 @@
       "value": "customerService"
     },
     {
+      "from": "orderForm",
+      "fromFile": "forms/order-form.form",
+      "fromType": "form",
+      "kind": "dataObject",
+      "rel": "field-dataObject",
+      "target": "data/customer.data",
+      "targetType": "model",
+      "value": "customerDO"
+    },
+    {
+      "from": "orderForm",
+      "fromFile": "forms/order-form.form",
+      "fromType": "form",
+      "kind": "service",
+      "rel": "field-service",
+      "target": "services/customer.service",
+      "targetType": "model",
+      "value": "customerService"
+    },
+    {
       "from": "orderProcess",
       "fromFile": "processes/order.bpmn",
       "fromType": "bpmn",
@@ -1906,6 +2047,16 @@
       "target": "processes/order.bpmn",
       "targetType": "model",
       "value": "orderProcess"
+    },
+    {
+      "from": "reviewCase",
+      "fromFile": "cases/review.cmmn",
+      "fromType": "cmmn",
+      "kind": "service",
+      "rel": "serviceMapping",
+      "target": "services/customer.service",
+      "targetType": "model",
+      "value": "customerService"
     }
   ],
   "restCalls": [
@@ -2033,12 +2184,12 @@
   ],
   "stats": {
     "archives": 0,
-    "edges": 30,
+    "edges": 33,
     "endpoints": 1,
     "groups": 3,
     "java": 2,
     "models": 11,
-    "nodes": 30
+    "nodes": 31
   },
   "unresolvedRefs": [
     {

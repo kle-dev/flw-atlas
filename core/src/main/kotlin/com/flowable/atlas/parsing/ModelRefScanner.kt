@@ -1,4 +1,4 @@
-package com.flowable.atlas.index
+package com.flowable.atlas.parsing
 
 /**
  * Extracts the Java symbols a model file refers to, so they can be treated as implicitly used:
@@ -6,9 +6,9 @@ package com.flowable.atlas.index
  *  - values of `class` / `delegateExpression` / `expression` attributes (delegate FQNs or expressions).
  *
  * Deliberately loose — over-collecting only means an occasional genuinely-unused symbol isn't
- * flagged, which is harmless.
+ * flagged, which is harmless. Pure text scanning (no I/O, no IntelliJ).
  */
-object ModelExpressionScanner {
+object ModelRefScanner {
 
     private val EXPRESSION = Regex("[#$]\\{([^}]*)}")
     private val IDENTIFIER = Regex("[A-Za-z_][A-Za-z0-9_]*")

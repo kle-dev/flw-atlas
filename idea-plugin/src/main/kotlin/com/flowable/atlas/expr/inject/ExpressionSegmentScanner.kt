@@ -11,7 +11,7 @@ data class ExpressionSegment(val innerStart: Int, val innerEnd: Int, val dialect
  * `${…}` / `#{…}` → backend, `{{…}}` → frontend. A single host may carry several segments (e.g. a
  * BPMN documentation line or a form label with two `{{…}}`), so all matches are returned, sorted.
  *
- * The backend regex mirrors [com.flowable.atlas.index.ModelExpressionScanner]. Empty bodies (`${}`)
+ * The backend regex mirrors [com.flowable.atlas.parsing.ModelRefScanner]. Empty bodies (`${}`)
  * are skipped.
  */
 object ExpressionSegmentScanner {

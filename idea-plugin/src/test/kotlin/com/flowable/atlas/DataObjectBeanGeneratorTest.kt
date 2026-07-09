@@ -1,6 +1,6 @@
 package com.flowable.atlas
 
-import com.flowable.atlas.index.DataField
+import com.flowable.atlas.parsing.DataField
 import com.flowable.atlas.intention.DataObjectBeanGenerator
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

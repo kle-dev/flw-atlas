@@ -1,6 +1,5 @@
-package com.flowable.atlas.index
+package com.flowable.atlas.parsing
 
-import com.flowable.atlas.model.JsonUtil
 import com.flowable.atlas.model.ModelType
 import java.io.ByteArrayInputStream
 import javax.xml.stream.XMLInputFactory
@@ -8,16 +7,18 @@ import javax.xml.stream.XMLStreamConstants
 import javax.xml.stream.XMLStreamReader
 
 /**
- * Extracts the model key(s) + name(s) + members from a model file's raw bytes.
+ * Extracts the model key(s) + name(s) + members from a model file's raw bytes — the single per-file
+ * extraction used by both the IDE's live index and any batch caller. Pure JDK (StAX + [ModelJsonReader]),
+ * no I/O and no IntelliJ, so it runs unchanged over a `java.nio` walk or an IntelliJ VFS walk.
  *
  *  - XML models (bpmn/cmmn/dmn): the `id`/`name` on every top-level `<process>` / `<case>` /
  *    `<decision>` element, plus the members declared inside it (variables, userTask/activity ids,
  *    DMN input/output variables) and the file-level BPMN `<message>` / `<signal>` names. Read with
  *    streaming StAX (JDK built-in) — namespaces are ignored via local names.
  *  - JSON models (everything else): top-level `key`/`name` (falling back to `metadata.key/name`),
- *    plus form field/outcome ids and event payload names via [JsonUtil].
+ *    plus form field/outcome ids and event payload names via [ModelJsonReader].
  */
-object ModelExtraction {
+object ModelMemberExtractor {
 
     private val XML_INPUT_FACTORY: XMLInputFactory = XMLInputFactory.newInstance().apply {
         // Harden against external entities / DTDs.
@@ -40,13 +41,13 @@ object ModelExtraction {
         else extractJson(bytes, type)
 
     private fun extractJson(bytes: ByteArray, type: ModelType): List<RawModel> {
-        val raw = JsonUtil.extractKeyName(bytes) ?: return emptyList()
+        val raw = ModelJsonReader.extractKeyName(bytes) ?: return emptyList()
         val members = when (type) {
             ModelType.FORM -> {
-                val fm = JsonUtil.readForm(bytes)
+                val fm = ModelJsonReader.readForm(bytes)
                 ModelMembers(variables = fm.fields, formFields = fm.fields, formOutcomes = fm.outcomes)
             }
-            ModelType.EVENT -> ModelMembers(payload = JsonUtil.readEventPayload(bytes))
+            ModelType.EVENT -> ModelMembers(payload = ModelJsonReader.readEventPayload(bytes))
             else -> ModelMembers.EMPTY
         }
         return listOf(raw.copy(members = members))

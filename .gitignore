@@ -28,21 +28,16 @@ out/
 .intellijPlatform/
 .kotlin/
 
-# Editor / OS / Python
+# Editor / OS
 .idea/
 .vscode/
 .DS_Store
-__pycache__/
-*.pyc
 
 # Exception: committed Marketplace media for the IntelliJ plugin (intentional content)
 !idea-plugin/marketplace-assets/*.png
 !idea-plugin/marketplace-assets/*.gif
 
 # Exception: golden test references (deliberately committed regression baselines)
-!tests/golden/*.summary.md
-!tests/golden/*.overview.md
-!tests/golden/*.graph.json
-
-# Test caches
-.pytest_cache/
+!core/src/test/resources/golden/*.summary.md
+!core/src/test/resources/golden/*.overview.md
+!core/src/test/resources/golden/*.graph.json

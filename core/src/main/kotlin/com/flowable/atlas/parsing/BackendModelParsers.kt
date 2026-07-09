@@ -253,6 +253,7 @@ object BackendModelParsers {
             info["serviceModelKey"] = sm.attr("serviceModelKey")
             info["operationKey"] = sm.attr("operationKey")
             ctx.addRef(caseKey, "cmmn", ffile, "serviceMapping", "service", sm.attr("serviceModelKey"))
+            ctx.addOpUse(caseKey, "service", sm.attr("serviceModelKey"), sm.attr("operationKey"))
         }
         val dom = ext.findChild("dataObjectMapping")
         if (dom != null) {

@@ -3,6 +3,13 @@ package com.flowable.atlas.index
 import com.flowable.atlas.model.JsonUtil
 import com.flowable.atlas.model.ModelFiles
 import com.flowable.atlas.model.ModelType
+import com.flowable.atlas.parsing.DataObjectInfo
+import com.flowable.atlas.parsing.ModelMemberExtractor
+import com.flowable.atlas.parsing.ModelMembers
+import com.flowable.atlas.parsing.ModelRefScanner
+import com.flowable.atlas.parsing.OperationInfo
+import com.flowable.atlas.parsing.ParamInfo
+import com.flowable.atlas.parsing.ServiceTable
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.application.ReadAction
@@ -157,7 +164,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
         // (a loose file, or a navigable entry inside a .bar/.zip archive).
         fun processModel(fileName: String, bytes: ByteArray, type: ModelType, navFile: VirtualFile) {
             try {
-                for (raw in ModelExtraction.extract(fileName, bytes, type)) {
+                for (raw in ModelMemberExtractor.extract(fileName, bytes, type)) {
                     val entry = ModelEntry(raw.key, raw.name ?: raw.key, type, navFile, raw.members)
                     byKey.getOrPut(raw.key) { ArrayList() }.add(entry)
                     raw.members.let { m ->
@@ -168,7 +175,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
                         activityIds.addAll(m.activityIds)
                     }
                 }
-                ModelExpressionScanner.scan(String(bytes, Charsets.UTF_8), referencedIdentifiers, referencedClassFqns)
+                ModelRefScanner.scan(String(bytes, Charsets.UTF_8), referencedIdentifiers, referencedClassFqns)
             } catch (e: Exception) {
                 // unreadable / not valid — skip this model, but leave a trace: a systematically
                 // mis-parsed model type would otherwise silently never be indexed

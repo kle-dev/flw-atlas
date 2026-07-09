@@ -220,6 +220,7 @@ object ModelParsers {
                 if (truthy(es["dataObjectDefinitionKey"])) {
                     dataSources.add(linkedMapOf("kind" to "dataObject", "key" to es["dataObjectDefinitionKey"], "op" to es["dataObjectOperationKey"]))
                     ctx.addRef(key, mtype, ffile, "field-dataObject", "dataObject", es["dataObjectDefinitionKey"])
+                    ctx.addOpUse(key, "dataObject", es["dataObjectDefinitionKey"], es["dataObjectOperationKey"])
                 }
                 if (truthy(es["queryUrl"])) {
                     dataSources.add(linkedMapOf("kind" to "rest", "url" to es["queryUrl"]))
@@ -229,6 +230,7 @@ object ModelParsers {
                 if (sm != null && truthy(sm["serviceModelKey"])) {
                     dataSources.add(linkedMapOf("kind" to "service", "key" to sm["serviceModelKey"], "op" to sm["operationKey"]))
                     ctx.addRef(key, mtype, ffile, "field-service", "service", sm["serviceModelKey"])
+                    ctx.addOpUse(key, "service", sm["serviceModelKey"], sm["operationKey"])
                 }
                 for (fk in listOf("dataObjectDataTableCreateFormKey", "dataObjectDataTableEditFormKey", "dataObjectDataTableViewFormKey")) {
                     if (truthy(es[fk])) ctx.addRef(key, mtype, ffile, fk, "form", es[fk])
