@@ -172,12 +172,15 @@ object GraphBuilder {
             return addNode("java", fqn, jc["primary"], jc["file"], data)
         }
 
+        // Java classes that invoke a service/data-object operation must become nodes so they resolve
+        // as consumers in each operation's "usedBy" list.
+        val opUseConsumers = ctx.opUse.mapNotNull { it["consumer"] as? String }.toHashSet()
         for ((fqn, jc) in allJava) {
             val roles = jc["roles"] as Collection<String>
             val vars = jc["vars"] as? Collection<*> ?: emptyList<Any?>()
             val strings = jc["strings"] as? Collection<*> ?: emptyList<Any?>()
             if (roles.any { it != "other" } || fqn in referencedJava || vars.isNotEmpty() ||
-                strings.any { it in modelKeys }
+                strings.any { it in modelKeys } || fqn in opUseConsumers
             ) javaNode(jc)
         }
 

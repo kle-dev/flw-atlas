@@ -36,7 +36,7 @@ object ModelParsers {
 
     // A data-source / link / navigation URL can invoke a service operation with the target and operation
     // keys as *literal* query params even though the host is a dynamic `{{endpoints.*}}` placeholder — e.g.
-    // `{{endpoints.dataobject}}/dataobject-runtime/data-object-instances?dataObjectDefinitionKey=KYC-DO2&dataObjectOperationKey=findActiveByIssueType&…`.
+    // `{{endpoints.dataobject}}/dataobject-runtime/data-object-instances?dataObjectDefinitionKey=<key>&dataObjectOperationKey=<op>&…`.
     // The structured `extraSettings.dataObjectDefinitionKey` / `serviceModel` paths miss these, so URL
     // strings are scanned for them too. Only literal keys survive [Ctx.addOpUse]'s dynamic-value guard.
     private val DO_DEF_RE = Regex("dataObjectDefinitionKey=([^&\\s\"']+)")

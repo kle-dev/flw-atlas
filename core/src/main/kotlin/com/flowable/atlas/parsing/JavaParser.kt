@@ -26,6 +26,13 @@ object JavaParser {
     private val ANY_STR_RE = Regex("""\"([^"]*)\"""")
     private val HANDLER_RE = Regex("""\b(\w+)\s*\(""")
 
+    // `static final String NAME = "value";` constant declarations — used to resolve a data-object key
+    // referenced by a constant (e.g. a generated model-keys class field) back to its literal value.
+    private val STRING_CONST_RE = Regex("""\bstatic\s+final\s+String\s+(\w+)\s*=\s*"([^"]+)"""")
+    // Flowable data-object runtime builder chain: `.definitionKey(<expr>) … .operation("<literal>")`.
+    private val DEFINITION_KEY_RE = Regex("""\.definitionKey\(\s*([^)]+?)\s*\)""")
+    private val OPERATION_CALL_RE = Regex("""\.operation\(\s*"([^"]+)"\s*\)""")
+
     private val CONTROL_KEYWORDS = setOf("if", "for", "while", "switch", "catch", "synchronized", "return", "new")
     private val DELEGATE_INTERFACES = setOf(
         "JavaDelegate", "PlanItemJavaDelegate", "JavaDelegatePlanItem",
@@ -141,6 +148,29 @@ object JavaParser {
             "strings" to JAVA_STR_RE.findAll(text).map { it.groupValues[1] }.toCollection(LinkedHashSet()),
             "line" to (if (classDeclIdx != -1) lineOf(classDeclIdx) else 1),
         )
+    }
+
+    /** A `static final String NAME = "value"` constant declared in the source (name → value). */
+    fun stringConstants(rawText: String): Map<String, String> {
+        val out = LinkedHashMap<String, String>()
+        for (m in STRING_CONST_RE.findAll(blankComments(rawText))) out.putIfAbsent(m.groupValues[1], m.groupValues[2])
+        return out
+    }
+
+    /** Flowable data-object operation invocations: each `.operation("op")` paired with the nearest
+     *  preceding `.definitionKey(expr)` in the same statement (no `;` between). `def` is kept raw — a
+     *  quoted literal or a constant reference (e.g. a generated model-keys class field) — for the caller
+     *  to resolve to a model key. Returns `{def, op}` maps. */
+    fun dataObjectOpCalls(rawText: String): List<Map<String, String>> {
+        val text = blankComments(rawText)
+        val defKeys = DEFINITION_KEY_RE.findAll(text).map { it.range.first to it.groupValues[1].trim() }.toList()
+        val out = ArrayList<Map<String, String>>()
+        for (m in OPERATION_CALL_RE.findAll(text)) {
+            val def = defKeys.lastOrNull { it.first < m.range.first } ?: continue
+            if (text.substring(def.first, m.range.first).contains(';')) continue
+            out.add(linkedMapOf("def" to def.second, "op" to m.groupValues[1]))
+        }
+        return out
     }
 
     private val SCHEME_HOST_RE = Regex("""^[a-z]+://[^/]+""")
