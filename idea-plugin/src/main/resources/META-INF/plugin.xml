@@ -4,7 +4,7 @@
 <idea-plugin require-restart="true">
     <id>com.flowable.atlas</id>
     <name>Flowable Atlas</name>
-    <version>0.7.3</version>
+    <version>0.7.4</version>
     <vendor email="kevin.klever@flowable.com" url="https://www.flowable.com">Flowable</vendor>
 
     <description><![CDATA[
@@ -103,6 +103,16 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.7.4</h3>
+        <ul>
+          <li><b>Service-operation “Used by” now finds usages hidden in data-source URLs</b> — forms and
+              pages most often invoke an operation through a REST data source, lookup or navigation URL
+              (e.g. <code>{{endpoints.dataobject}}/dataobject-runtime/data-object-instances?dataObjectDefinitionKey=…&amp;dataObjectOperationKey=…</code>)
+              rather than a structured field. The operation and target keys embedded as literal query
+              params are now detected, so these usages appear in the operation's <b>“Used by”</b> list.
+              Data-object references still resolve through their backing service. (Verified against a real
+              project: operations with recorded usages went from none to dozens.)</li>
+        </ul>
         <h3>0.7.3</h3>
         <ul>
           <li><b>Service operations are now first-class in the Explorer</b> — every service-registry
