@@ -54,6 +54,7 @@ object ReferenceResolver {
     private val MUSTACHE_HEAD_RE = Regex("^\\$?([A-Za-z_]\\w*)")
     private val DATA_OBJ_KEY_RE = Regex("dataObjectDefinitionKey=([A-Za-z0-9_.\\-]+)")
     private val QUERY_PATH_RE = Regex("/query/([A-Za-z0-9_.\\-]+)")
+    private val IDENT_RE = Regex("[A-Za-z_]\\w*")
 
     /** Root identifiers a `{{…}}` placeholder may carry that are never project variables. */
     private val MUSTACHE_IGNORE = setOf(
@@ -86,10 +87,15 @@ object ReferenceResolver {
         val fqnIndex = LinkedHashMap<String, Map<String, Any?>>()
         val javaByRole = LinkedHashMap<String, ArrayList<Any?>>()
 
+        // Global `static final String` constants (simple name → value) and per-class data-object
+        // operation calls, collected during the java pass and resolved into op-uses just below.
+        val javaConstants = LinkedHashMap<String, String>()
+        val javaOpCalls = LinkedHashMap<String, List<Map<String, String>>>()
         for (path in javas) {
             val rel = relOf(path)
+            val srcText = String(path.readBytes(), Charsets.UTF_8)
             val jc: Map<String, Any?> = try {
-                JavaParser.parseJava(String(path.readBytes(), Charsets.UTF_8), rel)
+                JavaParser.parseJava(srcText, rel)
             } catch (e: Exception) {
                 diag("java", rel, e.message ?: e.toString())
                 continue
@@ -110,6 +116,27 @@ object ReferenceResolver {
             if (jc["isGlue"] as Boolean) bucketList("javaGlue").add(jc)
             for (role in jc["roles"] as Collection<String>) {
                 javaByRole.getOrPut(role) { ArrayList() }.add(jc)
+            }
+            for ((n, v) in JavaParser.stringConstants(srcText)) javaConstants.putIfAbsent(n, v)
+            val ops = JavaParser.dataObjectOpCalls(srcText)
+            if (ops.isNotEmpty()) javaOpCalls[fqn] = ops
+        }
+
+        // ---- Java data-object operation calls (dataObjectRuntimeService…definitionKey(key).operation("op")) ----
+        // Resolve each call's definitionKey — a string literal or a `static final String` constant
+        // reference (a generated model-keys class field) — to a model key, then record it as an op-use so
+        // the Java class shows up in the operation's "Used by" list (data objects resolve to their
+        // backing service in the graph builder, exactly like the form/page data-source usages).
+        fun resolveDefKey(expr: String): String? {
+            val e = expr.trim()
+            if (e.length >= 2 && e.startsWith('"') && e.endsWith('"')) return e.substring(1, e.length - 1)
+            val simple = e.substringAfterLast('.')
+            return if (IDENT_RE.matches(simple)) javaConstants[simple] else null
+        }
+        for ((fqn, calls) in javaOpCalls) {
+            for (call in calls) {
+                val key = resolveDefKey(call["def"] ?: continue) ?: continue
+                ctx.addOpUse(fqn, "dataObject", key, call["op"])
             }
         }
 

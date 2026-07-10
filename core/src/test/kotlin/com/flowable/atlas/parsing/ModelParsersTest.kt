@@ -49,17 +49,17 @@ class ModelParsersTest {
     fun parseFormExtractsOpUseFromDataSourceUrls() {
         // DO operation invoked via a `{{endpoints.dataobject}}` REST data-source URL (queryUrl/lookupUrl):
         // the target + operation keys are literal query params even though the host is a placeholder.
-        val doc = """{"metadata": {"key": "KYC-F045", "name": "F"},
+        val doc = """{"metadata": {"key": "f1", "name": "F"},
                      "rows": [[{"id": "a", "type": "select", "label": "A", "extraSettings": {
-                        "queryUrl": "{{endpoints.dataobject}}/dataobject-runtime/data-object-instances?dataObjectDefinitionKey=KYC-DO2&dataObjectOperationKey=findActiveByIssueType&issueType={{issueType}}",
-                        "lookupUrl": "{{endpoints.dataobject}}/dataobject-runtime/data-object-instances?dataObjectDefinitionKey=KYC-DO2&dataObjectOperationKey=findActiveByIssueType"}}]]}""".toByteArray()
+                        "queryUrl": "{{endpoints.dataobject}}/dataobject-runtime/data-object-instances?dataObjectDefinitionKey=do-order&dataObjectOperationKey=findByStatus&status={{status}}",
+                        "lookupUrl": "{{endpoints.dataobject}}/dataobject-runtime/data-object-instances?dataObjectDefinitionKey=do-order&dataObjectOperationKey=findByStatus"}}]]}""".toByteArray()
         val ctx = Ctx()
         ModelParsers.parseForm(doc, ctx, "f.form")
         val opUses = ctx.opUse.map { Triple(it["targetKind"], it["targetKey"], it["op"]) }.toSet()
         assertTrue("DO op-use must be extracted from the data-source URL",
-            Triple<Any?, Any?, Any?>("dataObject", "KYC-DO2", "findActiveByIssueType") in opUses)
+            Triple<Any?, Any?, Any?>("dataObject", "do-order", "findByStatus") in opUses)
         assertTrue("form→dataObject ref must be recorded from the URL",
-            Triple("field-dataObject", "dataObject", "KYC-DO2") in refs(ctx))
+            Triple("field-dataObject", "dataObject", "do-order") in refs(ctx))
     }
 
     @Test
@@ -67,7 +67,7 @@ class ModelParsersTest {
         // A dynamic (`{{…}}`) operation key can't be tied to one operation — it must not be recorded.
         val doc = """{"metadata": {"key": "f1", "name": "F"},
                      "rows": [[{"id": "a", "type": "select", "label": "A", "extraSettings": {
-                        "queryUrl": "{{endpoints.dataobject}}/x?dataObjectDefinitionKey=KYC-DO2&dataObjectOperationKey={{op}}"}}]]}""".toByteArray()
+                        "queryUrl": "{{endpoints.dataobject}}/x?dataObjectDefinitionKey=do-order&dataObjectOperationKey={{op}}"}}]]}""".toByteArray()
         val ctx = Ctx()
         ModelParsers.parseForm(doc, ctx, "f.form")
         assertTrue("dynamic op key must not produce an op-use", ctx.opUse.isEmpty())
