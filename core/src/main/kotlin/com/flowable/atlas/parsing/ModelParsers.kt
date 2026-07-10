@@ -34,6 +34,39 @@ object ModelParsers {
 
     private val GENERIC_KEYS = listOf("key", "name", "description", "type", "subType", "modelType")
 
+    // A data-source / link / navigation URL can invoke a service operation with the target and operation
+    // keys as *literal* query params even though the host is a dynamic `{{endpoints.*}}` placeholder — e.g.
+    // `{{endpoints.dataobject}}/dataobject-runtime/data-object-instances?dataObjectDefinitionKey=KYC-DO2&dataObjectOperationKey=findActiveByIssueType&…`.
+    // The structured `extraSettings.dataObjectDefinitionKey` / `serviceModel` paths miss these, so URL
+    // strings are scanned for them too. Only literal keys survive [Ctx.addOpUse]'s dynamic-value guard.
+    private val DO_DEF_RE = Regex("dataObjectDefinitionKey=([^&\\s\"']+)")
+    private val DO_OP_RE = Regex("dataObjectOperationKey=([^&\\s\"']+)")
+    private val SVC_KEY_RE = Regex("serviceModelKey=([^&\\s\"']+)")
+    private val SVC_OP_RE = Regex("(?<![A-Za-z])operationKey=([^&\\s\"']+)")
+
+    /** Extract data-object / service operation usages embedded as query params in a data-source or
+     *  navigation [url] and record them (ref + op-use) against [key]. No-op unless a `…OperationKey=` /
+     *  `serviceModelKey=` param is present, so scanning arbitrary URLs stays cheap and side-effect free. */
+    private fun recordUrlOpUses(url: String?, key: Any?, mtype: String, ffile: String, ctx: Ctx) {
+        if (url == null) return
+        if (url.contains("dataObjectOperationKey=")) {
+            val doKey = DO_DEF_RE.find(url)?.groupValues?.get(1)
+            val doOp = DO_OP_RE.find(url)?.groupValues?.get(1)
+            if (doKey != null && doOp != null) {
+                ctx.addRef(key, mtype, ffile, "field-dataObject", "dataObject", doKey)
+                ctx.addOpUse(key, "dataObject", doKey, doOp)
+            }
+        }
+        if (url.contains("serviceModelKey=")) {
+            val svcKey = SVC_KEY_RE.find(url)?.groupValues?.get(1)
+            val svcOp = SVC_OP_RE.find(url)?.groupValues?.get(1)
+            if (svcKey != null && svcOp != null) {
+                ctx.addRef(key, mtype, ffile, "field-service", "service", svcKey)
+                ctx.addOpUse(key, "service", svcKey, svcOp)
+            }
+        }
+    }
+
     /** Recursively visit every JSON object in a tree (ElementTree-free `_walk_json`). */
     private fun walkJson(node: Any?, fn: (Map<String, Any?>) -> Unit) {
         when (node) {
@@ -237,11 +270,17 @@ object ModelParsers {
                 }
                 if (truthy(es["expandablePanel"])) ctx.addRef(key, mtype, ffile, "datatable-detail-form", "form", es["expandablePanel"])
                 if (truthy(es["actionDefinitionKey"])) ctx.addRef(key, mtype, ffile, "triggers-action", "action", es["actionDefinitionKey"])
+                // Data-source / lookup / navigation URLs (queryUrl, lookupUrl, navigationUrl, …) can embed a
+                // dataObject/service operation as literal query params — pick those up as op-uses.
+                for (v in es.values) if (v is String) recordUrlOpUses(v, key, mtype, ffile, ctx)
             }
             val u = n["url"]
             if (u is String && u.trim().isNotEmpty()) {
                 ctx.restCalls.add(linkedMapOf("source" to key, "sourceFile" to ffile, "where" to n["id"], "method" to "(button)", "url" to u.trim(), "kind" to "form-button"))
+                recordUrlOpUses(u, key, mtype, ffile, ctx)
             }
+            // Link components carry their target URL in `value`.
+            (n["value"] as? String)?.let { recordUrlOpUses(it, key, mtype, ffile, ctx) }
         }
         walkJson(doc["rows"] ?: emptyList<Any?>(), ::visit)
         return info
