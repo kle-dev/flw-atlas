@@ -61,20 +61,20 @@ find_jar() {
 }
 JAR="$(find_jar || true)"
 if [[ -z "${JAR:-}" ]]; then
-  # No jar found. NEVER auto-build here: on a locked-down/offline machine `./gradlew` would hang
-  # forever trying to reach Maven Central / the Gradle Plugin Portal. Fail fast with guidance;
-  # only build when explicitly opted in with ATLAS_BUILD=1.
-  if [[ "${ATLAS_BUILD:-0}" == "1" ]]; then
-    echo "▶ ATLAS_BUILD=1 — building the CLI (needs network: Maven Central + Gradle Plugin Portal) …" >&2
-    (cd "$SCRIPT_DIR" && ./gradlew --console=plain -q :cli:shadowJar)
-    JAR="$(find_jar || true)"
-  else
-    echo "error: no Atlas CLI jar found (looked for \$ATLAS_JAR, ./*-all.jar, ./lib/*-all.jar, ./cli/build/libs/*-all.jar)." >&2
-    echo "  This repo ships a prebuilt one at lib/cli-<version>-all.jar — run 'git pull' to fetch it, then retry." >&2
-    echo "  Or point at a jar directly:   ATLAS_JAR=/path/to/cli-all.jar ./atlas <project>" >&2
-    echo "  To build from source (needs network):   ATLAS_BUILD=1 ./atlas <project>" >&2
+  # No jar found: build it (convenient on a dev machine with network). Set ATLAS_NO_BUILD=1 to skip
+  # the build on a locked-down/offline machine, where `./gradlew` would otherwise hang trying to
+  # reach Maven Central / the Gradle Plugin Portal (there, `git pull` fetches lib/cli-<version>-all.jar).
+  if [[ "${ATLAS_NO_BUILD:-0}" == "1" ]]; then
+    echo "error: no Atlas CLI jar found and ATLAS_NO_BUILD=1 is set." >&2
+    echo "  Fetch the committed jar with 'git pull' (lib/cli-<version>-all.jar), or set ATLAS_JAR=/path/to/cli-all.jar." >&2
     exit 1
   fi
+  echo "▶ No prebuilt Atlas jar found — building it with Gradle (first run)." >&2
+  echo "  This needs network access (Maven Central + Gradle Plugin Portal). If it hangs on an" >&2
+  echo "  offline/locked-down machine: Ctrl-C, then 'git pull' (ships lib/cli-<version>-all.jar)" >&2
+  echo "  or set ATLAS_JAR=/path/to/cli-all.jar (and ATLAS_NO_BUILD=1 to skip this build next time)." >&2
+  (cd "$SCRIPT_DIR" && ./gradlew --console=plain -q :cli:shadowJar)
+  JAR="$(find_jar || true)"
 fi
 if [[ -z "${JAR:-}" ]]; then
   echo "error: could not locate or build the CLI fat-jar." >&2
