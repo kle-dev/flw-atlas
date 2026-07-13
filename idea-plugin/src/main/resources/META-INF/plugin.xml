@@ -538,14 +538,11 @@
         <additionalTextAttributes scheme="Default" file="colorSchemes/FlowableExprDefault.xml"/>
         <additionalTextAttributes scheme="Darcula" file="colorSchemes/FlowableExprDarcula.xml"/>
         <colorSettingsPage implementation="com.flowable.atlas.expr.lang.FlowableExprColorSettingsPage"/>
-        <!-- Alt-Enter on an injected ${…}/{{…}} fragment → rework it in the playground, pre-filled. -->
+        <!-- Alt-Enter on an injected ${…}/{{…}} fragment → rework it in the playground, pre-filled.
+             Registered once (no <language> filter): the same class must not be registered twice or the
+             platform rejects it as a duplicate. isAvailable() self-gates on FlowableExprFile, which
+             covers both the backend and frontend dialects. -->
         <intentionAction>
-            <language>FlowableBackendExpr</language>
-            <className>com.flowable.atlas.expr.intention.OpenInExpressionPlaygroundIntention</className>
-            <category>Flowable</category>
-        </intentionAction>
-        <intentionAction>
-            <language>FlowableFrontendExpr</language>
             <className>com.flowable.atlas.expr.intention.OpenInExpressionPlaygroundIntention</className>
             <category>Flowable</category>
         </intentionAction>
