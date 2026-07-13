@@ -42,6 +42,16 @@
       "users": []
     },
     {
+      "action": "read",
+      "groups": [
+        "sales"
+      ],
+      "model": "orderPolicy",
+      "modelType": "securityPolicy",
+      "scope": "policy",
+      "users": []
+    },
+    {
       "action": "start",
       "groups": [
         "auditors"
@@ -59,6 +69,16 @@
       "model": "orderProcess",
       "modelType": "process",
       "scope": "start",
+      "users": []
+    },
+    {
+      "action": "update",
+      "groups": [
+        "backoffice"
+      ],
+      "model": "orderPolicy",
+      "modelType": "securityPolicy",
+      "scope": "policy",
       "users": []
     }
   ],
@@ -488,6 +508,11 @@
         "t": "dataObject:customerDO"
       },
       {
+        "rel": "read",
+        "s": "group:sales",
+        "t": "securityPolicy:orderPolicy"
+      },
+      {
         "rel": "receives-event",
         "s": "process:orderProcess",
         "t": "event:orderShipped"
@@ -533,6 +558,11 @@
         "t": "external:notifierBean"
       },
       {
+        "rel": "serviceTask-delegate",
+        "s": "process:orderProcess",
+        "t": "java:com.example.DemoBean"
+      },
+      {
         "rel": "start",
         "s": "group:auditors",
         "t": "case:reviewCase"
@@ -546,6 +576,11 @@
         "rel": "start-form",
         "s": "process:orderProcess",
         "t": "form:orderForm"
+      },
+      {
+        "rel": "update",
+        "s": "group:backoffice",
+        "t": "securityPolicy:orderPolicy"
       },
       {
         "rel": "userTask-form",
@@ -654,6 +689,7 @@
           "callActivities": [
             {
               "calledElement": "fulfilmentProcess",
+              "calledElementType": null,
               "id": "callSub",
               "inOut": [],
               "name": "Fulfil"
@@ -947,7 +983,8 @@
           ],
           "package": "com.example",
           "roles": [
-            "component"
+            "component",
+            "delegate"
           ]
         },
         "file": "src/main/java/com/example/DemoBean.java",
@@ -1572,6 +1609,7 @@
         "interfaces": [],
         "isController": false,
         "isGlue": false,
+        "keyedStrings": [],
         "line": 6,
         "methods": [
           {
@@ -1594,6 +1632,7 @@
           "demoBean",
           "total"
         ],
+        "topics": [],
         "types": [
           "DemoBean"
         ],
@@ -1620,6 +1659,7 @@
         "interfaces": [],
         "isController": true,
         "isGlue": false,
+        "keyedStrings": [],
         "line": 7,
         "methods": [
           {
@@ -1637,6 +1677,7 @@
           "/api/customers",
           "[]"
         ],
+        "topics": [],
         "types": [
           "CustomerController"
         ],
@@ -1662,6 +1703,7 @@
       "interfaces": [],
       "isController": true,
       "isGlue": false,
+      "keyedStrings": [],
       "line": 7,
       "methods": [
         {
@@ -1679,6 +1721,7 @@
         "/api/customers",
         "[]"
       ],
+      "topics": [],
       "types": [
         "CustomerController"
       ],
@@ -1789,6 +1832,7 @@
       "callActivities": [
         {
           "calledElement": "fulfilmentProcess",
+          "calledElementType": null,
           "id": "callSub",
           "inOut": [],
           "name": "Fulfil"
@@ -1992,6 +2036,17 @@
       "from": "orderProcess",
       "fromFile": "processes/order.bpmn",
       "fromType": "bpmn",
+      "kind": "bean",
+      "rel": "serviceTask-delegate",
+      "target": "src/main/java/com/example/DemoBean.java:6 (com.example.DemoBean)",
+      "targetFqn": "com.example.DemoBean",
+      "targetType": "bean",
+      "value": "demoBean"
+    },
+    {
+      "from": "orderProcess",
+      "fromFile": "processes/order.bpmn",
+      "fromType": "bpmn",
       "kind": "decision",
       "rel": "ruleTask-decision",
       "target": "decisions/order-decision.dmn",
@@ -2184,12 +2239,14 @@
   ],
   "stats": {
     "archives": 0,
-    "edges": 33,
+    "dynamicEdges": 0,
+    "edges": 36,
     "endpoints": 1,
     "groups": 3,
     "java": 2,
     "models": 11,
-    "nodes": 31
+    "nodes": 31,
+    "suspectEdges": 0
   },
   "unresolvedRefs": [
     {

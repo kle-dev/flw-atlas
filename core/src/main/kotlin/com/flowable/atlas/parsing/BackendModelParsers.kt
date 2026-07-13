@@ -26,6 +26,24 @@ object BackendModelParsers {
     fun parseBpmn(data: ByteArray, ctx: Ctx, ffile: String): List<Map<String, Any?>> {
         val root = AtlasXml.parse(data)
         val processes = ArrayList<Map<String, Any?>>()
+        // Root-level <message>/<signal>/<error>/<escalation> definitions: events reference them by
+        // id, but cross-model correlation happens by NAME (messages/signals) or CODE (errors/
+        // escalations) — exactly what the engine's event subscriptions store.
+        fun defNames(tag: String, nameAttr: String): Map<String, String> =
+            root.iter(tag).mapNotNull { d ->
+                d.attr("id")?.let { id -> id to (d.attr(nameAttr)?.ifEmpty { null } ?: id) }
+            }.toMap()
+        val msgDefs = defNames("message", "name")
+        val sigDefs = defNames("signal", "name")
+        val errDefs = defNames("error", "errorCode")
+        val escDefs = defNames("escalation", "escalationCode")
+        fun correlate(kind: String, refOrName: String): String = when (kind) {
+            "message" -> msgDefs[refOrName] ?: refOrName
+            "signal" -> sigDefs[refOrName] ?: refOrName
+            "error" -> errDefs[refOrName] ?: refOrName
+            "escalation" -> escDefs[refOrName] ?: refOrName
+            else -> refOrName
+        }
         for (proc in root.iter("process")) {
             val pkey = proc.attr("id")
             val userTasks = ArrayList<Any?>()
@@ -103,11 +121,25 @@ object BackendModelParsers {
                     if (eext != null) {
                         val ev = eext.childText("eventType")
                         if (!ev.isNullOrEmpty()) {
-                            val rel = if (el.attr("type") in listOf("send-event", "sendEvent"))
-                                "sends-event" else "receives-event"
+                            // Direction follows the element, not just a `type` attribute: throw/end
+                            // events and send-event tasks publish; start/catch/boundary consume.
+                            val rel = when {
+                                el.attr("type") in listOf("send-event", "sendEvent") -> "sends-event"
+                                tag in listOf("intermediateThrowEvent", "endEvent") -> "sends-event"
+                                else -> "receives-event"
+                            }
                             ctx.addRef(pkey, "bpmn", ffile, rel, "event", ev)
                         }
                         ctx.addRef(pkey, "bpmn", ffile, "trigger-event", "event", eext.childText("triggerEventType"))
+                        // send/receive via an explicit channel + template refs (email/document tasks)
+                        ctx.addRef(pkey, "bpmn", ffile, "via-channel", "channel", eext.childText("channelKey"))
+                        for (tk in listOf("templateKey", "subjectTemplateModelKey", "bodyTemplateModelKey")) {
+                            ctx.addRef(pkey, "bpmn", ffile, tk, "template", eext.childText(tk))
+                        }
+                        for (dec in eext.findChildren("documentEventConfiguration")) {
+                            ctx.addRef(pkey, "bpmn", ffile, "document-event", "document",
+                                dec.attr("definitionKey") ?: dec.childText("definitionKey"))
+                        }
                     }
                 }
                 val mi = el.findChild("multiInstanceLoopCharacteristics")
@@ -143,9 +175,13 @@ object BackendModelParsers {
                         )
                         serviceTasks.add(st)
                         ctx.addRef(pkey, "bpmn", ffile, "serviceTask-class", "class", st["class"])
-                        val de = st["delegateExpression"] as? String
-                        if (!de.isNullOrEmpty()) {
-                            for (m in BEAN_RE.findAll(de)) {
+                        // Both `delegateExpression` and `expression` reference a bean — a bean-only
+                        // `flowable:expression="${myBean}"` has no method call, so the whole-file
+                        // METHOD_CALL harvest never sees it either.
+                        for (exAttr in listOf("delegateExpression", "expression")) {
+                            val exv = st[exAttr] as? String
+                            if (exv.isNullOrEmpty()) continue
+                            for (m in BEAN_RE.findAll(exv)) {
                                 val b = m.groupValues[1]
                                 if (b !in Constants.FLOWABLE_CONTEXT)
                                     ctx.addRef(pkey, "bpmn", ffile, "serviceTask-delegate", "bean", b)
@@ -168,6 +204,17 @@ object BackendModelParsers {
                             val dref = pyOr(f["decisionTableReferenceKey"], f["decisionServiceReferenceKey"])
                             ruleTasks.add(linkedMapOf("id" to eid, "name" to ename, "decisionRef" to dref))
                             ctx.addRef(pkey, "bpmn", ffile, "ruleTask-decision", "decision", dref)
+                        } else if (type == "case") {
+                            // case service task — starts a CMMN case by definition key (attribute,
+                            // with a field-injection fallback for older exports)
+                            val ck = pyOr(el.attr("caseDefinitionKey"), XmlHelpers.readFields(el)["caseDefinitionKey"])
+                            st["caseDefinitionKey"] = ck
+                            ctx.addRef(pkey, "bpmn", ffile, "caseTask", "case", ck)
+                        } else if (type == "external-worker") {
+                            // external worker task — the topic names the external system's queue
+                            val topic = pyOr(el.attr("topic"), XmlHelpers.readFields(el)["topic"])
+                            st["topic"] = topic
+                            ctx.addRef(pkey, "bpmn", ffile, "external-topic", "topic", topic)
                         }
                         // data object service task (field injection)
                         val ext = XmlHelpers.extEl(el)
@@ -197,10 +244,15 @@ object BackendModelParsers {
                     tag == "callActivity" -> {
                         val called = el.attr("calledElement")
                         val io = XmlHelpers.readInOut(el)
+                        // calledElementType is "key" (default) or "id" — an id is a deployment-time
+                        // definition id, not a model key, so resolving it by key is only a guess.
+                        val calledType = el.attr("calledElementType")
                         callActivities.add(linkedMapOf(
                             "id" to eid, "name" to ename, "calledElement" to called, "inOut" to io,
+                            "calledElementType" to calledType,
                         ))
-                        ctx.addRef(pkey, "bpmn", ffile, "callActivity", "process", called)
+                        ctx.addRef(pkey, "bpmn", ffile, "callActivity", "process", called,
+                            suspect = calledType.equals("id", ignoreCase = true))
                         for (fk in XmlHelpers.inoutFormKeys(io)) {
                             ctx.addRef(pkey, "bpmn", ffile, "task-form-mapping", "form", fk)
                         }
@@ -217,12 +269,25 @@ object BackendModelParsers {
                         if (tag == "startEvent" && truthy(el.attr("formKey"))) {
                             ctx.addRef(pkey, "bpmn", ffile, "start-form", "form", el.attr("formKey"))
                         }
+                        // message/signal/error/escalation events correlate across models through a
+                        // shared named node; throw and catch side carry the direction in the rel.
+                        if (k != null && k in listOf("message", "signal", "error", "escalation") && !v.isNullOrEmpty()) {
+                            val throwing = tag in listOf("intermediateThrowEvent", "endEvent")
+                            val rel = (if (throwing) "throws-" else "catches-") + k
+                            ctx.addRef(pkey, "bpmn", ffile, rel, k, correlate(k, v))
+                        }
                     }
                     tag in XmlHelpers.BPMN_GW_TAGS -> {
                         gateways.add(linkedMapOf("id" to eid, "name" to ename, "type" to tag))
                     }
                     tag in listOf("sendTask", "receiveTask", "manualTask", "task") -> {
                         otherTasks.add(linkedMapOf("id" to eid, "name" to ename, "type" to tag))
+                        // send/receive tasks reference a <message> definition by id
+                        val mref = el.attr("messageRef")
+                        if (!mref.isNullOrEmpty() && tag in listOf("sendTask", "receiveTask")) {
+                            val rel = if (tag == "sendTask") "throws-message" else "catches-message"
+                            ctx.addRef(pkey, "bpmn", ffile, rel, "message", correlate("message", mref))
+                        }
                     }
                     tag == "sequenceFlow" -> {
                         val cond = el.textOfDescendant("conditionExpression")
@@ -269,9 +334,9 @@ object BackendModelParsers {
             val v = ext.childText(tk)
             if (truthy(v)) ctx.addRef(caseKey, "cmmn", ffile, tk, "template", v)
         }
-        val de = el.attr("delegateExpression")
-        if (!de.isNullOrEmpty()) {
-            for (m in BEAN_RE.findAll(de)) {
+        for (exv in listOf(el.attr("delegateExpression"), el.attr("expression"))) {
+            if (exv.isNullOrEmpty()) continue
+            for (m in BEAN_RE.findAll(exv)) {
                 val b = m.groupValues[1]
                 if (b !in Constants.FLOWABLE_CONTEXT) ctx.addRef(caseKey, "cmmn", ffile, "task-delegate", "bean", b)
             }
@@ -297,17 +362,20 @@ object BackendModelParsers {
                 val ref = pyOr(el.textOfDescendant("processRefExpression"), el.attr("processRef"))
                 d["processRef"] = ref
                 d["inOut"] = XmlHelpers.readInOut(el)
+                el.attr("sameDeployment")?.let { d["sameDeployment"] = it }
                 ctx.addRef(caseKey, "cmmn", ffile, "processTask", "process", ref)
             }
             tag == "caseTask" -> {
                 val ref = pyOr(el.textOfDescendant("caseRefExpression"), el.attr("caseRef"))
                 d["caseRef"] = ref
                 d["inOut"] = XmlHelpers.readInOut(el)
+                el.attr("sameDeployment")?.let { d["sameDeployment"] = it }
                 ctx.addRef(caseKey, "cmmn", ffile, "caseTask", "case", ref)
             }
             tag == "decisionTask" -> {
                 val ref = pyOr(el.textOfDescendant("decisionRefExpression"), el.attr("decisionRef"))
                 d["decisionRef"] = ref
+                el.attr("sameDeployment")?.let { d["sameDeployment"] = it }
                 ctx.addRef(caseKey, "cmmn", ffile, "decisionTask", "decision", ref)
             }
             tag in listOf("task", "serviceTask", "humanTaskWithService") -> {
@@ -316,11 +384,22 @@ object BackendModelParsers {
                 if (truthy(el.attr("formKey"))) {
                     ctx.addRef(caseKey, "cmmn", ffile, "task-form", "form", el.attr("formKey"))
                 }
+                // assignment on generic tasks carries access too (parity with humanTask)
+                if (truthy(el.attr("assignee"))) d["assignee"] = el.attr("assignee")
+                if (truthy(el.attr("candidateGroups"))) d["candidateGroups"] = el.attr("candidateGroups")
+                ctx.addAccess(caseKey, "case", "task:${el.attr("id")}", "assign",
+                    el.attr("candidateGroups"), pyOr(el.attr("candidateUsers"), el.attr("assignee")))
                 // CMMN script task: <task flowable:type="script"> with body in a <flowable:field name="script">
                 if (el.attr("type") == "script") {
                     d["scriptFormat"] = el.attr("scriptFormat")
                     d["script"] = XmlHelpers.readFields(el)["script"]
                     VarHarvest.collectScriptVars(ctx, d["script"] as? String, listOf(caseKey))
+                }
+                // CMMN external worker task — the topic names the external system's queue
+                if (el.attr("type") == "external-worker") {
+                    val topic = pyOr(el.attr("topic"), XmlHelpers.readFields(el)["topic"])
+                    d["topic"] = topic
+                    ctx.addRef(caseKey, "cmmn", ffile, "external-topic", "topic", topic)
                 }
             }
         }
@@ -347,6 +426,12 @@ object BackendModelParsers {
                 ctx.addRef(caseKey, "cmmn", ffile, rel, "event", ev)
             }
             ctx.addRef(caseKey, "cmmn", ffile, "trigger-event", "event", dext.childText("triggerEventType"))
+            // send/receive via an explicit channel + document event configuration
+            ctx.addRef(caseKey, "cmmn", ffile, "via-channel", "channel", dext.childText("channelKey"))
+            for (dec in dext.findChildren("documentEventConfiguration")) {
+                ctx.addRef(caseKey, "cmmn", ffile, "document-event", "document",
+                    dec.attr("definitionKey") ?: dec.childText("definitionKey"))
+            }
         }
         val listeners = XmlHelpers.readListeners(el)
         d["listeners"] = listeners
@@ -504,6 +589,12 @@ object BackendModelParsers {
                                 "id" to el.attr("id"), "name" to el.attr("name"), "type" to el.tag,
                             )
                             if (!lev.isNullOrEmpty()) entry["eventType"] = lev
+                            // signal event listener — correlates by signal name across models
+                            val sref = el.attr("signalRef")
+                            if (!sref.isNullOrEmpty()) {
+                                entry["signalRef"] = sref
+                                ctx.addRef(ckey, "cmmn", ffile, "catches-signal", "signal", sref)
+                            }
                             eventListeners.add(entry)
                         }
                     }

@@ -3,29 +3,68 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#ffffff">
 <title>Flowable Atlas</title>
 <style>
 /*__ATLAS_CSS__*/</style>
 </head>
 <body>
-<header>
-  <div class="brand"><div class="mark">Flowable&nbsp;<b>Atlas</b></div><div class="proj mono" id="proj"></div></div>
-  <div class="search">
-    <span class="ic" aria-hidden="true">⌕</span>
-    <input id="q" placeholder="Search everything — keys, files, classes, groups…" autocomplete="off"
-           role="combobox" aria-expanded="false" aria-controls="results" aria-autocomplete="list" aria-label="Search all nodes">
-    <span class="hint" aria-hidden="true">/</span>
-    <div class="results" id="results" role="listbox" aria-label="Search results"></div>
+<div class="shell">
+  <aside class="sidebar" id="sidebar">
+    <!-- Flowable brand lockup, derived from the Flowable Hub logo (FlowableHubFull);
+         the "flow" letters use currentColor so the wordmark inverts with the theme.
+         The mark-only variant is the same red path cropped via viewBox (collapsed rail). -->
+    <div class="side-logo">
+      <svg class="logo-full" viewBox="0 0 165 50" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Flowable Atlas">
+        <g fill-rule="evenodd" fill="none">
+          <path d="M157.229 16.8007C156.734 17.2954 156.338 17.5922 154.162 17.5922H146.147C146.741 19.2743 148.324 20.3627 150.105 20.2638C151.391 20.2638 152.677 19.6701 153.469 18.5817C153.469 18.5817 155.349 18.5817 157.427 18.5817C157.229 19.6701 156.734 20.7585 155.943 21.5501C154.359 23.1333 152.282 24.1227 150.006 24.1227C145.553 24.1227 141.892 20.4617 141.892 16.0091C141.892 11.5565 145.553 7.89544 150.006 7.89544C153.667 7.7965 156.932 10.2702 157.823 13.8323C158.218 14.8217 157.922 16.0091 157.229 16.8007ZM150.204 11.8533C148.423 11.8533 146.84 13.0407 146.246 14.7228H154.261C153.568 13.0407 151.985 11.8533 150.204 11.8533Z M140.606 0.969727H136.747V24.2222H140.606V0.969727Z M118.838 16.3065V0.969727H122.697V9.18231C123.983 8.39074 125.467 7.99495 126.951 7.99495C131.404 7.99495 135.065 11.557 135.164 16.1086C135.263 20.6601 131.602 24.2222 127.05 24.3212C122.697 24.2222 119.036 20.7591 118.838 16.3065ZM126.951 20.2644C129.227 20.2644 131.107 18.3844 131.107 16.1086C131.107 13.8328 129.227 11.9528 126.951 11.9528C124.676 11.9528 122.796 13.8328 122.796 16.1086C122.796 18.3844 124.676 20.2644 126.951 20.2644Z M112.802 7.89551H116.661V24.1228H112.802V22.9354C108.943 25.3101 103.996 24.1228 101.621 20.2639C99.2462 16.4049 100.434 11.4576 104.293 9.08287C106.964 7.49972 110.229 7.49972 112.901 9.08287V7.89551H112.802ZM108.547 20.2639C110.823 20.2639 112.703 18.3839 112.703 16.1081C112.703 13.8323 110.823 11.9523 108.547 11.9523C106.271 11.9523 104.391 13.8323 104.391 16.1081C104.391 18.3839 106.173 20.2639 108.547 20.2639Z" fill="#A8BAC1"/>
+          <path d="M95.1894 7.89551H99.1473C99.1473 9.5776 99.1473 10.3692 99.1473 10.4681V17.2955C99.1473 21.0554 96.08 24.1228 92.32 24.1228C90.44 24.1228 88.659 23.4302 87.3726 22.0449C84.7011 24.7165 80.2485 24.8154 77.5769 22.0449C76.2906 20.7586 75.499 18.9776 75.499 17.1965V7.89551H79.4569V17.2955C79.4569 18.9776 80.8422 20.2639 82.4253 20.1649C84.0085 20.1649 85.2948 18.8786 85.2948 17.2955V10.4681C85.2948 10.3692 85.2948 9.5776 85.2948 7.89551H89.2526V12.1502V17.3944C89.2526 19.0765 90.6379 20.3628 92.221 20.2639C93.8042 20.2639 95.0905 18.9776 95.0905 17.3944L95.1894 7.89551Z M65.9012 24.2224C61.4486 24.2224 57.7875 20.5614 57.7875 16.1088C57.7875 11.6562 61.4486 7.99512 65.9012 7.99512C70.3538 7.99512 74.0148 11.6562 74.0148 16.1088C74.0148 20.5614 70.3538 24.2224 65.9012 24.2224ZM65.9012 20.2645C68.177 20.2645 70.0569 18.3845 70.0569 16.1088C70.0569 13.833 68.177 11.854 65.9012 11.854C63.6254 11.854 61.7454 13.734 61.7454 16.0098C61.6465 18.3845 63.5265 20.2645 65.9012 20.2645Z M56.5013 0.969727H52.6423V24.1233H56.5013V0.969727Z M42.9453 9.87494H50.6631V13.8328H42.9453C42.8463 13.8328 42.7474 13.8328 42.6484 13.8328V24.3212H38.7895V24.2222V24.1233V9.28126C38.6906 3.2455 41.56 1.16762 45.5179 0.969727C45.6168 0.969727 45.7158 0.969727 45.8147 0.969727H50.96V4.82865H45.8147C43.9347 4.82865 42.5495 6.01601 42.5495 9.18231V9.97389C42.7474 9.97389 42.8463 9.87494 42.9453 9.87494Z" fill="currentColor"/>
+          <path fill-rule="nonzero" d="M4.70984 27.151L10.14 21.7208H11.0266C12.4673 21.7208 13.6863 20.5018 13.6863 19.0611V18.1746L20.7788 11.082V19.6152C20.7788 20.7234 21.5545 21.61 22.6628 21.61C23.771 21.61 24.6575 20.8342 24.6575 19.726V19.6152V6.64923C24.7683 5.54102 24.1034 4.54364 22.9952 4.43282H22.8844C22.7736 4.43282 22.7736 4.43282 22.6628 4.43282H9.3643C8.2561 4.43282 7.36953 5.31938 7.36953 6.42759C7.36953 7.53579 8.2561 8.42235 9.3643 8.42235H18.0083L10.9158 15.5149H10.0292C8.58856 15.404 7.48035 16.6231 7.48035 17.9529V18.8395L1.93933 24.3805C2.93671 21.1667 2.93671 20.9451 2.93671 19.726V6.42759C2.93671 2.88133 5.81805 0 9.3643 0H22.6628C26.209 0 29.0903 2.88133 29.0903 6.42759V19.726C29.0903 23.2723 26.209 26.1536 22.6628 26.1536H9.3643C8.2561 26.1536 7.92363 26.1536 4.70984 27.151Z" fill="#E74C3C"/>
+          <text x="0" y="42" fill="#8A9BA2" font-family="Geist, sans-serif" font-size="11" font-weight="700" letter-spacing="0.5">ATLAS</text>
+        </g>
+      </svg>
+      <svg class="logo-mark" viewBox="0 0 31 28" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Flowable Atlas">
+        <path fill-rule="nonzero" d="M4.70984 27.151L10.14 21.7208H11.0266C12.4673 21.7208 13.6863 20.5018 13.6863 19.0611V18.1746L20.7788 11.082V19.6152C20.7788 20.7234 21.5545 21.61 22.6628 21.61C23.771 21.61 24.6575 20.8342 24.6575 19.726V19.6152V6.64923C24.7683 5.54102 24.1034 4.54364 22.9952 4.43282H22.8844C22.7736 4.43282 22.7736 4.43282 22.6628 4.43282H9.3643C8.2561 4.43282 7.36953 5.31938 7.36953 6.42759C7.36953 7.53579 8.2561 8.42235 9.3643 8.42235H18.0083L10.9158 15.5149H10.0292C8.58856 15.404 7.48035 16.6231 7.48035 17.9529V18.8395L1.93933 24.3805C2.93671 21.1667 2.93671 20.9451 2.93671 19.726V6.42759C2.93671 2.88133 5.81805 0 9.3643 0H22.6628C26.209 0 29.0903 2.88133 29.0903 6.42759V19.726C29.0903 23.2723 26.209 26.1536 22.6628 26.1536H9.3643C8.2561 26.1536 7.92363 26.1536 4.70984 27.151Z" fill="#E74C3C"/>
+      </svg>
+    </div>
+    <nav class="side-nav" id="nav" aria-label="Categories"></nav>
+    <div class="side-foot" id="sidefoot">
+      <div class="proj mono" id="proj"></div>
+      <button class="side-warn" id="diagchip" hidden></button>
+      <button class="tbtn" data-theme-btn aria-label="Switch color theme"></button>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav>
+      <button class="searchbtn" id="searchbtn" aria-haspopup="dialog" aria-controls="palette">
+        <span class="ic" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></span>
+        <span class="ph">Search everything…</span>
+        <kbd class="kbd" id="searchkbd">⌘K</kbd>
+      </button>
+      <button class="tbtn" id="linkfilter" hidden aria-pressed="false">≈</button>
+      <button class="tbtn" data-theme-btn aria-label="Switch color theme"></button>
+    </header>
+    <div class="content" id="content">
+      <section class="view" id="view-overview" hidden></section>
+      <section class="view view-browse" id="view-browse" hidden>
+        <div class="listcol"><div id="list"></div></div>
+        <main class="detailcol" id="detail" aria-label="Node details"></main>
+      </section>
+    </div>
   </div>
-  <div class="stats" id="stats"></div>
-  <button id="themebtn" class="tbtn" aria-label="Switch color theme"></button>
-  <div class="diagpanel" id="diagpanel"></div>
-  <div class="diagpanel cfnpanel" id="cfnpanel"></div>
-</header>
-<div class="layout">
-  <div class="col"><nav class="rail" id="rail" aria-label="Categories"></nav></div>
-  <div class="col"><div id="list"></div></div>
-  <main class="col detail" id="detail" aria-label="Node details"></main>
+</div>
+<div class="palette" id="palette" hidden>
+  <div class="pal-overlay" data-close></div>
+  <div class="pal-panel" role="dialog" aria-modal="true" aria-label="Search">
+    <div class="pal-inputrow">
+      <span class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></span>
+      <input id="palq" autocomplete="off" role="combobox" aria-expanded="true"
+             aria-controls="palresults" aria-autocomplete="list" placeholder="Search everything — keys, files, classes, groups…" aria-label="Search all nodes">
+      <kbd class="kbd">esc</kbd>
+    </div>
+    <div class="pal-results" id="palresults" role="listbox" aria-label="Search results"></div>
+  </div>
 </div>
 <script type="application/json" id="atlas-data">__ATLAS_DATA__</script>
 <script>

@@ -33,6 +33,7 @@ object ModelFiles {
         if (isExcluded(path)) return false
         val name = path.substringAfterLast('/')
         if (ModelType.byExtension(name) != null) return true
+        if (ModelPaths.isArchive(name)) return true   // .bar/.zip archives are indexed (mounted) content too
         if (designIndexingEnabled() && name.endsWith(".json", ignoreCase = true)) {
             val folder = path.substringBeforeLast('/').substringAfterLast('/')
             return ModelType.byDesignFolder(folder) != null

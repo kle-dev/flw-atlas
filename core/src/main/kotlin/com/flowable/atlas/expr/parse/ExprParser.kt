@@ -206,7 +206,16 @@ object ExprParser {
                 TokType.RBRACKET -> err(t, "Unmatched ']'")
                 TokType.COLON -> err(t, "Unexpected ':'")
                 TokType.COMMA -> err(t, "Unexpected ','")
-                TokType.BAD -> err(t, "Unexpected character '${t.text}'")
+                // The most common slip: using curly braces to group. They only ever delimit the
+                // whole expression (`${…}`/`#{…}` backend, `{{…}}` frontend) — inside, group with parens.
+                TokType.BAD -> when (t.text) {
+                    "{", "}" -> err(
+                        t,
+                        "Unexpected '${t.text}' — curly braces only delimit the whole expression " +
+                            (if (backend) "(\${…} / #{…})" else "({{…}})") + "; use parentheses to group",
+                    )
+                    else -> err(t, "Unexpected character '${t.text}'")
+                }
             }
         }
 

@@ -57,7 +57,7 @@ class AddToExpressionAllowlistFix(
     override fun generatePreview(project: Project, previewDescriptor: ProblemDescriptor): IntentionPreviewInfo =
         IntentionPreviewInfo.Html(
             "Adds <code>$subject</code> to the project's expression allowlist " +
-                "(<code>.idea/flowableAtlas.xml</code>) so it is no longer reported.",
+                "(<code>.idea/flowable-atlas.xml</code>) so it is no longer reported.",
         )
 
     override fun applyFix(project: Project, descriptor: ProblemDescriptor) {

@@ -6,18 +6,23 @@ import com.flowable.atlas.render.ClaudeRenderer
 import com.flowable.atlas.render.ExplorerHtmlRenderer
 import com.flowable.atlas.render.OverviewRenderer
 import com.flowable.atlas.render.SummaryRenderer
+import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.project.Project
+import java.io.File
 import java.nio.file.Path
 
 /**
  * Runs the Flowable Atlas generator against the open project entirely in-process. The analysis and
  * rendering are the shared pure-JVM `:core` engine ([Atlas] + the render objects) — the same code
  * the standalone `atlas` CLI uses, guaranteeing identical output — so there is no external
- * interpreter or subprocess. Can emit just the explorer HTML, or the full set of artifacts (`--all`).
+ * interpreter or subprocess. Generation honours the project settings: the expression allowlist and
+ * custom-function discovery flow into [Atlas.extract] (mirroring the CLI's `--expr-allowlist` /
+ * `--custom-functions` / `--no-custom-functions`), and the artifact selection decides what is
+ * rendered.
  */
 @Service(Service.Level.PROJECT)
 class AtlasGeneratorService(private val project: Project) {
@@ -34,9 +39,7 @@ class AtlasGeneratorService(private val project: Project) {
     fun generateExplorer(projectDir: Path, outputHtml: Path, indicator: ProgressIndicator): Outcome =
         try {
             val root = projectDir.toFile()
-            indicator.isIndeterminate = true
-            indicator.text = "Analyzing Flowable project…"
-            val result = Atlas.extract(root)
+            val result = extract(root, indicator)
 
             indicator.text = "Rendering Atlas explorer…"
             val html = ExplorerHtmlRenderer.render(result, root)
@@ -45,39 +48,60 @@ class AtlasGeneratorService(private val project: Project) {
             Outcome.Success(outputHtml, listOf(outputHtml), summaryLog(result))
         } catch (e: Exception) {
             LOG.warn("Atlas explorer generation failed", e)
-            Outcome.Failure("Failed to generate the Atlas explorer: ${e.message}", "")
+            Outcome.Failure("Failed to generate the Atlas explorer: ${e.message}", e.stackTraceToString())
         }
 
-    /** Generate all Atlas artifacts (summary, overview, graph, explorer, CLAUDE.md) into [outputDir]. */
-    fun generateAll(projectDir: Path, outputDir: Path, indicator: ProgressIndicator): Outcome =
+    /** Generate the selected [artifacts] (summary, overview, graph, explorer, CLAUDE.md) into [outputDir]. */
+    fun generateAll(
+        projectDir: Path,
+        outputDir: Path,
+        indicator: ProgressIndicator,
+        artifacts: Set<AtlasArtifact> = FlowableAtlasProjectSettings.getInstance(project).atlasArtifacts,
+    ): Outcome =
         try {
             val root = projectDir.toFile()
-            indicator.isIndeterminate = true
-            indicator.text = "Analyzing Flowable project…"
-            val result = Atlas.extract(root)
+            val result = extract(root, indicator)
 
             indicator.text = "Rendering Atlas artifacts…"
             val name = atlasProjectName(projectDir)
             outputDir.toFile().mkdirs()
-            val artifacts = listOf(
-                "$name.summary.md" to SummaryRenderer.render(result, root),
-                "$name.overview.md" to OverviewRenderer.render(result, root),
-                "$name.graph.json" to MiniJson.stringify(result, 2),
-                "$name.explorer.html" to ExplorerHtmlRenderer.render(result, root),
-                "$name.CLAUDE.md" to ClaudeRenderer.render(result, root),
+            val renderers = mapOf<AtlasArtifact, () -> String>(
+                AtlasArtifact.SUMMARY_MD to { SummaryRenderer.render(result, root) },
+                AtlasArtifact.OVERVIEW_MD to { OverviewRenderer.render(result, root) },
+                AtlasArtifact.GRAPH_JSON to { MiniJson.stringify(result, 2) },
+                AtlasArtifact.EXPLORER_HTML to { ExplorerHtmlRenderer.render(result, root) },
+                AtlasArtifact.CLAUDE_MD to { ClaudeRenderer.render(result, root) },
             )
             val written = ArrayList<Path>()
-            for ((fn, content) in artifacts) {
-                val p = outputDir.resolve(fn)
-                p.toFile().writeText(content, Charsets.UTF_8)
+            for (artifact in AtlasArtifact.entries) {
+                if (artifact !in artifacts) continue
+                val p = outputDir.resolve("$name${artifact.suffix}")
+                p.toFile().writeText(renderers.getValue(artifact)(), Charsets.UTF_8)
                 written.add(p)
             }
             val explorer = written.firstOrNull { it.fileName.toString().endsWith(".explorer.html") }
             Outcome.Success(explorer, written, summaryLog(result))
         } catch (e: Exception) {
             LOG.warn("Atlas artifact generation failed", e)
-            Outcome.Failure("Failed to generate the Atlas artifacts: ${e.message}", "")
+            Outcome.Failure("Failed to generate the Atlas artifacts: ${e.message}", e.stackTraceToString())
         }
+
+    /** [Atlas.extract] with the project's allowlist and custom-function settings applied. */
+    private fun extract(root: File, indicator: ProgressIndicator): LinkedHashMap<String, Any?> {
+        indicator.isIndeterminate = true
+        indicator.text = "Analyzing Flowable project…"
+        val settings = FlowableAtlasProjectSettings.getInstance(project)
+        val allowlist = (settings.state.allowedNamespaces + settings.state.allowedFunctions)
+            .toSet().takeIf { it.isNotEmpty() }
+        val customPath = settings.customFunctionsPath.takeIf { it.isNotBlank() }
+            ?.let { root.resolve(it) }?.takeIf { it.exists() }
+        return Atlas.extract(
+            root,
+            exprAllowlist = allowlist,
+            discoverCustom = settings.customFunctionsEnabled,
+            customPath = customPath,
+        )
+    }
 
     /** A short one-line health check mirroring the CLI status line, for the "Show details" affordance. */
     private fun summaryLog(result: Map<String, Any?>): String {

@@ -1,7 +1,7 @@
 package com.flowable.atlas.generate
 
 import com.flowable.atlas.index.FlowableModelIndexService
-import com.flowable.atlas.settings.FlowableAtlasSettings
+import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.command.WriteCommandAction
@@ -62,7 +62,7 @@ class ModelConstantsService(private val project: Project) {
             project.service<FlowableModelIndexService>().index().allDistinct()
                 .map { ModelInfo(it.type, it.key, it.name) }
         }
-        val settings = FlowableAtlasSettings.getInstance()
+        val settings = FlowableAtlasProjectSettings.getInstance(project)
         return ModelConstantsGenerator.generate(models, fqcn, settings.constantNaming, settings.constantFormat)
     }
 
