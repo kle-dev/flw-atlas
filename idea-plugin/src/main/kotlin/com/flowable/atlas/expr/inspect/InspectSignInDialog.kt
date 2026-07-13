@@ -11,9 +11,13 @@ import org.cef.browser.CefBrowser
 import org.cef.browser.CefFrame
 import org.cef.callback.CefCookieVisitor
 import org.cef.handler.CefLoadHandlerAdapter
+import org.cef.handler.CefRequestHandlerAdapter
+import org.cef.handler.CefResourceRequestHandler
+import org.cef.handler.CefResourceRequestHandlerAdapter
 import org.cef.misc.BoolRef
 import org.cef.network.CefCookie
 import org.cef.network.CefCookieManager
+import org.cef.network.CefRequest
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.net.URI
@@ -51,6 +55,21 @@ class InspectSignInDialog(project: Project, private val baseUrl: String) : Dialo
         init()
         Disposer.register(disposable, browser)
         status.text = "Log in below. Once you're back on the app, click “Use this session”."
+        // Best-effort: present a normal desktop-Chrome User-Agent, since some IdPs (e.g. Microsoft
+        // Entra) refuse to log in from an "embedded browser". Scoped to this browser only. Note this
+        // rewrites the outgoing header, not navigator.userAgent, so it won't beat policies that also
+        // check via JS or device compliance — hence the "Paste session from browser" fallback.
+        browser.jbCefClient.addRequestHandler(object : CefRequestHandlerAdapter() {
+            override fun getResourceRequestHandler(
+                cefBrowser: CefBrowser?, frame: CefFrame?, request: CefRequest?,
+                isNavigation: Boolean, isDownload: Boolean, requestInitiator: String?, disableDefaultHandling: BoolRef?,
+            ): CefResourceRequestHandler = object : CefResourceRequestHandlerAdapter() {
+                override fun onBeforeResourceLoad(b: CefBrowser?, f: CefFrame?, req: CefRequest?): Boolean {
+                    req?.setHeaderByName("User-Agent", DESKTOP_CHROME_UA, true)
+                    return false
+                }
+            }
+        }, browser.cefBrowser)
         browser.jbCefClient.addLoadHandler(object : CefLoadHandlerAdapter() {
             override fun onLoadEnd(cefBrowser: CefBrowser, frame: CefFrame, httpStatusCode: Int) {
                 if (frame.isMain) harvest()
@@ -96,5 +115,12 @@ class InspectSignInDialog(project: Project, private val baseUrl: String) : Dialo
                 "Session detected for $host. Click “Use this session” when your login is complete."
             }
         }, ModalityState.any())
+    }
+
+    private companion object {
+        /** A current desktop-Chrome UA, so the embedded login isn't rejected as an "embedded browser". */
+        const val DESKTOP_CHROME_UA =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
+                "Chrome/126.0.0.0 Safari/537.36"
     }
 }

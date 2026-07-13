@@ -14,8 +14,9 @@ import java.util.Base64
  * endpoint: `POST {baseUrl}/inspect-api/evaluate-expression`.
  *
  * Auth is layered to match how apps are actually deployed: HTTP Basic (`username`/`password`) for a
- * local dev instance, and/or a browser session [cookie][Request.cookie] captured by "Sign in to app"
- * for an app fronted by SSO/OAuth2. Both can be sent at once — e.g. an OAuth2 gateway that grants
+ * local dev instance, and/or captured browser [session headers][Request.sessionHeaders] (a `Cookie`,
+ * plus optionally `Authorization`/CSRF from a pasted cURL) for an app fronted by SSO/OAuth2. Both can
+ * be sent at once — e.g. an OAuth2 gateway that grants
  * general access (satisfied by the session cookie) in front of a Flowable that still wants basic auth
  * (satisfied by the `Authorization` header) — the server's security chain uses whichever it needs.
  * A login redirect (a 3xx, or an HTML body) surfaces as [SSO_REDIRECT_HINT], distinct from a
@@ -43,11 +44,12 @@ object InspectClient {
         val username: String,
         val password: String,
         /**
-         * Browser session cookie(s) (`name=value; name2=value2`) captured by the "Sign in to app"
-         * login, replayed for apps behind SSO/OAuth2 where basic auth can't pass the login redirect.
-         * Null/blank when the app uses plain basic auth (a local dev instance). See [InspectSession].
+         * Auth headers captured from the user's browser session (`Cookie`, and — from a pasted
+         * "Copy as cURL" — optionally `Authorization` and the CSRF token), replayed for apps behind
+         * SSO/OAuth2 where basic auth can't pass the login redirect. Null/empty when the app uses plain
+         * basic auth (a local dev instance). See [InspectSession] and [CurlAuthParser].
          */
-        val cookie: String? = null,
+        val sessionHeaders: Map<String, String>? = null,
     )
 
     /** Mirrors the server `ExpressionValueDTO`. */
@@ -109,13 +111,17 @@ object InspectClient {
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
-            // Basic auth for local dev apps; a captured SSO session cookie for IdP-fronted apps.
-            // Both may be present — the server uses whichever its security chain honours.
-            if (req.username.isNotBlank()) {
+            // Basic auth for local dev apps; captured browser-session headers (Cookie / CSRF token /
+            // bearer or basic Authorization) for IdP-fronted apps. Both may be present — the server uses
+            // whichever its security chain honours. `header()` appends, so only add basic auth when the
+            // capture didn't already bring an Authorization header (avoids two Authorization headers).
+            val captured = req.sessionHeaders ?: emptyMap()
+            val hasCapturedAuth = captured.keys.any { it.equals("Authorization", ignoreCase = true) }
+            if (req.username.isNotBlank() && !hasCapturedAuth) {
                 val auth = "Basic " + Base64.getEncoder().encodeToString("${req.username}:${req.password}".toByteArray())
                 builder.header("Authorization", auth)
             }
-            if (!req.cookie.isNullOrBlank()) builder.header("Cookie", req.cookie)
+            captured.forEach { (name, value) -> if (value.isNotBlank()) builder.header(name, value) }
             val resp = client.send(builder.build(), HttpResponse.BodyHandlers.ofString())
             val parsed = runCatching { parseResponse(resp.body()) }.getOrNull()
             when {

@@ -4,7 +4,7 @@
 <idea-plugin require-restart="true">
     <id>com.flowable.atlas</id>
     <name>Flowable Atlas</name>
-    <version>0.8.4</version>
+    <version>0.8.5</version>
     <vendor email="kevin.klever@flowable.com" url="https://www.flowable.com">Flowable</vendor>
 
     <description><![CDATA[
@@ -114,6 +114,22 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.8.5</h3>
+        <ul>
+          <li><b>"Paste session from browser" for "Evaluate Against App"</b> — the reliable way to
+              evaluate backend expressions against an SSO/OAuth2-fronted app whose identity provider
+              blocks the embedded browser login (e.g. Microsoft Entra Conditional Access). Log in to the
+              app in your normal browser, copy any authenticated request (DevTools → Network →
+              <i>Copy as cURL</i>, or just its <code>Cookie</code> header) and paste it: the plugin
+              extracts the <code>Cookie</code>, <code>Authorization</code> and CSRF-token
+              (<code>X-XSRF-TOKEN</code>) headers and replays them, so the Inspect request rides your
+              already-authenticated session — CSRF-protected POSTs included. Captured headers live only
+              for the current IDE session (nothing written to disk).</li>
+          <li><b>Embedded sign-in sends a desktop User-Agent</b> — the <i>Sign in via browser (SSO)</i>
+              login now presents a normal desktop-Chrome User-Agent, which lets some IdPs accept the
+              embedded login; where policy still blocks it, use <i>Paste session from browser</i>.</li>
+        </ul>
+
         <h3>0.8.4</h3>
         <ul>
           <li><b>Sign in via browser (SSO) for “Evaluate Against App”</b> — the Expression Playground's
