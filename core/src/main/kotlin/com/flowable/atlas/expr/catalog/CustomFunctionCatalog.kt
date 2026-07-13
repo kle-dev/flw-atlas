@@ -429,8 +429,8 @@ object CustomFunctionExtractor {
     private fun findSourcemap(bundle: File, text: String): File? {
         var url: String? = null
         for (m in Regex("""sourceMappingURL=([^\s'"]+)""").findAll(text)) url = m.groupValues[1]
-        if (url != null && !url!!.startsWith("data:")) {
-            val cand = File(bundle.parentFile, url!!).normalize()
+        if (url != null && !url.startsWith("data:")) {
+            val cand = File(bundle.parentFile, url).normalize()
             if (cand.isFile) return cand
         }
         val sibling = File(bundle.path + ".map")

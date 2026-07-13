@@ -2,6 +2,7 @@ package com.flowable.atlas.design
 
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.index.FlowableModelIndexService
+import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.ConnectionsConfigurable
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.ide.util.PropertiesComponent
@@ -45,8 +46,8 @@ class DesignPullService(private val project: Project) {
 
     private fun pull(indicator: ProgressIndicator) {
         val settings = FlowableAtlasProjectSettings.getInstance(project)
-        val basePath = project.basePath
-        if (basePath == null || !settings.isDesignConfigured()) {
+        val projectDir = AtlasProjectRootService.getInstance(project).activeProjectDir()
+        if (projectDir == null || !settings.isDesignConfigured()) {
             configureThenRetry()
             return
         }
@@ -78,7 +79,7 @@ class DesignPullService(private val project: Project) {
 
         indicator.text = "Writing $appKey.zip…"
         val target = try {
-            writeZip(Path.of(basePath), settings.designTargetFolder, appKey, bytes)
+            writeZip(projectDir, settings.designTargetFolder, appKey, bytes)
         } catch (e: IOException) {
             notifyFailure("Could not write the ZIP: ${e.message}")
             return
@@ -98,10 +99,10 @@ class DesignPullService(private val project: Project) {
         indicator.text = "Rebuilding Flowable index…"
         project.service<FlowableModelIndexService>().refresh()
 
-        val outsideContent = vf == null || !ReadAction.compute<Boolean, RuntimeException> {
+        val outsideContent = vf == null || !ReadAction.computeBlocking<Boolean, RuntimeException> {
             ProjectFileIndex.getInstance(project).isInContent(vf)
         }
-        notifySuccess(app, appKey, Path.of(basePath).relativize(target), bytes.size, outsideContent)
+        notifySuccess(app, appKey, projectDir.relativize(target), bytes.size, outsideContent)
     }
 
     private fun writeZip(projectDir: Path, targetFolder: String, appKey: String, bytes: ByteArray): Path {

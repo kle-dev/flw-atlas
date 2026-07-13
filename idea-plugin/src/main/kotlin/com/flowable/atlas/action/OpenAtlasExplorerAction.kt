@@ -2,6 +2,7 @@ package com.flowable.atlas.action
 
 import com.flowable.atlas.explorer.AtlasExplorerFiles
 import com.flowable.atlas.explorer.AtlasExplorerOpener
+import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnAction
@@ -26,13 +27,12 @@ class OpenAtlasExplorerAction : AnAction() {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val basePath = project.basePath
-        if (basePath == null) {
+        val base = AtlasProjectRootService.getInstance(project).activeProjectDir()
+        if (base == null) {
             Messages.showErrorDialog(project, "This action needs a project directory on disk.", "Flowable Atlas")
             return
         }
 
-        val base = Path.of(basePath)
         val files = AtlasExplorerFiles.find(base, FlowableAtlasProjectSettings.getInstance(project).atlasOutputDir)
         when (files.size) {
             0 -> offerToGenerate(project, e)
@@ -85,7 +85,7 @@ class OpenAtlasExplorerAction : AnAction() {
         )
         if (choice == Messages.YES) {
             ActionManager.getInstance().getAction(FlowableActionIds.GENERATE_ATLAS_EXPLORER)
-                ?.let { ActionUtil.invokeAction(it, e.dataContext, e.place, null, null) }
+                ?.let { ActionUtil.performAction(it, e) }
         }
     }
 

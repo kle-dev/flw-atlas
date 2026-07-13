@@ -29,14 +29,14 @@ import com.intellij.util.Processor
 class FlowableModelUsageSearcher : CustomUsageSearcher() {
 
     override fun processElementUsages(element: PsiElement, processor: Processor<in Usage>, options: FindUsagesOptions) {
-        ReadAction.run<RuntimeException> {
+        ReadAction.runBlocking<RuntimeException> {
             val project = element.project
-            if (project.isDisposed) return@run
+            if (project.isDisposed) return@runBlocking
             val names = targetNames(element)
-            if (names.isEmpty()) return@run
+            if (names.isEmpty()) return@runBlocking
 
             val index = project.service<FlowableModelIndexService>().index()
-            if (names.none { it in index.referencedIdentifiers || it in index.referencedClassFqns }) return@run
+            if (names.none { it in index.referencedIdentifiers || it in index.referencedClassFqns }) return@runBlocking
 
             val psiManager = PsiManager.getInstance(project)
 

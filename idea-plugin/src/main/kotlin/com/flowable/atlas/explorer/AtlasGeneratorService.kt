@@ -91,7 +91,7 @@ class AtlasGeneratorService(private val project: Project) {
         indicator.isIndeterminate = true
         indicator.text = "Analyzing Flowable project…"
         val settings = FlowableAtlasProjectSettings.getInstance(project)
-        val allowlist = (settings.state.allowedNamespaces + settings.state.allowedFunctions)
+        val allowlist = (settings.allowedNamespaces + settings.allowedFunctions)
             .toSet().takeIf { it.isNotEmpty() }
         val customPath = settings.customFunctionsPath.takeIf { it.isNotBlank() }
             ?.let { root.resolve(it) }?.takeIf { it.exists() }

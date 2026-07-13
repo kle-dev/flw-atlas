@@ -363,7 +363,7 @@ object ModelParsers {
                 val type = g["type"] as? String
                 val field = when (type) { "agent" -> "agentModel"; "service" -> "serviceModel"; else -> continue }
                 val ref = objOf(g[field]) ?: objOf(objOf(g["configuration"])?.get(field))
-                ctx.addRef(key, "agent", ffile, "guardrail", type!!, ref?.get("key"))
+                ctx.addRef(key, "agent", ffile, "guardrail", type, ref?.get("key"))
             }
             for (ev in listOfObjs(node["evaluators"])) {
                 val type = ev["type"] as? String

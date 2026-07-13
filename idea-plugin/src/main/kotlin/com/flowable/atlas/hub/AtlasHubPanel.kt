@@ -9,6 +9,7 @@ import com.flowable.atlas.explorer.AtlasExplorerFiles
 import com.flowable.atlas.explorer.AtlasExplorerOpener
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
+import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.FlowableAtlasConfigurable
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.icons.AllIcons
@@ -17,6 +18,7 @@ import com.intellij.ide.DataManager
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionUpdateThread
+import com.intellij.openapi.actionSystem.ActionUiKind
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -28,6 +30,7 @@ import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.SimpleToolWindowPanel
+import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.CollectionListModel
@@ -58,11 +61,15 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
     private data class ExplorerArtifact(val path: Path, val relative: String, val modified: Long)
 
     private data class Snapshot(
+        val projectText: String,
+        val showChangeLink: Boolean,
         val indexText: String,
         val artifacts: List<ExplorerArtifact>,
         val designText: String,
     )
 
+    private val projectStatus = JBLabel()
+    private var changeProjectLink: javax.swing.JComponent? = null
     private val indexStatus = JBLabel()
     private val designStatus = JBLabel()
     private val artifactsModel = CollectionListModel<ExplorerArtifact>()
@@ -103,6 +110,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
             override fun modelIndexUpdated() = refreshAlarm.cancelAndRequest()
             override fun artifactsGenerated(explorerHtml: Path?, written: List<Path>) = refreshAlarm.cancelAndRequest()
             override fun designPullFinished(succeeded: Boolean) = refreshAlarm.cancelAndRequest()
+            override fun activeSubProjectChanged() = refreshAlarm.cancelAndRequest()
         })
         refreshAlarm.request()
     }
@@ -124,6 +132,13 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
     }
 
     private fun buildContent() = panel {
+        group("Flowable Project") {
+            row { cell(projectStatus) }
+            row {
+                link("Change…") { chooseSubProject() }
+                    .applyToComponent { changeProjectLink = this }
+            }
+        }
         group("Model Index") {
             row { cell(indexStatus) }
             row {
@@ -165,7 +180,24 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
 
     private fun invokeAction(id: String) {
         val action = ActionManager.getInstance().getAction(id) ?: return
-        ActionUtil.invokeAction(action, DataManager.getInstance().getDataContext(this), "AtlasHub", null, null)
+        val context = DataManager.getInstance().getDataContext(this)
+        val event = AnActionEvent.createEvent(action, context, null, "AtlasHub", ActionUiKind.NONE, null)
+        ActionUtil.performAction(action, event)
+    }
+
+    /** Popup to switch the active Flowable sub-project (or back to the whole project). */
+    private fun chooseSubProject() {
+        val rootService = AtlasProjectRootService.getInstance(project)
+        val detected = rootService.detectedOrNull().orEmpty()
+        val labels = listOf(WHOLE_PROJECT_LABEL) + detected.map { it.relPath }
+        JBPopupFactory.getInstance()
+            .createPopupChooserBuilder(labels)
+            .setTitle("Select Flowable Project")
+            .setItemChosenCallback { label ->
+                rootService.setActiveSubProject(if (label == WHOLE_PROJECT_LABEL) "" else label)
+            }
+            .createPopup()
+            .showCenteredInCurrentWindow(project)
     }
 
     private fun selectedArtifact(): ExplorerArtifact? = artifactsList.selectedValue
@@ -193,7 +225,19 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
 
     private fun gather(): Snapshot {
         val settings = FlowableAtlasProjectSettings.getInstance(project)
-        val base = project.basePath?.let { Path.of(it) }
+        val rootService = AtlasProjectRootService.getInstance(project)
+        val base = rootService.activeProjectDir()
+
+        val active = rootService.activeSubProject()
+        val detected = rootService.detectedOrNull()
+        if (detected == null) rootService.detectAsync { refreshAlarm.cancelAndRequest() }
+        val subCount = detected?.size ?: 0
+        val projectText = when {
+            active.isNotBlank() -> "<html>Project: <b>$active</b></html>"
+            subCount >= 2 -> "<html>⚠ $subCount Flowable projects found — choose one</html>"
+            else -> "Whole project"
+        }
+        val showChangeLink = subCount >= 2 || active.isNotBlank()
 
         val index = project.service<FlowableModelIndexService>().cachedOrNull()
         val indexText = if (index == null) {
@@ -223,10 +267,12 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
             "Not configured"
         }
 
-        return Snapshot(indexText, artifacts, designText)
+        return Snapshot(projectText, showChangeLink, indexText, artifacts, designText)
     }
 
     private fun apply(snapshot: Snapshot) {
+        projectStatus.text = snapshot.projectText
+        changeProjectLink?.isVisible = snapshot.showChangeLink
         indexStatus.text = snapshot.indexText
         designStatus.text = snapshot.designText
         val selected = selectedArtifact()?.path
@@ -238,4 +284,8 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
     }
 
     override fun dispose() {}
+
+    companion object {
+        private const val WHOLE_PROJECT_LABEL = "Whole project (repository root)"
+    }
 }
