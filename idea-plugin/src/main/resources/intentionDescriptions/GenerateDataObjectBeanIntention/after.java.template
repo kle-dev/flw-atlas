@@ -1,0 +1,1 @@
+String key = "order"; // generates an Order bean from the data object fields

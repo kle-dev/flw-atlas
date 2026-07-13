@@ -18,10 +18,12 @@ import java.io.File
  * when it is internally split into build modules (`myproject/work`, `myproject/models`, …) — those
  * submodules are grouped under `myproject`, never surfaced separately.
  *
- * Crucially, this only fires for a **container** of projects. If the root *itself* is a project — it
- * directly holds a build file (`pom.xml`/`settings.gradle`/…) or a Flowable model — it is treated as
- * one whole project and detection returns empty, so a single multi-module build at the IntelliJ root
- * is never split into its modules.
+ * Crucially, a container of *one* project is never split into its modules. If the root directly holds
+ * a Flowable model/archive, the root itself is the project (empty result). A build file
+ * (`pom.xml`/`settings.gradle`/…) directly at the root normally also means a single (multi-module)
+ * build, so its modules are not surfaced either — the **sole exception** is a monorepo/reactor that
+ * bundles two or more independent apps (each first-level folder carrying its own `.app` descriptor),
+ * which genuinely needs a project choice.
  */
 object ProjectDetection {
 
@@ -36,20 +38,21 @@ object ProjectDetection {
 
     /**
      * Project folders found under [root], sorted by name. Empty when the root is itself a single
-     * project (root-level build file / model), when nothing Flowable is found, or when there is only
-     * one candidate — the *caller* decides whether a choice is needed (a size of < 2 normally means
-     * "just use the whole root").
+     * project (root-level model, or a root build file wrapping a single app), or when nothing Flowable
+     * is found. With a root build file, folders are surfaced only when **two or more** of them carry
+     * their own app (`.app`) — a reactor of independent apps; otherwise the *caller* treats a size of
+     * < 2 as "just use the whole root".
      */
     fun detect(root: File): List<SubProject> {
         if (!root.isDirectory) return emptyList()
 
-        // The root is itself a project (a single, possibly multi-module, build) — don't split it.
         val rootChildren = root.listFiles() ?: return emptyList()
-        val rootIsProject = rootChildren.any { child ->
-            child.isFile && (child.name in BUILD_MARKERS ||
-                ModelType.byExtension(child.name) != null || ModelPaths.isArchive(child.name))
+
+        // The root directly holding a Flowable model/archive means the root *itself* is the project.
+        val rootHoldsModel = rootChildren.any { child ->
+            child.isFile && (ModelType.byExtension(child.name) != null || ModelPaths.isArchive(child.name))
         }
-        if (rootIsProject) return emptyList()
+        if (rootHoldsModel) return emptyList()
 
         val rootPath = root.toPath()
         val agg = LinkedHashMap<String, IntArray>()   // first-level dir name -> [appCount, modelCount]
@@ -66,9 +69,21 @@ object ProjectDetection {
                 counts[1]++
             }
 
-        return agg.entries
+        val subs = agg.entries
             .map { (name, counts) -> SubProject(name, counts[0], counts[1]) }
             .sortedBy { it.relPath }
+
+        // A build file directly at the root normally marks a single (possibly multi-module) build, so
+        // its modules must NOT be surfaced as separate projects — that is the "don't split one app"
+        // rule. The exception is a real monorepo/reactor: when two or more first-level folders each
+        // carry their own deployable app (.app), the user genuinely needs to pick one.
+        val rootHasBuildFile = rootChildren.any { it.isFile && it.name in BUILD_MARKERS }
+        if (rootHasBuildFile) {
+            val appProjects = subs.filter { it.appCount > 0 }
+            return if (appProjects.size >= 2) appProjects else emptyList()
+        }
+
+        return subs
     }
 
     /** The first path segment of [file] relative to [rootPath], or null when the file sits in the root. */

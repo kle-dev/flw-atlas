@@ -188,10 +188,13 @@ object ModelParsers {
             dictionaryRefs(op["outputParameters"])
             ctx.addRef(doc["key"], "service", ffile, "body-template", "template",
                 objOf(oc["bodyTemplateModel"])?.get("bodyTemplateTemplateModelKey"))
-            if (oc["method"] != null || oc["url"] != null) {
+            // Only record a rest call when we actually have a URL — a method-only operation has no
+            // graph edge to draw, and a null `url` would violate the invariant every other restCalls
+            // producer upholds (and break GraphBuilder's non-null cast).
+            if (full != null) {
                 ctx.restCalls.add(linkedMapOf(
                     "source" to doc["key"], "sourceFile" to ffile, "where" to op["key"],
-                    "method" to (oc["method"] ?: "?"), "url" to (full ?: oc["url"]), "kind" to "service-op",
+                    "method" to (oc["method"] ?: "?"), "url" to full, "kind" to "service-op",
                 ))
             }
         }

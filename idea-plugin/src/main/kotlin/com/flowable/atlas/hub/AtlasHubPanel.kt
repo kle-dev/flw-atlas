@@ -239,7 +239,11 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
             subCount >= 2 && !chosen -> "<html>⚠ $subCount Flowable projects found — choose one</html>"
             else -> "Whole project"
         }
-        val showChangeLink = subCount >= 2 || active.isNotBlank()
+        // Show "Change…" whenever switching could change the scope: the chooser always offers
+        // "Whole project" plus every detected sub-project, so ≥1 detected sub-project already means a
+        // real alternative — and if a sub-project is active, the user must be able to revert to whole.
+        // (A stricter ">= 2" locked the user on "Whole project" once picked in a single-sub-project repo.)
+        val showChangeLink = subCount >= 1 || active.isNotBlank()
 
         val index = project.service<FlowableModelIndexService>().cachedOrNull()
         val indexText = if (index == null) {

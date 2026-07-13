@@ -182,7 +182,7 @@ object ClaudeRenderer {
                     "`${(bote["t"] as String).substringAfterLast(".")}` (BotService)")
         }
         val rc = (result["restCalls"] as? List<Map<String, Any?>> ?: emptyList())
-            .firstOrNull { truthy(it["matches"]) }
+            .firstOrNull { truthy(it["matches"]) && it["url"] is String }
         if (rc != null) {
             val u = rc["url"] as String
             val url = if (u.length > 60) u.take(60) + "…" else u

@@ -117,6 +117,29 @@ class ProjectDetectionTest {
     }
 
     @Test
+    fun `a Maven reactor bundling several independent apps IS split despite the root pom`() {
+        val root = tempRoot(
+            "pom.xml",                                // root aggregator, but it wraps TWO real apps…
+            "order-app/order-app.app",
+            "order-app/processes/p.bpmn20.xml",
+            "billing-app/billing-app.app",
+            "billing-app/cases/c.cmmn.xml",
+        )
+        assertEquals(listOf("billing-app", "order-app"), paths(root))
+    }
+
+    @Test
+    fun `a root build file wrapping a single app (one app descriptor) stays one project`() {
+        val root = tempRoot(
+            "pom.xml",                                // one app split across modules → not a reactor
+            "app/myapp.app",
+            "app/processes/p.bpmn20.xml",
+            "support/review.cmmn.xml",                // support module, no app of its own
+        )
+        assertEquals(emptyList<String>(), paths(root))
+    }
+
+    @Test
     fun `counts aggregate a whole project folder and distinguish apps`() {
         val root = tempRoot(
             "svc/work/svc.app",
