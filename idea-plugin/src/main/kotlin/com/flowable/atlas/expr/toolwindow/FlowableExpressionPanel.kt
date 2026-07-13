@@ -8,6 +8,7 @@ import com.flowable.atlas.expr.eval.EvalResult
 import com.flowable.atlas.expr.inspect.InspectClient
 import com.flowable.atlas.expr.inspect.InspectConnectionDetector
 import com.flowable.atlas.expr.inspect.InspectCredentials
+import com.flowable.atlas.expr.inspect.InspectPasteSessionDialog
 import com.flowable.atlas.expr.inspect.InspectSession
 import com.flowable.atlas.expr.inspect.InspectSignInDialog
 import com.flowable.atlas.expr.inspect.WorkUrlParser
@@ -350,7 +351,15 @@ class FlowableExpressionPanel(val project: Project) :
         }
         row("") {
             button("Sign in via browser (SSO)…") { signInToApp() }
-                .comment("For SSO/OAuth2-fronted apps: logs in in a browser and reuses the session cookie for this IDE session. Combine with the username/password above when Flowable also requires basic auth behind the SSO layer.")
+            button("Paste session from browser…") { pasteSessionFromBrowser() }
+        }
+        row("") {
+            comment(
+                "For SSO/OAuth2-fronted apps, where basic auth can't pass. Both reuse your browser session for " +
+                    "this IDE session only. If the embedded sign-in is blocked by your IdP, use “Paste session” " +
+                    "(DevTools → Copy as cURL). Combine with the username/password above when Flowable also " +
+                    "requires basic auth behind the SSO layer.",
+            )
         }
         row("Scope:") {
             cell(scopeTypeCombo)
@@ -543,9 +552,32 @@ class FlowableExpressionPanel(val project: Project) :
         if (cookie.isNullOrBlank()) {
             backendResultPane.showInfo("No session cookie was captured — make sure the login completed, then try again.")
         } else {
-            InspectSession.set(baseUrl, cookie)
+            InspectSession.set(baseUrl, mapOf("Cookie" to cookie))
             backendResultPane.showInfo("Signed in — session captured for this IDE session. You can evaluate against the app now.")
         }
+    }
+
+    /**
+     * Capture the browser session from a pasted "Copy as cURL" (or raw Cookie header) — the reliable
+     * path when the embedded [InspectSignInDialog] login is blocked by the IdP. Extracted headers
+     * (Cookie / Authorization / CSRF) are stored in [InspectSession] for this IDE session.
+     */
+    private fun pasteSessionFromBrowser() {
+        val dialog = InspectPasteSessionDialog(project)
+        if (!dialog.showAndGet()) return
+        val parsed = dialog.parsed
+        if (!parsed.hasAny) {
+            backendResultPane.showInfo("No session headers found in the pasted text — copy a request as cURL (or its Cookie header) and try again.")
+            return
+        }
+        if (baseUrlField.text.isBlank()) parsed.baseUrl?.let { baseUrlField.text = it }
+        val baseUrl = baseUrlField.text.trim()
+        if (baseUrl.isBlank()) {
+            backendResultPane.showInfo("Enter the app base URL first, then paste the session.")
+            return
+        }
+        InspectSession.set(baseUrl, parsed.headers)
+        backendResultPane.showInfo("Session captured (${parsed.headers.keys.joinToString(", ")}) for this IDE session. You can evaluate against the app now.")
     }
 
     /** POST the expression to the configured Flowable Inspect endpoint and show the result. */
@@ -563,7 +595,7 @@ class FlowableExpressionPanel(val project: Project) :
             subScopeId = subScopeIdField.text.trim().ifBlank { null },
             username = usernameField.text.trim(),
             password = String(passwordField.password),
-            cookie = InspectSession.get(baseUrlField.text.trim()),
+            sessionHeaders = InspectSession.get(baseUrlField.text.trim()),
         )
         isEvaluating = true
         backendResultPane.showLoading()
