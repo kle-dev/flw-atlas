@@ -1,106 +1,57 @@
 package com.flowable.atlas.settings
 
-import com.flowable.atlas.explorer.AtlasArtifactScope
-import com.flowable.atlas.generate.ConstantFormat
-import com.flowable.atlas.generate.ConstantNaming
+import com.flowable.atlas.FlowableAtlasBundle
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.intellij.openapi.components.service
-import com.intellij.openapi.options.Configurable
+import com.intellij.openapi.options.BoundSearchableConfigurable
 import com.intellij.openapi.project.ProjectManager
-import com.intellij.ui.components.JBCheckBox
-import java.awt.Component
-import java.awt.FlowLayout
-import javax.swing.BoxLayout
-import javax.swing.JComboBox
-import javax.swing.JComponent
-import javax.swing.JLabel
-import javax.swing.JPanel
+import com.intellij.openapi.ui.DialogPanel
+import com.intellij.ui.dsl.builder.bindSelected
+import com.intellij.ui.dsl.builder.panel
 
-/** Settings → Tools → Flowable Atlas. */
-class FlowableAtlasConfigurable : Configurable {
+/**
+ * Settings → Tools → Flowable Atlas: the root page with the application-wide core toggles.
+ * Expression validation, generation output and the Design/Inspect connections live on the
+ * project-level sub-pages (Expressions / Generation / Connections).
+ */
+class FlowableAtlasConfigurable : BoundSearchableConfigurable(
+    FlowableAtlasBundle.message("configurable.atlas"),
+    helpTopic = "",
+    _id = "com.flowable.atlas.settings",
+) {
 
-    private var root: JPanel? = null
-    private val extra = JBCheckBox("Enable extra completions (messages, signals, variables, task/activity keys, DMN variables)")
-    private val exprValidation = JBCheckBox("Validate Flowable expression syntax (playground + injected \${…} / {{…}} in models)")
-    private val injectJava = JBCheckBox("Also validate expressions in Java String literals that contain \${…} / #{…}")
-    private val indexDesign = JBCheckBox("Index Flowable Design workspace models (per-model .json under *-models/ folders)")
-    private val naming = JComboBox(ConstantNaming.entries.toTypedArray())
-    private val format = JComboBox(ConstantFormat.entries.toTypedArray())
-    private val artifactScope = JComboBox(AtlasArtifactScope.entries.toTypedArray())
-
-    override fun getDisplayName(): String = "Flowable Atlas"
-
-    override fun createComponent(): JComponent {
-        val panel = JPanel().apply {
-            layout = BoxLayout(this, BoxLayout.Y_AXIS)
-            add(leftAligned(extra))
-            add(leftAligned(exprValidation))
-            add(leftAligned(injectJava))
-            add(leftAligned(JLabel("Unknown-function warnings & codebase grounding: Settings → Editor → Inspections → Flowable.")))
-            add(leftAligned(JLabel("Project-provided functions can be allowlisted via Alt-Enter → \"Add … to Flowable expression allowlist\".")))
-            add(leftAligned(indexDesign))
-            add(leftAligned(JLabel("Generated model constants (Tools → Generate Model Constants):")))
-            add(labeledRow("Identifier:", naming))
-            add(labeledRow("Format:", format))
-            add(leftAligned(JLabel("Atlas explorer (Tools → Generate Atlas Explorer):")))
-            add(labeledRow("Generate:", artifactScope))
-        }
-        root = panel
-        reset()
-        return panel
-    }
-
-    override fun isModified(): Boolean {
-        val s = FlowableAtlasSettings.getInstance()
-        return extra.isSelected != s.extraCompletions ||
-            exprValidation.isSelected != s.expressionValidation ||
-            injectJava.isSelected != s.injectJavaExpressions ||
-            indexDesign.isSelected != s.indexDesignWorkspace ||
-            naming.selectedItem != s.constantNaming ||
-            format.selectedItem != s.constantFormat ||
-            artifactScope.selectedItem != s.atlasArtifactScope
-    }
-
-    override fun apply() {
-        val s = FlowableAtlasSettings.getInstance()
-        val reindex = indexDesign.isSelected != s.indexDesignWorkspace
-        s.extraCompletions = extra.isSelected
-        s.expressionValidation = exprValidation.isSelected
-        s.injectJavaExpressions = injectJava.isSelected
-        s.indexDesignWorkspace = indexDesign.isSelected
-        s.constantNaming = naming.selectedItem as ConstantNaming
-        s.constantFormat = format.selectedItem as ConstantFormat
-        s.atlasArtifactScope = artifactScope.selectedItem as AtlasArtifactScope
-        if (reindex) {
-            // The design-workspace toggle changes what gets indexed; drop cached indexes.
-            ProjectManager.getInstance().openProjects.forEach {
-                if (!it.isDisposed) it.service<FlowableModelIndexService>().invalidate()
+    override fun createPanel(): DialogPanel {
+        val settings = FlowableAtlasSettings.getInstance()
+        return panel {
+            group("Completion") {
+                row {
+                    checkBox("Extra completion domains")
+                        .comment("Messages, signals, variables, task/activity keys, DMN variables and form outcomes — in addition to model keys.")
+                        .bindSelected(settings::extraCompletions)
+                }
+            }
+            group("Model Index") {
+                row {
+                    checkBox("Index Flowable Design workspace models")
+                        .comment("Also index per-model .json files under *-models/ workspace folders.")
+                        .bindSelected(settings::indexDesignWorkspace)
+                        .onApply {
+                            // The design-workspace toggle changes what gets indexed; drop cached indexes.
+                            ProjectManager.getInstance().openProjects.forEach {
+                                if (!it.isDisposed) it.service<FlowableModelIndexService>().invalidate()
+                            }
+                        }
+                }
+            }
+            row {
+                comment(
+                    "Expression validation and the project allowlist: <b>Expressions</b> · " +
+                        "artifact selection, output folder and model constants: <b>Generation</b> · " +
+                        "Flowable Design and Inspect: <b>Connections</b> (sub-pages of this one).<br>" +
+                        "Unknown-function warnings &amp; codebase grounding are inspections: " +
+                        "Settings → Editor → Inspections → Flowable.",
+                )
             }
         }
     }
-
-    override fun reset() {
-        val s = FlowableAtlasSettings.getInstance()
-        extra.isSelected = s.extraCompletions
-        exprValidation.isSelected = s.expressionValidation
-        injectJava.isSelected = s.injectJavaExpressions
-        indexDesign.isSelected = s.indexDesignWorkspace
-        naming.selectedItem = s.constantNaming
-        format.selectedItem = s.constantFormat
-        artifactScope.selectedItem = s.atlasArtifactScope
-    }
-
-    override fun disposeUIResources() {
-        root = null
-    }
-
-    private fun leftAligned(c: JComponent): JComponent =
-        JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply { add(c); alignmentX = Component.LEFT_ALIGNMENT }
-
-    private fun labeledRow(label: String, field: JComponent): JComponent =
-        JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply {
-            add(JLabel(label).apply { border = javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 8) })
-            add(field)
-            alignmentX = Component.LEFT_ALIGNMENT
-        }
 }

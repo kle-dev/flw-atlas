@@ -15,6 +15,7 @@ import com.flowable.atlas.expr.lang.dialectOf
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
 import com.intellij.codeInsight.AutoPopupController
+import com.intellij.icons.AllIcons
 import com.intellij.codeInsight.completion.CompletionContributor
 import com.intellij.codeInsight.completion.CompletionParameters
 import com.intellij.codeInsight.completion.CompletionProvider
@@ -70,8 +71,10 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
             for (m in BackendBeanResolver.membersOf(receiver, project)) {
                 var b = LookupElementBuilder.create(m.name).withTypeText(m.typeText, true)
                 b = when (m.kind) {
-                    BackendBeanResolver.Kind.METHOD -> b.withInsertHandler(CallInsertHandler).withTailText(m.paramText, true)
-                    BackendBeanResolver.Kind.PROPERTY -> b.withTailText("  property", true)
+                    BackendBeanResolver.Kind.METHOD ->
+                        b.withIcon(AllIcons.Nodes.Method).withInsertHandler(CallInsertHandler).withTailText(m.paramText, true)
+                    BackendBeanResolver.Kind.PROPERTY ->
+                        b.withIcon(AllIcons.Nodes.Property).withTailText("  property", true)
                 }
                 out.addElement(b)
             }
@@ -104,7 +107,7 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
             val cat = FlowableCustomFunctions.getInstance(project).catalog() ?: return
             for (ns in cat.namespaces.keys.sorted())
                 out.addElement(
-                    LookupElementBuilder.create(ns).withTypeText("custom 🧩", true)
+                    LookupElementBuilder.create(ns).withIcon(AllIcons.Nodes.Plugin).withTypeText("custom", true)
                         .withTailText("  $ns.…", true).withInsertHandler(DotInsertHandler),
                 )
             for (fn in cat.topLevel.sorted()) out.addElement(customFnLookup(fn, cat.signatureOf(fn)))
@@ -137,6 +140,7 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
         private fun addFunctions(out: CompletionResultSet, functions: List<ExprFunction>, dialect: ExpressionDialect, typeText: String?) {
             for (f in functions) {
                 var b = LookupElementBuilder.create(f.name)
+                    .withIcon(AllIcons.Nodes.Function)
                     .withInsertHandler(CallInsertHandler)
                     .withLookupStrings(KeyLookup.searchTokens(f.name, null))
                 typeText?.let { b = b.withTypeText(it, true) }
@@ -156,6 +160,7 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
             for (f in members) {
                 val nestsFurther = receiver == FlowableExpressionCatalog.FRONTEND_NS && f.name in FlowableExpressionCatalog.frontendNestingMembers
                 var b = LookupElementBuilder.create(f.name)
+                    .withIcon(if (nestsFurther) AllIcons.Nodes.Package else AllIcons.Nodes.Function)
                     .withInsertHandler(if (nestsFurther) DotInsertHandler else CallInsertHandler)
                     .withLookupStrings(KeyLookup.searchTokens(f.name, null))
                 f.doc?.let { b = b.withTailText("  $it", true) }
@@ -171,7 +176,7 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
         /** A custom-function lookup that lists its parameters as tail text and, on selection, inserts
          *  `(params)` with the parameters selected so they're easy to fill in. */
         private fun customFnLookup(name: String, params: String?): LookupElement {
-            var b = LookupElementBuilder.create(name).withTypeText("custom 🧩", true)
+            var b = LookupElementBuilder.create(name).withIcon(AllIcons.Nodes.Plugin).withTypeText("custom", true)
                 .withInsertHandler(if (params.isNullOrEmpty()) CallInsertHandler else CustomParamsInsertHandler(params))
                 .withLookupStrings(KeyLookup.searchTokens(name, null))
             if (params != null) b = b.withTailText("($params)", true)
@@ -181,7 +186,7 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
         // ---- lookup element builders ----
 
         private fun rootLookup(root: ExprRoot, dialect: ExpressionDialect): LookupElement {
-            var b = LookupElementBuilder.create(root.name).withTypeText("root", true)
+            var b = LookupElementBuilder.create(root.name).withIcon(AllIcons.Nodes.Tag).withTypeText("root", true)
             root.doc?.let { b = b.withTailText("  $it", true) }
             if (dialect == ExpressionDialect.FRONTEND && root.name == FlowableExpressionCatalog.FRONTEND_NS) {
                 b = b.withInsertHandler(DotInsertHandler)
@@ -191,6 +196,7 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
 
         private fun namespaceLookup(prefix: String): LookupElement =
             LookupElementBuilder.create(prefix)
+                .withIcon(AllIcons.Nodes.Package)
                 .withTypeText("namespace", true)
                 .withTailText("  ${prefix}:…", true)
                 .withInsertHandler(ColonInsertHandler)
@@ -199,7 +205,7 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
             LookupElementBuilder.create(name).withTypeText(typeText, true)
 
         private fun variableLookup(name: String, label: String): LookupElement =
-            LookupElementBuilder.create(name).withTypeText(label, true)
+            LookupElementBuilder.create(name).withIcon(AllIcons.Nodes.Variable).withTypeText(label, true)
 
         /** Distinct canonical backend prefixes (so `variables`/`vars`/`var` show once as `variables`). */
         private fun canonicalPrefixes(): List<String> =

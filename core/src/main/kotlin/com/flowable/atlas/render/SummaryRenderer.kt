@@ -185,6 +185,11 @@ object SummaryRenderer {
         if (extUrls != 0) L.add("- External REST URLs called: $extUrls")
         L.add("- Review (unresolved in project — likely missing/external): " +
                 (if (review.isNotEmpty()) cap(review) else "none ✅"))
+        val suspectN = (result["resolvedRefs"] as? List<Map<String, Any?>>)?.count { it["suspect"] == true } ?: 0
+        val dynN = (result["dynamicRefs"] as? List<*>)?.size ?: 0
+        if (suspectN + dynN != 0) {
+            L.add("- Uncertain links: $suspectN suspect (loose/cross-type match) · $dynN dynamic (expression-valued)")
+        }
         L.add("")
 
         L.add("---\n_For details: `--json` gives the full traversable graph; `--html` opens the interactive explorer; " +

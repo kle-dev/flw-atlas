@@ -29,6 +29,7 @@ import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiExpressionList
 import com.intellij.psi.PsiLiteralExpression
+import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiMethodCallExpression
 import com.intellij.psi.PsiReferenceExpression
 import com.intellij.psi.util.InheritanceUtil
@@ -142,11 +143,19 @@ class FlowableJavaCompletionContributor : CompletionContributor() {
         private fun matchSite(ctx: ArgContext): ApiSite? {
             val call = ctx.call ?: return null
             if (ctx.argIndex < 0) return null
-            val method = call.resolveMethod() ?: return null
-            val declaring = method.containingClass ?: return null
-            return FlowableApiCatalog.sitesForMethod(method.name).firstOrNull { s ->
-                s.argIndex == ctx.argIndex && SiteMatching.isReceiver(declaring, s.receiverFqn)
+            // At a bare `foo(<caret>)` the argument type is unknown, so an overloaded method may
+            // not resolve to a single candidate — fall back to ALL name-matched candidates instead
+            // of silently offering nothing.
+            val methods = call.resolveMethod()?.let { listOf(it) }
+                ?: call.methodExpression.multiResolve(true).mapNotNull { it.element as? PsiMethod }
+            for (method in methods) {
+                val declaring = method.containingClass ?: continue
+                val site = FlowableApiCatalog.sitesForMethod(method.name).firstOrNull { s ->
+                    s.argIndex == ctx.argIndex && SiteMatching.isReceiver(declaring, s.receiverFqn)
+                }
+                if (site != null) return site
             }
+            return null
         }
 
         private fun addKeys(result: CompletionResultSet, service: FlowableModelIndexService, site: KeySite, quote: Boolean) {
@@ -239,6 +248,7 @@ class FlowableJavaCompletionContributor : CompletionContributor() {
                 Vocabulary.VARIABLE -> service.variables()
                 Vocabulary.USER_TASK -> service.userTaskIds()
                 Vocabulary.ACTIVITY -> service.activityIds()
+                Vocabulary.OUTCOME -> service.formOutcomes()
             }
             val typeText = scoped?.let { site.vocabulary.display + " · " + it.modelKey } ?: site.vocabulary.display
             for (v in values) result.addElement(prioritized(memberLookup(v, typeText, quote)))

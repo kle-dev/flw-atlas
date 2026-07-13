@@ -9,9 +9,11 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.jcef.JBCefApp
 
 /**
- * Contributes an "Atlas Explorer" tab (rendered by JCEF) for any `*.explorer.html` file, placed
- * after the platform's default HTML editor. Only offered when JCEF is available in the running IDE;
- * otherwise users can still open the page in their external browser.
+ * Contributes the "Atlas Explorer" tab (rendered by JCEF) for any `*.explorer.html` file and hides the
+ * platform's default HTML "Text" editor for it — a generated, self-contained page isn't meant to be
+ * hand-edited, so the rendered explorer is the only editor. Only offered when JCEF is available in the
+ * running IDE; otherwise the provider bows out (the default editor stays, and the page can still be
+ * opened in an external browser).
  */
 class AtlasFileEditorProvider : FileEditorProvider, DumbAware {
 
@@ -20,9 +22,14 @@ class AtlasFileEditorProvider : FileEditorProvider, DumbAware {
             file.name.endsWith(".explorer.html", ignoreCase = true) &&
             JBCefApp.isSupported()
 
-    override fun createEditor(project: Project, file: VirtualFile): FileEditor = AtlasFileEditor(file)
+    override fun createEditor(project: Project, file: VirtualFile): FileEditor = AtlasFileEditor(project, file)
 
-    override fun getEditorTypeId(): String = "flowable-atlas-explorer"
+    override fun getEditorTypeId(): String = EDITOR_TYPE_ID
 
-    override fun getPolicy(): FileEditorPolicy = FileEditorPolicy.PLACE_AFTER_DEFAULT_EDITOR
+    override fun getPolicy(): FileEditorPolicy = FileEditorPolicy.HIDE_DEFAULT_EDITOR
+
+    companion object {
+        /** Provider id of the embedded JCEF explorer tab; used to select it after opening (see [AtlasExplorerOpener]). */
+        const val EDITOR_TYPE_ID = "flowable-atlas-explorer"
+    }
 }

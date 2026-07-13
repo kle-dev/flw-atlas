@@ -32,22 +32,36 @@ import com.flowable.atlas.expr.parse.UnaryNode
 object FrontendExpressionEvaluator {
 
     /** Evaluate [body] (a frontend expression, wrapper optional) against [payloadJson] (a JSON object, or null/blank for `{}`). */
-    fun evaluate(body: String, payloadJson: String?): EvalResult {
-        val inner = stripWrapper(body)
-        if (inner.isBlank()) return EvalResult.Err("Empty expression")
+    fun evaluate(body: String, payloadJson: String?): EvalResult =
+        evaluateTraced(body, payloadJson, collect = false).result
+
+    /**
+     * Like [evaluate], but additionally records what every sub-expression evaluated to — for
+     * `(1+1) + (2+2)` the trace holds `1+1` → 2 and `2+2` → 4 next to the root's 6, with source
+     * ranges pointing into the ORIGINAL [body] (wrapper included). Short-circuited branches and
+     * arrow bodies are [TraceOutcome.NotEvaluated], never force-evaluated. [evaluate] delegates
+     * here, so the two can't drift apart.
+     */
+    fun evaluateTraced(body: String, payloadJson: String?, collect: Boolean = true): TracedEvaluation {
+        val (stripped, baseShift) = ExprWrappers.stripOuter(body, ExprWrappers.FRONTEND)
+        val lead = stripped.takeWhile { it.isWhitespace() }.length
+        val inner = stripped.trim()
+        val shift = baseShift + lead
+        if (inner.isBlank()) return TracedEvaluation(EvalResult.Err("Empty expression"), emptyList())
 
         val parsed = ExprParser.parse(inner, ExpressionDialect.FRONTEND)
-        parsed.error?.let { return EvalResult.Err("Syntax error: ${it.message}") }
-        val ast = parsed.ast ?: return EvalResult.Err("Could not parse expression")
+        parsed.error?.let { return TracedEvaluation(EvalResult.Err("Syntax error: ${it.message}"), emptyList()) }
+        val ast = parsed.ast ?: return TracedEvaluation(EvalResult.Err("Could not parse expression"), emptyList())
 
         val payload: Any? = try {
             if (payloadJson.isNullOrBlank()) emptyMap<String, Any?>() else MiniJson.parse(payloadJson)
         } catch (e: MiniJson.JsonException) {
-            return EvalResult.Err("Invalid payload JSON: ${e.message}")
+            return TracedEvaluation(EvalResult.Err("Invalid payload JSON: ${e.message}"), emptyList())
         }
 
-        return try {
-            EvalResult.Ok(Evaluator(buildContext(payload)).eval(ast))
+        val collector = if (collect) TraceCollector() else null
+        val result = try {
+            EvalResult.Ok(Evaluator(buildContext(payload), collector).eval(ast))
         } catch (e: PreviewUnavailableException) {
             EvalResult.Unavailable(e.message ?: "Not available in the payload preview")
         } catch (e: EvalException) {
@@ -55,10 +69,8 @@ object FrontendExpressionEvaluator {
         } catch (e: Exception) {
             EvalResult.Err(e.message ?: e.javaClass.simpleName)
         }
+        return TracedEvaluation(result, collector?.entriesFor(ast, shift) ?: emptyList())
     }
-
-    private fun stripWrapper(body: String): String =
-        ExprWrappers.stripOuter(body, ExprWrappers.FRONTEND).first.trim()
 
     private fun buildContext(payload: Any?): Map<String, Any?> {
         val ctx = LinkedHashMap<String, Any?>()
@@ -71,9 +83,31 @@ object FrontendExpressionEvaluator {
         return ctx
     }
 
-    private class Evaluator(private val context: Map<String, Any?>) {
+    private class Evaluator(
+        private val context: Map<String, Any?>,
+        private val trace: TraceCollector? = null,
+    ) {
 
-        fun eval(node: ExprNode): Any? = when (node) {
+        /** Tracing wrapper around [doEval]: records each node's value (or, at the deepest failing
+         *  node only, its error) without changing evaluation semantics — the untraced path is the
+         *  plain recursion. */
+        fun eval(node: ExprNode): Any? {
+            val t = trace ?: return doEval(node)
+            try {
+                return doEval(node).also { t.recordValue(node, it) }
+            } catch (e: PreviewUnavailableException) {
+                t.recordUnavailable(node, e.message ?: "Not available in the payload preview")
+                throw e
+            } catch (e: EvalException) {
+                t.recordError(node, e.message ?: "Evaluation error")
+                throw e
+            } catch (e: Exception) {
+                t.recordError(node, e.message ?: e.javaClass.simpleName)
+                throw e
+            }
+        }
+
+        private fun doEval(node: ExprNode): Any? = when (node) {
             is LitNode -> node.value
             is IdentNode -> context[node.name]
             is ArrayNode -> node.elements.map { eval(it) }

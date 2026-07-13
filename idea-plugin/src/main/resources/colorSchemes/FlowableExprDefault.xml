@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Default (light) colours for the Flowable expression rainbow parentheses; the dark variants live
+     in FlowableExprDarcula.xml. Wired via <additionalTextAttributes> in plugin.xml. -->
+<list>
+  <option name="FLW_EXPR_PAREN_L0">
+    <value>
+      <option name="FOREGROUND" value="3592c4"/>
+    </value>
+  </option>
+  <option name="FLW_EXPR_PAREN_L1">
+    <value>
+      <option name="FOREGROUND" value="e8a33d"/>
+    </value>
+  </option>
+  <option name="FLW_EXPR_PAREN_L2">
+    <value>
+      <option name="FOREGROUND" value="59a869"/>
+    </value>
+  </option>
+  <option name="FLW_EXPR_PAREN_L3">
+    <value>
+      <option name="FOREGROUND" value="c670c6"/>
+    </value>
+  </option>
+  <option name="FLW_EXPR_PAREN_L4">
+    <value>
+      <option name="FOREGROUND" value="d1655a"/>
+    </value>
+  </option>
+</list>

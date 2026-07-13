@@ -1,0 +1,15 @@
+<html>
+<body>
+Reports function calls in Flowable expressions whose namespace or function name the Flowable
+expression catalog does not know.
+<p>Example: <code>${date:noww()}</code> is reported with the suggestion <i>did you mean 'now'?</i></p>
+<p>
+Functions and namespaces the project registers itself (which the built-in catalog cannot know)
+can be added to the project's expression allowlist via <b>Alt+Enter → Add … to Flowable expression
+allowlist</b> — entries are stored in <code>.idea/flowable-atlas.xml</code> and shared with the team.
+</p>
+<!-- tooltip end -->
+<p>Applies to <code>${…}</code> / <code>#{…}</code> backend fragments and <code>{{…}}</code> frontend
+fragments in BPMN/CMMN/DMN models, forms and pages, and to the Expression Playground.</p>
+</body>
+</html>

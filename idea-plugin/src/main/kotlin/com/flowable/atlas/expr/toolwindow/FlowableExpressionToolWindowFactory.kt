@@ -11,6 +11,8 @@ class FlowableExpressionToolWindowFactory : ToolWindowFactory, DumbAware {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val panel = FlowableExpressionPanel(project)
         val content = ContentFactory.getInstance().createContent(panel, "", false)
+        content.setDisposer(panel)
+        content.preferredFocusableComponent = panel.focusComponent
         toolWindow.contentManager.addContent(content)
     }
 }

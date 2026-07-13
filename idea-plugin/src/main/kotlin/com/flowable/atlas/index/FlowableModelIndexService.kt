@@ -1,5 +1,7 @@
 package com.flowable.atlas.index
 
+import com.flowable.atlas.events.AtlasEvents
+import com.flowable.atlas.events.AtlasEventsListener
 import com.flowable.atlas.model.JsonUtil
 import com.flowable.atlas.model.ModelFiles
 import com.flowable.atlas.model.ModelType
@@ -42,7 +44,10 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
             VirtualFileManager.VFS_CHANGES,
             object : BulkFileListener {
                 override fun after(events: MutableList<out VFileEvent>) {
-                    if (events.any { ModelFiles.isModelPath(it.path) }) cached = null
+                    if (events.any { ModelFiles.isModelPath(it.path) }) {
+                        cached = null
+                        publishUpdated()
+                    }
                 }
             },
         )
@@ -53,8 +58,15 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
         cached?.let { return it }
         val built = ReadAction.compute<FlowableIndex, RuntimeException> { build() }
         cached = built
+        publishUpdated()
         return built
     }
+
+    /**
+     * The cached index if one exists, without triggering a (blocking) build. The Atlas Hub's
+     * status display uses this — the full scan must never run on the EDT.
+     */
+    fun cachedOrNull(): FlowableIndex? = cached
 
     /** Force a rebuild and return the fresh index. */
     fun refresh(): FlowableIndex {
@@ -65,6 +77,14 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
     /** Drop the cached index so it is rebuilt lazily on next use (cheap; safe on the EDT). */
     fun invalidate() {
         cached = null
+        publishUpdated()
+    }
+
+    /** May fire from any thread (VFS events, completion-triggered builds) — see [AtlasEventsListener]. */
+    private fun publishUpdated() {
+        if (!project.isDisposed) {
+            project.messageBus.syncPublisher(AtlasEvents.TOPIC).modelIndexUpdated()
+        }
     }
 
     fun keysOfType(type: ModelType): List<ModelEntry> = index().keysOfType(type)
@@ -120,6 +140,15 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
     /** Payload + correlation parameter names of an event (for event-payload completion). */
     fun payloadOf(eventKey: String): List<String> =
         index().membersOf(eventKey, ModelType.EVENT)?.payload.orEmpty()
+
+    /** Project-wide form outcome values (for completeTaskWithForm's outcome argument). */
+    fun formOutcomes(): Set<String> {
+        val out = LinkedHashSet<String>()
+        for (type in listOf(ModelType.FORM, ModelType.PAGE)) {
+            for (e in index().keysOfType(type)) out.addAll(e.members.formOutcomes)
+        }
+        return out
+    }
 
     // ---- Liquibase-coverage support (read on demand) -----------------------------------
 

@@ -92,19 +92,42 @@ object ModelParsers {
     /** `.dmn` — one entry per `<decision>`, with its decision-table shape when present. */
     fun parseDmn(data: ByteArray, ctx: Ctx, ffile: String): List<Map<String, Any?>> {
         val root = AtlasXml.parse(data)
-        return root.iter("decision").map { dec ->
+        val out = ArrayList<Map<String, Any?>>()
+        for (dec in root.iter("decision")) {
+            val key = dec.attr("id")
             val info = linkedMapOf<String, Any?>(
-                "key" to dec.attr("id"), "name" to dec.attr("name"), "file" to ffile,
+                "key" to key, "name" to dec.attr("name"), "file" to ffile,
             )
             val t = dec.findDescendant("decisionTable")
             if (t != null) {
                 info["hitPolicy"] = t.attr("hitPolicy") ?: "UNIQUE"
-                info["inputs"] = t.findChildren("input").map { it.attr("label") ?: it.textOfDescendant("inputExpression") }
+                // the input variable lives in inputExpression/<text>; `label` is only a display name
+                info["inputs"] = t.findChildren("input").map {
+                    it.attr("label") ?: it.textOfDescendant("text") ?: it.textOfDescendant("inputExpression")
+                }
                 info["outputs"] = t.findChildren("output").map { it.attr("label") ?: it.attr("name") }
                 info["ruleCount"] = t.findChildren("rule").size
             }
-            info
+            // DRD: a decision may require other decisions (informationRequirement/requiredDecision)
+            for (req in dec.findChildren("informationRequirement")) {
+                val href = req.findChild("requiredDecision")?.attr("href")
+                ctx.addRef(key, "dmn", ffile, "requires", "decision", href?.removePrefix("#"))
+            }
+            out.add(info)
         }
+        // Decision services are resolvable targets too — a serviceTask type=dmn may reference one
+        // via decisionServiceReferenceKey, exactly like a plain decision key.
+        for (ds in root.iter("decisionService")) {
+            val dsKey = ds.attr("id")
+            val members = (ds.findChildren("outputDecision") + ds.findChildren("encapsulatedDecision"))
+                .mapNotNull { it.attr("href")?.removePrefix("#") }
+            for (m in members) ctx.addRef(dsKey, "dmn", ffile, "contains-decision", "decision", m)
+            out.add(linkedMapOf(
+                "key" to dsKey, "name" to ds.attr("name"), "file" to ffile,
+                "decisionService" to true, "decisions" to members,
+            ))
+        }
+        return out
     }
 
     /** `.event` — the event key/name plus its payload names and correlation-parameter names. */
@@ -139,6 +162,17 @@ object ModelParsers {
             "tableName" to doc["tableName"], "referencedLiquibaseModelKey" to doc["referencedLiquibaseModelKey"],
             "referenceKey" to doc["referenceKey"], "columns" to columns, "operations" to operations,
         )
+        // Cross-model references (parity with the platform's ServiceModelReferenceExtractor):
+        // referenceKey → data object; typeReference.modelKey → data dictionary (output and
+        // per-operation input/output parameters); operation body templates → template model.
+        ctx.addRef(doc["key"], "service", ffile, "service-dataObject", "dataObject", doc["referenceKey"])
+        fun dictionaryRefs(params: Any?) {
+            for (p in listOfObjs(params)) {
+                ctx.addRef(doc["key"], "service", ffile, "typed-by-dictionary", "dataDictionary",
+                    objOf(p["typeReference"])?.get("modelKey"))
+            }
+        }
+        dictionaryRefs(doc["outputParameters"])
         for (op in listOfObjs(doc["operations"])) {
             val oc = objOf(op["config"]) ?: emptyMap()
             val rawUrl = oc["url"] as? String
@@ -150,6 +184,10 @@ object ModelParsers {
                 "key" to op["key"], "name" to op["name"], "method" to oc["method"],
                 "url" to oc["url"], "fullUrl" to full, "params" to operationParams(op),
             ))
+            dictionaryRefs(op["inputParameters"])
+            dictionaryRefs(op["outputParameters"])
+            ctx.addRef(doc["key"], "service", ffile, "body-template", "template",
+                objOf(oc["bodyTemplateModel"])?.get("bodyTemplateTemplateModelKey"))
             if (oc["method"] != null || oc["url"] != null) {
                 ctx.restCalls.add(linkedMapOf(
                     "source" to doc["key"], "sourceFile" to ffile, "where" to op["key"],
@@ -182,6 +220,9 @@ object ModelParsers {
                 .filter { truthy(it.value) }.map { it.key }
             perms.add(linkedMapOf("key" to pk, "label" to pv["label"], "roles" to roles))
             ctx.groups.addAll(roles)
+            // group → policy edges: which roles hold this permission (action = permission key)
+            ctx.addAccess(doc["key"], "securityPolicy", "policy", pk?.toString() ?: "permission",
+                roles.joinToString(","))
         }
         return linkedMapOf(
             "key" to doc["key"], "name" to doc["name"], "file" to ffile,
@@ -212,6 +253,9 @@ object ModelParsers {
         ctx.addAccess(key, "app", "app", "open-app", doc["groupsAccess"], doc["usersAccess"])
         for (p in listOfObjs(doc["pageModels"])) {
             ctx.addAccess(p["key"] ?: key, "page", "page", "view", p["accessPermissions"])
+            // pages listed only under pageModels (not in extension.design.childModels) still
+            // belong to the app — dedupe/edge-dedupe absorbs the overlap when both are present
+            ctx.addRef(key, "app", ffile, "contains", "model:page", p["key"])
         }
         return info
     }
@@ -305,7 +349,31 @@ object ModelParsers {
             tools.add(linkedMapOf("key" to tm["key"], "type" to mt))
             ctx.addRef(key, "agent", ffile, "tool", mt, tm["key"])
         }
+        // freemarker behavior templates (documentClassification + operations), guardrails and
+        // evaluators — parity with the platform's AgentModelReferenceExtractor (both persisted
+        // shapes: `agentModel.key` directly and nested under `configuration`).
+        fun behaviorTemplateRefs(behavior: Map<String, Any?>?) {
+            if (behavior?.get("type") != "freemarkerTemplate") return
+            for (t in listOf("systemMessageTemplate", "userMessageTemplate")) {
+                ctx.addRef(key, "agent", ffile, "message-template", "template", objOf(behavior[t])?.get("templateKey"))
+            }
+        }
+        fun guardrailEvaluatorRefs(node: Map<String, Any?>) {
+            for (g in listOfObjs(node["guardrails"])) {
+                val type = g["type"] as? String
+                val field = when (type) { "agent" -> "agentModel"; "service" -> "serviceModel"; else -> continue }
+                val ref = objOf(g[field]) ?: objOf(objOf(g["configuration"])?.get(field))
+                ctx.addRef(key, "agent", ffile, "guardrail", type!!, ref?.get("key"))
+            }
+            for (ev in listOfObjs(node["evaluators"])) {
+                val type = ev["type"] as? String
+                if (type == "agent" || type == "service") {
+                    ctx.addRef(key, "agent", ffile, "evaluator", type, objOf(ev["reference"])?.get("key"))
+                }
+            }
+        }
         for (t in (doc["tools"] as? List<*> ?: emptyList<Any?>())) toolRef(t)
+        guardrailEvaluatorRefs(doc)
         for (op in listOfObjs(doc["operations"])) {
             val beh = objOf(op["behavior"]) ?: emptyMap()
             operations.add(linkedMapOf(
@@ -314,6 +382,20 @@ object ModelParsers {
                 "userMessage" to ((beh["userMessage"] as? String) ?: "").take(200),
             ))
             for (t in (op["tools"] as? List<*> ?: emptyList<Any?>())) toolRef(t)
+            behaviorTemplateRefs(beh)
+            guardrailEvaluatorRefs(op)
+        }
+        // document classification: freemarker templates + classified document content models
+        val dc = objOf(doc["documentClassification"])
+        if (dc != null) {
+            behaviorTemplateRefs(objOf(dc["behavior"]))
+            for (d in listOfObjs(dc["documentClassifications"])) {
+                ctx.addRef(key, "agent", ffile, "classifies-document", "document", objOf(d["contentModel"])?.get("key"))
+            }
+        }
+        // external agent settings: inbound-event-configuration properties reference an event model
+        for (v in (objOf(objOf(doc["externalAgentSettings"])?.get("properties")) ?: emptyMap()).values) {
+            ctx.addRef(key, "agent", ffile, "agent-event", "event", objOf(v)?.get("key"))
         }
         val kb = objOf(objOf(doc["knowledgeBase"])?.get("knowledgeBaseModelReference")) ?: emptyMap()
         if (truthy(kb["key"])) { info["knowledgeBase"] = kb["key"]; ctx.addRef(key, "agent", ffile, "knowledgeBase", "knowledgeBase", kb["key"]) }
@@ -342,7 +424,17 @@ object ModelParsers {
         for (ch in (doc["channels"] as? List<*> ?: emptyList<Any?>())) {
             ctx.addRef(key, "action", ffile, "action-channel", "channel", if (ch is String) ch else objOf(ch)?.get("key"))
         }
-        ctx.addRef(key, "action", ffile, "triggers-signal", "process", doc["signalName"])
+        // `signalName` is a model key only for the start-instance bots (the platform's reference
+        // extractor discriminates on botKey the same way); for any other bot it is a real BPMN
+        // signal name and resolves against the signal index, not the process index.
+        when (doc["botKey"]) {
+            "bpmn-start-process-instance-bot" ->
+                ctx.addRef(key, "action", ffile, "starts-process", "process", doc["signalName"])
+            "cmmn-start-case-instance-bot" ->
+                ctx.addRef(key, "action", ffile, "starts-case", "case", doc["signalName"])
+            else ->
+                ctx.addRef(key, "action", ffile, "triggers-signal", "signal", doc["signalName"])
+        }
         val permGroups = (doc["permissionGroups"] as? List<*>) ?: emptyList<Any?>()
         ctx.addAccess(key, "action", "action", "use", permGroups.joinToString(","))
         val scriptInfo = objOf(objOf(doc["config"])?.get("scriptInfo")) ?: emptyMap()

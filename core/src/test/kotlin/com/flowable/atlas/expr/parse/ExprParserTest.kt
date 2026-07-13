@@ -89,4 +89,14 @@ class ExprParserTest {
         val e = r.error!!
         assertTrue(e.start in 0..("a && || b".length))
     }
+
+    @Test
+    fun curlyBraceGroupingGetsATargetedMessage() {
+        // `{2+2}` inside a body — the common "curly braces as grouping" slip; the message must point
+        // users at parens (and at the inner '{', not the outer delimiters, which the validator strips).
+        val r = fe("(1+1) + {2+2}")
+        assertNotNull(r.error)
+        assertTrue(r.error!!.message.contains("use parentheses to group"))
+        assertTrue(r.error!!.start == "(1+1) + ".length)
+    }
 }

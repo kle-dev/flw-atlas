@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Dark-theme colours for the Flowable expression rainbow parentheses — the light hues from
+     FlowableExprDefault.xml, brightened to read on dark editor backgrounds. -->
+<list>
+  <option name="FLW_EXPR_PAREN_L0">
+    <value>
+      <option name="FOREGROUND" value="56a8d8"/>
+    </value>
+  </option>
+  <option name="FLW_EXPR_PAREN_L1">
+    <value>
+      <option name="FOREGROUND" value="f0b54f"/>
+    </value>
+  </option>
+  <option name="FLW_EXPR_PAREN_L2">
+    <value>
+      <option name="FOREGROUND" value="73bd79"/>
+    </value>
+  </option>
+  <option name="FLW_EXPR_PAREN_L3">
+    <value>
+      <option name="FOREGROUND" value="da8bda"/>
+    </value>
+  </option>
+  <option name="FLW_EXPR_PAREN_L4">
+    <value>
+      <option name="FOREGROUND" value="e07b6a"/>
+    </value>
+  </option>
+</list>

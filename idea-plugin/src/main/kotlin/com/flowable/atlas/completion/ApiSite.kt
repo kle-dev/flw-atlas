@@ -56,6 +56,7 @@ enum class Vocabulary(val display: String) {
     VARIABLE("Variable"),
     USER_TASK("Task key"),
     ACTIVITY("Activity id"),
+    OUTCOME("Form outcome"),
 }
 
 /**

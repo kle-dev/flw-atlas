@@ -2,7 +2,6 @@ package com.flowable.atlas.action
 
 import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.FlowableModelIndexService
-import com.flowable.atlas.model.ModelType
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
@@ -11,9 +10,9 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.ui.Messages
 
 /**
- * Debug helper (Tools → "Flowable: Dump Key Index"): rescans the project and shows a
- * per-type summary of the indexed model keys. Used to verify M0 before the completion
- * features are wired up.
+ * Internal debug helper (Tools → Flowable Atlas → "Dump Key Index (Internal)", visible only with
+ * `idea.is.internal=true`): rescans the project synchronously and shows a per-type summary of the
+ * indexed model keys. End users get the same information from "Rebuild Model Index".
  */
 class DumpFlowableIndexAction : AnAction() {
 
@@ -28,23 +27,10 @@ class DumpFlowableIndexAction : AnAction() {
             project,
         )
 
-        Messages.showMessageDialog(project, render(index), "Flowable Key Index", Messages.getInformationIcon())
+        Messages.showMessageDialog(project, RebuildModelIndexAction.render(index), "Model Index", Messages.getInformationIcon())
     }
 
     override fun update(e: AnActionEvent) {
         e.presentation.isEnabled = e.getData(CommonDataKeys.PROJECT) != null
-    }
-
-    private fun render(index: FlowableIndex): String {
-        val byType = index.allDistinct().groupBy { it.type }
-        val sb = StringBuilder()
-        sb.append("Indexed ").append(index.distinctCount()).append(" Flowable models.\n\n")
-        for (type in ModelType.entries) {
-            val list = byType[type] ?: continue
-            sb.append(type.display).append(": ").append(list.size).append('\n')
-            list.take(5).forEach { sb.append("    ").append(it.key).append("  —  ").append(it.name).append('\n') }
-            if (list.size > 5) sb.append("    …\n")
-        }
-        return sb.toString()
     }
 }

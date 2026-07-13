@@ -38,6 +38,7 @@ object FlowableApiCatalog {
         key("org.flowable.engine.RuntimeService", "startProcessInstanceByKey", 0, PROCESS)
         key("org.flowable.engine.RuntimeService", "startProcessInstanceByKeyAndTenantId", 0, PROCESS)
         key("org.flowable.engine.runtime.ProcessInstanceBuilder", "processDefinitionKey", 0, PROCESS)
+        key("org.flowable.engine.runtime.ProcessInstanceStartEventSubscriptionBuilder", "processDefinitionKey", 0, PROCESS)
         key("org.flowable.engine.runtime.ProcessInstanceQuery", "processDefinitionKey", 0, PROCESS)
         key("org.flowable.engine.runtime.ProcessInstanceQuery", "processDefinitionKeyLike", 0, PROCESS)
         key("org.flowable.engine.runtime.ProcessInstanceQuery", "processDefinitionKeyLikeIgnoreCase", 0, PROCESS)
@@ -114,6 +115,9 @@ object FlowableApiCatalog {
         // ---------------------------------------------------------------- SERVICE REGISTRY
         val svcInvoke = "com.flowable.serviceregistry.api.runtime.ServiceInvocationBuilder"
         key("com.flowable.serviceregistry.api.runtime.ServiceRegistryRuntimeService", "getLookupIdByServiceKey", 1, SERVICE)
+        // getLookupIdByReferenceKey(data, referenceKey, tenantId) — a service's referenceKey names
+        // the data object it backs (see ServiceModelReferenceExtractor), so offer data-object keys
+        key("com.flowable.serviceregistry.api.runtime.ServiceRegistryRuntimeService", "getLookupIdByReferenceKey", 1, DATA_OBJECT)
         key(svcInvoke, "serviceKey", 0, SERVICE)
         key("com.flowable.serviceregistry.api.repository.ServiceRegistryRepositoryService", "getServiceDefinitionModelByKey", 0, SERVICE)
         key("com.flowable.serviceregistry.api.repository.ServiceRegistryRepositoryService", "getServiceDefinitionByKey", 0, SERVICE)
@@ -132,6 +136,8 @@ object FlowableApiCatalog {
         key(agentRepo, "getAgentDefinitionByKeyAndTenant", 0, AGENT)
         key(agentRepo, "getAgentDefinitionModelByKeyAndTenant", 0, AGENT)
         key("com.flowable.agent.api.repository.AgentDefinitionQuery", "key", 0, AGENT)
+        key("com.flowable.agent.api.runtime.AgentInstanceBuilder", "agentDefinitionKey", 0, AGENT)
+        key("com.flowable.agent.api.runtime.AgentInstanceQuery", "agentDefinitionKey", 0, AGENT)
         key(agentRepo, "getKnowledgeBaseDefinitionModelByKeyAndTenant", 0, KNOWLEDGE_BASE)
 
         // ---------------------------------------------------------------- TEMPLATE
@@ -167,6 +173,7 @@ object FlowableApiCatalog {
         key("com.flowable.platform.api.repository.QueryDefinitionQuery", "key", 0, QUERY)
         key("com.flowable.platform.api.repository.VariableExtractorDefinitionQuery", "key", 0, VARIABLE_EXTRACTOR)
         key("com.flowable.platform.api.repository.SequenceDefinitionQuery", "key", 0, SEQUENCE)
+        key("com.flowable.platform.api.sequence.SequenceGenerator", "definitionKey", 0, SEQUENCE)
         key("com.flowable.platform.api.repository.SlaDefinitionQuery", "key", 0, SLA)
         key("com.flowable.platform.api.repository.DashboardComponentDefinitionQuery", "key", 0, DASHBOARD_COMPONENT)
         key("com.flowable.platform.api.repository.datadictionary.DataDictionaryDefinitionQuery", "key", 0, DATA_DICTIONARY)
@@ -194,19 +201,28 @@ object FlowableApiCatalog {
         vocab(runtime, "startProcessInstanceByMessage", 0, Vocabulary.MESSAGE)
         vocab(runtime, "startProcessInstanceByMessageAndTenantId", 0, Vocabulary.MESSAGE)
         vocab(runtime, "messageEventReceived", 0, Vocabulary.MESSAGE)
+        vocab(runtime, "messageEventReceivedAsync", 0, Vocabulary.MESSAGE)
         vocab("org.flowable.engine.runtime.ProcessInstanceBuilder", "messageName", 0, Vocabulary.MESSAGE)
         vocab(runtime, "signalEventReceived", 0, Vocabulary.SIGNAL)
+        vocab(runtime, "signalEventReceivedAsync", 0, Vocabulary.SIGNAL)
 
         // ---------------------------------------------------------------- VARIABLE names (arg index 1)
         // getVariable(executionId, variableName) etc. — the id is arg 0, the variable name is arg 1.
         val taskService = "org.flowable.engine.TaskService"
         val cmmnRuntime = "org.flowable.cmmn.api.CmmnRuntimeService"
-        for (host in listOf(runtime, taskService, cmmnRuntime)) {
+        val cmmnTaskService = "org.flowable.cmmn.api.CmmnTaskService"
+        for (host in listOf(runtime, taskService, cmmnRuntime, cmmnTaskService)) {
             for (m in listOf("getVariable", "getVariableLocal", "setVariable", "setVariableLocal",
                              "hasVariable", "hasVariableLocal", "removeVariable", "removeVariableLocal")) {
                 vocab(host, m, 1, Vocabulary.VARIABLE)
             }
         }
+
+        // ---------------------------------------------------------------- FORM OUTCOMES
+        // completeTaskWithForm(taskId, formDefinitionId, outcome, …) — the outcome literal is arg 2;
+        // offered as the project-wide union of all form outcome values.
+        vocab(taskService, "completeTaskWithForm", 2, Vocabulary.OUTCOME)
+        vocab(cmmnTaskService, "completeTaskWithForm", 2, Vocabulary.OUTCOME)
 
         // ---------------------------------------------------------------- TASK-DEFINITION KEY / ACTIVITY ID
         // Scoped to the sibling processDefinitionKey / caseDefinitionKey in the same query chain when

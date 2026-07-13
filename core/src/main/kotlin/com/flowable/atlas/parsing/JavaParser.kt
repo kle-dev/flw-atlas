@@ -29,9 +29,30 @@ object JavaParser {
     // `static final String NAME = "value";` constant declarations — used to resolve a data-object key
     // referenced by a constant (e.g. a generated model-keys class field) back to its literal value.
     private val STRING_CONST_RE = Regex("""\bstatic\s+final\s+String\s+(\w+)\s*=\s*"([^"]+)"""")
+
+    // A string literal that is the first argument of a method call — `method("literal"` — so the
+    // literal's call context is known. Literals passed to a known key-taking Flowable API produce a
+    // confident CODE→MODEL edge; any other literal that happens to equal a model key only a suspect one.
+    private val STR_CTX_RE = Regex("""\b(\w+)\s*\(\s*"([^"\\\n]{2,80})"""")
+    private val KEY_API_METHODS = setOf(
+        // engine + platform methods whose (first) String argument is a model key
+        "startProcessInstanceByKey", "startProcessInstanceByKeyAndTenantId", "startProcessInstanceByMessage",
+        "processDefinitionKey", "processDefinitionKeyLike", "processDefinitionKeyLikeIgnoreCase",
+        "caseDefinitionKey", "caseDefinitionKeyLike", "caseDefinitionKeyLikeIgnoreCase",
+        "decisionKey", "formDefinitionKey", "getFormModelByKey", "getFormModelWithVariablesByKey",
+        "getFormInstanceModelByKey", "definitionKey", "dataObjectDefinitionKey",
+        "eventDefinitionKey", "channelDefinitionKey", "getEventModelByKey", "getChannelModelByKey",
+        "serviceKey", "operationKey", "actionDefinitionKey", "templateKey", "processTemplate",
+        "agentDefinitionKey", "getServiceDefinitionModelByKey", "getServiceDefinitionByKey",
+        "getActionDefinitionModelByKey", "getActionDefinitionByKey", "getPolicyModelByKey",
+        "taskFormKey", "formKey", "key", "operation", "messageName", "signalEventReceived",
+        "signalEventReceivedAsync", "messageEventReceived", "messageEventReceivedAsync",
+    )
     // Flowable data-object runtime builder chain: `.definitionKey(<expr>) … .operation("<literal>")`.
     private val DEFINITION_KEY_RE = Regex("""\.definitionKey\(\s*([^)]+?)\s*\)""")
     private val OPERATION_CALL_RE = Regex("""\.operation\(\s*"([^"]+)"\s*\)""")
+    // External-worker subscriptions/queries: `.topic("orders")` — links the class to the topic node.
+    private val TOPIC_CALL_RE = Regex("""\.topic\(\s*"([^"]+)"\s*\)""")
 
     private val CONTROL_KEYWORDS = setOf("if", "for", "while", "switch", "catch", "synchronized", "return", "new")
     private val DELEGATE_INTERFACES = setOf(
@@ -138,6 +159,12 @@ object JavaParser {
         }
         if (roles.isEmpty()) roles.add("other")
 
+        // literals whose call context is a known key-taking Flowable API — confident model refs
+        val keyedStrings = LinkedHashSet<String>()
+        for (m in STR_CTX_RE.findAll(text)) {
+            if (m.groupValues[1] in KEY_API_METHODS) keyedStrings.add(m.groupValues[2])
+        }
+
         return linkedMapOf(
             "file" to ffile, "package" to pkg, "primary" to primary,
             "fqn" to (if (pkg.isNotEmpty()) "$pkg.$primary" else primary),
@@ -146,6 +173,8 @@ object JavaParser {
             "endpoints" to endpoints, "methods" to methods, "deps" to deps, "botKey" to botKey,
             "vars" to JAVA_VAR_RE.findAll(text).map { it.groupValues[1] }.toSortedSet().toList(),
             "strings" to JAVA_STR_RE.findAll(text).map { it.groupValues[1] }.toCollection(LinkedHashSet()),
+            "keyedStrings" to keyedStrings,
+            "topics" to TOPIC_CALL_RE.findAll(text).map { it.groupValues[1] }.toSortedSet().toList(),
             "line" to (if (classDeclIdx != -1) lineOf(classDeclIdx) else 1),
         )
     }
@@ -183,19 +212,24 @@ object JavaParser {
         return p.lowercase().split("/").filter { it.isNotEmpty() }
     }
 
-    /** REST endpoints whose path matches [url] (shared last literal segment, or suffix match). */
+    /** REST endpoints whose path matches [url]. A segment-suffix match (placeholders `*` match any
+     *  segment) is a confident hit; the legacy shared-last-literal-segment rule still matches but is
+     *  annotated `loose=true` so the graph flags the edge as suspect instead of presenting it clean. */
     fun matchRest(url: String?, codeEndpoints: List<Map<String, Any?>>): List<Map<String, Any?>> {
         val target = normPath(url)
         if (target.isEmpty()) return emptyList()
+        fun segsMatch(ep: List<String>, tail: List<String>): Boolean =
+            ep.size == tail.size && ep.indices.all { ep[it] == "*" || tail[it] == "*" || ep[it] == tail[it] }
         val matches = ArrayList<Map<String, Any?>>()
         for (ep in codeEndpoints) {
             val epSegs = normPath(ep["path"] as? String)
             if (epSegs.isEmpty()) continue
+            val suffix = target.size >= epSegs.size &&
+                segsMatch(epSegs, target.subList(target.size - epSegs.size, target.size))
             val lits = epSegs.filter { it != "*" }
-            if (lits.isNotEmpty() && lits.last() in target) {
-                matches.add(ep)
-            } else if (epSegs.isNotEmpty() && target.size >= epSegs.size && target.subList(target.size - epSegs.size, target.size) == epSegs) {
-                matches.add(ep)
+            when {
+                suffix -> matches.add(ep)
+                lits.isNotEmpty() && lits.last() in target -> matches.add(ep + mapOf("loose" to true))
             }
         }
         return matches

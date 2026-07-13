@@ -33,16 +33,21 @@ class Ctx {
     var archiveFileCount = 0
     var javaFileCount = 0
 
-    /** Record a static model→X reference; dynamic (`${…}`/`{{…}}`) values go to [dynamicRefs] instead. */
-    fun addRef(frm: Any?, ftype: String, ffile: String, rel: String, kind: String, value: Any?) {
+    /** Record a static model→X reference; dynamic (`${…}`/`{{…}}`) values go to [dynamicRefs] instead.
+     *  [suspect] marks a reference the producer already knows is uncertain (e.g. a ref-by-id where a
+     *  key is expected) — it survives resolution and flags the resulting edge. */
+    fun addRef(frm: Any?, ftype: String, ffile: String, rel: String, kind: String, value: Any?,
+               suspect: Boolean = false) {
         if (value == null) return
         val v = value.toString().trim()
         if (v.isEmpty()) return
         val target = if (v.contains("\${") || v.contains("{{")) dynamicRefs else refs
-        target.add(linkedMapOf(
+        val entry = linkedMapOf<String, Any?>(
             "from" to frm, "fromType" to ftype, "fromFile" to ffile,
             "rel" to rel, "kind" to kind, "value" to v,
-        ))
+        )
+        if (suspect) entry["suspect"] = true
+        target.add(entry)
     }
 
     /** Record that [consumer] invokes operation [opKey] on a service ([targetKind] = "service") or a

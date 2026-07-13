@@ -4,7 +4,7 @@
 <idea-plugin require-restart="true">
     <id>com.flowable.atlas</id>
     <name>Flowable Atlas</name>
-    <version>0.7.5</version>
+    <version>0.8.0</version>
     <vendor email="kevin.klever@flowable.com" url="https://www.flowable.com">Flowable</vendor>
 
     <description><![CDATA[
@@ -77,15 +77,26 @@
               (connection auto-detected from the project's Spring configuration).</li>
         </ul>
 
-        <h3>3 &middot; Atlas explorer</h3>
+        <h3>3 &middot; Atlas explorer &amp; hub</h3>
         <ul>
-          <li><b>Map your whole project</b> — Tools → Flowable Atlas → <i>Generate Atlas Explorer</i> turns
-              your models + Java + Liquibase into a single self-contained, offline, interactive HTML page.
-              Save it into the project and open it in your browser or right inside the IDE (embedded
-              viewer), then click through every relationship in both directions. Or switch the scope in
-              Settings to write <b>all Atlas artifacts</b> at once — summary &amp; overview Markdown, the
-              graph JSON, the explorer HTML and a CLAUDE.md primer for AI agents — into a folder.
-              Generation runs entirely in-process — no external tools required.</li>
+          <li><b>Atlas Hub</b> — a tool window (right stripe) that is the plugin's control center:
+              model-index status with per-type counts and one-click rebuild, every generated explorer
+              page (double-click to open), and the Flowable Design sync state — kept up to date live.</li>
+          <li><b>Map your whole project</b> — Tools → Flowable Atlas → <i>Generate Atlas Explorer…</i>
+              turns your models + Java + Liquibase into a single self-contained, offline, interactive
+              HTML page. Save it into the project and open it in your browser or right inside the IDE
+              (embedded viewer), then click through every relationship in both directions. In
+              Settings → Generation you pick exactly which artifacts are written — summary &amp;
+              overview Markdown, the graph JSON, the explorer HTML, a CLAUDE.md primer for AI agents.
+              Generation runs entirely in-process — no external tools required — and honours the
+              project's expression allowlist.</li>
+          <li><b>IDE-native viewing</b> — the embedded explorer follows the IDE light/dark theme
+              (switching restyles live) and carries a toolbar with <i>Regenerate</i>, <i>Reload</i>
+              and <i>Open in Browser</i>.</li>
+          <li><b>Reopen without regenerating</b> — <i>Open Atlas Explorer</i> (Atlas Hub, or Tools →
+              Flowable Atlas) opens an already-generated <code>*.explorer.html</code> — including
+              one written by the standalone <code>atlas</code> CLI into the configured output folder — as a
+              center editor tab (like a DB table), so you never have to leave the IDE for a browser.</li>
         </ul>
 
         <h3>How it feels</h3>
@@ -103,6 +114,63 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.8.0</h3>
+        <ul>
+          <li><b>Atlas Hub — one control center</b> — a new tool window (right stripe, or Tools →
+              Flowable Atlas → <i>Atlas Hub</i>) shows the model-index status with per-type counts
+              and a background <i>Rebuild</i>, every generated <code>*.explorer.html</code>
+              (double-click opens the embedded viewer, with a browser fallback when JCEF is
+              unavailable), and the Flowable Design sync state with last-pull time — refreshing
+              live as models change, artifacts are generated or a pull finishes.</li>
+          <li><b>The explorer follows your IDE theme</b> — the embedded Atlas Explorer now opens in
+              the IntelliJ light/dark theme and restyles live when you switch the LAF, without a
+              reload. The in-page toggle still wins for explicit overrides; <i>auto</i> follows the
+              IDE. In a plain browser nothing changes.</li>
+          <li><b>Explorer editor toolbar</b> — the embedded viewer gained a thin toolbar:
+              <i>Regenerate</i> (re-runs the generator for exactly this file and reloads, no dialogs,
+              no balloon), <i>Reload</i> and <i>Open in Browser</i>.</li>
+          <li><b>Settings, reorganized</b> — Settings → Tools → Flowable Atlas is now a small tree:
+              the root page keeps the core toggles, and three project-level sub-pages hold the rest —
+              <i>Expressions</i> (validation toggles and, for the first time, the expression
+              allowlist as an editable table plus custom-function discovery), <i>Generation</i>
+              (per-artifact selection instead of the old two-way switch, a configurable output
+              folder, and the model-constants class options — now project-level and VCS-shared) and
+              <i>Connections</i> (the full Flowable Design connection editor — replacing the old
+              dialog — and the Inspect connection with <i>Detect from Project</i>).</li>
+          <li><b>Allowlist flows into generation</b> — the project's expression allowlist and the
+              custom-function settings are now passed to the Atlas generator (as with the CLI's
+              <code>--expr-allowlist</code> / <code>--custom-functions</code>), so the explorer's
+              <i>Suspect</i> findings respect them.</li>
+          <li><b>Tools menu, tidied</b> — grouped into Open / Generate / Flowable Design /
+              Maintenance; dialog-opening actions carry an ellipsis; the debug <i>Dump Key Index</i>
+              became the user-facing <i>Rebuild Model Index</i> (background, balloon with counts)
+              and the raw dump is internal-mode only. Consistent naming across dialogs and
+              notifications; project settings consolidated into
+              <code>.idea/flowable-atlas.xml</code>. The main-toolbar compass icon is gone — the
+              Atlas Hub is the plugin's one visible surface (tool-window icons follow the native
+              monochrome style).</li>
+        </ul>
+        <h3>0.7.6</h3>
+        <ul>
+          <li><b>Open an existing Atlas explorer from the menu</b> — Tools → Flowable Atlas →
+              <i>Open Atlas Explorer</i> opens an already-generated <code>*.explorer.html</code> in the
+              embedded in-IDE viewer, without regenerating it and without switching to a browser. It
+              looks under <code>atlas-output/</code> first (where both the generator and the standalone
+              <code>atlas</code> CLI write by default), so a page produced from the terminal opens
+              straight in the IDE; if several exist you pick one, and if none is found it offers to
+              generate. Opening now brings the rendered <i>Atlas Explorer</i> tab to the front
+              immediately (instead of the HTML source), from the menu, the post-generation balloon and
+              double-clicking the file alike.</li>
+          <li><b>One-click toolbar icon — opens in the center</b> — <i>Open Atlas Explorer</i> also sits
+              as a compass icon in the main toolbar; clicking it opens the explorer as a <b>center editor
+              tab</b> (like opening a database table), rendered right away, so it fills the main area and
+              can be maximized like any editor.</li>
+          <li><b>One unified view — no “Text” tab, playground included</b> — the center Atlas Explorer no
+              longer shows the raw-HTML <i>Text</i> sub-tab, and a second <b>Flowable Expressions</b> tab
+              sits right next to <i>Atlas Explorer</i>, so the whole-project map and the expression
+              playground share a single window instead of two separate entry points. (The standalone
+              <i>Flowable Expressions</i> tool window still works too.)</li>
+        </ul>
         <h3>0.7.5</h3>
         <ul>
           <li><b>Service-operation “Used by” now also finds Java callers</b> — Java code that invokes an
@@ -223,7 +291,7 @@
           <li><b>Project allowlist for custom functions</b> — Alt-Enter on a finding offers
               <i>Add … to Flowable expression allowlist</i>: functions/namespaces your project
               registers itself (which the built-in catalog cannot know) are silenced project-wide.
-              Stored in <code>.idea/flowableAtlas.xml</code>, shareable via VCS. The
+              Stored in <code>.idea/flowable-atlas.xml</code>, shareable via VCS. The
               "ground backend expressions" checkbox moved into the (default-off) grounding inspection.</li>
           <li><b>Expression Playground</b> shows semantic findings (allowlist-aware) in a status line.</li>
           <li><b>Modernized Atlas Explorer</b> (bundled generator) — light/dark theme with toggle,
@@ -307,13 +375,36 @@
     <!-- JSON PSI for form-model {{…}} expression injection and the .form → JSON association. -->
     <depends>com.intellij.modules.json</depends>
 
+    <resource-bundle>messages.FlowableAtlasBundle</resource-bundle>
+
     <extensions defaultExtensionNs="com.intellij">
         <!-- Services (FlowableModelIndexService, ModelConstantsService/Settings) are @Service — no registration needed. -->
+        <!-- Settings tree: an app-level root page (core toggles) with three project-level children.
+             parentId chaining across levels is supported — the settings tree merges them by ID. -->
         <applicationConfigurable
                 parentId="tools"
                 id="com.flowable.atlas.settings"
-                displayName="Flowable Atlas"
+                bundle="messages.FlowableAtlasBundle"
+                key="configurable.atlas"
                 instance="com.flowable.atlas.settings.FlowableAtlasConfigurable"/>
+        <projectConfigurable
+                parentId="com.flowable.atlas.settings"
+                id="com.flowable.atlas.settings.expressions"
+                bundle="messages.FlowableAtlasBundle"
+                key="configurable.atlas.expressions"
+                instance="com.flowable.atlas.settings.ExpressionsConfigurable"/>
+        <projectConfigurable
+                parentId="com.flowable.atlas.settings"
+                id="com.flowable.atlas.settings.generation"
+                bundle="messages.FlowableAtlasBundle"
+                key="configurable.atlas.generation"
+                instance="com.flowable.atlas.settings.GenerationConfigurable"/>
+        <projectConfigurable
+                parentId="com.flowable.atlas.settings"
+                id="com.flowable.atlas.settings.connections"
+                bundle="messages.FlowableAtlasBundle"
+                key="configurable.atlas.connections"
+                instance="com.flowable.atlas.settings.ConnectionsConfigurable"/>
         <completion.contributor
                 language="JAVA"
                 implementationClass="com.flowable.atlas.completion.FlowableJavaCompletionContributor"/>
@@ -384,8 +475,12 @@
         <customUsageSearcher implementation="com.flowable.atlas.usage.FlowableModelUsageSearcher"/>
         <!-- Balloon shown after generating the Atlas explorer (open in browser / open in IDE). -->
         <notificationGroup id="Flowable Atlas" displayType="BALLOON"/>
-        <!-- Render a *.explorer.html as an embedded (JCEF) "Atlas Explorer" tab after the default editor. -->
+        <!-- Render a *.explorer.html as an embedded (JCEF) "Atlas Explorer" tab in the center editor
+             area (like a DB table); hides the raw-HTML "Text" tab for it. -->
         <fileEditorProvider implementation="com.flowable.atlas.explorer.AtlasFileEditorProvider"/>
+        <!-- Second tab on the same *.explorer.html: the Flowable Expressions playground, so the map and
+             the playground share one window (no separate tool window needed). Placed after Atlas Explorer. -->
+        <fileEditorProvider implementation="com.flowable.atlas.explorer.AtlasExpressionEditorProvider"/>
 
         <!-- ==================== Flowable Expression support ==================== -->
         <!-- Two dialects of one expression language: backend ${…}/#{…} (JUEL) and frontend {{…}} (flw.*). -->
@@ -438,7 +533,27 @@
         <!-- Rainbow parentheses are done in the syntax highlighter (FlowableExprSyntaxHighlighter):
              the highlighting lexer tags each round paren with its nesting level and each level gets
              a distinct colour. This paints in every surface, including the playground's embedded
-             editor field where an annotator would not. -->
+             editor field where an annotator would not. Per-theme default colours + the Color Scheme
+             page that makes them customizable: -->
+        <additionalTextAttributes scheme="Default" file="colorSchemes/FlowableExprDefault.xml"/>
+        <additionalTextAttributes scheme="Darcula" file="colorSchemes/FlowableExprDarcula.xml"/>
+        <colorSettingsPage implementation="com.flowable.atlas.expr.lang.FlowableExprColorSettingsPage"/>
+        <!-- Alt-Enter on an injected ${…}/{{…}} fragment → rework it in the playground, pre-filled. -->
+        <intentionAction>
+            <language>FlowableBackendExpr</language>
+            <className>com.flowable.atlas.expr.intention.OpenInExpressionPlaygroundIntention</className>
+            <category>Flowable</category>
+        </intentionAction>
+        <intentionAction>
+            <language>FlowableFrontendExpr</language>
+            <className>com.flowable.atlas.expr.intention.OpenInExpressionPlaygroundIntention</className>
+            <category>Flowable</category>
+        </intentionAction>
+        <!-- Ctrl-Q / hover on a catalog function or root inside an expression → call head + doc line. -->
+        <lang.documentationProvider language="FlowableBackendExpr"
+                  implementationClass="com.flowable.atlas.expr.documentation.FlowableExprDocumentationProvider"/>
+        <lang.documentationProvider language="FlowableFrontendExpr"
+                  implementationClass="com.flowable.atlas.expr.documentation.FlowableExprDocumentationProvider"/>
         <!-- Completion of functions, root objects and the project's variables/form-fields. -->
         <completion.contributor language="FlowableBackendExpr"
                   implementationClass="com.flowable.atlas.expr.completion.FlowableExpressionCompletionContributor"/>
@@ -456,6 +571,13 @@
                     secondary="true"
                     icon="/META-INF/expr-toolwindow.svg"
                     factoryClass="com.flowable.atlas.expr.toolwindow.FlowableExpressionToolWindowFactory"/>
+        <!-- The Atlas Hub: the plugin's control center (model-index status, generated explorers,
+             Flowable Design sync). Right anchor — the home of project control-center panels
+             (Gradle, Maven, Database). -->
+        <toolWindow id="Atlas Hub"
+                    anchor="right"
+                    icon="/META-INF/atlas-hub.svg"
+                    factoryClass="com.flowable.atlas.hub.AtlasHubToolWindowFactory"/>
     </extensions>
 
     <projectListeners>
@@ -464,30 +586,48 @@
                   topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
     </projectListeners>
 
-    <actions>
-        <group id="Flowable.Menu"
-               text="Flowable Atlas"
-               description="Flowable Atlas actions"
-               popup="true">
+    <!-- Action/group texts and descriptions come from messages/FlowableAtlasBundle.properties
+         (action.<id>.text / .description keys). Ellipsis convention: only actions that always need
+         further input before they can complete carry one. -->
+    <actions resource-bundle="messages.FlowableAtlasBundle">
+        <group id="Flowable.Menu" popup="true">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
 
+            <!-- Open -->
+            <action id="Flowable.OpenAtlasHub"
+                    class="com.flowable.atlas.action.OpenAtlasHubAction"/>
+            <!-- Platform icons (AllIcons) on the actions the Atlas Hub toolbar reuses; no entry in
+                 the main toolbar — the hub is the plugin's visible surface, everything else stays
+                 in the menu. -->
+            <action id="Flowable.OpenAtlasExplorer"
+                    class="com.flowable.atlas.action.OpenAtlasExplorerAction"
+                    icon="AllIcons.Nodes.PpWeb"/>
+            <action id="Flowable.OpenExpressionPlayground"
+                    class="com.flowable.atlas.action.OpenExpressionPlaygroundAction"/>
+            <separator/>
+
+            <!-- Generate -->
             <action id="Flowable.GenerateAtlasExplorer"
                     class="com.flowable.atlas.action.GenerateAtlasExplorerAction"
-                    text="Generate Atlas Explorer"
-                    description="Map the whole project into a self-contained interactive Atlas HTML page (open in browser or in the IDE)"/>
-            <action id="Flowable.OpenExpressionPlayground"
-                    class="com.flowable.atlas.action.OpenExpressionPlaygroundAction"
-                    text="Open Expression Playground"
-                    description="Show the Flowable Expressions tool window to validate and evaluate backend/frontend expressions"/>
-            <separator/>
+                    icon="AllIcons.Actions.Compile"/>
             <action id="Flowable.GenerateModelConstants"
-                    class="com.flowable.atlas.action.GenerateModelConstantsAction"
-                    text="Generate Model Constants"
-                    description="Generate a Java class with all Flowable model keys as constants (kept in sync)"/>
-            <action id="Flowable.DumpKeyIndex"
-                    class="com.flowable.atlas.action.DumpFlowableIndexAction"
-                    text="Dump Key Index"
-                    description="Scan the project and list all indexed Flowable model keys"/>
+                    class="com.flowable.atlas.action.GenerateModelConstantsAction"/>
+            <separator/>
+
+            <!-- Flowable Design -->
+            <action id="Flowable.PullFromDesign"
+                    class="com.flowable.atlas.action.PullFromDesignAction"
+                    icon="AllIcons.Actions.Download"/>
+            <action id="Flowable.ConfigureDesignConnection"
+                    class="com.flowable.atlas.action.ConfigureDesignConnectionAction"/>
+            <separator/>
+
+            <!-- Maintenance -->
+            <action id="Flowable.RebuildModelIndex"
+                    class="com.flowable.atlas.action.RebuildModelIndexAction"/>
+            <!-- Debug helper; visible only with idea.is.internal=true. -->
+            <action id="Flowable.DumpKeyIndex" internal="true"
+                    class="com.flowable.atlas.action.DumpFlowableIndexAction"/>
         </group>
     </actions>
 </idea-plugin>

@@ -40,13 +40,31 @@ object ReferenceResolver {
     )
 
     /** Ref kinds that name a Flowable model (mirrors the tuple in the Python `resolve references` step). */
-    private val MODEL_KIND_NAMES = setOf(
+    internal val MODEL_KIND_NAMES = setOf(
         "process", "case", "decision", "form", "page",
         "service", "agent", "dataObject", "dataDictionary",
         "channel", "event", "template", "sla", "securityPolicy",
         "knowledgeBase", "query", "sequence", "masterData",
         "action", "document", "variableExtractor", "dashboardComponent",
     )
+
+    /**
+     * Cross-type fallback compatibility: an expected model kind may silently fall back only to these
+     * types (tagged `fallbackType`, still a normal edge). Any other cross-type match is kept but
+     * flagged `suspect` — a `process --callActivity--> form` edge is semantically impossible and must
+     * be visible as such instead of looking like a clean resolution.
+     */
+    private val FALLBACK_COMPAT = mapOf(
+        "process" to setOf("case"),          // call activity may start a case (calledElementType)
+        "case" to setOf("process"),          // work definitions cover both
+        "form" to setOf("page"),             // casePage-/work-form keys may name a page model
+        "page" to setOf("form"),
+        "dataObject" to setOf("masterData"), // master data is a data-object specialisation
+        "masterData" to setOf("dataObject"),
+    )
+
+    /** A value that is exactly one `${ident}` / `#{ident}` — the only shape we best-effort resolve. */
+    private val SIMPLE_EXPR_RE = Regex("^[#$]\\{\\s*([A-Za-z_]\\w*)\\s*}$")
 
     private val EXPR_STRIP_RE = Regex("^[#$]\\{|\\}$")
     private val STR_LIT_IN_EXPR_RE = Regex("'[^']*'|\"[^\"]*\"")
@@ -91,6 +109,9 @@ object ReferenceResolver {
         // operation calls, collected during the java pass and resolved into op-uses just below.
         val javaConstants = LinkedHashMap<String, String>()
         val javaOpCalls = LinkedHashMap<String, List<Map<String, String>>>()
+        // Simple class names shared by more than one class — resolving through them is a guess
+        // (first-wins), so any ref that falls back to such a name is flagged `suspect`.
+        val ambiguousSimple = HashSet<String>()
         for (path in javas) {
             val rel = relOf(path)
             val srcText = String(path.readBytes(), Charsets.UTF_8)
@@ -103,7 +124,7 @@ object ReferenceResolver {
             val primary = jc["primary"] as String
             val fqn = jc["fqn"] as String
             for (b in jc["beanNames"] as Collection<String>) beanIndex.putIfAbsent(b, jc)
-            classIndex.putIfAbsent(primary, jc)
+            if (classIndex.putIfAbsent(primary, jc) != null) ambiguousSimple.add(primary)
             fqnIndex[fqn] = jc
             for (ep in jc["endpoints"] as List<Map<String, Any?>>) {
                 val ep2 = LinkedHashMap(ep)
@@ -168,11 +189,18 @@ object ReferenceResolver {
             val url = (rc["url"] as? String) ?: ""
             val source = rc["source"]
             val sourceFile = (rc["sourceFile"] as? String) ?: ""
+            // The originating model type follows the call's kind — an http-task URL comes from a
+            // process, a service-op URL from a service model, everything else from a form/page.
+            val srcType = when (rc["kind"]) {
+                "service-op" -> "service"
+                "http-task" -> "process"
+                else -> "form"
+            }
             for (m in DATA_OBJ_KEY_RE.findAll(url)) {
-                ctx.addRef(source, "form", sourceFile, "queries-dataObject", "dataObject", m.groupValues[1])
+                ctx.addRef(source, srcType, sourceFile, "queries-dataObject", "dataObject", m.groupValues[1])
             }
             for (m in QUERY_PATH_RE.findAll(url)) {
-                ctx.addRef(source, "form", sourceFile, "runs-query", "query", m.groupValues[1])
+                ctx.addRef(source, srcType, sourceFile, "runs-query", "query", m.groupValues[1])
             }
         }
         replaceInPlace(ctx.refs, dedupe(ctx.refs, ::refKey))
@@ -193,13 +221,20 @@ object ReferenceResolver {
                     ref2["target"] = target
                     ref2["targetType"] = "model"
                     if (target == null && value in byKey) {
-                        // Fallback across model types: prefer a same-type entry, else the first,
-                        // tagging cross-type resolutions so they stay auditable.
+                        // Fallback across model types: prefer a same-type entry, then a semantically
+                        // compatible one ([FALLBACK_COMPAT]) — anything else stays resolvable but is
+                        // flagged `suspect` so impossible edges are visible instead of looking clean.
                         val entries = byKey[value]!!
-                        val match = entries.firstOrNull { it.first == norm } ?: entries[0]
+                        val compat = FALLBACK_COMPAT[norm] ?: emptySet()
+                        val match = entries.firstOrNull { it.first == norm }
+                            ?: entries.firstOrNull { it.first in compat }
+                            ?: entries[0]
                         target = match.second
                         ref2["target"] = target
-                        if (match.first != norm) ref2["fallbackType"] = match.first
+                        if (match.first != norm) {
+                            ref2["fallbackType"] = match.first
+                            if (match.first !in compat) ref2["suspect"] = true
+                        }
                     }
                 }
                 kind == "bean" -> {
@@ -209,6 +244,8 @@ object ReferenceResolver {
                     ref2["target"] = target
                     ref2["targetType"] = "bean"
                     ref2["targetFqn"] = jc?.get("fqn")
+                    // Resolved through a shared simple name — first-wins guess, keep it flagged.
+                    if (jc != null && beanIndex[value] == null && cap in ambiguousSimple) ref2["suspect"] = true
                 }
                 kind == "class" -> {
                     val simple = value.substringAfterLast('.')
@@ -217,6 +254,7 @@ object ReferenceResolver {
                     ref2["target"] = target
                     ref2["targetType"] = "class"
                     ref2["targetFqn"] = jc?.get("fqn")
+                    if (jc != null && fqnIndex[value] == null && simple in ambiguousSimple) ref2["suspect"] = true
                 }
                 else -> {
                     ref2["target"] = null
@@ -225,6 +263,27 @@ object ReferenceResolver {
             }
             (if (target != null) resolved else unresolved).add(ref2)
         }
+
+        // ---- Best-effort resolution of dynamic (expression-valued) references ----
+        // A model ref whose value is exactly `${ident}` resolves when `ident` is a project constant
+        // (`static final String`, e.g. a generated model-keys class) whose value is an indexed model
+        // key. Everything else keeps its expression text; either way the graph builder renders these
+        // as `dynamic` edges (resolved → the model, unresolved → an expression placeholder node).
+        for (ref in ctx.dynamicRefs) {
+            ref["dynamic"] = true
+            val kind = ref["kind"] as? String ?: continue
+            if (!(kind.startsWith("model:") || kind in MODEL_KIND_NAMES)) continue
+            var norm = if (kind.startsWith("model:")) kind.substringAfter(":") else kind
+            norm = ModelKinds.NORMALIZE_TYPE[norm] ?: norm
+            val value = ref["value"] as? String ?: continue
+            val ident = SIMPLE_EXPR_RE.matchEntire(value)?.groupValues?.get(1) ?: continue
+            val candidate = javaConstants[ident] ?: continue
+            val hit = modelIndex[norm to candidate] ?: continue
+            ref["resolvedValue"] = candidate
+            ref["target"] = hit
+            ref["targetType"] = "model"
+        }
+
         // Must land in result BEFORE the graph step — it reads unresolvedRefs.
         result["resolvedRefs"] = resolved
         result["unresolvedRefs"] = unresolved

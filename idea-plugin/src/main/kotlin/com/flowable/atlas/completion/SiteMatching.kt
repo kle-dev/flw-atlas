@@ -1,9 +1,12 @@
 package com.flowable.atlas.completion
 
 import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiExpression
 import com.intellij.psi.PsiExpressionList
 import com.intellij.psi.PsiLiteralExpression
 import com.intellij.psi.PsiMethodCallExpression
+import com.intellij.psi.PsiReferenceExpression
+import com.intellij.psi.PsiVariable
 import com.intellij.psi.util.InheritanceUtil
 
 /**
@@ -29,10 +32,36 @@ object SiteMatching {
      */
     fun keySiteForLiteral(literal: PsiLiteralExpression): KeySite? {
         if (literal.value !is String) return null
-        val argList = literal.parent as? PsiExpressionList ?: return null
+        return keySiteForArgument(literal)?.first
+    }
+
+    /**
+     * If [expr] — a String literal or a constant reference like `ModelConstants.SHOPPING_LIST` —
+     * is an argument at a Flowable [KeySite], returns the site plus the compile-time key value.
+     * This is what makes validation/navigation work on the generated model-constants pattern,
+     * not only on inline literals.
+     */
+    fun keySiteForArgument(expr: PsiExpression): Pair<KeySite, String>? {
+        val argList = expr.parent as? PsiExpressionList ?: return null
         val call = argList.parent as? PsiMethodCallExpression ?: return null
-        val argIndex = argList.expressions.indexOf(literal)
-        return siteAt(call, argIndex) as? KeySite
+        val argIndex = argList.expressions.indexOf(expr)
+        val site = siteAt(call, argIndex) as? KeySite ?: return null
+        val value = constantValueOf(expr) ?: return null
+        return site to value
+    }
+
+    /** The compile-time String value of [expr]: a literal, or a resolved constant reference. */
+    fun constantValueOf(expr: PsiExpression): String? {
+        when (expr) {
+            is PsiLiteralExpression -> return expr.value as? String
+            is PsiReferenceExpression -> {
+                val resolved = expr.resolve() as? PsiVariable ?: return null
+                (resolved.computeConstantValue() as? String)?.let { return it }
+                val init = resolved.initializer
+                if (init is PsiLiteralExpression) return init.value as? String
+            }
+        }
+        return null
     }
 
     fun isReceiver(declaring: PsiClass, fqn: String): Boolean =
