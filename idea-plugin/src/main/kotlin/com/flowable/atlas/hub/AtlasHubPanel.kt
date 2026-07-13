@@ -232,9 +232,10 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         val detected = rootService.detectedOrNull()
         if (detected == null) rootService.detectAsync { refreshAlarm.cancelAndRequest() }
         val subCount = detected?.size ?: 0
+        val chosen = rootService.hasChosenProject()
         val projectText = when {
             active.isNotBlank() -> "<html>Project: <b>$active</b></html>"
-            subCount >= 2 -> "<html>⚠ $subCount Flowable projects found — choose one</html>"
+            subCount >= 2 && !chosen -> "<html>⚠ $subCount Flowable projects found — choose one</html>"
             else -> "Whole project"
         }
         val showChangeLink = subCount >= 2 || active.isNotBlank()

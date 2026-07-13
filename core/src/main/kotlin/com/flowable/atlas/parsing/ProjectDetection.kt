@@ -16,22 +16,40 @@ import java.io.File
  *
  * Granularity is the **first-level directory** under the root: a project folder is a whole unit even
  * when it is internally split into build modules (`myproject/work`, `myproject/models`, …) — those
- * submodules are grouped under `myproject`, never surfaced separately. Models that sit at the root
- * itself do not make the root "a sub-project of itself" and are ignored here (that is just the
- * ordinary whole-project case).
+ * submodules are grouped under `myproject`, never surfaced separately.
+ *
+ * Crucially, this only fires for a **container** of projects. If the root *itself* is a project — it
+ * directly holds a build file (`pom.xml`/`settings.gradle`/…) or a Flowable model — it is treated as
+ * one whole project and detection returns empty, so a single multi-module build at the IntelliJ root
+ * is never split into its modules.
  */
 object ProjectDetection {
 
     /** A detected project folder: [relPath] is the first-level directory name under the scan root. */
     data class SubProject(val relPath: String, val appCount: Int, val modelCount: Int)
 
+    /** A build file directly in a directory marks it as its own (possibly multi-module) project. */
+    private val BUILD_MARKERS: Set<String> = setOf(
+        "pom.xml", "build.gradle", "build.gradle.kts",
+        "settings.gradle", "settings.gradle.kts", "package.json",
+    )
+
     /**
-     * Project folders found under [root], sorted by name. May be empty (no models, or models only at
-     * [root]) or hold a single entry — the *caller* decides whether a choice is needed (a size of
-     * < 2 normally means "just use the whole root").
+     * Project folders found under [root], sorted by name. Empty when the root is itself a single
+     * project (root-level build file / model), when nothing Flowable is found, or when there is only
+     * one candidate — the *caller* decides whether a choice is needed (a size of < 2 normally means
+     * "just use the whole root").
      */
     fun detect(root: File): List<SubProject> {
         if (!root.isDirectory) return emptyList()
+
+        // The root is itself a project (a single, possibly multi-module, build) — don't split it.
+        val rootChildren = root.listFiles() ?: return emptyList()
+        val rootIsProject = rootChildren.any { child ->
+            child.isFile && (child.name in BUILD_MARKERS ||
+                ModelType.byExtension(child.name) != null || ModelPaths.isArchive(child.name))
+        }
+        if (rootIsProject) return emptyList()
 
         val rootPath = root.toPath()
         val agg = LinkedHashMap<String, IntArray>()   // first-level dir name -> [appCount, modelCount]
