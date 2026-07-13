@@ -150,7 +150,7 @@ class FlowableFeaturesTest : BasePlatformTestCase() {
         val ref = myFixture.getReferenceAtCaretPosition()
         assertNotNull("expected a Flowable key reference", ref)
         val target = ref!!.resolve()
-        assertTrue("reference must resolve to the model file", target is PsiFile && (target as PsiFile).name == "DEMO-C001.cmmn")
+        assertTrue("reference must resolve to the model file", target is PsiFile && target.name == "DEMO-C001.cmmn")
     }
 
     private fun addDatabaseService() {
