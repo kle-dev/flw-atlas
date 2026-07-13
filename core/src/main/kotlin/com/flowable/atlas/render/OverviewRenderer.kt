@@ -414,6 +414,28 @@ object OverviewRenderer {
             L.add("_None — every reference resolved within the project._\n")
         }
 
+        // Uncertain links — suspect (loose/cross-type) resolutions and dynamic (expression-valued)
+        // references; both are rendered dashed in the explorer and deserve a review pass.
+        val suspectRefs = asList(result["resolvedRefs"]).map { asMap(it) }.filter { it["suspect"] == true }
+        if (suspectRefs.isNotEmpty()) {
+            L.add("### Suspect links — resolved via a loose or cross-type match (verify)")
+            for (r in suspectRefs) {
+                val fb = r["fallbackType"]?.let { " — actually a `${pyStr(it)}` model" } ?: ""
+                L.add("- `${pyStr(r["from"])}` —${pyStr(r["rel"])}→ ${pyStr(r["kind"])} `${pyStr(r["value"])}`$fb")
+            }
+            L.add("")
+        }
+        val dynRefs = asList(result["dynamicRefs"]).map { asMap(it) }
+        if (dynRefs.isNotEmpty()) {
+            L.add("### Dynamic references (expression-valued — resolved at runtime)")
+            for (r in dynRefs.take(30)) {
+                val res = r["resolvedValue"]?.let { " → resolves to `${pyStr(it)}` (constant)" } ?: ""
+                L.add("- `${pyStr(r["from"])}` —${pyStr(r["rel"])}→ ${pyStr(r["kind"])} `${pyStr(r["value"])}`$res")
+            }
+            if (dynRefs.size > 30) L.add("- … ${dynRefs.size - 30} more")
+            L.add("")
+        }
+
         // Access & user groups
         hdr(11, "Access & user groups (who can do what)")
         val acc = asList(result["access"]).map { asMap(it) }

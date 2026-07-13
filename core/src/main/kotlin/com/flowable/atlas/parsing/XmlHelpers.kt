@@ -30,12 +30,16 @@ object XmlHelpers {
 
     fun extEl(el: El): El? = el.findChild("extensionElements")
 
-    /** `[(rel, formKey)]` for forms referenced via Design extension elements under `el`. */
+    /** `[(rel, formKey)]` for forms referenced via Design extension elements under `el`.
+     *  Matched case-insensitively — Design has emitted both `<flowable:formkey>` and camelCase
+     *  variants, and an exact-lowercase match silently drops the reference. */
     fun designFormKeys(el: El): List<Pair<String, String>> {
         val ext = extEl(el) ?: return emptyList()
         val out = ArrayList<Pair<String, String>>()
-        for ((tag, rel) in DESIGN_FORM_TAGS) {
-            ext.childText(tag)?.let { out.add(rel to it) }
+        for (c in ext.children) {
+            val rel = DESIGN_FORM_TAGS[c.tag.lowercase()] ?: continue
+            val v = c.text?.trim()
+            if (!v.isNullOrEmpty()) out.add(rel to v)
         }
         return out
     }
@@ -85,14 +89,19 @@ object XmlHelpers {
         val out = ArrayList<Map<String, Any?>>()
         for (tag in listOf("executionListener", "taskListener", "planItemLifecycleListener")) {
             for (lst in ext.findChildren(tag)) {
-                out.add(linkedMapOf(
+                val entry = linkedMapOf<String, Any?>(
                     "kind" to tag,
                     "event" to (lst.attr("event") ?: lst.attr("targetState")),
                     "class" to lst.attr("class"),
                     "expression" to lst.attr("expression"),
                     "delegateExpression" to lst.attr("delegateExpression"),
                     "script" to lst.childText("script"),
-                ))
+                )
+                // throw-event listeners publish a signal/message/error by name/code
+                for (a in listOf("signalName", "messageName", "errorCode")) {
+                    lst.attr(a)?.ifEmpty { null }?.let { entry[a] = it }
+                }
+                out.add(entry)
             }
         }
         return out
@@ -112,6 +121,10 @@ object XmlHelpers {
                     if (b !in Constants.FLOWABLE_CONTEXT) ctx.addRef(frm, ftype, ffile, rel, "bean", b)
                 }
             }
+            // throw-event listeners publish by name/code — same shared node as event throws
+            (ls["signalName"])?.let { ctx.addRef(frm, ftype, ffile, "throws-signal", "signal", it) }
+            (ls["messageName"])?.let { ctx.addRef(frm, ftype, ffile, "throws-message", "message", it) }
+            (ls["errorCode"])?.let { ctx.addRef(frm, ftype, ffile, "throws-error", "error", it) }
             VarHarvest.collectScriptVars(ctx, ls["script"] as? String, listOf(frm))
         }
     }
@@ -123,7 +136,7 @@ object XmlHelpers {
                 val kind = c.tag.replace("EventDefinition", "")
                 val value = c.childText("timeDuration") ?: c.childText("timeCycle")
                     ?: c.childText("timeDate") ?: c.attr("messageRef") ?: c.attr("signalRef")
-                    ?: c.attr("errorRef")
+                    ?: c.attr("errorRef") ?: c.attr("escalationRef")
                 return kind to value
             }
         }

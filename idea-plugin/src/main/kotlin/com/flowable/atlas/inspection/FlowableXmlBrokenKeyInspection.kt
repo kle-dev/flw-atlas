@@ -14,6 +14,7 @@ import com.intellij.psi.PsiElementVisitor
 import com.intellij.psi.XmlElementVisitor
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.xml.XmlAttribute
+import com.intellij.psi.xml.XmlText
 
 /**
  * Flags a model-XML cross-reference whose key matches no indexed model of the expected type — e.g. a
@@ -48,6 +49,29 @@ class FlowableXmlBrokenKeyInspection : LocalInspectionTool() {
                     "'$value' is not a known $typeLabel key$hint",
                     ProblemHighlightType.WARNING,
                     *fixes,
+                )
+            }
+
+            // extension elements carrying a key as TEXT: <flowable:eventType>, <flowable:channelKey>, …
+            override fun visitXmlText(text: XmlText) {
+                val tag = text.parentTag ?: return
+                val site = FlowableXmlKeyCatalog.textSiteForTag(tag) ?: return
+                val value = text.text.trim()
+                if (!FlowableXmlKeyCatalog.isResolvableKey(value)) return
+
+                val service = text.project.service<FlowableModelIndexService>()
+                val knownKeys = LinkedHashSet<String>()
+                for (type in site.types) service.keysOfType(type).forEach { knownKeys.add(it.key) }
+                if (knownKeys.isEmpty()) return          // nothing indexed for this type — don't guess
+                if (value in knownKeys) return
+
+                val typeLabel = site.types.joinToString("/") { it.display }
+                val suggestion = Suggestions.closest(value, knownKeys)
+                val hint = suggestion?.let { " — did you mean '$it'?" } ?: ""
+                holder.registerProblem(
+                    text,
+                    "'$value' is not a known $typeLabel key$hint",
+                    ProblemHighlightType.WARNING,
                 )
             }
         }

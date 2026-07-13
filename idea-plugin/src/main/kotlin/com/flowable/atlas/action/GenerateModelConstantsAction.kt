@@ -11,7 +11,7 @@ import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vfs.VirtualFile
 
 /**
- * Tools → "Flowable: Generate Model Constants": generates a Java class holding every project
+ * Tools → Flowable Atlas → "Generate Model Constants…": generates a Java class holding every project
  * model key as a constant. After generation, the class is kept in sync automatically when models
  * are added/removed (see ModelConstantsAutoRefresher).
  */
@@ -25,7 +25,7 @@ class GenerateModelConstantsAction : AnAction() {
         val fqcn = Messages.showInputDialog(
             project,
             "Fully-qualified class name for the generated model-constants class:",
-            "Generate Flowable Model Constants",
+            "Generate Model Constants",
             null,
             default,
             null,

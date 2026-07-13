@@ -6,7 +6,9 @@ import com.flowable.atlas.model.ModelType
 import com.intellij.lang.documentation.AbstractDocumentationProvider
 import com.intellij.openapi.components.service
 import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiExpressionList
 import com.intellij.psi.PsiLiteralExpression
+import com.intellij.psi.PsiReferenceExpression
 import com.intellij.psi.util.PsiTreeUtil
 
 /**
@@ -22,11 +24,21 @@ class FlowableKeyDocumentationProvider : AbstractDocumentationProvider() {
         doc(element, originalElement)
 
     private fun doc(element: PsiElement?, originalElement: PsiElement?): String? {
-        val literal = literalOf(originalElement) ?: literalOf(element) ?: return null
-        val site = SiteMatching.keySiteForLiteral(literal) ?: return null
-        val key = literal.value as? String ?: return null
+        // literal at a key site, or a constant reference used as the key argument
+        val (site, key, anchor) = run {
+            val literal = literalOf(originalElement) ?: literalOf(element)
+            if (literal != null) {
+                val s = SiteMatching.keySiteForLiteral(literal) ?: return null
+                val k = literal.value as? String ?: return null
+                Triple(s, k, literal as PsiElement)
+            } else {
+                val ref = refOf(originalElement) ?: refOf(element) ?: return null
+                val (s, k) = SiteMatching.keySiteForArgument(ref) ?: return null
+                Triple(s, k, ref as PsiElement)
+            }
+        }
 
-        val service = literal.project.service<FlowableModelIndexService>()
+        val service = anchor.project.service<FlowableModelIndexService>()
         val entries = service.find(key).filter { it.type in site.targetTypes }
         if (entries.isEmpty()) return null
 
@@ -60,6 +72,13 @@ class FlowableKeyDocumentationProvider : AbstractDocumentationProvider() {
 
     private fun literalOf(element: PsiElement?): PsiLiteralExpression? =
         PsiTreeUtil.getParentOfType(element, PsiLiteralExpression::class.java, false)
+
+    /** The innermost reference expression sitting directly in an argument list. */
+    private fun refOf(element: PsiElement?): PsiReferenceExpression? {
+        var ref = PsiTreeUtil.getParentOfType(element, PsiReferenceExpression::class.java, false)
+        while (ref != null && ref.parent is PsiReferenceExpression) ref = ref.parent as PsiReferenceExpression
+        return ref?.takeIf { it.parent is PsiExpressionList }
+    }
 
     private fun escape(s: String): String =
         s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")

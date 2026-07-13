@@ -149,6 +149,9 @@ fun run(args: Array<String>): Int {
     val status = buildString {
         append("${stat("models")} models $MIDDLE_DOT ${stat("java")} java $MIDDLE_DOT ${stat("nodes")} nodes $MIDDLE_DOT ")
         append("${stat("edges")} links $MIDDLE_DOT $resolvedN resolved / $unresolvedN unresolved refs")
+        val suspectN = stat("suspectEdges")
+        val dynN = stat("dynamicEdges")
+        if (suspectN + dynN > 0) append(" $MIDDLE_DOT $suspectN suspect / $dynN dynamic links")
         if (cf != null) append(" $MIDDLE_DOT custom fns: ${cf["summary"]}")
         if (nDiag > 0) append(" $MIDDLE_DOT $WARN_SIGN $nDiag parse issue(s), see -v")
     }

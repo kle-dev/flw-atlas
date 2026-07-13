@@ -1,0 +1,13 @@
+<html>
+<body>
+Reports root identifiers in backend expressions that are neither a known engine root object, an
+indexed process/case variable, nor a bean referenced elsewhere in the project.
+<p>Example: <code>${ordr.total > 10}</code> is reported when only <code>order</code> is known.</p>
+<p>
+Disabled by default: variables can be created at runtime only (script tasks, APIs, listeners), so an
+unknown root is a hint, never an error. Known-good roots can be allowlisted via <b>Alt+Enter</b>
+(stored in <code>.idea/flowable-atlas.xml</code>).
+</p>
+<!-- tooltip end -->
+</body>
+</html>

@@ -47,6 +47,10 @@ object GraphBuilder {
         "caseServiceTask", "httpServiceTask", "scriptServiceTask", "mailServiceTask",
     )
 
+    /** Ref kinds correlated by NAME (not by model key): throw side and catch side of a signal/
+     *  message/error/escalation — and external-worker topics — meet in one shared node. */
+    private val NAMED_REF_KINDS = setOf("signal", "message", "error", "escalation", "topic")
+
     /** Root identifiers a `{{…}}` placeholder may carry that are never project variables. */
     private val MUSTACHE_IGNORE = setOf(
         "endpoints", "item", "index", "ctx", "root", "parent", "event", "self",
@@ -179,14 +183,19 @@ object GraphBuilder {
             val roles = jc["roles"] as Collection<String>
             val vars = jc["vars"] as? Collection<*> ?: emptyList<Any?>()
             val strings = jc["strings"] as? Collection<*> ?: emptyList<Any?>()
+            val topics = jc["topics"] as? Collection<*> ?: emptyList<Any?>()
             if (roles.any { it != "other" } || fqn in referencedJava || vars.isNotEmpty() ||
-                strings.any { it in modelKeys } || fqn in opUseConsumers
+                strings.any { it in modelKeys } || fqn in opUseConsumers || topics.isNotEmpty()
             ) javaNode(jc)
         }
 
-        // index java simple-name -> fqn for dependency (DI) edges
+        // index java simple-name -> fqn for dependency (DI) edges; names shared by several classes
+        // resolve first-wins, so edges through them are flagged `suspect`.
         val simpleToFqn = LinkedHashMap<String, String>()
-        for ((fqn, jc) in allJava) simpleToFqn.putIfAbsent(jc["primary"] as String, fqn)
+        val ambiguousSimple = HashSet<String>()
+        for ((fqn, jc) in allJava) {
+            if (simpleToFqn.putIfAbsent(jc["primary"] as String, fqn) != null) ambiguousSimple.add(jc["primary"] as String)
+        }
 
         // --- endpoint nodes ---
         for (o in bucketList("endpoints")) {
@@ -384,13 +393,17 @@ object GraphBuilder {
 
         // ------------------------------------------------------------------ edges
         val edges = ArrayList<LinkedHashMap<String, Any?>>()
-        fun addEdge(s: String?, t: String?, rel: String) {
+        fun addEdge(s: String?, t: String?, rel: String, suspect: Boolean = false, dynamic: Boolean = false) {
             if (!s.isNullOrEmpty() && !t.isNullOrEmpty() && s != t) {
-                edges.add(linkedMapOf("s" to s, "t" to t, "rel" to rel))
+                val e = linkedMapOf<String, Any?>("s" to s, "t" to t, "rel" to rel)
+                if (suspect) e["suspect"] = true
+                if (dynamic) e["dynamic"] = true
+                edges.add(e)
             }
         }
 
-        // model -> model / java
+        // model -> model / java (a `suspect` ref — incompatible cross-type fallback, ref-by-id,
+        // ambiguous simple-name match — keeps the flag on its edge so the explorer can mark it)
         for (r in resolved) {
             val s = kn(r["from"])
             val t: String? = when {
@@ -398,7 +411,7 @@ object GraphBuilder {
                 truthy(r["targetFqn"]) -> "java:${r["targetFqn"]}"
                 else -> null
             }
-            addEdge(s, t, r["rel"] as String)
+            addEdge(s, t, r["rel"] as String, suspect = r["suspect"] == true)
         }
 
         // Java methods called from models: model --calls--> method --declared-in--> class
@@ -446,13 +459,35 @@ object GraphBuilder {
         val extSeen = HashSet<String>()
         for (r in (result["unresolvedRefs"] as? List<Map<String, Any?>> ?: emptyList())) {
             val kind = r["kind"] as String
+            // named correlation nodes: signal/message/error/escalation/topic — one node per name,
+            // throwers and catchers (or workers) connect to it from both sides
+            if (kind in NAMED_REF_KINDS) {
+                val value = r["value"] as String
+                val nid = "$kind:$value"
+                if (nid !in nodes) {
+                    nodes[nid] = linkedMapOf(
+                        "id" to nid, "type" to kind, "label" to value, "key" to value,
+                        "file" to null, "data" to linkedMapOf<String, Any?>(),
+                    )
+                }
+                addEdge(kn(r["from"]), nid, r["rel"] as String, suspect = r["suspect"] == true)
+                continue
+            }
             val data: LinkedHashMap<String, Any?> = when {
                 kind == "bean" || kind == "class" -> {
                     val platform = kind == "bean" && r["value"] in FLOWABLE_PLATFORM_BEANS
                     linkedMapOf("platform" to platform, "kind" to kind)
                 }
                 r["targetType"] == "model" -> linkedMapOf("kind" to kind, "missingModel" to true)
-                else -> continue
+                else -> {
+                    // No node type exists for this ref kind — surface it instead of silently
+                    // dropping (a newly added non-model ref kind would otherwise just vanish).
+                    (result["diagnostics"] as? MutableList<Any?>)?.add(linkedMapOf(
+                        "kind" to "unresolved-ref", "path" to (r["fromFile"] ?: ""),
+                        "message" to "unhandled unresolved ref kind '$kind' (${r["rel"]} -> ${r["value"]})",
+                    ))
+                    continue
+                }
             }
             val value = r["value"] as String
             val nid = "external:$value"
@@ -462,7 +497,32 @@ object GraphBuilder {
                     "id" to nid, "type" to "external", "label" to value, "key" to value, "file" to null, "data" to data,
                 )
             }
-            addEdge(kn(r["from"]), nid, r["rel"] as String)
+            addEdge(kn(r["from"]), nid, r["rel"] as String, suspect = r["suspect"] == true)
+        }
+
+        // dynamic (expression-valued) references — best-effort resolved by the reference resolver
+        // (constant-backed `${ident}` → model), else an expression placeholder node. Both variants
+        // carry `dynamic=true` so the explorer renders them dashed and they stay filterable.
+        for (r in (result["dynamicRefs"] as? List<Map<String, Any?>> ?: emptyList())) {
+            val s = kn(r["from"]) ?: continue
+            val rel = r["rel"] as? String ?: continue
+            val kind = r["kind"] as? String ?: continue
+            val resolvedNode = (r["resolvedValue"] as? String)?.let { kn(it) }
+            if (resolvedNode != null) {
+                addEdge(s, resolvedNode, rel, dynamic = true)
+                continue
+            }
+            if (!(kind.startsWith("model:") || kind in ReferenceResolver.MODEL_KIND_NAMES)) continue
+            val value = r["value"] as? String ?: continue
+            val nid = "external:$value"
+            if (nid !in extSeen && nid !in nodes) {
+                extSeen.add(nid)
+                nodes[nid] = linkedMapOf(
+                    "id" to nid, "type" to "external", "label" to value, "key" to value, "file" to null,
+                    "data" to linkedMapOf<String, Any?>("dynamic" to true, "kind" to kind),
+                )
+            }
+            addEdge(s, nid, rel, dynamic = true)
         }
 
         // rest calls -> endpoint (matched) or external url
@@ -470,7 +530,9 @@ object GraphBuilder {
             val s = kn(rc["source"])
             val matchEps = rc["_matchEps"] as? List<Map<String, Any?>>
             if (!matchEps.isNullOrEmpty()) {
-                for (ep in matchEps) addEdge(s, "endpoint:${ep["http"]} ${ep["path"]}", "rest-call")
+                for (ep in matchEps) {
+                    addEdge(s, "endpoint:${ep["http"]} ${ep["path"]}", "rest-call", suspect = ep["loose"] == true)
+                }
                 continue
             }
             val url = rc["url"] as String
@@ -517,14 +579,31 @@ object GraphBuilder {
             if (snode !in nodes) continue
             for (dep in (jc["deps"] as? Collection<String> ?: emptyList())) {
                 val dfqn = simpleToFqn[dep]
-                if (dfqn != null && dfqn != fqn && "java:$dfqn" in nodes) addEdge(snode, "java:$dfqn", "uses")
+                if (dfqn != null && dfqn != fqn && "java:$dfqn" in nodes) {
+                    addEdge(snode, "java:$dfqn", "uses", suspect = dep in ambiguousSimple)
+                }
             }
+            // a literal passed to a known key-taking API is a confident reference; any other
+            // literal that merely equals a model key ("status", "customer", …) only a suspect one
+            val keyed = jc["keyedStrings"] as? Collection<*> ?: emptyList<Any?>()
             for (s in (jc["strings"] as? Collection<*> ?: emptyList<Any?>())) {
                 if (s !in modelKeys) continue
                 val t = kn(s)
                 if (t != null && t.substringBefore(":") !in setOf("liquibase", "java", "endpoint", "group")) {
-                    addEdge(snode, t, "references")
+                    addEdge(snode, t, "references", suspect = s !in keyed)
                 }
+            }
+            // external-worker subscriptions: the class polls a topic — meets the BPMN/CMMN
+            // `external-topic` refs in the shared topic node
+            for (t in (jc["topics"] as? Collection<*> ?: emptyList<Any?>())) {
+                val tid = "topic:$t"
+                if (tid !in nodes) {
+                    nodes[tid] = linkedMapOf(
+                        "id" to tid, "type" to "topic", "label" to t, "key" to t,
+                        "file" to null, "data" to linkedMapOf<String, Any?>(),
+                    )
+                }
+                addEdge(snode, tid, "worker-topic")
             }
         }
 
@@ -624,7 +703,9 @@ object GraphBuilder {
             val nonModel = setOf(
                 "java", "endpoint", "group", "external", "bot", "liquibase", "app",
                 "expression", "binding", "variable", "string", "method",
-            )
+                // named correlation nodes share their key with real models (a signal named after
+                // the process it starts) — app membership must never attach to them
+            ) + NAMED_REF_KINDS
             for (n in nodes.values.toList()) {
                 if (n["type"] in nonModel) continue
                 val key = n["key"]
@@ -640,13 +721,20 @@ object GraphBuilder {
         // drop _matchEps from restCalls before serialising (internal only)
         for (rc in ctx.restCalls) rc.remove("_matchEps")
 
-        // dedupe edges
-        val seenE = HashSet<List<Any?>>()
-        val uniq = ArrayList<Map<String, Any?>>()
+        // dedupe edges — when the same (s,t,rel) exists both flagged and unflagged, the strongest
+        // signal wins: a clean occurrence clears `suspect`/`dynamic` from the kept edge.
+        val edgeByKey = LinkedHashMap<List<Any?>, LinkedHashMap<String, Any?>>()
         for (e in edges) {
             val k = listOf(e["s"], e["t"], e["rel"])
-            if (seenE.add(k)) uniq.add(e)
+            val prev = edgeByKey[k]
+            if (prev == null) {
+                edgeByKey[k] = e
+            } else {
+                if (prev["suspect"] == true && e["suspect"] != true) prev.remove("suspect")
+                if (prev["dynamic"] == true && e["dynamic"] != true) prev.remove("dynamic")
+            }
         }
+        val uniq = ArrayList<Map<String, Any?>>(edgeByKey.values)
 
         val nodeList = ArrayList<Any?>(nodes.values)
         result["graph"] = linkedMapOf("nodes" to nodeList, "edges" to uniq)
@@ -658,6 +746,8 @@ object GraphBuilder {
             "groups" to ctx.groups.size,
             "nodes" to nodeList.size,
             "edges" to uniq.size,
+            "suspectEdges" to uniq.count { it["suspect"] == true },
+            "dynamicEdges" to uniq.count { it["dynamic"] == true },
         )
     }
 

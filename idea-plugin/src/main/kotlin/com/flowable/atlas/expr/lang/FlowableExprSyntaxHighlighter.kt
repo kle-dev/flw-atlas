@@ -4,15 +4,12 @@ import com.intellij.lexer.Lexer
 import com.intellij.openapi.editor.DefaultLanguageHighlighterColors
 import com.intellij.openapi.editor.HighlighterColors
 import com.intellij.openapi.editor.colors.TextAttributesKey
-import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.openapi.fileTypes.SyntaxHighlighter
 import com.intellij.openapi.fileTypes.SyntaxHighlighterBase
 import com.intellij.openapi.fileTypes.SyntaxHighlighterFactory
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.tree.IElementType
-import java.awt.Color
-import java.awt.Font
 
 /**
  * Colors expression tokens — parentheses, brackets, strings, numbers, operators — in the playground
@@ -38,15 +35,12 @@ class FlowableExprSyntaxHighlighter : SyntaxHighlighterBase() {
         private fun key(name: String, fallback: TextAttributesKey) =
             TextAttributesKey.createTextAttributesKey(name, fallback)
 
-        // Five distinguishable hues that read on both light and dark backgrounds; cycled by paren
-        // depth. Custom colours (with an in-code default) — customizable under Settings → Editor →
-        // Color Scheme → Flowable expression.
-        private val PAREN_COLORS = intArrayOf(0x3592C4, 0xE8A33D, 0x59A869, 0xC670C6, 0xD1655A)
-        private val PAREN_LEVEL_KEYS: Array<TextAttributesKey> = Array(PAREN_COLORS.size) { i ->
-            TextAttributesKey.createTextAttributesKey(
-                "FLW_EXPR_PAREN_L$i",
-                TextAttributes(Color(PAREN_COLORS[i]), null, null, null, Font.PLAIN),
-            )
+        // Five distinguishable hues cycled by paren depth. The per-theme default colours live in
+        // colorSchemes/FlowableExprDefault.xml (light) and FlowableExprDarcula.xml (dark), wired via
+        // <additionalTextAttributes> in plugin.xml; customizable under Settings → Editor →
+        // Color Scheme → Flowable Expression (FlowableExprColorSettingsPage).
+        val PAREN_LEVEL_KEYS: Array<TextAttributesKey> = Array(FlowableExprTokenTypes.PAREN_LEVELS) { i ->
+            TextAttributesKey.createTextAttributesKey("FLW_EXPR_PAREN_L$i")
         }
 
         val BRACKETS = key("FLW_EXPR_BRACKETS", DefaultLanguageHighlighterColors.BRACKETS)

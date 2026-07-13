@@ -44,6 +44,10 @@ class RenderersSmokeTest {
         assertFalse("leftover __ATLAS_DATA__ marker", html.contains("__ATLAS_DATA__"))
         assertFalse("leftover CSS marker", html.contains("/*__ATLAS_CSS__*/"))
         assertFalse("leftover JS marker", html.contains("/*__ATLAS_JS__*/"))
+        // The CSS token scale survives composition into the single-file HTML.
+        assertTrue("expected the layout-scale tokens from explorer.css", html.contains("--space-1:"))
+        // The IDE theme-bridge hook the IntelliJ JCEF viewer pushes theme switches through.
+        assertTrue("expected the __atlasSetIdeTheme hook from explorer.js", html.contains("__atlasSetIdeTheme"))
         // The graph payload is inlined — a known model key must appear.
         assertTrue("expected the substituted graph data", html.contains("orderProcess"))
     }
