@@ -15,7 +15,7 @@ The installable plugin ZIP, committed so you can install it after a `git pull`
 ## This build
 
 - Version: **0.8.1**
-- SHA-256: `4e3274ae8070e928d64587506cff27fe29a99cb54befacd6a1ef9be5b62a91c4`
+- SHA-256: `a14fee9fd6292993471127af6a512a9a21bee927c6862d3be7f58d064335afe1`
 
 Bundles the Atlas generator (the pure-Kotlin `:core` engine, run in-process). **Generate Atlas
 Explorer** (Tools → Flowable Atlas) needs only a **Java 21+** runtime — no external interpreter.
