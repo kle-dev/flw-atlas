@@ -6,8 +6,10 @@ import java.io.File
 import java.nio.file.Files
 
 /**
- * Heuristic sub-project detection for the multi-project (monorepo) case. Fixtures are built in a temp
- * directory because detection is purely name/extension based — file contents never matter.
+ * Heuristic project-folder detection for the multi-project (monorepo) case. Granularity is the
+ * first-level folder under the root, so build submodules inside one project are grouped, not split.
+ * Fixtures are built in a temp directory because detection is purely name/extension based — file
+ * contents never matter.
  */
 class ProjectDetectionTest {
 
@@ -24,52 +26,46 @@ class ProjectDetectionTest {
     private fun paths(root: File): List<String> = ProjectDetection.detect(root).map { it.relPath }
 
     @Test
-    fun `two build modules with models are separate sub-projects`() {
+    fun `each top-level project folder is a separate sub-project`() {
         val root = tempRoot(
-            "service-a/pom.xml",
-            "service-a/src/main/resources/app/service-a.app",
-            "service-a/src/main/resources/processes/order.bpmn20.xml",
-            "service-b/build.gradle.kts",
-            "service-b/models/review.cmmn.xml",
+            "order-app/src/main/resources/processes/order.bpmn20.xml",
+            "billing-app/models/review.cmmn.xml",
         )
-        assertEquals(listOf("service-a", "service-b"), paths(root))
+        assertEquals(listOf("billing-app", "order-app"), paths(root))
     }
 
     @Test
-    fun `a build module without any model is not a sub-project`() {
+    fun `a project folder split into build submodules is ONE sub-project, not its submodules`() {
         val root = tempRoot(
-            "service-a/pom.xml",
-            "service-a/order.bpmn20.xml",
-            "shared-lib/pom.xml",           // library module, no Flowable models
-            "shared-lib/src/main/java/Foo.java",
+            "myproject/work/pom.xml",
+            "myproject/work/src/main/resources/app/myapp.app",
+            "myproject/work/src/main/resources/processes/order.bpmn20.xml",
+            "myproject/models/pom.xml",
+            "myproject/models/review.cmmn.xml",
         )
-        assertEquals(listOf("service-a"), paths(root))
+        assertEquals(listOf("myproject"), paths(root))
     }
 
     @Test
-    fun `models nested in a module resolve to the module root, not the leaf folder`() {
+    fun `a top-level folder without Flowable models is not a sub-project`() {
         val root = tempRoot(
-            "svc/build.gradle",
+            "order-app/order.bpmn20.xml",
+            "docs/readme.md",                         // no models
+            "shared-lib/src/main/java/Foo.java",      // Java only, no models
+        )
+        assertEquals(listOf("order-app"), paths(root))
+    }
+
+    @Test
+    fun `models nested arbitrarily deep still resolve to their top-level project folder`() {
+        val root = tempRoot(
             "svc/a/b/c/deep.dmn.xml",
         )
         assertEquals(listOf("svc"), paths(root))
     }
 
     @Test
-    fun `aggregator pom with no direct models is excluded, its children are kept`() {
-        val root = tempRoot(
-            "pom.xml",                       // repo-root aggregator, no models of its own
-            "services/pom.xml",              // intermediate aggregator, no models of its own
-            "services/orders/pom.xml",
-            "services/orders/order.bpmn20.xml",
-            "services/billing/pom.xml",
-            "services/billing/bill.bpmn20.xml",
-        )
-        assertEquals(listOf("services/billing", "services/orders"), paths(root))
-    }
-
-    @Test
-    fun `design-export monorepo without build files uses first-level folders`() {
+    fun `design-export monorepo uses the top-level folders`() {
         val root = tempRoot(
             "app-one/app-one.app",
             "app-one/bpmn-models/p.bpmn20.xml",
@@ -91,9 +87,8 @@ class ProjectDetectionTest {
     @Test
     fun `build-output directories are pruned from detection`() {
         val root = tempRoot(
-            "svc/pom.xml",
             "svc/src/main/resources/order.bpmn20.xml",
-            "svc/target/classes/order.bpmn20.xml",   // build output — must be ignored
+            "svc/target/classes/order.bpmn20.xml",    // build output — must be ignored
         )
         val detected = ProjectDetection.detect(root)
         assertEquals(listOf("svc"), detected.map { it.relPath })
@@ -101,15 +96,15 @@ class ProjectDetectionTest {
     }
 
     @Test
-    fun `counts distinguish apps from other models`() {
+    fun `counts aggregate a whole project folder and distinguish apps`() {
         val root = tempRoot(
-            "svc/pom.xml",
-            "svc/svc.app",
-            "svc/a.bpmn20.xml",
-            "svc/b.cmmn.xml",
+            "svc/work/svc.app",
+            "svc/work/a.bpmn20.xml",
+            "svc/models/b.cmmn.xml",
         )
         val sp = ProjectDetection.detect(root).single()
+        assertEquals("svc", sp.relPath)
         assertEquals(1, sp.appCount)
-        assertEquals(3, sp.modelCount)   // app + bpmn + cmmn
+        assertEquals(3, sp.modelCount)   // app + bpmn + cmmn, across both submodules
     }
 }
