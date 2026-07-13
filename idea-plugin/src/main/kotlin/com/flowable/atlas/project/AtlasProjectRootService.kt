@@ -52,14 +52,24 @@ class AtlasProjectRootService(private val project: Project) {
         }.getOrDefault(base)
     }
 
+    /**
+     * True once the user has explicitly picked a project — including deliberately choosing the whole
+     * project. Lets the UI stop nagging "choose one" after a choice, since `""` alone can't tell an
+     * explicit "whole project" apart from the never-decided default.
+     */
+    fun hasChosenProject(): Boolean =
+        PropertiesComponent.getInstance(project).getBoolean(PROJECT_CHOSEN_PROPERTY, false)
+
     /** Persist the selection (workspace-local), invalidate the index and notify listeners. */
     fun setActiveSubProject(relPath: String?) {
         val key = relPath?.trim()?.trim('/').orEmpty()
-        if (key == activeSubProject()) return
-        PropertiesComponent.getInstance(project)
-            .setValue(FlowableAtlasProjectSettings.ACTIVE_SUBPROJECT_PROPERTY, key, "")
+        val changed = key != activeSubProject()
+        val pc = PropertiesComponent.getInstance(project)
+        pc.setValue(FlowableAtlasProjectSettings.ACTIVE_SUBPROJECT_PROPERTY, key, "")
+        pc.setValue(PROJECT_CHOSEN_PROPERTY, true, false)   // even choosing "whole project" counts
         if (project.isDisposed) return
-        project.service<FlowableModelIndexService>().invalidate()
+        if (changed) project.service<FlowableModelIndexService>().invalidate()
+        // Always notify, even when the effective scope is unchanged, so the Hub drops the prompt.
         project.messageBus.syncPublisher(AtlasEvents.TOPIC).activeSubProjectChanged()
     }
 
@@ -78,6 +88,9 @@ class AtlasProjectRootService(private val project: Project) {
     }
 
     companion object {
+        /** Whether the user has made an explicit project choice, in [PropertiesComponent] (workspace-local). */
+        const val PROJECT_CHOSEN_PROPERTY = "flowable.atlas.projectChosen"
+
         fun getInstance(project: Project): AtlasProjectRootService = project.service()
     }
 }

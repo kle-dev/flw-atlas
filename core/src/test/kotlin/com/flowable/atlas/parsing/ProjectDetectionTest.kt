@@ -76,6 +76,27 @@ class ProjectDetectionTest {
     }
 
     @Test
+    fun `a single Gradle multi-module project (root settings file) is not split into its modules`() {
+        val root = tempRoot(
+            "settings.gradle.kts",                    // root Gradle build → the root IS one project
+            "module-a/a.bpmn20.xml",
+            "module-b/b.cmmn.xml",
+            "module-c/c.form",
+        )
+        assertEquals(emptyList<String>(), paths(root))
+    }
+
+    @Test
+    fun `a single Maven multi-module project (root pom) is not split into its modules`() {
+        val root = tempRoot(
+            "pom.xml",                                // root aggregator → the root IS one project
+            "work/order.bpmn20.xml",
+            "models/review.cmmn.xml",
+        )
+        assertEquals(emptyList<String>(), paths(root))
+    }
+
+    @Test
     fun `models at the root itself are the whole-project case, not a sub-project`() {
         val root = tempRoot(
             "order.bpmn20.xml",
