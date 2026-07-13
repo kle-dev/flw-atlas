@@ -77,26 +77,26 @@ class FlowableAtlasProjectSettingsTest {
     @Test
     fun `sub-project scopes are independent of the default scope`() {
         val s = FlowableAtlasProjectSettings(null)
-        s.scope("").designAppKey = "root-app"       // "" == the flat default scope
-        s.scope("svc-a").designAppKey = "a-app"
-        s.scope("svc-b").designAppKey = "b-app"
-        assertEquals("root-app", s.scope("").designAppKey)
-        assertEquals("a-app", s.scope("svc-a").designAppKey)
-        assertEquals("b-app", s.scope("svc-b").designAppKey)
+        s.scope("").designAppKeys = mutableListOf("root-app")   // "" == the flat default scope
+        s.scope("svc-a").designAppKeys = mutableListOf("a-app")
+        s.scope("svc-b").designAppKeys = mutableListOf("b-app")
+        assertEquals(listOf("root-app"), s.scope("").designAppKeys)
+        assertEquals(listOf("a-app"), s.scope("svc-a").designAppKeys)
+        assertEquals(listOf("b-app"), s.scope("svc-b").designAppKeys)
     }
 
     @Test
     fun `public accessors target the default scope when there is no project`() {
         val s = FlowableAtlasProjectSettings(null)
-        s.designAppKey = "root"
-        assertEquals("root", s.scope("").designAppKey)   // written through to the flat fields
-        assertEquals("root", s.designAppKey)
+        s.designAppKeys = mutableListOf("root")
+        assertEquals(listOf("root"), s.scope("").designAppKeys)   // written through to the flat fields
+        assertEquals(listOf("root"), s.designAppKeys)
     }
 
     @Test
     fun `getState keeps configured sub-projects sorted and prunes untouched ones`() {
         val s = FlowableAtlasProjectSettings(null)
-        s.scope("z-svc").designAppKey = "z"
+        s.scope("z-svc").designAppKeys = mutableListOf("z")
         s.scope("a-svc")                             // touched but left at defaults → pruned
         s.scope("m-svc").atlasOutputDir = "out"
         val out = s.state                            // getState()
@@ -108,14 +108,31 @@ class FlowableAtlasProjectSettingsTest {
         val s = FlowableAtlasProjectSettings(null)
         val state = FlowableAtlasProjectSettings.State()
         state.subProjects = mutableListOf(
-            FlowableAtlasProjectSettings.SubProjectState("").also { it.designAppKey = "stray" },
-            FlowableAtlasProjectSettings.SubProjectState("svc").also { it.designAppKey = "first" },
-            FlowableAtlasProjectSettings.SubProjectState("svc").also { it.designAppKey = "second" },
+            FlowableAtlasProjectSettings.SubProjectState("").also { it.designAppKeys = mutableListOf("stray") },
+            FlowableAtlasProjectSettings.SubProjectState("svc").also { it.designAppKeys = mutableListOf("first") },
+            FlowableAtlasProjectSettings.SubProjectState("svc").also { it.designAppKeys = mutableListOf("second") },
         )
         s.loadState(state)
         val subs = s.getState().subProjects
         assertEquals(listOf("svc"), subs.map { it.path })
-        assertEquals("second", subs.single().designAppKey)
+        assertEquals(listOf("second"), subs.single().designAppKeys)
+    }
+
+    @Test
+    fun `a legacy single-app file migrates designAppKey into designAppKeys and clears the legacy field`() {
+        val s = FlowableAtlasProjectSettings(null)
+        val flat = FlowableAtlasProjectSettings.State()
+        flat.designAppKey = "legacy"                 // pre-multi-app single-app field
+        flat.subProjects = mutableListOf(
+            FlowableAtlasProjectSettings.SubProjectState("svc").also { it.designAppKey = "sub-legacy" },
+        )
+        s.loadState(flat)
+        assertEquals(listOf("legacy"), s.designAppKeys)
+        assertEquals(listOf("sub-legacy"), s.scope("svc").designAppKeys)
+        // The legacy field is cleared so it never re-persists (SkipDefaultsSerializationFilter omits "").
+        val out = s.getState()
+        assertEquals("", out.designAppKey)
+        assertEquals("", out.subProjects.single { it.path == "svc" }.designAppKey)
     }
 
     @Test
@@ -125,7 +142,7 @@ class FlowableAtlasProjectSettingsTest {
         flat.designAppKey = "legacy"
         flat.allowedNamespaces.add("myns")
         s.loadState(flat)                            // no subProjects element, as a 0.8.0 file
-        assertEquals("legacy", s.designAppKey)
+        assertEquals(listOf("legacy"), s.designAppKeys)
         assertTrue(s.isAllowlisted(problem(ExprProblemKind.UNKNOWN_NAMESPACE, "myns")))
         assertTrue(s.getState().subProjects.isEmpty())
     }

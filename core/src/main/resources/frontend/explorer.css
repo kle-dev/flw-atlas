@@ -14,6 +14,7 @@
     --space-05:2px; --space-1:4px; --space-15:6px; --space-2:8px; --space-25:10px;
     --space-3:12px; --space-35:14px; --space-4:16px; --space-5:20px; --space-6:24px;
     --space-7:28px; --space-8:32px;
+    --sidebar-w:240px;          /* live width of the expanded sidebar (JS-set via the drag handle) */
     --radius-xs:2px; --radius-sm:4px; --radius-md:6px; --radius-lg:8px;
     --radius-xl:12px; --radius-2xl:16px; --radius-full:999px;
     --text-2xs:10px; --text-xs:11px; --text-sm:12px; --text-md:13px;
@@ -121,7 +122,7 @@
   /* ------------------------------------------------------------------ */
   /* Shell: full-height sidebar + (topbar / content) column              */
   /* ------------------------------------------------------------------ */
-  .shell{display:grid;grid-template-columns:240px 1fr;grid-template-rows:100%;height:100vh}
+  .shell{position:relative;display:grid;grid-template-columns:var(--sidebar-w) 1fr;grid-template-rows:100%;height:100vh}
   .sidebar{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--panel2);border-right:1px solid var(--line)}
   .side-logo{display:flex;align-items:center;height:64px;flex:none;padding:0 var(--space-4);
     border-bottom:1px solid var(--line);color:var(--ink)}
@@ -147,6 +148,19 @@
     color:var(--warn-text);cursor:pointer;border-radius:var(--radius-full);padding:var(--space-05) var(--space-2);font-family:var(--mono);font-size:var(--text-2xs);flex:none}
   .side-warn:hover{border-color:var(--warn-text)}
   .main{display:flex;flex-direction:column;min-width:0;min-height:0}
+
+  /* Drag handle straddling the sidebar/main boundary (IntelliJ-style resize).   */
+  /* Absolutely positioned inside .shell so it stays out of the grid track       */
+  /* sizing and tracks the live --sidebar-w. Wired in explorer.js.               */
+  .side-resize{position:absolute;top:0;left:var(--sidebar-w);transform:translateX(-3px);
+    width:6px;height:100%;z-index:20;cursor:col-resize;touch-action:none}
+  .side-resize::before{content:"";position:absolute;top:0;bottom:0;left:3px;width:2px;
+    background:transparent;transition:background .12s ease}
+  .side-resize:hover::before,.side-resize:focus-visible::before,
+  .shell.dragging .side-resize::before{background:var(--accent)}
+  .side-resize:focus-visible{outline:none}
+  .shell.rail .side-resize{left:64px}
+  .shell.dragging{cursor:col-resize;user-select:none}
 
   /* topbar: breadcrumbs / ⌘K trigger / theme */
   .topbar{flex:none;display:flex;align-items:center;gap:var(--space-35);height:64px;padding:0 var(--space-4);
@@ -379,22 +393,41 @@
   .parmgrid .pt{color:var(--ink-faint);flex:none}
 
   /* ------------------------------------------------------------------ */
-  /* Responsive: ≤1100px the sidebar collapses to a 64px icon rail;      */
-  /* ≤800px everything stacks vertically and the page scrolls.           */
+  /* Sidebar collapse ("rail"): state-driven via .shell.rail, toggled by  */
+  /* the drag handle / auto-default in explorer.js (previously a hard     */
+  /* ≤1100px media query). ≥801px only — the ≤800px block below owns the  */
+  /* stacked layout and always shows labels. Collapsed, the sidebar is a  */
+  /* 64px icon rail overlaid on the content; hovering/focusing it flies   */
+  /* the full sidebar out over the content without reflowing it.          */
+  /* ------------------------------------------------------------------ */
+  @media (min-width:801px){
+    .shell.rail{grid-template-columns:64px 1fr}
+    .shell.rail .sidebar{position:absolute;top:0;bottom:0;left:0;width:64px;z-index:30;
+      overflow:hidden;transition:width .12s ease}
+    .shell.rail .sidebar:hover,.shell.rail .sidebar:focus-within{width:var(--sidebar-w);
+      box-shadow:6px 0 24px rgba(0,0,0,.16)}
+    .shell.dragging .sidebar{transition:none}
+    /* collapsed look — applied only while not expanded; the hovered/focused */
+    /* state falls back to the default full styling automatically.           */
+    .shell.rail .sidebar:not(:hover):not(:focus-within) .side-logo{justify-content:center;padding:0}
+    .shell.rail .sidebar:not(:hover):not(:focus-within) .side-logo .logo-full{display:none}
+    .shell.rail .sidebar:not(:hover):not(:focus-within) .side-logo .logo-mark{display:block}
+    .shell.rail .sidebar:not(:hover):not(:focus-within) .side-nav{padding:var(--space-25) var(--space-15)}
+    .shell.rail .sidebar:not(:hover):not(:focus-within) .side-group{border-top:1px solid var(--line);margin:var(--space-25) var(--space-25) var(--space-05);padding:0;height:0;overflow:hidden;color:transparent}
+    .shell.rail .sidebar:not(:hover):not(:focus-within) .side-item{justify-content:center;padding:0}
+    .shell.rail .sidebar:not(:hover):not(:focus-within) .side-item .lbl,
+    .shell.rail .sidebar:not(:hover):not(:focus-within) .side-item .n{display:none}
+    .shell.rail .sidebar:not(:hover):not(:focus-within) .side-item.on::before{left:1px}
+    .shell.rail .sidebar:not(:hover):not(:focus-within) .side-foot{flex-direction:column;gap:var(--space-15);padding:var(--space-2) var(--space-15)}
+    .shell.rail .sidebar:not(:hover):not(:focus-within) .side-foot .proj{display:none}
+    .shell.rail .sidebar:not(:hover):not(:focus-within) .side-warn .wtxt{display:none}
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Responsive: ≤1100px trims the topbar/content chrome; ≤800px stacks   */
+  /* everything vertically and the page scrolls.                          */
   /* ------------------------------------------------------------------ */
   @media (max-width:1100px){
-    .shell{grid-template-columns:64px 1fr}
-    .side-logo{justify-content:center;padding:0}
-    .side-logo .logo-full{display:none}
-    .side-logo .logo-mark{display:block}
-    .side-nav{padding:var(--space-25) var(--space-15)}
-    .side-group{border-top:1px solid var(--line);margin:var(--space-25) var(--space-25) var(--space-05);padding:0;height:0;overflow:hidden;color:transparent}
-    .side-item{justify-content:center;padding:0}
-    .side-item .lbl,.side-item .n{display:none}
-    .side-item.on::before{left:1px}
-    .side-foot{flex-direction:column;gap:var(--space-15);padding:var(--space-2) var(--space-15)}
-    .side-foot .proj{display:none}
-    .side-warn .wtxt{display:none}
     .view-browse{grid-template-columns:280px 1fr}
     .searchbtn{width:auto}
     .searchbtn .ph{display:none}
@@ -402,6 +435,7 @@
   @media (max-width:800px){
     html,body{height:auto}
     .shell{display:flex;flex-direction:column;height:auto}
+    .side-resize{display:none}
     .sidebar{flex-direction:row;flex-wrap:wrap;align-items:center;height:auto;
       border-right:none;border-bottom:1px solid var(--line);padding:var(--space-1) var(--space-2)}
     .side-logo{height:48px;border-bottom:none;padding:0 var(--space-2)}

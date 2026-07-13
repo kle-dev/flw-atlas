@@ -2,11 +2,13 @@ package com.flowable.atlas.design
 
 import com.flowable.atlas.model.MiniJson
 import com.intellij.openapi.diagnostic.logger
+import java.io.ByteArrayOutputStream
 import java.net.URI
 import java.net.URLEncoder
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.util.Base64
@@ -41,6 +43,13 @@ object DesignClient {
     data class Workspace(val key: String, val name: String)
 
     data class App(val key: String, val name: String, val version: Int?, val lastUpdated: String?)
+
+    /**
+     * An app export: the ZIP [bytes] plus the server-suggested download [fileName] (the
+     * `Content-Disposition` filename, or null when the server sent none). A plain class on purpose —
+     * a `data class` holding a [ByteArray] would get reference-based equals/hashCode.
+     */
+    class Export(val bytes: ByteArray, val fileName: String?)
 
     /** One page of a Design `DataResponse` (`data` plus the server's `total` count). */
     data class Page<T>(val data: List<T>, val total: Int)
@@ -105,8 +114,12 @@ object DesignClient {
     fun listApps(conn: Connection, workspaceKey: String): Result<List<App>> =
         fetchAllPages(conn, { start, size -> appsEndpoint(conn.baseUrl, workspaceKey, start, size) }, ::parseAppPage)
 
-    /** Downloads the app's current export ZIP (what the Design UI's "Export app" produces). */
-    fun exportApp(conn: Connection, workspaceKey: String, appKey: String): Result<ByteArray> {
+    /**
+     * Downloads the app's current export ZIP (what the Design UI's "Export app" produces), together
+     * with the server-suggested filename from `Content-Disposition` so the pull can name the file the
+     * same way Design does.
+     */
+    fun exportApp(conn: Connection, workspaceKey: String, appKey: String): Result<Export> {
         if (conn.baseUrl.isBlank()) return Result.Failed("Design base URL is required")
         return try {
             val request = requestBuilder(conn, exportEndpoint(conn.baseUrl, workspaceKey, appKey), EXPORT_TIMEOUT)
@@ -121,12 +134,61 @@ object DesignClient {
                     "Server did not return a ZIP (got ${resp.headers().firstValue("Content-Type").orElse("no content type")}) — " +
                         "is the base URL a Flowable Design server, or did a proxy/SSO login page answer instead?",
                 )
-                else -> Result.Success(body)
+                else -> {
+                    val suggested = parseContentDispositionFilename(resp.headers().firstValue("Content-Disposition").orElse(null))
+                    Result.Success(Export(body, suggested))
+                }
             }
         } catch (e: Exception) {
             LOG.warn("Design app export failed", e)
             Result.Failed(failureMessage(conn.baseUrl, e))
         }
+    }
+
+    /**
+     * The download filename the server suggests via `Content-Disposition`, or null when the header is
+     * absent/blank or carries no filename. Honors RFC 6266: the extended `filename*=charset''pct-encoded`
+     * form wins over a plain `filename=` (quoted or bare). The extended value is percent-decoded
+     * manually — never via `URLDecoder`, which would turn a literal `+` into a space.
+     */
+    fun parseContentDispositionFilename(header: String?): String? {
+        if (header.isNullOrBlank()) return null
+        Regex("""filename\*\s*=\s*([^;]+)""", RegexOption.IGNORE_CASE).find(header)?.let { m ->
+            decodeExtendedValue(m.groupValues[1].trim())?.let { return it }
+        }
+        Regex("""filename\s*=\s*("([^"]*)"|[^;]+)""", RegexOption.IGNORE_CASE).find(header)?.let { m ->
+            val raw = if (m.groupValues[1].startsWith("\"")) m.groupValues[2] else m.groupValues[1].trim()
+            return raw.takeUnless { it.isBlank() }
+        }
+        return null
+    }
+
+    /** Decodes an RFC 5987 `charset'lang'pct-encoded` value, e.g. `UTF-8''r%C3%A9sum%C3%A9.zip`. */
+    private fun decodeExtendedValue(value: String): String? {
+        val firstQuote = value.indexOf('\'')
+        val secondQuote = if (firstQuote >= 0) value.indexOf('\'', firstQuote + 1) else -1
+        val charset = if (secondQuote >= 0) {
+            runCatching { Charset.forName(value.substring(0, firstQuote).ifBlank { "UTF-8" }) }.getOrDefault(StandardCharsets.UTF_8)
+        } else {
+            StandardCharsets.UTF_8
+        }
+        val encoded = if (secondQuote >= 0) value.substring(secondQuote + 1) else value
+        val out = ByteArrayOutputStream()
+        var i = 0
+        while (i < encoded.length) {
+            val c = encoded[i]
+            if (c == '%' && i + 2 < encoded.length) {
+                val b = encoded.substring(i + 1, i + 3).toIntOrNull(16)
+                if (b != null) {
+                    out.write(b)
+                    i += 3
+                    continue
+                }
+            }
+            out.write(c.code)   // token chars in an extended value are ASCII by spec
+            i++
+        }
+        return out.toByteArray().toString(charset).takeUnless { it.isBlank() }
     }
 
     private fun <T> fetchAllPages(

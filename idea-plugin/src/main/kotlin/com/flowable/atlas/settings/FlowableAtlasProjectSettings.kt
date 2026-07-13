@@ -47,7 +47,7 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         var inspectUsername: String
         var designBaseUrl: String
         var designWorkspaceKey: String
-        var designAppKey: String
+        var designAppKeys: MutableList<String>
         var designTargetFolder: String
     }
 
@@ -67,8 +67,11 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         override var inspectUsername: String = ""
         override var designBaseUrl: String = ""
         override var designWorkspaceKey: String = ""
-        override var designAppKey: String = ""
+        override var designAppKeys: MutableList<String> = mutableListOf()
         override var designTargetFolder: String = DEFAULT_DESIGN_TARGET_FOLDER
+
+        /** Legacy single-app field; read once by [loadState] into [designAppKeys], then cleared. */
+        var designAppKey: String = ""
 
         constructor(path: String) : this() { this.path = path }
 
@@ -80,7 +83,8 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
                 atlasArtifacts == mutableSetOf(AtlasArtifact.EXPLORER_HTML) &&
                 constantNaming == ConstantNaming.NAME_AND_KEY && constantFormat == ConstantFormat.CLASS &&
                 inspectBaseUrl.isEmpty() && inspectUsername.isEmpty() &&
-                designBaseUrl.isEmpty() && designWorkspaceKey.isEmpty() && designAppKey.isEmpty() &&
+                designBaseUrl.isEmpty() && designWorkspaceKey.isEmpty() && designAppKeys.isEmpty() &&
+                designAppKey.isEmpty() &&
                 designTargetFolder == DEFAULT_DESIGN_TARGET_FOLDER
     }
 
@@ -122,13 +126,16 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         /** Flowable Design base URL incl. context path, e.g. `http://localhost:8888/flowable-design`. */
         var designBaseUrl: String = ""
 
-        /** Key of the Design workspace the pulled app lives in. */
+        /** Key of the Design workspace the pulled apps live in. */
         var designWorkspaceKey: String = ""
 
-        /** Key of the Design app whose export ZIP is pulled into the project. */
+        /** Keys of the Design apps whose export ZIPs are pulled into the project. */
+        var designAppKeys: MutableList<String> = mutableListOf()
+
+        /** Legacy single-app field; read once by [loadState] into [designAppKeys], then cleared. */
         var designAppKey: String = ""
 
-        /** Project-relative folder the pulled `{appKey}.zip` is written to. */
+        /** Project-relative folder the pulled app ZIPs are written to. */
         var designTargetFolder: String = DEFAULT_DESIGN_TARGET_FOLDER
 
         // ---- additional sub-projects (path != "") ----
@@ -165,8 +172,8 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
             get() = state.designBaseUrl; set(v) { state.designBaseUrl = v }
         override var designWorkspaceKey: String
             get() = state.designWorkspaceKey; set(v) { state.designWorkspaceKey = v }
-        override var designAppKey: String
-            get() = state.designAppKey; set(v) { state.designAppKey = v }
+        override var designAppKeys: MutableList<String>
+            get() = state.designAppKeys; set(v) { state.designAppKeys = v }
         override var designTargetFolder: String
             get() = state.designTargetFolder; set(v) { state.designTargetFolder = v }
     }
@@ -200,7 +207,18 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         // dropped, and duplicate paths are collapsed (last wins) so a bad VCS merge can't corrupt us.
         newState.subProjects.removeAll { it.path.isBlank() }
         newState.subProjects = newState.subProjects.associateBy { it.path }.values.toMutableList()
+        // Migrate the pre-multi-app single `designAppKey` into `designAppKeys`, then clear the legacy
+        // field so it can never re-persist (SkipDefaultsSerializationFilter omits the now-"" value).
+        migrateLegacyAppKey(newState.designAppKeys, { newState.designAppKey }, { newState.designAppKey = it })
+        newState.subProjects.forEach { sub ->
+            migrateLegacyAppKey(sub.designAppKeys, { sub.designAppKey }, { sub.designAppKey = it })
+        }
         state = newState
+    }
+
+    private inline fun migrateLegacyAppKey(keys: MutableList<String>, legacy: () -> String, clear: (String) -> Unit) {
+        if (keys.isEmpty() && legacy().isNotBlank()) keys.add(legacy())
+        clear("")
     }
 
     /** True when [problem] refers to an allowlisted namespace/function/root — i.e. must not be reported. */
@@ -282,17 +300,17 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         get() = active().designWorkspaceKey
         set(value) { active().designWorkspaceKey = value }
 
-    var designAppKey: String
-        get() = active().designAppKey
-        set(value) { active().designAppKey = value }
+    var designAppKeys: MutableList<String>
+        get() = active().designAppKeys
+        set(value) { active().designAppKeys = value }
 
     var designTargetFolder: String
         get() = active().designTargetFolder
         set(value) { active().designTargetFolder = value }
 
-    /** True once server, workspace and app are configured — i.e. a pull can run without the dialog. */
+    /** True once server, workspace and at least one app are configured — i.e. a pull can run without the dialog. */
     fun isDesignConfigured(): Boolean =
-        designBaseUrl.isNotBlank() && designWorkspaceKey.isNotBlank() && designAppKey.isNotBlank()
+        designBaseUrl.isNotBlank() && designWorkspaceKey.isNotBlank() && designAppKeys.isNotEmpty()
 
     companion object {
         const val DEFAULT_DESIGN_TARGET_FOLDER = "flowable-models"
