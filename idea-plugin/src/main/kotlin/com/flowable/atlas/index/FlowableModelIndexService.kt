@@ -4,7 +4,9 @@ import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.events.AtlasEventsListener
 import com.flowable.atlas.model.JsonUtil
 import com.flowable.atlas.model.ModelFiles
+import com.flowable.atlas.model.ModelPaths
 import com.flowable.atlas.model.ModelType
+import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.parsing.DataObjectInfo
 import com.flowable.atlas.parsing.ModelMemberExtractor
 import com.flowable.atlas.parsing.ModelMembers
@@ -19,10 +21,13 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectFileIndex
+import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
+import java.nio.file.Path
 
 /**
  * Project-wide index of Flowable model keys and the query facade used by the completion
@@ -56,7 +61,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
     /** The current index, building it (under a read action) on first use / after invalidation. */
     fun index(): FlowableIndex {
         cached?.let { return it }
-        val built = ReadAction.compute<FlowableIndex, RuntimeException> { build() }
+        val built = ReadAction.computeBlocking<FlowableIndex, RuntimeException> { build() }
         cached = built
         publishUpdated()
         return built
@@ -94,7 +99,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
     /** Operations available on a data object, resolved via its backing service model. */
     fun operationsOf(dataObjectKey: String): List<OperationInfo> {
         val dataFile = index().find(dataObjectKey, ModelType.DATA_OBJECT)?.file ?: return emptyList()
-        val serviceKey = ReadAction.compute<String?, RuntimeException> {
+        val serviceKey = ReadAction.computeBlocking<String?, RuntimeException> {
             JsonUtil.topLevelString(dataFile, "referencedServiceDefinitionModelKey")
         } ?: return emptyList()
         return operationsOfService(serviceKey)
@@ -103,7 +108,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
     /** Operations declared directly on a service model. */
     fun operationsOfService(serviceKey: String): List<OperationInfo> {
         val serviceFile = index().find(serviceKey, ModelType.SERVICE)?.file ?: return emptyList()
-        return ReadAction.compute<List<OperationInfo>, RuntimeException> {
+        return ReadAction.computeBlocking<List<OperationInfo>, RuntimeException> {
             JsonUtil.readOperations(serviceFile)
         }
     }
@@ -155,22 +160,22 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
     /** The physical-table mapping of a `.service` model, or null if not a database service / not found. */
     fun serviceTableOf(serviceKey: String): ServiceTable? {
         val file = index().find(serviceKey, ModelType.SERVICE)?.file ?: return null
-        return ReadAction.compute<ServiceTable?, RuntimeException> { JsonUtil.readServiceTable(file) }
+        return ReadAction.computeBlocking<ServiceTable?, RuntimeException> { JsonUtil.readServiceTable(file) }
     }
 
     /** The logical field mapping of a `.data` model, or null if not found. */
     fun dataObjectInfoOf(dataObjectKey: String): DataObjectInfo? {
         val file = index().find(dataObjectKey, ModelType.DATA_OBJECT)?.file ?: return null
-        return ReadAction.compute<DataObjectInfo?, RuntimeException> { JsonUtil.readDataObject(file) }
+        return ReadAction.computeBlocking<DataObjectInfo?, RuntimeException> { JsonUtil.readDataObject(file) }
     }
 
     /** All indexed database `.service` models (for the Liquibase-coverage inspection). */
-    fun allServiceTables(): List<ServiceTable> = ReadAction.compute<List<ServiceTable>, RuntimeException> {
+    fun allServiceTables(): List<ServiceTable> = ReadAction.computeBlocking<List<ServiceTable>, RuntimeException> {
         index().keysOfType(ModelType.SERVICE).mapNotNull { JsonUtil.readServiceTable(it.file) }
     }
 
     /** All indexed `.data` models. */
-    fun allDataObjects(): List<DataObjectInfo> = ReadAction.compute<List<DataObjectInfo>, RuntimeException> {
+    fun allDataObjects(): List<DataObjectInfo> = ReadAction.computeBlocking<List<DataObjectInfo>, RuntimeException> {
         index().keysOfType(ModelType.DATA_OBJECT).mapNotNull { JsonUtil.readDataObject(it.file) }
     }
 
@@ -212,8 +217,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
             }
         }
 
-        ProjectFileIndex.getInstance(project).iterateContent { file ->
-            ProgressManager.checkCanceled()   // let a long scan be interrupted (e.g. during completion)
+        fun process(file: VirtualFile) {
             if (!file.isDirectory && !ModelFiles.isExcluded(file.path)) {
                 val type = ModelFiles.typeOf(file)
                 when {
@@ -227,7 +231,30 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
                         }
                 }
             }
-            true
+        }
+
+        // When an active Flowable sub-project is selected, scan only its subtree (a direct VFS walk,
+        // not a ProjectFileIndex prefix-filter, so a folder outside all content roots is still
+        // indexed). Otherwise fall back to the whole project's content roots — the historical scope.
+        val activeDir = AtlasProjectRootService.getInstance(project).activeProjectDir()
+        val base = project.basePath?.let { Path.of(it).normalize() }
+        val scopedRoot = if (activeDir != null && base != null && activeDir != base) {
+            LocalFileSystem.getInstance().findFileByNioFile(activeDir)
+        } else {
+            null
+        }
+        if (scopedRoot != null) {
+            VfsUtilCore.iterateChildrenRecursively(
+                scopedRoot,
+                { vf -> !(vf.isDirectory && vf.name in ModelPaths.EXCLUDE_DIRS) },
+                { file -> ProgressManager.checkCanceled(); process(file); true },
+            )
+        } else {
+            ProjectFileIndex.getInstance(project).iterateContent { file ->
+                ProgressManager.checkCanceled()   // let a long scan be interrupted (e.g. during completion)
+                process(file)
+                true
+            }
         }
         return FlowableIndex(
             byKey, referencedIdentifiers, referencedClassFqns,

@@ -31,7 +31,7 @@ object ExprParser {
             val ast = p.parseTop()
             ParseResult(ast, null)
         } catch (e: ParseException) {
-            ParseResult(null, ParseError(e.message ?: "Syntax error", e.start, e.end))
+            ParseResult(null, ParseError(e.message, e.start, e.end))
         }
     }
 

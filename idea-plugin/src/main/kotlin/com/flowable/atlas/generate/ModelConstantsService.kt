@@ -47,7 +47,7 @@ class ModelConstantsService(private val project: Project) {
         val fqcn = state.fqcn
 
         val source = buildSource(fqcn)
-        val current = ReadAction.compute<String?, RuntimeException> {
+        val current = ReadAction.computeBlocking<String?, RuntimeException> {
             if (existing.isValid) VfsUtilCore.loadText(existing) else null
         }
         if (current == source) return
@@ -58,7 +58,7 @@ class ModelConstantsService(private val project: Project) {
     }
 
     private fun buildSource(fqcn: String): String {
-        val models = ReadAction.compute<List<ModelInfo>, RuntimeException> {
+        val models = ReadAction.computeBlocking<List<ModelInfo>, RuntimeException> {
             project.service<FlowableModelIndexService>().index().allDistinct()
                 .map { ModelInfo(it.type, it.key, it.name) }
         }

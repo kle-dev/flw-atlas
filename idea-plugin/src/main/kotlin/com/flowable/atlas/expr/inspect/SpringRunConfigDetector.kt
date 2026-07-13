@@ -43,7 +43,7 @@ object SpringRunConfigDetector {
      * Read reflectively so there is no compile-time dependency on the Spring / execution-parameters API
      * (Application, Spring Boot, Maven/Gradle run configs all expose these getters).
      */
-    fun detect(project: Project): RunHints = ReadAction.compute<RunHints, RuntimeException> {
+    fun detect(project: Project): RunHints = ReadAction.computeBlocking<RunHints, RuntimeException> {
         val settings = RunManager.getInstance(project).allSettings
             .sortedByDescending { it.type.id.contains("SpringBoot", ignoreCase = true) }
         for (s in settings) {
@@ -54,7 +54,7 @@ object SpringRunConfigDetector {
                 reflectEnvs(cfg),
                 reflectString(cfg, "getActiveProfiles"),
             )
-            if (hints.hasAny) return@compute hints
+            if (hints.hasAny) return@computeBlocking hints
         }
         RunHints(emptyList(), null, null)
     }

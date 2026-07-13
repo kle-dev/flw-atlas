@@ -4,6 +4,7 @@ import com.flowable.atlas.design.DesignClient
 import com.flowable.atlas.design.DesignCredentials
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelPaths
+import com.flowable.atlas.project.AtlasProjectRootService
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
@@ -202,9 +203,9 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
     private fun suggestTargetFolder() {
         val default = FlowableAtlasProjectSettings.DEFAULT_DESIGN_TARGET_FOLDER
         if (settings.designTargetFolder.isNotBlank() && settings.designTargetFolder != default) return
-        val basePath = project.basePath ?: return
+        val base = AtlasProjectRootService.getInstance(project).activeProjectDir()?.toString() ?: return
         ApplicationManager.getApplication().executeOnPooledThread {
-            val suggestion = runCatching { modelArchiveFolder(basePath) }.getOrNull() ?: return@executeOnPooledThread
+            val suggestion = runCatching { modelArchiveFolder(base) }.getOrNull() ?: return@executeOnPooledThread
             ApplicationManager.getApplication().invokeLater({
                 val current = targetFolderField.text.trim()
                 if (!disposed && (current.isBlank() || current == default)) targetFolderField.text = suggestion
@@ -311,7 +312,7 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
      */
     private fun relativeTargetFolder(): Path? {
         val text = targetFolderField.text.trim().ifBlank { FlowableAtlasProjectSettings.DEFAULT_DESIGN_TARGET_FOLDER }
-        val base = project.basePath?.let { Path.of(it) } ?: return null
+        val base = AtlasProjectRootService.getInstance(project).activeProjectDir() ?: return null
         return try {
             val path = Path.of(text)
             val relative = (if (path.isAbsolute) base.relativize(path) else path).normalize()

@@ -63,7 +63,7 @@ class ExpressionsConfigurable(private val project: Project) : BoundSearchableCon
                         .onApply {
                             allowlist.apply(settings)
                             // Mirror the quick-fix: findings depending on the allowlist must re-run.
-                            DaemonCodeAnalyzer.getInstance(project).restart()
+                            DaemonCodeAnalyzer.getInstance(project).restart("Flowable Atlas expression allowlist changed")
                         }
                 }
             }

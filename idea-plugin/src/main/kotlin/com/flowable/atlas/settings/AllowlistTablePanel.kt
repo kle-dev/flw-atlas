@@ -65,11 +65,10 @@ class AllowlistTablePanel {
     }
 
     fun reset(settings: FlowableAtlasProjectSettings) {
-        val state = settings.state
         val items = buildList {
-            state.allowedNamespaces.forEach { add(Entry(it, Kind.NAMESPACE)) }
-            state.allowedFunctions.forEach { add(Entry(it, Kind.FUNCTION)) }
-            state.allowedGroundingRoots.forEach { add(Entry(it, Kind.GROUNDING_ROOT)) }
+            settings.allowedNamespaces.forEach { add(Entry(it, Kind.NAMESPACE)) }
+            settings.allowedFunctions.forEach { add(Entry(it, Kind.FUNCTION)) }
+            settings.allowedGroundingRoots.forEach { add(Entry(it, Kind.GROUNDING_ROOT)) }
         }
         model.items = items
     }
@@ -77,17 +76,16 @@ class AllowlistTablePanel {
     fun isModified(settings: FlowableAtlasProjectSettings): Boolean {
         stopEditing()
         val (ns, fn, roots) = split()
-        val state = settings.state
-        return ns != state.allowedNamespaces || fn != state.allowedFunctions || roots != state.allowedGroundingRoots
+        return ns != settings.allowedNamespaces || fn != settings.allowedFunctions ||
+            roots != settings.allowedGroundingRoots
     }
 
     fun apply(settings: FlowableAtlasProjectSettings) {
         stopEditing()
         val (ns, fn, roots) = split()
-        val state = settings.state
-        state.allowedNamespaces = ns.toMutableList()
-        state.allowedFunctions = fn.toMutableList()
-        state.allowedGroundingRoots = roots.toMutableList()
+        settings.allowedNamespaces = ns.toMutableList()
+        settings.allowedFunctions = fn.toMutableList()
+        settings.allowedGroundingRoots = roots.toMutableList()
     }
 
     private fun split(): Triple<List<String>, List<String>, List<String>> {

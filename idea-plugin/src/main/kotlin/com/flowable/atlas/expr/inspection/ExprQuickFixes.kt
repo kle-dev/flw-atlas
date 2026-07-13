@@ -62,6 +62,6 @@ class AddToExpressionAllowlistFix(
 
     override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
         FlowableAtlasProjectSettings.getInstance(project).allow(subject, kind)
-        DaemonCodeAnalyzer.getInstance(project).restart()
+        DaemonCodeAnalyzer.getInstance(project).restart("Flowable Atlas expression allowlist changed")
     }
 }

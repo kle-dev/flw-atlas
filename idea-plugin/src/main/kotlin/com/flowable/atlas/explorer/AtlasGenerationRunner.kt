@@ -1,6 +1,7 @@
 package com.flowable.atlas.explorer
 
 import com.flowable.atlas.events.AtlasEvents
+import com.flowable.atlas.project.AtlasProjectRootService
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
@@ -42,7 +43,9 @@ object AtlasGenerationRunner {
         }
     }
 
-    private fun projectDir(project: Project): Path? = project.basePath?.let { Path.of(it) }
+    /** The directory to analyse — the active Flowable sub-project, or the whole project when none. */
+    private fun projectDir(project: Project): Path? =
+        AtlasProjectRootService.getInstance(project).activeProjectDir()
 
     private fun run(
         project: Project,

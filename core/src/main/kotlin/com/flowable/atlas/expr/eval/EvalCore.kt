@@ -87,9 +87,8 @@ object Values {
         else -> toNum(a).compareTo(toNum(b))
     }
 
-    @Suppress("UNCHECKED_CAST")
     fun asList(v: Any?): List<Any?>? = when (v) {
-        is List<*> -> v as List<Any?>
+        is List<*> -> v
         else -> null
     }
 

@@ -1,6 +1,6 @@
 package com.flowable.atlas.expr.inspect
 
-import com.intellij.openapi.project.DumbService
+import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.project.Project
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
@@ -49,20 +49,21 @@ object InspectConnectionDetector {
     /**
      * Discover config files in the project and detect a connection. Queries the filename index, so it
      * MUST be called off the EDT (it is a slow operation) — callers run it on a pooled thread and apply
-     * the result back on the UI thread. Waits for indexes via [DumbService.runReadActionInSmartMode].
+     * the result back on the UI thread. Waits for indexes via a smart-mode non-blocking read action
+     * ([ReadAction.nonBlocking] executed synchronously off the EDT).
      * Uses the active Spring profile(s) from the run configuration to pick `application-<profile>.properties`,
      * and applies any run-time port / context-path override.
      */
     fun detect(project: Project): Connection {
         val hints = SpringRunConfigDetector.detect(project)
-        return DumbService.getInstance(project).runReadActionInSmartMode<Connection> {
+        return ReadAction.nonBlocking<Connection> {
             val scope = GlobalSearchScope.projectScope(project)
             val texts = FilenameIndex.getAllFilesByExt(project, "properties", scope)
                 .filter { isRelevant(it.name, hints.profiles) }
                 .sortedBy { orderKey(it.name, hints.profiles) }
                 .mapNotNull { runCatching { String(it.contentsToByteArray(), Charsets.UTF_8) }.getOrNull() }
             detect(texts, hints.port, hints.contextPath)
-        }
+        }.inSmartMode(project).executeSynchronously()
     }
 
     /** flowable defaults + base application config always apply; profile files only for active profiles. */

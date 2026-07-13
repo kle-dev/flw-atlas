@@ -19,6 +19,9 @@ interface AtlasEventsListener {
 
     /** A "Pull from Flowable Design" run finished. */
     fun designPullFinished(succeeded: Boolean) {}
+
+    /** The active Flowable sub-project changed — consumers re-resolve their root / re-read settings. */
+    fun activeSubProjectChanged() {}
 }
 
 object AtlasEvents {

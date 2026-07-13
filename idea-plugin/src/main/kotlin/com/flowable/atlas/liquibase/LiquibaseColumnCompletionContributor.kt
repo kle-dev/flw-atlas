@@ -33,7 +33,7 @@ class LiquibaseColumnCompletionContributor : CompletionContributor() {
         override fun addCompletions(parameters: CompletionParameters, context: ProcessingContext, result: CompletionResultSet) {
             val position = parameters.position
             val attr = PsiTreeUtil.getParentOfType(position, XmlAttributeValue::class.java)?.parent as? XmlAttribute ?: return
-            val tag = attr.parent as? XmlTag ?: return
+            val tag = attr.parent ?: return
             val file = position.containingFile as? XmlFile ?: return
             val text = file.text
             if (!text.contains("databaseChangeLog")) return
