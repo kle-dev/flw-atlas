@@ -1082,10 +1082,85 @@ document.querySelectorAll('[data-theme-btn]').forEach(b=>b.onclick=cycleTheme);
 matchMedia('(prefers-color-scheme: light)').addEventListener('change',applyThemePref);
 applyThemePref();
 
+// ---------- sidebar resize (IntelliJ-style drag handle) ----------
+// The expanded width lives in the --sidebar-w custom property; the collapsed
+// "rail" is the .shell.rail class. Both are user-controllable via the drag
+// handle (#sideresize) and remembered. atlas-sidebar='rail'|'wide' records an
+// explicit choice; with none stored the rail auto-engages below 1100px, which
+// preserves the old media-query behavior. localStorage is wrapped in try/catch
+// for private-mode / file:// quirks, matching the theme prefs above.
+const SB_MIN=180, SB_MAX=480, SB_DEF=240, SB_COLLAPSE=140, SB_RAIL=64;
+const _sbNarrow=matchMedia('(max-width:1100px)');
+function sbPref(){ try{ return localStorage.getItem('atlas-sidebar'); }catch(e){ return null; } }
+function sbWidth(){
+  let w=NaN; try{ w=parseInt(localStorage.getItem('atlas-sidebar-w'),10); }catch(e){}
+  return (w>=SB_MIN&&w<=SB_MAX)?w:SB_DEF;
+}
+function sbClamp(v){ return Math.max(SB_MIN,Math.min(SB_MAX,v)); }
+function applySidebar(){
+  const shell=document.querySelector('.shell'); if(!shell) return;
+  const pref=sbPref();                              // 'rail' | 'wide' | null(auto)
+  const rail = pref ? pref==='rail' : _sbNarrow.matches;
+  const w=sbWidth();
+  shell.style.setProperty('--sidebar-w', w+'px');
+  shell.classList.toggle('rail', rail);
+  const h=document.getElementById('sideresize');
+  if(h){
+    h.setAttribute('aria-valuenow', rail?'0':String(w));
+    h.setAttribute('aria-label', rail?'Sidebar collapsed — drag to expand'
+                                      :'Sidebar width '+w+'px — drag to resize');
+  }
+}
+function setSidebar(state, w){                       // persist an explicit choice, then re-apply
+  try{ localStorage.setItem('atlas-sidebar', state); }catch(e){}
+  if(w!=null){ try{ localStorage.setItem('atlas-sidebar-w', String(w)); }catch(e){} }
+  applySidebar();
+}
+function wireSidebarResize(){
+  const shell=document.querySelector('.shell');
+  const h=document.getElementById('sideresize');
+  if(!shell||!h) return;
+  let startX=0, startW=0, dragging=false;
+  h.addEventListener('pointerdown',e=>{
+    dragging=true; startX=e.clientX;
+    startW=shell.classList.contains('rail')?SB_RAIL:sbWidth();
+    try{ h.setPointerCapture(e.pointerId); }catch(_){}
+    shell.classList.add('dragging'); e.preventDefault();
+  });
+  h.addEventListener('pointermove',e=>{
+    if(!dragging) return;
+    const raw=startW+(e.clientX-startX);
+    if(raw<SB_COLLAPSE){ shell.classList.add('rail'); }
+    else{ shell.classList.remove('rail'); shell.style.setProperty('--sidebar-w', sbClamp(raw)+'px'); }
+  });
+  const end=e=>{
+    if(!dragging) return; dragging=false;
+    shell.classList.remove('dragging');
+    try{ h.releasePointerCapture(e.pointerId); }catch(_){}
+    if(shell.classList.contains('rail')) setSidebar('rail');
+    else setSidebar('wide', parseInt(shell.style.getPropertyValue('--sidebar-w'),10)||SB_DEF);
+  };
+  h.addEventListener('pointerup',end);
+  h.addEventListener('pointercancel',end);
+  h.addEventListener('dblclick',()=>setSidebar('wide',SB_DEF));   // reset to default width
+  h.addEventListener('keydown',e=>{
+    if(e.key==='ArrowLeft'||e.key==='ArrowRight'){
+      e.preventDefault();
+      const base=shell.classList.contains('rail')?SB_MIN:sbWidth();
+      setSidebar('wide', sbClamp(base+(e.key==='ArrowRight'?16:-16)));
+    } else if(e.key==='Home'){ e.preventDefault(); setSidebar('wide',SB_DEF); }
+  });
+  // Re-evaluate the auto default on viewport crossings, but only while the
+  // user has not made an explicit choice.
+  _sbNarrow.addEventListener('change',()=>{ if(!sbPref()) applySidebar(); });
+}
+
 // ---------- boot ----------
 document.getElementById('proj').textContent=DATA.project;
 computeInsights();
 renderSidebar();
+applySidebar();
+wireSidebarResize();
 wireSearchTrigger();
 wireLinkFilter();
 window.addEventListener('hashchange',route);

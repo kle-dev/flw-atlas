@@ -82,4 +82,20 @@ class DesignClientTest {
         val out = DesignClient.exportApp(DesignClient.Connection("  ", "u", "p"), "ws", "app")
         assertTrue(out is DesignClient.Result.Failed)
     }
+
+    @Test fun parsesContentDispositionFilename() {
+        val f = DesignClient::parseContentDispositionFilename
+        assertNull(f(null))
+        assertNull(f(""))
+        assertNull(f("attachment"))                                            // no filename param
+        assertEquals("HR App.zip", f("""attachment; filename="HR App.zip""""))  // quoted
+        assertEquals("HRApp.zip", f("attachment; filename=HRApp.zip"))          // bare token
+        assertEquals("HR App.zip", f("attachment; filename*=UTF-8''HR%20App.zip"))   // RFC 5987, percent-decoded
+        assertEquals("a+b.zip", f("attachment; filename*=UTF-8''a+b.zip"))      // literal '+', NOT a space
+        // The extended form wins over a plain fallback (RFC 6266).
+        assertEquals("real.zip", f("""attachment; filename="fallback.zip"; filename*=UTF-8''real.zip"""))
+        // A non-UTF charset in the extended form is honored.
+        val eAcute = String(byteArrayOf(0xE9.toByte()), Charsets.ISO_8859_1)
+        assertEquals("$eAcute.zip", f("attachment; filename*=ISO-8859-1''%E9.zip"))
+    }
 }

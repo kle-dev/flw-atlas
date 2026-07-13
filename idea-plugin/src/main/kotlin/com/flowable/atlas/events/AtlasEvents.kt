@@ -22,6 +22,9 @@ interface AtlasEventsListener {
 
     /** The active Flowable sub-project changed — consumers re-resolve their root / re-read settings. */
     fun activeSubProjectChanged() {}
+
+    /** The Design connection settings were applied — status surfaces re-read them. */
+    fun designSettingsChanged() {}
 }
 
 object AtlasEvents {

@@ -69,17 +69,20 @@ class DesignClientHttpTest {
         assertTrue((out as DesignClient.Result.Failed).message.contains("Authentication failed"))
     }
 
-    @Test fun exportReturnsZipBytes() {
+    @Test fun exportReturnsZipBytesAndServerFilename() {
         val zip = byteArrayOf('P'.code.toByte(), 'K'.code.toByte(), 3, 4, 42)
         server.createContext("/design-api/workspaces/ws/apps/hr/export") { ex ->
             ex.responseHeaders.add("Content-Type", "application/zip")
+            ex.responseHeaders.add("Content-Disposition", "attachment; filename=\"HR App.zip\"")
             respond(ex, 200, zip)
         }
 
         val out = DesignClient.exportApp(conn(), "ws", "hr")
 
         assertTrue(out is DesignClient.Result.Success)
-        assertArrayEquals(zip, (out as DesignClient.Result.Success).value)
+        val export = (out as DesignClient.Result.Success).value
+        assertArrayEquals(zip, export.bytes)
+        assertEquals("HR App.zip", export.fileName)
     }
 
     @Test fun rejectsNonZipExportResponse() {

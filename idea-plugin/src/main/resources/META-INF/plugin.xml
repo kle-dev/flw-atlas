@@ -4,7 +4,7 @@
 <idea-plugin require-restart="true">
     <id>com.flowable.atlas</id>
     <name>Flowable Atlas</name>
-    <version>0.8.1</version>
+    <version>0.8.2</version>
     <vendor email="kevin.klever@flowable.com" url="https://www.flowable.com">Flowable</vendor>
 
     <description><![CDATA[
@@ -114,6 +114,15 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.8.2</h3>
+        <ul>
+          <li><b>Resizable Atlas Explorer sidebar</b> — grab the sidebar's right edge and drag it
+              wider or narrower like an IntelliJ tool window; the width is remembered. Dragging it
+              very narrow snaps it to the icon rail, and while collapsed, hovering the rail flies
+              the full labelled menu out over the content — so a narrow window (or a narrow Atlas
+              Hub tool window) no longer leaves you with unlabelled dots.</li>
+        </ul>
+
         <h3>0.8.1</h3>
         <ul>
           <li><b>Multi-project (monorepo) support</b> — Atlas detects the distinct Flowable

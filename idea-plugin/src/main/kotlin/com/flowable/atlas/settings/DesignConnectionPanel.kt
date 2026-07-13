@@ -2,6 +2,7 @@ package com.flowable.atlas.settings
 
 import com.flowable.atlas.design.DesignClient
 import com.flowable.atlas.design.DesignCredentials
+import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelPaths
 import com.flowable.atlas.project.AtlasProjectRootService
@@ -15,11 +16,14 @@ import com.intellij.openapi.options.ConfigurationException
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.openapi.vfs.JarFileSystem
+import com.intellij.ui.CheckBoxList
 import com.intellij.ui.JBColor
 import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPasswordField
+import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextField
+import java.awt.Dimension
 import java.awt.FlowLayout
 import java.nio.file.InvalidPathException
 import java.nio.file.Path
@@ -55,12 +59,8 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
             if (ws.name == ws.key) ws.key else "${ws.name} (${ws.key})"
         }
     }
-    private val appCombo = JComboBox<DesignClient.App>().apply {
-        renderer = SimpleListCellRenderer.create("") { app ->
-            val label = if (app.name == app.key) app.key else "${app.name} (${app.key})"
-            label + (app.version?.let { " v$it" } ?: "")
-        }
-    }
+    /** Multi-select: several apps in the chosen workspace can be pulled in one go. */
+    private val appList = CheckBoxList<DesignClient.App>()
     private val targetFolderField = TextFieldWithBrowseButton().apply {
         textField.columns = 25
     }
@@ -93,7 +93,8 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
         add(row(JBLabel("Server URL:"), baseUrlField))
         add(row(JBLabel("Username:"), usernameField, JBLabel("  Password:"), passwordField))
         add(row(refreshButton))
-        add(row(JBLabel("Workspace:"), workspaceCombo, JBLabel("  App:"), appCombo))
+        add(row(JBLabel("Workspace:"), workspaceCombo))
+        add(row(JBLabel("Apps:"), JBScrollPane(appList).apply { preferredSize = Dimension(320, 120) }))
         add(row(JBLabel("Target folder:"), targetFolderField))
         add(row(status))
     }
@@ -118,7 +119,7 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
             usernameField.text.trim() != loadedUsername ||
             String(passwordField.password) != loadedPassword ||
             (selectedWorkspace()?.key ?: "") != settings.designWorkspaceKey ||
-            (selectedApp()?.key ?: "") != settings.designAppKey ||
+            checkedAppKeys().toSet() != settings.designAppKeys.toSet() ||
             targetFolderField.text.trim() != settings.designTargetFolder
 
     @Throws(ConfigurationException::class)
@@ -136,7 +137,7 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
         val password = String(passwordField.password)
         settings.designBaseUrl = baseUrl
         settings.designWorkspaceKey = selectedWorkspace()?.key.orEmpty()
-        settings.designAppKey = selectedApp()?.key.orEmpty()
+        settings.designAppKeys = checkedAppKeys().toMutableList()
         settings.designTargetFolder = folder.joinToString("/")
             .ifBlank { FlowableAtlasProjectSettings.DEFAULT_DESIGN_TARGET_FOLDER }
         loadedUsername = username
@@ -147,6 +148,9 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
                 runCatching { DesignCredentials.save(baseUrl, username, password) }
             }
         }
+        // Let status surfaces (the Atlas Hub) re-read the just-saved connection immediately, instead
+        // of waiting for an unrelated event or a tool-window reopen.
+        project.messageBus.syncPublisher(AtlasEvents.TOPIC).designSettingsChanged()
     }
 
     override fun dispose() {
@@ -167,12 +171,8 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
             else listOf(DesignClient.Workspace(settings.designWorkspaceKey, settings.designWorkspaceKey)),
             settings.designWorkspaceKey,
         ) { it.key }
-        populate(
-            appCombo,
-            if (settings.designAppKey.isBlank()) emptyList()
-            else listOf(DesignClient.App(settings.designAppKey, settings.designAppKey, null, null)),
-            settings.designAppKey,
-        ) { it.key }
+        val keys = settings.designAppKeys
+        populateApps(keys.map { DesignClient.App(it, it, null, null) }, keys.toSet())
     }
 
     /** PasswordSafe access can block on the OS keychain, so prefill runs on a pooled thread. */
@@ -267,13 +267,16 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
 
     private fun loadApps(workspaceKey: String) {
         val conn = currentConnection(quiet = true) ?: return
+        // Keep whatever is checked now (seeded from settings on open, or the user's picks) checked
+        // after the live list replaces the placeholders — snapshot before the async replace.
+        val checked = checkedAppKeys().toSet()
         ApplicationManager.getApplication().executeOnPooledThread {
             val result = DesignClient.listApps(conn, workspaceKey)
             ApplicationManager.getApplication().invokeLater({
                 if (disposed || selectedWorkspace()?.key != workspaceKey) return@invokeLater
                 when (result) {
                     is DesignClient.Result.Success -> {
-                        populate(appCombo, result.value, selectedAppKey()) { it.key }
+                        populateApps(result.value, checked)
                         status.text = if (result.value.isEmpty()) "No apps in workspace '$workspaceKey'" else ""
                     }
                     is DesignClient.Result.Failed -> showError(result.message)
@@ -285,7 +288,22 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
     /** The key to keep selected across a refresh: the current pick, falling back to the saved one. */
     private fun selectedWorkspaceKey(): String = selectedWorkspace()?.key ?: settings.designWorkspaceKey
 
-    private fun selectedAppKey(): String = selectedApp()?.key ?: settings.designAppKey
+    /** Checkbox text for an app: display name (+ key when they differ) and version when known. */
+    private fun appLabel(app: DesignClient.App): String {
+        val label = if (app.name == app.key) app.key else "${app.name} (${app.key})"
+        return label + (app.version?.let { " v$it" } ?: "")
+    }
+
+    /** Rebuilds the app checkbox list, checking every app whose key is in [checkedKeys]. */
+    private fun populateApps(items: List<DesignClient.App>, checkedKeys: Set<String>) {
+        appList.clear()
+        items.forEach { app -> appList.addItem(app, appLabel(app), app.key in checkedKeys) }
+    }
+
+    private fun checkedApps(): List<DesignClient.App> =
+        (0 until appList.model.size).mapNotNull { i -> appList.getItemAt(i)?.takeIf { appList.isItemSelected(i) } }
+
+    private fun checkedAppKeys(): List<String> = checkedApps().map { it.key }
 
     private fun <T> populate(combo: JComboBox<T>, items: List<T>, persistedKey: String, key: (T) -> String) {
         populating = true
@@ -303,8 +321,6 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
     }
 
     private fun selectedWorkspace(): DesignClient.Workspace? = workspaceCombo.selectedItem as? DesignClient.Workspace
-
-    private fun selectedApp(): DesignClient.App? = appCombo.selectedItem as? DesignClient.App
 
     /**
      * The target folder as a normalized project-relative path, or null when it escapes the project

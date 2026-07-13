@@ -8,6 +8,7 @@ import com.flowable.atlas.expr.eval.EvalResult
 import com.flowable.atlas.expr.inspect.InspectClient
 import com.flowable.atlas.expr.inspect.InspectConnectionDetector
 import com.flowable.atlas.expr.inspect.InspectCredentials
+import com.flowable.atlas.expr.inspect.WorkUrlParser
 import com.flowable.atlas.expr.lang.FlowableBackendExprFileType
 import com.flowable.atlas.expr.lang.FlowableExprFileType
 import com.flowable.atlas.expr.lang.FlowableFrontendExprFileType
@@ -149,6 +150,8 @@ class FlowableExpressionPanel(val project: Project) :
 
     // -- backend (Inspect) card ------------------------------------------------------------------
 
+    /** Paste-a-Work-URL field: its content is parsed into base URL / scope / instance id below. */
+    private val appUrlField = JBTextField()
     private val baseUrlField = JBTextField(settings.inspectBaseUrl)
     private val usernameField = JBTextField(settings.inspectUsername, 12)
     private val passwordField = JBPasswordField()
@@ -178,6 +181,9 @@ class FlowableExpressionPanel(val project: Project) :
     private var currentScope: ScopeItem = scopeItems.first()
     private var pendingScopeKey: String? = state.scopeKey
     private val scopeAlarm = SingleAlarm(::reloadScopeItems, 300, this)
+
+    /** Debounces parsing of [appUrlField] so a paste fills the form once, not per keystroke. */
+    private val urlAlarm = SingleAlarm(::applyUrlFromField, 200, this)
 
     private val cards = JPanel(CardLayout())
 
@@ -224,6 +230,7 @@ class FlowableExpressionPanel(val project: Project) :
         applyScope()
         showCard()
         prefillConnection()
+        installUrlAutoParse()
         diagnostics.scheduleRevalidate()
     }
 
@@ -324,6 +331,10 @@ class FlowableExpressionPanel(val project: Project) :
     private fun backendCard(): JComponent = panel {
         row {
             comment("Evaluates against a running Flowable app (Inspect REST API) — a live process/case/task instance id is required.")
+        }
+        row("App URL:") {
+            cell(appUrlField).align(AlignX.FILL)
+                .comment("Paste a Work URL (…/flowable-work/#/work/all/case/<id>) — base URL, scope and id fill in automatically")
         }
         row("App base URL:") {
             cell(baseUrlField).align(AlignX.FILL)
@@ -469,6 +480,38 @@ class FlowableExpressionPanel(val project: Project) :
                     (c.username?.let { " · user '$it'" } ?: "") +
                     (if (c.password != null) " · password from dev config" else ""),
             )
+        }
+    }
+
+    /** Wire [appUrlField] so pasting a Work URL auto-fills base URL / scope / instance id (debounced). */
+    private fun installUrlAutoParse() {
+        appUrlField.document.addDocumentListener(object : javax.swing.event.DocumentListener {
+            private fun schedule() = urlAlarm.cancelAndRequest()
+            override fun insertUpdate(e: javax.swing.event.DocumentEvent) = schedule()
+            override fun removeUpdate(e: javax.swing.event.DocumentEvent) = schedule()
+            override fun changedUpdate(e: javax.swing.event.DocumentEvent) = schedule()
+        })
+    }
+
+    /**
+     * Parse [appUrlField] and fill the connection fields. Only a field the URL actually yields is
+     * touched: an unrecognised scope leaves the [scopeTypeCombo] on its current selection, and a
+     * base-URL-only link leaves scope/id alone.
+     */
+    private fun applyUrlFromField() {
+        if (project.isDisposed) return
+        val parsed = WorkUrlParser.parse(appUrlField.text)
+        if (!parsed.hasAny) return
+        parsed.baseUrl?.let { baseUrlField.text = it }
+        if (parsed.scopeId != null) {
+            parsed.scopeType?.let { scopeTypeCombo.selectedItem = it }
+            scopeIdField.text = parsed.scopeId
+            subScopeIdField.text = parsed.subScopeId ?: ""
+            val type = parsed.scopeType ?: scopeTypeCombo.selectedItem
+            val sub = parsed.subScopeId?.let { " (sub $it)" } ?: ""
+            backendResultPane.showInfo("Parsed URL → $type · ${parsed.scopeId}$sub")
+        } else {
+            backendResultPane.showInfo("Parsed base URL from link")
         }
     }
 

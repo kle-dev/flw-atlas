@@ -111,6 +111,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
             override fun artifactsGenerated(explorerHtml: Path?, written: List<Path>) = refreshAlarm.cancelAndRequest()
             override fun designPullFinished(succeeded: Boolean) = refreshAlarm.cancelAndRequest()
             override fun activeSubProjectChanged() = refreshAlarm.cancelAndRequest()
+            override fun designSettingsChanged() = refreshAlarm.cancelAndRequest()
         })
         refreshAlarm.request()
     }
@@ -263,7 +264,9 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         val designText = if (settings.isDesignConfigured()) {
             val lastPull = DesignPullService.lastPullMillis(project)
                 ?.let { DateFormatUtil.formatPrettyDateTime(it) } ?: "never"
-            "<html>${settings.designBaseUrl} · <b>${settings.designAppKey}</b><br>Last pull: $lastPull</html>"
+            val apps = settings.designAppKeys
+            val appsLabel = if (apps.size == 1) apps.first() else "${apps.size} apps: ${apps.joinToString(", ")}"
+            "<html>${settings.designBaseUrl} · <b>$appsLabel</b><br>Last pull: $lastPull</html>"
         } else {
             "Not configured"
         }
