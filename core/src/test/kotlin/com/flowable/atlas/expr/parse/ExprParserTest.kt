@@ -97,6 +97,6 @@ class ExprParserTest {
         val r = fe("(1+1) + {2+2}")
         assertNotNull(r.error)
         assertTrue(r.error!!.message.contains("use parentheses to group"))
-        assertTrue(r.error!!.start == "(1+1) + ".length)
+        assertTrue(r.error.start == "(1+1) + ".length)
     }
 }

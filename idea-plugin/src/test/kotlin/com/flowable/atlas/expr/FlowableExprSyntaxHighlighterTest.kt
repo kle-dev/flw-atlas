@@ -19,7 +19,7 @@ class FlowableExprSyntaxHighlighterTest : BasePlatformTestCase() {
 
     private fun foreground(key: TextAttributesKey): Color? {
         val scheme = EditorColorsManager.getInstance().globalScheme
-        return scheme.getAttributes(key)?.foregroundColor ?: key.defaultAttributes?.foregroundColor
+        return scheme.getAttributes(key)?.foregroundColor ?: key.defaultAttributes.foregroundColor
     }
 
     fun testEachParenLevelHasADistinctResolvedColour() {

@@ -4,7 +4,7 @@
 <idea-plugin require-restart="true">
     <id>com.flowable.atlas</id>
     <name>Flowable Atlas</name>
-    <version>0.8.0</version>
+    <version>0.8.1</version>
     <vendor email="kevin.klever@flowable.com" url="https://www.flowable.com">Flowable</vendor>
 
     <description><![CDATA[
@@ -114,6 +114,20 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.8.1</h3>
+        <ul>
+          <li><b>Multi-project (monorepo) support</b> — Atlas detects the distinct Flowable
+              sub-projects under the project root; the Atlas Hub lets you switch the active one and
+              the model index then scans just that subtree.</li>
+          <li><b>Flowable Inspect connection editor</b> — Settings → Tools → Flowable Atlas →
+              <i>Connections</i> gains an embedded Inspect connection (base URL + credentials, with
+              <i>Detect from project</i>) that the Expression Playground evaluates backend
+              expressions against.</li>
+          <li><b>Fixes</b> — resolve a duplicate registration of the “Open in Expression Playground”
+              intention that could abort the highlighting pass, and clear all remaining compiler
+              warnings across the codebase.</li>
+        </ul>
+
         <h3>0.8.0</h3>
         <ul>
           <li><b>Atlas Hub — one control center</b> — a new tool window (right stripe, or Tools →
