@@ -535,7 +535,7 @@ object GraphBuilder {
                 }
                 continue
             }
-            val url = rc["url"] as String
+            val url = rc["url"] as? String ?: continue
             if (DATAOBJ_QUERY_RE.containsMatchIn(url)) continue
             val data = linkedMapOf<String, Any?>("method" to rc["method"])
             val rel: String

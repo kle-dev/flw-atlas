@@ -74,6 +74,27 @@ class ModelParsersTest {
     }
 
     @Test
+    fun parseServiceOperationWithoutUrlRecordsNoRestCall() {
+        // A service operation with a method but no URL must NOT produce a restCall entry — a null
+        // `url` would violate the restCalls invariant and later crash GraphBuilder's non-null cast.
+        val doc = """{"key": "s1", "name": "S", "type": "service",
+                     "operations": [{"key": "op1", "name": "Op", "config": {"method": "POST"}}]}""".toByteArray()
+        val ctx = Ctx()
+        ModelParsers.parseService(doc, ctx, "s.service")
+        assertTrue("method-only operation must not record a rest call", ctx.restCalls.isEmpty())
+    }
+
+    @Test
+    fun parseServiceOperationWithUrlRecordsRestCall() {
+        val doc = """{"key": "s1", "name": "S", "type": "service", "config": {"baseUrl": "https://api.example.com"},
+                     "operations": [{"key": "op1", "name": "Op", "config": {"method": "GET", "url": "/things"}}]}""".toByteArray()
+        val ctx = Ctx()
+        ModelParsers.parseService(doc, ctx, "s.service")
+        assertEquals("https://api.example.com/things", ctx.restCalls[0]["url"])
+        assertEquals("GET", ctx.restCalls[0]["method"])
+    }
+
+    @Test
     fun parseAppChildModels() {
         val doc = """{"key": "app1", "name": "A", "groupsAccess": "g1",
                      "extension": {"design": {"childModels": [{"key": "p1", "type": "bpmn"}]}}}""".toByteArray()
