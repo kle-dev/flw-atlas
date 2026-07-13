@@ -8,6 +8,8 @@ import com.flowable.atlas.expr.eval.EvalResult
 import com.flowable.atlas.expr.inspect.InspectClient
 import com.flowable.atlas.expr.inspect.InspectConnectionDetector
 import com.flowable.atlas.expr.inspect.InspectCredentials
+import com.flowable.atlas.expr.inspect.InspectSession
+import com.flowable.atlas.expr.inspect.InspectSignInDialog
 import com.flowable.atlas.expr.inspect.WorkUrlParser
 import com.flowable.atlas.expr.lang.FlowableBackendExprFileType
 import com.flowable.atlas.expr.lang.FlowableExprFileType
@@ -47,6 +49,7 @@ import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.Align
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.panel
+import com.intellij.ui.jcef.JBCefApp
 import com.intellij.util.SingleAlarm
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
@@ -345,6 +348,10 @@ class FlowableExpressionPanel(val project: Project) :
             label("Password:")
             cell(passwordField).comment("Remembered in the IDE Password Safe after a successful evaluation")
         }
+        row("") {
+            button("Sign in via browser (SSO)…") { signInToApp() }
+                .comment("For SSO/OAuth2-fronted apps: logs in in a browser and reuses the session cookie for this IDE session. Combine with the username/password above when Flowable also requires basic auth behind the SSO layer.")
+        }
         row("Scope:") {
             cell(scopeTypeCombo)
             label("Instance id:")
@@ -515,6 +522,32 @@ class FlowableExpressionPanel(val project: Project) :
         }
     }
 
+    /**
+     * Open the embedded-browser SSO login for the configured base URL and, on success, cache the
+     * captured session cookie for this IDE session ([InspectSession]) so [evaluateAgainstApp] can
+     * replay it. For apps fronted by an IdP (OAuth2/SAML), where basic auth can't pass the login.
+     */
+    private fun signInToApp() {
+        val baseUrl = baseUrlField.text.trim()
+        if (baseUrl.isBlank()) {
+            backendResultPane.showInfo("Enter the app base URL first, then sign in.")
+            return
+        }
+        if (!JBCefApp.isSupported()) {
+            backendResultPane.showInfo("The embedded browser (JCEF) isn't available in this IDE, so browser sign-in can't run.")
+            return
+        }
+        val dialog = InspectSignInDialog(project, baseUrl)
+        if (!dialog.showAndGet()) return
+        val cookie = dialog.harvestedCookie
+        if (cookie.isNullOrBlank()) {
+            backendResultPane.showInfo("No session cookie was captured — make sure the login completed, then try again.")
+        } else {
+            InspectSession.set(baseUrl, cookie)
+            backendResultPane.showInfo("Signed in — session captured for this IDE session. You can evaluate against the app now.")
+        }
+    }
+
     /** POST the expression to the configured Flowable Inspect endpoint and show the result. */
     fun evaluateAgainstApp() {
         if (isEvaluating) return
@@ -530,6 +563,7 @@ class FlowableExpressionPanel(val project: Project) :
             subScopeId = subScopeIdField.text.trim().ifBlank { null },
             username = usernameField.text.trim(),
             password = String(passwordField.password),
+            cookie = InspectSession.get(baseUrlField.text.trim()),
         )
         isEvaluating = true
         backendResultPane.showLoading()
