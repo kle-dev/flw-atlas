@@ -123,7 +123,9 @@ object Atlas {
                         linkedMapOf("groups" to LinkedHashSet<String>(), "sourceIndex" to null)
                     }
                     val gs = QUERY_GROUPS_RE.findAll(raw).map { it.groupValues[1] }.toSet()
-                    (meta["groups"] as MutableSet<String>).addAll(gs)
+                    @Suppress("UNCHECKED_CAST")
+                    val groups = meta["groups"] as MutableSet<String>
+                    groups.addAll(gs)
                     ctx.groups.addAll(gs)
                     val si = QUERY_SOURCE_RE.find(raw)
                     if (si != null && meta["sourceIndex"] == null) meta["sourceIndex"] = si.groupValues[1]
