@@ -1,6 +1,5 @@
 package com.flowable.atlas.explorer
 
-import com.intellij.ide.BrowserUtil
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
@@ -53,9 +52,11 @@ object AtlasExplorerNotifier {
             .createNotification(title, body, NotificationType.INFORMATION)
 
         if (explorerHtml != null) {
-            notification.addAction(NotificationAction.createSimple("Open in browser") {
-                BrowserUtil.browse(explorerHtml.toFile())
-            })
+            if (AtlasBrowser.isAvailable()) {
+                notification.addAction(NotificationAction.createSimple("Open in browser") {
+                    AtlasBrowser.open(explorerHtml)
+                })
+            }
             if (explorerFile != null) {
                 notification.addAction(NotificationAction.createSimple("Open in IDE") {
                     AtlasExplorerOpener.openInIde(project, explorerFile)

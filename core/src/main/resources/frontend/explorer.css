@@ -87,6 +87,34 @@
     background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:var(--text-md);
     -webkit-font-smoothing:antialiased;
   }
+  /* ---------- loading / boot overlay ---------- */
+  /* Shown until explorer.js finishes its synchronous boot. Uses only design tokens so it is
+     theme-correct in light and dark; the spin is transform-based (compositor-driven) so it
+     keeps moving even while the boot script blocks the main thread. */
+  .boot{
+    position:fixed; inset:0; z-index:9999;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--bg);
+    transition:opacity .3s ease;
+  }
+  .boot--done{ opacity:0; pointer-events:none; }
+  .boot-card{
+    display:flex; flex-direction:column; align-items:center;
+    gap:var(--space-4); padding:var(--space-6); text-align:center;
+  }
+  .boot-spinner{
+    width:28px; height:28px;
+    border:3px solid var(--line);
+    border-top-color:var(--accent);
+    border-radius:var(--radius-full);
+    animation:boot-spin .8s linear infinite;
+  }
+  .boot-title{ font-family:var(--sans); font-weight:600; font-size:var(--text-lg); color:var(--ink); }
+  .boot-msg{ font-family:var(--sans); font-size:var(--text-sm); color:var(--ink-dim); max-width:24rem; }
+  @keyframes boot-spin{ to{ transform:rotate(360deg); } }
+  @media (prefers-reduced-motion:reduce){
+    .boot-spinner{ animation:none; opacity:.7; }
+  }
   ::-webkit-scrollbar{width:10px;height:10px}
   ::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:var(--radius-md);border:2px solid var(--bg)}
   ::-webkit-scrollbar-thumb:hover{background:var(--scroll-hover)}
