@@ -28,12 +28,18 @@ import com.flowable.atlas.expr.parse.UnaryNode
  * static preview — running-form/locale members, or a custom function injected via
  * `flowable.externals.additionalData` — return [EvalResult.Unavailable] so they read as "not previewable
  * here", never as invalid.
+ *
+ * An optional [PayloadScopePath] evaluates the expression *at* a node inside the payload — as if it
+ * lived on a component inside the subform/list bound to that node: the node's keys become the local
+ * scope and `$item`/`$index`/`$itemParent` are bound the way the browser engine chains them (see
+ * [PayloadScopes]); `root` and `$payload` stay absolute.
  */
 object FrontendExpressionEvaluator {
 
-    /** Evaluate [body] (a frontend expression, wrapper optional) against [payloadJson] (a JSON object, or null/blank for `{}`). */
-    fun evaluate(body: String, payloadJson: String?): EvalResult =
-        evaluateTraced(body, payloadJson, collect = false).result
+    /** Evaluate [body] (a frontend expression, wrapper optional) against [payloadJson] (a JSON object,
+     *  or null/blank for `{}`), optionally scoped to the payload node at [scope]. */
+    fun evaluate(body: String, payloadJson: String?, scope: PayloadScopePath? = null): EvalResult =
+        evaluateTraced(body, payloadJson, scope, collect = false).result
 
     /**
      * Like [evaluate], but additionally records what every sub-expression evaluated to — for
@@ -42,7 +48,7 @@ object FrontendExpressionEvaluator {
      * arrow bodies are [TraceOutcome.NotEvaluated], never force-evaluated. [evaluate] delegates
      * here, so the two can't drift apart.
      */
-    fun evaluateTraced(body: String, payloadJson: String?, collect: Boolean = true): TracedEvaluation {
+    fun evaluateTraced(body: String, payloadJson: String?, scope: PayloadScopePath? = null, collect: Boolean = true): TracedEvaluation {
         val (stripped, baseShift) = ExprWrappers.stripOuter(body, ExprWrappers.FRONTEND)
         val lead = stripped.takeWhile { it.isWhitespace() }.length
         val inner = stripped.trim()
@@ -59,9 +65,16 @@ object FrontendExpressionEvaluator {
             return TracedEvaluation(EvalResult.Err("Invalid payload JSON: ${e.message}"), emptyList())
         }
 
+        val frame: PayloadScopes.Resolution.Resolved? = if (scope != null && !scope.isRoot) {
+            when (val r = PayloadScopes.resolve(payload, scope)) {
+                is PayloadScopes.Resolution.Resolved -> r
+                is PayloadScopes.Resolution.NotFound -> return TracedEvaluation(EvalResult.Err(r.message), emptyList())
+            }
+        } else null
+
         val collector = if (collect) TraceCollector() else null
         val result = try {
-            EvalResult.Ok(Evaluator(buildContext(payload), collector).eval(ast))
+            EvalResult.Ok(Evaluator(buildContext(payload, frame), collector).eval(ast))
         } catch (e: PreviewUnavailableException) {
             EvalResult.Unavailable(e.message ?: "Not available in the payload preview")
         } catch (e: EvalException) {
@@ -72,14 +85,24 @@ object FrontendExpressionEvaluator {
         return TracedEvaluation(result, collector?.entriesFor(ast, shift) ?: emptyList())
     }
 
-    private fun buildContext(payload: Any?): Map<String, Any?> {
+    /** `{ …additionalData, …scopeSlice }` — the slice (the scoped node, or the whole payload) is
+     *  spread LAST so its keys win on a name clash, exactly like the browser's `basicResolveComponent`. */
+    private fun buildContext(payload: Any?, frame: PayloadScopes.Resolution.Resolved?): Map<String, Any?> {
         val ctx = LinkedHashMap<String, Any?>()
         ctx["flw"] = FlwLibrary.namespace()
         ctx["\$lang"] = "en"
         ctx["\$payload"] = payload
-        val map = Values.asMap(payload)
-        ctx["root"] = map?.get("root") ?: payload
-        if (map != null) ctx.putAll(map)
+        ctx["root"] = Values.asMap(payload)?.get("root") ?: payload
+        if (frame == null) {
+            Values.asMap(payload)?.let { ctx.putAll(it) }
+            return ctx
+        }
+        ctx["\$itemParent"] = frame.itemParent
+        if (frame.hasItem) {
+            ctx["\$item"] = frame.item
+            ctx["\$index"] = frame.index?.toDouble()
+        }
+        Values.asMap(frame.scope)?.let { ctx.putAll(it) }
         return ctx
     }
 

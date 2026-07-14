@@ -7,6 +7,8 @@ import com.flowable.atlas.expr.ExpressionValidator
 import com.flowable.atlas.expr.catalog.FlowableCustomFunctions
 import com.flowable.atlas.expr.eval.EvalResult
 import com.flowable.atlas.expr.eval.FrontendExpressionEvaluator
+import com.flowable.atlas.expr.eval.PayloadScopePath
+import com.flowable.atlas.expr.eval.PayloadScopes
 import com.flowable.atlas.expr.eval.TraceEntry
 import com.flowable.atlas.expr.eval.TraceNodeKind
 import com.flowable.atlas.expr.eval.TraceOutcome
@@ -78,11 +80,24 @@ internal class PlaygroundDiagnostics(
     internal interface Host {
         val dialect: ExpressionDialect
         val payloadText: String
+
+        /** The frontend payload-scope path as typed (`orders[2].items[0]`-style, blank = root). */
+        val frontendScopeText: String
         val showSubEvaluations: Boolean
 
         /** Frontend evaluation result of the last pass — `null` means "expression is blank". Not
          *  called while the backend dialect is active (that result pane is driven by Inspect calls). */
         fun onFrontendResult(result: EvalResult?)
+
+        /** Scope-path status of the last pass — `null` when no scope is set (or the backend dialect
+         *  is active). Drives the scope field's error outline and the payload-editor highlight. */
+        fun onScopeStatus(status: ScopeStatus?)
+    }
+
+    /** Outcome of checking the typed scope path against the current payload. */
+    internal sealed interface ScopeStatus {
+        data class Valid(val path: PayloadScopePath) : ScopeStatus
+        data class Invalid(val message: String) : ScopeStatus
     }
 
     private class Computed(
@@ -91,6 +106,7 @@ internal class PlaygroundDiagnostics(
         val dialect: ExpressionDialect,
         val problems: List<ExprProblem>,
         val trace: TracedEvaluation?,
+        val scopeStatus: ScopeStatus?,
     )
 
     private val alarm = SingleAlarm(::revalidate, 250, this)
@@ -108,6 +124,23 @@ internal class PlaygroundDiagnostics(
     }
 
     fun scheduleRevalidate() = alarm.cancelAndRequest()
+
+    /**
+     * Re-apply just the sub-expression `= value` inlays from the last computed trace, synchronously on
+     * the EDT. The toolbar's "Show Sub-Expression Values" toggle only flips inlay visibility — the
+     * trace is already in [lastComputed], so there is nothing to re-evaluate. Doing this inline avoids
+     * the 250 ms debounce + pooled round-trip whose result the stale-guard (or an editor relayout that
+     * happens to overlap it) can silently drop, which left the hints intermittently missing after a
+     * toggle. Highlighters and the result pane are left untouched. If the editor is momentarily absent
+     * the next [editorAvailable] re-applies everything, so no state is lost.
+     */
+    fun refreshSubEvaluations() {
+        val editor = field.editor as? EditorEx ?: return
+        for (i in inlays) if (i.isValid) Disposer.dispose(i)
+        inlays.clear()
+        val c = lastComputed ?: return
+        if (host.showSubEvaluations && c.trace != null) applyInlays(editor, c.text, c.trace.entries)
+    }
 
     /** Called from the field's `addSettingsProvider` — i.e. whenever a (new) editor materializes. */
     fun editorAvailable(editor: EditorEx) {
@@ -134,6 +167,7 @@ internal class PlaygroundDiagnostics(
         val stamp = field.document.modificationStamp
         val dialect = host.dialect
         val payload = if (dialect == ExpressionDialect.FRONTEND) host.payloadText else ""
+        val scopeText = if (dialect == ExpressionDialect.FRONTEND) host.frontendScopeText else ""
         ApplicationManager.getApplication().executeOnPooledThread {
             if (project.isDisposed) return@executeOnPooledThread
             val allowlist = FlowableAtlasProjectSettings.getInstance(project)
@@ -145,17 +179,47 @@ internal class PlaygroundDiagnostics(
                 ExpressionValidator.validateSyntax(text, dialect) +
                     ExpressionValidator.validateSemantics(text, dialect, custom).filterNot { allowlist.isAllowlisted(it) }
                 ).sortedBy { it.startOffset }
-            val trace = if (dialect == ExpressionDialect.FRONTEND && text.isNotBlank()) {
-                FrontendExpressionEvaluator.evaluateTraced(text, payload)
-            } else null
+            val (scopePath, scopeStatus) = checkScope(dialect, scopeText, payload)
+            val trace = when {
+                dialect != ExpressionDialect.FRONTEND || text.isBlank() -> null
+                // an unparseable path never reaches the evaluator — surface it as the result, same
+                // loud policy as an unresolvable path (which the evaluator itself reports)
+                scopePath == null && scopeStatus is ScopeStatus.Invalid ->
+                    TracedEvaluation(EvalResult.Err(scopeStatus.message), emptyList())
+                else -> FrontendExpressionEvaluator.evaluateTraced(text, payload, scopePath)
+            }
             ApplicationManager.getApplication().invokeLater({
                 if (project.isDisposed) return@invokeLater
-                // stale (text/dialect/payload changed since) → drop; the pending alarm re-runs
+                // stale (text/dialect/payload/scope changed since) → drop; the pending alarm re-runs
                 if (field.document.modificationStamp != stamp || host.dialect != dialect) return@invokeLater
-                if (dialect == ExpressionDialect.FRONTEND && host.payloadText != payload) return@invokeLater
-                lastComputed = Computed(text, stamp, dialect, problems, trace)
+                if (dialect == ExpressionDialect.FRONTEND && (host.payloadText != payload || host.frontendScopeText != scopeText)) return@invokeLater
+                lastComputed = Computed(text, stamp, dialect, problems, trace, scopeStatus)
                 applyComputed()
             }, ModalityState.any())
+        }
+    }
+
+    /**
+     * Parse + resolve the typed scope path against the payload. Returns the path to evaluate with
+     * (null = evaluate at the root) and the status for the UI (null = no scope set). The resolution
+     * here only feeds the field outline / highlight — the evaluator re-resolves and reports its own
+     * error, so the result pane and the status can't drift apart.
+     */
+    private fun checkScope(dialect: ExpressionDialect, scopeText: String, payload: String): Pair<PayloadScopePath?, ScopeStatus?> {
+        if (dialect != ExpressionDialect.FRONTEND || scopeText.isBlank()) return null to null
+        val path = when (val parsed = PayloadScopePath.parse(scopeText)) {
+            is PayloadScopePath.ParseResult.Err -> return null to ScopeStatus.Invalid(parsed.message)
+            is PayloadScopePath.ParseResult.Ok -> parsed.path
+        }
+        if (path.isRoot) return null to null
+        val payloadValue: Any? = try {
+            if (payload.isBlank()) emptyMap<String, Any?>() else MiniJson.parse(payload)
+        } catch (e: MiniJson.JsonException) {
+            return path to ScopeStatus.Invalid("Payload is not valid JSON: ${e.message}")
+        }
+        return when (val r = PayloadScopes.resolve(payloadValue, path)) {
+            is PayloadScopes.Resolution.Resolved -> path to ScopeStatus.Valid(path)
+            is PayloadScopes.Resolution.NotFound -> path to ScopeStatus.Invalid(r.message)
         }
     }
 
@@ -167,6 +231,7 @@ internal class PlaygroundDiagnostics(
         if (c.dialect == ExpressionDialect.FRONTEND) {
             host.onFrontendResult(c.trace?.result)
         }
+        host.onScopeStatus(if (c.dialect == ExpressionDialect.FRONTEND) c.scopeStatus else null)
         val editor = field.editor as? EditorEx ?: return
         appliedEditor = editor
         applyHighlighters(editor, c.problems)

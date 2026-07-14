@@ -34,4 +34,20 @@ class FlowableRenameWarningTest : BasePlatformTestCase() {
         assertNotNull("referenced method should get a rename listener", provider.getListener(doWork))
         assertNull("unreferenced method should not get a rename listener", provider.getListener(nope))
     }
+
+    fun testListenerAttachesEvenBeforeIndexIsBuilt() {
+        myFixture.addFileToProject(
+            "models/P.bpmn",
+            """<definitions xmlns:flowable="http://flowable.org/bpmn"><process id="P">""" +
+                """<serviceTask id="t" flowable:expression="${'$'}{myBean.doWork()}"/></process></definitions>""",
+        )
+        myFixture.addFileToProject("com/acme/MyBean.java", "package com.acme; public class MyBean { public void doWork() {} }")
+        // Simulate "not scanned yet": with no cached index, the listener must still attach so the
+        // warning is reliable regardless of when the index gets built (the actual check runs later).
+        project.service<FlowableModelIndexService>().invalidate()
+
+        val doWork = JavaPsiFacade.getInstance(project).findClass("com.acme.MyBean", GlobalSearchScope.allScope(project))!!
+            .findMethodsByName("doWork", false).first()
+        assertNotNull("listener must attach even when the index isn't cached yet", provider.getListener(doWork))
+    }
 }

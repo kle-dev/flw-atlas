@@ -24,6 +24,7 @@ class FlowableExprPlaygroundState : PersistentStateComponent<FlowableExprPlaygro
         var dialect: String = ExpressionDialect.BACKEND.name
         var expression: String = ""
         var payload: String = ""
+        var frontendScopePath: String = ""
         var scopeKey: String? = null
         var inspectScopeType: String = InspectClient.ScopeType.BPMN.name
         var inspectScopeId: String = ""
@@ -45,6 +46,11 @@ class FlowableExprPlaygroundState : PersistentStateComponent<FlowableExprPlaygro
     var payload: String
         get() = state.payload
         set(value) { state.payload = value }
+
+    /** The frontend payload-scope path (`orders[2].items[0]`-style, blank = root) — see `PayloadScopePath`. */
+    var frontendScopePath: String
+        get() = state.frontendScopePath
+        set(value) { state.frontendScopePath = value }
 
     var scopeKey: String?
         get() = state.scopeKey
