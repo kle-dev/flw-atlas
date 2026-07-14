@@ -430,6 +430,9 @@
   /* ------------------------------------------------------------------ */
   @media (min-width:801px){
     .shell.rail{grid-template-columns:64px 1fr}
+    /* Sidebar is position:absolute in rail mode (out of grid flow), so pin .main to  */
+    /* the 1fr track — otherwise grid auto-placement drops it into the 64px column.   */
+    .shell.rail .main{grid-column:2}
     .shell.rail .sidebar{position:absolute;top:0;bottom:0;left:0;width:64px;z-index:30;
       overflow:hidden;transition:width .12s ease}
     .shell.rail .sidebar:hover,.shell.rail .sidebar:focus-within{width:var(--sidebar-w);

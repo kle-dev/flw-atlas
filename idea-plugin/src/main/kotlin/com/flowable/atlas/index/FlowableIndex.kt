@@ -28,6 +28,8 @@ class FlowableIndex(
     val userTaskIds: Set<String> = emptySet(),
     /** Ids of every flow node — candidates for `activityId(...)`. */
     val activityIds: Set<String> = emptySet(),
+    /** Wall-clock time this snapshot was built (epoch millis); 0 when not set by the scanner. */
+    val builtAtMillis: Long = 0L,
 ) {
 
     private val distinctByType: Map<ModelType, List<ModelEntry>> by lazy {
