@@ -1,6 +1,8 @@
 package com.flowable.atlas.design
 
 import com.flowable.atlas.events.AtlasEvents
+import com.flowable.atlas.explorer.AtlasExplorerFiles
+import com.flowable.atlas.explorer.AtlasGenerationRunner
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.ConnectionsConfigurable
@@ -174,10 +176,18 @@ class DesignPullService(private val project: Project) {
             body += "<br><br>Failed:<br>" + failed.joinToString("<br>")
         }
         val type = if (outsideContent || failed.isNotEmpty()) NotificationType.WARNING else NotificationType.INFORMATION
-        NotificationGroupManager.getInstance()
+        val notification = NotificationGroupManager.getInstance()
             .getNotificationGroup(GROUP_ID)
             .createNotification(title, body, type)
-            .notify(project)
+        // The index was already rebuilt above, but any generated Atlas Explorer is now out of date —
+        // offer a one-click regenerate when such artifacts exist.
+        val outputDir = FlowableAtlasProjectSettings.getInstance(project).atlasOutputDir
+        if (AtlasExplorerFiles.find(projectDir, outputDir).isNotEmpty()) {
+            notification.addAction(NotificationAction.createSimple("Regenerate Atlas Explorer") {
+                AtlasGenerationRunner.regenerate(project)
+            })
+        }
+        notification.notify(project)
         recordPullFinished(succeeded = true)
     }
 

@@ -35,8 +35,12 @@ class ExpressionsConfigurable(private val project: Project) : BoundSearchableCon
                         .bindSelected(app::expressionValidation)
                 }
                 row {
-                    checkBox("Also validate expressions in Java string literals")
-                        .comment("Inject the backend expression language into Java strings that contain \${…} / #{…}.")
+                    checkBox("Treat \${…} / #{…} in Java string literals as Flowable expressions")
+                        .comment(
+                            "Applies the same highlighting, completion and validation to \${…} / #{…} inside Java " +
+                                "String literals that the plugin already gives BPMN/CMMN XML and .form JSON. " +
+                                "Squiggles for malformed expressions also require \"Validate expression syntax\" above.",
+                        )
                         .bindSelected(app::injectJavaExpressions)
                 }
                 row {

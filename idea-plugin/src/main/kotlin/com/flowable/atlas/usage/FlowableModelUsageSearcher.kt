@@ -1,20 +1,13 @@
 package com.flowable.atlas.usage
 
-import com.flowable.atlas.index.ArchiveModelScanner
 import com.flowable.atlas.index.FlowableModelIndexService
-import com.flowable.atlas.model.ModelFiles
 import com.flowable.atlas.parsing.ModelUsageLocator
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.find.findUsages.FindUsagesOptions
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.components.service
-import com.intellij.openapi.progress.ProgressManager
-import com.intellij.openapi.roots.ProjectFileIndex
-import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiField
 import com.intellij.psi.PsiManager
-import com.intellij.psi.PsiMethod
 import com.intellij.find.findUsages.CustomUsageSearcher
 import com.intellij.usageView.UsageInfo
 import com.intellij.usages.Usage
@@ -32,7 +25,7 @@ class FlowableModelUsageSearcher : CustomUsageSearcher() {
         ReadAction.runBlocking<RuntimeException> {
             val project = element.project
             if (project.isDisposed) return@runBlocking
-            val names = targetNames(element)
+            val names = ModelReferenceScan.namesOf(element)
             if (names.isEmpty()) return@runBlocking
 
             val index = project.service<FlowableModelIndexService>().index()
@@ -50,32 +43,7 @@ class FlowableModelUsageSearcher : CustomUsageSearcher() {
                 }
             }
 
-            ProjectFileIndex.getInstance(project).iterateContent { file ->
-                ProgressManager.checkCanceled()
-                if (!file.isDirectory && !ModelFiles.isExcluded(file.path)) {
-                    when {
-                        ModelFiles.typeOf(file) != null ->
-                            runCatching { String(file.contentsToByteArray(), Charsets.UTF_8) }.getOrNull()
-                                ?.let { reportUsages(file, it) }
-                        ArchiveModelScanner.isArchive(file) ->
-                            ArchiveModelScanner.scan(file) { _, bytes, _, entryFile ->
-                                reportUsages(entryFile, String(bytes, Charsets.UTF_8))
-                            }
-                    }
-                }
-                true
-            }
+            ModelReferenceScan.forEachModelText(project, ::reportUsages)
         }
-    }
-
-    private fun targetNames(element: PsiElement): Set<String> = when (element) {
-        is PsiMethod -> setOfNotNull(element.name)
-        is PsiField -> setOfNotNull(element.name)
-        is PsiClass -> setOfNotNull(
-            element.qualifiedName,
-            element.name,
-            element.name?.replaceFirstChar { it.lowercaseChar() },
-        )
-        else -> emptySet()
     }
 }

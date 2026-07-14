@@ -1165,3 +1165,9 @@ wireSearchTrigger();
 wireLinkFilter();
 window.addEventListener('hashchange',route);
 route();
+
+// ---------- boot done: dismiss the loading overlay ----------
+// The overlay (explorer.html #atlas-boot) covered the file read + this synchronous boot;
+// fade it out now that the initial view is rendered, then remove it after the transition.
+const _boot=document.getElementById('atlas-boot');
+if(_boot){ _boot.classList.add('boot--done'); setTimeout(()=>_boot.remove(),400); }

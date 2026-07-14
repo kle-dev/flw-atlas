@@ -1,7 +1,6 @@
 package com.flowable.atlas.explorer
 
 import com.intellij.icons.AllIcons
-import com.intellij.ide.BrowserUtil
 import com.intellij.ide.ui.LafManagerListener
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionUpdateThread
@@ -101,8 +100,15 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
         Separator.getInstance(),
         object : AnAction("Open in Browser", "Open this explorer in the external browser", AllIcons.General.Web), DumbAware {
             override fun actionPerformed(e: AnActionEvent) {
-                BrowserUtil.browse(file.toNioPath().toFile())
+                AtlasBrowser.open(file.toNioPath())
             }
+
+            // Hidden where a browser launch can't work (headless Remote-Dev host / no configured browser).
+            override fun update(e: AnActionEvent) {
+                e.presentation.isEnabledAndVisible = AtlasBrowser.isAvailable()
+            }
+
+            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
         },
     )
 
