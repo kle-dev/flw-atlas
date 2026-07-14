@@ -31,6 +31,7 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.application.WriteIntentReadAction
 import com.intellij.openapi.application.runReadAction
+import com.intellij.openapi.command.undo.UndoUtil
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
@@ -104,6 +105,10 @@ class FlowableExpressionPanel(val project: Project) :
         // even when the tool window is docked short at the bottom of the screen.
         minimumSize = Dimension(JBUI.scale(120), JBUI.scale(56))
         addSettingsProvider { editor ->
+            // A LanguageTextField's document isn't file-backed, so the platform's global $Undo action
+            // doesn't track it out of the box (no Ctrl+Z). Enable undo explicitly — this settings
+            // provider re-runs after a dialect switch swaps the document, so the new document gets it too.
+            UndoUtil.enableUndoFor(editor.document)
             editor.setVerticalScrollbarVisible(true)
             editor.setHorizontalScrollbarVisible(true)
             editor.setBorder(JBUI.Borders.empty(4))
@@ -151,6 +156,7 @@ class FlowableExpressionPanel(val project: Project) :
         // floor the height so the payload/result splitter can shrink it to give the result room, never to nothing
         minimumSize = Dimension(JBUI.scale(120), JBUI.scale(80))
         addSettingsProvider { editor ->
+            UndoUtil.enableUndoFor(editor.document)   // Ctrl+Z in the payload field too (see the expression field)
             editor.setVerticalScrollbarVisible(true)
             editor.setBorder(JBUI.Borders.empty(4))
             editor.settings.apply {
