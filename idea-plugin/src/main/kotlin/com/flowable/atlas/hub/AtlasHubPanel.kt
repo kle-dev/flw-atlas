@@ -267,7 +267,9 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
             val top = counts.sortedByDescending { it.second }.take(4)
                 .joinToString(" · ") { (name, count) -> "$count $name" }
             val more = (counts.size - 4).takeIf { it > 0 }?.let { " · +$it more" } ?: ""
-            "<html><b>${index.distinctCount()}</b> models indexed<br>$top$more</html>"
+            val scanned = index.builtAtMillis.takeIf { it > 0 }
+                ?.let { "<br>Last scanned: ${DateFormatUtil.formatPrettyDateTime(it)}" } ?: ""
+            "<html><b>${index.distinctCount()}</b> models indexed<br>$top$more$scanned</html>"
         }
 
         val artifacts = base?.let { b ->

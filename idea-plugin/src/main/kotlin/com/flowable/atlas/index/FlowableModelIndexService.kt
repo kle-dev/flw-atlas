@@ -260,6 +260,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
             byKey, referencedIdentifiers, referencedClassFqns,
             variables = variables, messages = messages, signals = signals,
             userTaskIds = userTaskIds, activityIds = activityIds,
+            builtAtMillis = System.currentTimeMillis(),
         )
     }
 }
