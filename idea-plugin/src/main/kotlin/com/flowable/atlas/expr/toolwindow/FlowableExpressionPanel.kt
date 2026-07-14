@@ -5,6 +5,7 @@ import com.flowable.atlas.events.AtlasEventsListener
 import com.flowable.atlas.expr.ExpressionDialect
 import com.flowable.atlas.expr.ExpressionScope
 import com.flowable.atlas.expr.eval.EvalResult
+import com.flowable.atlas.expr.eval.PayloadScopePath
 import com.flowable.atlas.expr.inspect.InspectClient
 import com.flowable.atlas.expr.inspect.InspectConnectionDetector
 import com.flowable.atlas.expr.inspect.InspectCredentials
@@ -28,10 +29,16 @@ import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.application.WriteIntentReadAction
+import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.editor.ex.EditorEx
+import com.intellij.openapi.editor.markup.HighlighterLayer
+import com.intellij.openapi.editor.markup.HighlighterTargetArea
+import com.intellij.openapi.editor.markup.RangeHighlighter
+import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.SimpleToolWindowPanel
@@ -40,8 +47,8 @@ import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.ui.AnimatedIcon
 import com.intellij.ui.JBColor
+import com.intellij.ui.JBSplitter
 import com.intellij.ui.LanguageTextField
-import com.intellij.ui.OnePixelSplitter
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPasswordField
 import com.intellij.ui.components.JBScrollPane
@@ -55,6 +62,9 @@ import com.intellij.util.SingleAlarm
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
 import java.awt.CardLayout
+import java.awt.Dimension
+import java.awt.event.ComponentAdapter
+import java.awt.event.ComponentEvent
 import javax.swing.BoxLayout
 import javax.swing.JComponent
 import javax.swing.JPanel
@@ -90,6 +100,9 @@ class FlowableExpressionPanel(val project: Project) :
 
     private val field: LanguageTextField = LanguageTextField(languageOf(state.dialect), project, state.expression, false).apply {
         border = JBUI.Borders.customLine(JBColor.border(), 1)
+        // Floor the editor height so the splitter (once it honors component minimums) keeps it usable
+        // even when the tool window is docked short at the bottom of the screen.
+        minimumSize = Dimension(JBUI.scale(120), JBUI.scale(56))
         addSettingsProvider { editor ->
             editor.setVerticalScrollbarVisible(true)
             editor.setHorizontalScrollbarVisible(true)
@@ -123,8 +136,10 @@ class FlowableExpressionPanel(val project: Project) :
         object : PlaygroundDiagnostics.Host {
             override val dialect: ExpressionDialect get() = this@FlowableExpressionPanel.dialect
             override val payloadText: String get() = payloadField.text
+            override val frontendScopeText: String get() = payloadScopeField.text
             override val showSubEvaluations: Boolean get() = state.showSubEvaluations
             override fun onFrontendResult(result: EvalResult?) = this@FlowableExpressionPanel.onFrontendResult(result)
+            override fun onScopeStatus(status: PlaygroundDiagnostics.ScopeStatus?) = this@FlowableExpressionPanel.onScopeStatus(status)
         },
         this,
     )
@@ -133,6 +148,8 @@ class FlowableExpressionPanel(val project: Project) :
 
     private val payloadField = LanguageTextField(JsonLanguage.INSTANCE, project, state.payload, false).apply {
         border = JBUI.Borders.customLine(JBColor.border(), 1)
+        // floor the height so the payload/result splitter can shrink it to give the result room, never to nothing
+        minimumSize = Dimension(JBUI.scale(120), JBUI.scale(80))
         addSettingsProvider { editor ->
             editor.setVerticalScrollbarVisible(true)
             editor.setBorder(JBUI.Borders.empty(4))
@@ -142,6 +159,10 @@ class FlowableExpressionPanel(val project: Project) :
                 isLineMarkerAreaShown = false
                 isCaretRowShown = false
             }
+            // the editor materializes lazily (and is re-created) — its markup died with the old one
+            payloadEditor = editor
+            scopeHighlighter = null
+            applyScopeHighlight()
         }
         addDocumentListener(object : DocumentListener {
             override fun documentChanged(event: DocumentEvent) {
@@ -150,6 +171,23 @@ class FlowableExpressionPanel(val project: Project) :
             }
         })
     }
+
+    /** The payload-scope path (`orders[2].items[0]`-style) — the node the frontend expression is evaluated *at*. */
+    private val payloadScopeField = JBTextField(state.frontendScopePath).apply {
+        emptyText.text = "(root)"
+        document.addDocumentListener(object : javax.swing.event.DocumentListener {
+            private fun sync() {
+                state.frontendScopePath = text
+                if (dialect == ExpressionDialect.FRONTEND) diagnostics.scheduleRevalidate()
+            }
+            override fun insertUpdate(e: javax.swing.event.DocumentEvent) = sync()
+            override fun removeUpdate(e: javax.swing.event.DocumentEvent) = sync()
+            override fun changedUpdate(e: javax.swing.event.DocumentEvent) = sync()
+        })
+    }
+    private var payloadEditor: EditorEx? = null
+    private var scopeHighlighter: RangeHighlighter? = null
+    private var lastScopeStatus: PlaygroundDiagnostics.ScopeStatus? = null
     private val frontendResultPane = PlaygroundResultPane("Type an expression to evaluate")
 
     // -- backend (Inspect) card ------------------------------------------------------------------
@@ -195,7 +233,9 @@ class FlowableExpressionPanel(val project: Project) :
         get() = state.showSubEvaluations
         set(value) {
             state.showSubEvaluations = value
-            diagnostics.scheduleRevalidate()
+            // Flip the inlays right now from the already-computed trace — no debounced re-evaluation,
+            // whose async result could be dropped and leave the hints stuck hidden/shown.
+            diagnostics.refreshSubEvaluations()
         }
 
     init {
@@ -219,10 +259,28 @@ class FlowableExpressionPanel(val project: Project) :
             }, BorderLayout.SOUTH)
         }
 
-        val splitter = OnePixelSplitter(true, "flowable.atlas.expr.playground.splitter", 0.45f).apply {
+        val splitter = JBSplitter(true, "flowable.atlas.expr.playground.splitter", 0.45f).apply {
             firstComponent = editorSection
             secondComponent = cards
+            // a grabbable divider (the old OnePixelSplitter's 1px line was near-impossible to grab) so the
+            // expression editor and the payload/scope card can be resized against each other — width when
+            // docked landscape (side-by-side), height when portrait (stacked)
+            dividerWidth = JBUI.scale(6)
+            setHonorComponentsMinimumSize(true)
         }
+        // Adapt to the tool window's shape: stack the editor over the payload/result when the panel is
+        // portrait (docked left/right, the usual case), but lay them side-by-side when it is clearly
+        // landscape (docked short at the bottom of the screen) so the editor keeps its full height
+        // instead of being squeezed into a sliver.
+        splitter.addComponentListener(object : ComponentAdapter() {
+            override fun componentResized(e: ComponentEvent) {
+                val w = splitter.width
+                val h = splitter.height
+                if (w == 0 || h == 0) return
+                val wantVertical = w <= h * 1.3
+                if (splitter.isVertical != wantVertical) splitter.orientation = wantVertical
+            }
+        })
         setContent(splitter)
 
         project.messageBus.connect(this).subscribe(AtlasEvents.TOPIC, object : AtlasEventsListener {
@@ -324,12 +382,77 @@ class FlowableExpressionPanel(val project: Project) :
         row {
             comment("Payload (JSON, optional) — the expression is evaluated live against it.")
         }
-        row {
-            cell(payloadField).align(Align.FILL)
-        }.resizableRow()
-        row {
-            cell(frontendResultPane).align(AlignX.FILL)
+        row("Scope:") {
+            cell(payloadScopeField).align(AlignX.FILL).resizableColumn()
+                .comment("Evaluate as a component at this payload node — e.g. orders[2].items[0]; empty = whole payload. Binds \$item, \$index and \$itemParent like the form runtime.")
         }
+        row("") {
+            button("From Cursor") { setScopeFromCaret() }
+            button("Clear") { payloadScopeField.text = "" }
+        }
+        row {
+            // payload editor over the result, split by a grabbable divider so the result box can be dragged
+            // taller for large payloads (it still scrolls); resizableRow lets the pair fill the card height
+            cell(
+                JBSplitter(true, "flowable.atlas.expr.playground.frontend.result.splitter", 0.65f).apply {
+                    firstComponent = payloadField
+                    secondComponent = frontendResultPane
+                    dividerWidth = JBUI.scale(6)
+                    setHonorComponentsMinimumSize(true)
+                },
+            ).align(Align.FILL)
+        }.resizableRow()
+    }
+
+    /** Derive the scope path from the caret position in the payload JSON editor. */
+    private fun setScopeFromCaret() {
+        val editor = payloadEditor?.takeUnless { it.isDisposed }
+        if (editor == null) {
+            frontendResultPane.showInfo("Place the caret on a node in the payload JSON first, then use “From Cursor”.")
+            return
+        }
+        // a plain Swing button callback holds no write-intent lock, and committing a document needs one
+        val path = WriteIntentReadAction.compute<PayloadScopePath?> {
+            val documentManager = PsiDocumentManager.getInstance(project)
+            documentManager.commitDocument(payloadField.document)
+            documentManager.getPsiFile(payloadField.document)
+                ?.let { PayloadJsonPaths.pathAt(it, editor.caretModel.offset) }
+        }
+        if (path == null) {
+            frontendResultPane.showInfo("Place the caret on a node in the payload JSON first, then use “From Cursor”.")
+            return
+        }
+        payloadScopeField.text = path.format()   // the field's document listener re-evaluates
+    }
+
+    /** Reflect the last pass's scope check: error outline + tooltip on the field, node highlight in the editor. */
+    private fun onScopeStatus(status: PlaygroundDiagnostics.ScopeStatus?) {
+        lastScopeStatus = status
+        val invalid = status as? PlaygroundDiagnostics.ScopeStatus.Invalid
+        payloadScopeField.putClientProperty("JComponent.outline", if (invalid != null) "error" else null)
+        payloadScopeField.toolTipText = invalid?.message
+        applyScopeHighlight()
+    }
+
+    /** Tint the scoped payload node so the selection is visible where it matters — in the JSON itself. */
+    private fun applyScopeHighlight() {
+        val editor = payloadEditor?.takeUnless { it.isDisposed } ?: return
+        scopeHighlighter?.let { if (it.isValid) editor.markupModel.removeHighlighter(it) }
+        scopeHighlighter = null
+        val valid = lastScopeStatus as? PlaygroundDiagnostics.ScopeStatus.Valid ?: return
+        if (valid.path.isRoot) return
+        // no commit here: PSI may lag the document for a moment, but every diagnostics pass re-fires
+        // onScopeStatus, so a stale/missing highlight self-heals; PSI reads still need a read lock
+        val range = runReadAction {
+            PsiDocumentManager.getInstance(project).getPsiFile(payloadField.document)
+                ?.let { PayloadJsonPaths.rangeOf(it, valid.path) }
+        } ?: return
+        val end = range.endOffset.coerceAtMost(editor.document.textLength)
+        if (range.startOffset >= end) return
+        val attrs = TextAttributes().apply { backgroundColor = SCOPE_BG }
+        scopeHighlighter = editor.markupModel.addRangeHighlighter(
+            range.startOffset, end, HighlighterLayer.SELECTION - 1, attrs, HighlighterTargetArea.EXACT_RANGE,
+        )
     }
 
     private fun backendCard(): JComponent = panel {
@@ -345,9 +468,11 @@ class FlowableExpressionPanel(val project: Project) :
             button("Detect from project") { applyDetectedConnection(force = true) }
         }
         row("Username:") {
-            cell(usernameField)
-            label("Password:")
-            cell(passwordField).comment("Remembered in the IDE Password Safe after a successful evaluation")
+            cell(usernameField).align(AlignX.FILL).resizableColumn()
+        }
+        row("Password:") {
+            cell(passwordField).align(AlignX.FILL).resizableColumn()
+                .comment("Remembered in the IDE Password Safe after a successful evaluation")
         }
         row("") {
             button("Sign in via browser (SSO)…") { signInToApp() }
@@ -628,6 +753,9 @@ class FlowableExpressionPanel(val project: Project) :
         const val TOOL_WINDOW_ID = "Flowable Expressions"
         private const val ALL_VARIABLES_LABEL = "(all variables)"
 
+        /** Scope-node tint in the payload editor (light, dark) — subtle, below the selection layer. */
+        private val SCOPE_BG = JBColor(0xDDEBF9, 0x2D3B4E)
+
         /** Activate the playground tool window and pre-fill it — the intention's entry point. */
         fun open(project: Project, text: String, dialect: ExpressionDialect, scopeKey: String? = null) {
             val toolWindow = ToolWindowManager.getInstance(project).getToolWindow(TOOL_WINDOW_ID) ?: return
@@ -650,7 +778,7 @@ internal class PlaygroundResultPane(private val emptyHint: String) : JPanel(Bord
         verticalAlignment = SwingConstants.TOP
         border = JBUI.Borders.empty(6, 2, 0, 6)
     }
-    private val text = JBTextArea(4, 40).apply {
+    private val text = JBTextArea(6, 40).apply {
         isEditable = false
         lineWrap = true
         wrapStyleWord = true
@@ -658,6 +786,8 @@ internal class PlaygroundResultPane(private val emptyHint: String) : JPanel(Bord
 
     init {
         isOpaque = false
+        // keep a few lines visible so the splitter's honored minimum can't collapse the result away
+        minimumSize = Dimension(JBUI.scale(80), JBUI.scale(72))
         add(icon, BorderLayout.WEST)
         add(JBScrollPane(text), BorderLayout.CENTER)
         showEmpty()

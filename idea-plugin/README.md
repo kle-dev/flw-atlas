@@ -86,7 +86,11 @@ First-class editor support for both Flowable expression dialects, wherever they 
   Backend or Frontend, and get instant validation and completion. An optional *Scope to model* picker
   narrows variable/field completion to one model. The lower panel adds live evaluation:
   - **Frontend** — paste a form payload as JSON and the expression is evaluated live against it (empty
-    payload → pure syntax check).
+    payload → pure syntax check). An optional **Scope** path (e.g. `orders[2].items[0]`, or *From
+    Caret* on a node in the payload) evaluates the expression as a component inside the subform/list
+    bound to that node would see it: `$item`, `$index` and the chained `$itemParent` are bound like
+    the form runtime binds them, `root`/`$payload` stay absolute, and the scoped node is highlighted
+    in the payload editor.
   - **Backend** — *Evaluate against app* runs the expression against a running instance via the Flowable
     Inspect REST API (needs a live process/case/task instance id). The connection (base URL, user,
     dev password) is **auto-detected** from the project's Spring configuration; *Detect from project*

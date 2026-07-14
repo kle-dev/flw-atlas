@@ -1155,12 +1155,31 @@ function wireSidebarResize(){
   _sbNarrow.addEventListener('change',()=>{ if(!sbPref()) applySidebar(); });
 }
 
+// In rail mode the collapsed sidebar flies out on :hover/:focus-within. A mouse
+// click on a nav item (or a footer button) leaves that element focused, so
+// :focus-within stays true and the rail never collapses when the pointer leaves.
+// Drop the focus after pointer-initiated clicks so the fly-out closes on mouse-out.
+// Keyboard activation reports detail:0 (Enter/Space synthesize el.click()) and is
+// left alone, so Tab users keep the fly-out until they move focus away themselves.
+function wireRailAutoCollapse(){
+  const shell=document.querySelector('.shell');
+  const sidebar=document.getElementById('sidebar');
+  if(!shell||!sidebar) return;
+  sidebar.addEventListener('click',e=>{
+    if(e.detail===0) return;                                    // keyboard-synthesized click
+    if(!shell.classList.contains('rail')) return;               // only the collapsed rail flies out
+    const a=document.activeElement;
+    if(a&&a!==document.body&&sidebar.contains(a)) a.blur();      // release :focus-within → collapse on mouse-out
+  });
+}
+
 // ---------- boot ----------
 document.getElementById('proj').textContent=DATA.project;
 computeInsights();
 renderSidebar();
 applySidebar();
 wireSidebarResize();
+wireRailAutoCollapse();
 wireSearchTrigger();
 wireLinkFilter();
 window.addEventListener('hashchange',route);

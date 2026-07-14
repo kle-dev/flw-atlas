@@ -31,12 +31,18 @@ class FlowableRenameWarningProvider : RefactoringElementListenerProvider {
             is PsiClass -> element.name ?: return null
             else -> return null
         }
-        val project = element.project
-        // O(1); never build the index on the refactoring thread. If it isn't cached yet we simply
-        // don't warn (no reference data to check against).
-        val index = project.service<FlowableModelIndexService>().cachedOrNull() ?: return null
         val names = ModelReferenceScan.namesOf(element)
-        if (names.none { it in index.referencedIdentifiers || it in index.referencedClassFqns }) return null
+        if (names.isEmpty()) return null
+        val project = element.project
+        // Fast path: when the index is already built, only attach a listener if the symbol is actually
+        // referenced — no background work / task flash for unrelated renames. When the index is NOT yet
+        // cached (e.g. right after opening the project) we must not build it on the refactoring thread,
+        // so attach a listener anyway and decide in the background (warn() re-checks and no-ops if not
+        // referenced). This is what makes the warning reliable regardless of index-build timing.
+        val cached = project.service<FlowableModelIndexService>().cachedOrNull()
+        if (cached != null && names.none { it in cached.referencedIdentifiers || it in cached.referencedClassFqns }) {
+            return null
+        }
 
         return object : RefactoringElementListener {
             override fun elementRenamed(newElement: PsiElement) = warn(project, displayName, names)
@@ -47,6 +53,10 @@ class FlowableRenameWarningProvider : RefactoringElementListenerProvider {
     private fun warn(project: Project, displayName: String, names: Set<String>) {
         object : Task.Backgroundable(project, "Checking Flowable model references", true) {
             override fun run(indicator: ProgressIndicator) {
+                if (project.isDisposed) return
+                val service = project.service<FlowableModelIndexService>()
+                val index = service.cachedOrNull() ?: service.index()   // build once, off the EDT, if needed
+                if (names.none { it in index.referencedIdentifiers || it in index.referencedClassFqns }) return
                 val files = ModelReferenceScan.affectedModelFiles(project, names)
                 ApplicationManager.getApplication().invokeLater {
                     if (!project.isDisposed) notify(project, displayName, files)
@@ -56,14 +66,18 @@ class FlowableRenameWarningProvider : RefactoringElementListenerProvider {
     }
 
     private fun notify(project: Project, displayName: String, files: List<VirtualFile>) {
-        val count = files.size
-        val where = if (count == 1) "1 model file" else "$count model files"
+        val where = when (files.size) {
+            0 -> "Flowable models"
+            1 -> "1 Flowable model"
+            else -> "${files.size} Flowable models"
+        }
         val notification = NotificationGroupManager.getInstance()
             .getNotificationGroup(GROUP_ID)
             .createNotification(
-                "'$displayName' is referenced by Flowable models",
-                "Flowable models reference it by name in expression text ($where). Those references are " +
-                    "not updated by this rename — update the models manually.",
+                "Rename not applied to Flowable models",
+                "'$displayName' is used by $where as expression text (e.g. \${bean.$displayName()}). " +
+                    "Renaming the Java symbol does not update the models — open them and adjust the " +
+                    "reference by hand.",
                 NotificationType.WARNING,
             )
         if (files.isNotEmpty()) {

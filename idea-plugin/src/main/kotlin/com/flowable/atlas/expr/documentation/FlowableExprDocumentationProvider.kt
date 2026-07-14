@@ -34,14 +34,24 @@ class FlowableExprDocumentationProvider : AbstractDocumentationProvider() {
         if (file !is FlowableExprFile) return null
         val dialect = dialectOf(file.language) ?: return null
         val html = docAt(file.text, targetOffset, dialect) ?: return null
-        return ExprDocElement(file, html)
+        val name = wordRangeAt(file.text, targetOffset)?.let { file.text.substring(it.first, it.second) } ?: "expression"
+        return ExprDocElement(file, html, name)
     }
 
     override fun generateDoc(element: PsiElement?, originalElement: PsiElement?): String? =
         (element as? ExprDocElement)?.html
 
-    private class ExprDocElement(private val file: PsiFile, val html: String) : FakePsiElement() {
+    private class ExprDocElement(
+        private val file: PsiFile,
+        val html: String,
+        private val name: String,
+    ) : FakePsiElement() {
         override fun getParent(): PsiElement = file
+
+        // The 2026.1 documentation backend wraps this element in a PsiElementDocumentationTarget and
+        // calls targetPresentation(), which needs a non-null presentable text (via getPresentableText()
+        // → getName()). Without this the platform throws "… cannot be presented".
+        override fun getName(): String = name
     }
 
     // ---- catalog lookup ------------------------------------------------------------------------
