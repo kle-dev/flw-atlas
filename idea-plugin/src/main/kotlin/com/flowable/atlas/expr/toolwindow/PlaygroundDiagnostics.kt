@@ -15,16 +15,16 @@ import com.flowable.atlas.expr.eval.TraceOutcome
 import com.flowable.atlas.expr.eval.TracedEvaluation
 import com.flowable.atlas.model.MiniJson
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
+import com.intellij.codeInsight.hints.presentation.PresentationFactory
+import com.intellij.codeInsight.hints.presentation.PresentationRenderer
 import com.intellij.icons.AllIcons
+import com.intellij.idea.AppMode
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
-import com.intellij.openapi.editor.DefaultLanguageHighlighterColors
 import com.intellij.openapi.editor.Editor
-import com.intellij.openapi.editor.EditorCustomElementRenderer
 import com.intellij.openapi.editor.Inlay
 import com.intellij.openapi.editor.ScrollType
-import com.intellij.openapi.editor.colors.EditorFontType
 import com.intellij.openapi.editor.event.SelectionEvent
 import com.intellij.openapi.editor.event.SelectionListener
 import com.intellij.openapi.editor.ex.EditorEx
@@ -44,10 +44,6 @@ import com.intellij.ui.components.JBLabel
 import com.intellij.util.SingleAlarm
 import com.intellij.util.ui.JBUI
 import java.awt.Cursor
-import java.awt.Graphics
-import java.awt.Graphics2D
-import java.awt.Rectangle
-import java.awt.RenderingHints
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.Box
@@ -112,6 +108,11 @@ internal class PlaygroundDiagnostics(
     private val alarm = SingleAlarm(::revalidate, 250, this)
     private val highlighters = mutableListOf<RangeHighlighter>()
     private val inlays = mutableListOf<Inlay<*>>()
+
+    /** On a Remote-Dev host a custom-painted inlay never reaches the thin client, so the inline
+     *  `= value` badges are invisible there. Mirror the same values into a plain-Swing fallback
+     *  ([PlaygroundProblemsStrip]) — Swing renders fine over the Remote-Dev protocol. */
+    private val remoteDevHost = AppMode.isRemoteDevHost()
     private var appliedEditor: EditorEx? = null
     private var lastComputed: Computed? = null
     private var selectionEditor: Editor? = null
@@ -134,13 +135,7 @@ internal class PlaygroundDiagnostics(
      * toggle. Highlighters and the result pane are left untouched. If the editor is momentarily absent
      * the next [editorAvailable] re-applies everything, so no state is lost.
      */
-    fun refreshSubEvaluations() {
-        val editor = field.editor as? EditorEx ?: return
-        for (i in inlays) if (i.isValid) Disposer.dispose(i)
-        inlays.clear()
-        val c = lastComputed ?: return
-        if (host.showSubEvaluations && c.trace != null) applyInlays(editor, c.text, c.trace.entries)
-    }
+    fun refreshSubEvaluations() = renderSubEvaluations()
 
     /** Called from the field's `addSettingsProvider` — i.e. whenever a (new) editor materializes. */
     fun editorAvailable(editor: EditorEx) {
@@ -232,10 +227,11 @@ internal class PlaygroundDiagnostics(
             host.onFrontendResult(c.trace?.result)
         }
         host.onScopeStatus(if (c.dialect == ExpressionDialect.FRONTEND) c.scopeStatus else null)
-        val editor = field.editor as? EditorEx ?: return
-        appliedEditor = editor
-        applyHighlighters(editor, c.problems)
-        if (host.showSubEvaluations && c.trace != null) applyInlays(editor, c.text, c.trace.entries)
+        (field.editor as? EditorEx)?.let { editor ->
+            appliedEditor = editor
+            applyHighlighters(editor, c.problems)
+        }
+        renderSubEvaluations()
     }
 
     private fun clearMarkup() {
@@ -301,11 +297,45 @@ internal class PlaygroundDiagnostics(
         const val MIN_NODE_SPAN = 3
     }
 
-    private fun applyInlays(editor: EditorEx, text: String, entries: List<TraceEntry>) {
+    /**
+     * Rebuild the sub-expression `= value` hints from the last computed trace, on the EDT. Two
+     * surfaces, both gated on the "Show Sub-Expression Values" toggle:
+     *  - inline [Inlay]s via the platform's [PresentationRenderer] — a serializable presentation, so
+     *    it renders locally AND stands a chance on a Remote-Dev thin client, unlike a raw custom paint;
+     *  - on a Remote-Dev host, the very same values as guaranteed plain-Swing rows in [strip].
+     * The editor may be momentarily absent (it materializes lazily and is re-created on a dialect
+     * switch); the inlays are then skipped and the next [editorAvailable] re-applies them.
+     */
+    private fun renderSubEvaluations() {
+        for (i in inlays) if (i.isValid) Disposer.dispose(i)
+        inlays.clear()
+        val c = lastComputed
+        val hints = if (host.showSubEvaluations && c?.trace != null)
+            computeSubHints(c.text, c.trace.entries) else emptyList()
+        (field.editor as? EditorEx)?.let { editor ->
+            val factory = PresentationFactory(editor)
+            val length = editor.document.textLength
+            for (h in hints) {
+                val presentation = factory.roundWithBackground(factory.smallText(h.label))
+                val inlay = editor.inlayModel.addInlineElement(
+                    h.anchor.coerceIn(0, length), true, PresentationRenderer(presentation),
+                ) ?: continue
+                inlays += inlay
+            }
+        }
+        if (remoteDevHost) strip.setSubEvaluations(hints.map { "${it.exprText}${it.label}" })
+    }
+
+    /** One sub-expression hint: where the inline badge anchors, the node's own source text, and the
+     *  ` = value` label — shared verbatim by the inline inlays and the Remote-Dev Swing fallback. */
+    private data class SubHint(val anchor: Int, val exprText: String, val label: String)
+
+    /** Pick the trace nodes worth a hint (the same filter the inlays always used) and format each. */
+    private fun computeSubHints(text: String, entries: List<TraceEntry>): List<SubHint> {
         val parenMatch = matchParens(text)
-        var added = 0
+        val hints = ArrayList<SubHint>()
         for (entry in entries) {
-            if (added >= MAX_INLAYS) break
+            if (hints.size >= MAX_INLAYS) break
             if (entry.depth == 0) continue                        // the root's value lives in the result pane
             if (entry.kind !in HINTED_KINDS) continue
             if (entry.end - entry.start < MIN_NODE_SPAN) continue
@@ -316,12 +346,11 @@ internal class PlaygroundDiagnostics(
                 is TraceOutcome.Unavailable -> " = ?"
                 is TraceOutcome.Error, TraceOutcome.NotEvaluated -> continue   // errors are squiggled already
             }
-            val inlay = editor.inlayModel.addInlineElement(
-                anchor.coerceIn(0, editor.document.textLength), true, ResultHintRenderer(label),
-            ) ?: continue
-            inlays += inlay
-            added++
+            val s = entry.start.coerceIn(0, text.length)
+            val e = entry.end.coerceIn(s, text.length)
+            hints += SubHint(anchor, text.substring(s, e), label)
         }
+        return hints
     }
 
     /** Close-paren index → its open-paren index; quick scan that skips string literals. */
@@ -419,40 +448,13 @@ internal class PlaygroundDiagnostics(
         if (s.length <= max) s else s.take(max / 2) + "…" + s.takeLast(max / 2 - 1)
 }
 
-/** A gray `= value` chip painted after a sub-expression — same visual family as parameter hints. */
-private class ResultHintRenderer(private val text: String) : EditorCustomElementRenderer {
-
-    private fun font(editor: Editor) = editor.colorsScheme.getFont(EditorFontType.PLAIN)
-        .let { it.deriveFont(maxOf(it.size2D - 1f, 10f)) }
-
-    override fun calcWidthInPixels(inlay: Inlay<*>): Int {
-        val editor = inlay.editor
-        val metrics = editor.contentComponent.getFontMetrics(font(editor))
-        return metrics.stringWidth(text) + JBUI.scale(8)
-    }
-
-    override fun paint(inlay: Inlay<*>, g: Graphics, targetRegion: Rectangle, textAttributes: TextAttributes) {
-        val editor = inlay.editor
-        val attrs = editor.colorsScheme.getAttributes(DefaultLanguageHighlighterColors.INLINE_PARAMETER_HINT)
-        val g2 = g as Graphics2D
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-        attrs?.backgroundColor?.let { bg ->
-            g2.color = bg
-            g2.fillRoundRect(targetRegion.x + 2, targetRegion.y + 1, targetRegion.width - 4, targetRegion.height - 2, 6, 6)
-        }
-        g2.color = attrs?.foregroundColor ?: JBColor.GRAY
-        g2.font = font(editor)
-        val metrics = g2.fontMetrics
-        val baseline = targetRegion.y + (targetRegion.height + metrics.ascent - metrics.descent) / 2
-        g2.drawString(text, targetRegion.x + JBUI.scale(4), baseline)
-    }
-}
-
 /**
  * Persistent message rows under the expression field — replaces the old monospace `^`-caret text
  * area and the orange one-line label: the exact offset is now marked by the in-editor squiggle, so
  * the strip carries the message (clicking a row jumps to the offset). Caps at [MAX_ROWS] rows plus
- * a "+N more" summary; an optional transient "Selection = …" info row sits on top.
+ * a "+N more" summary; an optional transient "Selection = …" info row sits on top, and — on a
+ * Remote-Dev host, where the inline `= value` badges can't paint — the sub-expression values are
+ * mirrored here as plain rows (see [setSubEvaluations]).
  */
 internal class PlaygroundProblemsStrip : JPanel() {
 
@@ -460,6 +462,7 @@ internal class PlaygroundProblemsStrip : JPanel() {
 
     private var selectionInfo: String? = null
     private var problems: List<ExprProblem> = emptyList()
+    private var subEvaluations: List<String> = emptyList()
     private var navigate: (Int) -> Unit = {}
 
     init {
@@ -481,6 +484,16 @@ internal class PlaygroundProblemsStrip : JPanel() {
         rebuild()
     }
 
+    /**
+     * The `<sub-expression> = <value>` rows shown as the Remote-Dev fallback for the inline badges.
+     * Only populated on a Remote-Dev host; empty everywhere else, so this stays invisible locally.
+     */
+    fun setSubEvaluations(rows: List<String>) {
+        if (subEvaluations == rows) return
+        subEvaluations = rows
+        rebuild()
+    }
+
     private fun rebuild() {
         removeAll()
         selectionInfo?.let { info ->
@@ -493,6 +506,13 @@ internal class PlaygroundProblemsStrip : JPanel() {
             add(JBLabel("+${problems.size - MAX_ROWS} more").apply {
                 foreground = JBColor.GRAY
                 toolTipText = problems.drop(MAX_ROWS).joinToString("<br>", "<html>", "</html>") { it.message }
+            })
+        }
+        for (row in subEvaluations) {
+            add(JBLabel(row, AllIcons.General.InspectionsEye, SwingConstants.LEADING).apply {
+                foreground = JBColor.GRAY
+                toolTipText = row                 // full text on hover — the strip may be narrower than the row
+                border = JBUI.Borders.emptyBottom(2)
             })
         }
         isVisible = componentCount > 0
