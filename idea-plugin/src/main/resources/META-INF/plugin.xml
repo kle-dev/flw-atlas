@@ -114,6 +114,22 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.8.8</h3>
+        <ul>
+          <li><b>Payload scope in the Expression Playground</b> — evaluate a frontend expression as a
+              component <i>inside a subform or list</i> would see it: enter a payload node path
+              (e.g. <code>orders[2].items[0]</code>) or place the caret on the node and hit
+              <i>From Caret</i>. <code>$item</code>, <code>$index</code> and the chained
+              <code>$itemParent</code> are bound exactly like the form runtime binds them;
+              <code>root</code> and <code>$payload</code> stay absolute. The scoped node is
+              highlighted in the payload editor, and a path that no longer resolves is flagged on
+              the field and reported as the evaluation result.</li>
+          <li><b>Resizable playground panels</b> — the divider between the expression editor and the
+              payload/scope card is now grabbable (drag it to trade width when docked side-by-side, or
+              height when stacked), and the frontend evaluation result sits under the payload behind
+              its own drag handle so a large payload can be given more room; it still scrolls.</li>
+        </ul>
+
         <h3>0.8.7</h3>
         <ul>
           <li><b>“Last scanned” time on the Model Index</b> — the Atlas Hub now shows when the model
