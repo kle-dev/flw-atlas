@@ -1,19 +1,21 @@
 package com.flowable.atlas.hub
 
 import com.flowable.atlas.action.FlowableActionIds
+import com.flowable.atlas.action.GenerateModelConstantsAction
 import com.flowable.atlas.action.RebuildModelIndexAction
 import com.flowable.atlas.design.DesignPullService
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.events.AtlasEventsListener
+import com.flowable.atlas.explorer.AtlasBrowser
 import com.flowable.atlas.explorer.AtlasExplorerFiles
 import com.flowable.atlas.explorer.AtlasExplorerOpener
+import com.flowable.atlas.explorer.AtlasGenerationRunner
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
 import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.FlowableAtlasConfigurable
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.icons.AllIcons
-import com.intellij.ide.BrowserUtil
 import com.intellij.ide.DataManager
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
@@ -66,12 +68,16 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         val indexText: String,
         val artifacts: List<ExplorerArtifact>,
         val designText: String,
+        val designArtifactsStale: Boolean,
+        val browserAvailable: Boolean,
     )
 
     private val projectStatus = JBLabel()
     private var changeProjectLink: javax.swing.JComponent? = null
     private val indexStatus = JBLabel()
     private val designStatus = JBLabel()
+    private var designStaleRow: com.intellij.ui.dsl.builder.Row? = null
+    private var openInBrowserLink: javax.swing.JComponent? = null
     private val artifactsModel = CollectionListModel<ExplorerArtifact>()
     private val artifactsList = JBList(artifactsModel).apply {
         visibleRowCount = 8
@@ -144,6 +150,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
             row { cell(indexStatus) }
             row {
                 link("Rebuild") { RebuildModelIndexAction.rebuild(project) }
+                link("Generate Constants…") { GenerateModelConstantsAction.generate(project) }
             }
         }
         group("Atlas Explorer") {
@@ -156,9 +163,9 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
                 // most-recently-modified first) — the link must never be a silent no-op.
                 link("Open in Browser") {
                     (selectedArtifact() ?: artifactsModel.items.firstOrNull())
-                        ?.let { BrowserUtil.browse(it.path.toFile()) }
+                        ?.let { AtlasBrowser.open(it.path) }
                         ?: invokeAction(FlowableActionIds.GENERATE_ATLAS_EXPLORER)
-                }
+                }.applyToComponent { openInBrowserLink = this }
             }
         }
         group("Flowable Design") {
@@ -167,6 +174,12 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
                 link("Pull from Design") { invokeAction(FlowableActionIds.PULL_FROM_DESIGN) }
                 link("Configure…") { invokeAction(FlowableActionIds.CONFIGURE_DESIGN_CONNECTION) }
             }
+            // Shown only when models were pulled after the Atlas Explorer was last generated: the index
+            // rebuilds on pull, but the generated explorer HTML does not — offer a one-click regenerate.
+            designStaleRow = row {
+                label("Models changed since the last generation.")
+                link("Regenerate Atlas Explorer") { AtlasGenerationRunner.regenerate(project) }
+            }.visible(false)
         }
         separator()
         row {
@@ -207,7 +220,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         val vf = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(artifact.path)
         when {
             vf != null && JBCefApp.isSupported() -> AtlasExplorerOpener.openInIde(project, vf)
-            else -> BrowserUtil.browse(artifact.path.toFile())   // JCEF unavailable → external browser
+            else -> AtlasBrowser.open(artifact.path)   // JCEF unavailable → external browser
         }
     }
 
@@ -265,17 +278,23 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
             }
         }.orEmpty()
 
+        val lastPullMillis = DesignPullService.lastPullMillis(project)
         val designText = if (settings.isDesignConfigured()) {
-            val lastPull = DesignPullService.lastPullMillis(project)
-                ?.let { DateFormatUtil.formatPrettyDateTime(it) } ?: "never"
+            val lastPull = lastPullMillis?.let { DateFormatUtil.formatPrettyDateTime(it) } ?: "never"
             val apps = settings.designAppKeys
             val appsLabel = if (apps.size == 1) apps.first() else "${apps.size} apps: ${apps.joinToString(", ")}"
             "<html>${settings.designBaseUrl} · <b>$appsLabel</b><br>Last pull: $lastPull</html>"
         } else {
             "Not configured"
         }
+        // Stale when the last pull happened after the newest generated explorer artifact.
+        val designArtifactsStale = settings.isDesignConfigured() &&
+            isExplorerStale(artifacts.map { it.modified }, lastPullMillis)
 
-        return Snapshot(projectText, showChangeLink, indexText, artifacts, designText)
+        return Snapshot(
+            projectText, showChangeLink, indexText, artifacts, designText,
+            designArtifactsStale, AtlasBrowser.isAvailable(),
+        )
     }
 
     private fun apply(snapshot: Snapshot) {
@@ -283,6 +302,8 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         changeProjectLink?.isVisible = snapshot.showChangeLink
         indexStatus.text = snapshot.indexText
         designStatus.text = snapshot.designText
+        designStaleRow?.visible(snapshot.designArtifactsStale)
+        openInBrowserLink?.isVisible = snapshot.browserAvailable
         val selected = selectedArtifact()?.path
         artifactsModel.replaceAll(snapshot.artifacts)
         selected?.let { keep ->
@@ -295,5 +316,9 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
 
     companion object {
         private const val WHOLE_PROJECT_LABEL = "Whole project (repository root)"
+
+        /** A generated explorer is stale when something was pulled after its newest artifact was written. */
+        internal fun isExplorerStale(artifactMtimes: List<Long>, lastPullMillis: Long?): Boolean =
+            lastPullMillis != null && artifactMtimes.isNotEmpty() && artifactMtimes.max() < lastPullMillis
     }
 }

@@ -4,7 +4,7 @@
 <idea-plugin require-restart="true">
     <id>com.flowable.atlas</id>
     <name>Flowable Atlas</name>
-    <version>0.8.5</version>
+    <version>0.8.6</version>
     <vendor email="kevin.klever@flowable.com" url="https://www.flowable.com">Flowable</vendor>
 
     <description><![CDATA[
@@ -114,6 +114,29 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.8.6</h3>
+        <ul>
+          <li><b>Works when the IDE backend runs remotely</b> (e.g. JetBrains Remote Dev in Kubernetes).
+              <i>Generate Model Constants</i> no longer depends on a modal dialog that could silently
+              fail on the thin client — it uses the class name from <i>Settings → Flowable Atlas →
+              Generation</i>, reports any problem as a notification, and falls back to a folder picker
+              when the project exposes no Java source root. <i>Open in Browser</i> now uses the IDE's own
+              browser mechanism (like the built-in HTML action) and is shown only where a browser can
+              actually be launched.</li>
+          <li><b>“Generate Model Constants” in the Atlas Hub</b> — right in the Hub's <i>Model Index</i>
+              section, next to <i>Rebuild</i>.</li>
+          <li><b>Warning when you rename Java a model uses</b> — renaming a method or bean/delegate class
+              referenced from a model expression (<code>${bean.method()}</code>, delegate expressions, …)
+              warns that the model's text references are not updated by the rename, with a
+              <i>Show affected models</i> action. A gutter icon also marks such methods/beans and
+              navigates to the models that use them.</li>
+          <li><b>Stale-explorer hint after a Design pull</b> — pulling models from Flowable Design now
+              offers a <i>Regenerate Atlas Explorer</i> action (and a hint in the Atlas Hub): the model
+              index is rebuilt automatically, but the generated explorer is not.</li>
+          <li><b>Clearer settings wording</b> — the “index raw Design workspace sources” and
+              “expressions in Java string literals” options now explain what they actually do.</li>
+        </ul>
+
         <h3>0.8.5</h3>
         <ul>
           <li><b>"Paste session from browser" for "Evaluate Against App"</b> — the reliable way to
@@ -539,6 +562,13 @@
         <implicitUsageProvider implementation="com.flowable.atlas.usage.FlowableImplicitUsageProvider"/>
         <!-- Find Usages / Ctrl-B on a delegate class or ${bean.method()} shows the model files that use it. -->
         <customUsageSearcher implementation="com.flowable.atlas.usage.FlowableModelUsageSearcher"/>
+        <!-- Gutter icon on Java methods/beans referenced from Flowable models → navigate to the model usages. -->
+        <codeInsight.lineMarkerProvider
+                language="JAVA"
+                implementationClass="com.flowable.atlas.usage.FlowableModelReferenceLineMarkerProvider"/>
+        <!-- Warn when renaming a Java symbol referenced by Flowable model expressions (text, not auto-updated). -->
+        <refactoring.elementListenerProvider
+                implementation="com.flowable.atlas.usage.FlowableRenameWarningProvider"/>
         <!-- Balloon shown after generating the Atlas explorer (open in browser / open in IDE). -->
         <notificationGroup id="Flowable Atlas" displayType="BALLOON"/>
         <!-- Render a *.explorer.html as an embedded (JCEF) "Atlas Explorer" tab in the center editor

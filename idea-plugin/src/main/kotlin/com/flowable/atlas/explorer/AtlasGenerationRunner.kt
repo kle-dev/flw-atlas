@@ -2,6 +2,7 @@ package com.flowable.atlas.explorer
 
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.project.AtlasProjectRootService
+import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
@@ -40,6 +41,22 @@ object AtlasGenerationRunner {
         val projectDir = projectDir(project) ?: return
         run(project, "Generating Flowable Atlas artifacts", quiet, onSuccess = null) { indicator ->
             AtlasGeneratorService.getInstance(project).generateAll(projectDir, outputDir, indicator)
+        }
+    }
+
+    /**
+     * Refresh already-generated artifacts without a dialog — e.g. after a Design pull made them stale.
+     * Regenerates the existing explorer page(s) in place when explorer HTML is the only selected
+     * artifact; otherwise regenerates the full selected set into the configured output folder.
+     */
+    fun regenerate(project: Project) {
+        val projectDir = projectDir(project) ?: return
+        val settings = FlowableAtlasProjectSettings.getInstance(project)
+        val existing = AtlasExplorerFiles.find(projectDir, settings.atlasOutputDir)
+        if (settings.atlasArtifacts == setOf(AtlasArtifact.EXPLORER_HTML) && existing.isNotEmpty()) {
+            existing.forEach { generateExplorer(project, it) }
+        } else {
+            generateAll(project, projectDir.resolve(settings.atlasOutputDir))
         }
     }
 

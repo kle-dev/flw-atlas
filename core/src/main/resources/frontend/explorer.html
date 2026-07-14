@@ -5,10 +5,34 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#ffffff">
 <title>Flowable Atlas</title>
+<script>
+/* Seed the effective color theme onto <html data-theme> before first paint, so the boot
+   overlay (and the shell) render in the correct theme with no white flash on a dark IDE.
+   Mirrors themePref()/applyThemePref() in explorer.js, which re-resolves the same value
+   once the boot script runs: ?ideTheme -> localStorage('atlas-theme') -> prefers-color-scheme. */
+try{
+  var _t=new URLSearchParams(location.search).get('ideTheme');
+  var _ide=(_t==='light'||_t==='dark')?_t:null;
+  var _p=null; try{_p=localStorage.getItem('atlas-theme');}catch(e){}
+  _p=_p||(_ide?'auto':'light');
+  var _sys=_ide||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');
+  document.documentElement.dataset.theme=(_p==='auto')?_sys:_p;
+}catch(e){}
+</script>
 <style>
 /*__ATLAS_CSS__*/</style>
 </head>
 <body>
+<!-- Loading overlay: present in source order before the (potentially multi-MB) #atlas-data
+     island and the boot script, so it paints early while the island streams off disk and
+     stays up over the synchronous boot. Dismissed at the end of the boot block in explorer.js. -->
+<div class="boot" id="atlas-boot" role="status" aria-live="polite">
+  <div class="boot-card">
+    <div class="boot-spinner" aria-hidden="true"></div>
+    <div class="boot-title">Flowable Atlas</div>
+    <div class="boot-msg">Loading — large reports can take a moment…</div>
+  </div>
+</div>
 <div class="shell">
   <aside class="sidebar" id="sidebar">
     <!-- Flowable brand lockup, derived from the Flowable Hub logo (FlowableHubFull);

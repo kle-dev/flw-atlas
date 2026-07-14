@@ -32,8 +32,13 @@ class FlowableAtlasConfigurable : BoundSearchableConfigurable(
             }
             group("Model Index") {
                 row {
-                    checkBox("Index Flowable Design workspace models")
-                        .comment("Also index per-model .json files under *-models/ workspace folders.")
+                    checkBox("Also index raw Flowable Design workspace sources")
+                        .comment(
+                            "By default only exported deployment artifacts are indexed " +
+                                "(.bpmn/.cmmn/.dmn/.form/.data/.service, incl. inside .bar/.zip). Enable this to " +
+                                "also index the raw Design-workspace source JSON (bpmn-models/, form-models/, …) — " +
+                                "needed when the repository holds the Design export rather than deployment artifacts.",
+                        )
                         .bindSelected(settings::indexDesignWorkspace)
                         .onApply {
                             // The design-workspace toggle changes what gets indexed; drop cached indexes.
