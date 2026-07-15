@@ -48,6 +48,10 @@ class RenderersSmokeTest {
         assertTrue("expected the layout-scale tokens from explorer.css", html.contains("--space-1:"))
         // The IDE theme-bridge hook the IntelliJ JCEF viewer pushes theme switches through.
         assertTrue("expected the __atlasSetIdeTheme hook from explorer.js", html.contains("__atlasSetIdeTheme"))
+        // The copy-to-clipboard machinery: the shared helper + the icon-button class + the IDE bridge hook.
+        assertTrue("expected the atlasCopy helper from explorer.js", html.contains("function atlasCopy"))
+        assertTrue("expected the copy-button class from explorer.js/css", html.contains("class=\"cpy\"") || html.contains(".cpy{"))
+        assertTrue("expected the __atlasCopy IDE bridge hook from explorer.js", html.contains("__atlasCopy"))
         // The graph payload is inlined — a known model key must appear.
         assertTrue("expected the substituted graph data", html.contains("orderProcess"))
     }

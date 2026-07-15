@@ -336,6 +336,19 @@
   .dkey{font-family:var(--mono);font-size:var(--text-sm);color:var(--accent)}
   .dfile{font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-faint);margin-top:var(--space-15);cursor:copy}
   .dfile:hover{color:var(--ink-dim)}
+  .dfile.copied .fp{color:var(--cov-good,#2e7d32)}
+  .dfile.copied::after{content:"✓ copied";margin-left:var(--space-15);color:var(--cov-good,#2e7d32)}
+  /* ---- copy-to-clipboard icon button (keys, values, "used by" badges) ---- */
+  .cpy{display:inline-flex;align-items:center;justify-content:center;flex:none;width:20px;height:20px;padding:0;
+    margin-left:var(--space-1);vertical-align:middle;line-height:0;background:transparent;
+    border:1px solid transparent;border-radius:var(--radius-sm);color:var(--ink-faint);cursor:copy}
+  .cpy:hover{color:var(--accent);border-color:var(--line2);background:var(--panel)}
+  .cpy:focus-visible{outline:2px solid var(--accent);outline-offset:1px;color:var(--accent)}
+  .cpy.ok{color:var(--cov-good,#2e7d32);border-color:transparent;background:transparent}
+  .cpy svg{display:block}
+  /* reveal on hover inside dense contexts (chips, grid cells) so they stay uncluttered */
+  .nc .cpy,.cell .cpy{opacity:0;transition:opacity .1s ease}
+  .nc:hover .cpy,.nc:focus-within .cpy,.cell:hover .cpy,.cell:focus-within .cpy,.cpy:focus-visible{opacity:1}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1px;
     background:var(--line);border:1px solid var(--line);border-radius:var(--radius-md);overflow:hidden;margin:var(--space-4) 0}
   .cell{background:var(--panel);padding:var(--space-25) var(--space-3)}
