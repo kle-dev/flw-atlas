@@ -11,6 +11,7 @@ import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorState
+import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
@@ -18,11 +19,14 @@ import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.JBColor
 import com.intellij.ui.jcef.JBCefBrowser
+import com.intellij.ui.jcef.JBCefBrowserBase
+import com.intellij.ui.jcef.JBCefJSQuery
 import com.intellij.util.ui.update.UiNotifyConnector
 import org.cef.browser.CefBrowser
 import org.cef.browser.CefFrame
 import org.cef.handler.CefLoadHandlerAdapter
 import java.awt.BorderLayout
+import java.awt.datatransfer.StringSelection
 import java.beans.PropertyChangeListener
 import javax.swing.JComponent
 import javax.swing.JPanel
@@ -44,17 +48,26 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
     private val browser = JBCefBrowser()
     private val wrapper = JPanel(BorderLayout())
 
+    // JS→Kotlin channel so the page's copy buttons work inside the JCEF file:// viewer, where
+    // navigator.clipboard is blocked; the page falls back to this via window.__atlasCopy.
+    private val copyQuery = JBCefJSQuery.create(browser as JBCefBrowserBase)
+
     private val loadHandler = object : CefLoadHandlerAdapter() {
         override fun onLoadEnd(cefBrowser: CefBrowser, frame: CefFrame, httpStatusCode: Int) {
             // Re-push after any (re)load: the query param goes stale when the IDE theme switched
             // between load and reload. The page-side `window.__atlasSetIdeTheme &&` guard makes an
-            // early or racing push a harmless no-op.
-            if (frame.isMain) pushIdeTheme()
+            // early or racing push a harmless no-op. The copy bridge is (re)installed the same way.
+            if (frame.isMain) { installCopyBridge(); pushIdeTheme() }
         }
     }
 
     init {
         Disposer.register(this, browser)
+        Disposer.register(this, copyQuery)
+        copyQuery.addHandler { text ->
+            CopyPasteManager.getInstance().setContents(StringSelection(text))
+            null
+        }
         browser.jbCefClient.addLoadHandler(loadHandler, browser.cefBrowser)
         ApplicationManager.getApplication().messageBus.connect(this)
             .subscribe(LafManagerListener.TOPIC, LafManagerListener { pushIdeTheme() })
@@ -81,6 +94,15 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
     private fun pushIdeTheme() {
         browser.cefBrowser.executeJavaScript(
             "window.__atlasSetIdeTheme && window.__atlasSetIdeTheme('${ideTheme()}');",
+            browser.cefBrowser.url,
+            0,
+        )
+    }
+
+    private fun installCopyBridge() {
+        // Define window.__atlasCopy(text) → route the string to copyQuery's handler (system clipboard).
+        browser.cefBrowser.executeJavaScript(
+            "window.__atlasCopy = function(text){ ${copyQuery.inject("text")} };",
             browser.cefBrowser.url,
             0,
         )

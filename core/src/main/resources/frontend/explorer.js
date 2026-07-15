@@ -505,7 +505,7 @@ function nodeChip(id,f){
   const flag=f&&f.sus?'<span class="ncflag" title="suspect — loose or cross-type match">≈</span>'
            :f&&f.dyn?'<span class="ncflag" title="dynamic — reference is an expression">ƒ</span>':'';
   return '<span class="nc'+cls+'" data-id="'+enc(id)+'" tabindex="0" role="link"><span class="dot" style="background:'+nodeColor(n)+'"></span>'+
-    '<span class="nm">'+esc(n.label)+'</span>'+flag+'<span class="ty">'+esc(nodeKind(n))+'</span></span>';
+    '<span class="nm">'+esc(n.label)+'</span>'+flag+'<span class="ty">'+esc(nodeKind(n))+'</span>'+copyBtn(n.key,nodeKind(n)+' key')+'</span>';
 }
 // rel -> Map(id -> adjacency entry) — the Map keeps per-target flags while deduping ids.
 function groupRels(arr){ const g={}; (arr||[]).forEach(x=>{ (g[x.rel]=g[x.rel]||new Map()).set(x.id,x); }); return g; }
@@ -551,7 +551,7 @@ function describe(n){
     if(d.service) rows.push(['Backing service',{html:vlink('service:'+d.service, d.service, 'Service model '+d.service)}]);
     // When backed by a service, surface that service's physical table here and link the name back to the service node.
     const svc=d.service&&byId.get('service:'+d.service), tbl=d.serviceTableName||(svc&&(svc.data||{}).tableName);
-    if(tbl) rows.push(['Table',{html:'<span class="vlink" data-id="'+enc('service:'+d.service)+'" tabindex="0" role="link" title="Provided by service '+esc(d.service)+'">'+esc(tbl)+'</span>'}]);
+    if(tbl) rows.push(['Table',{html:'<span class="vlink" data-id="'+enc('service:'+d.service)+'" tabindex="0" role="link" title="Provided by service '+esc(d.service)+'">'+esc(tbl)+'</span>', copy:tbl}]);
     if(d.dictionary) rows.push(['Data dictionary',{html:vlink('dataDictionary:'+d.dictionary, d.dictionary)}]);
     add('Columns',(d.fields||[]).length); }
   else if(n.type==='service'){ add('Type',d.type); add('Base URL',d.baseUrl); add('Auth',d.auth); add('Table',d.tableName);
@@ -570,9 +570,9 @@ function describe(n){
   else if(n.type==='event'){ add('Payload',(d.payload||[]).join(', ')); add('Correlation',(d.correlation||[]).join(', ')); }
   else if(n.type==='java'){ add('Package',d.package); add('Roles',(d.roles||[]).join(', ')); add('Bot key',d.botKey); add('Implements',(d.interfaces||[]).join(', ')); add('Methods',(d.methods||[]).length); add('Called from models',(d.calledMethods||[]).join(', ')); }
   else if(n.type==='endpoint'){ add('Method',d.http); add('Path',d.path);
-    rows.push(['Handler',{html:vlink(incFrom(n.id,'serves'), (d.controller||'')+'#'+(d.handler||''))}]); }
-  else if(n.type==='method'){ add('Method',(d.name||'')+'()');
-    if(d.class) rows.push(['Declared in',{html:vlink(d.declaredIn||'java:'+d.class, d.class)}]); }
+    rows.push(['Handler',{html:vlink(incFrom(n.id,'serves'), (d.controller||'')+'#'+(d.handler||'')), copy:d.controller||undefined}]); }  // FQN for 'Go to Class'
+  else if(n.type==='method'){ if(d.name) rows.push(['Method',{html:esc(d.name)+'()', copy:d.name}]);  // copy the bare name for IntelliJ 'Go to Symbol'
+    if(d.class) rows.push(['Declared in',{html:vlink(d.declaredIn||'java:'+d.class, d.class), copy:d.class}]); }  // FQN for 'Go to Class'
   else if(n.type==='query'){ add('Source index',d.sourceIndex); add('Parameters',(d.parameters||[]).join(', ')); add('Filters by groups',(d.groups||[]).length); }
   else if(n.type==='action'){
     // Link the bot to whatever the graph resolved (action --bot--> java:<fqn> | bot:<key> | model node):
@@ -620,9 +620,9 @@ function detailExtra(n){
         const title='<span class="opname">'+esc(o.fullUrl||o.url||o.name||'')+'</span>';
         // link the key to the operation's own node (its "where used" page)
         const opid='serviceOperation:'+n.key+'#'+(o.key||'');
-        const key=(o.key&&byId.get(opid))
+        const key=((o.key&&byId.get(opid))
           ? '<span class="opkey vlink" data-id="'+enc(opid)+'" tabindex="0" role="link" title="Show where '+esc(o.key)+' is used">'+esc(o.key)+'</span>'
-          : '<span class="opkey">'+esc(o.key||'')+'</span>';
+          : '<span class="opkey">'+esc(o.key||'')+'</span>')+copyBtn(o.key,'operation key');
         const np=(o.params||[]).length;
         if(!np) return '<div class="op flat">'+verb+title+'<span class="opcount">no params</span>'+key+'</div>';
         return '<details class="op"><summary>'+verb+title+
@@ -822,7 +822,8 @@ function implLink(s){
   return '';
 }
 function jchip(id,label){
-  return '<span class="nc" data-id="'+enc(id)+'" tabindex="0" role="link" style="flex:none"><span class="dot" style="background:'+color('java')+'"></span><span class="nm">'+esc(label)+'</span></span>';
+  const k=(byId.get(id)||{}).key||label;
+  return '<span class="nc" data-id="'+enc(id)+'" tabindex="0" role="link" style="flex:none"><span class="dot" style="background:'+color('java')+'"></span><span class="nm">'+esc(label)+'</span>'+copyBtn(k,'class')+'</span>';
 }
 
 function renderDetail(){
@@ -841,10 +842,16 @@ function renderDetail(){
   h+='<div class="dbody">';
   h+='<span class="chip"><span class="dot" style="background:'+nodeColor(n)+'"></span>'+esc(nodeKind(n))+'</span>';
   h+='<div class="dtitle">'+esc(n.label)+authBadge(n)+'</div>';
-  h+='<div class="dkey mono">'+esc(n.key)+'</div>';
-  if(n.file) h+='<div class="dfile" title="click to copy" data-copy="'+enc(n.file)+'">'+esc(n.file)+'</div>';
+  h+='<div class="dkey mono">'+esc(n.key)+copyBtn(n.key,'key')+'</div>';
+  if(n.file) h+='<div class="dfile" title="click to copy" data-copy="'+enc(n.file)+'"><span class="fp">'+esc(n.file)+'</span>'+copyBtn(n.file,'path')+'</div>';
   const rows=describe(n);
-  if(rows.length){ h+='<div class="grid">'+rows.map(r=>'<div class="cell"><div class="k">'+esc(r[0])+'</div><div class="v mono">'+(r[1]&&r[1].html!==undefined?r[1].html:esc(String(r[1])))+'</div></div>').join('')+'</div>'; }
+  if(rows.length){ h+='<div class="grid">'+rows.map(r=>{
+      const v=r[1], isHtml=v&&v.html!==undefined;
+      const shown=isHtml?v.html:esc(String(v));
+      // auto-copy scalar values; link rows opt in via a `copy:` payload. Skip counts (numbers).
+      const ct=isHtml?(v.copy!=null?String(v.copy):null):(typeof v==='number'?null:String(v));
+      return '<div class="cell"><div class="k">'+esc(r[0])+'</div><div class="v mono">'+shown+copyBtn(ct,r[0])+'</div></div>';
+    }).join('')+'</div>'; }
   h+=neighborhoodSvg(n);
   h+=detailExtra(n);
   // outgoing
@@ -872,7 +879,18 @@ function renderDetail(){
     c.onclick=()=>select(dec(c.dataset.id));
     c.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); select(dec(c.dataset.id)); } };
   });
-  const fp=det.querySelector('.dfile'); if(fp) fp.onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(dec(fp.dataset.copy)); fp.textContent='✓ copied — '+dec(fp.dataset.copy); };
+  // clicking the path (but not its copy icon) copies too — routed through atlasCopy so the "copied"
+  // hint only shows on real success and the child copy button survives (no textContent nuke).
+  const fp=det.querySelector('.dfile');
+  if(fp) fp.onclick=e=>{ if(e.target.closest('.cpy')) return;
+    atlasCopy(dec(fp.dataset.copy), ()=>{ fp.classList.add('copied'); setTimeout(()=>fp.classList.remove('copied'),1200); }); };
+  det.querySelectorAll('.cpy').forEach(b=>{
+    b.onclick=e=>{ e.stopPropagation();   // don't navigate the chip/link this button sits inside
+      atlasCopy(dec(b.dataset.copy), ()=>{ if(b.dataset.busy) return; b.dataset.busy='1';
+        const old=b.innerHTML; b.classList.add('ok'); b.innerHTML=CPY_OK_SVG;
+        setTimeout(()=>{ b.classList.remove('ok'); b.innerHTML=old; delete b.dataset.busy; },1200); }); };
+    b.onkeydown=e=>{ if(e.key==='Enter'||e.key===' ') e.stopPropagation(); };   // keep Enter/Space from the parent's nav
+  });
 }
 
 // Navigation: select() only moves the URL hash; the hashchange listener routes. That makes
@@ -1039,6 +1057,40 @@ function wireLinkFilter(){
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function enc(s){ return encodeURIComponent(s); }
 function dec(s){ return decodeURIComponent(s); }
+
+// ---------- copy ----------
+// feather "copy" (two overlapping rounded rects) + a check for the success flash.
+const CPY_SVG='<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+const CPY_OK_SVG='<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+// A copy-to-clipboard icon button; the payload rides in data-copy (URI-encoded), wired by the
+// delegated handler in renderDetail. `what` names the thing in the tooltip ("Copy key", …).
+function copyBtn(text,what){
+  if(text==null||text==='') return '';
+  const lbl='Copy'+(what?' '+what:'');
+  return '<button type="button" class="cpy" data-copy="'+enc(String(text))+'" title="'+esc(lbl)+'" aria-label="'+esc(lbl)+'">'+CPY_SVG+'</button>';
+}
+// Single copy path for every affordance. Order: IDE bridge → clipboard API → execCommand → prompt.
+// onOk fires only on genuine success, so the UI never shows a false "✓ copied" (the embedded JCEF
+// file:// viewer blocks navigator.clipboard — window.__atlasCopy is injected there by the IDE host).
+function atlasCopy(text,onOk){
+  text=String(text==null?'':text);
+  const ok=()=>{ if(onOk) onOk(); };
+  if(window.__atlasCopy){ try{ window.__atlasCopy(text); ok(); return; }catch(e){} }
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(ok,()=>{ if(execCopy(text)) ok(); else prompt('Copy:',text); });
+    return;
+  }
+  if(execCopy(text)){ ok(); return; }
+  prompt('Copy:',text);
+}
+function execCopy(text){
+  try{
+    const ta=document.createElement('textarea'); ta.value=text; ta.setAttribute('readonly','');
+    ta.style.position='fixed'; ta.style.top='0'; ta.style.left='0'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    const done=document.execCommand('copy'); document.body.removeChild(ta); return done;
+  }catch(e){ return false; }
+}
 
 // ---------- theme ----------
 // Preference cycle: light → dark → auto (follow the OS). Light is the default — it is the
