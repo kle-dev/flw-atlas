@@ -1022,9 +1022,9 @@ function wireLinkFilter(){
   const paint=()=>{
     b.classList.toggle('off', hideUncertain);
     b.setAttribute('aria-pressed', hideUncertain?'true':'false');
-    b.title=(hideUncertain?'Uncertain links hidden':'Uncertain links shown')+' — '+
+    const tip=(hideUncertain?'Uncertain links hidden':'Uncertain links shown')+' — '+
       su+' suspect (≈ loose/cross-type match), '+dy+' dynamic (ƒ expression-valued). Click to toggle.';
-    b.setAttribute('aria-label', b.title);
+    b.setAttribute('data-tip', tip); b.setAttribute('aria-label', tip);   // data-tip drives the hover bubble
   };
   paint();
   b.onclick=()=>{
@@ -1070,7 +1070,8 @@ function applyThemePref(){
   if(mt) mt.content = theme==='dark'?'#0c141c':'#ffffff';
   document.querySelectorAll('[data-theme-btn]').forEach(b=>{
     b.textContent = pref==='auto'?'◐':(pref==='light'?'☀':'☾');
-    b.title='Theme: '+pref+(pref==='auto'&&window.__ideTheme?' (follows IDE)':'')+' — click to switch';
+    const tip='Theme: '+pref+(pref==='auto'&&window.__ideTheme?' (follows IDE)':'')+' — click to switch';
+    b.setAttribute('data-tip', tip); b.setAttribute('aria-label', tip);   // data-tip drives the hover bubble
   });
 }
 function cycleTheme(){
@@ -1081,6 +1082,30 @@ function cycleTheme(){
 document.querySelectorAll('[data-theme-btn]').forEach(b=>b.onclick=cycleTheme);
 matchMedia('(prefers-color-scheme: light)').addEventListener('change',applyThemePref);
 applyThemePref();
+
+// ---------- hover tooltips ----------
+// A DOM bubble for elements carrying [data-tip] (the icon-only ≈ link filter and the theme toggle).
+// Native title= tooltips don't render in the embedded JCEF viewer (off-screen rendering, especially
+// over Remote Dev), so we draw our own — it shows identically in the IDE and a plain browser. Reads
+// the attribute at hover time, so the dynamic link-filter / theme text is always current.
+const _tip=document.createElement('div'); _tip.className='atlas-tip'; _tip.setAttribute('role','tooltip');
+let _tipFor=null;
+function showTip(el){
+  const t=el.getAttribute('data-tip'); if(!t){ hideTip(); return; }
+  _tipFor=el; _tip.textContent=t;
+  if(!_tip.parentNode) document.body.appendChild(_tip);
+  const r=el.getBoundingClientRect(), tr=_tip.getBoundingClientRect();
+  const left=Math.max(8, Math.min(r.left, window.innerWidth-tr.width-8));   // right-align onto screen
+  let top=r.bottom+6;
+  if(top+tr.height>window.innerHeight-8) top=r.top-tr.height-6;             // flip above if no room below
+  _tip.style.left=left+'px'; _tip.style.top=Math.max(8,top)+'px';
+  requestAnimationFrame(()=>_tip.classList.add('show'));
+}
+function hideTip(){ _tipFor=null; _tip.classList.remove('show'); if(_tip.parentNode) _tip.parentNode.removeChild(_tip); }
+document.addEventListener('mouseover',e=>{ const el=e.target.closest&&e.target.closest('[data-tip]'); if(el){ if(el!==_tipFor) showTip(el); } else if(_tipFor) hideTip(); });
+document.addEventListener('mouseout',e=>{ if(_tipFor && e.target.closest&&e.target.closest('[data-tip]')===_tipFor && !_tipFor.contains(e.relatedTarget)) hideTip(); });
+document.addEventListener('focusin',e=>{ const el=e.target.closest&&e.target.closest('[data-tip]'); if(el) showTip(el); else if(_tipFor) hideTip(); });
+window.addEventListener('scroll',()=>{ if(_tipFor) hideTip(); }, true);
 
 // ---------- sidebar resize (IntelliJ-style drag handle) ----------
 // The expanded width lives in the --sidebar-w custom property; the collapsed
