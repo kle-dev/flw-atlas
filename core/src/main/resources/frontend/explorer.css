@@ -129,6 +129,16 @@
     border-radius:var(--radius-md);padding:var(--space-1) var(--space-2);font-size:var(--text-sm);line-height:1;flex:none}
   .tbtn:hover{color:var(--ink);border-color:var(--accent)}
 
+  /* Custom hover tooltip for icon-only controls (the ≈ link filter, the theme toggle). Native
+     title= tooltips don't render in the embedded JCEF viewer (off-screen rendering, esp. over Remote
+     Dev), so an in-page bubble driven by [data-tip] shows the same text in the IDE and a plain
+     browser alike. Inverted (ink bg / panel text) so it reads in both themes. */
+  .atlas-tip{position:fixed;z-index:200;max-width:min(320px,80vw);pointer-events:none;
+    background:var(--ink);color:var(--panel);font-family:var(--sans);font-size:var(--text-xs);
+    line-height:1.4;padding:var(--space-1) var(--space-2);border-radius:var(--radius-sm);
+    box-shadow:var(--shadow);opacity:0;transform:translateY(2px);transition:opacity .12s,transform .12s}
+  .atlas-tip.show{opacity:1;transform:none}
+
   /* semantic tone pills (Hub recipe: tone-50 bg / tone-300 border / tone-700 text) */
   .pill{display:inline-flex;align-items:center;gap:var(--space-1);font-family:var(--mono);font-size:var(--text-2xs);
     letter-spacing:.04em;text-transform:uppercase;border-radius:var(--radius-full);border:1px solid var(--neutral-border);
