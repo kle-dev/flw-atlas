@@ -18,6 +18,7 @@ import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.JBColor
 import com.intellij.ui.jcef.JBCefBrowser
+import com.intellij.util.ui.update.UiNotifyConnector
 import org.cef.browser.CefBrowser
 import org.cef.browser.CefFrame
 import org.cef.handler.CefLoadHandlerAdapter
@@ -63,7 +64,12 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
         toolbar.targetComponent = wrapper
         wrapper.add(toolbar.component, BorderLayout.NORTH)
         wrapper.add(browser.component, BorderLayout.CENTER)
-        load()
+        // Load only once the browser is actually on screen. Loading eagerly here — before the editor
+        // tab is ever shown (opened in the background, or restored on project reopen) — intermittently
+        // left the page blank: the initial navigation is issued into a browser whose native surface
+        // isn't created/sized yet, so it's lost, which is why closing and reopening the tab "fixed" it.
+        // Deferring to first-shown makes the page load reliably whether the tab opens focused or not.
+        UiNotifyConnector.doWhenFirstShown(browser.component, { load() }, this)
     }
 
     private fun ideTheme(): String = if (JBColor.isBright()) "light" else "dark"
