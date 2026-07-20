@@ -54,6 +54,19 @@ class ModelMemberExtractorTest {
         assertTrue("decision vars: ${m.members.decisionVariables}", m.members.decisionVariables.contains("result"))
     }
 
+    @Test fun action_botKey_is_extracted() {
+        val json = """{ "key": "greetAction", "name": "Greet", "botKey": "greeter-bot" }"""
+        val m = ModelMemberExtractor.extract("greet.action", bytes(json), ModelType.ACTION).single()
+        assertEquals("greetAction", m.key)
+        assertEquals("greeter-bot", m.members.botKey)
+    }
+
+    @Test fun action_without_botKey_has_null() {
+        val json = """{ "key": "greetAction", "name": "Greet" }"""
+        val m = ModelMemberExtractor.extract("greet.action", bytes(json), ModelType.ACTION).single()
+        assertEquals(null, m.members.botKey)
+    }
+
     @Test fun multiple_processes_in_one_file() {
         val xml = """
             <definitions>

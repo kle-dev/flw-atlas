@@ -25,6 +25,7 @@ data class RawModel(
  *  - [decisionVariables]: DMN input/output clause variable names — candidates for `variable(...)`.
  *  - [payload]: event payload + correlation parameter names.
  *  - [formFields] / [formOutcomes]: form field / outcome ids.
+ *  - [botKey]: the `botKey` of an `.action` model — the Java `BotService` (`getKey()`) it invokes.
  */
 data class ModelMembers(
     val variables: List<String> = emptyList(),
@@ -36,6 +37,7 @@ data class ModelMembers(
     val payload: List<String> = emptyList(),
     val formFields: List<String> = emptyList(),
     val formOutcomes: List<String> = emptyList(),
+    val botKey: String? = null,
 ) {
     companion object {
         val EMPTY = ModelMembers()

@@ -48,6 +48,9 @@ object ModelMemberExtractor {
                 ModelMembers(variables = fm.fields, formFields = fm.fields, formOutcomes = fm.outcomes)
             }
             ModelType.EVENT -> ModelMembers(payload = ModelJsonReader.readEventPayload(bytes))
+            // An action carries the `botKey` of the Java BotService it invokes — captured so the live
+            // index can answer "which actions use this bot" and offer the key for search/filter.
+            ModelType.ACTION -> ModelMembers(botKey = ModelJsonReader.topLevelString(bytes, "botKey"))
             else -> ModelMembers.EMPTY
         }
         return listOf(raw.copy(members = members))

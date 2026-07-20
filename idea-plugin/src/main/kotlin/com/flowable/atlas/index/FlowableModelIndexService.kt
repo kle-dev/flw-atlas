@@ -96,6 +96,9 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
 
     fun find(key: String): List<ModelEntry> = index().find(key)
 
+    /** Distinct `.action` models that invoke the bot with this [botKey]. */
+    fun actionsUsingBot(botKey: String): List<ModelEntry> = index().actionsUsingBot(botKey)
+
     /** Operations available on a data object, resolved via its backing service model. */
     fun operationsOf(dataObjectKey: String): List<OperationInfo> {
         val dataFile = index().find(dataObjectKey, ModelType.DATA_OBJECT)?.file ?: return emptyList()

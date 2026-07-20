@@ -28,10 +28,13 @@ dependencies {
     implementation(project(":core"))
 
     intellijPlatform {
-        // Build against the locally installed IntelliJ IDEA — exact match to the target IDE
-        // (2026.1.2) and no multi-GB SDK download. To build against a downloaded SDK instead,
-        // replace this line with: intellijIdeaCommunity("2026.1")
-        local("/Applications/IntelliJ IDEA.app")
+        // Portable build against a downloaded IntelliJ IDEA 2026.1 SDK — no dependency on a locally
+        // installed IDE, so it builds on any machine / CI. Since 2025.3 the separate Community SDK
+        // (ideaIC) is no longer published; 2026.x ships a single "IntelliJ IDEA" distribution with a
+        // free tier, requested via intellijIdea(...). The plugin only uses APIs available in that free
+        // tier (java/json/xml/platform). Target platform is 2026.1 (build 261); JCEF is in the
+        // platform core there (no bundled-plugin dependency needed — that split happened in 262).
+        intellijIdea("2026.1")
 
         // Java PSI — required by the Java completion contributor.
         bundledPlugin("com.intellij.java")
