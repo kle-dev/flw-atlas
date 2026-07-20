@@ -1031,6 +1031,10 @@ function wireSearchTrigger(){
   document.getElementById('searchbtn').onclick=openPalette;
   const mac=/Mac|iPhone|iPad/.test(navigator.platform||'');
   document.getElementById('searchkbd').textContent = mac?'⌘K':'Ctrl K';
+  // Reload the page — recovery for the occasional hung/stale explorer. The page is loaded from a
+  // file:// URL both in a browser and in the JCEF IDE tab, so a plain reload re-reads it cleanly.
+  const rb=document.getElementById('reloadbtn');
+  if(rb) rb.onclick=()=>location.reload();
 }
 
 // ---------- uncertain-links toggle (suspect ≈ / dynamic ƒ edges) ----------
