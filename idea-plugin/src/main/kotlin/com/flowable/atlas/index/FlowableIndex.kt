@@ -51,6 +51,10 @@ class FlowableIndex(
     /** Members (variables, decision variables, payload, …) of a specific model, if indexed. */
     fun membersOf(key: String, type: ModelType): ModelMembers? = find(key, type)?.members
 
+    /** Distinct `.action` models that invoke the bot with this [botKey] (via their `botKey` field). */
+    fun actionsUsingBot(botKey: String): List<ModelEntry> =
+        keysOfType(ModelType.ACTION).filter { it.members.botKey == botKey }
+
     fun allDistinct(): List<ModelEntry> = distinctByType.values.flatten()
 
     fun distinctCount(): Int = distinctByType.values.sumOf { it.size }

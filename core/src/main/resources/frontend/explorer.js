@@ -447,7 +447,7 @@ function renderItems(cat, wrap){
   wrap.innerHTML='';
   let items = nodes.filter(cat.match);
   const f = state.filter.toLowerCase();
-  if(f) items = items.filter(n => (n.label+' '+n.key+' '+(n.file||'')).toLowerCase().includes(f));
+  if(f) items = items.filter(n => (n.label+' '+n.key+' '+(n.file||'')+' '+((n.data&&n.data.botKey)||'')).toLowerCase().includes(f));
   if(state.sort==='refs')
     items.sort((a,b)=>(INSIGHTS.indeg.get(b.id)||0)-(INSIGHTS.indeg.get(a.id)||0)||a.label.localeCompare(b.label));
   else if(state.sort==='file')
