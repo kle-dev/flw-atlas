@@ -6,6 +6,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.find.findUsages.FindUsagesOptions
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.components.service
+import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiManager
 import com.intellij.find.findUsages.CustomUsageSearcher
@@ -18,6 +19,10 @@ import com.intellij.util.Processor
  * Reports Flowable model files as usages of a Java symbol referenced from a model expression, so
  * that Find Usages / "Go to Declaration or Usages" (Ctrl/Cmd-B) on a delegate class, bean, or
  * `${bean.method()}` method shows where the model uses it (instead of "no usages").
+ *
+ * For a **bot** class (a `BotService` implementor) it additionally reports the `.action` models that
+ * invoke it — matched by the bot's `getKey()` against each action's `botKey` (a JSON field the
+ * expression-based scan below does not see).
  */
 class FlowableModelUsageSearcher : CustomUsageSearcher() {
 
@@ -25,13 +30,28 @@ class FlowableModelUsageSearcher : CustomUsageSearcher() {
         ReadAction.runBlocking<RuntimeException> {
             val project = element.project
             if (project.isDisposed) return@runBlocking
+
+            val botKey = (element as? PsiClass)?.let { BotPsi.botKeyOf(it) }
             val names = ModelReferenceScan.namesOf(element)
-            if (names.isEmpty()) return@runBlocking
+            if (botKey == null && names.isEmpty()) return@runBlocking
 
             val index = project.service<FlowableModelIndexService>().index()
-            if (names.none { it in index.referencedIdentifiers || it in index.referencedClassFqns }) return@runBlocking
-
             val psiManager = PsiManager.getInstance(project)
+
+            // Bot class → the .action models that invoke it (matched by botKey).
+            if (botKey != null) {
+                for (entry in index.actionsUsingBot(botKey)) {
+                    val psiFile = psiManager.findFile(entry.file) ?: continue
+                    val text = runCatching { String(entry.file.contentsToByteArray(), Charsets.UTF_8) }.getOrNull()
+                    val at = text?.let { botKeyOffset(it, botKey) } ?: -1
+                    val usage = if (at >= 0) UsageInfo(psiFile, at, at + botKey.length, false) else UsageInfo(psiFile)
+                    processor.process(UsageInfo2UsageAdapter(usage))
+                }
+            }
+
+            // Java symbol → the model expressions that reference it by name.
+            if (names.isEmpty()) return@runBlocking
+            if (names.none { it in index.referencedIdentifiers || it in index.referencedClassFqns }) return@runBlocking
 
             fun reportUsages(vf: VirtualFile, text: String) {
                 if (names.none { text.contains(it) }) return
@@ -45,5 +65,13 @@ class FlowableModelUsageSearcher : CustomUsageSearcher() {
 
             ModelReferenceScan.forEachModelText(project, ::reportUsages)
         }
+    }
+
+    /** Offset of the bot key value inside an action's `"botKey": "<key>"` field, or -1 if not found. */
+    private fun botKeyOffset(text: String, botKey: String): Int {
+        val label = text.indexOf("\"botKey\"")
+        if (label < 0) return -1
+        val valueStart = text.indexOf("\"$botKey\"", label)
+        return if (valueStart >= 0) valueStart + 1 else -1
     }
 }
