@@ -937,7 +937,9 @@ function applySelection(id){
 // would never surface its data object.
 function searchText(n){
   const d=n.data||{};
-  let s=n.label+' '+n.key+' '+(n.file||'')+' '+n.type;
+  // base identity + the bot key (a Java bot's getKey() and an action's botKey field both live in
+  // data.botKey), so ⌘K/Ctrl-K finds the bot class AND the actions that invoke it by that key.
+  let s=n.label+' '+n.key+' '+(n.file||'')+' '+n.type+' '+(d.botKey||'');
   if(n.type==='dataObject') s+=' '+(d.fields||[]).join(' ')+' '+(d.serviceTableName||'')+' '+
     (d.columns||[]).map(c=>(c.label||'')+' '+(c.type||'')).join(' ');
   if(n.type==='service') s+=' '+(d.columns||[]).map(c=>(c.name||'')+' '+(c.columnName||'')+' '+(c.type||'')).join(' ');
