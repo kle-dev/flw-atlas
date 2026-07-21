@@ -4,7 +4,7 @@
 <idea-plugin require-restart="true">
     <id>com.flowable.atlas</id>
     <name>Flowable Atlas</name>
-    <version>0.10.2</version>
+    <version>0.10.3</version>
     <vendor email="kevin.klever@flowable.com" url="https://www.flowable.com">Flowable</vendor>
 
     <description><![CDATA[
@@ -596,6 +596,16 @@
         <codeInsight.lineMarkerProvider
                 language="JAVA"
                 implementationClass="com.flowable.atlas.usage.FlowableBotActionLineMarkerProvider"/>
+        <!-- Inline hint: the physical table name after a string literal that is a data-object key. -->
+        <codeInsight.declarativeInlayProvider
+                language="JAVA"
+                implementationClass="com.flowable.atlas.hint.FlowableDataObjectTableInlayProvider"
+                isEnabledByDefault="true"
+                group="VALUES_GROUP"
+                providerId="com.flowable.atlas.dataObjectTable"
+                bundle="messages.FlowableAtlasBundle"
+                nameKey="inlay.dataObjectTable.name"
+                descriptionKey="inlay.dataObjectTable.description"/>
         <!-- Warn when renaming a Java symbol referenced by Flowable model expressions (text, not auto-updated). -->
         <refactoring.elementListenerProvider
                 implementation="com.flowable.atlas.usage.FlowableRenameWarningProvider"/>

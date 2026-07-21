@@ -25,21 +25,29 @@ class FlowableKeyDocumentationProvider : AbstractDocumentationProvider() {
 
     private fun doc(element: PsiElement?, originalElement: PsiElement?): String? {
         // literal at a key site, or a constant reference used as the key argument
-        val (site, key, anchor) = run {
+        val service = (originalElement ?: element)?.project?.service<FlowableModelIndexService>() ?: return null
+        val (targetTypes, key, _) = run {
             val literal = literalOf(originalElement) ?: literalOf(element)
             if (literal != null) {
-                val s = SiteMatching.keySiteForLiteral(literal) ?: return null
                 val k = literal.value as? String ?: return null
-                Triple(s, k, literal as PsiElement)
+                val site = SiteMatching.keySiteForLiteral(literal)
+                when {
+                    site != null -> Triple(site.targetTypes, k, literal as PsiElement)
+                    // Fallback: a plain data-object key string (a constant's value / bare literal),
+                    // even outside a recognised Flowable API call site — so hovering a data-object
+                    // key constant still shows its name and physical table.
+                    service.cachedOrNull()?.find(k, ModelType.DATA_OBJECT) != null ->
+                        Triple(setOf(ModelType.DATA_OBJECT), k, literal as PsiElement)
+                    else -> return null
+                }
             } else {
                 val ref = refOf(originalElement) ?: refOf(element) ?: return null
                 val (s, k) = SiteMatching.keySiteForArgument(ref) ?: return null
-                Triple(s, k, ref as PsiElement)
+                Triple(s.targetTypes, k, ref as PsiElement)
             }
         }
 
-        val service = anchor.project.service<FlowableModelIndexService>()
-        val entries = service.find(key).filter { it.type in site.targetTypes }
+        val entries = service.find(key).filter { it.type in targetTypes }
         if (entries.isEmpty()) return null
 
         val first = entries.first()
