@@ -373,4 +373,206 @@ class FlowableCompletionTest : BasePlatformTestCase() {
         val strings = myFixture.lookupElementStrings ?: emptyList()
         assertFalse("must not offer keys for unrelated methods: $strings", strings.contains("DEMO-C001"))
     }
+
+    // ---- variableValueEquals family / master-data fields / CMMN plan items / misc gap coverage ----
+
+    private fun addQueryStubs() {
+        myFixture.addFileToProject(
+            "org/flowable/engine/runtime/ProcessInstanceQuery.java",
+            "package org.flowable.engine.runtime; " +
+                "public interface ProcessInstanceQuery { " +
+                "ProcessInstanceQuery processDefinitionKey(String key); " +
+                "ProcessInstanceQuery variableValueEquals(String name, Object value); }",
+        )
+        myFixture.addFileToProject(
+            "org/flowable/cmmn/api/runtime/CaseInstanceQuery.java",
+            "package org.flowable.cmmn.api.runtime; " +
+                "public interface CaseInstanceQuery { " +
+                "CaseInstanceQuery caseDefinitionKey(String key); " +
+                "CaseInstanceQuery variableValueEquals(String name, Object value); " +
+                "CaseInstanceQuery activePlanItemDefinitionId(String id); }",
+        )
+        myFixture.addFileToProject(
+            "org/flowable/task/api/TaskInfoQuery.java",
+            "package org.flowable.task.api; " +
+                "public interface TaskInfoQuery { " +
+                "TaskInfoQuery processDefinitionKey(String key); " +
+                "TaskInfoQuery caseDefinitionKey(String key); " +
+                "TaskInfoQuery taskVariableValueEquals(String name, Object value); " +
+                "TaskInfoQuery processVariableValueEquals(String name, Object value); " +
+                "TaskInfoQuery caseVariableValueEquals(String name, Object value); }",
+        )
+        myFixture.addFileToProject(
+            "org/flowable/variable/api/history/HistoricVariableInstanceQuery.java",
+            "package org.flowable.variable.api.history; " +
+                "public interface HistoricVariableInstanceQuery { " +
+                "HistoricVariableInstanceQuery variableValueEquals(String name, Object value); }",
+        )
+        myFixture.addFileToProject(
+            "com/flowable/dataobject/api/runtime/MasterDataInstanceQuery.java",
+            "package com.flowable.dataobject.api.runtime; " +
+                "public interface MasterDataInstanceQuery { " +
+                "MasterDataInstanceQuery definitionKey(String key); " +
+                "MasterDataInstanceQuery variableValueEquals(String name, Object value); }",
+        )
+        myFixture.addFileToProject(
+            "org/flowable/engine/RepositoryService.java",
+            "package org.flowable.engine; " +
+                "public interface RepositoryService { void suspendProcessDefinitionByKey(String key); }",
+        )
+        myFixture.addFileToProject(
+            "com/flowable/dataobject/api/runtime/DataObjectDeletionBuilder.java",
+            "package com.flowable.dataobject.api.runtime; " +
+                "public interface DataObjectDeletionBuilder { " +
+                "DataObjectDeletionBuilder definitionKey(String key); " +
+                "void delete(String operationKey); }",
+        )
+    }
+
+    fun testProcessVariableValueEqualsScopedCompletion() {
+        addQueryStubs()
+        myFixture.addFileToProject(
+            "models/DEMO-P001.bpmn20.xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+                <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+                <process id="DEMO-P001" name="Demo Process"><dataObject id="do1" name="orderId"/></process>
+                </definitions>""",
+        )
+        myFixture.configureByText(
+            "T.java",
+            "class T { void m(org.flowable.engine.runtime.ProcessInstanceQuery q) { " +
+                "q.processDefinitionKey(\"DEMO-P001\").variableValueEquals(\"<caret>\", \"x\"); } }",
+        )
+        myFixture.completeBasic()
+        val strings = myFixture.lookupElementStrings ?: emptyList()
+        assertTrue("expected orderId among $strings", strings.contains("orderId"))
+    }
+
+    fun testCaseVariableValueEqualsScopedCompletion() {
+        addQueryStubs()
+        myFixture.addFileToProject(
+            "models/DEMO-C020.cmmn",
+            """<definitions><case id="DEMO-C020" name="Demo Case">""" +
+                """<casePlanModel><dataObject id="do1" name="applicantName"/></casePlanModel></case></definitions>""",
+        )
+        myFixture.configureByText(
+            "T.java",
+            "class T { void m(org.flowable.cmmn.api.runtime.CaseInstanceQuery q) { " +
+                "q.caseDefinitionKey(\"DEMO-C020\").variableValueEquals(\"<caret>\", \"x\"); } }",
+        )
+        myFixture.completeBasic()
+        val strings = myFixture.lookupElementStrings ?: emptyList()
+        assertTrue("expected applicantName among $strings", strings.contains("applicantName"))
+    }
+
+    fun testTaskVariableValueEqualsScopedCompletion() {
+        addQueryStubs()
+        myFixture.addFileToProject(
+            "models/DEMO-P002.bpmn20.xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+                <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+                <process id="DEMO-P002" name="Demo Process 2"><dataObject id="do1" name="amount"/></process>
+                </definitions>""",
+        )
+        myFixture.configureByText(
+            "T.java",
+            "class T { void m(org.flowable.task.api.TaskInfoQuery q) { " +
+                "q.processDefinitionKey(\"DEMO-P002\").processVariableValueEquals(\"<caret>\", \"x\"); } }",
+        )
+        myFixture.completeBasic()
+        val strings = myFixture.lookupElementStrings ?: emptyList()
+        assertTrue("expected amount among $strings", strings.contains("amount"))
+    }
+
+    fun testHistoricVariableInstanceQueryUnscopedCompletion() {
+        addQueryStubs()
+        myFixture.addFileToProject(
+            "models/DEMO-P003.bpmn20.xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+                <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+                <process id="DEMO-P003" name="Demo Process 3"><dataObject id="do1" name="riskScore"/></process>
+                </definitions>""",
+        )
+        // No sibling definitionKey call at all — must fall back to the project-wide variable union.
+        myFixture.configureByText(
+            "T.java",
+            "class T { void m(org.flowable.variable.api.history.HistoricVariableInstanceQuery q) { " +
+                "q.variableValueEquals(\"<caret>\", \"x\"); } }",
+        )
+        myFixture.completeBasic()
+        val strings = myFixture.lookupElementStrings ?: emptyList()
+        assertTrue("expected riskScore among $strings", strings.contains("riskScore"))
+    }
+
+    fun testMasterDataFieldCompletion() {
+        addQueryStubs()
+        myFixture.addFileToProject(
+            "models/DEMO-MD1.masterdata",
+            """{"key":"DEMO-MD1","name":"Country","variables":{"alpha2Code":"alpha2Code","numericCode":"numeric"}}""",
+        )
+        myFixture.configureByText(
+            "T.java",
+            "class T { void m(com.flowable.dataobject.api.runtime.MasterDataInstanceQuery q) { " +
+                "q.definitionKey(\"DEMO-MD1\").variableValueEquals(\"<caret>\", \"x\"); } }",
+        )
+        myFixture.completeBasic()
+        val strings = myFixture.lookupElementStrings ?: emptyList()
+        assertTrue("expected alpha2Code among $strings", strings.contains("alpha2Code"))
+        assertTrue("expected numericCode among $strings", strings.contains("numericCode"))
+    }
+
+    fun testCasePlanItemIdScopedCompletion() {
+        addQueryStubs()
+        myFixture.addFileToProject(
+            "models/DEMO-C021.cmmn",
+            """<definitions><case id="DEMO-C021" name="Demo Case">""" +
+                """<casePlanModel><humanTask id="approveTask" name="Approve"/></casePlanModel></case></definitions>""",
+        )
+        myFixture.configureByText(
+            "T.java",
+            "class T { void m(org.flowable.cmmn.api.runtime.CaseInstanceQuery q) { " +
+                "q.caseDefinitionKey(\"DEMO-C021\").activePlanItemDefinitionId(\"<caret>\"); } }",
+        )
+        myFixture.completeBasic()
+        val strings = myFixture.lookupElementStrings ?: emptyList()
+        assertTrue("expected approveTask among $strings", strings.contains("approveTask"))
+    }
+
+    fun testRepositoryServiceSuspendKeyCompletion() {
+        addQueryStubs()
+        myFixture.addFileToProject(
+            "models/DEMO-P004.bpmn20.xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+                <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+                <process id="DEMO-P004" name="Demo Process 4"/>
+                </definitions>""",
+        )
+        myFixture.configureByText(
+            "T.java",
+            "class T { void m(org.flowable.engine.RepositoryService s) { s.suspendProcessDefinitionByKey(\"<caret>\"); } }",
+        )
+        myFixture.completeBasic()
+        val strings = myFixture.lookupElementStrings ?: emptyList()
+        assertTrue("expected DEMO-P004 among $strings", strings.contains("DEMO-P004"))
+    }
+
+    fun testDataObjectDeletionBuilderDeleteOperationCascade() {
+        addQueryStubs()
+        myFixture.addFileToProject(
+            "models/data-object-DEMO-D020.data",
+            """{"key":"DEMO-D020","referencedServiceDefinitionModelKey":"DEMO-S020"}""",
+        )
+        myFixture.addFileToProject(
+            "models/service-DEMO-S020.service",
+            """{"key":"DEMO-S020","operations":[{"key":"archive","inputParameters":[]}]}""",
+        )
+        myFixture.configureByText(
+            "T.java",
+            "class T { void m(com.flowable.dataobject.api.runtime.DataObjectDeletionBuilder b) { " +
+                "b.definitionKey(\"DEMO-D020\").delete(\"<caret>\"); } }",
+        )
+        myFixture.completeBasic()
+        val strings = myFixture.lookupElementStrings ?: emptyList()
+        assertTrue("expected archive among $strings", strings.contains("archive"))
+    }
 }

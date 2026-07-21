@@ -83,7 +83,7 @@ data class VocabularySite(
  * referenced by the sibling [keyMethod] call in the same fluent chain / call. [memberKind] selects
  * which member list of that model to offer.
  */
-enum class MemberKind { DECISION_VARIABLE, EVENT_PAYLOAD }
+enum class MemberKind { DECISION_VARIABLE, EVENT_PAYLOAD, MASTER_DATA_FIELD }
 
 data class MemberSite(
     override val receiverFqn: String,
