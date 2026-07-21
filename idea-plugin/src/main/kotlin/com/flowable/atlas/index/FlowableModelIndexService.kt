@@ -44,13 +44,17 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
     @Volatile
     private var cached: FlowableIndex? = null
 
+    /** data-object key → physical table name; derived from [cached] and dropped with it. */
+    @Volatile
+    private var dataObjectTablesCache: Map<String, String>? = null
+
     init {
         project.messageBus.connect(this).subscribe(
             VirtualFileManager.VFS_CHANGES,
             object : BulkFileListener {
                 override fun after(events: MutableList<out VFileEvent>) {
                     if (events.any { ModelFiles.isModelPath(it.path) }) {
-                        cached = null
+                        cached = null; dataObjectTablesCache = null
                         publishUpdated()
                     }
                 }
@@ -75,7 +79,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
 
     /** Force a rebuild and return the fresh index. */
     fun refresh(): FlowableIndex {
-        cached = null
+        cached = null; dataObjectTablesCache = null
         return index()
     }
 
@@ -170,6 +174,30 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
     fun dataObjectInfoOf(dataObjectKey: String): DataObjectInfo? {
         val file = index().find(dataObjectKey, ModelType.DATA_OBJECT)?.file ?: return null
         return ReadAction.computeBlocking<DataObjectInfo?, RuntimeException> { JsonUtil.readDataObject(file) }
+    }
+
+    /**
+     * Every data-object key → its physical table name (via the backing `database` service model:
+     * the data object's `referencedServiceDefinitionModelKey`, or a service whose `referenceKey` is
+     * the data-object key). Cached and dropped with the index, because inlay hints query it per
+     * literal on every pass. Uses the already-built index only ([cachedOrNull]) — never triggers a
+     * (blocking) build — so it is cheap to call from a highlighting/hint pass; empty until the index
+     * exists. Callers must hold read access (JSON model files are read directly).
+     */
+    fun dataObjectTables(): Map<String, String> {
+        dataObjectTablesCache?.let { return it }
+        val idx = cachedOrNull() ?: return emptyMap()
+        val services = idx.keysOfType(ModelType.SERVICE).mapNotNull { JsonUtil.readServiceTable(it.file) }
+        val byKey = services.associateBy { it.key }
+        val byRef = services.filter { !it.referenceKey.isNullOrBlank() }.associateBy { it.referenceKey!! }
+        val map = LinkedHashMap<String, String>()
+        for (entry in idx.keysOfType(ModelType.DATA_OBJECT)) {
+            val info = JsonUtil.readDataObject(entry.file) ?: continue
+            val table = (info.referencedServiceDefinitionModelKey?.let { byKey[it] } ?: byRef[entry.key])?.tableName
+            if (!table.isNullOrBlank()) map[entry.key] = table
+        }
+        dataObjectTablesCache = map
+        return map
     }
 
     /** All indexed database `.service` models (for the Liquibase-coverage inspection). */
