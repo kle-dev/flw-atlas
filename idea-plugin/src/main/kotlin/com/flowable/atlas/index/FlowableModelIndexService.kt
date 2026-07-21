@@ -177,6 +177,18 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
     }
 
     /**
+     * The field mapping of a `.masterdata` model (for MasterDataInstanceQuery's field-filter
+     * completion). Same JSON shape/reader as a data object's `fieldMappings` — a `.masterdata`
+     * export keeps its fields in a top-level `variables` map, already handled by
+     * [JsonUtil.readDataObject] — but it is indexed under [ModelType.MASTER_DATA], not
+     * [ModelType.DATA_OBJECT], so it needs its own lookup.
+     */
+    fun masterDataInfoOf(masterDataKey: String): DataObjectInfo? {
+        val file = index().find(masterDataKey, ModelType.MASTER_DATA)?.file ?: return null
+        return ReadAction.computeBlocking<DataObjectInfo?, RuntimeException> { JsonUtil.readDataObject(file) }
+    }
+
+    /**
      * Every data-object key → its physical table name (via the backing `database` service model:
      * the data object's `referencedServiceDefinitionModelKey`, or a service whose `referenceKey` is
      * the data-object key). Cached and dropped with the index, because inlay hints query it per

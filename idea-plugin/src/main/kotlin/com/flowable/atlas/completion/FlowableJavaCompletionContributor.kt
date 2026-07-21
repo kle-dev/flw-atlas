@@ -292,6 +292,7 @@ class FlowableJavaCompletionContributor : CompletionContributor() {
             val members = when (site.memberKind) {
                 MemberKind.DECISION_VARIABLE -> service.decisionVariablesOf(key)
                 MemberKind.EVENT_PAYLOAD -> service.payloadOf(key)
+                MemberKind.MASTER_DATA_FIELD -> service.masterDataInfoOf(key)?.fields.orEmpty()
             }
             for (m in members) result.addElement(prioritized(memberLookup(m, key, quote)))
         }
