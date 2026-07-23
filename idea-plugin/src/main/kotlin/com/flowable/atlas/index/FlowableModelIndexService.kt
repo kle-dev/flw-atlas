@@ -104,12 +104,21 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
     /** Distinct `.action` models that invoke the bot with this [botKey]. */
     fun actionsUsingBot(botKey: String): List<ModelEntry> = index().actionsUsingBot(botKey)
 
+    /**
+     * The backing service model's key for a data object (its `referencedServiceDefinitionModelKey`),
+     * or null when the data object / that field is absent. The operation + value-field catalog is
+     * declared on this service model — see [operationsOf].
+     */
+    fun backingServiceKey(dataObjectKey: String): String? {
+        val dataFile = index().find(dataObjectKey, ModelType.DATA_OBJECT)?.file ?: return null
+        return ReadAction.computeBlocking<String?, RuntimeException> {
+            JsonUtil.topLevelString(dataFile, "referencedServiceDefinitionModelKey")
+        }
+    }
+
     /** Operations available on a data object, resolved via its backing service model. */
     fun operationsOf(dataObjectKey: String): List<OperationInfo> {
-        val dataFile = index().find(dataObjectKey, ModelType.DATA_OBJECT)?.file ?: return emptyList()
-        val serviceKey = ReadAction.computeBlocking<String?, RuntimeException> {
-            JsonUtil.topLevelString(dataFile, "referencedServiceDefinitionModelKey")
-        } ?: return emptyList()
+        val serviceKey = backingServiceKey(dataObjectKey) ?: return emptyList()
         return operationsOfService(serviceKey)
     }
 

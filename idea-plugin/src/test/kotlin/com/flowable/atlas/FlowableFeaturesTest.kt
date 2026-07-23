@@ -153,6 +153,51 @@ class FlowableFeaturesTest : BasePlatformTestCase() {
         assertTrue("reference must resolve to the model file", target is PsiFile && target.name == "DEMO-C001.cmmn")
     }
 
+    /** A data object + its backing service, declaring the operation `create` with input `label`. */
+    private fun addDataObjectOperationFixtures() {
+        myFixture.addFileToProject(
+            "com/flowable/dataobject/api/runtime/DataObjectInstanceVariableContainerQuery.java",
+            "package com.flowable.dataobject.api.runtime; public interface DataObjectInstanceVariableContainerQuery { " +
+                "DataObjectInstanceVariableContainerQuery definitionKey(String key); " +
+                "DataObjectInstanceVariableContainerQuery operation(String operation); " +
+                "DataObjectInstanceVariableContainerQuery value(String name, Object value); }",
+        )
+        myFixture.addFileToProject(
+            "models/DEMO-D010.data",
+            """{"key":"DEMO-D010","name":"Shopping List","referencedServiceDefinitionModelKey":"DEMO-S010"}""",
+        )
+        myFixture.addFileToProject(
+            "models/DEMO-S010.service",
+            """{"key":"DEMO-S010","name":"Source","operations":[{"key":"create","inputParameters":[{"name":"label","type":"string"}]}]}""",
+        )
+    }
+
+    fun testOperationReferenceResolvesToBackingServiceModel() {
+        addDataObjectOperationFixtures()
+        myFixture.configureByText(
+            "T.java",
+            "class T { void m(com.flowable.dataobject.api.runtime.DataObjectInstanceVariableContainerQuery q) { " +
+                "q.definitionKey(\"DEMO-D010\").operation(\"cre<caret>ate\"); } }",
+        )
+        val ref = myFixture.getReferenceAtCaretPosition()
+        assertNotNull("expected a Flowable operation reference", ref)
+        val target = ref!!.resolve()
+        assertTrue("operation must resolve to the backing service model", target is PsiFile && target.name == "DEMO-S010.service")
+    }
+
+    fun testValueFieldReferenceResolvesToBackingServiceModel() {
+        addDataObjectOperationFixtures()
+        myFixture.configureByText(
+            "T.java",
+            "class T { void m(com.flowable.dataobject.api.runtime.DataObjectInstanceVariableContainerQuery q) { " +
+                "q.definitionKey(\"DEMO-D010\").operation(\"create\").value(\"lab<caret>el\", null); } }",
+        )
+        val ref = myFixture.getReferenceAtCaretPosition()
+        assertNotNull("expected a Flowable value-field reference", ref)
+        val target = ref!!.resolve()
+        assertTrue("value field must resolve to the backing service model", target is PsiFile && target.name == "DEMO-S010.service")
+    }
+
     private fun addDatabaseService() {
         myFixture.addFileToProject(
             "models/DEMO-S010.service",
