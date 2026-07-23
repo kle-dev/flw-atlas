@@ -17,7 +17,11 @@ class FlowableAtlasSettings : PersistentStateComponent<FlowableAtlasSettings.Sta
     data class State(
         /** Also index per-model `.json` files under the Flowable Design `*-models/` workspace folders. */
         var indexDesignWorkspace: Boolean = false,
-        /** Offer the extra completion domains (messages, signals, variables, task/activity, DMN variables). */
+        /**
+         * Aggressively list the extra completion domains (messages, signals, variables, task/activity,
+         * DMN & master-data fields) even at an *empty* prefix. These domains are always offered once a
+         * non-empty prefix is typed regardless of this flag; this only adds the empty-prefix listing.
+         */
         var extraCompletions: Boolean = true,
         /**
          * Report structural syntax errors in Flowable expressions (playground + injected). Semantic

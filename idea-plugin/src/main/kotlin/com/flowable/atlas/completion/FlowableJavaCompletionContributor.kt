@@ -90,10 +90,12 @@ class FlowableJavaCompletionContributor : CompletionContributor() {
                 is ValueSite -> addValueFields(results, service, ctx.call!!, site, position.project, ctx.quote)
 
                 is VocabularySite ->
-                    if (FlowableAtlasSettings.getInstance().extraCompletions) addVocabulary(results, service, ctx.call, site, position.project, ctx.quote)
+                    // Available by default once a non-empty prefix is typed (discoverable with zero
+                    // setup); the setting additionally allows empty-prefix (aggressive) listing.
+                    if (extraOrPrefixed(ctx)) addVocabulary(results, service, ctx.call, site, position.project, ctx.quote)
 
                 is MemberSite ->
-                    if (FlowableAtlasSettings.getInstance().extraCompletions) addMembers(results, service, ctx.call!!, site, position.project, ctx.quote)
+                    if (extraOrPrefixed(ctx)) addMembers(results, service, ctx.call!!, site, position.project, ctx.quote)
 
                 null ->
                     // Not a recognized API method. Offer all keys when completion is invoked twice,
@@ -103,6 +105,15 @@ class FlowableJavaCompletionContributor : CompletionContributor() {
                     }
             }
         }
+
+        /**
+         * Gate for the vocabulary / member domains (messages, signals, variables, task/activity ids,
+         * DMN & master-data fields). They fire by default as soon as a non-empty prefix is typed — so
+         * they are discoverable with zero setup — while the `extraCompletions` setting additionally
+         * enables empty-prefix (aggressive) listing.
+         */
+        private fun extraOrPrefixed(ctx: ArgContext): Boolean =
+            ctx.prefix.isNotEmpty() || FlowableAtlasSettings.getInstance().extraCompletions
 
         /** Ranks Flowable key items above everything else (beats type-matched local variables). */
         private fun flowableFirstSorter(parameters: CompletionParameters, matcher: PrefixMatcher): CompletionSorter {
