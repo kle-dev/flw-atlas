@@ -25,8 +25,12 @@ class FlowableAtlasConfigurable : BoundSearchableConfigurable(
         return panel {
             group("Completion") {
                 row {
-                    checkBox("Extra completion domains")
-                        .comment("Messages, signals, variables, task/activity keys, DMN variables and form outcomes — in addition to model keys.")
+                    checkBox("List extra completion domains at an empty prefix")
+                        .comment(
+                            "Messages, signals, variables, task/activity keys, DMN &amp; master-data fields and " +
+                                "form outcomes are always offered once you type a prefix; enable this to also list " +
+                                "them with no prefix typed (aggressive).",
+                        )
                         .bindSelected(settings::extraCompletions)
                 }
             }

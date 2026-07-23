@@ -250,6 +250,18 @@ object FlowableApiCatalog {
             }
         }
 
+        // ---------------------------------------------------------------- START VARIABLES (builders)
+        // ProcessInstanceBuilder.variable(name, value) / .transientVariable(name, value) and the CMMN
+        // CaseInstanceBuilder equivalents — the start-variable NAME is arg 0. Scoped to the model named
+        // by the sibling processDefinitionKey(...) / caseDefinitionKey(...) in the same builder chain
+        // (→ that model's variables), else the project-wide variable union — identical to the query
+        // variable-filter vocab above. (These builders expose no variableLocal method; only the
+        // runtime/task services do, so it is not offered here.)
+        for (m in listOf("variable", "transientVariable")) {
+            vocab("org.flowable.engine.runtime.ProcessInstanceBuilder", m, 0, Vocabulary.VARIABLE, listOf("processDefinitionKey"), listOf(PROCESS))
+            vocab("org.flowable.cmmn.api.runtime.CaseInstanceBuilder", m, 0, Vocabulary.VARIABLE, listOf("caseDefinitionKey"), listOf(CASE))
+        }
+
         // ---------------------------------------------------------------- FORM OUTCOMES
         // completeTaskWithForm(taskId, formDefinitionId, outcome, …) — the outcome literal is arg 2;
         // offered as the project-wide union of all form outcome values.
