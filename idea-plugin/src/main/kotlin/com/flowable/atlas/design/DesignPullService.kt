@@ -3,6 +3,7 @@ package com.flowable.atlas.design
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.explorer.AtlasExplorerFiles
 import com.flowable.atlas.explorer.AtlasGenerationRunner
+import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.ConnectionsConfigurable
@@ -28,6 +29,15 @@ import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+
+/**
+ * Model keys present in the [previous] index snapshot but absent from [current] after a Design pull —
+ * i.e. keys the modeler renamed or removed. Sorted; empty when there is no baseline ([previous] is null,
+ * e.g. the first pull of a session) or nothing was removed. A pure top-level function so it is unit-
+ * testable without the VFS/network-bound service.
+ */
+internal fun removedModelKeys(previous: Set<String>?, current: Set<String>): List<String> =
+    previous?.minus(current)?.sorted() ?: emptyList()
 
 /**
  * Executes "Pull from Flowable Design": downloads each configured app's export ZIP into the
@@ -111,11 +121,20 @@ class DesignPullService(private val project: Project) {
         // the whole folder. Synchronous refresh is fine: we are on a pooled thread, not the EDT.
         val outsideContent = refreshVfsAndDetectOutsideContent(targetDir, written.map { it.target })
 
+        // Post-pull drift: snapshot the keys the project had, rebuild, and flag any the pull removed —
+        // code or models still referencing them may now be broken. refresh() rebuilds synchronously and
+        // returns the fresh index, so the after-snapshot is exact.
+        val indexService = project.service<FlowableModelIndexService>()
+        val previousKeys = indexService.cachedOrNull()?.let { modelKeys(it) }
         indicator.text = "Rebuilding Flowable index…"
-        project.service<FlowableModelIndexService>().refresh()
+        val removedKeys = removedModelKeys(previousKeys, modelKeys(indexService.refresh()))
 
-        notifySuccess(projectDir, written, failed, outsideContent)
+        notifySuccess(projectDir, written, failed, outsideContent, removedKeys)
     }
+
+    /** The distinct model keys currently in [index] (for post-pull drift detection). */
+    private fun modelKeys(index: FlowableIndex): Set<String> =
+        index.allDistinct().mapTo(HashSet()) { it.key }
 
     private fun writeZip(dir: Path, fileBase: String, bytes: ByteArray): Path {
         Files.createDirectories(dir)
@@ -160,7 +179,7 @@ class DesignPullService(private val project: Project) {
         }
     }
 
-    private fun notifySuccess(projectDir: Path, written: List<PulledApp>, failed: List<String>, outsideContent: Boolean) {
+    private fun notifySuccess(projectDir: Path, written: List<PulledApp>, failed: List<String>, outsideContent: Boolean, removedKeys: List<String>) {
         val title = if (written.size == 1) {
             val only = written.first()
             "Pulled ${only.app?.name ?: only.appKey}${only.app?.version?.let { " v$it" } ?: ""} from Flowable Design"
@@ -175,7 +194,13 @@ class DesignPullService(private val project: Project) {
         if (failed.isNotEmpty()) {
             body += "<br><br>Failed:<br>" + failed.joinToString("<br>")
         }
-        val type = if (outsideContent || failed.isNotEmpty()) NotificationType.WARNING else NotificationType.INFORMATION
+        if (removedKeys.isNotEmpty()) {
+            val shown = removedKeys.take(10).joinToString(", ")
+            val more = if (removedKeys.size > 10) ", … (+${removedKeys.size - 10} more)" else ""
+            body += "<br><br>${removedKeys.size} model key(s) no longer present since the last pull:<br>" +
+                "$shown$more<br>Code or models referencing them may now be broken."
+        }
+        val type = if (outsideContent || failed.isNotEmpty() || removedKeys.isNotEmpty()) NotificationType.WARNING else NotificationType.INFORMATION
         val notification = NotificationGroupManager.getInstance()
             .getNotificationGroup(GROUP_ID)
             .createNotification(title, body, type)
