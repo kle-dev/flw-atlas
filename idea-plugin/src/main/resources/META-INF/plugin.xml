@@ -600,6 +600,11 @@
         <codeInsight.lineMarkerProvider
                 language="JAVA"
                 implementationClass="com.flowable.atlas.usage.FlowableEndpointUsageLineMarkerProvider"/>
+        <!-- Gutter icon on a model-key literal whose model ships a rendered .svg (Design export) →
+             open that diagram in the IDE's built-in image/SVG viewer. No .svg (e.g. a BAR) → no marker. -->
+        <codeInsight.lineMarkerProvider
+                language="JAVA"
+                implementationClass="com.flowable.atlas.usage.FlowableDiagramLineMarkerProvider"/>
         <!-- Inline hint: the physical table name after a string literal that is a data-object key. -->
         <codeInsight.declarativeInlayProvider
                 language="JAVA"
