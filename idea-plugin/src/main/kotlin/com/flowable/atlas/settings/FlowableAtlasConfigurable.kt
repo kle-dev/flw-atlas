@@ -30,6 +30,16 @@ class FlowableAtlasConfigurable : BoundSearchableConfigurable(
                         .bindSelected(settings::extraCompletions)
                 }
             }
+            group("Inline Hints") {
+                row {
+                    checkBox("Data object table names")
+                        .comment(
+                            "Shows the physical table name inline next to a string literal that is a data-object " +
+                                "key. Hover/Ctrl-Q always shows it regardless of this setting.",
+                        )
+                        .bindSelected(settings::showDataObjectTableInlay)
+                }
+            }
             group("Model Index") {
                 row {
                     checkBox("Also index raw Flowable Design workspace sources")

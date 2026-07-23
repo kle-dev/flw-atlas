@@ -596,6 +596,10 @@
         <codeInsight.lineMarkerProvider
                 language="JAVA"
                 implementationClass="com.flowable.atlas.usage.FlowableBotActionLineMarkerProvider"/>
+        <!-- Gutter icon on a @GetMapping/@PostMapping/… handler → navigate to the models calling its endpoint. -->
+        <codeInsight.lineMarkerProvider
+                language="JAVA"
+                implementationClass="com.flowable.atlas.usage.FlowableEndpointUsageLineMarkerProvider"/>
         <!-- Inline hint: the physical table name after a string literal that is a data-object key. -->
         <codeInsight.declarativeInlayProvider
                 language="JAVA"

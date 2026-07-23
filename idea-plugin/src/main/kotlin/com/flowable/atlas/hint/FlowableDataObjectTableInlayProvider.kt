@@ -1,6 +1,7 @@
 package com.flowable.atlas.hint
 
 import com.flowable.atlas.index.FlowableModelIndexService
+import com.flowable.atlas.settings.FlowableAtlasSettings
 import com.intellij.codeInsight.hints.declarative.InlayHintsCollector
 import com.intellij.codeInsight.hints.declarative.InlayHintsProvider
 import com.intellij.codeInsight.hints.declarative.InlayTreeSink
@@ -18,11 +19,14 @@ import com.intellij.psi.PsiLiteralExpression
  * **data object** key — so `"kyc-customer"` reads as `"kyc-customer"‹CMM_CUSTOMER›` without hovering
  * or navigating. The key→table map is resolved via the data object's backing `database` service model
  * and cached ([FlowableModelIndexService.dataObjectTables]). Toggle under
- * Settings → Editor → Inlay Hints → Values → "Data object table names".
+ * Settings → Editor → Inlay Hints → Values → "Data object table names", or Settings → Tools →
+ * Flowable Atlas → Inline Hints ([FlowableAtlasSettings.showDataObjectTableInlay]) — the hover/Ctrl-Q
+ * documentation always shows the table regardless of either toggle.
  */
 class FlowableDataObjectTableInlayProvider : InlayHintsProvider {
 
     override fun createCollector(file: PsiFile, editor: Editor): InlayHintsCollector? {
+        if (!FlowableAtlasSettings.getInstance().showDataObjectTableInlay) return null
         val service = file.project.service<FlowableModelIndexService>()
         // Never build the (blocking) index from a hint pass. If it isn't ready yet, kick a background
         // build and show nothing this pass; hints appear once the index exists.
