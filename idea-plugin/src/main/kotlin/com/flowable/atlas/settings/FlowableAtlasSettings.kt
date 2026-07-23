@@ -27,6 +27,12 @@ class FlowableAtlasSettings : PersistentStateComponent<FlowableAtlasSettings.Sta
         var expressionValidation: Boolean = true,
         /** Inject the backend expression language into Java String literals that carry `${…}` / `#{…}`. */
         var injectJavaExpressions: Boolean = false,
+        /**
+         * Show the data-object table name as an inline hint next to its key literal. Independent of
+         * the hover/Ctrl-Q documentation ([com.flowable.atlas.navigation.FlowableKeyDocumentationProvider]),
+         * which always shows the table regardless of this setting.
+         */
+        var showDataObjectTableInlay: Boolean = true,
     )
 
     private var state = State()
@@ -52,6 +58,10 @@ class FlowableAtlasSettings : PersistentStateComponent<FlowableAtlasSettings.Sta
     var injectJavaExpressions: Boolean
         get() = state.injectJavaExpressions
         set(value) { state.injectJavaExpressions = value }
+
+    var showDataObjectTableInlay: Boolean
+        get() = state.showDataObjectTableInlay
+        set(value) { state.showDataObjectTableInlay = value }
 
     companion object {
         fun getInstance(): FlowableAtlasSettings = service()

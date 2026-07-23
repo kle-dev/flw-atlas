@@ -12,6 +12,7 @@ import com.flowable.atlas.parsing.ModelMemberExtractor
 import com.flowable.atlas.parsing.ModelMembers
 import com.flowable.atlas.parsing.ModelRefScanner
 import com.flowable.atlas.parsing.OperationInfo
+import com.flowable.atlas.parsing.RestCallScanner
 import com.flowable.atlas.parsing.ParamInfo
 import com.flowable.atlas.parsing.ServiceTable
 import com.intellij.openapi.Disposable
@@ -237,6 +238,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
         val signals = HashSet<String>()
         val userTaskIds = HashSet<String>()
         val activityIds = HashSet<String>()
+        val restCallUrls = HashSet<String>()
         // Index one model's content, associating its entry with [navFile] for navigation
         // (a loose file, or a navigable entry inside a .bar/.zip archive).
         fun processModel(fileName: String, bytes: ByteArray, type: ModelType, navFile: VirtualFile) {
@@ -252,7 +254,9 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
                         activityIds.addAll(m.activityIds)
                     }
                 }
-                ModelRefScanner.scan(String(bytes, Charsets.UTF_8), referencedIdentifiers, referencedClassFqns)
+                val text = String(bytes, Charsets.UTF_8)
+                ModelRefScanner.scan(text, referencedIdentifiers, referencedClassFqns)
+                restCallUrls.addAll(RestCallScanner.urls(text))
             } catch (e: Exception) {
                 // unreadable / not valid — skip this model, but leave a trace: a systematically
                 // mis-parsed model type would otherwise silently never be indexed
@@ -303,6 +307,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
             byKey, referencedIdentifiers, referencedClassFqns,
             variables = variables, messages = messages, signals = signals,
             userTaskIds = userTaskIds, activityIds = activityIds,
+            restCallUrls = restCallUrls,
             builtAtMillis = System.currentTimeMillis(),
         )
     }
