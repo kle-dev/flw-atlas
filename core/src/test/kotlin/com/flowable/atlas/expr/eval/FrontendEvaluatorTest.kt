@@ -39,6 +39,29 @@ class FrontendEvaluatorTest {
         assertEquals(3.0, value("items.length", """{"items":[1,2,3]}"""))
     }
 
+    // EX·5: catalog-known-but-not-previewable members/roots read as Unavailable, never as a red error
+    // or a silently-null Ok. A plain missing payload field stays null (JS undefined) — no over-flagging.
+    @Test fun knownButUnimplementedFlwMemberIsUnavailable() {
+        // `flw.encode` is in the catalog (validates green) but has no JVM preview impl — was "Unknown flw.encode".
+        assertTrue(unavailable("flw.encode('x')").contains("flw.encode"))
+        assertTrue(unavailable("{{ flw.encode(v) }}", """{"v":"x"}""").contains("payload preview"))
+    }
+
+    @Test fun engineRootsAreUnavailableNotSilentlyNull() {
+        assertTrue(unavailable("\$currentUser").contains("running form"))
+        assertTrue(unavailable("\$currentUser.id").contains("running form"))
+        assertTrue(unavailable("\$formValid").isNotEmpty())
+        assertTrue(unavailable("\$temp.foo").isNotEmpty())
+    }
+
+    @Test fun plainMissingFieldStaysNull() {
+        assertNull(value("missing"))                          // not an env root → JS undefined, unchanged
+        assertNull(value("a.b.c", """{"a":{}}"""))
+        assertNull(value("\$item"))                           // repeat binder without a scope → undefined, unchanged
+        assertEquals(2.0, value("flw.sum([1,1])"))            // real impl still evaluates
+        assertTrue(value("flw.encodeURI('a b')") is String)   // sibling encodeURI still works
+    }
+
     @Test fun ternaryAndLogical() {
         assertEquals("child", value("age < 16 ? 'child' : 'adult'", """{"age":10}"""))
         assertEquals(true, value("disabled || invisible", """{"disabled":false,"invisible":true}"""))
