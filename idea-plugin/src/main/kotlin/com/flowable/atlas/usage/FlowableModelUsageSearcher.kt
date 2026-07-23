@@ -9,6 +9,7 @@ import com.intellij.openapi.components.service
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiManager
+import com.intellij.psi.PsiMethod
 import com.intellij.find.findUsages.CustomUsageSearcher
 import com.intellij.usageView.UsageInfo
 import com.intellij.usages.Usage
@@ -23,6 +24,9 @@ import com.intellij.util.Processor
  * For a **bot** class (a `BotService` implementor) it additionally reports the `.action` models that
  * invoke it — matched by the bot's `getKey()` against each action's `botKey` (a JSON field the
  * expression-based scan below does not see).
+ *
+ * For a **Spring REST handler** method (`@GetMapping`/`@PostMapping`/…) it reports the model HTTP
+ * service tasks whose `requestUrl` resolves to the endpoint — matched by [EndpointModelScan].
  */
 class FlowableModelUsageSearcher : CustomUsageSearcher() {
 
@@ -32,8 +36,9 @@ class FlowableModelUsageSearcher : CustomUsageSearcher() {
             if (project.isDisposed) return@runBlocking
 
             val botKey = (element as? PsiClass)?.let { BotPsi.botKeyOf(it) }
+            val endpoint = (element as? PsiMethod)?.let { EndpointPsi.endpointOf(it) }
             val names = ModelReferenceScan.namesOf(element)
-            if (botKey == null && names.isEmpty()) return@runBlocking
+            if (botKey == null && endpoint == null && names.isEmpty()) return@runBlocking
 
             val index = project.service<FlowableModelIndexService>().index()
             val psiManager = PsiManager.getInstance(project)
@@ -46,6 +51,20 @@ class FlowableModelUsageSearcher : CustomUsageSearcher() {
                     val at = text?.let { botKeyOffset(it, botKey) } ?: -1
                     val usage = if (at >= 0) UsageInfo(psiFile, at, at + botKey.length, false) else UsageInfo(psiFile)
                     processor.process(UsageInfo2UsageAdapter(usage))
+                }
+            }
+
+            // Spring REST handler → the model HTTP tasks whose requestUrl resolves to its endpoint.
+            if (endpoint != null && EndpointModelScan.anyModelCalls(index, endpoint.path)) {
+                ModelReferenceScan.forEachModelText(project) { vf, text ->
+                    val ranges = EndpointModelScan.usageRanges(text, endpoint.path)
+                    if (ranges.isNotEmpty()) {
+                        psiManager.findFile(vf)?.let { psiFile ->
+                            for (r in ranges) {
+                                processor.process(UsageInfo2UsageAdapter(UsageInfo(psiFile, r.first, r.last + 1, false)))
+                            }
+                        }
+                    }
                 }
             }
 
