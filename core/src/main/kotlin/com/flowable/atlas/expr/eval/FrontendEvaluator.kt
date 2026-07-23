@@ -3,6 +3,7 @@ package com.flowable.atlas.expr.eval
 import com.flowable.atlas.expr.ExprWrappers
 import com.flowable.atlas.model.MiniJson
 import com.flowable.atlas.expr.ExpressionDialect
+import com.flowable.atlas.expr.catalog.FlowableExpressionCatalog
 import com.flowable.atlas.expr.parse.ArrayNode
 import com.flowable.atlas.expr.parse.ArrowNode
 import com.flowable.atlas.expr.parse.BinaryNode
@@ -35,6 +36,15 @@ import com.flowable.atlas.expr.parse.UnaryNode
  * [PayloadScopes]); `root` and `$payload` stay absolute.
  */
 object FrontendExpressionEvaluator {
+
+    /** Catalog frontend roots that are provided by the *running form* (or are JS globals) and can never
+     *  appear in a static payload preview — so a reference to one reads as [EvalResult.Unavailable] rather
+     *  than silently evaluating to `null`. Excludes the roots the preview binds itself (`flw`, `root`,
+     *  `$payload`, `$lang`) and the repeat-scope binders (`$item`/`$index`/`$itemParent`), whose "absent →
+     *  undefined" semantics the [PayloadScopes] model relies on. */
+    private val ENV_ROOTS: Set<String> =
+        FlowableExpressionCatalog.rootNames(ExpressionDialect.FRONTEND) -
+            setOf("flw", "root", "\$payload", "\$lang", "\$item", "\$index", "\$itemParent")
 
     /** Evaluate [body] (a frontend expression, wrapper optional) against [payloadJson] (a JSON object,
      *  or null/blank for `{}`), optionally scoped to the payload node at [scope]. */
@@ -132,7 +142,10 @@ object FrontendExpressionEvaluator {
 
         private fun doEval(node: ExprNode): Any? = when (node) {
             is LitNode -> node.value
-            is IdentNode -> context[node.name]
+            is IdentNode ->
+                if (context.containsKey(node.name)) context[node.name]
+                else if (node.name in ENV_ROOTS) unavailableRoot(node.name)
+                else null
             is ArrayNode -> node.elements.map { eval(it) }
             is TernaryNode -> if (Values.truthy(eval(node.cond))) eval(node.then) else eval(node.otherwise)
             is UnaryNode -> evalUnary(node)
@@ -185,7 +198,7 @@ object FrontendExpressionEvaluator {
         }
 
         private fun evalMember(recv: Any?, name: String): Any? = when (recv) {
-            is FlwNamespace -> recv.members[name] ?: throw EvalException("Unknown ${recv.name}.$name")
+            is FlwNamespace -> recv.members[name] ?: flwMemberMissing(recv, name)
             is Map<*, *> -> recv[name]
             is List<*> -> if (name == "length") recv.size.toDouble() else null
             is String -> if (name == "length") recv.length.toDouble() else null
@@ -218,7 +231,7 @@ object FrontendExpressionEvaluator {
                         when (val m = recv.members[callee.name]) {
                             is FlwCallable -> m.call(args)
                             is FlwNamespace -> throw EvalException("${recv.name}.${callee.name} is a namespace, not a function")
-                            else -> throw EvalException("Unknown ${recv.name}.${callee.name}")
+                            else -> flwMemberMissing(recv, callee.name)
                         }
                     } else callBuiltinMethod(recv, callee.name, args)
                 }
@@ -252,6 +265,23 @@ object FrontendExpressionEvaluator {
             val child = LinkedHashMap(context)
             n.params.forEachIndexed { i, p -> child[p] = args.getOrNull(i) }
             Evaluator(child).eval(n.body)
+        }
+
+        /** A running-form / JS-global root referenced in a static preview: reported as Unavailable, not
+         *  silent null (e.g. `$currentUser`, `$formValid`, `$temp`, `Object`, `BigNumber`). */
+        private fun unavailableRoot(name: String): Nothing = throw PreviewUnavailableException(
+            "'$name' is not available in the payload preview (it is provided by the running form)")
+
+        /** A `flw.<name>` (or `flw.<ns>.<name>`) the JVM preview doesn't reimplement: if the catalog knows
+         *  it, it's a real Flowable function we just can't evaluate statically (→ Unavailable); otherwise it
+         *  is genuinely unknown (→ Err). Fixes e.g. `flw.encode`, which validates but has no preview impl. */
+        private fun flwMemberMissing(recv: FlwNamespace, name: String): Nothing {
+            val known = if (recv.name == "flw") FlowableExpressionCatalog.isFrontendMember(name)
+                        else FlowableExpressionCatalog.isFrontendSubMember(recv.name, name)
+            val qualified = if (recv.name == "flw") "flw.$name" else "flw.${recv.name}.$name"
+            if (known) throw PreviewUnavailableException(
+                "$qualified is a known Flowable function but is not available in the payload preview")
+            throw EvalException("Unknown ${recv.name}.$name")
         }
 
         /** A small set of the JS String/Array methods forms commonly use directly (`names.join(', ')`). */
