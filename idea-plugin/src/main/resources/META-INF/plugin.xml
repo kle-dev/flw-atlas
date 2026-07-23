@@ -748,12 +748,20 @@
                     class="com.flowable.atlas.action.OpenExpressionPlaygroundAction"/>
             <separator/>
 
-            <!-- Generate -->
-            <action id="Flowable.GenerateAtlasExplorer"
-                    class="com.flowable.atlas.action.GenerateAtlasExplorerAction"
-                    icon="AllIcons.Actions.Compile"/>
-            <action id="Flowable.GenerateModelConstants"
-                    class="com.flowable.atlas.action.GenerateModelConstantsAction"/>
+            <!-- Generate (submenu, with a nested Liquibase submenu) -->
+            <group id="Flowable.Generate" popup="true">
+                <action id="Flowable.GenerateAtlasExplorer"
+                        class="com.flowable.atlas.action.GenerateAtlasExplorerAction"
+                        icon="AllIcons.Actions.Compile"/>
+                <action id="Flowable.GenerateModelConstants"
+                        class="com.flowable.atlas.action.GenerateModelConstantsAction"/>
+                <group id="Flowable.GenerateLiquibase" popup="true">
+                    <action id="Flowable.GenerateLiquibaseFromDataObject"
+                            class="com.flowable.atlas.action.GenerateLiquibaseFromDataObjectAction"/>
+                    <action id="Flowable.GenerateLiquibaseFromApps"
+                            class="com.flowable.atlas.action.GenerateLiquibaseFromAppsAction"/>
+                </group>
+            </group>
             <separator/>
 
             <!-- Flowable Design -->
