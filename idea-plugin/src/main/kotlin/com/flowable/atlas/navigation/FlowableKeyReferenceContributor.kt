@@ -1,9 +1,14 @@
 package com.flowable.atlas.navigation
 
+import com.flowable.atlas.completion.FluentChain
 import com.flowable.atlas.completion.KeySite
+import com.flowable.atlas.completion.OperationSite
 import com.flowable.atlas.completion.SiteMatching
+import com.flowable.atlas.completion.ValueSite
 import com.flowable.atlas.index.FlowableModelIndexService
+import com.flowable.atlas.model.ModelType
 import com.intellij.openapi.components.service
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.intellij.patterns.PlatformPatterns
 import com.intellij.psi.PsiElement
@@ -11,6 +16,7 @@ import com.intellij.psi.PsiElementResolveResult
 import com.intellij.psi.PsiExpressionList
 import com.intellij.psi.PsiLiteralExpression
 import com.intellij.psi.PsiManager
+import com.intellij.psi.PsiMethodCallExpression
 import com.intellij.psi.PsiReferenceExpression
 import com.intellij.psi.PsiReference
 import com.intellij.psi.PsiReferenceBase
@@ -23,6 +29,10 @@ import com.intellij.util.ProcessingContext
 /**
  * Turns a Flowable model-key literal at a public-API call site into a navigable reference: Ctrl-click
  * (or Go To Declaration) jumps to the model file(s) declaring that key, and Find Usages works too.
+ *
+ * Operation-name (`.operation("…")`) and value-field (`.value("…", …)`) literals navigate too — to
+ * the backing service model that declares the operation catalog (a data object via its backing
+ * service), resolved exactly as completion resolves the offered operations.
  */
 class FlowableKeyReferenceContributor : PsiReferenceContributor() {
 
@@ -32,8 +42,11 @@ class FlowableKeyReferenceContributor : PsiReferenceContributor() {
             object : PsiReferenceProvider() {
                 override fun getReferencesByElement(element: PsiElement, context: ProcessingContext): Array<PsiReference> {
                     val literal = element as? PsiLiteralExpression ?: return PsiReference.EMPTY_ARRAY
-                    val site = SiteMatching.keySiteForLiteral(literal) ?: return PsiReference.EMPTY_ARRAY
-                    return arrayOf(FlowableKeyReference(literal, site))
+                    // A model-KEY literal → the file(s) declaring that key.
+                    SiteMatching.keySiteForLiteral(literal)?.let { return arrayOf(FlowableKeyReference(literal, it)) }
+                    // An operation-name / value-field literal → the backing service model file.
+                    operationModelReference(literal)?.let { return arrayOf(it) }
+                    return PsiReference.EMPTY_ARRAY
                 }
             },
         )
@@ -62,13 +75,7 @@ private class FlowableKeyReference(
 
     override fun multiResolve(incompleteCode: Boolean): Array<ResolveResult> {
         val key = element.value as? String ?: return ResolveResult.EMPTY_ARRAY
-        val service = element.project.service<FlowableModelIndexService>()
-        val psiManager = PsiManager.getInstance(element.project)
-        val results = service.find(key)
-            .filter { it.type in site.targetTypes }
-            .mapNotNull { psiManager.findFile(it.file) }
-            .map { PsiElementResolveResult(it) }
-        return results.toTypedArray()
+        return resolveKeyToModelFiles(element.project, key, site.targetTypes)
     }
 
     // Completion is handled by the dedicated contributor; don't duplicate variants here.
@@ -82,17 +89,65 @@ private class FlowableKeyConstantReference(
     private val key: String,
 ) : PsiReferenceBase.Poly<PsiReferenceExpression>(ref, TextRange(0, ref.textLength), true) {
 
+    override fun multiResolve(incompleteCode: Boolean): Array<ResolveResult> =
+        resolveKeyToModelFiles(element.project, key, site.targetTypes)
+
+    override fun getVariants(): Array<Any> = emptyArray()
+}
+
+/**
+ * Resolves an operation-name / value-field literal to the backing service model file whose operation
+ * catalog it scopes to: the service named by the sibling `serviceKey(…)`, or a data object's backing
+ * service (via its `referencedServiceDefinitionModelKey`) — the same resolution the completion
+ * contributor uses, so navigation and completion agree.
+ */
+private class FlowableOperationModelReference(
+    literal: PsiLiteralExpression,
+    private val call: PsiMethodCallExpression,
+    private val keyMethod: String,
+    private val keyIsService: Boolean,
+) : PsiReferenceBase.Poly<PsiLiteralExpression>(literal, innerRange(literal), false) {
+
     override fun multiResolve(incompleteCode: Boolean): Array<ResolveResult> {
-        val service = element.project.service<FlowableModelIndexService>()
-        val psiManager = PsiManager.getInstance(element.project)
-        return service.find(key)
-            .filter { it.type in site.targetTypes }
-            .mapNotNull { psiManager.findFile(it.file) }
-            .map { PsiElementResolveResult(it) }
-            .toTypedArray()
+        val project = element.project
+        val chain = FluentChain.collectCalls(call)
+        val keyCall = FluentChain.findCall(chain, keyMethod) ?: return ResolveResult.EMPTY_ARRAY
+        val siblingKey = FluentChain.constantStringArg(keyCall, 0, project) ?: return ResolveResult.EMPTY_ARRAY
+        val serviceKey = if (keyIsService) siblingKey
+            else project.service<FlowableModelIndexService>().backingServiceKey(siblingKey) ?: return ResolveResult.EMPTY_ARRAY
+        return resolveKeyToModelFiles(project, serviceKey, listOf(ModelType.SERVICE))
     }
 
     override fun getVariants(): Array<Any> = emptyArray()
+}
+
+/**
+ * If [literal] is a String argument at an [OperationSite] or [ValueSite], a reference navigating to
+ * the backing service model file; null otherwise. Both site kinds carry the sibling key method and
+ * whether that key names a service directly.
+ */
+private fun operationModelReference(literal: PsiLiteralExpression): PsiReference? {
+    if (literal.value !is String) return null
+    val argList = literal.parent as? PsiExpressionList ?: return null
+    val call = argList.parent as? PsiMethodCallExpression ?: return null
+    val argIndex = argList.expressions.indexOf(literal)
+    val (keyMethod, keyIsService) = when (val site = SiteMatching.siteAt(call, argIndex)) {
+        is OperationSite -> site.keyMethod to site.keyIsService
+        is ValueSite -> site.keyMethod to site.keyIsService
+        else -> return null
+    }
+    return FlowableOperationModelReference(literal, call, keyMethod, keyIsService)
+}
+
+/** The shared model-key → PsiFile mapping: the file(s) declaring [key] as one of [types]. */
+private fun resolveKeyToModelFiles(project: Project, key: String, types: Collection<ModelType>): Array<ResolveResult> {
+    val service = project.service<FlowableModelIndexService>()
+    val psiManager = PsiManager.getInstance(project)
+    return service.find(key)
+        .filter { it.type in types }
+        .mapNotNull { psiManager.findFile(it.file) }
+        .map { PsiElementResolveResult(it) }
+        .toTypedArray()
 }
 
 /** The range covering the string content (excluding the surrounding quotes). */
