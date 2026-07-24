@@ -62,6 +62,35 @@ class GenerationConfigurable(private val project: Project) : BoundSearchableConf
                     )
                 }
             }
+            group("Liquibase Changelogs") {
+                row("Output folder:") {
+                    textFieldWithBrowseButton(
+                        FileChooserDescriptorFactory.createSingleFolderDescriptor()
+                            .withTitle("Select Liquibase Output Folder"),
+                        project,
+                    )
+                        .align(AlignX.FILL)
+                        .comment("Where \"Generate → Liquibase\" writes changelogs and the master flowable-project-db-changelog.xml (project-relative).")
+                        .bindText(settings::liquibaseOutputDir)
+                }
+                row("File name pattern:") {
+                    textField()
+                        .align(AlignX.FILL)
+                        .comment("Tokens: {key} {name} {service} {servicePrefix} {serviceNo} {table}. e.g. {servicePrefix}-L{serviceNo}-{name}")
+                        .bindText(settings::liquibaseFileNamePattern)
+                }
+                collapsibleGroup("Rename (regex)") {
+                    row("Find:") {
+                        textField().align(AlignX.FILL).bindText(settings::liquibaseRenameFind)
+                    }
+                    row("Replace:") {
+                        textField()
+                            .align(AlignX.FILL)
+                            .comment("Applied to the rendered file-name base. e.g. Find S0*(\\d+) Replace L\$1 turns KYC-S009 into …-L9.")
+                            .bindText(settings::liquibaseRenameReplace)
+                    }
+                }
+            }
             group("Model Constants") {
                 row("Class name (FQCN):") {
                     textField()

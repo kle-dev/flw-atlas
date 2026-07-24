@@ -5,6 +5,7 @@ import com.flowable.atlas.expr.ExprProblem
 import com.flowable.atlas.expr.ExprProblemKind
 import com.flowable.atlas.generate.ConstantFormat
 import com.flowable.atlas.generate.ConstantNaming
+import com.flowable.atlas.generate.liquibase.LiquibaseFileNamePattern
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.Service
@@ -43,6 +44,10 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         var atlasArtifacts: MutableSet<AtlasArtifact>
         var constantNaming: ConstantNaming
         var constantFormat: ConstantFormat
+        var liquibaseOutputDir: String
+        var liquibaseFileNamePattern: String
+        var liquibaseRenameFind: String
+        var liquibaseRenameReplace: String
         var inspectBaseUrl: String
         var inspectUsername: String
         var designBaseUrl: String
@@ -63,6 +68,10 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         override var atlasArtifacts: MutableSet<AtlasArtifact> = mutableSetOf(AtlasArtifact.EXPLORER_HTML)
         override var constantNaming: ConstantNaming = ConstantNaming.NAME_AND_KEY
         override var constantFormat: ConstantFormat = ConstantFormat.CLASS
+        override var liquibaseOutputDir: String = DEFAULT_LIQUIBASE_DIR
+        override var liquibaseFileNamePattern: String = DEFAULT_LIQUIBASE_PATTERN
+        override var liquibaseRenameFind: String = ""
+        override var liquibaseRenameReplace: String = ""
         override var inspectBaseUrl: String = ""
         override var inspectUsername: String = ""
         override var designBaseUrl: String = ""
@@ -82,6 +91,8 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
                 atlasOutputDir == DEFAULT_ATLAS_OUTPUT_DIR &&
                 atlasArtifacts == mutableSetOf(AtlasArtifact.EXPLORER_HTML) &&
                 constantNaming == ConstantNaming.NAME_AND_KEY && constantFormat == ConstantFormat.CLASS &&
+                liquibaseOutputDir == DEFAULT_LIQUIBASE_DIR && liquibaseFileNamePattern == DEFAULT_LIQUIBASE_PATTERN &&
+                liquibaseRenameFind.isEmpty() && liquibaseRenameReplace.isEmpty() &&
                 inspectBaseUrl.isEmpty() && inspectUsername.isEmpty() &&
                 designBaseUrl.isEmpty() && designWorkspaceKey.isEmpty() && designAppKeys.isEmpty() &&
                 designAppKey.isEmpty() &&
@@ -116,6 +127,18 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
 
         /** Whether generated model constants are a class of Strings or an enum. */
         var constantFormat: ConstantFormat = ConstantFormat.CLASS
+
+        /** Project-relative folder the "Generate → Liquibase" dialog writes changelogs into by default. */
+        var liquibaseOutputDir: String = DEFAULT_LIQUIBASE_DIR
+
+        /** Default changelog filename pattern (tokens `{key} {name} {service} {servicePrefix} {serviceNo} {table}`). */
+        var liquibaseFileNamePattern: String = DEFAULT_LIQUIBASE_PATTERN
+
+        /** Optional regex applied to the rendered filename base (find); blank disables the rename step. */
+        var liquibaseRenameFind: String = ""
+
+        /** Replacement for [liquibaseRenameFind] (Kotlin regex replacement, so `$1` group refs work). */
+        var liquibaseRenameReplace: String = ""
 
         /** Base URL of a running Flowable app for the playground's "Evaluate against app" (Inspect). */
         var inspectBaseUrl: String = ""
@@ -164,6 +187,14 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
             get() = state.constantNaming; set(v) { state.constantNaming = v }
         override var constantFormat: ConstantFormat
             get() = state.constantFormat; set(v) { state.constantFormat = v }
+        override var liquibaseOutputDir: String
+            get() = state.liquibaseOutputDir; set(v) { state.liquibaseOutputDir = v }
+        override var liquibaseFileNamePattern: String
+            get() = state.liquibaseFileNamePattern; set(v) { state.liquibaseFileNamePattern = v }
+        override var liquibaseRenameFind: String
+            get() = state.liquibaseRenameFind; set(v) { state.liquibaseRenameFind = v }
+        override var liquibaseRenameReplace: String
+            get() = state.liquibaseRenameReplace; set(v) { state.liquibaseRenameReplace = v }
         override var inspectBaseUrl: String
             get() = state.inspectBaseUrl; set(v) { state.inspectBaseUrl = v }
         override var inspectUsername: String
@@ -284,6 +315,22 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         get() = active().constantFormat
         set(value) { active().constantFormat = value }
 
+    var liquibaseOutputDir: String
+        get() = active().liquibaseOutputDir.ifBlank { DEFAULT_LIQUIBASE_DIR }
+        set(value) { active().liquibaseOutputDir = value.ifBlank { DEFAULT_LIQUIBASE_DIR } }
+
+    var liquibaseFileNamePattern: String
+        get() = active().liquibaseFileNamePattern.ifBlank { DEFAULT_LIQUIBASE_PATTERN }
+        set(value) { active().liquibaseFileNamePattern = value.ifBlank { DEFAULT_LIQUIBASE_PATTERN } }
+
+    var liquibaseRenameFind: String
+        get() = active().liquibaseRenameFind
+        set(value) { active().liquibaseRenameFind = value }
+
+    var liquibaseRenameReplace: String
+        get() = active().liquibaseRenameReplace
+        set(value) { active().liquibaseRenameReplace = value }
+
     var inspectBaseUrl: String
         get() = active().inspectBaseUrl
         set(value) { active().inspectBaseUrl = value }
@@ -315,6 +362,8 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
     companion object {
         const val DEFAULT_DESIGN_TARGET_FOLDER = "flowable-models"
         const val DEFAULT_ATLAS_OUTPUT_DIR = "atlas-output"
+        const val DEFAULT_LIQUIBASE_DIR = "src/main/resources/liquibase"
+        const val DEFAULT_LIQUIBASE_PATTERN = LiquibaseFileNamePattern.DEFAULT_PATTERN
 
         /** Active sub-project path, kept in [PropertiesComponent] (workspace-local, not VCS-shared). */
         const val ACTIVE_SUBPROJECT_PROPERTY = "flowable.atlas.activeSubProject"
