@@ -1,6 +1,6 @@
 # Flowable Atlas — Features
 
-*IntelliJ IDEA plugin, v0.10.5.* A summary of what Flowable Atlas provides, grouped by area.
+*IntelliJ IDEA plugin, v0.10.8.* A summary of what Flowable Atlas provides, grouped by area.
 Everything is resolved against the Flowable models that actually live in your repository.
 
 ## Atlas Explorer & Hub
@@ -28,6 +28,14 @@ Everything is resolved against the Flowable models that actually live in your re
   layout (BPMN/CMMN/DMN diagram interchange) — so it keeps working with newer Design exports that no
   longer bundle a `.svg`. The same rendering also powers the **Diagrams (SVG)** generation artifact and
   is embedded inline in each node's detail view in the Explorer HTML.
+- **Recognize model keys anywhere** *(opt-in)* — enable *Settings → Tools → Flowable Atlas → "Recognize
+  model keys anywhere in code"* and any Java string literal whose value equals a known model key gets
+  the diagram icon, Ctrl-click navigation, Find Usages and hover — not only at a recognized Flowable API
+  call such as `startProcessInstanceByKey("…")`.
+- **Diagrams for archived models** — models packaged inside a `.zip`/`.bar`/Design app export render
+  their diagram just like loose model files, in the Explorer HTML and the Diagrams (SVG) artifact.
+- **Version at a glance** — the generated Explorer HTML footer and the Atlas Hub show the Atlas version,
+  so it's clear which build produced a given page.
 
 ## Java ↔ model integration
 

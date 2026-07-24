@@ -26,9 +26,9 @@ object DiagramArtifacts {
             val type = modelType(node["type"] as? String) ?: continue
             val key = node["key"] as? String ?: continue
             val filePath = node["file"] as? String ?: continue
-            val file = File(root, filePath)
-            val bytes = runCatching { if (file.isFile) file.readBytes() else null }.getOrNull() ?: continue
-            val svg = runCatching { DiagramRenderer.renderSvg(bytes, file.name, type) }.getOrNull() ?: continue
+            // ModelBytes handles both loose files and "<archive>!<entry>" labels (see ModelBytes).
+            val (bytes, name) = ModelBytes.resolve(root, filePath) ?: continue
+            val svg = runCatching { DiagramRenderer.renderSvg(bytes, name, type) }.getOrNull() ?: continue
             out.putIfAbsent(sanitize(key) + ".svg", svg)
         }
         return out

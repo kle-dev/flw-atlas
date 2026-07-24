@@ -4,6 +4,7 @@ import com.flowable.atlas.completion.FluentChain
 import com.flowable.atlas.completion.KeySite
 import com.flowable.atlas.completion.OperationSite
 import com.flowable.atlas.completion.SiteMatching
+import com.flowable.atlas.completion.ValueKeyMatching
 import com.flowable.atlas.completion.ValueSite
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
@@ -46,6 +47,9 @@ class FlowableKeyReferenceContributor : PsiReferenceContributor() {
                     SiteMatching.keySiteForLiteral(literal)?.let { return arrayOf(FlowableKeyReference(literal, it)) }
                     // An operation-name / value-field literal → the backing service model file.
                     operationModelReference(literal)?.let { return arrayOf(it) }
+                    // Value-based (opt-in): any literal whose value equals a known model key navigates too,
+                    // even with no call site. cachedOrNull() only — a reference provider must not build.
+                    valueKeyReference(literal)?.let { return arrayOf(it) }
                     return PsiReference.EMPTY_ARRAY
                 }
             },
@@ -137,6 +141,34 @@ private fun operationModelReference(literal: PsiLiteralExpression): PsiReference
         else -> return null
     }
     return FlowableOperationModelReference(literal, call, keyMethod, keyIsService)
+}
+
+/**
+ * Resolves a value-matched key literal (recognized anywhere, not at a call site — opt-in via
+ * [ValueKeyMatching]) to its model file(s). Since there is no call site to narrow the type, it resolves
+ * across all model types. Uses the cached index only (never builds from a reference pass); returns null
+ * — so no reference — until the index exists.
+ */
+private class FlowableValueKeyReference(
+    literal: PsiLiteralExpression,
+) : PsiReferenceBase.Poly<PsiLiteralExpression>(literal, innerRange(literal), false) {
+
+    override fun multiResolve(incompleteCode: Boolean): Array<ResolveResult> {
+        val key = element.value as? String ?: return ResolveResult.EMPTY_ARRAY
+        return resolveKeyToModelFiles(element.project, key, ModelType.entries)
+    }
+
+    override fun getVariants(): Array<Any> = emptyArray()
+}
+
+/** A value-based key reference for [literal], or null if disabled, implausible, or not a known key. */
+private fun valueKeyReference(literal: PsiLiteralExpression): PsiReference? {
+    if (!ValueKeyMatching.enabled()) return null
+    val value = literal.value as? String ?: return null
+    if (!ValueKeyMatching.plausible(value)) return null
+    val index = literal.project.service<FlowableModelIndexService>().cachedOrNull() ?: return null
+    if (index.find(value).isEmpty()) return null
+    return FlowableValueKeyReference(literal)
 }
 
 /** The shared model-key → PsiFile mapping: the file(s) declaring [key] as one of [types]. */

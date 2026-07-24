@@ -44,6 +44,21 @@ class FlowableAtlasConfigurable : BoundSearchableConfigurable(
                         .bindSelected(settings::showDataObjectTableInlay)
                 }
             }
+            group("Navigation") {
+                row {
+                    checkBox("Recognize model keys anywhere in code")
+                        .comment(
+                            "By default a string is treated as a model key only at a known Flowable API call " +
+                                "(startProcessInstanceByKey(\"…\"), .processDefinitionKey(\"…\"), …). Enable this to " +
+                                "recognize <i>any</i> string literal whose value equals a known model key — the diagram " +
+                                "icon, Ctrl-click, Find Usages and hover then work on it too. Matches on value alone, so " +
+                                "a literal that happens to equal a short/common real key can also light up.",
+                        )
+                        .bindSelected(settings::recognizeModelKeysAnywhere)
+                        // Takes effect on the next highlighting pass (edit or reopen the file) — the same
+                        // way the index toggle above applies; no explicit daemon restart needed.
+                }
+            }
             group("Model Index") {
                 row {
                     checkBox("Also index raw Flowable Design workspace sources")
