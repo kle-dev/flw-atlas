@@ -1,6 +1,8 @@
 package com.flowable.atlas.render
 
+import com.flowable.atlas.AtlasBuildInfo
 import com.flowable.atlas.diagram.DiagramRenderer
+import com.flowable.atlas.diagram.ModelBytes
 import com.flowable.atlas.model.MiniJson
 import com.flowable.atlas.model.ModelType
 import java.io.File
@@ -18,7 +20,7 @@ import java.io.File
 object ExplorerHtmlRenderer {
 
     @Suppress("UNCHECKED_CAST")
-    fun render(result: Map<String, Any?>, root: File): String {
+    fun render(result: Map<String, Any?>, root: File, version: String = AtlasBuildInfo.VERSION): String {
         val graph = result["graph"] as Map<String, Any?>
         // Same payload object html_render builds, in the same key order.
         val payload = LinkedHashMap<String, Any?>()
@@ -30,7 +32,11 @@ object ExplorerHtmlRenderer {
         payload["edges"] = graph["edges"]
         // json.dumps(payload, ensure_ascii=False, default=list).replace("</", "<\/")
         val data = MiniJson.stringify(payload).replace("</", "<\\/")
-        return composeTemplate().replace("__ATLAS_DATA__", data)
+        // Stamp the version before the data island so a version like "__ATLAS_VERSION__" can't collide
+        // with anything inside the (already-built) JSON.
+        return composeTemplate()
+            .replace("__ATLAS_VERSION__", "Atlas $version")
+            .replace("__ATLAS_DATA__", data)
     }
 
     /**
@@ -73,9 +79,10 @@ object ExplorerHtmlRenderer {
             val file = node["file"] as? String ?: continue
             @Suppress("UNCHECKED_CAST")
             val data = node["data"] as? MutableMap<Any?, Any?> ?: continue
-            val f = File(root, file)
-            val bytes = runCatching { if (f.isFile) f.readBytes() else null }.getOrNull() ?: continue
-            val svg = runCatching { DiagramRenderer.renderSvg(bytes, f.name, type) }.getOrNull() ?: continue
+            // Resolve via ModelBytes (handles loose files AND "<archive>!<entry>" labels) — a plain
+            // File(root, file) silently fails for models packaged inside a .zip/.bar/Design export.
+            val (bytes, name) = ModelBytes.resolve(root, file) ?: continue
+            val svg = runCatching { DiagramRenderer.renderSvg(bytes, name, type) }.getOrNull() ?: continue
             data["diagram"] = svg
         }
         return list

@@ -4,6 +4,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.nio.file.Files
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 /**
  * [DiagramArtifacts] is the additive generation step. These assert it renders diagram-bearing nodes and
@@ -53,6 +56,32 @@ class DiagramArtifactsTest {
             root,
         )
         assertTrue("expected no diagram artifacts, got ${out.keys}", out.isEmpty())
+    }
+
+    @Test
+    fun rendersModelPackagedInsideAnArchive() {
+        // Models inside a .zip/.bar/Design app export carry a graph `file` label of the form
+        // "<archiveRel>!<entryPath>" (see Extractor). A plain File(root, label) can't read that back —
+        // the bug that left archived processes/cases without a diagram in the generated explorer. Zip
+        // the diagram-bearing BPMN into an archive at test time and assert the SVG round-trips.
+        val tmp = Files.createTempDirectory("atlas-archive-test").toFile()
+        try {
+            val bpmn = File(root, "DEMO-onboarding.bpmn20.xml").readBytes()
+            val archive = File(tmp, "app.zip")
+            ZipOutputStream(archive.outputStream()).use { zip ->
+                zip.putNextEntry(ZipEntry("bpmn/DEMO-onboarding.bpmn20.xml"))
+                zip.write(bpmn)
+                zip.closeEntry()
+            }
+            val out = DiagramArtifacts.render(
+                resultWith(node("process", "DEMO-onboarding", "app.zip!bpmn/DEMO-onboarding.bpmn20.xml")),
+                tmp,
+            )
+            assertEquals(setOf("DEMO-onboarding.svg"), out.keys)
+            assertTrue(out.getValue("DEMO-onboarding.svg").startsWith("<svg"))
+        } finally {
+            tmp.deleteRecursively()
+        }
     }
 
     @Test

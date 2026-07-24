@@ -1,5 +1,6 @@
 package com.flowable.atlas.hub
 
+import com.flowable.atlas.AtlasBuildInfo
 import com.flowable.atlas.action.FlowableActionIds
 import com.flowable.atlas.action.GenerateModelConstantsAction
 import com.flowable.atlas.action.RebuildModelIndexAction
@@ -17,6 +18,7 @@ import com.flowable.atlas.settings.FlowableAtlasConfigurable
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.icons.AllIcons
 import com.intellij.ide.DataManager
+import com.intellij.ide.plugins.PluginManagerCore
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionUpdateThread
@@ -28,6 +30,7 @@ import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.components.service
+import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
@@ -190,7 +193,13 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
                 ToolWindowManager.getInstance(project).getToolWindow("Flowable Expressions")?.activate(null, true)
             }
         }
+        row { comment("Flowable Atlas " + atlasVersion()) }
     }
+
+    /** The running plugin's version (what the user sees in Settings › Plugins); falls back to the baked
+     * :core build version, which is the same Gradle version, so any mismatch would itself signal drift. */
+    private fun atlasVersion(): String =
+        PluginManagerCore.getPlugin(PluginId.getId("com.flowable.atlas"))?.version ?: AtlasBuildInfo.VERSION
 
     private fun invokeAction(id: String) {
         val action = ActionManager.getInstance().getAction(id) ?: return

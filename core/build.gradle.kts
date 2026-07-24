@@ -26,3 +26,19 @@ dependencies {
 tasks.test {
     useJUnit()
 }
+
+// Bake the Gradle version into a resource so :core (and thus the generated explorer HTML + the CLI) can
+// stamp which Atlas version produced their output — read back by com.flowable.atlas.AtlasBuildInfo.
+val generateVersionResource by tasks.registering {
+    val versionValue = project.version.toString()
+    val outputDir = layout.buildDirectory.dir("generated-resources/version")
+    inputs.property("version", versionValue)
+    outputs.dir(outputDir)
+    doLast {
+        val f = outputDir.get().file("atlas-version.txt").asFile
+        f.parentFile.mkdirs()
+        f.writeText(versionValue)
+    }
+}
+
+sourceSets.main.get().resources.srcDir(generateVersionResource)

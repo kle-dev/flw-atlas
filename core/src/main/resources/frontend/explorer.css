@@ -183,6 +183,7 @@
   .side-foot{flex:none;display:flex;align-items:center;gap:var(--space-2);border-top:1px solid var(--line);padding:var(--space-25) var(--space-3)}
   .side-foot .proj{flex:1;min-width:0;font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-dim);
     border:1px solid var(--line2);padding:var(--space-05) var(--space-2);border-radius:var(--radius-full);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .side-foot .atlasver{flex:none;font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-dim);opacity:.72;white-space:nowrap}
   .side-warn{display:flex;align-items:center;gap:var(--space-1);background:var(--warn-bg);border:1px solid var(--warn-border);
     color:var(--warn-text);cursor:pointer;border-radius:var(--radius-full);padding:var(--space-05) var(--space-2);font-family:var(--mono);font-size:var(--text-2xs);flex:none}
   .side-warn:hover{border-color:var(--warn-text)}
@@ -475,6 +476,7 @@
     .shell.rail .sidebar:not(:hover):not(:focus-within) .side-item.on::before{left:1px}
     .shell.rail .sidebar:not(:hover):not(:focus-within) .side-foot{flex-direction:column;gap:var(--space-15);padding:var(--space-2) var(--space-15)}
     .shell.rail .sidebar:not(:hover):not(:focus-within) .side-foot .proj{display:none}
+    .shell.rail .sidebar:not(:hover):not(:focus-within) .side-foot .atlasver{display:none}
     .shell.rail .sidebar:not(:hover):not(:focus-within) .side-warn .wtxt{display:none}
   }
 

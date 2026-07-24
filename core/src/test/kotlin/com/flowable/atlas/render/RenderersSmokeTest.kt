@@ -44,6 +44,9 @@ class RenderersSmokeTest {
         assertFalse("leftover __ATLAS_DATA__ marker", html.contains("__ATLAS_DATA__"))
         assertFalse("leftover CSS marker", html.contains("/*__ATLAS_CSS__*/"))
         assertFalse("leftover JS marker", html.contains("/*__ATLAS_JS__*/"))
+        // The generator-version stamp is substituted into the sidebar footer.
+        assertFalse("leftover __ATLAS_VERSION__ marker", html.contains("__ATLAS_VERSION__"))
+        assertTrue("expected the stamped Atlas version", html.contains(">Atlas "))
         // The CSS token scale survives composition into the single-file HTML.
         assertTrue("expected the layout-scale tokens from explorer.css", html.contains("--space-1:"))
         // The IDE theme-bridge hook the IntelliJ JCEF viewer pushes theme switches through.

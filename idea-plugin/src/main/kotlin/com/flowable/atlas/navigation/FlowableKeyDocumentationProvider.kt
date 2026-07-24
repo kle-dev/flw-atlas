@@ -1,6 +1,7 @@
 package com.flowable.atlas.navigation
 
 import com.flowable.atlas.completion.SiteMatching
+import com.flowable.atlas.completion.ValueKeyMatching
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
 import com.intellij.lang.documentation.AbstractDocumentationProvider
@@ -35,9 +36,12 @@ class FlowableKeyDocumentationProvider : AbstractDocumentationProvider() {
                     site != null -> Triple(site.targetTypes, k, literal as PsiElement)
                     // Fallback: a plain data-object key string (a constant's value / bare literal),
                     // even outside a recognised Flowable API call site — so hovering a data-object
-                    // key constant still shows its name and physical table.
+                    // key constant still shows its name and physical table. Always on.
                     service.cachedOrNull()?.find(k, ModelType.DATA_OBJECT) != null ->
                         Triple(setOf(ModelType.DATA_OBJECT), k, literal as PsiElement)
+                    // Opt-in: recognize any model key by value, so hover works on a key literal anywhere.
+                    ValueKeyMatching.enabled() && service.cachedOrNull()?.find(k)?.isNotEmpty() == true ->
+                        Triple(ModelType.entries.toSet(), k, literal as PsiElement)
                     else -> return null
                 }
             } else {

@@ -114,6 +114,21 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.10.8</h3>
+        <ul>
+          <li><b>Recognize model keys anywhere in code</b> (opt-in) — enable
+              <i>Settings → Tools → Flowable Atlas → "Recognize model keys anywhere in code"</i> and any
+              Java string literal whose value equals a known model key gets the diagram gutter icon,
+              Ctrl-click navigation, Find Usages and hover — not only at a recognised Flowable API call
+              like <code>startProcessInstanceByKey("…")</code>. Off by default; matches on value alone.</li>
+          <li><b>Diagrams for models inside an app archive</b> — a process/case/decision packaged in a
+              <code>.zip</code>/<code>.bar</code>/Design app export now renders its diagram in the
+              generated Explorer HTML and the <i>Diagrams (SVG)</i> artifact, the same as a loose model
+              file; previously archived models showed no diagram section.</li>
+          <li><b>Version at a glance</b> — the generated Explorer HTML footer and the Atlas Hub now show
+              the Atlas version, so it's clear which build produced a given page.</li>
+        </ul>
+
         <h3>0.10.7</h3>
         <ul>
           <li><b>Diagrams render from the model layout</b> — the model-diagram gutter icon no longer

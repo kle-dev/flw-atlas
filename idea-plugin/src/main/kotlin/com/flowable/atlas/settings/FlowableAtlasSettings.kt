@@ -37,6 +37,13 @@ class FlowableAtlasSettings : PersistentStateComponent<FlowableAtlasSettings.Sta
          * which always shows the table regardless of this setting.
          */
         var showDataObjectTableInlay: Boolean = true,
+        /**
+         * Recognize a model key by VALUE anywhere in Java code, not only at a catalogued Flowable API
+         * call site: any string literal whose value equals a known model key gets the diagram gutter
+         * icon, navigation, Find Usages and hover. Opt-in (default off) — it matches on value alone
+         * ([com.flowable.atlas.completion.ValueKeyMatching]).
+         */
+        var recognizeModelKeysAnywhere: Boolean = false,
     )
 
     private var state = State()
@@ -66,6 +73,10 @@ class FlowableAtlasSettings : PersistentStateComponent<FlowableAtlasSettings.Sta
     var showDataObjectTableInlay: Boolean
         get() = state.showDataObjectTableInlay
         set(value) { state.showDataObjectTableInlay = value }
+
+    var recognizeModelKeysAnywhere: Boolean
+        get() = state.recognizeModelKeysAnywhere
+        set(value) { state.recognizeModelKeysAnywhere = value }
 
     companion object {
         fun getInstance(): FlowableAtlasSettings = service()
