@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             targetNamespace="http://flowable.org/demo">
+  <process id="DEMO-nolayout" name="DEMO No Layout">
+    <startEvent id="start"/>
+    <userTask id="task" name="Work"/>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="task"/>
+    <sequenceFlow id="f2" sourceRef="task" targetRef="end"/>
+  </process>
+</definitions>

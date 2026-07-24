@@ -776,6 +776,16 @@ function detailExtra(n){
   return h;
 }
 
+// ---------- rendered model diagram (BPMN/CMMN/DMN), when Atlas embedded one ----------
+function diagramView(n){
+  const svg = n.data && n.data.diagram;
+  if(!svg) return '';
+  // Atlas-generated, script-free SVG; scale it to fit the panel while keeping its aspect ratio.
+  const scaled = svg.replace('<svg ', '<svg style="max-width:100%;height:auto;display:block" ');
+  return '<details class="uses" open><summary>Diagram</summary>'+
+    '<div style="padding:6px 10px 10px;overflow:auto">'+scaled+'</div></details>';
+}
+
 // ---------- neighborhood graph (ego view: selected node + 1-hop neighbors) ----------
 const GRAPH_MAX_NEIGHBORS = 26;
 function neighborhoodSvg(n){
@@ -852,6 +862,7 @@ function renderDetail(){
       const ct=isHtml?(v.copy!=null?String(v.copy):null):(typeof v==='number'?null:String(v));
       return '<div class="cell"><div class="k">'+esc(r[0])+'</div><div class="v mono">'+shown+copyBtn(ct,r[0])+'</div></div>';
     }).join('')+'</div>'; }
+  h+=diagramView(n);
   h+=neighborhoodSvg(n);
   h+=detailExtra(n);
   // outgoing

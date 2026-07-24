@@ -1,5 +1,6 @@
 package com.flowable.atlas.explorer
 
+import com.flowable.atlas.diagram.DiagramArtifacts
 import com.flowable.atlas.graph.Atlas
 import com.flowable.atlas.model.MiniJson
 import com.flowable.atlas.render.ClaudeRenderer
@@ -75,9 +76,24 @@ class AtlasGeneratorService(private val project: Project) {
             val written = ArrayList<Path>()
             for (artifact in AtlasArtifact.entries) {
                 if (artifact !in artifacts) continue
+                if (artifact == AtlasArtifact.DIAGRAMS_SVG) continue   // a folder, handled below
                 val p = outputDir.resolve("$name${artifact.suffix}")
                 p.toFile().writeText(renderers.getValue(artifact)(), Charsets.UTF_8)
                 written.add(p)
+            }
+            if (AtlasArtifact.DIAGRAMS_SVG in artifacts) {
+                // Each process/case/decision's DI layout → one SVG in `<name>.diagrams/`. Additive
+                // post-pass over the finished result; a project with no BPMN/CMMN/DMN layout emits none.
+                val diagrams = DiagramArtifacts.render(result, root)
+                if (diagrams.isNotEmpty()) {
+                    val dir = outputDir.resolve("$name.diagrams")
+                    dir.toFile().mkdirs()
+                    for ((fn, svg) in diagrams) {
+                        val p = dir.resolve(fn)
+                        p.toFile().writeText(svg, Charsets.UTF_8)
+                        written.add(p)
+                    }
+                }
             }
             val explorer = written.firstOrNull { it.fileName.toString().endsWith(".explorer.html") }
             Outcome.Success(explorer, written, summaryLog(result))

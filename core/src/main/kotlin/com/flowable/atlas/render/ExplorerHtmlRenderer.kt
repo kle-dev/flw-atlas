@@ -1,6 +1,8 @@
 package com.flowable.atlas.render
 
+import com.flowable.atlas.diagram.DiagramRenderer
 import com.flowable.atlas.model.MiniJson
+import com.flowable.atlas.model.ModelType
 import java.io.File
 
 /**
@@ -24,7 +26,7 @@ object ExplorerHtmlRenderer {
         payload["stats"] = result["stats"]
         payload["diagnostics"] = result["diagnostics"] ?: ArrayList<Any?>()
         payload["customFunctions"] = result["customFunctions"]
-        payload["nodes"] = slimNodes(graph["nodes"])
+        payload["nodes"] = attachDiagrams(slimNodes(graph["nodes"]), root)
         payload["edges"] = graph["edges"]
         // json.dumps(payload, ensure_ascii=False, default=list).replace("</", "<\/")
         val data = MiniJson.stringify(payload).replace("</", "<\\/")
@@ -54,6 +56,36 @@ object ExplorerHtmlRenderer {
             (nm["data"] as? Map<*, *>)?.let { out["data"] = slimData(it) }
             out
         }
+    }
+
+    /**
+     * Attach each process/case/decision node's rendered diagram SVG to its (already-slimmed) `data` map
+     * under `diagram`, so the explorer can show the diagram inline. Runs *after* [slimNodes] on the
+     * fresh payload maps — the shared graph and the `extract()` result are never touched, and a project
+     * without any BPMN/CMMN/DMN layout adds nothing (leaving the payload byte-for-byte as before).
+     */
+    private fun attachDiagrams(nodes: Any?, root: File): Any? {
+        val list = nodes as? List<*> ?: return nodes
+        for (nodeAny in list) {
+            @Suppress("UNCHECKED_CAST")
+            val node = nodeAny as? MutableMap<Any?, Any?> ?: continue
+            val type = diagramType(node["type"] as? String) ?: continue
+            val file = node["file"] as? String ?: continue
+            @Suppress("UNCHECKED_CAST")
+            val data = node["data"] as? MutableMap<Any?, Any?> ?: continue
+            val f = File(root, file)
+            val bytes = runCatching { if (f.isFile) f.readBytes() else null }.getOrNull() ?: continue
+            val svg = runCatching { DiagramRenderer.renderSvg(bytes, f.name, type) }.getOrNull() ?: continue
+            data["diagram"] = svg
+        }
+        return list
+    }
+
+    private fun diagramType(nodeType: String?): ModelType? = when (nodeType) {
+        "process" -> ModelType.PROCESS
+        "case" -> ModelType.CASE
+        "decision" -> ModelType.DECISION
+        else -> null
     }
 
     private fun slimData(data: Map<*, *>): Map<Any?, Any?> {

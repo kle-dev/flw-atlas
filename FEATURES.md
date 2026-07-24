@@ -22,9 +22,12 @@ Everything is resolved against the Flowable models that actually live in your re
 - **Broken-reference inspection** — flags an unknown model key at a cross-reference attribute
   (broken deployment).
 - **Hover / Ctrl-Q docs** — shows a model key's type, name, and file.
-- **View model diagram** — a gutter icon on a model-key literal opens the model's rendered diagram
-  (the `.svg` shipped by the Design export) in the IDE, so you can see the process / case / form /
-  decision without opening Flowable Design.
+- **View model diagram** — a gutter icon on a model-key literal opens the model's diagram in the IDE,
+  so you can see the process / case / decision without opening Flowable Design. It prefers the `.svg`
+  bundled by an older Design export, and otherwise **renders the diagram itself** from the model's
+  layout (BPMN/CMMN/DMN diagram interchange) — so it keeps working with newer Design exports that no
+  longer bundle a `.svg`. The same rendering also powers the **Diagrams (SVG)** generation artifact and
+  is embedded inline in each node's detail view in the Explorer HTML.
 
 ## Java ↔ model integration
 

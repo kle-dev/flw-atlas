@@ -1,0 +1,47 @@
+{
+  "resourceId": "canvas",
+  "stencil": { "id": "BPMNDiagram" },
+  "childShapes": [
+    {
+      "resourceId": "sid-start",
+      "stencil": { "id": "StartNoneEvent" },
+      "bounds": { "upperLeft": { "x": 100, "y": 100 }, "lowerRight": { "x": 130, "y": 130 } },
+      "properties": { "name": "" },
+      "outgoing": [ { "resourceId": "sid-f1" } ],
+      "childShapes": []
+    },
+    {
+      "resourceId": "sid-review",
+      "stencil": { "id": "UserTask" },
+      "bounds": { "upperLeft": { "x": 180, "y": 85 }, "lowerRight": { "x": 280, "y": 145 } },
+      "properties": { "name": "Review application" },
+      "outgoing": [ { "resourceId": "sid-f2" } ],
+      "childShapes": []
+    },
+    {
+      "resourceId": "sid-end",
+      "stencil": { "id": "EndNoneEvent" },
+      "bounds": { "upperLeft": { "x": 330, "y": 100 }, "lowerRight": { "x": 360, "y": 130 } },
+      "properties": { "name": "" },
+      "childShapes": []
+    },
+    {
+      "resourceId": "sid-f1",
+      "stencil": { "id": "SequenceFlow" },
+      "bounds": { "upperLeft": { "x": 130, "y": 115 }, "lowerRight": { "x": 180, "y": 115 } },
+      "target": { "resourceId": "sid-review" },
+      "outgoing": [ { "resourceId": "sid-review" } ],
+      "dockers": [],
+      "childShapes": []
+    },
+    {
+      "resourceId": "sid-f2",
+      "stencil": { "id": "SequenceFlow" },
+      "bounds": { "upperLeft": { "x": 280, "y": 115 }, "lowerRight": { "x": 330, "y": 115 } },
+      "target": { "resourceId": "sid-end" },
+      "outgoing": [ { "resourceId": "sid-end" } ],
+      "dockers": [],
+      "childShapes": []
+    }
+  ]
+}

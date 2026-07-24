@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             targetNamespace="http://flowable.org/demo">
+  <process id="DEMO-onboarding" name="DEMO Onboarding">
+    <startEvent id="start" name="Start"/>
+    <userTask id="review" name="Review application"/>
+    <exclusiveGateway id="gw" name="Approved?"/>
+    <endEvent id="end" name="Done"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="review"/>
+    <sequenceFlow id="f2" sourceRef="review" targetRef="gw"/>
+    <sequenceFlow id="f3" sourceRef="gw" targetRef="end"/>
+  </process>
+  <bpmndi:BPMNDiagram id="D">
+    <bpmndi:BPMNPlane bpmnElement="DEMO-onboarding">
+      <bpmndi:BPMNShape id="s_start" bpmnElement="start">
+        <omgdc:Bounds x="100" y="100" width="30" height="30"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_review" bpmnElement="review">
+        <omgdc:Bounds x="180" y="85" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_gw" bpmnElement="gw">
+        <omgdc:Bounds x="330" y="95" width="40" height="40"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_end" bpmnElement="end">
+        <omgdc:Bounds x="420" y="100" width="30" height="30"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="e_f1" bpmnElement="f1">
+        <omgdi:waypoint x="130" y="115"/>
+        <omgdi:waypoint x="180" y="115"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f2" bpmnElement="f2">
+        <omgdi:waypoint x="280" y="115"/>
+        <omgdi:waypoint x="330" y="115"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f3" bpmnElement="f3">
+        <omgdi:waypoint x="370" y="115"/>
+        <omgdi:waypoint x="420" y="115"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

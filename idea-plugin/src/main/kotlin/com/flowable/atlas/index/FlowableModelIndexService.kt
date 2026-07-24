@@ -247,7 +247,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
         val signals = HashSet<String>()
         val userTaskIds = HashSet<String>()
         val activityIds = HashSet<String>()
-        val restCallUrls = HashSet<String>()
+        val restCalls = HashSet<RestCallScanner.RestRef>()
         // Index one model's content, associating its entry with [navFile] for navigation
         // (a loose file, or a navigable entry inside a .bar/.zip archive).
         fun processModel(fileName: String, bytes: ByteArray, type: ModelType, navFile: VirtualFile) {
@@ -265,7 +265,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
                 }
                 val text = String(bytes, Charsets.UTF_8)
                 ModelRefScanner.scan(text, referencedIdentifiers, referencedClassFqns)
-                restCallUrls.addAll(RestCallScanner.urls(text))
+                restCalls.addAll(RestCallScanner.refs(text))
             } catch (e: Exception) {
                 // unreadable / not valid — skip this model, but leave a trace: a systematically
                 // mis-parsed model type would otherwise silently never be indexed
@@ -316,7 +316,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
             byKey, referencedIdentifiers, referencedClassFqns,
             variables = variables, messages = messages, signals = signals,
             userTaskIds = userTaskIds, activityIds = activityIds,
-            restCallUrls = restCallUrls,
+            restCalls = restCalls,
             builtAtMillis = System.currentTimeMillis(),
         )
     }

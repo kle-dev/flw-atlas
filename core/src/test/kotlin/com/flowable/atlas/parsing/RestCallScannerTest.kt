@@ -85,4 +85,33 @@ class RestCallScannerTest {
         """.trimIndent()
         assertTrue(RestCallScanner.scan(text).isEmpty())
     }
+
+    @Test
+    fun capturesTheNearbyRequestMethod() {
+        val text = """
+            <serviceTask id="t" flowable:type="http">
+              <extensionElements>
+                <flowable:field name="requestMethod"><flowable:string>get</flowable:string></flowable:field>
+                <flowable:field name="requestUrl"><flowable:string>/api/customers/42</flowable:string></flowable:field>
+              </extensionElements>
+            </serviceTask>
+        """.trimIndent()
+        val call = RestCallScanner.scan(text).single()
+        assertEquals("/api/customers/42", call.url)
+        assertEquals("GET", call.method)
+        assertEquals(setOf(RestCallScanner.RestRef("/api/customers/42", "GET")), RestCallScanner.refs(text))
+    }
+
+    @Test
+    fun jsonFieldObjectValueBeforeName() {
+        // key order must not matter — {"stringValue":…,"name":"requestUrl"} is as valid as name-first
+        val text = """{ "stringValue": "/api/things", "name": "requestUrl" }"""
+        assertEquals(listOf("/api/things"), RestCallScanner.scan(text).map { it.url })
+    }
+
+    @Test
+    fun urlWithoutAMethodHasNullMethod() {
+        val text = """<flowable:field name="requestUrl" stringValue="/api/orders" />"""
+        assertEquals(null, RestCallScanner.scan(text).single().method)
+    }
 }
