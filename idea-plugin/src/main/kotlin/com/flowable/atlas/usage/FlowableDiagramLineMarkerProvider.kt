@@ -2,12 +2,14 @@ package com.flowable.atlas.usage
 
 import com.flowable.atlas.FlowableAtlasBundle
 import com.flowable.atlas.completion.SiteMatching
+import com.flowable.atlas.completion.ValueKeyMatching
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
 import com.intellij.codeInsight.daemon.LineMarkerInfo
 import com.intellij.codeInsight.daemon.LineMarkerProvider
 import com.intellij.codeInsight.hint.HintManager
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.markup.GutterIconRenderer
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -38,18 +40,28 @@ class FlowableDiagramLineMarkerProvider : LineMarkerProvider {
         result: MutableCollection<in LineMarkerInfo<*>>,
     ) {
         if (elements.isEmpty()) return
-        // cachedOrNull() only — never build the index from a highlighting pass.
-        val index = elements.first().project.service<FlowableModelIndexService>().cachedOrNull() ?: return
+        // cachedOrNull() only — never build the index from a highlighting pass. If it isn't ready yet,
+        // kick a background build and show nothing this pass; markers appear once the index exists.
+        val service = elements.first().project.service<FlowableModelIndexService>()
+        val index = service.cachedOrNull() ?: run {
+            ApplicationManager.getApplication().executeOnPooledThread { runCatching { service.index() } }
+            return
+        }
+        val valueBased = ValueKeyMatching.enabled()
         for (element in elements) {
             // Line markers must be anchored on a leaf; a string literal's single child is that leaf.
             val literal = element.parent as? PsiLiteralExpression ?: continue
             if (literal.firstChild !== element) continue
-            val site = SiteMatching.keySiteForLiteral(literal) ?: continue
             val key = literal.value as? String ?: continue
-            val entry = index.find(key)
-                .filter { it.type in site.targetTypes }
-                .firstOrNull { FlowableDiagram.hasOpenableDiagram(it.file, it.type) }
-                ?: continue
+            val site = SiteMatching.keySiteForLiteral(literal)
+            // Call-site match narrows by the site's target types; otherwise (opt-in) match by value
+            // against every model type — the key must still equal a real indexed key.
+            val candidates = when {
+                site != null -> index.find(key).filter { it.type in site.targetTypes }
+                valueBased && ValueKeyMatching.plausible(key) -> index.find(key)
+                else -> continue
+            }
+            val entry = candidates.firstOrNull { FlowableDiagram.hasOpenableDiagram(it.file, it.type) } ?: continue
             result.add(buildMarker(element, entry.file, entry.type))
         }
     }

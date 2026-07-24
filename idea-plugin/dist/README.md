@@ -6,7 +6,7 @@ The installable plugin ZIP, committed so you can install it after a `git pull`
 ## Install (on any machine)
 
 1. IntelliJ IDEA **2026.1+** → **Settings → Plugins → ⚙ → Install Plugin from Disk…**
-2. Select `flowable-atlas-0.10.7.zip`
+2. Select `flowable-atlas-0.10.8.zip`
 3. **Restart**
 
 > You do **not** need to open or build `idea-plugin/` just to use the plugin —
@@ -14,8 +14,8 @@ The installable plugin ZIP, committed so you can install it after a `git pull`
 
 ## This build
 
-- Version: **0.10.7**
-- SHA-256: `cce00fde75060d3c8787423272357bbaef848b0a9399c731a9329bbb21dd08a7`
+- Version: **0.10.8**
+- SHA-256: `0f5592f7ae2aa4781336bc297be70504c77e3ce971ef325bb7bca8a314a9e490`
 
 Bundles the Atlas generator (the pure-Kotlin `:core` engine, run in-process). **Generate Atlas
 Explorer** (Tools → Flowable Atlas) needs only a **Java 21+** runtime — no external interpreter.
