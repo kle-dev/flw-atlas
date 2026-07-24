@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+             xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/"
+             namespace="http://flowable.org/demo">
+  <inputData id="in_amount" name="Amount"/>
+  <decision id="dec_risk" name="Risk level">
+    <informationRequirement id="ir1">
+      <requiredInput href="#in_amount"/>
+    </informationRequirement>
+  </decision>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram>
+      <dmndi:DMNShape dmnElementRef="in_amount">
+        <dc:Bounds x="60" y="200" width="120" height="50"/>
+      </dmndi:DMNShape>
+      <dmndi:DMNShape dmnElementRef="dec_risk">
+        <dc:Bounds x="80" y="60" width="120" height="60"/>
+      </dmndi:DMNShape>
+      <dmndi:DMNEdge dmnElementRef="ir1">
+        <di:waypoint x="120" y="200"/>
+        <di:waypoint x="140" y="120"/>
+      </dmndi:DMNEdge>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>

@@ -226,9 +226,14 @@ object JavaParser {
             if (epSegs.isEmpty()) continue
             val suffix = target.size >= epSegs.size &&
                 segsMatch(epSegs, target.subList(target.size - epSegs.size, target.size))
+            // A model URL that begins with a variable segment (`${base}`/`{{base}}` → "*") may stand for
+            // a multi-segment base, so the endpoint's trailing segments still identify it even when the
+            // model path is shorter than the endpoint path (the leading "*" absorbs the extra base segs).
+            val varBase = !suffix && target.first() == "*" && target.size in 2..epSegs.size &&
+                segsMatch(epSegs.subList(epSegs.size - (target.size - 1), epSegs.size), target.subList(1, target.size))
             val lits = epSegs.filter { it != "*" }
             when {
-                suffix -> matches.add(ep)
+                suffix || varBase -> matches.add(ep)
                 lits.isNotEmpty() && lits.last() in target -> matches.add(ep + mapOf("loose" to true))
             }
         }

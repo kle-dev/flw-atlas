@@ -38,30 +38,30 @@ class FlowableEndpointUsageLineMarkerProvider : LineMarkerProvider {
             if (element !is PsiIdentifier) continue
             val method = element.parent as? PsiMethod ?: continue
             if (method.nameIdentifier !== element) continue
-            val endpoint = EndpointPsi.endpointOf(method) ?: continue
-            if (!EndpointModelScan.anyModelCalls(index, endpoint.path)) continue
-            result.add(buildMarker(element, endpoint))
+            val called = EndpointPsi.endpointsOf(method).filter { EndpointModelScan.anyModelCalls(index, it) }
+            if (called.isEmpty()) continue
+            result.add(buildMarker(element, called))
         }
     }
 
-    private fun buildMarker(identifier: PsiIdentifier, endpoint: EndpointPsi.Endpoint): LineMarkerInfo<PsiElement> {
-        val tooltip = "Called by Flowable models (${endpoint.verb} ${endpoint.path})"
+    private fun buildMarker(identifier: PsiIdentifier, endpoints: List<EndpointPsi.Endpoint>): LineMarkerInfo<PsiElement> {
+        val tooltip = "Called by Flowable models (" + endpoints.joinToString(", ") { "${it.verb} ${it.path}" } + ")"
         return LineMarkerInfo(
             identifier,
             identifier.textRange,
             ICON,
             { _ -> tooltip },
-            { event, elt -> navigate(event, elt, endpoint.path) },
+            { event, elt -> navigate(event, elt, endpoints) },
             GutterIconRenderer.Alignment.RIGHT,
             Supplier { tooltip },
         )
     }
 
-    private fun navigate(event: MouseEvent, element: PsiElement, path: String) {
+    private fun navigate(event: MouseEvent, element: PsiElement, endpoints: List<EndpointPsi.Endpoint>) {
         val project = element.project
         object : Task.Backgroundable(project, "Finding models calling this endpoint", true) {
             override fun run(indicator: ProgressIndicator) {
-                val files = EndpointModelScan.affectedModelFiles(project, path)
+                val files = EndpointModelScan.affectedModelFiles(project, endpoints)
                 val at = RelativePoint(event)
                 ApplicationManager.getApplication().invokeLater {
                     ModelReferenceNavigator.show(project, files, "Models calling this endpoint", at)

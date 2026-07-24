@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/CMMN/20151109/MODEL"
+             xmlns:cmmndi="http://www.omg.org/spec/CMMN/20151109/CMMNDI"
+             xmlns:dc="http://www.omg.org/spec/CMMN/20151109/DC"
+             xmlns:di="http://www.omg.org/spec/CMMN/20151109/DI"
+             targetNamespace="http://flowable.org/demo">
+  <case id="DEMO-reviewCase" name="Review Case">
+    <casePlanModel id="cpm" name="Review">
+      <planItem id="pi_task" definitionRef="ht_review"/>
+      <planItem id="pi_ms" definitionRef="ms_done"/>
+      <humanTask id="ht_review" name="Review"/>
+      <milestone id="ms_done" name="Completed"/>
+    </casePlanModel>
+  </case>
+  <cmmndi:CMMNDI>
+    <cmmndi:CMMNDiagram>
+      <cmmndi:CMMNShape cmmnElementRef="cpm">
+        <dc:Bounds x="40" y="40" width="400" height="300"/>
+      </cmmndi:CMMNShape>
+      <cmmndi:CMMNShape cmmnElementRef="pi_task">
+        <dc:Bounds x="80" y="120" width="100" height="60"/>
+      </cmmndi:CMMNShape>
+      <cmmndi:CMMNShape cmmnElementRef="pi_ms">
+        <dc:Bounds x="240" y="130" width="120" height="40"/>
+      </cmmndi:CMMNShape>
+    </cmmndi:CMMNDiagram>
+  </cmmndi:CMMNDI>
+</definitions>

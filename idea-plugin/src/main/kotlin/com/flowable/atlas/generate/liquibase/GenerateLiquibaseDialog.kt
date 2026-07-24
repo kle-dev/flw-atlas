@@ -173,7 +173,7 @@ class GenerateLiquibaseDialog(
         plan.forEach { rows.add(Row(it).apply { include = defaultInclude }) }
         table.emptyText.text = when {
             newSource == LiquibaseSource.DATA_OBJECTS -> "No data objects are indexed in this project."
-            else -> "No app export in this project bundles a Liquibase changelog."
+            else -> "No app export in this project ships a Liquibase changelog."
         }
         model.items = rows
         recompute()
