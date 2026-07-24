@@ -6,6 +6,8 @@ import com.flowable.atlas.model.ModelPaths
 import com.flowable.atlas.model.ModelType
 import com.flowable.atlas.parsing.ServiceTable
 import com.flowable.atlas.project.AtlasProjectRootService
+import com.flowable.atlas.settings.GenerationConfigurable
+import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
@@ -15,6 +17,7 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
@@ -25,144 +28,163 @@ import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
 
 /**
- * Writes Liquibase changelogs into developer code for the "Generate → Liquibase" actions. Two entry
- * points ([generateFromDataObject], [generateFromApps]) do their heavy work — zip reads, model
- * lookups, synthesis — off the EDT (a background task + a read action), then apply the file writes in
- * a single write command on the EDT.
+ * Backs the "Generate → Liquibase" dialog ([GenerateLiquibaseDialog]). Splits into three concerns:
  *
- * Every changelog lands in `src/main/resources/liquibase/<key>.changelog.xml` under the active
- * project. The master `flowable-project-db-changelog.xml` (the convention path Flowable auto-runs) is
- * created from a skeleton when absent and otherwise left alone — only the missing `<include>` line is
- * added, idempotently (see [LiquibaseChangelogGenerator.withInclude]).
+ *  - **plan** ([computePlans]) — a read-only pass over the model index and the app-export zips that
+ *    resolves, for every data object and every bundled changelog, what would be written and *how*
+ *    (extracted verbatim from the bundling app, or synthesized from the data object's fields). No file
+ *    is touched; the dialog renders this as a preview. Must run under a read action (the caller wraps).
+ *  - **write** ([writeResolved]) — applies the user's confirmed selection in a single write command:
+ *    each changelog under the configured output folder, the master `flowable-project-db-changelog.xml`
+ *    created from a skeleton when absent, and each file registered via an idempotent `<include>`.
+ *  - **report** ([reportGenerated]) — opens the first file and raises the summary notification.
+ *
+ * The only project files ever created or modified are the per-changelog `*.changelog.xml` files and
+ * the master changelog — never a `liquibase.properties` or any build file.
  */
 @Service(Service.Level.PROJECT)
 class LiquibaseScaffoldService(private val project: Project) {
 
-    /** A changelog to write: the file base [key] and its [xml] body. */
-    data class GeneratedChangelog(val key: String, val xml: String)
+    // ---- plan model ---------------------------------------------------------------------------
 
-    // ---- public entry points ---------------------------------------------------------------
+    /** Where a changelog's content comes from — surfaced verbatim in the preview so the user sees it. */
+    sealed interface Origin {
+        val label: String
 
-    /** Generate the changelog backing the picked [dataObjectKey] (extract if bundled, else synthesize). */
-    fun generateFromDataObject(dataObjectKey: String) {
-        object : Task.Backgroundable(project, "Generating Liquibase changelog", true) {
-            override fun run(indicator: ProgressIndicator) = doGenerateFromDataObject(dataObjectKey)
-        }.queue()
-    }
+        /** The bundling app export shipped a Liquibase model; its [fileName] XML is emitted unchanged. */
+        data class Extracted(val fileName: String) : Origin {
+            override val label get() = "Extracted from $fileName"
+        }
 
-    /** Extract every bundled changelog from every Design-export app zip in the project. */
-    fun generateFromApps() {
-        object : Task.Backgroundable(project, "Extracting Liquibase changelogs", true) {
-            override fun run(indicator: ProgressIndicator) = doGenerateFromApps()
-        }.queue()
-    }
-
-    private fun doGenerateFromDataObject(dataObjectKey: String) {
-        try {
-            val base = projectDirFile()
-                ?: return notifyLater("Cannot generate changelog", "No project directory on disk.", NotificationType.ERROR)
-            val resolved = ReadAction.computeBlocking<Resolved?, RuntimeException> { resolveForDataObject(dataObjectKey, base) }
-                ?: return notifyLater("No data object '$dataObjectKey'", "It is not indexed as a data object.", NotificationType.WARNING)
-            applyOnEdt(base, listOf(resolved.changelog)) { written ->
-                val file = written.firstOrNull()
-                file?.let { FileEditorManager.getInstance(project).openFile(it, true) }
-                notify(
-                    "Generated ${file?.name ?: "${resolved.changelog.key}.changelog.xml"}",
-                    "${resolved.origin}. Registered in ${LiquibaseChangelogGenerator.MASTER_CHANGELOG}.",
-                    NotificationType.INFORMATION,
-                )
-            }
-        } catch (pce: ProcessCanceledException) {
-            throw pce
-        } catch (t: Throwable) {
-            thisLogger().warn("Generate Liquibase from data object failed", t)
-            notifyLater("Generate Liquibase changelog failed", t.message ?: t.javaClass.simpleName, NotificationType.ERROR)
+        /** No bundled changelog matched; a `createTable` is synthesized from [fieldCount] data-object fields. */
+        data class Synthesized(val fieldCount: Int) : Origin {
+            override val label get() = "Synthesized ($fieldCount field${if (fieldCount == 1) "" else "s"})"
         }
     }
 
-    private fun doGenerateFromApps() {
-        try {
-            val base = projectDirFile()
-                ?: return notifyLater("Cannot extract changelogs", "No project directory on disk.", NotificationType.ERROR)
-            val extracted = ReadAction.computeBlocking<List<LiquibaseChangelogExtractor.Extracted>, RuntimeException> {
-                archivesUnder(base).flatMap { LiquibaseChangelogExtractor.extract(it) }
-            }
-            val changelogs = extracted.distinctBy { it.key }.map { GeneratedChangelog(it.key, it.xml) }
-            if (changelogs.isEmpty()) {
-                return notifyLater("No bundled changelogs found", "No app export in the project bundles a Liquibase changelog.", NotificationType.INFORMATION)
-            }
-            applyOnEdt(base, changelogs) { written ->
-                written.firstOrNull()?.let { FileEditorManager.getInstance(project).openFile(it, true) }
-                notify(
-                    "Extracted ${written.size} Liquibase changelog(s)",
-                    "Written under src/main/resources/liquibase and registered in ${LiquibaseChangelogGenerator.MASTER_CHANGELOG}.",
-                    NotificationType.INFORMATION,
-                )
-            }
-        } catch (pce: ProcessCanceledException) {
-            throw pce
-        } catch (t: Throwable) {
-            thisLogger().warn("Generate Liquibase from apps failed", t)
-            notifyLater("Extract Liquibase changelogs failed", t.message ?: t.javaClass.simpleName, NotificationType.ERROR)
-        }
-    }
+    /**
+     * One candidate changelog for the preview: its [key], the [defaultName] the `{name}` token starts
+     * from (slug of the model's display name / key), the [serviceKey] and [tableName] the other tokens
+     * derive from, its [origin] and the resolved [xml] body.
+     */
+    data class ChangelogPlanItem(
+        val key: String,
+        val defaultName: String,
+        val serviceKey: String?,
+        val tableName: String?,
+        val origin: Origin,
+        val xml: String,
+    )
 
-    // ---- write pipeline (testable) ----------------------------------------------------------
+    /** The full preview for both sources, computed in one pass so switching source is instant. */
+    data class Plans(val dataObjects: List<ChangelogPlanItem>, val apps: List<ChangelogPlanItem>)
+
+    /** A confirmed write: the final [fileName] (rendered from the pattern) and the [xml] to store. */
+    data class ChangelogWrite(val fileName: String, val xml: String)
+
+    // ---- entry point --------------------------------------------------------------------------
 
     /**
-     * Write each of [changelogs] to `src/main/resources/liquibase/<key>.changelog.xml` under
-     * [projectDir], create the master skeleton when absent and register each file via an idempotent
-     * `<include>`. One write command; returns the per-changelog files written (master excluded).
+     * Compute the preview off the EDT and open [GenerateLiquibaseDialog] with [source] preselected. When
+     * nothing at all is generatable (no data objects, no bundled changelogs), a notification is shown
+     * instead of an empty dialog. Both "Generate → Liquibase" menu actions funnel through here.
      */
-    fun writeChangelogs(projectDir: VirtualFile, changelogs: List<GeneratedChangelog>): List<VirtualFile> {
-        val written = ArrayList<VirtualFile>()
-        WriteCommandAction.runWriteCommandAction(project, "Generate Liquibase Changelog", null, {
-            val dir = VfsUtil.createDirectoryIfMissing(projectDir, LIQUIBASE_DIR)
-            val master = dir.findChild(LiquibaseChangelogGenerator.MASTER_CHANGELOG)
-                ?: dir.createChildData(this, LiquibaseChangelogGenerator.MASTER_CHANGELOG)
-                    .also { VfsUtil.saveText(it, LiquibaseChangelogGenerator.masterSkeleton()) }
-
-            var masterText = VfsUtilCore.loadText(master)
-            for (cl in changelogs) {
-                val fileName = fileNameFor(cl.key)
-                val file = dir.findChild(fileName) ?: dir.createChildData(this, fileName)
-                VfsUtil.saveText(file, cl.xml)
-                written.add(file)
-                masterText = LiquibaseChangelogGenerator.withInclude(masterText, fileName)
+    fun openDialog(source: LiquibaseSource) {
+        val base = projectBaseDir()
+            ?: return notify("Cannot generate changelogs", "No project directory on disk.", NotificationType.ERROR)
+        object : Task.Backgroundable(project, "Preparing Liquibase preview", true) {
+            override fun run(indicator: ProgressIndicator) {
+                val plans = try {
+                    ReadAction.computeBlocking<Plans, RuntimeException> { computePlans(base) }
+                } catch (pce: ProcessCanceledException) {
+                    throw pce
+                } catch (t: Throwable) {
+                    thisLogger().warn("Liquibase preview failed", t)
+                    return notifyLater("Liquibase preview failed", t.message ?: t.javaClass.simpleName, NotificationType.ERROR)
+                }
+                ApplicationManager.getApplication().invokeLater {
+                    if (project.isDisposed) return@invokeLater
+                    if (plans.dataObjects.isEmpty() && plans.apps.isEmpty()) {
+                        notify(
+                            "Nothing to generate",
+                            "No data objects are indexed and no app export bundles a Liquibase changelog.",
+                            NotificationType.INFORMATION,
+                        )
+                    } else {
+                        GenerateLiquibaseDialog(project, base, plans, source).show()
+                    }
+                }
             }
-            if (masterText != VfsUtilCore.loadText(master)) VfsUtil.saveText(master, masterText)
-        })
-        return written
+        }.queue()
     }
 
-    // ---- resolution / matching --------------------------------------------------------------
+    // ---- plan ---------------------------------------------------------------------------------
 
-    private data class Resolved(val changelog: GeneratedChangelog, val origin: String)
+    /** The active project directory on disk, or null when it is not materialized (e.g. remote/default). */
+    fun projectBaseDir(): VirtualFile? {
+        val dir = AtlasProjectRootService.getInstance(project).activeProjectDir() ?: return null
+        return LocalFileSystem.getInstance().refreshAndFindFileByNioFile(dir)
+    }
 
     /**
-     * The changelog for [dataObjectKey]: the bundled one when a matching app-export changelog exists
-     * (emitted verbatim), otherwise a synthesized fallback from the data object's fields. Read access
-     * required (model files are read directly).
+     * Resolve every data object (extract-if-bundled, else synthesize) and every bundled changelog under
+     * [base] into a [Plans] preview. Read access required — call inside a read action.
      */
-    private fun resolveForDataObject(dataObjectKey: String, base: VirtualFile): Resolved? {
+    fun computePlans(base: VirtualFile): Plans {
         val index = project.service<FlowableModelIndexService>()
-        val info = index.dataObjectInfoOf(dataObjectKey) ?: return null
-        val service = info.referencedServiceDefinitionModelKey?.let { index.serviceTableOf(it) }
         val candidates = archivesUnder(base).flatMap { LiquibaseChangelogExtractor.extract(it) }
 
-        matchBundled(dataObjectKey, service, candidates)?.let {
-            return Resolved(GeneratedChangelog(dataObjectKey, it.xml), "Extracted from ${it.fileName}")
+        // Resolve data objects first — reading keysOfType builds the index cache that dataObjectTables()
+        // relies on, and lets us record the service/table metadata per bundled changelog so the
+        // app-export rows can reuse it (their `{service}`/`{table}` tokens otherwise have no source).
+        val entries = index.keysOfType(ModelType.DATA_OBJECT).distinctBy { it.key }.sortedBy { it.key }
+        val tables = index.dataObjectTables()
+        val enrichByChangelog = HashMap<String, Pair<String?, String?>>()
+
+        val dataObjects = entries.mapNotNull { entry ->
+            val info = index.dataObjectInfoOf(entry.key) ?: return@mapNotNull null
+            val service = info.referencedServiceDefinitionModelKey?.let { index.serviceTableOf(it) }
+            val modelTable = service?.tableName ?: tables[entry.key]
+            val bundled = matchBundled(entry.key, service, candidates)
+            val origin: Origin
+            val xml: String
+            if (bundled != null) {
+                origin = Origin.Extracted(bundled.fileName)
+                xml = bundled.xml
+            } else {
+                origin = Origin.Synthesized(info.fieldMappings.size)
+                xml = LiquibaseChangelogGenerator.synthesize(entry.key, modelTable.orEmpty(), info.fieldMappings)
+            }
+            val tableName = tableNameOf(xml, modelTable)
+            val serviceKey = info.referencedServiceDefinitionModelKey
+            if (bundled != null) enrichByChangelog[bundled.key] = serviceKey to tableName
+            ChangelogPlanItem(entry.key, LiquibaseFileNamePattern.slug(entry.name), serviceKey, tableName, origin, xml)
         }
-        val tableName = service?.tableName ?: index.dataObjectTables()[dataObjectKey].orEmpty()
-        val xml = LiquibaseChangelogGenerator.synthesize(dataObjectKey, tableName, info.fieldMappings)
-        return Resolved(GeneratedChangelog(dataObjectKey, xml), "Synthesized from ${info.fieldMappings.size} field(s)")
+
+        val apps = candidates.distinctBy { it.key }.map {
+            val enriched = enrichByChangelog[it.key]
+            ChangelogPlanItem(
+                key = it.key,
+                defaultName = LiquibaseFileNamePattern.slug(it.key),
+                serviceKey = enriched?.first,
+                tableName = enriched?.second ?: tableNameOf(it.xml, null),
+                origin = Origin.Extracted(it.fileName),
+                xml = it.xml,
+            )
+        }
+        return Plans(dataObjects, apps)
     }
+
+    /** The changelog's own `createTable` name (authoritative), else the model-derived [fallback]; blank → null. */
+    private fun tableNameOf(xml: String, fallback: String?): String? =
+        LiquibaseChangelog.tableNames(xml).firstOrNull()?.takeIf { it.isNotBlank() }
+            ?: fallback?.takeIf { it.isNotBlank() }
 
     /**
      * The bundled changelog backing a data object, matched (strongest first): the backing service's
      * `referencedLiquibaseModelKey` equals the changelog's key; else a changelog whose `tableName`
      * equals the service's; else the changelog whose key equals the data-object key. Null when none
-     * of these line up (→ synthesize).
+     * line up (→ synthesize).
      */
     private fun matchBundled(
         dataObjectKey: String,
@@ -179,12 +201,6 @@ class LiquibaseScaffoldService(private val project: Project) {
         return candidates.firstOrNull { it.key == dataObjectKey }
     }
 
-    /** All model keys of [type] — the picker's list. Builds the index off the EDT if needed. */
-    fun keysOfType(type: ModelType): List<String> =
-        project.service<FlowableModelIndexService>().keysOfType(type).map { it.key }.distinct().sorted()
-
-    // ---- helpers ----------------------------------------------------------------------------
-
     /** Every `.zip`/`.bar` archive under [base], skipping build-output directories. */
     private fun archivesUnder(base: VirtualFile): List<VirtualFile> {
         val out = ArrayList<VirtualFile>()
@@ -196,16 +212,65 @@ class LiquibaseScaffoldService(private val project: Project) {
         return out
     }
 
-    private fun projectDirFile(): VirtualFile? {
-        val dir = AtlasProjectRootService.getInstance(project).activeProjectDir() ?: return null
-        return LocalFileSystem.getInstance().refreshAndFindFileByNioFile(dir)
+    // ---- write --------------------------------------------------------------------------------
+
+    /**
+     * Write each of [writes] to `<outputDir>/<fileName>` under [projectDir], create the master skeleton
+     * when absent and register each via an idempotent `<include>`. Files that already exist are
+     * overwritten unless [skipExisting] (then their content is kept but the include is still ensured).
+     * One write command; returns the files actually written (created or overwritten; master excluded).
+     */
+    fun writeResolved(
+        projectDir: VirtualFile,
+        outputDir: String,
+        writes: List<ChangelogWrite>,
+        skipExisting: Boolean,
+    ): List<VirtualFile> {
+        val written = ArrayList<VirtualFile>()
+        WriteCommandAction.runWriteCommandAction(project, "Generate Liquibase Changelog", null, {
+            val dir = VfsUtil.createDirectoryIfMissing(projectDir, outputDir)
+            val master = dir.findChild(LiquibaseChangelogGenerator.MASTER_CHANGELOG)
+                ?: dir.createChildData(this, LiquibaseChangelogGenerator.MASTER_CHANGELOG)
+                    .also { VfsUtil.saveText(it, LiquibaseChangelogGenerator.masterSkeleton()) }
+
+            var masterText = VfsUtilCore.loadText(master)
+            for (w in writes) {
+                val existing = dir.findChild(w.fileName)
+                if (existing != null && skipExisting) {
+                    masterText = LiquibaseChangelogGenerator.withInclude(masterText, w.fileName)
+                    continue
+                }
+                val file = existing ?: dir.createChildData(this, w.fileName)
+                VfsUtil.saveText(file, w.xml)
+                written.add(file)
+                masterText = LiquibaseChangelogGenerator.withInclude(masterText, w.fileName)
+            }
+            if (masterText != VfsUtilCore.loadText(master)) VfsUtil.saveText(master, masterText)
+        })
+        return written
     }
 
-    private fun applyOnEdt(base: VirtualFile, changelogs: List<GeneratedChangelog>, after: (List<VirtualFile>) -> Unit) {
-        ApplicationManager.getApplication().invokeLater {
-            if (project.isDisposed) return@invokeLater
-            after(writeChangelogs(base, changelogs))
-        }
+    // ---- report -------------------------------------------------------------------------------
+
+    /** Open the first written file and raise the summary notification (with a settings deep-link). */
+    fun reportGenerated(written: List<VirtualFile>, skipped: Int, outputDir: String) {
+        if (project.isDisposed) return
+        written.firstOrNull()?.let { FileEditorManager.getInstance(project).openFile(it, true) }
+        val skippedNote = if (skipped > 0) " $skipped file(s) already existed and were kept." else ""
+        val notification = NotificationGroupManager.getInstance()
+            .getNotificationGroup(GROUP_ID)
+            .createNotification(
+                "Generated ${written.size} Liquibase changelog(s)",
+                "Written under $outputDir and registered in ${LiquibaseChangelogGenerator.MASTER_CHANGELOG} " +
+                    "(Flowable runs it automatically).$skippedNote No liquibase.properties or build changes were made.",
+                NotificationType.INFORMATION,
+            )
+        notification.addAction(
+            NotificationAction.createSimple("Open Generation settings") {
+                ShowSettingsUtil.getInstance().showSettingsDialog(project, GenerationConfigurable::class.java)
+            },
+        )
+        notification.notify(project)
     }
 
     private fun notify(title: String, message: String, type: NotificationType) {
@@ -221,12 +286,6 @@ class LiquibaseScaffoldService(private val project: Project) {
 
     companion object {
         private const val GROUP_ID = "Flowable Atlas"
-
-        /** The developer-code output folder, relative to the active project directory. */
-        const val LIQUIBASE_DIR = "src/main/resources/liquibase"
-
-        /** `<key>.changelog.xml`, with the key reduced to filename-safe characters. */
-        fun fileNameFor(key: String): String = key.replace(Regex("[^A-Za-z0-9._-]"), "-") + ".changelog.xml"
 
         fun getInstance(project: Project): LiquibaseScaffoldService = project.service()
     }
