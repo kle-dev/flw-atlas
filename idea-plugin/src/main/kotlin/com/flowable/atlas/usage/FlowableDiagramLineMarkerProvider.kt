@@ -3,8 +3,10 @@ package com.flowable.atlas.usage
 import com.flowable.atlas.FlowableAtlasBundle
 import com.flowable.atlas.completion.SiteMatching
 import com.flowable.atlas.index.FlowableModelIndexService
+import com.flowable.atlas.model.ModelType
 import com.intellij.codeInsight.daemon.LineMarkerInfo
 import com.intellij.codeInsight.daemon.LineMarkerProvider
+import com.intellij.codeInsight.hint.HintManager
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.markup.GutterIconRenderer
@@ -44,32 +46,41 @@ class FlowableDiagramLineMarkerProvider : LineMarkerProvider {
             if (literal.firstChild !== element) continue
             val site = SiteMatching.keySiteForLiteral(literal) ?: continue
             val key = literal.value as? String ?: continue
-            val svg = index.find(key)
+            val entry = index.find(key)
                 .filter { it.type in site.targetTypes }
-                .firstNotNullOfOrNull { FlowableDiagram.siblingSvg(it.file) }
+                .firstOrNull { FlowableDiagram.hasOpenableDiagram(it.file, it.type) }
                 ?: continue
-            result.add(buildMarker(element, svg))
+            result.add(buildMarker(element, entry.file, entry.type))
         }
     }
 
-    private fun buildMarker(anchor: PsiElement, svg: VirtualFile): LineMarkerInfo<PsiElement> =
+    private fun buildMarker(anchor: PsiElement, modelFile: VirtualFile, type: ModelType): LineMarkerInfo<PsiElement> =
         LineMarkerInfo(
             anchor,
             anchor.textRange,
             ICON,
             { _ -> TOOLTIP },
-            { _, elt -> openDiagram(elt.project, svg) },
+            { _, elt -> openDiagram(elt.project, modelFile, type) },
             GutterIconRenderer.Alignment.RIGHT,
             Supplier { TOOLTIP },
         )
 
-    private fun openDiagram(project: Project, svg: VirtualFile) {
-        // The bundled Images plugin renders .svg; opening runs on the EDT (the click thread) — no scan.
-        FileEditorManager.getInstance(project).openFile(svg, true)
+    private fun openDiagram(project: Project, modelFile: VirtualFile, type: ModelType) {
+        // Resolve the bundled sibling .svg or render one from the model's DI layout; both open in the
+        // bundled Images viewer. Opening runs on the EDT (the click thread). A diagram-bearing model
+        // that carries no layout at all resolves to null — show a hint instead of an empty tab.
+        val svg = DiagramSvgCache.getInstance(project).resolveDiagram(modelFile, type)
+        if (svg != null) {
+            FileEditorManager.getInstance(project).openFile(svg, true)
+        } else {
+            FileEditorManager.getInstance(project).selectedTextEditor
+                ?.let { HintManager.getInstance().showInformationHint(it, NO_LAYOUT_HINT) }
+        }
     }
 
     private companion object {
         val TOOLTIP: String = FlowableAtlasBundle.message("linemarker.diagram.tooltip")
+        val NO_LAYOUT_HINT: String = FlowableAtlasBundle.message("linemarker.diagram.nolayout")
         val ICON: Icon = AllIcons.FileTypes.Image
     }
 }

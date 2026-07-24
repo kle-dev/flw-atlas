@@ -19,7 +19,14 @@ enum class AtlasArtifact(val label: String, val suffix: String) {
     GRAPH_JSON("Graph (JSON)", ".graph.json"),
 
     /** CLAUDE.md context primer for LLM tooling. */
-    CLAUDE_MD("CLAUDE.md primer", ".CLAUDE.md");
+    CLAUDE_MD("CLAUDE.md primer", ".CLAUDE.md"),
+
+    /**
+     * Rendered process/case/decision diagrams — one SVG per model, written into a `<name>.diagrams/`
+     * folder (the [suffix] names that folder, not a single file). Rendered from each model's diagram
+     * interchange layout, so it works even for Design exports that no longer bundle a `.svg`.
+     */
+    DIAGRAMS_SVG("Diagrams (SVG)", ".diagrams");
 
     override fun toString(): String = label
 }

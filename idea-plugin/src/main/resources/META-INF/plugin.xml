@@ -114,6 +114,18 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.10.7</h3>
+        <ul>
+          <li><b>Diagrams render from the model layout</b> — the model-diagram gutter icon no longer
+              depends on a <code>.svg</code> bundled by the Design export (newer Design exports no
+              longer ship one). Atlas now renders the process / case / decision diagram itself from the
+              model's BPMN/CMMN/DMN diagram-interchange layout — reading either deployment XML
+              (<code>bpmndi</code>) or Design-workspace JSON (ORYX) — and still prefers a bundled
+              <code>.svg</code> when one is present. The same rendering is available as a
+              <b>Diagrams (SVG)</b> generation artifact and is embedded in each node's detail view in the
+              Explorer HTML.</li>
+        </ul>
+
         <h3>0.8.8</h3>
         <ul>
           <li><b>Payload scope in the Expression Playground</b> — evaluate a frontend expression as a

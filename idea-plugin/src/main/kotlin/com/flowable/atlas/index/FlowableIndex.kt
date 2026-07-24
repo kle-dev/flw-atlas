@@ -2,6 +2,7 @@ package com.flowable.atlas.index
 
 import com.flowable.atlas.model.ModelType
 import com.flowable.atlas.parsing.ModelMembers
+import com.flowable.atlas.parsing.RestCallScanner
 
 /**
  * An immutable snapshot of all Flowable models found in the project, keyed by model key.
@@ -28,8 +29,9 @@ class FlowableIndex(
     val userTaskIds: Set<String> = emptySet(),
     /** Ids of every flow node — candidates for `activityId(...)`. */
     val activityIds: Set<String> = emptySet(),
-    /** `requestUrl` values of HTTP service tasks — the endpoints models call (see [FlowableEndpointUsageLineMarkerProvider]). */
-    val restCallUrls: Set<String> = emptySet(),
+    /** Outbound REST calls (`requestUrl` + `requestMethod`) of HTTP service tasks — the endpoints models
+     *  call (see [com.flowable.atlas.usage.FlowableEndpointUsageLineMarkerProvider]). */
+    val restCalls: Set<RestCallScanner.RestRef> = emptySet(),
     /** Wall-clock time this snapshot was built (epoch millis); 0 when not set by the scanner. */
     val builtAtMillis: Long = 0L,
 ) {

@@ -1,5 +1,6 @@
 package com.flowable.atlas.cli
 
+import com.flowable.atlas.diagram.DiagramArtifacts
 import com.flowable.atlas.graph.Atlas
 import com.flowable.atlas.model.MiniJson
 import com.flowable.atlas.render.ClaudeRenderer
@@ -177,6 +178,19 @@ fun run(args: Array<String>): Int {
             val p = File(outdir, fn)
             p.writeText(content, Charsets.UTF_8)
             written.add(p)
+        }
+        // Diagrams: render each process/case/decision's DI layout to an SVG in `<name>.diagrams/`.
+        // Additive post-pass over the finished result (never touches the graph); a project with no
+        // BPMN/CMMN/DMN layout produces no files here.
+        val diagrams = DiagramArtifacts.render(result, root)
+        if (diagrams.isNotEmpty()) {
+            val diagramsDir = File(outdir, "$name.diagrams")
+            diagramsDir.mkdirs()
+            for ((fn, svg) in diagrams) {
+                val p = File(diagramsDir, fn)
+                p.writeText(svg, Charsets.UTF_8)
+                written.add(p)
+            }
         }
         if (!quiet) {
             errln("Flowable Atlas $EM_DASH $name: $status")

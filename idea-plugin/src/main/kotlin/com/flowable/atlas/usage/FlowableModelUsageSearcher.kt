@@ -36,9 +36,9 @@ class FlowableModelUsageSearcher : CustomUsageSearcher() {
             if (project.isDisposed) return@runBlocking
 
             val botKey = (element as? PsiClass)?.let { BotPsi.botKeyOf(it) }
-            val endpoint = (element as? PsiMethod)?.let { EndpointPsi.endpointOf(it) }
+            val endpoints = (element as? PsiMethod)?.let { EndpointPsi.endpointsOf(it) }.orEmpty()
             val names = ModelReferenceScan.namesOf(element)
-            if (botKey == null && endpoint == null && names.isEmpty()) return@runBlocking
+            if (botKey == null && endpoints.isEmpty() && names.isEmpty()) return@runBlocking
 
             val index = project.service<FlowableModelIndexService>().index()
             val psiManager = PsiManager.getInstance(project)
@@ -55,9 +55,10 @@ class FlowableModelUsageSearcher : CustomUsageSearcher() {
             }
 
             // Spring REST handler → the model HTTP tasks whose requestUrl resolves to its endpoint.
-            if (endpoint != null && EndpointModelScan.anyModelCalls(index, endpoint.path)) {
+            val calledEndpoints = endpoints.filter { EndpointModelScan.anyModelCalls(index, it) }
+            if (calledEndpoints.isNotEmpty()) {
                 ModelReferenceScan.forEachModelText(project) { vf, text ->
-                    val ranges = EndpointModelScan.usageRanges(text, endpoint.path)
+                    val ranges = EndpointModelScan.usageRanges(text, calledEndpoints)
                     if (ranges.isNotEmpty()) {
                         psiManager.findFile(vf)?.let { psiFile ->
                             for (r in ranges) {

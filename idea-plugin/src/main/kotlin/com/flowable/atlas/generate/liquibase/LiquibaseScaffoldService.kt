@@ -6,6 +6,7 @@ import com.flowable.atlas.model.ModelPaths
 import com.flowable.atlas.model.ModelType
 import com.flowable.atlas.parsing.ServiceTable
 import com.flowable.atlas.project.AtlasProjectRootService
+import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.flowable.atlas.settings.GenerationConfigurable
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
@@ -107,7 +108,7 @@ class LiquibaseScaffoldService(private val project: Project) {
                     if (plans.dataObjects.isEmpty() && plans.apps.isEmpty()) {
                         notify(
                             "Nothing to generate",
-                            "No data objects are indexed and no app export bundles a Liquibase changelog.",
+                            "No data objects are indexed and no app export ships a Liquibase changelog.",
                             NotificationType.INFORMATION,
                         )
                     } else {
@@ -132,7 +133,7 @@ class LiquibaseScaffoldService(private val project: Project) {
      */
     fun computePlans(base: VirtualFile): Plans {
         val index = project.service<FlowableModelIndexService>()
-        val candidates = archivesUnder(base).flatMap { LiquibaseChangelogExtractor.extract(it) }
+        val candidates = bundledChangelogs(base)
 
         // Resolve data objects first — reading keysOfType builds the index cache that dataObjectTables()
         // relies on, and lets us record the service/table metadata per bundled changelog so the
@@ -201,13 +202,26 @@ class LiquibaseScaffoldService(private val project: Project) {
         return candidates.firstOrNull { it.key == dataObjectKey }
     }
 
-    /** Every `.zip`/`.bar` archive under [base], skipping build-output directories. */
-    private fun archivesUnder(base: VirtualFile): List<VirtualFile> {
-        val out = ArrayList<VirtualFile>()
+    /**
+     * Every bundled changelog under [base] — extracted from each `.zip`/`.bar` app export and read from
+     * any loose `*.data.changelog.xml` of an unpacked export. Build-output directories and the configured
+     * Liquibase output folder are skipped, so the master and already-generated changelogs are never
+     * re-surfaced as app exports.
+     */
+    private fun bundledChangelogs(base: VirtualFile): List<LiquibaseChangelogExtractor.Extracted> {
+        val outputDir = base.findFileByRelativePath(FlowableAtlasProjectSettings.getInstance(project).liquibaseOutputDir)
+        val out = ArrayList<LiquibaseChangelogExtractor.Extracted>()
         VfsUtilCore.iterateChildrenRecursively(
             base,
-            { vf -> !(vf.isDirectory && vf.name in ModelPaths.EXCLUDE_DIRS) },
-            { file -> if (LiquibaseChangelogExtractor.isArchive(file)) out.add(file); true },
+            { vf -> !(vf.isDirectory && (vf.name in ModelPaths.EXCLUDE_DIRS || vf == outputDir)) },
+            { file ->
+                when {
+                    LiquibaseChangelogExtractor.isArchive(file) -> out.addAll(LiquibaseChangelogExtractor.extract(file))
+                    LiquibaseChangelogExtractor.isLooseChangelog(file) ->
+                        LiquibaseChangelogExtractor.readLoose(file)?.let { out.add(it) }
+                }
+                true
+            },
         )
         return out
     }

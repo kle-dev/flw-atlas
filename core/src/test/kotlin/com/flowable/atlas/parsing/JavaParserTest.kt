@@ -94,4 +94,15 @@ class JavaParserTest {
         assertTrue(JavaParser.matchRest("http://host:8080/api/things?x=1", eps).isNotEmpty())
         assertTrue(JavaParser.matchRest("/api/other", eps).isEmpty())
     }
+
+    @Test
+    fun matchRestVariableMultiSegmentBase() {
+        // The endpoint carries a multi-segment base; the model expresses that base as a single variable
+        // segment, so the model path is shorter — the leading wildcard must absorb the extra base segs.
+        val eps = listOf(mapOf<String, Any?>("path" to "/app-api/v1/customers/{id}"))
+        assertTrue(JavaParser.matchRest("{{endpoints.baseUrl}}/customers/{id}", eps).isNotEmpty())
+        assertTrue(JavaParser.matchRest("{{base}}/customers/99", eps).isNotEmpty())
+        // a different trailing resource must still not match
+        assertTrue(JavaParser.matchRest("{{base}}/orders/{id}", eps).isEmpty())
+    }
 }
