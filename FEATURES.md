@@ -1,6 +1,6 @@
 # Flowable Atlas — Features
 
-*IntelliJ IDEA plugin, v0.10.10.* A summary of what Flowable Atlas provides, grouped by area.
+*IntelliJ IDEA plugin, v0.10.11.* A summary of what Flowable Atlas provides, grouped by area.
 Everything is resolved against the Flowable models that actually live in your repository.
 
 ## Atlas Explorer & Hub
@@ -77,7 +77,9 @@ Everything is resolved against the Flowable models that actually live in your re
   model / form (all linked), and — on gateways and flows — the flow conditions with resolved target
   names. *Show in details ↓* jumps to the element's rows in the sections below; the ⌖ button on
   parameter groups, tasks, events and flow conditions pans the diagram to that element and highlights
-  it. Element ids and names are indexed in ⌘K search.
+  it. Element ids and names are indexed in ⌘K search. The card docks to the diagram's top-right
+  corner, can be dragged by its header and resized via the corner grip — size and position are
+  remembered.
 - **Design vocabulary, explained** — node types, element types, parameter kinds and relationships are
   named the way Flowable Design names them (*Decision tables*, *AI agents*, *Services*, *Send payload
   map*, *Decision task → decision table*), each with a hover text explaining what it means — so the map
@@ -126,6 +128,9 @@ Everything is resolved against the Flowable models that actually live in your re
   service model.
 - **Coverage inspection** — flags changelog columns not mapped in the backing Flowable
   service/data-object model.
+- **Schema gaps tab** — a dedicated Explorer view (sidebar, next to Overview; the dashboard's
+  "Schema gaps" card routes there): every service's Liquibase → Service → Data object coverage,
+  its unmapped columns front and center, fully-mapped services collapsed to a chip row.
 
 ## Flowable expression support
 

@@ -402,6 +402,7 @@ function computeInsights(){
 // ---------- router — the hash is the single source of truth and the history ----------
 // ''              -> overview (default)
 // #/overview      -> overview
+// #/schema        -> schema-gaps report (Liquibase → Service → Data object)
 // #/browse/<cat>  -> browse, category list without selection
 // #<nodeId>       -> legacy permalink format: browse with that node selected (kept so
 //                    every previously copied link keeps working). enc() escapes '/', so
@@ -409,6 +410,7 @@ function computeInsights(){
 function parseHash(){
   const raw = location.hash.slice(1);
   if(!raw || raw==='/overview') return {view:'overview'};
+  if(raw==='/schema') return {view:'schema'};
   if(raw.indexOf('/browse/')===0){
     const cat = dec(raw.slice(8));
     return CATS.some(c=>c.id===cat) ? {view:'browse', cat} : {view:'overview'};
@@ -423,6 +425,7 @@ function parseHash(){
 }
 function showView(v){
   document.getElementById('view-overview').hidden = v!=='overview';
+  document.getElementById('view-schema').hidden = v!=='schema';
   document.getElementById('view-browse').hidden = v!=='browse';
 }
 let _navCount = 0;
@@ -434,6 +437,10 @@ function route(){
   if(r.view==='overview'){
     state.view='overview'; state.sel=null;
     showView('overview'); renderDashboard();
+    renderSidebarActive(); renderCrumbs();
+  } else if(r.view==='schema'){
+    state.view='schema'; state.sel=null;
+    showView('schema'); renderSchema();
     renderSidebarActive(); renderCrumbs();
   } else if(r.sel){
     applySelection(r.sel);                                // handles view/list/detail/crumbs
@@ -468,6 +475,16 @@ function renderSidebar(){
   ov.dataset.route='/overview';
   ov.onclick=()=>{ location.hash='/overview'; };
   nav.appendChild(ov);
+  // The schema-gaps report gets a tab of its own whenever any service declares coverage data.
+  if(INSIGHTS.totalCovServices>0){
+    const gaps=INSIGHTS.health.schemaGaps;
+    const sg=mkItem('<span class="dot" style="background:'+covColor(gaps?'bad':'good')+'"></span>'+
+      '<span class="lbl">Schema gaps</span>'+(gaps?'<span class="n">'+gaps+'</span>':''),
+      'Schema gaps — Liquibase → Service → Data object coverage');
+    sg.dataset.route='/schema';
+    sg.onclick=()=>{ location.hash='/schema'; };
+    nav.appendChild(sg);
+  }
   let cur='';
   CATS.forEach(c=>{
     if(c.sec!==cur){ cur=c.sec; const h=document.createElement('div'); h.className='side-group'; h.textContent=cur; nav.appendChild(h); }
@@ -492,7 +509,7 @@ function renderSidebar(){
 }
 function renderSidebarActive(){
   document.querySelectorAll('#nav .side-item').forEach(el=>{
-    const on = el.dataset.route ? state.view==='overview'
+    const on = el.dataset.route ? el.dataset.route==='/'+state.view
                                 : (state.view==='browse' && state.cat===el.dataset.cat);
     el.classList.toggle('on', on);
     el.setAttribute('aria-pressed', on?'true':'false');
@@ -509,6 +526,9 @@ function renderCrumbs(){
   if(state.view==='overview'){
     h=link(DATA.project,'#/overview')+sep+cur('Overview');
     title='Flowable Atlas — '+DATA.project;
+  } else if(state.view==='schema'){
+    h=link(DATA.project,'#/overview')+sep+cur('Schema gaps');
+    title='Schema gaps — Flowable Atlas';
   } else {
     const cat=CATS.find(x=>x.id===state.cat);
     const n=state.sel&&byId.get(state.sel);
@@ -550,7 +570,7 @@ function renderDashboard(){
      sub:c=>c?'no model links to them':'every form is referenced', show:INSIGHTS.totalForms>0},
     {k:'changelogIssues', label:'Changelog issues', cat:'liquibase',
      sub:c=>c?'orphan or superseded changelogs':'all changelogs are authoritative', show:INSIGHTS.totalChangelogs>0},
-    {k:'schemaGaps', label:'Schema gaps', bad:true, cat:'service',
+    {k:'schemaGaps', label:'Schema gaps', bad:true, route:'/schema',
      sub:c=>c?'columns not mapped through Liquibase → service → data object':'all columns mapped through', show:INSIGHTS.totalCovServices>0},
     {k:'unusedOps', label:'Unused operations', cat:'serviceOperation',
      sub:c=>c?c+' of '+INSIGHTS.totalOps+' operations are never called from a model':'every operation is used', show:INSIGHTS.totalOps>0},
@@ -562,8 +582,8 @@ function renderDashboard(){
     cards.forEach(c=>{
       const n=H[c.k];
       const tone=n===0?'ok':(c.bad?'bad':'warn');
-      const click=n>0&&(c.diag||(c.cat&&CATS.some(x=>x.id===c.cat)));
-      const attrs=click?(c.diag?' data-diag="1"':' data-cat="'+esc(c.cat)+'"')+' role="button" tabindex="0"':'';
+      const click=n>0&&(c.diag||c.route||(c.cat&&CATS.some(x=>x.id===c.cat)));
+      const attrs=click?(c.diag?' data-diag="1"':c.route?' data-route="'+esc(c.route)+'"':' data-cat="'+esc(c.cat)+'"')+' role="button" tabindex="0"':'';
       h+='<div class="hcard tone-'+tone+(click?' click':'')+'"'+attrs+'>'+
          '<div class="mk">'+c.label+'</div><div class="mv">'+n+'</div>'+
          '<div class="ms">'+esc(c.sub(n))+'</div></div>';
@@ -620,13 +640,15 @@ function renderDashboard(){
   v.onclick=e=>{
     const idEl=e.target.closest('[data-id]');
     if(idEl){ select(dec(idEl.dataset.id)); return; }
+    const rtEl=e.target.closest('[data-route]');
+    if(rtEl){ location.hash=rtEl.dataset.route; return; }
     const catEl=e.target.closest('[data-cat]');
     if(catEl){ location.hash='/browse/'+enc(catEl.dataset.cat); return; }
     if(e.target.closest('[data-diag]')) revealDiagList();
   };
   v.onkeydown=e=>{
     if(e.key!=='Enter'&&e.key!==' ') return;
-    const t=e.target.closest('[data-id],[data-cat],[data-diag]');
+    const t=e.target.closest('[data-id],[data-route],[data-cat],[data-diag]');
     if(t){ e.preventDefault(); t.click(); }
   };
   if(_revealDiag){ _revealDiag=false; revealDiagList(); }
@@ -634,6 +656,88 @@ function renderDashboard(){
 function revealDiagList(){
   const dl=document.getElementById('diaglist');
   if(dl){ dl.open=true; dl.scrollIntoView({block:'center'}); }
+}
+
+// ---------- schema coverage: one renderer for the service detail AND the schema tab ----------
+// `onlyGaps` filters the table to the problem rows (the schema tab's view of the world);
+// `leadChipId` puts the owning service's chip first on the meta line.
+function schemaCoverageHtml(sc, onlyGaps, leadChipId){
+  const ct=sc.counts||{};
+  let b='';
+  // owning service / source changelog / backing data objects (clickable)
+  let meta=leadChipId?nodeChip(leadChipId):'';
+  if(sc.liquibase){ const lc=nodeChip('liquibase:'+sc.liquibase); if(lc) meta+='<span class="muted">changelog</span>'+lc; }
+  (sc.dataObjects||[]).forEach(k=>{ const dc=nodeChip('dataObject:'+k); if(dc) meta+=dc; });
+  if(meta) b+='<div class="covmeta">'+meta+'</div>';
+  // gap summary
+  let badges='';
+  if(ct.noService) badges+='<span class="cov-badge cov-bad">'+ct.noService+' not mapped in service</span>';
+  if(ct.noDataObject) badges+='<span class="cov-badge cov-warn">'+ct.noDataObject+' not in data object</span>';
+  if(ct.extra) badges+='<span class="cov-badge cov-info">'+ct.extra+' not in Liquibase</span>';
+  if(ct.ok) badges+='<span class="cov-badge cov-good">'+ct.ok+' mapped through</span>';
+  if(badges) b+='<div class="covbadges">'+badges+'</div>';
+  const rowCls={'no-service':'cov-bad','no-dataobject':'cov-warn','extra-service':'cov-info','ok':''};
+  const miss='<span class="miss">✗ not mapped</span>';
+  const rows=onlyGaps?(sc.rows||[]).filter(r=>r.status!=='ok'):(sc.rows||[]);
+  if(rows.length){
+    b+='<div class="covwrap"><table class="cov"><thead><tr>'+
+       '<th>Liquibase column</th><th>Service mapping</th><th>Data object field</th></tr></thead><tbody>';
+    rows.forEach(r=>{
+      const lbCell = r.inLiquibase
+        ? '<span>'+esc(r.sql)+'</span>'+(r.sqlType?' <span class="muted">'+esc(r.sqlType)+'</span>':'')
+        : '<span class="miss">— not in changelog</span>';
+      const svCell = r.inService
+        ? '<span>'+esc(r.service||r.serviceCol||'')+'</span>'+
+          (r.serviceCol&&looseCol(r.serviceCol)!==looseCol(r.service||'')?' <span class="muted">'+esc(r.serviceCol)+'</span>':'')+
+          (r.serviceType?' <span class="muted">'+esc(r.serviceType)+'</span>':'')
+        : miss;
+      const doCell = (r.dataObjects&&r.dataObjects.length)
+        ? r.dataObjects.map(x=>'<span>'+esc(x.field)+'</span>'+
+            ((sc.dataObjects||[]).length>1?' <span class="muted">'+esc(x.do)+'</span>':'')).join(', ')
+        : (r.inLiquibase||r.inService?miss:'');
+      b+='<tr class="'+(rowCls[r.status]||'')+'"><td>'+lbCell+'</td><td>'+svCell+'</td><td>'+doCell+'</td></tr>';
+    });
+    b+='</tbody></table></div>';
+  }
+  if(onlyGaps&&ct.ok) b+='<div class="muted" style="font-size:var(--text-xs);margin:var(--space-1) 0 0">+ '+ct.ok+' column'+(ct.ok>1?'s':'')+' mapped through cleanly — full table on the service page</div>';
+  return b;
+}
+
+// ---------- schema-gaps tab (#/schema) ----------
+// The dashboard's "Schema gaps" number, unfolded: every service with coverage data, its problem rows
+// front and center, fully-mapped services collapsed to a chip row at the bottom.
+function renderSchema(){
+  const v=document.getElementById('view-schema');
+  const svcs=nodes.filter(n=>n.type==='service'&&(n.data||{}).schemaCoverage&&((n.data.schemaCoverage.rows||[]).length))
+    .map(n=>{ const c=n.data.schemaCoverage.counts||{};
+      return {n, sc:n.data.schemaCoverage, gaps:(c.noService||0)+(c.noDataObject||0), extra:c.extra||0}; })
+    .sort((a,b)=> (b.gaps+b.extra)-(a.gaps+a.extra) || a.n.label.localeCompare(b.n.label));
+  const dirty=svcs.filter(s=>s.gaps||s.extra), clean=svcs.filter(s=>!s.gaps&&!s.extra);
+  const total=svcs.reduce((a,s)=>a+s.gaps,0);
+  let h='<div class="dash">';
+  h+='<div class="dash-title">Schema gaps</div>'+
+     '<div class="dash-sub">Liquibase → Service → Data object — '+
+     (svcs.length===0?'no service declares schema coverage data'
+      :total?total+' column'+(total>1?'s':'')+' not mapped through, in '+dirty.length+' of '+svcs.length+' service'+(svcs.length>1?'s':'')
+      :'every column of all '+svcs.length+' service'+(svcs.length>1?'s':'')+' maps through cleanly')+'</div>';
+  if(!svcs.length){
+    h+='<div class="estate"><div class="estate-ic" aria-hidden="true">▦</div>'+
+       '<div class="et">Nothing to check</div>'+
+       '<div class="eh">No service in this project references a Liquibase changelog, so there is no schema to compare against.</div></div>';
+  }
+  dirty.forEach(s=>{
+    h+='<div class="seclabel">'+esc(s.n.label)+(s.sc.table?' — <span class="mono">'+esc(s.sc.table)+'</span>':'')+'</div>'+
+       '<div class="schemasvc">'+schemaCoverageHtml(s.sc, true, s.n.id)+'</div>';
+  });
+  if(clean.length){
+    h+='<div class="seclabel">Fully mapped ('+clean.length+')</div><div class="nodechips">'+
+       clean.map(s=>nodeChip(s.n.id)).join('')+'</div>';
+  }
+  h+='</div>';
+  v.innerHTML=h;
+  v.onclick=e=>{ const idEl=e.target.closest('[data-id]'); if(idEl) select(dec(idEl.dataset.id)); };
+  v.onkeydown=e=>{ if(e.key!=='Enter'&&e.key!==' ') return;
+    const t=e.target.closest('[data-id]'); if(t){ e.preventDefault(); t.click(); } };
 }
 
 // ---------- browse: list column ----------
@@ -1269,41 +1373,8 @@ function detailExtra(n){
       }).join(''));
   }
   if(n.type==='service' && d.schemaCoverage && (d.schemaCoverage.rows||[]).length){
-    const sc=d.schemaCoverage, ct=sc.counts||{};
-    let b='';
-    // source changelog + backing data objects (clickable)
-    let meta='';
-    if(sc.liquibase){ const lc=nodeChip('liquibase:'+sc.liquibase); if(lc) meta+='<span class="muted">changelog</span>'+lc; }
-    (sc.dataObjects||[]).forEach(k=>{ const dc=nodeChip('dataObject:'+k); if(dc) meta+=dc; });
-    if(meta) b+='<div class="covmeta">'+meta+'</div>';
-    // gap summary
-    let badges='';
-    if(ct.noService) badges+='<span class="cov-badge cov-bad">'+ct.noService+' not mapped in service</span>';
-    if(ct.noDataObject) badges+='<span class="cov-badge cov-warn">'+ct.noDataObject+' not in data object</span>';
-    if(ct.extra) badges+='<span class="cov-badge cov-info">'+ct.extra+' not in Liquibase</span>';
-    if(ct.ok) badges+='<span class="cov-badge cov-good">'+ct.ok+' mapped through</span>';
-    if(badges) b+='<div class="covbadges">'+badges+'</div>';
-    const rowCls={'no-service':'cov-bad','no-dataobject':'cov-warn','extra-service':'cov-info','ok':''};
-    const miss='<span class="miss">✗ not mapped</span>';
-    b+='<div class="covwrap"><table class="cov"><thead><tr>'+
-       '<th>Liquibase column</th><th>Service mapping</th><th>Data object field</th></tr></thead><tbody>';
-    sc.rows.forEach(r=>{
-      const lbCell = r.inLiquibase
-        ? '<span>'+esc(r.sql)+'</span>'+(r.sqlType?' <span class="muted">'+esc(r.sqlType)+'</span>':'')
-        : '<span class="miss">— not in changelog</span>';
-      const svCell = r.inService
-        ? '<span>'+esc(r.service||r.serviceCol||'')+'</span>'+
-          (r.serviceCol&&looseCol(r.serviceCol)!==looseCol(r.service||'')?' <span class="muted">'+esc(r.serviceCol)+'</span>':'')+
-          (r.serviceType?' <span class="muted">'+esc(r.serviceType)+'</span>':'')
-        : miss;
-      const doCell = (r.dataObjects&&r.dataObjects.length)
-        ? r.dataObjects.map(x=>'<span>'+esc(x.field)+'</span>'+
-            ((sc.dataObjects||[]).length>1?' <span class="muted">'+esc(x.do)+'</span>':'')).join(', ')
-        : (r.inLiquibase||r.inService?miss:'');
-      b+='<tr class="'+(rowCls[r.status]||'')+'"><td>'+lbCell+'</td><td>'+svCell+'</td><td>'+doCell+'</td></tr>';
-    });
-    b+='</tbody></table></div>';
-    h+=section('coverage','Schema coverage — Liquibase → Service → DataObject', b);
+    h+=section('coverage','Schema coverage — Liquibase → Service → DataObject',
+      schemaCoverageHtml(d.schemaCoverage, false));
   }
   else if(n.type==='service' && (d.columns||[]).length){
     h+=section('columns','Columns / field mappings ('+d.columns.length+')','<div class="oplist">'+
@@ -1903,6 +1974,49 @@ function revealByEl(det, elId){
 // ---------- element info card (click a diagram element) ----------
 let _dgCard=null;
 function hideDgCard(){ if(_dgCard&&_dgCard.parentNode) _dgCard.parentNode.removeChild(_dgCard); _dgCard=null; }
+// The card is a small window: docked to the top-right by default (it stays out of the drawing and is
+// stable while you click through elements), draggable by its header, resizable via the native corner
+// grip. Width and position are remembered; position is stored as an offset from the RIGHT edge so the
+// corner-docking carries over between the inline view and the (wider) fullscreen modal.
+const DGCARD_STORE='atlas-dgcard';
+function dgCardPrefs(){ try{ return JSON.parse(localStorage.getItem(DGCARD_STORE)||'{}')||{}; }catch(err){ return {}; } }
+function dgCardRemember(patch){
+  try{ localStorage.setItem(DGCARD_STORE, JSON.stringify(Object.assign(dgCardPrefs(), patch))); }catch(err){}
+}
+function placeDgCard(view, card){
+  const p=dgCardPrefs();
+  if(p.w) card.style.width=Math.max(240, Math.min(p.w, view.clientWidth-16))+'px';
+  const rx=p.rx!=null?p.rx:8, ty=p.ty!=null?p.ty:8;
+  const x=Math.max(8, view.clientWidth-card.offsetWidth-rx);
+  const y=Math.max(8, Math.min(ty, view.clientHeight-card.offsetHeight-8));
+  card.style.left=x+'px'; card.style.top=y+'px';
+}
+function wireDgCardMoveResize(view, card){
+  const head=card.querySelector('.dgcard-head');
+  if(head) head.addEventListener('pointerdown', e=>{
+    if(e.target.closest('button')) return;                 // the ✕ stays a click
+    e.preventDefault(); e.stopPropagation();
+    const sx=e.clientX-card.offsetLeft, sy=e.clientY-card.offsetTop;
+    const move=ev=>{
+      card.style.left=Math.max(4, Math.min(ev.clientX-sx, view.clientWidth-48))+'px';
+      card.style.top =Math.max(4, Math.min(ev.clientY-sy, view.clientHeight-28))+'px';
+    };
+    const up=()=>{
+      document.removeEventListener('pointermove',move); document.removeEventListener('pointerup',up);
+      dgCardRemember({rx:Math.max(0, view.clientWidth-(card.offsetLeft+card.offsetWidth)), ty:card.offsetTop});
+    };
+    document.addEventListener('pointermove',move); document.addEventListener('pointerup',up);
+  });
+  // native corner resize (CSS resize:both) — remember the width the user settles on
+  if(window.ResizeObserver){
+    let first=true;
+    new ResizeObserver(()=>{
+      if(first){ first=false; return; }                    // the observe() call itself fires once
+      clearTimeout(card._rszT);
+      card._rszT=setTimeout(()=>{ if(card.isConnected) dgCardRemember({w:card.offsetWidth}); }, 300);
+    }).observe(card);
+  }
+}
 function wireDgClicks(view, inModal){
   if(view._dgClicksWired) return;                     // the modal view persists across opens
   view._dgClicksWired=true;
@@ -1937,11 +2051,8 @@ function showDgCard(view, g, e, inModal){
   const card=document.createElement('div'); card.className='dgcard';
   card.innerHTML=dgCardHtml(n, elId, g);
   view.appendChild(card);
-  const vr=view.getBoundingClientRect();
-  let x=e.clientX-vr.left+12, y=e.clientY-vr.top+12;
-  if(x+card.offsetWidth>view.clientWidth-8) x=Math.max(8, view.clientWidth-card.offsetWidth-8);
-  if(y+card.offsetHeight>view.clientHeight-8) y=Math.max(8, (e.clientY-vr.top)-card.offsetHeight-12);
-  card.style.left=x+'px'; card.style.top=y+'px';
+  placeDgCard(view, card);
+  wireDgCardMoveResize(view, card);
   _dgCard=card;
   // The card is injected after renderDetail's wiring pass, so wire its own affordances here.
   card.addEventListener('pointerdown',ev=>ev.stopPropagation());   // no pan from inside the card
