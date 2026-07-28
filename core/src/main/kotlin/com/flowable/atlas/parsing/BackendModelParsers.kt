@@ -57,6 +57,7 @@ object BackendModelParsers {
             val conditions = ArrayList<Any?>()
             val otherTasks = ArrayList<Any?>()
             val multiInstance = ArrayList<Any?>()
+            val ioParameters = ArrayList<Map<String, Any?>>()
             val info = linkedMapOf<String, Any?>(
                 "key" to pkey, "name" to proc.attr("name"), "file" to ffile,
                 "documentation" to proc.textOfDescendant("documentation"),
@@ -65,6 +66,7 @@ object BackendModelParsers {
                 "ruleTasks" to ruleTasks, "callActivities" to callActivities, "subProcesses" to subProcesses,
                 "events" to events, "gateways" to gateways, "conditions" to conditions,
                 "otherTasks" to otherTasks, "listeners" to ArrayList<Any?>(), "multiInstance" to multiInstance,
+                "ioParameters" to ioParameters,
             )
 
             val listeners = XmlHelpers.readListeners(proc)
@@ -115,6 +117,8 @@ object BackendModelParsers {
                 for ((rel, fk) in XmlHelpers.designFormKeys(el)) {
                     ctx.addRef(pkey, "bpmn", ffile, rel, "form", fk)
                 }
+                // static model keys (case-view/page config) + watcher/participant group permissions
+                XmlHelpers.collectDesignExtensionRefs(ctx, pkey, "bpmn", "process", ffile, el)
                 // Event-registry links under an element's extensionElements (process-level handled above)
                 if (el !== proc) {
                     val eext = XmlHelpers.extEl(el)
@@ -152,6 +156,21 @@ object BackendModelParsers {
                     ))
                 }
 
+                // In/out parameter mappings, read once for every element: Flowable allows them on call
+                // activities, case/service-registry/agent/data-object/HTTP/init-variables service tasks,
+                // script tasks, receive tasks and event-registry start/boundary events, and they all use
+                // the same handful of extension elements (see XmlHelpers.readIoParams).
+                val elParams = XmlHelpers.readIoParams(el)
+                if (elParams.isNotEmpty()) {
+                    ctx.addParams(ioParameters, pkey, eid, ename, tag, elParams, el.attr("type"),
+                        XmlHelpers.calleeOf(el))
+                    // a form key can also arrive as the target of an in-mapping (parity with CMMN, which
+                    // checks this on every plan-item definition)
+                    for (fk in XmlHelpers.inoutFormKeys(elParams)) {
+                        ctx.addRef(pkey, "bpmn", ffile, "task-form-mapping", "form", fk)
+                    }
+                }
+
                 when {
                     tag == "userTask" -> {
                         val ut = linkedMapOf<String, Any?>(
@@ -159,6 +178,11 @@ object BackendModelParsers {
                             "candidateGroups" to el.attr("candidateGroups"),
                             "formKey" to el.attr("formKey"),
                         )
+                        // scheduling/classification attributes only when the model declares them, so
+                        // the common case keeps the minimal five-key shape
+                        for (a in listOf("dueDate", "priority", "category")) {
+                            el.attr(a)?.ifEmpty { null }?.let { ut[a] = it }
+                        }
                         userTasks.add(ut)
                         ctx.addRef(pkey, "bpmn", ffile, "userTask-form", "form", ut["formKey"])
                         ctx.addAccess(pkey, "process", "task:$eid", "assign",
@@ -216,14 +240,18 @@ object BackendModelParsers {
                             st["topic"] = topic
                             ctx.addRef(pkey, "bpmn", ffile, "external-topic", "topic", topic)
                         }
-                        // data object service task (field injection)
-                        val ext = XmlHelpers.extEl(el)
-                        if (ext != null) {
-                            val dom = ext.findChild("dataObjectMapping")
-                            if (dom != null) {
-                                ctx.addRef(pkey, "bpmn", ffile, "dataObjectMapping", "dataObject", dom.attr("definitionKey"))
-                            }
-                        }
+                        // Which model this task calls — service registry / data object / agent. Shared with
+                        // CMMN: until now only the CMMN side read these, so a BPMN service-registry or
+                        // agent task produced no reference at all and its parameters had no callee.
+                        st.putAll(XmlHelpers.readTaskMappings(ctx, pkey, "bpmn", ffile, el))
+                        // Field injections are this task's static configuration (an HTTP task's request
+                        // URL/method, a delegate's constants). Previously read only to probe seven
+                        // hard-coded names and then discarded.
+                        val fields = XmlHelpers.readFields(el)
+                        if (fields.isNotEmpty()) st["fields"] = fields
+                        XmlHelpers.resultVariableParam("resultVariable", st["resultVariable"] as? String)
+                            ?.let { ctx.addParams(ioParameters, pkey, eid, ename, tag, listOf(it), type,
+                                XmlHelpers.calleeOf(el)) }
                     }
                     tag == "scriptTask" -> {
                         val body = el.childText("script")
@@ -233,6 +261,8 @@ object BackendModelParsers {
                         ))
                         VarHarvest.collectScriptVars(ctx, body, listOf(pkey))
                         ctx.addVar(pkey, el.attr("resultVariable"))
+                        XmlHelpers.resultVariableParam("resultVariable", el.attr("resultVariable"))
+                            ?.let { ctx.addParams(ioParameters, pkey, eid, ename, tag, listOf(it)) }
                     }
                     tag == "businessRuleTask" -> {
                         val f = XmlHelpers.readFields(el)
@@ -243,19 +273,15 @@ object BackendModelParsers {
                     }
                     tag == "callActivity" -> {
                         val called = el.attr("calledElement")
-                        val io = XmlHelpers.readInOut(el)
                         // calledElementType is "key" (default) or "id" — an id is a deployment-time
                         // definition id, not a model key, so resolving it by key is only a guess.
                         val calledType = el.attr("calledElementType")
                         callActivities.add(linkedMapOf(
-                            "id" to eid, "name" to ename, "calledElement" to called, "inOut" to io,
+                            "id" to eid, "name" to ename, "calledElement" to called,
                             "calledElementType" to calledType,
                         ))
                         ctx.addRef(pkey, "bpmn", ffile, "callActivity", "process", called,
                             suspect = calledType.equals("id", ignoreCase = true))
-                        for (fk in XmlHelpers.inoutFormKeys(io)) {
-                            ctx.addRef(pkey, "bpmn", ffile, "task-form-mapping", "form", fk)
-                        }
                     }
                     tag in listOf("subProcess", "transaction", "adhocSubProcess") -> {
                         subProcesses.add(linkedMapOf(
@@ -292,8 +318,10 @@ object BackendModelParsers {
                     tag == "sequenceFlow" -> {
                         val cond = el.textOfDescendant("conditionExpression")
                         if (!cond.isNullOrEmpty()) {
+                            // the flow's own id lets the explorer match this condition to its diagram edge
                             conditions.add(linkedMapOf(
-                                "from" to el.attr("sourceRef"), "to" to el.attr("targetRef"), "condition" to cond,
+                                "id" to eid, "from" to el.attr("sourceRef"), "to" to el.attr("targetRef"),
+                                "condition" to cond,
                             ))
                         }
                     }
@@ -313,23 +341,7 @@ object BackendModelParsers {
         val info = LinkedHashMap<String, Any?>()
         val ext = XmlHelpers.extEl(el) ?: return info
         info["serviceTaskType"] = pyOr(el.childText("serviceTaskType"), ext.childText("serviceTaskType"))
-        val sm = ext.findChild("serviceMapping")
-        if (sm != null) {
-            info["serviceModelKey"] = sm.attr("serviceModelKey")
-            info["operationKey"] = sm.attr("operationKey")
-            ctx.addRef(caseKey, "cmmn", ffile, "serviceMapping", "service", sm.attr("serviceModelKey"))
-            ctx.addOpUse(caseKey, "service", sm.attr("serviceModelKey"), sm.attr("operationKey"))
-        }
-        val dom = ext.findChild("dataObjectMapping")
-        if (dom != null) {
-            info["dataObjectKey"] = dom.attr("definitionKey")
-            ctx.addRef(caseKey, "cmmn", ffile, "dataObjectMapping", "dataObject", dom.attr("definitionKey"))
-        }
-        val am = ext.findChild("agentMapping")
-        if (am != null) {
-            info["agentModelKey"] = am.attr("agentModelKey")
-            ctx.addRef(caseKey, "cmmn", ffile, "agentMapping", "agent", am.attr("agentModelKey"))
-        }
+        info.putAll(XmlHelpers.readTaskMappings(ctx, caseKey, "cmmn", ffile, el))
         for (tk in listOf("templateKey", "subjectTemplateModelKey", "bodyTemplateModelKey")) {
             val v = ext.childText(tk)
             if (truthy(v)) ctx.addRef(caseKey, "cmmn", ffile, tk, "template", v)
@@ -361,14 +373,12 @@ object BackendModelParsers {
             tag == "processTask" -> {
                 val ref = pyOr(el.textOfDescendant("processRefExpression"), el.attr("processRef"))
                 d["processRef"] = ref
-                d["inOut"] = XmlHelpers.readInOut(el)
                 el.attr("sameDeployment")?.let { d["sameDeployment"] = it }
                 ctx.addRef(caseKey, "cmmn", ffile, "processTask", "process", ref)
             }
             tag == "caseTask" -> {
                 val ref = pyOr(el.textOfDescendant("caseRefExpression"), el.attr("caseRef"))
                 d["caseRef"] = ref
-                d["inOut"] = XmlHelpers.readInOut(el)
                 el.attr("sameDeployment")?.let { d["sameDeployment"] = it }
                 ctx.addRef(caseKey, "cmmn", ffile, "caseTask", "case", ref)
             }
@@ -407,7 +417,9 @@ object BackendModelParsers {
         for ((rel, fk) in XmlHelpers.designFormKeys(el)) {
             ctx.addRef(caseKey, "cmmn", ffile, rel, "form", fk)
         }
-        for (fk in XmlHelpers.inoutFormKeys(d["inOut"] as? List<Map<String, Any?>>)) {
+        // A form key can also arrive as the target of an in-mapping. The mappings themselves are rolled up
+        // once per case in [parseCmmn]; here they are only needed to spot that form reference.
+        for (fk in XmlHelpers.inoutFormKeys(XmlHelpers.readIoParams(el))) {
             ctx.addRef(caseKey, "cmmn", ffile, "task-form-mapping", "form", fk)
         }
         // A Case Page task exposes tabs via <flowable:page-element>; a tab can render a form
@@ -468,8 +480,11 @@ object BackendModelParsers {
         for (pi in stage.findChildren("planItem")) {
             for (crit in pi.children) {
                 if (crit.tag in listOf("entryCriterion", "exitCriterion")) {
+                    // id joins the criterion to its diagram shape; planItemDef to the plan-tree row
                     criteria.add(linkedMapOf(
+                        "id" to crit.attr("id"),
                         "planItem" to pyOr(pi.attr("name"), pi.attr("definitionRef")),
+                        "planItemDef" to pi.attr("definitionRef"),
                         "type" to crit.tag, "sentryRef" to crit.attr("sentryRef"),
                     ))
                 }
@@ -516,6 +531,7 @@ object BackendModelParsers {
             val milestones = ArrayList<Any?>()
             val eventListeners = ArrayList<Any?>()
             val modelRefs = ArrayList<Any?>()
+            val ioParameters = ArrayList<Map<String, Any?>>()
             val info = linkedMapOf<String, Any?>(
                 "key" to ckey, "name" to case.attr("name"), "file" to ffile,
                 "documentation" to case.textOfDescendant("documentation"),
@@ -524,6 +540,7 @@ object BackendModelParsers {
                 "planModel" to (if (plan != null) cmmnWalk(ctx, ckey, ffile, plan) else null),
                 "sentries" to sentries, "milestones" to milestones,
                 "eventListeners" to eventListeners, "modelRefs" to modelRefs,
+                "ioParameters" to ioParameters,
             )
             ctx.addAccess(ckey, "case", "start", "start",
                 case.attr("candidateStarterGroups"), case.attr("candidateStarterUsers"))
@@ -537,6 +554,7 @@ object BackendModelParsers {
                 }
             }
             // case-level extension references
+            XmlHelpers.collectDesignExtensionRefs(ctx, ckey, "cmmn", "case", ffile, case)
             val ext = XmlHelpers.extEl(case)
             if (ext != null) {
                 for ((tag, kind) in listOf(
@@ -564,6 +582,19 @@ object BackendModelParsers {
             }
             if (plan != null) {
                 for (el in iterAll(plan)) {
+                    // static model keys (case pages, AI config) + watcher/participant group permissions
+                    XmlHelpers.collectDesignExtensionRefs(ctx, ckey, "cmmn", "case", ffile, el)
+                    // In/out parameter mappings for the whole plan tree in one pass — process/case tasks,
+                    // service-registry / agent / data-object / HTTP tasks and event listeners all use the
+                    // same extension elements (see XmlHelpers.readIoParams).
+                    val elParams = XmlHelpers.readIoParams(el)
+                    if (elParams.isNotEmpty()) {
+                        ctx.addParams(
+                            ioParameters, ckey, el.attr("id"), el.attr("name"), el.tag, elParams,
+                            pyOr(el.attr("type"), el.childText("serviceTaskType")) as? String,
+                            XmlHelpers.calleeOf(el),
+                        )
+                    }
                     when {
                         el.tag == "sentry" -> {
                             val cond = pyOr(el.textOfDescendant("condition"), el.textOfDescendant("ifPart"))

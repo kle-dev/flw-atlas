@@ -77,12 +77,25 @@ class DiagramExtractionTest {
     @Test
     fun cmmnXmlResolvesPlanItemDefinitions() {
         val g = XmlDiExtractor.extract(bytes("DEMO-review.cmmn"), DiagramGeometry.Notation.CMMN)
-        assertEquals(3, g.shapes.size)
+        assertEquals(5, g.shapes.size)
         assertEquals(ShapeKind.CMMN_STAGE, g.shapes.first { it.elementId == "cpm" }.kind)
-        // planItem → definitionRef → humanTask / milestone
-        assertEquals(ShapeKind.CMMN_TASK, g.shapes.first { it.elementId == "pi_task" }.kind)
-        assertEquals(ShapeKind.CMMN_MILESTONE, g.shapes.first { it.elementId == "pi_ms" }.kind)
-        assertEquals("Completed", g.shapes.first { it.elementId == "pi_ms" }.label)
+        // planItem → definitionRef → humanTask / milestone; the shape carries the DEFINITION's id
+        // (that is what the parsed plan tree / parameters are keyed by — the explorer joins on it)
+        assertEquals(ShapeKind.CMMN_TASK, g.shapes.first { it.elementId == "ht_review" }.kind)
+        assertEquals(ShapeKind.CMMN_MILESTONE, g.shapes.first { it.elementId == "ms_done" }.kind)
+        assertEquals("Completed", g.shapes.first { it.elementId == "ms_done" }.label)
+    }
+
+    @Test
+    fun cmmnCriterionShapesAreDiamondsWithTheirOwnIds() {
+        val g = XmlDiExtractor.extract(bytes("DEMO-review.cmmn"), DiagramGeometry.Notation.CMMN)
+        // criteria keep their own element id (the explorer joins them to their sentry's condition)
+        val entry = g.shapes.first { it.elementId == "crit_entry" }
+        val exit = g.shapes.first { it.elementId == "crit_exit" }
+        assertEquals(ShapeKind.CMMN_CRITERION_ENTRY, entry.kind)
+        assertEquals(ShapeKind.CMMN_CRITERION_EXIT, exit.kind)
+        assertEquals("Entry criterion", entry.typeLabel)
+        assertEquals("Exit criterion", exit.typeLabel)
     }
 
     @Test

@@ -23,9 +23,19 @@ object DiagramKinds {
         }
     }
 
-    /** Shape-typed names → [ShapeKind]. Never null: unknown elements become [ShapeKind.GENERIC_BOX]. */
-    fun shapeKind(name: String, notation: DiagramGeometry.Notation): ShapeKind = when (notation) {
-        DiagramGeometry.Notation.BPMN -> bpmnKind(name)
+    /**
+     * Shape-typed names → [ShapeKind]. Never null: unknown elements become [ShapeKind.GENERIC_BOX].
+     *
+     * [stencil] is the Design stencil id when the model carries one. It only ever *refines* the answer:
+     * an exported event sub-process is a plain `<subProcess triggeredByEvent="true">`, and only the
+     * stencil says so unambiguously.
+     */
+    fun shapeKind(
+        name: String,
+        notation: DiagramGeometry.Notation,
+        stencil: String? = null,
+    ): ShapeKind = when (notation) {
+        DiagramGeometry.Notation.BPMN -> bpmnKind(if (stencil.isNullOrEmpty()) name else stencil)
         DiagramGeometry.Notation.CMMN -> cmmnKind(name)
         DiagramGeometry.Notation.DMN -> dmnKind(name)
     }
@@ -41,8 +51,11 @@ object DiagramKinds {
             }
             n.startsWith("start") -> ShapeKind.EVENT_START
             n.startsWith("end") -> ShapeKind.EVENT_END
+            // an event sub-process is a container, not an event — check it before the generic event rule
+            n.contains("eventsubprocess") -> ShapeKind.EVENT_SUBPROCESS
             n.contains("event") -> ShapeKind.EVENT_INTERMEDIATE  // intermediate/boundary/catch/throw
-            n == "callactivity" -> ShapeKind.SUBPROCESS
+            // a call activity is a thick-bordered activity of its own, not a sub-process with a [+]
+            n == "callactivity" -> ShapeKind.CALL_ACTIVITY
             n.contains("subprocess") || n == "transaction" || n.contains("adhoc") -> ShapeKind.SUBPROCESS
             n.endsWith("task") || n == "task" -> ShapeKind.TASK
             n.contains("participant") || n == "pool" -> ShapeKind.POOL
@@ -56,6 +69,8 @@ object DiagramKinds {
     private fun cmmnKind(name: String): ShapeKind {
         val n = name.lowercase()
         return when {
+            n.contains("entrycriterion") -> ShapeKind.CMMN_CRITERION_ENTRY
+            n.contains("exitcriterion") -> ShapeKind.CMMN_CRITERION_EXIT
             n.contains("caseplanmodel") || n == "stage" || n.contains("planningtable") -> ShapeKind.CMMN_STAGE
             n.contains("milestone") -> ShapeKind.CMMN_MILESTONE
             n.contains("listener") || n.contains("eventlistener") || n.contains("timerevent") ->

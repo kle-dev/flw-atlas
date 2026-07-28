@@ -102,10 +102,11 @@ object OverviewRenderer {
                 }
                 for (caAny in asList(p["callActivities"])) {
                     val ca = asMap(caAny)
-                    val io = asList(ca["inOut"]).joinToString("") {
-                        val m = asMap(it)
-                        " ${pyStr(m["dir"])}(${pyStr(m["source"])}→${pyStr(m["target"])})"
-                    }
+                    // `<flowable:in>`/`<flowable:out>` live in the model's flat `parameters` rollup, stamped
+                    // with the element that declares them (see Ctx.addParams).
+                    val io = asList(p["ioParameters"]).map { asMap(it) }
+                        .filter { it["element"] == ca["id"] && it["kind"] in listOf("in", "out") }
+                        .joinToString("") { " ${pyStr(it["dir"])}(${pyStr(it["source"])}→${pyStr(it["target"])})" }
                     L.add("- 📞 callActivity `${pyStr(ca["id"])}` → process `${pyStr(ca["calledElement"])}`$io")
                 }
                 for (miAny in asList(p["multiInstance"])) {

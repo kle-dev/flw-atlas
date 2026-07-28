@@ -30,6 +30,23 @@
         "label": "Customer record",
         "extraSettings": {"dataObjectDefinitionKey": "customerDO", "dataObjectOperationKey": "findAll"}
       }
+    ],
+    [
+      {
+        "id": "notifyButton",
+        "type": "workAction",
+        "label": "Notify customer",
+        "extraSettings": {
+          "actionDefinitionKey": "notifyCustomerAction",
+          "sendPayloadMapping": [
+            {"name": "customerEmail", "expression": "{{customer.email}}"},
+            {"name": "orderTotal", "expression": "{{amount}}"}
+          ],
+          "responsePayloadMapping": [
+            {"name": "$temp.sent", "expression": "{{$response.executionPayload.sent}}"}
+          ]
+        }
+      }
     ]
   ],
   "outcomes": [

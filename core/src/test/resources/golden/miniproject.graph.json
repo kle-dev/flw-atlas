@@ -82,7 +82,87 @@
       "users": []
     }
   ],
-  "actions": [],
+  "actions": [
+    {
+      "_uses": {
+        "variable": [
+          "variable:customerEmail",
+          "variable:notified",
+          "variable:orderTotal",
+          "variable:sent"
+        ]
+      },
+      "botKey": "script-evaluation-bot",
+      "channels": null,
+      "file": "actions/notify-customer.action",
+      "formKey": null,
+      "icon": null,
+      "ioParameters": [
+        {
+          "dir": "in",
+          "element": "script-evaluation-bot",
+          "elementName": "Notify customer",
+          "elementType": "actionBot",
+          "kind": "config",
+          "refKey": "script-evaluation-bot",
+          "refKind": "bot",
+          "source": "true",
+          "target": "includeInstanceVariablesInResponse"
+        },
+        {
+          "dir": "in",
+          "element": "script-evaluation-bot",
+          "elementName": "Notify customer",
+          "elementType": "actionBot",
+          "kind": "flwScript",
+          "refKey": "script-evaluation-bot",
+          "refKind": "bot",
+          "source": null,
+          "target": "customerEmail"
+        },
+        {
+          "dir": "in",
+          "element": "script-evaluation-bot",
+          "elementName": "Notify customer",
+          "elementType": "actionBot",
+          "kind": "flwScript",
+          "refKey": "script-evaluation-bot",
+          "refKind": "bot",
+          "source": null,
+          "target": "orderTotal"
+        },
+        {
+          "dir": "in",
+          "element": "script-evaluation-bot",
+          "elementName": "Notify customer",
+          "elementType": "actionBot",
+          "kind": "signalVariable",
+          "refKey": "script-evaluation-bot",
+          "refKind": "bot",
+          "source": null,
+          "target": "notified"
+        },
+        {
+          "dir": "out",
+          "element": "script-evaluation-bot",
+          "elementName": "Notify customer",
+          "elementType": "actionBot",
+          "kind": "flwScript",
+          "refKey": "script-evaluation-bot",
+          "refKind": "bot",
+          "source": null,
+          "target": "sent"
+        }
+      ],
+      "key": "notifyCustomerAction",
+      "name": "Notify customer",
+      "permissionGroups": null,
+      "scopeType": "bpmn",
+      "script": "var to = flw.getInput('customerEmail'); var amount = flw.getInput('orderTotal'); flw.setOutput('sent', true);",
+      "scriptLanguage": "javascript",
+      "signalName": null
+    }
+  ],
   "agents": [],
   "apps": [
     {
@@ -148,6 +228,7 @@
       "eventListeners": [],
       "file": "cases/review.cmmn",
       "initiatorVariableName": null,
+      "ioParameters": [],
       "key": "reviewCase",
       "milestones": [],
       "modelRefs": [],
@@ -178,7 +259,6 @@
           },
           {
             "id": "startOrder",
-            "inOut": [],
             "listeners": [],
             "name": "Start order",
             "processRef": "orderProcess",
@@ -272,6 +352,12 @@
   ],
   "decisions": [
     {
+      "_uses": {
+        "variable": [
+          "variable:approved",
+          "variable:total"
+        ]
+      },
       "file": "decisions/order-decision.dmn",
       "hitPolicy": "FIRST",
       "inputs": [
@@ -330,13 +416,17 @@
     {
       "_uses": {
         "binding": [
-          "binding:{{amount}}"
+          "binding:{{$response.executionPayload.sent}}",
+          "binding:{{amount}}",
+          "binding:{{customer.email}}"
         ],
         "serviceOperation": [
           "serviceOperation:customerService#findAll"
         ],
         "variable": [
-          "variable:amount"
+          "variable:amount",
+          "variable:customer",
+          "variable:customerRecord"
         ]
       },
       "dataSources": [
@@ -385,6 +475,13 @@
           "value": null
         },
         {
+          "id": "notifyButton",
+          "label": "Notify customer",
+          "required": false,
+          "type": "workAction",
+          "value": null
+        },
+        {
           "id": "totalDisplay",
           "label": "Total",
           "required": false,
@@ -393,6 +490,47 @@
         }
       ],
       "file": "forms/order-form.form",
+      "ioParameters": [
+        {
+          "dir": "in",
+          "element": "notifyButton",
+          "elementName": "Notify customer",
+          "elementSubType": "action",
+          "elementType": "workAction",
+          "expression": true,
+          "kind": "sendPayloadMapping",
+          "refKey": "notifyCustomerAction",
+          "refKind": "action",
+          "source": "{{amount}}",
+          "target": "orderTotal"
+        },
+        {
+          "dir": "in",
+          "element": "notifyButton",
+          "elementName": "Notify customer",
+          "elementSubType": "action",
+          "elementType": "workAction",
+          "expression": true,
+          "kind": "sendPayloadMapping",
+          "refKey": "notifyCustomerAction",
+          "refKind": "action",
+          "source": "{{customer.email}}",
+          "target": "customerEmail"
+        },
+        {
+          "dir": "out",
+          "element": "notifyButton",
+          "elementName": "Notify customer",
+          "elementSubType": "action",
+          "elementType": "workAction",
+          "expression": true,
+          "kind": "responsePayloadMapping",
+          "refKey": "notifyCustomerAction",
+          "refKind": "action",
+          "source": "{{$response.executionPayload.sent}}",
+          "target": "$temp.sent"
+        }
+      ],
       "key": "orderForm",
       "modelType": "form",
       "name": "Order Form",
@@ -421,6 +559,11 @@
         "rel": "backed-by-service",
         "s": "dataObject:customerDO",
         "t": "service:customerService"
+      },
+      {
+        "rel": "bot",
+        "s": "action:notifyCustomerAction",
+        "t": "bot:script-evaluation-bot"
       },
       {
         "rel": "callActivity",
@@ -578,6 +721,11 @@
         "t": "form:orderForm"
       },
       {
+        "rel": "triggers-action",
+        "s": "form:orderForm",
+        "t": "action:notifyCustomerAction"
+      },
+      {
         "rel": "update",
         "s": "group:backoffice",
         "t": "securityPolicy:orderPolicy"
@@ -593,13 +741,17 @@
         "data": {
           "_uses": {
             "binding": [
-              "binding:{{amount}}"
+              "binding:{{$response.executionPayload.sent}}",
+              "binding:{{amount}}",
+              "binding:{{customer.email}}"
             ],
             "serviceOperation": [
               "serviceOperation:customerService#findAll"
             ],
             "variable": [
-              "variable:amount"
+              "variable:amount",
+              "variable:customer",
+              "variable:customerRecord"
             ]
           },
           "dataSources": [
@@ -648,6 +800,13 @@
               "value": null
             },
             {
+              "id": "notifyButton",
+              "label": "Notify customer",
+              "required": false,
+              "type": "workAction",
+              "value": null
+            },
+            {
               "id": "totalDisplay",
               "label": "Total",
               "required": false,
@@ -656,6 +815,47 @@
             }
           ],
           "file": "forms/order-form.form",
+          "ioParameters": [
+            {
+              "dir": "in",
+              "element": "notifyButton",
+              "elementName": "Notify customer",
+              "elementSubType": "action",
+              "elementType": "workAction",
+              "expression": true,
+              "kind": "sendPayloadMapping",
+              "refKey": "notifyCustomerAction",
+              "refKind": "action",
+              "source": "{{amount}}",
+              "target": "orderTotal"
+            },
+            {
+              "dir": "in",
+              "element": "notifyButton",
+              "elementName": "Notify customer",
+              "elementSubType": "action",
+              "elementType": "workAction",
+              "expression": true,
+              "kind": "sendPayloadMapping",
+              "refKey": "notifyCustomerAction",
+              "refKind": "action",
+              "source": "{{customer.email}}",
+              "target": "customerEmail"
+            },
+            {
+              "dir": "out",
+              "element": "notifyButton",
+              "elementName": "Notify customer",
+              "elementSubType": "action",
+              "elementType": "workAction",
+              "expression": true,
+              "kind": "responsePayloadMapping",
+              "refKey": "notifyCustomerAction",
+              "refKind": "action",
+              "source": "{{$response.executionPayload.sent}}",
+              "target": "$temp.sent"
+            }
+          ],
           "key": "orderForm",
           "modelType": "form",
           "name": "Order Form",
@@ -683,6 +883,9 @@
               "expression:${vars:bogus(}"
             ],
             "variable": [
+              "variable:orderId",
+              "variable:subOrderId",
+              "variable:subTotal",
               "variable:total"
             ]
           },
@@ -691,7 +894,6 @@
               "calledElement": "fulfilmentProcess",
               "calledElementType": null,
               "id": "callSub",
-              "inOut": [],
               "name": "Fulfil"
             }
           ],
@@ -700,11 +902,13 @@
             {
               "condition": "${total > 100}",
               "from": "calcTask",
+              "id": "f2",
               "to": "approveTask"
             },
             {
               "condition": "${vars:bogus(}",
               "from": "approveTask",
+              "id": "f3",
               "to": "notifyTask"
             }
           ],
@@ -727,6 +931,39 @@
           ],
           "file": "processes/order.bpmn",
           "gateways": [],
+          "ioParameters": [
+            {
+              "dir": "in",
+              "element": "callSub",
+              "elementName": "Fulfil",
+              "elementType": "callActivity",
+              "kind": "in",
+              "refKey": "fulfilmentProcess",
+              "refKind": "process",
+              "source": "orderId",
+              "target": "subOrderId"
+            },
+            {
+              "dir": "out",
+              "element": "calcTask",
+              "elementName": "Calculate total",
+              "elementType": "serviceTask",
+              "kind": "resultVariable",
+              "source": null,
+              "target": "total"
+            },
+            {
+              "dir": "out",
+              "element": "callSub",
+              "elementName": "Fulfil",
+              "elementType": "callActivity",
+              "kind": "out",
+              "refKey": "fulfilmentProcess",
+              "refKind": "process",
+              "source": "subTotal",
+              "target": "total"
+            }
+          ],
           "key": "orderProcess",
           "listeners": [],
           "multiInstance": [],
@@ -769,6 +1006,9 @@
               "class": null,
               "delegateExpression": null,
               "expression": null,
+              "fields": {
+                "decisionTableReferenceKey": "orderDecision"
+              },
               "id": "decideTask",
               "name": "Decide approval",
               "resultVariable": null,
@@ -804,6 +1044,7 @@
           "eventListeners": [],
           "file": "cases/review.cmmn",
           "initiatorVariableName": null,
+          "ioParameters": [],
           "key": "reviewCase",
           "milestones": [],
           "modelRefs": [],
@@ -834,7 +1075,6 @@
               },
               {
                 "id": "startOrder",
-                "inOut": [],
                 "listeners": [],
                 "name": "Start order",
                 "processRef": "orderProcess",
@@ -910,6 +1150,32 @@
         "data": {
           "_uses": {
             "variable": [
+              "variable:approved",
+              "variable:total"
+            ]
+          },
+          "file": "decisions/order-decision.dmn",
+          "hitPolicy": "FIRST",
+          "inputs": [
+            "total"
+          ],
+          "key": "orderDecision",
+          "name": "Order decision",
+          "outputs": [
+            "approved"
+          ],
+          "ruleCount": 1
+        },
+        "file": "decisions/order-decision.dmn",
+        "id": "decision:orderDecision",
+        "key": "orderDecision",
+        "label": "Order decision",
+        "type": "decision"
+      },
+      {
+        "data": {
+          "_uses": {
+            "variable": [
               "variable:color",
               "variable:level"
             ]
@@ -949,6 +1215,92 @@
         "key": "priorityMD",
         "label": "Priority",
         "type": "dataObject"
+      },
+      {
+        "data": {
+          "_uses": {
+            "variable": [
+              "variable:customerEmail",
+              "variable:notified",
+              "variable:orderTotal",
+              "variable:sent"
+            ]
+          },
+          "botKey": "script-evaluation-bot",
+          "channels": null,
+          "file": "actions/notify-customer.action",
+          "formKey": null,
+          "icon": null,
+          "ioParameters": [
+            {
+              "dir": "in",
+              "element": "script-evaluation-bot",
+              "elementName": "Notify customer",
+              "elementType": "actionBot",
+              "kind": "config",
+              "refKey": "script-evaluation-bot",
+              "refKind": "bot",
+              "source": "true",
+              "target": "includeInstanceVariablesInResponse"
+            },
+            {
+              "dir": "in",
+              "element": "script-evaluation-bot",
+              "elementName": "Notify customer",
+              "elementType": "actionBot",
+              "kind": "flwScript",
+              "refKey": "script-evaluation-bot",
+              "refKind": "bot",
+              "source": null,
+              "target": "customerEmail"
+            },
+            {
+              "dir": "in",
+              "element": "script-evaluation-bot",
+              "elementName": "Notify customer",
+              "elementType": "actionBot",
+              "kind": "flwScript",
+              "refKey": "script-evaluation-bot",
+              "refKind": "bot",
+              "source": null,
+              "target": "orderTotal"
+            },
+            {
+              "dir": "in",
+              "element": "script-evaluation-bot",
+              "elementName": "Notify customer",
+              "elementType": "actionBot",
+              "kind": "signalVariable",
+              "refKey": "script-evaluation-bot",
+              "refKind": "bot",
+              "source": null,
+              "target": "notified"
+            },
+            {
+              "dir": "out",
+              "element": "script-evaluation-bot",
+              "elementName": "Notify customer",
+              "elementType": "actionBot",
+              "kind": "flwScript",
+              "refKey": "script-evaluation-bot",
+              "refKind": "bot",
+              "source": null,
+              "target": "sent"
+            }
+          ],
+          "key": "notifyCustomerAction",
+          "name": "Notify customer",
+          "permissionGroups": null,
+          "scopeType": "bpmn",
+          "script": "var to = flw.getInput('customerEmail'); var amount = flw.getInput('orderTotal'); flw.setOutput('sent', true);",
+          "scriptLanguage": "javascript",
+          "signalName": null
+        },
+        "file": "actions/notify-customer.action",
+        "id": "action:notifyCustomerAction",
+        "key": "notifyCustomerAction",
+        "label": "Notify customer",
+        "type": "action"
       },
       {
         "data": {
@@ -1018,6 +1370,7 @@
               "key": "findAll",
               "method": "GET",
               "name": "Find all",
+              "outParams": [],
               "params": [],
               "url": "/api/customers"
             }
@@ -1270,26 +1623,6 @@
       },
       {
         "data": {
-          "file": "decisions/order-decision.dmn",
-          "hitPolicy": "FIRST",
-          "inputs": [
-            "total"
-          ],
-          "key": "orderDecision",
-          "name": "Order decision",
-          "outputs": [
-            "approved"
-          ],
-          "ruleCount": 1
-        },
-        "file": "decisions/order-decision.dmn",
-        "id": "decision:orderDecision",
-        "key": "orderDecision",
-        "label": "Order decision",
-        "type": "decision"
-      },
-      {
-        "data": {
           "file": "policies/case.policy",
           "key": "orderPolicy",
           "name": "Order policy",
@@ -1323,6 +1656,7 @@
           "method": "GET",
           "name": "Find all",
           "operation": "findAll",
+          "outParams": [],
           "params": [],
           "service": "customerService",
           "url": "/api/customers",
@@ -1336,6 +1670,294 @@
         "key": "customerService#findAll",
         "label": "findAll",
         "type": "serviceOperation"
+      },
+      {
+        "data": {
+          "ioParams": [
+            {
+              "dir": "in",
+              "element": "callSub",
+              "model": "process:orderProcess",
+              "source": "orderId",
+              "target": "subOrderId"
+            }
+          ],
+          "scopes": [
+            "process"
+          ],
+          "usages": [
+            {
+              "model": "process:orderProcess",
+              "snippets": [
+                "(declared / mapped)",
+                "(in parameter on callSub) orderId → subOrderId"
+              ]
+            }
+          ],
+          "usedBy": [
+            "process:orderProcess"
+          ]
+        },
+        "file": null,
+        "id": "variable:orderId",
+        "key": "orderId",
+        "label": "orderId",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "ioParams": [
+            {
+              "dir": "in",
+              "element": "callSub",
+              "model": "process:orderProcess",
+              "source": "orderId",
+              "target": "subOrderId"
+            }
+          ],
+          "scopes": [
+            "process"
+          ],
+          "usages": [
+            {
+              "model": "process:orderProcess",
+              "snippets": [
+                "(declared / mapped)",
+                "(in parameter on callSub) orderId → subOrderId"
+              ]
+            }
+          ],
+          "usedBy": [
+            "process:orderProcess"
+          ]
+        },
+        "file": null,
+        "id": "variable:subOrderId",
+        "key": "subOrderId",
+        "label": "subOrderId",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "ioParams": [
+            {
+              "dir": "in",
+              "element": "script-evaluation-bot",
+              "model": "action:notifyCustomerAction",
+              "source": null,
+              "target": "customerEmail"
+            }
+          ],
+          "scopes": [
+            "action"
+          ],
+          "usages": [
+            {
+              "model": "action:notifyCustomerAction",
+              "snippets": [
+                "(in parameter on script-evaluation-bot) customerEmail",
+                "(script)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "action:notifyCustomerAction"
+          ]
+        },
+        "file": null,
+        "id": "variable:customerEmail",
+        "key": "customerEmail",
+        "label": "customerEmail",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "ioParams": [
+            {
+              "dir": "in",
+              "element": "script-evaluation-bot",
+              "model": "action:notifyCustomerAction",
+              "source": null,
+              "target": "notified"
+            }
+          ],
+          "scopes": [
+            "action"
+          ],
+          "usages": [
+            {
+              "model": "action:notifyCustomerAction",
+              "snippets": [
+                "(in parameter on script-evaluation-bot) notified"
+              ]
+            }
+          ],
+          "usedBy": [
+            "action:notifyCustomerAction"
+          ]
+        },
+        "file": null,
+        "id": "variable:notified",
+        "key": "notified",
+        "label": "notified",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "ioParams": [
+            {
+              "dir": "in",
+              "element": "script-evaluation-bot",
+              "model": "action:notifyCustomerAction",
+              "source": null,
+              "target": "orderTotal"
+            }
+          ],
+          "scopes": [
+            "action"
+          ],
+          "usages": [
+            {
+              "model": "action:notifyCustomerAction",
+              "snippets": [
+                "(in parameter on script-evaluation-bot) orderTotal",
+                "(script)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "action:notifyCustomerAction"
+          ]
+        },
+        "file": null,
+        "id": "variable:orderTotal",
+        "key": "orderTotal",
+        "label": "orderTotal",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "ioParams": [
+            {
+              "dir": "out",
+              "element": "calcTask",
+              "model": "process:orderProcess",
+              "source": null,
+              "target": "total"
+            },
+            {
+              "dir": "out",
+              "element": "callSub",
+              "model": "process:orderProcess",
+              "source": "subTotal",
+              "target": "total"
+            }
+          ],
+          "scopes": [
+            "decision",
+            "java",
+            "process"
+          ],
+          "usages": [
+            {
+              "model": "decision:orderDecision",
+              "snippets": [
+                "(declared / mapped)"
+              ]
+            },
+            {
+              "model": "java:com.example.DemoBean",
+              "snippets": [
+                "(Java: set/getVariable)"
+              ]
+            },
+            {
+              "model": "process:orderProcess",
+              "snippets": [
+                "${total > 100}",
+                "(declared / mapped)",
+                "(out parameter on calcTask) total",
+                "(out parameter on callSub) subTotal → total"
+              ]
+            }
+          ],
+          "usedBy": [
+            "decision:orderDecision",
+            "java:com.example.DemoBean",
+            "process:orderProcess"
+          ]
+        },
+        "file": null,
+        "id": "variable:total",
+        "key": "total",
+        "label": "total",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "ioParams": [
+            {
+              "dir": "out",
+              "element": "callSub",
+              "model": "process:orderProcess",
+              "source": "subTotal",
+              "target": "total"
+            }
+          ],
+          "scopes": [
+            "process"
+          ],
+          "usages": [
+            {
+              "model": "process:orderProcess",
+              "snippets": [
+                "(declared / mapped)",
+                "(out parameter on callSub) subTotal → total"
+              ]
+            }
+          ],
+          "usedBy": [
+            "process:orderProcess"
+          ]
+        },
+        "file": null,
+        "id": "variable:subTotal",
+        "key": "subTotal",
+        "label": "subTotal",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "ioParams": [
+            {
+              "dir": "out",
+              "element": "script-evaluation-bot",
+              "model": "action:notifyCustomerAction",
+              "source": null,
+              "target": "sent"
+            }
+          ],
+          "scopes": [
+            "action"
+          ],
+          "usages": [
+            {
+              "model": "action:notifyCustomerAction",
+              "snippets": [
+                "(out parameter on script-evaluation-bot) sent",
+                "(script)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "action:notifyCustomerAction"
+          ]
+        },
+        "file": null,
+        "id": "variable:sent",
+        "key": "sent",
+        "label": "sent",
+        "type": "variable"
       },
       {
         "data": {
@@ -1358,6 +1980,16 @@
         "key": "fulfilmentProcess",
         "label": "fulfilmentProcess",
         "type": "external"
+      },
+      {
+        "data": {
+          "platform": true
+        },
+        "file": null,
+        "id": "bot:script-evaluation-bot",
+        "key": "script-evaluation-bot",
+        "label": "script-evaluation-bot",
+        "type": "bot"
       },
       {
         "data": {
@@ -1463,12 +2095,36 @@
       {
         "data": {
           "scopes": [
+            "decision"
+          ],
+          "usages": [
+            {
+              "model": "decision:orderDecision",
+              "snippets": [
+                "(declared / mapped)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "decision:orderDecision"
+          ]
+        },
+        "file": null,
+        "id": "variable:approved",
+        "key": "approved",
+        "label": "approved",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "scopes": [
             "form"
           ],
           "usages": [
             {
               "model": "form:orderForm",
               "snippets": [
+                "(form field)",
                 "{{amount}}"
               ]
             }
@@ -1486,34 +2142,61 @@
       {
         "data": {
           "scopes": [
-            "java",
-            "process"
+            "form"
           ],
           "usages": [
             {
-              "model": "java:com.example.DemoBean",
+              "model": "form:orderForm",
               "snippets": [
-                "(Java: set/getVariable)"
-              ]
-            },
-            {
-              "model": "process:orderProcess",
-              "snippets": [
-                "${total > 100}",
-                "(declared / mapped)"
+                "(form field)",
+                "{{customer.email}}"
               ]
             }
           ],
           "usedBy": [
-            "java:com.example.DemoBean",
-            "process:orderProcess"
+            "form:orderForm"
           ]
         },
         "file": null,
-        "id": "variable:total",
-        "key": "total",
-        "label": "total",
+        "id": "variable:customer",
+        "key": "customer",
+        "label": "customer",
         "type": "variable"
+      },
+      {
+        "data": {
+          "scopes": [
+            "form"
+          ],
+          "usages": [
+            {
+              "model": "form:orderForm",
+              "snippets": [
+                "(form field)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "form:orderForm"
+          ]
+        },
+        "file": null,
+        "id": "variable:customerRecord",
+        "key": "customerRecord",
+        "label": "customerRecord",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:orderForm"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{$response.executionPayload.sent}}",
+        "key": "{{$response.executionPayload.sent}}",
+        "label": "{{$response.executionPayload.sent}}",
+        "type": "binding"
       },
       {
         "data": {
@@ -1525,6 +2208,18 @@
         "id": "binding:{{amount}}",
         "key": "{{amount}}",
         "label": "{{amount}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:orderForm"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{customer.email}}",
+        "key": "{{customer.email}}",
+        "label": "{{customer.email}}",
         "type": "binding"
       },
       {
@@ -1777,6 +2472,7 @@
     }
   ],
   "modelIndex": {
+    "action:notifyCustomerAction": "actions/notify-customer.action",
     "app:demoApp": "apps/demo.app",
     "case:reviewCase": "cases/review.cmmn",
     "dataObject:customerDO": "data/customer.data",
@@ -1790,7 +2486,9 @@
   },
   "others": [],
   "placeholders": [
-    "{{amount}}"
+    "{{$response.executionPayload.sent}}",
+    "{{amount}}",
+    "{{customer.email}}"
   ],
   "policies": [
     {
@@ -1826,6 +2524,9 @@
           "expression:${vars:bogus(}"
         ],
         "variable": [
+          "variable:orderId",
+          "variable:subOrderId",
+          "variable:subTotal",
           "variable:total"
         ]
       },
@@ -1834,7 +2535,6 @@
           "calledElement": "fulfilmentProcess",
           "calledElementType": null,
           "id": "callSub",
-          "inOut": [],
           "name": "Fulfil"
         }
       ],
@@ -1843,11 +2543,13 @@
         {
           "condition": "${total > 100}",
           "from": "calcTask",
+          "id": "f2",
           "to": "approveTask"
         },
         {
           "condition": "${vars:bogus(}",
           "from": "approveTask",
+          "id": "f3",
           "to": "notifyTask"
         }
       ],
@@ -1870,6 +2572,39 @@
       ],
       "file": "processes/order.bpmn",
       "gateways": [],
+      "ioParameters": [
+        {
+          "dir": "in",
+          "element": "callSub",
+          "elementName": "Fulfil",
+          "elementType": "callActivity",
+          "kind": "in",
+          "refKey": "fulfilmentProcess",
+          "refKind": "process",
+          "source": "orderId",
+          "target": "subOrderId"
+        },
+        {
+          "dir": "out",
+          "element": "calcTask",
+          "elementName": "Calculate total",
+          "elementType": "serviceTask",
+          "kind": "resultVariable",
+          "source": null,
+          "target": "total"
+        },
+        {
+          "dir": "out",
+          "element": "callSub",
+          "elementName": "Fulfil",
+          "elementType": "callActivity",
+          "kind": "out",
+          "refKey": "fulfilmentProcess",
+          "refKind": "process",
+          "source": "subTotal",
+          "target": "total"
+        }
+      ],
       "key": "orderProcess",
       "listeners": [],
       "multiInstance": [],
@@ -1912,6 +2647,9 @@
           "class": null,
           "delegateExpression": null,
           "expression": null,
+          "fields": {
+            "decisionTableReferenceKey": "orderDecision"
+          },
           "id": "decideTask",
           "name": "Decide approval",
           "resultVariable": null,
@@ -2000,6 +2738,16 @@
       "target": "services/customer.service",
       "targetType": "model",
       "value": "customerService"
+    },
+    {
+      "from": "orderForm",
+      "fromFile": "forms/order-form.form",
+      "fromType": "form",
+      "kind": "action",
+      "rel": "triggers-action",
+      "target": "actions/notify-customer.action",
+      "targetType": "model",
+      "value": "notifyCustomerAction"
     },
     {
       "from": "orderForm",
@@ -2163,6 +2911,7 @@
           "key": "findAll",
           "method": "GET",
           "name": "Find all",
+          "outParams": [],
           "params": [],
           "url": "/api/customers"
         }
@@ -2240,12 +2989,12 @@
   "stats": {
     "archives": 0,
     "dynamicEdges": 0,
-    "edges": 36,
+    "edges": 38,
     "endpoints": 1,
     "groups": 3,
     "java": 2,
-    "models": 11,
-    "nodes": 31,
+    "models": 12,
+    "nodes": 45,
     "suspectEdges": 0
   },
   "unresolvedRefs": [
@@ -2273,6 +3022,7 @@
   ],
   "variables": [
     "amount",
+    "customer",
     "notifierBean",
     "total"
   ],

@@ -114,6 +114,103 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.10.10</h3>
+        <ul>
+          <li><b>Legacy Design exports are no longer invisible</b> — the "typed-directory" export format
+              (<code>form-models/</code>, <code>service-models/</code>, <code>action-models/</code>, … with
+              each model wrapped in <code>{key, name, editorJson}</code>) is now unwrapped and parsed, from
+              a zip or a loose workspace directory. Services, data objects, actions, events, channels,
+              queries and policies go through their full parsers; old Oryx-editor forms/pages are at least
+              registered by key so references resolve and their <code>{{…}}</code> bindings are indexed;
+              the root app wrapper becomes the app node with <i>contains</i> membership.</li>
+          <li><b>Model data that was parsed but never shown</b> — new collapsible detail sections:
+              a form/page's <i>Fields</i> (id → variable link, label, type, required, bound value) and
+              <i>Data sources</i>; a process's <i>User tasks</i> (form, candidate groups, assignee, due
+              date/priority), <i>Script tasks</i> (with the script body), <i>Events &amp; timers</i>,
+              <i>Multi-instance</i>, <i>Flow conditions</i> and <i>Listeners</i>; a case's <i>Plan model</i>
+              tree (stages, milestones, tasks — each linking to the form/process/case/decision it uses),
+              <i>Sentries</i> and <i>Event listeners &amp; timers</i>; a security policy's
+              <i>Permissions</i> (roles link to groups); an agent's <i>Tools</i> and <i>Operations</i>
+              (with prompts); an app's <i>Variables</i> and <i>Pages</i>; an action's <i>Bot script</i>.</li>
+          <li><b>More links between the datasets</b> — form field ids and DMN decision inputs/outputs join
+              the variable graph (a variable page now shows the forms and decision tables that touch it);
+              events link to the channels that carry them and the data-dictionary types of their payload;
+              agents' service tools count as uses of the exact operation; services link to the services
+              their column relations join to; case-view/case-page <code>static-*-key</code> references and
+              create-instance buttons resolve to their process/case/form/decision; watcher / participant /
+              manual-activation / event-listener group permissions and form-button
+              <code>permissionGroups</code> feed the Access view.</li>
+          <li><b>Hover explanations now work in the IDE</b> — every <code>title=</code> tooltip (Design
+              vocabulary hints, copy buttons, badges) and the neighborhood graph's labels are served by the
+              Explorer's own tooltip bubble, which renders in the embedded JCEF viewer where native
+              tooltips never show.</li>
+          <li><b>Small things</b> — zero counts are no longer shown as rows; a decision service is labelled
+              as such; CMMN tasks reuse the BPMN task-type vocabulary (<i>Data object task</i>, not
+              <i>task · data-object</i>); search also matches form field ids/labels, app variables, agent
+              tools, policy permissions and dictionary types; user tasks pick up due date / priority /
+              category.</li>
+        </ul>
+        <h3>0.10.9</h3>
+        <ul>
+          <li><b>In/out parameters are mapped and searchable</b> — Atlas now reads every variable mapping a
+              model passes into, or takes back out of, the things it calls: call activities and
+              process/case tasks (<code>flowable:in</code>/<code>out</code>), Service-Registry, Agent,
+              Data-Object and HTTP tasks (<code>inputParameter</code> / <code>outputParameter</code> /
+              <code>errorOutputParameter</code> / <code>outputVariableName</code>), Send-/Receive-Event
+              tasks (<code>eventInParameter</code> / <code>eventOutParameter</code>), Init-Variables
+              (<code>variableMapping</code>), result variables, and Action Bots
+              (<code>signalVariableNames</code>, bot <code>config</code>, <code>flw.getInput</code> /
+              <code>flw.setOutput</code>). Previously only <code>flowable:in</code>/<code>out</code> on a
+              call activity or a CMMN process/case task was read at all.</li>
+          <li><b>See them</b> — a node's detail view gets a <i>Parameters</i> section grouped per element
+              with direction and <code>source → target</code> (variable names link to the variable), a
+              collapsed <i>Field injections</i> section for a task's static configuration (an HTTP task's
+              request URL/method), and each <code>.service</code> operation now shows its declared
+              <b>outputs</b> next to its inputs.</li>
+          <li><b>Find them</b> — ⌘K/Ctrl-K matches parameter names on both sides of a mapping (the
+              caller's variable <i>and</i> the callee's contract name) and shows which mapping matched; a
+              variable's detail view lists every mapping that reads or writes it, and a new
+              <i>Variable · parameter</i> sidebar category collects the variables that travel through one.</li>
+          <li><b>Form and page buttons too</b> — an Action, REST, Service, Agent or Create-Instance
+              button's <i>Send payload map</i> and <i>Store response attributes</i>
+              (<code>sendPayloadMapping</code> / <code>responsePayloadMapping</code> /
+              <code>errorResponsePayloadMapping</code>, plus REST headers) are read and shown on the form.
+              Previously only the button's <code>actionDefinitionKey</code> was, so the values it actually
+              passes to the bot were invisible.</li>
+          <li><b>Every parameter group names what it calls</b> — <code>→ notifyCustomerAction</code>,
+              <code>→ custSvc</code>, <code>→ subProcess</code>, an HTTP task's URL — with a link to that
+              model when it is part of the project. And any called model (action, agent, service, data
+              object, process, case, event, bot) gets the mirror view, <b>Called with</b>, listing what each
+              caller sends — handy for checking that the names match a script's
+              <code>flw.getInput(…)</code> or a service operation's declared inputs.</li>
+          <li><b>Detail pages fold up</b> — every section is collapsible and starts collapsed (except the
+              diagram), so a node with 35 parameters stays skimmable. What you open stays open as you walk
+              the graph, there is an <i>expand all</i> control, and a long parameter list gets its own text
+              filter plus in / out / error direction chips.</li>
+          <li><b>Search jumps to the row</b> — picking a ⌘K/Ctrl-K hit now scrolls to the matching
+              parameter, expands its section and highlights it instead of dropping you at the top of the
+              page. The term rides along in the link, so <i>copy link</i> reproduces the highlight.</li>
+          <li><b>Diagrams show what each element is</b> — every shape now carries its Flowable type icon
+              (User task, Service task, Service registry, AI Agent, Data object, HTTP, Script, Email,
+              Timer / Message / Signal / Error events, …) plus the BPMN markers that belong to it:
+              multi-instance, loop, a dashed non-interrupting boundary event, and a thick-bordered call
+              activity instead of a sub-process marker. Hovering a shape names it in <b>Flowable Design's
+              own words</b> ("Lookup customer — Service registry task"). The type comes from the Design
+              stencil the model was drawn from, falling back to <code>flowable:type</code> and then to the
+              element itself, so both app exports and Design workspace models are covered.</li>
+          <li><b>Diagram zoom and full screen</b> — zoom / fit buttons, scroll-to-zoom and drag-to-pan, and
+              a full-screen view (<code>+</code> / <code>−</code> / <code>0</code>, Esc closes) for the
+              diagrams that were simply too small to read in the panel.</li>
+          <li><b>Design's vocabulary, with explanations</b> — node types, element types, parameter kinds and
+              relationships are now named as Design names them (<i>Decision tables</i>, <i>AI agents</i>,
+              <i>Services</i>, <i>Send payload map</i>, <i>Decision task → decision table</i>) instead of
+              Atlas's internal keys, and each carries a hover text saying what it means.</li>
+          <li><b>Also fixed</b> — a BPMN Service-Registry or Agent task's <code>serviceMapping</code> /
+              <code>agentMapping</code> is now read (only the CMMN side was), so it links to the service or
+              agent model and counts towards that operation's usages. Same for an <b>agent button</b> on a
+              form, whose agent-model reference was not recorded at all.</li>
+        </ul>
+
         <h3>0.10.8</h3>
         <ul>
           <li><b>Recognize model keys anywhere in code</b> (opt-in) — enable
