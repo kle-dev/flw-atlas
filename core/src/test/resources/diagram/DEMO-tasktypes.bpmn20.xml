@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:design="http://flowable.org/design"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI">
+  <process id="typeDemo" name="Type demo">
+    <startEvent id="s1" name="Start"/>
+    <userTask id="t1" name="Approve order"/>
+    <serviceTask id="t2" name="Calculate" flowable:class="com.acme.X"/>
+    <serviceTask id="t3" name="Lookup customer" flowable:type="service-registry">
+      <extensionElements><design:stencilid><![CDATA[ServiceRegistryTask]]></design:stencilid></extensionElements>
+    </serviceTask>
+    <serviceTask id="t4" name="Ask the agent" flowable:type="agent"/>
+    <serviceTask id="t5" name="Call REST" flowable:type="http"/>
+    <serviceTask id="t6" name="Create region" flowable:type="data-object">
+      <extensionElements><design:stencilid><![CDATA[DataObjectCreateTask]]></design:stencilid></extensionElements>
+    </serviceTask>
+    <scriptTask id="t7" name="Compute" scriptFormat="groovy"><script>x=1</script></scriptTask>
+    <callActivity id="t8" name="Fulfil" calledElement="sub"/>
+    <serviceTask id="t9" name="Send mail" flowable:type="mail"/>
+    <userTask id="t10" name="Review each">
+      <multiInstanceLoopCharacteristics isSequential="false"/>
+    </userTask>
+    <boundaryEvent id="b1" name="Timeout" attachedToRef="t1" cancelActivity="false">
+      <timerEventDefinition><timeDuration>PT1H</timeDuration></timerEventDefinition>
+    </boundaryEvent>
+    <exclusiveGateway id="g1" name="OK?"/>
+    <endEvent id="e1" name="Failed"><errorEventDefinition errorRef="boom"/></endEvent>
+  </process>
+  <bpmndi:BPMNDiagram id="d"><bpmndi:BPMNPlane bpmnElement="typeDemo" id="p">
+    <bpmndi:BPMNShape bpmnElement="s1" id="sh0"><omgdc:Bounds x="30" y="30" width="30" height="30"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape bpmnElement="t1" id="sh1"><omgdc:Bounds x="90" y="20" width="110" height="60"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape bpmnElement="t2" id="sh2"><omgdc:Bounds x="230" y="20" width="110" height="60"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape bpmnElement="t3" id="sh3"><omgdc:Bounds x="370" y="20" width="110" height="60"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape bpmnElement="t4" id="sh4"><omgdc:Bounds x="510" y="20" width="110" height="60"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape bpmnElement="t5" id="sh5"><omgdc:Bounds x="650" y="20" width="110" height="60"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape bpmnElement="t6" id="sh6"><omgdc:Bounds x="90" y="120" width="110" height="60"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape bpmnElement="t7" id="sh7"><omgdc:Bounds x="230" y="120" width="110" height="60"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape bpmnElement="t8" id="sh8"><omgdc:Bounds x="370" y="120" width="110" height="60"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape bpmnElement="t9" id="sh9"><omgdc:Bounds x="510" y="120" width="110" height="60"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape bpmnElement="t10" id="sh10"><omgdc:Bounds x="650" y="120" width="110" height="60"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape bpmnElement="b1" id="sh11"><omgdc:Bounds x="170" y="68" width="26" height="26"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape bpmnElement="g1" id="sh12"><omgdc:Bounds x="90" y="220" width="40" height="40"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape bpmnElement="e1" id="sh13"><omgdc:Bounds x="180" y="225" width="30" height="30"/></bpmndi:BPMNShape>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</definitions>

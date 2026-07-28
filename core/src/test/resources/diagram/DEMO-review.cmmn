@@ -6,8 +6,18 @@
              targetNamespace="http://flowable.org/demo">
   <case id="DEMO-reviewCase" name="Review Case">
     <casePlanModel id="cpm" name="Review">
-      <planItem id="pi_task" definitionRef="ht_review"/>
-      <planItem id="pi_ms" definitionRef="ms_done"/>
+      <planItem id="pi_task" definitionRef="ht_review">
+        <entryCriterion id="crit_entry" sentryRef="sentry_ready"/>
+      </planItem>
+      <planItem id="pi_ms" definitionRef="ms_done">
+        <exitCriterion id="crit_exit" sentryRef="sentry_closed"/>
+      </planItem>
+      <sentry id="sentry_ready">
+        <ifPart><condition><![CDATA[${documentsComplete}]]></condition></ifPart>
+      </sentry>
+      <sentry id="sentry_closed">
+        <ifPart><condition><![CDATA[${reviewOutcome == 'closed'}]]></condition></ifPart>
+      </sentry>
       <humanTask id="ht_review" name="Review"/>
       <milestone id="ms_done" name="Completed"/>
     </casePlanModel>
@@ -22,6 +32,12 @@
       </cmmndi:CMMNShape>
       <cmmndi:CMMNShape cmmnElementRef="pi_ms">
         <dc:Bounds x="240" y="130" width="120" height="40"/>
+      </cmmndi:CMMNShape>
+      <cmmndi:CMMNShape cmmnElementRef="crit_entry">
+        <dc:Bounds x="73" y="140" width="14" height="22"/>
+      </cmmndi:CMMNShape>
+      <cmmndi:CMMNShape cmmnElementRef="crit_exit">
+        <dc:Bounds x="353" y="139" width="14" height="22"/>
       </cmmndi:CMMNShape>
     </cmmndi:CMMNDiagram>
   </cmmndi:CMMNDI>

@@ -38,6 +38,10 @@ object Discovery {
                     low.endsWith(".java") -> javas.add(f)
                     ModelPaths.isArchive(low) -> archives.add(f)
                     ModelKinds.modelTypeFor(f.name) != null -> models.add(f)
+                    // legacy Design-workspace layout: per-model JSON wrappers inside `<type>-models/`
+                    low.endsWith(".json") &&
+                        com.flowable.atlas.model.ModelType.byDesignFolder(f.parentFile?.name) != null ->
+                        models.add(f)
                     low.endsWith(".xml") || low.endsWith(".sql") -> xmls.add(f)  // liquibase candidates
                 }
             }
