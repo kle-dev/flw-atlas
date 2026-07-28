@@ -114,6 +114,15 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.10.12</h3>
+        <ul>
+          <li><b>No more multi-second UI freezes while the model index builds</b> — the scan now only
+              holds the read lock to collect candidate files; parsing and regex work run lock-free, so
+              typing and VFS refreshes are never queued behind it.</li>
+          <li><b>Quieter shutdown</b> — the index scan stops when the project closes and the embedded
+              explorer editor no longer touches the VFS after disposal (no more
+              AlreadyDisposedException warnings in the log).</li>
+        </ul>
         <h3>0.10.11</h3>
         <ul>
           <li><b>Schema gaps tab</b> — the dashboard's "Schema gaps" number unfolded into a view of its
