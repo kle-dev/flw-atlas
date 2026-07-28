@@ -146,7 +146,9 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
     override fun getFile(): VirtualFile = file
     override fun setState(state: FileEditorState) {}
     override fun isModified(): Boolean = false
-    override fun isValid(): Boolean = file.isValid
+    // The isDisposed guard keeps late queries (editor-history bookkeeping during IDE shutdown) from
+    // touching an already-disconnected VFS, which logs a scary AlreadyDisposedException warning.
+    override fun isValid(): Boolean = !project.isDisposed && file.isValid
     override fun addPropertyChangeListener(listener: PropertyChangeListener) {}
     override fun removePropertyChangeListener(listener: PropertyChangeListener) {}
 

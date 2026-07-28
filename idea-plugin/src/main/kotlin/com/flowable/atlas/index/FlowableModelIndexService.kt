@@ -63,10 +63,18 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
         )
     }
 
-    /** The current index, building it (under a read action) on first use / after invalidation. */
+    /** The current index, building it on first use / after invalidation. */
     fun index(): FlowableIndex {
         cached?.let { return it }
-        val built = ReadAction.computeBlocking<FlowableIndex, RuntimeException> { build() }
+        // A torn scan during shutdown is worthless — and iterating a disposing VFS spams the log.
+        if (project.isDisposed) return build(emptyList())
+        // Phase 1, under a (short) read action: only COLLECT the candidate files — no file content is
+        // read while the lock is held. Phase 2 (bytes + parse + regex) runs lock-free, so a pending
+        // write action (typing, VFS refresh) never queues behind a multi-second scan. One long read
+        // action here used to freeze the EDT for seconds on large workspaces.
+        val candidates = ReadAction.computeBlocking<List<VirtualFile>, RuntimeException> { collectCandidates() }
+        val built = build(candidates)
+        if (project.isDisposed) return built           // don't cache what a dying scan produced
         cached = built
         publishUpdated()
         return built
@@ -238,7 +246,46 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
 
     // ---- scanning ----------------------------------------------------------------------
 
-    private fun build(): FlowableIndex {
+    /**
+     * Phase 1 — the files worth indexing (model files + archives), collected under the caller's
+     * read action. Deliberately does NOT touch file contents: this is the only part of the scan
+     * that needs the read lock, so it must stay milliseconds-cheap.
+     */
+    private fun collectCandidates(): List<VirtualFile> {
+        val out = ArrayList<VirtualFile>()
+        val collect = { file: VirtualFile ->
+            if (!file.isDirectory && !ModelFiles.isExcluded(file.path) &&
+                (ModelFiles.typeOf(file) != null || ArchiveModelScanner.isArchive(file))
+            ) out.add(file)
+        }
+        // When an active Flowable sub-project is selected, scan only its subtree (a direct VFS walk,
+        // not a ProjectFileIndex prefix-filter, so a folder outside all content roots is still
+        // indexed). Otherwise fall back to the whole project's content roots — the historical scope.
+        val activeDir = AtlasProjectRootService.getInstance(project).activeProjectDir()
+        val base = project.basePath?.let { Path.of(it).normalize() }
+        val scopedRoot = if (activeDir != null && base != null && activeDir != base) {
+            LocalFileSystem.getInstance().findFileByNioFile(activeDir)
+        } else {
+            null
+        }
+        if (scopedRoot != null) {
+            VfsUtilCore.iterateChildrenRecursively(
+                scopedRoot,
+                { vf -> !(vf.isDirectory && vf.name in ModelPaths.EXCLUDE_DIRS) },
+                { file -> ProgressManager.checkCanceled(); collect(file); !project.isDisposed },
+            )
+        } else {
+            ProjectFileIndex.getInstance(project).iterateContent { file ->
+                ProgressManager.checkCanceled()   // let a long scan be interrupted (e.g. during completion)
+                collect(file)
+                !project.isDisposed
+            }
+        }
+        return out
+    }
+
+    /** Phase 2 — parse + regex over the candidates' bytes. Runs WITHOUT the read lock. */
+    private fun build(candidates: List<VirtualFile>): FlowableIndex {
         val byKey = HashMap<String, MutableList<ModelEntry>>()
         val referencedIdentifiers = HashSet<String>()
         val referencedClassFqns = HashSet<String>()
@@ -273,43 +320,21 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
             }
         }
 
-        fun process(file: VirtualFile) {
-            if (!file.isDirectory && !ModelFiles.isExcluded(file.path)) {
-                val type = ModelFiles.typeOf(file)
-                when {
-                    type != null ->
-                        runCatching { file.contentsToByteArray() }.getOrNull()
-                            ?.let { processModel(file.name, it, type, file) }
-                    // Look inside .bar/.zip archives (real-world deployment; unpacked folder optional).
-                    ArchiveModelScanner.isArchive(file) ->
+        for (file in candidates) {
+            ProgressManager.checkCanceled()       // let a long scan be interrupted (e.g. during completion)
+            if (project.isDisposed) break         // shutdown mid-scan — stop before the VFS goes away
+            val type = ModelFiles.typeOf(file)
+            when {
+                type != null ->
+                    runCatching { file.contentsToByteArray() }.getOrNull()
+                        ?.let { processModel(file.name, it, type, file) }
+                // Look inside .bar/.zip archives (real-world deployment; unpacked folder optional).
+                ArchiveModelScanner.isArchive(file) ->
+                    runCatching {
                         ArchiveModelScanner.scan(file) { name, bytes, entryType, entryFile ->
                             processModel(name, bytes, entryType, entryFile)
                         }
-                }
-            }
-        }
-
-        // When an active Flowable sub-project is selected, scan only its subtree (a direct VFS walk,
-        // not a ProjectFileIndex prefix-filter, so a folder outside all content roots is still
-        // indexed). Otherwise fall back to the whole project's content roots — the historical scope.
-        val activeDir = AtlasProjectRootService.getInstance(project).activeProjectDir()
-        val base = project.basePath?.let { Path.of(it).normalize() }
-        val scopedRoot = if (activeDir != null && base != null && activeDir != base) {
-            LocalFileSystem.getInstance().findFileByNioFile(activeDir)
-        } else {
-            null
-        }
-        if (scopedRoot != null) {
-            VfsUtilCore.iterateChildrenRecursively(
-                scopedRoot,
-                { vf -> !(vf.isDirectory && vf.name in ModelPaths.EXCLUDE_DIRS) },
-                { file -> ProgressManager.checkCanceled(); process(file); true },
-            )
-        } else {
-            ProjectFileIndex.getInstance(project).iterateContent { file ->
-                ProgressManager.checkCanceled()   // let a long scan be interrupted (e.g. during completion)
-                process(file)
-                true
+                    }.onFailure { LOG.debug("skipping unreadable archive ${file.name}", it) }
             }
         }
         return FlowableIndex(
