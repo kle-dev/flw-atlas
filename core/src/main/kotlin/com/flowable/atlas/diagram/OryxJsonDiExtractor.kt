@@ -65,7 +65,14 @@ object OryxJsonDiExtractor {
             val w = b.lrx - b.ulx
             val h = b.lry - b.uly
             val name = ((child["properties"] as? Map<*, *>)?.get("name") as? String)?.takeIf { it.isNotBlank() }
-            shapes.add(DiaShape(id, DiagramKinds.shapeKind(stencil, notation), ax, ay, w, h, name))
+            // A workspace shape names its Design stencil outright — the most precise type source there is.
+            val resolved = DiagramIcons.resolve(stencil, null, stencil, null)
+            shapes.add(
+                DiaShape(
+                    id, DiagramKinds.shapeKind(stencil, notation, stencil), ax, ay, w, h, name,
+                    resolved.icon, resolved.typeLabel,
+                ),
+            )
             centers[id] = Point(ax + w / 2, ay + h / 2)
 
             (child["outgoing"] as? List<*>)?.forEach { o ->

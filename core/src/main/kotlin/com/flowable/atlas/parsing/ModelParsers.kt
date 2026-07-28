@@ -34,6 +34,15 @@ object ModelParsers {
 
     private val GENERIC_KEYS = listOf("key", "name", "description", "type", "subType", "modelType")
 
+    /** Form component types that render/act but never bind a variable of their own. */
+    private val NON_BINDING_FIELD_TYPES = setOf(
+        "text", "headline", "horizontalLine", "image", "html", "link", "spacer", "expression",
+        "container", "panel", "tabs", "tab", "workAction", "outcomeButton",
+    )
+
+    /** Field-id roots that are frontend scratch space, never process/case variables. */
+    private val FIELD_ID_IGNORE = setOf("temp", "response", "payload", "root", "item", "self")
+
     // A data-source / link / navigation URL can invoke a service operation with the target and operation
     // keys as *literal* query params even though the host is a dynamic `{{endpoints.*}}` placeholder — e.g.
     // `{{endpoints.dataobject}}/dataobject-runtime/data-object-instances?dataObjectDefinitionKey=<key>&dataObjectOperationKey=<op>&…`.
@@ -107,6 +116,12 @@ object ModelParsers {
                 }
                 info["outputs"] = t.findChildren("output").map { it.attr("label") ?: it.attr("name") }
                 info["ruleCount"] = t.findChildren("rule").size
+                // A decision table reads its input variables from, and writes its output names back
+                // into, the calling scope — index both so decisions join the variable graph.
+                for (inp in t.findChildren("input")) {
+                    ctx.addVar(key, inp.textOfDescendant("text")?.trim()?.substringBefore('.'))
+                }
+                for (outp in t.findChildren("output")) ctx.addVar(key, outp.attr("name"))
             }
             // DRD: a decision may require other decisions (informationRequirement/requiredDecision)
             for (req in dec.findChildren("informationRequirement")) {
@@ -140,6 +155,16 @@ object ModelParsers {
         for (p in payload) {
             if (p["correlationParameter"] == true && p["name"] !in correlation) correlation.add(p["name"])
         }
+        // which channels carry this event, and the data-dictionary types its payload fields use
+        for ((chKey, rel) in listOf("inboundChannelKeys" to "inbound-channel", "outboundChannelKeys" to "outbound-channel")) {
+            for (ck in (doc[chKey] as? List<*> ?: emptyList<Any?>())) {
+                ctx.addRef(doc["key"], "event", ffile, rel, "channel", ck)
+            }
+        }
+        for (p in payload) {
+            ctx.addRef(doc["key"], "event", ffile, "typed-by-dictionary", "dataDictionary",
+                objOf(p["extensionProperties"])?.get("dataDictionaryModelKey"))
+        }
         return linkedMapOf(
             "key" to doc["key"], "name" to doc["name"], "file" to ffile,
             "correlation" to correlation,
@@ -164,8 +189,13 @@ object ModelParsers {
         )
         // Cross-model references (parity with the platform's ServiceModelReferenceExtractor):
         // referenceKey → data object; typeReference.modelKey → data dictionary (output and
-        // per-operation input/output parameters); operation body templates → template model.
+        // per-operation input/output parameters); operation body templates → template model;
+        // a column relation joins to the table of another service model.
         ctx.addRef(doc["key"], "service", ffile, "service-dataObject", "dataObject", doc["referenceKey"])
+        for (cm in listOfObjs(doc["columnMappings"])) {
+            ctx.addRef(doc["key"], "service", ffile, "relates-to-service", "service",
+                objOf(cm["relation"])?.get("referenceServiceDefinitionKey"))
+        }
         fun dictionaryRefs(params: Any?) {
             for (p in listOfObjs(params)) {
                 ctx.addRef(doc["key"], "service", ffile, "typed-by-dictionary", "dataDictionary",
@@ -182,7 +212,12 @@ object ModelParsers {
             }
             operations.add(linkedMapOf(
                 "key" to op["key"], "name" to op["name"], "method" to oc["method"],
-                "url" to oc["url"], "fullUrl" to full, "params" to operationParams(op),
+                "url" to oc["url"], "fullUrl" to full,
+                "params" to operationParams(op["inputParameters"]),
+                // An operation's declared outputs are the other half of its contract — what the caller
+                // gets back and can map into a variable. Falls back to the service-level list, which
+                // Flowable shares across operations that declare none of their own.
+                "outParams" to operationParams(op["outputParameters"] ?: doc["outputParameters"]),
             ))
             dictionaryRefs(op["inputParameters"])
             dictionaryRefs(op["outputParameters"])
@@ -201,9 +236,9 @@ object ModelParsers {
         return info
     }
 
-    /** Input parameters an operation declares (the variables it requires), name + type. */
-    private fun operationParams(op: Map<String, Any?>): List<Map<String, Any?>> =
-        listOfObjs(op["inputParameters"]).filter { it["name"] != null }
+    /** Parameters a service operation declares (its contract towards a caller), name + type. */
+    private fun operationParams(params: Any?): List<Map<String, Any?>> =
+        listOfObjs(params).filter { it["name"] != null }
             .map { linkedMapOf("name" to it["name"], "type" to it["type"]) }
 
     /** `.policy` — a security policy's permission → roles mapping (dict or list shape). */
@@ -274,14 +309,18 @@ object ModelParsers {
         val outcomes = ArrayList<Any?>()
         val dataSources = ArrayList<Any?>()
         val subforms = ArrayList<Any?>()
+        val ioParameters = ArrayList<Map<String, Any?>>()
         val info = linkedMapOf<String, Any?>(
             "key" to key, "name" to meta["name"], "file" to ffile, "modelType" to mtype,
             "fields" to fields, "outcomes" to outcomes, "dataSources" to dataSources, "subforms" to subforms,
+            "ioParameters" to ioParameters,
         )
         for (oc in listOfObjs(doc["outcomes"])) {
             outcomes.add(linkedMapOf("value" to oc["value"], "label" to oc["label"]))
             ctx.addRef(key, mtype, ffile, "outcome-form", "form", oc["outcomeFormKey"])
         }
+        // the variable the chosen outcome is stored in (the key is all-lowercase in the model JSON)
+        ctx.addVar(key, doc["outcomevariablename"])
         fun visit(n: Map<String, Any?>) {
             if (truthy(n["id"]) && n.containsKey("type") && n.containsKey("label")) {
                 fields.add(linkedMapOf(
@@ -291,7 +330,18 @@ object ModelParsers {
                 if (n["type"] == "outcomeButton" && truthy(n["value"])) {
                     outcomes.add(linkedMapOf("value" to n["value"], "label" to n["label"]))
                 }
+                // A data-entry field's id is the variable path the form reads/writes at runtime — index
+                // its root so the form joins the variable graph. Buttons don't bind a variable, and a
+                // display component whose value is a {{…}} binding reads through the expression pass.
+                val ftype = (n["type"] as? String) ?: ""
+                val bound = (n["value"] as? String)?.contains("{{") == true
+                if (!bound && !NON_BINDING_FIELD_TYPES.contains(ftype) && !ftype.lowercase().contains("button")) {
+                    val root = n["id"].toString().trimStart('$').substringBefore('.').substringBefore('[')
+                    if (root !in FIELD_ID_IGNORE) ctx.addVar(key, root, "form_field_use")
+                }
             }
+            // an outcome button can open a follow-up form directly on the field definition
+            if (truthy(n["outcomeFormKey"])) ctx.addRef(key, mtype, ffile, "outcome-form", "form", n["outcomeFormKey"])
             val es = objOf(n["extraSettings"])
             if (es != null) {
                 if (truthy(es["formRef"])) {
@@ -317,6 +367,36 @@ object ModelParsers {
                 }
                 if (truthy(es["expandablePanel"])) ctx.addRef(key, mtype, ffile, "datatable-detail-form", "form", es["expandablePanel"])
                 if (truthy(es["actionDefinitionKey"])) ctx.addRef(key, mtype, ffile, "triggers-action", "action", es["actionDefinitionKey"])
+                // An agent button references an agent model the same way a service button references a
+                // service — this was the one model reference on a form that went unrecorded.
+                val am = objOf(es["agentModel"])
+                if (am != null && truthy(am["agentModelKey"])) {
+                    ctx.addRef(key, mtype, ffile, "field-agent", "agent", am["agentModelKey"])
+                }
+                // A create-instance button starts a process/case; a query data source runs a query
+                // model. The reference is a bare key or a {key: …} object, depending on the version.
+                fun refKey(v: Any?): Any? = if (v is Map<*, *>) v["key"] else v
+                ctx.addRef(key, mtype, ffile, "starts-process", "process", refKey(es["processReference"]))
+                ctx.addRef(key, mtype, ffile, "starts-case", "case", refKey(es["caseReference"]))
+                ctx.addRef(key, mtype, ffile, "runs-query", "query", refKey(es["query"]))
+                // A button/section can be gated to groups: ["group1"] or [{"permission-group": "group1"}].
+                val pgs = (es["permissionGroups"] as? List<*> ?: emptyList<Any?>())
+                    .map { if (it is Map<*, *>) it["permission-group"] else it }
+                    .filterIsInstance<String>().filter { it.isNotEmpty() }
+                if (pgs.isNotEmpty()) {
+                    ctx.addAccess(key, mtype, "field:${n["id"]}", "use", pgs.joinToString(","))
+                }
+                // The payload a button sends to (and maps back from) whatever it invokes. Each record
+                // carries the callee, which is what lets the invoked action/agent/service turn around and
+                // show the values its callers actually pass.
+                val (refKind, refKey) = calleeOf(es, n)
+                val payload = payloadParams(es, refKind, refKey)
+                if (payload.isNotEmpty()) {
+                    ctx.addParams(
+                        ioParameters, key, n["id"], pyOr(n["label"], es["text"]),
+                        (n["type"] as? String) ?: "button", payload, refKind,
+                    )
+                }
                 // Data-source / lookup / navigation URLs (queryUrl, lookupUrl, navigationUrl, …) can embed a
                 // dataObject/service operation as literal query params — pick those up as op-uses.
                 for (v in es.values) if (v is String) recordUrlOpUses(v, key, mtype, ffile, ctx)
@@ -331,6 +411,66 @@ object ModelParsers {
         }
         walkJson(doc["rows"] ?: emptyList<Any?>(), ::visit)
         return info
+    }
+
+    /**
+     * The payload-mapping `extraSettings` keys a form/page button can carry, and the direction each means.
+     *
+     * These are the Design dialog's "Send payload map" and "Store response attributes". The same
+     * `extraSettings` path is used by every button flavour — Action, REST, Service, Agent, Create-Instance,
+     * Data-Object table — so one reader covers them all.
+     */
+    private val PAYLOAD_MAPPINGS: Map<String, String> = linkedMapOf(
+        "sendPayloadMapping" to "in",
+        "dataObjectDataTableCreatePayloadMapping" to "in",
+        "headerPropertyMapping" to "in",
+        "responsePayloadMapping" to "out",
+        "errorResponsePayloadMapping" to "error-out",
+    )
+
+    /**
+     * A button's payload mappings, normalised onto the same `source -> target` record as a BPMN/CMMN task's
+     * (see [XmlHelpers.readIoParams]).
+     *
+     * Two shapes occur in the wild: a list of `{name, expression}` — `name` is the payload key sent to (or
+     * the form path written by) the call, `expression` the `{{…}}` binding read from the form — and, on a
+     * REST button, a bare string that is the whole request body as one expression. `headerPropertyMapping`
+     * uses `{name, value}` instead and describes HTTP headers, so it keeps its own `kind`.
+     */
+    private fun payloadParams(es: Map<String, Any?>, refKind: String?, refKey: Any?): List<Map<String, Any?>> {
+        val out = ArrayList<Map<String, Any?>>()
+        fun rec(dir: String, kind: String, source: Any?, target: Any?, expression: Boolean = false) {
+            val r = linkedMapOf<String, Any?>("dir" to dir, "kind" to kind, "source" to source, "target" to target)
+            if (expression) r["expression"] = true
+            if (refKind != null) r["refKind"] = refKind
+            if (refKey != null) r["refKey"] = refKey
+            out.add(r)
+        }
+        for ((k, dir) in PAYLOAD_MAPPINGS) {
+            val v = es[k] ?: continue
+            val kind = if (k == "headerPropertyMapping") "header" else k
+            when (v) {
+                // the whole body as one expression — there is no per-key mapping to show
+                is String -> if (v.isNotEmpty()) rec(dir, kind, v, null, expression = true)
+                is List<*> -> for (e in listOfObjs(v)) {
+                    val src = e["expression"] ?: e["value"]
+                    if (e["name"] == null && src == null) continue
+                    rec(dir, kind, src, e["name"], expression = src is String && src.contains("{{"))
+                }
+            }
+        }
+        return out
+    }
+
+    /** What a button invokes, as `(kind, key)` — the callee its payload is mapped onto. */
+    private fun calleeOf(es: Map<String, Any?>, n: Map<String, Any?>): Pair<String?, Any?> {
+        if (truthy(es["actionDefinitionKey"])) return "action" to es["actionDefinitionKey"]
+        objOf(es["agentModel"])?.get("agentModelKey")?.let { if (truthy(it)) return "agent" to it }
+        objOf(es["serviceModel"])?.get("serviceModelKey")?.let { if (truthy(it)) return "service" to it }
+        if (truthy(es["dataObjectDefinitionKey"])) return "dataObject" to es["dataObjectDefinitionKey"]
+        val url = pyOr(n["url"], es["invokeServiceUrl"]) as? String
+        if (!url.isNullOrBlank()) return "rest" to url.trim()
+        return null to null
     }
 
     /** `.agent` — model settings, tools, operations, knowledge base; records tool/KB refs. */
@@ -349,8 +489,12 @@ object ModelParsers {
             val tm = objOf(t) ?: return
             if (!truthy(tm["key"])) return
             val mt = (tm["modelType"] as? String) ?: "service"
-            tools.add(linkedMapOf("key" to tm["key"], "type" to mt))
+            val tool = linkedMapOf<String, Any?>("key" to tm["key"], "type" to mt)
+            if (truthy(tm["operationKey"])) tool["operation"] = tm["operationKey"]
+            tools.add(tool)
             ctx.addRef(key, "agent", ffile, "tool", mt, tm["key"])
+            // a service tool names the exact operation — count it as a use of that operation
+            if (mt == "service") ctx.addOpUse(key, "service", tm["key"], tm["operationKey"])
         }
         // freemarker behavior templates (documentClassification + operations), guardrails and
         // evaluators — parity with the platform's AgentModelReferenceExtractor (both persisted
@@ -440,7 +584,8 @@ object ModelParsers {
         }
         val permGroups = (doc["permissionGroups"] as? List<*>) ?: emptyList<Any?>()
         ctx.addAccess(key, "action", "action", "use", permGroups.joinToString(","))
-        val scriptInfo = objOf(objOf(doc["config"])?.get("scriptInfo")) ?: emptyMap()
+        val config = objOf(doc["config"]) ?: emptyMap()
+        val scriptInfo = objOf(config["scriptInfo"]) ?: emptyMap()
         val script = scriptInfo["script"] as? String
         VarHarvest.collectScriptVars(ctx, script, listOf(key))
         return linkedMapOf(
@@ -448,7 +593,48 @@ object ModelParsers {
             "formKey" to doc["formKey"], "signalName" to doc["signalName"], "channels" to doc["channels"],
             "scopeType" to doc["scopeType"], "icon" to doc["icon"], "permissionGroups" to doc["permissionGroups"],
             "script" to script, "scriptLanguage" to scriptInfo["language"],
+            "ioParameters" to actionParams(ctx, key, doc, config, script),
         )
+    }
+
+    /** `flw.getInput('x')` / `flw.setOutput('y', …)` — how a script-based action bot reads its payload
+     *  and returns a result (the `flw` scripting API; quotes may be single or double). */
+    private val FLW_IO_RE = Regex("""flw\.(getInput|setOutput)\s*\(\s*['"]([^'"]+)['"]""")
+
+    /**
+     * The in/out parameters an action bot is given, in the same shape as a BPMN/CMMN task's mappings.
+     *
+     * An action has no extension elements — its inputs arrive three ways: `signalVariableNames` (copied
+     * into the signalled instance), the bot-specific `config` block, and, for script bots, the `flw`
+     * scripting API. `element` is the bot key so the reader can see *which* bot the values feed.
+     */
+    private fun actionParams(
+        ctx: Ctx, key: Any?, doc: Map<String, Any?>, config: Map<String, Any?>, script: String?,
+    ): List<Map<String, Any?>> {
+        val out = ArrayList<Map<String, Any?>>()
+        val bot = doc["botKey"]
+        // the bot is this action's callee — the thing the values are actually handed to
+        val callee = (bot as? String)?.ifEmpty { null }?.let { "bot" to it }
+        fun add(dir: String, kind: String, source: Any?, target: Any?) = ctx.addParams(
+            out, key, bot, doc["name"], "actionBot",
+            listOf(linkedMapOf("dir" to dir, "kind" to kind, "source" to source, "target" to target)),
+            callee = callee,
+        )
+        for (v in (doc["signalVariableNames"] as? List<*> ?: emptyList<Any?>())) {
+            if (v is String && v.isNotEmpty()) add("in", "signalVariable", null, v)
+        }
+        // Only scalar config entries are a parameter; a nested object (e.g. `scriptInfo`) is bot wiring.
+        for ((k, v) in config) {
+            if (v is Map<*, *> || v is List<*>) continue
+            add("in", "config", v?.toString(), k)
+        }
+        // A script commonly reads the same input in several places; list each payload key once.
+        val seen = LinkedHashSet<Pair<String, String>>()
+        for (m in FLW_IO_RE.findAll(script ?: "")) {
+            val dir = if (m.groupValues[1] == "getInput") "in" else "out"
+            if (seen.add(dir to m.groupValues[2])) add(dir, "flwScript", null, m.groupValues[2])
+        }
+        return out
     }
 
     /** `.dictionary` — a data dictionary's declared type names. */
@@ -513,6 +699,9 @@ object ModelParsers {
         if (mtype == "document") objOf(d["forms"])?.forEach { (op, fk) -> ctx.addRef(d["key"], mtype, ffile, "document-$op-form", "form", fk) }
         return out
     }
+
+    /** Python `a or b`: `a` when truthy, else `b`. */
+    private fun pyOr(a: Any?, b: Any?): Any? = if (truthy(a)) a else b
 
     /** Python truthiness for a permission flag (true / non-empty / non-zero). */
     private fun truthy(v: Any?): Boolean = when (v) {

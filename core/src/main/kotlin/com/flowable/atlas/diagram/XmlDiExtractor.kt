@@ -27,11 +27,16 @@ object XmlDiExtractor {
         val tagById = HashMap<String, String>()
         val nameById = HashMap<String, String?>()
         val planItemDefRef = HashMap<String, String>()
+        // What the element *is*, beyond its tag: the Design stencil it was modelled from, the
+        // `flowable:type` discriminator that turns a bare <serviceTask> into an HTTP/agent/registry call,
+        // its event definition, and the markers BPMN paints on top (see DiagramIcons / DiaMarker).
+        val elementById = HashMap<String, ElementFacts>()
         walk(root) { el ->
             el.attr("id")?.let { id ->
                 tagById[id] = el.tag
                 nameById[id] = el.attr("name")
                 if (el.tag == "planItem") el.attr("definitionRef")?.let { planItemDefRef[id] = it }
+                elementById[id] = facts(el)
             }
         }
 
@@ -40,6 +45,10 @@ object XmlDiExtractor {
 
         fun resolvedName(ref: String): String? =
             nameById[ref] ?: planItemDefRef[ref]?.let { nameById[it] }
+
+        // A CMMN shape points at a planItem; the type lives on the definition it references.
+        fun resolvedFacts(ref: String): ElementFacts =
+            planItemDefRef[ref]?.let { elementById[it] } ?: elementById[ref] ?: ElementFacts()
 
         // 2. Shapes: the shape's *direct-child* Bounds is the geometry (a nested label Bounds is not).
         val shapes = ArrayList<DiaShape>()
@@ -51,7 +60,18 @@ object XmlDiExtractor {
             val w = bounds.attr("width")?.toDoubleOrNull() ?: continue
             val h = bounds.attr("height")?.toDoubleOrNull() ?: continue
             val tag = resolvedTag(ref) ?: ""
-            shapes.add(DiaShape(ref, DiagramKinds.shapeKind(tag, notation), x, y, w, h, resolvedName(ref)))
+            val f = resolvedFacts(ref)
+            val resolved = DiagramIcons.resolve(f.stencil, f.flowableType, tag, f.eventDef)
+            // CMMN DI references the planItem, but everything parsed from the model (plan tree,
+            // parameters, script bodies) is keyed by the *definition* — emit the definition's id so
+            // the explorer joins diagram ↔ details by id, not by a name heuristic.
+            val elementId = planItemDefRef[ref] ?: ref
+            shapes.add(
+                DiaShape(
+                    elementId, DiagramKinds.shapeKind(tag, notation, f.stencil), x, y, w, h, resolvedName(ref),
+                    resolved.icon, resolved.typeLabel, f.markers,
+                ),
+            )
         }
 
         // 3. Edges: straight polyline through the absolute waypoints.
@@ -76,6 +96,33 @@ object XmlDiExtractor {
         DiagramGeometry.Notation.DMN -> EdgeKind.DMN_REQUIREMENT
         DiagramGeometry.Notation.CMMN -> EdgeKind.CMMN_ASSOCIATION
         DiagramGeometry.Notation.BPMN -> EdgeKind.SEQUENCE_FLOW
+    }
+
+    /** Everything about an element that decides its glyph and decorations, read once per element. */
+    private data class ElementFacts(
+        val stencil: String? = null,
+        val flowableType: String? = null,
+        val eventDef: String? = null,
+        val markers: Set<DiaMarker> = emptySet(),
+    )
+
+    private val EVENT_DEF_SUFFIX = "EventDefinition"
+
+    private fun facts(el: AtlasXml.El): ElementFacts {
+        val ext = el.findChild("extensionElements")
+        val markers = LinkedHashSet<DiaMarker>()
+        el.findChild("multiInstanceLoopCharacteristics")?.let { mi ->
+            markers += if (mi.attr("isSequential") == "true") DiaMarker.MI_SEQUENTIAL else DiaMarker.MI_PARALLEL
+        }
+        if (el.findChild("standardLoopCharacteristics") != null) markers += DiaMarker.LOOP
+        // BPMN draws a non-interrupting boundary/event-subprocess start with a dashed outline
+        if (el.attr("cancelActivity") == "false") markers += DiaMarker.NON_INTERRUPTING
+        return ElementFacts(
+            stencil = ext?.childText("stencilid"),
+            flowableType = el.attr("type"),
+            eventDef = el.children.firstOrNull { it.tag.endsWith(EVENT_DEF_SUFFIX) }?.tag,
+            markers = markers,
+        )
     }
 
     /** Pre-order walk of the whole element tree (AtlasXml exposes only per-tag iteration). */

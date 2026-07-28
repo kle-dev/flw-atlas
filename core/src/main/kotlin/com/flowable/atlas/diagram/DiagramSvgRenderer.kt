@@ -7,7 +7,9 @@ import kotlin.math.min
  * Paints a [DiagramGeometry] to a standalone SVG string — a schematic but layout-faithful rendering:
  * every shape keeps its real DI position and size, connectors follow their real path, and each element
  * category (task, event, gateway, pool, data object, DMN decision, …) gets a recognisable silhouette.
- * It is intentionally *not* a full bpmn.js-fidelity renderer (no type mini-icons, no colour theming).
+ * Each element also carries its Flowable Design type glyph and a `<title>` naming that type, so the
+ * diagram reads like the Design canvas. It is intentionally *not* a full bpmn.js-fidelity renderer (no
+ * colour theming, straight connectors, labels placed by the painter rather than by the DI).
  *
  * The output is deterministic (stable element order, locale-free number formatting) so it is safe for
  * golden/byte-comparison tests and for embedding in the Atlas explorer HTML. A white background is
@@ -53,7 +55,8 @@ object DiagramSvgRenderer {
     }
 
     private fun isContainer(k: ShapeKind): Boolean =
-        k == ShapeKind.POOL || k == ShapeKind.LANE || k == ShapeKind.SUBPROCESS || k == ShapeKind.CMMN_STAGE
+        k == ShapeKind.POOL || k == ShapeKind.LANE || k == ShapeKind.SUBPROCESS ||
+            k == ShapeKind.EVENT_SUBPROCESS || k == ShapeKind.CMMN_STAGE
 
     private fun defs(): String =
         """<defs>""" +
@@ -74,32 +77,73 @@ object DiagramSvgRenderer {
             EdgeKind.MESSAGE_FLOW -> """ stroke-dasharray="6 4"""" to "openArrow"
             EdgeKind.ASSOCIATION, EdgeKind.CMMN_ASSOCIATION -> """ stroke-dasharray="2 4"""" to "openArrow"
         }
+        // Same `data-el` contract as shapes (see drawShape). The invisible fat twin of the line is the
+        // click target — a 1.4px stroke is impossible to hit, 14px is comfortable.
+        sb.append("<g")
+        if (e.elementId.isNotBlank()) sb.append(""" data-el="${esc(e.elementId)}"""")
+        sb.append(">")
         sb.append(
             """<polyline points="$pts" fill="none" stroke="$STROKE" stroke-width="1.4"$dash """ +
                 """marker-end="url(#$marker)"/>""",
         )
+        if (e.elementId.isNotBlank()) {
+            sb.append(
+                """<polyline points="$pts" fill="none" stroke="#000" stroke-opacity="0" """ +
+                    """stroke-width="14" pointer-events="stroke"/>""",
+            )
+        }
+        sb.append("</g>")
     }
 
     // ---- shapes ------------------------------------------------------------------------------
 
+    /**
+     * One shape, wrapped in a `<g>` that carries its model element id as `data-el`, its type as
+     * `data-icon` and a `<title>` naming it.
+     *
+     * `data-el` is the interactivity contract with the explorer frontend: it matches the element ids in
+     * the parsed model data (parameters, tasks, flow conditions), so a click on the canvas can be routed
+     * to the element's details and vice versa. The `<title>` covers plain no-JS viewers (the exported
+     * `.svg` artifacts); the explorer lifts it into its own tooltip bubble. `data-icon` makes the output
+     * greppable.
+     */
     private fun drawShape(sb: StringBuilder, s: DiaShape) {
+        sb.append("<g")
+        if (s.elementId.isNotBlank()) sb.append(""" data-el="${esc(s.elementId)}"""")
+        s.icon?.let { sb.append(""" data-icon="${it.slug}"""") }
+        sb.append(">")
+        tooltip(sb, s)
         when {
             s.kind.isEvent -> drawEvent(sb, s)
             s.kind.isGateway -> drawGateway(sb, s)
             s.kind == ShapeKind.DATA_OBJECT -> drawDataObject(sb, s)
             s.kind == ShapeKind.TEXT_ANNOTATION -> drawTextAnnotation(sb, s)
             s.kind == ShapeKind.POOL || s.kind == ShapeKind.LANE -> drawLane(sb, s)
+            s.kind == ShapeKind.CMMN_CRITERION_ENTRY || s.kind == ShapeKind.CMMN_CRITERION_EXIT ->
+                drawCriterion(sb, s)
             s.kind == ShapeKind.CMMN_MILESTONE || s.kind == ShapeKind.DMN_INPUT_DATA -> drawStadium(sb, s)
             s.kind == ShapeKind.DMN_DECISION -> drawRect(sb, s, rx = 0.0)
-            else -> drawRect(sb, s, rx = 8.0)   // task / subprocess / stage / bkm / generic
+            else -> drawRect(sb, s, rx = 8.0)   // task / sub-process / call activity / stage / bkm / generic
         }
+        sb.append("</g>")
+    }
+
+    /** `«Name» — «Design type»`, or whichever of the two the model actually gives us. */
+    private fun tooltip(sb: StringBuilder, s: DiaShape) {
+        val name = s.label?.trim()?.ifEmpty { null }
+        val type = s.typeLabel?.trim()?.ifEmpty { null }
+        val text = listOfNotNull(name, type).joinToString(" — ").ifEmpty { return }
+        sb.append("<title>${esc(text)}</title>")
     }
 
     private fun drawRect(sb: StringBuilder, s: DiaShape, rx: Double) {
         val fill = if (s.kind == ShapeKind.CMMN_STAGE) LANE_FILL else FILL
+        // BPMN distinguishes these by their outline: a call activity is thick, an event sub-process dashed.
+        val strokeW = if (s.kind == ShapeKind.CALL_ACTIVITY) 3.5 else 1.5
+        val dash = if (s.kind == ShapeKind.EVENT_SUBPROCESS) """ stroke-dasharray="6 4"""" else ""
         sb.append(
             """<rect x="${fmt(s.x)}" y="${fmt(s.y)}" width="${fmt(s.width)}" height="${fmt(s.height)}" """ +
-                """rx="${fmt(rx)}" ry="${fmt(rx)}" fill="$fill" stroke="$STROKE" stroke-width="1.5"/>""",
+                """rx="${fmt(rx)}" ry="${fmt(rx)}" fill="$fill" stroke="$STROKE" stroke-width="${fmt(strokeW)}"$dash/>""",
         )
         if (s.kind == ShapeKind.SUBPROCESS) {
             // collapsed-subprocess [+] marker, bottom-centre
@@ -108,7 +152,49 @@ object DiagramSvgRenderer {
             sb.append("""<rect x="${fmt(bx)}" y="${fmt(by)}" width="14" height="14" fill="none" stroke="$STROKE" stroke-width="1.2"/>""")
             sb.append(plus(s.centerX, by + 7, 4.0, 1.2))
         }
+        taskIcon(sb, s)
+        markers(sb, s)
         centeredLabel(sb, s)
+    }
+
+    // ---- type glyphs ---------------------------------------------------------------------------
+
+    private const val ICON_BOX = 24.0
+
+    /** The type glyph in the shape's top-left corner, where BPMN puts it. */
+    private fun taskIcon(sb: StringBuilder, s: DiaShape) {
+        val icon = s.icon ?: return
+        val size = min(16.0, min(s.width, s.height) * 0.34)
+        if (size < 7) return                    // below this the glyph is a smudge; the label carries it
+        glyph(sb, icon, s.x + 5, s.y + 5, size)
+    }
+
+    /** Scale a 24×24 glyph to [size] px at ([x], [y]) and stroke it in the diagram's ink. */
+    private fun glyph(sb: StringBuilder, icon: DiaIcon, x: Double, y: Double, size: Double) {
+        val body = DiagramIconPaths.of(icon)
+        if (body.isEmpty()) return
+        val k = size / ICON_BOX
+        sb.append(
+            """<g transform="translate(${fmt(x)} ${fmt(y)}) scale(${fmt(k)})" fill="none" stroke="$STROKE" """ +
+                """stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" color="$STROKE">""",
+        )
+        sb.append(body)
+        sb.append("</g>")
+    }
+
+    /** Multi-instance / loop decorations along the bottom edge, as BPMN draws them. */
+    private fun markers(sb: StringBuilder, s: DiaShape) {
+        val cy = s.y + s.height - 8
+        val cx = s.centerX
+        when {
+            DiaMarker.MI_PARALLEL in s.markers ->
+                for (i in -1..1) sb.append(line(cx + i * 4, cy - 5, cx + i * 4, cy + 5, 1.8))
+            DiaMarker.MI_SEQUENTIAL in s.markers ->
+                for (i in -1..1) sb.append(line(cx - 5, cy + i * 4, cx + 5, cy + i * 4, 1.8))
+            DiaMarker.LOOP in s.markers -> {
+                sb.append("""<path d="M${fmt(cx - 5)},${fmt(cy + 2)} a5,5 0 1,1 5,4" fill="none" stroke="$STROKE" stroke-width="1.6"/>""")
+            }
+        }
     }
 
     private fun drawStadium(sb: StringBuilder, s: DiaShape) {
@@ -117,6 +203,7 @@ object DiagramSvgRenderer {
             """<rect x="${fmt(s.x)}" y="${fmt(s.y)}" width="${fmt(s.width)}" height="${fmt(s.height)}" """ +
                 """rx="${fmt(r)}" ry="${fmt(r)}" fill="$FILL" stroke="$STROKE" stroke-width="1.5"/>""",
         )
+        taskIcon(sb, s)
         centeredLabel(sb, s)
     }
 
@@ -141,9 +228,23 @@ object DiagramSvgRenderer {
         val cx = s.centerX
         val cy = s.centerY
         val strokeW = if (s.kind == ShapeKind.EVENT_END) 3.0 else 1.6
-        sb.append("""<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="${fmt(r)}" fill="$FILL" stroke="$STROKE" stroke-width="${fmt(strokeW)}"/>""")
+        // a non-interrupting boundary event / event-subprocess start is dashed
+        val dash = if (DiaMarker.NON_INTERRUPTING in s.markers) """ stroke-dasharray="4 3"""" else ""
+        sb.append(
+            """<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="${fmt(r)}" fill="$FILL" stroke="$STROKE" """ +
+                """stroke-width="${fmt(strokeW)}"$dash/>""",
+        )
         if (s.kind == ShapeKind.EVENT_INTERMEDIATE && r > 4) {
-            sb.append("""<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="${fmt(r - 3)}" fill="none" stroke="$STROKE" stroke-width="1.3"/>""")
+            sb.append(
+                """<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="${fmt(r - 3)}" fill="none" stroke="$STROKE" """ +
+                    """stroke-width="1.3"$dash/>""",
+            )
+        }
+        // The definition glyph sits centred in the circle — that is what tells a timer from a message.
+        // Kept under the ring's inscribed square so a dashed or thick ring never collides with it.
+        s.icon?.let { icon ->
+            val size = r * 0.95
+            if (size >= 7) glyph(sb, icon, cx - size / 2, cy - size / 2, size)
         }
         belowLabel(sb, s)
     }
@@ -164,6 +265,15 @@ object DiagramSvgRenderer {
             }
         }
         belowLabel(sb, s)
+    }
+
+    /** Sentry diamond on a plan item's border: entry criterion hollow, exit criterion filled. */
+    private fun drawCriterion(sb: StringBuilder, s: DiaShape) {
+        val cx = s.centerX
+        val cy = s.centerY
+        val pts = "${fmt(cx)},${fmt(s.y)} ${fmt(s.x + s.width)},${fmt(cy)} ${fmt(cx)},${fmt(s.y + s.height)} ${fmt(s.x)},${fmt(cy)}"
+        val fill = if (s.kind == ShapeKind.CMMN_CRITERION_EXIT) STROKE else FILL
+        sb.append("""<polygon points="$pts" fill="$fill" stroke="$STROKE" stroke-width="1.4"/>""")
     }
 
     private fun drawDataObject(sb: StringBuilder, s: DiaShape) {

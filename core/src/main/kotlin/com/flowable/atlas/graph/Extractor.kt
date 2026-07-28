@@ -133,6 +133,53 @@ object Atlas {
             }
         }
 
+        // Legacy Design exports ("KYC Reviews"-era) store each model as `<type>-models/<name>.json`
+        // wrapping the body in {id, key, name, editorJson}. Unwrap and dispatch so those apps are not
+        // invisible: modern-shaped bodies go straight to their parser (wrapper key/name injected);
+        // Oryx-shaped bodies (stencil/childShapes — the old form/page editor) at least register the
+        // model, so keys resolve and the raw ${…}/{{…}} harvest attributes to it.
+        fun dispatchDesignJson(folder: String?, data: ByteArray, label: String) {
+            val wrapper = try {
+                com.flowable.atlas.model.MiniJson.parse(String(data, Charsets.UTF_8)) as? Map<String, Any?>
+            } catch (e: Exception) { null } ?: return
+            val key = wrapper["key"] as? String ?: return
+            val ejRaw = wrapper["editorJson"] ?: return
+            @Suppress("UNCHECKED_CAST")
+            val body: Map<String, Any?>? = when (ejRaw) {
+                is Map<*, *> -> ejRaw as Map<String, Any?>
+                is String -> try { com.flowable.atlas.model.MiniJson.parse(ejRaw) as? Map<String, Any?> } catch (e: Exception) { null }
+                else -> null
+            }
+            val mt = com.flowable.atlas.model.ModelType.byDesignFolder(folder)
+            // a root-level wrapper whose body carries the app manifest is the (legacy) app model
+                ?: if (body != null && (body.containsKey("flowApp") || body["models"] is List<*>)) {
+                    com.flowable.atlas.model.ModelType.APP
+                } else return
+            val mtype = mt.parserKey
+            // bpmn/cmmn/dmn json is the Oryx twin of an XML sibling in the same export — skip the copy
+            if (mtype in setOf("bpmn", "cmmn", "dmn")) return
+            val oryx = body == null || body.containsKey("childShapes") || body.containsKey("stencil")
+            val doc = LinkedHashMap<String, Any?>()
+            if (mtype == "form" || mtype == "page" || (oryx && mtype == "app")) {
+                // keep the whole wrapper (the expression harvest still sees every {{…}} in editorJson)
+                // and add the modern metadata header the form parser registers models from
+                doc.putAll(wrapper)
+                doc["metadata"] = linkedMapOf(
+                    "key" to key, "name" to wrapper["name"], "modelType" to mtype,
+                )
+            } else if (oryx) {
+                return  // an Oryx body for a non-form type — nothing a parser could read
+            } else {
+                doc.putAll(body!!)
+                doc.putIfAbsent("key", key)
+                if (truthyStr(wrapper["name"])) doc.putIfAbsent("name", wrapper["name"])
+                if (truthyStr(wrapper["description"])) doc.putIfAbsent("description", wrapper["description"])
+                // the legacy action wrapper says `form`, the modern parser reads `formKey`
+                if (mtype == "action" && doc["formKey"] == null && truthyStr(doc["form"])) doc["formKey"] = doc["form"]
+            }
+            dispatch(mtype, com.flowable.atlas.model.MiniJson.stringify(doc).toByteArray(Charsets.UTF_8), label)
+        }
+
         val discovered = Discovery.discover(root)
         val isDir = root.isDirectory
         fun relOf(f: File): String = if (isDir) relativize(root, f) else f.name
@@ -140,7 +187,9 @@ object Atlas {
         for (path in discovered.models) {
             val rel = relOf(path)
             try {
-                dispatch(ModelKinds.modelTypeFor(path.name), path.readBytes(), rel)
+                val mt = ModelKinds.modelTypeFor(path.name)
+                if (mt != null) dispatch(mt, path.readBytes(), rel)
+                else dispatchDesignJson(path.parentFile?.name, path.readBytes(), rel)
             } catch (e: Exception) {
                 diag("read", rel, e.message ?: e.toString())
             }
@@ -154,9 +203,21 @@ object Atlas {
                     while (entries.hasMoreElements()) {
                         val entry = entries.nextElement()
                         if (entry.name.endsWith("/")) continue
-                        val mt = ModelKinds.modelTypeFor(entry.name.substringAfterLast('/')) ?: continue
+                        val base = entry.name.substringAfterLast('/')
+                        val mt = ModelKinds.modelTypeFor(base)
+                        if (mt != null) {
+                            val bytes = zf.getInputStream(entry).use { it.readBytes() }
+                            dispatch(mt, bytes, "$rel!${entry.name}")
+                            continue
+                        }
+                        // legacy-export JSON: `<type>-models/x.json` anywhere, or an app wrapper at the root
+                        if (!base.lowercase().endsWith(".json")) continue
+                        val folder = entry.name.split('/').dropLast(1).lastOrNull()
+                        if (com.flowable.atlas.model.ModelType.byDesignFolder(folder) == null &&
+                            entry.name.contains('/')
+                        ) continue
                         val bytes = zf.getInputStream(entry).use { it.readBytes() }
-                        dispatch(mt, bytes, "$rel!${entry.name}")
+                        dispatchDesignJson(folder, bytes, "$rel!${entry.name}")
                     }
                 }
             } catch (e: Exception) {
@@ -222,4 +283,6 @@ object Atlas {
 
     private fun relativize(root: File, file: File): String =
         root.toPath().relativize(file.toPath()).toString().replace(File.separatorChar, '/')
+
+    private fun truthyStr(v: Any?): Boolean = (v as? String)?.isNotEmpty() == true
 }

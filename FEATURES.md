@@ -1,6 +1,6 @@
 # Flowable Atlas — Features
 
-*IntelliJ IDEA plugin, v0.10.8.* A summary of what Flowable Atlas provides, grouped by area.
+*IntelliJ IDEA plugin, v0.10.10.* A summary of what Flowable Atlas provides, grouped by area.
 Everything is resolved against the Flowable models that actually live in your repository.
 
 ## Atlas Explorer & Hub
@@ -13,6 +13,75 @@ Everything is resolved against the Flowable models that actually live in your re
   explorers, and quick actions.
 - **Post-generation balloon** — after generating, offers to open the explorer in the browser or in
   the IDE.
+- **In/out parameters** — every variable mapping a model passes into, or takes back out of, the things
+  it calls: call activities and process/case tasks (`flowable:in`/`out`), Service-Registry, Agent,
+  Data-Object and HTTP tasks (`inputParameter` / `outputParameter` / `errorOutputParameter` /
+  `outputVariableName`), Send-/Receive-Event tasks (`eventInParameter` / `eventOutParameter`),
+  Init-Variables (`variableMapping`), result variables, Action Bots (`signalVariableNames`, bot `config`,
+  `flw.getInput` / `flw.setOutput`) and **form/page buttons** — an Action, REST, Service, Agent or
+  Create-Instance button's "Send payload map" and "Store response attributes"
+  (`sendPayloadMapping` / `responsePayloadMapping` / `errorResponsePayloadMapping`, plus REST headers).
+  Shown per element in the node's detail view; a task's static **field injections** (an HTTP task's
+  request URL/method) live inside its entry in the *Service tasks* section, next to its implementation,
+  result variable and callee — one place per task instead of three parallel lists. The declared in/out
+  contract is shown on each `.service` operation.
+  Each group names **what it calls** — `→ notifyCustomerAction`, `→ custSvc`, `→ subProcess`, an HTTP
+  task's URL — with a link to that model when it's in the project.
+- **Called with** — the mirror view: any called model (action, agent, service, data object, process, case,
+  event, bot) also lists the payload its *callers* pass, so you can check in one place whether a form
+  button's names line up with what the bot reads via `flw.getInput(…)`.
+- **Find a parameter** — ⌘K/Ctrl-K matches parameter names on both sides of a mapping (the caller's
+  variable or `{{binding}}` *and* the callee's contract name) and shows which mapping matched; picking a
+  hit **jumps straight to the matching row**, expands its section and highlights it — and "copy link"
+  keeps that highlight for whoever you send it to. A variable's detail view lists every mapping that
+  reads or writes it, and a **Variable · parameter** sidebar category collects the variables that travel
+  through one.
+- **Collapsible detail sections** — every section on a node's page folds away and starts collapsed
+  (except the diagram), so a process with 35 parameters is still skimmable; what you open stays open as
+  you walk the graph, there's an *expand all* control, and long parameter lists get their own text filter
+  and in/out/error direction chips.
+- **Model structure sections** — the data Atlas parses is on the page, linked into the graph: a
+  form/page's **Fields** (id → variable, label, type, required, bound value) and **Data sources**;
+  a process's **User tasks** (form, candidate groups, assignee, due date/priority), **Script tasks**
+  (with the Groovy/JS body), **Service tasks** (implementation, callee model, result variable, field
+  injections — a script-typed task shows its script as code), **Events & timers**, **Multi-instance**,
+  **Flow conditions** (element *names*, not ids, each locatable on the diagram) and **Listeners**; a
+  case's **Plan model** tree (stages/milestones/tasks with links to the models they use, each item's
+  **entry ◇ / exit ◆ criteria with their sentry conditions inline**), **Script tasks** (CMMN
+  `flowable:type="script"` bodies), **Sentries** (named by what they guard — *entry of Review*, not
+  *sentry3*) and **Event listeners & timers**; criterion diamonds on the diagram are clickable and
+  show their condition; a security policy's **Permissions** (roles link to groups); an agent's
+  **Tools** and **Operations** (with prompts); an app's **Variables** and **Pages**; an action's
+  **Bot script**. Search (⌘K/Ctrl-K) also matches field ids/labels, app variables, agent tools, policy
+  permissions and dictionary types.
+- **Variable graph covers forms and decisions** — form field ids and DMN inputs/outputs are indexed as
+  variables, so a variable's page lists the forms and decision tables that read or write it (and vice
+  versa), alongside its in/out parameter flows.
+- **Legacy Design exports** — the "typed-directory" export format (`form-models/`, `service-models/`, …
+  with each model wrapped in `{key, name, editorJson}`) is unwrapped and parsed, from a zip or a loose
+  workspace; old Oryx-editor forms/pages are registered by key so references resolve and their
+  `{{…}}` bindings are indexed, and the root app wrapper becomes the app node with *contains* membership.
+- **Design vocabulary everywhere, with working hover help in the IDE** — labels follow Flowable Design's
+  wording, and every explanation tooltip is rendered by the Explorer's own bubble, which also works in
+  the embedded JCEF viewer (native tooltips never show there).
+- **Diagrams with real type icons** — each element carries its Flowable type glyph (User task, Service
+  task, Service registry, AI Agent, Data object, HTTP, Script, Email, Timer/Message/Signal/Error events,
+  …), the BPMN markers that belong to it (multi-instance, loop, non-interrupting boundary, thick-bordered
+  call activity), and a hover tooltip naming the element in **Design's own words**. The type is taken from
+  the Design stencil where the model has one, else from `flowable:type`, else from the element itself.
+- **Zoom and full screen** — the diagram has zoom / fit controls, ⌘/Ctrl-scroll-to-zoom (a plain scroll
+  keeps scrolling the page — the diagram never captures it) and drag-to-pan, plus a full-screen view
+  (`+` / `−` / `0`, Esc to close) for the diagrams that are too big for the panel.
+- **Interactive diagram** — click any element (task, gateway, event, sequence flow) for an info card
+  with its element id, in/out parameter mappings, the variables they touch, its implementation / callee
+  model / form (all linked), and — on gateways and flows — the flow conditions with resolved target
+  names. *Show in details ↓* jumps to the element's rows in the sections below; the ⌖ button on
+  parameter groups, tasks, events and flow conditions pans the diagram to that element and highlights
+  it. Element ids and names are indexed in ⌘K search.
+- **Design vocabulary, explained** — node types, element types, parameter kinds and relationships are
+  named the way Flowable Design names them (*Decision tables*, *AI agents*, *Services*, *Send payload
+  map*, *Decision task → decision table*), each with a hover text explaining what it means — so the map
+  is readable without having built Atlas.
 
 ## Model navigation & validation
 

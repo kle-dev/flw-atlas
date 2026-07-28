@@ -96,6 +96,21 @@ try{
     <div class="pal-results" id="palresults" role="listbox" aria-label="Search results"></div>
   </div>
 </div>
+<div class="palette" id="dgmodal" hidden>
+  <div class="pal-overlay" data-close></div>
+  <div class="dg-panel" role="dialog" aria-modal="true" aria-label="Diagram">
+    <div class="dgbar">
+      <span class="dgtitle" id="dgtitle"></span>
+      <button data-z="out" title="Zoom out">−</button>
+      <button data-z="fit" title="Fit to width">fit</button>
+      <button data-z="in" title="Zoom in">+</button>
+      <span class="dgpct">100%</span>
+      <span class="dghint">drag to pan · scroll to zoom · +/−/0</span>
+      <button data-close title="Close">esc</button>
+    </div>
+    <div class="dgview" id="dgmodalview"><div class="dgpan"></div></div>
+  </div>
+</div>
 <script type="application/json" id="atlas-data">__ATLAS_DATA__</script>
 <script>
 /*__ATLAS_JS__*/</script>

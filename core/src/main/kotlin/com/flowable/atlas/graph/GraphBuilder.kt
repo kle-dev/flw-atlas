@@ -258,6 +258,20 @@ object GraphBuilder {
         }
         for ((v, keys) in ctx.varUse) for (k in keys) addUsage(v, k, "(declared / mapped)")
         for ((v, keys) in ctx.scriptVarUse) for (k in keys) addUsage(v, k, "(script)")
+        for ((v, keys) in ctx.formFieldUse) for (k in keys) addUsage(v, k, "(form field)")
+        // In/out parameter mappings: one precise snippet per binding instead of the generic
+        // "(declared / mapped)", plus a per-variable list so the detail view can show the data flow and
+        // the sidebar can offer a "used as a parameter" facet.
+        val varParams = LinkedHashMap<String, MutableList<Map<String, Any?>>>()
+        for (f in ctx.paramFlows) {
+            val v = f["variable"] as? String ?: continue
+            val model = f["model"]
+            addUsage(v, model, paramSnippet(f))
+            varParams.getOrPut(v) { ArrayList() }.add(linkedMapOf(
+                "model" to model, "element" to f["element"], "dir" to f["dir"],
+                "source" to f["source"], "target" to f["target"],
+            ))
+        }
         for (o in bucketList("apps")) {
             val am = o as Map<String, Any?>
             for (vv in (am["variables"] as? List<*> ?: emptyList<Any?>())) {
@@ -276,7 +290,11 @@ object GraphBuilder {
             val usages = perModel.entries.filter { it.key in keyToNode }.map { (k, snips) ->
                 linkedMapOf<String, Any?>("model" to keyToNode.getValue(k), "snippets" to snips.sorted().take(10))
             }
-            addNode("variable", v, v, null, linkedMapOf("usedBy" to usedBy, "scopes" to scopes, "usages" to usages))
+            val data = linkedMapOf<String, Any?>("usedBy" to usedBy, "scopes" to scopes, "usages" to usages)
+            val flows = (varParams[v] ?: emptyList()).filter { it["model"] in keyToNode }
+                .map { it + mapOf("model" to keyToNode.getValue(it["model"].toString())) }
+            if (flows.isNotEmpty()) data["ioParams"] = flows
+            addNode("variable", v, v, null, data)
         }
 
         // --- string-literal nodes ---
@@ -363,7 +381,8 @@ object GraphBuilder {
                         linkedMapOf(
                             "service" to svcKey, "operation" to opKey, "name" to op["name"],
                             "method" to op["method"], "url" to op["url"], "fullUrl" to op["fullUrl"],
-                            "params" to op["params"], "usedBy" to (opUsedBy["$svcKey#$opKey"]?.sorted() ?: emptyList<String>()),
+                            "params" to op["params"], "outParams" to op["outParams"],
+                            "usedBy" to (opUsedBy["$svcKey#$opKey"]?.sorted() ?: emptyList<String>()),
                         ),
                     )
                 }
@@ -791,6 +810,21 @@ object GraphBuilder {
             out.add(n)
         }
         return out
+    }
+
+    /**
+     * A variable node's "used in" line for one in/out parameter binding, e.g.
+     * `(in parameter on callSub) orderId → subOrderId`. Deliberately in the same parenthesised style as
+     * the other non-expression markers (`(script)`, `(app variable)`), but naming the element and the
+     * actual mapping instead of the generic `(declared / mapped)`.
+     */
+    private fun paramSnippet(flow: Map<String, Any?>): String {
+        val el = (flow["element"] as? String)?.ifEmpty { null }
+        val mapping = listOfNotNull(
+            (flow["source"] as? String)?.ifEmpty { null },
+            (flow["target"] as? String)?.ifEmpty { null },
+        ).joinToString(" → ")
+        return "(${flow["dir"]} parameter" + (if (el != null) " on $el" else "") + ") $mapping"
     }
 
     /** The bound variable name of a `{{…}}` binding, e.g. `{{order.x}}` -> `order`. */

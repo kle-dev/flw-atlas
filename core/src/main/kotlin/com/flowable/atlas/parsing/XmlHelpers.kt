@@ -50,6 +50,142 @@ object XmlHelpers {
             it["source"] != null && (it["target"] as? String)?.lowercase()?.contains("formkey") == true
         }.map { it["source"] }
 
+    /**
+     * The `<extensionElements>` children that carry a variable mapping, and the direction each implies.
+     *
+     * Flowable spells "pass this value in / take that value out" a different way for almost every task
+     * flavour — `<flowable:in>` on a call activity, `<flowable:inputParameter>` on a service-registry or
+     * agent task, `<flowable:eventInParameter>` on a send/receive-event task, `<flowable:variableMapping>`
+     * on an Init-Variables task — but they all describe the same thing. [readIoParams] normalises every
+     * flavour onto one `source -> target` record so a single call per element covers them all.
+     */
+    private val IO_PARAM_TAGS: Map<String, String> = linkedMapOf(
+        "in" to "in",
+        "out" to "out",
+        "inputParameter" to "in",
+        "outputParameter" to "out",
+        "errorOutputParameter" to "error-out",
+        "eventInParameter" to "in",
+        "eventOutParameter" to "out",
+        "variableMapping" to "in",
+        "outputVariableName" to "out",
+    )
+
+    /**
+     * Every in/out parameter mapping declared on `el`, normalised to `{dir, kind, source, target}`.
+     *
+     * `source` is always where the value comes from and `target` where it lands, so a reader never has to
+     * know which flavour produced the record:
+     *
+     *  - `<flowable:in source="a" target="b"/>` → `in  a -> b`; a `sourceExpression` lands in `source`
+     *    with `expression=true` (the distinction matters — an expression is not a variable name).
+     *  - `<flowable:inputParameter name="p" value="${v}"/>` → `in  ${v} -> p` (the caller's value flows
+     *    into the callee's parameter `p`).
+     *  - `<flowable:outputParameter name="p" value="v"/>` → `out p -> v` (the callee's `p` flows into the
+     *    caller's variable `v`); `errorOutputParameter` is the same shape on the error path.
+     *  - `<flowable:variableMapping name="v" value="x"/>` → `in  x -> v`, `valueType` in `type`.
+     *  - `<flowable:outputVariableName>c</…>` → `out null -> c` (the callee's result has no name).
+     *
+     * Optional keys (`type`, `transient`, `expression`) are only present when the model declares them, so
+     * a mapping without them keeps the minimal three-key shape.
+     */
+    fun readIoParams(el: El): List<Map<String, Any?>> {
+        val ext = extEl(el) ?: return emptyList()
+        val out = ArrayList<Map<String, Any?>>()
+        for (c in ext.children) {
+            val dir = IO_PARAM_TAGS[c.tag] ?: continue
+            var source: String? = null
+            var target: String? = null
+            var type: String? = null
+            var expression = false
+            when (c.tag) {
+                "in", "out" -> {
+                    val srcExpr = c.attr("sourceExpression")
+                    source = c.attr("source") ?: srcExpr
+                    expression = c.attr("source") == null && srcExpr != null
+                    target = c.attr("target") ?: c.attr("targetExpression")
+                }
+                "inputParameter" -> {
+                    source = c.attr("value")
+                    target = c.attr("name")
+                    type = c.attr("type")
+                }
+                "outputParameter", "errorOutputParameter" -> {
+                    source = c.attr("name")
+                    target = c.attr("value")
+                    type = c.attr("type")
+                }
+                "eventInParameter", "eventOutParameter" -> {
+                    source = c.attr("source") ?: c.attr("sourceExpression")
+                    target = c.attr("target")
+                }
+                "variableMapping" -> {
+                    val valExpr = c.attr("valueExpression")
+                    source = c.attr("value") ?: valExpr
+                    expression = c.attr("value") == null && valExpr != null
+                    target = c.attr("name")
+                    type = c.attr("valueType")
+                }
+                "outputVariableName" -> target = c.text?.trim()?.ifEmpty { null }
+            }
+            if (source == null && target == null) continue
+            val rec = linkedMapOf<String, Any?>("dir" to dir, "kind" to c.tag, "source" to source, "target" to target)
+            if (!type.isNullOrEmpty()) rec["type"] = type
+            if (c.attr("transient") == "true") rec["transient"] = true
+            // an expression is not a variable name — flag it so consumers can skip variable resolution
+            if (expression || looksLikeExpression(source)) rec["expression"] = true
+            out.add(rec)
+        }
+        return out
+    }
+
+    /**
+     * The model this element calls, as `(kind, key)` — what its in/out parameters are actually mapped onto.
+     *
+     * A parameter list without its callee is half a story: "3 params on Lookup" says nothing about *which*
+     * service the values go to. Stamped onto every record by the parsers so both the element's own detail
+     * view and the callee's "Called with" view can name (and link) the other side.
+     */
+    fun calleeOf(el: El): Pair<String, String>? {
+        val ext = extEl(el)
+        if (ext != null) {
+            ext.findChild("serviceMapping")?.attr("serviceModelKey").nonEmpty()?.let { return "service" to it }
+            ext.findChild("agentMapping")?.attr("agentModelKey").nonEmpty()?.let { return "agent" to it }
+            ext.findChild("dataObjectMapping")?.attr("definitionKey").nonEmpty()?.let { return "dataObject" to it }
+        }
+        when (el.tag) {
+            "callActivity" -> el.attr("calledElement").nonEmpty()?.let { return "process" to it }
+            "processTask" ->
+                (el.textOfDescendant("processRefExpression") ?: el.attr("processRef")).nonEmpty()
+                    ?.let { return "process" to it }
+            "caseTask" ->
+                (el.textOfDescendant("caseRefExpression") ?: el.attr("caseRef")).nonEmpty()
+                    ?.let { return "case" to it }
+        }
+        // a BPMN "case" service task starts a case by definition key (attribute, or an older field injection)
+        if (el.attr("type") == "case") {
+            (el.attr("caseDefinitionKey") ?: readFields(el)["caseDefinitionKey"] as? String).nonEmpty()
+                ?.let { return "case" to it }
+        }
+        // send/receive-event tasks and event-registry events map their payload onto an event model
+        ext?.childText("eventType").nonEmpty()?.let { return "event" to it }
+        // an HTTP task's callee is a URL rather than a model — still worth naming, just not linkable
+        if (el.attr("type") == "http") {
+            (readFields(el)["requestUrl"] as? String).nonEmpty()?.let { return "rest" to it }
+        }
+        return null
+    }
+
+    private fun String?.nonEmpty(): String? = this?.trim()?.ifEmpty { null }
+
+    /** An attribute-derived out-parameter, for the `resultVariable`-style attributes that have no element. */
+    fun resultVariableParam(kind: String, name: String?): Map<String, Any?>? =
+        if (name.isNullOrEmpty()) null
+        else linkedMapOf("dir" to "out", "kind" to kind, "source" to null, "target" to name)
+
+    private fun looksLikeExpression(v: String?): Boolean =
+        v != null && (v.contains("\${") || v.contains("#{") || v.contains("{{"))
+
     /** Field-injection values on a delegate/listener element (`<flowable:field>`). */
     fun readFields(el: El): LinkedHashMap<String, Any?> {
         val fields = LinkedHashMap<String, Any?>()
@@ -67,20 +203,68 @@ object XmlHelpers {
         return fields
     }
 
-    /** `<flowable:in>` / `<flowable:out>` variable mappings on an element. */
-    fun readInOut(el: El): List<Map<String, Any?>> {
-        val ext = extEl(el) ?: return emptyList()
-        val out = ArrayList<Map<String, Any?>>()
-        for (dir in listOf("in", "out")) {
-            for (m in ext.findChildren(dir)) {
-                out.add(linkedMapOf(
-                    "dir" to dir,
-                    "source" to (m.attr("source") ?: m.attr("sourceExpression")),
-                    "target" to m.attr("target"),
-                ))
-            }
+    /**
+     * The Design "which model does this task call" extension elements: service registry, data object,
+     * agent and template references.
+     *
+     * Shared by BPMN and CMMN — the elements are byte-identical in both dialects, only the `fromType`
+     * label on the recorded reference differs. Returns the resolved keys so the caller can store them on
+     * the task, which is what gives an in/out parameter list its callee.
+     */
+    fun readTaskMappings(ctx: Ctx, frm: Any?, ftype: String, ffile: String, el: El): LinkedHashMap<String, Any?> {
+        val info = LinkedHashMap<String, Any?>()
+        val ext = extEl(el) ?: return info
+        ext.findChild("serviceMapping")?.let { sm ->
+            info["serviceModelKey"] = sm.attr("serviceModelKey")
+            info["operationKey"] = sm.attr("operationKey")
+            ctx.addRef(frm, ftype, ffile, "serviceMapping", "service", sm.attr("serviceModelKey"))
+            ctx.addOpUse(frm, "service", sm.attr("serviceModelKey"), sm.attr("operationKey"))
         }
-        return out
+        ext.findChild("dataObjectMapping")?.let { dom ->
+            info["dataObjectKey"] = dom.attr("definitionKey")
+            dom.attr("operationKey")?.ifEmpty { null }?.let { info["dataObjectOperationKey"] = it }
+            ctx.addRef(frm, ftype, ffile, "dataObjectMapping", "dataObject", dom.attr("definitionKey"))
+        }
+        ext.findChild("agentMapping")?.let { am ->
+            info["agentModelKey"] = am.attr("agentModelKey")
+            am.attr("operationKey")?.ifEmpty { null }?.let { info["agentOperationKey"] = it }
+            ctx.addRef(frm, ftype, ffile, "agentMapping", "agent", am.attr("agentModelKey"))
+        }
+        return info
+    }
+
+    /** Design "static model key" extension elements (case-view / case-page / AI config) → (kind, rel).
+     *  All of them are CDATA-text children of `extensionElements`, not attributes. */
+    private val STATIC_KEY_TAGS: Map<String, Pair<String, String>> = linkedMapOf(
+        "static-process-key" to ("process" to "starts-process"),
+        "static-case-key" to ("case" to "starts-case"),
+        "static-form-key" to ("form" to "static-form"),
+        "static-manual-start-form-key" to ("form" to "manual-start-form"),
+        "static-decision-table-key" to ("decision" to "static-decision"),
+    )
+
+    /** Group-permission extension elements → the access action they grant. */
+    private val PERMISSION_GROUP_TAGS: Map<String, String> = linkedMapOf(
+        "watcher-groups" to "watch",
+        "participant-groups" to "participate",
+        "participant-candidate-groups" to "participate",
+        "event-listener-permission-groups" to "trigger",
+        "manual-activation-permission-groups" to "manually-start",
+    )
+
+    /** Record the Design static-key references and group permissions declared under [el]. */
+    fun collectDesignExtensionRefs(
+        ctx: Ctx, frm: Any?, ftype: String, accessType: String, ffile: String, el: El,
+    ) {
+        val ext = extEl(el) ?: return
+        for ((tag, kindRel) in STATIC_KEY_TAGS) {
+            ctx.addRef(frm, ftype, ffile, kindRel.second, kindRel.first, ext.childText(tag))
+        }
+        val eid = el.attr("id") ?: ""
+        for ((tag, action) in PERMISSION_GROUP_TAGS) {
+            val g = ext.childText(tag)
+            if (!g.isNullOrEmpty()) ctx.addAccess(frm, accessType, "element:$eid", action, g)
+        }
     }
 
     /** Execution/task/plan-item listeners declared on an element. */
