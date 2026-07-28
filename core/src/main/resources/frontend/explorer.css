@@ -320,10 +320,13 @@
     background:rgba(19,30,41,.85);color:#fff;font-family:var(--sans);font-size:var(--text-xs);
     padding:var(--space-1) var(--space-25);border-radius:var(--radius-full);opacity:0;transition:opacity .18s}
   .dgwheelhint.show{opacity:1}
-  .dgcard{position:absolute;z-index:30;width:min(400px,86%);max-height:78%;overflow:auto;cursor:default;
+  .dgcard{position:absolute;z-index:30;width:min(420px,88%);max-width:96%;max-height:92%;
+    min-width:240px;min-height:90px;overflow:auto;cursor:default;resize:both;
     background:var(--panel);color:var(--ink);border:1px solid var(--line2);border-radius:var(--radius-lg);
     box-shadow:var(--shadow);padding:var(--space-25) var(--space-3);font-size:var(--text-sm);font-family:var(--sans)}
-  .dgcard-head{display:flex;align-items:center;gap:var(--space-2)}
+  .dgcard-head{display:flex;align-items:center;gap:var(--space-2);cursor:move;user-select:none;
+    margin:calc(-1*var(--space-25)) calc(-1*var(--space-3)) 0;padding:var(--space-25) var(--space-3) 0}
+  .dgcard-head:active{cursor:grabbing}
   .dgcard-title{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .dgcard-ty{flex:none;color:var(--ink-faint);font-size:var(--text-xs)}
   .dgcard-x{margin-left:auto;flex:none;background:none;border:none;color:var(--ink-faint);cursor:pointer;
@@ -350,6 +353,9 @@
   .dgloc:hover{color:var(--accent)}
   .dgloc svg{display:block}
   .cflow .pa{color:var(--ink-faint)}
+  /* schema-gaps tab: one coverage block per service */
+  .schemasvc{margin:0 0 var(--space-5)}
+  .schemasvc .covwrap{margin-top:var(--space-2)}
   @media (prefers-reduced-motion: no-preference){
     .pal-panel{animation:palin .12s ease}
   }
