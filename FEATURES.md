@@ -36,6 +36,25 @@ Everything is resolved against the Flowable models that actually live in your re
   keeps that highlight for whoever you send it to. A variable's detail view lists every mapping that
   reads or writes it, and a **Variable · parameter** sidebar category collects the variables that travel
   through one.
+- **Checks — everything worth a look, in one tab** — its own sidebar section (*Models · Integration ·
+  Code · Expressions · **Checks** · …*) holding the review lists, plus a tab that collects every finding
+  on one page: parse issues with the analyzer's own message, expressions flagged as invalid or suspect
+  (with what is wrong and who uses them), schema gaps per service, keys referenced but never defined,
+  unused forms / operations / custom functions, orphan or superseded changelogs, variables only a script
+  guess supports, and the count of uncertain (≈ / ƒ) links. Every block links to its drill-down list, and
+  the dashboard's health cards jump straight into the matching block.
+- **Script tasks tab** — under *Integration*, one sidebar entry listing **every script in the project**: BPMN script tasks,
+  CMMN `flowable:type="script"` plan items, execution/task-listener scripts and action bot scripts,
+  grouped by model, each with its Design element name (*Script task*, *Execution listener · end*, *Bot
+  script*), language, line count, documentation, result variable and the **variables it touches**
+  (linked; a bare-identifier read marked `≈`). Chips narrow to one kind, one text filter searches names,
+  languages *and the code itself*, one control expands or collapses every body, and *in model ↓* jumps to
+  that element in its model. Reading all the code of a project no longer means opening every model in turn.
+- **Find anything, and see where it matched** — ⌘K/Ctrl-K searches *every* string Atlas parsed, not a
+  list of blessed fields: script bodies, element documentation, flow conditions, field injections,
+  listener classes, DMN cells. Each hit says where it came from (`script · stampTask`,
+  `doc · approveTask`, `DMN annotation · r1`), name matches always rank above free-text ones, and
+  picking a hit opens that element's row in the detail panel.
 - **Collapsible detail sections** — every section on a node's page folds away and starts collapsed
   (except the diagram), so a process with 35 parameters is still skimmable; what you open stays open as
   you walk the graph, there's an *expand all* control, and long parameter lists get their own text filter
@@ -52,11 +71,16 @@ Everything is resolved against the Flowable models that actually live in your re
   *sentry3*) and **Event listeners & timers**; criterion diamonds on the diagram are clickable and
   show their condition; a security policy's **Permissions** (roles link to groups); an agent's
   **Tools** and **Operations** (with prompts); an app's **Variables** and **Pages**; an action's
-  **Bot script**. Search (⌘K/Ctrl-K) also matches field ids/labels, app variables, agent tools, policy
-  permissions and dictionary types.
-- **Variable graph covers forms and decisions** — form field ids and DMN inputs/outputs are indexed as
-  variables, so a variable's page lists the forms and decision tables that read or write it (and vice
-  versa), alongside its in/out parameter flows.
+  **Bot script**; a decision's **Rules** — the decision table itself, every input/output cell with its
+  annotation. **Element documentation** (what the modeller wrote about a task, event or gateway) and
+  **Listeners** are listed per element, including the execution listeners on service tasks, gateways and
+  events that used to be dropped.
+- **Variable graph covers forms, decisions and scripts** — form field ids and DMN inputs/outputs are
+  indexed as variables, so a variable's page lists the forms and decision tables that read or write it
+  (and vice versa), alongside its in/out parameter flows. Script bodies count too: a
+  `setVariable('x', …)` in a script task, a CMMN script item or a listener script names the variable
+  **and the element** it happens on, and the bare identifiers a Groovy/JS script reads out of its scope
+  are reported as what they are — a good guess, marked `≈ read` rather than presented as a declaration.
 - **Legacy Design exports** — the "typed-directory" export format (`form-models/`, `service-models/`, …
   with each model wrapped in `{key, name, editorJson}`) is unwrapped and parsed, from a zip or a loose
   workspace; old Oryx-editor forms/pages are registered by key so references resolve and their
@@ -77,13 +101,18 @@ Everything is resolved against the Flowable models that actually live in your re
   model / form (all linked), and — on gateways and flows — the flow conditions with resolved target
   names. *Show in details ↓* jumps to the element's rows in the sections below; the ⌖ button on
   parameter groups, tasks, events and flow conditions pans the diagram to that element and highlights
-  it. Element ids and names are indexed in ⌘K search. The card docks to the diagram's top-right
-  corner, can be dragged by its header and resized via the corner grip — size and position are
-  remembered.
+  it. Element ids and names are indexed in ⌘K search. The card also shows the element's own
+  documentation and the listeners it runs. It is a **free-floating window**: it starts docked to the
+  diagram's top-right corner but can be dragged and resized anywhere in the app — well past the
+  drawing area, which is what makes it usable when the diagram panel is narrow (an IDE tool window).
+  Size and position are remembered.
 - **Design vocabulary, explained** — node types, element types, parameter kinds and relationships are
   named the way Flowable Design names them (*Decision tables*, *AI agents*, *Services*, *Send payload
-  map*, *Decision task → decision table*), each with a hover text explaining what it means — so the map
-  is readable without having built Atlas.
+  map*, *Decision task → decision table*, *Execution listener*, *Case plan model*), each with a hover
+  text explaining what it means — so the map is readable without having built Atlas. The same words are
+  used in the generated Markdown (`overview.md` says *User task* / *Sequence flow*, the inventory counts
+  *2 data objects*), and a test keeps the two tables in step and fails if Atlas ever emits an identifier
+  nobody gave a Design term.
 
 ## Model navigation & validation
 
@@ -128,9 +157,9 @@ Everything is resolved against the Flowable models that actually live in your re
   service model.
 - **Coverage inspection** — flags changelog columns not mapped in the backing Flowable
   service/data-object model.
-- **Schema gaps tab** — a dedicated Explorer view (sidebar, next to Overview; the dashboard's
-  "Schema gaps" card routes there): every service's Liquibase → Service → Data object coverage,
-  its unmapped columns front and center, fully-mapped services collapsed to a chip row.
+- **Schema gaps tab** — a dedicated Explorer view (sidebar section *Checks*; the Checks tab and the
+  dashboard's "Schema gaps" card route there): every service's Liquibase → Service → Data object
+  coverage, its unmapped columns front and center, fully-mapped services collapsed to a chip row.
 
 ## Flowable expression support
 

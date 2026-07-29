@@ -293,8 +293,12 @@ object XmlHelpers {
 
     private val LISTENER_BEAN_RE = Regex("[#$]\\{\\s*([A-Za-z_]\\w*)")
 
-    /** Record class/bean/script references declared by a set of listeners. */
-    fun collectListenerRefs(ctx: Ctx, frm: Any?, ftype: String, ffile: String, listeners: List<Map<String, Any?>>) {
+    /** Record class/bean/script references declared by a set of listeners. [element]/[elementName] name
+     *  the element the listeners hang off, so a variable a listener script touches can say where. */
+    fun collectListenerRefs(
+        ctx: Ctx, frm: Any?, ftype: String, ffile: String, listeners: List<Map<String, Any?>>,
+        element: Any? = null, elementName: Any? = null,
+    ) {
         for (ls in listeners) {
             val rel = "${ls["kind"]}:${ls["event"]}"
             (ls["class"])?.let { ctx.addRef(frm, ftype, ffile, rel, "class", it) }
@@ -309,7 +313,8 @@ object XmlHelpers {
             (ls["signalName"])?.let { ctx.addRef(frm, ftype, ffile, "throws-signal", "signal", it) }
             (ls["messageName"])?.let { ctx.addRef(frm, ftype, ffile, "throws-message", "message", it) }
             (ls["errorCode"])?.let { ctx.addRef(frm, ftype, ffile, "throws-error", "error", it) }
-            VarHarvest.collectScriptVars(ctx, ls["script"] as? String, listOf(frm))
+            VarHarvest.collectScriptVars(ctx, ls["script"] as? String, listOf(frm),
+                element = element, elementName = elementName, elementType = ls["kind"] as? String)
         }
     }
 

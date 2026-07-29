@@ -1,6 +1,6 @@
 # Flowable project — `miniproject` (quick overview)
 
-_12 model files · 2 Java files · 45 nodes · 38 relationships · 3 user groups. Compact summary — use `--json` for the full graph, or open the HTML explorer._
+_12 model files · 2 Java files · 47 nodes · 38 relationships · 3 user groups. Compact summary — use `--json` for the full graph, or open the HTML explorer._
 
 ⚠ **1 file(s) could not be fully analyzed** (parse/read failures) — the map below may be incomplete. Details: `diagnostics` in graph.json / Warnings section of the overview.
 
@@ -8,9 +8,9 @@ _12 model files · 2 Java files · 45 nodes · 38 relationships · 3 user groups
 - **Demo App** (`demoApp`) — 5 models
 
 ## Inventory
-Models: 1 process · 1 case · 1 decision · 1 form · 2 dataObject · 1 service · 1 event · 1 action · 1 securityPolicy · 1 liquibase
+Models: 1 process · 1 case · 1 decision table · 1 form · 2 data objects · 1 service · 1 event · 1 action · 1 security policy · 1 Liquibase changelog
 Java: 1 controller · 1 component · 1 delegate
-Variables: 15 (grouped by scope: process / form / case / java / …)
+Variables: 17 (grouped by scope: process / form / case / java / …)
 Expressions: 4 backend ${ } · 3 frontend {{ }} · 0 string literals
 
 ## Entry points — who can start what

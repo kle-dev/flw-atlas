@@ -203,6 +203,42 @@ class ReferenceFixesTest {
         assertTrue(t.toString(), Triple("contains-decision", "decision", "d1") in t)
     }
 
+    @Test
+    fun dmnKeepsTheRuleRowsThemselves() {
+        // The rows ARE the business logic of a decision; only their count used to survive parsing, so a
+        // value that lives in a cell was neither shown nor findable.
+        val out = ModelParsers.parseDmn(
+            """<definitions>
+                 <decision id="d1" name="First">
+                   <decisionTable hitPolicy="FIRST">
+                     <input label="Total"><inputExpression><text>orderTotal</text></inputExpression></input>
+                     <output label="Approved" name="approved"/>
+                     <rule>
+                       <description>Large orders need approval.</description>
+                       <inputEntry><text>&gt; 100</text></inputEntry>
+                       <outputEntry><text>false</text></outputEntry>
+                     </rule>
+                     <rule>
+                       <inputEntry><text>&lt;= 100</text></inputEntry>
+                       <outputEntry><text>true</text></outputEntry>
+                     </rule>
+                   </decisionTable>
+                 </decision>
+               </definitions>""".toByteArray(), Ctx(), "d.dmn",
+        )
+        val d1 = out.first { it["key"] == "d1" }
+        @Suppress("UNCHECKED_CAST")
+        val rules = d1["rules"] as List<Map<String, Any?>>
+        assertEquals(2, rules.size)
+        assertEquals(listOf("> 100"), rules[0]["inputs"])
+        assertEquals(listOf("false"), rules[0]["outputs"])
+        assertEquals("Large orders need approval.", rules[0]["annotation"])
+        assertEquals(listOf("<= 100"), rules[1]["inputs"])
+        // a labelled input hides the expression it evaluates — keep both
+        assertEquals(listOf("Total"), d1["inputs"])
+        assertEquals(listOf("orderTotal"), d1["inputExpressions"])
+    }
+
     // ---------------------------------------------------------------- platform JSON models
 
     @Test
