@@ -9,10 +9,6 @@ import com.flowable.atlas.graph.Ctx
  */
 object VarHarvest {
 
-    private val SCRIPT_VAR_RE = Regex(
-        "\\b(?:(?:get|set)(?:Transient)?(?:Input|Output)" +
-            "|(?:set|get|has|remove)(?:Transient)?Variable(?:Local)?)" +
-            "\\s*\\(\\s*['\"]([A-Za-z_]\\w*)['\"]")
     private val DECL_VAR_RE = Regex(
         "\\b(?:resultVariableName|elementVariable|counterVariable|collectionVariable|" +
             "initiatorVariableName|variableName)=\"([A-Za-z_]\\w*)\"")
@@ -25,11 +21,23 @@ object VarHarvest {
     private val SRC_TARGET_RE = Regex("\\b(?:source|target)=\"([A-Za-z_]\\w*)\"")
     private val NAME_ATTR_RE = Regex("\\bname=\"([A-Za-z_]\\w*)\"")
 
-    /** Variables referenced inside a script body (Flowable API + legacy `*Variable` idioms). */
-    fun collectScriptVars(ctx: Ctx, script: String?, mkeys: List<Any?>) {
+    /**
+     * Variables a script body touches — the Flowable APIs *and* the bare identifiers the script reads
+     * out of its scope (see [ScriptVars]). [element]/[elementName]/[elementType] name the script's own
+     * element (a script task, a listener) so the variable node can say where it is used; a caller with
+     * no element context (a bot script *is* the model) may leave them out.
+     */
+    fun collectScriptVars(
+        ctx: Ctx, script: String?, mkeys: List<Any?>, format: String? = null,
+        element: Any? = null, elementName: Any? = null, elementType: String? = null,
+    ) {
         if (script.isNullOrEmpty()) return
-        val names = SCRIPT_VAR_RE.findAll(script).map { it.groupValues[1] }.toCollection(LinkedHashSet())
-        for (k in mkeys) for (n in names) ctx.addVar(k, n, "script_var_use")
+        val use = ScriptVars.analyze(script, format)
+        if (use.isEmpty) return
+        for (k in mkeys) {
+            for (n in use.api) ctx.addScriptVar(k, n, true, element, elementName, elementType)
+            for (n in use.reads) ctx.addScriptVar(k, n, false, element, elementName, elementType)
+        }
     }
 
     /** Declared/mapped backend variable names from raw XML (init vars, in/out, MI, params, …). */

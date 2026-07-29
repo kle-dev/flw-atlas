@@ -98,6 +98,9 @@ object ModelParsers {
     private fun listOfObjs(v: Any?): List<Map<String, Any?>> =
         (v as? List<*>).orEmpty().mapNotNull { objOf(it) }
 
+    /** How many decision-table rows are kept per decision; beyond that `rulesTruncated` records the real count. */
+    private const val DMN_RULE_LIMIT = 500
+
     /** `.dmn` — one entry per `<decision>`, with its decision-table shape when present. */
     fun parseDmn(data: ByteArray, ctx: Ctx, ffile: String): List<Map<String, Any?>> {
         val root = AtlasXml.parse(data)
@@ -116,6 +119,24 @@ object ModelParsers {
                 }
                 info["outputs"] = t.findChildren("output").map { it.attr("label") ?: it.attr("name") }
                 info["ruleCount"] = t.findChildren("rule").size
+                // The rows themselves — the actual business logic of a decision. Only the counts were
+                // kept before, so a value or condition that lives in a cell (`> 100`, `"REJECTED"`) was
+                // invisible: neither shown nor findable. Wide tables are common, so cap the list and
+                // say so rather than embedding thousands of rows in the explorer payload.
+                val ruleEls = t.findChildren("rule")
+                info["rules"] = ruleEls.take(DMN_RULE_LIMIT).map { r ->
+                    linkedMapOf(
+                        "id" to r.attr("id"),
+                        "inputs" to r.findChildren("inputEntry").map { it.textOfDescendant("text") },
+                        "outputs" to r.findChildren("outputEntry").map { it.textOfDescendant("text") },
+                        "annotation" to r.textOfDescendant("description"),
+                    )
+                }
+                if (ruleEls.size > DMN_RULE_LIMIT) info["rulesTruncated"] = ruleEls.size
+                // A labelled input hides the expression it evaluates (`inputs` prefers the label), and
+                // that expression is what a reader looks for when tracing a variable into a decision.
+                val inputExprs = t.findChildren("input").mapNotNull { it.textOfDescendant("text") }
+                if (inputExprs.isNotEmpty()) info["inputExpressions"] = inputExprs
                 // A decision table reads its input variables from, and writes its output names back
                 // into, the calling scope — index both so decisions join the variable graph.
                 for (inp in t.findChildren("input")) {
@@ -587,7 +608,7 @@ object ModelParsers {
         val config = objOf(doc["config"]) ?: emptyMap()
         val scriptInfo = objOf(config["scriptInfo"]) ?: emptyMap()
         val script = scriptInfo["script"] as? String
-        VarHarvest.collectScriptVars(ctx, script, listOf(key))
+        VarHarvest.collectScriptVars(ctx, script, listOf(key), scriptInfo["language"] as? String)
         return linkedMapOf(
             "key" to key, "name" to doc["name"], "file" to ffile, "botKey" to doc["botKey"],
             "formKey" to doc["formKey"], "signalName" to doc["signalName"], "channels" to doc["channels"],

@@ -12,7 +12,7 @@ const TM = {
   app:['Apps','Models'],process:['Processes','Models'],case:['Cases','Models'],
   decision:['Decision tables','Models'],form:['Forms','Models'],page:['Pages','Models'],
   dataObject:['Data objects','Models'],dataDictionary:['Data dictionaries','Models'],
-  masterData:['Master Data','Models'],
+  masterData:['Master data','Models'],
   service:['Services','Integration'],serviceOperation:['Service operations','Integration'],agent:['AI agents','Integration'],
   channel:['Channels','Integration'],event:['Events','Integration'],knowledgeBase:['Knowledge bases','Integration'],
   signal:['Signals','Integration'],message:['Messages','Integration'],error:['Errors','Integration'],
@@ -20,9 +20,9 @@ const TM = {
   endpoint:['REST endpoints','Code'],java:['Java classes','Code'],method:['Java methods','Code'],liquibase:['Liquibase changelogs','Code'],
   action:['Actions','Integration'],bot:['Bots','Integration'],
   query:['Queries','Other'],template:['Templates','Other'],sequence:['Sequences','Other'],
-  document:['Content','Other'],variableExtractor:['Variable Extractors','Other'],
+  document:['Content','Other'],variableExtractor:['Variable extractors','Other'],
   sla:['SLAs','Other'],dashboardComponent:['Dashboard components','Other'],
-  securityPolicy:['Security Policies','Access'],group:['User groups','Access'],
+  securityPolicy:['Security policies','Access'],group:['User groups','Access'],
   variable:['Variables','Variables'],
   expression:['Backend expressions ${ }','Expressions'],binding:['Frontend bindings {{ }}','Expressions'],
   string:['String literals','Expressions'],customFunction:['Custom functions 🧩','Expressions'],
@@ -109,6 +109,12 @@ const DESIGN_TERMS = {
   'el:variableEventListener': ['Variable listener', 'Fires when a variable changes.'],
   'el:intermediateCatchEvent': ['Intermediate catch event', 'Waits mid-flow for a timer, message or signal.'],
   'el:intermediateThrowEvent': ['Intermediate throw event', 'Publishes a signal/message mid-flow.'],
+  'el:eventListener': ['Event listener', 'A case element that waits for something — a timer, a user, a signal or a variable change.'],
+  'el:casePlanModel': ['Case plan model', 'The root stage of a case: everything the case can do lives inside it.'],
+  // --- listeners: what runs alongside an element rather than as one ---
+  'el:executionListener': ['Execution listener', 'Runs when the element starts or ends — a Java class, an expression or a script.'],
+  'el:taskListener': ['Task listener', 'Runs on a user task’s lifecycle: create, assignment, complete or delete.'],
+  'el:planItemLifecycleListener': ['Lifecycle listener', 'Runs when a plan item changes state — available, active, completed, terminated.'],
   // --- data-source kinds on a form/page component ---
   'kind-ds:dataObject': ['Data object', 'Rows or options come from a data object lookup.'],
   'kind-ds:service': ['Service', 'Rows or options come from a Service Registry operation.'],
@@ -142,6 +148,7 @@ const DESIGN_TERMS = {
   'rel:ruleTask-decision': ['Decision task → decision table', 'A decision task evaluates that decision table.'],
   'rel:serviceTask-class': ['Service task → Java class', 'The task runs that class as a JavaDelegate.'],
   'rel:serviceTask-delegate': ['Service task → bean', 'The task runs that Spring bean via a delegate expression.'],
+  'rel:task-delegate': ['Task → bean', 'The case task runs that Spring bean via a delegate expression.'],
   'rel:serviceMapping': ['Service registry task → service', 'The task calls an operation of that service.'],
   'rel:dataObjectMapping': ['Data object task → data object', 'The task creates, reads, updates, deletes or searches that data object.'],
   'rel:agentMapping': ['AI Agent → agent model', 'The task hands its input to that agent model.'],
@@ -180,6 +187,16 @@ const DESIGN_TERMS = {
   'rel:action-channel': ['Offered on channel', 'Where the action appears in the UI.'],
   'rel:assign': ['Assigned to', 'Who may work on it.'],
   'rel:start': ['May start', 'Who may start an instance.'],
+  'rel:owner': ['Owner', 'Who owns the instance or task.'],
+  'rel:watcher': ['Watcher', 'Who follows it without working on it.'],
+  // data-object permissions, as the security policy spells them
+  'rel:createInstances': ['May create', 'Who may create instances of that data object.'],
+  'rel:queryInstances': ['May query', 'Who may search instances of that data object.'],
+  'rel:updateInstances': ['May update', 'Who may change instances of that data object.'],
+  'rel:deleteInstances': ['May delete', 'Who may delete instances of that data object.'],
+  'rel:read': ['May read', 'Who may read it.'],
+  'rel:query': ['May query', 'Who may search it.'],
+  'rel:update': ['May update', 'Who may change it.'],
   'rel:open-app': ['May open app', 'Who may open the app.'],
   'rel:references': ['Code references key', 'A Java string literal equal to that model key.'],
   'rel:relates-to': ['Relates to', 'A field of this model points at that model.'],
@@ -230,6 +247,8 @@ const DESIGN_TERMS = {
   'rel:manually-start': ['May start manually', 'Who may manually start the plan item.'],
   'rel:use': ['May use', 'Who may use it.'],
   'rel:view': ['May view', 'Who may view it.'],
+  'rel:document-create-form': ['Document create form', 'Creating a document opens that form.'],
+  'rel:document-edit-form': ['Document edit form', 'Editing a document opens that form.'],
   'rel:dataObjectDataTableCreateFormKey': ['Data table create form', 'Creating a row opens that form.'],
   'rel:dataObjectDataTableEditFormKey': ['Data table edit form', 'Editing a row opens that form.'],
   'rel:dataObjectDataTableViewFormKey': ['Data table view form', 'Viewing a row opens that form.'],
@@ -238,7 +257,17 @@ const DESIGN_TERMS = {
 function term(ns, key){
   if(key==null||key==='') return {label:'', hint:''};
   const e=DESIGN_TERMS[ns+':'+key];
-  return {label:(e&&e[0])||String(key), hint:(e&&e[1])||''};
+  if(e) return {label:e[0]||String(key), hint:e[1]||''};
+  // Relations Atlas *composes* instead of taking from a vocabulary: a listener relation carries its
+  // event (`taskListener:complete`) and a bean call names the method (`calls asText()`). Resolve them
+  // from their stem — dumping the raw string on the reader is what the vocabulary is here to prevent.
+  if(ns==='rel'){
+    const m=String(key).match(/^([A-Za-z]+):(.+)$/);
+    const base=m&&DESIGN_TERMS['el:'+m[1]];
+    if(base) return {label:base[0]+' ('+m[2]+')', hint:base[1]||''};
+    if(/^calls .+\(\)$/.test(key)) return {label:String(key), hint:(DESIGN_TERMS['rel:calls']||[])[1]||''};
+  }
+  return {label:String(key), hint:''};
 }
 // A term rendered as text plus a native tooltip, so hovering explains it.
 function termHtml(ns, key, cls){
@@ -247,7 +276,9 @@ function termHtml(ns, key, cls){
   const c='term'+(cls?' '+cls:'');
   return '<span class="'+c+'"'+(t.hint?' title="'+esc(t.hint)+'"':'')+'>'+esc(t.label)+'</span>';
 }
-const SECTIONS = ['Models','Integration','Code','Expressions','Variables','Access','Other'];
+// Section headings say "Execution listeners" where a single row says "Execution listener".
+const plural = s => !s ? s : (/s$/.test(s) ? s : s+'s');
+const SECTIONS = ['Models','Integration','Code','Expressions','Checks','Variables','Access','Other'];
 // Colors are emitted as var() references, not resolved values: the browser resolves them
 // at paint time, so a theme switch restyles everything without any re-render (and there is
 // no getComputedStyle per node, which used to force a style recalculation in large lists).
@@ -297,7 +328,8 @@ const isUnusedForm = n => n.type==='form' && !(incM.get(n.id)||[]).some(e=>e.rel
 // state — the URL hash is the single source of truth for navigation (routes below);
 // `view` mirrors the active route, `cat`/`sel` drive the browse columns.
 // `focus` is the search term the current selection was reached with — highlighted in the detail panel.
-let state = {view:'overview', cat:null, sel:null, filter:'', sort:'name', focus:''};
+// `focusEl` is the model element a search hit came from — the detail panel opens that row directly.
+let state = {view:'overview', cat:null, sel:null, filter:'', sort:'name', focus:'', focusEl:''};
 
 // ---------- categories ----------
 function categories(){
@@ -328,7 +360,7 @@ function categories(){
       // (endpoints.*) and in-app navigation routes (#/...) from real third-party deps.
       [{id:'external::api',  label:'Flowable API',        sec:'Integration', color:color('endpoint'), match:n=>n.type==='external'&&n.data.flowableApi},
        {id:'external::route',label:'Navigation · routes', sec:'Other',       color:color('page'),     match:n=>n.type==='external'&&n.data.route},
-       {id:'external::missing',label:'Missing model refs',sec:'Other',       color:color('external'), match:n=>n.type==='external'&&n.data.missingModel},
+       {id:'external::missing',label:'Missing model refs',sec:'Checks',      color:color('external'), match:n=>n.type==='external'&&n.data.missingModel},
        {id:'external::lib',  label:'External / library',  sec:'Other',       color:color('external'), match:n=>n.type==='external'&&!n.data.flowableApi&&!n.data.route&&!n.data.missingModel}
       ].forEach(c=>{ const count=byType.external.filter(c.match).length; if(count) cats.push(Object.assign({count}, c)); });
     } else {
@@ -338,7 +370,7 @@ function categories(){
   });
   // a review list: forms that nothing links to (orphaned UI models worth pruning)
   const unusedForms = nodes.filter(isUnusedForm);
-  if(unusedForms.length) cats.push({id:'unused-form', label:'Forms · unused', sec:'Models',
+  if(unusedForms.length) cats.push({id:'unused-form', label:'Forms · unused', sec:'Checks',
     color:color('form'), count:unusedForms.length, match:isUnusedForm});
   // Review lists for flagged expressions/bindings. Structural syntax errors make an
   // expression *invalid*; catalog findings (unknown function/namespace — the catalog may
@@ -347,11 +379,22 @@ function categories(){
   const hasErr = n => isExprN(n) && (n.data.problems||[]).some(p=>p.severity==='error');
   const hasWarnOnly = n => isExprN(n) && (n.data.problems||[]).length && !(n.data.problems||[]).some(p=>p.severity==='error');
   const invalidExprs = nodes.filter(hasErr);
-  if(invalidExprs.length) cats.push({id:'invalid-expr', label:'Invalid — syntax ⚠', sec:'Expressions',
+  if(invalidExprs.length) cats.push({id:'invalid-expr', label:'Invalid — syntax ⚠', sec:'Checks',
     color:color('invalidExpr'), count:invalidExprs.length, match:hasErr});
   const suspectExprs = nodes.filter(hasWarnOnly);
-  if(suspectExprs.length) cats.push({id:'suspect-expr', label:'Suspect — review', sec:'Expressions',
+  if(suspectExprs.length) cats.push({id:'suspect-expr', label:'Suspect — review', sec:'Checks',
     color:color('suspectExpr'), count:suspectExprs.length, match:hasWarnOnly});
+  // A changelog nobody references, or one superseded by a later revision, is a schema surprise waiting.
+  const isChangelogIssue = n => n.type==='liquibase' &&
+    ['orphan','superseded'].indexOf(((n.data||{}).authority||{}).status)>=0;
+  const clIssues = nodes.filter(isChangelogIssue);
+  if(clIssues.length) cats.push({id:'changelog-issue', label:'Changelogs · orphan / superseded', sec:'Checks',
+    color:color('liquibase'), count:clIssues.length, match:isChangelogIssue});
+  // Variables whose only evidence is a bare identifier in a script — probably real, not provable.
+  const isGuessedVar = n => n.type==='variable' && (n.data||{}).heuristic===true;
+  const guessed = nodes.filter(isGuessedVar);
+  if(guessed.length) cats.push({id:'guessed-var', label:'Variables · script guess ≈', sec:'Checks',
+    color:color('variable'), count:guessed.length, match:isGuessedVar});
   cats.sort((a,b)=> (SECTIONS.indexOf(a.sec)-SECTIONS.indexOf(b.sec)) || a.label.localeCompare(b.label));
   return cats;
 }
@@ -376,7 +419,8 @@ function computeInsights(){
     .slice(0,10).map(x=>({id:x[0], count:x[1]}));
   const isExprN = n => n.type==='expression'||n.type==='binding';
   let invalidExpr=0, suspectExpr=0, unusedForms=0, changelogIssues=0, schemaGaps=0,
-      unusedOps=0, unusedFns=0, totalExprs=0, totalForms=0, totalChangelogs=0,
+      unusedOps=0, unusedFns=0, missingRefs=0, guessedVars=0,
+      totalExprs=0, totalForms=0, totalChangelogs=0,
       totalCovServices=0, totalOps=0, totalFns=0;
   nodes.forEach(n=>{
     const d=n.data||{};
@@ -389,20 +433,27 @@ function computeInsights(){
       if(c){ totalCovServices++; schemaGaps+=(c.noService||0)+(c.noDataObject||0); } }
     else if(n.type==='serviceOperation'){ totalOps++; if(!(d.usedBy||[]).length) unusedOps++; }
     else if(n.type==='customFunction'){ totalFns++; if(!(d.usedBy||[]).length) unusedFns++; }
+    else if(n.type==='external' && d.missingModel) missingRefs++;
+    if(n.type==='variable' && d.heuristic===true) guessedVars++;
   });
   const apps = nodes.filter(n=>n.type==='app')
     .map(a=>({id:a.id, models:containsByApp.get(a.id)||0, groups:openAppByApp.get(a.id)||0}))
     .sort((a,b)=>b.models-a.models);
+  const health = { parseIssues: diags.length+cfnDiags.length, invalidExpr, suspectExpr, unusedForms,
+                   changelogIssues, schemaGaps, missingRefs, guessedVars, unusedOps, unusedFns };
   INSIGHTS = { indeg, hotspots, apps, entryPoints,
     totalExprs, totalForms, totalChangelogs, totalCovServices, totalOps, totalFns,
-    health: { parseIssues: diags.length+cfnDiags.length, invalidExpr, suspectExpr, unusedForms,
-              changelogIssues, schemaGaps, unusedOps, unusedFns } };
+    health,
+    // what the Checks tab counts in its badge: every open finding, in one number
+    checksOpen: Object.keys(health).reduce((a,k)=>a+health[k],0) };
 }
 
 // ---------- router — the hash is the single source of truth and the history ----------
 // ''              -> overview (default)
 // #/overview      -> overview
 // #/schema        -> schema-gaps report (Liquibase → Service → Data object)
+// #/checks        -> everything worth a look, in one place
+// #/scripts       -> every script body in the project
 // #/browse/<cat>  -> browse, category list without selection
 // #<nodeId>       -> legacy permalink format: browse with that node selected (kept so
 //                    every previously copied link keeps working). enc() escapes '/', so
@@ -411,21 +462,29 @@ function parseHash(){
   const raw = location.hash.slice(1);
   if(!raw || raw==='/overview') return {view:'overview'};
   if(raw==='/schema') return {view:'schema'};
+  if(raw==='/scripts') return {view:'scripts'};
+  if(raw==='/checks') return {view:'checks'};
   if(raw.indexOf('/browse/')===0){
     const cat = dec(raw.slice(8));
     return CATS.some(c=>c.id===cat) ? {view:'browse', cat} : {view:'overview'};
   }
   if(raw.charAt(0)==='/') return {view:'overview'};      // unknown route
-  // A node route may carry the search term that led here: `#<encId>&q=<encTerm>`. Ids are URI-encoded,
-  // so a literal '&' cannot occur in the id part and the split is unambiguous.
+  // A node route may carry the search term that led here and the element the hit came from:
+  // `#<encId>&q=<encTerm>&e=<encElementId>`. Every part is URI-encoded, so a literal '&' cannot occur
+  // inside one and the splits are unambiguous.
   const amp = raw.indexOf('&q=');
-  const id = dec(amp<0 ? raw : raw.slice(0, amp));
-  const q  = amp<0 ? '' : dec(raw.slice(amp+3));
-  return byId.get(id) ? {view:'browse', sel:id, q} : {view:'overview'};
+  const ael = raw.indexOf('&e=');
+  const cut = amp<0 ? ael : (ael<0 ? amp : Math.min(amp, ael));
+  const id  = dec(cut<0 ? raw : raw.slice(0, cut));
+  const q   = amp<0 ? '' : dec(ael>amp ? raw.slice(amp+3, ael) : raw.slice(amp+3));
+  const e   = ael<0 ? '' : dec(raw.slice(ael+3));
+  return byId.get(id) ? {view:'browse', sel:id, q, e} : {view:'overview'};
 }
 function showView(v){
   document.getElementById('view-overview').hidden = v!=='overview';
   document.getElementById('view-schema').hidden = v!=='schema';
+  document.getElementById('view-scripts').hidden = v!=='scripts';
+  document.getElementById('view-checks').hidden = v!=='checks';
   document.getElementById('view-browse').hidden = v!=='browse';
 }
 let _navCount = 0;
@@ -434,6 +493,7 @@ function route(){
   _navCount++;
   const r = parseHash();
   state.focus = r.q || '';
+  state.focusEl = r.e || '';
   if(r.view==='overview'){
     state.view='overview'; state.sel=null;
     showView('overview'); renderDashboard();
@@ -441,6 +501,14 @@ function route(){
   } else if(r.view==='schema'){
     state.view='schema'; state.sel=null;
     showView('schema'); renderSchema();
+    renderSidebarActive(); renderCrumbs();
+  } else if(r.view==='scripts'){
+    state.view='scripts'; state.sel=null;
+    showView('scripts'); renderScripts();
+    renderSidebarActive(); renderCrumbs();
+  } else if(r.view==='checks'){
+    state.view='checks'; state.sel=null;
+    showView('checks'); renderChecks();
     renderSidebarActive(); renderCrumbs();
   } else if(r.sel){
     applySelection(r.sel);                                // handles view/list/detail/crumbs
@@ -459,7 +527,10 @@ function renderSidebar(){
   const mkItem = (html, title) => {
     const el=document.createElement('div');
     el.className='side-item'; el.setAttribute('role','button'); el.tabIndex=0;
-    el.setAttribute('aria-pressed','false'); el.title=title; el.innerHTML=html;
+    // No tooltip on a menu entry: the label and count are right there, and a bubble popping up under
+    // the cursor while you slide down the list is pure noise. In rail mode the sidebar flies out on
+    // hover, so the label is never actually hidden. The text stays available to screen readers.
+    el.setAttribute('aria-pressed','false'); el.setAttribute('aria-label', title); el.innerHTML=html;
     el.onkeydown=e=>{
       if(e.key==='Enter'||e.key===' '){ e.preventDefault(); el.click(); }
       else if(e.key==='ArrowDown'||e.key==='ArrowUp'){
@@ -475,23 +546,33 @@ function renderSidebar(){
   ov.dataset.route='/overview';
   ov.onclick=()=>{ location.hash='/overview'; };
   nav.appendChild(ov);
-  // The schema-gaps report gets a tab of its own whenever any service declares coverage data.
+  // A tab belongs to a section like any other list — "Script tasks" is an Integration thing, the
+  // review reports belong under Checks. `pri` keeps a section's tabs above its drill-down lists.
+  const items=[...CATS];
+  const scriptCount=allScripts().length;
+  if(scriptCount) items.push({route:'/scripts', label:'Script tasks', sec:'Integration', pri:0,
+    color:color('process'), count:scriptCount,
+    tip:'Script tasks ('+scriptCount+') — every script task, listener script and bot script'});
+  const openChecks=INSIGHTS.checksOpen;
+  items.push({route:'/checks', label:'Checks', sec:'Checks', pri:0,
+    color:covColor(openChecks?'bad':'good'), count:openChecks,
+    tip:'Everything worth a look — parse issues, flagged expressions, schema gaps, unused and unproven models'});
   if(INSIGHTS.totalCovServices>0){
     const gaps=INSIGHTS.health.schemaGaps;
-    const sg=mkItem('<span class="dot" style="background:'+covColor(gaps?'bad':'good')+'"></span>'+
-      '<span class="lbl">Schema gaps</span>'+(gaps?'<span class="n">'+gaps+'</span>':''),
-      'Schema gaps — Liquibase → Service → Data object coverage');
-    sg.dataset.route='/schema';
-    sg.onclick=()=>{ location.hash='/schema'; };
-    nav.appendChild(sg);
+    items.push({route:'/schema', label:'Schema gaps', sec:'Checks', pri:1,
+      color:covColor(gaps?'bad':'good'), count:gaps,
+      tip:'Schema gaps — Liquibase → Service → Data object coverage'});
   }
+  items.sort((a,b)=> (SECTIONS.indexOf(a.sec)-SECTIONS.indexOf(b.sec)) ||
+                     ((a.pri==null?2:a.pri)-(b.pri==null?2:b.pri)) || a.label.localeCompare(b.label));
   let cur='';
-  CATS.forEach(c=>{
+  items.forEach(c=>{
     if(c.sec!==cur){ cur=c.sec; const h=document.createElement('div'); h.className='side-group'; h.textContent=cur; nav.appendChild(h); }
-    const el = mkItem('<span class="dot" style="background:'+c.color+'"></span><span class="lbl">'+esc(c.label)+'</span><span class="n">'+c.count+'</span>',
-                      c.label+' ('+c.count+')');
-    el.dataset.cat=c.id;
-    el.onclick=()=>{ location.hash='/browse/'+enc(c.id); };
+    const el = mkItem('<span class="dot" style="background:'+c.color+'"></span><span class="lbl">'+esc(c.label)+'</span>'+
+                      (c.count?'<span class="n">'+c.count+'</span>':''),
+                      c.tip||(c.label+' ('+c.count+')'));
+    if(c.route){ el.dataset.route=c.route; el.onclick=()=>{ location.hash=c.route; }; }
+    else { el.dataset.cat=c.id; el.onclick=()=>{ location.hash='/browse/'+enc(c.id); }; }
     nav.appendChild(el);
   });
   // footer warning chip — routes to the dashboard and reveals the diagnostics list
@@ -500,10 +581,11 @@ function renderSidebar(){
     const n=diags.length+cfnDiags.length;
     chip.hidden=false;
     chip.innerHTML='⚠<span class="wtxt">&nbsp;'+n+' parse issue'+(n>1?'s':'')+'</span>';
-    chip.title=n+' parse issue'+(n>1?'s':'')+' — files the generator could not fully analyze';
+    chip.setAttribute('aria-label',
+      n+' parse issue'+(n>1?'s':'')+' — files the generator could not fully analyze');
     chip.onclick=()=>{
-      _revealDiag=true;
-      if(state.view==='overview') renderDashboard(); else location.hash='/overview';
+      _checkJump='chk-parse';
+      if(state.view==='checks') renderChecks(); else location.hash='/checks';
     };
   }
 }
@@ -529,6 +611,12 @@ function renderCrumbs(){
   } else if(state.view==='schema'){
     h=link(DATA.project,'#/overview')+sep+cur('Schema gaps');
     title='Schema gaps — Flowable Atlas';
+  } else if(state.view==='scripts'){
+    h=link(DATA.project,'#/overview')+sep+cur('Script tasks');
+    title='Script tasks — Flowable Atlas';
+  } else if(state.view==='checks'){
+    h=link(DATA.project,'#/overview')+sep+cur('Checks');
+    title='Checks — Flowable Atlas';
   } else {
     const cat=CATS.find(x=>x.id===state.cat);
     const n=state.sel&&byId.get(state.sel);
@@ -542,7 +630,9 @@ function renderCrumbs(){
 }
 
 // ---------- dashboard (#/overview) ----------
-let _revealDiag=false;
+// A health card on the overview is a shortcut into the Checks tab: remember which block it wants and
+// let `renderChecks()` scroll there once the route has landed.
+let _checkJump=null;
 function renderDashboard(){
   const v=document.getElementById('view-overview');
   const st=DATA.stats||{}, H=INSIGHTS.health;
@@ -558,46 +648,14 @@ function renderDashboard(){
    ['REST endpoints',st.endpoints,'served by controllers'],['User groups',st.groups,'referenced in access rules']]
     .forEach(m=>{ h+='<div class="metric"><div class="mk">'+m[0]+'</div><div class="mv">'+(m[1]||0)+'</div><div class="ms">'+m[2]+'</div></div>'; });
   h+='</div>';
-  // health
-  const cards=[
-    {k:'parseIssues', label:'Parse issues', bad:true, diag:true,
-     sub:c=>c?'files the analyzer could not fully read':'all files analyzed cleanly', show:true},
-    {k:'invalidExpr', label:'Invalid expressions', bad:true, cat:'invalid-expr',
-     sub:c=>c?'syntax errors in ${ } / {{ }}':'no syntax errors', show:INSIGHTS.totalExprs>0},
-    {k:'suspectExpr', label:'Suspect expressions', cat:'suspect-expr',
-     sub:c=>c?'flagged for review by the catalog':'nothing flagged', show:INSIGHTS.totalExprs>0},
-    {k:'unusedForms', label:'Unused forms', cat:'unused-form',
-     sub:c=>c?'no model links to them':'every form is referenced', show:INSIGHTS.totalForms>0},
-    {k:'changelogIssues', label:'Changelog issues', cat:'liquibase',
-     sub:c=>c?'orphan or superseded changelogs':'all changelogs are authoritative', show:INSIGHTS.totalChangelogs>0},
-    {k:'schemaGaps', label:'Schema gaps', bad:true, route:'/schema',
-     sub:c=>c?'columns not mapped through Liquibase → service → data object':'all columns mapped through', show:INSIGHTS.totalCovServices>0},
-    {k:'unusedOps', label:'Unused operations', cat:'serviceOperation',
-     sub:c=>c?c+' of '+INSIGHTS.totalOps+' operations are never called from a model':'every operation is used', show:INSIGHTS.totalOps>0},
-    {k:'unusedFns', label:'Unused custom functions', cat:'customFunction',
-     sub:c=>c?c+' of '+INSIGHTS.totalFns+' functions are never called':'every function is used', show:INSIGHTS.totalFns>0},
-  ].filter(c=>c.show);
-  if(cards.length){
-    h+='<div class="seclabel">Health</div><div class="health">';
-    cards.forEach(c=>{
-      const n=H[c.k];
-      const tone=n===0?'ok':(c.bad?'bad':'warn');
-      const click=n>0&&(c.diag||c.route||(c.cat&&CATS.some(x=>x.id===c.cat)));
-      const attrs=click?(c.diag?' data-diag="1"':c.route?' data-route="'+esc(c.route)+'"':' data-cat="'+esc(c.cat)+'"')+' role="button" tabindex="0"':'';
-      h+='<div class="hcard tone-'+tone+(click?' click':'')+'"'+attrs+'>'+
-         '<div class="mk">'+c.label+'</div><div class="mv">'+n+'</div>'+
-         '<div class="ms">'+esc(c.sub(n))+'</div></div>';
-    });
-    h+='</div>';
-  }
-  // inline diagnostics list (replaces the old floating panel)
-  if(diags.length+cfnDiags.length){
-    h+='<details id="diaglist"><summary>'+(diags.length+cfnDiags.length)+' parse issue'+
-       (diags.length+cfnDiags.length>1?'s':'')+' — the map may be incomplete</summary>';
-    h+=diags.map(d=>'<div class="dp-row"><span class="dp-kind">'+esc(d.kind)+'</span>'+
-      '<span class="dp-path mono">'+esc(d.path)+'</span><span class="dp-msg">'+esc(d.message)+'</span></div>').join('');
-    h+=cfnDiags.map(m=>'<div class="dp-row"><span class="dp-kind">custom-fn</span><span class="dp-msg">'+esc(m)+'</span></div>').join('');
-    h+='</details>';
+  // health — the same cards the Checks tab shows; the overview stays a summary and links there for the
+  // findings themselves (one place to review, instead of two that drift apart)
+  const cardsHtml=healthCardsHtml();
+  if(cardsHtml){
+    const open=INSIGHTS.checksOpen;
+    h+='<div class="seclabel" style="display:flex;align-items:center;gap:var(--space-2)">Health'+
+       '<button class="dgbtn" data-route="/checks">'+
+       (open?open+' finding'+(open>1?'s':'')+' to review ↗':'open Checks ↗')+'</button></div>'+cardsHtml;
   }
   // hotspots
   if(INSIGHTS.hotspots.length){
@@ -638,24 +696,20 @@ function renderDashboard(){
   h+='</div>';
   v.innerHTML=h;
   v.onclick=e=>{
+    const jump=e.target.closest('[data-jump]');
+    if(jump){ _checkJump=jump.dataset.jump; location.hash='/checks'; return; }
     const idEl=e.target.closest('[data-id]');
     if(idEl){ select(dec(idEl.dataset.id)); return; }
     const rtEl=e.target.closest('[data-route]');
     if(rtEl){ location.hash=rtEl.dataset.route; return; }
     const catEl=e.target.closest('[data-cat]');
     if(catEl){ location.hash='/browse/'+enc(catEl.dataset.cat); return; }
-    if(e.target.closest('[data-diag]')) revealDiagList();
   };
   v.onkeydown=e=>{
     if(e.key!=='Enter'&&e.key!==' ') return;
-    const t=e.target.closest('[data-id],[data-route],[data-cat],[data-diag]');
+    const t=e.target.closest('[data-id],[data-route],[data-cat],[data-jump]');
     if(t){ e.preventDefault(); t.click(); }
   };
-  if(_revealDiag){ _revealDiag=false; revealDiagList(); }
-}
-function revealDiagList(){
-  const dl=document.getElementById('diaglist');
-  if(dl){ dl.open=true; dl.scrollIntoView({block:'center'}); }
 }
 
 // ---------- schema coverage: one renderer for the service detail AND the schema tab ----------
@@ -738,6 +792,316 @@ function renderSchema(){
   v.onclick=e=>{ const idEl=e.target.closest('[data-id]'); if(idEl) select(dec(idEl.dataset.id)); };
   v.onkeydown=e=>{ if(e.key!=='Enter'&&e.key!==' ') return;
     const t=e.target.closest('[data-id]'); if(t){ e.preventDefault(); t.click(); } };
+}
+
+// ---------- checks view (#/checks) ----------
+// Everything Atlas cannot answer for you, on one page: parse issues, flagged expressions, schema gaps,
+// models nothing references, references to models that do not exist, and the variables only a script
+// guess supports. The sidebar's Checks section holds this tab plus the drill-down list per finding.
+const CHECK_CARDS = [
+  {k:'parseIssues', label:'Parse issues', bad:true, jump:'chk-parse',
+   sub:c=>c?'files the analyzer could not fully read':'all files analyzed cleanly', show:()=>true},
+  {k:'invalidExpr', label:'Invalid expressions', bad:true, cat:'invalid-expr', jump:'chk-invalid',
+   sub:c=>c?'syntax errors in ${ } / {{ }}':'no syntax errors', show:()=>INSIGHTS.totalExprs>0},
+  {k:'suspectExpr', label:'Suspect expressions', cat:'suspect-expr', jump:'chk-suspect',
+   sub:c=>c?'flagged for review by the catalog':'nothing flagged', show:()=>INSIGHTS.totalExprs>0},
+  {k:'schemaGaps', label:'Schema gaps', bad:true, route:'/schema', jump:'chk-schema',
+   sub:c=>c?'columns not mapped through Liquibase → service → data object':'all columns mapped through',
+   show:()=>INSIGHTS.totalCovServices>0},
+  {k:'missingRefs', label:'Missing model refs', bad:true, cat:'external::missing', jump:'chk-missing',
+   sub:c=>c?'a key is referenced but no model defines it':'every referenced key resolves', show:()=>true},
+  {k:'unusedForms', label:'Unused forms', cat:'unused-form', jump:'chk-unusedforms',
+   sub:c=>c?'no model links to them':'every form is referenced', show:()=>INSIGHTS.totalForms>0},
+  {k:'changelogIssues', label:'Changelog issues', cat:'changelog-issue', jump:'chk-changelogs',
+   sub:c=>c?'orphan or superseded changelogs':'all changelogs are authoritative',
+   show:()=>INSIGHTS.totalChangelogs>0},
+  {k:'guessedVars', label:'Variables · script guess', cat:'guessed-var', jump:'chk-guessed',
+   sub:c=>c?'only a bare identifier in a script names them':'every variable is declared somewhere',
+   show:()=>true},
+  {k:'unusedOps', label:'Unused operations', cat:'serviceOperation', jump:'chk-unusedops',
+   sub:c=>c?c+' of '+INSIGHTS.totalOps+' operations are never called from a model':'every operation is used',
+   show:()=>INSIGHTS.totalOps>0},
+  {k:'unusedFns', label:'Unused custom functions', cat:'customFunction', jump:'chk-unusedfns',
+   sub:c=>c?c+' of '+INSIGHTS.totalFns+' functions are never called':'every function is used',
+   show:()=>INSIGHTS.totalFns>0},
+];
+function healthCardsHtml(){
+  const H=INSIGHTS.health;
+  const cards=CHECK_CARDS.filter(c=>c.show());
+  if(!cards.length) return '';
+  return '<div class="health">'+cards.map(c=>{
+    const n=H[c.k], tone=n===0?'ok':(c.bad?'bad':'warn');
+    const attrs=n>0?' data-jump="'+c.jump+'" role="button" tabindex="0"':'';
+    return '<div class="hcard tone-'+tone+(n>0?' click':'')+'"'+attrs+'>'+
+      '<div class="mk">'+esc(c.label)+'</div><div class="mv">'+n+'</div>'+
+      '<div class="ms">'+esc(c.sub(n))+'</div></div>';
+  }).join('')+'</div>';
+}
+function renderChecks(){
+  const v=document.getElementById('view-checks');
+  const H=INSIGHTS.health, st=DATA.stats||{};
+  const open=INSIGHTS.checksOpen;
+  let h='<div class="dash">';
+  h+='<div class="dash-title">Checks</div>'+
+     '<div class="dash-sub">'+(open
+       ? open+' finding'+(open>1?'s':'')+' worth a look — none of them is automatically a bug, each one is a '+
+         'question Atlas cannot answer on its own'
+       : 'nothing flagged — no parse issues, no broken expressions, nothing unused or unproven')+'</div>';
+  h+=healthCardsHtml();
+  // one block per finding, with the actual items rather than only a number
+  const block=(id,title,count,body,cat)=>{
+    if(!count) return '';
+    const list=cat&&CATS.some(x=>x.id===cat)
+      ? '<button class="dgbtn" data-cat="'+esc(cat)+'">open the list ↗</button>' : '';
+    return '<div class="seclabel" id="'+id+'" style="display:flex;align-items:center;gap:var(--space-2)">'+
+      esc(title)+' <span class="muted">'+count+'</span>'+list+'</div>'+body;
+  };
+  const chips=list=>'<div class="nodechips">'+list.map(n=>nodeChip(n.id)).join('')+'</div>';
+  // parse issues — the analyzer's own honesty about what it could not read
+  if(diags.length+cfnDiags.length){
+    h+=block('chk-parse','Parse issues', diags.length+cfnDiags.length,
+      '<div class="dashrows">'+
+      diags.map(d=>'<div class="dp-row"><span class="dp-kind">'+esc(d.kind)+'</span>'+
+        '<span class="dp-path mono">'+esc(d.path)+'</span><span class="dp-msg">'+esc(d.message)+'</span></div>').join('')+
+      cfnDiags.map(m=>'<div class="dp-row"><span class="dp-kind">custom-fn</span>'+
+        '<span class="dp-msg">'+esc(m)+'</span></div>').join('')+'</div>');
+  }
+  // flagged expressions: the message and who uses them, so the fix is one click away
+  const exprRows=list=>'<div class="dashrows">'+list.slice(0,60).map(n=>{
+    const pr=(n.data||{}).problems||[];
+    return '<div class="dashrow" style="align-items:flex-start;flex-wrap:wrap">'+
+      '<span class="nm mono" data-id="'+enc(n.id)+'" role="link" tabindex="0" style="flex:1;min-width:200px">'+
+        esc(n.label)+'</span>'+
+      '<span class="ty">'+esc(pr.map(p=>p.message).join(' · '))+'</span>'+
+      ((n.data||{}).usedBy||[]).slice(0,4).map(id=>byId.get(id)?nodeChip(id):'').join('')+
+      '</div>';
+  }).join('')+(list.length>60?'<div class="dashrow muted">+ '+(list.length-60)+' more — open the list</div>':'')+'</div>';
+  const byCat=id=>{ const c=CATS.find(x=>x.id===id); return c?nodes.filter(c.match):[]; };
+  h+=block('chk-invalid','Invalid expressions — syntax', H.invalidExpr, exprRows(byCat('invalid-expr')), 'invalid-expr');
+  h+=block('chk-suspect','Suspect expressions — review', H.suspectExpr, exprRows(byCat('suspect-expr')), 'suspect-expr');
+  // schema gaps: the per-service summary; the full column table lives in its own tab
+  if(H.schemaGaps){
+    const svcs=nodes.filter(n=>n.type==='service'&&((n.data||{}).schemaCoverage||{}).counts)
+      .map(n=>{ const c=n.data.schemaCoverage.counts; return {n, gaps:(c.noService||0)+(c.noDataObject||0)}; })
+      .filter(x=>x.gaps).sort((a,b)=>b.gaps-a.gaps);
+    h+=block('chk-schema','Schema gaps', H.schemaGaps,
+      '<div class="dashrows">'+svcs.map(x=>'<div class="dashrow">'+nodeChip(x.n.id)+
+        '<span class="ty">'+x.gaps+' column'+(x.gaps>1?'s':'')+' not mapped through</span></div>').join('')+
+      '<div class="dashrow"><button class="dgbtn" data-route="/schema">open the full report ↗</button></div></div>');
+  }
+  h+=block('chk-missing','Missing model references', H.missingRefs, chips(byCat('external::missing')), 'external::missing');
+  h+=block('chk-unusedforms','Unused forms', H.unusedForms, chips(byCat('unused-form')), 'unused-form');
+  h+=block('chk-changelogs','Changelogs · orphan / superseded', H.changelogIssues,
+    chips(byCat('changelog-issue')), 'changelog-issue');
+  h+=block('chk-guessed','Variables · only a script guess ≈', H.guessedVars, chips(byCat('guessed-var')), 'guessed-var');
+  h+=block('chk-unusedops','Unused service operations', H.unusedOps,
+    chips(nodes.filter(n=>n.type==='serviceOperation'&&!((n.data||{}).usedBy||[]).length)), 'serviceOperation');
+  h+=block('chk-unusedfns','Unused custom functions', H.unusedFns,
+    chips(nodes.filter(n=>n.type==='customFunction'&&!((n.data||{}).usedBy||[]).length)), 'customFunction');
+  // uncertain edges are a property of the graph, not of one node — say so once
+  const suN=st.suspectEdges||0, dyN=st.dynamicEdges||0;
+  if(suN+dyN){
+    h+='<div class="seclabel">Uncertain links <span class="muted">'+(suN+dyN)+'</span></div>'+
+       '<div class="dashrows"><div class="dashrow muted">'+
+       (suN?suN+' suspect (≈ resolved by a loose or cross-type match)':'')+
+       (suN&&dyN?' · ':'')+(dyN?dyN+' dynamic (ƒ expression-valued reference)':'')+
+       ' — the ≈ button in the toolbar hides them everywhere.</div></div>';
+  }
+  if(!open) h+='<div class="estate"><div class="estate-ic" aria-hidden="true">✓</div>'+
+    '<div class="et">Nothing to check</div>'+
+    '<div class="eh">No parse issue, no flagged expression, no unused or unresolved model.</div></div>';
+  h+='</div>';
+  v.innerHTML=h;
+  v.onclick=e=>{
+    const jump=e.target.closest('[data-jump]');
+    if(jump){ const t=document.getElementById(jump.dataset.jump);
+      if(t) t.scrollIntoView({block:'start'}); return; }
+    const cat=e.target.closest('[data-cat]');
+    if(cat){ location.hash='/browse/'+enc(cat.dataset.cat); return; }
+    const route=e.target.closest('[data-route]');
+    if(route){ location.hash=route.dataset.route; return; }
+    const idEl=e.target.closest('[data-id]');
+    if(idEl) select(dec(idEl.dataset.id));
+  };
+  v.onkeydown=e=>{ if(e.key!=='Enter'&&e.key!==' ') return;
+    const t=e.target.closest('[data-jump],[data-cat],[data-route],[data-id]');
+    if(t){ e.preventDefault(); t.click(); } };
+  // arrived from a health card or the parse-issue chip: land on the block it asked for
+  if(_checkJump){
+    const target=document.getElementById(_checkJump);
+    _checkJump=null;
+    if(target) requestAnimationFrame(()=>target.scrollIntoView({block:'start'}));
+  }
+}
+
+// ---------- script tasks view (every script body in the project, in one place) ----------
+// A script is not a node of its own — it lives inside a script task, a CMMN plan item, a listener or a
+// bot — so "show me all the code in this project" used to mean opening every model in turn. Rebuilt on
+// each visit from the payload; there is nothing to cache and the counts stay honest.
+// `elKind` is the Design element the script belongs to (`scriptTask`, `executionListener`, …); `group`
+// is the coarse bucket the filter chips work on.
+function allScripts(){
+  const out=[];
+  const add=(n,o)=>{ if(o.body) out.push(Object.assign({model:n.id, modelLabel:n.label, modelType:n.type}, o)); };
+  nodes.forEach(n=>{
+    const d=n.data||{};
+    if(n.type==='process'){
+      (d.scriptTasks||[]).forEach(t=>add(n,{group:'script', elKind:'scriptTask', el:t.id, elName:t.name,
+        lang:t.format||t.scriptFormat, body:t.script, doc:t.documentation, out:t.resultVariable}));
+    }
+    if(n.type==='case' && d.planModel){
+      // CMMN keeps its script tasks in the plan tree (`<task flowable:type="script">`)
+      (function walk(nd){
+        if(nd.script) add(n,{group:'script', elKind:'serviceTask/script', el:nd.id, elName:nd.name,
+          lang:nd.scriptFormat, body:nd.script, doc:nd.documentation});
+        (nd.children||[]).forEach(walk);
+      })(d.planModel);
+    }
+    if(n.type==='process'||n.type==='case'){
+      const listener=(r,l)=>({group:'listener', elKind:l.kind, event:l.event,
+        el:r?r.id:null, elName:r?r.name:null, body:l.script});
+      (d.listeners||[]).forEach(l=>add(n, listener(null,l)));
+      elementRecords(n).forEach(r=>(r.listeners||[]).forEach(l=>add(n, listener(r,l))));
+    }
+    if(n.type==='action') add(n,{group:'bot', lang:d.scriptLanguage, body:d.script});
+  });
+  return out;
+}
+/** Chip buckets, in reading order. A bot script has no Design element of its own — it *is* the action. */
+const SCRIPT_GROUPS=[{id:'script', label:'Script tasks'},{id:'listener', label:'Listeners'},
+                     {id:'bot', label:'Bot scripts'}];
+/** The Design words for one script row: its element term plus the lifecycle event it hangs off. */
+function scriptKindLabel(s){
+  if(s.group==='bot') return 'Bot script';
+  const base=term('el', s.elKind).label || 'Script';
+  return s.event ? base+' · '+s.event : base;
+}
+/** `"<model>|<element>"` → the variables that script touches, inverted from the variable nodes. */
+function scriptVarIndex(){
+  const m=new Map();
+  nodes.forEach(n=>{
+    if(n.type!=='variable') return;
+    ((n.data||{}).scriptSites||[]).forEach(s=>{
+      const k=s.model+'|'+(s.element==null?'':s.element);
+      if(!m.has(k)) m.set(k,[]);
+      m.get(k).push({name:n.label, api:s.api});
+    });
+  });
+  return m;
+}
+function renderScripts(){
+  const v=document.getElementById('view-scripts');
+  const all=allScripts(), varIdx=scriptVarIndex();
+  const lines=s=>String(s.body).split('\n').length;
+  const byModel=new Map();
+  all.forEach(s=>{ if(!byModel.has(s.model)) byModel.set(s.model,[]); byModel.get(s.model).push(s); });
+  const models=[...byModel.keys()].sort((a,b)=>{
+    const la=(byId.get(a)||{}).label||a, lb=(byId.get(b)||{}).label||b;
+    return la.localeCompare(lb);
+  });
+  const totalLines=all.reduce((a,s)=>a+lines(s),0);
+  let h='<div class="dash">';
+  h+='<div class="dash-title">Script tasks</div>'+
+     '<div class="dash-sub">'+(all.length
+       ? all.length+' script'+(all.length>1?'s':'')+' in '+models.length+' model'+(models.length>1?'s':'')+
+         ' · '+totalLines+' line'+(totalLines>1?'s':'')+
+         ' — script tasks, listener scripts and bot scripts, with the variables each one touches'
+       : 'no model in this project carries a script')+'</div>';
+  if(!all.length){
+    h+='<div class="estate"><div class="estate-ic" aria-hidden="true">{ }</div>'+
+       '<div class="et">No script tasks</div>'+
+       '<div class="eh">Nothing to show — no script task, listener script or bot script was found.</div></div>';
+  } else {
+    // chips narrow by kind (same single-select pattern as the parameter sections), the text box searches
+    // names, languages and the code itself
+    const chip=(id,label,n)=>'<button class="pchip'+(id==='all'?' on':'')+'" data-group="'+id+'">'+
+      esc(label)+'<span class="pchipn">'+n+'</span></button>';
+    h+='<div class="pbar"><input class="pf" type="search" placeholder="filter scripts — name, language, code…" '+
+       'aria-label="Filter script tasks">'+
+       chip('all','All',all.length)+
+       SCRIPT_GROUPS.filter(g=>all.some(s=>s.group===g.id))
+         .map(g=>chip(g.id,g.label,all.filter(s=>s.group===g.id).length)).join('')+
+       '<button class="pchip" id="scriptsall"></button><span class="pcount"></span></div>';
+    models.forEach(mid=>{
+      const rows=byModel.get(mid);
+      h+='<div class="seclabel" style="display:flex;align-items:center;gap:var(--space-2)">'+
+         nodeChip(mid)+'<span class="muted">'+rows.length+' script'+(rows.length>1?'s':'')+'</span></div>';
+      h+=rows.map(s=>{
+        const vars=varIdx.get(s.model+'|'+(s.el==null?'':s.el))||[];
+        const chips=vars.map(x=>'<span class="'+(x.api?'':'muted ')+'">'+
+          vlink('variable:'+x.name, (x.api?'':'≈ ')+x.name)+'</span>').join(' ');
+        // a bot script IS its model, and a model-level listener has only its kind to go by
+        const kind=scriptKindLabel(s);
+        const title=s.elName||s.el||(s.group==='bot'?s.modelLabel:kind);
+        const jump=s.el?'<span class="opref" data-goto="'+enc(s.model)+'" data-goto-el="'+esc(String(s.el))+
+          '" tabindex="0" role="link" style="cursor:pointer" data-tip="Open this element in its model">'+
+          'in model ↓</span>':'';
+        const hay=[title, kind, s.lang||'', s.el||'', (byId.get(mid)||{}).label||'', s.body]
+          .join(' ').toLowerCase();
+        // a handful of scripts: show the code straight away; a big project starts collapsed
+        return '<details class="op" data-scriptrow data-group="'+esc(s.group)+'"'+
+          (all.length<=6?' open':'')+' data-hay="'+esc(hay)+'">'+
+          '<summary><span class="opname">'+esc(title)+'</span>'+
+          (s.el&&s.el!==title?'<span class="opid">'+esc(String(s.el))+'</span>':'')+
+          '<span class="pt">'+esc(kind)+'</span>'+
+          (s.lang?'<span class="pt">'+esc(s.lang)+'</span>':'')+
+          '<span class="pt">'+lines(s)+' line'+(lines(s)>1?'s':'')+'</span>'+
+          (s.out?'<span class="pd" style="color:var(--ok-text)">out</span> <span class="mono">'+
+            paramSide(s.out)+'</span>':'')+
+          (chips?'<span style="flex:1;display:flex;gap:6px;flex-wrap:wrap;min-width:0">'+chips+'</span>':'')+
+          jump+'</summary>'+
+          (s.doc?'<div class="muted" style="padding:4px 10px 0">'+esc(s.doc)+'</div>':'')+
+          '<pre class="scriptbox">'+esc(s.body)+'</pre></details>';
+      }).join('');
+    });
+  }
+  h+='</div>';
+  v.innerHTML=h;
+  // kind chips + one text filter over every row: model, element, language and the code itself
+  const pf=v.querySelector('.pf'), count=v.querySelector('.pcount');
+  if(pf){
+    const chips=[...v.querySelectorAll('.pchip[data-group]')];
+    const apply=()=>{
+      const q=(pf.value||'').trim().toLowerCase();
+      const group=(chips.find(c=>c.classList.contains('on'))||{dataset:{}}).dataset.group||'all';
+      let shown=0;
+      v.querySelectorAll('[data-scriptrow]').forEach(r=>{
+        const on=(group==='all'||r.dataset.group===group) && (!q||(r.dataset.hay||'').indexOf(q)>=0);
+        r.hidden=!on; if(on) shown++;
+        if(q&&on) r.open=true;
+      });
+      // hide a model heading whose scripts are all filtered out
+      v.querySelectorAll('.seclabel').forEach(lab=>{
+        let any=false;
+        for(let e=lab.nextElementSibling; e&&!e.classList.contains('seclabel'); e=e.nextElementSibling){
+          if(e.hasAttribute('data-scriptrow')&&!e.hidden) any=true;
+        }
+        lab.hidden=!any;
+      });
+      count.textContent=(q||group!=='all')?shown+' of '+all.length:'';
+      syncAll();
+    };
+    pf.oninput=debounce(apply,120);
+    chips.forEach(c=>c.onclick=()=>{ chips.forEach(x=>x.classList.toggle('on', x===c)); apply(); });
+    // one control for every body at once — reading a project's scripts top to bottom is the point of
+    // this view, and clicking 40 triangles is not
+    const all2=()=>[...v.querySelectorAll('[data-scriptrow]')].filter(r=>!r.hidden);
+    const toggle=v.querySelector('#scriptsall');
+    const syncAll=()=>{ const rows=all2();
+      toggle.textContent=(rows.length&&rows.every(r=>r.open))?'⇕ collapse all':'⇕ expand all'; };
+    toggle.onclick=()=>{ const rows=all2(), open=!rows.every(r=>r.open);
+      rows.forEach(r=>{ r.open=open; }); syncAll(); };
+    v.querySelectorAll('[data-scriptrow]').forEach(r=>r.addEventListener('toggle',syncAll));
+    syncAll();
+  }
+  v.onclick=e=>{
+    const go=e.target.closest('[data-goto]');
+    if(go){ e.preventDefault(); select(dec(go.dataset.goto), '', go.dataset.gotoEl||''); return; }
+    const idEl=e.target.closest('[data-id]');
+    if(idEl) select(dec(idEl.dataset.id));
+  };
+  v.onkeydown=e=>{ if(e.key!=='Enter'&&e.key!==' ') return;
+    const t=e.target.closest('[data-goto],[data-id]'); if(t){ e.preventDefault(); t.click(); } };
 }
 
 // ---------- browse: list column ----------
@@ -1051,6 +1415,9 @@ function describe(n){
   else if(n.type==='decision'){ if(d.decisionService) add('Kind','Decision service');
     add('Hit policy',d.hitPolicy); addCount('Rules',d.ruleCount);
     if((d.inputs||[]).length) rows.push(['Inputs',varList(d.inputs)]);
+    // the expression behind a labelled input — that is what actually reads a variable
+    if((d.inputExpressions||[]).length && String(d.inputExpressions)!==String(d.inputs))
+      rows.push(['Input expressions',varList(d.inputExpressions)]);
     if((d.outputs||[]).length) rows.push(['Outputs',varList(d.outputs)]); }
   else if(n.type==='form'||n.type==='page'){ addCount('Fields',(d.fields||[]).length);
     addCount('Data sources',(d.dataSources||[]).length);
@@ -1123,7 +1490,11 @@ function describe(n){
     const pr=d.problems||[]; if(pr.length){ const ec=pr.filter(p=>p.severity==='error').length, wc=pr.length-ec;
       add('Problems',[ec?ec+' error'+(ec>1?'s':''):'', wc?wc+' warning'+(wc>1?'s':''):''].filter(Boolean).join(', ')); } }
   else if(n.type==='variable'){ add('Scope',(d.scopes||[]).join(', ')); add('Used in', (d.usages||[]).length+' model(s)');
-    add('As parameter', paramSummary(d.ioParams)); }
+    add('As parameter', paramSummary(d.ioParams));
+    // nothing but a bare identifier in a script says this exists — same ≈ vocabulary as uncertain links
+    if(d.heuristic) rows.push(['Evidence',{html:'<span class="pt" data-tip="Only a bare identifier in a '+
+      'script body names this variable — Flowable puts scope variables into the script binding, so it is '+
+      'probably real, but Atlas cannot prove it.">≈ script read only</span>',copy:null}]); }
   else if(n.type==='string'){ add('Used in', (d.usages||[]).length+' model(s)'); }
   else if(n.type==='customFunction'){
     add('Kind', d.kind==='namespace'?('namespace '+d.namespace+'.*'):d.kind==='flw'?'flw.* member':'top-level');
@@ -1201,7 +1572,7 @@ function detailExtra(n){
   }
   if(n.type==='process' && (d.events||[]).length){
     const evs=d.events.filter(e=>e.def||e.name);
-    if(evs.length) h+=section('events','Events & timers ('+evs.length+')','<div class="oplist">'+
+    if(evs.length) h+=section('events','Events ('+evs.length+')','<div class="oplist">'+
       evs.map(e=>'<div class="oprow"'+dataEl(e.id)+'><span style="min-width:150px">'+esc(e.name||e.id||'')+'</span>'+loc(e.id,e.name)+
         '<span class="opkey">'+elementTerm(e.type)+'</span>'+(e.def?'<span class="pt">'+esc(e.def)+'</span>':'')+
         (e.value?'<span class="mono" style="color:var(--ink-faint)">'+esc(e.value)+'</span>':'')+'</div>').join('')+'</div>');
@@ -1220,20 +1591,60 @@ function detailExtra(n){
     // rows were impossible to map to anything.
     const elRef=id=>{ const nm=elName(EM,id);
       return '<span'+(nm!==String(id)?' data-tip="'+esc(String(id))+'"':'')+'>'+esc(nm)+'</span>'; };
-    h+=section('conditions','Flow conditions ('+d.conditions.length+')','<div class="oplist">'+
+    h+=section('conditions','Sequence flow conditions ('+d.conditions.length+')','<div class="oplist">'+
       d.conditions.map(c=>'<div class="oprow"'+dataEl(c.id)+'>'+
         '<span class="cflow" style="min-width:150px">'+elRef(c.from)+' <span class="pa">→</span> '+elRef(c.to)+'</span>'+
         loc(c.id)+
         '<span class="mono" style="flex:1">'+esc(c.condition||'')+'</span></div>').join('')+'</div>');
   }
-  if((n.type==='process'||n.type==='case') && (d.listeners||[]).length){
-    const ls=d.listeners.filter(l=>l.class||l.expression||l.delegateExpression||l.script);
-    if(ls.length) h+=section('listeners','Listeners ('+ls.length+')','<div class="oplist">'+
-      ls.map(l=>{
-        const impl=l.class?vlink('java:'+l.class, l.class):esc(l.expression||l.delegateExpression||(l.script?'(script)':''));
-        return '<div class="oprow"><span class="pt">'+esc(l.kind||'')+'</span><span class="pt">'+esc(l.event||'')+'</span>'+
-          '<span class="mono" style="flex:1">'+impl+'</span></div>';
-      }).join('')+'</div>');
+  // Two things every element can carry, both previously dropped on the floor: the documentation the
+  // modeller wrote about it, and the listeners it runs (only the process/case level and BPMN user tasks
+  // were read before, so an execution listener on a service task existed nowhere in Atlas).
+  if(n.type==='process'||n.type==='case'){
+    const recs=elementRecords(n);
+    const docs=recs.filter(r=>r.documentation);
+    if(docs.length) h+=section('eldocs','Documentation ('+docs.length+')','<div class="oplist">'+
+      docs.map(r=>'<div class="oprow"'+dataEl(r.id)+'><span style="min-width:150px">'+esc(r.name||r.id||'')+'</span>'+
+        loc(r.id,r.name)+'<span style="flex:1">'+esc(r.documentation)+'</span></div>').join('')+'</div>');
+    const ls=[].concat(
+      (d.listeners||[]).map(l=>({owner:null, l})),
+      ...recs.map(r=>(r.listeners||[]).map(l=>({owner:r, l}))),
+    ).filter(x=>x.l&&(x.l.class||x.l.expression||x.l.delegateExpression||x.l.script));
+    // Design keeps execution, task and lifecycle listeners in separate property groups — one section
+    // each, named the way Design names them, instead of one pile called "Listeners".
+    const byKind=new Map();
+    ls.forEach(x=>{ const k=x.l.kind||'listener';
+      if(!byKind.has(k)) byKind.set(k,[]); byKind.get(k).push(x); });
+    [...byKind.keys()].sort().forEach(kind=>{
+      const items=byKind.get(kind);
+      h+=section('listeners-'+kind, plural(term('el',kind).label)+' ('+items.length+')','<div class="oplist">'+
+        items.map(({owner:o, l})=>{
+          const impl=l.class?vlink('java:'+l.class, l.class):esc(l.expression||l.delegateExpression||(l.script?'(script)':''));
+          const who=o?'<span style="min-width:150px">'+esc(o.name||o.id||'')+'</span>'+loc(o.id,o.name)
+                     :'<span class="muted" style="min-width:150px">'+esc(nodeKind(n))+'</span>';
+          return '<div class="oprow"'+(o?dataEl(o.id):'')+'>'+who+
+            (l.event?'<span class="pt">'+esc(l.event)+'</span>':'')+
+            '<span class="mono" style="flex:1">'+impl+'</span></div>';
+        }).join('')+'</div>');
+    });
+  }
+  // The decision table itself. Only the row *count* used to survive parsing, so the conditions and
+  // values that are the actual business logic were neither visible nor findable.
+  if(n.type==='decision' && (d.rules||[]).length){
+    const ann=d.rules.some(r=>r.annotation);
+    // `o` marks where the inputs end and the outputs begin
+    const cell=(tag,v,i)=>'<'+tag+(i===0?' class="o"':'')+'>'+esc(v==null||v===''?'—':String(v))+'</'+tag+'>';
+    const row=r=>'<tr>'+(r.inputs||[]).map(c=>cell('td',c,-1)).join('')+
+      (r.outputs||[]).map((c,i)=>cell('td',c,i)).join('')+
+      (ann?'<td>'+esc(r.annotation||'')+'</td>':'')+'</tr>';
+    h+=section('dmnrules','Rules ('+(d.ruleCount||d.rules.length)+')',
+      '<div class="dmntab"><table><thead><tr>'+
+      (d.inputs||[]).map(x=>cell('th',x,-1)).join('')+
+      (d.outputs||[]).map((x,i)=>cell('th',x,i)).join('')+
+      (ann?'<th>annotation</th>':'')+'</tr></thead><tbody>'+
+      d.rules.map(row).join('')+'</tbody></table>'+
+      (d.rulesTruncated?'<div class="muted" style="padding:4px 0">showing '+d.rules.length+' of '+
+        d.rulesTruncated+' rules</div>':'')+'</div>');
   }
   if(n.type==='case' && d.planModel){
     const CRIT=caseCriteria(d);
@@ -1264,13 +1675,13 @@ function detailExtra(n){
         '<span class="opkey">'+elementTerm(nd.type, nd.serviceTaskType||undefined)+'</span>'+
         (bits?'<span style="flex:1;display:flex;gap:8px;flex-wrap:wrap">'+bits+'</span>':'')+rules+'</div>';
     };
-    h+=section('plan','Plan model — stages & plan items', planItem(d.planModel));
+    h+=section('plan','Case plan model — stages & plan items', planItem(d.planModel));
   }
   if(n.type==='case' && (d.sentries||[]).length){
     const CRIT=caseCriteria(d);
     const ss=d.sentries.filter(s=>s.condition||(s.onParts||[]).length);
     // name each sentry by what it guards ("entry of Review", not "sentry3"); the raw id stays a tooltip
-    if(ss.length) h+=section('sentries','Sentries — entry/exit conditions ('+ss.length+')','<div class="oplist">'+
+    if(ss.length) h+=section('sentries','Sentries — entry / exit criteria ('+ss.length+')','<div class="oplist">'+
       ss.map(s=>{
         const uses=CRIT.filter(c=>String(c.sentryRef)===String(s.id))
           .map(c=>(c.type==='entryCriterion'?'entry of ':'exit of ')+
@@ -1284,7 +1695,7 @@ function detailExtra(n){
       }).join('')+'</div>');
   }
   if(n.type==='case' && (d.eventListeners||[]).length){
-    h+=section('eventlisteners','Event listeners & timers ('+d.eventListeners.length+')','<div class="oplist">'+
+    h+=section('eventlisteners','Event listeners ('+d.eventListeners.length+')','<div class="oplist">'+
       d.eventListeners.map(e=>{
         const bits=[
           e.timer?'<span class="mono">'+esc(e.timer)+'</span>':'',
@@ -1373,11 +1784,11 @@ function detailExtra(n){
       }).join(''));
   }
   if(n.type==='service' && d.schemaCoverage && (d.schemaCoverage.rows||[]).length){
-    h+=section('coverage','Schema coverage — Liquibase → Service → DataObject',
+    h+=section('coverage','Schema coverage — Liquibase → Service → Data object',
       schemaCoverageHtml(d.schemaCoverage, false));
   }
   else if(n.type==='service' && (d.columns||[]).length){
-    h+=section('columns','Columns / field mappings ('+d.columns.length+')','<div class="oplist">'+
+    h+=section('columns','Column mappings ('+d.columns.length+')','<div class="oplist">'+
       d.columns.map(c=>'<div class="oprow"><span>'+esc(c.name||'')+'</span>'+
         (c.columnName&&c.columnName!==c.name?'<span class="muted">'+esc(c.columnName)+'</span>':'')+
         (c.type?'<span class="mono" style="margin-left:auto;color:var(--ink-faint);font-size:10px">'+esc(c.type)+'</span>':'')+
@@ -1438,7 +1849,7 @@ function detailExtra(n){
       }).join(''));
   }
   if(n.type==='dataObject' && (d.columns||[]).length){
-    h+=section('columns','Columns / field mappings ('+d.columns.length+')','<div class="oplist">'+
+    h+=section('columns','Field mappings ('+d.columns.length+')','<div class="oplist">'+
       d.columns.map(c=>'<div class="oprow"><span>'+esc(c.name)+'</span><span class="muted">'+esc(c.label||'')+'</span>'+
         (c.refDataObject?'<span class="vlink" data-id="'+enc('dataObject:'+c.refDataObject)+'" tabindex="0" role="link">→ '+esc(c.refDataObject)+(c.relationship?' ('+esc(c.relationship)+')':'')+'</span>':'')+
         (c.type?'<span class="mono" style="margin-left:auto;color:var(--ink-faint);font-size:10px">'+esc(c.type)+'</span>':'')+
@@ -1510,6 +1921,20 @@ function detailExtra(n){
         '<span style="flex:1">'+nodeChip(p.model)+
           (p.element?'<span class="mono" style="color:var(--ink-faint)"> @'+esc(p.element)+'</span>':'')+'</span>'+
         '<span class="mono" style="font-size:var(--text-2xs)">'+paramFlowHtml(p)+'</span>'+
+      '</div>').join('')+'</div>');
+  }
+  // The scripts that touch this variable. Each row jumps to that script's own row in its model — the
+  // answer to "where is this variable actually set?" used to require reading every script by hand.
+  if(n.type==='variable' && (d.scriptSites||[]).length){
+    h+=section('inscripts','In scripts ('+d.scriptSites.length+')','<div class="oplist">'+
+      d.scriptSites.map(s=>'<div class="oprow">'+
+        '<span class="verb" style="color:var('+(s.api?'--ok-text':'--ink-faint')+')">'+
+          (s.api?'sets / reads':'≈ reads')+'</span>'+
+        '<span style="flex:1">'+nodeChip(s.model)+
+          (s.element?'<span class="opref" data-goto="'+enc(s.model)+'" data-goto-el="'+esc(String(s.element))+
+            '" tabindex="0" role="link" style="cursor:pointer">'+esc(s.elementName||s.element)+' ↓</span>':'')+
+        '</span>'+
+        (s.elementType?'<span class="pt">'+esc(s.elementType)+'</span>':'')+
       '</div>').join('')+'</div>');
   }
   if((n.type==='variable'||n.type==='string') && (d.usages||[]).length){
@@ -1609,6 +2034,9 @@ function jchip(id,label){
 
 function renderDetail(){
   const det=document.getElementById('detail');
+  // The info card lives on <body> now, so it survives this re-render — drop it, or it would keep
+  // showing an element of the model we are navigating away from.
+  hideDgCard();
   if(!state.sel || !byId.get(state.sel)){
     det.innerHTML='<div class="estate"><div class="estate-ic" aria-hidden="true">⌕</div>'+
       '<div class="et">'+(state.cat?'Nothing selected':'Flowable Atlas')+'</div>'+
@@ -1697,6 +2125,12 @@ function renderDetail(){
   // "N parameter mappings ↓" inside a service task — jumps to that element's mapping group
   det.querySelectorAll('[data-reveal-el]').forEach(b=>{
     b.onclick=e=>{ e.stopPropagation(); revealByEl(det, b.dataset.revealEl); };
+  });
+  // travel to another node AND land on one of its elements (a variable → the script that sets it)
+  det.querySelectorAll('[data-goto]').forEach(b=>{
+    const go=e=>{ e.stopPropagation(); select(dec(b.dataset.goto), '', b.dataset.gotoEl||''); };
+    b.onclick=go;
+    b.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(e); } };
   });
   wireParamFilter(det);
   wireDiagram(det);
@@ -1886,6 +2320,17 @@ function elementNames(n){
   return m;
 }
 function elName(em, id){ const e=em.get(String(id)); return (e&&e.name)?e.name:String(id==null?'':id); }
+// Every element record of a model, whatever list it lives in. Used by the views that are about a
+// property elements *share* (documentation, listeners) rather than about one element type.
+function elementRecords(n){
+  const d=n.data||{}, out=[];
+  const push=arr=>(arr||[]).forEach(r=>{ if(r&&typeof r==='object') out.push(r); });
+  push(d.userTasks); push(d.serviceTasks); push(d.scriptTasks); push(d.ruleTasks);
+  push(d.callActivities); push(d.subProcesses); push(d.events); push(d.gateways);
+  push(d.otherTasks); push(d.eventListeners); push(d.milestones);
+  if(d.planModel)(function walk(nd){ out.push(nd); (nd.children||[]).forEach(walk); })(d.planModel);
+  return out;
+}
 // A case's entry/exit criteria (from the plan tree), each joined with its sentry's condition/on-parts.
 function caseCriteria(d){
   if(!d.planModel) return [];
@@ -1974,22 +2419,31 @@ function revealByEl(det, elId){
 // ---------- element info card (click a diagram element) ----------
 let _dgCard=null;
 function hideDgCard(){ if(_dgCard&&_dgCard.parentNode) _dgCard.parentNode.removeChild(_dgCard); _dgCard=null; }
-// The card is a small window: docked to the top-right by default (it stays out of the drawing and is
-// stable while you click through elements), draggable by its header, resizable via the native corner
-// grip. Width and position are remembered; position is stored as an offset from the RIGHT edge so the
-// corner-docking carries over between the inline view and the (wider) fullscreen modal.
+// The card is a small window on <body> — `position:fixed`, NOT a child of the diagram viewport. That is
+// what lets it be dragged and resized far past the drawing area: in a narrow IDE tool window the
+// viewport is much smaller than the space a card full of parameters needs, and a card clamped to it
+// would stay unusably tiny. It still *starts* docked to the viewport's top-right corner (out of the
+// drawing, and stable while you click through elements). Size and the corner offset are remembered, so
+// the docking carries over between the inline view and the (wider) fullscreen modal.
 const DGCARD_STORE='atlas-dgcard';
 function dgCardPrefs(){ try{ return JSON.parse(localStorage.getItem(DGCARD_STORE)||'{}')||{}; }catch(err){ return {}; } }
 function dgCardRemember(patch){
   try{ localStorage.setItem(DGCARD_STORE, JSON.stringify(Object.assign(dgCardPrefs(), patch))); }catch(err){}
 }
 function placeDgCard(view, card){
-  const p=dgCardPrefs();
-  if(p.w) card.style.width=Math.max(240, Math.min(p.w, view.clientWidth-16))+'px';
+  const p=dgCardPrefs(), r=view.getBoundingClientRect();
+  if(p.w) card.style.width=Math.max(240, Math.min(p.w, window.innerWidth-16))+'px';
+  if(p.h) card.style.height=Math.max(90, Math.min(p.h, window.innerHeight-16))+'px';
   const rx=p.rx!=null?p.rx:8, ty=p.ty!=null?p.ty:8;
-  const x=Math.max(8, view.clientWidth-card.offsetWidth-rx);
-  const y=Math.max(8, Math.min(ty, view.clientHeight-card.offsetHeight-8));
-  card.style.left=x+'px'; card.style.top=y+'px';
+  card.style.left=(r.right-card.offsetWidth-rx)+'px';
+  card.style.top =(r.top+ty)+'px';
+  clampDgCard(card);
+}
+/** Keep the card reachable inside the window — after placing it, a drag, or a window resize. */
+function clampDgCard(card){
+  const x=parseFloat(card.style.left)||0, y=parseFloat(card.style.top)||0;
+  card.style.left=Math.max(4, Math.min(x, window.innerWidth-48))+'px';
+  card.style.top =Math.max(4, Math.min(y, window.innerHeight-28))+'px';
 }
 function wireDgCardMoveResize(view, card){
   const head=card.querySelector('.dgcard-head');
@@ -1998,25 +2452,30 @@ function wireDgCardMoveResize(view, card){
     e.preventDefault(); e.stopPropagation();
     const sx=e.clientX-card.offsetLeft, sy=e.clientY-card.offsetTop;
     const move=ev=>{
-      card.style.left=Math.max(4, Math.min(ev.clientX-sx, view.clientWidth-48))+'px';
-      card.style.top =Math.max(4, Math.min(ev.clientY-sy, view.clientHeight-28))+'px';
+      // clamped to the WINDOW, not to the diagram — the card is free to sit anywhere on the page
+      card.style.left=Math.max(4, Math.min(ev.clientX-sx, window.innerWidth-48))+'px';
+      card.style.top =Math.max(4, Math.min(ev.clientY-sy, window.innerHeight-28))+'px';
     };
     const up=()=>{
       document.removeEventListener('pointermove',move); document.removeEventListener('pointerup',up);
-      dgCardRemember({rx:Math.max(0, view.clientWidth-(card.offsetLeft+card.offsetWidth)), ty:card.offsetTop});
+      const r=view.getBoundingClientRect();
+      dgCardRemember({rx:Math.round(r.right-(card.offsetLeft+card.offsetWidth)), ty:Math.round(card.offsetTop-r.top)});
     };
     document.addEventListener('pointermove',move); document.addEventListener('pointerup',up);
   });
-  // native corner resize (CSS resize:both) — remember the width the user settles on
+  // native corner resize (CSS resize:both) — remember the size the user settles on
   if(window.ResizeObserver){
     let first=true;
     new ResizeObserver(()=>{
       if(first){ first=false; return; }                    // the observe() call itself fires once
       clearTimeout(card._rszT);
-      card._rszT=setTimeout(()=>{ if(card.isConnected) dgCardRemember({w:card.offsetWidth}); }, 300);
+      card._rszT=setTimeout(()=>{
+        if(card.isConnected) dgCardRemember({w:card.offsetWidth, h:card.offsetHeight});
+      }, 300);
     }).observe(card);
   }
 }
+window.addEventListener('resize',()=>{ if(_dgCard) clampDgCard(_dgCard); });
 function wireDgClicks(view, inModal){
   if(view._dgClicksWired) return;                     // the modal view persists across opens
   view._dgClicksWired=true;
@@ -2049,8 +2508,12 @@ function showDgCard(view, g, e, inModal){
   if(!n) return;
   const elId=dgEffectiveId(n, g);
   const card=document.createElement('div'); card.className='dgcard';
+  card.setAttribute('role','dialog');
+  card.setAttribute('aria-label','Element details — drag the header to move, drag the corner to resize');
   card.innerHTML=dgCardHtml(n, elId, g);
-  view.appendChild(card);
+  // on <body>, not in the view: see placeDgCard. `_view` keeps the originating viewport reachable.
+  card._view=view;
+  document.body.appendChild(card);
   placeDgCard(view, card);
   wireDgCardMoveResize(view, card);
   _dgCard=card;
@@ -2173,6 +2636,15 @@ function dgCardHtml(n, elId, g){
     body+='<div class="dgsec">Script'+(sc.format||sc.scriptFormat?' ('+esc(sc.format||sc.scriptFormat)+')':'')+'</div>'+
       '<pre class="scriptbox" style="margin:2px 0">'+esc(lines.slice(0,5).join('\n'))+(lines.length>5?'\n…':'')+'</pre>';
   }
+  // -- what the modeller wrote about this element, and the listeners it runs --
+  const rec=elementRecords(n).find(r=>sameId(r.id));
+  if(rec&&rec.documentation) body+='<div class="dgsec">Documentation</div>'+
+    '<div style="font-size:var(--text-xs)">'+esc(rec.documentation)+'</div>';
+  const recLs=((rec&&rec.listeners)||[]).filter(l=>l.class||l.expression||l.delegateExpression||l.script);
+  if(recLs.length) body+='<div class="dgsec">Listeners ('+recLs.length+')</div>'+
+    recLs.map(l=>'<div class="dgcond"><span class="cflow">'+
+      esc([term('el', l.kind).label, l.event].filter(Boolean).join(' · '))+'</span>'+
+      '<code>'+esc(l.class||l.expression||l.delegateExpression||'(script)')+'</code></div>').join('');
   const det=document.getElementById('detail');
   // a criterion has no detail row of its own — its "details" are the guarded plan item's row
   const revealId=crit&&crit.planItemDef!=null?String(crit.planItemDef):String(elId);
@@ -2186,15 +2658,20 @@ function dgCardHtml(n, elId, g){
 }
 
 // A search hit lands on the node, not on the row that matched — so find the matching rows, open every
-// collapsed ancestor, mark them all and scroll the first one into view.
+// collapsed ancestor, mark them all and scroll the first one into view. When the hit carried the
+// element it came from (a script task, a flow condition), that element's rows win: they are the exact
+// place, not a text guess.
 function applyFocus(det){
+  if(state.focusEl && revealByEl(det, state.focusEl)) return;
   const q=(state.focus||'').trim().toLowerCase();
   if(!q) return;
   const match=el=>(el.dataset.hay||el.textContent||'').toLowerCase().indexOf(q)>=0;
   let rows=[...det.querySelectorAll('.pc, .oprow')].filter(match);
+  // script bodies / operation blocks, flow conditions and DMN cells — a free-text hit usually lands here
+  if(!rows.length) rows=[...det.querySelectorAll('details.op, .dgcond, .dmntab td')].filter(match);
   if(!rows.length) rows=[...det.querySelectorAll('.cell')].filter(match);
   if(!rows.length) return;
-  rows.forEach(el=>el.classList.add('hit'));
+  rows.forEach(el=>{ el.classList.add('hit'); if(el.tagName==='DETAILS') el.open=true; });
   for(let p=rows[0].parentElement; p && p!==det; p=p.parentElement){
     if(p.tagName==='DETAILS') p.open=true;
   }
@@ -2207,12 +2684,14 @@ function applyFocus(det){
 // Navigation: select() only moves the URL hash; the hashchange listener routes. That makes
 // the hash the single source of truth — browser back/forward, bookmarks and copied links all
 // go through the same path.
-// `q` is the search term that led here — it rides along in the hash so Back/Forward and "copy link"
-// reproduce the highlight without any extra plumbing.
-function select(id, q){
+// `q` is the search term that led here and `el` the model element the hit came from (a script task, a
+// flow condition …) — both ride along in the hash so Back/Forward and "copy link" reproduce the
+// highlight without any extra plumbing.
+function select(id, q, el){
   if(!byId.get(id)) return;
-  const hash=encodeURIComponent(id)+(q?'&q='+encodeURIComponent(q):'');
-  if(location.hash.slice(1)===hash){ state.focus=q||''; applySelection(id); return; }
+  const hash=encodeURIComponent(id)+(q?'&q='+encodeURIComponent(q):'')+
+             (el?'&e='+encodeURIComponent(el):'');
+  if(location.hash.slice(1)===hash){ state.focus=q||''; state.focusEl=el||''; applySelection(id); return; }
   location.hash=hash;
 }
 
@@ -2244,18 +2723,54 @@ function applySelection(id){
   renderSidebarActive(); renderCrumbs();
 }
 
-// ---------- search haystack (shared by the command palette) ----------
-// base identity plus a few type-specific extras. A DataObject's fields/columns are not
-// nodes of their own, so without this a field name like 'crewId' (or its label / type)
-// would never surface its data object.
-function searchText(n){
-  if(n._search) return n._search;              // node data never changes at runtime — build once
+// ---------- search index (shared by the command palette) ----------
+// Three haystacks per node, because "find everything" and "rank sensibly" pull in opposite directions:
+//   ident  — label / key / file / type (+ the bot key: a Java bot's getKey() and an action's botKey
+//            field both live in data.botKey, so ⌘K finds the bot class AND its callers).
+//   member — names of things that are NOT nodes of their own (element ids, in/out parameters, form
+//            fields, columns, permissions …). Enumerated on purpose: their shape carries meaning.
+//   text   — every other string in node.data, collected by a generic deep walk WITH provenance. This
+//            is what makes a script body, an element's documentation, a flow condition or a field
+//            injection findable at all. Enumerating those field by field kept losing the race with the
+//            parsers — a walk cannot fall behind.
+const HAY_SKIP=new Set([
+  // `diagram` is the rendered SVG (a wall of path data) — indexing it would make every query match
+  // every model. The rest is node-id bookkeeping the palette already navigates by.
+  'diagram','_uses','usedBy','usages','scopes','_idx','_search',
+]);
+const HAY_MAX_VALUE=4000, HAY_MAX_ENTRIES=400;
+// Field name → what to call it in the "why did this match" hint.
+const HAY_LABEL={
+  script:'script', documentation:'doc', condition:'condition', conditions:'condition',
+  delegateExpression:'delegate', expression:'expression', class:'class', formKey:'form',
+  candidateGroups:'groups', candidateUsers:'users', assignee:'assignee', resultVariable:'result var',
+  inputs:'DMN input', outputs:'DMN output', rules:'DMN rule', inputExpressions:'DMN input',
+  annotation:'DMN annotation', fields:'field', topic:'topic', url:'url', tableName:'table',
+};
+/**
+ * Deep-walk a value, pushing one `{k, id, v}` entry per string found: `k` is the field it came from,
+ * `id` the nearest enclosing object's id/name/key — for a script body that is the script task's
+ * element id, which is what lets a hit jump straight to the right row.
+ * Strings only: numbers and booleans ("true", counts) match everything and mean nothing here.
+ */
+function walkHay(v, key, owner, out){
+  if(out.length>=HAY_MAX_ENTRIES || v==null) return;
+  if(typeof v==='string'){
+    if(v) out.push({k:key, id:owner, v:v.length>HAY_MAX_VALUE?v.slice(0,HAY_MAX_VALUE):v});
+    return;
+  }
+  if(Array.isArray(v)){ v.forEach(x=>walkHay(x, key, owner, out)); return; }
+  if(typeof v!=='object') return;
+  const own=v.id||v.name||v.key||owner;        // the element this sub-object belongs to
+  for(const k in v){ if(!HAY_SKIP.has(k)) walkHay(v[k], k, own, out); }
+}
+function searchIndex(n){
+  if(n._idx) return n._idx;                    // node data never changes at runtime — build once
   const d=n.data||{};
-  // base identity + the bot key (a Java bot's getKey() and an action's botKey field both live in
-  // data.botKey), so ⌘K/Ctrl-K finds the bot class AND the actions that invoke it by that key.
-  let s=n.label+' '+n.key+' '+(n.file||'')+' '+n.type+' '+(d.botKey||'');
+  const ident=(n.label+' '+n.key+' '+(n.file||'')+' '+n.type+' '+(d.botKey||'')).toLowerCase();
+  let s='';
   // model element ids + names (tasks, gateways, events, plan items) — an element id from the BPMN
-  // XML or the diagram now surfaces its model in ⌘K
+  // XML or the diagram surfaces its model in ⌘K
   if(n.type==='process'||n.type==='case')
     s+=' '+[...elementNames(n).entries()].map(([id,e])=>id+' '+(e.name||'')).join(' ');
   if(n.type==='dataObject') s+=' '+(d.fields||[]).join(' ')+' '+(d.serviceTableName||'')+' '+
@@ -2278,18 +2793,37 @@ function searchText(n){
   if(n.type==='agent') s+=' '+(d.tools||[]).map(t=>t.key||'').join(' ');
   if(n.type==='securityPolicy') s+=' '+(d.permissions||[]).map(p=>(p.key||'')+' '+(p.label||'')+' '+(p.roles||[]).join(' ')).join(' ');
   if(n.type==='dataDictionary') s+=' '+(d.types||[]).join(' ');
-  n._search=s.toLowerCase();
-  return n._search;
+  const entries=[];
+  for(const k in d){ if(!HAY_SKIP.has(k)) walkHay(d[k], k, null, entries); }
+  n._idx={ident, mem:s.toLowerCase(), text:entries.map(e=>e.v).join('\n').toLowerCase(), entries};
+  return n._idx;
+}
+// How well does this node match? 0 = label/key starts with the term, 1 = anywhere in the identity,
+// 2 = a member name, 3 = free text (script, documentation, condition …), -1 = not at all. Without the
+// tiers the free-text hits would drown the node you actually typed the name of.
+function matchTier(n,v){
+  const ix=searchIndex(n);
+  const idn=(n.label+' '+n.key).toLowerCase();
+  if((' '+idn).indexOf(' '+v)>=0) return 0;
+  if(ix.ident.indexOf(v)>=0) return 1;
+  if(ix.mem.indexOf(v)>=0) return 2;
+  if(ix.text.indexOf(v)>=0) return 3;
+  return -1;
 }
 function paramHaystack(p){ return (p.source||'')+' '+(p.target||'')+' '+(p.element||'')+' '+(p.kind||''); }
-// Why did this node match? When the hit came from a parameter rather than the node's own name, the
-// palette shows that mapping instead of the key — otherwise the match looks arbitrary.
-function paramMatchHint(n,v){
-  if(!v || (n.label+' '+n.key).toLowerCase().indexOf(v)>=0) return '';
+// Why did this node match, and where? When the hit did not come from the node's own name, the palette
+// shows the mapping / field it came from instead of the key — otherwise the match looks arbitrary —
+// and `el` carries the element id so the detail panel can open exactly that row.
+function matchWhere(n,v){
+  if(!v || (n.label+' '+n.key).toLowerCase().indexOf(v)>=0) return null;
   const p=((n.data||{}).ioParameters||[]).find(x=>paramHaystack(x).toLowerCase().indexOf(v)>=0);
-  if(!p) return '';
-  const flow=[p.source,p.target].filter(x=>x!=null&&x!=='').join(' → ');
-  return p.dir+' '+flow+(p.element?' @'+p.element:'');
+  if(p){
+    const flow=[p.source,p.target].filter(x=>x!=null&&x!=='').join(' → ');
+    return {hint:p.dir+' '+flow+(p.element?' @'+p.element:''), el:p.element||''};
+  }
+  const e=searchIndex(n).entries.find(x=>x.v.toLowerCase().indexOf(v)>=0);
+  if(!e) return null;
+  return {hint:(HAY_LABEL[e.k]||e.k)+(e.id?' · '+e.id:''), el:e.id||''};
 }
 
 // ---------- command palette (⌘K) ----------
@@ -2297,6 +2831,7 @@ const pal=document.getElementById('palette'), palq=document.getElementById('palq
 let palList=[], palSel=-1, _palPrevFocus=null;
 function openPalette(){
   if(!pal.hidden) return;
+  hideDgCard();                                  // the card floats above the palette (z-index 120 > 100)
   _palPrevFocus=document.activeElement;
   pal.hidden=false; palq.value=''; palSel=-1;
   palRender(); palq.focus();
@@ -2317,49 +2852,63 @@ function pushRecent(id){
     localStorage.setItem('atlas-recent', JSON.stringify(r.slice(0,8)));
   }catch(e){}
 }
+const PAL_LIMIT=60;
 function palRender(){
   const v=palq.value.trim().toLowerCase();
-  let groups=[];
+  let groups=[], dropped=0;
   if(!v){
     const rec=getRecents().map(id=>byId.get(id));
-    if(rec.length) groups=[{label:'Recent', items:rec}];
+    if(rec.length) groups=[{label:'Recent', items:rec.map(n=>({n}))}];
   } else {
-    const hits=nodes.filter(n=>searchText(n).includes(v))
-                    .sort((a,b)=>a.label.length-b.label.length).slice(0,40);
+    const scored=[];
+    nodes.forEach(n=>{ const t=matchTier(n,v); if(t>=0) scored.push({n, t}); });
+    scored.sort((a,b)=>a.t-b.t || a.n.label.length-b.n.label.length ||
+                       (a.n.label<b.n.label?-1:a.n.label>b.n.label?1:0));
+    dropped=Math.max(0, scored.length-PAL_LIMIT);
     const bySec={};
-    hits.forEach(n=>{
+    scored.slice(0,PAL_LIMIT).forEach(hit=>{
+      const n=hit.n;
       const sec = n.type==='external' ? (n.data&&n.data.flowableApi?'Integration':'Other')
                                       : (TM[n.type]?TM[n.type][1]:'Other');
-      (bySec[sec]=bySec[sec]||[]).push(n);
+      (bySec[sec]=bySec[sec]||[]).push(hit);
     });
-    SECTIONS.forEach(s=>{ if(bySec[s]) groups.push({label:s, items:bySec[s]}); });
+    // Sections keep their familiar order, except that the one holding the best match comes first —
+    // otherwise an exact name match sinks below a section of free-text hits that happens to sort earlier.
+    const best=s=>Math.min.apply(null, bySec[s].map(x=>x.t));
+    SECTIONS.filter(s=>bySec[s]).sort((a,b)=>best(a)-best(b)||SECTIONS.indexOf(a)-SECTIONS.indexOf(b))
+      .forEach(s=>groups.push({label:s, items:bySec[s]}));
   }
   palList=[]; let h='';
   groups.forEach(g=>{
     h+='<div class="pal-group">'+esc(g.label)+'</div>';
-    g.items.forEach(n=>{
-      const i=palList.length; palList.push(n);
-      const hint=paramMatchHint(n,v)||n.key;
+    g.items.forEach(hit=>{
+      const n=hit.n, i=palList.length;
+      // Free-text hits (tier 3) explain themselves: "script · scriptTask1", "doc · orderProcess".
+      const w=v?matchWhere(n,v):null;
+      palList.push({n, el:(w&&w.el)||''});
       h+='<div class="pal-item'+(i===palSel?' sel':'')+'" id="pal-'+i+'" role="option" aria-selected="'+(i===palSel)+'" data-i="'+i+'">'+
          '<span class="dot" style="background:'+nodeColor(n)+'"></span>'+
-         '<span class="nm">'+esc(n.label)+'</span><span class="hint">'+esc(hint)+'</span></div>';
+         '<span class="nm">'+esc(n.label)+'</span><span class="hint">'+esc((w&&w.hint)||n.key)+'</span></div>';
     });
   });
   if(!h) h='<div class="pal-empty">'+(v?'No matches':'Nothing recent yet — visit a few nodes and they will show up here')+'</div>';
+  else if(dropped) h+='<div class="pal-more">+'+dropped+' more — keep typing to narrow it down</div>';
   palres.innerHTML=h;
   if(palSel>=0){
     palq.setAttribute('aria-activedescendant','pal-'+palSel);
     const el=document.getElementById('pal-'+palSel); if(el) el.scrollIntoView({block:'nearest'});
   } else palq.removeAttribute('aria-activedescendant');
   palres.querySelectorAll('.pal-item').forEach(el=>el.onclick=()=>{
-    const n=palList[+el.dataset.i]; closePalette(); select(n.id, v);
+    const hit=palList[+el.dataset.i]; closePalette(); select(hit.n.id, v, hit.el);
   });
 }
 palq.addEventListener('input', debounce(()=>{ palSel=-1; palRender(); },120));
 palq.addEventListener('keydown',e=>{
   if(e.key==='ArrowDown'){ e.preventDefault(); palSel=Math.min(palSel+1,palList.length-1); palRender(); }
   else if(e.key==='ArrowUp'){ e.preventDefault(); palSel=Math.max(palSel-1,0); palRender(); }
-  else if(e.key==='Enter' && palList[palSel]){ const n=palList[palSel]; closePalette(); select(n.id, palq.value.trim()); }
+  else if(e.key==='Enter' && palList[palSel]){
+    const hit=palList[palSel]; closePalette(); select(hit.n.id, palq.value.trim(), hit.el);
+  }
   else if(e.key==='Escape'){ closePalette(); }
   else if(e.key==='Tab'){ e.preventDefault(); }            // the input is the only tabbable — trap
 });
@@ -2516,11 +3065,29 @@ function showTip(el){
   _tip.style.left=left+'px'; _tip.style.top=Math.max(8,top)+'px';
   requestAnimationFrame(()=>_tip.classList.add('show'));
 }
-function hideTip(){ _tipFor=null; _tip.classList.remove('show'); if(_tip.parentNode) _tip.parentNode.removeChild(_tip); }
-document.addEventListener('mouseover',e=>{ let el=tipTarget(e.target); if(el){ el=liftTitle(el); if(el!==_tipFor) showTip(el); } else if(_tipFor) hideTip(); });
-document.addEventListener('mouseout',e=>{ if(_tipFor && tipTarget(e.target)===_tipFor && !_tipFor.contains(e.relatedTarget)) hideTip(); });
+function hideTip(){
+  clearTimeout(_tipT); _tipT=null;
+  _tipFor=null; _tip.classList.remove('show'); if(_tip.parentNode) _tip.parentNode.removeChild(_tip);
+}
+// Hover tooltips wait — a bubble that appears the instant the cursor passes over something turns every
+// mouse movement across a list into a flicker. Keyboard focus shows it immediately: there the tooltip
+// is the answer to a deliberate question.
+const TIP_DELAY=450;
+let _tipT=null;
+document.addEventListener('mouseover',e=>{
+  let el=tipTarget(e.target);
+  if(!el){ if(_tipFor||_tipT) hideTip(); return; }
+  if(el===_tipFor) return;
+  clearTimeout(_tipT);
+  _tipT=setTimeout(()=>{ _tipT=null; showTip(liftTitle(el)); }, TIP_DELAY);
+});
+document.addEventListener('mouseout',e=>{
+  const el=tipTarget(e.target);
+  if(_tipT && el && !el.contains(e.relatedTarget)){ clearTimeout(_tipT); _tipT=null; }
+  if(_tipFor && el===_tipFor && !_tipFor.contains(e.relatedTarget)) hideTip();
+});
 document.addEventListener('focusin',e=>{ let el=tipTarget(e.target); if(el){ el=liftTitle(el); showTip(el); } else if(_tipFor) hideTip(); });
-window.addEventListener('scroll',()=>{ if(_tipFor) hideTip(); }, true);
+window.addEventListener('scroll',()=>{ if(_tipFor||_tipT) hideTip(); }, true);
 
 // ---------- sidebar resize (IntelliJ-style drag handle) ----------
 // The expanded width lives in the --sidebar-w custom property; the collapsed

@@ -85,4 +85,56 @@ class GraphBuilderTest {
         assertEquals("cust_customer", doModel["serviceTableName"])
         assertEquals("db", doModel["serviceType"])
     }
+
+    /**
+     * A variable a script writes must name the script's element, and a variable that exists *only*
+     * because a script mentions it must say so — that is the difference between "the process sets this"
+     * and "a script seems to read this".
+     */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun scriptVariablesCarryTheirElementAndFlagGuesses() {
+        val byId = nodes().associateBy { it["id"] as String }
+        val stamp = byId["variable:shippingStamp"] ?: error("a setVariable() in a script task must yield a variable")
+        val stampData = stamp["data"] as Map<String, Any?>
+        val site = (stampData["scriptSites"] as List<Map<String, Any?>>).single()
+        assertEquals("process:orderProcess", site["model"])
+        assertEquals("stampTask", site["element"])
+        assertEquals("Stamp order", site["elementName"])
+        assertEquals(true, site["api"])
+        assertEquals("an explicit API call is evidence, not a guess", null, stampData["heuristic"])
+
+        // read bare out of the script's scope and nowhere else in the project
+        val courier = byId["variable:courierCode"] ?: error("a bare identifier read in a script must yield a variable")
+        val courierData = courier["data"] as Map<String, Any?>
+        assertEquals(true, courierData["heuristic"])
+        assertTrue(
+            courierData["usages"].toString(),
+            courierData["usages"].toString().contains("script ≈ read · Stamp order"),
+        )
+
+        // a listener's script is attributed to the element the listener hangs off
+        val notified = byId["variable:notified"] ?: error("a listener script's variable must be indexed")
+        val nSite = ((notified["data"] as Map<String, Any?>)["scriptSites"] as List<Map<String, Any?>>).single()
+        assertEquals("notifyTask", nSite["element"])
+        assertEquals("executionListener", nSite["elementType"])
+    }
+
+    /** Element-level `<documentation>` and listeners now travel with the element that declares them. */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun elementDocumentationAndListenersAreKept() {
+        val processes = result["processes"] as List<Map<String, Any?>>
+        val order = processes.first { it["key"] == "orderProcess" }
+        val approve = (order["userTasks"] as List<Map<String, Any?>>).first { it["id"] == "approveTask" }
+        assertEquals(
+            "Backoffice checks the order total before it ships.",
+            approve["documentation"],
+        )
+        val notify = (order["serviceTasks"] as List<Map<String, Any?>>).first { it["id"] == "notifyTask" }
+        val ls = (notify["listeners"] as List<Map<String, Any?>>).single()
+        assertEquals("executionListener", ls["kind"])
+        assertEquals("end", ls["event"])
+        assertTrue(ls["script"].toString().contains("setVariable"))
+    }
 }

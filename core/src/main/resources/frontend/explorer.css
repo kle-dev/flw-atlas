@@ -291,6 +291,8 @@
     max-width:45%;overflow:hidden;text-overflow:ellipsis}
   .pal-item.sel .hint{color:var(--sel-text)}
   .pal-empty{padding:var(--space-6);text-align:center;font-size:var(--text-md);color:var(--ink-faint)}
+  .pal-more{padding:var(--space-2) var(--space-4);text-align:center;font-size:var(--text-xs);
+    color:var(--ink-faint);border-top:1px solid var(--line)}
   /* ---- diagram viewport: zoom + pan inline, and the same thing full screen ---- */
   .dgbar{display:flex;align-items:center;gap:var(--space-15);flex-wrap:wrap;margin:0 0 var(--space-2)}
   .dgbar button{background:var(--panel);border:1px solid var(--line2);color:var(--ink-dim);
@@ -320,7 +322,9 @@
     background:rgba(19,30,41,.85);color:#fff;font-family:var(--sans);font-size:var(--text-xs);
     padding:var(--space-1) var(--space-25);border-radius:var(--radius-full);opacity:0;transition:opacity .18s}
   .dgwheelhint.show{opacity:1}
-  .dgcard{position:absolute;z-index:30;width:min(420px,88%);max-width:96%;max-height:92%;
+  /* A window on <body>, not a child of .dgview — so it can be dragged/resized past the drawing area
+     (z-index 120 keeps it above the fullscreen diagram modal, which reuses .palette's layer at 100). */
+  .dgcard{position:fixed;z-index:120;width:min(420px,88vw);max-width:min(96vw,900px);max-height:88vh;
     min-width:240px;min-height:90px;overflow:auto;cursor:default;resize:both;
     background:var(--panel);color:var(--ink);border:1px solid var(--line2);border-radius:var(--radius-lg);
     box-shadow:var(--shadow);padding:var(--space-25) var(--space-3);font-size:var(--text-sm);font-family:var(--sans)}
@@ -526,6 +530,14 @@
   .scriptbox{font-family:var(--mono);font-size:var(--text-xs);line-height:1.5;color:var(--ink-dim);
     background:var(--bg);border-top:1px solid var(--line);margin:0;padding:var(--space-25) var(--space-3);
     max-height:320px;overflow:auto;white-space:pre}
+  /* DMN decision table: the rules themselves. Wide tables scroll inside the section, never sideways. */
+  .dmntab{overflow-x:auto;padding:var(--space-2) var(--space-3)}
+  .dmntab table{border-collapse:collapse;font-family:var(--mono);font-size:var(--text-xs)}
+  .dmntab th,.dmntab td{border:1px solid var(--line);padding:2px var(--space-15);
+    text-align:left;white-space:pre;vertical-align:top}
+  .dmntab th{background:var(--panel2);color:var(--ink-dim);font-family:var(--sans);font-weight:600}
+  .dmntab td{color:var(--ink-dim)}
+  .dmntab .o{border-left:2px solid var(--line2)}          /* where inputs end and outputs begin */
   /* CMMN plan-model tree: indent each nested stage under its parent */
   .plantree{border-left:1px solid var(--line2);margin:0 0 var(--space-15) var(--space-2);
     padding-left:var(--space-25)}
@@ -547,6 +559,7 @@
     font-family:var(--mono);font-size:var(--text-sm);padding:var(--space-1) var(--space-2);
     border-radius:var(--radius-md);outline:none}
   .pbar .pf:focus{border-color:var(--accent)}
+  .pbar .pcount{flex:none;font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint)}
   .pchip{display:inline-flex;align-items:center;gap:var(--space-1);background:var(--panel);
     border:1px solid var(--line2);color:var(--ink-dim);border-radius:var(--radius-full);
     padding:var(--space-05) var(--space-2);cursor:pointer;font-family:var(--mono);font-size:var(--text-2xs);

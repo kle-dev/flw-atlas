@@ -146,6 +146,13 @@ object BackendModelParsers {
                         }
                     }
                 }
+                // Listeners on the element itself. Until now only the process and its user tasks were
+                // read, so an execution listener on a service task, gateway or start event produced no
+                // reference at all — its class/bean/script was invisible to the graph and to search.
+                val elListeners = if (el === proc) emptyList() else XmlHelpers.readListeners(el)
+                if (elListeners.isNotEmpty()) {
+                    XmlHelpers.collectListenerRefs(ctx, pkey, "bpmn", ffile, elListeners, eid, ename)
+                }
                 val mi = el.findChild("multiInstanceLoopCharacteristics")
                 if (mi != null && tag != "process") {
                     multiInstance.add(linkedMapOf(
@@ -183,12 +190,10 @@ object BackendModelParsers {
                         for (a in listOf("dueDate", "priority", "category")) {
                             el.attr(a)?.ifEmpty { null }?.let { ut[a] = it }
                         }
-                        userTasks.add(ut)
+                        userTasks.add(withElementExtras(ut, el, elListeners))
                         ctx.addRef(pkey, "bpmn", ffile, "userTask-form", "form", ut["formKey"])
                         ctx.addAccess(pkey, "process", "task:$eid", "assign",
                             el.attr("candidateGroups"), pyOr(el.attr("candidateUsers"), el.attr("assignee")))
-                        val ls = XmlHelpers.readListeners(el)
-                        XmlHelpers.collectListenerRefs(ctx, pkey, "bpmn", ffile, ls)
                     }
                     tag == "serviceTask" -> {
                         val st = linkedMapOf<String, Any?>(
@@ -197,7 +202,7 @@ object BackendModelParsers {
                             "delegateExpression" to el.attr("delegateExpression"),
                             "type" to el.attr("type"), "resultVariable" to el.attr("resultVariableName"),
                         )
-                        serviceTasks.add(st)
+                        serviceTasks.add(withElementExtras(st, el, elListeners))
                         ctx.addRef(pkey, "bpmn", ffile, "serviceTask-class", "class", st["class"])
                         // Both `delegateExpression` and `expression` reference a bean — a bean-only
                         // `flowable:expression="${myBean}"` has no method call, so the whole-file
@@ -255,11 +260,12 @@ object BackendModelParsers {
                     }
                     tag == "scriptTask" -> {
                         val body = el.childText("script")
-                        scriptTasks.add(linkedMapOf(
+                        scriptTasks.add(withElementExtras(linkedMapOf(
                             "id" to eid, "name" to ename, "format" to el.attr("scriptFormat"),
                             "script" to body, "resultVariable" to el.attr("resultVariable"),
-                        ))
-                        VarHarvest.collectScriptVars(ctx, body, listOf(pkey))
+                        ), el, elListeners))
+                        VarHarvest.collectScriptVars(ctx, body, listOf(pkey), el.attr("scriptFormat"),
+                            eid, ename, "scriptTask")
                         ctx.addVar(pkey, el.attr("resultVariable"))
                         XmlHelpers.resultVariableParam("resultVariable", el.attr("resultVariable"))
                             ?.let { ctx.addParams(ioParameters, pkey, eid, ename, tag, listOf(it)) }
@@ -268,7 +274,8 @@ object BackendModelParsers {
                         val f = XmlHelpers.readFields(el)
                         val dref = pyOr(pyOr(el.attr("decisionTableReferenceKey"), f["decisionTableReferenceKey"]),
                             el.textOfDescendant("decisionRef"))
-                        ruleTasks.add(linkedMapOf("id" to eid, "name" to ename, "decisionRef" to dref))
+                        ruleTasks.add(withElementExtras(
+                            linkedMapOf("id" to eid, "name" to ename, "decisionRef" to dref), el, elListeners))
                         ctx.addRef(pkey, "bpmn", ffile, "ruleTask-decision", "decision", dref)
                     }
                     tag == "callActivity" -> {
@@ -276,22 +283,24 @@ object BackendModelParsers {
                         // calledElementType is "key" (default) or "id" — an id is a deployment-time
                         // definition id, not a model key, so resolving it by key is only a guess.
                         val calledType = el.attr("calledElementType")
-                        callActivities.add(linkedMapOf(
+                        callActivities.add(withElementExtras(linkedMapOf(
                             "id" to eid, "name" to ename, "calledElement" to called,
                             "calledElementType" to calledType,
-                        ))
+                        ), el, elListeners))
                         ctx.addRef(pkey, "bpmn", ffile, "callActivity", "process", called,
                             suspect = calledType.equals("id", ignoreCase = true))
                     }
                     tag in listOf("subProcess", "transaction", "adhocSubProcess") -> {
-                        subProcesses.add(linkedMapOf(
+                        subProcesses.add(withElementExtras(linkedMapOf(
                             "id" to eid, "name" to ename, "type" to tag,
                             "eventSubProcess" to (el.attr("triggeredByEvent") == "true"),
-                        ))
+                        ), el, elListeners))
                     }
                     tag in XmlHelpers.BPMN_EVENT_TAGS -> {
                         val (k, v) = XmlHelpers.eventInfo(el)
-                        events.add(linkedMapOf("id" to eid, "name" to ename, "type" to tag, "def" to k, "value" to v))
+                        events.add(withElementExtras(
+                            linkedMapOf("id" to eid, "name" to ename, "type" to tag, "def" to k, "value" to v),
+                            el, elListeners))
                         if (tag == "startEvent" && truthy(el.attr("formKey"))) {
                             ctx.addRef(pkey, "bpmn", ffile, "start-form", "form", el.attr("formKey"))
                         }
@@ -304,10 +313,12 @@ object BackendModelParsers {
                         }
                     }
                     tag in XmlHelpers.BPMN_GW_TAGS -> {
-                        gateways.add(linkedMapOf("id" to eid, "name" to ename, "type" to tag))
+                        gateways.add(withElementExtras(
+                            linkedMapOf("id" to eid, "name" to ename, "type" to tag), el, elListeners))
                     }
                     tag in listOf("sendTask", "receiveTask", "manualTask", "task") -> {
-                        otherTasks.add(linkedMapOf("id" to eid, "name" to ename, "type" to tag))
+                        otherTasks.add(withElementExtras(
+                            linkedMapOf("id" to eid, "name" to ename, "type" to tag), el, elListeners))
                         // send/receive tasks reference a <message> definition by id
                         val mref = el.attr("messageRef")
                         if (!mref.isNullOrEmpty() && tag in listOf("sendTask", "receiveTask")) {
@@ -403,7 +414,8 @@ object BackendModelParsers {
                 if (el.attr("type") == "script") {
                     d["scriptFormat"] = el.attr("scriptFormat")
                     d["script"] = XmlHelpers.readFields(el)["script"]
-                    VarHarvest.collectScriptVars(ctx, d["script"] as? String, listOf(caseKey))
+                    VarHarvest.collectScriptVars(ctx, d["script"] as? String, listOf(caseKey),
+                        el.attr("scriptFormat"), el.attr("id"), el.attr("name"), "scriptTask")
                 }
                 // CMMN external worker task — the topic names the external system's queue
                 if (el.attr("type") == "external-worker") {
@@ -447,7 +459,9 @@ object BackendModelParsers {
         }
         val listeners = XmlHelpers.readListeners(el)
         d["listeners"] = listeners
-        XmlHelpers.collectListenerRefs(ctx, caseKey, "cmmn", ffile, listeners)
+        XmlHelpers.collectListenerRefs(ctx, caseKey, "cmmn", ffile, listeners, el.attr("id"), el.attr("name"))
+        // The modeller's own explanation of this plan item — read at case level only until now.
+        el.childText("documentation")?.let { d["documentation"] = it }
         return d
     }
 
@@ -641,6 +655,21 @@ object BackendModelParsers {
     // -----------------------------------------------------------------------
 
     /** ElementTree `elem.iter()` (no tag): self + every descendant, pre-order. */
+    /**
+     * Element-level extras every flow node can carry, added only when the model declares them (so a
+     * plain task keeps the record shape it always had):
+     *  - `documentation` — the modeller's own explanation. Previously read at process/case level only,
+     *    which is exactly the text a reader searches for when they don't know the element's id.
+     *  - `listeners` — execution/task listeners on *this* element (class, expression, script, event).
+     */
+    private fun withElementExtras(
+        rec: LinkedHashMap<String, Any?>, el: El, listeners: List<Map<String, Any?>>,
+    ): LinkedHashMap<String, Any?> {
+        el.childText("documentation")?.let { rec["documentation"] = it }
+        if (listeners.isNotEmpty()) rec["listeners"] = listeners
+        return rec
+    }
+
     private fun iterAll(el: El): List<El> {
         val out = ArrayList<El>()
         fun walk(e: El) {
