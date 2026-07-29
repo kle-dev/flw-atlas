@@ -18,30 +18,32 @@ _Scanned 12 model files, 0 archives, 2 Java files, 1 REST endpoints. Generated b
 ### Order Process (`orderProcess`) — `processes/order.bpmn`
 > Handles an order from entry to approval.
 - starter groups: `sales`
-- 👤 userTask `approveTask` Approve order form=`orderForm`
-- ⚙️ serviceTask `calcTask` Calculate total → ${demoBean.run(execution)} → var `total`
-- ⚙️ serviceTask `notifyTask` Notify → ${notifierBean}
-- ⚙️ serviceTask `decideTask` Decide approval → dmn
-- 📊 ruleTask `decideTask` → decision `orderDecision`
-- 📞 callActivity `callSub` → process `fulfilmentProcess` in(orderId→subOrderId) out(subTotal→total)
-- 🔔 startEvent `start` 
-- 🔔 endEvent `end` 
-    - flow calcTask→approveTask: `${total > 100}`
-    - flow approveTask→notifyTask: `${vars:bogus(}`
+- 👤 User task `approveTask` Approve order form=`orderForm`
+- ⚙️ Service task `calcTask` Calculate total → ${demoBean.run(execution)} → var `total`
+- ⚙️ Service task `notifyTask` Notify → ${notifierBean}
+- ⚙️ Service task `decideTask` Decide approval → dmn
+- 🧾 Script task `stampTask` Stamp order (groovy)
+- 📊 Decision task `decideTask` → decision table `orderDecision`
+- 📞 Call activity `callSub` → process `fulfilmentProcess` in(orderId→subOrderId) out(subTotal→total)
+- 🔔 Start event `start` 
+- 🔔 End event `end` 
+- 🎧 Execution listener [end] on `notifyTask` → (script)
+    - sequence flow calcTask→approveTask: `${total > 100}`
+    - sequence flow approveTask→notifyTask: `${vars:bogus(}`
 
 ## 3. Cases (CMMN)
 
 ### Review Case (`reviewCase`) — `cases/review.cmmn`
-    - 📁 **casePlanModel** Review plan
-        - humanTask Review order formKey=`orderForm`
-        - processTask Start order processRef=`orderProcess`
-        - task Lookup customer serviceModelKey=`customerService`
+    - 📁 **Case plan model** Review plan
+        - Human task Review order formKey=`orderForm`
+        - Process task Start order processRef=`orderProcess`
+        - Task Lookup customer serviceModelKey=`customerService`
 
-## 4. Decisions (DMN)
+## 4. Decision tables (DMN)
 
 - `orderDecision` (FIRST, 1 rules) — in: ['total'], out: ['approved'] — `decisions/order-decision.dmn`
 
-## 5. Forms & Pages
+## 5. Forms & pages
 
 ### Order Form (`orderForm`) — `forms/order-form.form`
 - `customer` [select] Customer

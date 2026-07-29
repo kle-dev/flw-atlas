@@ -7,6 +7,7 @@
       </input>
       <output id="out1" label="approved" name="approved" typeRef="boolean"/>
       <rule id="r1">
+        <description>Large orders need approval.</description>
         <inputEntry id="uie1"><text>&gt; 100</text></inputEntry>
         <outputEntry id="uoe1"><text>true</text></outputEntry>
       </rule>

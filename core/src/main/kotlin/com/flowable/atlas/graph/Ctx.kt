@@ -28,7 +28,11 @@ class Ctx {
      *  `variable` node, which is what makes a parameter findable by its variable name. */
     val paramFlows = ArrayList<MutableMap<String, Any?>>()
     val varUse = LinkedHashMap<String, MutableSet<String>>()
-    val scriptVarUse = LinkedHashMap<String, MutableSet<String>>()
+    /** One entry per (variable, script) pair: which model's script touches the name, on which element,
+     *  and whether an explicit API call named it (`api = true`) or the bare-identifier heuristic did.
+     *  [GraphBuilder] turns these into the precise "used in" snippets on a `variable` node and marks
+     *  the variables only a heuristic read supports — a guess must never look like a declaration. */
+    val scriptVarSites = ArrayList<MutableMap<String, Any?>>()
     /** Form/page field ids — in Flowable Work a field id IS the variable path the form reads and
      *  writes, so indexing it is what connects a form to the process/case variables it touches. */
     val formFieldUse = LinkedHashMap<String, MutableSet<String>>()
@@ -140,6 +144,23 @@ class Ctx {
         ))
     }
 
+    /**
+     * Record that [model]'s script — the one on element [elementId] ([elementName] for reading) — touches
+     * [name]. [api] separates an explicit `setVariable('x')`-style call from a bare-identifier read.
+     */
+    fun addScriptVar(
+        model: Any?, name: Any?, api: Boolean,
+        elementId: Any? = null, elementName: Any? = null, elementType: String? = null,
+    ) {
+        if (model == null || name == null) return
+        val n = name.toString().trim()
+        if (!IDENT.matches(n) || n in Constants.FLOWABLE_CONTEXT || n in Constants.JAVA_LITERALS) return
+        scriptVarSites.add(linkedMapOf(
+            "model" to model.toString(), "variable" to n, "api" to api,
+            "element" to elementId, "elementName" to elementName, "elementType" to elementType,
+        ))
+    }
+
     /** Record a plain variable identifier declared/mapped/used by a model. */
     fun addVar(modelKey: Any?, name: Any?, bucket: String = "var_use") {
         if (modelKey == null || name == null) return
@@ -147,7 +168,6 @@ class Ctx {
         if (IDENT.matches(n) && n !in Constants.FLOWABLE_CONTEXT && n !in Constants.JAVA_LITERALS) {
             val target = when (bucket) {
                 "var_use" -> varUse
-                "script_var_use" -> scriptVarUse
                 "form_field_use" -> formFieldUse
                 "expr_use" -> exprUse
                 "mustache_use" -> mustacheUse

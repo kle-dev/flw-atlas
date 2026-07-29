@@ -246,9 +246,14 @@ object GraphBuilder {
         }
 
         val varUsages = LinkedHashMap<String, LinkedHashMap<String, LinkedHashSet<String>>>()
-        fun addUsage(v: String, k: Any?, snippet: String) {
+        // Variables backed by something stronger than a script's bare-identifier read. Everything a
+        // parser saw literally is solid; only the [ScriptVars] read heuristic is not, and a variable
+        // resting on that alone is flagged rather than silently presented as a fact.
+        val solidVars = LinkedHashSet<String>()
+        fun addUsage(v: String, k: Any?, snippet: String, solid: Boolean = true) {
             if (v in beans) return
             varUsages.getOrPut(v) { LinkedHashMap() }.getOrPut(k.toString()) { LinkedHashSet() }.add(snippet)
+            if (solid) solidVars.add(v)
         }
 
         for ((expr, keys) in ctx.exprUse) for (v in varsInExpr(expr)) for (k in keys) addUsage(v, k, expr)
@@ -257,7 +262,21 @@ object GraphBuilder {
             for (k in keys) addUsage(v, k, ph)
         }
         for ((v, keys) in ctx.varUse) for (k in keys) addUsage(v, k, "(declared / mapped)")
-        for ((v, keys) in ctx.scriptVarUse) for (k in keys) addUsage(v, k, "(script)")
+        // Script bodies, with the element whose script it is — "(script)" alone left the reader hunting
+        // for which of a dozen tasks actually touches the variable.
+        val varScripts = LinkedHashMap<String, MutableList<Map<String, Any?>>>()
+        for (s in ctx.scriptVarSites) {
+            val v = s["variable"] as? String ?: continue
+            if (v in beans) continue
+            val api = s["api"] == true
+            val where = (s["elementName"] as? String)?.ifEmpty { null } ?: s["element"] as? String
+            val snippet = "(script" + (if (api) "" else " ≈ read") + (if (where != null) " · $where" else "") + ")"
+            addUsage(v, s["model"], snippet, solid = api)
+            varScripts.getOrPut(v) { ArrayList() }.add(linkedMapOf(
+                "model" to s["model"], "element" to s["element"], "elementName" to s["elementName"],
+                "elementType" to s["elementType"], "api" to api,
+            ))
+        }
         for ((v, keys) in ctx.formFieldUse) for (k in keys) addUsage(v, k, "(form field)")
         // In/out parameter mappings: one precise snippet per binding instead of the generic
         // "(declared / mapped)", plus a per-variable list so the detail view can show the data flow and
@@ -294,6 +313,14 @@ object GraphBuilder {
             val flows = (varParams[v] ?: emptyList()).filter { it["model"] in keyToNode }
                 .map { it + mapOf("model" to keyToNode.getValue(it["model"].toString())) }
             if (flows.isNotEmpty()) data["ioParams"] = flows
+            // Which scripts touch this variable, and on which element — the detail view lists them and
+            // the explorer's search jumps straight to that script.
+            val scripts = (varScripts[v] ?: emptyList()).filter { it["model"] in keyToNode }
+                .map { it + mapOf("model" to keyToNode.getValue(it["model"].toString())) }
+            if (scripts.isNotEmpty()) data["scriptSites"] = scripts
+            // Nothing but a bare identifier in a script backs this name: real often enough to be worth
+            // showing, not solid enough to state as fact.
+            if (v !in solidVars) data["heuristic"] = true
             addNode("variable", v, v, null, data)
         }
 

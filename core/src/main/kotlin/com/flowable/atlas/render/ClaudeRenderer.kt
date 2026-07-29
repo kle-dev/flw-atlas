@@ -1,5 +1,6 @@
 package com.flowable.atlas.render
 
+import com.flowable.atlas.model.DesignTerms
 import com.flowable.atlas.model.MiniJson
 import java.io.File
 
@@ -68,7 +69,8 @@ object ClaudeRenderer {
         }
         val order = listOf("process", "case", "decision", "form", "page", "dataObject", "service", "agent",
             "channel", "event", "action", "query", "template", "sequence", "variableExtractor")
-        val inv = order.filter { bt(it).isNotEmpty() }.joinToString(" · ") { "${bt(it).size} $it" }
+        // counted in Design's words ("2 data objects"), the same as the summary's inventory
+        val inv = order.filter { bt(it).isNotEmpty() }.joinToString(" · ") { DesignTerms.counted(bt(it).size, it) }
         if (inv.isNotEmpty()) L.add("- **Models:** " + inv)
         val jr = LinkedHashMap<String, Int>()
         for (n in bt("java")) {

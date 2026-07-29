@@ -13,12 +13,20 @@
       <conditionExpression xsi:type="tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${total &gt; 100}</conditionExpression>
     </sequenceFlow>
     <userTask id="approveTask" name="Approve order"
-              flowable:candidateGroups="backoffice" flowable:formKey="orderForm"/>
+              flowable:candidateGroups="backoffice" flowable:formKey="orderForm">
+      <documentation>Backoffice checks the order total before it ships.</documentation>
+    </userTask>
     <sequenceFlow id="f3" sourceRef="approveTask" targetRef="notifyTask">
       <conditionExpression xsi:type="tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${vars:bogus(}</conditionExpression>
     </sequenceFlow>
     <serviceTask id="notifyTask" name="Notify"
-                 flowable:delegateExpression="${notifierBean}"/>
+                 flowable:delegateExpression="${notifierBean}">
+      <extensionElements>
+        <flowable:executionListener event="end">
+          <flowable:script scriptFormat="groovy">execution.setVariable('notified', true)</flowable:script>
+        </flowable:executionListener>
+      </extensionElements>
+    </serviceTask>
     <sequenceFlow id="f4" sourceRef="notifyTask" targetRef="callSub"/>
     <callActivity id="callSub" name="Fulfil" calledElement="fulfilmentProcess">
       <extensionElements>
@@ -40,7 +48,15 @@
         <flowable:eventType>orderShipped</flowable:eventType>
       </extensionElements>
     </receiveTask>
-    <sequenceFlow id="f7" sourceRef="waitShipped" targetRef="end"/>
+    <sequenceFlow id="f7" sourceRef="waitShipped" targetRef="stampTask"/>
+    <scriptTask id="stampTask" name="Stamp order" scriptFormat="groovy">
+      <documentation>Builds the shipping stamp from the order and the courier.</documentation>
+      <script>
+        def stamp = "shipped-" + orderId + "-" + courierCode
+        execution.setVariable('shippingStamp', stamp)
+      </script>
+    </scriptTask>
+    <sequenceFlow id="f8" sourceRef="stampTask" targetRef="end"/>
     <endEvent id="end"/>
   </process>
 </definitions>

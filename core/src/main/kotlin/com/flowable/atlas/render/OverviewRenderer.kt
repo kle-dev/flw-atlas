@@ -1,5 +1,6 @@
 package com.flowable.atlas.render
 
+import com.flowable.atlas.model.DesignTerms
 import java.io.File
 
 /**
@@ -86,7 +87,8 @@ object OverviewRenderer {
                     val ut = asMap(utAny)
                     val extra = if (truthy(ut["formKey"])) " form=`${pyStr(ut["formKey"])}`" else ""
                     L.add(
-                        "- 👤 userTask `${pyStr(ut["id"])}` ${orE(ut["name"])}$extra" +
+                        "- 👤 ${DesignTerms.label("el", "userTask")} `${pyStr(ut["id"])}` " +
+                            "${orE(ut["name"])}$extra" +
                             (if (truthy(ut["assignee"])) " assignee=${pyStr(ut["assignee"])}" else "")
                     )
                 }
@@ -94,11 +96,22 @@ object OverviewRenderer {
                     val st = asMap(stAny)
                     val impl = orAny(st["class"], st["delegateExpression"], st["expression"], st["type"], "?")
                     val rv = if (truthy(st["resultVariable"])) " → var `${pyStr(st["resultVariable"])}`" else ""
-                    L.add("- ⚙️ serviceTask `${pyStr(st["id"])}` ${orE(st["name"])} → ${pyStr(impl)}$rv")
+                    L.add("- ⚙️ ${DesignTerms.label("el", "serviceTask")} `${pyStr(st["id"])}` " +
+                        "${orE(st["name"])} → ${pyStr(impl)}$rv")
+                }
+                // Script tasks were missing from this report entirely — a process could run a script and
+                // nothing in the Markdown said so.
+                for (stAny in asList(p["scriptTasks"])) {
+                    val st = asMap(stAny)
+                    val fmt = if (truthy(st["format"])) " (${pyStr(st["format"])})" else ""
+                    val rv = if (truthy(st["resultVariable"])) " → var `${pyStr(st["resultVariable"])}`" else ""
+                    L.add("- 🧾 ${DesignTerms.label("el", "scriptTask")} `${pyStr(st["id"])}` " +
+                        "${orE(st["name"])}$fmt$rv")
                 }
                 for (rtAny in asList(p["ruleTasks"])) {
                     val rt = asMap(rtAny)
-                    L.add("- 📊 ruleTask `${pyStr(rt["id"])}` → decision `${pyStr(rt["decisionRef"])}`")
+                    L.add("- 📊 ${DesignTerms.label("el", "serviceTask/dmn")} `${pyStr(rt["id"])}` " +
+                        "→ decision table `${pyStr(rt["decisionRef"])}`")
                 }
                 for (caAny in asList(p["callActivities"])) {
                     val ca = asMap(caAny)
@@ -107,12 +120,13 @@ object OverviewRenderer {
                     val io = asList(p["ioParameters"]).map { asMap(it) }
                         .filter { it["element"] == ca["id"] && it["kind"] in listOf("in", "out") }
                         .joinToString("") { " ${pyStr(it["dir"])}(${pyStr(it["source"])}→${pyStr(it["target"])})" }
-                    L.add("- 📞 callActivity `${pyStr(ca["id"])}` → process `${pyStr(ca["calledElement"])}`$io")
+                    L.add("- 📞 ${DesignTerms.label("el", "callActivity")} `${pyStr(ca["id"])}` " +
+                        "→ process `${pyStr(ca["calledElement"])}`$io")
                 }
                 for (miAny in asList(p["multiInstance"])) {
                     val mi = asMap(miAny)
                     L.add(
-                        "- 🔁 multi-instance on `${pyStr(mi["activity"])}` collection=`${pyStr(mi["collection"])}` " +
+                        "- 🔁 Multi-instance on `${pyStr(mi["activity"])}` collection=`${pyStr(mi["collection"])}` " +
                             "elementVar=`${pyStr(mi["elementVariable"])}`"
                     )
                 }
@@ -121,16 +135,28 @@ object OverviewRenderer {
                     val d = if (truthy(ev["def"]))
                         " (${pyStr(ev["def"])}${if (truthy(ev["value"])) "=" + pyStr(ev["value"]) else ""})"
                     else ""
-                    L.add("- 🔔 ${pyStr(ev["type"])}$d `${pyStr(ev["id"])}` ${orE(ev["name"])}")
+                    L.add("- 🔔 ${DesignTerms.label("el", ev["type"])}$d `${pyStr(ev["id"])}` ${orE(ev["name"])}")
                 }
-                for (lsAny in asList(p["listeners"])) {
-                    val ls = asMap(lsAny)
-                    val impl = orAny(ls["class"], ls["delegateExpression"], ls["expression"])
-                    if (truthy(impl)) L.add("- 🎧 ${pyStr(ls["kind"])} [${pyStr(ls["event"])}] → ${pyStr(impl)}")
+                // Listeners of the process AND of its elements. Only the process-level ones were listed,
+                // and a script-only listener was skipped entirely because it has no class/expression —
+                // both cases hid code that runs at runtime.
+                fun listenerLine(ls: Map<String, Any?>, on: Any?) {
+                    val impl = orAny(ls["class"], ls["delegateExpression"], ls["expression"],
+                        if (truthy(ls["script"])) "(script)" else null)
+                    if (!truthy(impl)) return
+                    val where = if (truthy(on)) " on `${pyStr(on)}`" else ""
+                    L.add("- 🎧 ${DesignTerms.label("el", ls["kind"])} [${pyStr(ls["event"])}]$where → ${pyStr(impl)}")
+                }
+                for (lsAny in asList(p["listeners"])) listenerLine(asMap(lsAny), null)
+                for (bucket in ELEMENT_BUCKETS) {
+                    for (elAny in asList(p[bucket])) {
+                        val el = asMap(elAny)
+                        for (lsAny in asList(el["listeners"])) listenerLine(asMap(lsAny), el["id"])
+                    }
                 }
                 for (cAny in asList(p["conditions"])) {
                     val c = asMap(cAny)
-                    L.add("    - flow ${pyStr(c["from"])}→${pyStr(c["to"])}: `${pyStr(c["condition"])}`")
+                    L.add("    - sequence flow ${pyStr(c["from"])}→${pyStr(c["to"])}: `${pyStr(c["condition"])}`")
                 }
                 L.add("")
             }
@@ -153,14 +179,14 @@ object OverviewRenderer {
                     val sen = asMap(sAny)
                     val cond = if (truthy(sen["condition"])) " if `${pyStr(sen["condition"])}`" else ""
                     L.add(
-                        "- 🚪 sentry `${pyStr(sen["id"])}`$cond" +
+                        "- 🚪 Sentry `${pyStr(sen["id"])}`$cond" +
                             (if (truthy(sen["onParts"])) " on ${pyStr(sen["onParts"])}" else "")
                     )
                 }
                 for (eAny in asList(c["eventListeners"])) {
                     val e = asMap(eAny)
                     val t = if (truthy(e["timer"])) " timer=`${pyStr(e["timer"])}`" else ""
-                    L.add("- ⏰ ${pyStr(e["type"])} `${pyStr(e["id"])}`$t")
+                    L.add("- ⏰ ${DesignTerms.label("el", e["type"])} `${pyStr(e["id"])}`$t")
                 }
                 L.add("")
             }
@@ -169,7 +195,7 @@ object OverviewRenderer {
         // Decisions
         val decisions = asList(result["decisions"])
         if (decisions.isNotEmpty()) {
-            hdr(4, "Decisions (DMN)")
+            hdr(4, "Decision tables (DMN)")
             for (dAny in decisions) {
                 val d = asMap(dAny)
                 L.add(
@@ -183,7 +209,7 @@ object OverviewRenderer {
         // Forms & Pages
         val forms = asList(result["forms"])
         if (forms.isNotEmpty()) {
-            hdr(5, "Forms & Pages")
+            hdr(5, "Forms & pages")
             for (fAny in forms) {
                 val f = asMap(fAny)
                 L.add("### ${orE(f["name"])} (`${pyStr(f["key"])}`) — `${pyStr(f["file"])}`")
@@ -260,7 +286,7 @@ object OverviewRenderer {
         // Agents / Bots
         val agents = asList(result["agents"])
         if (agents.isNotEmpty()) {
-            hdr(6, "Agents / Bots")
+            hdr(6, "AI agents & bots")
             for (aAny in agents) {
                 val a = asMap(aAny)
                 L.add("### `${pyStr(a["key"])}` — ${orE(a["name"])} (${pyStr(a["type"])}) — `${pyStr(a["file"])}`")
@@ -621,9 +647,15 @@ object OverviewRenderer {
     }
 
     /** Port of `_render_stage(node, L, depth)`. */
+    /** The per-element-type lists of a parsed process; anything an element can carry lives in one of them. */
+    private val ELEMENT_BUCKETS = listOf(
+        "userTasks", "serviceTasks", "scriptTasks", "ruleTasks", "callActivities",
+        "subProcesses", "events", "gateways", "otherTasks",
+    )
+
     private fun renderStage(node: Map<String, Any?>, L: MutableList<String>, depth: Int) {
         val ind = "    ".repeat(depth)
-        L.add("$ind- 📁 **${pyStr(node["type"])}** ${pyStr(orAny(node["name"], node["id"], ""))}")
+        L.add("$ind- 📁 **${DesignTerms.label("el", node["type"])}** ${pyStr(orAny(node["name"], node["id"], ""))}")
         for (chAny in asList(node["children"])) {
             val ch = asMap(chAny)
             var rules = ""
@@ -640,7 +672,8 @@ object OverviewRenderer {
                 )) {
                     if (truthy(ch[k])) extra += " $k=`${pyStr(ch[k])}`"
                 }
-                L.add("$ind    - ${pyStr(ch["type"])} ${pyStr(orAny(ch["name"], ch["id"], ""))}$extra$rules")
+                L.add("$ind    - ${DesignTerms.label("el", ch["type"])} " +
+                    "${pyStr(orAny(ch["name"], ch["id"], ""))}$extra$rules")
             }
         }
     }

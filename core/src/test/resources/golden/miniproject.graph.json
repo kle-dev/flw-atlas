@@ -360,6 +360,9 @@
       },
       "file": "decisions/order-decision.dmn",
       "hitPolicy": "FIRST",
+      "inputExpressions": [
+        "total"
+      ],
       "inputs": [
         "total"
       ],
@@ -368,7 +371,19 @@
       "outputs": [
         "approved"
       ],
-      "ruleCount": 1
+      "ruleCount": 1,
+      "rules": [
+        {
+          "annotation": "Large orders need approval.",
+          "id": "r1",
+          "inputs": [
+            "> 100"
+          ],
+          "outputs": [
+            "true"
+          ]
+        }
+      ]
     }
   ],
   "delegateClasses": [],
@@ -883,7 +898,10 @@
               "expression:${vars:bogus(}"
             ],
             "variable": [
+              "variable:courierCode",
+              "variable:notified",
               "variable:orderId",
+              "variable:shippingStamp",
               "variable:subOrderId",
               "variable:subTotal",
               "variable:total"
@@ -982,13 +1000,32 @@
               "name": "Decide approval"
             }
           ],
-          "scriptTasks": [],
+          "scriptTasks": [
+            {
+              "documentation": "Builds the shipping stamp from the order and the courier.",
+              "format": "groovy",
+              "id": "stampTask",
+              "name": "Stamp order",
+              "resultVariable": null,
+              "script": "def stamp = \"shipped-\" + orderId + \"-\" + courierCode\n        execution.setVariable('shippingStamp', stamp)"
+            }
+          ],
           "serviceTasks": [
             {
               "class": null,
               "delegateExpression": "${notifierBean}",
               "expression": null,
               "id": "notifyTask",
+              "listeners": [
+                {
+                  "class": null,
+                  "delegateExpression": null,
+                  "event": "end",
+                  "expression": null,
+                  "kind": "executionListener",
+                  "script": "execution.setVariable('notified', true)"
+                }
+              ],
               "name": "Notify",
               "resultVariable": null,
               "type": null
@@ -1020,6 +1057,7 @@
             {
               "assignee": null,
               "candidateGroups": "backoffice",
+              "documentation": "Backoffice checks the order total before it ships.",
               "formKey": "orderForm",
               "id": "approveTask",
               "name": "Approve order"
@@ -1156,6 +1194,9 @@
           },
           "file": "decisions/order-decision.dmn",
           "hitPolicy": "FIRST",
+          "inputExpressions": [
+            "total"
+          ],
           "inputs": [
             "total"
           ],
@@ -1164,7 +1205,19 @@
           "outputs": [
             "approved"
           ],
-          "ruleCount": 1
+          "ruleCount": 1,
+          "rules": [
+            {
+              "annotation": "Large orders need approval.",
+              "id": "r1",
+              "inputs": [
+                "> 100"
+              ],
+              "outputs": [
+                "true"
+              ]
+            }
+          ]
         },
         "file": "decisions/order-decision.dmn",
         "id": "decision:orderDecision",
@@ -1673,6 +1726,39 @@
       },
       {
         "data": {
+          "heuristic": true,
+          "scopes": [
+            "process"
+          ],
+          "scriptSites": [
+            {
+              "api": false,
+              "element": "stampTask",
+              "elementName": "Stamp order",
+              "elementType": "scriptTask",
+              "model": "process:orderProcess"
+            }
+          ],
+          "usages": [
+            {
+              "model": "process:orderProcess",
+              "snippets": [
+                "(script ≈ read · Stamp order)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "process:orderProcess"
+          ]
+        },
+        "file": null,
+        "id": "variable:courierCode",
+        "key": "courierCode",
+        "label": "courierCode",
+        "type": "variable"
+      },
+      {
+        "data": {
           "ioParams": [
             {
               "dir": "in",
@@ -1685,12 +1771,22 @@
           "scopes": [
             "process"
           ],
+          "scriptSites": [
+            {
+              "api": false,
+              "element": "stampTask",
+              "elementName": "Stamp order",
+              "elementType": "scriptTask",
+              "model": "process:orderProcess"
+            }
+          ],
           "usages": [
             {
               "model": "process:orderProcess",
               "snippets": [
                 "(declared / mapped)",
-                "(in parameter on callSub) orderId → subOrderId"
+                "(in parameter on callSub) orderId → subOrderId",
+                "(script ≈ read · Stamp order)"
               ]
             }
           ],
@@ -1751,6 +1847,15 @@
           "scopes": [
             "action"
           ],
+          "scriptSites": [
+            {
+              "api": true,
+              "element": null,
+              "elementName": null,
+              "elementType": null,
+              "model": "action:notifyCustomerAction"
+            }
+          ],
           "usages": [
             {
               "model": "action:notifyCustomerAction",
@@ -1782,7 +1887,17 @@
             }
           ],
           "scopes": [
-            "action"
+            "action",
+            "process"
+          ],
+          "scriptSites": [
+            {
+              "api": true,
+              "element": "notifyTask",
+              "elementName": "Notify",
+              "elementType": "executionListener",
+              "model": "process:orderProcess"
+            }
           ],
           "usages": [
             {
@@ -1790,10 +1905,17 @@
               "snippets": [
                 "(in parameter on script-evaluation-bot) notified"
               ]
+            },
+            {
+              "model": "process:orderProcess",
+              "snippets": [
+                "(script · Notify)"
+              ]
             }
           ],
           "usedBy": [
-            "action:notifyCustomerAction"
+            "action:notifyCustomerAction",
+            "process:orderProcess"
           ]
         },
         "file": null,
@@ -1815,6 +1937,15 @@
           ],
           "scopes": [
             "action"
+          ],
+          "scriptSites": [
+            {
+              "api": true,
+              "element": null,
+              "elementName": null,
+              "elementType": null,
+              "model": "action:notifyCustomerAction"
+            }
           ],
           "usages": [
             {
@@ -1939,6 +2070,15 @@
           ],
           "scopes": [
             "action"
+          ],
+          "scriptSites": [
+            {
+              "api": true,
+              "element": null,
+              "elementName": null,
+              "elementType": null,
+              "model": "action:notifyCustomerAction"
+            }
           ],
           "usages": [
             {
@@ -2184,6 +2324,38 @@
         "id": "variable:customerRecord",
         "key": "customerRecord",
         "label": "customerRecord",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "scopes": [
+            "process"
+          ],
+          "scriptSites": [
+            {
+              "api": true,
+              "element": "stampTask",
+              "elementName": "Stamp order",
+              "elementType": "scriptTask",
+              "model": "process:orderProcess"
+            }
+          ],
+          "usages": [
+            {
+              "model": "process:orderProcess",
+              "snippets": [
+                "(script · Stamp order)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "process:orderProcess"
+          ]
+        },
+        "file": null,
+        "id": "variable:shippingStamp",
+        "key": "shippingStamp",
+        "label": "shippingStamp",
         "type": "variable"
       },
       {
@@ -2524,7 +2696,10 @@
           "expression:${vars:bogus(}"
         ],
         "variable": [
+          "variable:courierCode",
+          "variable:notified",
           "variable:orderId",
+          "variable:shippingStamp",
           "variable:subOrderId",
           "variable:subTotal",
           "variable:total"
@@ -2623,13 +2798,32 @@
           "name": "Decide approval"
         }
       ],
-      "scriptTasks": [],
+      "scriptTasks": [
+        {
+          "documentation": "Builds the shipping stamp from the order and the courier.",
+          "format": "groovy",
+          "id": "stampTask",
+          "name": "Stamp order",
+          "resultVariable": null,
+          "script": "def stamp = \"shipped-\" + orderId + \"-\" + courierCode\n        execution.setVariable('shippingStamp', stamp)"
+        }
+      ],
       "serviceTasks": [
         {
           "class": null,
           "delegateExpression": "${notifierBean}",
           "expression": null,
           "id": "notifyTask",
+          "listeners": [
+            {
+              "class": null,
+              "delegateExpression": null,
+              "event": "end",
+              "expression": null,
+              "kind": "executionListener",
+              "script": "execution.setVariable('notified', true)"
+            }
+          ],
           "name": "Notify",
           "resultVariable": null,
           "type": null
@@ -2661,6 +2855,7 @@
         {
           "assignee": null,
           "candidateGroups": "backoffice",
+          "documentation": "Backoffice checks the order total before it ships.",
           "formKey": "orderForm",
           "id": "approveTask",
           "name": "Approve order"
@@ -2994,7 +3189,7 @@
     "groups": 3,
     "java": 2,
     "models": 12,
-    "nodes": 45,
+    "nodes": 47,
     "suspectEdges": 0
   },
   "unresolvedRefs": [

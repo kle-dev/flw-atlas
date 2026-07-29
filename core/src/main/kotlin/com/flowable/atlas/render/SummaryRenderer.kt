@@ -1,5 +1,6 @@
 package com.flowable.atlas.render
 
+import com.flowable.atlas.model.DesignTerms
 import java.io.File
 
 /**
@@ -77,7 +78,8 @@ object SummaryRenderer {
         val order = listOf("process", "case", "decision", "form", "page", "dataObject", "dataDictionary",
             "service", "agent", "channel", "event", "action", "query", "template", "sequence",
             "securityPolicy", "variableExtractor", "liquibase")
-        val inv = order.filter { bt(it).isNotEmpty() }.map { "${bt(it).size} $it" }
+        // Design's word for each type, counted — "2 data objects", not "2 dataObject".
+        val inv = order.filter { bt(it).isNotEmpty() }.map { DesignTerms.counted(bt(it).size, it) }
         L.add("## Inventory")
         L.add("Models: " + inv.joinToString(" · "))
         if (jroles.isNotEmpty()) {
