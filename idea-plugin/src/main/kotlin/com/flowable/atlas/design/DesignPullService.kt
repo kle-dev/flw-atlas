@@ -58,14 +58,21 @@ class DesignPullService(private val project: Project) {
     /** One successfully written app, for the summary notification and VFS/index refresh. */
     private data class PulledApp(val app: DesignClient.App?, val appKey: String, val target: Path, val size: Int)
 
-    /** Queues the pull as a background task; safe to call from the EDT. */
-    fun pullInBackground() {
+    /** Queues the pull as a background task; safe to call from the EDT. Pulls the *effective*
+     *  selection: the Atlas Hub's personal override when one exists, else the configured default. */
+    fun pullInBackground() = pullInBackground(selection = null)
+
+    /** Pull exactly [workspaceKey]/[appKeys] — the Atlas Hub's "pull selected" entry point. */
+    fun pullInBackground(workspaceKey: String, appKeys: List<String>) =
+        pullInBackground(DesignPullSelection.Selection(workspaceKey, appKeys.toList()))
+
+    private fun pullInBackground(selection: DesignPullSelection.Selection?) {
         object : Task.Backgroundable(project, "Pulling app from Flowable Design", true) {
-            override fun run(indicator: ProgressIndicator) = pull(indicator)
+            override fun run(indicator: ProgressIndicator) = pull(indicator, selection)
         }.queue()
     }
 
-    private fun pull(indicator: ProgressIndicator) {
+    private fun pull(indicator: ProgressIndicator, requested: DesignPullSelection.Selection?) {
         val settings = FlowableAtlasProjectSettings.getInstance(project)
         val projectDir = AtlasProjectRootService.getInstance(project).activeProjectDir()
         if (projectDir == null || !settings.isDesignConfigured()) {
@@ -78,8 +85,16 @@ class DesignPullService(private val project: Project) {
             return
         }
         val conn = DesignClient.Connection(settings.designBaseUrl, auth)
-        val workspaceKey = settings.designWorkspaceKey
-        val appKeys = settings.designAppKeys.toList()
+        val selection = requested ?: DesignPullSelection.effective(
+            DesignPullSelection.Selection(settings.designWorkspaceKey, settings.designAppKeys.toList()),
+            DesignPullSelection.load(project),
+        )
+        val workspaceKey = selection.workspaceKey
+        val appKeys = selection.appKeys
+        if (appKeys.isEmpty()) {
+            notifyFailure("No apps selected — tick at least one app in the Atlas Hub or in Settings → Connections.")
+            return
+        }
         val targetDir = projectDir.resolve(settings.designTargetFolder.ifBlank { FlowableAtlasProjectSettings.DEFAULT_DESIGN_TARGET_FOLDER })
             .normalize()
 

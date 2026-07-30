@@ -1,5 +1,6 @@
 package com.flowable.atlas.settings
 
+import com.flowable.atlas.design.DesignAppListUi
 import com.flowable.atlas.design.DesignAuthMode
 import com.flowable.atlas.design.DesignClient
 import com.flowable.atlas.design.DesignCreateTokenDialog
@@ -130,6 +131,10 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
         add(row(refreshButton))
         add(row(JBLabel("Workspace:"), workspaceCombo))
         add(row(JBLabel("Apps:"), JBScrollPane(appList).apply { preferredSize = Dimension(320, 120) }))
+        add(row(JBLabel(" "), JBLabel(
+            "<html><small>The shared default for this project. Ticking apps in the Atlas Hub is a " +
+                "personal override and leaves this untouched.</small></html>",
+        ).apply { foreground = JBColor.GRAY }))
         add(row(JBLabel("Target folder:"), targetFolderField))
         add(row(status))
     }
@@ -434,22 +439,11 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
     /** The key to keep selected across a refresh: the current pick, falling back to the saved one. */
     private fun selectedWorkspaceKey(): String = selectedWorkspace()?.key ?: settings.designWorkspaceKey
 
-    /** Checkbox text for an app: display name (+ key when they differ) and version when known. */
-    private fun appLabel(app: DesignClient.App): String {
-        val label = if (app.name == app.key) app.key else "${app.name} (${app.key})"
-        return label + (app.version?.let { " v$it" } ?: "")
-    }
+    // list rendering/reading shared with the Atlas Hub — see [DesignAppListUi]
+    private fun populateApps(items: List<DesignClient.App>, checkedKeys: Set<String>) =
+        DesignAppListUi.populateApps(appList, items, checkedKeys)
 
-    /** Rebuilds the app checkbox list, checking every app whose key is in [checkedKeys]. */
-    private fun populateApps(items: List<DesignClient.App>, checkedKeys: Set<String>) {
-        appList.clear()
-        items.forEach { app -> appList.addItem(app, appLabel(app), app.key in checkedKeys) }
-    }
-
-    private fun checkedApps(): List<DesignClient.App> =
-        (0 until appList.model.size).mapNotNull { i -> appList.getItemAt(i)?.takeIf { appList.isItemSelected(i) } }
-
-    private fun checkedAppKeys(): List<String> = checkedApps().map { it.key }
+    private fun checkedAppKeys(): List<String> = DesignAppListUi.checkedAppKeys(appList)
 
     private fun <T> populate(combo: JComboBox<T>, items: List<T>, persistedKey: String, key: (T) -> String) {
         populating = true

@@ -127,6 +127,33 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.10.17</h3>
+        <ul>
+          <li><b>Choose what "Pull from Design" fetches — in the Hub</b> — the Atlas Hub's
+              <i>Flowable Design</i> section now lists the workspace's apps with checkboxes,
+              pre-ticked from the configured default. Ticking differently is a <b>personal
+              override</b>: stored workspace-locally, never in the VCS-shared settings file, marked
+              <i>(personal selection)</i> in the status line, with <i>Reset to configured</i> to go
+              back. The Hub link and the toolbar action both pull that effective selection, and app
+              names/versions load on demand so the Hub's own refresh never calls Design. The
+              Connections settings keep the shared team default (and the first-time setup).</li>
+          <li><b>Generate data-object DTOs in bulk</b> — Tools → Flowable Atlas → Generate →
+              <i>Data-Object DTOs</i> → <i>From App(s)…</i> / <i>From Data Object…</i>: a preview table
+              of exactly what will be written — key, editable class name, owning app, field count,
+              target file, and whether it is new or overwrites — for a whole app at once or for
+              hand-picked data objects. Target source root, package, an optional <i>sub-package per
+              app</i> and the class-name suffix (default <code>Dto</code>) live in Settings →
+              Flowable Atlas → <i>Generation</i>. Each class is the same POJO the Alt-Enter action
+              emits: typed fields, a <code>fromContainer(…)</code> mapper and a fluent builder.</li>
+          <li><b>The DTO quick action finds the key</b> — Alt-Enter now recognises a data object
+              behind a <b>constant</b> (<code>definitionKey(ModelKeys.CUSTOMER)</code> — what
+              <i>Generate Model Constants</i> produces), not just an inline literal, and beyond API
+              call sites it offers itself on <b>any</b> string literal or constant whose value is an
+              indexed data-object key. Availability is a plain index lookup, so it no longer parses
+              model files during highlighting; resolving the fields moved into a cancellable progress
+              that reports when a key has no model or no field mappings instead of doing nothing.</li>
+        </ul>
+
         <h3>0.10.16</h3>
         <ul>
           <li><b>Platform beans in the script catalog</b> — Work scripts resolve any Spring bean by
@@ -1034,6 +1061,12 @@
                             class="com.flowable.atlas.action.GenerateLiquibaseFromDataObjectAction"/>
                     <action id="Flowable.GenerateLiquibaseFromApps"
                             class="com.flowable.atlas.action.GenerateLiquibaseFromAppsAction"/>
+                </group>
+                <group id="Flowable.GenerateDto" popup="true">
+                    <action id="Flowable.GenerateDtoFromDataObject"
+                            class="com.flowable.atlas.action.GenerateDtoFromDataObjectAction"/>
+                    <action id="Flowable.GenerateDtoFromApps"
+                            class="com.flowable.atlas.action.GenerateDtoFromAppsAction"/>
                 </group>
             </group>
             <separator/>

@@ -11,6 +11,13 @@ Everything is resolved against the Flowable models that actually live in your re
   tab inside the IDE editor, theme-synced with the IDE.
 - **Atlas Hub tool window** — the plugin's control center: model-index status, list of generated
   explorers, and quick actions.
+- **Pick what a pull fetches, right in the Hub** — the *Flowable Design* section lists the
+  workspace's apps with checkboxes, pre-ticked from the configured default. Ticking differently is a
+  **personal override**: it is stored workspace-locally (never in the VCS-shared
+  `.idea/flowable-atlas.xml`), the status line marks it *(personal selection)*, and *Reset to
+  configured* appears to go back. Both the Hub's *Pull from Design* link and the toolbar action fetch
+  that effective selection, so they can never disagree; app names/versions load on demand
+  (*Refresh apps*) — the Hub's status refresh itself never calls Design.
 - **Post-generation balloon** — after generating, offers to open the explorer in the browser or in
   the IDE.
 - **In/out parameters** — every variable mapping a model passes into, or takes back out of, the things
@@ -222,8 +229,16 @@ Everything is resolved against the Flowable models that actually live in your re
   (`builder.variable(…)`), and messages / signals / variables / task ids.
 - **Go-to on Java literals** — Ctrl-click a key, an `operation(…)` or a `value(…)` literal at an API
   call site jumps to the model (operations / values resolve to the backing service model).
-- **Generate Java bean** — Alt-Enter on a data-object definitionKey generates a typed Java bean from
-  its fields.
+- **Generate a data-object DTO** — Alt-Enter on a data-object key generates a typed Java class from its
+  fields (typed fields, a `fromContainer(…)` mapper and a fluent builder). The key is recognised at a
+  data-object API call site as an inline literal **or** a constant — `definitionKey(ModelKeys.CUSTOMER)`,
+  the shape *Generate Model Constants* produces — and, beyond call sites, on any string literal or
+  constant whose value is an indexed data-object key.
+- **Generate DTOs in bulk** — Tools → Flowable Atlas → Generate → *Data-Object DTOs* → *From App(s)…*
+  or *From Data Object…*: a preview table of exactly what will be written (key, editable class name,
+  owning app, field count, target file, new vs. overwrite) for a whole app at once or for hand-picked
+  data objects. Target source root, package, an optional sub-package per app and the class-name suffix
+  (default `Dto`) are configurable; a data object with no field mappings is listed but never generated.
 
 ## Liquibase support
 

@@ -1,8 +1,8 @@
 package com.flowable.atlas.action
 
+import com.flowable.atlas.generate.JavaSourceRoots
 import com.flowable.atlas.generate.ModelConstantsService
 import com.flowable.atlas.generate.ModelConstantsSettings
-import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.GenerationConfigurable
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
@@ -11,15 +11,10 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.diagnostic.thisLogger
-import com.intellij.openapi.fileChooser.FileChooser
-import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.roots.ProjectRootManager
-import com.intellij.openapi.vfs.LocalFileSystem
-import com.intellij.openapi.vfs.VirtualFile
 
 /**
  * Tools → Flowable Atlas → "Generate Model Constants…" (and the Atlas Hub "Generate Constants…" link):
@@ -63,7 +58,7 @@ class GenerateModelConstantsAction : AnAction() {
                     return
                 }
 
-                val root = resolveSourceRoot(project)
+                val root = JavaSourceRoots.preferredOrChosen(project, "Select Folder for Generated Model Constants")
                 if (root == null) {
                     notify(
                         project, "Cannot generate model constants",
@@ -98,29 +93,6 @@ class GenerateModelConstantsAction : AnAction() {
                     t.message ?: t.javaClass.simpleName, NotificationType.ERROR,
                 )
             }
-        }
-
-        /**
-         * A source root for the class: a main Java root, else any non-test/non-resources root, else —
-         * when the project exposes no source roots (common in a plain-folder / Remote-Dev import) — a
-         * folder the user picks, falling back to the active project directory.
-         */
-        private fun resolveSourceRoot(project: Project): VirtualFile? {
-            pickSourceRoot(project)?.let { return it }
-            val lfs = LocalFileSystem.getInstance()
-            val base = AtlasProjectRootService.getInstance(project).activeProjectDir()?.let { lfs.findFileByNioFile(it) }
-            val descriptor = FileChooserDescriptorFactory.createSingleFolderDescriptor()
-                .withTitle("Select Folder for Generated Model Constants")
-                .withDescription("No source root was found — choose where to write the class")
-            return FileChooser.chooseFile(descriptor, project, base) ?: base
-        }
-
-        /** Prefer a main Java source root; fall back to any non-test, non-resources source root. */
-        private fun pickSourceRoot(project: Project): VirtualFile? {
-            val roots = ProjectRootManager.getInstance(project).contentSourceRoots.toList()
-            return roots.firstOrNull { it.path.contains("/src/main/java") }
-                ?: roots.firstOrNull { !it.path.contains("/test") && !it.path.contains("/resources") }
-                ?: roots.firstOrNull()
         }
 
         private fun notify(
