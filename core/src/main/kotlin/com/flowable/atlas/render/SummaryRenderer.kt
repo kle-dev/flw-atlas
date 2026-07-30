@@ -192,6 +192,10 @@ object SummaryRenderer {
         if (suspectN + dynN != 0) {
             L.add("- Uncertain links: $suspectN suspect (loose/cross-type match) · $dynN dynamic (expression-valued)")
         }
+        val scriptIssues = ((result["stats"] as? Map<*, *>)?.get("scriptIssues") as? Int) ?: 0
+        if (scriptIssues != 0) {
+            L.add("- Script syntax findings: $scriptIssues — see the explorer's Checks tab")
+        }
         L.add("")
 
         L.add("---\n_For details: `--json` gives the full traversable graph; `--html` opens the interactive explorer; " +

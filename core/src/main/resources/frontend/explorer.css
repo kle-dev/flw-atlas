@@ -530,6 +530,19 @@
   .scriptbox{font-family:var(--mono);font-size:var(--text-xs);line-height:1.5;color:var(--ink-dim);
     background:var(--bg);border-top:1px solid var(--line);margin:0;padding:var(--space-25) var(--space-3);
     max-height:320px;overflow:auto;white-space:pre}
+  /* the code viewer: line numbers, syntax tokens, and the problem lines a finding points at.
+     Token colors reuse the theme scale, so light and dark both stay right without a second palette. */
+  .scriptbox.code{padding-left:var(--space-15)}
+  .scriptbox.code .cl{display:block;min-height:1.5em}
+  .scriptbox.code .lno{display:inline-block;min-width:2.2em;margin-right:var(--space-25);text-align:right;
+    color:var(--ink-faint);opacity:.72;user-select:none}
+  .scriptbox.code .cl-bad{background:var(--bad-bg);box-shadow:inset 2px 0 0 var(--bad-bar);cursor:help}
+  .scriptbox.code .cl-warn{background:var(--warn-bg);box-shadow:inset 2px 0 0 var(--warn-bar);cursor:help}
+  .tok-k{color:var(--accent);font-weight:600}
+  .tok-s{color:var(--ok-text)}
+  .tok-c{color:var(--ink-faint);font-style:italic}
+  .tok-n{color:var(--warn-text)}
+  .tok-i{color:var(--accent-hover)}
   /* DMN decision table: the rules themselves. Wide tables scroll inside the section, never sideways. */
   .dmntab{overflow-x:auto;padding:var(--space-2) var(--space-3)}
   .dmntab table{border-collapse:collapse;font-family:var(--mono);font-size:var(--text-xs)}

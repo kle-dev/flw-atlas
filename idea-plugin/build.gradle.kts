@@ -45,6 +45,15 @@ dependencies {
 
         // Functional tests (BasePlatformTestCase + completion fixtures).
         testFramework(TestFrameworkType.Platform)
+
+        // Test-only: load the Groovy plugin into the test IDE so the script-injection/playground
+        // tests can assert that script bodies really receive the language. The shipped plugin
+        // resolves script languages by ID at runtime (Language.findLanguageByID) and has no
+        // compile-time or plugin.xml dependency on any of them, so it still installs and runs on
+        // the free tier. The JavaScript plugin ships in the unified distribution but is tied to the
+        // paid tier and does not load in the test IDE (verified: registers no language there) — the
+        // JS path degrades to plain text by design and is covered manually on an Ultimate sandbox.
+        testBundledPlugin("org.intellij.groovy")
     }
 
     testImplementation("junit:junit:4.13.2")

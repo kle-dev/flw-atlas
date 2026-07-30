@@ -766,9 +766,11 @@ class FlowableExpressionPanel(val project: Project) :
         fun open(project: Project, text: String, dialect: ExpressionDialect, scopeKey: String? = null) {
             val toolWindow = ToolWindowManager.getInstance(project).getToolWindow(TOOL_WINDOW_ID) ?: return
             toolWindow.activate({
-                toolWindow.contentManager.contents
-                    .firstNotNullOfOrNull { it.component as? FlowableExpressionPanel }
-                    ?.openWithExpression(text, dialect, scopeKey)
+                // the tool window also hosts the Scripts tab — make sure the Expressions one shows
+                val cm = toolWindow.contentManager
+                val content = cm.contents.firstOrNull { it.component is FlowableExpressionPanel } ?: return@activate
+                cm.setSelectedContent(content)
+                (content.component as FlowableExpressionPanel).openWithExpression(text, dialect, scopeKey)
             }, true)
         }
     }

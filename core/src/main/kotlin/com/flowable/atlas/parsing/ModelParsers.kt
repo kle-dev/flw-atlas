@@ -2,6 +2,8 @@ package com.flowable.atlas.parsing
 
 import com.flowable.atlas.graph.Ctx
 import com.flowable.atlas.model.MiniJson
+import com.flowable.atlas.script.ScriptContext
+import com.flowable.atlas.script.ScriptValidator
 
 /**
  * The per-model-family parsers — a port of the `parse_*` functions in `flowable_atlas.py`. Each takes
@@ -609,13 +611,19 @@ object ModelParsers {
         val scriptInfo = objOf(config["scriptInfo"]) ?: emptyMap()
         val script = scriptInfo["script"] as? String
         VarHarvest.collectScriptVars(ctx, script, listOf(key), scriptInfo["language"] as? String)
-        return linkedMapOf(
+        val rec = linkedMapOf(
             "key" to key, "name" to doc["name"], "file" to ffile, "botKey" to doc["botKey"],
             "formKey" to doc["formKey"], "signalName" to doc["signalName"], "channels" to doc["channels"],
             "scopeType" to doc["scopeType"], "icon" to doc["icon"], "permissionGroups" to doc["permissionGroups"],
             "script" to script, "scriptLanguage" to scriptInfo["language"],
             "ioParameters" to actionParams(ctx, key, doc, config, script),
         )
+        // named scriptProblems, not problems: the action record is the node's data wholesale, and
+        // node.data.problems already means "expression problems" to the explorer
+        ScriptValidator.problemDicts(script, scriptInfo["language"] as? String,
+            context = ScriptContext.ACTION_BOT)
+            .ifEmpty { null }?.let { rec["scriptProblems"] = it }
+        return rec
     }
 
     /** `flw.getInput('x')` / `flw.setOutput('y', …)` — how a script-based action bot reads its payload

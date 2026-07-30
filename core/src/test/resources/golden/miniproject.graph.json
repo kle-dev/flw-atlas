@@ -1008,6 +1008,43 @@
               "name": "Stamp order",
               "resultVariable": null,
               "script": "def stamp = \"shipped-\" + orderId + \"-\" + courierCode\n        execution.setVariable('shippingStamp', stamp)"
+            },
+            {
+              "format": "groovy",
+              "id": "badApi",
+              "name": "Broken API call",
+              "problems": [
+                {
+                  "end": 30,
+                  "kind": "unknown-member",
+                  "line": 1,
+                  "message": "'execution' has no member 'setTransientVariabel' — did you mean 'setTransientVariable'?",
+                  "quickFix": "setTransientVariable",
+                  "severity": "warning",
+                  "snippet": "execution.setTransientVariabel('meta', orderId)",
+                  "start": 10
+                }
+              ],
+              "resultVariable": null,
+              "script": "execution.setTransientVariabel('meta', orderId)"
+            },
+            {
+              "format": "groovy",
+              "id": "badStamp",
+              "name": "Broken stamp",
+              "problems": [
+                {
+                  "end": 22,
+                  "kind": "unclosed-opener",
+                  "line": 1,
+                  "message": "'(' is never closed",
+                  "severity": "error",
+                  "snippet": "execution.setVariable('shippingStamp', \"x-\" + orderId",
+                  "start": 21
+                }
+              ],
+              "resultVariable": null,
+              "script": "execution.setVariable('shippingStamp', \"x-\" + orderId"
             }
           ],
           "serviceTasks": [
@@ -1023,7 +1060,8 @@
                   "event": "end",
                   "expression": null,
                   "kind": "executionListener",
-                  "script": "execution.setVariable('notified', true)"
+                  "script": "execution.setVariable('notified', true)",
+                  "scriptFormat": "groovy"
                 }
               ],
               "name": "Notify",
@@ -1774,6 +1812,20 @@
           "scriptSites": [
             {
               "api": false,
+              "element": "badApi",
+              "elementName": "Broken API call",
+              "elementType": "scriptTask",
+              "model": "process:orderProcess"
+            },
+            {
+              "api": false,
+              "element": "badStamp",
+              "elementName": "Broken stamp",
+              "elementType": "scriptTask",
+              "model": "process:orderProcess"
+            },
+            {
+              "api": false,
               "element": "stampTask",
               "elementName": "Stamp order",
               "elementType": "scriptTask",
@@ -1786,6 +1838,8 @@
               "snippets": [
                 "(declared / mapped)",
                 "(in parameter on callSub) orderId → subOrderId",
+                "(script ≈ read · Broken API call)",
+                "(script ≈ read · Broken stamp)",
                 "(script ≈ read · Stamp order)"
               ]
             }
@@ -2334,6 +2388,13 @@
           "scriptSites": [
             {
               "api": true,
+              "element": "badStamp",
+              "elementName": "Broken stamp",
+              "elementType": "scriptTask",
+              "model": "process:orderProcess"
+            },
+            {
+              "api": true,
               "element": "stampTask",
               "elementName": "Stamp order",
               "elementType": "scriptTask",
@@ -2344,6 +2405,7 @@
             {
               "model": "process:orderProcess",
               "snippets": [
+                "(script · Broken stamp)",
                 "(script · Stamp order)"
               ]
             }
@@ -2806,6 +2868,43 @@
           "name": "Stamp order",
           "resultVariable": null,
           "script": "def stamp = \"shipped-\" + orderId + \"-\" + courierCode\n        execution.setVariable('shippingStamp', stamp)"
+        },
+        {
+          "format": "groovy",
+          "id": "badApi",
+          "name": "Broken API call",
+          "problems": [
+            {
+              "end": 30,
+              "kind": "unknown-member",
+              "line": 1,
+              "message": "'execution' has no member 'setTransientVariabel' — did you mean 'setTransientVariable'?",
+              "quickFix": "setTransientVariable",
+              "severity": "warning",
+              "snippet": "execution.setTransientVariabel('meta', orderId)",
+              "start": 10
+            }
+          ],
+          "resultVariable": null,
+          "script": "execution.setTransientVariabel('meta', orderId)"
+        },
+        {
+          "format": "groovy",
+          "id": "badStamp",
+          "name": "Broken stamp",
+          "problems": [
+            {
+              "end": 22,
+              "kind": "unclosed-opener",
+              "line": 1,
+              "message": "'(' is never closed",
+              "severity": "error",
+              "snippet": "execution.setVariable('shippingStamp', \"x-\" + orderId",
+              "start": 21
+            }
+          ],
+          "resultVariable": null,
+          "script": "execution.setVariable('shippingStamp', \"x-\" + orderId"
         }
       ],
       "serviceTasks": [
@@ -2821,7 +2920,8 @@
               "event": "end",
               "expression": null,
               "kind": "executionListener",
-              "script": "execution.setVariable('notified', true)"
+              "script": "execution.setVariable('notified', true)",
+              "scriptFormat": "groovy"
             }
           ],
           "name": "Notify",
@@ -3190,6 +3290,7 @@
     "java": 2,
     "models": 12,
     "nodes": 47,
+    "scriptIssues": 2,
     "suspectEdges": 0
   },
   "unresolvedRefs": [

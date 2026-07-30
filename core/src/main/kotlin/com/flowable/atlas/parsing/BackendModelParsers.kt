@@ -2,6 +2,8 @@ package com.flowable.atlas.parsing
 
 import com.flowable.atlas.graph.Ctx
 import com.flowable.atlas.parsing.AtlasXml.El
+import com.flowable.atlas.script.ScriptContext
+import com.flowable.atlas.script.ScriptValidator
 
 /**
  * The BPMN and CMMN parsers — a port of `parse_bpmn` and `parse_cmmn` (+ its helpers
@@ -260,10 +262,14 @@ object BackendModelParsers {
                     }
                     tag == "scriptTask" -> {
                         val body = el.childText("script")
-                        scriptTasks.add(withElementExtras(linkedMapOf(
+                        val st = linkedMapOf<String, Any?>(
                             "id" to eid, "name" to ename, "format" to el.attr("scriptFormat"),
                             "script" to body, "resultVariable" to el.attr("resultVariable"),
-                        ), el, elListeners))
+                        )
+                        ScriptValidator.problemDicts(body, el.attr("scriptFormat"), formatRequired = true,
+                            context = ScriptContext.BPMN_SCRIPT_TASK)
+                            .ifEmpty { null }?.let { st["problems"] = it }
+                        scriptTasks.add(withElementExtras(st, el, elListeners))
                         VarHarvest.collectScriptVars(ctx, body, listOf(pkey), el.attr("scriptFormat"),
                             eid, ename, "scriptTask")
                         ctx.addVar(pkey, el.attr("resultVariable"))
@@ -414,6 +420,9 @@ object BackendModelParsers {
                 if (el.attr("type") == "script") {
                     d["scriptFormat"] = el.attr("scriptFormat")
                     d["script"] = XmlHelpers.readFields(el)["script"]
+                    ScriptValidator.problemDicts(d["script"] as? String, el.attr("scriptFormat"), formatRequired = true,
+                        context = ScriptContext.CMMN_SCRIPT_TASK)
+                        .ifEmpty { null }?.let { d["problems"] = it }
                     VarHarvest.collectScriptVars(ctx, d["script"] as? String, listOf(caseKey),
                         el.attr("scriptFormat"), el.attr("id"), el.attr("name"), "scriptTask")
                 }
@@ -457,7 +466,7 @@ object BackendModelParsers {
                     dec.attr("definitionKey") ?: dec.childText("definitionKey"))
             }
         }
-        val listeners = XmlHelpers.readListeners(el)
+        val listeners = XmlHelpers.readListeners(el, cmmn = true)
         d["listeners"] = listeners
         XmlHelpers.collectListenerRefs(ctx, caseKey, "cmmn", ffile, listeners, el.attr("id"), el.attr("name"))
         // The modeller's own explanation of this plan item — read at case level only until now.
