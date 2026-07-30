@@ -154,6 +154,8 @@ fun run(args: Array<String>): Int {
         val dynN = stat("dynamicEdges")
         if (suspectN + dynN > 0) append(" $MIDDLE_DOT $suspectN suspect / $dynN dynamic links")
         if (cf != null) append(" $MIDDLE_DOT custom fns: ${cf["summary"]}")
+        val scriptIssuesN = stat("scriptIssues")
+        if (scriptIssuesN > 0) append(" $MIDDLE_DOT $WARN_SIGN $scriptIssuesN script issue(s)")
         if (nDiag > 0) append(" $MIDDLE_DOT $WARN_SIGN $nDiag parse issue(s), see -v")
     }
 

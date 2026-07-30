@@ -395,6 +395,10 @@ function categories(){
   const guessed = nodes.filter(isGuessedVar);
   if(guessed.length) cats.push({id:'guessed-var', label:'Variables · script guess ≈', sec:'Checks',
     color:color('variable'), count:guessed.length, match:isGuessedVar});
+  // Models with a script whose body (or scriptFormat) fails the structural syntax check.
+  const scriptIssueModels = new Set(allScripts().filter(s=>(s.problems||[]).length).map(s=>s.model));
+  if(scriptIssueModels.size) cats.push({id:'script-syntax', label:'Scripts · syntax ⚠', sec:'Checks',
+    color:color('invalidExpr'), count:scriptIssueModels.size, match:n=>scriptIssueModels.has(n.id)});
   cats.sort((a,b)=> (SECTIONS.indexOf(a.sec)-SECTIONS.indexOf(b.sec)) || a.label.localeCompare(b.label));
   return cats;
 }
@@ -439,10 +443,14 @@ function computeInsights(){
   const apps = nodes.filter(n=>n.type==='app')
     .map(a=>({id:a.id, models:containsByApp.get(a.id)||0, groups:openAppByApp.get(a.id)||0}))
     .sort((a,b)=>b.models-a.models);
-  const health = { parseIssues: diags.length+cfnDiags.length, invalidExpr, suspectExpr, unusedForms,
-                   changelogIssues, schemaGaps, missingRefs, guessedVars, unusedOps, unusedFns };
+  // scripts are not nodes — count their structural syntax findings from the flattened rows
+  const scripts = allScripts();
+  const scriptIssues = scripts.filter(s=>(s.problems||[]).length).length;
+  const health = { parseIssues: diags.length+cfnDiags.length, invalidExpr, suspectExpr, scriptIssues,
+                   unusedForms, changelogIssues, schemaGaps, missingRefs, guessedVars, unusedOps, unusedFns };
   INSIGHTS = { indeg, hotspots, apps, entryPoints,
     totalExprs, totalForms, totalChangelogs, totalCovServices, totalOps, totalFns,
+    totalScripts: scripts.length,
     health,
     // what the Checks tab counts in its badge: every open finding, in one number
     checksOpen: Object.keys(health).reduce((a,k)=>a+health[k],0) };
@@ -805,6 +813,8 @@ const CHECK_CARDS = [
    sub:c=>c?'syntax errors in ${ } / {{ }}':'no syntax errors', show:()=>INSIGHTS.totalExprs>0},
   {k:'suspectExpr', label:'Suspect expressions', cat:'suspect-expr', jump:'chk-suspect',
    sub:c=>c?'flagged for review by the catalog':'nothing flagged', show:()=>INSIGHTS.totalExprs>0},
+  {k:'scriptIssues', label:'Script syntax', bad:true, cat:'script-syntax', jump:'chk-scripts',
+   sub:c=>c?'syntax & binding findings in script bodies':'all scripts scan clean', show:()=>INSIGHTS.totalScripts>0},
   {k:'schemaGaps', label:'Schema gaps', bad:true, route:'/schema', jump:'chk-schema',
    sub:c=>c?'columns not mapped through Liquibase → service → data object':'all columns mapped through',
    show:()=>INSIGHTS.totalCovServices>0},
@@ -879,6 +889,28 @@ function renderChecks(){
   const byCat=id=>{ const c=CATS.find(x=>x.id===id); return c?nodes.filter(c.match):[]; };
   h+=block('chk-invalid','Invalid expressions — syntax', H.invalidExpr, exprRows(byCat('invalid-expr')), 'invalid-expr');
   h+=block('chk-suspect','Suspect expressions — review', H.suspectExpr, exprRows(byCat('suspect-expr')), 'suspect-expr');
+  // script syntax findings: model, element, language, then each finding with its line and code
+  if(H.scriptIssues){
+    const rows=allScripts().filter(s=>(s.problems||[]).length);
+    h+=block('chk-scripts','Script syntax findings', H.scriptIssues,
+      '<div class="dashrows">'+rows.map(s=>{
+        const kind=scriptKindLabel(s);
+        const title=s.elName||s.el||(s.group==='bot'?s.modelLabel:kind);
+        return '<div class="dashrow" style="align-items:flex-start;flex-wrap:wrap">'+
+          nodeChip(s.model)+
+          '<span class="nm mono" style="min-width:140px">'+esc(title)+'</span>'+
+          '<span class="pt">'+esc(kind)+'</span>'+
+          (s.lang?'<span class="pt">'+esc(s.lang)+'</span>':'')+
+          '<span class="ty" style="flex-basis:100%;display:flex;flex-direction:column;gap:2px">'+
+            s.problems.map(p=>'<span><span style="color:var(--'+(p.severity==='error'?'bad':'warn')+'-text)">'+
+              esc(p.severity)+'</span> '+esc(p.message)+
+              (p.line?' <span class="muted">· line '+p.line+'</span>':'')+
+              (p.snippet?' <span class="mono muted">'+esc(p.snippet)+'</span>':'')+'</span>').join('')+
+          '</span></div>';
+      }).join('')+
+      '<div class="dashrow"><button class="dgbtn" data-route="/scripts">open the scripts tab ↗</button></div>'+
+      '</div>', 'script-syntax');
+  }
   // schema gaps: the per-service summary; the full column table lives in its own tab
   if(H.schemaGaps){
     const svcs=nodes.filter(n=>n.type==='service'&&((n.data||{}).schemaCoverage||{}).counts)
@@ -942,28 +974,33 @@ function renderChecks(){
 // is the coarse bucket the filter chips work on.
 function allScripts(){
   const out=[];
-  const add=(n,o)=>{ if(o.body) out.push(Object.assign({model:n.id, modelLabel:n.label, modelType:n.type}, o)); };
+  // a row with findings but no body (an empty script task) still deserves a row — that IS the finding
+  const add=(n,o)=>{ if(o.body||(o.problems||[]).length)
+    out.push(Object.assign({model:n.id, modelLabel:n.label, modelType:n.type}, o)); };
   nodes.forEach(n=>{
     const d=n.data||{};
     if(n.type==='process'){
       (d.scriptTasks||[]).forEach(t=>add(n,{group:'script', elKind:'scriptTask', el:t.id, elName:t.name,
-        lang:t.format||t.scriptFormat, body:t.script, doc:t.documentation, out:t.resultVariable}));
+        lang:t.format||t.scriptFormat, body:t.script, doc:t.documentation, out:t.resultVariable,
+        problems:t.problems||[]}));
     }
     if(n.type==='case' && d.planModel){
       // CMMN keeps its script tasks in the plan tree (`<task flowable:type="script">`)
       (function walk(nd){
-        if(nd.script) add(n,{group:'script', elKind:'serviceTask/script', el:nd.id, elName:nd.name,
-          lang:nd.scriptFormat, body:nd.script, doc:nd.documentation});
+        if(nd.script||(nd.problems||[]).length) add(n,{group:'script', elKind:'serviceTask/script',
+          el:nd.id, elName:nd.name, lang:nd.scriptFormat, body:nd.script, doc:nd.documentation,
+          problems:nd.problems||[]});
         (nd.children||[]).forEach(walk);
       })(d.planModel);
     }
     if(n.type==='process'||n.type==='case'){
       const listener=(r,l)=>({group:'listener', elKind:l.kind, event:l.event,
-        el:r?r.id:null, elName:r?r.name:null, body:l.script});
+        el:r?r.id:null, elName:r?r.name:null, body:l.script, problems:l.problems||[]});
       (d.listeners||[]).forEach(l=>add(n, listener(null,l)));
       elementRecords(n).forEach(r=>(r.listeners||[]).forEach(l=>add(n, listener(r,l))));
     }
-    if(n.type==='action') add(n,{group:'bot', lang:d.scriptLanguage, body:d.script});
+    if(n.type==='action') add(n,{group:'bot', lang:d.scriptLanguage, body:d.script,
+      problems:d.scriptProblems||[]});
   });
   return out;
 }
@@ -975,6 +1012,82 @@ function scriptKindLabel(s){
   if(s.group==='bot') return 'Bot script';
   const base=term('el', s.elKind).label || 'Script';
   return s.event ? base+' · '+s.event : base;
+}
+/** ⚠ n — red when any finding is an error, amber when everything is a warning. */
+function scriptIssueBadge(problems){
+  const pr=problems||[];
+  if(!pr.length) return '';
+  const tone=pr.some(p=>p.severity==='error')?'bad':'warn';
+  return '<span class="pt" style="color:var(--'+tone+'-text)">⚠ '+pr.length+'</span>';
+}
+/** The findings of one script, as rows: severity, message, line and the offending source line. */
+function scriptProblemsHtml(problems){
+  const pr=problems||[];
+  if(!pr.length) return '';
+  return '<div style="display:flex;flex-direction:column;gap:2px;padding:4px 10px 0">'+
+    pr.map(p=>'<div><span style="color:var(--'+(p.severity==='error'?'bad':'warn')+'-text)">'+
+      esc(p.severity)+'</span> '+esc(p.message)+
+      (p.line?' <span class="muted">· line '+p.line+'</span>':'')+
+      (p.snippet?' <span class="mono muted">'+esc(p.snippet)+'</span>':'')+'</div>').join('')+'</div>';
+}
+// ---------- tiny script highlighter — display only, so the worst case is a token staying plain ----------
+const HL_KEYWORDS={
+  groovy:'def var final if else for while do switch case break continue return try catch finally throw '+
+    'new class interface enum extends implements import package assert in instanceof null true false this super void',
+  js:'const let var function if else for while do switch case break continue return try catch finally throw '+
+    'new class extends import from export await async yield typeof instanceof delete void in of null undefined true false this super',
+  py:'def class if elif else for while try except finally raise return import from as with lambda pass '+
+    'break continue global nonlocal yield assert in is not and or del None True False',
+};
+function hlFamily(lang){
+  const l=String(lang||'').toLowerCase();
+  if(l==='groovy') return 'groovy';
+  if(['javascript','js','ecmascript','nashorn','graal.js'].indexOf(l)>=0) return 'js';
+  if(l==='python'||l==='jython') return 'py';
+  return null;
+}
+/** Escaped HTML with comment/string/number/keyword tokens wrapped; `${…}` interpolation inside a
+ *  string is colored as code. Multi-line tokens close and reopen their span on every line, so the
+ *  result can be split on '\n' without breaking markup. */
+function hlScript(src, lang){
+  const fam=hlFamily(lang);
+  if(!fam) return esc(src);
+  const kw=new Set(HL_KEYWORDS[fam].split(' '));
+  const wrap=(cls,text)=>text.split('\n')
+    .map(seg=>seg?'<span class="tok-'+cls+'">'+esc(seg)+'</span>':'').join('\n');
+  const string=text=>{
+    if(fam==='py') return wrap('s', text);
+    let out='', i=0, m; const re=/\$\{[^}\n]*\}/g;
+    while((m=re.exec(text))){ out+=wrap('s',text.slice(i,m.index))+wrap('i',m[0]); i=m.index+m[0].length; }
+    return out+wrap('s',text.slice(i));
+  };
+  const re= fam==='py'
+    ? /(#[^\n]*)|('''[\s\S]*?(?:'''|$)|"""[\s\S]*?(?:"""|$)|'(?:\\.|[^'\\\n])*'?|"(?:\\.|[^"\\\n])*"?)|\b(\d[\w.]*)\b|\b([A-Za-z_]\w*)\b/g
+    : /(\/\*[\s\S]*?(?:\*\/|$)|\/\/[^\n]*)|('''[\s\S]*?(?:'''|$)|"""[\s\S]*?(?:"""|$)|`[\s\S]*?(?:`|$)|'(?:\\.|[^'\\\n])*'?|"(?:\\.|[^"\\\n])*"?)|\b(\d[\w.]*)\b|\b([A-Za-z_$]\w*)\b/g;
+  let out='', last=0, m;
+  while((m=re.exec(src))){
+    out+=esc(src.slice(last, m.index));
+    if(m[1]) out+=wrap('c', m[1]);
+    else if(m[2]) out+=string(m[2]);
+    else if(m[3]) out+=wrap('n', m[3]);
+    else out+= kw.has(m[4]) ? wrap('k', m[4]) : esc(m[4]);
+    last=m.index+m[0].length;
+  }
+  return out+esc(src.slice(last));
+}
+/** The read-only code viewer: line numbers, syntax colors, and the problem lines marked with the
+ *  finding's message on hover. Replaces the bare `<pre class="scriptbox">` wherever a script shows. */
+function codeBoxHtml(body, lang, problems){
+  if(body==null||body==='') return '';
+  const byLine={};
+  (problems||[]).forEach(p=>{ if(p.line) (byLine[p.line]=byLine[p.line]||[]).push(p); });
+  const lines=hlScript(String(body), lang).split('\n');
+  return '<pre class="scriptbox code">'+lines.map((l,i)=>{
+    const pr=byLine[i+1];
+    const cls='cl'+(pr?(pr.some(p=>p.severity==='error')?' cl-bad':' cl-warn'):'');
+    const tip=pr?' title="'+esc(pr.map(p=>p.message).join(' · '))+'"':'';
+    return '<span class="'+cls+'"'+tip+'><span class="lno">'+(i+1)+'</span>'+l+'</span>';
+  }).join('')+'</pre>';
 }
 /** `"<model>|<element>"` → the variables that script touches, inverted from the variable nodes. */
 function scriptVarIndex(){
@@ -1000,11 +1113,13 @@ function renderScripts(){
     return la.localeCompare(lb);
   });
   const totalLines=all.reduce((a,s)=>a+lines(s),0);
+  const withIssues=all.filter(s=>(s.problems||[]).length).length;
   let h='<div class="dash">';
   h+='<div class="dash-title">Script tasks</div>'+
      '<div class="dash-sub">'+(all.length
        ? all.length+' script'+(all.length>1?'s':'')+' in '+models.length+' model'+(models.length>1?'s':'')+
          ' · '+totalLines+' line'+(totalLines>1?'s':'')+
+         (withIssues?' · <span style="color:var(--bad-text)">⚠ '+withIssues+' with syntax findings</span>':'')+
          ' — script tasks, listener scripts and bot scripts, with the variables each one touches'
        : 'no model in this project carries a script')+'</div>';
   if(!all.length){
@@ -1036,22 +1151,24 @@ function renderScripts(){
         const jump=s.el?'<span class="opref" data-goto="'+enc(s.model)+'" data-goto-el="'+esc(String(s.el))+
           '" tabindex="0" role="link" style="cursor:pointer" data-tip="Open this element in its model">'+
           'in model ↓</span>':'';
-        const hay=[title, kind, s.lang||'', s.el||'', (byId.get(mid)||{}).label||'', s.body]
-          .join(' ').toLowerCase();
+        const hay=[title, kind, s.lang||'', s.el||'', (byId.get(mid)||{}).label||'', s.body||'',
+          (s.problems||[]).map(p=>p.message).join(' ')].join(' ').toLowerCase();
         // a handful of scripts: show the code straight away; a big project starts collapsed
         return '<details class="op" data-scriptrow data-group="'+esc(s.group)+'"'+
-          (all.length<=6?' open':'')+' data-hay="'+esc(hay)+'">'+
+          (all.length<=6||(s.problems||[]).length?' open':'')+' data-hay="'+esc(hay)+'">'+
           '<summary><span class="opname">'+esc(title)+'</span>'+
           (s.el&&s.el!==title?'<span class="opid">'+esc(String(s.el))+'</span>':'')+
           '<span class="pt">'+esc(kind)+'</span>'+
           (s.lang?'<span class="pt">'+esc(s.lang)+'</span>':'')+
           '<span class="pt">'+lines(s)+' line'+(lines(s)>1?'s':'')+'</span>'+
+          scriptIssueBadge(s.problems)+
           (s.out?'<span class="pd" style="color:var(--ok-text)">out</span> <span class="mono">'+
             paramSide(s.out)+'</span>':'')+
           (chips?'<span style="flex:1;display:flex;gap:6px;flex-wrap:wrap;min-width:0">'+chips+'</span>':'')+
           jump+'</summary>'+
           (s.doc?'<div class="muted" style="padding:4px 10px 0">'+esc(s.doc)+'</div>':'')+
-          '<pre class="scriptbox">'+esc(s.body)+'</pre></details>';
+          scriptProblemsHtml(s.problems)+
+          codeBoxHtml(s.body, s.lang, s.problems)+'</details>';
       }).join('');
     });
   }
@@ -1558,8 +1675,11 @@ function detailExtra(n){
     const rv=t.resultVariable?'<span class="pd" style="color:var(--ok-text)">out</span> <span class="mono">'+paramSide(t.resultVariable)+'</span>':'';
     const fmt=fmtV?'<span class="pt">'+esc(fmtV)+'</span>':'';
     const eid=(t.id&&t.id!==(t.name||t.id))?'<span class="opid">'+esc(t.id)+'</span>':'';
-    const body=t.script?'<pre class="scriptbox">'+esc(t.script)+'</pre>':'<div class="muted" style="padding:4px 10px">no script body</div>';
-    return '<details class="op"'+dataEl(t.id)+'><summary><span class="opname">'+esc(t.name||t.id||'')+'</span>'+eid+loc(t.id,t.name)+fmt+rv+'</summary>'+body+'</details>';
+    const body=t.script?codeBoxHtml(t.script, fmtV, t.problems)
+      :'<div class="muted" style="padding:4px 10px">no script body</div>';
+    return '<details class="op"'+dataEl(t.id)+((t.problems||[]).length?' open':'')+
+      '><summary><span class="opname">'+esc(t.name||t.id||'')+'</span>'+eid+loc(t.id,t.name)+fmt+
+      scriptIssueBadge(t.problems)+rv+'</summary>'+scriptProblemsHtml(t.problems)+body+'</details>';
   };
   if(n.type==='process' && (d.scriptTasks||[]).length){
     h+=section('scripttasks','Script tasks ('+d.scriptTasks.length+')', d.scriptTasks.map(scriptTaskHtml).join(''));
@@ -1567,7 +1687,7 @@ function detailExtra(n){
   // CMMN keeps its script tasks in the plan tree — surface their bodies just like BPMN script tasks.
   if(n.type==='case' && d.planModel){
     const cs=[];
-    (function walk(nd){ if(nd.script) cs.push(nd); (nd.children||[]).forEach(walk); })(d.planModel);
+    (function walk(nd){ if(nd.script||(nd.problems||[]).length) cs.push(nd); (nd.children||[]).forEach(walk); })(d.planModel);
     if(cs.length) h+=section('scripttasks','Script tasks ('+cs.length+')', cs.map(scriptTaskHtml).join(''));
   }
   if(n.type==='process' && (d.events||[]).length){
@@ -1758,9 +1878,11 @@ function detailExtra(n){
       d.pages.map(p=>byId.get('page:'+p.key)?nodeChip('page:'+p.key)
         :'<span class="nc"><span class="nm">'+esc(p.key||'')+'</span><span class="ty">page</span></span>').join('')+'</div>');
   }
-  if(n.type==='action' && d.script){
-    h+=section('script','Bot script'+(d.scriptLanguage?' ('+esc(d.scriptLanguage)+')':''),
-      '<pre class="scriptbox">'+esc(d.script)+'</pre>');
+  if(n.type==='action' && (d.script||(d.scriptProblems||[]).length)){
+    h+=section('script','Bot script'+(d.scriptLanguage?' ('+esc(d.scriptLanguage)+')':'')+
+      ((d.scriptProblems||[]).length?' '+scriptIssueBadge(d.scriptProblems):''),
+      scriptProblemsHtml(d.scriptProblems)+
+      codeBoxHtml(d.script, d.scriptLanguage, d.scriptProblems));
   }
   if(n.type==='service' && (d.operations||[]).length){
     h+=section('ops','Operations ('+d.operations.length+')',

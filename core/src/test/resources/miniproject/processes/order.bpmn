@@ -57,6 +57,15 @@
       </script>
     </scriptTask>
     <sequenceFlow id="f8" sourceRef="stampTask" targetRef="end"/>
+    <!-- deliberately broken (like the ${vars:bogus(} expression above): the unclosed '(' feeds the
+         script-syntax check through every artifact — graph problems, overview marker, Checks tab -->
+    <scriptTask id="badStamp" name="Broken stamp" scriptFormat="groovy">
+      <script>execution.setVariable('shippingStamp', "x-" + orderId</script>
+    </scriptTask>
+    <!-- deliberately misspelled API member: pins the semantic (bindings-catalog) check end to end -->
+    <scriptTask id="badApi" name="Broken API call" scriptFormat="groovy">
+      <script>execution.setTransientVariabel('meta', orderId)</script>
+    </scriptTask>
     <endEvent id="end"/>
   </process>
 </definitions>

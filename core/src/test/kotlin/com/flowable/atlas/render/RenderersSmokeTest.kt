@@ -78,5 +78,15 @@ class RenderersSmokeTest {
         assertTrue("expected Design's wording for a payload mapping", html.contains("Send payload map"))
         assertTrue("expected Design's wording for a decision model", html.contains("Decision tables"))
         assertTrue("expected the term styling from explorer.css", html.contains(".term[title]{"))
+        // Script syntax findings survive `slimData` (nested `problems` under scriptTasks) and reach
+        // the health object + Checks tab; the fixture's broken script task pins the whole path.
+        assertTrue("expected the scriptIssues health key in explorer.js", html.contains("scriptIssues"))
+        assertTrue("expected the fixture's script finding in the payload", html.contains("'(' is never closed"))
+        assertTrue("expected the script-syntax checks block from explorer.js", html.contains("Script syntax findings"))
+        // The script code viewer: syntax highlighting + line numbers + problem-line marking.
+        assertTrue("expected the script highlighter from explorer.js", html.contains("function hlScript"))
+        assertTrue("expected the code viewer from explorer.js", html.contains("function codeBoxHtml"))
+        assertTrue("expected the token styling from explorer.css", html.contains(".tok-k{"))
+        assertTrue("expected the problem-line styling from explorer.css", html.contains(".cl-bad{"))
     }
 }

@@ -2,6 +2,8 @@ package com.flowable.atlas.parsing
 
 import com.flowable.atlas.graph.Ctx
 import com.flowable.atlas.parsing.AtlasXml.El
+import com.flowable.atlas.script.ScriptContext
+import com.flowable.atlas.script.ScriptValidator
 
 /**
  * BPMN/CMMN element helpers — a port of the Flowable-Design extension-element readers in
@@ -267,8 +269,9 @@ object XmlHelpers {
         }
     }
 
-    /** Execution/task/plan-item listeners declared on an element. */
-    fun readListeners(el: El): List<Map<String, Any?>> {
+    /** Execution/task/plan-item listeners declared on an element. [cmmn] decides which script
+     *  bindings a task-listener script is validated against (BPMN and CMMN differ). */
+    fun readListeners(el: El, cmmn: Boolean = false): List<Map<String, Any?>> {
         val ext = extEl(el) ?: return emptyList()
         val out = ArrayList<Map<String, Any?>>()
         for (tag in listOf("executionListener", "taskListener", "planItemLifecycleListener")) {
@@ -281,6 +284,25 @@ object XmlHelpers {
                     "delegateExpression" to lst.attr("delegateExpression"),
                     "script" to lst.childText("script"),
                 )
+                // the script's language sits on the <flowable:script> tag itself
+                val scriptEl = lst.findChild("script")
+                (scriptEl?.attr("scriptFormat") ?: scriptEl?.attr("language"))?.ifEmpty { null }
+                    ?.let { entry["scriptFormat"] = it }
+                if (entry["script"] != null || scriptEl != null) {
+                    entry["problems"] = when (tag) {
+                        // the CMMN listener factory has no script branch — such a listener is a no-op
+                        "planItemLifecycleListener" -> ScriptValidator.unsupportedLifecycleListenerDicts()
+                        else -> ScriptValidator.problemDicts(
+                            entry["script"] as? String, entry["scriptFormat"] as? String,
+                            context = when {
+                                tag == "executionListener" -> ScriptContext.BPMN_EXECUTION_LISTENER
+                                cmmn -> ScriptContext.CMMN_TASK_LISTENER
+                                else -> ScriptContext.BPMN_TASK_LISTENER
+                            },
+                        ).ifEmpty { null }
+                    }
+                    if (entry["problems"] == null) entry.remove("problems")
+                }
                 // throw-event listeners publish a signal/message/error by name/code
                 for (a in listOf("signalName", "messageName", "errorCode")) {
                     lst.attr(a)?.ifEmpty { null }?.let { entry[a] = it }
@@ -314,6 +336,7 @@ object XmlHelpers {
             (ls["messageName"])?.let { ctx.addRef(frm, ftype, ffile, "throws-message", "message", it) }
             (ls["errorCode"])?.let { ctx.addRef(frm, ftype, ffile, "throws-error", "error", it) }
             VarHarvest.collectScriptVars(ctx, ls["script"] as? String, listOf(frm),
+                ls["scriptFormat"] as? String,
                 element = element, elementName = elementName, elementType = ls["kind"] as? String)
         }
     }

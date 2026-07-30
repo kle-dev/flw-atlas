@@ -460,8 +460,11 @@ internal class PlaygroundProblemsStrip : JPanel() {
 
     private companion object { const val MAX_ROWS = 3 }
 
+    /** One strip row, stripped of the problem type — lets the Script Playground reuse the strip. */
+    internal data class Row(val isError: Boolean, val message: String, val offset: Int)
+
     private var selectionInfo: String? = null
-    private var problems: List<ExprProblem> = emptyList()
+    private var rows: List<Row> = emptyList()
     private var subEvaluations: List<String> = emptyList()
     private var navigate: (Int) -> Unit = {}
 
@@ -472,8 +475,11 @@ internal class PlaygroundProblemsStrip : JPanel() {
         isVisible = false
     }
 
-    fun setProblems(problems: List<ExprProblem>, navigate: (Int) -> Unit) {
-        this.problems = problems
+    fun setProblems(problems: List<ExprProblem>, navigate: (Int) -> Unit) =
+        setRows(problems.map { Row(it.severity == ExprSeverity.ERROR, it.message, it.startOffset) }, navigate)
+
+    fun setRows(rows: List<Row>, navigate: (Int) -> Unit) {
+        this.rows = rows
         this.navigate = navigate
         rebuild()
     }
@@ -501,11 +507,11 @@ internal class PlaygroundProblemsStrip : JPanel() {
                 border = JBUI.Borders.emptyBottom(2)
             })
         }
-        for (p in problems.take(MAX_ROWS)) add(problemRow(p))
-        if (problems.size > MAX_ROWS) {
-            add(JBLabel("+${problems.size - MAX_ROWS} more").apply {
+        for (r in rows.take(MAX_ROWS)) add(problemRow(r))
+        if (rows.size > MAX_ROWS) {
+            add(JBLabel("+${rows.size - MAX_ROWS} more").apply {
                 foreground = JBColor.GRAY
-                toolTipText = problems.drop(MAX_ROWS).joinToString("<br>", "<html>", "</html>") { it.message }
+                toolTipText = rows.drop(MAX_ROWS).joinToString("<br>", "<html>", "</html>") { it.message }
             })
         }
         for (row in subEvaluations) {
@@ -525,16 +531,16 @@ internal class PlaygroundProblemsStrip : JPanel() {
      * so the row reads unmistakably as "click to go to the offending spot". The severity and jump
      * icons are their own [JBLabel]s (not the hyperlink's icon slot) so both always render.
      */
-    private fun problemRow(p: ExprProblem): JPanel {
-        val severityIcon = if (p.severity == ExprSeverity.ERROR) AllIcons.General.Error else AllIcons.General.Warning
-        val link = HyperlinkLabel(p.message).apply {
-            addHyperlinkListener { navigate(p.startOffset) }
+    private fun problemRow(r: Row): JPanel {
+        val severityIcon = if (r.isError) AllIcons.General.Error else AllIcons.General.Warning
+        val link = HyperlinkLabel(r.message).apply {
+            addHyperlinkListener { navigate(r.offset) }
         }
         val jump = JBLabel(AllIcons.Actions.EditSource).apply {
             toolTipText = "Jump to the problem"
             cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
             addMouseListener(object : MouseAdapter() {
-                override fun mouseClicked(e: MouseEvent) = navigate(p.startOffset)
+                override fun mouseClicked(e: MouseEvent) = navigate(r.offset)
             })
         }
         return JPanel().apply {

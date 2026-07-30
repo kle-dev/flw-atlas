@@ -23,6 +23,8 @@ _Scanned 12 model files, 0 archives, 2 Java files, 1 REST endpoints. Generated b
 - ⚙️ Service task `notifyTask` Notify → ${notifierBean}
 - ⚙️ Service task `decideTask` Decide approval → dmn
 - 🧾 Script task `stampTask` Stamp order (groovy)
+- 🧾 Script task `badStamp` Broken stamp (groovy) — ⚠ 1 syntax finding
+- 🧾 Script task `badApi` Broken API call (groovy) — ⚠ 1 syntax finding
 - 📊 Decision task `decideTask` → decision table `orderDecision`
 - 📞 Call activity `callSub` → process `fulfilmentProcess` in(orderId→subOrderId) out(subTotal→total)
 - 🔔 Start event `start` 

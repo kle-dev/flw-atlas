@@ -97,7 +97,8 @@ class GraphBuilderTest {
         val byId = nodes().associateBy { it["id"] as String }
         val stamp = byId["variable:shippingStamp"] ?: error("a setVariable() in a script task must yield a variable")
         val stampData = stamp["data"] as Map<String, Any?>
-        val site = (stampData["scriptSites"] as List<Map<String, Any?>>).single()
+        // the fixture's deliberately-broken `badStamp` task writes the same variable — pick the healthy one
+        val site = (stampData["scriptSites"] as List<Map<String, Any?>>).single { it["element"] == "stampTask" }
         assertEquals("process:orderProcess", site["model"])
         assertEquals("stampTask", site["element"])
         assertEquals("Stamp order", site["elementName"])

@@ -70,11 +70,24 @@
           <li><b>Recognised inline, everywhere expressions live</b> — BPMN/CMMN/DMN XML,
               <code>.form</code> / <code>.page</code> JSON, and (optionally) Java string literals — so the
               highlighting, validation and completion follow you into the models you edit.</li>
+          <li><b>Real Groovy &amp; JavaScript in script bodies</b> — BPMN/CMMN script tasks, listener
+              scripts and action-bot scripts get the IDE's own language support injected inline:
+              compiler-grade syntax errors, highlighting and fragment editing (Alt-Enter). Groovy is
+              bundled in every IDEA; JavaScript lights up on Ultimate. JUEL or unknown script formats
+              keep the plain expression injection. Atlas additionally runs its own dependency-free
+              structural script check (unterminated strings/comments, unbalanced brackets,
+              <code>scriptFormat</code> typos) in the CLI and the explorer's Checks tab.</li>
           <li><b>Expression Playground</b> (the <i>Flowable Expressions</i> tool window) — type an
               expression, pick backend or frontend, and get instant validation and completion; scope
               completion to one model; evaluate a frontend expression live against a pasted JSON payload;
               or evaluate a backend expression against a running app through the Flowable Inspect REST API
               (connection auto-detected from the project's Spring configuration).</li>
+          <li><b>Script Playground</b> (the <i>Scripts</i> tab of the same tool window) — paste or
+              write a Groovy/JavaScript/Python script: the IDE's real language editing (completion,
+              coloring) where the language plugin is available, live structural validation with
+              squiggles and clickable problem rows (the same checks the CLI and the explorer's Checks
+              tab run), the scope variables the script touches as chips, and a picker that loads any
+              script task / listener / action-bot script straight from the project's models.</li>
         </ul>
 
         <h3>3 &middot; Atlas explorer &amp; hub</h3>
@@ -114,6 +127,45 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.10.14</h3>
+        <ul>
+          <li><b>Script Playground</b> — the Flowable Expressions tool window gains a <i>Scripts</i>
+              tab: paste or write a Groovy/JavaScript/Python script and get real-language completion
+              and coloring (where the IDE plugin is available), live structural validation with
+              squiggles, clickable problem rows and an error stripe, the scope variables the script
+              touches as chips (API writes vs ≈ heuristic reads), and <i>Load Script from Model…</i>
+              to pull any script task, listener script or action-bot script out of the project's
+              models for inspection.</li>
+          <li><b>Real script-task validation</b> — BPMN/CMMN script tasks, listener scripts and
+              action-bot scripts get the IDE's own Groovy (bundled) / JavaScript (Ultimate) language
+              injected inline: compiler-grade syntax errors, highlighting and Alt-Enter fragment
+              editing right in the model file. GString <code>${…}</code> interpolation no longer
+              double-injects the expression language inside script bodies.</li>
+          <li><b>Script syntax checks everywhere</b> — a dependency-free structural validator
+              (unterminated strings/comments, unbalanced brackets, unclosed <code>${…}</code>
+              interpolation, <code>scriptFormat</code> typos with a did-you-mean) runs over every
+              script during generation: findings land in the explorer's Checks tab (new "Script
+              syntax" card), as ⚠ badges in the Script tasks tab and model detail panels, in the
+              Markdown reports and the CLI status line.</li>
+          <li><b>Script binding validation</b> — a catalog transcribed from the Flowable engine and
+              platform sources knows what each script context really binds (<code>execution</code>
+              in BPMN script tasks, only <code>task</code> in task-listener scripts,
+              <code>planItemInstance</code>/<code>caseInstance</code> in CMMN,
+              <code>flw</code>/<code>flwActionContext</code> in action bots) and the full API of
+              those objects: member typos get a did-you-mean
+              (<code>setTransientVariabel</code> → <i>setTransientVariable</i>), a root used in the
+              wrong context is explained, EL-only <code>flw.*</code> namespaces and case-sensitive
+              <code>scriptFormat</code> values are flagged, and a CMMN lifecycle listener with a
+              script — which the engine silently ignores — gets a warning. The Script Playground
+              gains a context picker and shows the bound root objects as chips.</li>
+          <li><b>Binding-aware script completion</b> — after <code>execution.</code> /
+              <code>flw.time.</code> the catalog offers the context's real API with parameter
+              signatures (<code>setTransientVariable(variableName, value)</code>), in the Script
+              Playground and inside injected script bodies in model files; the root bindings
+              complete at the top level. The Groovy/JS "unresolved" noise on those dynamic
+              bindings (gray <code>execution</code>, <i>No candidates found for method call</i>)
+              is suppressed exactly inside Flowable script bodies.</li>
+        </ul>
         <h3>0.10.12</h3>
         <ul>
           <li><b>No more multi-second UI freezes while the model index builds</b> — the scan now only
@@ -852,8 +904,44 @@
         <multiHostInjector implementation="com.flowable.atlas.expr.inject.FlowableXmlExpressionInjector"/>
         <multiHostInjector implementation="com.flowable.atlas.expr.inject.FlowableJsonExpressionInjector"/>
         <multiHostInjector implementation="com.flowable.atlas.expr.inject.FlowableJavaExpressionInjector"/>
-        <!-- Treat Flowable form models (.form) as JSON so their {{…}} strings become injection hosts. -->
-        <fileType name="JSON" extensions="form"/>
+        <!-- Inject the IDE's real Groovy / JavaScript languages into Flowable script bodies (BPMN
+             scriptTask, CMMN script tasks, execution/task listener scripts, action-bot scriptInfo):
+             compiler-grade syntax errors right in the model file. Languages are resolved by ID at
+             runtime (Language.findLanguageByID), so there is NO hard or optional plugin dependency —
+             no Groovy/JavaScript plugin simply means no injection, never an error. -->
+        <multiHostInjector implementation="com.flowable.atlas.script.inject.FlowableXmlScriptInjector"/>
+        <multiHostInjector implementation="com.flowable.atlas.script.inject.FlowableJsonScriptInjector"/>
+        <!-- Completion for the Flowable script bindings (execution.…, task.…, flw.time.…): the real
+             language completion knows nothing about these dynamic bindings, so the bindings catalog
+             offers them — in the Script Playground and inside injected script bodies. language="any"
+             because the host language varies (Groovy/JS/plain-text fallback) and this plugin has no
+             dependency on the language plugins; the contributor gates itself cheaply. -->
+        <completion.contributor language="any"
+                  implementationClass="com.flowable.atlas.script.completion.ScriptBindingsCompletionContributor"/>
+        <!-- Silence the Groovy/JS "unresolved" noise on the engine bindings (execution, flw, …)
+             inside Flowable script bodies — they are dynamic bindings the language PSI can never
+             resolve. Scoped to the playground + injected script fragments; real syntax errors and
+             the bindings-catalog validation are unaffected. Registered per language (the suppressor
+             lookup does not honor "any"); an entry for an absent language plugin is simply dormant,
+             so this keeps the no-Groovy/JS-dependency rule intact. -->
+        <lang.inspectionSuppressor language="Groovy"
+                  implementationClass="com.flowable.atlas.script.inspection.FlowableScriptInspectionSuppressor"/>
+        <lang.inspectionSuppressor language="JavaScript"
+                  implementationClass="com.flowable.atlas.script.inspection.FlowableScriptInspectionSuppressor"/>
+        <!-- Hover / Ctrl-Q on a binding shows catalog documentation instead of the platform's
+             "No candidates found for method call" fallback for unresolvable dynamic bindings. -->
+        <lang.documentationProvider language="Groovy"
+                  implementationClass="com.flowable.atlas.script.documentation.ScriptBindingsDocumentationProvider"/>
+        <lang.documentationProvider language="JavaScript"
+                  implementationClass="com.flowable.atlas.script.documentation.ScriptBindingsDocumentationProvider"/>
+        <lang.documentationProvider language="TEXT"
+                  implementationClass="com.flowable.atlas.script.documentation.ScriptBindingsDocumentationProvider"/>
+        <!-- The Script Playground's scratch file resolves imports against the whole project —
+             without a module, `import org.slf4j.LoggerFactory` would never resolve there. -->
+        <resolveScopeProvider implementation="com.flowable.atlas.script.toolwindow.ScriptPlaygroundResolveScopeProvider"/>
+        <!-- Treat Flowable form models (.form) as JSON so their {{…}} strings become injection hosts,
+             and action models (.action) so their scriptInfo.script strings can host Groovy/JS. -->
+        <fileType name="JSON" extensions="form;action"/>
         <!-- The Expression Playground: type an expression, get validation + completion. -->
         <toolWindow id="Flowable Expressions"
                     anchor="bottom"

@@ -1,5 +1,7 @@
 package com.flowable.atlas.parsing
 
+import com.flowable.atlas.script.ScriptLanguages
+
 /**
  * What variables a script body touches.
  *
@@ -53,7 +55,7 @@ object ScriptVars {
     private val IDENT_RE = Regex("[A-Za-z_][A-Za-z0-9_]*")
 
     /** Script languages whose bare identifiers are scope variables. `juel` is an expression, not a script. */
-    private val SCRIPT_LANGS = setOf("groovy", "javascript", "js", "ecmascript", "nashorn", "graal.js", "python", "jython")
+    private val SCRIPT_LANGS = ScriptLanguages.SCRIPT_LANGS
 
     /**
      * Roots that are engine API, language builtins or the script's own plumbing — never a variable of
@@ -66,6 +68,9 @@ object ScriptVars {
         "variableContainer", "variableScope", "entity", "flw", "vars", "variables", "transientVariables",
         "engine", "processEngine", "cmmnEngine", "runtimeService", "taskService", "repositoryService",
         "historyService", "cmmnRuntimeService", "cmmnTaskService", "identityService", "formService",
+        "managementService", "cmmnHistoryService", "cmmnManagementService", "processEngineConfiguration",
+        "engineConfiguration", "cmmnEngineConfiguration", "identityServiceKey",
+        "flwApi", "flwApiOutputContainer", "flwActionContext", "httpRequest", "httpResponse",
         "dmnEngine", "eventRegistry", "beans", "bean", "logger", "log", "out", "err", "args", "it", "this",
         // language builtins / literals
         "true", "false", "null", "undefined", "print", "println", "printf", "require", "load", "eval",

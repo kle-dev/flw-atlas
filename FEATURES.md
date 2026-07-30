@@ -50,6 +50,33 @@ Everything is resolved against the Flowable models that actually live in your re
   (linked; a bare-identifier read marked `≈`). Chips narrow to one kind, one text filter searches names,
   languages *and the code itself*, one control expands or collapses every body, and *in model ↓* jumps to
   that element in its model. Reading all the code of a project no longer means opening every model in turn.
+- **Script syntax validation** — a dependency-free structural check runs over every script during
+  generation (Groovy, JavaScript and Python families): unterminated strings/comments, unbalanced or
+  mismatched brackets, unclosed `${…}` interpolation, empty script tasks, and `scriptFormat` typos with
+  a did-you-mean (`grooy` → *groovy*; a distant name is respected as a custom JSR-223 engine). Findings
+  land in the Checks tab (its own *Script syntax* health card and block, with severity, line and the
+  offending source line), as ⚠ badges on the Script tasks tab and the model detail panels, as a marker
+  in the overview Markdown, a count in the summary and the CLI status line. Deliberately conservative:
+  a heuristic that cannot decide stays silent, so valid exotic Groovy never gets flagged.
+- **Script binding validation** — a hand-maintained catalog, transcribed from the Flowable engine and
+  platform sources, of what each script context really binds: `execution` in BPMN script tasks and
+  execution listeners, **only `task`** in BPMN task-listener scripts, `planItemInstance`/`caseInstance`
+  in CMMN, `flw`/`flwActionContext` in action bots, plus the engine services. On top of it: member-typo
+  checks with a did-you-mean across the full `DelegateExecution`/`DelegateTask`/`DelegatePlanItemInstance`/
+  `CaseInstance`/`flw.*` API surfaces (`execution.setTransientVariabel(` → *setTransientVariable*),
+  wrong-context warnings (`execution` used in a CMMN script), `flw` namespaces that exist only in EL
+  (`flw.base64` & co.), case-sensitive `scriptFormat` names (`GROOVY` fails at runtime — the engine's
+  JSR-223 lookup has no aliasing), and CMMN lifecycle listeners that declare a script (the engine
+  silently ignores those). Locally declared names shadow the catalog, and only near-miss typos are
+  reported — dynamic Groovy stays unflagged.
+- **Binding-aware completion & quiet editors** — the same catalog feeds completion: after
+  `execution.` / `flw.time.` the context's real API is offered with parameter signatures
+  (`setTransientVariable(variableName, value)`), sub-objects chain with an auto-popup dot, and at
+  the top level the context's root bindings complete — in the Script Playground (per its context
+  picker) and inside injected script bodies in model files (context derived from the XML). And
+  because `execution` & co. are dynamic bindings the Groovy/JS PSI can never resolve, the
+  "unresolved" inspection noise (gray `execution`, *No candidates found for method call*) is
+  suppressed exactly inside Flowable script bodies — nowhere else.
 - **Find anything, and see where it matched** — ⌘K/Ctrl-K searches *every* string Atlas parsed, not a
   list of blessed fields: script bodies, element documentation, flow conditions, field injections,
   listener classes, DMN cells. Each hit says where it came from (`script · stampTask`,
@@ -121,6 +148,19 @@ Everything is resolved against the Flowable models that actually live in your re
 - **Key completion** — autocompletes model keys at cross-reference attributes in BPMN/CMMN XML.
 - **Broken-reference inspection** — flags an unknown model key at a cross-reference attribute
   (broken deployment).
+- **Real Groovy & JavaScript in script bodies** — BPMN `<scriptTask>` bodies, CMMN script-task fields,
+  execution/task-listener scripts and action-bot `scriptInfo.script` strings get the IDE's own language
+  support injected inline: compiler-grade syntax errors, full highlighting, completion and Alt-Enter
+  *Edit Fragment*. Languages are resolved by ID at runtime, so there is no dependency on the Groovy or
+  JavaScript plugins — Groovy is bundled in every IDEA, JavaScript lights up on Ultimate, and where a
+  plugin is absent the body simply stays plain text. `juel` and unknown formats keep the `${…}`
+  expression injection instead, and GStrings no longer double-inject the expression language.
+- **Script Playground** — the *Scripts* tab of the Flowable Expressions tool window: paste or write a
+  Groovy/JavaScript/Python script and get the IDE's real language editing (completion, coloring — where
+  the language plugin is available), the structural validation the CLI/explorer run as live squiggles
+  plus clickable problem rows, the scope variables the script touches as chips (API writes vs `≈`
+  heuristic reads), and *Load Script from Model…* to pull any script task / listener / action-bot
+  script out of the project's models. The last script and language persist per user (workspace.xml).
 - **Hover / Ctrl-Q docs** — shows a model key's type, name, and file.
 - **View model diagram** — a gutter icon on a model-key literal opens the model's diagram in the IDE,
   so you can see the process / case / decision without opening Flowable Design. It prefers the `.svg`
