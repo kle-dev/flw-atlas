@@ -24,6 +24,9 @@
     --ink:#131e29; --ink-dim:#4c5b6a; --ink-faint:#79848f; --accent:#0f55d6;
     --accent-hover:#0c44ab; --accent-subtle:#eff6ff; --hover:#f1f5f9; --active:#e5f0ff; --input:#ffffff;
     --sel-text:#1d4ed8; --sel-bar:#2563eb;
+    /* Search-hit highlight. Deliberately NOT the accent: the accent already means "selected row", and a
+       hit inside a selected row has to stay readable against it. */
+    --hl-bg:#fde68a; --hl-ink:#422d00;
     --scroll:#cbd5e1; --scroll-hover:#94a3b8;
     --shadow:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1);
     --overlay:rgba(0,0,0,.30);
@@ -56,6 +59,7 @@
     --ink:#e9eef0; --ink-dim:#a5adb5; --ink-faint:#62707d; --accent:#6f99e6;
     --accent-hover:#9bb5d2; --accent-subtle:rgba(111,153,230,.12); --hover:#1a2b3b; --active:#1c3551; --input:#111c26;
     --sel-text:#cfddf7; --sel-bar:#6f99e6;
+    --hl-bg:rgba(250,204,21,.28); --hl-ink:#fde68a;
     --scroll:#415161; --scroll-hover:#62707d;
     --shadow:0 10px 15px -3px rgba(0,0,0,.5),0 4px 6px -4px rgba(0,0,0,.5);
     --overlay:rgba(0,0,0,.45);
@@ -322,9 +326,36 @@
   .pal-item .hint{margin-left:auto;flex:0 1 auto;font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint);
     max-width:65%;min-width:0;overflow-wrap:anywhere;text-align:right}
   .pal-item.sel .hint{color:var(--sel-text)}
-  .pal-empty{padding:var(--space-6);text-align:center;font-size:var(--text-md);color:var(--ink-faint)}
-  .pal-more{padding:var(--space-2) var(--space-4);text-align:center;font-size:var(--text-xs);
-    color:var(--ink-faint);border-top:1px solid var(--line)}
+  .pal-empty{padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-md);color:var(--ink-faint)}
+  .pal-empty b{color:var(--ink-dim);font-weight:600}
+  /* Now a real button (the old div announced "+N more" and offered no way to reach them). */
+  .pal-more{display:block;width:100%;padding:var(--space-2) var(--space-4);text-align:center;
+    font-family:var(--sans);font-size:var(--text-xs);color:var(--ink-dim);background:transparent;
+    border:none;border-top:1px solid var(--line);cursor:pointer}
+  .pal-more:hover{background:var(--hover);color:var(--ink)}
+  /* ---- search: result count + section facets, hit highlighting ---- */
+  /* Two stacked rows: sections, then the categories inside the chosen section. */
+  .pal-facets{flex:none;display:flex;flex-direction:column;gap:var(--space-15);
+    padding:var(--space-2) var(--space-4);border-bottom:1px solid var(--line)}
+  .pal-frow{display:flex;align-items:center;gap:var(--space-15);flex-wrap:wrap}
+  /* The second row is a refinement of the first, so it is indented and quieter rather than a peer. */
+  .pal-frow2{padding-left:var(--space-2);border-left:2px solid var(--line2)}
+  .pal-frow2 .pchip{font-size:var(--text-2xs)}
+  .pal-in{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint)}
+  .pal-count{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint);margin-right:var(--space-1)}
+  /* The hit highlight. `mark` carries a UA default (yellow on black) that has to be overridden in both
+     themes, and inside the selected row the tint must still separate from the accent background. */
+  mark.hl{background:var(--hl-bg);color:var(--hl-ink);border-radius:var(--radius-xs);padding:0 1px}
+  .pal-item.sel mark.hl,.item.on mark.hl{background:var(--hl-bg);color:var(--hl-ink)}
+  /* Suggestions and the "search all sections" escape hatch: buttons that read as links. */
+  .pal-sug{margin-top:var(--space-25);display:flex;flex-wrap:wrap;gap:var(--space-1);justify-content:center;
+    align-items:center;font-size:var(--text-xs)}
+  .pal-link{background:none;border:none;padding:0;font-family:var(--sans);font-size:var(--text-xs);
+    color:var(--accent);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+  .pal-link:hover{color:var(--accent-hover)}
+  .pal-tip{margin:var(--space-3) auto 0;max-width:46ch;font-size:var(--text-2xs);line-height:1.55;
+    color:var(--ink-faint);text-align:left}
+  .pal-tip code{font-family:var(--mono);background:var(--hover);border-radius:var(--radius-xs);padding:0 3px}
   /* ---- diagram viewport: zoom + pan inline, and the same thing full screen ---- */
   .dgbar{display:flex;align-items:center;gap:var(--space-15);flex-wrap:wrap;margin:0 0 var(--space-2)}
   .dgbar button{background:var(--panel);border:1px solid var(--line2);color:var(--ink-dim);
@@ -415,6 +446,14 @@
     font-family:var(--mono);font-size:var(--text-xs)}
   .lh-open:hover{background:var(--accent-hover)}
   .lh-note{margin-top:var(--space-1);font-family:var(--mono);font-size:var(--text-2xs);color:var(--warn-text)}
+  /* "N matches in other categories · search everything" — the list filter is category-scoped by design,
+     so this is the hand-off to ⌘K instead of leaving the user to conclude nothing exists. Quieter than
+     .lh-open: it is an offer, not the primary action. */
+  .lh-wider{width:100%;margin-top:var(--space-15);background:var(--warn-bg);
+    border:1px solid var(--warn-border);color:var(--warn-text);border-radius:var(--radius-md);
+    padding:var(--space-1) var(--space-2);cursor:pointer;text-align:left;
+    font-family:var(--mono);font-size:var(--text-2xs);line-height:1.4}
+  .lh-wider:hover{border-color:var(--warn-bar)}
   /* Off-screen but announced — carries the bare "N marked" counter for screen readers. */
   .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
   .item{display:flex;align-items:flex-start;gap:var(--space-2);padding:var(--space-2) var(--space-3);cursor:pointer;border-bottom:1px solid var(--line);

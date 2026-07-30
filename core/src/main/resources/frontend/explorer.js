@@ -1309,7 +1309,7 @@ function renderList(){
     '<div class="lh-controls"><input id="lf" placeholder="filter '+esc(cat.label.toLowerCase())+'…" aria-label="Filter list">'+
     '<select id="lsort" aria-label="Sort list"><option value="name">Name</option>'+
     '<option value="refs">Most referenced</option><option value="file">File</option></select></div>'+
-    '<div id="lmark"></div>';
+    '<div id="lwider"></div><div id="lmark"></div>';
   list.appendChild(head);
   const wrap=document.createElement('div'); wrap.id='listitems';
   wrap.setAttribute('role','listbox');
@@ -1372,6 +1372,47 @@ function renderList(){
   renderListMarkBar();
 }
 
+/**
+ * How many nodes OUTSIDE this category the same words would find. Identity-only matching (name / key /
+ * file) rather than the full scored pass: this runs on every keystroke, and the number only has to be
+ * honest that there is more to find elsewhere — ⌘K then shows the real, deeper result set.
+ */
+function countOutsideCat(cat, parsed){
+  if(parsed.empty) return 0;
+  let n=0;
+  for(let i=0;i<nodes.length;i++){
+    const node=nodes[i];
+    if(cat.match(node)) continue;
+    const ix=searchIndex(node);
+    let ok=true;
+    for(let j=0;j<parsed.terms.length && ok;j++){
+      const t=parsed.terms[j];
+      ok=ix.name.indexOf(t)>=0||ix.key.indexOf(t)>=0||ix.file.indexOf(t)>=0;
+    }
+    for(let j=0;j<parsed.phrases.length && ok;j++){
+      const p=parsed.phrases[j];
+      ok=ix.name.indexOf(p)>=0||ix.key.indexOf(p)>=0;
+    }
+    if(ok) n++;
+  }
+  return n;
+}
+/**
+ * The bridge between the two searches. The list filter only ever looks inside the selected category,
+ * which is correct but reads as "Atlas cannot find it" when you are standing in the wrong one. So when
+ * the words match something elsewhere, say so and hand the term to ⌘K, which searches everything.
+ */
+function renderListBridge(cat, parsed, shown){
+  const box=document.getElementById('lwider');
+  if(!box) return;
+  const outside=countOutsideCat(cat, parsed);
+  if(!outside){ box.innerHTML=''; return; }
+  box.innerHTML='<button class="lh-wider" type="button" id="lwiderbtn">'+
+    (shown?'':'Nothing here — ')+outside+' match'+(outside>1?'es':'')+
+    ' in other categories · search everything</button>';
+  document.getElementById('lwiderbtn').onclick=()=>openPalette(state.filter);
+}
+
 // Incremental rendering: 200 rows at a time, the IntersectionObserver on a trailing
 // sentinel appends the next chunk when it scrolls into view — every item of a large
 // category is reachable by scrolling (the old hard cap cut off at 600).
@@ -1381,14 +1422,24 @@ function renderItems(cat, wrap){
   if(_listIO){ _listIO.disconnect(); _listIO=null; }
   wrap.innerHTML='';
   let items = nodes.filter(cat.match);
-  const f = state.filter.toLowerCase();
-  if(f) items = items.filter(n => (n.label+' '+n.key+' '+(n.file||'')+' '+((n.data&&n.data.botKey)||'')).toLowerCase().includes(f));
+  // Same engine as ⌘K: words count independently and in any order, and a hyphen or a camel hump is a
+  // word boundary. Before this, the box was a single raw substring test over name/key/file only, so
+  // "customer name" found nothing in a category full of nodes matching both words.
+  const parsed = qParse(state.filter);
+  if(!parsed.empty){
+    const ranked=[];
+    items.forEach(n=>{ const r=scoreNode(n, parsed); if(r) ranked.push({n, score:r.score}); });
+    ranked.sort((a,b)=>b.score-a.score||a.n.label.localeCompare(b.n.label));
+    items=ranked.map(x=>x.n);
+  }
   if(state.sort==='refs')
     items.sort((a,b)=>(INSIGHTS.indeg.get(b.id)||0)-(INSIGHTS.indeg.get(a.id)||0)||a.label.localeCompare(b.label));
   else if(state.sort==='file')
     items.sort((a,b)=>String(a.file||'').localeCompare(String(b.file||''))||a.label.localeCompare(b.label));
-  else
+  else if(parsed.empty)
     items.sort((a,b)=>a.label.localeCompare(b.label));
+  // else: an explicit sort wins, but plain "Name" yields to the relevance order above.
+  renderListBridge(cat, parsed, items.length);
   const sentinel=document.createElement('div'); sentinel.className='sentinel';
   wrap.appendChild(sentinel);
   let idx=0;
@@ -1406,7 +1457,8 @@ function renderItems(cat, wrap){
     el.style.animationDelay=Math.min(i*8,300)+'ms';
     const rn=INSIGHTS.indeg.get(n.id)||0;
     el.innerHTML='<span class="dot" style="margin-top:5px;background:'+nodeColor(n)+'"></span>'+
-      '<div class="meta"><div class="nm">'+esc(n.label)+authBadge(n)+'</div><div class="sub">'+esc(n.key)+'</div></div>'+
+      '<div class="meta"><div class="nm">'+hlHtml(n.label, parsed)+authBadge(n)+
+      '</div><div class="sub">'+hlHtml(n.key, parsed)+'</div></div>'+
       (rn?'<span class="refn" title="referenced by '+rn+' node'+(rn>1?'s':'')+'">'+rn+'</span>':'')+
       '<span class="ck" aria-hidden="true">✓</span>';
     // ⌘/Ctrl+click toggles and Shift+click extends — the list-selection convention, not the
@@ -3222,22 +3274,38 @@ function cycleTab(delta){
   activateTab((from+delta+state.tabs.length)%state.tabs.length);
 }
 
-// ---------- search index (shared by the command palette) ----------
-// Three haystacks per node, because "find everything" and "rank sensibly" pull in opposite directions:
-//   ident  — label / key / file / type (+ the bot key: a Java bot's getKey() and an action's botKey
-//            field both live in data.botKey, so ⌘K finds the bot class AND its callers).
-//   member — names of things that are NOT nodes of their own (element ids, in/out parameters, form
-//            fields, columns, permissions …). Enumerated on purpose: their shape carries meaning.
-//   text   — every other string in node.data, collected by a generic deep walk WITH provenance. This
-//            is what makes a script body, an element's documentation, a flow condition or a field
-//            injection findable at all. Enumerating those field by field kept losing the race with the
-//            parsers — a walk cannot fall behind.
+/*__SEARCH_CORE_START__*/
+// ---------- search engine: index, query parsing, scoring, highlighting ----------
+// Everything between the two __SEARCH_CORE__ sentinels is PURE: no DOM, no module globals except the
+// injected SX_ENV below. scripts/search-selftest.mjs extracts exactly this block and runs it against a
+// freshly generated report, which is the only automated coverage the search has — keep it that way.
+//
+// The two things the engine needs from the rest of the app, injected rather than closed over so the
+// block stays standalone. Assigned right after the block (TM and elementNames both exist by then).
+const SX_ENV={TM:{}, elementNames:()=>new Map()};
+
+// ---------- search index (shared by the command palette and the browse list) ----------
+// One field per haystack, because "find everything" and "rank sensibly" pull in opposite directions:
+// the scorer weights them (see SX_FIELDS), so a name hit can never be buried by a script-body hit.
+//   name / key  — the node's own identity, also kept pre-tokenised (see hayTokens).
+//   file / type — where it lives and what it is; `type` carries Design's wording too, so `t:` works.
+//   mem         — names of things that are NOT nodes of their own (element ids, in/out parameters, form
+//                 fields, columns, permissions …). Enumerated on purpose: their shape carries meaning.
+//                 Includes the bot key: a Java bot's getKey() and an action's botKey field both live in
+//                 data.botKey, so ⌘K finds the bot class AND its callers.
+//   text        — every other string in node.data, collected by a generic deep walk WITH provenance.
+//                 This is what makes a script body, an element's documentation, a flow condition or a
+//                 field injection findable at all. Enumerating those field by field kept losing the
+//                 race with the parsers — a walk cannot fall behind. Not tokenised: a script body would
+//                 blow the token array up for no ranking benefit, so it is matched by substring.
 const HAY_SKIP=new Set([
   // `diagram` is the rendered SVG (a wall of path data) — indexing it would make every query match
   // every model. The rest is node-id bookkeeping the palette already navigates by.
   'diagram','_uses','usedBy','usages','scopes','_idx','_search',
 ]);
-const HAY_MAX_VALUE=4000, HAY_MAX_ENTRIES=400;
+// The index is built in the browser and never embedded in the report, so a generous entry cap costs
+// runtime memory only — not a byte of report size. 400 silently lost the tail of big models.
+const HAY_MAX_VALUE=4000, HAY_MAX_ENTRIES=1200;
 // Field name → what to call it in the "why did this match" hint.
 const HAY_LABEL={
   script:'script', documentation:'doc', condition:'condition', conditions:'condition',
@@ -3246,6 +3314,205 @@ const HAY_LABEL={
   inputs:'DMN input', outputs:'DMN output', rules:'DMN rule', inputExpressions:'DMN input',
   annotation:'DMN annotation', fields:'field', topic:'topic', url:'url', tableName:'table',
 };
+// ---------- query parsing + scoring ----------
+// The old matcher did `haystack.indexOf(wholeQuery)`, which made word order and adjacency mandatory:
+// "shopping template" found nothing even when a data object was named "… Shopping list template",
+// and "demo d05" found nothing where "demo-d05" found plenty. Terms are now independent and AND-ed.
+
+// Splits BOTH the query and the haystacks. Splitting the query too is the point: `demo d05`,
+// `demo-d05` and `demo_d05` all reduce to the terms [demo, d05] and therefore mean the same search.
+const SX_SEP=/[\s\-_./:,;()[\]{}<>"'`|\\+*=?!@#$%^~]+/;
+
+/** Lowercase tokens of `s`, split at separators AND at camelCase / letter↔digit boundaries. The
+ *  undivided part is kept too, so `outreachTemplateKey` yields
+ *  [outreachtemplatekey, outreach, template, key] and `DEMO-D05` yields [demo, d05, d, 05].
+ *  That is what lets a term after a hyphen or inside a camel hump still count as a word start. */
+function hayTokens(s){
+  if(s==null||s==='') return [];
+  const out=[];
+  String(s).split(SX_SEP).forEach(part=>{
+    if(!part) return;
+    out.push(part.toLowerCase());
+    const subs=part.replace(/([a-z0-9])([A-Z])/g,'$1 $2')      // aB     → a|B
+                   .replace(/([A-Z]+)([A-Z][a-z])/g,'$1 $2')   // ABCd   → AB|Cd
+                   .replace(/([A-Za-z])([0-9])/g,'$1 $2')      // d05    → d|05
+                   .replace(/([0-9])([A-Za-z])/g,'$1 $2')      // 05d    → 05|d
+                   .split(' ');
+    if(subs.length>1) subs.forEach(t=>{ if(t) out.push(t.toLowerCase()); });
+  });
+  return out;
+}
+
+const SX_FACET_KEYS={t:'type',type:'type',file:'file',key:'key',in:'section'};
+/**
+ * Parse a raw query into `{terms, phrases, facets}`.
+ *  - terms   — order-independent, ALL must match somewhere (AND)
+ *  - phrases — `"…"` quoted, must match contiguously
+ *  - facets  — inline `t:`/`type:`/`file:`/`key:`/`in:` hard filters
+ */
+function qParse(q){
+  const raw=String(q==null?'':q).trim();
+  const parsed={raw, terms:[], phrases:[], facets:{}, empty:true};
+  if(!raw) return parsed;
+  // Quoted phrases come out first: inside quotes the separators are literal, so a user who really
+  // wants an adjacent match can still ask for one.
+  let rest=raw.replace(/"([^"]*)"/g,(m,inner)=>{
+    const p=inner.trim().toLowerCase();
+    if(p) parsed.phrases.push(p);
+    return ' ';
+  });
+  rest=rest.replace(/(^|\s)(t|type|file|key|in):(\S+)/gi,(m,pre,k,v)=>{
+    parsed.facets[SX_FACET_KEYS[k.toLowerCase()]]=v.toLowerCase();
+    return ' ';
+  });
+  rest.split(SX_SEP).forEach(t=>{ if(t) parsed.terms.push(t.toLowerCase()); });
+  parsed.empty=!parsed.terms.length && !parsed.phrases.length && !Object.keys(parsed.facets).length;
+  return parsed;
+}
+
+// Field weights. `ex` = the term IS a whole token, `pre` = a token starts with it, `sub` = it occurs
+// somewhere. A name hit must always outrank a free-text hit, which is what the old tiers were for —
+// the difference is that now every term is scored on its own and the scores add up.
+// What kind of thing is this, in terms of "is it what people mean when they search"? A model you can
+// open in Design outranks an incidental mention of the same word in a string literal, an expression or
+// an external library symbol. Without this, "template" ranked a library symbol above the data object
+// actually named "… Shopping list template", because the shorter name scored better on coverage.
+const SX_KIND_BOOST={
+  app:200, process:200, case:200, decision:200, dataObject:200,
+  form:190, page:190, dataDictionary:190, masterData:190, template:170,
+  action:150, agent:150, service:150, query:150, securityPolicy:150,
+  channel:140, event:140, knowledgeBase:140, sequence:140, document:140,
+  variableExtractor:140, sla:140, dashboardComponent:140,
+  bot:130, serviceOperation:120, topic:120, signal:120, message:120, error:120, escalation:120,
+  group:110, endpoint:100, java:90, liquibase:90, method:70, variable:60,
+  customFunction:40, expression:10, binding:10, string:0, external:0,
+};
+const SX_FIELDS=[
+  {f:'name', ex:1000, pre:700, sub:500},
+  {f:'key',  ex:900,  pre:650, sub:450},
+  {f:'mem',  ex:400,  pre:300, sub:200},
+  {f:'file', ex:170,  pre:150, sub:120},
+  {f:'type', ex:150,  pre:140, sub:110},
+  {f:'text', ex:90,   pre:90,  sub:60},
+];
+
+/** Best score for one term across all fields of a prepared index. `null` = this term matched nothing. */
+function termScore(sx, term){
+  let best=null;
+  for(let i=0;i<SX_FIELDS.length;i++){
+    const spec=SX_FIELDS[i], s=sx[spec.f];
+    if(!s) continue;
+    let sc=0;
+    const toks=sx[spec.f+'Tok'];
+    if(toks){
+      for(let j=0;j<toks.length;j++){
+        const t=toks[j];
+        if(t===term){ sc=spec.ex; break; }
+        if(sc<spec.pre && t.lastIndexOf(term,0)===0) sc=spec.pre;
+      }
+    }
+    if(!sc && s.indexOf(term)>=0) sc=spec.sub;
+    if(sc && (!best||sc>best.score)) best={score:sc, field:spec.f};
+  }
+  return best;
+}
+
+/**
+ * Score a parsed query against one prepared index (see searchIndex). Returns `{score, fields}` or
+ * `null` when the node is not a match. `indeg` is an importance prior: a heavily referenced model
+ * beats an obscure string literal that happens to contain the same word.
+ */
+function scoreIndex(sx, parsed, indeg){
+  if(!sx || !parsed || parsed.empty) return null;
+  const fc=parsed.facets;
+  if(fc.type && (sx.type||'').indexOf(fc.type)<0) return null;
+  if(fc.file && (sx.file||'').indexOf(fc.file)<0) return null;
+  if(fc.key && (sx.key||'').indexOf(fc.key)<0) return null;
+  if(fc.section && (sx.section||'').toLowerCase().indexOf(fc.section)<0) return null;
+  let score=0;
+  const fields={};
+  for(let i=0;i<parsed.phrases.length;i++){
+    const ph=parsed.phrases[i];
+    let sc=0, fld='';
+    for(let j=0;j<SX_FIELDS.length;j++){
+      const spec=SX_FIELDS[j], s=sx[spec.f];
+      if(s && s.indexOf(ph)>=0){ sc=spec.sub; fld=spec.f; break; }
+    }
+    if(!sc) return null;                         // an explicit phrase is a hard requirement
+    score+=sc+200; fields[fld]=1;
+  }
+  for(let i=0;i<parsed.terms.length;i++){
+    const b=termScore(sx, parsed.terms[i]);
+    if(!b) return null;                          // AND: one unmatched term drops the node
+    score+=b.score; fields[b.field]=1;
+  }
+  if(parsed.terms.length>1){
+    // The whole query, in order, inside the name — "shopping list template" should still beat a node
+    // that merely contains those three words in three unrelated places.
+    if(sx.name && sx.name.indexOf(parsed.terms.join(' '))>=0) score+=400;
+    if(Object.keys(fields).length===1) score+=150;
+  }
+  if(sx.name){
+    // Coverage: how much of the name the query actually accounts for. Replaces the old
+    // "shorter label wins" sort, which ranked by an accident of naming rather than by fit.
+    let chars=0;
+    for(let i=0;i<parsed.terms.length;i++)
+      if(sx.name.indexOf(parsed.terms[i])>=0) chars+=parsed.terms[i].length;
+    score+=Math.round(200*Math.min(1, chars/Math.max(8, sx.name.length)));
+  }
+  score+=sx.kind||0;
+  score+=Math.min(indeg||0,20)*3;
+  return {score, fields};
+}
+
+/** Loose subsequence score, for "did you mean…" ONLY — far too permissive to rank real hits with. */
+function fuzzyScore(s, term){
+  if(!s||!term) return 0;
+  const low=String(s).toLowerCase();
+  let i=0, gaps=0, first=-1;
+  for(let j=0;j<low.length && i<term.length;j++){
+    if(low[j]===term[i]){ if(first<0) first=j; i++; }
+    else if(first>=0) gaps++;
+  }
+  if(i<term.length) return 0;
+  return Math.max(1, 1000-gaps*8-first*4-Math.max(0, low.length-term.length));
+}
+
+/**
+ * Split `text` into `{t, hit}` segments covering every matched range of `parsed`. Returns segments
+ * rather than HTML on purpose: the caller escapes each one, so a highlight can never inject markup
+ * out of model data.
+ */
+function hlite(text, parsed){
+  const s=String(text==null?'':text);
+  if(!s||!parsed||parsed.empty) return [{t:s, hit:false}];
+  const low=s.toLowerCase();
+  const needles=parsed.phrases.concat(parsed.terms);
+  const marks=[];
+  for(let i=0;i<needles.length;i++){
+    const nd=needles[i];
+    if(!nd) continue;
+    let from=0, at;
+    while((at=low.indexOf(nd, from))>=0){ marks.push([at, at+nd.length]); from=at+nd.length; }
+  }
+  if(!marks.length) return [{t:s, hit:false}];
+  marks.sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+  const merged=[];
+  for(let i=0;i<marks.length;i++){
+    const last=merged[merged.length-1];
+    if(last && marks[i][0]<=last[1]) last[1]=Math.max(last[1], marks[i][1]);
+    else merged.push([marks[i][0], marks[i][1]]);
+  }
+  const out=[]; let pos=0;
+  for(let i=0;i<merged.length;i++){
+    if(merged[i][0]>pos) out.push({t:s.slice(pos, merged[i][0]), hit:false});
+    out.push({t:s.slice(merged[i][0], merged[i][1]), hit:true});
+    pos=merged[i][1];
+  }
+  if(pos<s.length) out.push({t:s.slice(pos), hit:false});
+  return out;
+}
+
 /**
  * Deep-walk a value, pushing one `{k, id, v}` entry per string found: `k` is the field it came from,
  * `id` the nearest enclosing object's id/name/key — for a script body that is the script task's
@@ -3267,14 +3534,16 @@ function walkHay(v, key, owner, out){
 function searchIndex(n){
   if(n._idx) return n._idx;                    // node data never changes at runtime — build once
   const d=n.data||{};
-  const ident=(n.label+' '+n.key+' '+(n.file||'')+' '+n.type+' '+(d.botKey||'')).toLowerCase();
   let s='';
   // model element ids + names (tasks, gateways, events, plan items) — an element id from the BPMN
   // XML or the diagram surfaces its model in ⌘K
   if(n.type==='process'||n.type==='case')
-    s+=' '+[...elementNames(n).entries()].map(([id,e])=>id+' '+(e.name||'')).join(' ');
+    s+=' '+[...SX_ENV.elementNames(n).entries()].map(([id,e])=>id+' '+(e.name||'')).join(' ');
+  // A column's own name matters as much as its label ("customerName" is what a script writes), and the
+  // referenced data object is how you find the owner of a relation — both were tier-3-only before.
   if(n.type==='dataObject') s+=' '+(d.fields||[]).join(' ')+' '+(d.serviceTableName||'')+' '+
-    (d.columns||[]).map(c=>(c.label||'')+' '+(c.type||'')).join(' ');
+    (d.columns||[]).map(c=>(c.name||'')+' '+(c.label||'')+' '+(c.type||'')+' '+
+      (c.refDataObject||'')+' '+(c.relationship||'')).join(' ');
   if(n.type==='service') s+=' '+(d.columns||[]).map(c=>(c.name||'')+' '+(c.columnName||'')+' '+(c.type||'')).join(' ');
   if(n.type==='liquibase') s+=' '+(d.columns||[]).map(c=>(c.name||'')+' '+(c.type||'')).join(' ');
   // In/out parameters are not nodes of their own, so without this a parameter name would never surface
@@ -3299,35 +3568,71 @@ function searchIndex(n){
   if(n.type==='dataDictionary') s+=' '+(d.types||[]).join(' ');
   const entries=[];
   for(const k in d){ if(!HAY_SKIP.has(k)) walkHay(d[k], k, null, entries); }
-  n._idx={ident, mem:s.toLowerCase(), text:entries.map(e=>e.v).join('\n').toLowerCase(), entries};
+  const name=String(n.label==null?'':n.label).toLowerCase();
+  const key=String(n.key==null?'':n.key).toLowerCase();
+  const file=String(n.file||'').toLowerCase();
+  const tm=SX_ENV.TM[n.type]||[];
+  const mem=(s+' '+(d.botKey||'')).toLowerCase();
+  n._idx={
+    name, key, file, mem,
+    // Both the internal type and the Design wording, so `t:do`, `t:dataobject` and `t:data` all work.
+    type:(n.type+' '+(tm[0]||'')).toLowerCase(),
+    section:n.type==='external'?(d.flowableApi?'Integration':'Other'):(tm[1]||'Other'),
+    kind:SX_KIND_BOOST[n.type]||0,
+    text:entries.map(e=>e.v).join('\n').toLowerCase(),
+    // Free text is deliberately NOT tokenised — a script body would blow the token array up for no
+    // ranking benefit; it is matched by substring at the lowest weight.
+    nameTok:hayTokens(n.label), keyTok:hayTokens(n.key),
+    fileTok:hayTokens(n.file), memTok:hayTokens(mem),
+    entries,
+  };
   return n._idx;
-}
-// How well does this node match? 0 = label/key starts with the term, 1 = anywhere in the identity,
-// 2 = a member name, 3 = free text (script, documentation, condition …), -1 = not at all. Without the
-// tiers the free-text hits would drown the node you actually typed the name of.
-function matchTier(n,v){
-  const ix=searchIndex(n);
-  const idn=(n.label+' '+n.key).toLowerCase();
-  if((' '+idn).indexOf(' '+v)>=0) return 0;
-  if(ix.ident.indexOf(v)>=0) return 1;
-  if(ix.mem.indexOf(v)>=0) return 2;
-  if(ix.text.indexOf(v)>=0) return 3;
-  return -1;
 }
 function paramHaystack(p){ return (p.source||'')+' '+(p.target||'')+' '+(p.element||'')+' '+(p.kind||''); }
 // Why did this node match, and where? When the hit did not come from the node's own name, the palette
 // shows the mapping / field it came from instead of the key — otherwise the match looks arbitrary —
 // and `el` carries the element id so the detail panel can open exactly that row.
-function matchWhere(n,v){
-  if(!v || (n.label+' '+n.key).toLowerCase().indexOf(v)>=0) return null;
-  const p=((n.data||{}).ioParameters||[]).find(x=>paramHaystack(x).toLowerCase().indexOf(v)>=0);
+// `fields` is the winning-field set from scoreIndex: a pure name/key hit needs no explanation.
+function matchWhere(n,parsed,fields){
+  if(!parsed||parsed.empty) return null;
+  // If the name or the key carried the match, the row already shows it: the label and the key are both
+  // rendered with the hit highlighted, so the key stays the more useful hint. Explaining a name match by
+  // digging through the walked entries produced hints like a bare "key" — the field the value came from,
+  // which is exactly the thing the row was already displaying.
+  if(fields && (fields.name || fields.key)) return null;
+  if(fields && !fields.mem && !fields.text && !fields.file) return null;
+  const needles=parsed.phrases.concat(parsed.terms);
+  const anyIn=s=>{ const t=String(s||'').toLowerCase(); return needles.some(nd=>t.indexOf(nd)>=0); };
+  const p=((n.data||{}).ioParameters||[]).find(x=>anyIn(paramHaystack(x)));
   if(p){
     const flow=[p.source,p.target].filter(x=>x!=null&&x!=='').join(' → ');
     return {hint:p.dir+' '+flow+(p.element?' @'+p.element:''), el:p.element||''};
   }
-  const e=searchIndex(n).entries.find(x=>x.v.toLowerCase().indexOf(v)>=0);
+  const e=searchIndex(n).entries.find(x=>anyIn(x.v));
   if(!e) return null;
   return {hint:(HAY_LABEL[e.k]||e.k)+(e.id?' · '+e.id:''), el:e.id||''};
+}
+/*__SEARCH_CORE_END__*/
+SX_ENV.TM=TM;
+SX_ENV.elementNames=elementNames;
+
+// ---------- glue between the pure engine and the app (globals live out here on purpose) ----------
+/** Score one node against a parsed query. The ranking itself is in the engine above. */
+function scoreNode(n, parsed){
+  return scoreIndex(searchIndex(n), parsed, INSIGHTS?(INSIGHTS.indeg.get(n.id)||0):0);
+}
+/**
+ * Build every node's index once, in idle slices after boot. Without this the first keystroke pays for
+ * the whole deep walk at once, which on a 3000-node report is a visible stall in the palette.
+ */
+function prewarmSearchIndex(){
+  let i=0;
+  const idle=window.requestIdleCallback||(cb=>setTimeout(()=>cb({timeRemaining:()=>8}),60));
+  const step=deadline=>{
+    while(i<nodes.length && (!deadline||deadline.timeRemaining()>2)) searchIndex(nodes[i++]);
+    if(i<nodes.length) idle(step);
+  };
+  idle(step);
 }
 
 // ---------- command palette (⌘K) ----------
@@ -3423,13 +3728,19 @@ function wirePaletteResize(){
     }, 300);
   }).observe(palPanel);
 }
-function openPalette(){
+/** `prefill` seeds the query — the list-filter bridge hands over the term you already typed there,
+ *  so you never retype it just to widen the search past one category. */
+function openPalette(prefill){
   if(!pal.hidden) return;
   hideDgCard();                                  // the card floats above the palette (z-index 120 > 100)
   _palPrevFocus=document.activeElement;
-  pal.hidden=false; palq.value=''; palSel=-1; palMarksClear();
+  pal.hidden=false;
+  // With a prefill, palAuto lets palRender() pick the best-scoring row; without one there is nothing
+  // ranked to select (the empty query lists Recent).
+  palq.value=prefill||''; palSel=-1;
+  palShown=PAL_PAGE; palFacet=''; palType=''; palAuto=!!prefill; palMarksClear();
   applyPalSize();
-  palRender(); palq.focus();
+  palRender(); palq.focus(); palq.select();
 }
 function closePalette(){
   if(pal.hidden) return;
@@ -3448,39 +3759,179 @@ function pushRecent(id){
     localStorage.setItem('atlas-recent', JSON.stringify(r.slice(0,8)));
   }catch(e){}
 }
-const PAL_LIMIT=60;
+// How many hits are ranked at all, and how many of those are rendered before the "show more" button.
+// The old code scored everything but sliced at 60 with no way to reach the rest — a genuine hit could
+// sit at rank 61 and simply never appear.
+const PAL_LIMIT=400, PAL_PAGE=60;
+let palShown=PAL_PAGE;        // grows via the "show more" button; reset on every query change
+let palFacet='';              // active section chip ('' = all) — Models / Integration / Code / …
+let palType='';               // active category chip within that section ('' = all of it)
+// Sections render in a fixed order, so the best hit is not necessarily the first row. `palAuto` means
+// "the selection is still the engine's choice" — set on every new query, cleared as soon as the user
+// moves the cursor themselves, so an arrow keypress is never overruled by the next re-render.
+let palAuto=true;
+/** Escape and wrap the matched ranges of `s` — every segment goes through esc(), so a highlight can
+ *  never smuggle markup out of a model name. Shared by the palette and the browse list. */
+function hlHtml(s, parsed){
+  return hlite(s, parsed).map(seg=>seg.hit?'<mark class="hl">'+esc(seg.t)+'</mark>':esc(seg.t)).join('');
+}
+/** The facet row: a live result count plus one chip per section present in the hit set. Single-select,
+ *  reusing the .pchip pattern from the scripts view. Counts are over ALL hits, so a chip's number does
+ *  not shift as you page more rows in. */
+/** Design's own wording for a node type ("Data objects", not "dataObject"), as used in the sidebar. */
+function typeLabel(t){ return (TM[t] && TM[t][0]) || t; }
+/**
+ * Two tiers, because "where do I look" and "what am I looking for" are different questions: the top row
+ * picks a section, and once one is picked the second row narrows to a single category inside it (Data
+ * objects, Forms, Java classes …). Both stay small this way — a flat list of every node type would be
+ * 20-odd chips. The `t:` query prefix does the same thing for people who would rather type.
+ */
+function palRenderFacets(counts, total, typeCounts){
+  const bar=document.getElementById('palfacets');
+  if(!bar) return;
+  if(!counts){ bar.hidden=true; bar.innerHTML=''; return; }
+  bar.hidden=false;
+  const secs=SECTIONS.filter(s=>counts[s])
+    .concat(Object.keys(counts).filter(s=>SECTIONS.indexOf(s)<0).sort());
+  // The bare count is the live region — announcing the rows themselves on every keystroke would make
+  // the palette unusable with a screen reader (same reasoning as the list's mark bar).
+  let h='<div class="pal-frow"><span class="pal-count">'+total+(total===1?' result':' results')+
+        (total>PAL_LIMIT?' · top '+PAL_LIMIT+' listed':'')+'</span>'+
+        '<span class="vh" aria-live="polite">'+total+' results</span>';
+  if(secs.length>1){
+    h+='<button class="pchip'+(palFacet?'':' on')+'" type="button" data-facet=""'+
+       ' aria-pressed="'+(!palFacet)+'">All</button>';
+    secs.forEach(s=>{
+      h+='<button class="pchip'+(palFacet===s?' on':'')+'" type="button" data-facet="'+esc(s)+'"'+
+         ' aria-pressed="'+(palFacet===s)+'">'+esc(s)+'<span class="pchipn">'+counts[s]+'</span></button>';
+    });
+  }
+  h+='</div>';
+  // Only worth a second row when the section actually splits into more than one category.
+  const types=typeCounts?Object.keys(typeCounts).sort((a,b)=>
+    typeCounts[b]-typeCounts[a]||typeLabel(a).localeCompare(typeLabel(b))):[];
+  if(types.length>1){
+    h+='<div class="pal-frow pal-frow2"><span class="pal-in">in</span>'+
+       '<button class="pchip'+(palType?'':' on')+'" type="button" data-type=""'+
+       ' aria-pressed="'+(!palType)+'">All '+esc(palFacet)+'</button>';
+    types.forEach(t=>{
+      h+='<button class="pchip'+(palType===t?' on':'')+'" type="button" data-type="'+esc(t)+'"'+
+         ' aria-pressed="'+(palType===t)+'">'+esc(typeLabel(t))+
+         '<span class="pchipn">'+typeCounts[t]+'</span></button>';
+    });
+    h+='</div>';
+  }
+  bar.innerHTML=h;
+  const reset=()=>{ palShown=PAL_PAGE; palAuto=true; palMarksClear(); _palNote=''; palRender(); palq.focus(); };
+  bar.querySelectorAll('[data-facet]').forEach(b=>b.onclick=()=>{
+    palFacet=b.dataset.facet||''; palType='';        // a new section invalidates the category below it
+    reset();
+  });
+  bar.querySelectorAll('[data-type]').forEach(b=>b.onclick=()=>{ palType=b.dataset.type||''; reset(); });
+}
+/** Up to 5 "did you mean" nodes. Subsequence matching only, and only ever shown on a zero-result
+ *  query — it is far too loose to mix into the real ranking. */
+function palSuggest(parsed){
+  const term=parsed.terms.concat(parsed.phrases).join('');
+  if(term.length<3) return [];
+  const out=[];
+  nodes.forEach(n=>{
+    const ix=searchIndex(n);
+    const sc=Math.max(fuzzyScore(ix.name, term), fuzzyScore(ix.key, term));
+    if(sc>0) out.push({n, sc});
+  });
+  out.sort((a,b)=>b.sc-a.sc||(a.n.label<b.n.label?-1:1));
+  return out.slice(0,5).map(x=>x.n);
+}
+/** Zero-result state. Three situations, three messages: a bare "No matches" for a query that only a
+ *  facet chip filtered away is actively misleading, so say which chip did it. */
+function palEmptyHtml(parsed, hidden){
+  if(parsed.empty)
+    return '<div class="pal-empty">Nothing recent yet — visit a few nodes and they will show up here</div>';
+  if(hidden>0)
+    return '<div class="pal-empty">No matches in <b>'+esc(palFacet)+'</b> — but '+hidden+' elsewhere.'+
+      '<div class="pal-sug"><button class="pal-link" type="button" id="palclearfacet">'+
+      'Search all sections</button></div></div>';
+  const sug=palSuggest(parsed);
+  return '<div class="pal-empty">No matches for <b>'+esc(parsed.raw)+'</b>'+
+    (sug.length?'<div class="pal-sug">Did you mean '+sug.map(n=>
+      '<button class="pal-link" type="button" data-sug="'+esc(n.id)+'">'+esc(n.label)+'</button>'
+      ).join(' · ')+'</div>':'')+
+    '<div class="pal-tip">Every word has to match, in any order. Searched: names, keys, files, element '+
+    'ids, script bodies, documentation, conditions, endpoints, groups. Narrow with <code>t:</code> '+
+    '<code>file:</code> <code>key:</code> <code>in:</code>; quote <code>"…"</code> for an exact phrase.'+
+    '</div></div>';
+}
 function palRender(){
-  const v=palq.value.trim().toLowerCase();
-  let groups=[], dropped=0;
-  if(!v){
+  const raw=palq.value.trim();
+  const parsed=qParse(raw);
+  let groups=[], dropped=0, total=0, facetCounts=null, typeCounts=null, hidden=0;
+  if(parsed.empty){
+    palFacet=''; palType='';
     const rec=getRecents().map(id=>byId.get(id));
     if(rec.length) groups=[{label:'Recent', items:rec.map(n=>({n}))}];
   } else {
     const scored=[];
-    nodes.forEach(n=>{ const t=matchTier(n,v); if(t>=0) scored.push({n, t}); });
-    scored.sort((a,b)=>a.t-b.t || a.n.label.length-b.n.label.length ||
-                       (a.n.label<b.n.label?-1:a.n.label>b.n.label?1:0));
-    dropped=Math.max(0, scored.length-PAL_LIMIT);
-    const bySec={};
-    scored.slice(0,PAL_LIMIT).forEach(hit=>{
-      const n=hit.n;
-      const sec = n.type==='external' ? (n.data&&n.data.flowableApi?'Integration':'Other')
-                                      : (TM[n.type]?TM[n.type][1]:'Other');
-      (bySec[sec]=bySec[sec]||[]).push(hit);
+    nodes.forEach(n=>{
+      const r=scoreNode(n, parsed);
+      if(r) scored.push({n, score:r.score, fields:r.fields});
     });
-    // Sections keep their familiar order, except that the one holding the best match comes first —
-    // otherwise an exact name match sinks below a section of free-text hits that happens to sort earlier.
-    const best=s=>Math.min.apply(null, bySec[s].map(x=>x.t));
-    SECTIONS.filter(s=>bySec[s]).sort((a,b)=>best(a)-best(b)||SECTIONS.indexOf(a)-SECTIONS.indexOf(b))
+    // Best fit first; the label is only a tiebreak, so ranking no longer hinges on name length.
+    scored.sort((a,b)=>b.score-a.score||(a.n.label<b.n.label?-1:a.n.label>b.n.label?1:0));
+    total=scored.length;
+    // Facet counts are computed over ALL hits, so a chip's number does not change as you page in more.
+    facetCounts={};
+    scored.forEach(hit=>{ const s=searchIndex(hit.n).section; facetCounts[s]=(facetCounts[s]||0)+1; });
+    if(palFacet && !facetCounts[palFacet]) palFacet='';       // the chip no longer applies
+    // Second tier: which category inside the chosen section (Data objects, Forms, Java classes …).
+    // Counted over that section's hits only, so the numbers add up to the section chip's own count.
+    if(palFacet){
+      typeCounts={};
+      scored.forEach(hit=>{
+        if(searchIndex(hit.n).section!==palFacet) return;
+        typeCounts[hit.n.type]=(typeCounts[hit.n.type]||0)+1;
+      });
+      if(palType && !typeCounts[palType]) palType='';
+    } else palType='';                                        // no section picked → no category to pick
+    let list=scored;
+    if(palFacet) list=list.filter(hit=>searchIndex(hit.n).section===palFacet);
+    if(palType) list=list.filter(hit=>hit.n.type===palType);
+    hidden=total-list.length;
+    if(list.length>PAL_LIMIT) list=list.slice(0, PAL_LIMIT);   // the count line says when this bites
+    dropped=Math.max(0, list.length-palShown);
+    const bySec={};
+    list.slice(0, palShown).forEach(hit=>{
+      const s=searchIndex(hit.n).section;
+      (bySec[s]=bySec[s]||[]).push(hit);
+    });
+    // Fixed section order — models first, then integration, then code. Sorting the sections by their
+    // best score (what this did before) meant a Java class could push the whole Models group below
+    // Code because it happened to score a few points higher, and the grouping shuffled between
+    // keystrokes. A grouped list exists to be predictable; the best hit is still what Enter opens,
+    // wherever it sits (see palAuto).
+    SECTIONS.filter(s=>bySec[s]).forEach(s=>groups.push({label:s, items:bySec[s]}));
+    // Anything whose section is not in SECTIONS would otherwise be dropped silently.
+    Object.keys(bySec).filter(s=>SECTIONS.indexOf(s)<0).sort()
       .forEach(s=>groups.push({label:s, items:bySec[s]}));
+  }
+  // Preselect the highest-scoring row, not row 0: with a fixed section order the engine's best hit can
+  // sit anywhere in the list, and Enter has to open that one.
+  if(palAuto && !parsed.empty){
+    let bi=-1, bs=-Infinity, i=0;
+    groups.forEach(g=>g.items.forEach(hit=>{
+      if((hit.score||0)>bs){ bs=hit.score||0; bi=i; }
+      i++;
+    }));
+    palSel=bi;
+    palAuto=false;
   }
   palList=[]; let h='';
   groups.forEach(g=>{
     h+='<div class="pal-group">'+esc(g.label)+'</div>';
     g.items.forEach(hit=>{
       const n=hit.n, i=palList.length;
-      // Free-text hits (tier 3) explain themselves: "script · scriptTask1", "doc · orderProcess".
-      const w=v?matchWhere(n,v):null;
+      // Hits that did not come from the name explain themselves: "script · scriptTask1", "doc · order".
+      const w=parsed.empty?null:matchWhere(n, parsed, hit.fields);
       palList.push({n, el:(w&&w.el)||''});
       const hint=(w&&w.hint)||n.key;
       // title on both: whatever the panel width clips is still readable on hover, without resizing.
@@ -3489,13 +3940,29 @@ function palRender(){
          ' aria-selected="'+(i===palSel)+'" aria-checked="'+mk+'" data-i="'+i+'">'+
          '<span class="ck" aria-hidden="true">✓</span>'+
          '<span class="dot" style="background:'+nodeColor(n)+'"></span>'+
-         '<span class="nm" title="'+esc(n.label)+'">'+esc(n.label)+'</span>'+
-         '<span class="hint" title="'+esc(hint)+'">'+esc(hint)+'</span></div>';
+         '<span class="nm" title="'+esc(n.label)+'">'+hlHtml(n.label, parsed)+'</span>'+
+         '<span class="hint" title="'+esc(hint)+'">'+hlHtml(hint, parsed)+'</span></div>';
     });
   });
-  if(!h) h='<div class="pal-empty">'+(v?'No matches':'Nothing recent yet — visit a few nodes and they will show up here')+'</div>';
-  else if(dropped) h+='<div class="pal-more">+'+dropped+' more — keep typing to narrow it down</div>';
+  if(!h) h=palEmptyHtml(parsed, hidden);
+  else if(dropped) h+='<button class="pal-more" type="button" id="palmore">'+
+    'Show '+Math.min(dropped, PAL_PAGE)+' more of '+dropped+' remaining</button>';
+  palRenderFacets(facetCounts, total, typeCounts);
   palres.innerHTML=h;
+  const more=document.getElementById('palmore');
+  if(more) more.onclick=()=>{ palShown+=PAL_PAGE; palRender(); palq.focus(); };
+  const clearFacet=document.getElementById('palclearfacet');
+  if(clearFacet) clearFacet.onclick=()=>{
+    palFacet=''; palType=''; palShown=PAL_PAGE; palAuto=true; palRender(); palq.focus();
+  };
+  palres.querySelectorAll('[data-sug]').forEach(b=>b.onclick=()=>{
+    // Take the suggestion as the new query rather than opening it blind — the user still gets to see
+    // what else that spelling turns up.
+    const n=byId.get(b.dataset.sug);
+    if(!n) return;
+    palq.value=n.label; palAuto=true; palShown=PAL_PAGE; palFacet=''; palType='';
+    palRender(); palq.focus();
+  });
   if(palSel>=0){
     palq.setAttribute('aria-activedescendant','pal-'+palSel);
     const el=document.getElementById('pal-'+palSel); if(el) el.scrollIntoView({block:'nearest'});
@@ -3522,7 +3989,12 @@ function palRender(){
 }
 // A changed query means a different result set — marks that pointed into the old one would open
 // nodes the user can no longer see, so they go with it (same reason palSel resets).
-palq.addEventListener('input', debounce(()=>{ palSel=-1; palMarksClear(); _palNote=''; palRender(); },120));
+// palSel starts at 0, not -1: the top hit is preselected, so typing and pressing Enter opens the best
+// match. With -1 the first Enter did nothing at all. The section chip survives a refinement (palRender
+// drops it once it has no hits left), but the paging offset does not.
+palq.addEventListener('input', debounce(()=>{
+  palAuto=true; palShown=PAL_PAGE; palMarksClear(); _palNote=''; palRender();
+},120));
 palq.addEventListener('keydown',e=>{
   const mod=modKey(e);
   if(e.key==='ArrowDown'||e.key==='ArrowUp'){
@@ -3583,7 +4055,8 @@ document.addEventListener('keydown',e=>{
   }
 });
 function wireSearchTrigger(){
-  document.getElementById('searchbtn').onclick=openPalette;
+  // Wrapped, not passed by reference: openPalette takes a prefill string and a click Event is not one.
+  document.getElementById('searchbtn').onclick=()=>openPalette();
   document.getElementById('searchkbd').textContent = IS_MAC?'⌘K':'Ctrl K';
   // Reload the page — recovery for the occasional hung/stale explorer. The page is loaded from a
   // file:// URL both in a browser and in the JCEF IDE tab, so a plain reload re-reads it cleanly.
@@ -3854,6 +4327,7 @@ tabsRestore();                  // before route(): a permalink then ADDS to the 
 window.addEventListener('hashchange',route);
 route();
 _tabsBooting=false;             // from here on, following a link moves the active tab instead
+prewarmSearchIndex();           // after the first render: the first ⌘K query should not pay for the walk
 
 // ---------- boot done: dismiss the loading overlay ----------
 // The overlay (explorer.html #atlas-boot) covered the file read + this synchronous boot;

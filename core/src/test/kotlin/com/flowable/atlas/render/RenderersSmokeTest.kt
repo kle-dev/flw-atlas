@@ -123,5 +123,41 @@ class RenderersSmokeTest {
         assertTrue("expected the list mark styling from explorer.css", html.contains(".item.mark{"))
         assertTrue("expected the palette mark styling from explorer.css", html.contains(".pal-item.mark{"))
         assertTrue("expected the palette multi-select footer from explorer.html", html.contains("id=\"palfoot\""))
+        // Search: the engine is wrapped in sentinels because scripts/search-selftest.mjs extracts exactly
+        // that block and runs it outside the browser. Losing the markers silently disables that test, so
+        // they are part of the contract — as is the injection seam that keeps the block standalone.
+        assertTrue("expected the search engine start sentinel", html.contains("/*__SEARCH_CORE_START__*/"))
+        assertTrue("expected the search engine end sentinel", html.contains("/*__SEARCH_CORE_END__*/"))
+        assertTrue("expected the search engine's injected env", html.contains("SX_ENV.TM=TM"))
+        // A query is tokenised and every word must match, in any order — the fix for "shopping template"
+        // finding nothing while a "… Shopping list template" model existed.
+        assertTrue("expected the query parser from explorer.js", html.contains("function qParse("))
+        assertTrue("expected the haystack tokeniser from explorer.js", html.contains("function hayTokens("))
+        assertTrue("expected the scorer from explorer.js", html.contains("function scoreIndex("))
+        assertTrue("expected the per-term scorer from explorer.js", html.contains("function termScore("))
+        assertTrue("expected the did-you-mean fallback from explorer.js", html.contains("function fuzzyScore("))
+        // Hits are highlighted in both result lists, and every segment is escaped on the way out.
+        assertTrue("expected the highlight splitter from explorer.js", html.contains("function hlite("))
+        assertTrue("expected the shared highlight renderer from explorer.js", html.contains("function hlHtml("))
+        assertTrue("expected the highlight styling from explorer.css", html.contains("mark.hl{"))
+        assertTrue("expected the theme-aware highlight token from explorer.css", html.contains("--hl-bg:"))
+        // Result count + two tiers of facets (section, then category inside it), and a cap you can page
+        // past instead of a silent slice. Sections render in the fixed SECTIONS order — models before
+        // code — so the selected row is the best-scoring hit rather than whatever landed first.
+        assertTrue("expected the facet row from explorer.html", html.contains("id=\"palfacets\""))
+        assertTrue("expected the facet renderer from explorer.js", html.contains("function palRenderFacets("))
+        assertTrue("expected the facet styling from explorer.css", html.contains(".pal-facets{"))
+        assertTrue("expected the category tier from explorer.js", html.contains("data-type=\""))
+        assertTrue("expected the category tier styling from explorer.css", html.contains(".pal-frow2{"))
+        assertTrue("expected Design's type wording helper from explorer.js", html.contains("function typeLabel("))
+        assertTrue("expected the score-driven preselection from explorer.js", html.contains("let palAuto"))
+        assertTrue("expected the pageable result cap from explorer.js", html.contains("id=\"palmore\""))
+        // The bridge out of the category-scoped list filter into the everything-search.
+        assertTrue("expected the list bridge renderer from explorer.js", html.contains("function renderListBridge("))
+        assertTrue("expected the out-of-category counter from explorer.js", html.contains("function countOutsideCat("))
+        assertTrue("expected the list bridge container from explorer.js", html.contains("id=\"lwider\""))
+        assertTrue("expected the list bridge styling from explorer.css", html.contains(".lh-wider{"))
+        // The index is warmed after boot so the first query does not pay for the whole deep walk.
+        assertTrue("expected the index prewarm from explorer.js", html.contains("function prewarmSearchIndex("))
     }
 }
