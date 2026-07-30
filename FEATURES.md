@@ -100,6 +100,18 @@ Everything is resolved against the Flowable models that actually live in your re
   though the URL is written as `{{endpoints.baseUrl}}/api/…/{{someVar}}`. The palette itself is
   **resizable from its bottom-right corner** (the size is remembered, double-click resets it), because
   a templated URL is longer than any fixed width can show.
+- **Type the words you remember, in any order** — the query is split into words, and every word has to
+  match *somewhere*; it is not one contiguous substring. So `shopping template` finds the data object
+  named "DEMO-D05 Shopping list template", and `demo d05` finds `DEMO-D05` — a space, a hyphen and an
+  underscore all mean the same thing, and a word may start after a separator or at a camelCase hump
+  (`template` finds `outreachTemplateKey`). Matched text is **highlighted** in the name and the key, so
+  it is visible *why* a row is listed. Results are grouped in a fixed order — models before integration
+  before code — and the **best hit is preselected**, so Enter opens it without touching the mouse.
+  Two rows of chips narrow further: first the section, then the category inside it (Data objects, Forms,
+  Java classes …) with a count each; typed equivalents are `t:` `in:` `key:` `file:`, and `"…"` forces
+  an exact phrase. A query that matches nothing offers the closest names instead of a dead end. In a
+  sidebar category list the same engine applies, and because that list only ever searches the category
+  you are standing in, it tells you when the words match **elsewhere** and hands the query to ⌘K.
 - **Mark several results, open them as tabs** — in a sidebar category list *and* in the ⌘K palette,
   **⇧↑/↓** extends a selection from where you started, ⌘/Ctrl-click toggles one, ⇧-click takes a range
   and ⌘/Ctrl-A takes everything on screen; **Enter** then opens every marked result as its own detail

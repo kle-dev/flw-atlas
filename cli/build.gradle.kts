@@ -88,4 +88,28 @@ val searchSelfTest by tasks.registering(Exec::class) {
     )
 }
 
-tasks.named("check") { dependsOn(searchSelfTest) }
+// Runtime counterpart to the above: the engine test proves the ranking is right, this one proves the
+// page still WORKS — that boot completes and every way of activating a hit (click, ⌘-click, Shift-click,
+// Enter) actually navigates. A renamed variable once left the result-row click handler throwing, which
+// no golden, smoke test or `node --check` could see; the page just quietly stopped responding to clicks.
+// Skips itself when Chrome is absent (the script exits 0 saying so), so CI without a browser stays green.
+val explorerUiTest by tasks.registering(Exec::class) {
+    description = "Drives the generated explorer in headless Chrome (skipped without node/Chrome)."
+    group = "verification"
+    dependsOn(searchSelfTestReport)
+    val script = rootProject.file("scripts/explorer-uitest.mjs")
+    inputs.file(script)
+    inputs.dir(rootProject.file("core/src/main/resources/frontend"))
+    onlyIf {
+        val node = nodeExecutable
+        if (node == null) logger.lifecycle("explorerUiTest: skipped — no node on PATH")
+        node != null
+    }
+    commandLine(
+        nodeExecutable ?: "node",
+        script.absolutePath,
+        searchSelfTestDir.get().asFile.resolve("miniproject.explorer.html").absolutePath,
+    )
+}
+
+tasks.named("check") { dependsOn(searchSelfTest, explorerUiTest) }
