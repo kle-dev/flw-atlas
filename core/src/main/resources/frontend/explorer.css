@@ -223,7 +223,10 @@
   #view-overview{overflow-y:auto;background:var(--bg)}
   .view-browse{display:grid;grid-template-columns:330px 1fr;grid-template-rows:100%;height:100%}
   .listcol{overflow:auto;border-right:1px solid var(--line);background:var(--panel)}
-  .detailcol{overflow:auto;background:var(--panel);display:flex;flex-direction:column}
+  /* The tab strip is fixed and #detail scrolls under it: the wrap owns the column height and
+     clips, #detail takes the rest. min-height:0 is what lets a flex child actually shrink. */
+  .detailwrap{display:flex;flex-direction:column;min-height:0;overflow:hidden;background:var(--panel)}
+  .detailcol{flex:1;min-height:0;overflow:auto;background:var(--panel);display:flex;flex-direction:column}
   .detailcol>.dbody{flex:none}
 
   /* ------------------------------------------------------------------ */
@@ -298,7 +301,21 @@
   .pal-item{display:flex;align-items:center;gap:var(--space-2);min-height:38px;margin:1px var(--space-2);padding:var(--space-05) var(--space-25);
     border-radius:var(--radius-md);cursor:pointer;font-size:var(--text-md)}
   .pal-item:hover{background:var(--hover)}
+  /* Same split as the list: `.sel` is the cursor, `.mark` is "this one comes along on Enter". */
+  .pal-item.mark{background:var(--accent-subtle);box-shadow:inset 3px 0 0 var(--accent)}
   .pal-item.sel{background:var(--active);color:var(--sel-text)}
+  .pal-item.sel.mark{box-shadow:inset 3px 0 0 var(--accent)}
+  /* Hidden by visibility, so the box occupies its width in every row and marking a range never
+     reflows the labels — same reasoning as .item .ck. */
+  .pal-item .ck{flex:none;width:13px;height:13px;border:1px solid var(--line2);border-radius:var(--radius-xs);
+    display:flex;align-items:center;justify-content:center;font-size:var(--text-2xs);line-height:1;
+    color:#fff;background:transparent;visibility:hidden}
+  .pal-item:hover .ck{visibility:visible}
+  .pal-item.mark .ck{background:var(--accent);border-color:var(--accent);visibility:visible}
+  .pal-foot{flex:none;padding:var(--space-2) var(--space-4);border-top:1px solid var(--line);
+    font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint);display:flex;gap:var(--space-2)}
+  .pal-foot b{color:var(--accent);font-weight:600}
+  .pal-foot .pf-note{margin-left:auto;color:var(--warn-text)}
   .pal-item .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:0 1 auto}
   /* The hint carries the match context, so it gets a real share of the row (and wraps rather than
      ellipsing away the tail, which is exactly the part that identifies an endpoint). */
@@ -392,11 +409,31 @@
   #lsort{background:var(--input);border:1px solid var(--line2);color:var(--ink-dim);
     font-family:var(--mono);font-size:var(--text-xs);border-radius:var(--radius-md);padding:0 var(--space-15);outline:none;flex:none}
   #lsort:focus{border-color:var(--accent)}
+  /* "N marked" button in the list head, shown only while a multi-selection exists. */
+  .lh-open{width:100%;margin-top:var(--space-15);background:var(--accent);border:1px solid var(--accent);
+    color:#fff;border-radius:var(--radius-md);padding:var(--space-1) var(--space-2);cursor:pointer;
+    font-family:var(--mono);font-size:var(--text-xs)}
+  .lh-open:hover{background:var(--accent-hover)}
+  .lh-note{margin-top:var(--space-1);font-family:var(--mono);font-size:var(--text-2xs);color:var(--warn-text)}
+  /* Off-screen but announced — carries the bare "N marked" counter for screen readers. */
+  .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
   .item{display:flex;align-items:flex-start;gap:var(--space-2);padding:var(--space-2) var(--space-3);cursor:pointer;border-bottom:1px solid var(--line);
     animation:rise .25s ease both}
   .item:hover{background:var(--hover)}
+  /* `.mark` (multi-selection) and `.on` (what the active tab shows) are different things and must
+     read differently: mark is a soft tint + a dashed accent bar, on is the solid selection bar.
+     A row can be both, so the two rules stay additive. */
+  .item.mark{background:var(--accent-subtle);box-shadow:inset 3px 0 0 var(--accent)}
   .item.on{background:var(--active);box-shadow:inset 3px 0 0 var(--sel-bar)}
+  .item.on.mark{background:var(--active);box-shadow:inset 3px 0 0 var(--sel-bar),inset 6px 0 0 var(--accent-subtle)}
   .item.on .nm{color:var(--sel-text);font-weight:600}
+  /* visibility, not display: the box always occupies its 13px, so painting a Shift range never
+     reflows the labels of the rows you are looking at. */
+  .item .ck{flex:none;align-self:center;width:13px;height:13px;border:1px solid var(--line2);border-radius:var(--radius-xs);
+    display:flex;align-items:center;justify-content:center;font-size:var(--text-2xs);line-height:1;
+    color:#fff;visibility:hidden}
+  .item:hover .ck{visibility:visible;border-color:var(--line2)}
+  .item.mark .ck{visibility:visible;background:var(--accent);border-color:var(--accent)}
   .item .meta{min-width:0;flex:1}
   .item .nm{color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .item .sub{font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -409,6 +446,39 @@
   /* ------------------------------------------------------------------ */
   /* Browse: detail column                                               */
   /* ------------------------------------------------------------------ */
+  /* ---- tab strip: one tab per open node, hidden while only one is open ---- */
+  /* Hidden at ≤1 tab so the single-node case looks exactly as it always did — chrome that never
+     offers a choice is only noise. flex:none keeps it out of the detail scroll. */
+  .dtabs{flex:none;display:flex;align-items:stretch;background:var(--panel2);
+    border-bottom:1px solid var(--line);padding:var(--space-1) var(--space-1) 0}
+  /* The scroll container is the tablist, so "close others" stays pinned right. A role=tablist must
+     contain nothing but tabs, which is the other reason for the split. */
+  .dtablist{flex:1;min-width:0;display:flex;align-items:stretch;gap:var(--space-05);
+    overflow-x:auto;overflow-y:hidden}
+  .dtablist::-webkit-scrollbar{height:5px}
+  .dtablist::-webkit-scrollbar-thumb{border:none;border-radius:0}
+  /* flex:0 0 auto, NOT 0 1 auto: with shrink enabled a full strip squeezes every tab into an
+     unreadable sliver and overflow-x never engages, so the strip could not be scrolled. */
+  .dtab{flex:0 0 auto;min-width:96px;max-width:200px;display:flex;align-items:center;gap:var(--space-15);
+    padding:var(--space-1) var(--space-2);cursor:pointer;background:transparent;border:1px solid transparent;
+    border-bottom:none;border-radius:var(--radius-md) var(--radius-md) 0 0;
+    font-family:var(--sans);font-size:var(--text-sm);color:var(--ink-dim);white-space:nowrap}
+  .dtab:hover{background:var(--hover);color:var(--ink)}
+  .dtab.on{background:var(--panel);border-color:var(--line);color:var(--ink);font-weight:600;
+    box-shadow:inset 0 -2px 0 var(--sel-bar)}
+  .dtab .nm{overflow:hidden;text-overflow:ellipsis;min-width:0}
+  /* The × stays in the DOM for the keyboard and screen readers; only its opacity is conditional,
+     so tab widths never jump on hover. */
+  .dtab .x{flex:none;width:15px;height:15px;display:flex;align-items:center;justify-content:center;
+    border:none;background:transparent;color:var(--ink-faint);cursor:pointer;
+    border-radius:var(--radius-sm);font-size:var(--text-md);line-height:1;padding:0;opacity:0}
+  .dtab:hover .x,.dtab:focus-within .x,.dtab.on .x,.dtab .x:focus-visible{opacity:1}
+  .dtab .x:hover{background:var(--bad-bg);color:var(--bad-text)}
+  .dtabs .dtclose{flex:none;margin-left:auto;align-self:center;background:transparent;border:none;
+    color:var(--ink-faint);cursor:pointer;font-family:var(--mono);font-size:var(--text-2xs);
+    padding:0 var(--space-15);border-radius:var(--radius-sm);white-space:nowrap}
+  .dtabs .dtclose:hover{color:var(--ink);background:var(--hover)}
+
   .dhead{position:sticky;top:0;z-index:6;display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-4);
     background:var(--panel);border-bottom:1px solid var(--line)}
   .dhead button{background:var(--panel);border:1px solid var(--line2);color:var(--ink-dim);
@@ -668,6 +738,10 @@
     .content{min-height:0}
     .view-browse{display:flex;flex-direction:column;height:auto}
     .listcol{max-height:42vh;border-right:none;border-bottom:1px solid var(--line)}
+    /* Stacked layout: the page scrolls as a whole, so the wrap must not clip and the strip
+       sticks to the top of the detail block instead of to a column of its own. */
+    .detailwrap{overflow:visible;min-height:0}
+    .dtabs{position:sticky;top:0;z-index:7}
     .topbar{height:auto;min-height:48px;flex-wrap:wrap;padding:var(--space-2) var(--space-3);gap:var(--space-2)}
     /* width:auto so the panel still fills a narrow viewport — the remembered --pal-w is a desktop size */
     .pal-panel{margin:var(--space-6) var(--space-3);width:auto}

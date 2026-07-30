@@ -82,7 +82,13 @@ try{
       <section class="view" id="view-checks" hidden></section>
       <section class="view view-browse" id="view-browse" hidden>
         <div class="listcol"><div id="list"></div></div>
-        <main class="detailcol" id="detail" aria-label="Node details"></main>
+        <!-- The tab strip must not scroll with the detail body, so it is a sibling of #detail
+             inside a flex column rather than a child of it. #detail keeps its id and class:
+             it stays the single scroll container and the only detail renderer target. -->
+        <div class="detailwrap">
+          <div class="dtabs" id="dtabs" role="tablist" aria-label="Open nodes" hidden></div>
+          <main class="detailcol" id="detail" role="tabpanel" aria-label="Node details"></main>
+        </div>
       </section>
     </div>
   </div>
@@ -97,6 +103,8 @@ try{
       <kbd class="kbd">esc</kbd>
     </div>
     <div class="pal-results" id="palresults" role="listbox" aria-label="Search results"></div>
+    <!-- Sibling of the scrolling result list, so the multi-select hint stays pinned to the bottom. -->
+    <div class="pal-foot" id="palfoot" hidden></div>
   </div>
 </div>
 <div class="palette" id="dgmodal" hidden>
