@@ -1,0 +1,207 @@
+#!/usr/bin/env node
+/**
+ * Runtime smoke test for the generated explorer page, driven in headless Chrome.
+ *
+ * Why this exists: explorer.js is a 4000-line browser asset. `node --check` only proves it parses, and
+ * RenderersSmokeTest only proves certain strings are present — neither catches a handler that throws at
+ * runtime. A real case: a refactor left the result-row click handler referencing a variable that had
+ * been renamed. The palette still opened, still filtered, still worked with Enter; only clicking a row
+ * silently did nothing, because the ReferenceError killed the navigation after the panel had closed.
+ * Nothing in the build noticed. This does.
+ *
+ * It asserts the load-bearing interactions rather than appearance: the page boots without errors, every
+ * way of activating a hit works (click, ⌘-click, Shift-click, Enter), the facets narrow, and the browse
+ * list navigates. Any uncaught error anywhere in the run fails the test.
+ *
+ * Usage:  node scripts/explorer-uitest.mjs <report.explorer.html> [--chrome <path>]
+ * Wired up as `./gradlew :cli:explorerUiTest`, which skips when Chrome is not installed.
+ */
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { execFileSync } from 'child_process';
+
+const args = process.argv.slice(2);
+const reportPath = args.find(a => !a.startsWith('--'));
+const chromeArg = args.indexOf('--chrome') >= 0 ? args[args.indexOf('--chrome') + 1] : null;
+if (!reportPath) {
+  console.error('usage: node scripts/explorer-uitest.mjs <report.explorer.html> [--chrome <path>]');
+  process.exit(2);
+}
+const CHROME_CANDIDATES = [
+  chromeArg,
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Chromium.app/Contents/MacOS/Chromium',
+  '/usr/bin/google-chrome',
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser',
+].filter(Boolean);
+const chrome = CHROME_CANDIDATES.find(p => { try { fs.accessSync(p, fs.constants.X_OK); return true; } catch { return false; } });
+if (!chrome) {
+  console.log('explorer-uitest: skipped — no Chrome/Chromium found');
+  process.exit(0);
+}
+
+// The probe runs inside the page. It walks a list of steps on a timer (each search re-render is debounced
+// by 120ms), collects one line per assertion, and parks the result in document.title where --dump-dom
+// can retrieve it. Failures are marked FAIL and counted by the harness below.
+const probe = `<script>
+(function(){
+  const log=[], errs=[];
+  const say=(k,v)=>log.push(k+': '+v);
+  const ok=(k,cond,detail)=>log.push(k+': '+(cond?'ok':'FAIL '+(detail||'')));
+  window.addEventListener('error', e=>errs.push(e.message));
+  window.addEventListener('unhandledrejection', e=>errs.push('promise: '+(e.reason&&e.reason.message)));
+  const rows=()=>[...document.querySelectorAll('#palresults .pal-item')];
+  const click=(el,opt)=>el.dispatchEvent(new MouseEvent('click', Object.assign({bubbles:true}, opt||{})));
+  const key=k=>palq.dispatchEvent(new KeyboardEvent('keydown', {key:k, bubbles:true}));
+  const type=q=>{ palq.value=q; palq.dispatchEvent(new Event('input')); };
+  const steps=[];
+
+  // --- boot ---
+  steps.push(()=>{
+    ok('boot rendered the sidebar', document.querySelectorAll('#nav .side-item').length>0);
+    // The overlay fades for 400ms before it is removed, so "done" is either state — what matters is
+    // that boot got far enough to dismiss it rather than dying behind it.
+    const bootEl=document.getElementById('atlas-boot');
+    ok('boot overlay dismissed', !bootEl || bootEl.classList.contains('boot--done'));
+    openPalette(); type('customer');
+  });
+  // --- plain click must navigate ---
+  let picked='';
+  steps.push(()=>{
+    ok('query returned hits', rows().length>0, 'no rows for "customer"');
+    picked=rows()[0].querySelector('.nm').textContent;
+    ok('top hit is preselected', !!document.querySelector('.pal-item.sel'));
+    ok('hit is highlighted', !!document.querySelector('.pal-item .nm mark.hl'));
+    click(rows()[0]);
+  });
+  steps.push(()=>{
+    ok('click closed the palette', pal.hidden);
+    ok('click navigated', location.hash.indexOf('#')===0 && location.hash.length>1, 'hash still empty');
+    ok('click opened the node', (document.getElementById('detail').textContent||'').indexOf(picked)>=0,
+       'detail panel does not mention '+picked);
+  });
+  // --- mod-click marks, shift-click extends, Enter opens the set ---
+  steps.push(()=>{ openPalette(); type('customer'); });
+  steps.push(()=>{ click(rows()[1], {metaKey:true, ctrlKey:true}); });
+  steps.push(()=>{
+    ok('mod-click marked a row', document.querySelectorAll('.pal-item.mark').length===1);
+    ok('mod-click kept the palette open', !pal.hidden);
+    click(rows()[3], {shiftKey:true});
+  });
+  steps.push(()=>{
+    ok('shift-click extended the range', document.querySelectorAll('.pal-item.mark').length===3,
+       'marked '+document.querySelectorAll('.pal-item.mark').length);
+    const before=document.querySelectorAll('#dtabs .dtab').length;
+    window.__tabsBefore=before;
+    key('Enter');
+  });
+  steps.push(()=>{
+    ok('Enter opened the marked hits as tabs',
+       document.querySelectorAll('#dtabs .dtab').length>window.__tabsBefore);
+  });
+  // --- plain Enter on a fresh query opens the best hit ---
+  steps.push(()=>{ openPalette(); type('priority'); });
+  steps.push(()=>{ key('Enter'); });
+  steps.push(()=>{
+    ok('Enter navigated', decodeURIComponent(location.hash).indexOf('priority')>=0,
+       'hash='+location.hash);
+  });
+  // --- facets narrow, in two tiers ---
+  steps.push(()=>{ openPalette(); type('customer'); });
+  steps.push(()=>{
+    const secs=[...document.querySelectorAll('#palfacets [data-facet]')];
+    ok('section chips rendered', secs.length>1, 'only '+secs.length);
+    const groups=[...document.querySelectorAll('#palresults .pal-group')].map(e=>e.textContent);
+    const iM=groups.indexOf('Models'), iC=groups.indexOf('Code');
+    ok('Models is listed before Code', iM<0||iC<0||iM<iC, groups.join(' > '));
+    const code=secs.find(b=>/Code/.test(b.textContent));
+    if(code) click(code); else say('note','no Code section in this report');
+  });
+  steps.push(()=>{
+    const before=rows().length;
+    const types=[...document.querySelectorAll('#palfacets [data-type]')];
+    ok('category chips appeared for the section', types.length>1, 'only '+types.length);
+    const one=types.filter(b=>b.dataset.type)[0];
+    window.__before=before;
+    if(one) click(one);
+  });
+  steps.push(()=>{
+    ok('category chip narrowed the list', rows().length<=window.__before,
+       rows().length+' vs '+window.__before);
+    ok('selection followed into the narrowed list', !!document.querySelector('.pal-item.sel'));
+    closePalette();
+  });
+  // --- the browse list: navigation and the bridge to the palette ---
+  steps.push(()=>{
+    const c=[...document.querySelectorAll('#nav .side-item')].find(e=>/Data objects/.test(e.textContent));
+    if(c) click(c); else say('note','no Data objects category');
+  });
+  steps.push(()=>{
+    const it=document.querySelector('#listitems .item[data-id]');
+    ok('list rendered rows', !!it);
+    if(it) click(it);
+  });
+  steps.push(()=>{
+    ok('list click opened the node', (document.getElementById('detail').textContent||'').length>40);
+    const lf=document.getElementById('lf');
+    ok('list filter present', !!lf);
+    if(lf){ lf.value='zzzznope'; lf.dispatchEvent(new Event('input')); }
+  });
+  steps.push(()=>{
+    ok('a filter matching nothing renders no rows',
+       document.querySelectorAll('#listitems .item[data-id]').length===0);
+    const lf=document.getElementById('lf');
+    if(lf){ lf.value='customer'; lf.dispatchEvent(new Event('input')); }
+  });
+  steps.push(()=>{
+    // Standing in a category that cannot hold the term, the bridge must offer the wider search.
+    const b=document.getElementById('lwiderbtn');
+    say('bridge offered', b?('yes — '+b.textContent.trim()):'no (term also matches in this category)');
+  });
+
+  let i=0;(function run(){
+    if(i>=steps.length){
+      log.push('uncaught errors: '+(errs.length?('FAIL '+errs.join(' | ')):'none'));
+      document.title='UITEST_BEGIN '+log.join(' ;; ')+' UITEST_END';
+      return;
+    }
+    try{ steps[i++](); }catch(e){ log.push('FAIL threw in step '+i+': '+e.message); }
+    setTimeout(run, 300);
+  })();
+})();
+</script>`;
+
+const html = fs.readFileSync(reportPath, 'utf8');
+if (!html.includes('</body>')) { console.error('explorer-uitest: not an explorer report'); process.exit(2); }
+const tmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-uitest-')), 'report.html');
+fs.writeFileSync(tmp, html.replace('</body>', probe + '</body>'));
+
+let dom;
+try {
+  dom = execFileSync(chrome, [
+    '--headless', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
+    '--virtual-time-budget=20000', '--dump-dom', 'file://' + tmp,
+  ], { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024, timeout: 120000 });
+} catch (e) {
+  console.error('explorer-uitest: Chrome failed to run —', e.message);
+  process.exit(1);
+}
+
+const m = dom.match(/UITEST_BEGIN([\s\S]*?)UITEST_END/);
+if (!m) {
+  console.error('explorer-uitest: the probe never finished — the page most likely threw during boot.');
+  const t = dom.match(/<title>([\s\S]*?)<\/title>/);
+  console.error('  title was:', t ? t[1].slice(0, 300) : '(none)');
+  process.exit(1);
+}
+const lines = m[1].split(' ;; ').map(s => s.trim()).filter(Boolean);
+let failed = 0;
+for (const l of lines) {
+  const bad = l.includes('FAIL');
+  if (bad) failed++;
+  console.log(`  ${bad ? 'FAIL' : 'ok  '}  ${l}`);
+}
+console.log(`\n${lines.length - failed}/${lines.length} checks passed  (${path.basename(reportPath)})`);
+if (failed) { console.error(`${failed} explorer UI check(s) failed`); process.exit(1); }

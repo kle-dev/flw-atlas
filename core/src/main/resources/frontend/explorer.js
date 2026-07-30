@@ -3848,6 +3848,10 @@ function palSuggest(parsed){
 function palEmptyHtml(parsed, hidden){
   if(parsed.empty)
     return '<div class="pal-empty">Nothing recent yet — visit a few nodes and they will show up here</div>';
+  // Defensive: palRender() drops a chip the moment it has no hits left, so today this cannot be reached.
+  // It stays because the alternative failure — a bare "No matches" while an invisible filter is doing the
+  // hiding — is the single most confusing thing a search can say, and the next filter added here might
+  // not clear itself.
   if(hidden>0)
     return '<div class="pal-empty">No matches in <b>'+esc(palFacet)+'</b> — but '+hidden+' elsewhere.'+
       '<div class="pal-sug"><button class="pal-link" type="button" id="palclearfacet">'+
@@ -3983,7 +3987,8 @@ function palRender(){
       palMarks.clear(); palMarkRange(palAnchor, i);
       palSel=i; palRender(); palq.focus(); return;
     }
-    palMarksClear(); closePalette(); select(hit.n.id, v, hit.el);
+    // `raw`, matching the Enter path exactly — it rides along as the term the detail panel highlights.
+    palMarksClear(); closePalette(); select(hit.n.id, raw, hit.el);
   });
   palRenderFoot();
 }
