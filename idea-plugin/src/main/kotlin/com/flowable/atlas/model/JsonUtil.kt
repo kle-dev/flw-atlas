@@ -39,4 +39,8 @@ object JsonUtil {
     /** Logical field mapping of a `.data` model, or null if unreadable. */
     fun readDataObject(file: VirtualFile): DataObjectInfo? =
         bytesOf(file)?.let { ModelJsonReader.readDataObject(it) }
+
+    /** Keys of the models an `.app` lists as its children, optionally filtered on the child `type`. */
+    fun readAppChildKeys(file: VirtualFile, type: String? = null): List<String> =
+        bytesOf(file)?.let { ModelJsonReader.readAppChildKeys(it, type) } ?: emptyList()
 }

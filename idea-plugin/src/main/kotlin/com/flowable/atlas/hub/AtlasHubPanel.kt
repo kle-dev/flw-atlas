@@ -4,6 +4,10 @@ import com.flowable.atlas.AtlasBuildInfo
 import com.flowable.atlas.action.FlowableActionIds
 import com.flowable.atlas.action.GenerateModelConstantsAction
 import com.flowable.atlas.action.RebuildModelIndexAction
+import com.flowable.atlas.design.DesignAppListUi
+import com.flowable.atlas.design.DesignClient
+import com.flowable.atlas.design.DesignCredentials
+import com.flowable.atlas.design.DesignPullSelection
 import com.flowable.atlas.design.DesignPullService
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.events.AtlasEventsListener
@@ -43,8 +47,11 @@ import com.intellij.ui.ColoredListCellRenderer
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBList
+import com.intellij.ui.CheckBoxList
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.dsl.builder.AlignX
+import com.intellij.util.ui.JBUI
+import java.awt.Dimension
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.ui.jcef.JBCefApp
 import com.intellij.util.SingleAlarm
@@ -73,6 +80,10 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         val designText: String,
         val designArtifactsStale: Boolean,
         val browserAvailable: Boolean,
+        val designConfigured: Boolean,
+        /** What a pull would fetch right now — the personal override, else the configured default. */
+        val pullSelection: DesignPullSelection.Selection,
+        val pullSelectionIsOverride: Boolean,
     )
 
     private val projectStatus = JBLabel()
@@ -104,6 +115,19 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
             }
         })
     }
+
+    // -- Design pull selection (personal override of the configured default) ----------------------
+
+    private val appList = CheckBoxList<DesignClient.App>().apply {
+        setCheckBoxListListener { _, _ -> if (!populatingApps) onSelectionEdited() }
+    }
+    private var designAppsRow: com.intellij.ui.dsl.builder.Row? = null
+    private var designAppsListRow: com.intellij.ui.dsl.builder.Row? = null
+    private var resetSelectionLink: javax.swing.JComponent? = null
+    /** Guards the checkbox listener while the list is repopulated programmatically. */
+    private var populatingApps = false
+    /** The live app list is fetched once per workspace, on demand — `gather()` stays network-free. */
+    private var fetchedAppsWorkspace: String? = null
 
     private val refreshAlarm = SingleAlarm(::refreshNow, 300, this)
 
@@ -173,8 +197,21 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         }
         group("Flowable Design") {
             row { cell(designStatus) }
+            // Which apps a pull fetches — starts from the configured default; ticking here is a
+            // personal override that never touches the shared settings file.
+            designAppsListRow = row {
+                cell(JBScrollPane(appList).apply { preferredSize = Dimension(JBUI.scale(320), JBUI.scale(140)) })
+                    .align(AlignX.FILL)
+            }.visible(false)
+            designAppsRow = row {
+                link("Refresh apps") { loadApps(force = true) }
+                link("Reset to configured") { resetSelection() }
+                    .applyToComponent { resetSelectionLink = this }
+            }.visible(false)
             row {
-                link("Pull from Design") { invokeAction(FlowableActionIds.PULL_FROM_DESIGN) }
+                // pulls exactly what is ticked above — the toolbar's Pull action resolves to the
+                // same effective selection, so the two can never disagree
+                link("Pull from Design") { pullSelected() }
                 link("Configure…") { invokeAction(FlowableActionIds.CONFIGURE_DESIGN_CONNECTION) }
             }
             // Shown only when models were pulled after the Atlas Explorer was last generated: the index
@@ -290,11 +327,20 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         }.orEmpty()
 
         val lastPullMillis = DesignPullService.lastPullMillis(project)
+        val configured = DesignPullSelection.Selection(settings.designWorkspaceKey, settings.designAppKeys.toList())
+        val override = DesignPullSelection.load(project)
+        val pullSelection = DesignPullSelection.effective(configured, override)
+        val isOverride = DesignPullSelection.differsFromDefault(configured, override)
         val designText = if (settings.isDesignConfigured()) {
             val lastPull = lastPullMillis?.let { DateFormatUtil.formatPrettyDateTime(it) } ?: "never"
-            val apps = settings.designAppKeys
-            val appsLabel = if (apps.size == 1) apps.first() else "${apps.size} apps: ${apps.joinToString(", ")}"
-            "<html>${settings.designBaseUrl} · <b>$appsLabel</b><br>Last pull: $lastPull</html>"
+            val apps = pullSelection.appKeys
+            val appsLabel = when {
+                apps.isEmpty() -> "no apps selected"
+                apps.size == 1 -> apps.first()
+                else -> "${apps.size} apps: ${apps.joinToString(", ")}"
+            }
+            val personal = if (isOverride) " <i>(personal selection)</i>" else ""
+            "<html>${settings.designBaseUrl} · <b>$appsLabel</b>$personal<br>Last pull: $lastPull</html>"
         } else {
             "Not configured"
         }
@@ -305,6 +351,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         return Snapshot(
             projectText, showChangeLink, indexText, artifacts, designText,
             designArtifactsStale, AtlasBrowser.isAvailable(),
+            settings.isDesignConfigured(), pullSelection, isOverride,
         )
     }
 
@@ -321,9 +368,102 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
             snapshot.artifacts.firstOrNull { it.path == keep }
                 ?.let { artifactsList.setSelectedValue(it, false) }
         }
+        applyPullSelection(snapshot)
+    }
+
+    // -- pull selection ---------------------------------------------------------------------------
+
+    /** Renders the app list from the effective selection. Seeds key-only placeholders so the panel
+     *  shows the selection without a network call; real names arrive with [loadApps]. */
+    private fun applyPullSelection(snapshot: Snapshot) {
+        designAppsListRow?.visible(snapshot.designConfigured)
+        designAppsRow?.visible(snapshot.designConfigured)
+        resetSelectionLink?.isVisible = snapshot.pullSelectionIsOverride
+        if (!snapshot.designConfigured) return
+        val checked = snapshot.pullSelection.appKeys.toSet()
+        val known = (0 until appList.model.size).mapNotNull { appList.getItemAt(it) }
+        // keep the fetched apps (real names/versions) when we have them; otherwise placeholders
+        val items = if (known.isNotEmpty() && fetchedAppsWorkspace == snapshot.pullSelection.workspaceKey) known
+            else DesignAppListUi.placeholders((checked + known.map { it.key }).sorted())
+        populatingApps = true
+        try {
+            DesignAppListUi.populateApps(appList, items, checked)
+        } finally {
+            populatingApps = false
+        }
+        if (fetchedAppsWorkspace != snapshot.pullSelection.workspaceKey) loadApps(force = false)
+    }
+
+    /** Fetches the workspace's apps once (or on demand) so the checkboxes show real names/versions.
+     *  Never called from [gather] — the snapshot pass stays network-free. */
+    private fun loadApps(force: Boolean) {
+        val settings = FlowableAtlasProjectSettings.getInstance(project)
+        if (!settings.isDesignConfigured()) return
+        val workspaceKey = DesignPullSelection
+            .effective(
+                DesignPullSelection.Selection(settings.designWorkspaceKey, settings.designAppKeys.toList()),
+                DesignPullSelection.load(project),
+            ).workspaceKey
+        if (!force && fetchedAppsWorkspace == workspaceKey) return
+        fetchedAppsWorkspace = workspaceKey
+        ApplicationManager.getApplication().executeOnPooledThread {
+            if (project.isDisposed) return@executeOnPooledThread
+            val auth = runCatching { DesignCredentials.loadAuth(settings.designBaseUrl, settings.designAuthMode) }
+                .getOrNull() ?: return@executeOnPooledThread
+            val result = DesignClient.listApps(DesignClient.Connection(settings.designBaseUrl, auth), workspaceKey)
+            val apps = (result as? DesignClient.Result.Success)?.value ?: return@executeOnPooledThread
+            ApplicationManager.getApplication().invokeLater({
+                if (project.isDisposed || fetchedAppsWorkspace != workspaceKey) return@invokeLater
+                val checked = DesignAppListUi.checkedAppKeys(appList).toSet()
+                    .ifEmpty { currentSelection().appKeys.toSet() }
+                populatingApps = true
+                try {
+                    DesignAppListUi.populateApps(appList, apps, checked)
+                } finally {
+                    populatingApps = false
+                }
+            }, ModalityState.any())
+        }
+    }
+
+    /** A checkbox was toggled: store it as the personal override, or drop the override when it is
+     *  back in sync with the configured default. */
+    private fun onSelectionEdited() {
+        val settings = FlowableAtlasProjectSettings.getInstance(project)
+        val configured = DesignPullSelection.Selection(settings.designWorkspaceKey, settings.designAppKeys.toList())
+        val edited = DesignPullSelection.Selection(configured.workspaceKey, DesignAppListUi.checkedAppKeys(appList))
+        if (DesignPullSelection.differsFromDefault(configured, edited)) DesignPullSelection.save(project, edited)
+        else DesignPullSelection.clear(project)
+        refreshAlarm.cancelAndRequest()
+    }
+
+    private fun resetSelection() {
+        DesignPullSelection.clear(project)
+        refreshAlarm.cancelAndRequest()
+    }
+
+    /** Pull what is ticked; an unconfigured connection falls back to the action's setup flow. */
+    private fun pullSelected() {
+        if (!FlowableAtlasProjectSettings.getInstance(project).isDesignConfigured()) {
+            invokeAction(FlowableActionIds.PULL_FROM_DESIGN)
+            return
+        }
+        val selection = currentSelection()
+        project.service<DesignPullService>().pullInBackground(selection.workspaceKey, selection.appKeys)
+    }
+
+    private fun currentSelection(): DesignPullSelection.Selection {
+        val settings = FlowableAtlasProjectSettings.getInstance(project)
+        return DesignPullSelection.effective(
+            DesignPullSelection.Selection(settings.designWorkspaceKey, settings.designAppKeys.toList()),
+            DesignPullSelection.load(project),
+        )
     }
 
     override fun dispose() {}
+
+    /** Gather + apply synchronously — for tests, which cannot wait on the pooled refresh. */
+    internal fun refreshForTest() = apply(gather())
 
     companion object {
         private const val WHOLE_PROJECT_LABEL = "Whole project (repository root)"

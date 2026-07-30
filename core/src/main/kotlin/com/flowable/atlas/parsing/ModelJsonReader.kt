@@ -129,6 +129,24 @@ object ModelJsonReader {
     }
 
     /**
+     * The model keys an `.app` lists as its members. Shape:
+     * `{ "extension": { "design": { "childModels": [ { "key", "type" } ] } } }` — the same list
+     * [ModelParsers.parseApp] turns into `contains` edges. [type] filters on the child's `type`
+     * (`"dataObject"`, `"bpmn"`, …); null returns every child key. Pages listed only under
+     * `pageModels` are deliberately not included — this is the child-model list, not the page list.
+     */
+    fun readAppChildKeys(bytes: ByteArray, type: String? = null): List<String> {
+        val root = parseMap(bytes) ?: return emptyList()
+        val design = (root["extension"] as? Map<*, *>)?.get("design") as? Map<*, *> ?: return emptyList()
+        val children = design["childModels"] as? List<*> ?: return emptyList()
+        return children.mapNotNull { cAny ->
+            val child = cAny as? Map<*, *> ?: return@mapNotNull null
+            if (type != null && str(child, "type") != type) return@mapNotNull null
+            str(child, "key")
+        }
+    }
+
+    /**
      * The logical field mapping of a `.data` model. Shape:
      * `{ "key", "dataObjectType", "referencedServiceDefinitionModelKey",
      *    "fieldMappings": [ { "name", "type", "label" } ] }`.
