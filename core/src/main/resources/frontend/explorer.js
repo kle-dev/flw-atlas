@@ -287,6 +287,9 @@ const covColor = k => 'var(--cov-'+k+', #79848f)';
 const debounce = (fn,ms) => { let t; return function(){ clearTimeout(t); t=setTimeout(()=>fn.apply(this,arguments),ms); }; };
 const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform||'');
 const MODK = IS_MAC ? '⌘' : 'Ctrl';
+// The "toggle this one" modifier for list selection. Platform-exact on purpose: on a Mac,
+// Ctrl+click also raises the context menu, so accepting it there would fire both.
+const modKey = e => IS_MAC ? e.metaKey : e.ctrlKey;
 const looseCol = s => String(s==null?'':s).toLowerCase().replace(/[^a-z0-9]/g,'');
 // external nodes split into Flowable API / navigation routes / real third-party deps.
 const nodeColor = n => (n && n.type==='external')
@@ -329,7 +332,10 @@ const isUnusedForm = n => n.type==='form' && !(incM.get(n.id)||[]).some(e=>e.rel
 // `view` mirrors the active route, `cat`/`sel` drive the browse columns.
 // `focus` is the search term the current selection was reached with — highlighted in the detail panel.
 // `focusEl` is the model element a search hit came from — the detail panel opens that row directly.
-let state = {view:'overview', cat:null, sel:null, filter:'', sort:'name', focus:'', focusEl:''};
+// `tabs`/`tab` are the open detail tabs (node ids + active index). Invariant: while the browse view
+// shows a node, `sel === tabs[tab]` — that is what keeps every existing `state.sel` reader correct.
+let state = {view:'overview', cat:null, sel:null, filter:'', sort:'name', focus:'', focusEl:'',
+             tabs:[], tab:-1};
 
 // ---------- categories ----------
 function categories(){
@@ -489,6 +495,7 @@ function parseHash(){
   return byId.get(id) ? {view:'browse', sel:id, q, e} : {view:'overview'};
 }
 function showView(v){
+  if(v!=='browse') listMarksClear();          // a multi-selection cannot outlive the list it was made in
   document.getElementById('view-overview').hidden = v!=='overview';
   document.getElementById('view-schema').hidden = v!=='schema';
   document.getElementById('view-scripts').hidden = v!=='scripts';
@@ -522,9 +529,13 @@ function route(){
     applySelection(r.sel);                                // handles view/list/detail/crumbs
   } else {
     state.view='browse';
-    if(state.cat!==r.cat){ state.cat=r.cat; state.filter=''; }
+    if(state.cat!==r.cat){ state.cat=r.cat; state.filter=''; listMarksClear(); }
+    rememberTabScroll();
+    // The category listing has no active node, so no tab renders as current. `state.tab` is NOT
+    // reset here: it stays a valid write pointer, because "no active tab" would make syncTabsWith
+    // append — and then every sidebar category visit would silently grow the tab set.
     state.sel=null;
-    showView('browse'); renderList(); renderDetail();
+    showView('browse'); renderList(); renderTabs(); renderDetail();
     renderSidebarActive(); renderCrumbs();
   }
 }
@@ -1222,6 +1233,73 @@ function renderScripts(){
 }
 
 // ---------- browse: list column ----------
+// ---------- list multi-selection ----------
+// Marks are kept by NODE ID, never by row index: renderItems() rebuilds the rows on every filter
+// keystroke and sort change, and an index-keyed set would silently point at different nodes.
+// `listAnchor` is the id a Shift range extends from.
+let listMarks=new Set(), listAnchor=null;
+function listMarksClear(){ listMarks.clear(); listAnchor=null; }
+/** Ids of the rows currently in the DOM — a Shift range or ⌘A can only span what is rendered. */
+function listRenderedIds(){
+  return [...document.querySelectorAll('#listitems .item[data-id]')].map(el=>el.dataset.id);
+}
+/** Add ids up to the cap. Returns the number refused, so the caller can say so instead of
+ *  pretending: marking more than MAX_TABS would promise an "open all" that cannot be kept. */
+function listMarkAdd(ids){
+  let refused=0;
+  ids.forEach(id=>{
+    if(listMarks.has(id)) return;
+    if(listMarks.size>=MAX_TABS){ refused++; return; }
+    listMarks.add(id);
+  });
+  return refused;
+}
+function listMarkRange(fromId, toId){
+  const ids=listRenderedIds();
+  const a=ids.indexOf(fromId), b=ids.indexOf(toId);
+  if(a<0||b<0) return 0;
+  return listMarkAdd(ids.slice(Math.min(a,b), Math.max(a,b)+1));
+}
+/** Repaint marks only. Deliberately NOT syncListSelection(): that one scrolls the selected row into
+ *  view, which would yank the list back to the open node on every Shift+Arrow. */
+function syncListMarks(){
+  document.querySelectorAll('#listitems .item[data-id]').forEach(el=>{
+    const mk=listMarks.has(el.dataset.id);
+    el.classList.toggle('mark', mk);
+    el.setAttribute('aria-checked', mk?'true':'false');
+  });
+}
+const CAP_NOTE=()=>'marking stops at '+MAX_TABS+' — that is the tab limit';
+// A pending "n did not fit" line. It has to survive the async hash round-trip that opening tabs
+// goes through, so it lives here rather than being passed into the render call that would lose it.
+let _markNote='';
+function setMarkNote(s){ _markNote=s||''; renderListMarkBar(); }
+/** The "N marked → open" bar in the list head; also where an over-the-cap warning surfaces. */
+function renderListMarkBar(){
+  const box=document.getElementById('lmark');
+  if(!box) return;
+  const n=listMarks.size;
+  if(!n && !_markNote){ box.innerHTML=''; return; }
+  // The live region carries a bare counter, not the button label: announcing "open 4 in tabs,
+  // Enter" on every Shift+Arrow keystroke makes a screen reader unusable.
+  box.innerHTML=(n?'<button class="lh-open" id="lopen" data-tip="Open every marked item as a detail tab">'+
+      'open '+n+' in tab'+(n>1?'s':'')+' · Enter</button>':'')+
+    '<span class="vh" aria-live="polite">'+(n?n+' marked':'')+'</span>'+
+    (_markNote?'<div class="lh-note">'+esc(_markNote)+'</div>':'');
+  const b=document.getElementById('lopen');
+  if(b) b.onclick=()=>openMarkedList();
+}
+/** Open the marked rows as tabs. `background` keeps the current tab active. */
+function openMarkedList(background){
+  if(!listMarks.size) return;
+  const ids=listRenderedIds().filter(id=>listMarks.has(id));   // keep the on-screen order
+  const r=openTabs(ids.length?ids:[...listMarks], {background:!!background});
+  listMarksClear();
+  // Marks only — the route that openTabs kicked off runs syncListSelection() and owns the scroll.
+  syncListMarks();
+  setMarkNote(r.dropped ? r.dropped+' not opened — '+MAX_TABS+' tabs is the limit' : '');
+}
+
 function renderList(){
   const cat = CATS.find(c=>c.id===state.cat);
   const list = document.getElementById('list'); list.innerHTML='';
@@ -1230,7 +1308,8 @@ function renderList(){
   head.innerHTML='<div class="t"><span>'+esc(cat.label)+'</span><span class="muted">'+cat.count+'</span></div>'+
     '<div class="lh-controls"><input id="lf" placeholder="filter '+esc(cat.label.toLowerCase())+'…" aria-label="Filter list">'+
     '<select id="lsort" aria-label="Sort list"><option value="name">Name</option>'+
-    '<option value="refs">Most referenced</option><option value="file">File</option></select></div>';
+    '<option value="refs">Most referenced</option><option value="file">File</option></select></div>'+
+    '<div id="lmark"></div>';
   list.appendChild(head);
   const wrap=document.createElement('div'); wrap.id='listitems';
   wrap.setAttribute('role','listbox');
@@ -1242,18 +1321,55 @@ function renderList(){
   lf.oninput=debounce(()=>{ state.filter=lf.value; renderItems(cat, wrap); },120);
   const ls=document.getElementById('lsort'); ls.value=state.sort;
   ls.onchange=()=>{ state.sort=ls.value; renderItems(cat, wrap); };
-  // Arrow/Enter keyboard navigation over the items (roving focus).
+  // Arrow/Enter keyboard navigation over the items (roving focus), plus Shift+Arrow multi-select.
   wrap.onkeydown=e=>{
     const els=[...wrap.querySelectorAll('.item[data-id]')];
     const i=els.indexOf(document.activeElement);
+    const mod=e.metaKey||e.ctrlKey;
     if(e.key==='ArrowDown'||e.key==='ArrowUp'){
       e.preventDefault();
       const j=e.key==='ArrowDown'?Math.min(i+1,els.length-1):Math.max(i-1,0);
-      if(els[j]) els[j].focus();
+      if(!els[j]) return;
+      if(e.shiftKey && i>=0){
+        // Anchor at the row we started from, then paint the whole span each time — re-painting
+        // beats tracking increments, because shrinking a range has to unmark too.
+        if(listAnchor===null) listAnchor=els[i].dataset.id;
+        listMarks.clear();
+        const refused=listMarkRange(listAnchor, els[j].dataset.id);
+        syncListMarks(); setMarkNote(refused?CAP_NOTE():'');
+      }
+      els[j].focus();
     } else if(e.key==='Home'&&els[0]){ e.preventDefault(); els[0].focus(); }
     else if(e.key==='End'&&els[els.length-1]){ e.preventDefault(); els[els.length-1].focus(); }
-    else if((e.key==='Enter'||e.key===' ')&&i>=0){ e.preventDefault(); select(els[i].dataset.id); }
+    else if(mod && (e.key==='a'||e.key==='A')){
+      // Only the rendered rows: renderItems() chunks at LIST_CHUNK, and marking thousands of
+      // off-DOM nodes would promise an "open all" the tab cap cannot keep anyway.
+      e.preventDefault();
+      listMarks.clear();
+      const refused=listMarkAdd(els.map(el=>el.dataset.id));
+      listAnchor=els.length?els[0].dataset.id:null;
+      syncListMarks(); setMarkNote(refused?CAP_NOTE():'');
+    }
+    else if(e.key===' ' && i>=0){
+      e.preventDefault();                                  // Space toggles the mark under the cursor
+      const id=els[i].dataset.id;
+      let refused=0;
+      if(listMarks.has(id)) listMarks.delete(id); else { refused=listMarkAdd([id]); listAnchor=id; }
+      syncListMarks(); setMarkNote(refused?CAP_NOTE():'');
+    }
+    else if(e.key==='Enter'){
+      e.preventDefault();
+      if(listMarks.size) openMarkedList(mod);              // ⌘/Ctrl+Enter → keep the current tab
+      else if(i>=0){
+        if(mod) openTabs([els[i].dataset.id], {background:true});
+        else select(els[i].dataset.id);
+      }
+    }
+    else if(e.key==='Escape' && listMarks.size){
+      e.preventDefault(); listMarksClear(); syncListMarks(); setMarkNote('');
+    }
   };
+  renderListMarkBar();
 }
 
 // Incremental rendering: 200 rows at a time, the IntersectionObserver on a trailing
@@ -1277,17 +1393,43 @@ function renderItems(cat, wrap){
   wrap.appendChild(sentinel);
   let idx=0;
   function makeItem(n,i){
-    const el=document.createElement('div'); el.className='item'+(state.sel===n.id?' on':'');
+    const el=document.createElement('div');
+    el.className='item'+(state.sel===n.id?' on':'')+(listMarks.has(n.id)?' mark':'');
     el.dataset.id=n.id;
     el.setAttribute('role','option');
+    // Two independent states, two attributes: aria-selected is the node the detail panel shows,
+    // aria-checked is "marked, comes along on Enter". Overloading aria-selected with both would
+    // make the multi-selection unreadable to a screen reader.
     el.setAttribute('aria-selected', state.sel===n.id?'true':'false');
+    el.setAttribute('aria-checked', listMarks.has(n.id)?'true':'false');
     el.tabIndex=-1;
     el.style.animationDelay=Math.min(i*8,300)+'ms';
     const rn=INSIGHTS.indeg.get(n.id)||0;
     el.innerHTML='<span class="dot" style="margin-top:5px;background:'+nodeColor(n)+'"></span>'+
       '<div class="meta"><div class="nm">'+esc(n.label)+authBadge(n)+'</div><div class="sub">'+esc(n.key)+'</div></div>'+
-      (rn?'<span class="refn" title="referenced by '+rn+' node'+(rn>1?'s':'')+'">'+rn+'</span>':'');
-    el.onclick=()=>select(n.id);
+      (rn?'<span class="refn" title="referenced by '+rn+' node'+(rn>1?'s':'')+'">'+rn+'</span>':'')+
+      '<span class="ck" aria-hidden="true">✓</span>';
+    // ⌘/Ctrl+click toggles and Shift+click extends — the list-selection convention, not the
+    // browser's "open in new tab" one (middle-click and ⌘/Ctrl+Enter cover that).
+    el.onclick=e=>{
+      if(modKey(e)){
+        e.preventDefault();
+        let refused=0;
+        if(listMarks.has(n.id)) listMarks.delete(n.id); else { refused=listMarkAdd([n.id]); listAnchor=n.id; }
+        syncListMarks(); setMarkNote(refused?CAP_NOTE():''); return;
+      }
+      if(e.shiftKey){
+        e.preventDefault();
+        if(listAnchor===null) listAnchor=state.sel||n.id;
+        listMarks.clear();
+        const refused=listMarkRange(listAnchor, n.id);
+        syncListMarks(); setMarkNote(refused?CAP_NOTE():''); return;
+      }
+      if(listMarks.size){ listMarksClear(); setMarkNote(''); }
+      select(n.id);
+    };
+    el.onmousedown=e=>{ if(e.button===1) e.preventDefault(); };   // no autoscroll cursor
+    el.onauxclick=e=>{ if(e.button===1){ e.preventDefault(); openTabs([n.id], {background:true}); } };
     return el;
   }
   function append(){
@@ -1307,9 +1449,11 @@ function renderItems(cat, wrap){
 function syncListSelection(){
   let hit=null;
   document.querySelectorAll('#list .item[data-id]').forEach(el=>{
-    const on = el.dataset.id===state.sel;
+    const on = el.dataset.id===state.sel, mk = listMarks.has(el.dataset.id);
     el.classList.toggle('on', on);
+    el.classList.toggle('mark', mk);
     el.setAttribute('aria-selected', on?'true':'false');
+    el.setAttribute('aria-checked', mk?'true':'false');
     if(on) hit=el;
   });
   if(hit) hit.scrollIntoView({block:'nearest'});
@@ -2171,9 +2315,12 @@ function renderDetail(){
   // showing an element of the model we are navigating away from.
   hideDgCard();
   if(!state.sel || !byId.get(state.sel)){
+    const alt=IS_MAC?'⌥':'Alt+';
     det.innerHTML='<div class="estate"><div class="estate-ic" aria-hidden="true">⌕</div>'+
       '<div class="et">'+(state.cat?'Nothing selected':'Flowable Atlas')+'</div>'+
-      '<div class="eh">Pick an item from the list — click any relationship to travel the graph.</div></div>';
+      '<div class="eh">Pick an item from the list — click any relationship to travel the graph.<br>'+
+      'Mark several with <b>⇧↑↓</b> or <b>'+MODK+'-click</b> and press <b>Enter</b> to open them as tabs · '+
+      'switch with <b>'+alt+'1…9</b> or <b>'+alt+'←→</b> · close with <b>'+alt+'W</b>.</div></div>';
     return;
   }
   const n=byId.get(state.sel);
@@ -2234,9 +2381,20 @@ function renderDetail(){
     if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done,()=>prompt('Copy link:',url));
     else prompt('Copy link:',url);   // clipboard API is unavailable on file:// in some browsers
   };
+  // A relationship chip is a link, not a list row, so here ⌘/Ctrl+click and middle-click follow the
+  // browser convention: open in a background tab and stay where you are.
   det.querySelectorAll('.nc, .gn, .vlink').forEach(c=>{
-    c.onclick=()=>select(dec(c.dataset.id));
-    c.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); select(dec(c.dataset.id)); } };
+    const id=()=>dec(c.dataset.id);
+    c.onclick=e=>{
+      if(e.metaKey||e.ctrlKey){ e.preventDefault(); openTabs([id()], {background:true}); return; }
+      select(id());
+    };
+    c.onauxclick=e=>{ if(e.button===1){ e.preventDefault(); openTabs([id()], {background:true}); } };
+    c.onkeydown=e=>{
+      if(e.key!=='Enter'&&e.key!==' ') return;
+      e.preventDefault();
+      if(e.metaKey||e.ctrlKey) openTabs([id()], {background:true}); else select(id());
+    };
   });
   // clicking the path (but not its copy icon) copies too — routed through atlasCopy so the "copied"
   // hint only shows on real success and the child copy button survives (no textContent nuke).
@@ -2831,6 +2989,8 @@ function select(id, q, el){
 function applySelection(id){
   if(!byId.get(id)) return;
   state.view='browse'; showView('browse');
+  rememberTabScroll();                     // before the panel is replaced
+  syncTabsWith(id);                        // reconcile the tab set with what the hash asks for
   state.sel=id;
   pushRecent(id);
   const n=byId.get(id);
@@ -2852,8 +3012,214 @@ function applySelection(id){
   }
   if(catChanged || !document.getElementById('listitems')) renderList();
   syncListSelection();
+  renderTabs();
   renderDetail();
+  restoreTabScroll();                      // after renderDetail(), which resets scrollTop to 0
   renderSidebarActive(); renderCrumbs();
+}
+
+// ---------- detail tabs ----------
+// A tab is a VIEWPORT WITH HISTORY, not a pinned node: following a relationship chip moves the
+// active tab, exactly like a link followed inside a browser tab. Only one detail panel is ever
+// live — renderDetail() writes into #detail and mints globally unique child ids (#back, #sectall,
+// #permalink), so N simultaneous panels would collide. Switching tabs simply re-renders.
+//
+// The hash still carries ONLY the active node (grammar unchanged, so permalinks and "copy link"
+// keep working); the tab SET lives in localStorage. Putting the whole set in the hash would make
+// every shared link unreadable and push a history entry per opened tab.
+// 12, not 20: Alt+1..9 only reaches nine, and a strip of twenty tabs is a row of unreadable
+// slivers. Marks are capped at the same number, so "open them all" can always keep its promise.
+const MAX_TABS=12, TABS_STORE='atlas-tabs';
+// Per-tab view state: scroll offset plus the search term/element the tab was opened with, so
+// switching back to a tab opened from ⌘K still highlights the hit that put it there. Keyed by node
+// id (a node can occupy at most one tab) and pruned on close.
+let _tabView={};
+// During boot a permalink must ADD to the restored set, not overwrite the remembered active tab.
+let _tabsBooting=true;
+
+function tabsRemember(){
+  // Scoped to the project: every report on a file:// origin shares one localStorage, and two
+  // reports of the same codebase share node ids — an unscoped record would restore foreign tabs.
+  try{ localStorage.setItem(TABS_STORE,
+    JSON.stringify({p:DATA.project, ids:state.tabs, active:state.tab})); }catch(e){}
+}
+function tabsRestore(){
+  try{
+    const p=JSON.parse(localStorage.getItem(TABS_STORE)||'{}')||{};
+    if(p.p!==DATA.project){ state.tabs=[]; state.tab=-1; return; }
+    // A regenerated explorer can have a different node set — drop ids that no longer resolve.
+    const ids=(p.ids||[]).filter(id=>byId.get(id)).slice(0,MAX_TABS);
+    state.tabs=ids;
+    state.tab=(typeof p.active==='number' && p.active>=0 && p.active<ids.length) ? p.active : (ids.length?0:-1);
+  }catch(e){ state.tabs=[]; state.tab=-1; }
+}
+
+/** Reconcile the tab set with the node the hash just asked for. */
+function syncTabsWith(id){
+  const at=state.tabs.indexOf(id);
+  if(at>=0){ state.tab=at; }                                  // already open → just activate it
+  else if(_tabsBooting || state.tab<0 || state.tab>=state.tabs.length){
+    // Boot (a permalink alongside the restored set) or no active tab → append rather than replace,
+    // so restoring tabs and opening a shared link never costs the user a tab.
+    if(state.tabs.length>=MAX_TABS) evictTab();
+    state.tabs.push(id); state.tab=state.tabs.length-1;
+  } else {
+    state.tabs[state.tab]=id;                                 // the active tab travels
+  }
+  tabsRemember();
+}
+/** Make room under the cap by dropping the leftmost tab that is not the active one. */
+function evictTab(){
+  let i=state.tabs.findIndex((id,ix)=>ix!==state.tab);
+  if(i<0) i=0;
+  const [gone]=state.tabs.splice(i,1);
+  delete _tabView[gone];
+  if(state.tab>i) state.tab--;
+}
+
+function rememberTabScroll(){
+  const det=document.getElementById('detail');
+  if(!det || !state.sel) return;
+  const v=_tabView[state.sel]||{};
+  v.y=det.scrollTop; v.q=state.focus||''; v.el=state.focusEl||'';
+  _tabView[state.sel]=v;
+}
+function restoreTabScroll(){
+  // A search hit owns the scroll position (applyFocus scrolls the matching row into view) — don't
+  // fight it. Otherwise return to where this node was left, or stay at the top for a fresh one.
+  if(state.focus || state.focusEl) return;
+  const det=document.getElementById('detail'), v=_tabView[state.sel];
+  if(!det || !v || !v.y) return;
+  det.scrollTop=v.y;
+  // The inline diagram fits itself asynchronously, which can clamp the offset we just set.
+  requestAnimationFrame(()=>{ if(det.isConnected && !state.focus && !state.focusEl) det.scrollTop=v.y; });
+}
+
+function renderTabs(){
+  const bar=document.getElementById('dtabs');
+  if(!bar) return;
+  // One tab is no choice — showing a strip for it would be chrome that never earns its space.
+  if(state.tabs.length<2){ bar.hidden=true; bar.innerHTML=''; return; }
+  bar.hidden=false;
+  // "close others" is a plain button, so it lives OUTSIDE the tablist: a role=tablist must contain
+  // nothing but tabs, and the scroll container is the tablist itself.
+  const rows=state.tabs.map((id,i)=>{
+    const n=byId.get(id); if(!n) return '';
+    const on=id===state.sel;                      // derived from the selection, never from an index
+    // Only the first nine are reachable by number, so only they advertise one.
+    const hint=i<9 ? '  ('+(IS_MAC?'⌥':'Alt+')+(i+1)+')' : '';
+    return '<div class="dtab'+(on?' on':'')+'" id="dtab-'+i+'" role="tab" data-i="'+i+'"'+
+      ' aria-selected="'+on+'" tabindex="'+(on?0:-1)+'" data-tip="'+esc(n.label+' · '+nodeKind(n)+hint)+'">'+
+      '<span class="dot" style="background:'+nodeColor(n)+'"></span>'+
+      '<span class="nm">'+esc(n.label)+'</span>'+
+      '<button class="x" tabindex="-1" aria-label="'+esc('Close '+n.label)+'" data-close-i="'+i+'">×</button></div>';
+  }).join('');
+  bar.innerHTML='<div class="dtablist" id="dtablist" role="tablist" aria-label="Open nodes">'+rows+'</div>'+
+    '<button class="dtclose" id="dtcloseall" data-tip="Close every tab but the active one">close others</button>';
+  const list=bar.querySelector('#dtablist');
+  list.querySelectorAll('.dtab').forEach(t=>{
+    t.onclick=e=>{
+      const x=e.target.closest('.x');
+      if(x){ e.stopPropagation(); closeTab(+x.dataset.closeI); return; }
+      activateTab(+t.dataset.i);
+    };
+    // Middle-click closes, as in every editor and browser. mousedown must be swallowed too, or
+    // Chrome starts autoscroll on the way.
+    t.onmousedown=e=>{ if(e.button===1) e.preventDefault(); };
+    t.onauxclick=e=>{ if(e.button===1){ e.preventDefault(); closeTab(+t.dataset.i); } };
+    t.onkeydown=e=>{
+      const tabs=[...list.querySelectorAll('.dtab')], i=tabs.indexOf(t);
+      if(e.key==='ArrowRight'||e.key==='ArrowLeft'){
+        e.preventDefault();
+        const j=e.key==='ArrowRight'?Math.min(i+1,tabs.length-1):Math.max(i-1,0);
+        if(!tabs[j]) return;
+        tabs.forEach(o=>{ o.tabIndex=-1; });     // exactly one tab stop, or Tab walks the whole strip
+        tabs[j].tabIndex=0; tabs[j].focus();
+      } else if(e.key==='Enter'||e.key===' '){ e.preventDefault(); activateTab(+t.dataset.i); }
+      else if(e.key==='Delete'||e.key==='Backspace'){ e.preventDefault(); closeTab(+t.dataset.i); }
+    };
+  });
+  bar.querySelector('#dtcloseall').onclick=()=>closeOtherTabs();
+  const act=list.querySelector('.dtab.on');
+  if(act) act.scrollIntoView({block:'nearest', inline:'nearest'});
+}
+
+/**
+ * Open `ids` as tabs. Returns {opened, dropped} — `dropped` is how many did not fit under MAX_TABS,
+ * which the caller reports rather than swallowing (a silent cap reads as "opened everything").
+ * `opts.background` keeps the current tab active.
+ */
+function openTabs(ids, opts){
+  opts=opts||{};
+  const want=(ids||[]).filter(id=>byId.get(id));
+  if(!want.length) return {opened:0, dropped:0};
+  let dropped=0, first=null;
+  want.forEach(id=>{
+    if(state.tabs.indexOf(id)<0){
+      if(state.tabs.length>=MAX_TABS){ dropped++; return; }
+      state.tabs.push(id);
+    }
+    if(first===null) first=id;
+  });
+  tabsRemember();
+  renderTabs();                       // paint the new tabs now; select()'s route lands a frame later
+  if(!opts.background && first!==null){
+    state.tab=state.tabs.indexOf(first);
+    select(first, opts.q, opts.el);
+  }
+  return {opened:want.length-dropped, dropped};
+}
+
+function activateTab(i){
+  const id=state.tabs[i];
+  if(id==null || !byId.get(id)) return;
+  if(state.sel===id){ state.tab=i; renderTabs(); return; }    // already on screen
+  rememberTabScroll();
+  state.tab=i;
+  // Route through select() so the hash stays the source of truth. Replay the search term this tab
+  // was opened with, so a tab opened from ⌘K still highlights the hit that put it there.
+  const v=_tabView[id]||{};
+  state.focus=''; state.focusEl='';
+  select(id, v.q||'', v.el||'');
+}
+
+function closeTab(i){
+  if(i<0 || i>=state.tabs.length) return;
+  const wasActive=state.tabs[i]===state.sel;
+  const [gone]=state.tabs.splice(i,1);
+  delete _tabView[gone];
+  if(i<state.tab || state.tab>=state.tabs.length) state.tab--;
+  if(state.tab<0) state.tab=state.tabs.length?0:-1;
+  tabsRemember();
+  if(!state.tabs.length){
+    // Fall back to the category listing — the existing "browse, nothing selected" route. Assigning
+    // an unchanged hash fires no hashchange, so render directly in that case or the strip goes stale.
+    const h = state.cat ? '/browse/'+enc(state.cat) : '/overview';
+    if(location.hash.slice(1)===h){ state.sel=null; renderTabs(); renderDetail(); renderCrumbs(); }
+    else location.hash=h;
+    return;
+  }
+  if(!wasActive){ renderTabs(); return; }        // the shown node is untouched — repaint the strip
+  state.focus=''; state.focusEl='';
+  select(state.tabs[state.tab]);                 // right neighbour, or the new last one
+}
+
+function closeOtherTabs(){
+  if(state.tabs.length<2) return;
+  // Keep whatever is on screen; if nothing is (the category route), keep the write pointer's tab.
+  const keep=state.sel && state.tabs.indexOf(state.sel)>=0 ? state.sel
+           : state.tabs[Math.max(0,Math.min(state.tab,state.tabs.length-1))];
+  state.tabs.forEach(id=>{ if(id!==keep) delete _tabView[id]; });
+  state.tabs=[keep]; state.tab=0;
+  tabsRemember(); renderTabs();
+}
+
+function cycleTab(delta){
+  if(state.tabs.length<2) return;
+  // Step from what is on screen; fall back to the write pointer on the category route.
+  const from=state.sel!=null&&state.tabs.indexOf(state.sel)>=0 ? state.tabs.indexOf(state.sel)
+           : (state.tab<0?0:state.tab);
+  activateTab((from+delta+state.tabs.length)%state.tabs.length);
 }
 
 // ---------- search index (shared by the command palette) ----------
@@ -2966,8 +3332,52 @@ function matchWhere(n,v){
 
 // ---------- command palette (⌘K) ----------
 const pal=document.getElementById('palette'), palq=document.getElementById('palq'), palres=document.getElementById('palresults');
+const palFoot=document.getElementById('palfoot');
 const palPanel=pal?pal.querySelector('.pal-panel'):null;
 let palList=[], palSel=-1, _palPrevFocus=null;
+// Multi-pick: marks by NODE ID (palRender rebuilds the rows on every keystroke, so indices are
+// worthless), plus the row a Shift range extends from. Cleared whenever the query changes — a mark
+// on a hit that is no longer listed is a trap, not a feature.
+let palMarks=new Set(), palAnchor=-1;
+function palMarksClear(){ palMarks.clear(); palAnchor=-1; }
+function palMarkRange(a,b){
+  if(a<0||b<0) return 0;
+  let refused=0;
+  for(let i=Math.min(a,b); i<=Math.max(a,b); i++){
+    if(!palList[i]) continue;
+    if(palMarks.has(palList[i].n.id)) continue;
+    if(palMarks.size>=MAX_TABS){ refused++; continue; }   // never mark more than can be opened
+    palMarks.add(palList[i].n.id);
+  }
+  return refused;
+}
+let _palNote='';
+function palRenderFoot(){
+  if(!palFoot) return;
+  const n=palMarks.size;
+  palFoot.hidden=!n && !_palNote;
+  if(palFoot.hidden) return;
+  palFoot.innerHTML=(n?'<span><b>'+n+'</b> marked</span><span>↵ open '+
+      (n>1?'all '+n+' in tabs':'in a tab')+'</span><span>'+MODK+'↵ open and keep searching</span>':'')+
+    (_palNote?'<span class="pf-note">'+esc(_palNote)+'</span>':'');
+}
+/** Open the marked hits as tabs. `keepOpen` (⌘/Ctrl+Enter) leaves the palette up and the current
+ *  tab active, so several queries can be batched into tabs without reopening ⌘K each time. */
+function openMarkedPal(keepOpen){
+  if(!palMarks.size) return;
+  const hits=palList.filter(h=>palMarks.has(h.n.id));                // keep the listed order
+  const q=palq.value.trim();
+  // Seed each tab's view state with ITS OWN hit context, so switching to the 4th tab of a batch
+  // highlights the 4th match — not the first one's.
+  hits.forEach(h=>{ _tabView[h.n.id]=Object.assign(_tabView[h.n.id]||{}, {q, el:h.el||''}); });
+  const first=hits[0];
+  palMarksClear();
+  if(!keepOpen) closePalette();
+  const r=openTabs(hits.map(h=>h.n.id), {background:!!keepOpen, q, el:first?first.el:''});
+  const note=r.dropped ? r.dropped+' not opened — '+MAX_TABS+' tabs is the limit' : '';
+  // Report where the user is still looking: the palette footer if it stays up, else the list head.
+  if(keepOpen){ _palNote=note; palRender(); palq.focus(); } else setMarkNote(note);
+}
 // The panel is resizable from its bottom-right corner (CSS `resize:both`) and the size is remembered,
 // mirroring the diagram card (see DGCARD_STORE). A default-width palette ellipses the "why it matched"
 // hint, which for a REST call is the endpoint URL — the one thing you were searching for.
@@ -3017,13 +3427,14 @@ function openPalette(){
   if(!pal.hidden) return;
   hideDgCard();                                  // the card floats above the palette (z-index 120 > 100)
   _palPrevFocus=document.activeElement;
-  pal.hidden=false; palq.value=''; palSel=-1;
+  pal.hidden=false; palq.value=''; palSel=-1; palMarksClear();
   applyPalSize();
   palRender(); palq.focus();
 }
 function closePalette(){
   if(pal.hidden) return;
   pal.hidden=true;
+  palMarksClear(); _palNote=''; if(palFoot) palFoot.hidden=true;
   try{ if(_palPrevFocus && document.contains(_palPrevFocus)) _palPrevFocus.focus(); }catch(e){}
   _palPrevFocus=null;
 }
@@ -3073,7 +3484,10 @@ function palRender(){
       palList.push({n, el:(w&&w.el)||''});
       const hint=(w&&w.hint)||n.key;
       // title on both: whatever the panel width clips is still readable on hover, without resizing.
-      h+='<div class="pal-item'+(i===palSel?' sel':'')+'" id="pal-'+i+'" role="option" aria-selected="'+(i===palSel)+'" data-i="'+i+'">'+
+      const mk=palMarks.has(n.id);
+      h+='<div class="pal-item'+(i===palSel?' sel':'')+(mk?' mark':'')+'" id="pal-'+i+'" role="option"'+
+         ' aria-selected="'+(i===palSel)+'" aria-checked="'+mk+'" data-i="'+i+'">'+
+         '<span class="ck" aria-hidden="true">✓</span>'+
          '<span class="dot" style="background:'+nodeColor(n)+'"></span>'+
          '<span class="nm" title="'+esc(n.label)+'">'+esc(n.label)+'</span>'+
          '<span class="hint" title="'+esc(hint)+'">'+esc(hint)+'</span></div>';
@@ -3086,18 +3500,59 @@ function palRender(){
     palq.setAttribute('aria-activedescendant','pal-'+palSel);
     const el=document.getElementById('pal-'+palSel); if(el) el.scrollIntoView({block:'nearest'});
   } else palq.removeAttribute('aria-activedescendant');
-  palres.querySelectorAll('.pal-item').forEach(el=>el.onclick=()=>{
-    const hit=palList[+el.dataset.i]; closePalette(); select(hit.n.id, v, hit.el);
+  palres.querySelectorAll('.pal-item').forEach(el=>el.onclick=ev=>{
+    const i=+el.dataset.i, hit=palList[i];
+    if(!hit) return;
+    // ⌘/Ctrl+click toggles, Shift+click extends — same convention as the browse list.
+    if(modKey(ev)){
+      ev.preventDefault();
+      if(palMarks.has(hit.n.id)) palMarks.delete(hit.n.id);
+      else if(palMarks.size<MAX_TABS){ palMarks.add(hit.n.id); palAnchor=i; }
+      palSel=i; palRender(); palq.focus(); return;
+    }
+    if(ev.shiftKey){
+      ev.preventDefault();
+      if(palAnchor<0) palAnchor=palSel>=0?palSel:i;
+      palMarks.clear(); palMarkRange(palAnchor, i);
+      palSel=i; palRender(); palq.focus(); return;
+    }
+    palMarksClear(); closePalette(); select(hit.n.id, v, hit.el);
   });
+  palRenderFoot();
 }
-palq.addEventListener('input', debounce(()=>{ palSel=-1; palRender(); },120));
+// A changed query means a different result set — marks that pointed into the old one would open
+// nodes the user can no longer see, so they go with it (same reason palSel resets).
+palq.addEventListener('input', debounce(()=>{ palSel=-1; palMarksClear(); _palNote=''; palRender(); },120));
 palq.addEventListener('keydown',e=>{
-  if(e.key==='ArrowDown'){ e.preventDefault(); palSel=Math.min(palSel+1,palList.length-1); palRender(); }
-  else if(e.key==='ArrowUp'){ e.preventDefault(); palSel=Math.max(palSel-1,0); palRender(); }
-  else if(e.key==='Enter' && palList[palSel]){
-    const hit=palList[palSel]; closePalette(); select(hit.n.id, palq.value.trim(), hit.el);
+  const mod=modKey(e);
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+    e.preventDefault();
+    const j=e.key==='ArrowDown'?Math.min(palSel+1,palList.length-1):Math.max(palSel-1,0);
+    if(e.shiftKey && palList.length){
+      if(palAnchor<0) palAnchor=palSel>=0?palSel:j;
+      palMarks.clear();
+      _palNote=palMarkRange(palAnchor, j)?('marking stops at '+MAX_TABS+' — that is the tab limit'):'';
+    }
+    palSel=j; palRender();
   }
-  else if(e.key==='Escape'){ closePalette(); }
+  else if(e.key==='Enter'){
+    // ⌘/Ctrl+Enter batches: open what is marked, keep the palette up for the next query. Without
+    // marks it opens the highlighted hit in a background tab, same as in the list.
+    if(palMarks.size){ e.preventDefault(); openMarkedPal(mod); }
+    else if(palList[palSel]){
+      e.preventDefault();
+      const hit=palList[palSel];
+      if(mod){ openTabs([hit.n.id], {background:true}); palq.focus(); }
+      else { closePalette(); select(hit.n.id, palq.value.trim(), hit.el); }
+    }
+  }
+  else if(e.key==='Escape'){
+    // Escape drops the marks first, the panel second — losing a careful multi-pick to a stray
+    // Escape is worse than pressing it twice.
+    // stopPropagation, or the document-level Escape handler below closes the panel anyway.
+    if(palMarks.size){ e.preventDefault(); e.stopPropagation(); palMarksClear(); _palNote=''; palRender(); }
+    else closePalette();
+  }
   else if(e.key==='Tab'){ e.preventDefault(); }            // the input is the only tabbable — trap
 });
 pal.addEventListener('mousedown',e=>{ if(e.target.closest('[data-close]')) closePalette(); });
@@ -3108,6 +3563,23 @@ document.addEventListener('keydown',e=>{
     e.preventDefault(); openPalette();                     // guarded: '/' typed in a filter stays there
   } else if(e.key==='Escape' && !pal.hidden){
     closePalette();
+  } else if(e.altKey && !e.metaKey && pal.hidden && state.view==='browse'
+            && (!dgmodal || dgmodal.hidden)){
+    // Tab shortcuts are deliberately Alt-based: Chrome reserves ⌘/Ctrl+1..9, ⌘W and Ctrl+Tab for
+    // itself and a page cannot preventDefault them, and inside the IDE ⌘W would close the JCEF
+    // editor tab. Everything goes through e.code, because Alt+1 yields '¡' and Alt+[ yields '“'
+    // on a Mac layout.
+    const d=/^Digit([1-9])$/.exec(e.code||'');
+    if(d){ e.preventDefault(); activateTab(+d[1]-1); }
+    // Brackets are the portable pair: on Windows/Linux Alt+←/→ is the browser's Back/Forward and
+    // is not reliably preventable, so both are bound and either one works everywhere.
+    else if(e.code==='BracketRight' || e.key==='ArrowRight'){ e.preventDefault(); cycleTab(1); }
+    else if(e.code==='BracketLeft'  || e.key==='ArrowLeft'){ e.preventDefault(); cycleTab(-1); }
+    else if(e.code==='KeyW'){
+      e.preventDefault();
+      const i=state.sel!=null?state.tabs.indexOf(state.sel):state.tab;
+      if(i>=0) closeTab(i);
+    }
   }
 });
 function wireSearchTrigger(){
@@ -3378,8 +3850,10 @@ wireRailAutoCollapse();
 wireSearchTrigger();
 wirePaletteResize();
 wireLinkFilter();
+tabsRestore();                  // before route(): a permalink then ADDS to the restored set
 window.addEventListener('hashchange',route);
 route();
+_tabsBooting=false;             // from here on, following a link moves the active tab instead
 
 // ---------- boot done: dismiss the loading overlay ----------
 // The overlay (explorer.html #atlas-boot) covered the file read + this synchronous boot;
