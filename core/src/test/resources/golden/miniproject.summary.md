@@ -1,6 +1,6 @@
 # Flowable project — `miniproject` (quick overview)
 
-_12 model files · 2 Java files · 47 nodes · 38 relationships · 3 user groups. Compact summary — use `--json` for the full graph, or open the HTML explorer._
+_12 model files · 2 Java files · 51 nodes · 40 relationships · 3 user groups. Compact summary — use `--json` for the full graph, or open the HTML explorer._
 
 ⚠ **1 file(s) could not be fully analyzed** (parse/read failures) — the map below may be incomplete. Details: `diagnostics` in graph.json / Warnings section of the overview.
 
@@ -11,14 +11,14 @@ _12 model files · 2 Java files · 47 nodes · 38 relationships · 3 user groups
 Models: 1 process · 1 case · 1 decision table · 1 form · 2 data objects · 1 service · 1 event · 1 action · 1 security policy · 1 Liquibase changelog
 Java: 1 controller · 1 component · 1 delegate
 Variables: 17 (grouped by scope: process / form / case / java / …)
-Expressions: 4 backend ${ } · 3 frontend {{ }} · 0 string literals
+Expressions: 4 backend ${ } · 6 frontend {{ }} · 0 string literals
 
 ## Entry points — who can start what
 - process `orderProcess` ← sales
 - case `reviewCase` ← auditors
 
 ## REST API surface
-1 endpoints across 1 controllers: CustomerController
+2 endpoints across 1 controllers: CustomerController
 
 ## Integrations — services
 - `customerService` Customer Service (db → cust_customer)
@@ -37,11 +37,11 @@ Events: orderShipped
 - endpoint `GET /api/customers`  (referenced by 3)
 - securityPolicy `orderPolicy` — Order policy (referenced by 2)
 - method `com.example.DemoBean#run` — DemoBean.run() (referenced by 2)
+- endpoint `GET /api/customers/{id}/canEdit`  (referenced by 2)
 - dataObject `customerDO` — Customer (referenced by 2)
 - case `reviewCase` — Review Case (referenced by 2)
 - app `demoApp` — Demo App (referenced by 2)
 - liquibase `001-customer` — 001-customer.xml (referenced by 1)
-- external `notifierBean`  (referenced by 1)
 
 ## External surface
 - Review (unresolved in project — likely missing/external): bean:notifierBean, process:fulfilmentProcess

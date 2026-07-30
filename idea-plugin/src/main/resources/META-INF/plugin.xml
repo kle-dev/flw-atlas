@@ -127,6 +127,25 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.10.15</h3>
+        <ul>
+          <li><b>Design access tokens</b> — "Pull from Flowable Design" can authenticate with a Flowable
+              Design <i>personal access token</i> (<code>Authorization: Bearer …</code>) instead of a
+              username and password: the scheme Flowable's own CLI uses, and the only one that works when
+              Design sits behind SSO/OAuth2 (where basic auth is switched off). Pick the mode under
+              Settings → Tools → Flowable Atlas → <i>Connections</i>; workspace list, app list and app
+              export all go through it, and "Refresh Workspaces" still doubles as the connection test.</li>
+          <li><b>Mint a token without leaving the IDE</b> — <i>Create Token…</i> signs in once with your
+              username/password, creates a named token with a chosen validity and drops it straight into
+              the field, so afterwards <b>no password has to stay in the keychain</b>.
+              <i>Manage in Design…</i> opens Design's own token page. Password and token are stored as two
+              separate IDE PasswordSafe entries, never in a file, so switching auth modes back and forth
+              loses neither.</li>
+          <li><b>Sharper sign-in errors</b> — an HTTP 401 now says which credential to fix: "check
+              username/password" in password mode, "the access token is invalid or expired" in token mode.
+              A blank token fails immediately instead of producing a pointless request.</li>
+        </ul>
+
         <h3>0.10.14</h3>
         <ul>
           <li><b>Script Playground</b> — the Flowable Expressions tool window gains a <i>Scripts</i>

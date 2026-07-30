@@ -333,10 +333,11 @@ object ModelParsers {
         val dataSources = ArrayList<Any?>()
         val subforms = ArrayList<Any?>()
         val ioParameters = ArrayList<Map<String, Any?>>()
+        val restCalls = ArrayList<Map<String, Any?>>()
         val info = linkedMapOf<String, Any?>(
             "key" to key, "name" to meta["name"], "file" to ffile, "modelType" to mtype,
             "fields" to fields, "outcomes" to outcomes, "dataSources" to dataSources, "subforms" to subforms,
-            "ioParameters" to ioParameters,
+            "ioParameters" to ioParameters, "restCalls" to restCalls,
         )
         for (oc in listOfObjs(doc["outcomes"])) {
             outcomes.add(linkedMapOf("value" to oc["value"], "label" to oc["label"]))
@@ -345,13 +346,15 @@ object ModelParsers {
         // the variable the chosen outcome is stored in (the key is all-lowercase in the model JSON)
         ctx.addVar(key, doc["outcomevariablename"])
         fun visit(n: Map<String, Any?>) {
-            if (truthy(n["id"]) && n.containsKey("type") && n.containsKey("label")) {
+            if (ModelJsonReader.isFormComponent(n)) {
+                // A button has no `label`; its caption is `extraSettings.text` (see [isFormComponent]).
+                val label = pyOr(n["label"], objOf(n["extraSettings"])?.get("text"))
                 fields.add(linkedMapOf(
-                    "id" to n["id"], "type" to n["type"], "label" to n["label"],
+                    "id" to n["id"], "type" to n["type"], "label" to label,
                     "required" to (n["isRequired"] ?: false), "value" to n["value"],
                 ))
                 if (n["type"] == "outcomeButton" && truthy(n["value"])) {
-                    outcomes.add(linkedMapOf("value" to n["value"], "label" to n["label"]))
+                    outcomes.add(linkedMapOf("value" to n["value"], "label" to label))
                 }
                 // A data-entry field's id is the variable path the form reads/writes at runtime — index
                 // its root so the form joins the variable graph. Buttons don't bind a variable, and a
@@ -375,9 +378,12 @@ object ModelParsers {
                     ctx.addRef(key, mtype, ffile, "field-dataObject", "dataObject", es["dataObjectDefinitionKey"])
                     ctx.addOpUse(key, "dataObject", es["dataObjectDefinitionKey"], es["dataObjectOperationKey"])
                 }
-                if (truthy(es["queryUrl"])) {
-                    dataSources.add(linkedMapOf("kind" to "rest", "url" to es["queryUrl"]))
-                    ctx.restCalls.add(linkedMapOf("source" to key, "sourceFile" to ffile, "where" to n["id"], "method" to "GET", "url" to es["queryUrl"], "kind" to "form-query"))
+                // A select/table reads its options over REST: `queryUrl` for the list, `lookupUrl` to
+                // resolve a stored id back to a label. Both are plain GETs.
+                for (uk in listOf("queryUrl", "lookupUrl")) {
+                    if (!truthy(es[uk])) continue
+                    dataSources.add(linkedMapOf("kind" to "rest", "url" to es[uk]))
+                    ctx.restCalls.add(linkedMapOf("source" to key, "sourceFile" to ffile, "where" to n["id"], "method" to "GET", "url" to es[uk], "kind" to "form-query"))
                 }
                 val sm = objOf(es["serviceModel"])
                 if (sm != null && truthy(sm["serviceModelKey"])) {
@@ -424,15 +430,27 @@ object ModelParsers {
                 // dataObject/service operation as literal query params — pick those up as op-uses.
                 for (v in es.values) if (v is String) recordUrlOpUses(v, key, mtype, ffile, ctx)
             }
-            val u = n["url"]
-            if (u is String && u.trim().isNotEmpty()) {
-                ctx.restCalls.add(linkedMapOf("source" to key, "sourceFile" to ffile, "where" to n["id"], "method" to "(button)", "url" to u.trim(), "kind" to "form-button"))
-                recordUrlOpUses(u, key, mtype, ffile, ctx)
+            // A REST/link button's endpoint. Real Design keeps it on `extraSettings.url` (palette
+            // `rest-button-url`); only hand-written and legacy models put it on the component itself.
+            // Reading `extraSettings` here — rather than wherever the walk happens to land — is what
+            // gives the call a `where`: on the bare `extraSettings` map there is no id to attribute it to.
+            // `extraSettings.method` is omitted whenever it is the palette default, hence the fallback.
+            val url = (pyOr(es?.get("url"), n["url"]) as? String)?.trim()
+            if (truthy(n["id"]) && !url.isNullOrEmpty()) {
+                val method = ((es?.get("method") as? String)?.takeIf { it.isNotBlank() } ?: "get").uppercase()
+                restCalls.add(linkedMapOf(
+                    "where" to n["id"], "method" to method, "url" to url, "path" to es?.get("path"),
+                ))
+                ctx.restCalls.add(linkedMapOf("source" to key, "sourceFile" to ffile, "where" to n["id"], "method" to method, "url" to url, "kind" to "form-button"))
+                recordUrlOpUses(url, key, mtype, ffile, ctx)
             }
             // Link components carry their target URL in `value`.
             (n["value"] as? String)?.let { recordUrlOpUses(it, key, mtype, ffile, ctx) }
         }
-        walkJson(doc["rows"] ?: emptyList<Any?>(), ::visit)
+        // The whole document, not just `rows`: a page keeps header/toolbar buttons outside the row grid,
+        // and an outcome's `navigationUrl` lives on the outcome. The component predicate gates what
+        // actually becomes a field, so widening the walk only adds what was previously unreachable.
+        walkJson(doc, ::visit)
         return info
     }
 
@@ -491,7 +509,10 @@ object ModelParsers {
         objOf(es["agentModel"])?.get("agentModelKey")?.let { if (truthy(it)) return "agent" to it }
         objOf(es["serviceModel"])?.get("serviceModelKey")?.let { if (truthy(it)) return "service" to it }
         if (truthy(es["dataObjectDefinitionKey"])) return "dataObject" to es["dataObjectDefinitionKey"]
-        val url = pyOr(n["url"], es["invokeServiceUrl"]) as? String
+        // `extraSettings.url` is where a real REST button keeps its endpoint; the component-level `url`
+        // only occurs in hand-written and legacy models. Without the former, a REST button's payload and
+        // header mappings carried no callee at all.
+        val url = pyOr(pyOr(es["url"], n["url"]), es["invokeServiceUrl"]) as? String
         if (!url.isNullOrBlank()) return "rest" to url.trim()
         return null to null
     }

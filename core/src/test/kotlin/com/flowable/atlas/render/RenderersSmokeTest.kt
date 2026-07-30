@@ -88,5 +88,14 @@ class RenderersSmokeTest {
         assertTrue("expected the code viewer from explorer.js", html.contains("function codeBoxHtml"))
         assertTrue("expected the token styling from explorer.css", html.contains(".tok-k{"))
         assertTrue("expected the problem-line styling from explorer.css", html.contains(".cl-bad{"))
+        // A form/page REST button's endpoint reaches the page (it used to live only in the shared Ctx,
+        // which the payload never carried) and is both rendered and searchable.
+        assertTrue("expected the REST button's endpoint in the payload", html.contains("/canEdit"))
+        assertTrue("expected the REST calls section from explorer.js", html.contains("'restcalls'"))
+        // The ⌘K palette is resizable from its corner and remembers the size the user settles on.
+        assertTrue("expected the palette resize wiring from explorer.js", html.contains("function wirePaletteResize("))
+        assertTrue("expected the palette size store from explorer.js", html.contains("atlas-palette"))
+        assertTrue("expected the palette resize affordance from explorer.css", html.contains("resize:both"))
+        assertTrue("expected the palette width token from explorer.css", html.contains("--pal-w:"))
     }
 }

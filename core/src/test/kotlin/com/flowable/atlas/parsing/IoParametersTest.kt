@@ -311,9 +311,11 @@ class IoParametersTest {
 
     @Test
     fun restButtonWholeBodyExpressionAndHeadersAndErrorMapping() {
+        // The real Design shape (palette `base-rest-button`): the URL lives on `extraSettings.url`, the
+        // caption on `extraSettings.text`, and there is no `label` at all.
         val (f, _) = form(
-            """{"id":"rb","type":"restButton","url":"/api/x","extraSettings":{
-                 "text":"Save","method":"post",
+            """{"id":"rb","type":"restButton","extraSettings":{
+                 "text":"Save","method":"post","url":"/api/x",
                  "sendPayloadMapping":"{{Object.assign(${'$'}item, ${'$'}edit)}}",
                  "headerPropertyMapping":[{"name":"X-Tenant","value":"acme"}],
                  "errorResponsePayloadMapping":[{"name":"${'$'}temp.err","expression":"{{${'$'}response.message}}"}]}}"""
@@ -332,6 +334,55 @@ class IoParametersTest {
         assertEquals(setOf("rest"), params(f).map { it["refKind"] }.toSet())
         assertEquals(setOf("/api/x"), params(f).map { it["refKey"] }.toSet())
         assertEquals(setOf("Save"), params(f).map { it["elementName"] }.toSet())
+    }
+
+    @Test
+    fun restButtonEndpointIsOnTheModelWithItsButtonAndVerb() {
+        val (f, ctx) = form(
+            """{"id":"rest-button2","type":"restButton","extraSettings":{
+                 "text":"Select all","method":"post","path":"data",
+                 "url":"{{endpoints.baseUrl}}/api/myService/my-api"}}"""
+        )
+        // The endpoint has to be readable off the model itself: it used to be recorded only into the
+        // shared Ctx, which the explorer payload never carries — so it was neither shown nor findable.
+        assertEquals(
+            listOf(mapOf(
+                "where" to "rest-button2", "method" to "POST",
+                "url" to "{{endpoints.baseUrl}}/api/myService/my-api", "path" to "data",
+            )),
+            f["restCalls"],
+        )
+        // …and the Ctx entry now names the button and the real verb (it said `(button)` and null before)
+        val call = ctx.restCalls.single()
+        assertEquals("rest-button2", call["where"])
+        assertEquals("POST", call["method"])
+        assertEquals("form-button", call["kind"])
+        // a button has no `label`, so it only reaches `fields` via its `extraSettings.text`
+        @Suppress("UNCHECKED_CAST") val fields = f["fields"] as List<Map<String, Any?>>
+        assertEquals(listOf("rest-button2"), fields.map { it["id"] })
+        assertEquals(listOf("Select all"), fields.map { it["label"] })
+    }
+
+    @Test
+    fun restButtonWithoutAnExplicitMethodIsTheGetDefault() {
+        // `extraSettings.method` is omitted whenever it is the palette default, which is most buttons.
+        val (f, _) = form("""{"id":"rb","type":"restButton","extraSettings":{"text":"Load","url":"/api/x"}}""")
+        @Suppress("UNCHECKED_CAST") val calls = f["restCalls"] as List<Map<String, Any?>>
+        assertEquals("GET", calls.single()["method"])
+    }
+
+    @Test
+    fun aSelectsLookupUrlIsADataSourceToo() {
+        // `queryUrl` was read but its sibling `lookupUrl` — the id→label resolver — was not.
+        val (f, ctx) = form(
+            """{"id":"cust","type":"select","label":"Customer",
+                 "extraSettings":{"queryUrl":"/api/customers","lookupUrl":"/api/customers/{{id}}"}}"""
+        )
+        assertEquals(
+            listOf("/api/customers", "/api/customers/{{id}}"),
+            @Suppress("UNCHECKED_CAST") (f["dataSources"] as List<Map<String, Any?>>).map { it["url"] },
+        )
+        assertEquals(setOf("form-query"), ctx.restCalls.map { it["kind"] }.toSet())
     }
 
     @Test

@@ -401,9 +401,18 @@
       "controller": "CustomerController",
       "controllerFqn": "com.example.CustomerController",
       "file": "src/main/java/com/example/CustomerController.java",
+      "handler": "canEdit",
+      "http": "GET",
+      "line": 15,
+      "path": "/api/customers/{id}/canEdit"
+    },
+    {
+      "controller": "CustomerController",
+      "controllerFqn": "com.example.CustomerController",
+      "file": "src/main/java/com/example/CustomerController.java",
       "handler": "customers",
       "http": "GET",
-      "line": 9,
+      "line": 10,
       "path": "/api/customers"
     }
   ],
@@ -431,9 +440,12 @@
     {
       "_uses": {
         "binding": [
+          "binding:{{$response.canEdit}}",
           "binding:{{$response.executionPayload.sent}}",
           "binding:{{amount}}",
-          "binding:{{customer.email}}"
+          "binding:{{customer.email}}",
+          "binding:{{customer}}",
+          "binding:{{endpoints.baseUrl}}"
         ],
         "serviceOperation": [
           "serviceOperation:customerService#findAll"
@@ -466,6 +478,13 @@
           "label": "Amount",
           "required": true,
           "type": "number",
+          "value": null
+        },
+        {
+          "id": "canEditButton",
+          "label": "Check if editable",
+          "required": false,
+          "type": "restButton",
           "value": null
         },
         {
@@ -534,6 +553,19 @@
         },
         {
           "dir": "out",
+          "element": "canEditButton",
+          "elementName": "Check if editable",
+          "elementSubType": "rest",
+          "elementType": "restButton",
+          "expression": true,
+          "kind": "responsePayloadMapping",
+          "refKey": "{{endpoints.baseUrl}}/api/customers/{{customer}}/canEdit",
+          "refKind": "rest",
+          "source": "{{$response.canEdit}}",
+          "target": "$temp.canEdit"
+        },
+        {
+          "dir": "out",
           "element": "notifyButton",
           "elementName": "Notify customer",
           "elementSubType": "action",
@@ -553,6 +585,14 @@
         {
           "label": "Approve",
           "value": "approve"
+        }
+      ],
+      "restCalls": [
+        {
+          "method": "GET",
+          "path": "data",
+          "url": "{{endpoints.baseUrl}}/api/customers/{{customer}}/canEdit",
+          "where": "canEditButton"
         }
       ],
       "subforms": []
@@ -687,6 +727,11 @@
       },
       {
         "rel": "rest-call",
+        "s": "form:orderForm",
+        "t": "endpoint:GET /api/customers/{id}/canEdit"
+      },
+      {
+        "rel": "rest-call",
         "s": "service:customerService",
         "t": "endpoint:GET /api/customers"
       },
@@ -704,6 +749,11 @@
         "rel": "serves",
         "s": "java:com.example.CustomerController",
         "t": "endpoint:GET /api/customers"
+      },
+      {
+        "rel": "serves",
+        "s": "java:com.example.CustomerController",
+        "t": "endpoint:GET /api/customers/{id}/canEdit"
       },
       {
         "rel": "serviceMapping",
@@ -756,9 +806,12 @@
         "data": {
           "_uses": {
             "binding": [
+              "binding:{{$response.canEdit}}",
               "binding:{{$response.executionPayload.sent}}",
               "binding:{{amount}}",
-              "binding:{{customer.email}}"
+              "binding:{{customer.email}}",
+              "binding:{{customer}}",
+              "binding:{{endpoints.baseUrl}}"
             ],
             "serviceOperation": [
               "serviceOperation:customerService#findAll"
@@ -791,6 +844,13 @@
               "label": "Amount",
               "required": true,
               "type": "number",
+              "value": null
+            },
+            {
+              "id": "canEditButton",
+              "label": "Check if editable",
+              "required": false,
+              "type": "restButton",
               "value": null
             },
             {
@@ -859,6 +919,19 @@
             },
             {
               "dir": "out",
+              "element": "canEditButton",
+              "elementName": "Check if editable",
+              "elementSubType": "rest",
+              "elementType": "restButton",
+              "expression": true,
+              "kind": "responsePayloadMapping",
+              "refKey": "{{endpoints.baseUrl}}/api/customers/{{customer}}/canEdit",
+              "refKind": "rest",
+              "source": "{{$response.canEdit}}",
+              "target": "$temp.canEdit"
+            },
+            {
+              "dir": "out",
               "element": "notifyButton",
               "elementName": "Notify customer",
               "elementSubType": "action",
@@ -878,6 +951,14 @@
             {
               "label": "Approve",
               "value": "approve"
+            }
+          ],
+          "restCalls": [
+            {
+              "method": "GET",
+              "path": "data",
+              "url": "{{endpoints.baseUrl}}/api/customers/{{customer}}/canEdit",
+              "where": "canEditButton"
             }
           ],
           "subforms": []
@@ -1597,21 +1678,32 @@
           "calledMethods": [],
           "endpoints": [
             {
+              "handler": "canEdit",
+              "http": "GET",
+              "line": 15,
+              "path": "/api/customers/{id}/canEdit"
+            },
+            {
               "handler": "customers",
               "http": "GET",
-              "line": 9,
+              "line": 10,
               "path": "/api/customers"
             }
           ],
           "file": "src/main/java/com/example/CustomerController.java",
           "fqn": "com.example.CustomerController",
           "interfaces": [],
-          "line": 7,
+          "line": 8,
           "methods": [
             {
-              "line": 10,
+              "line": 11,
               "name": "customers",
               "params": 0
+            },
+            {
+              "line": 16,
+              "name": "canEdit",
+              "params": 1
             }
           ],
           "package": "com.example",
@@ -1682,9 +1774,23 @@
       {
         "data": {
           "controller": "CustomerController",
+          "handler": "canEdit",
+          "http": "GET",
+          "line": 15,
+          "path": "/api/customers/{id}/canEdit"
+        },
+        "file": "src/main/java/com/example/CustomerController.java",
+        "id": "endpoint:GET /api/customers/{id}/canEdit",
+        "key": "GET /api/customers/{id}/canEdit",
+        "label": "GET /api/customers/{id}/canEdit",
+        "type": "endpoint"
+      },
+      {
+        "data": {
+          "controller": "CustomerController",
           "handler": "customers",
           "http": "GET",
-          "line": 9,
+          "line": 10,
           "path": "/api/customers"
         },
         "file": "src/main/java/com/example/CustomerController.java",
@@ -2343,7 +2449,8 @@
               "model": "form:orderForm",
               "snippets": [
                 "(form field)",
-                "{{customer.email}}"
+                "{{customer.email}}",
+                "{{customer}}"
               ]
             }
           ],
@@ -2427,6 +2534,18 @@
           ]
         },
         "file": null,
+        "id": "binding:{{$response.canEdit}}",
+        "key": "{{$response.canEdit}}",
+        "label": "{{$response.canEdit}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:orderForm"
+          ]
+        },
+        "file": null,
         "id": "binding:{{$response.executionPayload.sent}}",
         "key": "{{$response.executionPayload.sent}}",
         "label": "{{$response.executionPayload.sent}}",
@@ -2454,6 +2573,30 @@
         "id": "binding:{{customer.email}}",
         "key": "{{customer.email}}",
         "label": "{{customer.email}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:orderForm"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{customer}}",
+        "key": "{{customer}}",
+        "label": "{{customer}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:orderForm"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{endpoints.baseUrl}}",
+        "key": "{{endpoints.baseUrl}}",
+        "label": "{{endpoints.baseUrl}}",
         "type": "binding"
       },
       {
@@ -2577,9 +2720,15 @@
         "deps": [],
         "endpoints": [
           {
+            "handler": "canEdit",
+            "http": "GET",
+            "line": 15,
+            "path": "/api/customers/{id}/canEdit"
+          },
+          {
             "handler": "customers",
             "http": "GET",
-            "line": 9,
+            "line": 10,
             "path": "/api/customers"
           }
         ],
@@ -2589,12 +2738,17 @@
         "isController": true,
         "isGlue": false,
         "keyedStrings": [],
-        "line": 7,
+        "line": 8,
         "methods": [
           {
-            "line": 10,
+            "line": 11,
             "name": "customers",
             "params": 0
+          },
+          {
+            "line": 16,
+            "name": "canEdit",
+            "params": 1
           }
         ],
         "package": "com.example",
@@ -2604,7 +2758,9 @@
         ],
         "strings": [
           "/api/customers",
-          "[]"
+          "/api/customers/{id}/canEdit",
+          "[]",
+          "true"
         ],
         "topics": [],
         "types": [
@@ -2621,9 +2777,15 @@
       "deps": [],
       "endpoints": [
         {
+          "handler": "canEdit",
+          "http": "GET",
+          "line": 15,
+          "path": "/api/customers/{id}/canEdit"
+        },
+        {
           "handler": "customers",
           "http": "GET",
-          "line": 9,
+          "line": 10,
           "path": "/api/customers"
         }
       ],
@@ -2633,12 +2795,17 @@
       "isController": true,
       "isGlue": false,
       "keyedStrings": [],
-      "line": 7,
+      "line": 8,
       "methods": [
         {
-          "line": 10,
+          "line": 11,
           "name": "customers",
           "params": 0
+        },
+        {
+          "line": 16,
+          "name": "canEdit",
+          "params": 1
         }
       ],
       "package": "com.example",
@@ -2648,7 +2815,9 @@
       ],
       "strings": [
         "/api/customers",
-        "[]"
+        "/api/customers/{id}/canEdit",
+        "[]",
+        "true"
       ],
       "topics": [],
       "types": [
@@ -2720,9 +2889,12 @@
   },
   "others": [],
   "placeholders": [
+    "{{$response.canEdit}}",
     "{{$response.executionPayload.sent}}",
     "{{amount}}",
-    "{{customer.email}}"
+    "{{customer.email}}",
+    "{{customer}}",
+    "{{endpoints.baseUrl}}"
   ],
   "policies": [
     {
@@ -3159,9 +3331,24 @@
   ],
   "restCalls": [
     {
-      "kind": "form-query",
+      "kind": "form-button",
+      "looseMatches": [
+        "GET /api/customers -> CustomerController#customers (src/main/java/com/example/CustomerController.java:10)"
+      ],
       "matches": [
-        "GET /api/customers -> CustomerController#customers (src/main/java/com/example/CustomerController.java:9)"
+        "GET /api/customers/{id}/canEdit -> CustomerController#canEdit (src/main/java/com/example/CustomerController.java:15)"
+      ],
+      "method": "GET",
+      "source": "orderForm",
+      "sourceFile": "forms/order-form.form",
+      "url": "{{endpoints.baseUrl}}/api/customers/{{customer}}/canEdit",
+      "where": "canEditButton"
+    },
+    {
+      "kind": "form-query",
+      "looseMatches": [],
+      "matches": [
+        "GET /api/customers -> CustomerController#customers (src/main/java/com/example/CustomerController.java:10)"
       ],
       "method": "GET",
       "source": "orderForm",
@@ -3171,8 +3358,9 @@
     },
     {
       "kind": "service-op",
+      "looseMatches": [],
       "matches": [
-        "GET /api/customers -> CustomerController#customers (src/main/java/com/example/CustomerController.java:9)"
+        "GET /api/customers -> CustomerController#customers (src/main/java/com/example/CustomerController.java:10)"
       ],
       "method": "GET",
       "source": "customerService",
@@ -3284,12 +3472,12 @@
   "stats": {
     "archives": 0,
     "dynamicEdges": 0,
-    "edges": 38,
-    "endpoints": 1,
+    "edges": 40,
+    "endpoints": 2,
     "groups": 3,
     "java": 2,
     "models": 12,
-    "nodes": 47,
+    "nodes": 51,
     "scriptIssues": 2,
     "suspectEdges": 0
   },

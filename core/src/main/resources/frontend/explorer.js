@@ -1845,6 +1845,17 @@ function detailExtra(n){
         return '<div class="oprow">'+termHtml('kind-ds', s.kind, 'pt')+'<span class="mono" style="flex:1">'+tgt+'</span>'+op+'</div>';
       }).join('')+'</div>');
   }
+  // What this form/page calls over HTTP — a REST button's endpoint, which used to be recorded only as a
+  // graph edge and so could not be read off the model or searched for.
+  if((n.type==='form'||n.type==='page') && (d.restCalls||[]).length){
+    h+=section('restcalls','REST calls ('+d.restCalls.length+')','<div class="oplist">'+
+      d.restCalls.map(r=>{
+        const path=r.path?'<span class="muted">response</span> <span class="mono">'+esc(r.path)+'</span>':'';
+        return '<div class="oprow"><span class="pt">'+esc(r.method||'')+'</span>'+
+          '<span class="mono" style="flex:1" title="'+esc(r.url||'')+'">'+esc(r.url||'')+'</span>'+
+          '<span class="opid">'+fieldLink(r.where)+'</span>'+path+'</div>';
+      }).join('')+'</div>');
+  }
   if(n.type==='securityPolicy' && (d.permissions||[]).length){
     h+=section('permissions','Permissions ('+d.permissions.length+') — who may do what','<div class="oplist">'+
       d.permissions.map(p=>'<div class="oprow"><span style="min-width:180px">'+esc(p.label||p.key||'')+'</span>'+
@@ -2883,7 +2894,8 @@ function walkHay(v, key, owner, out){
   }
   if(Array.isArray(v)){ v.forEach(x=>walkHay(x, key, owner, out)); return; }
   if(typeof v!=='object') return;
-  const own=v.id||v.name||v.key||owner;        // the element this sub-object belongs to
+  // the element this sub-object belongs to — `where` is how a form/page REST call names its button
+  const own=v.id||v.name||v.key||v.where||owner;
   for(const k in v){ if(!HAY_SKIP.has(k)) walkHay(v[k], k, own, out); }
 }
 function searchIndex(n){
@@ -2910,7 +2922,11 @@ function searchIndex(n){
     .map(p=>(p.name||'')+' '+(p.type||'')).join(' ');
   // form/page fields, app variables, agent tools, policy permissions and dictionary types are not
   // nodes of their own — index them here so their names surface the model that declares them.
-  if(n.type==='form'||n.type==='page') s+=' '+(d.fields||[]).map(f=>(f.id||'')+' '+(f.label||'')).join(' ');
+  if(n.type==='form'||n.type==='page') s+=' '+(d.fields||[]).map(f=>(f.id||'')+' '+(f.label||'')).join(' ')+
+    // A REST button's endpoint is the thing people search a form by ("which page calls /canEdit?"), so it
+    // ranks as a member rather than sinking to free text. Templated hosts ({{endpoints.*}}) match on any
+    // path fragment because the whole URL is one searchable string.
+    ' '+(d.restCalls||[]).map(r=>(r.where||'')+' '+(r.method||'')+' '+(r.url||'')).join(' ');
   if(n.type==='app') s+=' '+(d.variables||[]).map(v=>v.key||'').join(' ');
   if(n.type==='agent') s+=' '+(d.tools||[]).map(t=>t.key||'').join(' ');
   if(n.type==='securityPolicy') s+=' '+(d.permissions||[]).map(p=>(p.key||'')+' '+(p.label||'')+' '+(p.roles||[]).join(' ')).join(' ');
@@ -2950,12 +2966,59 @@ function matchWhere(n,v){
 
 // ---------- command palette (⌘K) ----------
 const pal=document.getElementById('palette'), palq=document.getElementById('palq'), palres=document.getElementById('palresults');
+const palPanel=pal?pal.querySelector('.pal-panel'):null;
 let palList=[], palSel=-1, _palPrevFocus=null;
+// The panel is resizable from its bottom-right corner (CSS `resize:both`) and the size is remembered,
+// mirroring the diagram card (see DGCARD_STORE). A default-width palette ellipses the "why it matched"
+// hint, which for a REST call is the endpoint URL — the one thing you were searching for.
+const PAL_STORE='atlas-palette', PAL_MIN_W=320, PAL_MIN_H=180;
+function palPrefs(){ try{ return JSON.parse(localStorage.getItem(PAL_STORE)||'{}')||{}; }catch(err){ return {}; } }
+function palRemember(patch){
+  try{ localStorage.setItem(PAL_STORE, JSON.stringify(Object.assign(palPrefs(), patch))); }catch(err){}
+}
+/** Apply the remembered size, clamped to the current window (a size stored on a wider screen must not
+ *  push the panel off-view). `.sized` hands the result list the panel's height instead of the 320px cap. */
+function applyPalSize(){
+  if(!palPanel) return;
+  const p=palPrefs();
+  if(!p.w && !p.h){ palPanel.classList.remove('sized'); palPanel.style.width=''; palPanel.style.height=''; return; }
+  if(p.w) palPanel.style.width=Math.max(PAL_MIN_W, Math.min(p.w, window.innerWidth-24))+'px';
+  if(p.h){
+    palPanel.style.height=Math.max(PAL_MIN_H, Math.min(p.h, window.innerHeight-48))+'px';
+    palPanel.classList.add('sized');
+  }
+}
+function resetPalSize(){
+  try{ localStorage.removeItem(PAL_STORE); }catch(err){}
+  applyPalSize();
+}
+function wirePaletteResize(){
+  if(!palPanel) return;
+  // Double-click the corner to get the default size back, as on the sidebar's drag handle. The handle
+  // has no element of its own, so this fires on a dblclick in the bottom-right ~18px of the panel.
+  palPanel.addEventListener('dblclick', e=>{
+    const r=palPanel.getBoundingClientRect();
+    if(e.clientX>r.right-18 && e.clientY>r.bottom-18) resetPalSize();
+  });
+  if(!window.ResizeObserver) return;
+  let first=true;
+  new ResizeObserver(()=>{
+    if(first){ first=false; return; }              // the observe() call itself fires once
+    if(pal.hidden) return;                         // closing/reopening is not a user resize
+    clearTimeout(palPanel._rszT);
+    palPanel._rszT=setTimeout(()=>{
+      if(!palPanel.isConnected || pal.hidden) return;
+      palPanel.classList.add('sized');
+      palRemember({w:palPanel.offsetWidth, h:palPanel.offsetHeight});
+    }, 300);
+  }).observe(palPanel);
+}
 function openPalette(){
   if(!pal.hidden) return;
   hideDgCard();                                  // the card floats above the palette (z-index 120 > 100)
   _palPrevFocus=document.activeElement;
   pal.hidden=false; palq.value=''; palSel=-1;
+  applyPalSize();
   palRender(); palq.focus();
 }
 function closePalette(){
@@ -3008,9 +3071,12 @@ function palRender(){
       // Free-text hits (tier 3) explain themselves: "script · scriptTask1", "doc · orderProcess".
       const w=v?matchWhere(n,v):null;
       palList.push({n, el:(w&&w.el)||''});
+      const hint=(w&&w.hint)||n.key;
+      // title on both: whatever the panel width clips is still readable on hover, without resizing.
       h+='<div class="pal-item'+(i===palSel?' sel':'')+'" id="pal-'+i+'" role="option" aria-selected="'+(i===palSel)+'" data-i="'+i+'">'+
          '<span class="dot" style="background:'+nodeColor(n)+'"></span>'+
-         '<span class="nm">'+esc(n.label)+'</span><span class="hint">'+esc((w&&w.hint)||n.key)+'</span></div>';
+         '<span class="nm" title="'+esc(n.label)+'">'+esc(n.label)+'</span>'+
+         '<span class="hint" title="'+esc(hint)+'">'+esc(hint)+'</span></div>';
     });
   });
   if(!h) h='<div class="pal-empty">'+(v?'No matches':'Nothing recent yet — visit a few nodes and they will show up here')+'</div>';
@@ -3310,6 +3376,7 @@ applySidebar();
 wireSidebarResize();
 wireRailAutoCollapse();
 wireSearchTrigger();
+wirePaletteResize();
 wireLinkFilter();
 window.addEventListener('hashchange',route);
 route();

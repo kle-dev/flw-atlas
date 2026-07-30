@@ -1,5 +1,6 @@
 package com.flowable.atlas.settings
 
+import com.flowable.atlas.design.DesignAuthMode
 import com.flowable.atlas.explorer.AtlasArtifact
 import com.flowable.atlas.expr.ExprProblem
 import com.flowable.atlas.expr.ExprProblemKind
@@ -51,6 +52,7 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         var inspectBaseUrl: String
         var inspectUsername: String
         var designBaseUrl: String
+        var designAuthMode: DesignAuthMode
         var designWorkspaceKey: String
         var designAppKeys: MutableList<String>
         var designTargetFolder: String
@@ -75,6 +77,7 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         override var inspectBaseUrl: String = ""
         override var inspectUsername: String = ""
         override var designBaseUrl: String = ""
+        override var designAuthMode: DesignAuthMode = DesignAuthMode.BASIC
         override var designWorkspaceKey: String = ""
         override var designAppKeys: MutableList<String> = mutableListOf()
         override var designTargetFolder: String = DEFAULT_DESIGN_TARGET_FOLDER
@@ -95,7 +98,7 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
                 liquibaseRenameFind.isEmpty() && liquibaseRenameReplace.isEmpty() &&
                 inspectBaseUrl.isEmpty() && inspectUsername.isEmpty() &&
                 designBaseUrl.isEmpty() && designWorkspaceKey.isEmpty() && designAppKeys.isEmpty() &&
-                designAppKey.isEmpty() &&
+                designAppKey.isEmpty() && designAuthMode == DesignAuthMode.BASIC &&
                 designTargetFolder == DEFAULT_DESIGN_TARGET_FOLDER
     }
 
@@ -149,6 +152,12 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         /** Flowable Design base URL incl. context path, e.g. `http://localhost:8888/flowable-design`. */
         var designBaseUrl: String = ""
 
+        /**
+         * How the Design pull authenticates. The secret itself — password or access token — lives in the
+         * PasswordSafe, never in this XML.
+         */
+        var designAuthMode: DesignAuthMode = DesignAuthMode.BASIC
+
         /** Key of the Design workspace the pulled apps live in. */
         var designWorkspaceKey: String = ""
 
@@ -201,6 +210,8 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
             get() = state.inspectUsername; set(v) { state.inspectUsername = v }
         override var designBaseUrl: String
             get() = state.designBaseUrl; set(v) { state.designBaseUrl = v }
+        override var designAuthMode: DesignAuthMode
+            get() = state.designAuthMode; set(v) { state.designAuthMode = v }
         override var designWorkspaceKey: String
             get() = state.designWorkspaceKey; set(v) { state.designWorkspaceKey = v }
         override var designAppKeys: MutableList<String>
@@ -342,6 +353,10 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
     var designBaseUrl: String
         get() = active().designBaseUrl
         set(value) { active().designBaseUrl = value }
+
+    var designAuthMode: DesignAuthMode
+        get() = active().designAuthMode
+        set(value) { active().designAuthMode = value }
 
     var designWorkspaceKey: String
         get() = active().designWorkspaceKey

@@ -1,9 +1,11 @@
 package com.flowable.atlas.design
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Base64
 
 class DesignClientTest {
 
@@ -28,6 +30,51 @@ class DesignClientTest {
             "https://host/design-api/workspaces/ws/apps/myApp/export",
             DesignClient.exportEndpoint("https://host", "ws", "myApp"),
         )
+        assertEquals(
+            "https://host/design-api/current-user/access-tokens",
+            DesignClient.accessTokensEndpoint("https://host/design-api/"),
+        )
+        assertEquals(
+            "http://host:8888/flowable-design/#/token-mgmt",
+            DesignClient.tokenManagementUrl("http://host:8888/flowable-design/"),
+        )
+    }
+
+    @Test fun normalizesPastedAccessToken() {
+        assertEquals("eyJ.a.b", DesignClient.normalizeAccessToken("  eyJ.a.b \n"))
+        assertEquals("eyJ.a.b", DesignClient.normalizeAccessToken("Bearer eyJ.a.b"))
+        assertEquals("eyJ.a.b", DesignClient.normalizeAccessToken("bearer   eyJ.a.b"))
+        assertEquals("eyJ.a.b", DesignClient.normalizeAccessToken("\"eyJ.a.b\""))
+        assertEquals("", DesignClient.normalizeAccessToken("   "))
+    }
+
+    @Test fun unauthorizedMessageIsModeSpecific() {
+        val basic = DesignClient.unauthorizedMessage(DesignClient.Auth.Basic("u", "p"))
+        assertTrue(basic.contains("username/password"))
+        val token = DesignClient.unauthorizedMessage(DesignClient.Auth.Token("t"))
+        assertTrue(token.contains("access token"))
+        assertTrue(token.contains("expired"))
+        assertFalse(token.contains("username"))
+    }
+
+    @Test fun authorizationHeaderPerScheme() {
+        assertEquals(
+            "Basic " + Base64.getEncoder().encodeToString("u:p".toByteArray()),
+            DesignClient.authorizationHeader(DesignClient.Auth.Basic("u", "p")),
+        )
+        // A pasted "Bearer …" must not double up.
+        assertEquals("Bearer T0K", DesignClient.authorizationHeader(DesignClient.Auth.Token("Bearer T0K")))
+    }
+
+    @Test fun parsesNewToken() {
+        val token = DesignClient.parseNewToken(
+            """{"id":"1","name":"Atlas","expirationTime":"2027-01-01T00:00:00Z","value":"T0K"}""",
+        )
+        assertEquals("T0K", token?.value)
+        assertEquals("Atlas", token?.name)
+        assertEquals("2027-01-01T00:00:00Z", token?.expirationTime)
+        assertNull(DesignClient.parseNewToken("""{"id":"1","name":"Atlas"}"""))   // no value → not usable
+        assertNull(DesignClient.parseNewToken("<html>login</html>"))
     }
 
     @Test fun encodesUrlHostileKeysInPathSegments() {
@@ -81,6 +128,13 @@ class DesignClientTest {
     @Test fun exportRejectsBlankBaseUrl() {
         val out = DesignClient.exportApp(DesignClient.Connection("  ", "u", "p"), "ws", "app")
         assertTrue(out is DesignClient.Result.Failed)
+    }
+
+    /** A blank token must fail before a socket is opened — the URL here is never reachable. */
+    @Test fun listWorkspacesRejectsBlankAccessToken() {
+        val out = DesignClient.listWorkspaces(DesignClient.Connection("https://host", DesignClient.Auth.Token("  ")))
+        assertTrue(out is DesignClient.Result.Failed)
+        assertTrue((out as DesignClient.Result.Failed).message.contains("access token"))
     }
 
     @Test fun parsesContentDispositionFilename() {
