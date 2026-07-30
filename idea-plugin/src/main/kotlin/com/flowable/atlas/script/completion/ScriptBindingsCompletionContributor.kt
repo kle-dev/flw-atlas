@@ -91,8 +91,8 @@ class ScriptBindingsCompletionContributor : CompletionContributor() {
         private fun rootLookup(root: ScriptRoot): LookupElement {
             val navigable = root.members != null || root.subObjects.isNotEmpty()
             var b = LookupElementBuilder.create(root.name)
-                .withIcon(AllIcons.Nodes.Tag)
-                .withTypeText("binding", true)
+                .withIcon(if (root.bean) AllIcons.Nodes.Plugin else AllIcons.Nodes.Tag)
+                .withTypeText(if (root.bean) "Spring bean" else "binding", true)
                 .withTailText("  ${root.doc}", true)
             if (navigable) b = b.withInsertHandler(DotInsertHandler)
             return prioritized(b)

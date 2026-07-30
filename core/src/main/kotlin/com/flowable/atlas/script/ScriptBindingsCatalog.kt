@@ -26,6 +26,9 @@ data class ScriptRoot(
     val subObjects: Map<String, ScriptRoot> = emptyMap(),
     /** Legacy aliases stay valid for the checks but are hidden from completion and the chips. */
     val hidden: Boolean = false,
+    /** Resolves as a Spring bean (Work platform), not an engine binding — completion shows it as
+     *  such, and the chips leave it out to stay readable. */
+    val bean: Boolean = false,
 )
 
 /**
@@ -291,21 +294,67 @@ object ScriptBindingsCatalog {
 
     private val FLW_ROOTS = listOf(FLW, FLW_API, FLW_OUTPUT)
 
+    private fun bean(name: String, doc: String, members: Map<String, String>) =
+        ScriptRoot(name, doc, members, bean = true)
+
+    /**
+     * The Flowable **platform** services scripts reach as Spring beans: in a Work installation the
+     * `beans` map is the whole ApplicationContext, so these resolve by name in every script
+     * context (BPMN, CMMN, bots). Bean names verified against the platform autoconfigurations;
+     * surfaces generated in [ScriptPlatformApis]. Unavailable under sandbox strict-mode.
+     */
+    private val PLATFORM_BEAN_ROOTS: List<ScriptRoot> = listOf(
+        bean("dataObjectRuntimeService", "data object runtime (Work)", ScriptPlatformApis.DATA_OBJECT_RUNTIME_SERVICE),
+        bean("dataObjectRepositoryService", "data object repository (Work)", ScriptPlatformApis.DATA_OBJECT_REPOSITORY_SERVICE),
+        bean("dataObjectManagementService", "data object management (Work)", ScriptPlatformApis.DATA_OBJECT_MANAGEMENT_SERVICE),
+        bean("contentService", "content service (Work)", ScriptPlatformApis.CONTENT_SERVICE),
+        ScriptRoot("coreContentService", "alias of contentService", ScriptPlatformApis.CONTENT_SERVICE,
+            hidden = true, bean = true),
+        bean("documentRepositoryService", "document definitions (Work)", ScriptPlatformApis.DOCUMENT_REPOSITORY_SERVICE),
+        bean("renditionService", "content renditions (Work)", ScriptPlatformApis.RENDITION_SERVICE),
+        bean("metadataService", "content metadata (Work)", ScriptPlatformApis.METADATA_SERVICE),
+        bean("templateService", "template processing (Work)", ScriptPlatformApis.TEMPLATE_SERVICE),
+        bean("templateRepositoryService", "template definitions (Work)", ScriptPlatformApis.TEMPLATE_REPOSITORY_SERVICE),
+        bean("sequenceService", "sequence values (Work)", ScriptPlatformApis.SEQUENCE_SERVICE),
+        bean("platformRuntimeService", "platform runtime (Work)", ScriptPlatformApis.PLATFORM_RUNTIME_SERVICE),
+        bean("platformRepositoryService", "platform repository (Work)", ScriptPlatformApis.PLATFORM_REPOSITORY_SERVICE),
+        bean("platformHistoryService", "platform history (Work)", ScriptPlatformApis.PLATFORM_HISTORY_SERVICE),
+        bean("translationService", "translations (Work)", ScriptPlatformApis.TRANSLATION_SERVICE),
+        bean("commentService", "comments (Work)", ScriptPlatformApis.COMMENT_SERVICE),
+        bean("tenantVariableService", "tenant variables (Work)", ScriptPlatformApis.TENANT_VARIABLE_SERVICE),
+        bean("encryptionService", "value encryption (Work)", ScriptPlatformApis.ENCRYPTION_SERVICE),
+        bean("platformIdentityService", "platform identity (Work)", ScriptPlatformApis.PLATFORM_IDENTITY_SERVICE),
+        bean("userDefinitionService", "user definitions (Work)", ScriptPlatformApis.USER_DEFINITION_SERVICE),
+        bean("userAccountService", "user accounts (Work)", ScriptPlatformApis.USER_ACCOUNT_SERVICE),
+        bean("actionRuntimeService", "action runtime (Work)", ScriptPlatformApis.ACTION_RUNTIME_SERVICE),
+        bean("actionRepositoryService", "action definitions (Work)", ScriptPlatformApis.ACTION_REPOSITORY_SERVICE),
+        bean("serviceRegistryRuntimeService", "service registry invocation (Work)", ScriptPlatformApis.SERVICE_REGISTRY_RUNTIME_SERVICE),
+        bean("serviceRegistryRepositoryService", "service registry definitions (Work)", ScriptPlatformApis.SERVICE_REGISTRY_REPOSITORY_SERVICE),
+        bean("auditService", "audit instances (Work)", ScriptPlatformApis.AUDIT_SERVICE),
+        bean("notificationService", "notifications (Work)", ScriptPlatformApis.NOTIFICATION_SERVICE),
+        bean("platformFormService", "form instances (Work)", ScriptPlatformApis.PLATFORM_FORM_SERVICE),
+        bean("platformFormRepositoryService", "form definitions (Work)", ScriptPlatformApis.PLATFORM_FORM_REPOSITORY_SERVICE),
+    )
+
     private val CONTEXT_ROOTS: Map<ScriptContext, Map<String, ScriptRoot>> = mapOf(
-        ScriptContext.BPMN_SCRIPT_TASK to (listOf(EXECUTION) + FLW_ROOTS + BPMN_SERVICES),
-        ScriptContext.BPMN_EXECUTION_LISTENER to (listOf(EXECUTION) + FLW_ROOTS + BPMN_SERVICES),
+        ScriptContext.BPMN_SCRIPT_TASK to (listOf(EXECUTION) + FLW_ROOTS + BPMN_SERVICES + PLATFORM_BEAN_ROOTS),
+        ScriptContext.BPMN_EXECUTION_LISTENER to (listOf(EXECUTION) + FLW_ROOTS + BPMN_SERVICES + PLATFORM_BEAN_ROOTS),
         // the scope key is task XOR execution: a task-listener script never sees `execution`
-        ScriptContext.BPMN_TASK_LISTENER to (listOf(DELEGATE_TASK) + FLW_ROOTS + BPMN_SERVICES),
+        ScriptContext.BPMN_TASK_LISTENER to (listOf(DELEGATE_TASK) + FLW_ROOTS + BPMN_SERVICES + PLATFORM_BEAN_ROOTS),
         ScriptContext.CMMN_SCRIPT_TASK to
-            (listOf(PLAN_ITEM, CASE_INSTANCE, CMMN_TASK_LIST) + FLW_ROOTS + CMMN_SERVICES),
+            (listOf(PLAN_ITEM, CASE_INSTANCE, CMMN_TASK_LIST) + FLW_ROOTS + CMMN_SERVICES + PLATFORM_BEAN_ROOTS),
         ScriptContext.CMMN_TASK_LISTENER to
-            (listOf(DELEGATE_TASK, PLAN_ITEM, CASE_INSTANCE) + FLW_ROOTS + CMMN_SERVICES),
-        ScriptContext.ACTION_BOT to (FLW_ROOTS + FLW_ACTION_CONTEXT),
+            (listOf(DELEGATE_TASK, PLAN_ITEM, CASE_INSTANCE) + FLW_ROOTS + CMMN_SERVICES + PLATFORM_BEAN_ROOTS),
+        ScriptContext.ACTION_BOT to (FLW_ROOTS + FLW_ACTION_CONTEXT + PLATFORM_BEAN_ROOTS),
         ScriptContext.UNKNOWN to emptyList(),
     ).mapValues { (_, roots) -> roots.associateBy { it.name } }
 
     fun rootsFor(context: ScriptContext): Map<String, ScriptRoot> =
         CONTEXT_ROOTS[context] ?: emptyMap()
+
+    /** Every root name any context binds — engine objects, services and platform beans. Feeds the
+     *  variable heuristic's blocklist: none of these is ever a model variable. */
+    val ALL_ROOT_NAMES: Set<String> = CONTEXT_ROOTS.values.flatMap { it.keys }.toSet()
 
     /**
      * The *scope* roots whose absence in a context is worth a warning (`execution`, `task`, …).
