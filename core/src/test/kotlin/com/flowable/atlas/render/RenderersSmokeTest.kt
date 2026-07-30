@@ -97,5 +97,31 @@ class RenderersSmokeTest {
         assertTrue("expected the palette size store from explorer.js", html.contains("atlas-palette"))
         assertTrue("expected the palette resize affordance from explorer.css", html.contains("resize:both"))
         assertTrue("expected the palette width token from explorer.css", html.contains("--pal-w:"))
+        // Detail tabs: the strip markup and the tab model. One reused panel (role=tabpanel) plus a
+        // tablist that holds nothing but tabs; the tab set is remembered, so its store key and the
+        // project scoping are part of the contract.
+        assertTrue("expected the tab strip from explorer.html", html.contains("id=\"dtabs\""))
+        assertTrue("expected the detail wrapper from explorer.html", html.contains("class=\"detailwrap\""))
+        assertTrue("expected the single reused detail panel", html.contains("role=\"tabpanel\""))
+        assertTrue("expected the tablist from explorer.js", html.contains("role=\"tablist\""))
+        assertTrue("expected the tab renderer from explorer.js", html.contains("function renderTabs("))
+        assertTrue("expected the tab opener from explorer.js", html.contains("function openTabs("))
+        assertTrue("expected the tab closer from explorer.js", html.contains("function closeTab("))
+        assertTrue("expected the tab/hash reconciliation from explorer.js", html.contains("function syncTabsWith("))
+        assertTrue("expected the tab store key from explorer.js", html.contains("atlas-tabs"))
+        assertTrue("expected the tab store to be project-scoped", html.contains("p:DATA.project"))
+        assertTrue("expected the tab styling from explorer.css", html.contains(".dtab.on{"))
+        assertTrue("expected the scrolling tablist from explorer.css", html.contains(".dtablist{"))
+        // Multi-selection in both result lists: state, the open action, and the mark styling. Marks
+        // use aria-checked so aria-selected can keep meaning "this is the node on screen".
+        assertTrue("expected the list multi-select state from explorer.js", html.contains("let listMarks"))
+        assertTrue("expected the palette multi-select state from explorer.js", html.contains("let palMarks"))
+        assertTrue("expected the list open-marked action from explorer.js", html.contains("function openMarkedList("))
+        assertTrue("expected the palette open-marked action from explorer.js", html.contains("function openMarkedPal("))
+        assertTrue("expected the mark repaint without scroll from explorer.js", html.contains("function syncListMarks("))
+        assertTrue("expected marks to be exposed as aria-checked", html.contains("aria-checked"))
+        assertTrue("expected the list mark styling from explorer.css", html.contains(".item.mark{"))
+        assertTrue("expected the palette mark styling from explorer.css", html.contains(".pal-item.mark{"))
+        assertTrue("expected the palette multi-select footer from explorer.html", html.contains("id=\"palfoot\""))
     }
 }
