@@ -51,12 +51,28 @@ object ModelJsonReader {
     }
 
     /**
-     * A real form field carries `id` + `type` + `label` (the same predicate as the original
-     * `flowable_atlas` `parse_form`) — plain containers have no label, and their ids must not leak
-     * into the variables vocabulary. Shared so `:core`'s rich form parser and the index agree.
+     * A **variable-binding** form field carries `id` + `type` + `label` (the same predicate as the
+     * original `flowable_atlas` `parse_form`) — plain containers have no label, and their ids must not
+     * leak into the variables vocabulary.
+     *
+     * Deliberately narrower than [isFormComponent]: this one gates the completion vocabulary, where a
+     * button id like `rest-button2` would be noise.
      */
     fun isFormField(node: Map<*, *>): Boolean =
         node["id"] is String && node.containsKey("type") && node.containsKey("label")
+
+    /**
+     * A form/page **component** worth listing and searching: `id` + `type` and something to call it by.
+     *
+     * Buttons are the reason this is wider than [isFormField]. Every button flavour in the Design
+     * palettes (`base-rest-button`, `base-script-button`, `work-action`, `work-invoke-service`, …) keeps
+     * its caption in `extraSettings.text` and has **no** `label` at all, so the `label`-only predicate
+     * dropped them silently — id, caption and, for a REST button, the endpoint URL never reached the
+     * model data and were therefore unfindable. Containers still have neither, so they stay out.
+     */
+    fun isFormComponent(node: Map<*, *>): Boolean =
+        node["id"] is String && node.containsKey("type") &&
+            (node.containsKey("label") || (node["extraSettings"] as? Map<*, *>)?.get("text") != null)
 
     /** Form field ids + outcomes of a `.form` model (used to build member vocabularies). */
     fun readForm(bytes: ByteArray): FormInfo {

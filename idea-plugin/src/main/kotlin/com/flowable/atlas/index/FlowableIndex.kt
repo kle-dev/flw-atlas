@@ -29,8 +29,10 @@ class FlowableIndex(
     val userTaskIds: Set<String> = emptySet(),
     /** Ids of every flow node — candidates for `activityId(...)`. */
     val activityIds: Set<String> = emptySet(),
-    /** Outbound REST calls (`requestUrl` + `requestMethod`) of HTTP service tasks — the endpoints models
-     *  call (see [com.flowable.atlas.usage.FlowableEndpointUsageLineMarkerProvider]). */
+    /** Outbound REST calls (URL + HTTP method) of every URL-carrying model field — HTTP service tasks,
+     *  form/page REST buttons, `.service` operations, REST data sources; see
+     *  [RestCallScanner.URL_FIELDS]. These are the endpoints models call (consumed by
+     *  [com.flowable.atlas.usage.FlowableEndpointUsageLineMarkerProvider]). */
     val restCalls: Set<RestCallScanner.RestRef> = emptySet(),
     /** Wall-clock time this snapshot was built (epoch millis); 0 when not set by the scanner. */
     val builtAtMillis: Long = 0L,

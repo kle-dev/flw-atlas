@@ -3,32 +3,59 @@ package com.flowable.atlas.parsing
 import kotlin.math.abs
 
 /**
- * Locates the outbound REST calls a model file makes — the `requestUrl` value of an HTTP service task
- * (`flowable:type="http"`), together with its nearby `requestMethod` and the exact offset range of the
- * URL value in the text. Companion to [ModelUsageLocator] (which locates Java-symbol references): this
- * one locates the endpoint URLs so a Spring controller's `@GetMapping` can find the models that call it.
+ * Locates the outbound REST calls a model file makes, together with the exact offset range of each URL
+ * value in the text. Companion to [ModelUsageLocator] (which locates Java-symbol references): this one
+ * locates the endpoint URLs so a Spring controller's `@GetMapping` can find the models that call it.
+ *
+ * Four kinds of model carry an outbound URL, and all four must be found — scanning only the BPMN/CMMN
+ * HTTP task's `requestUrl` (as this did originally) made the IDE disagree with the generated explorer,
+ * which resolves all four: a form/page REST button and a `.service` operation were called out in the
+ * report but had no gutter icon and no Find Usages hit.
  *
  * Deliberately loose, pure text scanning (no XML/JSON parse, no I/O, no IntelliJ) — mirroring
  * [ModelRefScanner] — so it runs unchanged over a deployment `.bpmn`, a `.bar` archive entry, or a
  * flattened JSON export. The extracted URL is matched against code endpoints by [JavaParser.matchRest],
- * which already tolerates EL placeholders (`${...}`), scheme/host and query strings.
+ * which already tolerates placeholders (`${…}`, `{{…}}`, `{…}`), scheme/host and query strings.
  */
 object RestCallScanner {
 
-    /** One outbound REST call: the raw `requestUrl` value, its end-inclusive offset [range] in the text,
-     *  and the task's `requestMethod` (upper-case, or null when none is declared near the URL). */
-    data class RestCall(val url: String, val range: IntRange, val method: String? = null)
+    /** One outbound REST call: the raw URL value, its end-inclusive offset [range] in the text, the
+     *  declared HTTP method (upper-case, or null when none is declared near the URL), and the model
+     *  [field] the URL was read from (`requestUrl`, `url`, …). */
+    data class RestCall(val url: String, val range: IntRange, val method: String? = null, val field: String = "requestUrl")
 
     /** A model's outbound REST call reduced to what matching needs (no offset): URL + HTTP method. */
     data class RestRef(val url: String, val method: String?)
 
+    /**
+     * The model fields that hold an outbound URL, most specific first.
+     *
+     * - `requestUrl` — BPMN/CMMN HTTP service task (`flowable:type="http"`), a `flowable:field`.
+     * - `url` — a form/page REST button's `extraSettings.url`, and a `.service` operation's `config.url`.
+     * - `queryUrl` / `lookupUrl` — a select's or data table's REST data source.
+     *
+     * `url` is a common JSON key, so this does pull in unrelated values (icon URLs, link targets). That
+     * costs index size only: [com.flowable.atlas.usage.EndpointModelScan] keeps a call solely when
+     * [JavaParser.matchRest] reports a *clean* segment-suffix match against a real controller path, so a
+     * stray URL cannot produce a wrong navigation target.
+     */
+    val URL_FIELDS = listOf("requestUrl", "url", "queryUrl", "lookupUrl")
+
+    /** The fields that hold the HTTP verb, paired with a URL by proximity. */
+    private val METHOD_FIELDS = listOf("requestMethod", "method")
+
     /** Every outbound REST call in [text], each with the offset range of its (trimmed) URL value and
-     *  the nearest declared `requestMethod`. */
+     *  the nearest declared method. */
     fun scan(text: String): List<RestCall> {
-        val methods = fieldValues(text, "requestMethod")
-        return fieldValues(text, "requestUrl").map { (url, range) ->
-            RestCall(url, range, nearestMethod(methods, range.first))
+        val methods = METHOD_FIELDS.flatMap { fieldValues(text, it) }.sortedBy { it.second.first }
+        return URL_FIELDS.flatMap { field ->
+            fieldValues(text, field).map { (url, range) -> RestCall(url, range, nearestMethod(methods, range.first, field), field) }
         }
+            // The field names cannot overlap (the regexes anchor on the opening quote, so `"url"` never
+            // matches inside `"requestUrl"`), but one offset yielding one call is the invariant callers
+            // rely on — `usageRanges` would otherwise report a duplicate highlight.
+            .distinctBy { it.range.first }
+            .sortedBy { it.range.first }
     }
 
     /** The distinct URL+method refs in [text] (offsets discarded) — for cheap index membership and
@@ -36,11 +63,20 @@ object RestCallScanner {
     fun refs(text: String): Set<RestRef> =
         scan(text).mapTo(LinkedHashSet()) { RestRef(it.url, it.method) }
 
-    /** The `requestMethod` value nearest the URL at [urlStart] (within [METHOD_WINDOW]), or null — a
-     *  task keeps its url/method fields adjacent, so nearest-by-offset pairs them without a real parse. */
-    private fun nearestMethod(methods: List<Pair<String, IntRange>>, urlStart: Int): String? {
+    /**
+     * The method value nearest the URL at [urlStart], or null.
+     *
+     * An HTTP task keeps its `requestUrl`/`requestMethod` fields adjacent but with a whole
+     * `<extensionElements>` block's worth of text between them, hence the generous [METHOD_WINDOW].
+     * The other URL fields sit in a compact `extraSettings` / `config` object next to their `method`, so
+     * they use [ES_METHOD_WINDOW]: with several buttons per form, a wide window would attach a
+     * *neighbour's* verb and `EndpointModelScan` would then reject an otherwise valid match. Returning
+     * null is the safe direction — an unknown verb matches any endpoint verb.
+     */
+    private fun nearestMethod(methods: List<Pair<String, IntRange>>, urlStart: Int, field: String): String? {
+        val window = if (field == "requestUrl") METHOD_WINDOW else ES_METHOD_WINDOW
         val nearest = methods.minByOrNull { abs(it.second.first - urlStart) } ?: return null
-        return if (abs(nearest.second.first - urlStart) <= METHOD_WINDOW) nearest.first.uppercase() else null
+        return if (abs(nearest.second.first - urlStart) <= window) nearest.first.uppercase() else null
     }
 
     /** All non-empty values of the Flowable field [field], each with the offset range of the value. */
@@ -57,11 +93,14 @@ object RestCallScanner {
         return byStart.values.sortedBy { it.second.first }
     }
 
-    /** The four value-carrying shapes a Flowable field [field] takes across BPMN XML and JSON exports.
-     *  The JSON field object is matched name-first and value-first so key ordering does not matter. */
+    /** The value-carrying shapes a Flowable field [field] takes across BPMN XML and JSON exports.
+     *  Both the XML attribute form and the JSON field object are matched name-first and value-first so
+     *  key ordering does not matter. */
     private fun fieldRegexes(field: String): List<Regex> = listOf(
         // <flowable:field name="X" stringValue|expression="…"/>
         Regex("""name\s*=\s*"$field"\s+(?:stringValue|expression)\s*=\s*"([^"]*)""""),
+        // <flowable:field stringValue|expression="…" name="X"/>
+        Regex("""(?:stringValue|expression)\s*=\s*"([^"]*)"\s+name\s*=\s*"$field""""),
         // <flowable:field name="X"><flowable:string|expression>[<![CDATA[]]>]…</…>
         Regex(
             """name\s*=\s*"$field"\s*>\s*<[A-Za-z0-9_:.]*(?:string|expression)\b[^>]*>\s*""" +
@@ -77,4 +116,5 @@ object RestCallScanner {
     )
 
     private const val METHOD_WINDOW = 1000
+    private const val ES_METHOD_WINDOW = 120
 }

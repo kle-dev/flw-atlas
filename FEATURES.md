@@ -81,7 +81,17 @@ Everything is resolved against the Flowable models that actually live in your re
   list of blessed fields: script bodies, element documentation, flow conditions, field injections,
   listener classes, DMN cells. Each hit says where it came from (`script · stampTask`,
   `doc · approveTask`, `DMN annotation · r1`), name matches always rank above free-text ones, and
-  picking a hit opens that element's row in the detail panel.
+  picking a hit opens that element's row in the detail panel. That includes the **endpoint a REST
+  button calls** — search any fragment of the path and the page/form that calls it comes up, even
+  though the URL is written as `{{endpoints.baseUrl}}/api/…/{{someVar}}`. The palette itself is
+  **resizable from its bottom-right corner** (the size is remembered, double-click resets it), because
+  a templated URL is longer than any fixed width can show.
+- **REST endpoints, both directions** — a form/page REST button, a `.service` operation, a REST data
+  source and a BPMN HTTP task are all treated as outbound calls: each model lists the endpoints it
+  calls (verb, URL, which button), and *Find Usages* / the gutter icon on a Spring
+  `@GetMapping("/canEdit/{caseId}")` handler lists the models that call it — matching through
+  `{{modelVar}}` ↔ `{pathVariable}` and a variable base URL. A path match that only shares a segment
+  is reported as `≈ possibly`, never as *served by*.
 - **Collapsible detail sections** — every section on a node's page folds away and starts collapsed
   (except the diagram), so a process with 35 parameters is still skimmable; what you open stays open as
   you walk the graph, there's an *expand all* control, and long parameter lists get their own text filter
@@ -218,6 +228,12 @@ Everything is resolved against the Flowable models that actually live in your re
 
 - **Pull from Design** — downloads the configured apps' exports from a Flowable Design server into the
   project folder and rebuilds the model index.
+- **Access-token or password auth** — the connection authenticates with a Design username/password *or*
+  a personal access token (`Authorization: Bearer …`), the scheme Flowable's own CLI uses and the only
+  one that works when Design sits behind SSO. *Create Token…* mints one straight from the settings page
+  (name + validity), so no password has to stay in the keychain, and *Manage in Design…* opens Design's
+  own token page. Both secrets live in the IDE PasswordSafe, never in a file — switching modes keeps
+  each of them.
 - **Post-pull drift warning** — after a pull, flags model keys that were present before but are now
   gone, so code (or models) still referencing them can be fixed before they break.
 

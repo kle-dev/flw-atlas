@@ -294,9 +294,15 @@ object ReferenceResolver {
         for (rc in ctx.restCalls) {
             val matchEps = JavaParser.matchRest(rc["url"] as? String, codeEndpoints)
             rc["_matchEps"] = matchEps
-            rc["matches"] = matchEps.map { m ->
+            fun describe(m: Map<String, Any?>) =
                 "${m["http"]} ${m["path"]} -> ${m["controller"]}#${m["handler"]} (${m["file"]}:${m["line"]})"
-            }
+            // Clean (segment-suffix) and loose (shared-last-literal-segment) hits are kept apart: a loose
+            // hit is a guess, and reporting it as "served by" states something untrue — e.g. a call to
+            // `…/customers/{{id}}/canEdit` loosely matches `GET /api/customers` on the shared `customers`
+            // segment. [JavaParser.matchRest] annotates them; only the graph honoured that until now.
+            val (loose, clean) = matchEps.partition { it["loose"] == true }
+            rc["matches"] = clean.map(::describe)
+            rc["looseMatches"] = loose.map(::describe)
         }
 
         // ---- Variables / beans / expressions (+ bean.method() map for the graph) ----

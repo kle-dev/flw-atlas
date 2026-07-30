@@ -1,12 +1,15 @@
 package com.flowable.atlas.settings
 
+import com.flowable.atlas.design.DesignAuthMode
 import com.flowable.atlas.design.DesignClient
+import com.flowable.atlas.design.DesignCreateTokenDialog
 import com.flowable.atlas.design.DesignCredentials
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelPaths
 import com.flowable.atlas.project.AtlasProjectRootService
 import com.intellij.icons.AllIcons
+import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
@@ -19,6 +22,7 @@ import com.intellij.openapi.vfs.JarFileSystem
 import com.intellij.ui.CheckBoxList
 import com.intellij.ui.JBColor
 import com.intellij.ui.SimpleListCellRenderer
+import com.intellij.ui.components.ActionLink
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPasswordField
 import com.intellij.ui.components.JBScrollPane
@@ -36,13 +40,20 @@ import javax.swing.JPanel
 
 /**
  * The Flowable Design connection editor, embedded in Settings → Tools → Flowable Atlas →
- * Connections (formerly the "Configure Design Connection" dialog): server + basic-auth credentials,
+ * Connections (formerly the "Configure Design Connection" dialog): server, credentials,
  * workspace/app picked from live server lists, and the project-relative target folder for the
  * pulled ZIP. The saved workspace/app show immediately (no network needed to hit Apply) and the
  * lists refresh silently once the credentials are restored; "Refresh workspaces" reloads explicitly
- * and doubles as the connection test. Server/workspace/app/folder persist in the VCS-shared project
- * settings ([FlowableAtlasProjectSettings]); username/password go to the PasswordSafe
- * ([DesignCredentials]). Network and keychain access stay off the EDT.
+ * and doubles as the connection test — for either auth mode.
+ *
+ * Authentication is a [DesignAuthMode] picked from a combo: username/password, or a Design personal
+ * access token that can be minted right here ([DesignCreateTokenDialog]) or managed in Design. Only the
+ * selected mode's row is visible, but both keep their values, so switching modes back and forth loses
+ * neither secret — matching the two separate keychain entries in [DesignCredentials].
+ *
+ * Server/mode/workspace/app/folder persist in the VCS-shared project settings
+ * ([FlowableAtlasProjectSettings]); password and token go to the PasswordSafe ([DesignCredentials]).
+ * Network and keychain access stay off the EDT.
  */
 class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable {
 
@@ -53,6 +64,17 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
     }
     private val usernameField = JBTextField(12)
     private val passwordField = JBPasswordField().apply { columns = 12 }
+    private val authModeCombo = JComboBox(DesignAuthMode.values()).apply {
+        renderer = SimpleListCellRenderer.create("") { it.label }
+    }
+    private val tokenField = JBPasswordField().apply { columns = 32 }
+    private val manageTokensLink = ActionLink("Manage in Design…") { openTokenManagement() }
+    private val createTokenButton = JButton("Create Token…")
+
+    /** Both rows stay in the layout; only the selected mode's is visible, so a switch keeps both values. */
+    private val basicRow = row(JBLabel("Username:"), usernameField, JBLabel("  Password:"), passwordField)
+    private val tokenRow = row(JBLabel("Access token:"), tokenField, manageTokensLink, createTokenButton)
+
     private val refreshButton = JButton("Refresh Workspaces", AllIcons.Actions.Refresh)
     private val workspaceCombo = JComboBox<DesignClient.Workspace>().apply {
         renderer = SimpleListCellRenderer.create("") { ws ->
@@ -76,6 +98,9 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
     @Volatile
     private var loadedPassword: String = ""
 
+    @Volatile
+    private var loadedToken: String = ""
+
     private var disposed = false
 
     init {
@@ -87,11 +112,21 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
                 .withDescription("The pulled app ZIP is written into this folder inside the project"),
         )
         refreshButton.addActionListener { loadWorkspaces() }
+        createTokenButton.addActionListener { createToken() }
         workspaceCombo.addActionListener {
             if (!populating) selectedWorkspace()?.let { loadApps(it.key) }
         }
+        // Switching mode must not fire a refresh: a half-pasted token would only produce 401 noise.
+        authModeCombo.addActionListener {
+            if (!populating) {
+                updateAuthRows()
+                status.text = ""
+            }
+        }
         add(row(JBLabel("Server URL:"), baseUrlField))
-        add(row(JBLabel("Username:"), usernameField, JBLabel("  Password:"), passwordField))
+        add(row(JBLabel("Authentication:"), authModeCombo))
+        add(basicRow)
+        add(tokenRow)
         add(row(refreshButton))
         add(row(JBLabel("Workspace:"), workspaceCombo))
         add(row(JBLabel("Apps:"), JBScrollPane(appList).apply { preferredSize = Dimension(320, 120) }))
@@ -108,16 +143,29 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
         baseUrlField.text = settings.designBaseUrl
         targetFolderField.text =
             settings.designTargetFolder.ifBlank { FlowableAtlasProjectSettings.DEFAULT_DESIGN_TARGET_FOLDER }
+        populating = true
+        try {
+            authModeCombo.selectedItem = settings.designAuthMode
+        } finally {
+            populating = false
+        }
+        updateAuthRows()
         seedFromSettings()
         prefillCredentials()
         suggestTargetFolder()
         status.text = ""
     }
 
+    /**
+     * Both secrets are compared in **both** modes — against the cached values, so this never touches the
+     * keychain on the EDT — so that editing a password and then switching mode still reports modified.
+     */
     fun isModified(): Boolean =
         DesignClient.normalizeBaseUrl(baseUrlField.text) != settings.designBaseUrl ||
+            selectedAuthMode() != settings.designAuthMode ||
             usernameField.text.trim() != loadedUsername ||
             String(passwordField.password) != loadedPassword ||
+            String(tokenField.password) != loadedToken ||
             (selectedWorkspace()?.key ?: "") != settings.designWorkspaceKey ||
             checkedAppKeys().toSet() != settings.designAppKeys.toSet() ||
             targetFolderField.text.trim() != settings.designTargetFolder
@@ -135,17 +183,23 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
         val baseUrl = DesignClient.normalizeBaseUrl(baseUrlField.text)
         val username = usernameField.text.trim()
         val password = String(passwordField.password)
+        val token = DesignClient.normalizeAccessToken(String(tokenField.password))
         settings.designBaseUrl = baseUrl
+        settings.designAuthMode = selectedAuthMode()
         settings.designWorkspaceKey = selectedWorkspace()?.key.orEmpty()
         settings.designAppKeys = checkedAppKeys().toMutableList()
         settings.designTargetFolder = folder.joinToString("/")
             .ifBlank { FlowableAtlasProjectSettings.DEFAULT_DESIGN_TARGET_FOLDER }
+        tokenField.text = token   // reflect the normalization back, so isModified() settles
         loadedUsername = username
         loadedPassword = password
-        if (baseUrl.isNotBlank() && username.isNotBlank()) {
+        loadedToken = token
+        if (baseUrl.isNotBlank()) {
             // PasswordSafe can block on the OS keychain — save off the EDT (same as the old dialog).
+            // Never clear the other mode's secret: switching back has to keep working.
             ApplicationManager.getApplication().executeOnPooledThread {
-                runCatching { DesignCredentials.save(baseUrl, username, password) }
+                if (username.isNotBlank()) runCatching { DesignCredentials.save(baseUrl, username, password) }
+                if (token.isNotBlank()) runCatching { DesignCredentials.saveToken(baseUrl, token) }
             }
         }
         // Let status surfaces (the Atlas Hub) re-read the just-saved connection immediately, instead
@@ -175,23 +229,98 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
         populateApps(keys.map { DesignClient.App(it, it, null, null) }, keys.toSet())
     }
 
-    /** PasswordSafe access can block on the OS keychain, so prefill runs on a pooled thread. */
+    /**
+     * PasswordSafe access can block on the OS keychain, so prefill runs on a pooled thread. Both modes'
+     * secrets are loaded in the same trip and applied in one `invokeLater`, so switching mode afterwards
+     * needs no further keychain access.
+     */
     private fun prefillCredentials() {
         loadedUsername = ""
         loadedPassword = ""
+        loadedToken = ""
         usernameField.text = ""
         passwordField.text = ""
+        tokenField.text = ""
         val baseUrl = settings.designBaseUrl
         if (baseUrl.isBlank()) return
         ApplicationManager.getApplication().executeOnPooledThread {
-            val credentials = runCatching { DesignCredentials.load(baseUrl) }.getOrNull() ?: return@executeOnPooledThread
+            val credentials = runCatching { DesignCredentials.load(baseUrl) }.getOrNull()
+            val token = runCatching { DesignCredentials.loadToken(baseUrl) }.getOrNull()
+            if (credentials == null && token == null) return@executeOnPooledThread
             ApplicationManager.getApplication().invokeLater({
                 if (disposed) return@invokeLater
-                loadedUsername = credentials.userName.orEmpty()
-                loadedPassword = credentials.getPasswordAsString().orEmpty()
+                loadedUsername = credentials?.userName.orEmpty()
+                loadedPassword = credentials?.getPasswordAsString().orEmpty()
+                loadedToken = token.orEmpty()
                 if (usernameField.text.isBlank()) usernameField.text = loadedUsername
                 if (passwordField.password.isEmpty()) passwordField.text = loadedPassword
+                if (tokenField.password.isEmpty()) tokenField.text = loadedToken
                 loadWorkspaces(quiet = true)
+            }, ModalityState.any())
+        }
+    }
+
+    private fun selectedAuthMode(): DesignAuthMode =
+        authModeCombo.selectedItem as? DesignAuthMode ?: DesignAuthMode.BASIC
+
+    /** Shows only the selected mode's credential row; both keep their values, so switching is lossless. */
+    private fun updateAuthRows() {
+        val token = selectedAuthMode() == DesignAuthMode.ACCESS_TOKEN
+        basicRow.isVisible = !token
+        tokenRow.isVisible = token
+        revalidate()
+        repaint()
+    }
+
+    private fun openTokenManagement() {
+        val baseUrl = DesignClient.normalizeBaseUrl(baseUrlField.text)
+        if (baseUrl.isBlank()) {
+            showError("Enter the Design server URL first")
+            return
+        }
+        BrowserUtil.browse(DesignClient.tokenManagementUrl(baseUrl))
+    }
+
+    /**
+     * Mints a personal access token and drops it into the token field — the dialog only collects input,
+     * the request itself runs off the EDT. The value is not stored until Apply, which the status says.
+     */
+    private fun createToken() {
+        val baseUrl = DesignClient.normalizeBaseUrl(baseUrlField.text)
+        if (baseUrl.isBlank()) {
+            showError("Enter the Design server URL first")
+            return
+        }
+        val dialog = DesignCreateTokenDialog(project, baseUrl)
+        if (!dialog.showAndGet()) return
+        val username = dialog.username
+        val password = dialog.password
+        val name = dialog.tokenName
+        val validFor = dialog.validFor
+        createTokenButton.isEnabled = false
+        status.foreground = JBColor.foreground()
+        status.text = "Creating access token…"
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val result = DesignClient.createAccessToken(baseUrl, username, password, name, validFor)
+            ApplicationManager.getApplication().invokeLater({
+                if (disposed) return@invokeLater
+                createTokenButton.isEnabled = true
+                when (result) {
+                    is DesignClient.Result.Success -> {
+                        tokenField.text = result.value.value
+                        populating = true
+                        try {
+                            authModeCombo.selectedItem = DesignAuthMode.ACCESS_TOKEN
+                        } finally {
+                            populating = false
+                        }
+                        updateAuthRows()
+                        val expires = result.value.expirationTime?.let { ", expires $it" } ?: ""
+                        status.foreground = JBColor.foreground()
+                        status.text = "Access token created$expires — click Apply to store it"
+                    }
+                    is DesignClient.Result.Failed -> showError(result.message)
+                }
             }, ModalityState.any())
         }
     }
@@ -232,11 +361,28 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
 
     private fun currentConnection(quiet: Boolean = false): DesignClient.Connection? {
         val baseUrl = DesignClient.normalizeBaseUrl(baseUrlField.text)
-        if (baseUrl.isBlank() || usernameField.text.isBlank()) {
-            if (!quiet) showError("Enter server URL and username first")
+        if (baseUrl.isBlank()) {
+            if (!quiet) showError("Enter the Design server URL first")
             return null
         }
-        return DesignClient.Connection(baseUrl, usernameField.text.trim(), String(passwordField.password))
+        val auth = when (selectedAuthMode()) {
+            DesignAuthMode.BASIC -> {
+                if (usernameField.text.isBlank()) {
+                    if (!quiet) showError("Enter server URL and username first")
+                    return null
+                }
+                DesignClient.Auth.Basic(usernameField.text.trim(), String(passwordField.password))
+            }
+            DesignAuthMode.ACCESS_TOKEN -> {
+                val token = DesignClient.normalizeAccessToken(String(tokenField.password))
+                if (token.isBlank()) {
+                    if (!quiet) showError("Paste a Flowable Design access token first")
+                    return null
+                }
+                DesignClient.Auth.Token(token)
+            }
+        }
+        return DesignClient.Connection(baseUrl, auth)
     }
 
     private fun loadWorkspaces(quiet: Boolean = false) {

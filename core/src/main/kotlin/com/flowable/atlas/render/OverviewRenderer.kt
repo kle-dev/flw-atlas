@@ -361,6 +361,9 @@ object OverviewRenderer {
                 L.add("- `${pyStr(rc["method"])}` ${pyStr(rc["url"])}  _(from ${pyStr(rc["kind"])} `$src`)_")
                 val matches = asList(rc["matches"])
                 for (m in matches) L.add("    - ✅ served by ${pyStr(m)}")
+                // `≈` for a loose path match, the same "uncertain" marker the explorer uses: it shares a
+                // path segment with the call but is not a confident hit, so it must not read as "served by".
+                for (m in asList(rc["looseMatches"])) L.add("    - ≈ possibly ${pyStr(m)}")
                 if (matches.isEmpty())
                     L.add("    - ⚠️ no matching controller in project (external or unimplemented)")
             }

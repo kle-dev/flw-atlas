@@ -33,6 +33,20 @@
     ],
     [
       {
+        "id": "canEditButton",
+        "type": "restButton",
+        "extraSettings": {
+          "text": "Check if editable",
+          "url": "{{endpoints.baseUrl}}/api/customers/{{customer}}/canEdit",
+          "path": "data",
+          "responsePayloadMapping": [
+            {"name": "$temp.canEdit", "expression": "{{$response.canEdit}}"}
+          ]
+        }
+      }
+    ],
+    [
+      {
         "id": "notifyButton",
         "type": "workAction",
         "label": "Notify customer",
