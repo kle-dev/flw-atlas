@@ -105,8 +105,11 @@ object OverviewRenderer {
                     val st = asMap(stAny)
                     val fmt = if (truthy(st["format"])) " (${pyStr(st["format"])})" else ""
                     val rv = if (truthy(st["resultVariable"])) " → var `${pyStr(st["resultVariable"])}`" else ""
+                    val probs = asList(st["problems"])
+                    val warn = if (probs.isEmpty()) ""
+                        else " — ⚠ ${probs.size} syntax finding${if (probs.size > 1) "s" else ""}"
                     L.add("- 🧾 ${DesignTerms.label("el", "scriptTask")} `${pyStr(st["id"])}` " +
-                        "${orE(st["name"])}$fmt$rv")
+                        "${orE(st["name"])}$fmt$rv$warn")
                 }
                 for (rtAny in asList(p["ruleTasks"])) {
                     val rt = asMap(rtAny)

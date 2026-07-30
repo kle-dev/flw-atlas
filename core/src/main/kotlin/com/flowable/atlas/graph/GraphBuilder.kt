@@ -794,7 +794,28 @@ object GraphBuilder {
             "edges" to uniq.size,
             "suspectEdges" to uniq.count { it["suspect"] == true },
             "dynamicEdges" to uniq.count { it["dynamic"] == true },
+            "scriptIssues" to countScriptIssues(result),
         )
+    }
+
+    /**
+     * Script syntax findings across the parsed model buckets — the `problems` lists the parsers
+     * attach to script tasks, plan items and listeners, plus action `scriptProblems`. Counted on
+     * the post-resolution buckets so a model seen both expanded and inside an archive counts once.
+     */
+    private fun countScriptIssues(result: Map<String, Any?>): Int {
+        var n = 0
+        fun walk(v: Any?) {
+            when (v) {
+                is Map<*, *> -> for ((k, x) in v) {
+                    if ((k == "problems" || k == "scriptProblems") && x is List<*>) n += x.size
+                    else walk(x)
+                }
+                is List<*> -> v.forEach { walk(it) }
+            }
+        }
+        for (b in listOf("processes", "cases", "actions")) walk(result[b])
+        return n
     }
 
     // ---- helpers ----

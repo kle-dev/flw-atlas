@@ -45,6 +45,7 @@ Events: orderShipped
 
 ## External surface
 - Review (unresolved in project — likely missing/external): bean:notifierBean, process:fulfilmentProcess
+- Script syntax findings: 2 — see the explorer's Checks tab
 
 ---
 _For details: `--json` gives the full traversable graph; `--html` opens the interactive explorer; the Markdown report (default) has every model, relationship and the access map._
