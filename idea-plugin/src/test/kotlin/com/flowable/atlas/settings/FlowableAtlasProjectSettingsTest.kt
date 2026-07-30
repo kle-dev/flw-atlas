@@ -1,5 +1,6 @@
 package com.flowable.atlas.settings
 
+import com.flowable.atlas.design.DesignAuthMode
 import com.flowable.atlas.expr.ExprProblem
 import com.flowable.atlas.expr.ExprProblemKind
 import com.flowable.atlas.expr.ExprSeverity
@@ -83,6 +84,30 @@ class FlowableAtlasProjectSettingsTest {
         assertEquals(listOf("root-app"), s.scope("").designAppKeys)
         assertEquals(listOf("a-app"), s.scope("svc-a").designAppKeys)
         assertEquals(listOf("b-app"), s.scope("svc-b").designAppKeys)
+    }
+
+    @Test
+    fun `designAuthMode defaults to BASIC and is scoped per sub-project`() {
+        val s = FlowableAtlasProjectSettings(null)
+        assertEquals(DesignAuthMode.BASIC, s.designAuthMode)
+        s.scope("svc-a").designAuthMode = DesignAuthMode.ACCESS_TOKEN
+        assertEquals(DesignAuthMode.BASIC, s.scope("").designAuthMode)
+        assertEquals(DesignAuthMode.ACCESS_TOKEN, s.scope("svc-a").designAuthMode)
+    }
+
+    @Test
+    fun `a file written before token auth keeps BASIC`() {
+        // A pre-0.10.15 State() carries no designAuthMode element at all.
+        val s = settings()
+        assertEquals(DesignAuthMode.BASIC, s.designAuthMode)
+    }
+
+    @Test
+    fun `getState keeps a sub-project whose only change is the auth mode`() {
+        val s = FlowableAtlasProjectSettings(null)
+        s.scope("tok").designAuthMode = DesignAuthMode.ACCESS_TOKEN
+        s.scope("untouched")                         // left at defaults → pruned
+        assertEquals(listOf("tok"), s.state.subProjects.map { it.path })
     }
 
     @Test

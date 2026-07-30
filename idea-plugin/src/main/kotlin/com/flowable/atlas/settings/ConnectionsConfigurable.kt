@@ -32,9 +32,11 @@ class ConnectionsConfigurable(private val project: Project) : BoundSearchableCon
             group("Flowable Design") {
                 row {
                     comment(
-                        "Used by \"Pull from Flowable Design\". \"Refresh Workspaces\" loads the live " +
-                            "workspace/app lists and doubles as the connection test. Credentials are " +
-                            "stored in the IDE PasswordSafe, never in a file.",
+                        "Used by \"Pull from Flowable Design\". Authenticate with a Design username/password " +
+                            "or a personal access token — \"Create Token…\" mints one, so no password has to " +
+                            "be kept. \"Refresh Workspaces\" loads the live workspace/app lists and doubles " +
+                            "as the connection test. Credentials are stored in the IDE PasswordSafe, never " +
+                            "in a file.",
                     )
                 }
                 row {

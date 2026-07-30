@@ -14,16 +14,23 @@ import java.time.Duration
 import java.util.Base64
 
 /**
- * A thin client for the Flowable Design REST API (HTTP Basic auth), used by "Pull from Flowable
- * Design" to discover and download the current app export:
+ * A thin client for the Flowable Design REST API, used by "Pull from Flowable Design" to discover and
+ * download the current app export:
  *
  *  - `GET {baseUrl}/design-api/workspaces` — paginated workspace list
  *  - `GET {baseUrl}/design-api/workspaces/{ws}/apps` — paginated app list (with version/lastUpdated)
  *  - `GET {baseUrl}/design-api/workspaces/{ws}/apps/{app}/export` — the app export ZIP, byte-identical
  *    to the Design UI's manual "Export app"
+ *  - `POST {baseUrl}/design-api/current-user/access-tokens` — mints a personal access token
  *
- * URL building and response parsing are pure and unit-tested; the `list*`/`export*` functions
- * perform network calls and must never run on the EDT.
+ * Requests authenticate with either HTTP Basic or a Design **personal access token** sent as
+ * `Authorization: Bearer …` (see [Auth]) — the token is the scheme the official Flowable CLI uses, and
+ * the only one that works when Design sits behind an IdP (`application.design.security.type=oauth2`,
+ * where Basic is switched off). Design validates it as a JWT it issued itself, so the server needs
+ * `flowable.design.security.access-token.signing-secret` configured.
+ *
+ * URL building and response parsing are pure and unit-tested; the `list*`/`export*`/[createAccessToken]
+ * functions perform network calls and must never run on the EDT.
  */
 object DesignClient {
 
@@ -38,7 +45,20 @@ object DesignClient {
     private val LIST_TIMEOUT = Duration.ofSeconds(30)
     private val EXPORT_TIMEOUT = Duration.ofSeconds(120)
 
-    data class Connection(val baseUrl: String, val username: String, val password: String)
+    /**
+     * How a request authenticates. A sealed type on purpose: the two schemes are mutually exclusive, so
+     * "password *and* token" is unrepresentable and [authorizationHeader] can only ever produce one
+     * header value.
+     */
+    sealed interface Auth {
+        data class Basic(val username: String, val password: String) : Auth
+        data class Token(val token: String) : Auth
+    }
+
+    data class Connection(val baseUrl: String, val auth: Auth) {
+        /** Basic-auth shorthand. */
+        constructor(baseUrl: String, username: String, password: String) : this(baseUrl, Auth.Basic(username, password))
+    }
 
     data class Workspace(val key: String, val name: String)
 
@@ -50,6 +70,12 @@ object DesignClient {
      * a `data class` holding a [ByteArray] would get reference-based equals/hashCode.
      */
     class Export(val bytes: ByteArray, val fileName: String?)
+
+    /**
+     * A freshly minted personal access token. [value] is the only time Design hands the token out — it
+     * stores just a hash — so the caller must keep it right away.
+     */
+    data class NewToken(val value: String, val name: String?, val expirationTime: String?)
 
     /** One page of a Design `DataResponse` (`data` plus the server's `total` count). */
     data class Page<T>(val data: List<T>, val total: Int)
@@ -77,6 +103,19 @@ object DesignClient {
 
     fun exportEndpoint(baseUrl: String, workspaceKey: String, appKey: String): String =
         "${normalizeBaseUrl(baseUrl)}/design-api/workspaces/${encode(workspaceKey)}/apps/${encode(appKey)}/export"
+
+    fun accessTokensEndpoint(baseUrl: String): String =
+        "${normalizeBaseUrl(baseUrl)}/design-api/current-user/access-tokens"
+
+    /** The Design UI page where a user creates and revokes personal access tokens. */
+    fun tokenManagementUrl(baseUrl: String): String = "${normalizeBaseUrl(baseUrl)}/#/token-mgmt"
+
+    /**
+     * An access token the way a human pastes it: surrounding whitespace and quotes are dropped, and a
+     * copied-along `Bearer ` prefix is removed so the header never becomes `Bearer Bearer …`.
+     */
+    fun normalizeAccessToken(raw: String): String =
+        raw.trim().trim('"', '\'').replace(Regex("^bearer\\s+", RegexOption.IGNORE_CASE), "").trim()
 
     private fun encode(pathSegment: String): String =
         URLEncoder.encode(pathSegment, StandardCharsets.UTF_8).replace("+", "%20")
@@ -120,7 +159,7 @@ object DesignClient {
      * same way Design does.
      */
     fun exportApp(conn: Connection, workspaceKey: String, appKey: String): Result<Export> {
-        if (conn.baseUrl.isBlank()) return Result.Failed("Design base URL is required")
+        missingConfig(conn)?.let { return it }
         return try {
             val request = requestBuilder(conn, exportEndpoint(conn.baseUrl, workspaceKey, appKey), EXPORT_TIMEOUT)
                 .header("Accept", "application/zip")
@@ -129,7 +168,7 @@ object DesignClient {
             val resp = newClient().send(request, HttpResponse.BodyHandlers.ofByteArray())
             val body = resp.body() ?: ByteArray(0)
             when {
-                resp.statusCode() !in 200..299 -> failedForStatus(resp.statusCode(), String(body, StandardCharsets.UTF_8))
+                resp.statusCode() !in 200..299 -> failedForStatus(conn.auth, resp.statusCode(), String(body, StandardCharsets.UTF_8))
                 !isZip(body) -> Result.Failed(
                     "Server did not return a ZIP (got ${resp.headers().firstValue("Content-Type").orElse("no content type")}) — " +
                         "is the base URL a Flowable Design server, or did a proxy/SSO login page answer instead?",
@@ -143,6 +182,64 @@ object DesignClient {
             LOG.warn("Design app export failed", e)
             Result.Failed(failureMessage(conn.baseUrl, e))
         }
+    }
+
+    /**
+     * Mints a personal access token for [username], so the pull can authenticate with a token from then
+     * on and no password has to stay in the keychain. [validFor] is an ISO-8601 duration (e.g. `P365D`)
+     * or null for the server default.
+     *
+     * Deliberately Basic-only: Design strips the `accessTokens` capability from requests that are
+     * themselves authenticated with a Design token, so a token cannot mint its own successor. On an
+     * IdP-fronted Design (where Basic is off) this fails with 401 and the caller is pointed at the Design
+     * UI instead.
+     */
+    fun createAccessToken(
+        baseUrl: String,
+        username: String,
+        password: String,
+        name: String,
+        validFor: String?,
+    ): Result<NewToken> {
+        if (baseUrl.isBlank()) return Result.Failed("Design base URL is required")
+        if (name.isBlank()) return Result.Failed("A token name is required")
+        val auth = Auth.Basic(username, password)
+        val fields = LinkedHashMap<String, Any?>()
+        fields["name"] = name
+        if (!validFor.isNullOrBlank()) fields["validFor"] = validFor
+        return try {
+            val request = HttpRequest.newBuilder()
+                .uri(URI.create(accessTokensEndpoint(baseUrl)))
+                .timeout(LIST_TIMEOUT)
+                .header("Authorization", authorizationHeader(auth))
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(MiniJson.stringify(fields)))
+                .build()
+            val resp = newClient().send(request, HttpResponse.BodyHandlers.ofString())
+            if (resp.statusCode() !in 200..299) {
+                return if (resp.statusCode() == 401) {
+                    Result.Failed(
+                        "Could not sign in to create a token — check username/password. If this Design is behind " +
+                            "SSO, username/password is disabled there: create the token in Design instead (HTTP 401)",
+                    )
+                } else {
+                    failedForStatus(auth, resp.statusCode(), resp.body())
+                }
+            }
+            parseNewToken(resp.body())?.let { Result.Success(it) }
+                ?: Result.Failed("The server did not return a token value — is the base URL a Flowable Design server?")
+        } catch (e: Exception) {
+            LOG.warn("Design access-token creation failed", e)   // never logs the token: only 2xx bodies carry one
+            Result.Failed(failureMessage(baseUrl, e))
+        }
+    }
+
+    /** The `CreateAccessTokenResponse` body, or null when it carries no token value. */
+    fun parseNewToken(json: String): NewToken? {
+        val map = runCatching { MiniJson.parse(json) }.getOrNull() as? Map<*, *> ?: return null
+        val value = (map["value"] as? String)?.takeUnless { it.isBlank() } ?: return null
+        return NewToken(value, map["name"] as? String, map["expirationTime"] as? String)
     }
 
     /**
@@ -196,7 +293,7 @@ object DesignClient {
         endpoint: (start: Int, size: Int) -> String,
         parse: (String) -> Page<T>,
     ): Result<List<T>> {
-        if (conn.baseUrl.isBlank()) return Result.Failed("Design base URL is required")
+        missingConfig(conn)?.let { return it }
         return try {
             val all = mutableListOf<T>()
             repeat(MAX_PAGES) {
@@ -205,7 +302,7 @@ object DesignClient {
                     .GET()
                     .build()
                 val resp = newClient().send(request, HttpResponse.BodyHandlers.ofString())
-                if (resp.statusCode() !in 200..299) return failedForStatus(resp.statusCode(), resp.body())
+                if (resp.statusCode() !in 200..299) return failedForStatus(conn.auth, resp.statusCode(), resp.body())
                 val page = parse(resp.body())
                 all += page.data
                 if (all.size >= page.total || page.data.isEmpty()) return Result.Success(all)
@@ -217,11 +314,18 @@ object DesignClient {
         }
     }
 
-    private fun failedForStatus(code: Int, body: String): Result.Failed = when (code) {
-        401 -> Result.Failed("Authentication failed — check username/password (HTTP 401)")
+    private fun failedForStatus(auth: Auth, code: Int, body: String): Result.Failed = when (code) {
+        401 -> Result.Failed(unauthorizedMessage(auth))
         403 -> Result.Failed("No read access to this workspace/app (HTTP 403)")
         404 -> Result.Failed("Not found — is the base URL a Flowable Design server, and do workspace/app still exist? (HTTP 404)")
         else -> Result.Failed("HTTP $code: ${body.take(200)}")
+    }
+
+    /** The 401 hint for the scheme actually used — a wrong password and a stale token need different fixes. */
+    internal fun unauthorizedMessage(auth: Auth): String = when (auth) {
+        is Auth.Basic -> "Authentication failed — check username/password (HTTP 401)"
+        is Auth.Token -> "Authentication failed — the access token is invalid or expired; " +
+            "create a new one in Design under \"Access tokens\" (HTTP 401)"
     }
 
     private fun failureMessage(baseUrl: String, e: Exception): String = when (e) {
@@ -229,12 +333,27 @@ object DesignClient {
         else -> "Cannot reach ${normalizeBaseUrl(baseUrl)}: ${e.message ?: e.javaClass.simpleName}"
     }
 
-    private fun requestBuilder(conn: Connection, url: String, timeout: Duration): HttpRequest.Builder {
-        val auth = "Basic " + Base64.getEncoder().encodeToString("${conn.username}:${conn.password}".toByteArray())
-        return HttpRequest.newBuilder()
+    /** Configuration pre-flight shared by the list and export paths — never touches the network. */
+    private fun missingConfig(conn: Connection): Result.Failed? {
+        if (conn.baseUrl.isBlank()) return Result.Failed("Design base URL is required")
+        val auth = conn.auth
+        if (auth is Auth.Token && normalizeAccessToken(auth.token).isBlank()) {
+            return Result.Failed("A Flowable Design access token is required")
+        }
+        return null   // a blank Basic username stays a server-side 401, exactly as before
+    }
+
+    private fun requestBuilder(conn: Connection, url: String, timeout: Duration): HttpRequest.Builder =
+        HttpRequest.newBuilder()
             .uri(URI.create(url))
             .timeout(timeout)
-            .header("Authorization", auth)
+            // `header()` appends rather than replaces, so this single call — together with the sealed
+            // Auth type — is what guarantees exactly one Authorization header.
+            .header("Authorization", authorizationHeader(conn.auth))
+
+    internal fun authorizationHeader(auth: Auth): String = when (auth) {
+        is Auth.Basic -> "Basic " + Base64.getEncoder().encodeToString("${auth.username}:${auth.password}".toByteArray())
+        is Auth.Token -> "Bearer " + normalizeAccessToken(auth.token)
     }
 
     private fun newClient(): HttpClient = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build()

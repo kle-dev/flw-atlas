@@ -19,9 +19,10 @@ import javax.swing.Icon
 
 /**
  * Puts a gutter icon on a Spring REST handler method (`@GetMapping`/`@PostMapping`/…) whose endpoint
- * URL is called from a Flowable model's HTTP service task; clicking it navigates to those model files.
+ * URL is called from a Flowable model — an HTTP service task, a form/page REST button, a `.service`
+ * operation or a REST data source; clicking it navigates to those model files.
  * Mirrors [FlowableBotActionLineMarkerProvider]: the highlight pass does only cheap cached-index
- * lookups (endpoint path vs. the indexed `requestUrl` set), the (potentially slow) file scan that
+ * lookups (endpoint path vs. the indexed URL set), the (potentially slow) file scan that
  * resolves the exact model files is deferred to the click.
  */
 class FlowableEndpointUsageLineMarkerProvider : LineMarkerProvider {
@@ -33,7 +34,14 @@ class FlowableEndpointUsageLineMarkerProvider : LineMarkerProvider {
         result: MutableCollection<in LineMarkerInfo<*>>,
     ) {
         if (elements.isEmpty()) return
-        val index = elements.first().project.service<FlowableModelIndexService>().cachedOrNull() ?: return
+        // cachedOrNull() only — never build the index from a highlighting pass. If it isn't ready yet,
+        // kick a background build and show nothing this pass; markers appear once the index exists.
+        // Without the build, a cold index is indistinguishable from "no model calls this endpoint".
+        val service = elements.first().project.service<FlowableModelIndexService>()
+        val index = service.cachedOrNull() ?: run {
+            ApplicationManager.getApplication().executeOnPooledThread { runCatching { service.index() } }
+            return
+        }
         for (element in elements) {
             if (element !is PsiIdentifier) continue
             val method = element.parent as? PsiMethod ?: continue

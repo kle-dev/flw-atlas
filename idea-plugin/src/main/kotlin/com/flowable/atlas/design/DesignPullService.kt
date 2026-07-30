@@ -47,6 +47,10 @@ internal fun removedModelKeys(previous: Set<String>?, current: Set<String>): Lis
  * index/jar file system never sees a half-written archive. A single app's failure doesn't abort the
  * rest; the summary notification lists what was pulled and what failed. Missing configuration or
  * credentials open the Connections settings page and re-run the pull once configured.
+ *
+ * Which credential is used follows the project's [DesignAuthMode] — a username/password or a personal
+ * access token; an expired token surfaces as a per-app HTTP 401 in the failure notification, not as the
+ * "not configured yet" retry.
  */
 @Service(Service.Level.PROJECT)
 class DesignPullService(private val project: Project) {
@@ -68,14 +72,12 @@ class DesignPullService(private val project: Project) {
             configureThenRetry()
             return
         }
-        val credentials = runCatching { DesignCredentials.load(settings.designBaseUrl) }.getOrNull()
-        val username = credentials?.userName
-        val password = credentials?.getPasswordAsString()
-        if (username.isNullOrBlank() || password == null) {
-            configureThenRetry()   // e.g. keychain entry was deleted
+        val auth = runCatching { DesignCredentials.loadAuth(settings.designBaseUrl, settings.designAuthMode) }.getOrNull()
+        if (auth == null) {
+            configureThenRetry()   // e.g. keychain entry was deleted, or the chosen mode has no secret yet
             return
         }
-        val conn = DesignClient.Connection(settings.designBaseUrl, username, password)
+        val conn = DesignClient.Connection(settings.designBaseUrl, auth)
         val workspaceKey = settings.designWorkspaceKey
         val appKeys = settings.designAppKeys.toList()
         val targetDir = projectDir.resolve(settings.designTargetFolder.ifBlank { FlowableAtlasProjectSettings.DEFAULT_DESIGN_TARGET_FOLDER })

@@ -15,6 +15,7 @@
     --space-3:12px; --space-35:14px; --space-4:16px; --space-5:20px; --space-6:24px;
     --space-7:28px; --space-8:32px;
     --sidebar-w:240px;          /* live width of the expanded sidebar (JS-set via the drag handle) */
+    --pal-w:576px;              /* live width of the ⌘K palette (JS-set from the remembered size) */
     --radius-xs:2px; --radius-sm:4px; --radius-md:6px; --radius-lg:8px;
     --radius-xl:12px; --radius-2xl:16px; --radius-full:999px;
     --text-2xs:10px; --text-xs:11px; --text-sm:12px; --text-md:13px;
@@ -272,23 +273,37 @@
   /* ------------------------------------------------------------------ */
   .palette{position:fixed;inset:0;z-index:100}
   .pal-overlay{position:absolute;inset:0;background:var(--overlay)}
-  .pal-panel{position:relative;max-width:576px;margin:96px auto 0;background:var(--panel);
-    border-radius:var(--radius-xl);box-shadow:0 25px 50px -12px rgba(0,0,0,.25),0 0 0 1px var(--line);overflow:hidden}
-  .pal-inputrow{display:flex;align-items:center;gap:var(--space-25);height:48px;padding:0 var(--space-4);border-bottom:1px solid var(--line)}
+  /* Resizable from the bottom-right corner (same native `resize:both` as .dgcard), because a hit's
+     "why it matched" hint is often a long templated URL — {{endpoints.baseUrl}}/api/… — that no fixed
+     width can show. `overflow:hidden` still clips to the rounded corners and does not suppress the
+     handle: `resize` only requires a computed overflow other than `visible`. */
+  .pal-panel{position:relative;display:flex;flex-direction:column;
+    width:var(--pal-w,576px);max-width:min(96vw,1100px);min-width:320px;
+    max-height:88vh;min-height:180px;
+    margin:96px auto 0;background:var(--panel);
+    border-radius:var(--radius-xl);box-shadow:0 25px 50px -12px rgba(0,0,0,.25),0 0 0 1px var(--line);
+    overflow:hidden;resize:both}
+  .pal-inputrow{display:flex;align-items:center;gap:var(--space-25);height:48px;flex:none;padding:0 var(--space-4);border-bottom:1px solid var(--line)}
   .pal-inputrow .ic{color:var(--ink-faint);flex:none;display:flex}
   .pal-inputrow input{flex:1;height:100%;border:none;outline:none;background:transparent;
     color:var(--ink);font-family:var(--sans);font-size:var(--text-md);min-width:0}
   .pal-inputrow input::placeholder{color:var(--ink-faint)}
-  .pal-results{max-height:320px;overflow-y:auto;padding:var(--space-15) 0 var(--space-2)}
+  /* Unsized, the panel hugs its content up to ~8 rows (as it always did). Once the user drags it, JS
+     adds .sized and the list takes whatever height the panel now has. */
+  .pal-results{flex:1 1 auto;min-height:0;max-height:var(--pal-res-max,320px);overflow-y:auto;padding:var(--space-15) 0 var(--space-2)}
+  .pal-panel.sized{--pal-res-max:none}
   .pal-group{font-size:var(--text-2xs);font-weight:600;letter-spacing:.08em;text-transform:uppercase;
     color:var(--ink-faint);padding:var(--space-25) var(--space-4) var(--space-1)}
-  .pal-item{display:flex;align-items:center;gap:var(--space-2);height:38px;margin:1px var(--space-2);padding:0 var(--space-25);
+  /* min-height, not height: a long name or URL wraps to a second line instead of being cut off. */
+  .pal-item{display:flex;align-items:center;gap:var(--space-2);min-height:38px;margin:1px var(--space-2);padding:var(--space-05) var(--space-25);
     border-radius:var(--radius-md);cursor:pointer;font-size:var(--text-md)}
   .pal-item:hover{background:var(--hover)}
   .pal-item.sel{background:var(--active);color:var(--sel-text)}
-  .pal-item .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-  .pal-item .hint{margin-left:auto;flex:none;font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint);
-    max-width:45%;overflow:hidden;text-overflow:ellipsis}
+  .pal-item .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:0 1 auto}
+  /* The hint carries the match context, so it gets a real share of the row (and wraps rather than
+     ellipsing away the tail, which is exactly the part that identifies an endpoint). */
+  .pal-item .hint{margin-left:auto;flex:0 1 auto;font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint);
+    max-width:65%;min-width:0;overflow-wrap:anywhere;text-align:right}
   .pal-item.sel .hint{color:var(--sel-text)}
   .pal-empty{padding:var(--space-6);text-align:center;font-size:var(--text-md);color:var(--ink-faint)}
   .pal-more{padding:var(--space-2) var(--space-4);text-align:center;font-size:var(--text-xs);
@@ -654,7 +669,8 @@
     .view-browse{display:flex;flex-direction:column;height:auto}
     .listcol{max-height:42vh;border-right:none;border-bottom:1px solid var(--line)}
     .topbar{height:auto;min-height:48px;flex-wrap:wrap;padding:var(--space-2) var(--space-3);gap:var(--space-2)}
-    .pal-panel{margin:var(--space-6) var(--space-3)}
+    /* width:auto so the panel still fills a narrow viewport — the remembered --pal-w is a desktop size */
+    .pal-panel{margin:var(--space-6) var(--space-3);width:auto}
     .dash{padding:var(--space-4) var(--space-35) var(--space-8)}
     .dbody{padding:var(--space-4) var(--space-35)}
   }
