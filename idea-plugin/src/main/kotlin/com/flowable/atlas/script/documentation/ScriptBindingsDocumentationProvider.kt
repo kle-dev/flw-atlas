@@ -52,6 +52,12 @@ class ScriptBindingsDocumentationProvider : AbstractDocumentationProvider() {
 
     private fun rootHtml(root: ScriptRoot, context: ScriptContext): String = buildString {
         append("<b>").append(root.name).append("</b> — ").append(root.doc)
+        if (root.bean) {
+            append("<p>Spring bean of a Flowable Work installation — scripts resolve any Spring ")
+            append("bean by its name. Unavailable when the sandbox strict-mode ")
+            append("(<code>flowable.sandbox.expression.strict-mode</code>) is enabled.</p>")
+            return@buildString
+        }
         append("<p>Binding in a <i>").append(context.display).append("</i> script.")
         if (root.members == null && root.subObjects.isEmpty()) {
             append(" Its API is not catalogued — see the Flowable engine javadoc.")

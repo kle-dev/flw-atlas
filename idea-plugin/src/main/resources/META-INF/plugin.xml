@@ -127,6 +127,26 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.10.16</h3>
+        <ul>
+          <li><b>Platform beans in the script catalog</b> — Work scripts resolve any Spring bean by
+              name, so the platform's default services (<code>dataObjectRuntimeService</code>,
+              <code>contentService</code>, <code>templateService</code>, <code>sequenceService</code>,
+              <code>platformIdentityService</code>, <code>actionRuntimeService</code>, ~25 more) come
+              with generated method surfaces: completion with signatures (typed as <i>Spring
+              bean</i>), member-typo checks and hover documentation — the sandbox strict-mode caveat
+              is documented on hover.</li>
+          <li><b>Script Playground chips, redesigned and clickable</b> — the info strip under the
+              editor is now a two-column layout (Variables · Reads · Bindings · Beans) with soft
+              pill chips that wrap instead of clipping, a click-to-expand <i>+N more</i> per row —
+              and every chip inserts its name at the caret when clicked (undoable, focus returns to
+              the editor).</li>
+          <li><b>Explorer: work through search hits in bulk</b> — list rows support multi-selection
+              (⇧-arrows, ⌘/Ctrl-click, ⇧-click ranges, ⌘/Ctrl-A) and Enter opens every marked row as
+              its own detail tab; detail tabs remember scroll and search term, open in the background
+              with ⌘/Ctrl-click, and switch with Alt+1…9.</li>
+        </ul>
+
         <h3>0.10.15</h3>
         <ul>
           <li><b>Design access tokens</b> — "Pull from Flowable Design" can authenticate with a Flowable
