@@ -91,6 +91,25 @@ class GenerationConfigurable(private val project: Project) : BoundSearchableConf
                     }
                 }
             }
+            group("Data-Object DTOs") {
+                row("Package:") {
+                    textField()
+                        .align(AlignX.FILL)
+                        .comment("Package the generated DTOs go into, e.g. com.acme.flowable.dto (empty = the source root itself). The target source root is picked in the \"Generate → Data-Object DTOs\" dialog and remembered per project.")
+                        .bindText(settings::dtoPackage)
+                }
+                row("Class name suffix:") {
+                    textField()
+                        .align(AlignX.FILL)
+                        .comment("Appended to the name derived from the model, e.g. Customer + Dto = CustomerDto. Leave empty for the plain model name.")
+                        .bindText(settings::dtoClassSuffix)
+                }
+                row {
+                    checkBox("Sub-package per app")
+                        .comment("Nest each DTO under the owning app, e.g. com.acme.flowable.dto.demoapp.CustomerDto — so two apps can never claim the same class name.")
+                        .bindSelected(settings::dtoPackagePerApp)
+                }
+            }
             group("Model Constants") {
                 row("Class name (FQCN):") {
                     textField()

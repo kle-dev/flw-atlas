@@ -161,6 +161,29 @@ class FlowableAtlasProjectSettingsTest {
     }
 
     @Test
+    fun `dto defaults are the generation defaults and are scoped per sub-project`() {
+        val s = settings()
+        assertEquals(FlowableAtlasProjectSettings.DEFAULT_DTO_PACKAGE, s.dtoPackage)
+        assertEquals(FlowableAtlasProjectSettings.DEFAULT_DTO_CLASS_SUFFIX, s.dtoClassSuffix)
+        assertEquals("", s.dtoSourceRootUrl)
+        assertFalse(s.dtoPackagePerApp)
+
+        s.scope("svc-a").dtoPackage = "com.acme.a.dto"
+        s.scope("svc-a").dtoPackagePerApp = true
+        assertEquals("com.acme.a.dto", s.scope("svc-a").dtoPackage)
+        assertEquals(FlowableAtlasProjectSettings.DEFAULT_DTO_PACKAGE, s.scope("").dtoPackage)
+        assertFalse(s.scope("").dtoPackagePerApp)
+    }
+
+    @Test
+    fun `a sub-project left at the dto defaults is still pruned`() {
+        val s = settings()
+        s.scope("untouched").dtoPackage = FlowableAtlasProjectSettings.DEFAULT_DTO_PACKAGE
+        s.scope("configured").dtoClassSuffix = "Bean"
+        assertEquals(listOf("configured"), s.getState().subProjects.map { it.path })
+    }
+
+    @Test
     fun `an old flat file loads with no sub-projects and behaves as the default scope`() {
         val s = FlowableAtlasProjectSettings(null)
         val flat = FlowableAtlasProjectSettings.State()

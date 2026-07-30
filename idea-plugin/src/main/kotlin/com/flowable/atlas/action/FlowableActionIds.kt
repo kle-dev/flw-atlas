@@ -9,6 +9,8 @@ object FlowableActionIds {
     const val GENERATE_MODEL_CONSTANTS = "Flowable.GenerateModelConstants"
     const val GENERATE_LIQUIBASE_FROM_DATA_OBJECT = "Flowable.GenerateLiquibaseFromDataObject"
     const val GENERATE_LIQUIBASE_FROM_APPS = "Flowable.GenerateLiquibaseFromApps"
+    const val GENERATE_DTO_FROM_DATA_OBJECT = "Flowable.GenerateDtoFromDataObject"
+    const val GENERATE_DTO_FROM_APPS = "Flowable.GenerateDtoFromApps"
     const val PULL_FROM_DESIGN = "Flowable.PullFromDesign"
     const val CONFIGURE_DESIGN_CONNECTION = "Flowable.ConfigureDesignConnection"
     const val REBUILD_MODEL_INDEX = "Flowable.RebuildModelIndex"

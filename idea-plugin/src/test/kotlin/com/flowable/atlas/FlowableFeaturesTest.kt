@@ -302,8 +302,8 @@ class FlowableFeaturesTest : BasePlatformTestCase() {
             "class T { void m(com.flowable.dataobject.api.runtime.DataObjectInstanceVariableContainerQuery q) { " +
                 "q.definitionKey(\"DEMO-D0<caret>10\"); } }",
         )
-        val intention = myFixture.findSingleIntention("Generate Java bean for this Flowable data object")
-        assertNotNull("bean intention should be offered", intention)
+        val intention = myFixture.findSingleIntention("Generate Java DTO for this Flowable data object")
+        assertNotNull("DTO intention should be offered", intention)
         // The intention asks for the class name; stub the input dialog to a custom name.
         TestDialogManager.setTestInputDialog { _ -> "MyOrderDto" }
         try {

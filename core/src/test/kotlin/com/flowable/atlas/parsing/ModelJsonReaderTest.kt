@@ -67,6 +67,32 @@ class ModelJsonReaderTest {
         assertEquals(listOf("from", "subject"), ModelJsonReader.readEventPayload(bytes(json)))
     }
 
+    @Test fun readAppChildKeys_reads_all_and_filters_by_type() {
+        val json = """
+            {"key":"DEMO-APP","name":"Demo App","pageModels":[{"key":"DEMO-PG1"}],
+             "extension":{"design":{"childModels":[{"key":"DEMO-P001","type":"bpmn"},
+                                                   {"key":"DEMO-D010","type":"dataObject"},
+                                                   {"key":"DEMO-D011","type":"dataObject"},
+                                                   {"type":"form"}]}}}
+        """.trimIndent()
+        assertEquals(
+            listOf("DEMO-P001", "DEMO-D010", "DEMO-D011"),
+            ModelJsonReader.readAppChildKeys(bytes(json)),
+        )
+        assertEquals(
+            listOf("DEMO-D010", "DEMO-D011"),
+            ModelJsonReader.readAppChildKeys(bytes(json), "dataObject"),
+        )
+    }
+
+    @Test fun readAppChildKeys_without_child_models_is_empty() {
+        assertEquals(emptyList<String>(), ModelJsonReader.readAppChildKeys(bytes("""{"key":"DEMO-APP"}""")))
+        assertEquals(
+            emptyList<String>(),
+            ModelJsonReader.readAppChildKeys(bytes("""{"key":"DEMO-APP","extension":{"design":{}}}""")),
+        )
+    }
+
     @Test fun extractKeyName_top_level_and_metadata() {
         assertEquals("K", ModelJsonReader.extractKeyName(bytes("""{"key":"K","name":"N"}"""))!!.key)
         assertEquals("MK", ModelJsonReader.extractKeyName(bytes("""{"metadata":{"key":"MK","name":"MN"}}"""))!!.key)
