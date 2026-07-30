@@ -7,6 +7,7 @@ import com.intellij.psi.PsiDocumentManager
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.command.undo.UndoUtil
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
@@ -80,7 +81,7 @@ class FlowableScriptPanel(val project: Project) : SimpleToolWindowPanel(true, tr
         }
 
     private val strip = PlaygroundProblemsStrip()
-    private val chips = ScriptVarChipsPanel()
+    private val chips = ScriptVarChipsPanel(onPick = ::insertAtCaret)
     private val diagnostics = ScriptPlaygroundDiagnostics(
         project, field, strip, chips,
         object : ScriptPlaygroundDiagnostics.Host {
@@ -155,6 +156,17 @@ class FlowableScriptPanel(val project: Project) : SimpleToolWindowPanel(true, tr
         field.setNewDocumentAndFileType(language.fileType(), document)
         applyContextStamp()   // new document = new PsiFile — re-stamp the completion context
         diagnostics.scheduleRevalidate()
+    }
+
+    /** A chip click drops the picked name into the script at the caret (undoable command). */
+    private fun insertAtCaret(name: String) {
+        val editor = field.editor ?: return
+        val offset = editor.caretModel.offset
+        WriteCommandAction.runWriteCommandAction(project) {
+            editor.document.insertString(offset, name)
+        }
+        editor.caretModel.moveToOffset(offset + name.length)
+        IdeFocusManager.getInstance(project).requestFocus(field, true)
     }
 
     /** Tell the bindings completion which context to offer (see [ScriptScope.CONTEXT_KEY]) and mark

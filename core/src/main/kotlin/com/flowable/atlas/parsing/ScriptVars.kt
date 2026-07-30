@@ -62,7 +62,7 @@ object ScriptVars {
      * the model. Anything reached through one of them (`execution.getVariable(…)`) is already handled by
      * [API_RE], and a bare mention of the root itself means nothing.
      */
-    private val NOT_A_VARIABLE = setOf(
+    private val NOT_A_VARIABLE = com.flowable.atlas.script.ScriptBindingsCatalog.ALL_ROOT_NAMES + setOf(
         // Flowable scripting scope
         "execution", "task", "taskEntity", "planItemInstance", "caseInstance", "processInstance",
         "variableContainer", "variableScope", "entity", "flw", "vars", "variables", "transientVariables",

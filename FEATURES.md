@@ -77,6 +77,13 @@ Everything is resolved against the Flowable models that actually live in your re
   because `execution` & co. are dynamic bindings the Groovy/JS PSI can never resolve, the
   "unresolved" inspection noise (gray `execution`, *No candidates found for method call*) is
   suppressed exactly inside Flowable script bodies — nowhere else.
+- **Platform beans, catalogued** — in a Work installation scripts resolve *any* Spring bean by name
+  (the engine's beans map is the whole ApplicationContext), so the catalog ships the platform's
+  default services with generated surfaces: `dataObjectRuntimeService`, `contentService`,
+  `templateService`, `sequenceService`, `platformIdentityService`, `actionRuntimeService` and ~25
+  more — completion (typed as *Spring bean*), member-typo checks and hover docs included. The
+  playground shows them in their own capped **Beans:** chips row (a *+N more* tooltip lists the
+  rest), and the docs note the sandbox strict-mode caveat (bean access can be whitelisted-off).
 - **Find anything, and see where it matched** — ⌘K/Ctrl-K searches *every* string Atlas parsed, not a
   list of blessed fields: script bodies, element documentation, flow conditions, field injections,
   listener classes, DMN cells. Each hit says where it came from (`script · stampTask`,
@@ -86,6 +93,23 @@ Everything is resolved against the Flowable models that actually live in your re
   though the URL is written as `{{endpoints.baseUrl}}/api/…/{{someVar}}`. The palette itself is
   **resizable from its bottom-right corner** (the size is remembered, double-click resets it), because
   a templated URL is longer than any fixed width can show.
+- **Mark several results, open them as tabs** — in a sidebar category list *and* in the ⌘K palette,
+  **⇧↑/↓** extends a selection from where you started, ⌘/Ctrl-click toggles one, ⇧-click takes a range
+  and ⌘/Ctrl-A takes everything on screen; **Enter** then opens every marked result as its own detail
+  tab. So working through a list of hits stops being a round trip through the list for each one.
+  A marked row shows a checkmark and its own tint — distinct from the row the detail panel is
+  currently showing. In the palette, **⌘/Ctrl-Enter** opens the marked hits and *keeps searching*, so
+  several queries can be batched into tabs without reopening ⌘K.
+- **Detail tabs** — the strip above the detail panel appears as soon as a second node is open, and each
+  tab keeps its own scroll position *and* the search term it was opened with, so switching back to a
+  hit from ⌘K still highlights the row that matched. A tab behaves like a browser tab: following a
+  relationship chip moves the tab you are in, while ⌘/Ctrl-click or middle-click on a chip opens it in
+  a background tab. Switch with **⌥1…9 / Alt+1…9**, step with **⌥←→ / ⌥[ ]**, close with **⌥W**,
+  middle-click or the tab's ×; "close others" keeps just the one you are reading. Alt is deliberate:
+  Chrome reserves ⌘/Ctrl+1…9, ⌘W and Ctrl+Tab for itself, and in the IDE ⌘W would close the JCEF
+  editor tab. The open set survives a reload (per project) and up to 12 tabs stay open — the strip
+  scrolls rather than squeezing them into slivers, and marking stops at that limit instead of
+  promising an "open all" it cannot keep.
 - **REST endpoints, both directions** — a form/page REST button, a `.service` operation, a REST data
   source and a BPMN HTTP task are all treated as outbound calls: each model lists the endpoints it
   calls (verb, URL, which button), and *Find Usages* / the gutter icon on a Spring

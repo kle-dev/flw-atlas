@@ -100,8 +100,13 @@ internal class ScriptPlaygroundDiagnostics(
             c.problems.map { PlaygroundProblemsStrip.Row(it.severity == ExprSeverity.ERROR, it.message, it.startOffset) },
             ::navigateTo,
         )
-        chips.setVars(c.vars, ScriptBindingsCatalog.rootsFor(host.context).values
-            .filterNot { it.hidden }.map { it.name }.sorted())
+        val roots = ScriptBindingsCatalog.rootsFor(host.context).values.filterNot { it.hidden }
+        chips.setVars(
+            c.vars,
+            bindings = roots.filterNot { it.bean }.map { it.name }.sorted(),
+            // the platform beans get their own capped row (+N more tooltip lists the rest)
+            beans = roots.filter { it.bean }.map { it.name }.sorted(),
+        )
         (field.editor as? EditorEx)?.let { editor ->
             appliedEditor = editor
             applyHighlighters(editor, c.problems)

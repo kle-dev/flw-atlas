@@ -62,6 +62,23 @@ class ScriptBindingsCompletionTest : BasePlatformTestCase() {
         assertTrue("expected plusDays, got: $members", "plusDays" in members)
     }
 
+    fun testPlatformBeansCompleteWithSignatures() {
+        // a single match is auto-inserted (no popup) — the CallInsertHandler appends the parens
+        val lookups = completeWithContext(
+            "dataObjectRuntimeService.addGroup<caret>", ScriptContext.BPMN_SCRIPT_TASK)
+        if (lookups.isEmpty()) {
+            assertTrue(myFixture.editor.document.text.contains("addGroupIdentityLink("))
+        } else {
+            assertTrue("expected addGroupIdentityLink, got: $lookups", "addGroupIdentityLink" in lookups)
+        }
+        val roots = completeWithContext("dataObjectRun<caret>", ScriptContext.ACTION_BOT)
+        if (roots.isNotEmpty()) {
+            assertTrue("dataObjectRuntimeService" in roots)
+        } else {
+            assertTrue(myFixture.editor.document.text.startsWith("dataObjectRuntimeService."))
+        }
+    }
+
     fun testServiceMembersCompleteWithSignatures() {
         val lookups = completeWithContext(
             "runtimeService.startProc<caret>", ScriptContext.BPMN_SCRIPT_TASK)
