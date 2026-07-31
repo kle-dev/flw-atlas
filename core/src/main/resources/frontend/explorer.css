@@ -391,14 +391,26 @@
     min-width:240px;min-height:90px;overflow:auto;cursor:default;resize:both;
     background:var(--panel);color:var(--ink);border:1px solid var(--line2);border-radius:var(--radius-lg);
     box-shadow:var(--shadow);padding:var(--space-25) var(--space-3);font-size:var(--text-sm);font-family:var(--sans)}
+  /* Expanded (⤢): the card stops being a corner window and becomes a centered overlay over the whole
+     page — the width cap has to go, because JS sizes it from the viewport. Height stays capped and
+     unset, so a short element still gets a short card. `.dgscrim` dims everything behind it at
+     z-index 119, i.e. also the fullscreen diagram modal (layer 100). Still `resize:both`: centered
+     with a margin, there is finally room to drag it wider. */
+  .dgcard.big{max-width:none;max-height:92vh;
+    box-shadow:0 25px 50px -12px rgba(0,0,0,.35),0 0 0 1px var(--line)}
+  .dgcard.big .dgcard-head,.dgcard.big .dgcard-head:active{cursor:default}
+  .dgscrim{position:fixed;inset:0;z-index:119;background:var(--overlay)}
   .dgcard-head{display:flex;align-items:center;gap:var(--space-2);cursor:move;user-select:none;
     margin:calc(-1*var(--space-25)) calc(-1*var(--space-3)) 0;padding:var(--space-25) var(--space-3) 0}
   .dgcard-head:active{cursor:grabbing}
   .dgcard-title{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .dgcard-ty{flex:none;color:var(--ink-faint);font-size:var(--text-xs)}
-  .dgcard-x{margin-left:auto;flex:none;background:none;border:none;color:var(--ink-faint);cursor:pointer;
+  /* The two header icon buttons. `margin-left:auto` sits on the FIRST one only — two auto margins
+     would split the free space and drive the pair apart. */
+  .dgcard-max,.dgcard-x{flex:none;background:none;border:none;color:var(--ink-faint);cursor:pointer;
     font-size:var(--text-lg);line-height:1;padding:0 2px}
-  .dgcard-x:hover{color:var(--ink)}
+  .dgcard-max{margin-left:auto;font-size:var(--text-sm)}
+  .dgcard-max:hover,.dgcard-x:hover{color:var(--ink)}
   .dgcard-id{color:var(--ink-faint);font-size:var(--text-2xs);margin:1px 0 var(--space-1);
     display:flex;align-items:center;gap:var(--space-1);word-break:break-all}
   .dgrow{display:flex;gap:var(--space-2);padding:2px 0;align-items:baseline;font-size:var(--text-xs)}
