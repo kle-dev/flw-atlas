@@ -57,6 +57,10 @@ object BackendModelParsers {
             val events = ArrayList<Any?>()
             val gateways = ArrayList<Any?>()
             val conditions = ArrayList<Any?>()
+            // Every sequence flow, conditional or not. `conditions` only ever kept the conditional ones,
+            // which meant nothing downstream could answer "what runs after this task" — the most basic
+            // question about a process. See the `flows` entry in [info].
+            val flows = ArrayList<Any?>()
             val otherTasks = ArrayList<Any?>()
             val multiInstance = ArrayList<Any?>()
             val ioParameters = ArrayList<Map<String, Any?>>()
@@ -67,6 +71,11 @@ object BackendModelParsers {
                 "userTasks" to userTasks, "serviceTasks" to serviceTasks, "scriptTasks" to scriptTasks,
                 "ruleTasks" to ruleTasks, "callActivities" to callActivities, "subProcesses" to subProcesses,
                 "events" to events, "gateways" to gateways, "conditions" to conditions,
+                // The process's topology: `{id, from, to, name?, condition?}` per sequence flow, in
+                // document order. `conditions` stays as the conditional subset the explorer matches to
+                // its diagram edges; `flows` is what lets a reader (or the Markdown report) walk the
+                // process from its start event instead of reading elements grouped by type.
+                "flows" to flows,
                 "otherTasks" to otherTasks, "listeners" to ArrayList<Any?>(), "multiInstance" to multiInstance,
                 "ioParameters" to ioParameters,
             )
@@ -334,6 +343,12 @@ object BackendModelParsers {
                     }
                     tag == "sequenceFlow" -> {
                         val cond = el.textOfDescendant("conditionExpression")
+                        val flow = linkedMapOf<String, Any?>(
+                            "id" to eid, "from" to el.attr("sourceRef"), "to" to el.attr("targetRef"),
+                        )
+                        if (truthy(ename)) flow["name"] = ename
+                        if (!cond.isNullOrEmpty()) flow["condition"] = cond
+                        flows.add(flow)
                         if (!cond.isNullOrEmpty()) {
                             // the flow's own id lets the explorer match this condition to its diagram edge
                             conditions.add(linkedMapOf(

@@ -13,6 +13,24 @@ import java.io.File
  */
 object SummaryRenderer {
 
+    /**
+     * Human wording for the [com.flowable.atlas.graph.Findings] check ids. Shared with the overview so
+     * one check is called the same thing wherever it appears.
+     */
+    internal val CHECK_LABELS = linkedMapOf(
+        "parseIssues" to "unparseable files",
+        "invalidExpr" to "invalid expressions",
+        "scriptIssues" to "script syntax",
+        "missingRefs" to "missing models",
+        "changelogIssues" to "changelog problems",
+        "schemaGaps" to "schema gaps",
+        "suspectExpr" to "suspect expressions",
+        "unusedForms" to "unused forms",
+        "unusedOps" to "unused service operations",
+        "unusedFns" to "unused custom functions",
+        "guessedVars" to "script-inferred variables",
+    )
+
     /** Well-known Flowable platform service-task beans (engine-provided) — mirrors the Python set. */
     private val FLOWABLE_PLATFORM_BEANS = setOf(
         "initVariablesService", "dataObjectServiceTask", "generateDocumentService",
@@ -41,21 +59,22 @@ object SummaryRenderer {
             }
         }
 
-        fun cap(items: List<String>, n: Int = 15): String {
-            val extra = if (items.size > n) " … (+${items.size - n} more)" else ""
-            return items.take(n).joinToString(", ") + extra
-        }
+        fun cap(items: List<String>, n: Int = 15): String = Fmt.cap(items, n)
+
+        // Sibling artifact names, so every pointer below names a file the reader can open rather than a
+        // CLI flag it cannot run or an explorer tab it cannot see.
+        val an = Fmt.artifactName(root)
 
         val L = ArrayList<String>()
         L.add("# Flowable project — `${root.absoluteFile.name}` (quick overview)\n")
         L.add("_${st["models"]} model files · ${st["java"]} Java files · ${st["nodes"] ?: 0} nodes · " +
                 "${st["edges"] ?: 0} relationships · ${st["groups"] ?: 0} user groups. " +
-                "Compact summary — use `--json` for the full graph, or open the HTML explorer._\n")
+                "Compact summary — full report in `$an.overview.md`, full graph in `$an.graph.json`._\n")
         val diags = result["diagnostics"] as? List<*> ?: emptyList<Any?>()
         if (diags.isNotEmpty()) {
             L.add("⚠ **${diags.size} file(s) could not be fully analyzed** (parse/read failures) — " +
-                    "the map below may be incomplete. Details: `diagnostics` in graph.json / " +
-                    "Warnings section of the overview.\n")
+                    "the map below may be incomplete. Details: the Findings section of " +
+                    "`$an.overview.md`, or `diagnostics` in `$an.graph.json`.\n")
         }
 
         // Apps
@@ -90,7 +109,27 @@ object SummaryRenderer {
         val nb = bt("binding").size
         val nv = bt("variable").size
         val ns = bt("string").size
-        if (nv != 0) L.add("Variables: $nv (grouped by scope: process / form / case / java / …)")
+        if (nv != 0) {
+            // The scopes a variable actually appears in, counted — the line used to print the words
+            // "process / form / case / java / …" as if they were data. `heuristic` variables are the
+            // ones only a script mentions, so a reader knows which names are inferred, not declared.
+            val scopeCount = LinkedHashMap<String, Int>()
+            var guessed = 0
+            for (n in bt("variable")) {
+                val d = n["data"] as? Map<String, Any?> ?: continue
+                if (d["heuristic"] == true) guessed++
+                for (sc in (d["scopes"] as? List<*> ?: emptyList<Any?>())) {
+                    val s = sc?.toString() ?: continue
+                    scopeCount[s] = (scopeCount[s] ?: 0) + 1
+                }
+            }
+            // `name count`, not `count name`: a variable can live in several scopes, so these do not
+            // partition the total and must not read as if they did.
+            val scopes = scopeCount.entries.sortedByDescending { it.value }
+                .joinToString(" · ") { "${it.key} ${it.value}" }
+            L.add("Variables: $nv" + (if (scopes.isNotEmpty()) " — scopes: $scopes" else "") +
+                    (if (guessed != 0) " · $guessed inferred from scripts" else ""))
+        }
         if (ne != 0 || nb != 0 || ns != 0) {
             L.add("Expressions: $ne backend \${ } · $nb frontend {{ }} · $ns string literals")
         }
@@ -101,14 +140,19 @@ object SummaryRenderer {
         val starts = access.filter { it["action"] == "start" }
         if (starts.isNotEmpty()) {
             L.add("## Entry points — who can start what")
-            for (a in starts.sortedBy { it["model"] as String }.take(15)) {
+            // Grouped by audience. One line per model spent ~1.2 KB on 17 near-identical
+            // "← flowableUser" lines in a real project: the same single bit of information, 17 times.
+            val byAudience = LinkedHashMap<String, MutableList<String>>()
+            for (a in starts.sortedBy { it["model"] as String }) {
                 val groups = a["groups"] as? List<String> ?: emptyList()
                 val users = a["users"] as? List<String> ?: emptyList()
                 val joined = (groups + users).joinToString(", ")
                 val who = if (joined.isEmpty()) "(no restriction)" else joined
-                L.add("- ${a["modelType"]} `${a["model"]}` ← $who")
+                byAudience.getOrPut(who) { ArrayList() }.add("${a["modelType"]} `${a["model"]}`")
             }
-            if (starts.size > 15) L.add("- … (+${starts.size - 15} more)")
+            for ((who, models) in byAudience.entries.sortedByDescending { it.value.size }) {
+                L.add("- **$who** ← ${cap(models, 12)}")
+            }
             L.add("")
         }
         if (bt("endpoint").isNotEmpty()) {
@@ -158,8 +202,17 @@ object SummaryRenderer {
             val t = e["t"] as String
             indeg[t] = (indeg[t] ?: 0) + 1
         }
+        // A `method:` node duplicates the `java:` node that owns it (`Svc` at 19, `Svc#doIt` at 18), and
+        // three of twelve hotspot slots went to such pairs in a real project. Keep the class, drop the
+        // method — the class is the thing a reader navigates to.
+        val hotJavaClasses = indeg.keys.filter { it.startsWith("java:") }
+            .map { it.removePrefix("java:") }.toSet()
         val hot = indeg.entries
             .filter { val n = byId[it.key]; n != null && n["type"] != "group" }
+            .filterNot { e ->
+                e.key.startsWith("method:") &&
+                    hotJavaClasses.any { e.key.removePrefix("method:").startsWith("$it#") }
+            }
             .map { it.value to it.key }
             .sortedWith(compareByDescending<Pair<Int, String>> { it.first }.thenByDescending { it.second })
             .take(12)
@@ -192,14 +245,31 @@ object SummaryRenderer {
         if (suspectN + dynN != 0) {
             L.add("- Uncertain links: $suspectN suspect (loose/cross-type match) · $dynN dynamic (expression-valued)")
         }
-        val scriptIssues = ((result["stats"] as? Map<*, *>)?.get("scriptIssues") as? Int) ?: 0
-        if (scriptIssues != 0) {
-            L.add("- Script syntax findings: $scriptIssues — see the explorer's Checks tab")
-        }
         L.add("")
 
-        L.add("---\n_For details: `--json` gives the full traversable graph; `--html` opens the interactive explorer; " +
-                "the Markdown report (default) has every model, relationship and the access map._")
+        // What is probably wrong here. These used to be computed only inside the HTML explorer, so the
+        // summary could only say "see the explorer's Checks tab" — useless to an agent holding the file.
+        val checks = result["checks"] as? Map<String, Any?> ?: emptyMap()
+        val open = (checks["open"] as? Number)?.toInt() ?: 0
+        if (open > 0) {
+            val findings = result["findings"] as? List<Map<String, Any?>> ?: emptyList()
+            L.add("## Health — $open open finding(s)")
+            L.add(checks.entries.filter { it.key != "open" }
+                .joinToString(" · ") { "${CHECK_LABELS[it.key] ?: it.key}: ${it.value}" })
+            // Name the worst few; the overview lists them all with file/line.
+            for (f in findings.filter { it["severity"] == "error" }.take(5)) {
+                val where = listOfNotNull(f["label"]?.toString(), f["element"]?.toString())
+                    .joinToString(" · ")
+                L.add("- ⚠ ${f["message"]}" + (if (where.isNotEmpty()) " — `$where`" else ""))
+            }
+            val errors = findings.count { it["severity"] == "error" }
+            if (errors > 5) L.add("- … (+${errors - 5} more errors — see `$an.overview.md`)")
+            L.add("")
+        }
+
+        L.add("---\n_Next: `$an.overview.md` has every model, relationship and the access map · " +
+                "`$an.graph.json` is the traversable graph to query · `$an.explorer.html` is the clickable view · " +
+                "regenerate with `atlas <project-dir>`._")
         return L.joinToString("\n")
     }
 

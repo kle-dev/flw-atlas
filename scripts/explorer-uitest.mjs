@@ -160,6 +160,69 @@ const probe = `<script>
     const b=document.getElementById('lwiderbtn');
     say('bridge offered', b?('yes — '+b.textContent.trim()):'no (term also matches in this category)');
   });
+  // --- reference links obey the tab contract on EVERY surface, not just the detail panel ---
+  // Counted off state.tabs rather than the DOM: the strip is hidden below two tabs and hidden again
+  // on the #/checks route, so the rendered markup cannot answer "how many tabs are open".
+  steps.push(()=>{
+    closeOtherTabs();                              // a known floor, well clear of the 12-tab cap
+    location.hash='/checks';
+  });
+  steps.push(()=>{
+    const chips=[...document.querySelectorAll('#view-checks [data-id]')];
+    ok('the checks view rendered reference links', chips.length>0, 'no [data-id] on #/checks');
+    // The health counts are computed in :core (Findings.kt) and shipped in the payload, so that the
+    // page, the Markdown artifacts and the CLI status line cannot disagree. If that wiring breaks, the
+    // page silently reports zero findings — assert it is actually reading them.
+    const declared=(DATA.checks&&DATA.checks.open)||0;
+    ok('the page takes its finding count from the payload', INSIGHTS.checksOpen===declared,
+       'INSIGHTS.checksOpen='+INSIGHTS.checksOpen+' vs DATA.checks.open='+declared);
+    ok('the fixture reports the findings it deliberately contains', declared>0,
+       'no findings in the payload at all');
+    window.__refTabs=state.tabs.slice();
+    window.__refHash=location.hash;
+    window.__refSel=state.sel;
+    if(chips.length) click(chips[0], {metaKey:true, ctrlKey:true});
+  });
+  steps.push(()=>{
+    ok('mod-click on a checks reference opened a background tab',
+       state.tabs.length===window.__refTabs.length+1,
+       state.tabs.length+' tabs vs '+window.__refTabs.length);
+    ok('mod-click stayed on the checks route', location.hash===window.__refHash,
+       'hash moved to '+location.hash);
+    ok('a background open reports itself while the strip is hidden',
+       document.getElementById('toast').classList.contains('show'));
+  });
+  // A plain click from a route that has no tab of its own must APPEND. Overwriting the active tab
+  // there is a silent loss: the strip is not on screen, so nothing shows which node just went.
+  steps.push(()=>{
+    window.__refTabs=state.tabs.slice();
+    const fresh=[...document.querySelectorAll('#view-checks [data-id]')]
+      .filter(c=>window.__refTabs.indexOf(dec(c.dataset.id))<0);
+    if(fresh.length) click(fresh[fresh.length-1]);
+    else say('note','every checks reference is already open — append not exercised');
+  });
+  steps.push(()=>{
+    ok('a click from the checks route appends a tab instead of overwriting one',
+       state.tabs.length===window.__refTabs.length+1,
+       state.tabs.length+' tabs vs '+window.__refTabs.length);
+    ok('no previously open tab was lost',
+       window.__refTabs.every(id=>state.tabs.indexOf(id)>=0),
+       'was ['+window.__refTabs.join(', ')+'] now ['+state.tabs.join(', ')+']');
+    ok('the clicked node is the one on screen', state.tabs[state.tab]===state.sel,
+       'tab '+state.tab+' holds '+state.tabs[state.tab]+' but sel is '+state.sel);
+  });
+  // Following a chip inside the detail panel still travels in place — the browser convention the
+  // strip is built on. This is the case the append fix must NOT have changed.
+  steps.push(()=>{
+    window.__refTabs=state.tabs.slice();
+    const chip=document.querySelector('#detail .nc[data-id], #detail .vlink[data-id]');
+    if(chip) click(chip); else say('note','no reference chip on this node');
+  });
+  steps.push(()=>{
+    ok('a plain click inside the detail panel reuses the active tab',
+       state.tabs.length===window.__refTabs.length,
+       state.tabs.length+' tabs vs '+window.__refTabs.length);
+  });
 
   let i=0;(function run(){
     if(i>=steps.length){

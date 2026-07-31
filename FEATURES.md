@@ -1,6 +1,6 @@
 # Flowable Atlas — Features
 
-*IntelliJ IDEA plugin, v0.10.12.* A summary of what Flowable Atlas provides, grouped by area.
+*IntelliJ IDEA plugin, v0.11.0.* A summary of what Flowable Atlas provides, grouped by area.
 Everything is resolved against the Flowable models that actually live in your repository.
 
 ## Atlas Explorer & Hub
@@ -293,3 +293,38 @@ Everything is resolved against the Flowable models that actually live in your re
 - **Settings tree** — an app-level root page (core toggles) with three project-level child pages.
 - **Model-constants regeneration** — rebuilds the model-constants class automatically when models
   are added, removed, or edited.
+
+## Generated artifacts for AI agents
+
+Atlas's original purpose: make a Flowable project understandable to an LLM quickly, accurately and
+cheaply. `--all` (and the plugin's generation settings) write five artifacts, in four size tiers.
+
+- **`<project>.CLAUDE.md`** (~10-14 KB) — drop-in agent context: a Flowable primer (models vs
+  definitions, extension points, the Design → export → build → deploy path), this project's discovered
+  facts (apps, inventory, where models and Java live, naming conventions that actually generalize,
+  build/run commands, detected Flowable version), concrete **wiring examples to mirror**, the project's
+  **open findings** ("do not copy these patterns"), and a **cheatsheet of every EL namespace, script
+  binding and platform bean that exists** — generated from the same catalogs the expression and script
+  validators use, so an agent is told what it may call instead of guessing. `CLAUDE.template.md` is the
+  project-independent primer alone, generated from the same source (`--claude-template`); a test keeps
+  the two in step.
+- **`<project>.summary.md`** (a few KB) — orientation: apps, inventory, variables by scope, entry points
+  grouped by audience, REST surface, integrations, Java glue, hotspots, external surface, and a **health
+  block** naming the worst findings.
+- **`--slice <type:key>`** — one node with its full context: what it uses, **who uses it** (the direction
+  the report cannot show), the findings that touch it, and its attributes. The tier between a few KB of
+  summary and megabytes of graph.
+- **`<project>.overview.md`** — the full report: every process **in execution order** with each step's
+  successors and branch conditions, CMMN plan trees with each criterion's sentry condition, DMN rule rows,
+  form fields and data sources, the **data layer** (service ↔ Liquibase table ↔ data object, with gaps),
+  variables with provenance (scope, where set, where read, script-inferred), expressions grouped by callee
+  with invalid ones marked, the access map, and every finding with `file:line`. Per-section caps keep a
+  large project's report readable.
+- **`<project>.graph.json`** — the machine-readable graph, minified, with each model body stored once
+  (`data.dataIn` names its bucket), a `usedBy` reverse index on every node, `findings`/`checks`, and a
+  `_schema` key documenting the shape plus `jq` recipes. Query it; do not read it whole.
+
+The health findings (`findings` / `checks`) are computed once in `:core` and used by every surface — the
+Markdown artifacts, `graph.json`, the CLI status line and the explorer's Checks tab: invalid and suspect
+expressions, script syntax errors, unparseable files, missing model references, orphan/superseded
+changelogs, schema gaps, unused forms/operations/custom functions, and variables only a script mentions.

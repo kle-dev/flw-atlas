@@ -93,6 +93,10 @@ try{
     </div>
   </div>
 </div>
+<!-- Transient status line for feedback that has nowhere else to land: a background tab opened from a
+     route that hides the tab strip (#/overview, #/checks …), or an open the tab cap refused. Always
+     in the DOM and hidden by opacity alone, so the aria-live region is registered before it speaks. -->
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="palette" id="palette" hidden>
   <div class="pal-overlay" data-close></div>
   <div class="pal-panel" role="dialog" aria-modal="true" aria-label="Search">

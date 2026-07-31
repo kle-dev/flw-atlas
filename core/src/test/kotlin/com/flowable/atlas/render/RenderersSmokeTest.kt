@@ -112,6 +112,41 @@ class RenderersSmokeTest {
         assertTrue("expected the tab store to be project-scoped", html.contains("p:DATA.project"))
         assertTrue("expected the tab styling from explorer.css", html.contains(".dtab.on{"))
         assertTrue("expected the scrolling tablist from explorer.css", html.contains(".dtablist{"))
+        // One navigation contract for every node link, in one delegated helper: ⌘/Ctrl-click and
+        // middle-click open a background tab wherever a reference link appears, not just in the
+        // detail panel. Each of the six link surfaces routes through it.
+        assertTrue("expected the shared link wiring from explorer.js", html.contains("function wireNodeLinks("))
+        assertTrue(
+            "expected the detail panel to route through the shared link wiring",
+            html.contains("wireNodeLinks(det, '.nc, .gn, .vlink, [data-goto]')"),
+        )
+        assertTrue(
+            "expected the diagram card to keep the diagram open on a background open",
+            html.contains("if(inModal&&!bg) closeDiagramModal()"),
+        )
+        // The five view renderers must not hand-roll navigation any more — a bare select() there is
+        // exactly the handler that had no modifier support.
+        assertFalse(
+            "no view may navigate without the shared link contract",
+            html.contains("select(dec(idEl.dataset.id))"),
+        )
+        assertTrue("expected the platform-exact modifier to be used for links", html.contains("go(t, modKey(e))"))
+        // Arriving from a route that hides the strip appends a tab instead of overwriting one.
+        assertTrue(
+            "expected the append-on-arrival guard from explorer.js",
+            html.contains("syncTabsWith(id, fromNonNodeView)"),
+        )
+        assertTrue(
+            "expected syncTabsWith to honour the append flag",
+            html.contains("else if(append || _tabsBooting"),
+        )
+        // …and says so, because on those routes the tab strip is not on screen to show it.
+        assertTrue("expected the transient status line from explorer.html", html.contains("id=\"toast\""))
+        assertTrue("expected the toast helper from explorer.js", html.contains("function toast("))
+        assertTrue("expected the toast styling from explorer.css", html.contains(".toast.show{"))
+        // The gesture is documented where the reference chips are.
+        assertTrue("expected the reference-gesture hint from explorer.js", html.contains("class=\"relhint\""))
+        assertTrue("expected the hint styling from explorer.css", html.contains(".relhint{"))
         // Multi-selection in both result lists: state, the open action, and the mark styling. Marks
         // use aria-checked so aria-selected can keep meaning "this is the node on screen".
         assertTrue("expected the list multi-select state from explorer.js", html.contains("let listMarks"))

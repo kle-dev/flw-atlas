@@ -43,7 +43,9 @@ object Atlas {
         val ctx = Ctx()
         val result = LinkedHashMap<String, Any?>()
         for (bucket in ModelKinds.MODEL_BUCKETS) result[bucket] = ArrayList<Any?>()
-        for (extra in listOf("javaBeans", "javaControllers", "javaGlue", "endpoints", "warnings", "diagnostics")) {
+        // (`javaBeans` used to be declared here and never written to — an always-empty key in every
+        // graph.json, which a consumer can only read as "this project has no beans".)
+        for (extra in listOf("javaControllers", "javaGlue", "endpoints", "warnings", "diagnostics")) {
             result[extra] = ArrayList<Any?>()
         }
         val modelIndex = LinkedHashMap<Pair<String, String>, String>()
@@ -278,6 +280,10 @@ object Atlas {
                 "summary" to custom.summary(),
             )
         }
+
+        // Health findings, derived from everything above (graph + buckets + diagnostics + custom fns),
+        // so every renderer can state what is wrong instead of pointing at the explorer's Checks tab.
+        Findings.apply(result)
         return result
     }
 

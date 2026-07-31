@@ -1,7 +1,11 @@
 package com.flowable.atlas.render
 
+import com.flowable.atlas.expr.ExpressionDialect
+import com.flowable.atlas.expr.catalog.FlowableExpressionCatalog
 import com.flowable.atlas.model.DesignTerms
 import com.flowable.atlas.model.MiniJson
+import com.flowable.atlas.script.ScriptBindingsCatalog
+import com.flowable.atlas.script.ScriptContext
 import java.io.File
 
 /**
@@ -34,14 +38,23 @@ object ClaudeRenderer {
             return if (fs.contains("/")) fs.substringBeforeLast("/") else "."
         }
 
+        /**
+         * The naming pattern a model type follows, e.g. ``process `DEMO-P#` (e.g. `DEMO-P041`)``.
+         *
+         * Only stated when there is actually a pattern: with one model per type it used to emit
+         * ``process `orderProcess` (e.g. `orderProcess`)`` — the same string twice, presented as a
+         * convention. A convention needs either digits that vary or two keys that agree.
+         */
         fun keypat(t: String): String? {
             val keys = bt(t).mapNotNull { val k = it["key"]; if (truthy(k)) k as String else null }
             if (keys.isEmpty()) return null
             val counts = LinkedHashMap<String, Int>()
             for (k in keys) { val p = k.replace(digits, "#"); counts[p] = (counts[p] ?: 0) + 1 }
-            val pat = counts.entries.maxByOrNull { it.value }!!.key
+            val top = counts.entries.maxByOrNull { it.value }!!
+            val pat = top.key
             val example = keys.firstOrNull { it.replace(digits, "#") == pat } ?: keys[0]
-            return "`$pat` (e.g. `$example`)"
+            if (top.value < 2 && pat == example) return null      // nothing generalizes from one name
+            return if (pat == example) "`$pat`" else "`$pat` (e.g. `$example`)"
         }
 
         val L = ArrayList<String>()
@@ -52,11 +65,28 @@ object ClaudeRenderer {
         // §0 — start here, pointing at the actual artifact filenames
         L.add("## 0. Understand this project — start here\n")
         L.add("Don't guess — build the picture in order:")
-        L.add("1. Read **`$name.summary.md`** — apps, inventory, entry points, integrations, hotspots.")
-        L.add("2. Query **`$name.graph.json`** for specific questions (what calls X, who uses variable Y, " +
-                "which controller serves form Z) — relationships are bidirectional (model↔code).")
-        L.add("3. Open **`$name.explorer.html`** for the clickable view.")
-        L.add("4. Read the actual source to verify, then implement.\n")
+        L.add("1. Read **`$name.summary.md`** — apps, inventory, entry points, integrations, hotspots, " +
+                "open findings. A few KB; read it whole.")
+        L.add("2. For one model, ask for its slice: `atlas <project-dir> --slice process:<key> --stdout` — " +
+                "what it uses, **who uses it**, and the findings that touch it, on one page.")
+        L.add("3. For the wider picture, **`$name.overview.md`** — every model in execution order, the " +
+                "access map, the data layer, the findings.")
+        // Telling an agent to "query the graph" without saying how, or how big it is, invites it to read
+        // the file: on a real project that is megabytes and blows the context it was meant to save.
+        L.add("4. **Query — never read — `$name.graph.json`** (${s["nodes"] ?: 0} nodes, " +
+                "${s["edges"] ?: 0} edges; megabytes on a large project). Its `_schema` key documents the " +
+                "shape; the recipes that matter:")
+        L.add("   ```bash")
+        L.add("   jq '.graph.nodes[] | select(.id==\"process:KEY\") | .usedBy' $name.graph.json  # who references it")
+        L.add("   jq '.graph.edges[] | select(.s==\"process:KEY\")'          $name.graph.json  # what it references")
+        L.add("   jq '.processes[] | select(.key==\"KEY\")'                  $name.graph.json  # the model body")
+        L.add("   jq '.findings[] | select(.severity==\"error\")'            $name.graph.json  # what is broken")
+        L.add("   ```")
+        L.add("   A model node's body is stored once in its bucket; the node carries " +
+                "`data.dataIn` naming that bucket. Every node carries `usedBy`, so relationships are " +
+                "traversable in both directions.")
+        L.add("5. Open **`$name.explorer.html`** for the clickable view (for humans).")
+        L.add("6. Read the actual source to verify, then implement.\n")
 
         L.add(CLAUDE_PLATFORM)
 
@@ -140,15 +170,35 @@ object ClaudeRenderer {
             L.add("- **Run & verify:** " + (if (run.isNotEmpty()) run.joinToString("; ") + "; " else "") +
                     "the app auto-deploys its bundled models on startup — exercise the change in the Work UI, " +
                     "or cover backend logic with a test.")
+            // The Flowable version decides which engine APIs exist — the file's own pitfall list says so
+            // ("Flowable APIs differ across versions"), and it used to be detected from `pom.xml` only,
+            // so every Gradle project was told "not auto-detected" about the one fact it warned about.
             var ver: String? = null
+            fun accept(cand: String?): Boolean {
+                val v = cand?.trim() ?: return false
+                if (v.isEmpty() || !Regex("^[6-9]\\.").containsMatchIn(v)) return false
+                ver = v
+                return true
+            }
             try {
                 if (fileExists("pom.xml")) {
                     val pom = File(root, "pom.xml").readText()
                     val m = Regex("<flowable(?:[.-]engine|[.-]bom|[.-]platform)?\\.version>\\s*([0-9][^<\\s]+)").find(pom)
                         ?: Regex("(?:com|org)\\.flowable\\b[^<]*</groupId>\\s*<artifactId>[^<]*</artifactId>" +
                                 "\\s*<version>\\s*([0-9][^<\\s]+)", RegexOption.DOT_MATCHES_ALL).find(pom)
-                    val cand = m?.groupValues?.get(1)?.trim()
-                    ver = if (cand != null && cand.isNotEmpty() && Regex("^[6-9]\\.").containsMatchIn(cand)) cand else null
+                    accept(m?.groupValues?.get(1))
+                }
+                // Gradle: a `flowableVersion = "8.x"`-style property, a version catalog entry, or the
+                // version on a `com.flowable:…` dependency coordinate.
+                if (ver == null) {
+                    for (f in listOf("gradle.properties", "gradle/libs.versions.toml",
+                        "build.gradle.kts", "build.gradle", "settings.gradle.kts", "settings.gradle")) {
+                        if (!fileExists(*f.split("/").toTypedArray())) continue
+                        val text = File(root, f).readText()
+                        val hit = Regex("(?i)flowable[-_.]?version\\s*[=:]\\s*[\"']?([0-9][^\"'\\s,)]*)").find(text)
+                            ?: Regex("(?:com|org)\\.flowable[^\"']*:([0-9][^\"'\\s:]*)[\"']").find(text)
+                        if (accept(hit?.groupValues?.get(1))) break
+                    }
                 }
             } catch (_: Exception) { ver = null }
             L.add("- **Flowable version:** " + (if (!ver.isNullOrEmpty()) ver else "see pom.xml / dependencies (not auto-detected)"))
@@ -196,10 +246,154 @@ object ClaudeRenderer {
             L.addAll(examples)
         }
 
+        // Known problems. An agent that cannot see these copies them: it mirrors a broken expression as
+        // if it were the house style, or "fixes" a script that was already reported. Counts + the worst
+        // few here; the itemized list with file/line is in the overview and in `findings` in graph.json.
+        val checks = result["checks"] as? Map<String, Any?> ?: emptyMap()
+        val open = (checks["open"] as? Number)?.toInt() ?: 0
+        if (open > 0) {
+            val findings = result["findings"] as? List<Map<String, Any?>> ?: emptyList()
+            L.add("\n**Known issues in this project ($open) — do not copy these patterns, and expect " +
+                    "them when something behaves oddly:**")
+            L.add("- " + checks.entries.filter { it.key != "open" }
+                .joinToString(" · ") { "${SummaryRenderer.CHECK_LABELS[it.key] ?: it.key}: ${it.value}" })
+            for (f in findings.filter { it["severity"] == "error" }.take(3)) {
+                val where = listOfNotNull(f["label"]?.toString(), f["element"]?.toString())
+                    .joinToString(" · ")
+                L.add("- ⚠ ${f["message"]}" + (if (where.isEmpty()) "" else " — `$where`"))
+            }
+            L.add("- Full list: `$name.overview.md` §Findings, or `findings` in `$name.graph.json`.")
+        }
+
         L.add("")
         L.add("> `<!-- Add house rules: code style, where business logic goes, what NOT to touch, " +
                 "how this app is deployed/published to Work. -->`\n")
 
+        L.add(CLAUDE_RULES)
+        // Reference material goes last: it is looked up, not read top to bottom.
+        L.addAll(expressionCheatsheet(result))
+        return L.joinToString("\n")
+    }
+
+    /**
+     * `addCandidateGroup` + `addCandidateGroups` → `addCandidateGroup(s)`.
+     *
+     * These families dominate the `bpmn:`/`cmmn:`/`task:` namespaces, where naming both halves of a dozen
+     * pairs costs a third of the list for no extra information. Sorted, deduplicated.
+     */
+    private fun foldPlurals(names: List<String>): List<String> {
+        val all = names.distinct().toSet()
+        val out = LinkedHashSet<String>()
+        for (n in names.distinct().sorted()) {
+            if (n.endsWith("s") && n.dropLast(1) in all) continue   // covered by its singular
+            out.add(if ("${n}s" in all) "$n(s)" else n)
+        }
+        return out.toList()
+    }
+
+    /**
+     * The expression and script surface an agent can actually call — from Atlas's own catalogs.
+     *
+     * This is the sharpest instance of the gap Atlas exists to close. `FlowableExpressionCatalog`,
+     * `ScriptBindingsCatalog`, `ScriptPlatformApis` and `ScriptServiceApis` are a hand-curated inventory
+     * of Flowable's EL namespaces, script bindings and platform beans — precisely the knowledge a model
+     * lacks and invents instead. They were used only to *validate* expressions and to drive IDE
+     * completion, so Atlas would tell you `${'$'}{vars:bogus()}` is wrong while never saying what is right.
+     *
+     * Names only, no prose: the point is to fix the vocabulary, and one line per namespace costs a
+     * fraction of what a hallucinated function costs to debug. Project-specific functions discovered in
+     * the repo are listed too, since those are the ones no amount of Flowable knowledge would supply.
+     */
+    private fun expressionCheatsheet(result: Map<String, Any?>): List<String> {
+        val L = ArrayList<String>()
+        L.add("## 6. Expressions & scripts — what you may call\n")
+        L.add("_Atlas validates against these catalogs, so anything outside them is very likely a " +
+                "hallucination. Names only; check the docs for signatures._\n")
+
+        L.add("**Backend `\${…}` (JUEL) — namespaced functions:**")
+        for (prefix in FlowableExpressionCatalog.backendPrefixes().toSortedSet()) {
+            val canonical = FlowableExpressionCatalog.resolvePrefix(prefix) ?: continue
+            if (canonical != prefix) continue        // list each namespace once, under its canonical name
+            val fns = FlowableExpressionCatalog.backendFunctionsForPrefix(prefix)
+            if (fns.isEmpty()) continue
+            val aliases = FlowableExpressionCatalog.backendPrefixes()
+                .filter { it != prefix && FlowableExpressionCatalog.resolvePrefix(it) == canonical }
+                .sorted()
+            val head = "`$prefix:`" + (if (aliases.isEmpty()) "" else " (aka ${aliases.joinToString(", ") { "`$it:`" }})")
+            L.add("- $head — " + Fmt.cap(foldPlurals(fns.map { it.name }), 22))
+        }
+        val bare = FlowableExpressionCatalog.backendNoPrefixFunctions().map { it.name }
+        if (bare.isNotEmpty()) L.add("- _(no prefix)_ — " + Fmt.cap(foldPlurals(bare), 22))
+        val backendRoots = FlowableExpressionCatalog.roots(ExpressionDialect.BACKEND).map { it.name }.sorted()
+        if (backendRoots.isNotEmpty()) L.add("- implicit objects — " + Fmt.cap(backendRoots, 24))
+
+        L.add("\n**Frontend `{{…}}` (forms/pages):**")
+        val feMembers = FlowableExpressionCatalog.frontendMembers().map { it.name }
+        if (feMembers.isNotEmpty()) {
+            L.add("- `${FlowableExpressionCatalog.FRONTEND_NS}.` — " + Fmt.cap(foldPlurals(feMembers), 34))
+        }
+        val feRoots = FlowableExpressionCatalog.roots(ExpressionDialect.FRONTEND).map { it.name }.sorted()
+        if (feRoots.isNotEmpty()) L.add("- implicit objects — " + Fmt.cap(feRoots, 24))
+
+        L.add("\n**Script bindings** (Groovy/JS in script tasks, listeners and bots) — what each context binds:")
+        for (ctx in listOf(
+            ScriptContext.BPMN_SCRIPT_TASK, ScriptContext.BPMN_TASK_LISTENER,
+            ScriptContext.CMMN_SCRIPT_TASK, ScriptContext.ACTION_BOT,
+        )) {
+            val roots = ScriptBindingsCatalog.rootsFor(ctx).values.filter { !it.hidden }
+            if (roots.isEmpty()) continue
+            val scopes = roots.filter { !it.bean }.map { it.name }.sorted()
+            L.add("- ${ctx.display} — " + Fmt.cap(scopes, 12))
+        }
+        val beans = ScriptBindingsCatalog.rootsFor(ScriptContext.BPMN_SCRIPT_TASK).values
+            .filter { it.bean && !it.hidden }.map { it.name }.sorted()
+        if (beans.isNotEmpty()) {
+            L.add("- platform beans (also injectable in Java) — " + Fmt.cap(beans, 30))
+        }
+
+        // Whatever this project registers itself — the part no catalog can know.
+        val custom = result["customFunctions"] as? Map<*, *>
+        if (custom != null) {
+            val lines = ArrayList<String>()
+            (custom["namespaces"] as? Map<*, *>)?.forEach { (ns, members) ->
+                lines.add("`$ns:` — " + Fmt.list(members))
+            }
+            (custom["flw"] as? List<*>)?.takeIf { it.isNotEmpty() }
+                ?.let { lines.add("`flw.` — " + Fmt.list(it)) }
+            (custom["topLevel"] as? List<*>)?.takeIf { it.isNotEmpty() }
+                ?.let { lines.add("top-level — " + Fmt.list(it)) }
+            if (lines.isNotEmpty()) {
+                L.add("\n**This project's own expression functions** (discovered in the repo):")
+                for (l in lines) L.add("- $l")
+            }
+        }
+        L.add("")
+        return L
+    }
+
+    /**
+     * The project-independent primer on its own — the content of the repo's `CLAUDE.template.md`.
+     *
+     * That file used to be a second, hand-maintained copy of §1–§3/§5 with no test keeping it in step,
+     * and it had already drifted (it pointed at `APP_SUMMARY.md` and `python3 flowable_atlas.py`, both
+     * long gone, and documented a node field that does not exist). Now it is generated from the same
+     * constants [render] uses, so the two cannot disagree: `ClaudeTemplateSyncTest` fails if the
+     * committed file differs, and `./gradlew :core:updateGoldens` rewrites it.
+     *
+     * §4 is the only section that differs from a generated `<project>.CLAUDE.md`: here it is a FILL-IN
+     * skeleton, there it is auto-discovered.
+     */
+    fun renderGeneric(): String {
+        val L = ArrayList<String>()
+        L.add("# CLAUDE.md — Flowable solution project (context for AI agents)\n")
+        L.add("_Generic Flowable primer for AI agents. **Prefer the generated version:** " +
+                "`atlas <project-dir>` writes `<project>.CLAUDE.md` — this same primer with §4 filled in " +
+                "from the actual project (apps, inventory, where models/Java live, conventions, wiring " +
+                "examples to mirror). Use this file only when you cannot run Atlas; then copy it to the " +
+                "project root as `CLAUDE.md` (or `AGENTS.md`) and fill in §4 by hand._\n")
+        L.add(CLAUDE_START_GENERIC)
+        L.add(CLAUDE_PLATFORM)
+        L.add(CLAUDE_FILL_IN)
         L.add(CLAUDE_RULES)
         return L.joinToString("\n")
     }
@@ -232,12 +426,25 @@ Flowable is a Java process-automation platform. A solution project is custom Jav
 
 - **Work** = the **runtime *and* the end-user React frontend** (executes definitions, renders forms,
   hosts tasks/cases). Custom Java + REST controllers run here. **Design** = the visual modeler.
-  (Control/Hub = admin consoles.) Engines: BPMN (processes), CMMN (cases), DMN (decisions), Form, IDM.
+  (Control/Hub = admin consoles; Engage = the conversational/omnichannel layer, often unused.)
+  Engines: BPMN (processes), CMMN (cases), DMN (decisions), Form, Content, IDM (users/groups), plus
+  platform engines (data objects, actions, agents, indexing).
 
 **Models vs Definitions (the key concept):** models are mutable design-time JSON; when deployed they
-become **immutable, versioned Definitions** (stored in the DB's `ACT_*` tables — rarely touched
-directly; use the engine services/APIs). Everything is referenced by **key** (process/case/form/decision
-key) — cross-references between models, from Java, and from the frontend are all by key.
+become **immutable, versioned Definitions**. Everything is referenced by **key**
+(process/case/form/decision key) — cross-references between models, from Java, and from the frontend are
+all by key.
+
+```
+DESIGN (models, editable JSON)              WORK (definitions, deployed & IMMUTABLE)
+  App (package model) ── publish/export ──►   Deployment
+    ├─ BPMN / CMMN / DMN / Form model ────►     Process/Case/Decision/Form definition (versioned)
+    └─ data object / service / query / … ─►     platform definitions
+```
+
+Where state lives in the DB (rarely touched directly — use the engine services/APIs): `ACT_RU_*`
+runtime, `ACT_HI_*` history, `ACT_RE_*` deployed definitions, `ACT_ID_*` identity, `ACT_DE_*` Design
+models.
 
 **In a solution project, models are authored in Design and *exported into this repo*** — the `.app`/`.zip`
 and model files under `src/main/resources` are **exported build artifacts**, not the editing surface.
@@ -251,9 +458,11 @@ place to *change* a model is Flowable **Design**, then re-export.
 - **Listeners** — Execution/Task/PlanItemLifecycle/CaseInstanceLifecycle/FlowableEventListener.
 - **REST controllers** — `@RestController` endpoints the Work frontend (forms, data tables, buttons) calls.
 - **Bots** (`BotService`) — invoked by **Actions** (`.action` models, via `botKey`).
-- **Service-registry data objects** — `.data` backed by a `.service` (REST/DB); DB-backed map to **Liquibase** tables.
+- **Service-registry data objects** — `.data` backed by a `.service` (REST/DB); DB-backed ones map to
+  **Liquibase** tables via `referencedLiquibaseModelKey` + `tableName`.
 - **Forms** — bind fields to **variables**; outcomes drive flow; can call REST for options/data tables.
-- **Queries** (`.query`) — index queries (tasks/case-instances/…), often gated by **user group**.
+- **Queries** (`.query`) — index queries (tasks/case-instances/…), often gated by **user group**
+  (`currentGroups?seq_contains(…)`).
 - **Variables** — set in Java (`execution.setVariable(...)`), init-var mappings, in/out params, sequences; read in expressions.
 - **Access** — candidate (starter) groups, task candidate groups/assignees, app/page permissions, security policies.
 
@@ -274,6 +483,33 @@ controllers, bots) to match the models, and **read** the models to understand th
 needs a model change (new task/form/variable/decision), **say so explicitly and describe it** — it's
 made in Design and re-exported, unless this project's convention is to edit the model files directly
 (check existing commits/patterns first). Always mirror an existing similar case — find it via Atlas.
+"""
+
+    /** §0 for the standalone template — the generated file names its own sibling artifacts instead. */
+    private val CLAUDE_START_GENERIC = """## 0. Understand this project — start here
+
+Don't guess — build the picture in order:
+1. Run **Flowable Atlas** on the project (`atlas <project-dir>`). It writes, next to each other:
+   `<project>.summary.md` (compact orientation), `<project>.overview.md` (the full report),
+   `<project>.graph.json` (the traversable model↔code graph) and `<project>.explorer.html`.
+2. Read the **summary** — apps, inventory, entry points, integrations, hotspots, known issues.
+3. Query the **graph** for specific questions (what calls X, who uses variable Y, which controller
+   serves form Z) instead of reading everything.
+4. Read the actual source to verify, then implement.
+"""
+
+    /** §4 for the standalone template: the facts a generated `<project>.CLAUDE.md` fills in itself. */
+    private val CLAUDE_FILL_IN = """## 4. This project — `<!-- FILL IN -->`
+
+> Atlas auto-fills all of this. Generate `<project>.CLAUDE.md` instead of hand-filling it.
+
+- **Repo layout:** `<!-- where models live, where custom Java lives, where the frontend lives -->`
+- **Key/naming conventions:** `<!-- e.g. processes ABC-P###, cases ABC-C###, forms ABC-F### -->`
+- **Build/test:** `<!-- e.g. ./mvnw clean install -DskipTests -T 1C  /  ./mvnw test -pl <module> -am -->`
+- **Run & verify:** `<!-- how to start it; the app auto-deploys its bundled models on startup -->`
+- **Flowable version:** `<!-- matters: available APIs differ across versions -->`
+- **Wiring examples to mirror:** `<!-- one real delegate, listener, bot, form→REST call -->`
+- **House rules:** `<!-- code style, where business logic goes, what NOT to touch -->`
 """
 
     private val CLAUDE_RULES = """## 5. Rules for the agent
