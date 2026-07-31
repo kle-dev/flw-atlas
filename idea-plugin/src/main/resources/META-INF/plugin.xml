@@ -127,6 +127,17 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.11.1</h3>
+        <ul>
+          <li><b>The diagram's element card can be expanded over the whole page</b> — it starts docked to
+              the diagram's top-right corner, where its resize handle has nothing left to grow into: in a
+              narrow tool window you could not drag it past the drawing. <b>⤢</b> in the header (or a
+              double-click on the header) now lifts it out of the corner into a centered overlay across
+              the entire app — dimmed behind, above even the full-screen diagram, as tall as its content
+              needs and still resizable. Clicking the backdrop or <kbd>Esc</kbd> shrinks it back to the
+              corner, a second <kbd>Esc</kbd> closes it, and the expanded and docked sizes are remembered
+              separately, so clicking through elements stays in the mode you chose.</li>
+        </ul>
         <h3>0.11.0</h3>
         <ul>
           <li><b>The generated artifacts say what Atlas actually knows</b> — the Markdown/JSON artifacts

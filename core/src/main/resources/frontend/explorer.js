@@ -2578,13 +2578,19 @@ if(dgmodal){
   dgmodal.addEventListener('mousedown',e=>{ if(e.target.closest('[data-close]')) closeDiagramModal(); });
   document.addEventListener('keydown',e=>{
     if(dgmodal.hidden || !_dgZoom) return;
-    if(e.key==='Escape'){ if(_dgCard){ hideDgCard(); } else closeDiagramModal(); }
+    if(e.key==='Escape'){ if(_dgCard){ dgCardEscape(); } else closeDiagramModal(); }
     else if(e.key==='+'||e.key==='='){ e.preventDefault(); _dgZoom.zoom(1.25); }
     else if(e.key==='-'){ e.preventDefault(); _dgZoom.zoom(1/1.25); }
     else if(e.key==='0'){ e.preventDefault(); _dgZoom.fit(); }
   });
 }
-document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&_dgCard&&(!dgmodal||dgmodal.hidden)) hideDgCard(); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&_dgCard&&(!dgmodal||dgmodal.hidden)) dgCardEscape(); });
+/** Escape unwinds the card one step at a time: the overlay shrinks back first, the card closes second
+ *  — same reasoning as the palette's marks-then-panel chain. */
+function dgCardEscape(){
+  if(!_dgCard) return;
+  if(_dgCard.classList.contains('big')) setDgCardBig(_dgCard, false); else hideDgCard();
+}
 
 // ---------- diagram interactivity ----------
 // The renderer stamps every shape/edge group with its model element id (`data-el`), which is the same
@@ -2728,20 +2734,31 @@ function revealByEl(det, elId){
 }
 
 // ---------- element info card (click a diagram element) ----------
-let _dgCard=null;
-function hideDgCard(){ if(_dgCard&&_dgCard.parentNode) _dgCard.parentNode.removeChild(_dgCard); _dgCard=null; }
+let _dgCard=null, _dgScrim=null;
+function hideDgCard(){
+  if(_dgCard&&_dgCard.parentNode) _dgCard.parentNode.removeChild(_dgCard);
+  _dgCard=null; dgScrim(false);
+}
 // The card is a small window on <body> — `position:fixed`, NOT a child of the diagram viewport. That is
 // what lets it be dragged and resized far past the drawing area: in a narrow IDE tool window the
 // viewport is much smaller than the space a card full of parameters needs, and a card clamped to it
 // would stay unusably tiny. It still *starts* docked to the viewport's top-right corner (out of the
 // drawing, and stable while you click through elements). Size and the corner offset are remembered, so
-// the docking carries over between the inline view and the (wider) fullscreen modal.
+// the docking carries over between the inline view and the (wider) fullscreen modal. Corner-docked it
+// can only be dragged bigger to the right/down though, so ⤢ (`setDgCardBig`) trades the corner for a
+// centered, page-wide overlay.
 const DGCARD_STORE='atlas-dgcard';
 function dgCardPrefs(){ try{ return JSON.parse(localStorage.getItem(DGCARD_STORE)||'{}')||{}; }catch(err){ return {}; } }
 function dgCardRemember(patch){
   try{ localStorage.setItem(DGCARD_STORE, JSON.stringify(Object.assign(dgCardPrefs(), patch))); }catch(err){}
 }
 function placeDgCard(view, card){
+  if(dgCardPrefs().big){ setDgCardBig(card, true, false); return; }   // stay expanded across clicks
+  dgDockCard(view, card);
+}
+/** The docked geometry: remembered size, parked at the viewport's top-right corner. */
+function dgDockCard(view, card){
+  if(!view){ clampDgCard(card); return; }
   const p=dgCardPrefs(), r=view.getBoundingClientRect();
   if(p.w) card.style.width=Math.max(240, Math.min(p.w, window.innerWidth-16))+'px';
   if(p.h) card.style.height=Math.max(90, Math.min(p.h, window.innerHeight-16))+'px';
@@ -2749,6 +2766,64 @@ function placeDgCard(view, card){
   card.style.left=(r.right-card.offsetWidth-rx)+'px';
   card.style.top =(r.top+ty)+'px';
   clampDgCard(card);
+}
+// ---- docked corner window ⇄ full-page overlay ----
+// Docked, the card can only be dragged bigger down and to the RIGHT (that is where the native
+// `resize:both` handle is) while it *starts* at the diagram's top-right corner — so in a narrow IDE
+// tool window there is nothing left to grow into and the card seems unable to escape the diagram.
+// ⤢ lifts it out of the corner into a centered overlay over the whole page, above even the fullscreen
+// diagram modal, which is where an element with twenty parameters is actually readable. The choice is
+// remembered because the card is rebuilt from scratch on every element click.
+/** Overlay geometry: as wide as reading a parameter table wants, and only as TALL as the content —
+ *  capped at the viewport. A fixed 92vh box would turn a two-row start event into a white wall. */
+function dgCardBigRect(){
+  const p=dgCardPrefs(), maxW=Math.max(240, window.innerWidth-32);
+  return {w:Math.max(240, Math.min(p.bw||Math.min(1100, maxW), maxW)),
+          h:p.bh?Math.max(90, Math.min(p.bh, Math.round(window.innerHeight*0.92))):null};
+}
+function setDgCardBig(card, on, remember){
+  if(on){
+    const r=dgCardBigRect();
+    card.classList.add('big');
+    card.style.width=r.w+'px';
+    card.style.height=r.h?r.h+'px':'';                 // no remembered height → hug the content
+    // centered only after the width lands: until then the content height is unknown
+    card.style.left=Math.round((window.innerWidth-r.w)/2)+'px';
+    card.style.top =Math.max(8, Math.round((window.innerHeight-card.offsetHeight)/2))+'px';
+    dgScrim(true);
+  }else{
+    card.classList.remove('big');
+    card.style.width=''; card.style.height='';           // back to the remembered docked size
+    dgScrim(false);
+    dgDockCard(card._view, card);
+  }
+  if(remember!==false) dgCardRemember({big:!!on});
+  const b=card.querySelector('.dgcard-max');
+  if(b){
+    const lbl=on?'Shrink back to the diagram corner':'Expand to a full-page overlay';
+    b.textContent=on?'⤡':'⤢';
+    b.setAttribute('aria-label',lbl); b.setAttribute('data-tip',lbl);
+    b.setAttribute('aria-pressed',on?'true':'false');
+  }
+}
+/** The dim layer behind an expanded card. Its own element at z-index 119 so it also covers the
+ *  fullscreen diagram modal (which reuses .palette's layer at 100). Clicking it shrinks the card
+ *  back rather than closing it: expanding is a reading mode, and dismissing would cost you the
+ *  element you clicked to get here. ✕ / Escape still close. */
+function dgScrim(on){
+  if(on){
+    if(_dgScrim) return;
+    _dgScrim=document.createElement('div');
+    _dgScrim.className='dgscrim';
+    // shrink on `click`, not on `pointerdown`: removing the scrim under a pressed pointer leaves the
+    // following click with no stable target (it would land on whatever is now underneath).
+    _dgScrim.addEventListener('pointerdown',e=>e.stopPropagation());
+    _dgScrim.addEventListener('click',e=>{ e.stopPropagation(); if(_dgCard) setDgCardBig(_dgCard,false); });
+    document.body.appendChild(_dgScrim);
+  }else if(_dgScrim){
+    if(_dgScrim.parentNode) _dgScrim.parentNode.removeChild(_dgScrim);
+    _dgScrim=null;
+  }
 }
 /** Keep the card reachable inside the window — after placing it, a drag, or a window resize. */
 function clampDgCard(card){
@@ -2758,8 +2833,14 @@ function clampDgCard(card){
 }
 function wireDgCardMoveResize(view, card){
   const head=card.querySelector('.dgcard-head');
+  // Double-click the header to expand/shrink, as a window title bar does.
+  if(head) head.addEventListener('dblclick', e=>{
+    if(e.target.closest('button')) return;
+    setDgCardBig(card, !card.classList.contains('big'));
+  });
   if(head) head.addEventListener('pointerdown', e=>{
     if(e.target.closest('button')) return;                 // the ✕ stays a click
+    if(card.classList.contains('big')) return;             // expanded, it is centered, not draggable
     e.preventDefault(); e.stopPropagation();
     const sx=e.clientX-card.offsetLeft, sy=e.clientY-card.offsetTop;
     const move=ev=>{
@@ -2781,12 +2862,19 @@ function wireDgCardMoveResize(view, card){
       if(first){ first=false; return; }                    // the observe() call itself fires once
       clearTimeout(card._rszT);
       card._rszT=setTimeout(()=>{
-        if(card.isConnected) dgCardRemember({w:card.offsetWidth, h:card.offsetHeight});
+        if(!card.isConnected) return;
+        // The two modes keep their own size, so shrinking back never inherits the overlay's dimensions.
+        if(card.classList.contains('big')) dgCardRemember({bw:card.offsetWidth, bh:card.offsetHeight});
+        else dgCardRemember({w:card.offsetWidth, h:card.offsetHeight});
       }, 300);
     }).observe(card);
   }
 }
-window.addEventListener('resize',()=>{ if(_dgCard) clampDgCard(_dgCard); });
+window.addEventListener('resize',()=>{
+  if(!_dgCard) return;
+  if(_dgCard.classList.contains('big')) setDgCardBig(_dgCard, true, false);   // re-center on the new size
+  else clampDgCard(_dgCard);
+});
 function wireDgClicks(view, inModal){
   if(view._dgClicksWired) return;                     // the modal view persists across opens
   view._dgClicksWired=true;
@@ -2820,7 +2908,7 @@ function showDgCard(view, g, e, inModal){
   const elId=dgEffectiveId(n, g);
   const card=document.createElement('div'); card.className='dgcard';
   card.setAttribute('role','dialog');
-  card.setAttribute('aria-label','Element details — drag the header to move, drag the corner to resize');
+  card.setAttribute('aria-label','Element details — drag the header to move, drag the corner to resize, ⤢ to expand over the page');
   card.innerHTML=dgCardHtml(n, elId, g);
   // on <body>, not in the view: see placeDgCard. `_view` keeps the originating viewport reachable.
   card._view=view;
@@ -2833,6 +2921,8 @@ function showDgCard(view, g, e, inModal){
   card.addEventListener('click',ev=>ev.stopPropagation());
   card.addEventListener('wheel',ev=>ev.stopPropagation());         // the card scrolls itself
   card.querySelector('.dgcard-x').onclick=()=>{ hideDgCard(); dgSelect(view, null); };
+  const mx=card.querySelector('.dgcard-max');
+  if(mx) mx.onclick=()=>setDgCardBig(card, !card.classList.contains('big'));
   const dj=card.querySelector('[data-dgdetails]');
   if(dj) dj.onclick=()=>{
     hideDgCard();
@@ -2963,6 +3053,8 @@ function dgCardHtml(n, elId, g){
   const hasRows=det&&[...det.querySelectorAll('[data-el]')].some(x=>x.dataset.el===revealId&&!x.closest('.dgview'));
   return '<div class="dgcard-head"><span class="dgcard-title">'+esc(name||elId)+'</span>'+
     (tyHtml?'<span class="dgcard-ty">'+tyHtml+'</span>':'')+
+    '<button class="dgcard-max" aria-label="Expand to a full-page overlay" aria-pressed="false"'+
+    ' data-tip="Expand to a full-page overlay">⤢</button>'+
     '<button class="dgcard-x" aria-label="Close">×</button></div>'+
     '<div class="dgcard-id mono">'+esc(elId)+copyBtn(elId,'element id')+'</div>'+
     rows.join('')+body+
