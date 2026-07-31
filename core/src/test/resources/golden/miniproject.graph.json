@@ -275,6 +275,15 @@
     }
   ],
   "channels": [],
+  "checks": {
+    "guessedVars": 1,
+    "invalidExpr": 2,
+    "missingRefs": 1,
+    "open": 8,
+    "parseIssues": 1,
+    "schemaGaps": 1,
+    "scriptIssues": 2
+  },
   "customFunctions": null,
   "dataObjects": [
     {
@@ -435,6 +444,76 @@
     "${notifierBean}",
     "${total > 100}",
     "${vars:bogus(}"
+  ],
+  "findings": [
+    {
+      "check": "guessedVars",
+      "label": "courierCode",
+      "message": "only a script mentions this variable — the name is inferred, not declared",
+      "node": "variable:courierCode",
+      "severity": "warning"
+    },
+    {
+      "check": "invalidExpr",
+      "label": "${vars:bogus(}",
+      "message": "Unclosed '('",
+      "node": "expression:${vars:bogus(}",
+      "severity": "error",
+      "snippet": "("
+    },
+    {
+      "check": "invalidExpr",
+      "label": "${vars:bogus(}",
+      "message": "Unknown function 'vars:bogus'",
+      "node": "expression:${vars:bogus(}",
+      "severity": "warning",
+      "snippet": "bogus"
+    },
+    {
+      "check": "missingRefs",
+      "label": "fulfilmentProcess",
+      "message": "referenced model does not exist in this project",
+      "node": "external:fulfilmentProcess",
+      "severity": "error"
+    },
+    {
+      "check": "parseIssues",
+      "file": "broken.form",
+      "label": "broken.form",
+      "message": "parse: (form) Expecting property name enclosed in double quotes: line 2 column 1 (char 37)",
+      "node": null,
+      "severity": "error"
+    },
+    {
+      "check": "schemaGaps",
+      "file": "services/customer.service",
+      "label": "Customer Service",
+      "message": "column `orphan_col_` of table `cust_customer` is in Liquibase but not mapped by the service",
+      "node": "service:customerService",
+      "severity": "warning"
+    },
+    {
+      "check": "scriptIssues",
+      "element": "badApi",
+      "file": "processes/order.bpmn",
+      "label": "Order Process",
+      "line": 1,
+      "message": "'execution' has no member 'setTransientVariabel' — did you mean 'setTransientVariable'?",
+      "node": "process:orderProcess",
+      "severity": "warning",
+      "snippet": "execution.setTransientVariabel('meta', orderId)"
+    },
+    {
+      "check": "scriptIssues",
+      "element": "badStamp",
+      "file": "processes/order.bpmn",
+      "label": "Order Process",
+      "line": 1,
+      "message": "'(' is never closed",
+      "node": "process:orderProcess",
+      "severity": "error",
+      "snippet": "execution.setVariable('shippingStamp', \"x-\" + orderId"
+    }
   ],
   "forms": [
     {
@@ -1029,6 +1108,50 @@
             }
           ],
           "file": "processes/order.bpmn",
+          "flows": [
+            {
+              "condition": "${total > 100}",
+              "from": "calcTask",
+              "id": "f2",
+              "to": "approveTask"
+            },
+            {
+              "condition": "${vars:bogus(}",
+              "from": "approveTask",
+              "id": "f3",
+              "to": "notifyTask"
+            },
+            {
+              "from": "callSub",
+              "id": "f5",
+              "to": "decideTask"
+            },
+            {
+              "from": "decideTask",
+              "id": "f6",
+              "to": "waitShipped"
+            },
+            {
+              "from": "notifyTask",
+              "id": "f4",
+              "to": "callSub"
+            },
+            {
+              "from": "stampTask",
+              "id": "f8",
+              "to": "end"
+            },
+            {
+              "from": "start",
+              "id": "f1",
+              "to": "calcTask"
+            },
+            {
+              "from": "waitShipped",
+              "id": "f7",
+              "to": "stampTask"
+            }
+          ],
           "gateways": [],
           "ioParameters": [
             {
@@ -2666,7 +2789,6 @@
     "backoffice",
     "sales"
   ],
-  "javaBeans": [],
   "javaByRole": {
     "component": [
       {
@@ -2980,6 +3102,50 @@
         }
       ],
       "file": "processes/order.bpmn",
+      "flows": [
+        {
+          "condition": "${total > 100}",
+          "from": "calcTask",
+          "id": "f2",
+          "to": "approveTask"
+        },
+        {
+          "condition": "${vars:bogus(}",
+          "from": "approveTask",
+          "id": "f3",
+          "to": "notifyTask"
+        },
+        {
+          "from": "callSub",
+          "id": "f5",
+          "to": "decideTask"
+        },
+        {
+          "from": "decideTask",
+          "id": "f6",
+          "to": "waitShipped"
+        },
+        {
+          "from": "notifyTask",
+          "id": "f4",
+          "to": "callSub"
+        },
+        {
+          "from": "stampTask",
+          "id": "f8",
+          "to": "end"
+        },
+        {
+          "from": "start",
+          "id": "f1",
+          "to": "calcTask"
+        },
+        {
+          "from": "waitShipped",
+          "id": "f7",
+          "to": "stampTask"
+        }
+      ],
       "gateways": [],
       "ioParameters": [
         {

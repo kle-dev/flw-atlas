@@ -1,7 +1,9 @@
 package com.flowable.atlas.graph
 
+import com.flowable.atlas.GoldenFiles
 import com.flowable.atlas.model.MiniJson
 import org.junit.Assert.assertEquals
+import org.junit.Assume.assumeFalse
 import org.junit.Test
 import java.io.File
 
@@ -23,6 +25,8 @@ class GoldenExtractionTest {
 
     @Test
     fun implementedSectionsMatchGolden() {
+        // The per-section diff is a *reading* aid; when re-baselining, wholeResultMatchesGolden writes.
+        assumeFalse("re-baselining goldens", GoldenFiles.updating)
         for (section in IMPLEMENTED_SECTIONS) {
             val mine = GoldenNormalize.canonicalTree(result[section])
             val expected = golden[section]
@@ -36,6 +40,16 @@ class GoldenExtractionTest {
      *  -style parse-error messages, so even the broken-file diagnostic text matches. */
     @Test
     fun wholeResultMatchesGolden() {
+        if (GoldenFiles.updating) {
+            // Re-baseline through the same normalization the comparison uses: the strict gate below is
+            // list-order sensitive, so a raw `--all` dump would not pass. 2-space indent + trailing
+            // newline reproduce the committed file's shape exactly.
+            GoldenFiles.assertMatches(
+                "miniproject.graph.json",
+                MiniJson.stringify(GoldenNormalize.normalize(result), 2) + "\n",
+            )
+            return
+        }
         val mine = GoldenNormalize.canonicalTree(result)
         assertEquals("full result differs from core/src/test/resources/golden/miniproject.graph.json", golden, mine)
     }
@@ -75,8 +89,10 @@ class GoldenExtractionTest {
             "graph", "stats",
             // diagnostics/warnings — match now that MiniJson emits Python-json-style messages
             "diagnostics", "warnings",
+            // health findings derived from all of the above (Findings.kt)
+            "findings", "checks",
             // buckets that must remain empty for this fixture
-            "actions", "agents", "channels", "dictionaries", "others", "javaBeans", "javaGlue",
+            "actions", "agents", "channels", "dictionaries", "others", "javaGlue",
         )
     }
 }

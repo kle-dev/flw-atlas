@@ -2,9 +2,9 @@ package com.flowable.atlas.explorer
 
 import com.flowable.atlas.diagram.DiagramArtifacts
 import com.flowable.atlas.graph.Atlas
-import com.flowable.atlas.model.MiniJson
 import com.flowable.atlas.render.ClaudeRenderer
 import com.flowable.atlas.render.ExplorerHtmlRenderer
+import com.flowable.atlas.render.GraphJsonRenderer
 import com.flowable.atlas.render.OverviewRenderer
 import com.flowable.atlas.render.SummaryRenderer
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
@@ -69,7 +69,10 @@ class AtlasGeneratorService(private val project: Project) {
             val renderers = mapOf<AtlasArtifact, () -> String>(
                 AtlasArtifact.SUMMARY_MD to { SummaryRenderer.render(result, root) },
                 AtlasArtifact.OVERVIEW_MD to { OverviewRenderer.render(result, root) },
-                AtlasArtifact.GRAPH_JSON to { MiniJson.stringify(result, 2) },
+                // Projected + minified (GraphJsonRenderer): the raw result duplicated every model body
+                // and pretty-printed it, which on a large project meant a multi-megabyte file in the
+                // user's repo.
+                AtlasArtifact.GRAPH_JSON to { GraphJsonRenderer.render(result) },
                 AtlasArtifact.EXPLORER_HTML to { ExplorerHtmlRenderer.render(result, root) },
                 AtlasArtifact.CLAUDE_MD to { ClaudeRenderer.render(result, root) },
             )

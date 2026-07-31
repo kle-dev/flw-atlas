@@ -427,39 +427,41 @@ function computeInsights(){
   const hotspots = [...indeg.entries()].filter(x=>x[1]>0 && byId.get(x[0]))
     .sort((a,b)=> b[1]-a[1] || byId.get(a[0]).label.localeCompare(byId.get(b[0]).label))
     .slice(0,10).map(x=>({id:x[0], count:x[1]}));
+  // Denominators for the dashboard ("3 of 16 services have schema gaps"). The numerators are the
+  // health counts, which come from :core — see below.
   const isExprN = n => n.type==='expression'||n.type==='binding';
-  let invalidExpr=0, suspectExpr=0, unusedForms=0, changelogIssues=0, schemaGaps=0,
-      unusedOps=0, unusedFns=0, missingRefs=0, guessedVars=0,
-      totalExprs=0, totalForms=0, totalChangelogs=0,
-      totalCovServices=0, totalOps=0, totalFns=0;
+  let totalExprs=0, totalForms=0, totalChangelogs=0, totalCovServices=0, totalOps=0, totalFns=0;
   nodes.forEach(n=>{
     const d=n.data||{};
-    if(isExprN(n)){ totalExprs++; const pr=d.problems||[];
-      if(pr.length){ if(pr.some(p=>p.severity==='error')) invalidExpr++; else suspectExpr++; } }
-    else if(n.type==='form'){ totalForms++; if(isUnusedForm(n)) unusedForms++; }
-    else if(n.type==='liquibase'){ totalChangelogs++; const st=(d.authority||{}).status;
-      if(st==='orphan'||st==='superseded') changelogIssues++; }
-    else if(n.type==='service'){ const c=(d.schemaCoverage||{}).counts;
-      if(c){ totalCovServices++; schemaGaps+=(c.noService||0)+(c.noDataObject||0); } }
-    else if(n.type==='serviceOperation'){ totalOps++; if(!(d.usedBy||[]).length) unusedOps++; }
-    else if(n.type==='customFunction'){ totalFns++; if(!(d.usedBy||[]).length) unusedFns++; }
-    else if(n.type==='external' && d.missingModel) missingRefs++;
-    if(n.type==='variable' && d.heuristic===true) guessedVars++;
+    if(isExprN(n)) totalExprs++;
+    else if(n.type==='form') totalForms++;
+    else if(n.type==='liquibase') totalChangelogs++;
+    else if(n.type==='service'){ if((d.schemaCoverage||{}).counts) totalCovServices++; }
+    else if(n.type==='serviceOperation') totalOps++;
+    else if(n.type==='customFunction') totalFns++;
   });
   const apps = nodes.filter(n=>n.type==='app')
     .map(a=>({id:a.id, models:containsByApp.get(a.id)||0, groups:openAppByApp.get(a.id)||0}))
     .sort((a,b)=>b.models-a.models);
-  // scripts are not nodes — count their structural syntax findings from the flattened rows
   const scripts = allScripts();
-  const scriptIssues = scripts.filter(s=>(s.problems||[]).length).length;
-  const health = { parseIssues: diags.length+cfnDiags.length, invalidExpr, suspectExpr, scriptIssues,
-                   unusedForms, changelogIssues, schemaGaps, missingRefs, guessedVars, unusedOps, unusedFns };
+  // The health counts come precomputed from :core (Findings.kt), which now derives them for every
+  // artifact — the Markdown reports, graph.json, the CLI status line and this page. They used to be
+  // computed here only, which is why no text artifact could state a single one of them, and why
+  // "script issues" meant "scripts carrying a finding" here but "findings" everywhere else.
+  // The node passes above still feed the facets and the dashboard totals.
+  const CHK = DATA.checks || {};
+  const health = { parseIssues: CHK.parseIssues||0, invalidExpr: CHK.invalidExpr||0,
+                   suspectExpr: CHK.suspectExpr||0, scriptIssues: CHK.scriptIssues||0,
+                   unusedForms: CHK.unusedForms||0, changelogIssues: CHK.changelogIssues||0,
+                   schemaGaps: CHK.schemaGaps||0, missingRefs: CHK.missingRefs||0,
+                   guessedVars: CHK.guessedVars||0, unusedOps: CHK.unusedOps||0,
+                   unusedFns: CHK.unusedFns||0 };
   INSIGHTS = { indeg, hotspots, apps, entryPoints,
     totalExprs, totalForms, totalChangelogs, totalCovServices, totalOps, totalFns,
     totalScripts: scripts.length,
     health,
     // what the Checks tab counts in its badge: every open finding, in one number
-    checksOpen: Object.keys(health).reduce((a,k)=>a+health[k],0) };
+    checksOpen: CHK.open || 0 };
 }
 
 // ---------- router — the hash is the single source of truth and the history ----------
@@ -714,21 +716,14 @@ function renderDashboard(){
   }
   h+='</div>';
   v.innerHTML=h;
-  v.onclick=e=>{
+  wireNodeLinks(v, '[data-id]', {first:e=>{
     const jump=e.target.closest('[data-jump]');
-    if(jump){ _checkJump=jump.dataset.jump; location.hash='/checks'; return; }
-    const idEl=e.target.closest('[data-id]');
-    if(idEl){ select(dec(idEl.dataset.id)); return; }
+    if(jump){ _checkJump=jump.dataset.jump; location.hash='/checks'; return true; }
     const rtEl=e.target.closest('[data-route]');
-    if(rtEl){ location.hash=rtEl.dataset.route; return; }
+    if(rtEl){ location.hash=rtEl.dataset.route; return true; }
     const catEl=e.target.closest('[data-cat]');
-    if(catEl){ location.hash='/browse/'+enc(catEl.dataset.cat); return; }
-  };
-  v.onkeydown=e=>{
-    if(e.key!=='Enter'&&e.key!==' ') return;
-    const t=e.target.closest('[data-id],[data-route],[data-cat],[data-jump]');
-    if(t){ e.preventDefault(); t.click(); }
-  };
+    if(catEl){ location.hash='/browse/'+enc(catEl.dataset.cat); return true; }
+  }});
 }
 
 // ---------- schema coverage: one renderer for the service detail AND the schema tab ----------
@@ -808,9 +803,7 @@ function renderSchema(){
   }
   h+='</div>';
   v.innerHTML=h;
-  v.onclick=e=>{ const idEl=e.target.closest('[data-id]'); if(idEl) select(dec(idEl.dataset.id)); };
-  v.onkeydown=e=>{ if(e.key!=='Enter'&&e.key!==' ') return;
-    const t=e.target.closest('[data-id]'); if(t){ e.preventDefault(); t.click(); } };
+  wireNodeLinks(v, '[data-id]');
 }
 
 // ---------- checks view (#/checks) ----------
@@ -955,20 +948,15 @@ function renderChecks(){
     '<div class="eh">No parse issue, no flagged expression, no unused or unresolved model.</div></div>';
   h+='</div>';
   v.innerHTML=h;
-  v.onclick=e=>{
+  wireNodeLinks(v, '[data-id]', {first:e=>{
     const jump=e.target.closest('[data-jump]');
     if(jump){ const t=document.getElementById(jump.dataset.jump);
-      if(t) t.scrollIntoView({block:'start'}); return; }
+      if(t) t.scrollIntoView({block:'start'}); return true; }
     const cat=e.target.closest('[data-cat]');
-    if(cat){ location.hash='/browse/'+enc(cat.dataset.cat); return; }
+    if(cat){ location.hash='/browse/'+enc(cat.dataset.cat); return true; }
     const route=e.target.closest('[data-route]');
-    if(route){ location.hash=route.dataset.route; return; }
-    const idEl=e.target.closest('[data-id]');
-    if(idEl) select(dec(idEl.dataset.id));
-  };
-  v.onkeydown=e=>{ if(e.key!=='Enter'&&e.key!==' ') return;
-    const t=e.target.closest('[data-jump],[data-cat],[data-route],[data-id]');
-    if(t){ e.preventDefault(); t.click(); } };
+    if(route){ location.hash=route.dataset.route; return true; }
+  }});
   // arrived from a health card or the parse-issue chip: land on the block it asked for
   if(_checkJump){
     const target=document.getElementById(_checkJump);
@@ -1222,14 +1210,7 @@ function renderScripts(){
     v.querySelectorAll('[data-scriptrow]').forEach(r=>r.addEventListener('toggle',syncAll));
     syncAll();
   }
-  v.onclick=e=>{
-    const go=e.target.closest('[data-goto]');
-    if(go){ e.preventDefault(); select(dec(go.dataset.goto), '', go.dataset.gotoEl||''); return; }
-    const idEl=e.target.closest('[data-id]');
-    if(idEl) select(dec(idEl.dataset.id));
-  };
-  v.onkeydown=e=>{ if(e.key!=='Enter'&&e.key!==' ') return;
-    const t=e.target.closest('[data-goto],[data-id]'); if(t){ e.preventDefault(); t.click(); } };
+  wireNodeLinks(v, '[data-goto],[data-id]');
 }
 
 // ---------- browse: list column ----------
@@ -2399,7 +2380,10 @@ function renderDetail(){
   h+=diagramView(n);
   h+=neighborhoodSvg(n);
   h+=detailExtra(n);
-  const relBody=g=>Object.keys(g).sort().map(rel=>
+  // The gesture is stated where the reference chips actually are. Walking a fan of references is the
+  // case it exists for: without it, every chip you follow costs you the node you started from.
+  const relHint='<div class="relhint">click follows · <b>'+MODK+'-click</b> or middle-click opens a tab</div>';
+  const relBody=g=>relHint+Object.keys(g).sort().map(rel=>
     '<div class="relgrp"><div class="lab">'+termHtml('rel', rel)+'</div><div class="nodechips">'+
     [...g[rel].values()].map(e=>nodeChip(e.id,e)).join('')+'</div></div>').join('');
   // outgoing
@@ -2433,21 +2417,11 @@ function renderDetail(){
     if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done,()=>prompt('Copy link:',url));
     else prompt('Copy link:',url);   // clipboard API is unavailable on file:// in some browsers
   };
-  // A relationship chip is a link, not a list row, so here ⌘/Ctrl+click and middle-click follow the
-  // browser convention: open in a background tab and stay where you are.
-  det.querySelectorAll('.nc, .gn, .vlink').forEach(c=>{
-    const id=()=>dec(c.dataset.id);
-    c.onclick=e=>{
-      if(e.metaKey||e.ctrlKey){ e.preventDefault(); openTabs([id()], {background:true}); return; }
-      select(id());
-    };
-    c.onauxclick=e=>{ if(e.button===1){ e.preventDefault(); openTabs([id()], {background:true}); } };
-    c.onkeydown=e=>{
-      if(e.key!=='Enter'&&e.key!==' ') return;
-      e.preventDefault();
-      if(e.metaKey||e.ctrlKey) openTabs([id()], {background:true}); else select(id());
-    };
-  });
+  // A relationship chip is a link, not a list row, so ⌘/Ctrl+click and middle-click follow the
+  // browser convention here. `[data-goto]` joins the same contract: it travels to another node AND
+  // lands on one of its elements (a variable → the script that sets it), which openTabs carries too.
+  // Innermost match wins, so a `[data-goto]` inside a chip resolves to the element, not the node.
+  wireNodeLinks(det, '.nc, .gn, .vlink, [data-goto]');
   // clicking the path (but not its copy icon) copies too — routed through atlasCopy so the "copied"
   // hint only shows on real success and the child copy button survives (no textContent nuke).
   const fp=det.querySelector('.dfile');
@@ -2468,12 +2442,6 @@ function renderDetail(){
   // "N parameter mappings ↓" inside a service task — jumps to that element's mapping group
   det.querySelectorAll('[data-reveal-el]').forEach(b=>{
     b.onclick=e=>{ e.stopPropagation(); revealByEl(det, b.dataset.revealEl); };
-  });
-  // travel to another node AND land on one of its elements (a variable → the script that sets it)
-  det.querySelectorAll('[data-goto]').forEach(b=>{
-    const go=e=>{ e.stopPropagation(); select(dec(b.dataset.goto), '', b.dataset.gotoEl||''); };
-    b.onclick=go;
-    b.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(e); } };
   });
   wireParamFilter(det);
   wireDiagram(det);
@@ -2871,9 +2839,10 @@ function showDgCard(view, g, e, inModal){
     if(inModal) closeDiagramModal();
     revealByEl(document.getElementById('detail'), dj.getAttribute('data-dgdetails')||elId);
   };
-  card.querySelectorAll('.vlink,.nc').forEach(c=>{
-    c.onclick=()=>{ hideDgCard(); if(inModal) closeDiagramModal(); select(dec(c.dataset.id)); };
-  });
+  // Navigating away tears the card down and leaves the fullscreen diagram — but a BACKGROUND open
+  // must not: ⌘-clicking callee after callee out of one diagram is the whole point, so only the
+  // card closes there and the diagram stays where it was.
+  wireNodeLinks(card, '.vlink,.nc', {before:bg=>{ hideDgCard(); if(inModal&&!bg) closeDiagramModal(); }});
   card.querySelectorAll('.cpy').forEach(b=>{
     b.onclick=ev=>{ ev.stopPropagation();
       atlasCopy(dec(b.dataset.copy), ()=>{ b.classList.add('ok'); setTimeout(()=>b.classList.remove('ok'),1200); }); };
@@ -3040,9 +3009,14 @@ function select(id, q, el){
 
 function applySelection(id){
   if(!byId.get(id)) return;
+  // Read before state.view is overwritten. The overview / schema / scripts / checks routes have no
+  // tab of their own AND hide the strip, so letting the active tab travel from there would drop a
+  // node the user never saw leave. From those views a link APPENDS; from the browse list it does
+  // not — there the strip is on screen and following a row is following a link in the active tab.
+  const fromNonNodeView = state.view!=='browse';
   state.view='browse'; showView('browse');
   rememberTabScroll();                     // before the panel is replaced
-  syncTabsWith(id);                        // reconcile the tab set with what the hash asks for
+  syncTabsWith(id, fromNonNodeView);       // reconcile the tab set with what the hash asks for
   state.sel=id;
   pushRecent(id);
   const n=byId.get(id);
@@ -3106,11 +3080,14 @@ function tabsRestore(){
   }catch(e){ state.tabs=[]; state.tab=-1; }
 }
 
-/** Reconcile the tab set with the node the hash just asked for. */
-function syncTabsWith(id){
+/**
+ * Reconcile the tab set with the node the hash just asked for.
+ * `append` forces a new tab instead of letting the active one travel — see applySelection().
+ */
+function syncTabsWith(id, append){
   const at=state.tabs.indexOf(id);
   if(at>=0){ state.tab=at; }                                  // already open → just activate it
-  else if(_tabsBooting || state.tab<0 || state.tab>=state.tabs.length){
+  else if(append || _tabsBooting || state.tab<0 || state.tab>=state.tabs.length){
     // Boot (a permalink alongside the restored set) or no active tab → append rather than replace,
     // so restoring tabs and opening a shared link never costs the user a tab.
     if(state.tabs.length>=MAX_TABS) evictTab();
@@ -3220,6 +3197,85 @@ function openTabs(ids, opts){
     select(first, opts.q, opts.el);
   }
   return {opened:want.length-dropped, dropped};
+}
+
+/**
+ * One transient message at a time. Only used where the tab strip cannot speak for itself: a
+ * background open from a route that hides it, or an open the cap refused. One timer, so a burst of
+ * ⌘-clicks extends a single line instead of flickering.
+ */
+let _toastT=null;
+function toast(msg){
+  const box=document.getElementById('toast');
+  if(!box||!msg) return;
+  box.textContent=msg;
+  box.classList.add('show');
+  clearTimeout(_toastT);
+  _toastT=setTimeout(()=>box.classList.remove('show'), 2200);
+}
+
+/**
+ * Wire a container so every node link inside it obeys ONE navigation contract (the doc block above):
+ *   plain click       → navigate; arriving from a view with no tab of its own APPENDS a tab
+ *   ⌘/Ctrl · middle   → background tab, stay where you are
+ *   Enter / Space     → mirrors the click, modifier included
+ * Delegated on `root`: the view renderers replace their whole innerHTML on every filter keystroke,
+ * and one delegated handler survives that where N per-element handlers would have to be re-attached.
+ * Assigned as a property (not addEventListener) so re-wiring a re-rendered container cannot stack
+ * duplicate handlers.
+ *
+ * `sel`             which descendants are node links. They carry `data-id`, or `data-goto`
+ *                   (+ `data-goto-el`) when the target is a specific element inside that node.
+ * `opts.first(e)`   the container's OTHER clickables — an anchor jump, a route, a category. Runs
+ *                   before the link lookup and wins when it returns true. No element carries both
+ *                   kinds of attribute, so the order between them is free.
+ * `opts.before(bg)` cleanup for a container that has to close itself (the diagram card). `bg` is
+ *                   true for a background open, which is how the diagram stays up while you collect
+ *                   tabs out of it.
+ */
+function wireNodeLinks(root, sel, opts){
+  opts=opts||{};
+  const target=e=>{
+    const el=e.target.closest?e.target.closest(sel):null;
+    if(!el) return null;
+    const id=dec(el.dataset.goto||el.dataset.id||'');
+    return byId.get(id) ? {id, el:el.dataset.gotoEl||''} : null;
+  };
+  // preventDefault, not just for form-ish targets: a link inside a <summary> would otherwise
+  // navigate AND toggle the section it sits in (same reason the ⌖ buttons do it).
+  const go=(t,bg)=>{
+    if(opts.before) opts.before(bg);
+    if(!bg){ select(t.id, '', t.el); return; }
+    const r=openTabs([t.id], {background:true});
+    const n=byId.get(t.id);
+    // A refused open has nowhere to report itself, and on the routes that hide the strip even a
+    // successful one is invisible — the toast covers exactly those two cases.
+    if(r.dropped) toast('not opened — '+MAX_TABS+' tabs is the limit');
+    else if(state.view!=='browse'&&n) toast('opened “'+n.label+'” in a tab');
+  };
+  root.onclick=e=>{
+    if(opts.first&&opts.first(e)) return;
+    const t=target(e);
+    if(!t) return;
+    e.preventDefault();
+    go(t, modKey(e));
+  };
+  root.onmousedown=e=>{ if(e.button===1&&target(e)) e.preventDefault(); };   // no autoscroll cursor
+  root.onauxclick=e=>{
+    if(e.button!==1) return;
+    const t=target(e);
+    if(!t) return;
+    e.preventDefault();
+    go(t, true);
+  };
+  root.onkeydown=e=>{
+    if(e.key!=='Enter'&&e.key!==' ') return;
+    if(opts.first&&opts.first(e)){ e.preventDefault(); return; }
+    const t=target(e);
+    if(!t) return;
+    e.preventDefault();
+    go(t, modKey(e));
+  };
 }
 
 function activateTab(i){

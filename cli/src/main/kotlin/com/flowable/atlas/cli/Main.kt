@@ -2,10 +2,11 @@ package com.flowable.atlas.cli
 
 import com.flowable.atlas.diagram.DiagramArtifacts
 import com.flowable.atlas.graph.Atlas
-import com.flowable.atlas.model.MiniJson
 import com.flowable.atlas.render.ClaudeRenderer
 import com.flowable.atlas.render.ExplorerHtmlRenderer
+import com.flowable.atlas.render.GraphJsonRenderer
 import com.flowable.atlas.render.OverviewRenderer
+import com.flowable.atlas.render.SliceRenderer
 import com.flowable.atlas.render.SummaryRenderer
 import java.io.File
 import kotlin.system.exitProcess
@@ -44,7 +45,10 @@ fun run(args: Array<String>): Int {
     var path: String? = null
     var output: String? = null
     var all = false; var json = false; var html = false; var summary = false; var claude = false
+    var claudeTemplate = false
     var stdout = false; var open = false; var noCustom = false; var quiet = false
+    var pretty = false
+    var slice: String? = null
     @Suppress("UNUSED_VARIABLE") var verbose = 0
     var exprAllowlist = ""
     var customFunctions: String? = null
@@ -82,6 +86,9 @@ fun run(args: Array<String>): Int {
                     "--html" -> html = true
                     "--summary" -> summary = true
                     "--claude" -> claude = true
+                    "--claude-template" -> claudeTemplate = true
+                    "--pretty" -> pretty = true
+                    "--slice" -> slice = value(name, inline) ?: return 2
                     "--stdout" -> stdout = true
                     "--open" -> open = true
                     "--expr-allowlist" -> exprAllowlist = value(name, inline) ?: return 2
@@ -116,10 +123,26 @@ fun run(args: Array<String>): Int {
     }
 
     // Mutually-exclusive format group (argparse errors with exit code 2).
-    if (listOf(all, json, html, summary, claude).count { it } > 1) {
-        errln("error: argument --all/--json/--html/--summary/--claude: not allowed with one another")
+    if (listOf(all, json, html, summary, claude, claudeTemplate).count { it } > 1) {
+        errln("error: argument --all/--json/--html/--summary/--claude/--claude-template: " +
+            "not allowed with one another")
         return 2
     }
+
+    // The generic Flowable primer describes the platform, not a project, so it needs no path: this is
+    // the repo's `CLAUDE.template.md` (which is generated from the same source) available from the jar.
+    if (claudeTemplate) {
+        val text = ClaudeRenderer.renderGeneric().trimEnd('\n') + "\n"
+        if (output != null) {
+            File(output).writeText(text, Charsets.UTF_8)
+            if (!quiet) errln("Flowable Atlas $EM_DASH generic primer $CHECK $output")
+        } else {
+            System.out.write(text.toByteArray(Charsets.UTF_8))
+            System.out.flush()
+        }
+        return 0
+    }
+
     if (path == null) {
         errln("error: the following arguments are required: path")
         return 2
@@ -171,7 +194,7 @@ fun run(args: Array<String>): Int {
         val artifacts = listOf(
             "$name.summary.md" to SummaryRenderer.render(result, root),
             "$name.overview.md" to OverviewRenderer.render(result, root),
-            "$name.graph.json" to MiniJson.stringify(result, 2),
+            "$name.graph.json" to GraphJsonRenderer.render(result, pretty = pretty),
             "$name.explorer.html" to ExplorerHtmlRenderer.render(result, root),
             "$name.CLAUDE.md" to ClaudeRenderer.render(result, root),
         )
@@ -202,12 +225,31 @@ fun run(args: Array<String>): Int {
         return 0
     }
 
+    // ---- --slice: one node with its context, in both directions ----
+    // The tier between "3 KB summary" and "megabytes of graph": what an agent actually needs when it has
+    // been asked to change one process.
+    if (slice != null) {
+        val text = SliceRenderer.render(result, slice)
+        if (text == null) {
+            errln("error: no node matches '$slice' — try a `<type>:<key>` id, e.g. process:myProcess")
+            return 2
+        }
+        if (output != null) {
+            File(output).writeText(text + "\n", Charsets.UTF_8)
+            if (!quiet) errln("Flowable Atlas $EM_DASH slice $CHECK $output")
+        } else {
+            System.out.write((text + "\n").toByteArray(Charsets.UTF_8))
+            System.out.flush()
+        }
+        return 0
+    }
+
     // ---- single-artifact modes ----
     val (out, ext) = when {
         claude -> ClaudeRenderer.render(result, root) to "CLAUDE.md"
         summary -> SummaryRenderer.render(result, root) to "summary.md"
         html -> ExplorerHtmlRenderer.render(result, root) to "html"
-        json -> MiniJson.stringify(result, 2) to "json"
+        json -> GraphJsonRenderer.render(result, pretty = pretty) to "json"
         else -> OverviewRenderer.render(result, root) to "md"
     }
 

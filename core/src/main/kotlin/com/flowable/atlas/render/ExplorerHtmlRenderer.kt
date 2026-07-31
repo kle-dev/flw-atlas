@@ -28,6 +28,11 @@ object ExplorerHtmlRenderer {
         payload["stats"] = result["stats"]
         payload["diagnostics"] = result["diagnostics"] ?: ArrayList<Any?>()
         payload["customFunctions"] = result["customFunctions"]
+        // Health counts come from :core (Findings.kt) so the explorer, the Markdown artifacts and the
+        // CLI status line cannot disagree about how many findings a project has. The itemized
+        // `findings` list stays out of the payload: the Checks tab renders its items from the live
+        // nodes, which it needs anyway for chips and links.
+        payload["checks"] = result["checks"] ?: LinkedHashMap<String, Any?>()
         payload["nodes"] = attachDiagrams(slimNodes(graph["nodes"]), root)
         payload["edges"] = graph["edges"]
         // json.dumps(payload, ensure_ascii=False, default=list).replace("</", "<\/")

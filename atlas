@@ -36,13 +36,15 @@ Outputs (in the output dir, default ./atlas-output/<project>/):
   <project>.explorer.html   interactive explorer (opens automatically)
   <project>.summary.md      compact LLM overview
   <project>.overview.md     full Markdown report
-  <project>.graph.json      traversable graph (for agents/LLMs)
-  <project>.CLAUDE.md       AI-agent context (Flowable primer + this project's facts)
+  <project>.graph.json      traversable graph to query (minified; --pretty to indent)
+  <project>.CLAUDE.md       AI-agent context (Flowable primer + this project's facts + findings)
 
 Advanced (run the fat-jar directly for single artifacts):
   $JAVA -jar <cli-all.jar> <project> --summary --stdout
   $JAVA -jar <cli-all.jar> <project> --json -o graph.json
   $JAVA -jar <cli-all.jar> <project> --claude        # writes CLAUDE.md
+  $JAVA -jar <cli-all.jar> <project> --slice process:myProcess --stdout   # one node, both directions
+  $JAVA -jar <cli-all.jar> --claude-template         # the generic Flowable primer, no project needed
 EOF
   exit 0
 fi
