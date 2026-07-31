@@ -1,6 +1,6 @@
 # Flowable Atlas — Features
 
-*IntelliJ IDEA plugin, v0.11.0.* A summary of what Flowable Atlas provides, grouped by area.
+*IntelliJ IDEA plugin, v0.11.1.* A summary of what Flowable Atlas provides, grouped by area.
 Everything is resolved against the Flowable models that actually live in your repository.
 
 ## Atlas Explorer & Hub
@@ -186,6 +186,12 @@ Everything is resolved against the Flowable models that actually live in your re
   diagram's top-right corner but can be dragged and resized anywhere in the app — well past the
   drawing area, which is what makes it usable when the diagram panel is narrow (an IDE tool window).
   Size and position are remembered.
+- **⤢ Expand the card over the whole page** — docked in the corner there is nothing to the right to
+  grow into, so ⤢ (or a double-click on the header) turns the card into a centered overlay over the
+  entire app, dimmed behind and above even the full-screen diagram, as tall as its content needs and
+  still resizable. Clicking the backdrop or Escape shrinks it back to the corner; a second Escape
+  closes it. Expanded and docked sizes are remembered separately, so clicking through elements keeps
+  whichever mode you chose.
 - **Design vocabulary, explained** — node types, element types, parameter kinds and relationships are
   named the way Flowable Design names them (*Decision tables*, *AI agents*, *Services*, *Send payload
   map*, *Decision task → decision table*, *Execution listener*, *Case plan model*), each with a hover

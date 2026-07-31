@@ -112,4 +112,42 @@ val explorerUiTest by tasks.registering(Exec::class) {
     )
 }
 
-tasks.named("check") { dependsOn(searchSelfTest, explorerUiTest) }
+// Same idea for the diagram element card, which needs its own fixture: the card only exists where a model
+// carries DI, and miniproject has none — `core/src/test/resources/diagram` is the fixture that does.
+val diagramUiTestDir = layout.buildDirectory.dir("diagram-uitest")
+
+val diagramUiTestReport by tasks.registering(JavaExec::class) {
+    description = "Generates the DI-carrying report the diagram UI test runs against."
+    group = "verification"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.flowable.atlas.cli.MainKt")
+    args(
+        rootProject.file("core/src/test/resources/diagram").absolutePath,
+        "--all", "--quiet",
+        "-o", diagramUiTestDir.get().asFile.absolutePath,
+    )
+    inputs.dir(rootProject.file("core/src/test/resources/diagram"))
+    inputs.dir(rootProject.file("core/src/main/resources/frontend"))
+    outputs.dir(diagramUiTestDir)
+}
+
+val diagramUiTest by tasks.registering(Exec::class) {
+    description = "Drives the diagram element card in headless Chrome (skipped without node/Chrome)."
+    group = "verification"
+    dependsOn(diagramUiTestReport)
+    val script = rootProject.file("scripts/diagram-uitest.mjs")
+    inputs.file(script)
+    inputs.dir(rootProject.file("core/src/main/resources/frontend"))
+    onlyIf {
+        val node = nodeExecutable
+        if (node == null) logger.lifecycle("diagramUiTest: skipped — no node on PATH")
+        node != null
+    }
+    commandLine(
+        nodeExecutable ?: "node",
+        script.absolutePath,
+        diagramUiTestDir.get().asFile.resolve("diagram.explorer.html").absolutePath,
+    )
+}
+
+tasks.named("check") { dependsOn(searchSelfTest, explorerUiTest, diagramUiTest) }
