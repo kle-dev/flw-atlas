@@ -27,6 +27,27 @@ tasks.test {
     useJUnit()
 }
 
+// Re-baseline the committed golden artifacts (core/src/test/resources/golden/*) from the current
+// generator output, then review the diff — the workflow the deleted Python suite had as
+// `ATLAS_UPDATE_GOLDEN=1 pytest`. See com.flowable.atlas.GoldenFiles. Always re-runs (the tests it
+// drives are up-to-date-checked against source, not against the goldens they rewrite).
+val updateGoldens by tasks.registering(Test::class) {
+    group = "verification"
+    description = "Rewrite core/src/test/resources/golden/* from the current output (review the diff!)"
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnit()
+    environment("ATLAS_UPDATE_GOLDEN", "1")
+    filter {
+        includeTestsMatching("com.flowable.atlas.graph.GoldenExtractionTest")
+        includeTestsMatching("com.flowable.atlas.render.SummaryRendererTest")
+        includeTestsMatching("com.flowable.atlas.render.OverviewRendererTest")
+        includeTestsMatching("com.flowable.atlas.render.ClaudeTemplateSyncTest")
+    }
+    outputs.upToDateWhen { false }
+    testLogging { showStandardStreams = true }
+}
+
 // Bake the Gradle version into a resource so :core (and thus the generated explorer HTML + the CLI) can
 // stamp which Atlas version produced their output — read back by com.flowable.atlas.AtlasBuildInfo.
 val generateVersionResource by tasks.registering {

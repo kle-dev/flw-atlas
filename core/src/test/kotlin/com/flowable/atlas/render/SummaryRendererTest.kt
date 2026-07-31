@@ -1,7 +1,7 @@
 package com.flowable.atlas.render
 
+import com.flowable.atlas.GoldenFiles
 import com.flowable.atlas.graph.Atlas
-import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.io.File
 
@@ -16,8 +16,6 @@ class SummaryRendererTest {
     fun summaryGolden() {
         val fixtureDir = File(javaClass.classLoader.getResource("miniproject")!!.toURI())
         val result = Atlas.extract(fixtureDir)
-        val expected = javaClass.classLoader.getResourceAsStream("golden/miniproject.summary.md")!!
-            .use { it.readBytes().toString(Charsets.UTF_8) }
-        assertEquals(expected, SummaryRenderer.render(result, fixtureDir) + "\n")
+        GoldenFiles.assertMatches("miniproject.summary.md", SummaryRenderer.render(result, fixtureDir) + "\n")
     }
 }

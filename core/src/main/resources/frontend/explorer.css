@@ -518,6 +518,18 @@
     padding:0 var(--space-15);border-radius:var(--radius-sm);white-space:nowrap}
   .dtabs .dtclose:hover{color:var(--ink);background:var(--hover)}
 
+  /* ---- transient status line ---- */
+  /* z-index above the element card (120) and the fullscreen diagram (100): a ⌘-click inside either
+     one must be able to report itself. pointer-events:none so it can never swallow a click, and
+     visibility is carried by opacity alone — `hidden` would kill the fade back out. */
+  .toast{position:fixed;z-index:300;right:var(--space-4);bottom:var(--space-4);
+    max-width:min(360px,80vw);background:var(--panel);border:1px solid var(--line);
+    border-radius:var(--radius-md);box-shadow:var(--shadow);
+    padding:var(--space-2) var(--space-3);font-family:var(--sans);font-size:var(--text-sm);
+    color:var(--ink);opacity:0;transform:translateY(4px);pointer-events:none;
+    transition:opacity .16s,transform .16s}
+  .toast.show{opacity:1;transform:none}
+
   .dhead{position:sticky;top:0;z-index:6;display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-4);
     background:var(--panel);border-bottom:1px solid var(--line)}
   .dhead button{background:var(--panel);border:1px solid var(--line2);color:var(--ink-dim);
@@ -567,6 +579,10 @@
   details.sect>summary:hover{color:var(--ink)}
   details.sect[open]>summary{color:var(--ink)}
   .sb{padding:var(--space-1) 0 var(--space-3)}
+  /* Gesture hint at the top of a relationship section — faint on purpose: it teaches once and then
+     has to get out of the way of the chips it describes. */
+  .relhint{font-size:var(--text-2xs);color:var(--ink-faint);margin:0 0 var(--space-25)}
+  .relhint b{font-weight:600;color:var(--ink-dim)}
   .relgrp{margin:0 0 var(--space-35)}
   .relgrp .lab{font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-faint);margin:0 0 var(--space-15)}
   .nodechips{display:flex;flex-wrap:wrap;gap:var(--space-15)}
