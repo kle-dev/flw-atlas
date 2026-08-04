@@ -99,6 +99,7 @@ object XmlHelpers {
             var source: String? = null
             var target: String? = null
             var type: String? = null
+            var container: String? = null
             var expression = false
             when (c.tag) {
                 "in", "out" -> {
@@ -127,12 +128,18 @@ object XmlHelpers {
                     expression = c.attr("value") == null && valExpr != null
                     target = c.attr("name")
                     type = c.attr("valueType")
+                    // An Init-Variables mapping may write *into* a container: `target="chaserInfo"
+                    // name="chaisedBy"` sets the `chaisedBy` field of the `chaserInfo` object, not a
+                    // variable called `chaisedBy`. Without the container the field name looks like a
+                    // top-level variable nobody reads.
+                    container = c.attr("target")
                 }
                 "outputVariableName" -> target = c.text?.trim()?.ifEmpty { null }
             }
             if (source == null && target == null) continue
             val rec = linkedMapOf<String, Any?>("dir" to dir, "kind" to c.tag, "source" to source, "target" to target)
             if (!type.isNullOrEmpty()) rec["type"] = type
+            if (!container.isNullOrEmpty()) rec["container"] = container
             if (c.attr("transient") == "true") rec["transient"] = true
             // an expression is not a variable name — flag it so consumers can skip variable resolution
             if (expression || looksLikeExpression(source)) rec["expression"] = true

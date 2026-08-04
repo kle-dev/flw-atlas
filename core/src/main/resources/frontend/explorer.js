@@ -252,6 +252,39 @@ const DESIGN_TERMS = {
   'rel:dataObjectDataTableCreateFormKey': ['Data table create form', 'Creating a row opens that form.'],
   'rel:dataObjectDataTableEditFormKey': ['Data table edit form', 'Editing a row opens that form.'],
   'rel:dataObjectDataTableViewFormKey': ['Data table view form', 'Viewing a row opens that form.'],
+  // How a variable comes to be read or written. Each one is a construct a modeller recognises, because
+  // "written but never read" is only actionable if it also says *where* the write is.
+  'via:inParameter': ['In parameter', 'The caller maps a value into the called model under this name.'],
+  'via:inParameterSource': ['In parameter (source)', 'The value handed to a called model is read from this variable.'],
+  'via:outParameter': ['Out parameter', 'The called model maps a value back into this variable.'],
+  'via:outParameterSource': ['Out parameter (source)', 'The value handed back is read from this variable of the called model.'],
+  'via:resultVariable': ['Result variable', 'The task stores its result under this name.'],
+  'via:outputVariableName': ['Output variable', 'The service or decision result lands in this variable.'],
+  'via:outputParameter': ['Output parameter', 'The call maps a result field into this variable.'],
+  'via:errorOutputParameter': ['Error output parameter', 'A failed call maps its error into this variable.'],
+  'via:eventInParameter': ['Event in parameter', 'The variable is read to be sent out on an event payload.'],
+  'via:eventOutParameter': ['Event out parameter', 'A received event payload field lands in this variable.'],
+  'via:variableMapping': ['Init variable', 'An Init-Variables task sets this variable when the instance starts.'],
+  'via:signalVariable': ['Signal variable', 'The action reads this variable to pass it into the instance it signals.'],
+  'via:responsePayloadMapping': ['Stored response attribute', "A button's response is stored in this variable."],
+  'via:errorResponsePayloadMapping': ['Stored error attribute', "A failed button call is stored in this variable."],
+  'via:flwPayload': ['Action payload', "The bot script reads or writes this key of the action's payload."],
+  'via:scriptApi': ['Script', 'A script sets or gets the variable through the Flowable API.'],
+  'via:scriptRead': ['Script ≈ read', 'A bare identifier in a script body — probably a read, not provable.'],
+  'via:expression': ['Expression', 'A ${…} expression reads this variable.'],
+  'via:variablesFn': ['variables: function', 'A ${variables:…()} call names this variable as a string.'],
+  'via:binding': ['Binding', 'A {{…}} binding reads this variable.'],
+  'via:formField': ['Form field', 'A form field bound to this variable: prefilled from it, written back on submit.'],
+  'via:formProperty': ['Form property', 'A legacy BPMN form property, rendered as a field.'],
+  'via:formOutcome': ['Outcome variable', 'The form stores the chosen outcome here.'],
+  'via:dmnInput': ['Decision input', 'A decision table input expression reads this variable.'],
+  'via:dmnOutput': ['Decision output', 'A decision table writes its result to this variable.'],
+  'via:dataObject': ['Data object', 'A process-level variable declaration.'],
+  'via:multiInstanceElement': ['Element variable', 'Each item of a multi-instance collection is written here.'],
+  'via:multiInstanceCollection': ['Collection', 'The collection a multi-instance loop iterates over.'],
+  'via:initiator': ['Initiator variable', 'The engine writes the starting user here.'],
+  'via:variableExtractor': ['Extracted variable', 'Pulled out of a payload so queries can index it.'],
+  'via:javaApi': ['Java', 'A Java class sets or gets the variable through the engine API.'],
 };
 // [label, hint] for a namespaced key, falling back to the raw key with no hint.
 function term(ns, key){
@@ -401,6 +434,16 @@ function categories(){
   const guessed = nodes.filter(isGuessedVar);
   if(guessed.length) cats.push({id:'guessed-var', label:'Variables · script guess ≈', sec:'Checks',
     color:color('variable'), count:guessed.length, match:isGuessedVar});
+  // Something writes them and nothing reads them. Kept beside the script-guess list so all three
+  // variable reviews read as one family; the full report with the definition sites is #/variables.
+  const isUnusedVar = n => n.type==='variable' && (n.data||{}).unread===true;
+  const unusedVars = nodes.filter(isUnusedVar);
+  if(unusedVars.length) cats.push({id:'unused-var', label:'Variables · never read', sec:'Checks',
+    color:color('variable'), count:unusedVars.length, match:isUnusedVar});
+  const isUnreadInput = n => n.type==='variable' && ((n.data||{}).unreadIn||[]).length>0;
+  const unreadInputs = nodes.filter(isUnreadInput);
+  if(unreadInputs.length) cats.push({id:'unread-input', label:'Variables · unread call input', sec:'Checks',
+    color:color('variable'), count:unreadInputs.length, match:isUnreadInput});
   // Models with a script whose body (or scriptFormat) fails the structural syntax check.
   const scriptIssueModels = new Set(allScripts().filter(s=>(s.problems||[]).length).map(s=>s.model));
   if(scriptIssueModels.size) cats.push({id:'script-syntax', label:'Scripts · syntax ⚠', sec:'Checks',
@@ -431,6 +474,10 @@ function computeInsights(){
   // health counts, which come from :core — see below.
   const isExprN = n => n.type==='expression'||n.type==='binding';
   let totalExprs=0, totalForms=0, totalChangelogs=0, totalCovServices=0, totalOps=0, totalFns=0;
+  // Variables Atlas could prove a direction for, and the ones it declined to judge. The first is the
+  // denominator the unused-variable counts are quoted against; the second is the report's own caveat —
+  // how many names it stayed quiet about, which is what makes the ones it does name trustworthy.
+  let totalDirectedVars=0, silentVars=0;
   nodes.forEach(n=>{
     const d=n.data||{};
     if(isExprN(n)) totalExprs++;
@@ -439,6 +486,10 @@ function computeInsights(){
     else if(n.type==='service'){ if((d.schemaCoverage||{}).counts) totalCovServices++; }
     else if(n.type==='serviceOperation') totalOps++;
     else if(n.type==='customFunction') totalFns++;
+    else if(n.type==='variable'){
+      if(d.writeCount||d.readCount) totalDirectedVars++;
+      if(d.readsUnknown) silentVars++;
+    }
   });
   const apps = nodes.filter(n=>n.type==='app')
     .map(a=>({id:a.id, models:containsByApp.get(a.id)||0, groups:openAppByApp.get(a.id)||0}))
@@ -455,9 +506,11 @@ function computeInsights(){
                    unusedForms: CHK.unusedForms||0, changelogIssues: CHK.changelogIssues||0,
                    schemaGaps: CHK.schemaGaps||0, missingRefs: CHK.missingRefs||0,
                    guessedVars: CHK.guessedVars||0, unusedOps: CHK.unusedOps||0,
-                   unusedFns: CHK.unusedFns||0 };
+                   unusedFns: CHK.unusedFns||0,
+                   unusedVars: CHK.unusedVars||0, unreadInputs: CHK.unreadInputs||0 };
   INSIGHTS = { indeg, hotspots, apps, entryPoints,
     totalExprs, totalForms, totalChangelogs, totalCovServices, totalOps, totalFns,
+    totalDirectedVars, silentVars,
     totalScripts: scripts.length,
     health,
     // what the Checks tab counts in its badge: every open finding, in one number
@@ -480,6 +533,7 @@ function parseHash(){
   if(raw==='/schema') return {view:'schema'};
   if(raw==='/scripts') return {view:'scripts'};
   if(raw==='/checks') return {view:'checks'};
+  if(raw==='/variables') return {view:'variables'};
   if(raw.indexOf('/browse/')===0){
     const cat = dec(raw.slice(8));
     return CATS.some(c=>c.id===cat) ? {view:'browse', cat} : {view:'overview'};
@@ -502,6 +556,7 @@ function showView(v){
   document.getElementById('view-schema').hidden = v!=='schema';
   document.getElementById('view-scripts').hidden = v!=='scripts';
   document.getElementById('view-checks').hidden = v!=='checks';
+  document.getElementById('view-variables').hidden = v!=='variables';
   document.getElementById('view-browse').hidden = v!=='browse';
 }
 let _navCount = 0;
@@ -526,6 +581,10 @@ function route(){
   } else if(r.view==='checks'){
     state.view='checks'; state.sel=null;
     showView('checks'); renderChecks();
+    renderSidebarActive(); renderCrumbs();
+  } else if(r.view==='variables'){
+    state.view='variables'; state.sel=null;
+    showView('variables'); renderVariables();
     renderSidebarActive(); renderCrumbs();
   } else if(r.sel){
     applySelection(r.sel);                                // handles view/list/detail/crumbs
@@ -584,6 +643,13 @@ function renderSidebar(){
       color:covColor(gaps?'bad':'good'), count:gaps,
       tip:'Schema gaps — Liquibase → Service → Data object coverage'});
   }
+  if(INSIGHTS.totalDirectedVars>0){
+    const unusedVars=INSIGHTS.health.unusedVars+INSIGHTS.health.unreadInputs;
+    items.push({route:'/variables', label:'Unused variables', sec:'Variables', pri:0,
+      color:covColor(unusedVars?'bad':'good'), count:unusedVars,
+      tip:'Variables something writes and nothing reads, and inputs mapped into a model that never '+
+          'reads them'});
+  }
   items.sort((a,b)=> (SECTIONS.indexOf(a.sec)-SECTIONS.indexOf(b.sec)) ||
                      ((a.pri==null?2:a.pri)-(b.pri==null?2:b.pri)) || a.label.localeCompare(b.label));
   let cur='';
@@ -638,6 +704,9 @@ function renderCrumbs(){
   } else if(state.view==='checks'){
     h=link(DATA.project,'#/overview')+sep+cur('Checks');
     title='Checks — Flowable Atlas';
+  } else if(state.view==='variables'){
+    h=link(DATA.project,'#/overview')+sep+cur('Unused variables');
+    title='Unused variables — Flowable Atlas';
   } else {
     const cat=CATS.find(x=>x.id===state.cat);
     const n=state.sel&&byId.get(state.sel);
@@ -838,10 +907,18 @@ const CHECK_CARDS = [
   {k:'unusedFns', label:'Unused custom functions', cat:'customFunction', jump:'chk-unusedfns',
    sub:c=>c?c+' of '+INSIGHTS.totalFns+' functions are never called':'every function is used',
    show:()=>INSIGHTS.totalFns>0},
+  {k:'unusedVars', label:'Variables · never read', route:'/variables', jump:'chk-unusedvars',
+   sub:c=>c?c+' of '+INSIGHTS.totalDirectedVars+' variables are written but nothing reads them'
+          :'every variable that is written is read somewhere',
+   show:()=>INSIGHTS.totalDirectedVars>0},
+  {k:'unreadInputs', label:'Variables · unread call input', route:'/variables', jump:'chk-unreadinputs',
+   sub:c=>c?'mapped into a called model that never reads them':'every mapped input is read by its callee',
+   show:()=>INSIGHTS.totalDirectedVars>0},
 ];
-function healthCardsHtml(){
+/** The health grid. [keys] narrows it to a subset, so a page can show only the cards it is about. */
+function healthCardsHtml(keys){
   const H=INSIGHTS.health;
-  const cards=CHECK_CARDS.filter(c=>c.show());
+  const cards=CHECK_CARDS.filter(c=>(!keys||keys.indexOf(c.k)>=0)&&c.show());
   if(!cards.length) return '';
   return '<div class="health">'+cards.map(c=>{
     const n=H[c.k], tone=n===0?'ok':(c.bad?'bad':'warn');
@@ -850,6 +927,27 @@ function healthCardsHtml(){
       '<div class="mk">'+esc(c.label)+'</div><div class="mv">'+n+'</div>'+
       '<div class="ms">'+esc(c.sub(n))+'</div></div>';
   }).join('')+'</div>';
+}
+/** One finding's section: its heading, the count, and — when the finding has a browse list of its own —
+ *  the button into it. Nothing at all when the count is zero, so a page lists only what it found. */
+function findingBlock(id,title,count,body,cat){
+  if(!count) return '';
+  const list=cat&&CATS.some(x=>x.id===cat)
+    ? '<button class="dgbtn" data-cat="'+esc(cat)+'">open the list ↗</button>' : '';
+  return '<div class="seclabel" id="'+id+'" style="display:flex;align-items:center;gap:var(--space-2)">'+
+    esc(title)+' <span class="muted">'+count+'</span>'+list+'</div>'+body;
+}
+/** The click hook a report page hands [wireNodeLinks]: `data-jump` scrolls to a section of this page,
+ *  `data-cat` opens a finding's browse list, `data-route` switches tab. Returning true says the click
+ *  was a navigation of its own and must not also be read as a node link. */
+function reportNav(e){
+  const jump=e.target.closest('[data-jump]');
+  if(jump){ const t=document.getElementById(jump.dataset.jump);
+    if(t) t.scrollIntoView({block:'start'}); return true; }
+  const cat=e.target.closest('[data-cat]');
+  if(cat){ location.hash='/browse/'+enc(cat.dataset.cat); return true; }
+  const route=e.target.closest('[data-route]');
+  if(route){ location.hash=route.dataset.route; return true; }
 }
 function renderChecks(){
   const v=document.getElementById('view-checks');
@@ -863,17 +961,10 @@ function renderChecks(){
        : 'nothing flagged — no parse issues, no broken expressions, nothing unused or unproven')+'</div>';
   h+=healthCardsHtml();
   // one block per finding, with the actual items rather than only a number
-  const block=(id,title,count,body,cat)=>{
-    if(!count) return '';
-    const list=cat&&CATS.some(x=>x.id===cat)
-      ? '<button class="dgbtn" data-cat="'+esc(cat)+'">open the list ↗</button>' : '';
-    return '<div class="seclabel" id="'+id+'" style="display:flex;align-items:center;gap:var(--space-2)">'+
-      esc(title)+' <span class="muted">'+count+'</span>'+list+'</div>'+body;
-  };
   const chips=list=>'<div class="nodechips">'+list.map(n=>nodeChip(n.id)).join('')+'</div>';
   // parse issues — the analyzer's own honesty about what it could not read
   if(diags.length+cfnDiags.length){
-    h+=block('chk-parse','Parse issues', diags.length+cfnDiags.length,
+    h+=findingBlock('chk-parse','Parse issues', diags.length+cfnDiags.length,
       '<div class="dashrows">'+
       diags.map(d=>'<div class="dp-row"><span class="dp-kind">'+esc(d.kind)+'</span>'+
         '<span class="dp-path mono">'+esc(d.path)+'</span><span class="dp-msg">'+esc(d.message)+'</span></div>').join('')+
@@ -891,12 +982,12 @@ function renderChecks(){
       '</div>';
   }).join('')+(list.length>60?'<div class="dashrow muted">+ '+(list.length-60)+' more — open the list</div>':'')+'</div>';
   const byCat=id=>{ const c=CATS.find(x=>x.id===id); return c?nodes.filter(c.match):[]; };
-  h+=block('chk-invalid','Invalid expressions — syntax', H.invalidExpr, exprRows(byCat('invalid-expr')), 'invalid-expr');
-  h+=block('chk-suspect','Suspect expressions — review', H.suspectExpr, exprRows(byCat('suspect-expr')), 'suspect-expr');
+  h+=findingBlock('chk-invalid','Invalid expressions — syntax', H.invalidExpr, exprRows(byCat('invalid-expr')), 'invalid-expr');
+  h+=findingBlock('chk-suspect','Suspect expressions — review', H.suspectExpr, exprRows(byCat('suspect-expr')), 'suspect-expr');
   // script syntax findings: model, element, language, then each finding with its line and code
   if(H.scriptIssues){
     const rows=allScripts().filter(s=>(s.problems||[]).length);
-    h+=block('chk-scripts','Script syntax findings', H.scriptIssues,
+    h+=findingBlock('chk-scripts','Script syntax findings', H.scriptIssues,
       '<div class="dashrows">'+rows.map(s=>{
         const kind=scriptKindLabel(s);
         const title=s.elName||s.el||(s.group==='bot'?s.modelLabel:kind);
@@ -920,19 +1011,28 @@ function renderChecks(){
     const svcs=nodes.filter(n=>n.type==='service'&&((n.data||{}).schemaCoverage||{}).counts)
       .map(n=>{ const c=n.data.schemaCoverage.counts; return {n, gaps:(c.noService||0)+(c.noDataObject||0)}; })
       .filter(x=>x.gaps).sort((a,b)=>b.gaps-a.gaps);
-    h+=block('chk-schema','Schema gaps', H.schemaGaps,
+    h+=findingBlock('chk-schema','Schema gaps', H.schemaGaps,
       '<div class="dashrows">'+svcs.map(x=>'<div class="dashrow">'+nodeChip(x.n.id)+
         '<span class="ty">'+x.gaps+' column'+(x.gaps>1?'s':'')+' not mapped through</span></div>').join('')+
       '<div class="dashrow"><button class="dgbtn" data-route="/schema">open the full report ↗</button></div></div>');
   }
-  h+=block('chk-missing','Missing model references', H.missingRefs, chips(byCat('external::missing')), 'external::missing');
-  h+=block('chk-unusedforms','Unused forms', H.unusedForms, chips(byCat('unused-form')), 'unused-form');
-  h+=block('chk-changelogs','Changelogs · orphan / superseded', H.changelogIssues,
+  h+=findingBlock('chk-missing','Missing model references', H.missingRefs, chips(byCat('external::missing')), 'external::missing');
+  h+=findingBlock('chk-unusedforms','Unused forms', H.unusedForms, chips(byCat('unused-form')), 'unused-form');
+  h+=findingBlock('chk-changelogs','Changelogs · orphan / superseded', H.changelogIssues,
     chips(byCat('changelog-issue')), 'changelog-issue');
-  h+=block('chk-guessed','Variables · only a script guess ≈', H.guessedVars, chips(byCat('guessed-var')), 'guessed-var');
-  h+=block('chk-unusedops','Unused service operations', H.unusedOps,
+  h+=findingBlock('chk-guessed','Variables · only a script guess ≈', H.guessedVars, chips(byCat('guessed-var')), 'guessed-var');
+  // The two unused-variable checks summarise as chips here; the full report names the write to delete.
+  h+=findingBlock('chk-unusedvars','Variables · written, never read', H.unusedVars,
+    '<div class="dashrows"><div class="dashrow" style="display:block">'+chips(byCat('unused-var'))+'</div>'+
+    '<div class="dashrow"><button class="dgbtn" data-route="/variables">open the full report ↗</button></div>'+
+    '</div>', 'unused-var');
+  h+=findingBlock('chk-unreadinputs','Variables · mapped into a model that never reads them', H.unreadInputs,
+    '<div class="dashrows"><div class="dashrow" style="display:block">'+chips(byCat('unread-input'))+'</div>'+
+    '<div class="dashrow"><button class="dgbtn" data-route="/variables">open the full report ↗</button></div>'+
+    '</div>', 'unread-input');
+  h+=findingBlock('chk-unusedops','Unused service operations', H.unusedOps,
     chips(nodes.filter(n=>n.type==='serviceOperation'&&!((n.data||{}).usedBy||[]).length)), 'serviceOperation');
-  h+=block('chk-unusedfns','Unused custom functions', H.unusedFns,
+  h+=findingBlock('chk-unusedfns','Unused custom functions', H.unusedFns,
     chips(nodes.filter(n=>n.type==='customFunction'&&!((n.data||{}).usedBy||[]).length)), 'customFunction');
   // uncertain edges are a property of the graph, not of one node — say so once
   const suN=st.suspectEdges||0, dyN=st.dynamicEdges||0;
@@ -948,21 +1048,149 @@ function renderChecks(){
     '<div class="eh">No parse issue, no flagged expression, no unused or unresolved model.</div></div>';
   h+='</div>';
   v.innerHTML=h;
-  wireNodeLinks(v, '[data-id]', {first:e=>{
-    const jump=e.target.closest('[data-jump]');
-    if(jump){ const t=document.getElementById(jump.dataset.jump);
-      if(t) t.scrollIntoView({block:'start'}); return true; }
-    const cat=e.target.closest('[data-cat]');
-    if(cat){ location.hash='/browse/'+enc(cat.dataset.cat); return true; }
-    const route=e.target.closest('[data-route]');
-    if(route){ location.hash=route.dataset.route; return true; }
-  }});
+  wireNodeLinks(v, '[data-id]', {first:reportNav});
   // arrived from a health card or the parse-issue chip: land on the block it asked for
   if(_checkJump){
     const target=document.getElementById(_checkJump);
     _checkJump=null;
     if(target) requestAnimationFrame(()=>target.scrollIntoView({block:'start'}));
   }
+}
+
+// ---------- unused variables view (#/variables) ----------
+// Every variable something writes and nothing reads, with the write to delete. The graph knows where
+// each name is read and written (`writes`/`reads` on a variable node, computed in :core); this page is
+// what makes that answerable without opening a single model.
+//
+// The caveat block at the bottom is not decoration. This check can only ever say "nothing *in these
+// models* reads it", and a reader who does not know what Atlas cannot see would take it for more.
+
+/** Design's word for a write/read site, with the element it happens on — `Script · Stamp order`. */
+function varSiteLabel(s, varName){
+  const where=s.elementName||s.element;
+  // A DMN output's element id *is* the variable name; repeating it says nothing.
+  const show=(where!=null&&String(where)!==varName) ? String(where) : '';
+  return termHtml('via', s.via)+(show?'<span class="opid">'+esc(show)+'</span>':'');
+}
+
+/** One row per variable: name, how it is written, where, and the read/write tally. */
+function varRowHtml(n, opts){
+  const d=n.data||{};
+  const writes=d.writes||[];
+  // The models a write happens in, deduped — a variable written by three script tasks of one process
+  // should say that process once.
+  const models=[...new Set(writes.map(w=>w.model))];
+  const jumps=writes.filter(w=>w.element).slice(0,4)
+    .map(w=>elJumpHtml(w.model, w.element, w.elementName||w.element, 'Open this element in its model')).join('');
+  const vias=[...new Set(writes.map(w=>w.via))];
+  const hay=[n.label, vias.map(x=>term('via',x).label).join(' '),
+    models.map(m=>(byId.get(m)||{}).label||m).join(' '),
+    (d.unreadIn||[]).map(m=>(byId.get(m)||{}).label||m).join(' ')].join(' ').toLowerCase();
+  return '<div class="dashrow varrow" data-varrow data-via="'+esc(vias[0]||'')+'"'+
+    ' data-hay="'+esc(hay)+'">'+
+    '<span class="nm mono" data-id="'+enc(n.id)+'" role="link" tabindex="0">'+esc(n.label)+'</span>'+
+    '<span class="varvias">'+writes.map(w=>varSiteLabel(w, n.label)).join('')+'</span>'+
+    '<span class="nodechips">'+models.map(m=>nodeChip(m)).join('')+
+      (opts&&opts.callee ? '<span class="varnote">never read in</span>'+
+        (d.unreadIn||[]).map(m=>nodeChip(m)).join('') : '')+'</span>'+
+    jumps+
+    '<span class="vcount"><span class="vw">'+(d.writeCount||0)+' written</span> · '+
+      '<span class="vr">'+(d.readCount||0)+' read</span></span>'+
+    '</div>';
+}
+
+function renderVariables(){
+  const v=document.getElementById('view-variables');
+  // Sorted once: the three lists below are subsets of this one and inherit its order.
+  const vars=nodes.filter(n=>n.type==='variable').sort((a,b)=>a.label.localeCompare(b.label));
+  const unread=vars.filter(n=>(n.data||{}).unread===true);
+  const unreadIn=vars.filter(n=>((n.data||{}).unreadIn||[]).length>0);
+  // Declared, but with no direction Atlas can prove — an app variable, a data-object column, an
+  // extracted variable. Their readers are the Work UI, a query or a dashboard, so they are listed as
+  // what they are rather than accused of being unused.
+  const declared=vars.filter(n=>!(n.data||{}).writeCount&&!(n.data||{}).readCount);
+  const open=unread.length+unreadIn.length;
+  const total=INSIGHTS.totalDirectedVars, silent=INSIGHTS.silentVars;
+
+  let h='<div class="dash">';
+  h+='<div class="dash-title">Unused variables</div>'+
+     '<div class="dash-sub">'+(open
+       ? open+' of '+total+' variable'+(total>1?'s':'')+' worth a look — something writes them and '+
+         'nothing Atlas can see reads them back'
+       : 'nothing flagged — every variable that is written is read somewhere in these models')+'</div>';
+  // Only the two checks this page has blocks for. The script-guess card belongs to the Checks tab: its
+  // `jump` names a block that does not exist here, so showing it would be a card that does nothing.
+  h+=healthCardsHtml(['unusedVars','unreadInputs']);
+
+  if(open){
+    // one filter row over both blocks: the write construct, and free text over names and models
+    const flagged=unread.concat(unreadIn);
+    // A chip selects on the row's *first* write construct — the one varRowHtml puts in `data-via` — so
+    // that is what its count has to be, or the number would promise rows the filter does not show.
+    const perVia=new Map();
+    flagged.forEach(n=>{ const first=(((n.data||{}).writes||[])[0]||{}).via;
+      if(first) perVia.set(first,(perVia.get(first)||0)+1); });
+    const vias=[...new Set(flagged.flatMap(n=>((n.data||{}).writes||[]).map(w=>w.via)))];
+    const chip=(id,label,n)=>'<button class="pchip'+(id==='all'?' on':'')+'" data-via="'+esc(id)+'">'+
+      esc(label)+'<span class="pchipn">'+n+'</span></button>';
+    h+='<div class="pbar"><input class="pf" type="search" placeholder="filter variables — name, model…" '+
+       'aria-label="Filter unused variables">'+
+       chip('all','All',open)+
+       vias.filter(x=>perVia.get(x)).map(x=>chip(x, term('via',x).label, perVia.get(x))).join('')+
+       '<span class="pcount"></span></div>';
+  }
+  h+=findingBlock('chk-unusedvars','Written, never read', unread.length,
+    '<div class="dashrows">'+unread.map(n=>varRowHtml(n)).join('')+'</div>');
+  h+=findingBlock('chk-unreadinputs','Mapped into a model that never reads it', unreadIn.length,
+    '<div class="dashrows">'+unreadIn.map(n=>varRowHtml(n,{callee:true})).join('')+'</div>');
+  if(!open){
+    h+='<div class="estate"><div class="estate-ic" aria-hidden="true">✓</div>'+
+       '<div class="et">Nothing written and forgotten</div>'+
+       '<div class="eh">Every variable a model writes is read somewhere — by an expression, a script, '+
+       'a form field, a decision or a called model.</div></div>';
+  }
+  h+=findingBlock('chk-declaredvars','Declared — readers live outside the models', declared.length,
+    '<div class="dashrows">'+declared.map(n=>
+      '<div class="dashrow"><span class="nm mono" data-id="'+enc(n.id)+'" role="link" tabindex="0">'+
+      esc(n.label)+'</span><span class="nodechips">'+
+      ((n.data||{}).usedBy||[]).map(m=>nodeChip(m)).join('')+'</span></div>').join('')+
+    '</div><div class="muted" style="padding:var(--space-2) 0">An app variable, a data-object column or '+
+    'an extracted variable is read by the Work UI, a query or a dashboard — none of which Atlas parses. '+
+    'They are listed here rather than reported, because "unused" would be a guess.</div>');
+
+  // What this page cannot know. The count of names Atlas declined to judge is the honest denominator of
+  // everything above it, and the reason the rows above can be trusted.
+  h+='<div class="seclabel" id="chk-varcaveat">What Atlas cannot see</div>'+
+     '<div class="dashrows"><div class="dashrow" style="display:block">'+
+     '<div class="muted">Atlas stayed silent about <strong>'+silent+'</strong> further variable'+
+     (silent===1?'':'s')+' it would otherwise have listed, because it saw one of these:</div>'+
+     '<ul class="varwhy">'+(DATA.silenceRules||[]).map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul>'+
+     '<div class="muted">Query, dashboard and master-data models are not analysed for variable '+
+     'references, and the Work UI or any REST client is outside this project. A variable listed above is '+
+     'one that nothing <em>in these models</em> reads — not proof that nothing anywhere does.</div>'+
+     '</div></div>';
+  h+='</div>';
+  v.innerHTML=h;
+
+  const pf=v.querySelector('.pf'), count=v.querySelector('.pcount');
+  if(pf){
+    const chips=[...v.querySelectorAll('.pchip[data-via]')];
+    const apply=()=>{
+      const q=(pf.value||'').trim().toLowerCase();
+      const via=(chips.find(c=>c.classList.contains('on'))||{dataset:{}}).dataset.via||'all';
+      let shown=0;
+      v.querySelectorAll('[data-varrow]').forEach(r=>{
+        const on=(via==='all'||r.dataset.via===via)&&(!q||(r.dataset.hay||'').indexOf(q)>=0);
+        r.hidden=!on; if(on) shown++;
+      });
+      count.textContent=(q||via!=='all')?shown+' of '+open:'';
+    };
+    pf.oninput=debounce(apply,120);
+    chips.forEach(c=>c.onclick=()=>{ chips.forEach(x=>x.classList.toggle('on', x===c)); apply(); });
+  }
+  // The health cards of this page jump within it, so there is no `_checkJump` hand-off to honour here:
+  // the only route that sets one is `/checks`, which consumes it itself.
+  wireNodeLinks(v, '[data-goto],[data-id]', {first:reportNav});
 }
 
 // ---------- script tasks view (every script body in the project, in one place) ----------
@@ -1147,9 +1375,7 @@ function renderScripts(){
         // a bot script IS its model, and a model-level listener has only its kind to go by
         const kind=scriptKindLabel(s);
         const title=s.elName||s.el||(s.group==='bot'?s.modelLabel:kind);
-        const jump=s.el?'<span class="opref" data-goto="'+enc(s.model)+'" data-goto-el="'+esc(String(s.el))+
-          '" tabindex="0" role="link" style="cursor:pointer" data-tip="Open this element in its model">'+
-          'in model ↓</span>':'';
+        const jump=elJumpHtml(s.model, s.el, 'in model', 'Open this element in its model');
         const hay=[title, kind, s.lang||'', s.el||'', (byId.get(mid)||{}).label||'', s.body||'',
           (s.problems||[]).map(p=>p.message).join(' ')].join(' ').toLowerCase();
         // a handful of scripts: show the code straight away; a big project starts collapsed
@@ -1502,6 +1728,15 @@ function nodeChip(id,f){
   return '<span class="nc'+cls+'" data-id="'+enc(id)+'" tabindex="0" role="link"><span class="dot" style="background:'+nodeColor(n)+'"></span>'+
     '<span class="nm">'+esc(n.label)+'</span>'+flag+'<span class="ty">'+esc(nodeKind(n))+'</span>'+copyBtn(n.key,nodeKind(n)+' key')+'</span>';
 }
+// `label ↓` — one element inside a model, opened where it lives. `data-goto`/`data-goto-el` is the
+// contract wireNodeLinks() reads; `tip` is optional because in the detail pane the surrounding row
+// already says what the jump does.
+function elJumpHtml(model, element, label, tip){
+  if(!element) return '';
+  return '<span class="opref" data-goto="'+enc(model)+'" data-goto-el="'+esc(String(element))+'"'+
+    ' tabindex="0" role="link" style="cursor:pointer"'+(tip?' data-tip="'+esc(tip)+'"':'')+'>'+
+    esc(label)+' ↓</span>';
+}
 // rel -> Map(id -> adjacency entry) — the Map keeps per-target flags while deduping ids.
 function groupRels(arr){ const g={}; (arr||[]).forEach(x=>{ (g[x.rel]=g[x.rel]||new Map()).set(x.id,x); }); return g; }
 // Small badge marking a changelog as the live definition of its table vs a superseded/orphan revision.
@@ -1785,6 +2020,17 @@ function describe(n){
       add('Problems',[ec?ec+' error'+(ec>1?'s':''):'', wc?wc+' warning'+(wc>1?'s':''):''].filter(Boolean).join(', ')); } }
   else if(n.type==='variable'){ add('Scope',(d.scopes||[]).join(', ')); add('Used in', (d.usages||[]).length+' model(s)');
     add('As parameter', paramSummary(d.ioParams));
+    // Written vs read, which is the fact a reader acts on — and the verdict, when there is one.
+    if(d.writeCount||d.readCount) add('Direction', (d.writeCount||0)+' written · '+(d.readCount||0)+' read');
+    if(d.unread) rows.push(['Verdict',{html:'<span class="pt" data-tip="Something writes this variable '+
+      'and nothing Atlas can see reads it back. Query and dashboard models, master data and the Work UI '+
+      'are not analysed, so check those before deleting it.">never read</span>',copy:null}]);
+    if((d.unreadIn||[]).length) rows.push(['Verdict',{html:'<span class="pt" data-tip="The variable is '+
+      'mapped into a called model that never reads it — the mapping has no effect there.">unread in '+
+      esc(d.unreadIn.map(m=>(byId.get(m)||{}).label||m).join(', '))+'</span>',copy:null}]);
+    if(d.readsUnknown) rows.push(['Verdict',{html:'<span class="pt" data-tip="Atlas would have listed '+
+      'this as unread but declined to: it saw a construct whose direction it cannot determine, or a '+
+      'reader outside the models it parses.">readers unknown</span>',copy:null}]);
     // nothing but a bare identifier in a script says this exists — same ≈ vocabulary as uncertain links
     if(d.heuristic) rows.push(['Evidence',{html:'<span class="pt" data-tip="Only a bare identifier in a '+
       'script body names this variable — Flowable puts scope variables into the script binding, so it is '+
@@ -2223,6 +2469,23 @@ function detailExtra(n){
   if(n.type==='customFunction' && !(d.usedBy||[]).length){
     h+='<div class="authnote authnote-orphan">Registered via <b>externals.additionalData</b> but no <code>{{…}}</code> binding in the scanned models calls it.</div>';
   }
+  // Written where, read where — the two lists the "never read" verdict rests on, so a reader can check
+  // the reasoning instead of taking the verdict on faith. Each row jumps to its element in the model.
+  if(n.type==='variable' && ((d.writes||[]).length||(d.reads||[]).length)){
+    const siteRow=(s,verb,col)=>'<div class="oprow">'+
+      '<span class="verb" style="color:var('+col+')">'+verb+'</span>'+
+      '<span style="flex:1">'+nodeChip(s.model)+
+        elJumpHtml(s.model, s.element, s.elementName||s.element)+
+        (s.scope?'<span class="pd">in scope</span>'+nodeChip(s.scope):'')+
+        (s.scopeUnresolved?'<span class="pd" data-tip="The called model is not part of this project, so '+
+          'Atlas cannot tell whether anything there reads the variable.">callee not in project</span>':'')+
+      '</span>'+
+      termHtml('via', s.via, 'pt')+'</div>';
+    h+=section('rw','Written / read ('+(d.writeCount||0)+' / '+(d.readCount||0)+')','<div class="oplist">'+
+      (d.writes||[]).map(s=>siteRow(s,'writes','--bad-text')).join('')+
+      (d.reads||[]).map(s=>siteRow(s, s.guess?'≈ reads':'reads', s.guess?'--ink-faint':'--ok-text')).join('')+
+      '</div>');
+  }
   // The data-flow view of a variable: every in/out mapping that reads or writes it, and where.
   if(n.type==='variable' && (d.ioParams||[]).length){
     h+=section('passedas','Passed as parameter ('+paramSummary(d.ioParams)+')','<div class="oplist">'+
@@ -2241,8 +2504,7 @@ function detailExtra(n){
         '<span class="verb" style="color:var('+(s.api?'--ok-text':'--ink-faint')+')">'+
           (s.api?'sets / reads':'≈ reads')+'</span>'+
         '<span style="flex:1">'+nodeChip(s.model)+
-          (s.element?'<span class="opref" data-goto="'+enc(s.model)+'" data-goto-el="'+esc(String(s.element))+
-            '" tabindex="0" role="link" style="cursor:pointer">'+esc(s.elementName||s.element)+' ↓</span>':'')+
+          elJumpHtml(s.model, s.element, s.elementName||s.element)+
         '</span>'+
         (s.elementType?'<span class="pt">'+esc(s.elementType)+'</span>':'')+
       '</div>').join('')+'</div>');

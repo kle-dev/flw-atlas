@@ -80,8 +80,15 @@ and a clickable **⚠ parse issues** badge in the explorer header — so missing
 
 Beyond parse failures, every artifact now carries the same health findings (`findings` / `checks` in
 `graph.json`): invalid and suspect expressions, script syntax errors, missing model references,
-orphan/superseded Liquibase changelogs, schema gaps, unused forms/operations/custom functions, and
+orphan/superseded Liquibase changelogs, schema gaps, unused forms/operations/custom functions,
+**variables written but never read** (and inputs mapped into a called model that never reads them), and
 variables only a script mentions.
+
+Each variable node carries `writes` / `reads` — where the name is written and where it is read, with the
+construct and element for each — which is what the unused-variable verdict is derived from. The check
+only speaks when it has seen a write and nothing that could be a read; the cases it deliberately stays
+quiet about are listed on the explorer's *Unused variables* page (`#/variables`) next to the count of
+variables it declined to judge.
 
 ## Development
 

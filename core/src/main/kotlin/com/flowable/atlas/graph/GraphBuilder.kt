@@ -7,6 +7,7 @@ import com.flowable.atlas.expr.ExpressionDialect
 import com.flowable.atlas.expr.ExpressionValidator
 import com.flowable.atlas.expr.ExprWrappers
 import com.flowable.atlas.expr.catalog.CustomFunctionCatalog
+import com.flowable.atlas.expr.catalog.FlowableExpressionCatalog
 import com.flowable.atlas.parsing.Constants
 import com.flowable.atlas.parsing.ModelKinds
 
@@ -50,6 +51,14 @@ object GraphBuilder {
     /** Ref kinds correlated by NAME (not by model key): throw side and catch side of a signal/
      *  message/error/escalation — and external-worker topics — meet in one shared node. */
     private val NAMED_REF_KINDS = setOf("signal", "message", "error", "escalation", "topic")
+
+    /** How many write/read sites a variable node lists before the count alone has to speak. A busy name
+     *  like `total` can have hundreds, and every one of them ships inside the explorer's HTML payload. */
+    private const val VAR_SITES_LISTED = 25
+
+    /** `variables:get('orderId')` / `vars:equals('status','open')` — a variable named as a string. */
+    private val VAR_FN_RE = Regex(
+        "\\b(?:variables|vars|var)\\s*:\\s*([A-Za-z]\\w*)\\s*\\(\\s*['\"]([A-Za-z_]\\w*)['\"]")
 
     /** Root identifiers a `{{…}}` placeholder may carry that are never project variables. */
     private val MUSTACHE_IGNORE = setOf(
@@ -256,11 +265,74 @@ object GraphBuilder {
             if (solid) solidVars.add(v)
         }
 
-        for ((expr, keys) in ctx.exprUse) for (v in varsInExpr(expr)) for (k in keys) addUsage(v, k, expr)
+        // Where each name is written and where it is read. Kept apart from `usages` on purpose: `usages`
+        // is the human record of *every* occurrence, in the reader's own words; these two are the machine
+        // record of the single fact a reader acts on — does anything consume this variable?
+        val varWrites = LinkedHashMap<String, LinkedHashSet<Map<String, Any?>>>()
+        val varReads = LinkedHashMap<String, LinkedHashSet<Map<String, Any?>>>()
+        fun addSite(
+            v: String, model: Any?, dir: String, via: String,
+            element: Any? = null, elementName: Any? = null, elementType: String? = null,
+            scope: Any? = null, proven: Boolean = true,
+        ) {
+            // Beans are not variables, and neither are the engine's own context roots. The latter matter
+            // here specifically: every model-side read of `authenticatedUserId` is filtered out as
+            // context, so a Java `setVariable("authenticatedUserId", …)` would stand alone as a write
+            // with no readers and be reported as unused.
+            if (v in beans || v in Constants.FLOWABLE_CONTEXT || v in Constants.JAVA_LITERALS) return
+            if (model == null) return
+            val rec = linkedMapOf<String, Any?>("model" to model.toString(), "via" to via)
+            element?.let { rec["element"] = it }
+            elementName?.let { rec["elementName"] = it }
+            elementType?.let { rec["elementType"] = it }
+            scope?.let { rec["scope"] = it.toString() }
+            if (!proven) rec["guess"] = true
+            // A set, because the same (model, element, via) can be reached twice — a bot's script and the
+            // payload mapping it declares are two views of one call — and identical sites must collapse
+            // into one row rather than inflating the counts the report quotes.
+            (if (dir == Ctx.WRITE) varWrites else varReads).getOrPut(v) { LinkedHashSet() }.add(rec)
+        }
+
+        /** One variable's write or read sites, with the model keys resolved to node ids so the frontend
+         *  can link every row, and a site in an unknown model dropped. */
+        fun sites(recs: Set<Map<String, Any?>>?): List<Map<String, Any?>> =
+            (recs ?: emptySet()).filter { it["model"] in keyToNode }
+                .map { rec ->
+                    val out = LinkedHashMap(rec)
+                    out["model"] = keyToNode.getValue(rec["model"].toString())
+                    // A callee that is not in this project cannot be searched for readers, so the
+                    // dangling key is replaced by a flag saying exactly that. Dropping it silently would
+                    // turn "we cannot see the model this goes to" into "nobody reads it".
+                    (rec["scope"] as? String)?.let { s ->
+                        val node = keyToNode[s]
+                        if (node != null) out["scope"] = node else { out.remove("scope"); out["scopeUnresolved"] = true }
+                    }
+                    out
+                }
+                .sortedBy { "${it["model"]}|${it["via"]}|${it["element"]}" }
+
+        for ((expr, keys) in ctx.exprUse) {
+            for (v in varsInExpr(expr)) for (k in keys) {
+                addUsage(v, k, expr)
+                addSite(v, k, Ctx.READ, "expression")
+            }
+            // `${variables:get('x')}` names its variable as a string, which the identifier scan blanks
+            // out — without this a variable read only that way looked as if nothing read it.
+            for (v in varFnReads(expr)) for (k in keys) {
+                addUsage(v, k, expr)
+                addSite(v, k, Ctx.READ, "variablesFn")
+            }
+        }
         for ((ph, keys) in ctx.mustacheUse) {
             val v = varInMustache(ph) ?: continue
-            for (k in keys) addUsage(v, k, ph)
+            for (k in keys) {
+                addUsage(v, k, ph)
+                addSite(v, k, Ctx.READ, "binding")
+            }
         }
+        // No site for the undirected bucket: it lumps `resultVariableName` (a write) together with
+        // `collection` (a read), so it can prove neither. `VarHarvest.collectDirectedVars` recovers the
+        // halves whose direction Flowable fixes, and they arrive through `ctx.varSites` below.
         for ((v, keys) in ctx.varUse) for (k in keys) addUsage(v, k, "(declared / mapped)")
         // Script bodies, with the element whose script it is — "(script)" alone left the reader hunting
         // for which of a dozen tasks actually touches the variable.
@@ -278,6 +350,17 @@ object GraphBuilder {
             ))
         }
         for ((v, keys) in ctx.formFieldUse) for (k in keys) addUsage(v, k, "(form field)")
+        // Every directional site the parsers proved: script API calls with their verb, DMN inputs and
+        // outputs, form fields and outcomes, the engine-written attributes, and each side of an in/out
+        // mapping with the scope it really belongs to.
+        for (s in ctx.varSites) {
+            val v = s["variable"] as? String ?: continue
+            addSite(
+                v, s["model"], s["dir"] as? String ?: continue, s["via"] as? String ?: "parameter",
+                s["element"], s["elementName"], s["elementType"] as? String,
+                s["scope"], proven = s["proven"] != false,
+            )
+        }
         // In/out parameter mappings: one precise snippet per binding instead of the generic
         // "(declared / mapped)", plus a per-variable list so the detail view can show the data flow and
         // the sidebar can offer a "used as a parameter" facet.
@@ -298,8 +381,15 @@ object GraphBuilder {
                 if (truthy(vm["key"])) addUsage(vm["key"].toString(), am["key"], "(app variable)")
             }
         }
-        for ((fqn, jc) in allJava) for (v in (jc["vars"] as? Collection<String> ?: emptyList())) {
-            addUsage(v, fqn, "(Java: set/getVariable)")
+        for ((fqn, jc) in allJava) {
+            for (v in (jc["vars"] as? Collection<String> ?: emptyList())) {
+                addUsage(v, fqn, "(Java: set/getVariable)")
+            }
+            for ((key, dir) in listOf("varWrites" to Ctx.WRITE, "varReads" to Ctx.READ)) {
+                for (v in (jc[key] as? Collection<String> ?: emptyList())) {
+                    addSite(v, fqn, dir, "javaApi", elementType = "java")
+                }
+            }
         }
 
         for ((v, perModel) in varUsages) {
@@ -318,6 +408,15 @@ object GraphBuilder {
             val scripts = (varScripts[v] ?: emptyList()).filter { it["model"] in keyToNode }
                 .map { it + mapOf("model" to keyToNode.getValue(it["model"].toString())) }
             if (scripts.isNotEmpty()) data["scriptSites"] = scripts
+            // Where the name is written and where it is read. The counts are the uncapped truth while the
+            // lists are capped: a variable in a real project can have hundreds of sites, and the whole
+            // list ships inside the HTML payload.
+            val writes = sites(varWrites[v])
+            val reads = sites(varReads[v])
+            if (writes.isNotEmpty()) data["writes"] = writes.take(VAR_SITES_LISTED)
+            if (reads.isNotEmpty()) data["reads"] = reads.take(VAR_SITES_LISTED)
+            data["writeCount"] = writes.size
+            data["readCount"] = reads.size
             // Nothing but a bare identifier in a script backs this name: real often enough to be worth
             // showing, not solid enough to state as fact.
             if (v !in solidVars) data["heuristic"] = true
@@ -767,6 +866,14 @@ object GraphBuilder {
         // drop _matchEps from restCalls before serialising (internal only)
         for (rc in ctx.restCalls) rc.remove("_matchEps")
 
+        // Which variables nothing reads. Deliberately here rather than with the variable nodes above:
+        // the cross-model half has to follow the resolved edges, which did not exist yet at that point.
+        // The nodes are the same instances that go into `result`, so stamping them in place is enough.
+        val readsEverything = LinkedHashSet<String>()
+        for (k in ctx.varScopeReadsAll) keyToNode[k]?.let { readsEverything.add(it) }
+        for ((fqn, jc) in allJava) if (jc["readsAllVariables"] == true) readsEverything.add("java:$fqn")
+        UnusedVariables.decide(nodes, edges, ctx.varReadsUnknown, readsEverything, MUSTACHE_IGNORE)
+
         // dedupe edges — when the same (s,t,rel) exists both flagged and unflagged, the strongest
         // signal wins: a clean occurrence clears `suspect`/`dynamic` from the kept edge.
         val edgeByKey = LinkedHashMap<List<Any?>, LinkedHashMap<String, Any?>>()
@@ -856,6 +963,26 @@ object GraphBuilder {
             if (after.isNotEmpty() && after[0] == '(') continue
             if (n in Constants.FLOWABLE_CONTEXT || n in Constants.JAVA_LITERALS || n in beans) continue
             out.add(n)
+        }
+        return out
+    }
+
+    /**
+     * Variable names an expression names as a **string literal** rather than as an identifier:
+     * `${variables:get('orderId')}`, `${vars:equals('status','open')}`.
+     *
+     * [varsInExpr] cannot see these — the name is inside quotes, which that pass deliberately blanks out
+     * — so a variable only ever read through the `variables:` namespace looked as if nothing read it.
+     * The function name is checked against [FlowableExpressionCatalog], so a typo (`variables:gett`)
+     * invents no read.
+     */
+    private fun varFnReads(expr: String): Set<String> {
+        val out = LinkedHashSet<String>()
+        for (m in VAR_FN_RE.findAll(expr)) {
+            val fn = m.groupValues[1]
+            if (fn == "makeTransient") continue          // marks storage, does not read the value
+            if (!FlowableExpressionCatalog.isBackendFunction("variables", fn)) continue
+            out.add(m.groupValues[2])
         }
         return out
     }

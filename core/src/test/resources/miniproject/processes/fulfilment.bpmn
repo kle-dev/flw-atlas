@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The sub-process `order.bpmn`'s `callSub` call activity invokes. It exists to make the cross-model
+     variable checks real: the caller maps `orderId` in as `subOrderId`, and nothing here ever reads that
+     name (the `unreadInputs` check), while `orderNotes` is declared as a `<dataObject>` and *is* read, so
+     the declaration path is covered without adding a second finding. -->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://flowable.org/test">
+  <process id="fulfilmentProcess" name="Fulfilment Process">
+    <documentation>Ships an approved order and reports the shipping total back to its caller.</documentation>
+    <dataObject id="orderNotes" name="orderNotes" itemSubjectRef="xsd:string"/>
+    <startEvent id="fStart"/>
+    <sequenceFlow id="ff1" sourceRef="fStart" targetRef="packTask"/>
+    <scriptTask id="packTask" name="Pack shipment" scriptFormat="groovy">
+      <script>
+        def label = "pack:" + orderNotes
+        execution.setVariable('subTotal', 10)
+      </script>
+    </scriptTask>
+    <sequenceFlow id="ff2" sourceRef="packTask" targetRef="callCourier"/>
+    <!-- Deliberately dangling: `courierProcess` is not modelled here, which keeps the missing-model
+         check exercised end to end (it used to rest on `fulfilmentProcess` itself being absent). -->
+    <callActivity id="callCourier" name="Book courier" calledElement="courierProcess"/>
+    <sequenceFlow id="ff3" sourceRef="callCourier" targetRef="fEnd"/>
+    <endEvent id="fEnd"/>
+  </process>
+</definitions>

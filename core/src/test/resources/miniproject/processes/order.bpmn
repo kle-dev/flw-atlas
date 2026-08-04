@@ -30,7 +30,11 @@
     <sequenceFlow id="f4" sourceRef="notifyTask" targetRef="callSub"/>
     <callActivity id="callSub" name="Fulfil" calledElement="fulfilmentProcess">
       <extensionElements>
+        <!-- `subOrderId` is a name the callee never mentions at all: nothing anywhere reads it.
+             `orderId` is passed through under its own name and read here but not there — the two halves
+             of the unused-variable report, one mapping each. -->
         <flowable:in source="orderId" target="subOrderId"/>
+        <flowable:in source="orderId" target="orderId"/>
         <flowable:out source="subTotal" target="total"/>
       </extensionElements>
     </callActivity>

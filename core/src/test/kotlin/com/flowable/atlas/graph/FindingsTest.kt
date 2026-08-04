@@ -68,6 +68,67 @@ class FindingsTest {
     }
 
     @Test
+    fun anUnreadVariableNamesTheWriteToDelete() {
+        // A finding that only says "never read" leaves the reader hunting for the line to remove, so the
+        // message carries the construct and the element in Design's own words.
+        val r = run(listOf(node("variable:shippingStamp", "variable", data = mapOf(
+            "unread" to true, "writeCount" to 2,
+            "writes" to listOf(
+                mapOf("model" to "process:p", "via" to "scriptApi", "elementName" to "Stamp order"),
+                mapOf("model" to "process:p", "via" to "resultVariable", "elementName" to "Calculate"),
+            ),
+        ))))
+        assertEquals(1, checks(r)["unusedVars"])
+        assertEquals(
+            "written but never read — written by a script on `Stamp order`, the result variable of `Calculate`",
+            findings(r).single()["message"],
+        )
+    }
+
+    @Test
+    fun anUnreadCallInputNamesTheCalleeAndStaysApartFromTheGlobalCheck() {
+        val r = run(listOf(
+            node("variable:subOrderId", "variable", data = mapOf(
+                "unreadIn" to listOf("process:fulfilment"), "writeCount" to 1,
+                "writes" to listOf(mapOf("model" to "process:p", "via" to "inParameter", "elementName" to "Fulfil")),
+            )),
+            // the same variable node cannot be both; a name nothing reads anywhere is the stronger finding
+            node("variable:orphan", "variable", data = mapOf(
+                "unread" to true, "writeCount" to 1,
+                "writes" to listOf(mapOf("model" to "process:p", "via" to "dmnOutput")),
+            )),
+        ))
+        assertEquals(1, checks(r)["unreadInputs"])
+        assertEquals(1, checks(r)["unusedVars"])
+        assertEquals(
+            "mapped into `process:fulfilment`, which never reads it — written by an in parameter on `Fulfil`",
+            findings(r).single { it["check"] == "unreadInputs" }["message"],
+        )
+    }
+
+    @Test
+    fun aVariableCanBeBothAScriptGuessAndUnread() {
+        // The `variable` branch reports three independent things, and an early `continue` between them
+        // would silently drop whichever came second.
+        val r = run(listOf(node("variable:x", "variable", data = mapOf(
+            "heuristic" to true, "unread" to true, "writeCount" to 1,
+            "writes" to listOf(mapOf("model" to "process:p", "via" to "scriptApi")),
+        ))))
+        assertEquals(setOf("guessedVars", "unusedVars"), findings(r).map { it["check"] }.toSet())
+    }
+
+    @Test
+    fun aSilencedVariableIsNeverAFinding() {
+        // `readsUnknown` is the verdict Atlas declines to give; it must produce no finding on any surface.
+        val r = run(listOf(node("variable:sent", "variable", data = mapOf(
+            "readsUnknown" to true, "writeCount" to 1, "readCount" to 0,
+            "writes" to listOf(mapOf("model" to "action:a", "via" to "flwPayload")),
+        ))))
+        assertTrue(findings(r).isEmpty())
+        assertEquals(0, checks(r)["open"])
+    }
+
+    @Test
     fun orphanAndSupersededChangelogsAreReportedWithTheirSuccessor() {
         val r = run(
             listOf(

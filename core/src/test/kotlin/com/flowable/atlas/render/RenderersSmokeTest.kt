@@ -194,5 +194,16 @@ class RenderersSmokeTest {
         assertTrue("expected the list bridge styling from explorer.css", html.contains(".lh-wider{"))
         // The index is warmed after boot so the first query does not pay for the whole deep walk.
         assertTrue("expected the index prewarm from explorer.js", html.contains("function prewarmSearchIndex("))
+        // The unused-variables report: its own view, the renderer, the write/read data that survives
+        // `slimData`'s allowlist, Design's wording for a write construct, and the CSS that colours the
+        // two directions apart. `silenceRules` is what lets the page state its own limits.
+        assertTrue("expected the unused-variables view from explorer.html", html.contains("id=\"view-variables\""))
+        assertTrue("expected the unused-variables renderer from explorer.js", html.contains("function renderVariables("))
+        assertTrue("expected the write/read site row from explorer.js", html.contains("function varSiteLabel("))
+        assertTrue("expected the unused-variable check id in the payload", html.contains("unusedVars"))
+        assertTrue("expected the write sites in the payload", html.contains("\"writeCount\""))
+        assertTrue("expected Design's wording for a mapped-in parameter", html.contains("'via:inParameter'"))
+        assertTrue("expected the silence rules in the payload", html.contains("silenceRules"))
+        assertTrue("expected the write/read styling from explorer.css", html.contains(".vw{color:var(--bad-text)}"))
     }
 }

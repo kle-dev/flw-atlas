@@ -3,6 +3,7 @@ package com.flowable.atlas.render
 import com.flowable.atlas.AtlasBuildInfo
 import com.flowable.atlas.diagram.DiagramRenderer
 import com.flowable.atlas.diagram.ModelBytes
+import com.flowable.atlas.graph.UnusedVariables
 import com.flowable.atlas.model.MiniJson
 import com.flowable.atlas.model.ModelType
 import java.io.File
@@ -33,6 +34,10 @@ object ExplorerHtmlRenderer {
         // `findings` list stays out of the payload: the Checks tab renders its items from the live
         // nodes, which it needs anyway for chips and links.
         payload["checks"] = result["checks"] ?: LinkedHashMap<String, Any?>()
+        // What the unused-variable check refuses to conclude, in its own words. The report states these
+        // next to its findings, and they travel from the one place that implements them so the page can
+        // never claim more confidence than the check actually has.
+        payload["silenceRules"] = UnusedVariables.SILENCE_RULES
         payload["nodes"] = attachDiagrams(slimNodes(graph["nodes"]), root)
         payload["edges"] = graph["edges"]
         // json.dumps(payload, ensure_ascii=False, default=list).replace("</", "<\/")
@@ -132,15 +137,16 @@ object ExplorerHtmlRenderer {
         "namespace", "operations", "otherTasks", "outcomes", "outParams", "outputs", "package",
         "parameters", "params",
         "path", "payload", "permissionGroups", "permissions", "planModel", "platform", "problems",
+        "readCount", "reads", "readsUnknown",
         "referencedLiquibaseModelKey", "restCalls", "roles", "route", "ruleCount", "rules", "ruleTasks",
-        "schemaCoverage", "scopes",
+        "schemaCoverage", "scope", "scopes", "scopeUnresolved",
         "scopeType", "scriptProblems", "scriptSites", "scriptTasks", "sentries", "service",
         "serviceTableName", "serviceTasks",
         "signalName", "signature", "sourceId",
         "sourceIndex", "sources", "subforms", "subProcesses", "tableName", "tables", "temperature",
         "tools", "topics",
-        "type", "types", "url", "usages",
-        "usedBy", "userTasks", "variables",
+        "type", "types", "unread", "unreadIn", "url", "usages",
+        "usedBy", "userTasks", "variables", "writeCount", "writes",
     )
 
     /** The full explorer HTML page (CSS/JS inlined; `__ATLAS_DATA__` still unresolved). */
