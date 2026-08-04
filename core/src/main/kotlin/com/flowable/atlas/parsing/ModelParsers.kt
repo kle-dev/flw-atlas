@@ -142,9 +142,15 @@ object ModelParsers {
                 // A decision table reads its input variables from, and writes its output names back
                 // into, the calling scope — index both so decisions join the variable graph.
                 for (inp in t.findChildren("input")) {
-                    ctx.addVar(key, inp.textOfDescendant("text")?.trim()?.substringBefore('.'))
+                    val v = inp.textOfDescendant("text")?.trim()?.substringBefore('.')
+                    ctx.addVar(key, v)
+                    ctx.addVarSite(key, v, Ctx.READ, "dmnInput", inp.attr("id"), inp.attr("label"), "dmnInput")
                 }
-                for (outp in t.findChildren("output")) ctx.addVar(key, outp.attr("name"))
+                for (outp in t.findChildren("output")) {
+                    ctx.addVar(key, outp.attr("name"))
+                    ctx.addVarSite(key, outp.attr("name"), Ctx.WRITE, "dmnOutput",
+                        outp.attr("id"), outp.attr("label"), "dmnOutput")
+                }
             }
             // DRD: a decision may require other decisions (informationRequirement/requiredDecision)
             for (req in dec.findChildren("informationRequirement")) {
@@ -345,6 +351,11 @@ object ModelParsers {
         }
         // the variable the chosen outcome is stored in (the key is all-lowercase in the model JSON)
         ctx.addVar(key, doc["outcomevariablename"])
+        ctx.addVarSite(key, doc["outcomevariablename"], Ctx.WRITE, "formOutcome", elementType = "form")
+        // Which button the user pressed is what the Work UI shows in a task list and what a query filters
+        // on, so an outcome variable no flow condition reads is not evidence of anything. Recording the
+        // write but not claiming to know its readers is the honest half.
+        ctx.markReadsUnknown(doc["outcomevariablename"])
         fun visit(n: Map<String, Any?>) {
             if (ModelJsonReader.isFormComponent(n)) {
                 // A button has no `label`; its caption is `extraSettings.text` (see [isFormComponent]).
@@ -363,7 +374,16 @@ object ModelParsers {
                 val bound = (n["value"] as? String)?.contains("{{") == true
                 if (!bound && !NON_BINDING_FIELD_TYPES.contains(ftype) && !ftype.lowercase().contains("button")) {
                     val root = n["id"].toString().trimStart('$').substringBefore('.').substringBefore('[')
-                    if (root !in FIELD_ID_IGNORE) ctx.addVar(key, root, "form_field_use")
+                    if (root !in FIELD_ID_IGNORE) {
+                        ctx.addVar(key, root, "form_field_use")
+                        // A Work form field is prefilled *from* the variable and writes it back on
+                        // submit, and nothing in the model says which of the two a given field is for.
+                        // Recording both is the honest answer — and it means a field alone never makes a
+                        // variable look unread.
+                        for (d in listOf(Ctx.READ, Ctx.WRITE)) {
+                            ctx.addVarSite(key, root, d, "formField", n["id"], label, ftype)
+                        }
+                    }
                 }
             }
             // an outcome button can open a follow-up form directly on the field definition
@@ -720,6 +740,10 @@ object ModelParsers {
         objOf(doc["variables"])?.forEach { (n, lbl) ->
             columns.add(linkedMapOf("name" to n, "label" to (lbl as? String), "type" to null))
             ctx.addVar(key, n)
+            // A data object's own variable is a column of a table the Work UI, a query or a REST client
+            // reads. Nothing in the models has to mention it for it to be in use, so the direction is
+            // recorded as undecidable rather than as a write nobody consumes.
+            ctx.markReadsUnknown(n)
         }
         val out = linkedMapOf<String, Any?>(
             "key" to key, "name" to doc["name"], "file" to ffile,
@@ -744,6 +768,10 @@ object ModelParsers {
         if (mtype == "variableExtractor") for (ve in listOfObjs(d["variableExtractors"])) {
             ctx.addRef(d["key"], mtype, ffile, "extracts-from", "process", objOf(ve["filter"])?.get("scopeDefinitionKey"))
             ctx.addVar(d["key"], ve["to"])
+            // An extracted variable exists precisely so that queries, task lists and dashboards can
+            // index it — none of which Atlas parses. It is a write whose readers are out of reach.
+            ctx.addVarSite(d["key"], ve["to"], Ctx.WRITE, "variableExtractor", elementType = "variableExtractor")
+            ctx.markReadsUnknown(ve["to"])
         }
         if (mtype == "template" && truthy(d["formKey"])) ctx.addRef(d["key"], mtype, ffile, "template-form", "form", d["formKey"])
         if (mtype == "document") objOf(d["forms"])?.forEach { (op, fk) -> ctx.addRef(d["key"], mtype, ffile, "document-$op-form", "form", fk) }

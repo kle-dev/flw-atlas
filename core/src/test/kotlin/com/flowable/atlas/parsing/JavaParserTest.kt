@@ -30,6 +30,38 @@ class JavaParserTest {
 
     @Test
     @Suppress("UNCHECKED_CAST")
+    fun variableAccessesAreSplitByVerb() {
+        val src = """package com.x;
+            public class MyBean {
+                public void go(DelegateExecution execution) {
+                    execution.setVariable("written", 1);
+                    Object r = execution.getVariableLocal("read");
+                    if (execution.hasVariable("maybe")) execution.removeVariable("gone");
+                }
+            }"""
+        val jc = JavaParser.parseJava(src, "MyBean.java")
+        assertEquals(listOf("written"), jc["varWrites"])
+        assertEquals(listOf("read"), jc["varReads"])
+        assertEquals(listOf("gone", "maybe"), jc["varsUndecided"])
+        // `vars` stays the union of all three, so nothing that already read it changes behaviour.
+        assertEquals(listOf("gone", "maybe", "read", "written"), jc["vars"])
+        assertEquals(false, jc["readsAllVariables"])
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aWholeMapReadIsRecognised() {
+        // A class that reads every variable of the scope makes it impossible to prove any single one
+        // unread — the unused-variable check has to stay silent for the models that call it.
+        val src = """package com.x;
+            public class Nosy {
+                public void go(DelegateExecution execution) { execution.getVariables(); }
+            }"""
+        assertEquals(true, JavaParser.parseJava(src, "Nosy.java")["readsAllVariables"])
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
     fun controllerMapping() {
         val src = """package com.x;
             @RestController

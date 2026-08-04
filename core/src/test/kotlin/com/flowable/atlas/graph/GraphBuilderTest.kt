@@ -60,7 +60,7 @@ class GraphBuilderTest {
     fun externalNodeForUnresolvedRefs() {
         val byId = nodes().associateBy { it["id"] as String }
         assertTrue("unresolved beans must surface as external nodes", "external:notifierBean" in byId)
-        val missing = byId["external:fulfilmentProcess"]
+        val missing = byId["external:courierProcess"]
         assertNotNull("a referenced-but-undefined model key must surface as a missing-model node", missing)
         val data = missing!!["data"] as Map<String, Any?>
         assertEquals(true, data["missingModel"])

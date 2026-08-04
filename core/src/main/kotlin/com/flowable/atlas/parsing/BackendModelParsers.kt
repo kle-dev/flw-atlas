@@ -64,6 +64,9 @@ object BackendModelParsers {
             val otherTasks = ArrayList<Any?>()
             val multiInstance = ArrayList<Any?>()
             val ioParameters = ArrayList<Map<String, Any?>>()
+            // `<dataObject>` declarations — the process's own variables, with the type and default the
+            // modeller gave them.
+            val dataObjects = ArrayList<Any?>()
             val info = linkedMapOf<String, Any?>(
                 "key" to pkey, "name" to proc.attr("name"), "file" to ffile,
                 "documentation" to proc.textOfDescendant("documentation"),
@@ -77,7 +80,7 @@ object BackendModelParsers {
                 // process from its start event instead of reading elements grouped by type.
                 "flows" to flows,
                 "otherTasks" to otherTasks, "listeners" to ArrayList<Any?>(), "multiInstance" to multiInstance,
-                "ioParameters" to ioParameters,
+                "ioParameters" to ioParameters, "dataObjects" to dataObjects,
             )
 
             val listeners = XmlHelpers.readListeners(proc)
@@ -190,6 +193,28 @@ object BackendModelParsers {
                 }
 
                 when {
+                    // The only place BPMN states outright that a process *has* a variable. Until now the
+                    // graph could not see it: a declared variable existed only if something happened to
+                    // mention it elsewhere. The engine creates it, so it is a write and nothing more —
+                    // whether anyone reads it is exactly the question worth asking about a declaration.
+                    tag == "dataObject" -> {
+                        val vname = el.attr("name")?.ifEmpty { null } ?: eid
+                        dataObjects.add(linkedMapOf(
+                            "id" to eid, "name" to ename, "type" to el.attr("itemSubjectRef"),
+                            "default" to el.textOfDescendant("value"),
+                        ))
+                        ctx.addVar(pkey, vname)
+                        ctx.addVarSite(pkey, vname, Ctx.WRITE, "dataObject", eid, ename, "dataObject")
+                    }
+                    // A legacy BPMN form property is rendered as a field: read to prefill, written on
+                    // submit — the same two-way binding a Design form field has.
+                    tag == "formProperty" -> {
+                        val fid = el.attr("id")?.ifEmpty { null }
+                        ctx.addVar(pkey, fid)
+                        for (d in listOf(Ctx.READ, Ctx.WRITE)) {
+                            ctx.addVarSite(pkey, fid, d, "formProperty", fid, ename, "formProperty")
+                        }
+                    }
                     tag == "userTask" -> {
                         val ut = linkedMapOf<String, Any?>(
                             "id" to eid, "name" to ename, "assignee" to el.attr("assignee"),

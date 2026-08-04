@@ -38,6 +38,43 @@ class ScriptVarsTest {
     }
 
     @Test
+    fun theApiVerbDecidesWhetherItIsAWriteOrARead() {
+        val use = analyze(
+            """
+            execution.setVariable('written', 1)
+            execution.setVariables([alsoWritten: 2])
+            variables.put('mapWritten', 3)
+            flw.setOutput('outWritten', 4)
+            def a = execution.getVariable('readName')
+            def b = execution.getVariableLocal("alsoRead")
+            def c = variables.get('mapRead')
+            def d = flw.getInput('inRead')
+            if (execution.hasVariable('maybe')) execution.removeVariable('gone')
+            def e = vars['bracketed']
+            """,
+        )
+        assertEquals(listOf("alsoWritten", "mapWritten", "outWritten", "written"), use.writes.sorted())
+        assertEquals(listOf("alsoRead", "inRead", "mapRead", "readName"), use.apiReads.sorted())
+        // `has`/`remove` prove nothing, and `vars['x']` is a write on the left of an assignment and a
+        // read anywhere else — all three stay undecided rather than being guessed into a bucket.
+        assertEquals(listOf("bracketed", "gone", "maybe"), use.undecided.sorted())
+        // `api` stays the union, so every existing consumer sees exactly what it saw before.
+        assertEquals(
+            (use.writes + use.apiReads + use.undecided).sorted(),
+            use.api.sorted(),
+        )
+    }
+
+    @Test
+    fun readingTheWholeVariableMapIsRecognised() {
+        assertTrue(analyze("def all = execution.getVariables()").readsWholeScope)
+        assertTrue(analyze("def all = execution.getVariableInstancesLocal()").readsWholeScope)
+        // The name-taking overloads are covered name-by-name, so they must not claim the whole scope.
+        assertFalse(analyze("def some = execution.getVariables(['a','b'])").readsWholeScope)
+        assertFalse(analyze("def one = execution.getVariable('a')").readsWholeScope)
+    }
+
+    @Test
     fun bareIdentifiersAreReadsButLocalsAndTypesAreNot() {
         val use = analyze(
             """
