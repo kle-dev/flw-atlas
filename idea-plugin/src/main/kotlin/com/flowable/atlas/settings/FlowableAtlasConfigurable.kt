@@ -43,6 +43,14 @@ class FlowableAtlasConfigurable : BoundSearchableConfigurable(
                         )
                         .bindSelected(settings::showDataObjectTableInlay)
                 }
+                row {
+                    checkBox("Action names")
+                        .comment(
+                            "Shows the action model's name inline next to a string literal that is an action " +
+                                "key — so an opaque key in a constants class reads as what it starts.",
+                        )
+                        .bindSelected(settings::showActionNameInlay)
+                }
             }
             group("Navigation") {
                 row {
