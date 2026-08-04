@@ -1,6 +1,6 @@
 # Flowable Atlas — Features
 
-*IntelliJ IDEA plugin, v0.11.1.* A summary of what Flowable Atlas provides, grouped by area.
+*IntelliJ IDEA plugin, v0.11.2.* A summary of what Flowable Atlas provides, grouped by area.
 Everything is resolved against the Flowable models that actually live in your repository.
 
 ## Atlas Explorer & Hub
@@ -226,7 +226,14 @@ Everything is resolved against the Flowable models that actually live in your re
   bundled by an older Design export, and otherwise **renders the diagram itself** from the model's
   layout (BPMN/CMMN/DMN diagram interchange) — so it keeps working with newer Design exports that no
   longer bundle a `.svg`. The same rendering also powers the **Diagrams (SVG)** generation artifact and
-  is embedded inline in each node's detail view in the Explorer HTML.
+  is embedded inline in each node's detail view in the Explorer HTML. The key may be passed as a
+  **constant or local variable** — `.processDefinitionKey(PROCESS_KEY)` gets the icon on the call line,
+  not only `.processDefinitionKey("DEMO-P039")`.
+- **Decision tables open as tables** — a Design decision table has no canvas, so it carries no DMN
+  layout to draw (only a *decision requirement diagram* does). Clicking the gutter icon on a decision
+  key therefore paints the **decision table itself** — hit policy, input band (label + the expression it
+  evaluates) and output band, one numbered row per rule with its annotation — instead of reporting "no
+  diagram layout". The Explorer keeps showing a decision's rules as its own searchable HTML table.
 - **Recognize model keys anywhere** *(opt-in)* — enable *Settings → Tools → Flowable Atlas → "Recognize
   model keys anywhere in code"* and any Java string literal whose value equals a known model key gets
   the diagram icon, Ctrl-click navigation, Find Usages and hover — not only at a recognized Flowable API
@@ -247,6 +254,12 @@ Everything is resolved against the Flowable models that actually live in your re
   (`builder.variable(…)`), and messages / signals / variables / task ids.
 - **Go-to on Java literals** — Ctrl-click a key, an `operation(…)` or a `value(…)` literal at an API
   call site jumps to the model (operations / values resolve to the backing service model).
+- **Inline hints for opaque keys** — a key string is labelled inline with what it actually is, so a
+  constants class stops being a wall of `DEMO-Dnnn`: a **data-object** key gets its physical table name
+  (`"demo-customer"` ‹CMM_CUSTOMER›, resolved through the backing `database` service) and an **action**
+  key gets the action model's name (`"DEMO-A033"` ‹Create support request›). Both match by value — every
+  literal, not only API call sites — and are toggled under *Settings → Editor → Inlay Hints → Values*
+  or *Settings → Tools → Flowable Atlas → Inline Hints*.
 - **Generate a data-object DTO** — Alt-Enter on a data-object key generates a typed Java class from its
   fields (typed fields, a `fromContainer(…)` mapper and a fluent builder). The key is recognised at a
   data-object API call site as an inline literal **or** a constant — `definitionKey(ModelKeys.CUSTOMER)`,

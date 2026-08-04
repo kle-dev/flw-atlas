@@ -127,6 +127,25 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.11.2</h3>
+        <ul>
+          <li><b>The diagram icon follows a key held in a constant or variable</b> — it used to appear only
+              on an inline literal, so extracting the key (<code>String key = "DEMO-P039";</code> …
+              <code>.processDefinitionKey(key)</code>) or using the generated model constants
+              (<code>.processDefinitionKey(ModelKeys.ONBOARDING)</code>) lost it. The compile-time value is
+              now resolved at every Flowable key call site, and the icon sits on the call line.</li>
+          <li><b>Action keys are labelled with the action's name</b> — an inline hint after a string literal
+              that is an <code>.action</code> key, so a constants class of <code>DEMO-Annn</code> reads as
+              what each one starts. The counterpart of the data-object table-name hint; toggle under
+              <i>Settings → Editor → Inlay Hints → Values</i> or <i>Settings → Tools → Flowable Atlas →
+              Inline Hints</i>.</li>
+          <li><b>Decision tables open as tables</b> — a Design decision table has no canvas and therefore no
+              DMN layout to draw, so clicking the diagram icon on a decision key reported "no diagram
+              layout" for nearly every decision. Atlas now paints the <b>decision table</b> itself: hit
+              policy, input band (label plus the expression it evaluates), output band, one numbered row
+              per rule with its annotation. A decision requirement diagram still renders from its layout,
+              and the Explorer keeps showing rules as its own searchable table.</li>
+        </ul>
         <h3>0.11.1</h3>
         <ul>
           <li><b>The diagram's element card can be expanded over the whole page</b> — it starts docked to
@@ -920,8 +939,9 @@
         <codeInsight.lineMarkerProvider
                 language="JAVA"
                 implementationClass="com.flowable.atlas.usage.FlowableEndpointUsageLineMarkerProvider"/>
-        <!-- Gutter icon on a model-key literal whose model ships a rendered .svg (Design export) →
-             open that diagram in the IDE's built-in image/SVG viewer. No .svg (e.g. a BAR) → no marker. -->
+        <!-- Gutter icon on a model-key expression — a literal or a constant/local reference at a key
+             call site — whose model has a diagram (bundled Design .svg, or rendered from its DI layout)
+             → open it in the IDE's built-in image/SVG viewer. No diagram (e.g. a form BAR) → no marker. -->
         <codeInsight.lineMarkerProvider
                 language="JAVA"
                 implementationClass="com.flowable.atlas.usage.FlowableDiagramLineMarkerProvider"/>
@@ -935,6 +955,16 @@
                 bundle="messages.FlowableAtlasBundle"
                 nameKey="inlay.dataObjectTable.name"
                 descriptionKey="inlay.dataObjectTable.description"/>
+        <!-- Inline hint: the action model's name after a string literal that is an .action key. -->
+        <codeInsight.declarativeInlayProvider
+                language="JAVA"
+                implementationClass="com.flowable.atlas.hint.FlowableActionNameInlayProvider"
+                isEnabledByDefault="true"
+                group="VALUES_GROUP"
+                providerId="com.flowable.atlas.actionName"
+                bundle="messages.FlowableAtlasBundle"
+                nameKey="inlay.actionName.name"
+                descriptionKey="inlay.actionName.description"/>
         <!-- Warn when renaming a Java symbol referenced by Flowable model expressions (text, not auto-updated). -->
         <refactoring.elementListenerProvider
                 implementation="com.flowable.atlas.usage.FlowableRenameWarningProvider"/>
