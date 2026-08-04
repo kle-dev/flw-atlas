@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="demoEligibilityDef" name="Eligibility">
+  <decision id="DEMO-D003" name="Eligibility &amp; risk">
+    <decisionTable id="dt1" hitPolicy="FIRST">
+      <input id="in1" label="Order total">
+        <inputExpression id="ie1" typeRef="number"><text>order.total</text></inputExpression>
+      </input>
+      <input id="in2">
+        <inputExpression id="ie2" typeRef="string"><text>customer.segment</text></inputExpression>
+      </input>
+      <output id="out1" label="Approved" name="approved" typeRef="boolean"/>
+      <output id="out2" name="reviewLevel" typeRef="string"/>
+      <rule id="r1">
+        <description>Large orders always need a review.</description>
+        <inputEntry id="r1i1"><text>&gt; 10000</text></inputEntry>
+        <inputEntry id="r1i2"><text></text></inputEntry>
+        <outputEntry id="r1o1"><text>false</text></outputEntry>
+        <outputEntry id="r1o2"><text>"SENIOR"</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <inputEntry id="r2i1"><text>&lt;= 10000</text></inputEntry>
+        <inputEntry id="r2i2"><text>"RETAIL"</text></inputEntry>
+        <outputEntry id="r2o1"><text>true</text></outputEntry>
+        <outputEntry id="r2o2"><text>"NONE"</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <description>Everything else goes to the queue.</description>
+        <inputEntry id="r3i1"><text>-</text></inputEntry>
+        <inputEntry id="r3i2"><text>-</text></inputEntry>
+        <outputEntry id="r3o1"><text>false</text></outputEntry>
+        <outputEntry id="r3o2"><text>"STANDARD"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

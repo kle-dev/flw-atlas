@@ -1,6 +1,7 @@
 package com.flowable.atlas.usage
 
 import com.flowable.atlas.diagram.DiagramRenderer
+import com.flowable.atlas.diagram.DmnTableSvgRenderer
 import com.flowable.atlas.model.ModelType
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
@@ -16,9 +17,12 @@ import java.util.concurrent.ConcurrentHashMap
  * Resolution order: the model's **bundled sibling `.svg`** (an older Design export — best fidelity),
  * otherwise a **freshly rendered SVG** from the model's diagram-interchange layout via the shared
  * `:core` [DiagramRenderer] — the same engine the Atlas generation uses to emit its diagram artifacts,
- * so the IDE view and the generated files are identical. A generated diagram is returned as an
- * in-memory [LightVirtualFile] named `<base>.svg`, which IntelliJ's bundled Images viewer renders like
- * any other SVG. Returns null when the model has no diagram (non-diagram type, or no layout in it).
+ * so the IDE view and the generated files are identical. Failing that, a **decision table** is painted
+ * from its rules ([DmnTableSvgRenderer]): a Design decision table has no canvas and therefore no `dmndi`
+ * layout, so DI rendering finds nothing to draw — but the table is exactly what the reader wanted. A
+ * generated diagram is returned as an in-memory [LightVirtualFile] named `<base>.svg`, which IntelliJ's
+ * bundled Images viewer renders like any other SVG. Returns null when the model has no diagram at all
+ * (non-diagram type, or a process/case with no layout).
  */
 @Service(Service.Level.PROJECT)
 class DiagramSvgCache {
@@ -37,12 +41,24 @@ class DiagramSvgCache {
         val stamp = modelFile.modificationStamp
         cache[modelFile.url]?.let { if (it.stamp == stamp) return it.file }
         val bytes = runCatching { modelFile.contentsToByteArray() }.getOrNull() ?: return null
-        val svg = runCatching { DiagramRenderer.renderSvg(bytes, modelFile.name, type) }.getOrNull() ?: return null
+        val svg = runCatching { renderSvg(bytes, modelFile.name, type) }.getOrNull() ?: return null
         val name = modelFile.name.substringBeforeLast('.') + ".svg"
         val file = LightVirtualFile(name, svg)
         cache[modelFile.url] = Rendered(stamp, file)
         return file
     }
+
+    /**
+     * DI layout first (a DRD, a process, a case), then — for a decision — the decision table itself.
+     * XML only: a Design-workspace decision-table `.json` carries neither `dmndi` nor `<decisionTable>`.
+     */
+    private fun renderSvg(bytes: ByteArray, fileName: String, type: ModelType): String? =
+        DiagramRenderer.renderSvg(bytes, fileName, type)
+            ?: if (type == ModelType.DECISION && ModelType.isXmlModel(fileName)) {
+                DmnTableSvgRenderer.renderSvg(bytes)
+            } else {
+                null
+            }
 
     companion object {
         fun getInstance(project: Project): DiagramSvgCache = project.service()

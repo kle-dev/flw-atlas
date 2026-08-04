@@ -1,6 +1,7 @@
 package com.flowable.atlas.usage
 
 import com.flowable.atlas.FlowableAtlasBundle
+import com.flowable.atlas.completion.KeySite
 import com.flowable.atlas.completion.SiteMatching
 import com.flowable.atlas.completion.ValueKeyMatching
 import com.flowable.atlas.index.FlowableModelIndexService
@@ -17,16 +18,20 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiLiteralExpression
+import com.intellij.psi.PsiReferenceExpression
 import java.util.function.Supplier
 import javax.swing.Icon
 
 /**
- * Puts a gutter icon on a Flowable model-**key** string literal (a [SiteMatching.keySiteForLiteral]
- * site such as `startProcessInstanceByKey("onboarding")`) when the resolved model ships a rendered
- * `.svg` next to it (Flowable Design's export layout — see [FlowableDiagram]); clicking it opens that
- * diagram in IntelliJ's built-in image/SVG viewer, so the process/case/form/decision can be seen
- * without opening Flowable Design. When no `.svg` exists (e.g. a deployment BAR) no marker is added —
- * the marker is self-limiting, so it never appears where it would do nothing.
+ * Puts a gutter icon on a Flowable model-**key** expression: a string literal at a
+ * [SiteMatching.keySiteForLiteral] site such as `startProcessInstanceByKey("onboarding")`, or — the
+ * generated model-constants / local-variable pattern — a constant reference at a key site such as
+ * `processDefinitionKey(ModelConstants.ONBOARDING)`, whose compile-time value [SiteMatching] resolves.
+ * The icon appears when the resolved model has an openable diagram (a bundled `.svg` from Flowable
+ * Design's export layout, or a DI layout Atlas can render — see [FlowableDiagram]); clicking it opens
+ * that diagram in IntelliJ's built-in image/SVG viewer, so the process/case/decision can be seen
+ * without opening Flowable Design. When there is no diagram (e.g. a deployment BAR of a form) no
+ * marker is added — the marker is self-limiting, so it never appears where it would do nothing.
  *
  * Mirrors [FlowableModelReferenceLineMarkerProvider]: the highlight pass does only cheap cached-index
  * lookups (never builds the index) plus a sibling-file check; opening the editor is done on the click.
@@ -49,11 +54,7 @@ class FlowableDiagramLineMarkerProvider : LineMarkerProvider {
         }
         val valueBased = ValueKeyMatching.enabled()
         for (element in elements) {
-            // Line markers must be anchored on a leaf; a string literal's single child is that leaf.
-            val literal = element.parent as? PsiLiteralExpression ?: continue
-            if (literal.firstChild !== element) continue
-            val key = literal.value as? String ?: continue
-            val site = SiteMatching.keySiteForLiteral(literal)
+            val (key, site) = keyAnchor(element) ?: continue
             // Call-site match narrows by the site's target types; otherwise (opt-in) match by value
             // against every model type — the key must still equal a real indexed key.
             val candidates = when {
@@ -63,6 +64,33 @@ class FlowableDiagramLineMarkerProvider : LineMarkerProvider {
             }
             val entry = candidates.firstOrNull { FlowableDiagram.hasOpenableDiagram(it.file, it.type) } ?: continue
             result.add(buildMarker(element, entry.file, entry.type))
+        }
+    }
+
+    /**
+     * The model key [element] carries plus the call site it sits at (null when there is no site — the
+     * value-based path), or null when the leaf is not a key anchor at all.
+     *
+     * Line markers must be anchored on a **leaf**, so both branches key off the leaf and look up:
+     * a literal's single child, and a reference's name identifier. A qualified constant
+     * (`ModelConstants.ONBOARDING`) therefore yields exactly one marker — the qualifier's own
+     * reference expression is not an argument, so it resolves to no site.
+     */
+    private fun keyAnchor(element: PsiElement): Pair<String, KeySite?>? {
+        when (val parent = element.parent) {
+            is PsiLiteralExpression -> {
+                if (parent.firstChild !== element) return null
+                val key = parent.value as? String ?: return null
+                return key to SiteMatching.keySiteForLiteral(parent)
+            }
+            // A constant / local-variable reference at a key site: `processDefinitionKey(PROCESS_KEY)`.
+            // Site-gated only — matching a bare identifier by value would light up every mention of it.
+            is PsiReferenceExpression -> {
+                if (parent.referenceNameElement !== element) return null
+                val (site, value) = SiteMatching.keySiteForArgument(parent) ?: return null
+                return value to site
+            }
+            else -> return null
         }
     }
 
