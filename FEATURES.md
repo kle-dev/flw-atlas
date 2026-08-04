@@ -1,6 +1,6 @@
 # Flowable Atlas — Features
 
-*IntelliJ IDEA plugin, v0.11.2.* A summary of what Flowable Atlas provides, grouped by area.
+*IntelliJ IDEA plugin, v0.11.3.* A summary of what Flowable Atlas provides, grouped by area.
 Everything is resolved against the Flowable models that actually live in your repository.
 
 ## Atlas Explorer & Hub
@@ -47,9 +47,30 @@ Everything is resolved against the Flowable models that actually live in your re
   Code · Expressions · **Checks** · …*) holding the review lists, plus a tab that collects every finding
   on one page: parse issues with the analyzer's own message, expressions flagged as invalid or suspect
   (with what is wrong and who uses them), schema gaps per service, keys referenced but never defined,
-  unused forms / operations / custom functions, orphan or superseded changelogs, variables only a script
-  guess supports, and the count of uncertain (≈ / ƒ) links. Every block links to its drill-down list, and
-  the dashboard's health cards jump straight into the matching block.
+  unused forms / operations / custom functions, orphan or superseded changelogs, variables written but
+  never read, variables only a script guess supports, and the count of uncertain (≈ / ƒ) links. Every
+  block links to its drill-down list, and the dashboard's health cards jump straight into the matching
+  block.
+- **Unused variables tab** — under *Variables*, the variables something **writes** and nothing **reads**.
+  Atlas now records a direction for every piece of variable evidence — `setVariable` vs `getVariable`, a
+  DMN input vs its output, each side of an in/out mapping, a `<dataObject>` declaration, a form field
+  (both, because a field is prefilled from the variable *and* writes it back) — and reports two things:
+  a variable **written but never read anywhere**, and one **mapped into a called model that never reads
+  it** (the classic dead `flowable:in`, where the caller's own use of the name says nothing about the
+  callee). Every row names the write to delete in Design's words — *Result variable `Calculate total`*,
+  *Decision output*, *In parameter `Fulfil`* — links the model, and jumps to the element on its diagram;
+  chips narrow to one write construct. The variable's own page gains a **Written / read** list, so the
+  verdict can be checked rather than trusted.
+- **The unused-variable check would rather say nothing than guess** — it stays silent whenever a read
+  could exist where it cannot look: a construct whose direction Flowable does not fix (a variable
+  listener, `hasVariable`), a value consumed outside the models (an action's response payload, an
+  extracted variable a query indexes, a form's outcome variable the task list shows, a loop counter), a
+  name written into a container object, a bare-EL Init-Variables value, a name the `{{…}}` harvester
+  deliberately ignores (`{{total}}`, `{{data}}` …), a name passed anywhere as a string literal, any scope
+  whose script or Java code reads the *whole* variable map at once, and a mapping into a model that is not
+  in the project. The page says **how many variables it declined to judge** and why — the honest
+  denominator that makes the ones it does name worth acting on. On a 363-model real project this is ~4%
+  of variables flagged, with the rest either clean or explicitly left alone.
 - **Script tasks tab** — under *Integration*, one sidebar entry listing **every script in the project**: BPMN script tasks,
   CMMN `flowable:type="script"` plan items, execution/task-listener scripts and action bot scripts,
   grouped by model, each with its Design element name (*Script task*, *Execution listener · end*, *Bot
@@ -161,6 +182,9 @@ Everything is resolved against the Flowable models that actually live in your re
   `setVariable('x', …)` in a script task, a CMMN script item or a listener script names the variable
   **and the element** it happens on, and the bare identifiers a Groovy/JS script reads out of its scope
   are reported as what they are — a good guess, marked `≈ read` rather than presented as a declaration.
+  A process's `<dataObject>` variable declarations are parsed too, so the one place BPMN states outright
+  that a process *has* a variable is no longer invisible; and a Java class evaluating Flowable EL from a
+  string (`resolveValue(task, "${vars:get(flagReturn)}")`) counts as reading that variable.
 - **Legacy Design exports** — the "typed-directory" export format (`form-models/`, `service-models/`, …
   with each model wrapped in `{key, name, editorJson}`) is unwrapped and parsed, from a zip or a loose
   workspace; old Oryx-editor forms/pages are registered by key so references resolve and their

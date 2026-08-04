@@ -127,6 +127,35 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.11.3</h3>
+        <ul>
+          <li><b>Unused variables, on their own page</b> — the Explorer gains a <i>Variables → Unused
+              variables</i> tab listing every variable something <b>writes</b> that nothing <b>reads</b>.
+              Two findings: a variable no model reads anywhere, and one <b>mapped into a called model that
+              never reads it</b> — the dead <code>flowable:in</code>, where the caller's own use of the name
+              says nothing about the callee. Each row names the write to delete in Design's words
+              (<i>Result variable "Calculate total"</i>, <i>Decision output</i>, <i>In parameter "Fulfil"</i>),
+              links the model and jumps to the element on its diagram.</li>
+          <li><b>The variable graph now knows read from write</b> — it recorded only that a name occurred
+              somewhere. Direction is now tracked for every kind of evidence: <code>setVariable</code> vs
+              <code>getVariable</code>, a decision's inputs vs its outputs, each side of every in/out
+              mapping, a process-level <code>&lt;dataObject&gt;</code> declaration, and a form field as
+              <i>both</i> (a field is prefilled from the variable and writes it back). A variable's page
+              gains a <b>Written / read</b> list, so the finding can be checked rather than trusted.</li>
+          <li><b>The check would rather say nothing than guess</b> — it stays silent wherever a read could
+              exist out of view: a construct whose direction Flowable does not fix, a value consumed outside
+              the models (an action's response payload, an extracted variable a query indexes, a form's
+              outcome variable, a loop counter), a name written into a container object, a bare-EL
+              Init-Variables value, a name the <code>{{…}}</code> harvester ignores, a name passed as a
+              string literal, any scope whose script or Java code reads the whole variable map at once, and
+              a mapping into a model outside the project. The page says how many variables it declined to
+              judge, and why.</li>
+          <li><b>Also newly visible</b> — a process's <code>&lt;dataObject&gt;</code> variable declarations
+              and legacy <code>&lt;flowable:formProperty&gt;</code> fields are parsed into the graph, an
+              event task's <code>eventInParameter</code> source is recorded at all (both sides used to be
+              dropped), and a Java class evaluating Flowable EL from a string
+              (<code>resolveValue(task, "${vars:get(flagReturn)}")</code>) counts as reading that variable.</li>
+        </ul>
         <h3>0.11.2</h3>
         <ul>
           <li><b>The diagram icon follows a key held in a constant or variable</b> — it used to appear only

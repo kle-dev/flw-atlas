@@ -11,30 +11,63 @@ import com.flowable.atlas.script.ScriptLanguages
  * script performs invisible: searching for the variable found the form that declares it but never the
  * script that consumes it.
  *
- * The two findings are kept apart on purpose. [api] names come from an explicit call and are as good as
- * a declaration; [reads] come from a heuristic over the script's identifiers and are a good guess, which
- * is how callers must present them.
+ * The findings are kept apart on purpose. [writes], [apiReads] and [undecided] come from an explicit
+ * call and are as good as a declaration; [reads] come from a heuristic over the script's identifiers
+ * and are a good guess, which is how callers must present them.
+ *
+ * The verb matters as much as the name. `setVariable('x')` proves a write and `getVariable('x')` a
+ * read, and telling them apart is what lets Atlas say a variable is written but never consumed. The
+ * two used to be merged into one "the API named it" set, which could only answer whether a script
+ * mentions a variable at all.
  */
-data class ScriptVarUse(val api: Set<String>, val reads: Set<String>) {
+data class ScriptVarUse(
+    val writes: Set<String>,
+    val apiReads: Set<String>,
+    val reads: Set<String>,
+    /** Names touched by a call that neither reads nor writes a value, or where the two are
+     *  indistinguishable: `hasVariable`, `removeVariable`, `variables['x']`. Direction unknown, so
+     *  callers must treat these as "cannot decide" rather than as either half. */
+    val undecided: Set<String> = emptySet(),
+    /** The body reads the whole variable map (`execution.getVariables()`). Every variable of the
+     *  surrounding scope is potentially read, so none of them can be proven unread. */
+    val readsWholeScope: Boolean = false,
+    /** Every name an explicit Flowable API call named, regardless of verb, **in the order the script
+     *  names them** — which is what callers that only care *whether* the API named a variable see, and
+     *  why it is passed in rather than derived from the three unordered buckets. */
+    val api: Set<String> = LinkedHashSet(writes) + apiReads + undecided,
+) {
     val isEmpty: Boolean get() = api.isEmpty() && reads.isEmpty()
 
     companion object {
-        val EMPTY = ScriptVarUse(emptySet(), emptySet())
+        val EMPTY = ScriptVarUse(emptySet(), emptySet(), emptySet())
     }
 }
 
 object ScriptVars {
 
-    /** `execution.setVariable('x', …)`, `flw.getInput('x')`, … — the Flowable scripting APIs. */
+    /**
+     * The Flowable scripting APIs: `execution.setVariable('x', …)`, `getVariableLocal('x')`,
+     * `hasVariable('x')`, `flw.getInput('x')`, `flw.setOutput('x', …)`.
+     *
+     * One regex rather than one per family, so matches arrive in the order the script writes them — the
+     * variable list keeps its source order. The verb is captured because `set` proves a write and `get`
+     * a read, which is what tells a written-but-unconsumed variable from a used one.
+     */
     private val API_RE = Regex(
-        "\\b(?:(?:get|set)(?:Transient)?(?:Input|Output)" +
-            "|(?:set|get|has|remove)(?:Transient)?Variable(?:Local)?)" +
+        "\\b(set|get|has|remove)(?:Transient)?(?:Variable(?:Local)?|Input|Output)" +
             "\\s*\\(\\s*['\"]([A-Za-z_]\\w*)['\"]")
 
-    /** `variables.put('x', …)` / `vars['x']` — the variable map, addressed directly. */
+    /** `variables.put('x', …)` / `vars['x']` — the variable map, addressed directly. The accessor is
+     *  captured for the same reason the API verb is. */
     private val VAR_MAP_RE = Regex(
-        "\\b(?:variables|transientVariables|vars)\\s*(?:\\.\\s*(?:put|get|remove|containsKey)\\s*\\(|\\[)" +
+        "\\b(?:variables|transientVariables|vars)\\s*(?:\\.\\s*(put|get|remove|containsKey)\\s*\\(|(\\[))" +
             "\\s*['\"]([A-Za-z_]\\w*)['\"]")
+
+    /** `execution.getVariables()` / `getVariableInstancesLocal()` — a read of the whole map, so nothing
+     *  in the surrounding scope can be proven unread. Only the no-argument forms count: the overloads
+     *  that take a name collection are already covered name-by-name elsewhere. */
+    private val WHOLE_SCOPE_RE = Regex(
+        "\\b(?:get|has)(?:Transient)?Variable(?:Instance)?s(?:Local)?\\s*\\(\\s*\\)")
 
     /** `execution.setVariables([foo: 1, 'bar': 2])` — a whole map of writes in one call. */
     private val SET_VARS_MAP_RE = Regex("\\bset(?:Transient)?Variables\\s*\\(\\s*\\[([^\\]]{0,4000})]")
@@ -91,17 +124,48 @@ object ScriptVars {
      */
     fun analyze(script: String?, format: String? = null): ScriptVarUse {
         if (script.isNullOrBlank()) return ScriptVarUse.EMPTY
+        val writes = LinkedHashSet<String>()
+        val apiReads = LinkedHashSet<String>()
+        val undecided = LinkedHashSet<String>()
+        // Every name an explicit call named, in source order — what [ScriptVarUse.api] hands to callers
+        // that only care *whether* the API named a variable.
         val api = LinkedHashSet<String>()
-        for (m in API_RE.findAll(script)) api.add(m.groupValues[1])
-        for (m in VAR_MAP_RE.findAll(script)) api.add(m.groupValues[1])
+        for (m in API_RE.findAll(script)) {
+            val bucket = when (m.groupValues[1]) {
+                "set" -> writes
+                "get" -> apiReads
+                else -> undecided                        // has / remove — neither, and not worth guessing
+            }
+            bucket.add(m.groupValues[2])
+            api.add(m.groupValues[2])
+        }
+        for (m in VAR_MAP_RE.findAll(script)) {
+            // `vars['x']` is a write on the left of an assignment and a read anywhere else. Deciding
+            // that needs the surrounding statement, and being wrong invents a finding — so it stays
+            // undecided, which is the outcome that never speaks.
+            val bucket = when (m.groupValues[1]) {
+                "put" -> writes
+                "get" -> apiReads
+                else -> undecided                        // remove / containsKey / the bracket form
+            }
+            bucket.add(m.groupValues[3])
+            api.add(m.groupValues[3])
+        }
         for (m in SET_VARS_MAP_RE.findAll(script)) {
             for (k in MAP_KEY_RE.findAll(m.groupValues[1])) {
-                api.add(k.groupValues.drop(1).first { it.isNotEmpty() })
+                val name = k.groupValues.drop(1).first { it.isNotEmpty() }
+                writes.add(name)
+                api.add(name)
             }
         }
+        val wholeScope = WHOLE_SCOPE_RE.containsMatchIn(script)
         val lang = format?.lowercase()?.trim()
-        if (lang != null && lang.isNotEmpty() && lang !in SCRIPT_LANGS) return ScriptVarUse(api, emptySet())
-        return ScriptVarUse(api, bareIdentifiers(stripLiterals(script), api))
+        if (lang != null && lang.isNotEmpty() && lang !in SCRIPT_LANGS) {
+            return ScriptVarUse(writes, apiReads, emptySet(), undecided, wholeScope, api)
+        }
+        return ScriptVarUse(
+            writes, apiReads, bareIdentifiers(stripLiterals(script), api), undecided, wholeScope, api,
+        )
     }
 
     /**

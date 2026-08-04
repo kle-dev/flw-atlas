@@ -117,6 +117,7 @@ object Atlas {
                 for (m in musts) ctx.mustacheUse.getOrPut(m) { LinkedHashSet() }.add(k.toString())
             }
             VarHarvest.collectDeclaredVars(ctx, raw, mkeys)
+            VarHarvest.collectDirectedVars(ctx, raw, mkeys)
 
             if (mtype == "query") {
                 QUERY_KEY_RE.find(raw)?.let { km ->

@@ -263,6 +263,17 @@
   .dashrow .ty{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em;flex:none}
   .dashrow .pill{margin-left:auto;flex:none}
   .dashrow .sep{color:var(--ink-faint);flex:none}
+  /* Unused-variables report (#/variables). A row carries more than a name — the construct that writes
+     the variable, the models involved, and the write/read tally — so it wraps instead of truncating,
+     and the counts stay legible as the one thing a reader scans down the column. */
+  .varrow{align-items:flex-start;flex-wrap:wrap}
+  .varvias{display:flex;flex-wrap:wrap;gap:var(--space-15);align-items:center;min-width:0}
+  .varnote{color:var(--ink-faint);font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.06em;flex:none}
+  .vcount{margin-left:auto;flex:none;font-size:var(--text-2xs);color:var(--ink-faint);white-space:nowrap}
+  .vw{color:var(--bad-text)}
+  .vr{color:var(--ok-text)}
+  .varwhy{margin:var(--space-15) 0;padding-left:var(--space-4);color:var(--ink-dim);font-size:var(--text-xs)}
+  .varwhy li{margin:var(--space-1) 0}
   #diaglist{margin:var(--space-25) 0 0;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-md);overflow:hidden}
   #diaglist>summary{cursor:pointer;padding:var(--space-2) var(--space-35);font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-dim);list-style:none}
   #diaglist>summary::-webkit-details-marker{display:none}

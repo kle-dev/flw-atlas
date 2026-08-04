@@ -26,7 +26,8 @@ object Findings {
     /** Check ids, in the order they are worth reading: broken first, then unfinished, then noise. */
     private val CHECK_ORDER = listOf(
         "parseIssues", "invalidExpr", "scriptIssues", "missingRefs", "changelogIssues",
-        "schemaGaps", "suspectExpr", "unusedForms", "unusedOps", "unusedFns", "guessedVars",
+        "schemaGaps", "suspectExpr", "unusedForms", "unusedOps", "unusedFns",
+        "unusedVars", "unreadInputs", "guessedVars",
     )
 
     private const val ERROR = "error"
@@ -121,9 +122,20 @@ object Findings {
                 "external" -> if (data["missingModel"] == true) {
                     add("missingRefs", ERROR, n, "referenced model does not exist in this project")
                 }
-                "variable" -> if (data["heuristic"] == true) {
-                    add("guessedVars", WARNING, n,
-                        "only a script mentions this variable — the name is inferred, not declared")
+                // Three independent things can be worth saying about one variable, so this branch must
+                // not `continue` between them the way the others do.
+                "variable" -> {
+                    if (data["heuristic"] == true) {
+                        add("guessedVars", WARNING, n,
+                            "only a script mentions this variable — the name is inferred, not declared")
+                    }
+                    if (data["unread"] == true) {
+                        add("unusedVars", WARNING, n, "written but never read — " + writeSites(data))
+                    }
+                    for (scope in (data["unreadIn"] as? List<*> ?: emptyList<Any?>())) {
+                        add("unreadInputs", WARNING, n,
+                            "mapped into `$scope`, which never reads it — " + writeSites(data))
+                    }
                 }
             }
         }
@@ -166,6 +178,45 @@ object Findings {
         result["findings"] = sorted
         result["checks"] = counts
     }
+
+    /**
+     * Where a variable is written, in Design's words — `written by Script task "Stamp order"`. A finding
+     * that only says "never read" leaves the reader hunting for the line to delete.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun writeSites(data: Map<String, Any?>): String {
+        val writes = data["writes"] as? List<Map<String, Any?>> ?: return "written somewhere"
+        val named = writes.take(3).map { w ->
+            val what = VIA_TERMS[w["via"]] ?: w["via"]?.toString() ?: "a mapping"
+            val where = (w["elementName"] as? String)?.ifEmpty { null } ?: w["element"] as? String
+            if (where != null) "$what `$where`" else what
+        }
+        val total = (data["writeCount"] as? Number)?.toInt() ?: writes.size
+        return "written by " + named.joinToString(", ") + (if (total > named.size) " (+${total - named.size} more)" else "")
+    }
+
+    /** Design's wording for each way a variable can be written. */
+    private val VIA_TERMS = mapOf(
+        "inParameter" to "an in parameter on",
+        "outParameter" to "an out parameter on",
+        "resultVariable" to "the result variable of",
+        "outputVariableName" to "the output variable of",
+        "responsePayloadMapping" to "a stored response attribute of",
+        "errorResponsePayloadMapping" to "a stored error attribute of",
+        "eventOutParameter" to "an event out parameter on",
+        "variableMapping" to "an init-variables mapping on",
+        "scriptApi" to "a script on",
+        "dmnOutput" to "a decision output of",
+        "formField" to "a form field",
+        "formOutcome" to "the outcome variable of",
+        "formProperty" to "a form property",
+        "dataObject" to "a data-object declaration in",
+        "multiInstanceElement" to "a multi-instance element variable",
+        "initiator" to "the initiator variable",
+        "variableExtractor" to "a variable extractor",
+        "flwPayload" to "an action payload output of",
+        "javaApi" to "Java code",
+    )
 
     /**
      * Script syntax findings, with the element that carries the script.

@@ -28,6 +28,8 @@ object SummaryRenderer {
         "unusedForms" to "unused forms",
         "unusedOps" to "unused service operations",
         "unusedFns" to "unused custom functions",
+        "unusedVars" to "variables never read",
+        "unreadInputs" to "unread call parameters",
         "guessedVars" to "script-inferred variables",
     )
 

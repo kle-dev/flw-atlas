@@ -250,6 +250,108 @@ class IoParametersTest {
         )
     }
 
+    /** `"variable|dir|via"`, plus `@scope` when the site belongs to another model's variable space. */
+    private fun siteSig(s: Map<String, Any?>): String =
+        "${s["variable"]}|${s["dir"]}|${s["via"]}" + (s["scope"]?.let { "@$it" } ?: "")
+
+    @Test
+    fun eachMappingSideProvesAReadOrAWriteInTheRightScope() {
+        val (_, ctx) = bpmn(
+            """<callActivity id="callSub" calledElement="fulfilmentProcess">
+                 <extensionElements>
+                   <flowable:in source="orderId" target="subOrderId"/>
+                   <flowable:out source="subTotal" target="total"/>
+                 </extensionElements>
+               </callActivity>
+               <serviceTask id="svc" flowable:type="service-registry">
+                 <extensionElements>
+                   <flowable:serviceMapping serviceModelKey="custSvc" operationKey="findById"/>
+                   <flowable:inputParameter name="customerName" value="${'$'}{custVar}"/>
+                   <flowable:outputParameter name="id" value="newCustomerId"/>
+                 </extensionElements>
+               </serviceTask>"""
+        )
+        assertEquals(
+            listOf(
+                // the caller reads `orderId` to hand it over…
+                "orderId|read|inParameterSource",
+                // …and the value lands in a variable of the *callee*, which is where a reader must be
+                // looked for. Attributing it to this process would check the wrong model.
+                "subOrderId|write|inParameter@fulfilmentProcess",
+                "subTotal|read|outParameterSource@fulfilmentProcess",
+                "total|write|outParameter",
+                // an `inputParameter` name is the service's contract, not a variable — nothing recorded
+                "newCustomerId|write|outputParameter",
+            ),
+            ctx.varSites.map { siteSig(it) },
+        )
+    }
+
+    @Test
+    fun anInMappingWithNoCalleeAtAllCannotBeJudged() {
+        // Without a `calledElement` there is no scope to search for readers — not even a name to report as
+        // "not in this project". Recording the write and admitting the readers are unknown is all Atlas can
+        // honestly do; treating it as a local write would report a variable the callee may well consume.
+        val (_, ctx) = bpmn(
+            """<callActivity id="callSub">
+                 <extensionElements><flowable:in source="orderId" target="subOrderId"/></extensionElements>
+               </callActivity>"""
+        )
+        assertEquals(listOf("orderId|read|inParameterSource", "subOrderId|write|inParameter"),
+            ctx.varSites.map { siteSig(it) })
+        assertTrue("subOrderId" in ctx.varReadsUnknown)
+    }
+
+    @Test
+    fun anEventPayloadSourceIsAReadRatherThanNothingAtAll() {
+        // `eventInParameter`'s target is the event's own field name, so the kind is in
+        // TARGET_IS_CONTRACT — which used to drop the mapping entirely and leave the variable it sends
+        // looking like nothing reads it.
+        val (_, ctx) = bpmn(
+            """<serviceTask id="sendEv" flowable:type="send-event">
+                 <extensionElements>
+                   <flowable:eventType><![CDATA[orderPlaced]]></flowable:eventType>
+                   <flowable:eventInParameter source="orderId" target="id"/>
+                 </extensionElements>
+               </serviceTask>"""
+        )
+        assertEquals(listOf("orderId|read|eventInParameter"), ctx.varSites.map { siteSig(it) })
+        assertEquals(listOf("orderId"), ctx.paramFlows.map { it["variable"] })
+    }
+
+    @Test
+    fun theEngineWrittenAttributesAreWritesAndACollectionIsARead() {
+        val ctx = Ctx()
+        VarHarvest.collectDirectedVars(
+            ctx,
+            """<userTask id="t" flowable:assignee="x">
+                 <multiInstanceLoopCharacteristics flowable:collection="orderLines"
+                                                   flowable:elementVariable="line"/>
+               </userTask>
+               <serviceTask flowable:resultVariableName="callResult"/>
+               <process flowable:initiatorVariableName="starter"/>
+               <extensionElements><flowable:variableName>watched</flowable:variableName></extensionElements>
+               <flowable:variableEventListener variableName="watchedAttr"/>""",
+            listOf("process:p"),
+        )
+        assertEquals(
+            listOf(
+                "line|write|multiInstanceElement",
+                // read, not written — the loop iterates over it. Recovering this direction is what lets
+                // the undirected `varUse` bucket be ignored without losing the read.
+                "orderLines|read|multiInstanceCollection",
+                "starter|write|initiator",
+            ),
+            ctx.varSites.map { siteSig(it) }.sorted(),
+        )
+        // `resultVariableName` is deliberately absent: `Ctx.addParams` already records it structurally,
+        // with the element it belongs to. Harvesting it here too would report one write twice.
+        assertTrue(ctx.varSites.none { it["variable"] == "callResult" })
+        // a variable listener watches a name rather than reading or writing it — direction not ours to
+        // declare, so the unused check must stay quiet about it
+        assertEquals(setOf("watchedAttr"), ctx.varReadsUnknown)
+    }
+
     @Test
     fun actionBotInputsComeFromSignalVariablesConfigAndTheFlwScriptApi() {
         val json = """{
@@ -276,6 +378,21 @@ class IoParametersTest {
         assertEquals(setOf("script-evaluation-bot"), params(action).map { it["element"] }.toSet())
         // a config key is bot wiring, not a variable — only the real inputs/outputs become flows
         assertEquals(setOf("approved", "amount", "result"), ctx.paramFlows.map { it["variable"] }.toSet())
+        assertEquals(
+            listOf(
+                // The bot script and the payload mapping it produces are two views of the same call, so
+                // each name is recorded twice — once as the `flw.*` API the script performs, once as the
+                // payload contract it declares. Both are true, and the directions agree.
+                "amount|read|flwPayload", "amount|read|scriptApi",
+                // to pass a variable into the signalled instance the action first reads it
+                "approved|read|signalVariable",
+                "result|write|flwPayload", "result|write|scriptApi",
+            ),
+            ctx.varSites.map { siteSig(it) }.sorted(),
+        )
+        // `flw.setOutput` writes a value the *caller* consumes — a form button's `{{$response…}}`, the
+        // Work UI, a REST client. Atlas cannot follow any of those, so it must never call it unread.
+        assertEquals(setOf("result"), ctx.varReadsUnknown)
     }
 
     private fun form(nodeJson: String): Pair<Map<String, Any?>, Ctx> {

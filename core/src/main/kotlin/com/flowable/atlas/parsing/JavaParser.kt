@@ -17,7 +17,22 @@ object JavaParser {
     private val CONTROLLER_RE = Regex("""@(RestController|Controller)\b""")
     private val METHOD_RE = Regex("""(?:public|protected|private)\s+(?:[\w${'$'}<>\[\].,]+\s+)+?(\w+)\s*\(([^;{)]*)\)\s*(?:throws[\w.,\s]+)?\{""")
     private val FIELD_RE = Regex("""(?:private|protected|public)\s+(?:static\s+)?(?:final\s+)?([A-Z]\w+)(?:<[^>]*>)?\s+[a-z]\w*\s*[;=]""")
-    private val JAVA_VAR_RE = Regex("""\b(?:set|get|has|remove)Variable(?:Local)?\s*\(\s*(?:[^,"]+,\s*)?"([A-Za-z_]\w*)"""")
+    // The verb is captured, not just the name: `setVariable` proves a write and `getVariable` a read,
+    // which is what lets a variable be reported as written-but-never-consumed. `has`/`remove` decide
+    // nothing.
+    private val JAVA_VAR_RE = Regex("""\b(set|get|has|remove)Variable(?:Local)?\s*\(\s*(?:[^,"]+,\s*)?"([A-Za-z_]\w*)"""")
+
+    /** `execution.getVariables()` — a read of the whole map, so no variable of a scope this class
+     *  touches can be proven unread. Only the no-argument forms; the name-collection overloads are
+     *  already covered name-by-name by [JAVA_VAR_RE]. */
+    private val JAVA_VARS_ALL_RE = Regex("""\b(?:get|has)Variable(?:Instance)?s(?:Local)?\s*\(\s*\)""")
+
+    // A Flowable EL expression inside a Java string literal — `resolveValue(task, "${vars:get(flagReturn)}")`.
+    // A listener evaluating EL against the instance is ordinary Flowable code, and the names it reads are
+    // real variable reads that neither the setVariable/getVariable scan nor the model-side expression
+    // harvest can see: the expression lives in .java, and the variable name is not a quoted argument.
+    private val JAVA_EL_RE = Regex("""[#$]\{([^}"]*)}""")
+    private val EL_ROOT_RE = Regex("""(?<![\w.$'"])([A-Za-z_]\w*)(?!\s*[(\w:])""")
     private val JAVA_STR_RE = Regex("""\"([^"\\\n]{2,80})\"""")
     private val COMMENT_RE = Regex("""/\*.*?\*/|//[^\n]*""", RegexOption.DOT_MATCHES_ALL)
     private val NON_NEWLINE = Regex("""[^\n]""")
@@ -165,13 +180,38 @@ object JavaParser {
             if (m.groupValues[1] in KEY_API_METHODS) keyedStrings.add(m.groupValues[2])
         }
 
+        // Variable accesses, split by verb. `vars` stays the union so every existing consumer is
+        // unaffected; the three buckets are what the unused-variable check reads.
+        val varWrites = sortedSetOf<String>()
+        val varReads = sortedSetOf<String>()
+        val varsUndecided = sortedSetOf<String>()
+        for (m in JAVA_VAR_RE.findAll(text)) {
+            val bucket = when (m.groupValues[1]) {
+                "set" -> varWrites
+                "get" -> varReads
+                else -> varsUndecided
+            }
+            bucket.add(m.groupValues[2])
+        }
+        // Names an embedded EL expression reads. `${vars:get(flagReturn)}` names its variable as a bare
+        // identifier, not as a quoted argument, so nothing else picks it up.
+        for (m in JAVA_EL_RE.findAll(text)) {
+            for (r in EL_ROOT_RE.findAll(m.groupValues[1])) {
+                val name = r.groupValues[1]
+                if (name !in Constants.FLOWABLE_CONTEXT && name !in Constants.JAVA_LITERALS) varReads.add(name)
+            }
+        }
+
         return linkedMapOf(
             "file" to ffile, "package" to pkg, "primary" to primary,
             "fqn" to (if (pkg.isNotEmpty()) "$pkg.$primary" else primary),
             "types" to types, "beanNames" to beanNames, "interfaces" to interfaces, "roles" to roles,
             "isController" to isController, "isGlue" to interfaces.any { it in GLUE_INTERFACES },
             "endpoints" to endpoints, "methods" to methods, "deps" to deps, "botKey" to botKey,
-            "vars" to JAVA_VAR_RE.findAll(text).map { it.groupValues[1] }.toSortedSet().toList(),
+            "vars" to (varWrites + varReads + varsUndecided).toSortedSet().toList(),
+            "varWrites" to varWrites.toList(), "varReads" to varReads.toList(),
+            "varsUndecided" to varsUndecided.toList(),
+            "readsAllVariables" to JAVA_VARS_ALL_RE.containsMatchIn(text),
             "strings" to JAVA_STR_RE.findAll(text).map { it.groupValues[1] }.toCollection(LinkedHashSet()),
             "keyedStrings" to keyedStrings,
             "topics" to TOPIC_CALL_RE.findAll(text).map { it.groupValues[1] }.toSortedSet().toList(),

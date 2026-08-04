@@ -224,6 +224,53 @@ const probe = `<script>
        state.tabs.length+' tabs vs '+window.__refTabs.length);
   });
 
+  // --- the unused-variables report (#/variables) ---
+  // The verdict is computed in :core and only stamped onto the nodes, so a broken payload allowlist
+  // renders an empty page with correct-looking counts and no error anywhere. Assert the rows exist and
+  // that their number is exactly what the payload declares.
+  steps.push(()=>{ closeOtherTabs(); location.hash='/variables'; });
+  steps.push(()=>{
+    const view=document.getElementById('view-variables');
+    ok('the unused-variables view is on screen', view && !view.hidden);
+    const declared=((DATA.checks||{}).unusedVars||0)+((DATA.checks||{}).unreadInputs||0);
+    const rows=[...document.querySelectorAll('#view-variables [data-varrow]')];
+    ok('every declared finding has a row', rows.length===declared,
+       rows.length+' rows vs '+declared+' declared in the payload');
+    ok('the fixture reports the unused variables it deliberately contains', declared>0,
+       'no unused-variable findings in the payload at all');
+    // Each row must name the write to delete: the construct in Design's words, and the model.
+    const withVia=rows.filter(r=>r.querySelector('.varvias .term')).length;
+    ok('each row names how the variable is written', withVia===rows.length,
+       withVia+' of '+rows.length+' rows carry a write construct');
+    const withModel=rows.filter(r=>r.querySelector('.nodechips .nc[data-id]')).length;
+    ok('each row links the model that writes it', withModel===rows.length,
+       withModel+' of '+rows.length+' rows link a model');
+    // The caveat block is what keeps the report honest about its own limits.
+    ok('the page states what Atlas cannot see',
+       (document.getElementById('chk-varcaveat')||{}) && document.querySelectorAll('#view-variables .varwhy li').length>0);
+    window.__varTabs=state.tabs.slice();
+    window.__varHash=location.hash;
+    if(rows.length) click(rows[0].querySelector('[data-id]'), {metaKey:true, ctrlKey:true});
+  });
+  steps.push(()=>{
+    ok('mod-click on a variable opened a background tab',
+       state.tabs.length===window.__varTabs.length+1,
+       state.tabs.length+' tabs vs '+window.__varTabs.length);
+    ok('mod-click stayed on the variables route', location.hash===window.__varHash,
+       'hash moved to '+location.hash);
+  });
+  steps.push(()=>{
+    // The filter narrows on the write construct; a term matching nothing must empty the list rather
+    // than silently ignoring the filter.
+    const pf=document.querySelector('#view-variables .pf');
+    ok('the variables filter is present', !!pf);
+    if(pf){ pf.value='zzzznope'; pf.dispatchEvent(new Event('input')); }
+  });
+  steps.push(()=>{
+    const shown=[...document.querySelectorAll('#view-variables [data-varrow]')].filter(r=>!r.hidden);
+    ok('a filter matching nothing hides every row', shown.length===0, shown.length+' rows still shown');
+  });
+
   let i=0;(function run(){
     if(i>=steps.length){
       log.push('uncaught errors: '+(errs.length?('FAIL '+errs.join(' | ')):'none'));

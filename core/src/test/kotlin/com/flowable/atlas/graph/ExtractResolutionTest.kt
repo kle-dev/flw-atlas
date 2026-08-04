@@ -59,7 +59,7 @@ class ExtractResolutionTest {
     @Test
     fun unresolvedRefsStandOut() {
         val unresolved = refs("unresolvedRefs").map { it["value"] }.toSet()
-        assertTrue(unresolved.toString(), unresolved.containsAll(setOf("notifierBean", "fulfilmentProcess")))
+        assertTrue(unresolved.toString(), unresolved.containsAll(setOf("notifierBean", "courierProcess")))
     }
 
     // test_form_rest_call_matches_controller
