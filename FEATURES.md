@@ -1,6 +1,6 @@
 # Flowable Atlas — Features
 
-*IntelliJ IDEA plugin, v0.11.3.* A summary of what Flowable Atlas provides, grouped by area.
+*IntelliJ IDEA plugin, v0.12.0.* A summary of what Flowable Atlas provides, grouped by area.
 Everything is resolved against the Flowable models that actually live in your repository.
 
 ## Atlas Explorer & Hub
@@ -226,6 +226,19 @@ Everything is resolved against the Flowable models that actually live in your re
 
 ## Model navigation & validation
 
+- **"Flowable Model" tab in Search Everywhere** — press Shift twice and tab across to search only
+  Flowable models, unmixed with the project's classes, files and symbols. Models match on their
+  **key** and on their **file path**, and every row names its origin
+  (`app.zip → processes/invoice.bpmn`). From two characters on, the tab also greps model **content**
+  live, one row per occurrence with its line number; Enter jumps there. This is the only way to
+  search inside a `.bar`/`.zip` — an archive belongs to no content or library root, so its entries
+  appear in neither the Files tab nor Find in Files. Model keys remain searchable in the Symbols tab
+  as before. Reachable from *Tools → Flowable Atlas → Search Models…* and from the Atlas Hub's
+  *Model Index* row, as well as by tabbing across in Search Everywhere.
+- **Models open with their content** — `.bpmn`/`.cmmn`/`.dmn` are registered as XML and the JSON
+  model types (`.data`, `.service`, `.agent`, `.event`, `.query`, `.app`, …) as JSON, so opening one
+  shows the file instead of IntelliJ's "file type not associated" placeholder — most visibly for an
+  entry opened out of an archive.
 - **Go-to / Find Usages on model keys** — Ctrl-click a key literal (`calledElement`, `formKey`,
   `decisionRef`, …) in BPMN/CMMN XML jumps to the model file.
 - **Key completion** — autocompletes model keys at cross-reference attributes in BPMN/CMMN XML.

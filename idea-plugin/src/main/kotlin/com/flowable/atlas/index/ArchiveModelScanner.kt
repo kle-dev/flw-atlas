@@ -20,12 +20,23 @@ object ArchiveModelScanner {
     fun isArchive(file: VirtualFile): Boolean =
         !file.isDirectory && ModelPaths.isArchive(file.name)
 
-    /** Invoke [consume] for every model entry (name, content, type, navigable file) inside [archive]. */
-    fun scan(archive: VirtualFile, consume: (String, ByteArray, ModelType, VirtualFile) -> Unit) {
+    /**
+     * Invoke [consume] for every model entry (name, content, type, navigable file) inside [archive].
+     *
+     * [allowRefresh] mounts an archive the VFS has not seen yet, at the price of a **synchronous VFS
+     * refresh** — fine for a one-off index build, but callers on a hot path (a per-keystroke search)
+     * must pass `false`: refreshing from inside a read action risks a deadlock, and there it is
+     * better to miss a never-yet-mounted archive than to freeze the IDE.
+     */
+    fun scan(
+        archive: VirtualFile,
+        allowRefresh: Boolean = true,
+        consume: (String, ByteArray, ModelType, VirtualFile) -> Unit,
+    ) {
         if (!isArchive(archive)) return
         val jarFs = JarFileSystem.getInstance()
         val root = jarFs.getJarRootForLocalFile(archive)
-            ?: jarFs.refreshAndFindFileByPath(archive.path + JarFileSystem.JAR_SEPARATOR)
+            ?: (if (allowRefresh) jarFs.refreshAndFindFileByPath(archive.path + JarFileSystem.JAR_SEPARATOR) else null)
             ?: return
         VfsUtilCore.visitChildrenRecursively(root, object : VirtualFileVisitor<Unit>() {
             override fun visitFile(entry: VirtualFile): Boolean {
