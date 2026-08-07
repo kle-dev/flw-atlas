@@ -176,6 +176,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         group("Model Index") {
             row { cell(indexStatus) }
             row {
+                link("Search Models…") { invokeAction(FlowableActionIds.SEARCH_MODELS) }
                 link("Rebuild") { RebuildModelIndexAction.rebuild(project) }
                 link("Generate Constants…") { GenerateModelConstantsAction.generate(project) }
             }

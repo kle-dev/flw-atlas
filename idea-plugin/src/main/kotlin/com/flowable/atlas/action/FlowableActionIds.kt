@@ -5,6 +5,7 @@ object FlowableActionIds {
     const val OPEN_ATLAS_HUB = "Flowable.OpenAtlasHub"
     const val OPEN_ATLAS_EXPLORER = "Flowable.OpenAtlasExplorer"
     const val OPEN_EXPRESSION_PLAYGROUND = "Flowable.OpenExpressionPlayground"
+    const val SEARCH_MODELS = "Flowable.SearchModels"
     const val GENERATE_ATLAS_EXPLORER = "Flowable.GenerateAtlasExplorer"
     const val GENERATE_MODEL_CONSTANTS = "Flowable.GenerateModelConstants"
     const val GENERATE_LIQUIBASE_FROM_DATA_OBJECT = "Flowable.GenerateLiquibaseFromDataObject"
