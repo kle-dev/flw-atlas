@@ -63,5 +63,13 @@ class FlowableIndex(
 
     fun allDistinct(): List<ModelEntry> = distinctByType.values.flatten()
 
+    /**
+     * Every indexed entry, *including* the several files a single key can live in (Design workspace
+     * source + deployment artifact + archive entry). [allDistinct] collapses those to one entry per
+     * key, which is right for completion but wrong for anything that matches on the **file** — see
+     * [com.flowable.atlas.navigation.se.FlowableModelSeContributor].
+     */
+    fun allEntries(): List<ModelEntry> = byKey.values.flatten()
+
     fun distinctCount(): Int = distinctByType.values.sumOf { it.size }
 }

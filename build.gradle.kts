@@ -9,5 +9,5 @@ plugins {
 
 allprojects {
     group = "com.flowable.atlas"
-    version = "0.11.3"
+    version = "0.12.0"
 }

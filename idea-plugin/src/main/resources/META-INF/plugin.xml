@@ -127,6 +127,32 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.12.0</h3>
+        <ul>
+          <li><b>A "Flowable Model" tab in Search Everywhere</b> — open it from <i>Tools → Flowable Atlas
+              → Search Models…</i>, from the Atlas Hub's <i>Model Index</i> row, or by pressing Shift
+              twice and tabbing across to it, and search <i>only</i> Flowable models, without your
+              project's classes, files and symbols mixed in. Models are matched on their <b>key</b> and on their <b>file path</b>, and every
+              row names where it came from: <code>app.zip &rarr; processes/invoice.bpmn</code>. Model keys
+              stay searchable in the Symbols tab as before — the new tab is a second, focused way in,
+              not a replacement.</li>
+          <li><b>Your archives are searchable at last</b> — a model packed in a <code>.bar</code>/
+              <code>.zip</code> is invisible to IntelliJ: it appears in neither the Files tab nor Find in
+              Files, because an archive is not part of any content or library root. The new tab searches
+              those entries — by name <i>and</i> by content — so you no longer unpack an archive by hand
+              to find out which process references a variable.</li>
+          <li><b>Full text, live</b> — from two characters on, the tab also greps the content of
+              every model, with each occurrence its own row showing the matched line and its line number;
+              Enter jumps straight there. The scan is cancelled on the next keystroke and its results are
+              cached, so it stays responsive on large repositories. It runs only while the tab is
+              selected, never in the general "All" results.</li>
+          <li><b>Models open with their content</b> — <code>.bpmn</code>, <code>.cmmn</code> and
+              <code>.dmn</code> are now recognised as XML, and the remaining JSON model types
+              (<code>.data</code>, <code>.service</code>, <code>.agent</code>, <code>.event</code>,
+              <code>.query</code>, <code>.app</code>, …) as JSON. Previously IntelliJ classified them as
+              unknown and showed a "file type not associated" placeholder instead of the file — most
+              visibly for an entry opened out of an archive.</li>
+        </ul>
         <h3>0.11.3</h3>
         <ul>
           <li><b>Unused variables, on their own page</b> — the Explorer gains a <i>Variables → Unused
@@ -937,6 +963,12 @@
              (→ the BotService class and the actions that invoke it). -->
         <gotoSymbolContributor
                 implementation="com.flowable.atlas.navigation.FlowableKeyGotoSymbolContributor"/>
+        <!-- A "Flowable Model" tab of its own in Search Everywhere: model keys and the file paths
+             inside a .bar/.zip (invisible to the Files tab), plus a live full-text search over model
+             content (invisible to Find in Files). The contributor above stays — it feeds the
+             platform's Symbols tab, this feeds its own. -->
+        <searchEverywhereContributor
+                implementation="com.flowable.atlas.navigation.se.FlowableModelSeContributor$Factory"/>
         <!-- Liquibase changelog column not mapped in the backing Flowable service/data-object model. -->
         <localInspection
                 language="XML"
@@ -1120,8 +1152,17 @@
              without a module, `import org.slf4j.LoggerFactory` would never resolve there. -->
         <resolveScopeProvider implementation="com.flowable.atlas.script.toolwindow.ScriptPlaygroundResolveScopeProvider"/>
         <!-- Treat Flowable form models (.form) as JSON so their {{…}} strings become injection hosts,
-             and action models (.action) so their scriptInfo.script strings can host Groovy/JS. -->
-        <fileType name="JSON" extensions="form;action"/>
+             and action models (.action) so their scriptInfo.script strings can host Groovy/JS. The
+             remaining JSON-serialized model extensions are here so a model OPENS with its content:
+             an unregistered extension resolves to UnknownFileType, which is binary, so the editor
+             shows the "file type not associated" panel instead — most visibly for an entry opened
+             out of a .bar/.zip. A <fileType> with no implementationClass only adds matchers to the
+             existing type (the same idiom the bundled javaFX and Maven plugins use). The list mirrors
+             ModelType.EXTENSIONS in :core. -->
+        <fileType name="JSON"
+                  extensions="form;action;page;data;dictionary;query;sequence;sla;event;channel;agent;service;tpl;policy;extractor;knowledgebase;masterdata;dashboardcomponent;document;palette;app"/>
+        <!-- The XML-serialized models. .bpmn20.xml / .cmmn.xml / .dmn.xml already end in .xml. -->
+        <fileType name="XML" extensions="bpmn;cmmn;dmn"/>
         <!-- The Expression Playground: type an expression, get validation + completion. -->
         <toolWindow id="Flowable Expressions"
                     anchor="bottom"
@@ -1161,6 +1202,11 @@
                     icon="AllIcons.Nodes.PpWeb"/>
             <action id="Flowable.OpenExpressionPlayground"
                     class="com.flowable.atlas.action.OpenExpressionPlaygroundAction"/>
+            <!-- Opens Search Everywhere on the "Flowable Model" tab — otherwise reachable only by
+                 pressing Shift twice and tabbing across to it, which nobody discovers unaided. -->
+            <action id="Flowable.SearchModels"
+                    class="com.flowable.atlas.action.SearchFlowableModelsAction"
+                    icon="AllIcons.Actions.Search"/>
             <separator/>
 
             <!-- Generate (submenu, with a nested Liquibase submenu) -->
