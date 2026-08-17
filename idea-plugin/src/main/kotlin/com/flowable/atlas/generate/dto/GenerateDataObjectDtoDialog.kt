@@ -29,6 +29,7 @@ import org.jetbrains.annotations.VisibleForTesting
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.FlowLayout
+import java.util.regex.PatternSyntaxException
 import javax.swing.ButtonGroup
 import javax.swing.DefaultComboBoxModel
 import javax.swing.JComponent
@@ -39,10 +40,11 @@ import javax.swing.text.JTextComponent
 /**
  * "Generate Data-Object DTOs" — the single, transparent entry point for both menu actions. Shows, per
  * source (a whole app / hand-picked data objects), a preview table of exactly what will be written:
- * the data-object key, an editable class name, the owning app, the field count, the resulting
- * source-root-relative file and whether it is new or overwrites an existing class. Target source root,
- * package and the per-app nesting are seeded from — and, on OK, saved back to — the project's
- * Generation settings.
+ * the data-object key, the class name (rendered live from the class-name pattern, editable per row),
+ * the owning app, the field count, the resulting source-root-relative file and whether it is new or
+ * overwrites an existing class. Target source root, package, class-name pattern, optional regex rename
+ * and the per-app nesting are seeded from — and, on OK, saved back to — the project's Generation
+ * settings (its Liquibase sibling works the same way).
  *
  * All heavy resolution happened before construction ([DataObjectDtoService.computePlans], off the
  * EDT); this dialog is pure UI over the resulting [DataObjectDtoService.Plans].
@@ -59,6 +61,9 @@ class GenerateDataObjectDtoDialog(
         var className: String = item.defaultClassName
         var path: String = ""
         var exists: Boolean = false
+
+        /** True once the class name was typed in the table: the pattern stops overwriting this row. */
+        var classNameEdited: Boolean = false
     }
 
     /** An entry of the app combo; a null [ref] is the "all apps" entry. */
@@ -67,6 +72,9 @@ class GenerateDataObjectDtoDialog(
     }
 
     private val settings = FlowableAtlasProjectSettings.getInstance(project)
+
+    /** What the `{suffix}` token renders; configured in Settings → Generation, not in this dialog. */
+    private val classSuffix = settings.dtoClassSuffix
 
     private var source = initialSource
     private val rows = ArrayList<Row>()
@@ -81,6 +89,9 @@ class GenerateDataObjectDtoDialog(
     private val sourceRootCombo = ComboBox<VirtualFile>()
     private val browseLink = ActionLink("Browse…") { browseForSourceRoot() }
     private val packageField = JBTextField()
+    private val classPatternField = JBTextField()
+    private val renameFindField = JBTextField()
+    private val renameReplaceField = JBTextField()
     private val perAppBox = JBCheckBox("Sub-package per app")
     private val skipExistingBox = JBCheckBox("Skip files that already exist (keep their current content)")
 
@@ -94,6 +105,9 @@ class GenerateDataObjectDtoDialog(
         setOKButtonText("Generate")
 
         packageField.text = settings.dtoPackage
+        classPatternField.text = settings.dtoClassNamePattern
+        renameFindField.text = settings.dtoRenameFind
+        renameReplaceField.text = settings.dtoRenameReplace
         perAppBox.isSelected = settings.dtoPackagePerApp
         initSourceRoots()
 
@@ -112,6 +126,9 @@ class GenerateDataObjectDtoDialog(
             JavaSourceRoots.displayPath(project, root)
         }
         packageField.onChange { recompute() }
+        classPatternField.onChange { recompute() }
+        renameFindField.onChange { recompute() }
+        renameReplaceField.onChange { recompute() }
         perAppBox.addActionListener { recompute() }
 
         init()
@@ -172,11 +189,25 @@ class GenerateDataObjectDtoDialog(
         }
         row("Package:") { cell(packageField).align(AlignX.FILL) }
         row {
+            comment("Leave the package empty to write straight into the source root.")
+        }
+        row("Class name:") { cell(classPatternField).align(AlignX.FILL) }
+        row {
             comment(
-                "Leave the package empty to write straight into the source root. The class name is " +
-                    "editable per row; its default comes from the model name plus the suffix in " +
-                    "Settings → Flowable Atlas → Generation.",
+                "Tokens: {name} {shortName} {key} {app} {suffix} — {name} is the model name in " +
+                    "PascalCase, <b>{shortName} the same without the leading model key</b> " +
+                    "(<code>DEMO-D009 Pod Member</code> → <code>PodMember</code>, not " +
+                    "<code>DEMOD009PodMember</code>), {suffix} the class-name suffix from Settings → " +
+                    "Flowable Atlas → Generation. Type a class name in the table to override the pattern " +
+                    "for that row.",
             )
+        }
+        collapsibleGroup("Rename (regex)") {
+            row("Find:") { cell(renameFindField).align(AlignX.FILL) }
+            row("Replace:") { cell(renameReplaceField).align(AlignX.FILL) }
+            row {
+                comment("Applied to the rendered class name, for what the tokens can't express. e.g. Find <code>^DEMO(\\w+)</code> Replace <code>Demo\$1</code> turns DEMOCustomerDto into DemoCustomerDto.")
+            }
         }
         row { cell(perAppBox) }
         row { cell(skipExistingBox) }
@@ -225,10 +256,23 @@ class GenerateDataObjectDtoDialog(
         recompute()
     }
 
-    /** Re-render the file / status columns for every row from the current field values, then revalidate. */
+    /**
+     * Re-render the class-name / file / status columns for every row from the current field values, then
+     * revalidate. A row whose class name the user typed keeps it — the pattern only drives the rows it
+     * still owns.
+     */
     private fun recompute() {
         val root = selectedSourceRoot()
+        val pattern = classPatternField.text
+        val find = renameFindField.text
+        val replace = renameReplaceField.text
         for (row in rows) {
+            if (!row.classNameEdited) {
+                val tokens = DtoClassNamePattern.deriveTokens(
+                    row.item.key, row.item.modelName, row.app?.key, classSuffix,
+                )
+                row.className = DtoClassNamePattern.className(pattern, tokens, find, replace)
+            }
             val pkg = DataObjectDtoPlanner.packageFor(packageField.text, row.app?.key, perAppBox.isSelected)
             row.path = DataObjectDtoPlanner.targetPath(pkg, row.className)
             row.exists = root?.findFileByRelativePath(row.path) != null
@@ -266,8 +310,19 @@ class GenerateDataObjectDtoDialog(
         if (!DataObjectDtoPlanner.isValidPackage(packageField.text)) {
             return ValidationInfo("'${packageField.text.trim()}' is not a valid Java package.", packageField)
         }
+        val find = renameFindField.text
+        if (find.isNotBlank()) {
+            try {
+                java.util.regex.Pattern.compile(find)
+            } catch (e: PatternSyntaxException) {
+                return ValidationInfo("Invalid regex: ${e.description ?: e.message}", renameFindField)
+            }
+        }
         val included = rows.filter { it.include }
         if (included.isEmpty()) return ValidationInfo("Select at least one data object to generate.")
+        included.firstOrNull { it.className.isBlank() }?.let {
+            return ValidationInfo("The class name renders empty for row ${it.item.key}.", classPatternField)
+        }
         included.firstOrNull { !DataObjectDtoPlanner.isValidClassName(it.className) }?.let {
             return ValidationInfo("'${it.className}' is not a valid Java class name (row ${it.item.key}).")
         }
@@ -293,6 +348,9 @@ class GenerateDataObjectDtoDialog(
 
         settings.dtoSourceRootUrl = root.url
         settings.dtoPackage = packageField.text
+        settings.dtoClassNamePattern = classPatternField.text
+        settings.dtoRenameFind = renameFindField.text
+        settings.dtoRenameReplace = renameReplaceField.text
         settings.dtoPackagePerApp = perAppBox.isSelected
 
         super.doOKAction()
@@ -330,6 +388,23 @@ class GenerateDataObjectDtoDialog(
     }
 
     @VisibleForTesting
+    internal fun configurePatternForTesting(pattern: String, renameFind: String = "", renameReplace: String = "") {
+        classPatternField.text = pattern
+        renameFindField.text = renameFind
+        renameReplaceField.text = renameReplace
+        recompute()
+    }
+
+    @VisibleForTesting
+    internal fun classNamesForTesting(): List<Pair<String, String>> = rows.map { it.item.key to it.className }
+
+    @VisibleForTesting
+    internal fun editClassNameForTesting(key: String, className: String) {
+        val index = rows.indexOfFirst { it.item.key == key }
+        model.setValueAt(className, index, model.columnInfos.indexOfFirst { it is ClassColumn })
+    }
+
+    @VisibleForTesting
     internal fun validationMessageForTesting(): String? = doValidate()?.message
 
     private fun JTextComponent.onChange(run: () -> Unit) =
@@ -359,6 +434,8 @@ class GenerateDataObjectDtoDialog(
         override fun isCellEditable(row: Row): Boolean = row.item.generatable
         override fun setValue(row: Row, value: String) {
             row.className = value.trim()
+            // A typed name outranks the pattern from here on; clearing the cell hands the row back.
+            row.classNameEdited = row.className.isNotEmpty()
             recompute()
         }
     }

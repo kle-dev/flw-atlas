@@ -101,8 +101,31 @@ class GenerationConfigurable(private val project: Project) : BoundSearchableConf
                 row("Class name suffix:") {
                     textField()
                         .align(AlignX.FILL)
-                        .comment("Appended to the name derived from the model, e.g. Customer + Dto = CustomerDto. Leave empty for the plain model name.")
+                        .comment("What the {suffix} token below renders, e.g. Customer + Dto = CustomerDto. Leave empty for the plain model name; it is never doubled when the model name already ends in it.")
                         .bindText(settings::dtoClassSuffix)
+                }
+                row("Class name pattern:") {
+                    textField()
+                        .align(AlignX.FILL)
+                        .comment(
+                            "Tokens: {name} {shortName} {key} {app} {suffix}. Empty = {name}{suffix}, the " +
+                                "model name plus the suffix above. <b>{shortName} drops the model key most " +
+                                "model names start with</b>, so {shortName}{suffix} turns " +
+                                "<code>DEMO-D009 Pod Member</code> into <code>PodMemberDto</code> instead of " +
+                                "<code>DEMOD009PodMemberDto</code>.",
+                        )
+                        .bindText(settings::dtoClassNamePattern)
+                }
+                collapsibleGroup("Rename (regex)") {
+                    row("Find:") {
+                        textField().align(AlignX.FILL).bindText(settings::dtoRenameFind)
+                    }
+                    row("Replace:") {
+                        textField()
+                            .align(AlignX.FILL)
+                            .comment("Applied to the rendered class name, for what the tokens can't express. e.g. Find ^DEMO(\\w+) Replace Demo\$1 turns DEMOCustomerDto into DemoCustomerDto.")
+                            .bindText(settings::dtoRenameReplace)
+                    }
                 }
                 row {
                     checkBox("Sub-package per app")
