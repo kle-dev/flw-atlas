@@ -53,6 +53,9 @@ class DataObjectDtoService(private val project: Project) {
      * it, the [defaultClassName] the editable column starts from, and the [fields] the class is
      * generated from. A data object with no fields stays visible (so its absence is explained) but
      * cannot be generated — see [generatable].
+     *
+     * [defaultClassName] is the default-pattern name (model name + suffix); the dialog re-renders it
+     * from the project's class-name pattern ([DtoClassNamePattern]) as soon as it is shown.
      */
     data class DtoPlanItem(
         val key: String,

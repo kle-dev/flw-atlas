@@ -1,6 +1,7 @@
 package com.flowable.atlas.intention
 
 import com.flowable.atlas.generate.dto.DataObjectDtoPlanner
+import com.flowable.atlas.generate.dto.DtoClassNamePattern
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
 import com.flowable.atlas.parsing.DataObjectInfo
@@ -73,8 +74,15 @@ class GenerateDataObjectBeanIntention : PsiElementBaseIntentionAction() {
             return
         }
 
-        val suffix = FlowableAtlasProjectSettings.getInstance(project).dtoClassSuffix
-        val defaultName = DataObjectDtoPlanner.defaultClassName(resolved.modelName, key, suffix)
+        // The same class-name pattern the bulk dialog renders, so both propose the same name for the
+        // same data object. {app} stays empty here: an editor caret knows the key, not an owning app.
+        val settings = FlowableAtlasProjectSettings.getInstance(project)
+        val defaultName = DtoClassNamePattern.className(
+            settings.dtoClassNamePattern,
+            DtoClassNamePattern.deriveTokens(key, resolved.modelName, appKey = null, suffix = settings.dtoClassSuffix),
+            settings.dtoRenameFind,
+            settings.dtoRenameReplace,
+        )
 
         // Let the user name the class (default = derived from the model name / key).
         val className = Messages.showInputDialog(

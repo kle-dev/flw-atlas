@@ -1,11 +1,14 @@
 package com.flowable.atlas.generate.liquibase
 
+import com.flowable.atlas.generate.NamePattern
+
 /**
  * Pure (no `com.intellij.*`, no I/O) filename builder for the "Generate → Liquibase" dialog: turns a
  * user-authored token pattern into the `<base>.changelog.xml` name a changelog is written under.
  *
  * The pipeline is [render] (substitute `{token}`) → [applyRename] (an optional regex find/replace for
  * transformations tokens can't express) → [toFileName] (reduce to filename-safe characters + suffix).
+ * The first two steps are [NamePattern], shared with the DTO generator's class-name pattern.
  * A blank pattern or the default `{key}` reproduces the historical `<sanitized-key>.changelog.xml`.
  *
  * Kept pure so the derivation rules (`{servicePrefix}` / `{serviceNo}`) and the regex step are
@@ -59,8 +62,7 @@ object LiquibaseFileNamePattern {
     }
 
     /** [pattern] with each `{token}` replaced by its [tokens] value (unknown tokens → `""`). */
-    fun render(pattern: String, tokens: Map<String, String>): String =
-        TOKEN_REF.replace(pattern) { m -> tokens[m.groupValues[1]] ?: "" }
+    fun render(pattern: String, tokens: Map<String, String>): String = NamePattern.render(pattern, tokens)
 
     /**
      * [base] with [find]→[replace] applied (Kotlin regex replacement, so `$1` group refs work). A blank
@@ -68,7 +70,7 @@ object LiquibaseFileNamePattern {
      * regex — the dialog validates and reports it before ever calling this on user input.
      */
     fun applyRename(base: String, find: String, replace: String): String =
-        if (find.isBlank()) base else Regex(find).replace(base, replace)
+        NamePattern.applyRename(base, find, replace)
 
     /** [base] reduced to filename-safe characters, with [SUFFIX] appended. */
     fun toFileName(base: String): String = base.replace(UNSAFE, "-") + SUFFIX
@@ -92,7 +94,6 @@ object LiquibaseFileNamePattern {
         return digits.trimStart('0').ifEmpty { "0" }
     }
 
-    private val TOKEN_REF = Regex("\\{(\\w+)}")
     private val TRAILING_ID = Regex("[-_]?[A-Za-z]*\\d+$")
     private val DIGIT_RUN = Regex("\\d+")
     private val UNSAFE = Regex("[^A-Za-z0-9._-]")

@@ -6,6 +6,7 @@ import com.flowable.atlas.expr.ExprProblem
 import com.flowable.atlas.expr.ExprProblemKind
 import com.flowable.atlas.generate.ConstantFormat
 import com.flowable.atlas.generate.ConstantNaming
+import com.flowable.atlas.generate.dto.DtoClassNamePattern
 import com.flowable.atlas.generate.liquibase.LiquibaseFileNamePattern
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.components.PersistentStateComponent
@@ -52,6 +53,9 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         var dtoSourceRootUrl: String
         var dtoPackage: String
         var dtoClassSuffix: String
+        var dtoClassNamePattern: String
+        var dtoRenameFind: String
+        var dtoRenameReplace: String
         var dtoPackagePerApp: Boolean
         var inspectBaseUrl: String
         var inspectUsername: String
@@ -81,6 +85,9 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         override var dtoSourceRootUrl: String = ""
         override var dtoPackage: String = DEFAULT_DTO_PACKAGE
         override var dtoClassSuffix: String = DEFAULT_DTO_CLASS_SUFFIX
+        override var dtoClassNamePattern: String = DEFAULT_DTO_CLASS_PATTERN
+        override var dtoRenameFind: String = ""
+        override var dtoRenameReplace: String = ""
         override var dtoPackagePerApp: Boolean = false
         override var inspectBaseUrl: String = ""
         override var inspectUsername: String = ""
@@ -106,6 +113,8 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
                 liquibaseRenameFind.isEmpty() && liquibaseRenameReplace.isEmpty() &&
                 dtoSourceRootUrl.isEmpty() && dtoPackage == DEFAULT_DTO_PACKAGE &&
                 dtoClassSuffix == DEFAULT_DTO_CLASS_SUFFIX && !dtoPackagePerApp &&
+                dtoClassNamePattern == DEFAULT_DTO_CLASS_PATTERN &&
+                dtoRenameFind.isEmpty() && dtoRenameReplace.isEmpty() &&
                 inspectBaseUrl.isEmpty() && inspectUsername.isEmpty() &&
                 designBaseUrl.isEmpty() && designWorkspaceKey.isEmpty() && designAppKeys.isEmpty() &&
                 designAppKey.isEmpty() && designAuthMode == DesignAuthMode.BASIC &&
@@ -161,6 +170,15 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
 
         /** Appended to the class name derived from the model name, e.g. `Customer` + `Dto`. */
         var dtoClassSuffix: String = DEFAULT_DTO_CLASS_SUFFIX
+
+        /** Default DTO class-name pattern (tokens `{name} {shortName} {key} {app} {suffix}`). */
+        var dtoClassNamePattern: String = DEFAULT_DTO_CLASS_PATTERN
+
+        /** Optional regex applied to the rendered DTO class name (find); blank disables the rename step. */
+        var dtoRenameFind: String = ""
+
+        /** Replacement for [dtoRenameFind] (Kotlin regex replacement, so `$1` group refs work). */
+        var dtoRenameReplace: String = ""
 
         /** Nest each DTO in a per-app sub-package of [dtoPackage], so apps can never collide. */
         var dtoPackagePerApp: Boolean = false
@@ -232,6 +250,12 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
             get() = state.dtoPackage; set(v) { state.dtoPackage = v }
         override var dtoClassSuffix: String
             get() = state.dtoClassSuffix; set(v) { state.dtoClassSuffix = v }
+        override var dtoClassNamePattern: String
+            get() = state.dtoClassNamePattern; set(v) { state.dtoClassNamePattern = v }
+        override var dtoRenameFind: String
+            get() = state.dtoRenameFind; set(v) { state.dtoRenameFind = v }
+        override var dtoRenameReplace: String
+            get() = state.dtoRenameReplace; set(v) { state.dtoRenameReplace = v }
         override var dtoPackagePerApp: Boolean
             get() = state.dtoPackagePerApp; set(v) { state.dtoPackagePerApp = v }
         override var inspectBaseUrl: String
@@ -385,6 +409,19 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         get() = active().dtoClassSuffix
         set(value) { active().dtoClassSuffix = value.trim() }
 
+    /** Tokens `{name} {shortName} {key} {app} {suffix}`; blank falls back to the default `{name}{suffix}`. */
+    var dtoClassNamePattern: String
+        get() = active().dtoClassNamePattern.ifBlank { DEFAULT_DTO_CLASS_PATTERN }
+        set(value) { active().dtoClassNamePattern = value.trim().ifBlank { DEFAULT_DTO_CLASS_PATTERN } }
+
+    var dtoRenameFind: String
+        get() = active().dtoRenameFind
+        set(value) { active().dtoRenameFind = value }
+
+    var dtoRenameReplace: String
+        get() = active().dtoRenameReplace
+        set(value) { active().dtoRenameReplace = value }
+
     var dtoPackagePerApp: Boolean
         get() = active().dtoPackagePerApp
         set(value) { active().dtoPackagePerApp = value }
@@ -428,6 +465,7 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         const val DEFAULT_LIQUIBASE_PATTERN = LiquibaseFileNamePattern.DEFAULT_PATTERN
         const val DEFAULT_DTO_PACKAGE = "flowable.dto"
         const val DEFAULT_DTO_CLASS_SUFFIX = "Dto"
+        const val DEFAULT_DTO_CLASS_PATTERN = DtoClassNamePattern.DEFAULT_PATTERN
 
         /** Active sub-project path, kept in [PropertiesComponent] (workspace-local, not VCS-shared). */
         const val ACTIVE_SUBPROJECT_PROPERTY = "flowable.atlas.activeSubProject"

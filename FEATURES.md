@@ -1,6 +1,6 @@
 # Flowable Atlas — Features
 
-*IntelliJ IDEA plugin, v0.12.0.* A summary of what Flowable Atlas provides, grouped by area.
+*IntelliJ IDEA plugin, v0.12.1.* A summary of what Flowable Atlas provides, grouped by area.
 Everything is resolved against the Flowable models that actually live in your repository.
 
 ## Atlas Explorer & Hub
@@ -307,6 +307,17 @@ Everything is resolved against the Flowable models that actually live in your re
   owning app, field count, target file, new vs. overwrite) for a whole app at once or for hand-picked
   data objects. Target source root, package, an optional sub-package per app and the class-name suffix
   (default `Dto`) are configurable; a data object with no field mappings is listed but never generated.
+- **Class names from a pattern** — the DTO dialog names its classes from a token pattern, exactly like
+  the Liquibase dialog names its changelog files: `{name} {shortName} {key} {app} {suffix}` plus an
+  optional regex rename (e.g. `{app}{name}{suffix}`), rendered live into the preview's class-name and
+  target-file columns. The default `{name}{suffix}` is the historical name, a class name typed in the
+  table outranks the pattern for that row, and the Alt-Enter intention proposes the same name the bulk
+  dialog would. Pattern and rename live in *Settings → Flowable Atlas → Generation* with the rest.
+- **Names without the model key** — Design model names usually carry their key (`DEMO-D009 Pod Member`),
+  which a derived class name repeats as noise: `DEMOD009PodMemberDto`. `{shortName}` drops it — the key
+  itself when the name starts with it, otherwise a leading capitals-and-digits run before the first
+  word, so an unpadded `DEMO-D9 Document Type` also shortens while an acronym (`IBANCheck`) is left
+  intact. `{shortName}{suffix}` is therefore the one-token answer to `PodMemberDto`.
 
 ## Liquibase support
 

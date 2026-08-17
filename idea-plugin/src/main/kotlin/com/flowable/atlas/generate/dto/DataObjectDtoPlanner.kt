@@ -26,13 +26,16 @@ object DataObjectDtoPlanner {
      * PascalCase — [DataObjectBeanGenerator.classNameFor], the derivation the intention has always
      * used — plus [suffix]. The suffix is never doubled when the model name already ends in it, so a
      * data object literally named "Customer DTO" does not become `CustomerDtoDto`.
+     *
+     * This is [DtoClassNamePattern]'s default pattern, spelled out: the pattern engine and this
+     * pre-pattern default are one derivation, so a project that never configures a pattern is named
+     * exactly as before.
      */
-    fun defaultClassName(modelName: String?, key: String, suffix: String): String {
-        val base = DataObjectBeanGenerator.classNameFor(modelName, key)
-        val trimmed = suffix.trim()
-        if (trimmed.isEmpty() || base.endsWith(trimmed, ignoreCase = true)) return base
-        return base + trimmed
-    }
+    fun defaultClassName(modelName: String?, key: String, suffix: String): String =
+        DtoClassNamePattern.className(
+            DtoClassNamePattern.DEFAULT_PATTERN,
+            DtoClassNamePattern.deriveTokens(key, modelName, appKey = null, suffix = suffix),
+        )
 
     /**
      * A model key rendered as one lower-case Java package segment: `DEMO-App v2` → `demoappv2`.
