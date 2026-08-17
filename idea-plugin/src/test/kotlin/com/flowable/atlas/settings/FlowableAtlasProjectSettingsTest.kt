@@ -165,8 +165,14 @@ class FlowableAtlasProjectSettingsTest {
         val s = settings()
         assertEquals(FlowableAtlasProjectSettings.DEFAULT_DTO_PACKAGE, s.dtoPackage)
         assertEquals(FlowableAtlasProjectSettings.DEFAULT_DTO_CLASS_SUFFIX, s.dtoClassSuffix)
+        assertEquals(FlowableAtlasProjectSettings.DEFAULT_DTO_CLASS_PATTERN, s.dtoClassNamePattern)
+        assertEquals("", s.dtoRenameFind)
+        assertEquals("", s.dtoRenameReplace)
         assertEquals("", s.dtoSourceRootUrl)
         assertFalse(s.dtoPackagePerApp)
+        // A blanked pattern is the default pattern, never an empty class name.
+        s.dtoClassNamePattern = "   "
+        assertEquals(FlowableAtlasProjectSettings.DEFAULT_DTO_CLASS_PATTERN, s.dtoClassNamePattern)
 
         s.scope("svc-a").dtoPackage = "com.acme.a.dto"
         s.scope("svc-a").dtoPackagePerApp = true
@@ -179,8 +185,10 @@ class FlowableAtlasProjectSettingsTest {
     fun `a sub-project left at the dto defaults is still pruned`() {
         val s = settings()
         s.scope("untouched").dtoPackage = FlowableAtlasProjectSettings.DEFAULT_DTO_PACKAGE
+        s.scope("untouched-pattern").dtoClassNamePattern = FlowableAtlasProjectSettings.DEFAULT_DTO_CLASS_PATTERN
         s.scope("configured").dtoClassSuffix = "Bean"
-        assertEquals(listOf("configured"), s.getState().subProjects.map { it.path })
+        s.scope("patterned").dtoClassNamePattern = "{app}{name}Bean"
+        assertEquals(listOf("configured", "patterned"), s.getState().subProjects.map { it.path })
     }
 
     @Test
