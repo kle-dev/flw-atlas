@@ -1,0 +1,204 @@
+{
+  "version": 1,
+  "project": "miniproject",
+  "stories": [
+    {
+      "kind": "process",
+      "key": "orderProcess",
+      "name": "Order Process",
+      "file": "processes/order.bpmn",
+      "startedBy": {
+        "groups": [
+          "sales"
+        ],
+        "users": [],
+        "unrestricted": false
+      },
+      "body": {
+        "kind": "process",
+        "steps": [
+          {
+            "kind": "start",
+            "id": "start",
+            "name": null,
+            "trigger": "none"
+          },
+          {
+            "kind": "serviceTask",
+            "id": "calcTask",
+            "name": "Calculate total",
+            "delegate": {
+              "expression": "${demoBean.run(execution)}",
+              "resultVariable": "total"
+            }
+          },
+          {
+            "kind": "userTask",
+            "id": "approveTask",
+            "name": "Approve order",
+            "candidateGroups": [
+              "backoffice"
+            ],
+            "formKey": "orderForm"
+          },
+          {
+            "kind": "serviceTask",
+            "id": "notifyTask",
+            "name": "Notify",
+            "delegate": {
+              "delegateExpression": "${notifierBean}"
+            }
+          },
+          {
+            "kind": "call",
+            "id": "callSub",
+            "name": "Fulfil",
+            "callType": "callActivity",
+            "targetKey": "fulfilmentProcess",
+            "targetKind": "external",
+            "inline": {
+              "resolved": false,
+              "reason": "unresolvable"
+            }
+          },
+          {
+            "kind": "businessRuleTask",
+            "id": "decideTask",
+            "name": "Decide approval",
+            "decisionRef": "orderDecision"
+          },
+          {
+            "kind": "receiveTask",
+            "id": "waitShipped",
+            "name": "Wait for shipment"
+          },
+          {
+            "kind": "end",
+            "id": "end",
+            "name": null,
+            "reason": "none"
+          }
+        ]
+      },
+      "meta": {
+        "warnings": [],
+        "truncated": false
+      }
+    },
+    {
+      "kind": "case",
+      "key": "reviewCase",
+      "name": "Review Case",
+      "file": "cases/review.cmmn",
+      "startedBy": {
+        "groups": [
+          "auditors"
+        ],
+        "users": [],
+        "unrestricted": false
+      },
+      "body": {
+        "kind": "case",
+        "planItems": [
+          {
+            "kind": "userTask",
+            "id": "reviewTask",
+            "name": "Review order",
+            "candidateGroups": [
+              "auditors"
+            ],
+            "formKey": "orderForm"
+          },
+          {
+            "kind": "call",
+            "id": "startOrder",
+            "name": "Start order",
+            "callType": "callActivity",
+            "targetKey": "orderProcess",
+            "targetName": "Order Process",
+            "targetKind": "process",
+            "inline": {
+              "resolved": true,
+              "steps": [
+                {
+                  "kind": "start",
+                  "id": "start",
+                  "name": null,
+                  "trigger": "none"
+                },
+                {
+                  "kind": "serviceTask",
+                  "id": "calcTask",
+                  "name": "Calculate total",
+                  "delegate": {
+                    "expression": "${demoBean.run(execution)}",
+                    "resultVariable": "total"
+                  }
+                },
+                {
+                  "kind": "userTask",
+                  "id": "approveTask",
+                  "name": "Approve order",
+                  "candidateGroups": [
+                    "backoffice"
+                  ],
+                  "formKey": "orderForm"
+                },
+                {
+                  "kind": "serviceTask",
+                  "id": "notifyTask",
+                  "name": "Notify",
+                  "delegate": {
+                    "delegateExpression": "${notifierBean}"
+                  }
+                },
+                {
+                  "kind": "call",
+                  "id": "callSub",
+                  "name": "Fulfil",
+                  "callType": "callActivity",
+                  "targetKey": "fulfilmentProcess",
+                  "targetKind": "external",
+                  "inline": {
+                    "resolved": false,
+                    "reason": "unresolvable"
+                  }
+                },
+                {
+                  "kind": "businessRuleTask",
+                  "id": "decideTask",
+                  "name": "Decide approval",
+                  "decisionRef": "orderDecision"
+                },
+                {
+                  "kind": "receiveTask",
+                  "id": "waitShipped",
+                  "name": "Wait for shipment"
+                },
+                {
+                  "kind": "end",
+                  "id": "end",
+                  "name": null,
+                  "reason": "none"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "serviceTask",
+            "id": "lookupTask",
+            "name": "Lookup customer",
+            "delegate": {
+              "type": "customerService.findAll"
+            }
+          }
+        ],
+        "milestones": []
+      },
+      "meta": {
+        "warnings": [],
+        "truncated": false
+      }
+    }
+  ]
+}

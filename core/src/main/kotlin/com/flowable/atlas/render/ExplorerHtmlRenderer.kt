@@ -40,6 +40,10 @@ object ExplorerHtmlRenderer {
         payload["silenceRules"] = UnusedVariables.SILENCE_RULES
         payload["nodes"] = attachDiagrams(slimNodes(graph["nodes"]), root)
         payload["edges"] = graph["edges"]
+        // Business-flow narratives — same FlowStory JSON that gets written to <project>.flow.json.
+        // Embedded inline so the Storyline view in the self-contained HTML renders offline with no
+        // network fetch (matches how the rest of the explorer data is already carried).
+        payload["stories"] = FlowJsonRenderer.build(result, root).stories.map { it.toMap() }
         // json.dumps(payload, ensure_ascii=False, default=list).replace("</", "<\/")
         val data = MiniJson.stringify(payload).replace("</", "<\\/")
         // Stamp the version before the data island so a version like "__ATLAS_VERSION__" can't collide

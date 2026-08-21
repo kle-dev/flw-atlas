@@ -4,6 +4,7 @@ atlas-output/
 *.summary.md
 *.overview.md
 *.graph.json
+*.flow.json
 APP_OVERVIEW.*
 APP_SUMMARY.*
 APP_EXPLORER.*
@@ -24,6 +25,7 @@ email/
 .gradle/
 build/
 out/
+bin/
 *.iml
 .intellijPlatform/
 .kotlin/
@@ -31,6 +33,12 @@ out/
 # Editor / OS
 .idea/
 .vscode/
+# .claude/ holds a mix of session-local state (settings.local.json, scheduled_tasks.lock, …) and
+# team-shared slash commands under .claude/commands/. Ignore everything by default, un-ignore
+# commands/ so the /narrate skill and its siblings travel with the repo.
+.claude/*
+!.claude/commands/
+.gitattributes
 .DS_Store
 
 # Exception: committed Marketplace media for the IntelliJ plugin (intentional content)
@@ -41,3 +49,4 @@ out/
 !core/src/test/resources/golden/*.summary.md
 !core/src/test/resources/golden/*.overview.md
 !core/src/test/resources/golden/*.graph.json
+!core/src/test/resources/golden/*.flow.json
