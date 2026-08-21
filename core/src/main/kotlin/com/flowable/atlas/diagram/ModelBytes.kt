@@ -26,8 +26,12 @@ object ModelBytes {
     fun resolve(root: File, fileLabel: String): Pair<ByteArray, String>? {
         val bang = fileLabel.indexOf('!') // Extractor archive label: "$rel!${entry.name}"
         if (bang >= 0) {
-            val archive = File(root, fileLabel.substring(0, bang))
+            val archiveRel = fileLabel.substring(0, bang)
             val entryName = fileLabel.substring(bang + 1)
+            // When the project input is itself a single archive (`./atlas app.zip`), `Extractor.relOf`
+            // labels every model "<archive-name>!<entry>" with `root` set to the archive file. A plain
+            // `File(root, archiveRel)` would then look for the archive INSIDE itself and silently fail.
+            val archive = if (root.isFile && root.name == archiveRel) root else File(root, archiveRel)
             if (!archive.isFile) return null
             return runCatching {
                 ZipFile(archive).use { zf ->
