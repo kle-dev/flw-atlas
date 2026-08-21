@@ -85,6 +85,33 @@ class DiagramArtifactsTest {
     }
 
     @Test
+    fun rendersModelWhenRootIsTheArchiveItself() {
+        // When the input to Atlas is a single archive file (`./atlas app.zip`), `Extractor.relOf` sets
+        // every model's `file` label to "<archive-name>!<entry>" with `root` pointing at the archive
+        // file itself — not a containing directory. `ModelBytes.resolve` must open `root` directly
+        // instead of composing `File(root, archiveName)` (which fails silently, leaving every model
+        // without a diagram in the generated explorer HTML).
+        val tmp = Files.createTempDirectory("atlas-archive-as-root-test").toFile()
+        try {
+            val bpmn = File(root, "DEMO-onboarding.bpmn20.xml").readBytes()
+            val archive = File(tmp, "app.zip")
+            ZipOutputStream(archive.outputStream()).use { zip ->
+                zip.putNextEntry(ZipEntry("DEMO-onboarding.bpmn20.xml"))
+                zip.write(bpmn)
+                zip.closeEntry()
+            }
+            val out = DiagramArtifacts.render(
+                resultWith(node("process", "DEMO-onboarding", "app.zip!DEMO-onboarding.bpmn20.xml")),
+                archive,
+            )
+            assertEquals(setOf("DEMO-onboarding.svg"), out.keys)
+            assertTrue(out.getValue("DEMO-onboarding.svg").startsWith("<svg"))
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
+    @Test
     fun emptyOrGraphlessResultYieldsNothing() {
         assertTrue(DiagramArtifacts.render(emptyMap(), root).isEmpty())
         assertTrue(DiagramArtifacts.render(mapOf("graph" to mapOf("nodes" to emptyList<Any?>())), root).isEmpty())
