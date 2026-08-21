@@ -4,6 +4,7 @@ import com.flowable.atlas.diagram.DiagramArtifacts
 import com.flowable.atlas.graph.Atlas
 import com.flowable.atlas.render.ClaudeRenderer
 import com.flowable.atlas.render.ExplorerHtmlRenderer
+import com.flowable.atlas.render.FlowJsonRenderer
 import com.flowable.atlas.render.GraphJsonRenderer
 import com.flowable.atlas.render.OverviewRenderer
 import com.flowable.atlas.render.SliceRenderer
@@ -16,7 +17,8 @@ import kotlin.system.exitProcess
  *
  * A faithful, hand-rolled port of the Python `main(argv)` (`flowable_atlas.py` ~lines 4806-4917):
  * same positional `path`, the mutually-exclusive `--all/--json/--html/--summary/--claude` modes, the
- * five `--all` artifact names, the `-o/--output`, `--stdout`, `--open`, `--expr-allowlist`,
+ * six `--all` artifact names (summary/overview/graph/flow/explorer/CLAUDE), the `-o/--output`,
+ * `--stdout`, `--open`, `--expr-allowlist`,
  * `--custom-functions`, `--no-custom-functions`, `-v/--verbose`, `-q/--quiet` flags, the exit codes
  * (2 on a missing path / argument misuse) and the verbatim stderr status line. Argument parsing is
  * done by hand (no external arg library) to keep the runtime dependency-free.
@@ -187,7 +189,7 @@ fun run(args: Array<String>): Int {
     val name = splitextName(abs.name).ifEmpty { "project" }
     val root = File(projectPath)
 
-    // ---- --all: write all five artifacts into the -o directory (default ".") ----
+    // ---- --all: write all six artifacts into the -o directory (default ".") ----
     if (all) {
         val outdir = File(output ?: ".")
         outdir.mkdirs()
@@ -195,6 +197,7 @@ fun run(args: Array<String>): Int {
             "$name.summary.md" to SummaryRenderer.render(result, root),
             "$name.overview.md" to OverviewRenderer.render(result, root),
             "$name.graph.json" to GraphJsonRenderer.render(result, pretty = pretty),
+            "$name.flow.json" to FlowJsonRenderer.render(result, root),
             "$name.explorer.html" to ExplorerHtmlRenderer.render(result, root),
             "$name.CLAUDE.md" to ClaudeRenderer.render(result, root),
         )

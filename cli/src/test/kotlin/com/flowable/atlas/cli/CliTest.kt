@@ -9,24 +9,25 @@ import java.nio.file.Files
 
 /**
  * Contract tests for the standalone CLI (`run(argv)`), mirroring Python's `tests/test_cli.py`:
- * `--all` writes exactly the five `<name>.*` artifacts; the Markdown artifacts match the committed
+ * `--all` writes exactly the six `<name>.*` artifacts; the Markdown artifacts match the committed
  * goldens (the renderers are already golden-verified, so `--all` output + the trailing newline the
- * golden test appends is byte-identical); `graph.json` parses and normalizes to the golden graph; a
- * `--summary --stdout` run returns 0 without touching disk; a missing path exits 2.
+ * golden test appends is byte-identical); `graph.json` and `flow.json` parse and normalize to their
+ * respective goldens; a `--summary --stdout` run returns 0 without touching disk; a missing path
+ * exits 2.
  */
 class CliTest {
 
     @Test
-    fun allWritesExactlyFiveArtifacts() {
+    fun allWritesExactlySixArtifacts() {
         val out = tempDir()
         val code = run(arrayOf(fixtureDir().path, "--all", "-o", out.path, "-q"))
         assertEquals("run(--all) exit code", 0, code)
 
         val expected = setOf(
             "miniproject.summary.md", "miniproject.overview.md", "miniproject.graph.json",
-            "miniproject.explorer.html", "miniproject.CLAUDE.md",
+            "miniproject.flow.json", "miniproject.explorer.html", "miniproject.CLAUDE.md",
         )
-        assertEquals("exactly the five artifacts", expected, out.listFiles()!!.map { it.name }.toSet())
+        assertEquals("exactly the six artifacts", expected, out.listFiles()!!.map { it.name }.toSet())
         for (f in out.listFiles()!!) assertTrue("${f.name} is empty", f.length() > 0)
     }
 
@@ -115,6 +116,19 @@ class CliTest {
         // A bare key works too — a reader should not have to know Atlas calls it a `process`.
         assertEquals(0, run(arrayOf(fixtureDir().path, "--slice", "orderProcess", "--stdout", "-q")))
         assertEquals(2, run(arrayOf(fixtureDir().path, "--slice", "nope:nothing", "--stdout", "-q")))
+    }
+
+    @Test
+    fun allFlowJsonNormalizesToGolden() {
+        val out = tempDir()
+        assertEquals(0, run(arrayOf(fixtureDir().path, "--all", "-o", out.path, "-q")))
+
+        val written = MiniJson.parse(File(out, "miniproject.flow.json").readText())
+        val golden = MiniJson.parse(goldenFile("miniproject.flow.json").readText())
+        assertEquals(
+            "flow.json (normalized) differs from core/src/test/resources/golden/miniproject.flow.json",
+            canonical(golden), canonical(written),
+        )
     }
 
     @Test

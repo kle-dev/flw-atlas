@@ -564,19 +564,27 @@ object BackendModelParsers {
             val ref = pi.attr("definitionRef")
             var target: El? = ref?.let { defs[it] }
             if (target == null) target = ref?.let { allDefsResolved[it] }
+            // The enclosing <planItem id="…"> id — what a sentry's `<planItemOnPart sourceRef>`
+            // points at. Emitting it lets consumers translate sentry references into definition
+            // names ("when 'Initialize variables' completes") instead of the generic "when the
+            // sentry fires".
+            val planItemId = pi.attr("id")
             if (target == null) {
                 children.add(linkedMapOf(
                     "id" to pi.attr("id"), "name" to pi.attr("name"), "type" to "planItem(?)", "rules" to rules,
+                    "planItemId" to planItemId,
                 ))
             } else if (target.tag in listOf("stage", "planFragment")) {
                 val tid = target.attr("id")
                 if (tid in seenResolved) continue  // guard against pathological scope cycles
                 val child = cmmnWalk(ctx, caseKey, ffile, target, allDefsResolved, seenResolved + setOfNotNull(tid))
                 child["rules"] = rules
+                child["planItemId"] = planItemId
                 children.add(child)
             } else {
                 val d = cmmnDef(ctx, caseKey, ffile, target)
                 d["rules"] = rules
+                d["planItemId"] = planItemId
                 children.add(d)
             }
         }
