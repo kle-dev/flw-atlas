@@ -104,8 +104,19 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      # Read-only on purpose. setup-gradle writes the whole Gradle home — for this project that is the
+      # IntelliJ Platform SDK in `caches/modules-2` plus the same content again in `caches/transforms`,
+      # several GB per distinct dependency set. Three jobs each saving their own variant filled the
+      # repository's 10 GB Actions cache on its own, and once it is full GitHub evicts by age, which
+      # throws away the `build` entry every other run and makes the cache slower than none.
+      #
+      # So `build` on the default branch is the only writer, and this job reuses what it saved. The
+      # verifier's own IDE downloads are unaffected either way: the platform plugin puts them in
+      # ~/.pluginVerifier, outside the Gradle home this caches.
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
 
       # The verifier unpacks an IDE distribution next to the compile SDK. A stock runner has enough room,
       # but not a lot of it to spare, so reclaim the pre-installed toolchains we do not use. Kept even
@@ -165,8 +176,13 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      # Read-only, for the reason given in the verify job: `build` on the default branch is the single
+      # cache writer. A tag build would otherwise save a fourth multi-GB variant that nothing reuses,
+      # since the next tag has a different commit and this job runs once per release.
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
 
       # Built here rather than downloaded from the `build` job: the release assets must come from a
       # checkout of the tag itself, so what is published is exactly what the tag names.
