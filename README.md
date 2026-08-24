@@ -103,8 +103,22 @@ expression validation, rendering), `:cli` (the standalone fat-jar `./atlas` runs
   `core/src/test/resources/miniproject`, the parser unit tests, the `:cli` contract tests (the artifact
   names the IDEA plugin depends on) and the shared expression-validator parity suite.
 - The goldens in `core/src/test/resources/golden/` pin the generated artifacts byte-for-byte. When a
-  change to them is intended, re-baseline with **`./gradlew :core:updateGoldens`** and review the diff
-  (it also regenerates `CLAUDE.template.md` from `ClaudeRenderer`).
+  change to them is intended, re-baseline with **`./gradlew :core:updateGoldens`** and review the diff.
+  The same command regenerates every other derived file in the repo: `CLAUDE.template.md` (from
+  `ClaudeRenderer`) and the plugin descriptor's `<change-notes>` (from `CHANGELOG.md`, the source of
+  truth for the release history — the descriptor holds a size-budgeted window onto its newest entries,
+  because that field is capped at 65535 characters).
+- **Compatibility gate:** `./gradlew :idea-plugin:verifyPlugin` downloads IntelliJ IDEA 2026.1 and 2026.2
+  and runs JetBrains' Plugin Verifier against both. Add
+  `-Patlas.verifyIdes="/Applications/IntelliJ IDEA.app"` to use an IDE you already have instead. Run it
+  before every release: it is the only check that sees plugin-descriptor defects, which `build` does not.
+- The three browser-driven frontend tests (`searchSelfTest`, `explorerUiTest`, `diagramUiTest`) **skip
+  themselves** when node or Chrome is missing, so `./gradlew build` stays green without them. Set
+  `ATLAS_REQUIRE_BROWSER_TESTS=1` to turn that skip into a failure — CI does, so a green pipeline can
+  never mean "the frontend was never opened".
+- **CI:** `.github/workflows/build.yml` runs `build` (with the browser tests mandatory) on every push and
+  pull request, and the Plugin Verifier as a second job. Both upload their reports, and the built plugin
+  ZIP is attached to each run so a pull request can be installed without building it.
 
 ## For LLMs / agents
 
@@ -123,3 +137,30 @@ map, the data layer (service ↔ Liquibase table ↔ data object) and every find
 ## Requirements
 
 A **JRE 21+** to run `./atlas` (a JDK 21+ to build from source). No third-party packages.
+
+## Getting it
+
+Both artifacts are attached to every [**release**](https://github.com/kle-dev/flw-atlas/releases/latest)
+— they are not committed to this repository:
+
+- **IntelliJ plugin** — download `flowable-atlas-<version>.zip`, then *Settings → Plugins → ⚙ → Install
+  Plugin from Disk…* and restart. Verified on IDEA 2026.1 and 2026.2. See `idea-plugin/dist/README.md`.
+- **CLI** — download `cli-<version>-all.jar` into `lib/` and run `./atlas <project>`, or
+  `java -jar cli-<version>-all.jar <project> --all`. Needs only a JRE 21+. See `lib/README.md`.
+
+`SHA256SUMS.txt` in each release carries the checksums. Building from source instead:
+`./gradlew :idea-plugin:buildPlugin :cli:shadowJar`.
+
+## Status
+
+**Pre-release (`0.x`).** Atlas is used internally and carries no cross-version stability guarantee yet:
+behaviour, settings and generated-artifact formats may change between minor releases. Versions below
+0.13.0 were never published outside the team. See [CHANGELOG.md](CHANGELOG.md).
+
+## License
+
+Copyright (c) 2026 Flowable AG. All rights reserved.
+
+Proprietary — source available, **no license granted**. The source is published for visibility and for
+use by Flowable AG and its authorized users; publication grants no right to use, copy, modify or
+redistribute it. See [LICENSE](LICENSE) for the full terms and for licensing enquiries.

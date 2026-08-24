@@ -25,6 +25,20 @@ dependencies {
 
 tasks.test {
     useJUnit()
+
+    // Files this module's tests compare but that live OUTSIDE its source sets, so Gradle cannot infer
+    // them: the sync tests (ClaudeTemplateSyncTest, ChangelogSyncTest) read them straight off the repo
+    // via GoldenFiles.repoRoot. Without this the gates were only as good as luck — hand-editing
+    // CHANGELOG.md or CLAUDE.template.md left `test` UP-TO-DATE, so `./gradlew build` reported success
+    // on exactly the drift those tests exist to catch (verified: an injected line went unnoticed until
+    // --rerun-tasks). Declaring them as inputs is what makes the gates gate. plugin.xml is here because
+    // CHANGELOG.md is generated from its <change-notes>: editing the notes must re-run the comparison.
+    inputs.files(
+        rootProject.file("CLAUDE.template.md"),
+        rootProject.file("CHANGELOG.md"),
+        rootProject.file("idea-plugin/src/main/resources/META-INF/plugin.xml"),
+        rootProject.file("build.gradle.kts"),
+    ).withPropertyName("syncedRepoFiles").optional()
 }
 
 // Re-baseline the committed golden artifacts (core/src/test/resources/golden/*) from the current
@@ -43,6 +57,9 @@ val updateGoldens by tasks.registering(Test::class) {
         includeTestsMatching("com.flowable.atlas.render.SummaryRendererTest")
         includeTestsMatching("com.flowable.atlas.render.OverviewRendererTest")
         includeTestsMatching("com.flowable.atlas.render.ClaudeTemplateSyncTest")
+        // CHANGELOG.md is generated from the plugin descriptor's <change-notes>; re-baseline it here
+        // together with the other generated repo files instead of hand-editing it.
+        includeTestsMatching("com.flowable.atlas.render.ChangelogSyncTest")
     }
     outputs.upToDateWhen { false }
     testLogging { showStandardStreams = true }
