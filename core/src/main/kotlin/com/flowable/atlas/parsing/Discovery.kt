@@ -29,9 +29,9 @@ object Discovery {
             return Discovered(models, archives, javas, xmls)
         }
 
-        root.walkTopDown()
-            .onEnter { dir -> dir == root || dir.name !in ModelPaths.EXCLUDE_DIRS }
-            .filter { it.isFile }
+        // FileWalk, not walkTopDown(): the discovery order propagates into every insertion-ordered map
+        // downstream, so a filesystem-dependent order made the generated artifacts machine-dependent.
+        FileWalk.files(root) { dir -> dir == root || dir.name !in ModelPaths.EXCLUDE_DIRS }
             .forEach { f ->
                 val low = f.name.lowercase()
                 when {

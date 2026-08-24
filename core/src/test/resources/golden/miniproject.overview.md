@@ -69,8 +69,8 @@ _Scanned 13 model files, 0 archives, 2 Java files, 2 REST endpoints. Generated b
 
 ## 5b. Data objects
 
-- `priorityMD` (masterData) [2 fields: level, color] — `data/priority.data`
 - `customerDO` (lookup) (table `cust_customer`) [3 fields: id, customerName, priority] — `data/customer.data`
+- `priorityMD` (masterData) [2 fields: level, color] — `data/priority.data`
 
 ## 7. Integration: Services, Channels, Events & REST
 
@@ -108,6 +108,16 @@ _Scanned 13 model files, 0 archives, 2 Java files, 2 REST endpoints. Generated b
 - `orderProcess` [calls run()] `demoBean` → src/main/java/com/example/DemoBean.java:6 (com.example.DemoBean)
 
 ### Model → Model
+- `demoApp` —contains→ model:bpmn `orderProcess` (`processes/order.bpmn`)
+- `demoApp` —contains→ model:cmmn `reviewCase` (`cases/review.cmmn`)
+- `demoApp` —contains→ model:form `orderForm` (`forms/order-form.form`)
+- `demoApp` —contains→ model:service `customerService` (`services/customer.service`)
+- `demoApp` —contains→ model:dataObject `customerDO` (`data/customer.data`)
+- `reviewCase` —humanTask-form→ form `orderForm` (`forms/order-form.form`)
+- `reviewCase` —processTask→ process `orderProcess` (`processes/order.bpmn`)
+- `reviewCase` —serviceMapping→ service `customerService` (`services/customer.service`)
+- `customerDO` —backed-by-service→ service `customerService` (`services/customer.service`)
+- `customerDO` —relates-to→ dataObject `priorityMD` (`data/priority.data`)
 - `orderForm` —field-service→ service `customerService` (`services/customer.service`)
 - `orderForm` —field-dataObject→ dataObject `customerDO` (`data/customer.data`)
 - `orderForm` —triggers-action→ action `notifyCustomerAction` (`actions/notify-customer.action`)
@@ -116,16 +126,6 @@ _Scanned 13 model files, 0 archives, 2 Java files, 2 REST endpoints. Generated b
 - `orderProcess` —callActivity→ process `fulfilmentProcess` (`processes/fulfilment.bpmn`)
 - `orderProcess` —ruleTask-decision→ decision `orderDecision` (`decisions/order-decision.dmn`)
 - `orderProcess` —receives-event→ event `orderShipped` (`events/order-shipped.event`)
-- `reviewCase` —humanTask-form→ form `orderForm` (`forms/order-form.form`)
-- `reviewCase` —processTask→ process `orderProcess` (`processes/order.bpmn`)
-- `reviewCase` —serviceMapping→ service `customerService` (`services/customer.service`)
-- `customerDO` —backed-by-service→ service `customerService` (`services/customer.service`)
-- `customerDO` —relates-to→ dataObject `priorityMD` (`data/priority.data`)
-- `demoApp` —contains→ model:bpmn `orderProcess` (`processes/order.bpmn`)
-- `demoApp` —contains→ model:cmmn `reviewCase` (`cases/review.cmmn`)
-- `demoApp` —contains→ model:form `orderForm` (`forms/order-form.form`)
-- `demoApp` —contains→ model:service `customerService` (`services/customer.service`)
-- `demoApp` —contains→ model:dataObject `customerDO` (`data/customer.data`)
 
 ## 10. Unresolved references (external / library / missing)
 
