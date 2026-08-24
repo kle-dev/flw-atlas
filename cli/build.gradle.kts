@@ -68,6 +68,26 @@ val nodeExecutable: String? by lazy {
         }.getOrNull()
 }
 
+// The skip-when-missing behaviour below is right for a developer machine but wrong for CI: a runner
+// without node would report a green build having executed none of the frontend tests — a pipeline that
+// claims coverage it does not have is worse than no pipeline. Set ATLAS_REQUIRE_BROWSER_TESTS=1 there
+// and the absence becomes a failure. The Chrome half of the same switch lives in the .mjs scripts,
+// which are the only place that knows whether a browser was found.
+val requireBrowserTests: Boolean =
+    providers.environmentVariable("ATLAS_REQUIRE_BROWSER_TESTS").orNull == "1"
+
+/** True when the task may run; throws instead of skipping when the tests are declared mandatory. */
+fun nodePresentOrFail(taskName: String): Boolean {
+    val node = nodeExecutable
+    if (node == null) {
+        require(!requireBrowserTests) {
+            "$taskName: no node on PATH and ATLAS_REQUIRE_BROWSER_TESTS=1 — install node or unset the variable"
+        }
+        logger.lifecycle("$taskName: skipped — no node on PATH")
+    }
+    return node != null
+}
+
 val searchSelfTest by tasks.registering(Exec::class) {
     description = "Runs the explorer search behaviour test (skipped when node is unavailable)."
     group = "verification"
@@ -75,11 +95,7 @@ val searchSelfTest by tasks.registering(Exec::class) {
     val script = rootProject.file("scripts/search-selftest.mjs")
     inputs.file(script)
     inputs.dir(rootProject.file("core/src/main/resources/frontend"))
-    onlyIf {
-        val node = nodeExecutable
-        if (node == null) logger.lifecycle("searchSelfTest: skipped — no node on PATH")
-        node != null
-    }
+    onlyIf { nodePresentOrFail("searchSelfTest") }
     // Configured unconditionally (Exec requires a command line even when onlyIf skips it).
     commandLine(
         nodeExecutable ?: "node",
@@ -100,11 +116,7 @@ val explorerUiTest by tasks.registering(Exec::class) {
     val script = rootProject.file("scripts/explorer-uitest.mjs")
     inputs.file(script)
     inputs.dir(rootProject.file("core/src/main/resources/frontend"))
-    onlyIf {
-        val node = nodeExecutable
-        if (node == null) logger.lifecycle("explorerUiTest: skipped — no node on PATH")
-        node != null
-    }
+    onlyIf { nodePresentOrFail("explorerUiTest") }
     commandLine(
         nodeExecutable ?: "node",
         script.absolutePath,
@@ -138,11 +150,7 @@ val diagramUiTest by tasks.registering(Exec::class) {
     val script = rootProject.file("scripts/diagram-uitest.mjs")
     inputs.file(script)
     inputs.dir(rootProject.file("core/src/main/resources/frontend"))
-    onlyIf {
-        val node = nodeExecutable
-        if (node == null) logger.lifecycle("diagramUiTest: skipped — no node on PATH")
-        node != null
-    }
+    onlyIf { nodePresentOrFail("diagramUiTest") }
     commandLine(
         nodeExecutable ?: "node",
         script.absolutePath,

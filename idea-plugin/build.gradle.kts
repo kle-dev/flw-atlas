@@ -1,3 +1,4 @@
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 
@@ -64,10 +65,14 @@ dependencies {
 }
 
 intellijPlatform {
-    // Cross-version compatibility check. Pass one or more locally installed IDEs (comma-separated)
-    // and `verifyPlugin` runs JetBrains' Plugin Verifier against each of them — that is how we prove
-    // one artifact really loads on both 2026.1 and 2026.2:
+    // Cross-version compatibility check: JetBrains' Plugin Verifier, run against every IDE in the
+    // `ides { }` block below. This is how we prove one artifact really loads on both 2026.1 and 2026.2,
+    // and it is the only gate that sees descriptor defects `build` cannot (an invalid structure, or
+    // <change-notes> over its 65535-character cap).
+    //
+    //   ./gradlew :idea-plugin:verifyPlugin                                          # downloads both IDEs (CI)
     //   ./gradlew :idea-plugin:verifyPlugin -Patlas.verifyIdes="/Applications/IntelliJ IDEA.app"
+    //                                                                               # uses an installed one
     pluginVerification {
         // Only real breakage fails the check. The plugin knowingly touches a handful of internal /
         // experimental / deprecated platform APIs (AppMode, PluginManagerCore, the weighted
@@ -79,9 +84,28 @@ intellijPlatform {
             VerifyPluginTask.FailureLevel.MISSING_DEPENDENCIES,
         )
         ides {
-            providers.gradleProperty("atlas.verifyIdes").orNull
+            // Two ways in, because the two callers need different things:
+            //
+            //  * `-Patlas.verifyIdes="/Applications/IntelliJ IDEA.app"` verifies against IDEs already
+            //    installed here. Fast, no download — the developer loop.
+            //  * With the property absent, the versions below are DOWNLOADED. That is what makes the
+            //    check runnable on a machine with no IDE installed (CI), which is the whole point: with
+            //    only the local() path, the cross-version gate could never run unattended, and a
+            //    descriptor defect that `build` does not see (e.g. <change-notes> over its 65535-char
+            //    cap) reaches users unnoticed.
+            //
+            // The list is the verified range AtlasPlatformSupport declares. Keep the two in step: that
+            // constant is shown to users as a claim about what was actually checked.
+            // Named `localIdes`, not `local`: a `local` val here would shadow the `local(File)` call below.
+            val localIdes = providers.gradleProperty("atlas.verifyIdes").orNull
                 ?.split(",")?.map(String::trim)?.filter(String::isNotEmpty)
-                ?.forEach { local(file(it)) }
+                .orEmpty()
+            if (localIdes.isNotEmpty()) {
+                localIdes.forEach { local(file(it)) }
+            } else {
+                create(IntelliJPlatformType.IntellijIdea, "2026.1")
+                create(IntelliJPlatformType.IntellijIdea, "2026.2")
+            }
         }
     }
 
@@ -91,8 +115,17 @@ intellijPlatform {
 
     pluginConfiguration {
         ideaVersion {
-            sinceBuild = "261"   // 2026.1
-            untilBuild = "299.*" // wide open for "latest" (internal tool)
+            sinceBuild = "261"   // 2026.1 — the branch :idea-plugin compiles against (the floor)
+            // Deliberately wide, NOT the last verified branch. Atlas ships as a ZIP committed to
+            // idea-plugin/dist/ with no Marketplace update channel, so a tight until-build would not
+            // produce JetBrains' intended "update the plugin" prompt — it would just make Atlas vanish
+            // from every colleague's IDE on the day they upgrade the IDE, unrecoverable until a new ZIP
+            // is built and pulled. Staying loadable is the right trade-off for that distribution model.
+            //
+            // The compatibility claim is kept honest in code instead: AtlasPlatformSupport states the
+            // range actually covered by `verifyPlugin` and the Atlas Hub footer says so, flagging the
+            // running IDE when it is newer than that. Bump the constant there, never this line.
+            untilBuild = "299.*"
         }
     }
 }

@@ -30,6 +30,9 @@ if (!reportPath) {
 }
 const CHROME_CANDIDATES = [
   chromeArg,
+  // CHROME_PATH is the conventional override (puppeteer, karma) and is how CI points at whatever the
+  // runner image ships, instead of this list having to know every distro's path.
+  process.env.CHROME_PATH,
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/Applications/Chromium.app/Contents/MacOS/Chromium',
   '/usr/bin/google-chrome',
@@ -38,6 +41,14 @@ const CHROME_CANDIDATES = [
 ].filter(Boolean);
 const chrome = CHROME_CANDIDATES.find(p => { try { fs.accessSync(p, fs.constants.X_OK); return true; } catch { return false; } });
 if (!chrome) {
+  // Skipping keeps `./gradlew build` green on a machine without a browser, which is right for a
+  // developer. On CI it would be a lie: a green build that never opened the page. ATLAS_REQUIRE_BROWSER
+  // _TESTS=1 turns the skip into a failure, so the pipeline cannot claim coverage it does not have.
+  if (process.env.ATLAS_REQUIRE_BROWSER_TESTS === '1') {
+    console.error('explorer-uitest: FAILED — no Chrome/Chromium found and ATLAS_REQUIRE_BROWSER_TESTS=1');
+    console.error('  looked at:', CHROME_CANDIDATES.join(', '));
+    process.exit(1);
+  }
   console.log('explorer-uitest: skipped — no Chrome/Chromium found');
   process.exit(0);
 }
