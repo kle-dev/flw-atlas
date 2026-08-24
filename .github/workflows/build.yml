@@ -1,0 +1,195 @@
+# Continuous integration for Flowable Atlas.
+#
+# Two jobs on purpose. `build` is the fast gate every push gets. `verify-plugin` is separate because it
+# downloads two full IntelliJ IDEA distributions (several GB) and takes minutes — worth it, but not worth
+# blocking the quick feedback on.
+#
+# Why this exists at all: before it, "everything is green" was a statement about one laptop. Two gates in
+# particular could never run unattended — `verifyPlugin` needed a locally installed IDE passed by hand,
+# and the browser-driven frontend tests skip themselves when no browser is present. The second one is why
+# ATLAS_REQUIRE_BROWSER_TESTS exists: on a runner without Chrome those tests would report success having
+# opened nothing, and a pipeline that claims coverage it does not have is worse than no pipeline.
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+# Read-only token: nothing here writes to the repository.
+permissions:
+  contents: read
+
+# A new push to the same branch supersedes the old run; main is left alone so its history stays complete.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  build:
+    name: build & test
+    runs-on: ubuntu-latest
+    env:
+      # Turns "no node/Chrome, so skip" into a hard failure. See cli/build.gradle.kts and
+      # scripts/*-uitest.mjs — the two halves of the same switch.
+      ATLAS_REQUIRE_BROWSER_TESTS: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # Also validates gradle-wrapper.jar against Gradle's published checksums, which matters for a
+      # public repo: a tampered wrapper jar would otherwise execute unnoticed on every run.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Fail here, with a clear message, rather than deep inside a Gradle task. The runner image ships
+      # Chrome; if a future image stops doing so, this is the line that says so.
+      - name: Locate Chrome
+        run: |
+          CHROME="$(command -v google-chrome || command -v chromium-browser || true)"
+          if [ -z "$CHROME" ]; then
+            echo "::error::No Chrome/Chromium on this runner — the explorer UI tests cannot run."
+            exit 1
+          fi
+          echo "CHROME_PATH=$CHROME" >> "$GITHUB_ENV"
+          echo "using $CHROME ($("$CHROME" --version))"
+
+      # `build` runs the JVM suite, the goldens, the CLI contract tests, the search self-test and both
+      # headless-Chrome UI tests. With ATLAS_REQUIRE_BROWSER_TESTS=1 the last three cannot silently skip.
+      - name: Build and test
+        run: ./gradlew build --stacktrace
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: '**/build/reports/tests/**'
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # Atlas is distributed as a ZIP, so having the built one attached to a run makes it installable
+      # straight from a pull request without anyone building it locally.
+      - name: Upload plugin ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: flowable-atlas-plugin
+          path: idea-plugin/build/distributions/*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  verify-plugin:
+    name: JetBrains Plugin Verifier
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # The verifier unpacks two IDE distributions next to the compile SDK. A stock runner has enough
+      # room, but not a lot of it to spare, so reclaim the pre-installed toolchains we do not use.
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/share/boost || true
+          df -h /
+
+      # No -Patlas.verifyIdes here on purpose: without it the build DOWNLOADS the IDEs declared in
+      # idea-plugin/build.gradle.kts (2026.1 and 2026.2), which is what lets this gate run with no IDE
+      # installed. That is the whole point — it is how a descriptor defect `build` cannot see (for
+      # instance <change-notes> exceeding its 65535-character cap, which makes the artifact invalid)
+      # gets caught before anyone installs the ZIP.
+      - name: Verify against 2026.1 and 2026.2
+        run: ./gradlew :idea-plugin:verifyPlugin --stacktrace
+
+      - name: Upload verifier report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-verifier-report
+          path: idea-plugin/build/reports/pluginVerifier/**
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Publishes the release artifacts. Runs only for a pushed version tag, and only after both gates are
+  # green — a tag must never produce a release from a build that failed verification.
+  #
+  # This job is why the plugin ZIP and the CLI jar are no longer committed to the repository: binaries do
+  # not delta-compress, so 87 stored copies had grown to 152 MB (86% of the repo) for files where only
+  # the newest is ever useful. Attaching them here gives the same "download without building" that
+  # committing them did, without the history cost — and the checksums are computed rather than
+  # hand-maintained, so they cannot drift from the file they describe.
+  release:
+    name: publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, verify-plugin]
+    runs-on: ubuntu-latest
+    permissions:
+      # The only job that writes. Creating a release and uploading assets needs it; nothing else here does.
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Built here rather than downloaded from the `build` job: the release assets must come from a
+      # checkout of the tag itself, so what is published is exactly what the tag names.
+      - name: Build release artifacts
+        run: ./gradlew :idea-plugin:buildPlugin :cli:shadowJar
+
+      - name: Collect artifacts and checksums
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          cp idea-plugin/build/distributions/*.zip release/
+          cp cli/build/libs/*-all.jar release/
+          # Checksum written outside the directory first, then moved in: `sha256sum * > SHA256SUMS.txt`
+          # inside it can hash its own (just-truncated) output, depending on when the shell sets up the
+          # redirection relative to expanding the glob.
+          ( cd release && sha256sum ./* ) > SHA256SUMS.txt
+          mv SHA256SUMS.txt release/
+          cat release/SHA256SUMS.txt
+
+      # Fails the job when the tag and the built version disagree — otherwise `git tag v0.13.0` on a
+      # tree that still says 0.12.2 would publish a release whose assets contradict its own name.
+      - name: Check the tag matches the built version
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ ! -f "release/flowable-atlas-$TAG.zip" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME expects flowable-atlas-$TAG.zip, but the build produced:"
+            ls -1 release/
+            # Single quotes: backticks inside a double-quoted string would be command substitution,
+            # so "Bump `version`" would try to execute `version`.
+            echo '::error::Bump the version in the root build.gradle.kts to match the tag, or retag.'
+            exit 1
+          fi
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/* \
+            --title "Flowable Atlas $GITHUB_REF_NAME" \
+            --notes "Install the plugin: download the ZIP and use Settings → Plugins → ⚙ → Install Plugin from Disk. Run the CLI: \`java -jar cli-*-all.jar <project> --all\`. Checksums are in SHA256SUMS.txt; the full history is in CHANGELOG.md."
