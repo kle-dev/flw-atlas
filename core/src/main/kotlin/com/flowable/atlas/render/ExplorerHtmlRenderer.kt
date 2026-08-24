@@ -1,5 +1,6 @@
 package com.flowable.atlas.render
 
+import com.flowable.atlas.model.Dyn
 import com.flowable.atlas.AtlasBuildInfo
 import com.flowable.atlas.diagram.DiagramRenderer
 import com.flowable.atlas.diagram.ModelBytes
@@ -20,9 +21,12 @@ import java.io.File
  */
 object ExplorerHtmlRenderer {
 
-    @Suppress("UNCHECKED_CAST")
     fun render(result: Map<String, Any?>, root: File, version: String = AtlasBuildInfo.VERSION): String {
-        val graph = result["graph"] as Map<String, Any?>
+        // error() rather than an empty map: every caller passes an Atlas.extract result, which always
+        // carries "graph". The previous `as Map` threw here too — an explorer page silently rendered
+        // with no graph would be worse than a stack trace.
+        val graph = Dyn.mapOrNull(result["graph"])
+            ?: error("result[\"graph\"] is missing or not a map — Atlas.extract must produce it")
         // Same payload object html_render builds, in the same key order.
         val payload = LinkedHashMap<String, Any?>()
         payload["project"] = root.absoluteFile.name.ifEmpty { "project" }
@@ -83,12 +87,10 @@ object ExplorerHtmlRenderer {
     private fun attachDiagrams(nodes: Any?, root: File): Any? {
         val list = nodes as? List<*> ?: return nodes
         for (nodeAny in list) {
-            @Suppress("UNCHECKED_CAST")
-            val node = nodeAny as? MutableMap<Any?, Any?> ?: continue
+            val node = Dyn.anyMutableMapOrNull(nodeAny) ?: continue
             val type = diagramType(node["type"] as? String) ?: continue
             val file = node["file"] as? String ?: continue
-            @Suppress("UNCHECKED_CAST")
-            val data = node["data"] as? MutableMap<Any?, Any?> ?: continue
+            val data = Dyn.anyMutableMapOrNull(node["data"]) ?: continue
             // Resolve via ModelBytes (handles loose files AND "<archive>!<entry>" labels) — a plain
             // File(root, file) silently fails for models packaged inside a .zip/.bar/Design export.
             val (bytes, name) = ModelBytes.resolve(root, file) ?: continue

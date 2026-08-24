@@ -1,5 +1,5 @@
 package com.flowable.atlas.graph
-
+import com.flowable.atlas.model.Dyn
 /**
  * Which variables are written but never read — the one place that verdict is defined.
  *
@@ -50,7 +50,6 @@ object UnusedVariables {
         "a mapping into a called model that is not part of this project",
     )
 
-    @Suppress("UNCHECKED_CAST")
     fun decide(
         nodes: Map<String, MutableMap<String, Any?>>,
         edges: List<Map<String, Any?>>,
@@ -88,10 +87,10 @@ object UnusedVariables {
 
         for (node in nodes.values) {
             if (node["type"] != "variable") continue
-            val data = node["data"] as? MutableMap<String, Any?> ?: continue
+            val data = Dyn.mutableMapOrNull(node["data"]) ?: continue
             val name = node["key"]?.toString() ?: continue
-            val writes = (data["writes"] as? List<Map<String, Any?>>) ?: emptyList()
-            val reads = (data["reads"] as? List<Map<String, Any?>>) ?: emptyList()
+            val writes = Dyn.maps(data["writes"])
+            val reads = Dyn.maps(data["reads"])
 
             if (writes.isEmpty()) continue
 

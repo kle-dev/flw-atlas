@@ -1,5 +1,7 @@
 package com.flowable.atlas.render
 
+import com.flowable.atlas.model.Dyn
+
 import com.flowable.atlas.model.MiniJson
 
 /**
@@ -39,13 +41,12 @@ object GraphJsonRenderer {
      * Build the serializable projection. Nothing in [result] is mutated: the same result object is shared
      * with the other renderers in one in-process run (and with the IDE plugin's caller).
      */
-    @Suppress("UNCHECKED_CAST")
     fun project(result: Map<String, Any?>): Map<String, Any?> {
         val out = LinkedHashMap<String, Any?>()
         out["_schema"] = SCHEMA
-        val graph = result["graph"] as? Map<String, Any?>
-        val nodes = graph?.get("nodes") as? List<Map<String, Any?>>
-        val edges = graph?.get("edges") as? List<Map<String, Any?>>
+        val graph = Dyn.mapOrNull(result["graph"])
+        val nodes = graph?.let { Dyn.maps(it["nodes"]) }
+        val edges = graph?.let { Dyn.maps(it["edges"]) }
 
         // Identity, not equality: only a `data` that IS a bucket entry may be replaced by a pointer to
         // it. Two structurally equal maps in different buckets must both survive.
