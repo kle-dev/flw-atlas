@@ -108,8 +108,8 @@ expression validation, rendering), `:cli` (the standalone fat-jar `./atlas` runs
   `ClaudeRenderer`) and the plugin descriptor's `<change-notes>` (from `CHANGELOG.md`, the source of
   truth for the release history — the descriptor holds a size-budgeted window onto its newest entries,
   because that field is capped at 65535 characters).
-- **Compatibility gate:** `./gradlew :idea-plugin:verifyPlugin` downloads IntelliJ IDEA 2026.1 and 2026.2
-  and runs JetBrains' Plugin Verifier against both. Add
+- **Compatibility gate:** `./gradlew :idea-plugin:verifyPlugin` downloads IntelliJ IDEA 2026.2 and runs
+  JetBrains' Plugin Verifier against it. Add
   `-Patlas.verifyIdes="/Applications/IntelliJ IDEA.app"` to use an IDE you already have instead. Run it
   before every release: it is the only check that sees plugin-descriptor defects, which `build` does not.
 - The three browser-driven frontend tests (`searchSelfTest`, `explorerUiTest`, `diagramUiTest`) **skip
@@ -144,7 +144,8 @@ Both artifacts are attached to every [**release**](https://github.com/kle-dev/fl
 — they are not committed to this repository:
 
 - **IntelliJ plugin** — download `flowable-atlas-<version>.zip`, then *Settings → Plugins → ⚙ → Install
-  Plugin from Disk…* and restart. Verified on IDEA 2026.1 and 2026.2. See `idea-plugin/dist/README.md`.
+  Plugin from Disk…* and restart. Installs on IDEA 2026.1+, verified on 2026.2. See
+  `idea-plugin/dist/README.md`.
 - **CLI** — download `cli-<version>-all.jar` into `lib/` and run `./atlas <project>`, or
   `java -jar cli-<version>-all.jar <project> --all`. Needs only a JRE 21+. See `lib/README.md`.
 

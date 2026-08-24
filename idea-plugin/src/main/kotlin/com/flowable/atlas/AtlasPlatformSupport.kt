@@ -23,8 +23,15 @@ import com.intellij.openapi.application.ApplicationInfo
  */
 object AtlasPlatformSupport {
 
-    /** Oldest supported platform branch — the SDK `:idea-plugin` compiles against, and `since-build`. */
-    const val VERIFIED_SINCE_BRANCH = 261
+    /**
+     * Oldest platform branch `verifyPlugin` actually checks.
+     *
+     * NOT the same as the oldest branch the plugin *installs* on: `since-build` is 261 and the SDK is
+     * still 2026.1, so Atlas remains loadable on 2026.1 — it is simply no longer verified there. The
+     * supported range is therefore wider than the verified range, which is exactly the gap
+     * [isUnverifiedPlatform] exists to make visible rather than paper over.
+     */
+    const val VERIFIED_SINCE_BRANCH = 262
 
     /**
      * Newest platform branch this build was run and verified on. Bump only together with an actual
@@ -35,8 +42,15 @@ object AtlasPlatformSupport {
     /** The running IDE's platform branch (261 for 2026.1, 262 for 2026.2, …). */
     val runningBranch: Int get() = ApplicationInfo.getInstance().build.baselineVersion
 
-    /** True when the running IDE is newer than anything this build was verified against. */
-    val isUnverifiedPlatform: Boolean get() = runningBranch > VERIFIED_THROUGH_BRANCH
+    /**
+     * True when the running IDE lies outside the verified range — in **either** direction.
+     *
+     * Older counts too, now that verification starts above `since-build`: a 2026.1 install is a perfectly
+     * ordinary thing to have and is no more tested than a future 2026.3 would be. Only flagging newer
+     * builds would have quietly presented 2026.1 as covered.
+     */
+    val isUnverifiedPlatform: Boolean
+        get() = runningBranch < VERIFIED_SINCE_BRANCH || runningBranch > VERIFIED_THROUGH_BRANCH
 
     /** `261` → `"2026.1"`. The platform branch numbering has encoded year/release since 2020. */
     fun branchName(branch: Int): String = "${2000 + branch / 10}.${branch % 10}"

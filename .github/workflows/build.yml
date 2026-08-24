@@ -107,8 +107,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # The verifier unpacks two IDE distributions next to the compile SDK. A stock runner has enough
-      # room, but not a lot of it to spare, so reclaim the pre-installed toolchains we do not use.
+      # The verifier unpacks an IDE distribution next to the compile SDK. A stock runner has enough room,
+      # but not a lot of it to spare, so reclaim the pre-installed toolchains we do not use. Kept even
+      # though only one IDE is verified now — the margin is what makes adding another one uneventful.
       - name: Free disk space
         run: |
           df -h /
@@ -116,11 +117,11 @@ jobs:
           df -h /
 
       # No -Patlas.verifyIdes here on purpose: without it the build DOWNLOADS the IDEs declared in
-      # idea-plugin/build.gradle.kts (2026.1 and 2026.2), which is what lets this gate run with no IDE
+      # idea-plugin/build.gradle.kts (2026.2), which is what lets this gate run with no IDE
       # installed. That is the whole point — it is how a descriptor defect `build` cannot see (for
       # instance <change-notes> exceeding its 65535-character cap, which makes the artifact invalid)
       # gets caught before anyone installs the ZIP.
-      - name: Verify against 2026.1 and 2026.2
+      - name: Verify against 2026.2
         run: ./gradlew :idea-plugin:verifyPlugin --stacktrace
 
       - name: Upload verifier report

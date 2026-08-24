@@ -26,10 +26,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   for no visible reason. Those now log, as do a failed Design pull, custom-function extraction (whose failure
   made the inspection flag your own `flw.*` functions as unknown), sub-project detection and explorer
   discovery. Hot paths log at debug or once, never per file, so `idea.log` stays readable.
-- **The Atlas Hub states what was actually verified** — its footer now reads *"verified on 2026.1–2026.2"*,
-  and flags the running IDE when it is newer than anything this build was checked against. Atlas stays
-  installable on later IDEs on purpose — it ships as a ZIP with no update channel, so a tight `until-build`
-  would make it vanish on the day you upgrade the IDE rather than prompt for an update — but "it loads" is no
+- **The Atlas Hub states what was actually verified** — its footer reads *"verified on 2026.2"* and flags
+  the running IDE whenever it falls outside that, in either direction. Atlas installs on 2026.1 and later
+  on purpose: it ships as a ZIP with no update channel, so a tight `until-build` would make it vanish on
+  the day you upgrade the IDE rather than prompt for an update. That makes the range it *installs* on wider
+  than the range it is *verified* on, so a 2026.1 install is flagged as untested too — "it loads" is no
   longer confused with "it was tested".
 - **A CHANGELOG in the repository** — the release history only existed inside the plugin descriptor, where the
   IDE's plugin manager shows it, leaving CLI users and anyone reading the repo on GitHub with no way to see

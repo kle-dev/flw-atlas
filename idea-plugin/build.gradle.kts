@@ -65,10 +65,14 @@ dependencies {
 }
 
 intellijPlatform {
-    // Cross-version compatibility check: JetBrains' Plugin Verifier, run against every IDE in the
-    // `ides { }` block below. This is how we prove one artifact really loads on both 2026.1 and 2026.2,
-    // and it is the only gate that sees descriptor defects `build` cannot (an invalid structure, or
+    // Compatibility check: JetBrains' Plugin Verifier, run against every IDE in the `ides { }` block
+    // below. It is the only gate that sees descriptor defects `build` cannot (an invalid structure, or
     // <change-notes> over its 65535-character cap).
+    //
+    // Verification targets 2026.2 only, by choice. Note that this is NARROWER than what the plugin
+    // installs on: since-build stays 261 and the SDK is still 2026.1, so Atlas remains loadable on
+    // 2026.1 — just unverified there. AtlasPlatformSupport carries that distinction and the Atlas Hub
+    // shows it, so "it loads" is never presented as "it was tested".
     //
     //   ./gradlew :idea-plugin:verifyPlugin                                          # downloads both IDEs (CI)
     //   ./gradlew :idea-plugin:verifyPlugin -Patlas.verifyIdes="/Applications/IntelliJ IDEA.app"
@@ -94,8 +98,8 @@ intellijPlatform {
             //    descriptor defect that `build` does not see (e.g. <change-notes> over its 65535-char
             //    cap) reaches users unnoticed.
             //
-            // The list is the verified range AtlasPlatformSupport declares. Keep the two in step: that
-            // constant is shown to users as a claim about what was actually checked.
+            // This list IS the verified range AtlasPlatformSupport declares. Keep the two in step: those
+            // constants are shown to users as a claim about what was actually checked.
             // Named `localIdes`, not `local`: a `local` val here would shadow the `local(File)` call below.
             val localIdes = providers.gradleProperty("atlas.verifyIdes").orNull
                 ?.split(",")?.map(String::trim)?.filter(String::isNotEmpty)
@@ -103,7 +107,6 @@ intellijPlatform {
             if (localIdes.isNotEmpty()) {
                 localIdes.forEach { local(file(it)) }
             } else {
-                create(IntelliJPlatformType.IntellijIdea, "2026.1")
                 create(IntelliJPlatformType.IntellijIdea, "2026.2")
             }
         }

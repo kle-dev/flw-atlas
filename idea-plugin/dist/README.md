@@ -11,7 +11,7 @@ The plugin ZIP is **not committed to this repository**. Download it from the
 3. Select the downloaded ZIP.
 4. **Restart** the IDE.
 
-Verified on **2026.1** and **2026.2** (JetBrains' Plugin Verifier runs against both on every push). The
+Installs on **2026.1+**; verified on **2026.2** (JetBrains' Plugin Verifier runs on every push). The
 plugin bundles the Atlas generator — the pure-Kotlin `:core` engine, run in-process — so **Generate Atlas
 Explorer** (Tools → Flowable Atlas) needs only a **Java 21+** runtime, no external interpreter.
 
