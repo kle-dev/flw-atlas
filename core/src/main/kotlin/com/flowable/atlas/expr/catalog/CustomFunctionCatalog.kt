@@ -8,7 +8,7 @@ import java.io.File
  *
  * The Work runtime spreads `externals.additionalData` into the frontend expression scope (its
  * top-level keys) and merges `additionalData.flw` onto `flw` (see `hookEvalExpression`). Projects
- * expose their own helpers there — e.g. the DEMO app registers a `flowdemo` namespace called as
+ * expose their own helpers there — e.g. an app can register a `flowdemo` namespace, called as
  * `{{ flowdemo.foo(x) }}`. When that source is in the project we read the real names so those calls
  * validate *precisely* (known member → valid, close typo → suspect) instead of staying lenient.
  *

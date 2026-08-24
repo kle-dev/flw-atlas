@@ -118,7 +118,7 @@ class CustomFunctionExtractorTest {
     }
 
     @Test fun extractsFromMinifiedBundleWithLocalVarConfig() {
-        // Real DEMO shape: minified UMD where the config is a local var referenced as `additionalData:a`.
+        // Real-world shape: minified UMD where the config is a local var referenced as `additionalData:a`.
         write("static/ext/custom.js",
             "!function(e,t){e.flowable.externals=t()}(this,function(){\"use strict\";" +
                 "var n={ubsInboxItem:function(e){return e}}," +

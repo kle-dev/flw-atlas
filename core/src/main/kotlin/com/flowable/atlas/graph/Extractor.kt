@@ -137,7 +137,7 @@ object Atlas {
             }
         }
 
-        // Legacy Design exports ("DEMO Reviews"-era) store each model as `<type>-models/<name>.json`
+        // Older Design exports store each model as `<type>-models/<name>.json`
         // wrapping the body in {id, key, name, editorJson}. Unwrap and dispatch so those apps are not
         // invisible: modern-shaped bodies go straight to their parser (wrapper key/name injected);
         // Oryx-shaped bodies (stencil/childShapes — the old form/page editor) at least register the

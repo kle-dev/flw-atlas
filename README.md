@@ -143,8 +143,18 @@ A **JRE 21+** to run `./atlas` (a JDK 21+ to build from source). No third-party 
 Both artifacts are attached to every [**release**](https://github.com/kle-dev/flw-atlas/releases/latest)
 — they are not committed to this repository:
 
-- **IntelliJ plugin** — download `flowable-atlas-<version>.zip`, then *Settings → Plugins → ⚙ → Install
-  Plugin from Disk…* and restart. Installs on IDEA 2026.1+, verified on 2026.2. See
+- **IntelliJ plugin, the easy way** — add Atlas as a plugin repository once, and it joins the IDE's
+  normal update flow: new releases arrive as an update badge, no downloading and no *Install from Disk*.
+  Under *Settings → Plugins → ⚙ → Manage Plugin Repositories…* add:
+
+  ```
+  https://github.com/kle-dev/flw-atlas/releases/latest/download/updatePlugins.xml
+  ```
+
+  Then find **Flowable Atlas** in the *Marketplace* tab and install. The URL is stable — it always
+  resolves to the newest release.
+- **IntelliJ plugin, by hand** — download `flowable-atlas-<version>.zip`, then *Settings → Plugins → ⚙ →
+  Install Plugin from Disk…* and restart. Installs on IDEA 2026.1+, verified on 2026.2. See
   `idea-plugin/dist/README.md`.
 - **CLI** — download `cli-<version>-all.jar` into `lib/` and run `./atlas <project>`, or
   `java -jar cli-<version>-all.jar <project> --all`. Needs only a JRE 21+. See `lib/README.md`.
@@ -162,6 +172,14 @@ behaviour, settings and generated-artifact formats may change between minor rele
 
 Copyright (c) 2026 Flowable AG. All rights reserved.
 
-Proprietary — source available, **no license granted**. The source is published for visibility and for
-use by Flowable AG and its authorized users; publication grants no right to use, copy, modify or
-redistribute it. See [LICENSE](LICENSE) for the full terms and for licensing enquiries.
+Proprietary — source available, **no license granted**. In plain terms the repository is *readable,
+not usable*: read it, learn from it, cite it; running, building, installing or reusing it needs
+written permission. See [LICENSE](LICENSE) for the full terms and for licensing enquiries.
+
+Atlas redistributes two third-party components under their own licences — the Geist typeface
+(SIL OFL 1.1), embedded in every generated explorer HTML, and the Kotlin standard library
+(Apache 2.0) inside the CLI jar. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+- **Found a bug or have an idea?** Open an issue — see [CONTRIBUTING.md](CONTRIBUTING.md), which also
+  documents the internal build/release workflow.
+- **Found a security problem?** Do **not** open an issue. See [SECURITY.md](SECURITY.md).

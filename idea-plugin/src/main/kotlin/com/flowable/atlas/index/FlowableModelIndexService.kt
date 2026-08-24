@@ -19,6 +19,7 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectFileIndex
@@ -313,6 +314,8 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
                 val text = String(bytes, Charsets.UTF_8)
                 ModelRefScanner.scan(text, referencedIdentifiers, referencedClassFqns)
                 restCalls.addAll(RestCallScanner.refs(text))
+            } catch (pce: ProcessCanceledException) {
+                throw pce                      // a cancelled action is not a failure
             } catch (e: Exception) {
                 // unreadable / not valid — skip this model, but leave a trace: a systematically
                 // mis-parsed model type would otherwise silently never be indexed

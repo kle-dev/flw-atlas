@@ -293,7 +293,7 @@ Everything is resolved against the Flowable models that actually live in your re
   call site jumps to the model (operations / values resolve to the backing service model).
 - **Inline hints for opaque keys** — a key string is labelled inline with what it actually is, so a
   constants class stops being a wall of `DEMO-Dnnn`: a **data-object** key gets its physical table name
-  (`"demo-customer"` ‹CMM_CUSTOMER›, resolved through the backing `database` service) and an **action**
+  (`"demo-customer"` ‹DEMO_CUSTOMER›, resolved through the backing `database` service) and an **action**
   key gets the action model's name (`"DEMO-A033"` ‹Create support request›). Both match by value — every
   literal, not only API call sites — and are toggled under *Settings → Editor → Inlay Hints → Values*
   or *Settings → Tools → Flowable Atlas → Inline Hints*.

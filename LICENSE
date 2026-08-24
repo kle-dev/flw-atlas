@@ -3,13 +3,18 @@ Copyright (c) 2026 Flowable AG. All rights reserved.
 PROPRIETARY SOFTWARE — SOURCE AVAILABLE, NO LICENSE GRANTED
 
 This repository and everything in it — source code, build scripts, test fixtures,
-documentation, the prebuilt IntelliJ plugin distribution in `idea-plugin/dist/`
-and the prebuilt CLI in `lib/` — is the confidential and proprietary property of
-Flowable AG.
+documentation, and the prebuilt IntelliJ plugin and CLI attached to its releases —
+is the confidential and proprietary property of Flowable AG.
 
 The source is published here for visibility and for use by Flowable AG and its
 authorized users. Publication does NOT place it in the public domain and does NOT
 grant any license, express or implied.
+
+In plain terms: this repository is READABLE, not USABLE. You are welcome to read
+the code, learn from it, and cite it. You are not permitted to run it, build it,
+install the plugin, or reuse any part of it in your own work without written
+permission from Flowable AG. Making the source public is a deliberate choice about
+transparency; it is not a grant of rights.
 
 You may not, without prior written permission from Flowable AG:
 
@@ -28,5 +33,18 @@ FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL FLOWABLE AG BE
 LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
 CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+THIRD-PARTY COMPONENTS
+
+This license covers Flowable AG's own work. It does NOT cover the
+third-party components this repository redistributes, which remain under their own
+licenses and grant rights this notice does not:
+
+  - the Geist typeface, embedded in the generated explorer HTML
+    (SIL Open Font License 1.1, Copyright (c) 2023 Vercel, Inc.);
+  - the Kotlin standard library, bundled in the CLI fat-jar
+    (Apache License 2.0, Copyright JetBrains s.r.o. and contributors).
+
+See THIRD-PARTY-NOTICES.md for the full texts and for where each one ships.
 
 For licensing enquiries, contact Flowable AG: https://www.flowable.com

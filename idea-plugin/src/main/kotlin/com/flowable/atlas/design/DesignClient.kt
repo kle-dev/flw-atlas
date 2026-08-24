@@ -2,6 +2,7 @@ package com.flowable.atlas.design
 
 import com.flowable.atlas.model.MiniJson
 import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.progress.ProcessCanceledException
 import java.io.ByteArrayOutputStream
 import java.net.URI
 import java.net.URLEncoder
@@ -178,6 +179,8 @@ object DesignClient {
                     Result.Success(Export(body, suggested))
                 }
             }
+        } catch (pce: ProcessCanceledException) {
+            throw pce                      // a cancelled action is not a failure
         } catch (e: Exception) {
             LOG.warn("Design app export failed", e)
             Result.Failed(failureMessage(conn.baseUrl, e))
@@ -229,6 +232,8 @@ object DesignClient {
             }
             parseNewToken(resp.body())?.let { Result.Success(it) }
                 ?: Result.Failed("The server did not return a token value — is the base URL a Flowable Design server?")
+        } catch (pce: ProcessCanceledException) {
+            throw pce                      // a cancelled action is not a failure
         } catch (e: Exception) {
             LOG.warn("Design access-token creation failed", e)   // never logs the token: only 2xx bodies carry one
             Result.Failed(failureMessage(baseUrl, e))
@@ -308,6 +313,8 @@ object DesignClient {
                 if (all.size >= page.total || page.data.isEmpty()) return Result.Success(all)
             }
             Result.Success(all)   // page cap hit — return what we have
+        } catch (pce: ProcessCanceledException) {
+            throw pce                      // a cancelled action is not a failure
         } catch (e: Exception) {
             LOG.warn("Design request failed", e)
             Result.Failed(failureMessage(conn.baseUrl, e))

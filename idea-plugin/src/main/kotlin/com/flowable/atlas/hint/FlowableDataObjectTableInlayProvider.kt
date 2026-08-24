@@ -16,7 +16,7 @@ import com.intellij.psi.PsiLiteralExpression
 
 /**
  * Inline hint: the physical table name shown right after a string literal whose value is a Flowable
- * **data object** key — so `"demo-customer"` reads as `"demo-customer"‹CMM_CUSTOMER›` without hovering
+ * **data object** key — so `"demo-customer"` reads as `"demo-customer"‹DEMO_CUSTOMER›` without hovering
  * or navigating. The key→table map is resolved via the data object's backing `database` service model
  * and cached ([FlowableModelIndexService.dataObjectTables]). Toggle under
  * Settings → Editor → Inlay Hints → Values → "Data object table names", or Settings → Tools →

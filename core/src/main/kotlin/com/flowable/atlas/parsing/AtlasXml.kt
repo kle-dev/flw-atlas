@@ -4,6 +4,7 @@ import org.w3c.dom.Document
 import org.w3c.dom.Element
 import org.w3c.dom.Node
 import java.io.ByteArrayInputStream
+import javax.xml.XMLConstants
 import javax.xml.parsers.DocumentBuilderFactory
 
 /**
@@ -16,16 +17,32 @@ import javax.xml.parsers.DocumentBuilderFactory
  */
 object AtlasXml {
 
-    private val FACTORY: DocumentBuilderFactory = DocumentBuilderFactory.newInstance().apply {
+    private fun hardenedFactory(): DocumentBuilderFactory = DocumentBuilderFactory.newInstance().apply {
         isNamespaceAware = false
+        // A DOCTYPE is refused outright. The three features below only cover *external* references —
+        // an internal DTD subset still expands, which is the billion-laughs shape. Model files never
+        // carry a DOCTYPE, so refusing one costs nothing and closes the entity-expansion door that
+        // this object's contract ("DTDs and external entities are disabled") already claims is shut.
+        setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
         setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
         setFeature("http://xml.org/sax/features/external-general-entities", false)
         setFeature("http://xml.org/sax/features/external-parameter-entities", false)
+        setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
+        isXIncludeAware = false
+        isExpandEntityReferences = false
     }
+
+    // One builder per thread, not one shared factory. Neither DocumentBuilderFactory nor
+    // DocumentBuilder is specified as thread-safe, and both the CLI's parallel walk and the IDE's
+    // index scan parse from more than one thread — a shared factory was a latent race that happened
+    // to work only because the bundled Xerces implementation tolerates it.
+    private val BUILDER = ThreadLocal.withInitial { hardenedFactory().newDocumentBuilder() }
 
     /** Parse raw XML bytes and return the document element as an [El], or throw on malformed XML. */
     fun parse(data: ByteArray): El {
-        val doc: Document = FACTORY.newDocumentBuilder().parse(ByteArrayInputStream(data))
+        val builder = BUILDER.get()
+        builder.reset()
+        val doc: Document = builder.parse(ByteArrayInputStream(data))
         return El(doc.documentElement)
     }
 

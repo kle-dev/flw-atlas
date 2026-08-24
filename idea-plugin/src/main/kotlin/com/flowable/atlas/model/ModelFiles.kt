@@ -2,6 +2,7 @@ package com.flowable.atlas.model
 
 import com.flowable.atlas.settings.FlowableAtlasSettings
 import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.vfs.VirtualFile
 
 /**
@@ -29,6 +30,8 @@ object ModelFiles {
     private fun designIndexingEnabled(): Boolean =
         try {
             FlowableAtlasSettings.getInstance().indexDesignWorkspace
+        } catch (pce: ProcessCanceledException) {
+            throw pce                      // a cancelled action is not a failure
         } catch (e: Exception) {
             if (!settingsReadFailed) {
                 settingsReadFailed = true

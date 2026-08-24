@@ -4,7 +4,9 @@
 <idea-plugin require-restart="true">
     <id>com.flowable.atlas</id>
     <name>Flowable Atlas</name>
-    <version>0.10.4</version>
+    <!-- No <version> here on purpose: patchPluginXml injects the Gradle project version at build
+         time (root build.gradle.kts → allprojects { version }). A literal here is dead text that
+         drifts — this one had been reading 0.10.4 since three releases ago. -->
     <vendor email="kevin.klever@flowable.com" url="https://www.flowable.com">Flowable</vendor>
 
     <description><![CDATA[
@@ -127,6 +129,59 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.14.0</h3>
+        <ul>
+          <li><b>Atlas can update itself</b> — with no Marketplace listing, nothing ever told you a new
+              version existed; the ZIP you installed months ago just kept running, silently old. Every
+              release now publishes a custom plugin repository, so adding one URL under <i>Settings →
+              Plugins → ⚙ → Manage Plugin Repositories…</i> puts Atlas in the normal update flow — update
+              badge, one click, no download. The URL always resolves to the newest release, and the
+              compatibility range in it is read out of the built plugin rather than written by hand, so it
+              cannot advertise a version the IDE would then refuse to install.</li>
+          <li><b>Cancelling is no longer reported as a failure</b> — pressing <i>Cancel</i> on a running
+              Atlas action told you it had broken. Generating the explorer or the artifact set said
+              <i>"Failed to generate the Atlas explorer"</i>, a Design pull or connection test said
+              <i>"Design request failed"</i>, and an Inspect evaluation reported an empty error. All three
+              were the cancellation itself being caught and dressed up as an error. Eleven places that catch
+              broadly now let a cancellation through untouched. The same bug had a quieter form in the
+              editor: when a background scan was cancelled mid-inspection, the <i>implicit usage</i> check
+              read that as "no index", and a class referenced only from a model could be greyed out as
+              unused.</li>
+          <li><b>Find Usages no longer blocks typing</b> — invoking <i>Find Usages</i> on a delegate class
+              or bean while the model index was cold built the whole index while holding the read lock, so
+              every keystroke and file refresh queued behind a full model scan. The lookup now reads the PSI
+              under a short lock, builds the index outside it, and takes the lock again only to report
+              results. The index service had always split itself this way internally; this one caller had
+              been wrapping the whole thing back up again.</li>
+          <li><b>Stricter XML parsing</b> — model files are treated as untrusted input, and the parser said
+              so, but only <i>external</i> DTDs and entities were actually refused. An internal DTD subset
+              still expanded, which is the shape a decompression-bomb document takes. A <code>DOCTYPE</code>
+              is now rejected outright — real model files never carry one. The parser also gets one instance
+              per thread instead of one shared across the IDE's index scan and the CLI's walk, where neither
+              class is specified as thread-safe.</li>
+          <li><b>Releases can be signed</b> — Atlas installs by side-loading a ZIP, with no Marketplace
+              vouching for it, so nothing distinguished our build from a substituted one. Release artifacts
+              are now signed when a key is configured, and the signature is verified before publishing.
+              <code>SHA256SUMS.txt</code> alone could never establish this: whoever can replace the download
+              can replace its checksum line in the same breath.</li>
+          <li><b>Attribution for the embedded typeface</b> — the explorer HTML embeds the Geist font, which
+              ships under the SIL Open Font License and obliges its notice to travel with the font. Because
+              a generated <code>.explorer.html</code> is a redistribution with no repository attached, the
+              notice now lives inside the generated stylesheet as well as in the new
+              <code>THIRD-PARTY-NOTICES.md</code>. The repository <code>LICENSE</code> had also claimed that
+              everything in it was Flowable AG's property, which stopped being true the day the font was
+              embedded; it now carves out the two third-party components and says in plain words that the
+              source is readable, not usable.</li>
+          <li><b><code>SECURITY.md</code> and <code>CONTRIBUTING.md</code></b> — a security problem now has
+              somewhere to go that is not a public issue, together with the design decisions worth knowing
+              before reporting one (Atlas transmits nothing on its own, credentials live in the
+              PasswordSafe, generated artifacts contain your project's data by construction).
+              <code>CONTRIBUTING.md</code> is honest about what the licence permits and documents the build,
+              the release gates and which files are generated rather than written.</li>
+          <li><b>Placeholder keys everywhere</b> — every example model key, namespace and table name in the
+              code, tests and documentation is a <code>DEMO-*</code> placeholder. Some had been carried over
+              from a real project, and this repository is public.</li>
+        </ul>
         <h3>0.13.0</h3>
         <ul>
           <li><b>Report a problem straight from the error dialog</b> — an Atlas exception used to reach the
@@ -479,109 +534,6 @@
               · data-object</i>); search also matches form field ids/labels, app variables, agent tools,
               policy permissions and dictionary types; user tasks pick up due date / priority /
               category.</li>
-        </ul>
-        <h3>0.10.9</h3>
-        <ul>
-          <li><b>In/out parameters are mapped and searchable</b> — Atlas now reads every variable mapping a
-              model passes into, or takes back out of, the things it calls: call activities and process/case
-              tasks (<code>flowable:in</code>/<code>out</code>), Service-Registry, Agent, Data-Object and
-              HTTP tasks (<code>inputParameter</code> / <code>outputParameter</code> /
-              <code>errorOutputParameter</code> / <code>outputVariableName</code>), Send-/Receive-Event
-              tasks (<code>eventInParameter</code> / <code>eventOutParameter</code>), Init-Variables
-              (<code>variableMapping</code>), result variables, and Action Bots
-              (<code>signalVariableNames</code>, bot <code>config</code>, <code>flw.getInput</code> /
-              <code>flw.setOutput</code>). Previously only <code>flowable:in</code>/<code>out</code> on a
-              call activity or a CMMN process/case task was read at all.</li>
-          <li><b>See them</b> — a node's detail view gets a <i>Parameters</i> section grouped per element
-              with direction and <code>source → target</code> (variable names link to the variable), a
-              collapsed <i>Field injections</i> section for a task's static configuration (an HTTP task's
-              request URL/method), and each <code>.service</code> operation now shows its declared
-              <b>outputs</b> next to its inputs.</li>
-          <li><b>Find them</b> — ⌘K/Ctrl-K matches parameter names on both sides of a mapping (the caller's
-              variable <i>and</i> the callee's contract name) and shows which mapping matched; a variable's
-              detail view lists every mapping that reads or writes it, and a new <i>Variable · parameter</i>
-              sidebar category collects the variables that travel through one.</li>
-          <li><b>Form and page buttons too</b> — an Action, REST, Service, Agent or Create-Instance button's
-              <i>Send payload map</i> and <i>Store response attributes</i> (<code>sendPayloadMapping</code>
-              / <code>responsePayloadMapping</code> / <code>errorResponsePayloadMapping</code>, plus REST
-              headers) are read and shown on the form. Previously only the button's
-              <code>actionDefinitionKey</code> was, so the values it actually passes to the bot were
-              invisible.</li>
-          <li><b>Every parameter group names what it calls</b> — <code>→ notifyCustomerAction</code>,
-              <code>→ custSvc</code>, <code>→ subProcess</code>, an HTTP task's URL — with a link to that
-              model when it is part of the project. And any called model (action, agent, service, data
-              object, process, case, event, bot) gets the mirror view, <b>Called with</b>, listing what each
-              caller sends — handy for checking that the names match a script's <code>flw.getInput(…)</code>
-              or a service operation's declared inputs.</li>
-          <li><b>Detail pages fold up</b> — every section is collapsible and starts collapsed (except the
-              diagram), so a node with 35 parameters stays skimmable. What you open stays open as you walk
-              the graph, there is an <i>expand all</i> control, and a long parameter list gets its own text
-              filter plus in / out / error direction chips.</li>
-          <li><b>Search jumps to the row</b> — picking a ⌘K/Ctrl-K hit now scrolls to the matching
-              parameter, expands its section and highlights it instead of dropping you at the top of the
-              page. The term rides along in the link, so <i>copy link</i> reproduces the highlight.</li>
-          <li><b>Diagrams show what each element is</b> — every shape now carries its Flowable type icon
-              (User task, Service task, Service registry, AI Agent, Data object, HTTP, Script, Email, Timer
-              / Message / Signal / Error events, …) plus the BPMN markers that belong to it: multi-instance,
-              loop, a dashed non-interrupting boundary event, and a thick-bordered call activity instead of
-              a sub-process marker. Hovering a shape names it in <b>Flowable Design's own words</b> ("Lookup
-              customer — Service registry task"). The type comes from the Design stencil the model was drawn
-              from, falling back to <code>flowable:type</code> and then to the element itself, so both app
-              exports and Design workspace models are covered.</li>
-          <li><b>Diagram zoom and full screen</b> — zoom / fit buttons, scroll-to-zoom and drag-to-pan, and
-              a full-screen view (<code>+</code> / <code>−</code> / <code>0</code>, Esc closes) for the
-              diagrams that were simply too small to read in the panel.</li>
-          <li><b>Design's vocabulary, with explanations</b> — node types, element types, parameter kinds and
-              relationships are now named as Design names them (<i>Decision tables</i>, <i>AI agents</i>,
-              <i>Services</i>, <i>Send payload map</i>, <i>Decision task → decision table</i>) instead of
-              Atlas's internal keys, and each carries a hover text saying what it means.</li>
-          <li><b>Also fixed</b> — a BPMN Service-Registry or Agent task's <code>serviceMapping</code> /
-              <code>agentMapping</code> is now read (only the CMMN side was), so it links to the service or
-              agent model and counts towards that operation's usages. Same for an <b>agent button</b> on a
-              form, whose agent-model reference was not recorded at all.</li>
-        </ul>
-        <h3>0.10.8</h3>
-        <ul>
-          <li><b>Recognize model keys anywhere in code</b> (opt-in) — enable <i>Settings → Tools → Flowable
-              Atlas → "Recognize model keys anywhere in code"</i> and any Java string literal whose value
-              equals a known model key gets the diagram gutter icon, Ctrl-click navigation, Find Usages and
-              hover — not only at a recognised Flowable API call like
-              <code>startProcessInstanceByKey("…")</code>. Off by default; matches on value alone.</li>
-          <li><b>Diagrams for models inside an app archive</b> — a process/case/decision packaged in a
-              <code>.zip</code>/<code>.bar</code>/Design app export now renders its diagram in the generated
-              Explorer HTML and the <i>Diagrams (SVG)</i> artifact, the same as a loose model file;
-              previously archived models showed no diagram section.</li>
-          <li><b>Version at a glance</b> — the generated Explorer HTML footer and the Atlas Hub now show the
-              Atlas version, so it's clear which build produced a given page.</li>
-        </ul>
-        <h3>0.10.7</h3>
-        <ul>
-          <li><b>Diagrams render from the model layout</b> — the model-diagram gutter icon no longer depends
-              on a <code>.svg</code> bundled by the Design export (newer Design exports no longer ship one).
-              Atlas now renders the process / case / decision diagram itself from the model's BPMN/CMMN/DMN
-              diagram-interchange layout — reading either deployment XML (<code>bpmndi</code>) or
-              Design-workspace JSON (ORYX) — and still prefers a bundled <code>.svg</code> when one is
-              present. The same rendering is available as a <b>Diagrams (SVG)</b> generation artifact and is
-              embedded in each node's detail view in the Explorer HTML.</li>
-        </ul>
-        <h3>0.8.8</h3>
-        <ul>
-          <li><b>Payload scope in the Expression Playground</b> — evaluate a frontend expression as a
-              component <i>inside a subform or list</i> would see it: enter a payload node path (e.g.
-              <code>orders[2].items[0]</code>) or place the caret on the node and hit <i>From Caret</i>.
-              <code>$item</code>, <code>$index</code> and the chained <code>$itemParent</code> are bound
-              exactly like the form runtime binds them; <code>root</code> and <code>$payload</code> stay
-              absolute. The scoped node is highlighted in the payload editor, and a path that no longer
-              resolves is flagged on the field and reported as the evaluation result.</li>
-          <li><b>Resizable playground panels</b> — the divider between the expression editor and the
-              payload/scope card is now grabbable (drag it to trade width when docked side-by-side, or
-              height when stacked), and the frontend evaluation result sits under the payload behind its own
-              drag handle so a large payload can be given more room; it still scrolls.</li>
-        </ul>
-        <h3>0.8.7</h3>
-        <ul>
-          <li><b>“Last scanned” time on the Model Index</b> — the Atlas Hub now shows when the model index
-              was last built, next to the model count, so you can tell how fresh it is.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

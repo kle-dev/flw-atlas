@@ -30,17 +30,38 @@ import com.intellij.util.Processor
  */
 class FlowableModelUsageSearcher : CustomUsageSearcher() {
 
+    /** What one Find Usages run needs from the PSI element — read once, under a read action. */
+    private data class Subject(
+        val botKey: String?,
+        val endpoints: List<EndpointPsi.Endpoint>,
+        val names: Set<String>,
+    )
+
     override fun processElementUsages(element: PsiElement, processor: Processor<in Usage>, options: FindUsagesOptions) {
+        val project = element.project
+        if (project.isDisposed) return
+
+        // Phase 1 — PSI only, under a short read action.
+        val subject = ReadAction.computeBlocking<Subject, RuntimeException> {
+            Subject(
+                botKey = (element as? PsiClass)?.let { BotPsi.botKeyOf(it) },
+                endpoints = (element as? PsiMethod)?.let { EndpointPsi.endpointsOf(it) }.orEmpty(),
+                names = ModelReferenceScan.namesOf(element),
+            )
+        }
+        val (botKey, endpoints, names) = subject
+        if (botKey == null && endpoints.isEmpty() && names.isEmpty()) return
+
+        // Phase 2 — the index, deliberately OUTSIDE any read action. On a cold cache this is a full
+        // model scan, and holding the read lock across it makes every write action (typing, a VFS
+        // refresh) queue behind Find Usages. FlowableModelIndexService already splits itself into a
+        // short read action for collecting the files and a lock-free parse; that split only buys
+        // anything if the caller does not wrap the whole thing in a read action again.
+        val index = project.service<FlowableModelIndexService>().index()
+
+        // Phase 3 — reporting, back under a read action (PsiManager / PsiFile / UsageInfo).
         ReadAction.runBlocking<RuntimeException> {
-            val project = element.project
             if (project.isDisposed) return@runBlocking
-
-            val botKey = (element as? PsiClass)?.let { BotPsi.botKeyOf(it) }
-            val endpoints = (element as? PsiMethod)?.let { EndpointPsi.endpointsOf(it) }.orEmpty()
-            val names = ModelReferenceScan.namesOf(element)
-            if (botKey == null && endpoints.isEmpty() && names.isEmpty()) return@runBlocking
-
-            val index = project.service<FlowableModelIndexService>().index()
             val psiManager = PsiManager.getInstance(project)
 
             // Bot class → the .action models that invoke it (matched by botKey).

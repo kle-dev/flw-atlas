@@ -50,3 +50,8 @@ lib/*.jar
 !core/src/test/resources/golden/*.summary.md
 !core/src/test/resources/golden/*.overview.md
 !core/src/test/resources/golden/*.graph.json
+
+# Plugin-signing material — never committed (see idea-plugin/build.gradle.kts).
+*.pem
+*.crt
+*.p12

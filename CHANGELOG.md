@@ -12,6 +12,50 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.14.0
+
+- **Atlas can update itself** — with no Marketplace listing, nothing ever told you a new version existed;
+  the ZIP you installed months ago just kept running, silently old. Every release now publishes a custom
+  plugin repository, so adding one URL under *Settings → Plugins → ⚙ → Manage Plugin Repositories…* puts
+  Atlas in the normal update flow — update badge, one click, no download. The URL always resolves to the
+  newest release, and the compatibility range in it is read out of the built plugin rather than written
+  by hand, so it cannot advertise a version the IDE would then refuse to install.
+- **Cancelling is no longer reported as a failure** — pressing *Cancel* on a running Atlas action told you it
+  had broken. Generating the explorer or the artifact set said *"Failed to generate the Atlas explorer"*, a
+  Design pull or connection test said *"Design request failed"*, and an Inspect evaluation reported an empty
+  error. All three were the cancellation itself being caught and dressed up as an error. Eleven places that
+  catch broadly now let a cancellation through untouched. The same bug had a quieter form in the editor: when
+  a background scan was cancelled mid-inspection, the *implicit usage* check read that as "no index", and a
+  class referenced only from a model could be greyed out as unused.
+- **Find Usages no longer blocks typing** — invoking *Find Usages* on a delegate class or bean while the model
+  index was cold built the whole index while holding the read lock, so every keystroke and file refresh queued
+  behind a full model scan. The lookup now reads the PSI under a short lock, builds the index outside it, and
+  takes the lock again only to report results. The index service had always split itself this way internally;
+  this one caller had been wrapping the whole thing back up again.
+- **Stricter XML parsing** — model files are treated as untrusted input, and the parser said so, but only
+  *external* DTDs and entities were actually refused. An internal DTD subset still expanded, which is the shape
+  a decompression-bomb document takes. A `DOCTYPE` is now rejected outright — real model files never carry one.
+  The parser also gets one instance per thread instead of one shared across the IDE's index scan and the CLI's
+  walk, where neither class is specified as thread-safe.
+- **Releases can be signed** — Atlas installs by side-loading a ZIP, with no Marketplace vouching for it, so
+  nothing distinguished our build from a substituted one. Release artifacts are now signed when a key is
+  configured, and the signature is verified before publishing. `SHA256SUMS.txt` alone could never establish
+  this: whoever can replace the download can replace its checksum line in the same breath.
+- **Attribution for the embedded typeface** — the explorer HTML embeds the Geist font, which ships under the
+  SIL Open Font License and obliges its notice to travel with the font. Because a generated `.explorer.html`
+  is a redistribution with no repository attached, the notice now lives inside the generated stylesheet as
+  well as in the new `THIRD-PARTY-NOTICES.md`. The repository `LICENSE` had also claimed that everything in
+  it was Flowable AG's property, which stopped being true the day the font was embedded; it now carves out
+  the two third-party components and says in plain words that the source is readable, not usable.
+- **`SECURITY.md` and `CONTRIBUTING.md`** — a security problem now has somewhere to go that is not a public
+  issue, together with the design decisions worth knowing before reporting one (Atlas transmits nothing on its
+  own, credentials live in the PasswordSafe, generated artifacts contain your project's data by construction).
+  `CONTRIBUTING.md` is honest about what the licence permits and documents the build, the release gates and
+  which files are generated rather than written.
+- **Placeholder keys everywhere** — every example model key, namespace and table name in the code, tests and
+  documentation is a `DEMO-*` placeholder. Some had been carried over from a real project, and this repository
+  is public.
+
 ## 0.13.0
 
 - **Report a problem straight from the error dialog** — an Atlas exception used to reach the IDE's generic

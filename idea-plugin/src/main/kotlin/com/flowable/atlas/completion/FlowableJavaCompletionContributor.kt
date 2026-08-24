@@ -21,6 +21,7 @@ import com.intellij.codeInsight.lookup.LookupElement
 import com.intellij.codeInsight.lookup.LookupElementBuilder
 import com.intellij.codeInsight.lookup.LookupElementWeigher
 import com.intellij.openapi.components.service
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 import com.intellij.psi.codeStyle.CodeStyleManager
 import com.intellij.openapi.util.Key
@@ -124,6 +125,8 @@ class FlowableJavaCompletionContributor : CompletionContributor() {
             val default = CompletionSorter.defaultSorter(parameters, matcher)
             return try {
                 default.weighBefore("priority", weigher)
+            } catch (pce: ProcessCanceledException) {
+                throw pce                      // a cancelled action is not a failure
             } catch (e: Throwable) {
                 default.weighBefore("stats", weigher)
             }

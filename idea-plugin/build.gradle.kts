@@ -112,6 +112,51 @@ intellijPlatform {
         }
     }
 
+    // Plugin signing. OPTIONAL, and off unless a key is actually configured — a hard requirement
+    // here would break `./gradlew build` on every machine that has no signing key, which is all of
+    // them except the release one.
+    //
+    // Why sign at all without a Marketplace: Atlas is side-loaded from a ZIP off the Releases page.
+    // The Marketplace would otherwise be the thing vouching that the bytes are ours; with no
+    // Marketplace in the path, the signature is. It makes tampering between "we built it" and
+    // "a colleague installs it" detectable, which SHA256SUMS.txt cannot do on its own — whoever can
+    // replace the asset can replace its checksum line in the same breath.
+    //
+    // Two ways in, because CI and a laptop hold the key differently:
+    //
+    //   * ATLAS_CERTIFICATE_CHAIN / ATLAS_PRIVATE_KEY hold the PEM *contents*. That is the shape a
+    //     GitHub Actions secret has — there is no file to point at on a fresh runner.
+    //   * -Patlas.signing.certificateChainFile / privateKeyFile hold *paths*, for a local release
+    //     build where the key sits on disk and must not be pasted into a shell.
+    //
+    // The PASSWORD should always come from ATLAS_PRIVATE_KEY_PASSWORD, never from -Patlas.signing.password:
+    // Gradle prints its own command line at --info, so the property form puts the passphrase in the build
+    // log and in shell history. (The zip-signer subprocess still receives it as an argument, so it is
+    // visible to `ps` for the moment it runs — that is the tool's design and not something this build can
+    // fix; the property form simply adds two more places it leaks to.)
+    //
+    // One-time key generation (both files stay out of the repository — .gitignore covers *.pem/*.crt):
+    //   openssl genpkey -algorithm RSA -out private.pem -aes-256-cbc -pkeyopt rsa_keygen_bits:4096
+    //   openssl req -key private.pem -new -x509 -days 3650 -out chain.crt \
+    //           -subj "/CN=Flowable Atlas/O=Flowable AG/C=CH"
+    signing {
+        val chainText = providers.environmentVariable("ATLAS_CERTIFICATE_CHAIN")
+        val keyText = providers.environmentVariable("ATLAS_PRIVATE_KEY")
+        val chainPath = providers.gradleProperty("atlas.signing.certificateChainFile")
+        val keyPath = providers.gradleProperty("atlas.signing.privateKeyFile")
+
+        if (chainText.isPresent && keyText.isPresent) {
+            certificateChain = chainText.get()
+            privateKey = keyText.get()
+        } else if (chainPath.isPresent && keyPath.isPresent) {
+            certificateChainFile = file(chainPath.get())
+            privateKeyFile = file(keyPath.get())
+        }
+        providers.environmentVariable("ATLAS_PRIVATE_KEY_PASSWORD")
+            .orElse(providers.gradleProperty("atlas.signing.password"))
+            .orNull?.let { password = it }
+    }
+
     // Not needed for this plugin; disabling avoids slow/headless build steps.
     buildSearchableOptions = false
     instrumentCode = false
@@ -119,11 +164,13 @@ intellijPlatform {
     pluginConfiguration {
         ideaVersion {
             sinceBuild = "261"   // 2026.1 — the branch :idea-plugin compiles against (the floor)
-            // Deliberately wide, NOT the last verified branch. Atlas ships as a ZIP committed to
-            // idea-plugin/dist/ with no Marketplace update channel, so a tight until-build would not
-            // produce JetBrains' intended "update the plugin" prompt — it would just make Atlas vanish
-            // from every colleague's IDE on the day they upgrade the IDE, unrecoverable until a new ZIP
-            // is built and pulled. Staying loadable is the right trade-off for that distribution model.
+            // Deliberately wide, NOT the last verified branch — and still wide now that a custom plugin
+            // repository exists (see scripts/make-update-plugins.mjs and the release job). The channel
+            // changes the argument but not the conclusion: a tight until-build WOULD now produce
+            // JetBrains' intended "update available" prompt, but only for someone who has added the
+            // repository URL. For everyone who has not — and adoption of an opt-in URL is never
+            // complete — it would still make Atlas silently vanish on the day they upgrade the IDE,
+            // unrecoverable until a new release exists. Staying loadable is the better failure mode.
             //
             // The compatibility claim is kept honest in code instead: AtlasPlatformSupport states the
             // range actually covered by `verifyPlugin` and the Atlas Hub footer says so, flagging the
@@ -162,3 +209,41 @@ tasks.named<org.gradle.api.tasks.bundling.Zip>("buildPlugin") {
 // had no ZIP to upload. Wiring it here keeps the local build and CI producing the same thing, instead of
 // the workflow having to know about a module-specific task.
 tasks.named("build") { dependsOn("buildPlugin") }
+
+// Whether a signing key was supplied, by either of the two routes the `signing { }` block accepts.
+val signingConfigured = providers.environmentVariable("ATLAS_CERTIFICATE_CHAIN").isPresent ||
+    providers.gradleProperty("atlas.signing.certificateChainFile").isPresent
+
+// Skip cleanly instead of failing, so `build` works on a machine with no key — which is every machine
+// except the release one.
+tasks.named("signPlugin") { onlyIf { signingConfigured } }
+
+// verifyPluginSignature reads signPlugin's output, but the platform plugin wires no dependency between
+// them. Without this line Gradle is free to schedule the verification FIRST, where the signed archive
+// does not exist yet — and a task with no input is not a failure, it is NO-SOURCE. The release job
+// would then report a green "Verify the signature" step having verified nothing at all, which is worse
+// than not checking: it is a check that reports success by default. (Observed exactly that before the
+// dependency was added.) onlyIf keeps it honest in the other direction — nothing to verify when nothing
+// was signed.
+tasks.named<org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginSignatureTask>("verifyPluginSignature") {
+    onlyIf { signingConfigured }
+    // Both lines are needed. dependsOn alone still left the task NO-SOURCE, because its @InputFile was
+    // never pointed at signPlugin's output — so wiring the file is what actually gives it something to
+    // verify, and the dependency is what guarantees that file exists by the time it looks.
+    val sign = tasks.named<org.jetbrains.intellij.platform.gradle.tasks.SignPluginTask>("signPlugin")
+    inputArchiveFile.convention(sign.flatMap { it.signedArchiveFile })
+    certificateChainFile.convention(sign.flatMap { it.certificateChainFile })
+    certificateChain.convention(sign.flatMap { it.certificateChain })
+    dependsOn(sign)
+}
+
+// …but never skip *quietly*. A silent no-op is how an unsigned ZIP ends up on a Releases page that is
+// believed to be signed. The warning cannot live in the onlyIf above: Gradle evaluates those specs
+// during up-to-date checking and swallows their output at the default log level (verified — the
+// message never appeared). The task graph is the first point where saying it is guaranteed to be seen,
+// and asking there also means the warning only fires when signing was actually requested.
+gradle.taskGraph.whenReady {
+    if (!signingConfigured && hasTask("${project.path}:signPlugin")) {
+        logger.warn("signPlugin: no signing key configured — the plugin ZIP will be UNSIGNED.")
+    }
+}

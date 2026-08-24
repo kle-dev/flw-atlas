@@ -5,6 +5,7 @@ import com.flowable.atlas.parsing.ModelJsonReader
 import com.flowable.atlas.parsing.OperationInfo
 import com.flowable.atlas.parsing.ServiceTable
 import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.vfs.VirtualFile
 
 /**
@@ -19,6 +20,8 @@ object JsonUtil {
     private fun bytesOf(file: VirtualFile): ByteArray? =
         try {
             file.contentsToByteArray()
+        } catch (pce: ProcessCanceledException) {
+            throw pce                      // a cancelled action is not a failure
         } catch (e: Exception) {
             LOG.debug("unreadable model json ${file.path}", e)
             null

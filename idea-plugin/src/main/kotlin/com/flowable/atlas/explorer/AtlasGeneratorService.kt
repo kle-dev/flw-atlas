@@ -11,6 +11,7 @@ import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.project.Project
 import java.io.File
@@ -47,6 +48,8 @@ class AtlasGeneratorService(private val project: Project) {
             outputHtml.toFile().writeText(html, Charsets.UTF_8)
 
             Outcome.Success(outputHtml, listOf(outputHtml), summaryLog(result))
+        } catch (pce: ProcessCanceledException) {
+            throw pce                      // a cancelled action is not a failure
         } catch (e: Exception) {
             LOG.warn("Atlas explorer generation failed", e)
             Outcome.Failure("Failed to generate the Atlas explorer: ${e.message}", e.stackTraceToString())
@@ -100,6 +103,8 @@ class AtlasGeneratorService(private val project: Project) {
             }
             val explorer = written.firstOrNull { it.fileName.toString().endsWith(".explorer.html") }
             Outcome.Success(explorer, written, summaryLog(result))
+        } catch (pce: ProcessCanceledException) {
+            throw pce                      // a cancelled action is not a failure
         } catch (e: Exception) {
             LOG.warn("Atlas artifact generation failed", e)
             Outcome.Failure("Failed to generate the Atlas artifacts: ${e.message}", e.stackTraceToString())

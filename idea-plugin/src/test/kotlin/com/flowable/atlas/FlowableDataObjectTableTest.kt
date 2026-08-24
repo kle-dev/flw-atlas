@@ -21,7 +21,7 @@ class FlowableDataObjectTableTest : BasePlatformTestCase() {
         )
         myFixture.addFileToProject(
             "models/customer.service",
-            """{ "key": "demo-customer-svc", "type": "database", "tableName": "CMM_CUSTOMER", "columnMappings": [] }""",
+            """{ "key": "demo-customer-svc", "type": "database", "tableName": "DEMO_CUSTOMER", "columnMappings": [] }""",
         )
     }
 
@@ -29,7 +29,7 @@ class FlowableDataObjectTableTest : BasePlatformTestCase() {
         addModels()
         val service = project.service<FlowableModelIndexService>()
         service.index()
-        assertEquals("CMM_CUSTOMER", service.dataObjectTables()["demo-customer"])
+        assertEquals("DEMO_CUSTOMER", service.dataObjectTables()["demo-customer"])
     }
 
     fun testHoverShowsTableForPlainDataObjectKeyString() {
@@ -42,6 +42,6 @@ class FlowableDataObjectTableTest : BasePlatformTestCase() {
 
         val doc = FlowableKeyDocumentationProvider().generateDoc(literal, literal)
         assertNotNull("data-object key constant should get hover docs", doc)
-        assertTrue("hover should show the physical table: $doc", doc!!.contains("CMM_CUSTOMER"))
+        assertTrue("hover should show the physical table: $doc", doc!!.contains("DEMO_CUSTOMER"))
     }
 }

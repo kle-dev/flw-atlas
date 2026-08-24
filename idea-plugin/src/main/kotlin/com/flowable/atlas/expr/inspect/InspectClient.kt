@@ -2,6 +2,7 @@ package com.flowable.atlas.expr.inspect
 
 import com.intellij.openapi.diagnostic.logger
 import com.flowable.atlas.model.MiniJson
+import com.intellij.openapi.progress.ProcessCanceledException
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -133,6 +134,8 @@ object InspectClient {
                 resp.statusCode() == 404 -> Outcome.Failed("Endpoint not found — is this a Flowable app with Inspect enabled? (HTTP 404)")
                 else -> Outcome.Failed("HTTP ${resp.statusCode()}: ${resp.body().take(200)}")
             }
+        } catch (pce: ProcessCanceledException) {
+            throw pce                      // a cancelled action is not a failure
         } catch (e: Exception) {
             LOG.warn("Inspect evaluation failed", e)
             Outcome.Failed(e.message ?: e.javaClass.simpleName)

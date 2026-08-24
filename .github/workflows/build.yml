@@ -149,6 +149,13 @@ jobs:
     permissions:
       # The only job that writes. Creating a release and uploading assets needs it; nothing else here does.
       contents: write
+    # Mapped here, not per step: the `secrets` context is NOT available in a step's `if:` (only
+    # github/needs/strategy/matrix/job/runner/env/vars/steps/inputs are), so "was a key configured?"
+    # has to be asked of `env`. Unset secrets arrive as empty strings, which is exactly the test below.
+    env:
+      ATLAS_CERTIFICATE_CHAIN: ${{ secrets.ATLAS_CERTIFICATE_CHAIN }}
+      ATLAS_PRIVATE_KEY: ${{ secrets.ATLAS_PRIVATE_KEY }}
+      ATLAS_PRIVATE_KEY_PASSWORD: ${{ secrets.ATLAS_PRIVATE_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -163,15 +170,49 @@ jobs:
 
       # Built here rather than downloaded from the `build` job: the release assets must come from a
       # checkout of the tag itself, so what is published is exactly what the tag names.
+      #
+      # signPlugin is a no-op unless the three secrets below are set, and it says so in the log rather
+      # than quietly shipping an unsigned ZIP (see the onlyIf in idea-plugin/build.gradle.kts). Atlas is
+      # installed by side-loading a ZIP, with no Marketplace vouching for it — the signature is what
+      # makes tampering between this runner and a colleague's IDE detectable. SHA256SUMS.txt cannot do
+      # that job alone: whoever can replace the asset can replace its checksum line too.
       - name: Build release artifacts
-        run: ./gradlew :idea-plugin:buildPlugin :cli:shadowJar
+        run: ./gradlew :idea-plugin:buildPlugin :idea-plugin:signPlugin :cli:shadowJar
+
+      # Only meaningful when a key was configured; skipped otherwise so an unsigned release still works.
+      - name: Verify the signature
+        if: env.ATLAS_CERTIFICATE_CHAIN != ''
+        run: ./gradlew :idea-plugin:verifyPluginSignature --stacktrace
 
       - name: Collect artifacts and checksums
         run: |
           set -euo pipefail
           mkdir -p release
-          cp idea-plugin/build/distributions/*.zip release/
+          # When signing ran, the signed ZIP REPLACES the unsigned one under the plain release name, so
+          # there is exactly one plugin ZIP on the page and nobody has to choose. Two downloads that
+          # differ only by a "-signed" suffix is how the unsigned one gets installed by accident.
+          SIGNED="$(ls idea-plugin/build/distributions/*-signed.zip 2>/dev/null | head -1 || true)"
+          if [ -n "$SIGNED" ]; then
+            cp "$SIGNED" "release/$(basename "${SIGNED%-signed.zip}.zip")"
+            echo "signed plugin ZIP: $SIGNED"
+          else
+            cp idea-plugin/build/distributions/*.zip release/
+            echo "::warning::No signing key configured — publishing an UNSIGNED plugin ZIP."
+          fi
           cp cli/build/libs/*-all.jar release/
+
+          # The custom plugin repository. Published as a release asset rather than to GitHub Pages so it
+          # has a URL that never changes — /releases/latest/download/ always resolves to the newest
+          # release — and so it cannot collide with whatever else the Pages site deploys (a Pages
+          # deployment replaces the whole site, so two workflows publishing there fight each other).
+          # Generated from the PATCHED descriptor, so the compatibility range can never drift from the
+          # plugin it advertises; see scripts/make-update-plugins.mjs for why that matters.
+          TAG="${GITHUB_REF_NAME#v}"
+          node scripts/make-update-plugins.mjs \
+            idea-plugin/build/tmp/patchPluginXml/plugin.xml \
+            "https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/flowable-atlas-$TAG.zip" \
+            release/updatePlugins.xml
+
           # Checksum written outside the directory first, then moved in: `sha256sum * > SHA256SUMS.txt`
           # inside it can hash its own (just-truncated) output, depending on when the shell sets up the
           # redirection relative to expanding the glob.
@@ -194,10 +235,30 @@ jobs:
             exit 1
           fi
 
+      # The notes live in a YAML block scalar rather than a shell heredoc: inside `run: |` a heredoc
+      # line starting with `*` (bold Markdown) is read by the YAML parser as an alias and breaks the
+      # file. Indented under `env:` the same text is inert, and the shell just expands one variable.
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          NOTES: |
+            **Stay up to date automatically** — add this URL once, under
+            *Settings → Plugins → ⚙ → Manage Plugin Repositories…*:
+
+                https://github.com/${{ github.repository }}/releases/latest/download/updatePlugins.xml
+
+            Atlas then joins the normal IDE update flow: a new release shows up as an available update,
+            with no download and no *Install from Disk*. The URL is stable — it always resolves to the
+            newest release.
+
+            **Or install by hand** — download the ZIP and use
+            *Settings → Plugins → ⚙ → Install Plugin from Disk…*, then restart the IDE.
+
+            **CLI** — `java -jar cli-*-all.jar <project> --all` (needs a JRE 21+).
+
+            Checksums are in `SHA256SUMS.txt`; the full history is in
+            [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md).
         run: |
           gh release create "$GITHUB_REF_NAME" release/* \
             --title "Flowable Atlas $GITHUB_REF_NAME" \
-            --notes "Install the plugin: download the ZIP and use Settings → Plugins → ⚙ → Install Plugin from Disk. Run the CLI: \`java -jar cli-*-all.jar <project> --all\`. Checksums are in SHA256SUMS.txt; the full history is in CHANGELOG.md."
+            --notes "$NOTES"
