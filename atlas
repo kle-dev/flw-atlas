@@ -65,16 +65,19 @@ JAR="$(find_jar || true)"
 if [[ -z "${JAR:-}" ]]; then
   # No jar found: build it (convenient on a dev machine with network). Set ATLAS_NO_BUILD=1 to skip
   # the build on a locked-down/offline machine, where `./gradlew` would otherwise hang trying to
-  # reach Maven Central / the Gradle Plugin Portal (there, `git pull` fetches lib/cli-<version>-all.jar).
+  # reach Maven Central / the Gradle Plugin Portal. There, download the jar from the GitHub Releases
+  # page into lib/ instead — it is no longer committed to the repository (see lib/README.md).
   if [[ "${ATLAS_NO_BUILD:-0}" == "1" ]]; then
     echo "error: no Atlas CLI jar found and ATLAS_NO_BUILD=1 is set." >&2
-    echo "  Fetch the committed jar with 'git pull' (lib/cli-<version>-all.jar), or set ATLAS_JAR=/path/to/cli-all.jar." >&2
+    echo "  Download cli-<version>-all.jar from the GitHub Releases page into lib/, or set" >&2
+    echo "  ATLAS_JAR=/path/to/cli-all.jar. See lib/README.md." >&2
     exit 1
   fi
   echo "▶ No prebuilt Atlas jar found — building it with Gradle (first run)." >&2
   echo "  This needs network access (Maven Central + Gradle Plugin Portal). If it hangs on an" >&2
-  echo "  offline/locked-down machine: Ctrl-C, then 'git pull' (ships lib/cli-<version>-all.jar)" >&2
-  echo "  or set ATLAS_JAR=/path/to/cli-all.jar (and ATLAS_NO_BUILD=1 to skip this build next time)." >&2
+  echo "  offline/locked-down machine: Ctrl-C, then download cli-<version>-all.jar from the GitHub" >&2
+  echo "  Releases page into lib/, or set ATLAS_JAR=/path/to/cli-all.jar (and ATLAS_NO_BUILD=1 to" >&2
+  echo "  skip this build next time). See lib/README.md." >&2
   (cd "$SCRIPT_DIR" && ./gradlew --console=plain -q :cli:shadowJar)
   JAR="$(find_jar || true)"
 fi
