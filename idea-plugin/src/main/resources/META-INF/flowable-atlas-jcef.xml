@@ -1,0 +1,6 @@
+<!-- Optional-dependency descriptor for the bundled JCEF plugin (2026.2+, see plugin.xml). It adds no
+     extensions of its own: the platform requires a config-file for an optional <depends>, and the
+     point here is purely the classloader link that makes com.intellij.ui.jcef.* visible once JCEF
+     lives in its own plugin. Everything JCEF-related stays registered unconditionally in plugin.xml
+     and guarded at runtime by JBCefApp.isSupported(). -->
+<idea-plugin/>

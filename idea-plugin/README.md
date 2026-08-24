@@ -133,15 +133,23 @@ Verify indexing any time via **Tools → Flowable Atlas → Dump Key Index**.
 ## Requirements / compatibility
 
 - Target IDE: **IntelliJ IDEA 2026.1+** (`since-build 261`, open until-build). Needs the Java plugin
-  (bundled in Community and Ultimate).
+  (bundled in the free tier and in Ultimate). **One artifact covers 2026.1 and 2026.2** — both are
+  checked with JetBrains' Plugin Verifier (see *Build* below); the last run reported *Compatible*
+  against `IU-261.26222.65` and `IU-262.8665.258`.
+- **JCEF** (Atlas Hub, the explorer editor, the Inspect sign-in browser) lives in the platform core up
+  to 2026.1 and in the bundled *Web Browser (JCEF)* plugin from 2026.2 on. The plugin declares that
+  plugin as an **optional** dependency, so the same ZIP resolves it on 2026.2 and ignores it on
+  2026.1; every JCEF call site is additionally guarded by `JBCefApp.isSupported()`.
 - Runs on **JDK/JBR 21+** (compiled to Java 21 bytecode).
 - The Atlas explorer generation runs entirely **in-process** (the bundled `:core` engine) — no
   external interpreter or subprocess required.
 
 ## Build
 
-The build compiles against the **locally installed** IntelliJ IDEA (`local("/Applications/IntelliJ IDEA.app")`
-in `build.gradle.kts`) — exact match to your IDE, no multi-GB SDK download.
+The build compiles against a downloaded **IntelliJ IDEA 2026.1** SDK (`intellijIdea("2026.1")` in
+`build.gradle.kts`) — no dependency on a locally installed IDE, so it builds on any machine and in CI.
+2026.1 is deliberately the *oldest* supported platform: compiling against the floor is what keeps a
+single artifact loadable on every later version.
 
 Toolchain notes (all matter for a 2026.1 target):
 - **IntelliJ Platform Gradle Plugin 2.17.0** (2.5.x fails `runIde` against 2026.1's
@@ -149,18 +157,38 @@ Toolchain notes (all matter for a 2026.1 target):
   Gradle 9.4.0.
 - **Kotlin Gradle plugin ≥ the Kotlin the IDE ships** (2026.1 ships Kotlin 2.3.x → we use 2.3.21),
   otherwise the compiler can't read the platform's Kotlin metadata.
-- Compile/run on **JDK 21** (`org.gradle.java.installations.paths` in `gradle.properties` points at
-  the local JDK 21; adjust if yours is elsewhere).
+- Compile/run on **JDK 21** (auto-detected; override via `org.gradle.java.installations.paths` in your
+  *local* `~/.gradle/gradle.properties` if JDK 21 isn't found).
 
 ```bash
-./gradlew buildPlugin        # → build/distributions/flowable-atlas-0.4.1.zip (installable)
+./gradlew buildPlugin        # → build/distributions/flowable-atlas-<version>.zip (installable)
 ./gradlew test               # functional + unit tests
-./gradlew runIde             # sandbox IDE with the plugin; open any Flowable project
+./gradlew runIde             # sandbox IDE (2026.1 SDK); open any Flowable project
 ```
+
+### Checking a new IDE version
+
+Two commands, both taking *locally installed* IDEs so no SDK download is needed. Run them whenever a
+new platform version appears — that is the whole 2026.x compatibility story:
+
+```bash
+# static check: does the built ZIP resolve against these IDEs? (fails only on real breakage —
+# compatibility problems, invalid plugin, missing dependencies)
+./gradlew :idea-plugin:verifyPlugin \
+  -Patlas.verifyIdes="/Applications/IntelliJ IDEA.app,$HOME/Applications/IntelliJ IDEA.app"
+
+# live check: sandbox IDE on that exact installation — the real plugin classloader, so this is what
+# catches a JCEF-style module split. Open the Atlas Hub + explorer once.
+./gradlew :idea-plugin:runIdeLocal -Patlas.runIdePath="/Applications/IntelliJ IDEA.app"
+```
+
+Reports land in `idea-plugin/build/reports/pluginVerifier/<IDE build>/`; the per-IDE
+`verification-verdict.txt` is the one-line answer. Internal / experimental / deprecated API usages are
+listed there but never fail the build — the plugin uses a handful on purpose.
 
 ## Install (from disk)
 
-1. `./gradlew buildPlugin` → `build/distributions/flowable-atlas-0.4.1.zip`.
+1. `./gradlew buildPlugin` → `build/distributions/flowable-atlas-<version>.zip`.
 2. In IntelliJ IDEA: **Settings → Plugins → ⚙ → Install Plugin from Disk…** → pick the zip.
 3. Restart. Open a Flowable project, then either generate the Atlas explorer
    (**Tools → Flowable Atlas → Generate Atlas Explorer**), open the **Flowable Expressions** tool
