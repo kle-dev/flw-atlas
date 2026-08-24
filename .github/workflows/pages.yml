@@ -49,10 +49,10 @@ jobs:
     name: build site
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -60,7 +60,7 @@ jobs:
       # Also validates gradle-wrapper.jar against Gradle's published checksums, which matters for a
       # public repo: a tampered wrapper jar would otherwise execute unnoticed on every run.
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v5
 
       # Fail here, with a clear message, rather than deep inside a screenshot that silently comes back
       # as a zero-byte file. The runner image ships Chrome; if a future image stops doing so, this is
@@ -100,10 +100,14 @@ jobs:
       - name: Check the built pages
         run: node scripts/site-shots.mjs --check-site build/site
 
+      # `include-hidden-files` is not optional here. v4 of this action started excluding dotfiles
+      # from the tarball, and site-build.mjs writes `.nojekyll` into the output — without the opt-in
+      # the deploy succeeds and quietly ships a site missing it.
       - name: Upload the Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: build/site
+          include-hidden-files: true
 
   deploy:
     name: deploy
@@ -115,4 +119,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
