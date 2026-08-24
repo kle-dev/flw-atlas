@@ -5,7 +5,10 @@
      the declaration path is covered without adding a second finding. -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:flowable="http://flowable.org/bpmn"
-             targetNamespace="http://flowable.org/test">
+             targetNamespace="http://flowable.org/test"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI">
   <process id="fulfilmentProcess" name="Fulfilment Process">
     <documentation>Ships an approved order and reports the shipping total back to its caller.</documentation>
     <dataObject id="orderNotes" name="orderNotes" itemSubjectRef="xsd:string"/>
@@ -24,4 +27,35 @@
     <sequenceFlow id="ff3" sourceRef="callCourier" targetRef="fEnd"/>
     <endEvent id="fEnd"/>
   </process>
+
+  <!-- Layout. Four elements, one row — the call activity draws with its thick border, which is how
+       the dangling `courierProcess` reference is visible on the canvas and not only in the checks. -->
+  <bpmndi:BPMNDiagram id="dia_fulfilmentProcess">
+    <bpmndi:BPMNPlane id="plane_fulfilmentProcess" bpmnElement="fulfilmentProcess">
+      <bpmndi:BPMNShape id="s_fStart" bpmnElement="fStart">
+        <omgdc:Bounds x="100" y="115" width="30" height="30"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_packTask" bpmnElement="packTask">
+        <omgdc:Bounds x="180" y="100" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_callCourier" bpmnElement="callCourier">
+        <omgdc:Bounds x="340" y="100" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_fEnd" bpmnElement="fEnd">
+        <omgdc:Bounds x="500" y="115" width="30" height="30"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="e_ff1" bpmnElement="ff1">
+        <omgdi:waypoint x="130" y="130"/>
+        <omgdi:waypoint x="180" y="130"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_ff2" bpmnElement="ff2">
+        <omgdi:waypoint x="280" y="130"/>
+        <omgdi:waypoint x="340" y="130"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_ff3" bpmnElement="ff3">
+        <omgdi:waypoint x="440" y="130"/>
+        <omgdi:waypoint x="500" y="130"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </definitions>

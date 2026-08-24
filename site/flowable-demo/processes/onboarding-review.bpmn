@@ -3,7 +3,10 @@
      decision, an agent, a service and a Java delegate. -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:flowable="http://flowable.org/bpmn"
-             targetNamespace="http://flowable.org/demo">
+             targetNamespace="http://flowable.org/demo"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI">
   <process id="onboardingReviewProcess" name="Onboarding Review"
            flowable:candidateStarterGroups="sales,compliance">
     <documentation>Reviews an onboarding application and scores its risk.</documentation>
@@ -76,4 +79,72 @@
     </sequenceFlow>
     <endEvent id="end"/>
   </process>
+
+  <!-- Layout. The row break after `askAssistant` keeps the eight steps readable at one zoom level;
+       the glyphs come from each task's `flowable:type`, not from anything written here. -->
+  <bpmndi:BPMNDiagram id="dia_onboardingReviewProcess">
+    <bpmndi:BPMNPlane id="plane_onboardingReviewProcess" bpmnElement="onboardingReviewProcess">
+      <bpmndi:BPMNShape id="s_start" bpmnElement="start">
+        <omgdc:Bounds x="100" y="115" width="30" height="30"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_enrich" bpmnElement="enrich">
+        <omgdc:Bounds x="180" y="100" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_lookupOrder" bpmnElement="lookupOrder">
+        <omgdc:Bounds x="340" y="100" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_scoreRisk" bpmnElement="scoreRisk">
+        <omgdc:Bounds x="500" y="100" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_askAssistant" bpmnElement="askAssistant">
+        <omgdc:Bounds x="660" y="100" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_reviewCase" bpmnElement="reviewCase">
+        <omgdc:Bounds x="100" y="240" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_decide" bpmnElement="decide">
+        <omgdc:Bounds x="260" y="240" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_stamp" bpmnElement="stamp">
+        <omgdc:Bounds x="420" y="240" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_end" bpmnElement="end">
+        <omgdc:Bounds x="580" y="255" width="30" height="30"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="e_f1" bpmnElement="f1">
+        <omgdi:waypoint x="130" y="130"/>
+        <omgdi:waypoint x="180" y="130"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f2" bpmnElement="f2">
+        <omgdi:waypoint x="280" y="130"/>
+        <omgdi:waypoint x="340" y="130"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f3" bpmnElement="f3">
+        <omgdi:waypoint x="440" y="130"/>
+        <omgdi:waypoint x="500" y="130"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f4" bpmnElement="f4">
+        <omgdi:waypoint x="600" y="130"/>
+        <omgdi:waypoint x="660" y="130"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f5" bpmnElement="f5">
+        <omgdi:waypoint x="710" y="160"/>
+        <omgdi:waypoint x="710" y="200"/>
+        <omgdi:waypoint x="150" y="200"/>
+        <omgdi:waypoint x="150" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f6" bpmnElement="f6">
+        <omgdi:waypoint x="200" y="270"/>
+        <omgdi:waypoint x="260" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f7" bpmnElement="f7">
+        <omgdi:waypoint x="360" y="270"/>
+        <omgdi:waypoint x="420" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f8" bpmnElement="f8">
+        <omgdi:waypoint x="520" y="270"/>
+        <omgdi:waypoint x="580" y="270"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </definitions>

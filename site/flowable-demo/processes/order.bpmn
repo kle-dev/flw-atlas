@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:flowable="http://flowable.org/bpmn"
-             targetNamespace="http://flowable.org/test">
+             targetNamespace="http://flowable.org/test"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI">
   <process id="orderProcess" name="Order Process" flowable:candidateStarterGroups="sales">
     <documentation>Handles an order from entry to approval.</documentation>
     <startEvent id="start" flowable:formKey="orderForm"/>
@@ -72,4 +75,79 @@
     </scriptTask>
     <endEvent id="end"/>
   </process>
+
+  <!-- Layout, so the explorer and the plugin can draw this process. Two rows: the happy path wraps
+       after `callSub`; the two deliberately-broken script tasks sit unattached below it, which is
+       exactly what they are in the model. -->
+  <bpmndi:BPMNDiagram id="dia_orderProcess">
+    <bpmndi:BPMNPlane id="plane_orderProcess" bpmnElement="orderProcess">
+      <bpmndi:BPMNShape id="s_start" bpmnElement="start">
+        <omgdc:Bounds x="100" y="115" width="30" height="30"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_calcTask" bpmnElement="calcTask">
+        <omgdc:Bounds x="180" y="100" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_approveTask" bpmnElement="approveTask">
+        <omgdc:Bounds x="340" y="100" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_notifyTask" bpmnElement="notifyTask">
+        <omgdc:Bounds x="500" y="100" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_callSub" bpmnElement="callSub">
+        <omgdc:Bounds x="660" y="100" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_decideTask" bpmnElement="decideTask">
+        <omgdc:Bounds x="100" y="240" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_waitShipped" bpmnElement="waitShipped">
+        <omgdc:Bounds x="260" y="240" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_stampTask" bpmnElement="stampTask">
+        <omgdc:Bounds x="420" y="240" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_end" bpmnElement="end">
+        <omgdc:Bounds x="580" y="255" width="30" height="30"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_badStamp" bpmnElement="badStamp">
+        <omgdc:Bounds x="100" y="360" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_badApi" bpmnElement="badApi">
+        <omgdc:Bounds x="260" y="360" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="e_f1" bpmnElement="f1">
+        <omgdi:waypoint x="130" y="130"/>
+        <omgdi:waypoint x="180" y="130"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f2" bpmnElement="f2">
+        <omgdi:waypoint x="280" y="130"/>
+        <omgdi:waypoint x="340" y="130"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f3" bpmnElement="f3">
+        <omgdi:waypoint x="440" y="130"/>
+        <omgdi:waypoint x="500" y="130"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f4" bpmnElement="f4">
+        <omgdi:waypoint x="600" y="130"/>
+        <omgdi:waypoint x="660" y="130"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f5" bpmnElement="f5">
+        <omgdi:waypoint x="710" y="160"/>
+        <omgdi:waypoint x="710" y="200"/>
+        <omgdi:waypoint x="150" y="200"/>
+        <omgdi:waypoint x="150" y="240"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f6" bpmnElement="f6">
+        <omgdi:waypoint x="200" y="270"/>
+        <omgdi:waypoint x="260" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f7" bpmnElement="f7">
+        <omgdi:waypoint x="360" y="270"/>
+        <omgdi:waypoint x="420" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f8" bpmnElement="f8">
+        <omgdi:waypoint x="520" y="270"/>
+        <omgdi:waypoint x="580" y="270"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </definitions>
