@@ -127,6 +127,14 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.12.2</h3>
+        <ul>
+          <li><b>Runs on IntelliJ IDEA 2026.2</b> — one ZIP for 2026.1 and 2026.2, both checked with
+              JetBrains' Plugin Verifier. 2026.2 moved JCEF (the Atlas Hub, the explorer editor, the
+              Inspect sign-in browser) out of the platform core into the bundled <i>Web Browser (JCEF)</i>
+              plugin; Atlas now declares that plugin as an <i>optional</i> dependency, so the same build
+              picks it up on 2026.2 and ignores it on 2026.1.</li>
+        </ul>
         <h3>0.12.1</h3>
         <ul>
           <li><b>DTO class names come from a pattern</b> — <i>Generate → Data-Object DTOs</i> names its
@@ -897,6 +905,13 @@
     <depends>com.intellij.modules.xml</depends>
     <!-- JSON PSI for form-model {{…}} expression injection and the .form → JSON association. -->
     <depends>com.intellij.modules.json</depends>
+    <!-- JCEF (Atlas Hub, the explorer editor, the Inspect sign-in browser). Up to 2026.1 (build 261)
+         JCEF sits in the platform core; 2026.2 (262) moved it into the bundled "Web Browser (JCEF)"
+         plugin (id com.intellij.modules.jcef). Declared *optional* so one artifact covers both: on
+         262 it wires that plugin's classloader in, on 261 the id doesn't exist and the dependency is
+         simply skipped. Every JCEF call site is already guarded by JBCefApp.isSupported(), so a
+         remote-dev / no-JCEF IDE keeps working without it. -->
+    <depends optional="true" config-file="flowable-atlas-jcef.xml">com.intellij.modules.jcef</depends>
 
     <resource-bundle>messages.FlowableAtlasBundle</resource-bundle>
 

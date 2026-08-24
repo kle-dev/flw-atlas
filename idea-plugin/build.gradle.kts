@@ -1,4 +1,5 @@
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 
 plugins {
     id("java")
@@ -32,8 +33,11 @@ dependencies {
         // installed IDE, so it builds on any machine / CI. Since 2025.3 the separate Community SDK
         // (ideaIC) is no longer published; 2026.x ships a single "IntelliJ IDEA" distribution with a
         // free tier, requested via intellijIdea(...). The plugin only uses APIs available in that free
-        // tier (java/json/xml/platform). Target platform is 2026.1 (build 261); JCEF is in the
-        // platform core there (no bundled-plugin dependency needed — that split happened in 262).
+        // tier (java/json/xml/platform). Compile target is the *oldest* supported platform, 2026.1
+        // (build 261) — building against the floor is what keeps one artifact loadable on 2026.2 and
+        // later. JCEF is in the platform core on 261 and in the bundled "Web Browser (JCEF)" plugin
+        // from 262 on; plugin.xml handles that with an optional <depends>, so nothing is needed here.
+        // `verifyPlugin` (below) proves both versions.
         intellijIdea("2026.1")
 
         // Java PSI — required by the Java completion contributor.
@@ -60,6 +64,27 @@ dependencies {
 }
 
 intellijPlatform {
+    // Cross-version compatibility check. Pass one or more locally installed IDEs (comma-separated)
+    // and `verifyPlugin` runs JetBrains' Plugin Verifier against each of them — that is how we prove
+    // one artifact really loads on both 2026.1 and 2026.2:
+    //   ./gradlew :idea-plugin:verifyPlugin -Patlas.verifyIdes="/Applications/IntelliJ IDEA.app"
+    pluginVerification {
+        // Only real breakage fails the check. The plugin knowingly touches a handful of internal /
+        // experimental / deprecated platform APIs (AppMode, PluginManagerCore, the weighted
+        // Search-Everywhere contributor); those are reported in the HTML report but must not fail the
+        // gate, or the gate is useless. NOT_DYNAMIC is expected too — the plugin is require-restart.
+        failureLevel = listOf(
+            VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS,
+            VerifyPluginTask.FailureLevel.INVALID_PLUGIN,
+            VerifyPluginTask.FailureLevel.MISSING_DEPENDENCIES,
+        )
+        ides {
+            providers.gradleProperty("atlas.verifyIdes").orNull
+                ?.split(",")?.map(String::trim)?.filter(String::isNotEmpty)
+                ?.forEach { local(file(it)) }
+        }
+    }
+
     // Not needed for this plugin; disabling avoids slow/headless build steps.
     buildSearchableOptions = false
     instrumentCode = false
@@ -69,6 +94,16 @@ intellijPlatform {
             sinceBuild = "261"   // 2026.1
             untilBuild = "299.*" // wide open for "latest" (internal tool)
         }
+    }
+}
+
+// Sandbox IDE on a *locally installed* IDE instead of the downloaded 2026.1 SDK — the only way to
+// smoke-test against the real plugin classloader of another platform version (e.g. the JCEF plugin
+// split in 2026.2):
+//   ./gradlew :idea-plugin:runIdeLocal -Patlas.runIdePath="/Applications/IntelliJ IDEA.app"
+providers.gradleProperty("atlas.runIdePath").orNull?.takeIf { it.isNotBlank() }?.let { path ->
+    intellijPlatformTesting.runIde.register("runIdeLocal") {
+        localPath = file(path.trim())
     }
 }
 
