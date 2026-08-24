@@ -17,17 +17,21 @@
 #
 # One-time setup, in the repository settings: Pages → Build and deployment → Source: GitHub Actions.
 # Without it this workflow succeeds and deploys nowhere.
+#
+# Why this deploys on a version TAG and not on every push to `main`: the site states the project version
+# (pages write `{{VERSION}}` and the generator substitutes the Gradle version), and it documents the
+# product a reader can actually download. Deploying from `main` published a site describing a build that
+# had no release behind it — every doc-only commit shipped a new site, and between a version bump and its
+# tag the site advertised a version nobody could install. Tag-triggered, the published site and the newest
+# release always describe the same thing.
+#
+# `workflow_dispatch` stays, so a documentation fix that must not wait for the next release can still be
+# deployed by hand from the Actions tab.
 name: pages
 
 on:
   push:
-    branches: [main]
-    paths:
-      - 'site/**'
-      - 'scripts/site-*.mjs'
-      - 'core/src/main/resources/frontend/**'   # the demo explorer is rendered from these
-      - 'CHANGELOG.md'                          # the release-notes page is generated from it
-      - '.github/workflows/pages.yml'
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:

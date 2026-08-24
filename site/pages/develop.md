@@ -139,8 +139,14 @@ node scripts/site-shots.mjs --check-site build/site   # no page scrolls sideways
   `DEMO-*` keys and `com.example.*` packages only: **this repository is public, so no customer
   identifier belongs anywhere in it.**
 - Nothing generated is committed. `.github/workflows/pages.yml` builds the demo artifacts and the
-  screenshots on every push to `main` and deploys the result; `--strict` makes a missing generated file
-  a build failure there, while a local build only warns.
+  screenshots and deploys the result; `--strict` makes a missing generated file a build failure there,
+  while a local build only warns.
+- It deploys on a pushed **`v*` tag**, not on every push to `main`. The site substitutes the Gradle
+  version into `{{VERSION}}`, so deploying from `main` published a site describing a build with no
+  release behind it — and between a version bump and its tag it advertised a version nobody could
+  install. Tag-triggered, the published site and the newest release always describe the same product.
+  A documentation fix that cannot wait for the next release goes out via **workflow_dispatch** from the
+  Actions tab.
 
 Two tests in `./gradlew build` keep the site honest, so a page cannot quietly go out of date:
 
