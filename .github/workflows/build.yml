@@ -75,9 +75,16 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      # Atlas is distributed as a ZIP, so having the built one attached to a run makes it installable
-      # straight from a pull request without anyone building it locally.
+      # Only for `main`. A feature branch should not put an installable plugin ZIP on GitHub: it invites
+      # someone to install a build that has not been reviewed or merged, and every branch would leave
+      # another artifact behind. Releases are where a ZIP meant for installing comes from (see the
+      # `release` job); a `main` build is the one place a pre-release artifact is useful for testing.
+      #
+      # Packaging itself is still exercised on every branch, because buildPlugin is wired into `build`
+      # in idea-plugin/build.gradle.kts — so a broken package fails a pull request even though nothing
+      # is uploaded from it. if-no-files-found stays `error`: on main the ZIP must exist.
       - name: Upload plugin ZIP
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: flowable-atlas-plugin
