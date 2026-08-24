@@ -15,59 +15,53 @@ That is not a brush-off, and it does not make the repository read-only in spirit
 - **Feature ideas are welcome** as issues.
 - **Questions about how something works are welcome.** The code is public so it can be read.
 
-The rest of this file documents the internal workflow, for Flowable engineers and for anyone reading
-along who wants to know how the project holds itself together.
+The rest of this file is the internal workflow, for Flowable engineers.
 
-## Build and test
+## Where the rest is written down
 
-Requires **JDK 21**. Node and Chrome are needed for the three browser-driven tests.
+This file deliberately carries only what is not documented elsewhere. Two documents cover the ground
+it used to repeat, and they are the ones to change when the workflow changes:
 
-```bash
-./gradlew build          # compiles, runs the JVM suite + goldens + CLI contracts + the browser tests,
-                         # and produces idea-plugin/build/distributions/flowable-atlas-<version>.zip
-```
+- **[`AGENTS.md`](AGENTS.md)** — the rules every change has to satisfy: the gate, which document a
+  given change obliges you to update, the generated files that must never be hand-edited, the house
+  rules, and the definition of done. Read it before your first change.
+- **[The development page](https://kle-dev.github.io/flw-atlas/develop/)** (`site/pages/develop.md`) —
+  the module layout, `./gradlew build` and what it runs, the goldens and how to read their diffs, the
+  browser tests, the compatibility gate, the site build, and CI. The long-form version, public.
 
-`build` is the gate. It must be green before anything is committed — there is no "known failing test"
-list, and there should never be one.
+## The short version
 
-The three browser tests (`searchSelfTest`, `explorerUiTest`, `diagramUiTest`) **skip themselves** when
-node or Chrome is missing, so `build` stays green without them locally. CI sets
-`ATLAS_REQUIRE_BROWSER_TESTS=1`, which turns that skip into a failure — a green pipeline can never
-mean "the frontend was never opened". Set it locally too when you touch the explorer frontend.
-
-## Before a release
+Requires **JDK 21**; Node and Chrome for the three browser-driven tests.
 
 ```bash
-./gradlew :idea-plugin:verifyPlugin
+./gradlew build                                  # the gate — green before anything is committed
+ATLAS_REQUIRE_BROWSER_TESTS=1 ./gradlew build    # …and this when you touch the explorer frontend
+./gradlew :idea-plugin:verifyPlugin              # before every release
 ```
 
-JetBrains' Plugin Verifier, against a downloaded IntelliJ IDEA 2026.2. It is the **only** check that
-sees plugin-descriptor defects — an invalid structure, or `<change-notes>` over its 65535-character
-cap — which `build` does not. Run it every time. Add
+`build` is the gate — `AGENTS.md` states the rule it enforces. The browser tests skip themselves when
+node or Chrome is missing, so `build` stays green locally without them;
+`ATLAS_REQUIRE_BROWSER_TESTS=1` turns that skip into a failure, and CI sets it — a green pipeline can
+never mean "the frontend was never opened".
+
+`verifyPlugin` is the **only** check that sees plugin-descriptor defects — an invalid structure, or
+`<change-notes>` over its 65535-character cap — which `build` does not. Add
 `-Patlas.verifyIdes="/Applications/IntelliJ IDEA.app"` to verify against an IDE you already have
-instead of downloading one.
+instead of downloading one, and `./gradlew :idea-plugin:runIdeLocal -Patlas.runIdePath=…` to smoke-test
+in a real installation, which is the only check that exercises the real plugin classloader.
 
-To smoke-test inside a real IDE against another platform version:
-
-```bash
-./gradlew :idea-plugin:runIdeLocal -Patlas.runIdePath="/Applications/IntelliJ IDEA.app"
-```
-
-## Cutting a release
-
-1. Write the entry in `CHANGELOG.md`, bump `version` in the root `build.gradle.kts` to match, and run
-   `./gradlew :core:updateGoldens` so the plugin descriptor's `<change-notes>` follows.
-2. `./gradlew build` and `./gradlew :idea-plugin:verifyPlugin`, both green.
-3. Push a `v<version>` tag. CI builds from the tag, signs, verifies the signature, and publishes the
-   ZIP, the CLI jar, `SHA256SUMS.txt` and `updatePlugins.xml` to a GitHub release. The job fails if the
-   tag and the built version disagree, so a mismatched tag cannot produce a release.
+Cutting a release: write the `CHANGELOG.md` entry, bump `version` in the root `build.gradle.kts`, run
+`./gradlew :core:updateGoldens`, get both gates green, then push a `v<version>` tag. CI builds from the
+tag, signs, verifies, and publishes the ZIP, the CLI jar, `SHA256SUMS.txt` and `updatePlugins.xml` to a
+GitHub release. The job fails if the tag and the built version disagree, so a mismatched tag cannot
+produce a release.
 
 `updatePlugins.xml` is what makes Atlas updatable without a Marketplace listing. It is generated from
 the **patched** descriptor, never hand-written: a compatibility range that drifted from the plugin it
 advertises is the one defect that makes an update channel worse than none, because the IDE would then
 offer an update it cannot install.
 
-### Signing
+## Signing
 
 Release artifacts are signed when a key is configured, and the job publishes an unsigned ZIP with a
 loud warning when one is not. Atlas is side-loaded, so nothing else distinguishes our build from a
@@ -99,37 +93,3 @@ security find-generic-password -s flowable-atlas-signing -w | gh secret set ATLA
 
 Losing the key is not fatal — generate a new one and keep releasing. It only means a colleague's IDE
 sees a different signer than before.
-
-## Generated files — do not hand-edit
-
-Several files in this repository are outputs, not sources. Editing them by hand works right up until
-the next regeneration silently reverts it.
-
-| File | Generated from | Regenerate with |
-|---|---|---|
-| `core/src/test/resources/golden/*` | the current extractor/renderer output | `./gradlew :core:updateGoldens` |
-| `<change-notes>` in `plugin.xml` | `CHANGELOG.md` (the source of truth for release history) | `./gradlew :core:updateGoldens` |
-| the Geist `@font-face` block in `explorer.css` | the platform's font files | `node scripts/embed-geist.mjs` |
-| `<version>` in `plugin.xml` | the Gradle project version | `patchPluginXml`, at build time |
-
-`updateGoldens` **rewrites** the baselines from whatever the code currently produces. That makes it a
-tool for accepting a change you already understand, never a way to make a red test go green. Always
-read the resulting diff: goldens re-sort when a new node key appears, so a large diff for a small
-change is normal, but a *semantic* change buried in one is exactly what the goldens exist to catch.
-
-## Conventions that are not obvious from the code
-
-- **`CHANGELOG.md` is the source of truth**, not the plugin descriptor. Write the entry there, then
-  run `updateGoldens` to push a size-budgeted window of the newest entries into `<change-notes>`.
-- **No customer identifiers.** This repository is public. Model keys, namespaces, table names and app
-  names in code, tests, docs and commit messages use `DEMO-*` placeholders. Never a real one.
-- **Comments explain *why*.** The codebase is written so that a decision that looks odd carries the
-  reason it was made — including the alternatives that were rejected. Match that when you add code:
-  a comment restating what the line does is noise, one recording why it does it that way is the
-  point.
-- **A cancelled action is not a failure.** Anything catching broadly rethrows
-  `ProcessCanceledException` first, or a user pressing Cancel is reported as an error.
-- **The compatibility claim stays honest.** `untilBuild` is deliberately wide so the plugin keeps
-  loading on newer IDEs; the range that was actually *verified* lives in `AtlasPlatformSupport` and is
-  what the Atlas Hub shows. Bump that constant when the verifier target changes — never present
-  "it loads" as "it was tested".

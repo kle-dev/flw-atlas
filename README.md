@@ -62,24 +62,17 @@ explorer you can click through:
 
 ## Development
 
-The short version — the [development page](https://kle-dev.github.io/flw-atlas/develop/) has the rest.
-
 A Gradle multi-module JVM project: `:core` (the pure-Kotlin engine), `:cli` (the fat-jar `./atlas`
 runs) and `:idea-plugin` (which consumes `:core` in-process). Needs a **JDK 21+** to build.
 
 ```bash
 ./gradlew build                      # goldens, unit tests, CLI contracts, browser tests, the plugin ZIP
-./gradlew :core:updateGoldens        # re-baseline the goldens and every generated file, then review the diff
 ./gradlew :idea-plugin:verifyPlugin  # the compatibility gate — run it before every release
-./gradlew site                       # build the documentation site into build/site
 ```
 
-- The explorer frontend is `core/src/main/resources/frontend/explorer.{html,css,js}` — plain files
-  read at render time and inlined into the generated page.
-- `CHANGELOG.md` is the source of truth for the release history; the plugin descriptor's
-  `<change-notes>` is generated from it by `:core:updateGoldens`.
-- The documentation site lives in `site/`. Nothing it generates is committed — the screenshots and the
-  live demo are built on every deploy by `.github/workflows/pages.yml`.
+The [development page](https://kle-dev.github.io/flw-atlas/develop/) covers the modules, the goldens,
+the browser tests, the site build and CI; [`AGENTS.md`](AGENTS.md) is the rule list every change has to
+satisfy, and [`CONTRIBUTING.md`](CONTRIBUTING.md) the contribution policy.
 
 ## Requirements
 

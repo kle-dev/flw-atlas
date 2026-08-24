@@ -5,8 +5,8 @@ Instructions for AI agents (and humans) making changes to **Flowable Atlas itsel
 > **Not to be confused with `CLAUDE.template.md`.** That file is a *product output*: the primer Atlas
 > writes into other people's Flowable solution projects. It says nothing about how to work on this
 > repository, and it is generated — see [Generated files](#generated-files--never-hand-edit).
-> `CONTRIBUTING.md` holds the full build/release workflow; this file is the short list of rules that
-> must hold for every change.
+> This file is the rule list every change has to satisfy. `CONTRIBUTING.md` adds the contribution
+> policy and the signing/secrets detail; `site/pages/develop.md` is the long-form build and CI guide.
 
 ## The repository in one screen
 
@@ -55,24 +55,24 @@ Three questions, every time:
 | If you change… | Update… |
 |---|---|
 | Anything user-visible, at all | `CHANGELOG.md` — the source of truth for the release history, hand-authored, one entry per user-visible change |
-| A plugin feature (action, inspection, completion, hint, line marker, tool window, setting) | `FEATURES.md`, `idea-plugin/README.md`, `site/pages/plugin.md` + `site/pages/plugin-reference.md`; the `<description>` in `plugin.xml` if it is a headline feature |
+| A plugin feature (action, inspection, completion, hint, line marker, tool window, setting) | `site/pages/plugin.md` + `site/pages/plugin-reference.md`; the `<description>` in `plugin.xml` if it is a headline feature |
 | A CLI flag, or what an artifact contains | `README.md` (the artifact list and *Advanced — single artifacts*), `site/pages/cli.md`, `site/pages/artifacts.md` |
-| A health check or finding | `site/pages/checks.md`, the findings paragraph in `README.md`, `FEATURES.md` |
-| Variable read/write analysis or its silence rules | `site/pages/variables.md`, `FEATURES.md` |
-| Expression/script validation, the function catalog, script bindings | `site/pages/expressions.md`, `FEATURES.md` |
+| A health check or finding | `site/pages/checks.md`, the findings paragraph in `README.md` |
+| Variable read/write analysis or its silence rules | `site/pages/variables.md` |
+| Expression/script validation, the function catalog, script bindings | `site/pages/expressions.md` |
 | The explorer frontend — a route, page, facet or visible layout | `site/pages/explorer.md`; regenerate screenshots (`node scripts/site-shots.mjs`) or adjust the `site/mockups/*.html` if the change is visual |
 | What agents receive (the `CLAUDE.md` renderer, `--summary`, `--slice`, `--json`) | `site/pages/agents.md`, the *For LLMs / agents* section of `README.md`; `CLAUDE.template.md` regenerates itself |
-| Build, test, CI or release workflow | `CONTRIBUTING.md`, `site/pages/develop.md`, the *Development* section of `README.md`, and `.github/workflows/build.yml` if the commands moved |
-| Supported IDE range, or what was actually verified | `AtlasPlatformSupport` (the verified range the Atlas Hub shows), `plugin.xml`, `README.md`, `CONTRIBUTING.md`, `site/pages/develop.md` |
-| The version | `version` in the root `build.gradle.kts`, the `CHANGELOG.md` entry, the version line at the top of `FEATURES.md`, then `./gradlew :core:updateGoldens` |
+| Build, test, CI or release workflow | `site/pages/develop.md` (the long form), `CONTRIBUTING.md` only if the policy or the signing setup changed, and `.github/workflows/build.yml` if the commands moved |
+| Supported IDE range, or what was actually verified | `AtlasPlatformSupport` (the verified range the Atlas Hub shows), `plugin.xml`, `site/pages/develop.md`, `site/pages/plugin-reference.md` |
+| The version | `version` in the root `build.gradle.kts` and the `CHANGELOG.md` entry, then `./gradlew :core:updateGoldens`. Nothing else states a version: the site writes `{{VERSION}}` and the generator rejects a literal one |
 | A newly bundled third-party component | `THIRD-PARTY-NOTICES.md` and the *License* section of `README.md` |
+| The toolchain the plugin builds against (the SDK floor, Gradle, Kotlin, JCEF's module split) | `idea-plugin/README.md` — the only place that explains *why* each pin exists |
 | A new docs page | `site/nav.json` (page order — it drives the sidebar, the pager and the search index) |
 
-Three of these obligations are enforced, and `./gradlew build` fails when you skip them:
+Two of these obligations are enforced, and `./gradlew build` fails when you skip them:
 `SiteDocsCoverageTest` (every check id, silence rule, CLI flag, explorer route, inspection and action
-appears on its page), `SiteDemoProjectTest` (the sample project still demonstrates every check) and
-`DocsVersionSyncTest` (`FEATURES.md` states this build's version). Nothing to re-baseline — the fix is
-to write the sentence.
+appears on its page) and `SiteDemoProjectTest` (the sample project still demonstrates every check).
+Nothing to re-baseline — the fix is to write the sentence.
 
 Everything else is on you. When you add a page or move a claim, also run `node scripts/site-build.mjs`
 (or `./gradlew site`): it fails on Markdown outside its supported subset, on an internal link or image
@@ -81,6 +81,41 @@ that does not resolve, and on a hardcoded version string (write `{{VERSION}}`).
 **What does *not* need a doc update:** a refactor, a rename or a test that changes nothing a reader can
 observe. Do not pad `CHANGELOG.md` with those — a release-notes list that mixes internals into user
 changes is harder to read than a shorter one.
+
+### Do not add a document — extend one
+
+Every fact in this repository has **one** home, named in the table above. The obligation is to edit
+that home, and adding a new file beside it is the failure mode this section exists to prevent: a second
+document describing the same feature does not get updated by the next change, so it does not become a
+second explanation, it becomes a **wrong** one, and a reader has no way to tell which of the two is
+current.
+
+This is not hypothetical. A `FEATURES.md` at the repository root was a fourth retelling of the plugin's
+feature list, beside `site/pages/plugin.md`, `plugin-reference.md` and the descriptor's `<description>`.
+Nothing linked to it and nothing built from it; 54 of the 68 distinctive identifiers it named already
+appeared on the site or in the descriptor, so it was 397 lines kept in step by hand for no reader.
+The instructive part is what *was* enforced about it: a sync test held its version line to the build's
+version, and nothing held the 397 lines underneath. A green build therefore certified the one fact in
+the file that cost nothing to keep true, which is worse than no test at all — it reads as coverage.
+Four copies did not make the feature four times as well documented; they made three of them
+liabilities.
+
+So, before creating any `.md` file:
+
+1. **Which row of the table above already owns this fact?** Edit that document. Almost always this is
+   where the work ends.
+2. **If no row owns it, does it belong to a reader the site already serves?** Then it is a section on
+   an existing page, or a new page in `site/nav.json` — not a root-level file. The site is gated;
+   a root-level file is not.
+3. **Only if it is genuinely a new audience** — a module's own maintainers, a design decision under
+   discussion — does a new file earn its place. Then give it a scope line at the top saying what it
+   covers and what it does *not*, and add its row to the table in the same commit. A document nothing
+   in the table points at is a document nothing will maintain.
+
+The same rule governs prose inside a document. When a paragraph would restate what another document
+says, link to it instead: `AGENTS.md` holds the rules, `CONTRIBUTING.md` the contribution policy and
+signing, `site/pages/develop.md` the build and CI in long form, and each module's `README.md` only what
+is specific to that module. Cross-link across those boundaries; never copy across them.
 
 ### Generated files — never hand-edit
 
@@ -114,7 +149,9 @@ So: write release notes in `CHANGELOG.md` and run `updateGoldens` — never in t
 - **Mirror what is there.** Match the existing naming, structure and prose voice rather than
   introducing a second style beside it.
 - **One source of truth per fact.** If a value must appear twice, generate the second copy or add a sync
-  test — that is why `CHANGELOG.md`, `CLAUDE.template.md` and the Design vocabulary have one.
+  test — that is why `CHANGELOG.md`, `CLAUDE.template.md` and the Design vocabulary have one. For prose,
+  the second copy is not generated and cannot be tested, so it does not get written: see
+  [Do not add a document](#do-not-add-a-document--extend-one).
 - **Commit messages: `area: lowercase summary`** (`core:`, `plugin:`, `build:`, `ci:`, `docs:`, `fix:`,
   `release:`), imperative, no trailing period.
 - **No AI attribution in the history.** A commit carries **no** `Co-Authored-By: Claude …` trailer, no

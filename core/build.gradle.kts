@@ -35,14 +35,13 @@ tasks.test {
     // CHANGELOG.md is generated from its <change-notes>: editing the notes must re-run the comparison.
     //
     // The same reasoning covers the documentation gates: SiteDocsCoverageTest reads `site/pages/*` and
-    // the sources those pages must stay in step with, SiteDemoProjectTest reads the sample project, and
-    // DocsVersionSyncTest reads FEATURES.md. Without them declared, renaming every `guessedVars`
-    // mention in site/pages/checks.md left `test` UP-TO-DATE and `build` reported success on a page that
-    // no longer documented the check (verified the same way as above).
+    // the sources those pages must stay in step with, and SiteDemoProjectTest reads the sample project.
+    // Without them declared, renaming every `guessedVars` mention in site/pages/checks.md left `test`
+    // UP-TO-DATE and `build` reported success on a page that no longer documented the check (verified
+    // the same way as above).
     inputs.files(
         rootProject.file("CLAUDE.template.md"),
         rootProject.file("CHANGELOG.md"),
-        rootProject.file("FEATURES.md"),
         rootProject.file("idea-plugin/src/main/resources/META-INF/plugin.xml"),
         rootProject.file("idea-plugin/src/main/resources/messages/FlowableAtlasBundle.properties"),
         rootProject.file("cli/src/main/kotlin/com/flowable/atlas/cli/Main.kt"),

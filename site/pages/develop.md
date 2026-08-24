@@ -142,16 +142,16 @@ node scripts/site-shots.mjs --check-site build/site   # no page scrolls sideways
   screenshots on every push to `main` and deploys the result; `--strict` makes a missing generated file
   a build failure there, while a local build only warns.
 
-Three tests in `./gradlew build` keep the site honest, so a page cannot quietly go out of date:
+Two tests in `./gradlew build` keep the site honest, so a page cannot quietly go out of date:
 
 | Test | What it holds |
 |---|---|
 | `SiteDocsCoverageTest` | Reads the real check ids, variable silence rules, CLI flags, explorer routes, inspections and actions out of the source, and fails if any of them is undocumented. A new flag without a line on the [CLI page](../cli/) is a red build, not a stale page. |
 | `SiteDemoProjectTest` | `site/flowable-demo` still produces at least one finding for **every** check, and exactly one deliberate parse issue — the screenshots claim all of them are real. |
-| `DocsVersionSyncTest` | The version `FEATURES.md` says it describes is the version this build is. |
 
-There is nothing to re-baseline for any of them: the fix is to write the sentence, because the point is
-that a human describes the new thing.
+There is nothing to re-baseline for either: the fix is to write the sentence, because the point is that
+a human describes the new thing. A version number is handled structurally instead — the generator
+rejects a hardcoded one, so a page writes `{{VERSION}}` and cannot go stale.
 
 > These tests read files that live **outside** `:core`'s source sets, so they are declared as inputs of
 > `:core:test` in `core/build.gradle.kts`. Without that, editing a page leaves the task `UP-TO-DATE` and

@@ -25,16 +25,10 @@ which one runs a matter of file timestamps.
 
 > This folder is gitignored for `*.jar`, so a jar you put here stays local.
 
-## Why it is not in the repository
-
-It used to be committed for exactly the offline case above. But binaries do not delta-compress: every
-version stored a full copy, and together with the plugin ZIP that had reached 152 MB — 86% of the
-repository — for files where only the newest is useful. And the reason given for committing it
-(*"reaches this git remote but not Maven Central"*) did not hold: the git remote and the Releases page
-are the **same host**, so `git pull` and a release download face the same firewall.
-
 ## Building it locally
 
 ```bash
 ./gradlew :cli:shadowJar        # -> cli/build/libs/cli-<version>-all.jar
 ```
+
+> Why the jar is not committed: see the release-artifacts comment in `.gitignore`.
