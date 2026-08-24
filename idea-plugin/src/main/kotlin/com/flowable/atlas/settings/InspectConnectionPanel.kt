@@ -5,6 +5,7 @@ import com.flowable.atlas.expr.inspect.InspectCredentials
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
@@ -27,6 +28,8 @@ import javax.swing.JPanel
  * access stay off the EDT.
  */
 class InspectConnectionPanel(private val project: Project) : JPanel(), Disposable {
+
+    private val LOG = logger<InspectConnectionPanel>()
 
     private val settings = FlowableAtlasProjectSettings.getInstance(project)
 
@@ -78,7 +81,10 @@ class InspectConnectionPanel(private val project: Project) : JPanel(), Disposabl
         if (baseUrl.isNotBlank()) {
             // PasswordSafe can block on the OS keychain — save off the EDT (same as the Design panel).
             ApplicationManager.getApplication().executeOnPooledThread {
+                // Same reasoning as DesignConnectionPanel: a silently dropped save means the playground
+                // keeps asking for a password the user believes they already entered.
                 runCatching { InspectCredentials.save(baseUrl, username, password) }
+                    .onFailure { LOG.warn("Could not store the Inspect password for $baseUrl in the PasswordSafe", it) }
             }
         }
     }
@@ -96,7 +102,9 @@ class InspectConnectionPanel(private val project: Project) : JPanel(), Disposabl
         val baseUrl = settings.inspectBaseUrl
         if (baseUrl.isBlank()) return
         ApplicationManager.getApplication().executeOnPooledThread {
-            val credentials = runCatching { InspectCredentials.load(baseUrl) }.getOrNull() ?: return@executeOnPooledThread
+            val credentials = runCatching { InspectCredentials.load(baseUrl) }
+                .onFailure { LOG.warn("Could not read the Inspect password for $baseUrl from the PasswordSafe", it) }
+                .getOrNull() ?: return@executeOnPooledThread
             ApplicationManager.getApplication().invokeLater({
                 if (disposed) return@invokeLater
                 loadedPassword = credentials.getPasswordAsString().orEmpty()
@@ -115,7 +123,11 @@ class InspectConnectionPanel(private val project: Project) : JPanel(), Disposabl
         status.foreground = JBColor.foreground()
         status.text = "Reading project config…"
         ApplicationManager.getApplication().executeOnPooledThread {
-            val c = runCatching { InspectConnectionDetector.detect(project) }.getOrNull()
+            // The panel already tells the user "No Flowable app config found"; the log distinguishes
+            // "really nothing there" from "the detector blew up on a malformed config".
+            val c = runCatching { InspectConnectionDetector.detect(project) }
+                .onFailure { LOG.warn("Inspect connection detection failed", it) }
+                .getOrNull()
             ApplicationManager.getApplication().invokeLater({
                 if (disposed) return@invokeLater
                 detectButton.isEnabled = true

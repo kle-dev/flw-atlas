@@ -2,6 +2,7 @@ package com.flowable.atlas.expr.inspect
 
 import com.intellij.execution.RunManager
 import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
 
 /**
@@ -16,6 +17,8 @@ import com.intellij.openapi.project.Project
  * "Active profiles" field is read reflectively and best-effort).
  */
 object SpringRunConfigDetector {
+
+    private val LOG = logger<SpringRunConfigDetector>()
 
     data class RunHints(val profiles: List<String>, val port: String?, val contextPath: String?) {
         val hasAny: Boolean get() = profiles.isNotEmpty() || port != null || contextPath != null
@@ -59,14 +62,26 @@ object SpringRunConfigDetector {
         RunHints(emptyList(), null, null)
     }
 
+    // These two are the only reflection in the plugin: the Spring Boot run configuration is not on our
+    // compile classpath (the Spring plugin is paid-tier and we declare no dependency on it), so its
+    // getters can only be reached by name. That makes them the most fragile code we ship — a JetBrains
+    // rename degrades detection to "nothing found" with no other symptom. Hence the logging: DEBUG for
+    // the expected NoSuchMethodException on an IDE without the getter, WARN when the method exists but
+    // the call itself fails, which is the signal that the duck-typing assumption broke.
     private fun reflectString(cfg: Any, method: String): String? = runCatching {
         cfg.javaClass.getMethod(method).invoke(cfg) as? String
-    }.getOrNull()
+    }.onFailure { logReflectionFailure(cfg, method, it) }.getOrNull()
 
     @Suppress("UNCHECKED_CAST")
     private fun reflectEnvs(cfg: Any): Map<String, String> = runCatching {
         cfg.javaClass.getMethod("getEnvs").invoke(cfg) as? Map<String, String>
-    }.getOrNull() ?: emptyMap()
+    }.onFailure { logReflectionFailure(cfg, "getEnvs", it) }.getOrNull() ?: emptyMap()
+
+    private fun logReflectionFailure(cfg: Any, method: String, t: Throwable) {
+        val where = "${cfg.javaClass.name}.$method()"
+        if (t is NoSuchMethodException) LOG.debug("Run configuration has no $where — skipping that hint")
+        else LOG.warn("Reading $where reflectively failed — Inspect connection hints may be incomplete", t)
+    }
 
     private fun tokenize(s: String?): List<String> = s?.trim()?.takeIf { it.isNotEmpty() }?.split(Regex("\\s+")) ?: emptyList()
 

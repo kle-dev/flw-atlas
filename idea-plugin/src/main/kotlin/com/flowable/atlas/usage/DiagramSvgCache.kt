@@ -5,6 +5,7 @@ import com.flowable.atlas.diagram.DmnTableSvgRenderer
 import com.flowable.atlas.model.ModelType
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.LightVirtualFile
@@ -27,6 +28,8 @@ import java.util.concurrent.ConcurrentHashMap
 @Service(Service.Level.PROJECT)
 class DiagramSvgCache {
 
+    private val LOG = logger<DiagramSvgCache>()
+
     private data class Rendered(val stamp: Long, val file: VirtualFile)
 
     private val cache = ConcurrentHashMap<String, Rendered>()
@@ -40,8 +43,15 @@ class DiagramSvgCache {
     private fun rendered(modelFile: VirtualFile, type: ModelType): VirtualFile? {
         val stamp = modelFile.modificationStamp
         cache[modelFile.url]?.let { if (it.stamp == stamp) return it.file }
-        val bytes = runCatching { modelFile.contentsToByteArray() }.getOrNull() ?: return null
-        val svg = runCatching { renderSvg(bytes, modelFile.name, type) }.getOrNull() ?: return null
+        // Read failure is environmental (file deleted between index and paint) — debug. A *render*
+        // failure is an Atlas defect on real customer DI and the only symptom is a missing gutter icon,
+        // so it warns. Both are per-file-per-modification, not per-paint: the cache above bounds them.
+        val bytes = runCatching { modelFile.contentsToByteArray() }
+            .onFailure { LOG.debug("Could not read ${modelFile.path} to render its diagram", it) }
+            .getOrNull() ?: return null
+        val svg = runCatching { renderSvg(bytes, modelFile.name, type) }
+            .onFailure { LOG.warn("Rendering the $type diagram for ${modelFile.path} failed", it) }
+            .getOrNull() ?: return null
         val name = modelFile.name.substringBeforeLast('.') + ".svg"
         val file = LightVirtualFile(name, svg)
         cache[modelFile.url] = Rendered(stamp, file)

@@ -1,6 +1,7 @@
 package com.flowable.atlas.model
 
 import com.flowable.atlas.settings.FlowableAtlasSettings
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.vfs.VirtualFile
 
 /**
@@ -9,10 +10,32 @@ import com.intellij.openapi.vfs.VirtualFile
  */
 object ModelFiles {
 
+    private val LOG = logger<ModelFiles>()
+
     fun isExcluded(path: String): Boolean = ModelPaths.isExcluded(path)
 
+    /** Set once the settings read has failed, so the hot path below logs the cause once, not per file. */
+    @Volatile private var settingsReadFailed = false
+
+    /**
+     * Whether Design-workspace `.json` models count as models. Reached from [typeOf] for every file the
+     * index classifies, so it must stay cheap and must never throw — the application service is absent
+     * in a light test fixture and during shutdown, and one unavailable setting may not abort indexing.
+     *
+     * Falling back to `false` silently used to make "setting is off" and "setting could not be read"
+     * look identical, which is the difference between an empty Design workspace by choice and by
+     * accident. Logged once (not per file) so the distinction survives without flooding idea.log.
+     */
     private fun designIndexingEnabled(): Boolean =
-        try { FlowableAtlasSettings.getInstance().indexDesignWorkspace } catch (e: Exception) { false }
+        try {
+            FlowableAtlasSettings.getInstance().indexDesignWorkspace
+        } catch (e: Exception) {
+            if (!settingsReadFailed) {
+                settingsReadFailed = true
+                LOG.debug("Could not read the \"Index Flowable Design workspace\" setting — treating it as off", e)
+            }
+            false
+        }
 
     /**
      * Model type of a file, by its deployment-artifact extension (.bpmn, .cmmn, .dmn, .form, .action, ...).

@@ -6,6 +6,7 @@ import com.flowable.atlas.model.ModelPaths
 import com.intellij.openapi.vfs.JarFileSystem
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.vfs.VirtualFileVisitor
 
 /**
@@ -22,6 +23,9 @@ import com.intellij.openapi.vfs.VirtualFileVisitor
  * changelog XML is emitted verbatim by the caller.
  */
 object LiquibaseChangelogExtractor {
+
+    private val LOG = logger<LiquibaseChangelogExtractor>()
+
 
     /** One bundled changelog: its [key] (from the filename) and the raw [xml] read from the archive/file. */
     data class Extracted(val key: String, val fileName: String, val xml: String)
@@ -64,7 +68,11 @@ object LiquibaseChangelogExtractor {
 
     /** Read [entry] verbatim, keeping it only when its body really is a changelog; null otherwise. */
     private fun readChangelog(entry: VirtualFile): Extracted? {
-        val xml = runCatching { String(entry.contentsToByteArray(), Charsets.UTF_8) }.getOrNull() ?: return null
+        // Debug: one unreadable entry drops that changelog from the extraction, which the caller
+        // reports as "not found" — per-entry, so it must not warn.
+        val xml = runCatching { String(entry.contentsToByteArray(), Charsets.UTF_8) }
+            .onFailure { LOG.debug("Could not read ${entry.path} as a Liquibase changelog", it) }
+            .getOrNull() ?: return null
         if (!looksLikeChangelog(xml)) return null
         return Extracted(LiquibaseChangelog.changelogKey(entry.name), entry.name, xml)
     }

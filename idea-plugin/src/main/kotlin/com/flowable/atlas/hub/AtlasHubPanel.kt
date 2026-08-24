@@ -1,6 +1,7 @@
 package com.flowable.atlas.hub
 
 import com.flowable.atlas.AtlasBuildInfo
+import com.flowable.atlas.AtlasPlatformSupport
 import com.flowable.atlas.action.FlowableActionIds
 import com.flowable.atlas.action.GenerateModelConstantsAction
 import com.flowable.atlas.action.RebuildModelIndexAction
@@ -231,7 +232,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
                 ToolWindowManager.getInstance(project).getToolWindow("Flowable Expressions")?.activate(null, true)
             }
         }
-        row { comment("Flowable Atlas " + atlasVersion()) }
+        row { comment("Flowable Atlas ${atlasVersion()} · ${AtlasPlatformSupport.compatibilityNote()}") }
     }
 
     /** The running plugin's version (what the user sees in Settings › Plugins); falls back to the baked

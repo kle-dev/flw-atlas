@@ -5,6 +5,7 @@ import com.intellij.ide.actions.searcheverywhere.SearchEverywhereManager
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.ui.Messages
 
 /**
@@ -17,13 +18,16 @@ import com.intellij.openapi.ui.Messages
  */
 class SearchFlowableModelsAction : AnAction() {
 
+    private val LOG = logger<SearchFlowableModelsAction>()
+
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val manager = SearchEverywhereManager.getInstance(project)
         val opened = runCatching {
             if (manager.isShown) manager.selectedTabID = FlowableModelSeContributor.ID
             else manager.show(FlowableModelSeContributor.ID, "", e)
-        }.isSuccess
+        }.onFailure { LOG.debug("Flowable models Search-Everywhere tab unavailable — falling back", it) }
+            .isSuccess
         if (!opened) {
             // The tab is contributed by an extension point, so it only exists once the plugin is
             // fully loaded — same restart caveat as the tool window.

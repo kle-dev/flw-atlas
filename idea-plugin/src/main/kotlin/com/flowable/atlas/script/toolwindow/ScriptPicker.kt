@@ -16,7 +16,7 @@ import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.ui.SimpleListCellRenderer
+import com.intellij.ui.dsl.listCellRenderer.textListCellRenderer
 
 /**
  * "Load Script from Model…": scan the indexed BPMN/CMMN/action models for every script (script
@@ -155,7 +155,7 @@ internal object ScriptPicker {
         }
         factory.createPopupChooserBuilder(rows)
             .setTitle("Load Script from Model")
-            .setRenderer(SimpleListCellRenderer.create("") { it.label })
+            .setRenderer(textListCellRenderer("") { it.label })
             .setNamerForFiltering { it.label }
             .setItemChosenCallback { row -> panel.loadScript(row.body, row.format, row.context) }
             .createPopup()

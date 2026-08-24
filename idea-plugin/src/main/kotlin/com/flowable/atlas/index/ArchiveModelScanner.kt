@@ -3,6 +3,7 @@ package com.flowable.atlas.index
 import com.flowable.atlas.model.ModelFiles
 import com.flowable.atlas.model.ModelPaths
 import com.flowable.atlas.model.ModelType
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.vfs.JarFileSystem
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
@@ -16,6 +17,8 @@ import com.intellij.openapi.vfs.VirtualFileVisitor
  * AND for go-to / Find-Usages.
  */
 object ArchiveModelScanner {
+
+    private val LOG = logger<ArchiveModelScanner>()
 
     fun isArchive(file: VirtualFile): Boolean =
         !file.isDirectory && ModelPaths.isArchive(file.name)
@@ -43,7 +46,11 @@ object ArchiveModelScanner {
                 if (!entry.isDirectory) {
                     val type = ModelFiles.typeOf(entry)
                     if (type != null) {
-                        runCatching { entry.contentsToByteArray() }.getOrNull()?.let { consume(entry.name, it, type, entry) }
+                        // Debug: one unreadable entry (truncated/encrypted archive) drops that single
+                        // model from the index. Per-entry inside a walk, so it must not warn.
+                        runCatching { entry.contentsToByteArray() }
+                            .onFailure { LOG.debug("Could not read ${entry.name} inside the archive — model skipped", it) }
+                            .getOrNull()?.let { consume(entry.name, it, type, entry) }
                     }
                 }
                 return true

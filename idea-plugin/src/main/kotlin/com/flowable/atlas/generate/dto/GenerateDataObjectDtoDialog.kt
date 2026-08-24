@@ -12,7 +12,7 @@ import com.intellij.openapi.ui.ValidationInfo
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.ui.DocumentAdapter
-import com.intellij.ui.SimpleListCellRenderer
+import com.intellij.ui.dsl.listCellRenderer.textListCellRenderer
 import com.intellij.ui.components.ActionLink
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
@@ -122,7 +122,7 @@ class GenerateDataObjectDtoDialog(
         dataObjectsRadio.addActionListener { switchSource(DtoSource.DATA_OBJECTS) }
 
         sourceRootCombo.addActionListener { recompute() }
-        sourceRootCombo.renderer = SimpleListCellRenderer.create("") { root ->
+        sourceRootCombo.renderer = textListCellRenderer("") { root ->
             JavaSourceRoots.displayPath(project, root)
         }
         packageField.onChange { recompute() }

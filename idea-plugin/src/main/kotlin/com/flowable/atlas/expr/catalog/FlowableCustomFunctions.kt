@@ -1,6 +1,7 @@
 package com.flowable.atlas.expr.catalog
 
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
 import java.io.File
 
@@ -13,6 +14,8 @@ import java.io.File
 @Service(Service.Level.PROJECT)
 class FlowableCustomFunctions(private val project: Project) {
 
+    private val LOG = logger<FlowableCustomFunctions>()
+
     @Volatile private var computed = false
     @Volatile private var cached: CustomFunctionCatalog? = null
 
@@ -21,7 +24,12 @@ class FlowableCustomFunctions(private val project: Project) {
             synchronized(this) {
                 if (!computed) {
                     cached = project.basePath?.let {
-                        runCatching { CustomFunctionExtractor.extract(File(it)) }.getOrNull()
+                        // Warn, not debug: an empty catalog does not merely hide a feature, it makes the
+                        // expression inspection report the project's own custom functions as unknown.
+                        // A wrong warning in the editor must be traceable to its cause.
+                        runCatching { CustomFunctionExtractor.extract(File(it)) }
+                            .onFailure { e -> LOG.warn("Extracting custom functions from $it failed — project functions will be flagged as unknown", e) }
+                            .getOrNull()
                     }
                     computed = true
                 }
