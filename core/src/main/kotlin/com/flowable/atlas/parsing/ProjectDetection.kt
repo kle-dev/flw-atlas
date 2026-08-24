@@ -46,7 +46,7 @@ object ProjectDetection {
     fun detect(root: File): List<SubProject> {
         if (!root.isDirectory) return emptyList()
 
-        val rootChildren = root.listFiles() ?: return emptyList()
+        val rootChildren = root.listFiles()?.sortedBy { it.name } ?: return emptyList()
 
         // The root directly holding a Flowable model/archive means the root *itself* is the project.
         val rootHoldsModel = rootChildren.any { child ->
@@ -57,9 +57,8 @@ object ProjectDetection {
         val rootPath = root.toPath()
         val agg = LinkedHashMap<String, IntArray>()   // first-level dir name -> [appCount, modelCount]
 
-        root.walkTopDown()
-            .onEnter { dir -> dir == root || dir.name !in ModelPaths.EXCLUDE_DIRS }
-            .filter { it.isFile }
+        // Deterministic order: `agg` is insertion-ordered and decides how sub-projects are listed.
+        FileWalk.files(root) { dir -> dir == root || dir.name !in ModelPaths.EXCLUDE_DIRS }
             .forEach { f ->
                 val type = ModelType.byExtension(f.name)
                 if (type == null && !ModelPaths.isArchive(f.name)) return@forEach   // not a Flowable model

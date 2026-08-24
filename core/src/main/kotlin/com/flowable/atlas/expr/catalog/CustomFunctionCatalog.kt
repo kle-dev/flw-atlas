@@ -565,10 +565,11 @@ object CustomFunctionExtractor {
     private fun walkCandidates(base: File): List<File> {
         val hits = ArrayList<File>()
         var count = 0
-        base.walkTopDown()
-            .onEnter { it.name !in SKIP_DIRS }
+        // Deterministic order matters more here than anywhere else: the MAX_FILES cap below is applied
+        // *during* the walk, so a filesystem-dependent order changed which files were analysed at all.
+        com.flowable.atlas.parsing.FileWalk.files(base) { it.name !in SKIP_DIRS }
             .forEach { f ->
-                if (!f.isFile || SRC_EXT.none { f.name.endsWith(it) }) return@forEach
+                if (SRC_EXT.none { f.name.endsWith(it) }) return@forEach
                 if (++count > MAX_FILES || f.length() > MAX_SIZE) return@forEach
                 val head = runCatching { f.readText() }.getOrNull() ?: return@forEach
                 if ("additionalData" in head && ("export default" in head || ".additionalData" in head ||
