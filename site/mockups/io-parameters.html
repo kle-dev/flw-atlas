@@ -1,0 +1,91 @@
+<div class="mockfit ide" data-w="1010" data-h="901" style="width:1010px;height:901px">
+   <div class="title">
+     <span class="tl"><i class="r"></i><i class="y"></i><i class="g"></i></span>
+     <span class="proj">flowable-demo — <b>Atlas Explorer</b></span>
+   </div>
+   <div class="body">
+     <div class="editor">
+       <div class="tabs"><div class="tab on"><span style="color:#3574f0">◈</span>Atlas Explorer</div></div>
+       <div class="exp">
+         <div class="expm">
+           <div style="display:flex; align-items:center; gap:8px">
+             <span style="width:8px;height:8px;border-radius:50%;background:#006276;display:inline-block"></span>
+             <div class="exph" style="font-size:15px">Order Fulfilment</div>
+             <span class="tag o" style="font-size:10px">process</span>
+             <span style="margin-left:auto" class="xall">⇕ collapse all</span>
+           </div>
+           <div class="expsub" style="font-family:ui-monospace,monospace">order-fulfilment &nbsp;·&nbsp; bpmn-models/order-fulfilment.bpmn</div>
+
+           <div class="sec">
+             <div class="sech"><span class="tri">▾</span>Parameters <span class="cnt">(8)</span>
+               <span class="rt">4 in · 3 out · 1 error-out</span></div>
+             <div class="secb">
+               <div class="chips">
+                 <span class="filt">Filter parameters…</span>
+                 <span class="tag i">in 4</span><span class="tag o">out 3</span><span class="tag e">error-out 1</span>
+               </div>
+
+               <div class="grow"><span class="loc">⌖</span>callActivity <b style="font-weight:400;color:#4c5b6a">shipSubprocess</b> → <span class="lk">shipping-process</span></div>
+               <table class="ptbl pm" style="margin-top:3px">
+                 <tbody>
+                   <tr><td><span class="tag i">in</span></td><td>orderId</td><td style="color:#79848f">→</td><td>subOrderId</td></tr>
+                   <tr><td><span class="tag i">in</span></td><td>orderTotal</td><td style="color:#79848f">→</td><td>amount</td></tr>
+                   <tr><td><span class="tag o">out</span></td><td>trackingCode</td><td style="color:#79848f">←</td><td>tracking</td></tr>
+                 </tbody>
+               </table>
+
+               <div class="grow"><span class="loc">⌖</span>serviceTask <b style="font-weight:400;color:#4c5b6a">lookupCustomer</b> → <span class="lk">custSvc</span> <span style="color:#79848f">· findById</span></div>
+               <table class="ptbl pm" style="margin-top:3px">
+                 <tbody>
+                   <tr><td><span class="tag i">in</span></td><td>customerRef</td><td style="color:#79848f">→</td><td>id</td></tr>
+                   <tr><td><span class="tag o">out</span></td><td>customerName</td><td style="color:#79848f">←</td><td>name</td></tr>
+                   <tr><td><span class="tag e">error-out</span></td><td>lookupError</td><td style="color:#79848f">←</td><td>error</td></tr>
+                 </tbody>
+               </table>
+
+               <div class="grow"><span class="loc">⌖</span>httpTask <b style="font-weight:400;color:#4c5b6a">notifyErp</b> → <span style="color:#4c5b6a">${erpBaseUrl}/orders</span></div>
+               <table class="ptbl pm" style="margin-top:3px">
+                 <tbody>
+                   <tr><td><span class="tag i">in</span></td><td>orderTotal</td><td style="color:#79848f">→</td><td>body.amount</td></tr>
+                   <tr><td><span class="tag o">out</span></td><td>erpAck</td><td style="color:#79848f">←</td><td>responseBody</td></tr>
+                 </tbody>
+               </table>
+               <div style="font-size:10px; color:#79848f; margin-top:6px; font-family:ui-monospace,monospace">
+                 field injections · requestMethod POST · requestUrl ${erpBaseUrl}/orders
+               </div>
+             </div>
+           </div>
+
+           <div class="sec">
+             <div class="sech"><span class="tri">▾</span>Called with <span class="cnt">(4)</span>
+               <span class="rt">from 3 callers</span></div>
+             <div class="secb">
+               <div class="grow"><span class="loc">⌖</span>button <b style="font-weight:400;color:#4c5b6a">startOrder</b> on <span class="lk">order-form.form</span> <span style="color:#79848f">· Send payload map</span></div>
+               <table class="ptbl pm" style="margin-top:3px">
+                 <tbody>
+                   <tr><td><span class="tag i">in</span></td><td>{{total}}</td><td style="color:#79848f">→</td><td>orderTotal</td></tr>
+                   <tr><td><span class="tag i">in</span></td><td>{{cust.id}}</td><td style="color:#79848f">→</td><td>customerRef</td></tr>
+                 </tbody>
+               </table>
+               <div class="grow">caseTask <b style="font-weight:400;color:#4c5b6a">handleOrder</b> on <span class="lk">customer-onboarding</span></div>
+               <table class="ptbl pm" style="margin-top:3px">
+                 <tbody>
+                   <tr><td><span class="tag i">in</span></td><td>caseOrderId</td><td style="color:#79848f">→</td><td>orderId</td></tr>
+                 </tbody>
+               </table>
+               <div class="grow"><span class="lk">OrderController</span><span style="color:#79848f">#create</span> · start variable</div>
+               <table class="ptbl pm" style="margin-top:3px">
+                 <tbody>
+                   <tr><td><span class="tag i">in</span></td><td>req.total()</td><td style="color:#79848f">→</td><td>orderTotal</td></tr>
+                 </tbody>
+               </table>
+             </div>
+           </div>
+
+           <div class="sec"><div class="sech shut"><span class="tri">▸</span>User tasks <span class="cnt">(3)</span></div></div>
+         </div>
+       </div>
+       <div class="status"><span>⎇ main</span><span>Atlas 0.10.10</span><span class="rt">🔗 copy link</span></div>
+     </div>
+   </div>
+</div>

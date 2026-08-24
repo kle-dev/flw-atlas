@@ -1,0 +1,12 @@
+{
+  "key": "openOrdersQuery",
+  "name": "Open orders",
+  "scopeType": "bpmn",
+  "processDefinitionKey": "orderProcess",
+  "columns": [
+    {"name": "orderId", "label": "Order", "variableName": "orderId"},
+    {"name": "total", "label": "Total", "variableName": "total"},
+    {"name": "courier", "label": "Courier", "variableName": "courierCode"}
+  ],
+  "identityLinks": {"query": {"groups": ["sales"]}}
+}

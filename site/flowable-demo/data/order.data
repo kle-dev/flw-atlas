@@ -1,0 +1,14 @@
+{
+  "key": "orderDO",
+  "name": "Order",
+  "dataObjectType": "master",
+  "referencedServiceDefinitionModelKey": "orderService",
+  "fieldMappings": [
+    {"name": "id", "label": "Id", "type": "string"},
+    {"name": "orderNumber", "label": "Order number", "type": "string"},
+    {"name": "companyName", "label": "Company", "type": "string"},
+    {"name": "totalAmount", "label": "Total", "type": "number"},
+    {"name": "orderType", "label": "Type", "type": "DATA-DICTIONARY", "dataDictionaryModelKey": "orderTypes"}
+  ],
+  "definitionIdentityLinks": {"query": {"groups": ["sales", "compliance"]}, "update": {"groups": ["compliance"]}}
+}

@@ -1,0 +1,9 @@
+{
+  "key": "orderTypes",
+  "name": "Order types",
+  "types": [
+    {"key": "standard", "name": "Standard"},
+    {"key": "express", "name": "Express"},
+    {"key": "bulk", "name": "Bulk"}
+  ]
+}

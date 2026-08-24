@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Backing table for orderService / orderDO.
+     `legacy_note_` is deliberately absent from the service's columnMappings, so the schema-coverage
+     check has one real "in Liquibase but not mapped in the service" row to report. -->
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog">
+  <changeSet id="002-order" author="demo">
+    <createTable tableName="ord_order">
+      <column name="id_" type="VARCHAR(64)"/>
+      <column name="order_no_" type="VARCHAR(64)"/>
+      <column name="company_" type="VARCHAR(255)"/>
+      <column name="total_" type="DECIMAL(19,2)"/>
+      <column name="score_" type="DECIMAL(19,2)"/>
+      <column name="legacy_note_" type="VARCHAR(255)"/>
+    </createTable>
+  </changeSet>
+</databaseChangeLog>

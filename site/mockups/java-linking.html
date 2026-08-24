@@ -1,0 +1,42 @@
+<div class="mockfit ide" data-w="1180" data-h="420" style="width:1180px;height:420px">
+   <div class="title">
+     <span class="tl"><i class="r"></i><i class="y"></i><i class="g"></i></span>
+     <span class="proj">flowable-demo — <b>NotifyCustomer.java</b></span>
+   </div>
+   <div class="body">
+     <div class="tree">
+       <div class="ttl">Project</div>
+       <div class="row"><span class="caret">▾</span><span class="ic fold">📁</span>com.example.app</div>
+       <div class="row sel ind"><span class="caret hid">▸</span><span class="ic j">J</span>NotifyCustomer</div>
+       <div class="row ind"><span class="caret hid">▸</span><span class="ic j">J</span>OrderController</div>
+       <div class="row"><span class="caret">▾</span><span class="ic fold">📁</span>bpmn-models</div>
+       <div class="row ind"><span class="caret hid">▸</span><span class="ic p">P</span>order-fulfilment.bpmn</div>
+       <div class="row ind"><span class="caret hid">▸</span><span class="ic p">P</span>invoice-approval.bpmn</div>
+       <div class="row"><span class="caret">▸</span><span class="ic fold">📁</span>action-models</div>
+     </div>
+     <div class="editor">
+       <div class="tabs"><div class="tab on"><span class="ic j" style="width:13px;height:13px">J</span>NotifyCustomer.java</div></div>
+       <div class="edscroll">
+         <div class="gutter">
+           <span>10</span><span>11</span>
+           <span class="gi"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5c9eff" stroke-width="1.9"><circle cx="6" cy="6" r="2.3"/><circle cx="6" cy="18" r="2.3"/><circle cx="18" cy="12" r="2.3"/><path d="M8.2 7.1 15.7 11M8.2 16.9 15.7 13" stroke-linecap="round"/></svg>12</span>
+           <span>13</span><span>14</span><span>15</span><span>16</span>
+         </div>
+         <div class="code"><span class="ln"><span class="an">@Component</span>(<span class="s">"notifyCustomer"</span>)</span><span class="ln"><span class="kw">public class</span> <span class="ty">NotifyCustomer</span> <span class="kw">implements</span> <span class="ty">JavaDelegate</span> {</span><span class="ln">    <span class="an">@Override</span></span><span class="ln">    <span class="kw">public void</span> <span class="fn">execute</span>(<span class="ty">DelegateExecution</span> execution) {</span><span class="ln">        mailer.<span class="m">send</span>(execution.<span class="m">getVariable</span>(<span class="s">"customerEmail"</span>));</span><span class="ln">    }</span><span class="ln">}</span>
+           <div class="menu" style="top:36px; left:56px; min-width:340px">
+             <div style="padding:6px 13px 4px; font-size:10.5px; text-transform:uppercase; letter-spacing:.07em; color:#7a7e85">Used in 3 Flowable models</div>
+             <div class="mrow sel"><span class="picn p">P</span>order-fulfilment.bpmn<span style="margin-left:auto; color:#9aa4b2; font-size:11.5px">serviceTask · line 58</span></div>
+             <div class="mrow"><span class="picn p">P</span>invoice-approval.bpmn<span style="margin-left:auto; color:#9aa4b2; font-size:11.5px">listener · line 22</span></div>
+             <div class="mrow"><span class="picn c">C</span>customer-onboarding.cmmn.json<span style="margin-left:auto; color:#9aa4b2; font-size:11.5px">task · notifyCustomer</span></div>
+           </div>
+           <div class="tooltip" style="top:212px; left:470px; width:330px">
+             <b>Renaming this class?</b>
+             <div style="margin-top:4px">Flowable models reference it by text — rename will not update them.</div>
+             <div style="margin-top:8px; color:#5c9eff">Show affected models</div>
+           </div>
+         </div>
+       </div>
+       <div class="status"><span>⎇ main</span><span>Implicitly used — referenced from 3 models</span><span class="rt">12:23 · Java</span></div>
+     </div>
+   </div>
+</div>

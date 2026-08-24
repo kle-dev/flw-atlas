@@ -1,0 +1,21 @@
+{
+  "key": "orderService",
+  "name": "Order Service",
+  "type": "db",
+  "tableName": "ord_order",
+  "referencedLiquibaseModelKey": "002-order",
+  "columnMappings": [
+    {"name": "id", "columnName": "id_", "type": "string"},
+    {"name": "orderNumber", "columnName": "order_no_", "type": "string"},
+    {"name": "companyName", "columnName": "company_", "type": "string"},
+    {"name": "totalAmount", "columnName": "total_", "type": "number"},
+    {"name": "internalScore", "columnName": "score_", "type": "number"}
+  ],
+  "operations": [
+    {"key": "findAll", "name": "Find all", "config": {"method": "GET", "url": "/api/orders"}},
+    {"key": "findByNumber", "name": "Find by number", "config": {"method": "GET", "url": "/api/orders/{orderNumber}"},
+     "inputParameters": [{"name": "orderNumber", "type": "string"}]},
+    {"key": "archive", "name": "Archive", "config": {"method": "POST", "url": "/api/orders/archive"},
+     "inputParameters": [{"name": "orderNumber", "type": "string"}]}
+  ]
+}

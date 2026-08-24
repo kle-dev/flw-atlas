@@ -1,0 +1,69 @@
+{
+  "metadata": {"key": "orderForm", "name": "Order Form", "modelType": "form"},
+  "rows": [
+    [
+      {
+        "id": "customer",
+        "type": "select",
+        "label": "Customer",
+        "extraSettings": {"queryUrl": "/api/customers"}
+      }
+    ],
+    [
+      {"id": "amount", "type": "number", "label": "Amount", "isRequired": true}
+    ],
+    [
+      {"id": "totalDisplay", "type": "text", "label": "Total", "value": "{{amount}}"}
+    ],
+    [
+      {
+        "id": "lookupCustomer",
+        "type": "button",
+        "label": "Lookup customer",
+        "extraSettings": {"serviceModel": {"serviceModelKey": "customerService", "operationKey": "findAll"}}
+      }
+    ],
+    [
+      {
+        "id": "customerRecord",
+        "type": "select",
+        "label": "Customer record",
+        "extraSettings": {"dataObjectDefinitionKey": "customerDO", "dataObjectOperationKey": "findAll"}
+      }
+    ],
+    [
+      {
+        "id": "canEditButton",
+        "type": "restButton",
+        "extraSettings": {
+          "text": "Check if editable",
+          "url": "{{endpoints.baseUrl}}/api/customers/{{customer}}/canEdit",
+          "path": "data",
+          "responsePayloadMapping": [
+            {"name": "$temp.canEdit", "expression": "{{$response.canEdit}}"}
+          ]
+        }
+      }
+    ],
+    [
+      {
+        "id": "notifyButton",
+        "type": "workAction",
+        "label": "Notify customer",
+        "extraSettings": {
+          "actionDefinitionKey": "notifyCustomerAction",
+          "sendPayloadMapping": [
+            {"name": "customerEmail", "expression": "{{customer.email}}"},
+            {"name": "orderTotal", "expression": "{{amount}}"}
+          ],
+          "responsePayloadMapping": [
+            {"name": "$temp.sent", "expression": "{{$response.executionPayload.sent}}"}
+          ]
+        }
+      }
+    ]
+  ],
+  "outcomes": [
+    {"value": "approve", "label": "Approve"}
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "key": "onboardingPolicies",
+  "name": "Onboarding policies",
+  "description": "Policy documents the onboarding assistant is allowed to cite.",
+  "sources": [{"type": "folder", "path": "docs/policies"}]
+}

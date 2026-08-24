@@ -159,3 +159,73 @@ val diagramUiTest by tasks.registering(Exec::class) {
 }
 
 tasks.named("check") { dependsOn(searchSelfTest, explorerUiTest, diagramUiTest) }
+
+// ---- documentation site (site/ -> build/site) ----
+// The site lives here rather than in the root build because everything it needs is already wired up
+// in this module: the CLI main class that generates the live demo, and the node-present-or-fail
+// helper the browser tests use.
+//
+// Nothing the site build produces is committed. The demo artifacts and the screenshots are generated
+// on every deploy (see .github/workflows/pages.yml), which is what keeps the images from ever showing
+// a version of the product that no longer exists.
+
+val siteDemoDir = layout.buildDirectory.dir("site-demo")
+
+val siteDemo by tasks.registering(JavaExec::class) {
+    description = "Generates the documentation site's live demo artifacts from site/flowable-demo."
+    group = "documentation"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.flowable.atlas.cli.MainKt")
+    args(
+        rootProject.file("site/flowable-demo").absolutePath,
+        "--all", "--quiet",
+        "-o", siteDemoDir.get().asFile.absolutePath,
+    )
+    inputs.dir(rootProject.file("site/flowable-demo"))
+    inputs.dir(rootProject.file("core/src/main/resources/frontend"))
+    outputs.dir(siteDemoDir)
+}
+
+val siteShots by tasks.registering(Exec::class) {
+    description = "Renders the site's screenshots and checks every mockup's geometry (needs Chrome)."
+    group = "documentation"
+    dependsOn(siteDemo)
+    onlyIf { nodePresentOrFail("siteShots") }
+    commandLine(
+        nodeExecutable ?: "node",
+        rootProject.file("scripts/site-shots.mjs").absolutePath,
+        "--explorer", siteDemoDir.get().asFile.resolve("flowable-demo.explorer.html").absolutePath,
+    )
+}
+
+val site by tasks.registering(Exec::class) {
+    description = "Builds the documentation site into build/site."
+    group = "documentation"
+    dependsOn(siteDemo)
+    onlyIf { nodePresentOrFail("site") }
+    commandLine(
+        nodeExecutable ?: "node",
+        rootProject.file("scripts/site-build.mjs").absolutePath,
+        "--demo", siteDemoDir.get().asFile.absolutePath,
+    )
+}
+
+// Deliberately NOT --strict and deliberately without the demo: this is the gate every `./gradlew
+// build` runs, so it must not need Chrome or a generated demo. It still catches what actually rots —
+// an unparseable page, a dead internal link, a hardcoded version, a missing mockup. The strict build,
+// which additionally requires every screenshot and the live demo to exist, runs in the Pages workflow.
+val siteCheck by tasks.registering(Exec::class) {
+    description = "Validates the site sources: markdown subset, internal links, versions, mockups."
+    group = "verification"
+    onlyIf { nodePresentOrFail("siteCheck") }
+    commandLine(
+        nodeExecutable ?: "node",
+        rootProject.file("scripts/site-build.mjs").absolutePath,
+        "--out", layout.buildDirectory.dir("site-check").get().asFile.absolutePath,
+        // Point --demo at a directory this task never creates, so the gate behaves the same whether or
+        // not a previous `siteDemo` run left artifacts lying around.
+        "--demo", layout.buildDirectory.dir("site-check-no-demo").get().asFile.absolutePath,
+    )
+}
+
+tasks.named("check") { dependsOn(siteCheck) }

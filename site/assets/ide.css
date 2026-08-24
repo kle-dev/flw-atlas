@@ -1,0 +1,250 @@
+/* ---------------------------------------------------------------------------
+   IntelliJ IDEA chrome as CSS, namespaced under `.ide`.
+
+   Every "screenshot" of the plugin on this site is one of these: HTML and CSS,
+   not a PNG. That is deliberate — a mockup is vector-crisp at any zoom, weighs
+   ~2 KB instead of ~300 KB, is reviewable in a diff, and needs no exception to
+   the repo's `*.png` gitignore rule (which exists to keep customer screenshots
+   out of a public repo).
+
+   Derived from idea-plugin/marketplace-assets/src/ide.css. The class names
+   there are very generic (.row, .code, .s, .c, .status), so everything here is
+   scoped under `.ide` — do not unscope it.
+
+   Always dark, in both site themes: an IDE screenshot reads as dark either way.
+
+   Authoring rules, both learned the hard way:
+   1. A mockup is authored at a fixed pixel size (data-w / data-h) and scaled to
+      fit its column by site.js. Measure a new one with the element's height set
+      to `auto`, and include absolutely-positioned descendants — they do not
+      contribute to layout, so a naive measure under-measures and clips popups.
+   2. A popup can also be clipped by an INTERMEDIATE overflow:hidden container
+      (.edscroll, a diagram viewport), not just the outer frame.
+   --------------------------------------------------------------------------- */
+
+/* ---------- the frame a mockup sits in ---------- */
+/* Pairs with figure.fig.mock in site.css: the body is the dark IDE ground, and .mockfit is the
+   fixed-size mockup that site.js scales down to the column width. */
+/* The dark ground belongs to the mockup itself (`.ide` sets it), not to the figure: a 430px-wide
+   tool-window mockup inside a full-width dark band reads as a broken screenshot. So the figure body
+   stays neutral and the mockup floats on it, centred by site.js when it is narrower than the column. */
+.fig.mock > .body{
+  background:var(--panel2); padding:var(--space-4); display:block;
+  position:relative; overflow:hidden;
+}
+.mockfit{
+  transform-origin:top left; border-radius:var(--radius-md); overflow:hidden;
+  box-shadow:var(--shadow); border:1px solid #1e1f22;
+}
+
+/* ---------- IntelliJ mockup styles (namespaced under .ide) ----------
+   Derived from idea-plugin/marketplace-assets/src/ide.css so the mockups
+   match the real IDE chrome. Always dark: an IDE screenshot is dark either way. */
+.ide{
+  font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  background:#1e1f22; color:#dfe1e5; font-size:13.5px; line-height:1.72;
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.ide *{box-sizing:border-box}
+.ide .title{height:36px; flex:none; display:flex; align-items:center; padding:0 14px; gap:8px; background:#2b2d30; border-bottom:1px solid #1e1f22}
+.ide .tl{display:flex; gap:7px}
+.ide .tl i{width:11px; height:11px; border-radius:50%; display:block}
+.ide .tl .r{background:#ec6a5e} .ide .tl .y{background:#f5bf4f} .ide .tl .g{background:#61c554}
+.ide .proj{margin-left:12px; font-family:-apple-system,"Segoe UI",sans-serif; font-size:12.5px; color:#b4b8bf}
+.ide .proj b{color:#dfe1e5; font-weight:600}
+.ide .run{margin-left:auto; display:flex; align-items:center; gap:12px; color:#7a7e85}
+.ide .run .play{color:#61c554; font-size:11px}
+.ide .run .cfg{font-family:-apple-system,sans-serif; font-size:11.5px; color:#b4b8bf; border:1px solid #43454a; border-radius:6px; padding:2px 9px}
+.ide .body{flex:1; display:flex; min-height:0}
+.ide .strip{width:38px; flex:none; background:#2b2d30; border-right:1px solid #1e1f22; display:flex; flex-direction:column; align-items:center; padding-top:11px; gap:17px; color:#6b7079}
+.ide .strip .on{color:#dfe1e5}
+.ide .tree{width:224px; flex:none; background:#2b2d30; border-right:1px solid #1e1f22; font-family:-apple-system,"Segoe UI",sans-serif; font-size:12.5px; padding:7px 0; overflow:hidden}
+.ide .ttl{padding:3px 13px 7px; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:#7a7e85}
+.ide .row{display:flex; align-items:center; gap:7px; padding:2px 12px 2px 0; color:#c7cbd1; white-space:nowrap}
+.ide .row.sel{background:#2e436e}
+.ide .ind{padding-left:22px}
+.ide .ic{width:15px; height:15px; border-radius:3px; display:inline-flex; align-items:center; justify-content:center; font-size:8px; font-weight:800; color:#fff; font-family:-apple-system,sans-serif; flex:none}
+.ide .ic.p{background:#3f7dd6} .ide .ic.c{background:#7a5cff} .ide .ic.d{background:#d68a3f}
+.ide .ic.f{background:#3faf7a} .ide .ic.o{background:#c74f8a} .ide .ic.svc{background:#5c8bff}
+.ide .ic.lq{background:#2a7f9e} .ide .ic.a{background:#c44133}
+.ide .ic.j{background:linear-gradient(135deg,#f97a53,#e0447a)}
+.ide .ic.fold{background:none}
+.ide .caret{color:#7a7e85; font-size:9px; width:10px; display:inline-block; text-align:center; flex:none}
+.ide .caret.hid{visibility:hidden}
+.ide .editor{flex:1; display:flex; flex-direction:column; min-width:0; background:#1e1f22}
+.ide .tabs{height:32px; flex:none; display:flex; align-items:stretch; background:#2b2d30; border-bottom:1px solid #1e1f22}
+.ide .tab{display:flex; align-items:center; gap:7px; padding:0 15px; font-family:-apple-system,sans-serif; font-size:12.5px; color:#9aa0a6; border-right:1px solid #2b2d30}
+.ide .tab.on{color:#dfe1e5; background:#1e1f22; border-top:2px solid #3574f0}
+.ide .edscroll{flex:1; display:flex; position:relative; overflow:hidden}
+.ide .gutter{width:52px; flex:none; text-align:right; padding:12px 11px 0 0; color:#4b4e55; user-select:none; font-variant-numeric:tabular-nums; background:#1e1f22}
+.ide .gutter span{display:block}
+.ide .gutter .gi{display:flex; justify-content:flex-end; align-items:center; gap:5px}
+.ide .code{flex:1; padding:12px 0 0 10px; white-space:pre; position:relative; min-width:0}
+.ide .ln{display:block; min-height:1.72em}
+.ide .kw{color:#cf8e6d} .ide .s{color:#6aab73} .ide .num{color:#2aacb8} .ide .cm{color:#7a7e85}
+.ide .m{color:#dfe1e5} .ide .fn{color:#56a8f5} .ide .ty{color:#dfe1e5} .ide .jd{color:#5f9a5f}
+.ide .fld{color:#c77dbb} .ide .an{color:#b3ae60} .ide .at{color:#bcbec4} .ide .tg{color:#e8bf6a}
+.ide .car{display:inline-block; width:2px; height:1.15em; background:#dfe1e5; vertical-align:-3px; margin:0 -1px}
+.ide .sq{text-decoration:underline wavy #e05252; text-decoration-skip-ink:none; text-underline-offset:4px; text-decoration-thickness:1.4px}
+.ide .sqw{text-decoration:underline wavy #d9a343; text-decoration-skip-ink:none; text-underline-offset:4px; text-decoration-thickness:1.4px}
+.ide .warnbg{background:rgba(224,82,82,.12); border-radius:2px}
+.ide .deref{color:#dfe1e5; text-decoration:underline; text-decoration-color:#5c9eff; text-underline-offset:3px}
+/* rainbow parens, as the expression highlighter paints them */
+.ide .p1{color:#e8bf6a} .ide .p2{color:#c77dbb} .ide .p3{color:#56a8f5} .ide .p4{color:#6aab73}
+.ide .popup{position:absolute; background:#2b2d30; border:1px solid #43454a; border-radius:8px; box-shadow:0 22px 50px -12px rgba(0,0,0,.75); overflow:hidden; min-width:400px; font-size:12.5px; white-space:normal; padding:4px 0}
+.ide .prow{display:flex; align-items:center; gap:10px; padding:5px 13px 5px 10px; color:#bcc2cc; white-space:nowrap}
+.ide .prow.sel{background:#2e436e}
+.ide .prow .key{color:#d9dee6} .ide .prow.sel .key{color:#fff}
+.ide .prow .key b{color:#5c9eff; font-weight:700}
+.ide .prow .hint{margin-left:auto; padding-left:30px; color:#7a7e85; font-family:-apple-system,sans-serif; font-size:11.5px}
+.ide .picn{width:16px; height:16px; border-radius:4px; display:inline-flex; align-items:center; justify-content:center; font-size:9px; font-weight:800; color:#fff; font-family:-apple-system,sans-serif; flex:none}
+.ide .picn.p{background:#3f7dd6} .ide .picn.c{background:#7a5cff} .ide .picn.d{background:#d68a3f}
+.ide .picn.o{background:#c74f8a} .ide .picn.f{background:#3faf7a} .ide .picn.v{background:#3faf7a}
+.ide .picn.fx{background:#7a5cff} .ide .picn.col{background:#2a7f9e}
+.ide .tooltip{position:absolute; background:#3c3f41; border:1px solid #4b4e55; border-radius:7px; box-shadow:0 18px 44px -14px rgba(0,0,0,.75); padding:10px 13px; font-family:-apple-system,sans-serif; font-size:12.5px; color:#c9cfd8; max-width:440px; white-space:normal; line-height:1.5}
+.ide .tooltip b{color:#dfe1e5}
+.ide .kbd{display:inline-block; border:1px solid #5a5e66; border-radius:4px; padding:0 6px; font-size:11px; color:#b4b8bf; background:#33363a}
+.ide .menu{position:absolute; background:#2b2d30; border:1px solid #43454a; border-radius:8px; box-shadow:0 20px 46px -12px rgba(0,0,0,.75); padding:5px 0; min-width:290px; white-space:normal; font-family:-apple-system,sans-serif; font-size:12.5px}
+.ide .mrow{display:flex; align-items:center; gap:9px; padding:5px 13px; color:#c7cbd1}
+.ide .mrow.sel{background:#2e436e; color:#fff}
+.ide .docpop{position:absolute; background:#2b2d30; border:1px solid #43454a; border-radius:9px; box-shadow:0 22px 50px -12px rgba(0,0,0,.75); padding:13px 15px; min-width:310px; white-space:normal; font-family:-apple-system,sans-serif; font-size:12.5px; color:#c3ccd9; line-height:1.55}
+.ide .docpop .h{display:flex; gap:9px; align-items:center; margin-bottom:8px}
+.ide .docpop .lbl{font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:#7a7e85}
+.ide .docpop .name{color:#eef1f5; font-weight:650; font-size:14.5px}
+.ide .docpop .kvp{color:#9aa4b2; margin-top:4px}
+.ide .docpop .path{color:#56a8f5; font-size:11.5px; margin-top:8px; padding-top:8px; border-top:1px solid #3a3d42; word-break:break-all}
+.ide .status{height:23px; flex:none; background:#2b2d30; border-top:1px solid #1e1f22; display:flex; align-items:center; padding:0 13px; gap:15px; font-family:-apple-system,sans-serif; font-size:11px; color:#7a7e85}
+.ide .status .rt{margin-left:auto}
+.ide .toast{position:absolute; right:20px; bottom:18px; width:330px; background:#2b2d30; border:1px solid #43454a; border-radius:10px; box-shadow:0 22px 50px -12px rgba(0,0,0,.75); padding:13px 15px; font-family:-apple-system,sans-serif}
+.ide .toast .th{display:flex; align-items:center; gap:9px; font-size:12.5px; color:#dfe1e5; font-weight:600}
+.ide .toast .tb{font-size:12px; color:#9aa4b2; margin-top:5px; line-height:1.5}
+.ide .toast .ta{margin-top:9px; display:flex; gap:14px; font-size:12px; color:#5c9eff}
+
+/* tool-window panel chrome (Atlas Hub, Playground) */
+.ide .tw{background:#2b2d30; display:flex; flex-direction:column; flex:1; min-height:0; font-family:-apple-system,"Segoe UI",sans-serif}
+.ide .twh{height:29px; flex:none; display:flex; align-items:center; gap:8px; padding:0 11px; border-bottom:1px solid #1e1f22; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#9aa0a6}
+.ide .twh .rt{margin-left:auto; display:flex; gap:10px; color:#7a7e85; letter-spacing:0; text-transform:none; font-size:11.5px}
+.ide .twb{flex:1; overflow:hidden; padding:5px 0}
+.ide .grp{padding:8px 12px 10px; border-bottom:1px solid #34373b}
+.ide .grp:last-child{border-bottom:0}
+.ide .gl{font-size:10.5px; letter-spacing:.07em; text-transform:uppercase; color:#7a7e85; margin-bottom:6px; display:flex; align-items:center; gap:7px}
+.ide .gv{font-size:12.5px; color:#dfe1e5; display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.ide .gs{font-size:11.5px; color:#8a8f98; margin-top:3px}
+.ide .btnrow{display:flex; gap:7px; margin-top:8px; flex-wrap:wrap}
+.ide .btn{font-size:11.5px; color:#c7cbd1; border:1px solid #4a4d52; border-radius:5px; padding:2.5px 10px; background:#3a3d41}
+.ide .btn.pri{background:#3574f0; border-color:#3574f0; color:#fff}
+.ide .lnk{color:#5c9eff; font-size:11.5px}
+.ide .chip{font-size:10.5px; border-radius:999px; padding:1px 8px; border:1px solid}
+.ide .chip.ok{color:#87ba4d; border-color:rgba(135,186,77,.45); background:rgba(135,186,77,.1)}
+.ide .chip.warn{color:#ffc926; border-color:rgba(255,201,38,.45); background:rgba(255,201,38,.1)}
+.ide .chip.bad{color:#e99195; border-color:rgba(233,145,149,.45); background:rgba(233,145,149,.1)}
+.ide .chip.neu{color:#a8bac1; border-color:#4a4d52; background:rgba(168,186,193,.08)}
+
+/* dialog chrome (Liquibase generation, Settings) */
+.ide .dlg{flex:1; display:flex; flex-direction:column; min-height:0; background:#2b2d30; font-family:-apple-system,"Segoe UI",sans-serif}
+.ide .dlgh{height:38px; flex:none; display:flex; align-items:center; padding:0 16px; border-bottom:1px solid #1e1f22; font-size:13px; color:#dfe1e5; font-weight:600}
+.ide .dlgb{flex:1; padding:14px 16px; overflow:hidden; min-height:0}
+.ide .dlgf{height:48px; flex:none; display:flex; align-items:center; gap:9px; padding:0 16px; border-top:1px solid #1e1f22; justify-content:flex-end}
+.ide .fld2{display:flex; align-items:center; gap:9px; margin-bottom:9px; font-size:12.5px; color:#c7cbd1}
+.ide .fld2 label{width:132px; flex:none; color:#9aa4b2; text-align:right}
+.ide .inp{flex:1; min-width:0; background:#1e1f22; border:1px solid #4a4d52; border-radius:5px; padding:3px 9px; color:#dfe1e5; font-family:ui-monospace,Menlo,monospace; font-size:12px}
+.ide table.tbl{width:100%; border-collapse:collapse; font-size:12px; background:#1e1f22; border:1px solid #43454a; border-radius:6px; overflow:hidden}
+.ide table.tbl th{text-align:left; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:#7a7e85; font-weight:600; padding:6px 10px; background:#2b2d30; border-bottom:1px solid #43454a; white-space:nowrap}
+.ide table.tbl td{padding:5px 10px; border-bottom:1px solid #303338; color:#c7cbd1; font-family:ui-monospace,Menlo,monospace; white-space:nowrap}
+.ide table.tbl tr:last-child td{border-bottom:0}
+.ide .cbx{display:inline-flex; width:13px; height:13px; border-radius:3px; border:1px solid #6b7079; align-items:center; justify-content:center; font-size:9px; color:#fff; flex:none}
+.ide .cbx.on{background:#3574f0; border-color:#3574f0}
+/* settings tree */
+.ide .stree{width:214px; flex:none; background:#2b2d30; border-right:1px solid #1e1f22; padding:9px 0; font-size:12.5px}
+.ide .srow{display:flex; align-items:center; gap:7px; padding:3px 12px; color:#c7cbd1}
+.ide .srow.sel{background:#2e436e; color:#fff}
+.ide .srow.sub{padding-left:30px}
+/* explorer-inside-IDE mockup */
+.ide .exp{flex:1; display:flex; min-height:0; background:#fafafa; color:#131e29; font-family:-apple-system,"Segoe UI",sans-serif}
+.ide .exps{width:186px; flex:none; background:#fff; border-right:1px solid #e2e8f0; padding:11px 0; font-size:12px}
+.ide .expsl{padding:0 13px 5px; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#79848f; font-weight:600}
+.ide .expsr{display:flex; align-items:center; gap:7px; padding:3px 13px; color:#4c5b6a}
+.ide .expsr.on{background:#e5f0ff; color:#131e29; font-weight:500; border-left:2px solid #0f55d6; padding-left:11px}
+.ide .expsr .dt{width:6px; height:6px; border-radius:50%; flex:none}
+.ide .expsr .ct{margin-left:auto; font-size:10px; color:#79848f; font-family:ui-monospace,monospace}
+.ide .expm{flex:1; min-width:0; padding:13px 15px; overflow:hidden}
+.ide .exph{font-size:16px; font-weight:600; color:#131e29}
+.ide .expsub{font-size:11.5px; color:#4c5b6a; margin-top:2px}
+.ide .mcards{display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:#e2e8f0; border:1px solid #e2e8f0; border-radius:6px; overflow:hidden; margin-top:11px}
+.ide .mcard{background:#fff; padding:8px 11px}
+.ide .mv{font-size:20px; font-weight:600; color:#131e29; line-height:1.15; font-variant-numeric:tabular-nums}
+.ide .mk{font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; color:#79848f; margin-top:1px}
+.ide .hcards{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:9px}
+.ide .hcard{background:#fff; border:1px solid #e2e8f0; border-left:4px solid; border-radius:6px; padding:7px 10px}
+.ide .hv{font-size:17px; font-weight:600; line-height:1.2; font-variant-numeric:tabular-nums}
+.ide .hk{font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; color:#79848f}
+.ide .rowlist{margin-top:11px; border:1px solid #e2e8f0; border-radius:6px; background:#fff; overflow:hidden}
+.ide .rl{display:flex; align-items:center; gap:8px; padding:5px 11px; border-bottom:1px solid #e2e8f0; font-size:12px; color:#131e29}
+.ide .rl:last-child{border-bottom:0}
+.ide .rl .rk2{margin-left:auto; font-size:10px; color:#79848f; font-family:ui-monospace,monospace}
+.ide .rl .dt{width:6px; height:6px; border-radius:50%; flex:none}
+.ide .expsearch{margin-left:auto; display:flex; align-items:center; gap:6px; font-size:11px; color:#79848f; border:1px solid #e2e8f0; border-radius:999px; padding:2px 9px; background:#fff}
+
+/* key/value detail grid inside the explorer mockup */
+.ide .kvgrid{display:grid; grid-template-columns:repeat(2,1fr); gap:1px; background:#e2e8f0; border:1px solid #e2e8f0; border-radius:6px; overflow:hidden; margin-top:10px}
+.ide .kvc{background:#fff; padding:6px 10px}
+.ide .kvk{font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; color:#79848f}
+.ide .kvv{font-size:11.5px; color:#131e29; font-family:ui-monospace,monospace}
+.ide .ptbl{width:100%; border-collapse:collapse; font-size:11.5px; margin-top:9px; background:#fff; border:1px solid #e2e8f0; border-radius:6px; overflow:hidden}
+.ide .ptbl th{text-align:left; font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; color:#79848f; font-weight:600; padding:5px 9px; background:#f8fafc; border-bottom:1px solid #e2e8f0}
+.ide .ptbl td{padding:4px 9px; border-bottom:1px solid #e2e8f0; color:#131e29; font-family:ui-monospace,monospace}
+.ide .ptbl tr:last-child td{border-bottom:0}
+.ide table.ptbl.pm{table-layout:fixed}
+.ide table.ptbl.pm td:nth-child(1){width:78px}
+.ide table.ptbl.pm td:nth-child(2){width:40%; overflow:hidden; text-overflow:ellipsis}
+.ide table.ptbl.pm td:nth-child(3){width:24px; color:#79848f; text-align:center}
+.ide .tag{font-size:9.5px; border-radius:999px; padding:0 7px; border:1px solid; font-family:-apple-system,sans-serif}
+.ide .tag.i{color:#047857; border-color:#6ee7b7; background:#ecfdf5}
+.ide .tag.o{color:#1d4ed8; border-color:#93c5fd; background:#eff6ff}
+.ide .tag.e{color:#b45309; border-color:#fcd34d; background:#fffbeb}
+/* collapsible detail sections, parameter groups, locate buttons (0.10.10 explorer) */
+.ide .sec{margin-top:10px; border:1px solid #e2e8f0; border-radius:6px; background:#fff; overflow:hidden}
+.ide .sech{display:flex; align-items:center; gap:7px; padding:6px 10px; background:#f8fafc; border-bottom:1px solid #e2e8f0; font-size:11.5px; color:#131e29; font-weight:600}
+.ide .sech.shut{border-bottom:0}
+.ide .sech .tri{color:#79848f; font-size:9px; width:9px; flex:none}
+.ide .sech .cnt{font-family:ui-monospace,monospace; font-weight:400; color:#4c5b6a; font-size:10.5px}
+.ide .sech .rt{margin-left:auto; font-weight:400; color:#79848f; font-size:10.5px; font-family:ui-monospace,monospace}
+.ide .secb{padding:8px 10px}
+.ide .grow{display:flex; align-items:center; gap:7px; font-size:11.5px; color:#131e29; font-family:ui-monospace,monospace; margin:7px 0 3px}
+.ide .grow:first-child{margin-top:0}
+.ide .loc{border:1px solid #cbd5e1; border-radius:4px; color:#0f55d6; font-size:10px; padding:0 4px; flex:none; background:#fff}
+.ide .lk{color:#0f55d6}
+.ide .chips{display:flex; align-items:center; gap:5px; margin-bottom:7px}
+.ide .filt{flex:1; min-width:0; border:1px solid #e2e8f0; border-radius:4px; padding:2px 7px; font-size:11px; color:#79848f; background:#fff; font-family:-apple-system,sans-serif}
+.ide .xall{font-size:10.5px; color:#0f55d6; font-family:ui-monospace,monospace}
+/* diagram viewport + info card (interactive diagram) */
+.ide .dgwrap{margin-top:10px; border:1px solid #e2e8f0; border-radius:6px; background:#fff; overflow:hidden}
+.ide .dgbar{display:flex; align-items:center; gap:7px; padding:5px 9px; border-bottom:1px solid #e2e8f0; background:#f8fafc; font-size:11px; color:#4c5b6a}
+.ide .zb{border:1px solid #cbd5e1; border-radius:4px; background:#fff; color:#131e29; font-size:11px; min-width:20px; text-align:center; padding:0 5px; font-family:ui-monospace,monospace}
+.ide .dgview{position:relative; padding:9px; background:#fff}
+.ide .icard{position:absolute; background:#fff; border:1px solid #cbd5e1; border-radius:7px; box-shadow:0 14px 34px -10px rgba(0,0,0,.28); padding:9px 11px; width:274px; font-size:11px; color:#131e29}
+.ide .icard .it{font-weight:600; font-size:12px; display:flex; align-items:center; gap:6px}
+.ide .icard .ik{font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; color:#79848f; margin-top:7px}
+.ide .icard .iv{font-family:ui-monospace,monospace; font-size:10.5px; color:#131e29}
+.ide .icard .btn2{margin-top:8px; padding-top:7px; border-top:1px solid #e2e8f0; color:#0f55d6; font-size:11px}
+/* plan-model tree (CMMN) */
+.ide .ptree{font-family:ui-monospace,monospace; font-size:11.5px; color:#131e29}
+.ide .pt{display:flex; align-items:center; gap:6px; padding:2px 0}
+.ide .crit{font-size:10px; color:#4c5b6a; font-family:ui-monospace,monospace}
+.ide .dia{color:#59476b}
+.ide .code2{background:#f8fafc; border:1px solid #e2e8f0; border-radius:5px; padding:6px 8px; font-family:ui-monospace,monospace; font-size:10.5px; color:#131e29; white-space:pre; overflow:hidden; margin-top:4px}
+
+/* playground */
+.ide .pg{flex:1; display:flex; flex-direction:column; min-height:0; background:#2b2d30; font-family:-apple-system,"Segoe UI",sans-serif}
+.ide .pgt{height:31px; flex:none; display:flex; align-items:center; gap:7px; padding:0 11px; border-bottom:1px solid #1e1f22}
+.ide .seg{display:flex; border:1px solid #4a4d52; border-radius:5px; overflow:hidden; font-size:11.5px}
+.ide .seg span{padding:2px 11px; color:#9aa4b2}
+.ide .seg span.on{background:#3574f0; color:#fff}
+.ide .pgfield{margin:10px 11px 0; background:#1e1f22; border:1px solid #4a4d52; border-radius:6px; padding:7px 10px; font-family:ui-monospace,Menlo,monospace; font-size:13px; color:#dfe1e5}
+.ide .pgres{margin:8px 11px 0; border:1px solid #43454a; border-radius:6px; overflow:hidden; background:#1e1f22}
+.ide .pgrow{display:flex; gap:9px; padding:5px 10px; border-bottom:1px solid #303338; font-family:ui-monospace,Menlo,monospace; font-size:11.5px; color:#9aa4b2}
+.ide .pgrow:last-child{border-bottom:0}
+.ide .pgrow b{color:#dfe1e5; font-weight:400}
+.ide .pgrow .ar{color:#6b7079}
+.ide .pglbl{font-size:10.5px; letter-spacing:.07em; text-transform:uppercase; color:#7a7e85; margin:11px 11px 0}
+.ide .ok{color:#87ba4d} .ide .warnt{color:#ffc926} .ide .badt{color:#e99195}

@@ -11,3 +11,16 @@ allprojects {
     group = "com.flowable.atlas"
     version = "0.14.0"
 }
+
+// Convenience aliases so the documentation site is discoverable from the root: the tasks themselves
+// live in :cli, which already has the CLI classpath and the node helper they need.
+tasks.register("site") {
+    description = "Builds the documentation site into build/site."
+    group = "documentation"
+    dependsOn(":cli:site")
+}
+tasks.register("siteShots") {
+    description = "Renders the documentation site's screenshots (needs Chrome)."
+    group = "documentation"
+    dependsOn(":cli:siteShots")
+}

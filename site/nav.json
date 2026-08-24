@@ -1,0 +1,49 @@
+{
+  "site": {
+    "title": "Flowable Atlas",
+    "tagline": "Map any Flowable project — models and Java — into something you can read, click and query.",
+    "url": "https://kle-dev.github.io/flw-atlas",
+    "repo": "https://github.com/kle-dev/flw-atlas",
+    "releases": "https://github.com/kle-dev/flw-atlas/releases/latest"
+  },
+  "groups": [
+    {
+      "title": "Start here",
+      "pages": [
+        { "slug": "", "file": "index", "title": "Flowable Atlas", "nav": "Overview" },
+        { "slug": "start", "file": "start", "title": "Getting started" }
+      ]
+    },
+    {
+      "title": "The IntelliJ plugin",
+      "pages": [
+        { "slug": "plugin", "file": "plugin", "title": "What the plugin does" },
+        { "slug": "plugin/reference", "file": "plugin-reference", "title": "Plugin reference" }
+      ]
+    },
+    {
+      "title": "The explorer & artifacts",
+      "pages": [
+        { "slug": "explorer", "file": "explorer", "title": "The Atlas explorer" },
+        { "slug": "artifacts", "file": "artifacts", "title": "Generated artifacts" },
+        { "slug": "cli", "file": "cli", "title": "CLI reference" }
+      ]
+    },
+    {
+      "title": "What Atlas checks",
+      "pages": [
+        { "slug": "checks", "file": "checks", "title": "Health checks" },
+        { "slug": "variables", "file": "variables", "title": "Variable analysis" },
+        { "slug": "expressions", "file": "expressions", "title": "Expressions & scripts" }
+      ]
+    },
+    {
+      "title": "Reference",
+      "pages": [
+        { "slug": "agents", "file": "agents", "title": "For LLMs & agents" },
+        { "slug": "develop", "file": "develop", "title": "Development" },
+        { "slug": "changelog", "file": "changelog", "title": "Release notes", "source": "CHANGELOG.md" }
+      ]
+    }
+  ]
+}

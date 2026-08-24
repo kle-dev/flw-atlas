@@ -6,11 +6,12 @@ import com.intellij.openapi.application.ApplicationInfo
  * Which IntelliJ Platform versions this build was actually *verified* against, and whether the IDE it
  * is currently running in is one of them.
  *
- * `plugin.xml` deliberately declares a wide `until-build`. Atlas ships as a ZIP committed to the repo
- * (`idea-plugin/dist/`) with no Marketplace update channel, so a tight `until-build` would not produce
- * the JetBrains-intended "update the plugin" prompt — it would simply make Atlas vanish from every
- * colleague's IDE the day they upgrade, with no way to get it back until a new ZIP is built and pulled.
- * Staying loadable is the right trade-off for that distribution model.
+ * `plugin.xml` deliberately declares a wide `until-build`. Atlas is side-loaded: a ZIP attached to a
+ * GitHub release, offered through our own `updatePlugins.xml` rather than a Marketplace listing. That
+ * channel can only offer an update that already exists, so a tight `until-build` would not produce the
+ * JetBrains-intended "update the plugin" prompt — it would simply make Atlas vanish from every
+ * colleague's IDE the day they upgrade, until a new release is cut and installed. Staying loadable is
+ * the right trade-off for that distribution model.
  *
  * The honest part is here instead: the verified range is stated as a fact, and the Atlas Hub shows when
  * the running IDE is outside it, so "it works" is never confused with "it was tested".

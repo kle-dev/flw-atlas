@@ -1,0 +1,6 @@
+{
+  "key": "orderNumberSequence",
+  "name": "Order number",
+  "format": "ORD-{seq:6}",
+  "startValue": 1000
+}

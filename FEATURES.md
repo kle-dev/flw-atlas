@@ -1,6 +1,6 @@
 # Flowable Atlas — Features
 
-*IntelliJ IDEA plugin, v0.13.0.* A summary of what Flowable Atlas provides, grouped by area.
+*IntelliJ IDEA plugin, v0.14.0.* A summary of what Flowable Atlas provides, grouped by area.
 Everything is resolved against the Flowable models that actually live in your repository.
 
 ## Atlas Explorer & Hub

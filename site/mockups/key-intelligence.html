@@ -1,0 +1,39 @@
+<div class="mockfit ide" data-w="1180" data-h="502" style="width:1180px;height:502px">
+   <div class="title">
+     <span class="tl"><i class="r"></i><i class="y"></i><i class="g"></i></span>
+     <span class="proj">flowable-demo — <b>ShoppingListService.java</b></span>
+   </div>
+   <div class="body">
+     <div class="tree">
+       <div class="ttl">Project</div>
+       <div class="row"><span class="caret">▾</span><span class="ic fold">📁</span>com.example.app</div>
+       <div class="row sel ind"><span class="caret hid">▸</span><span class="ic j">J</span>ShoppingListService</div>
+       <div class="row"><span class="caret">▾</span><span class="ic fold">📁</span>data-object-models</div>
+       <div class="row ind"><span class="caret hid">▸</span><span class="ic o">O</span>shopping-list.data.json</div>
+       <div class="row ind"><span class="caret hid">▸</span><span class="ic o">O</span>customer-profile.data.json</div>
+       <div class="row"><span class="caret">▸</span><span class="ic fold">📁</span>bpmn-models</div>
+     </div>
+     <div class="editor">
+       <div class="tabs"><div class="tab on"><span class="ic j" style="width:13px;height:13px">J</span>ShoppingListService.java</div></div>
+       <div class="edscroll">
+         <div class="gutter"><span>23</span><span>24</span><span>25</span><span>26</span><span>27</span><span>28</span><span>29</span></div>
+         <div class="code"><span class="ln"><span class="kw">public</span> <span class="ty">List</span>&lt;<span class="ty">DataObjectInstance</span>&gt; <span class="fn">openItems</span>(<span class="ty">String</span> owner) {</span><span class="ln">    <span class="kw">return</span> dataObjectRuntimeService.<span class="m">createDataObjectInstanceQuery</span>()</span><span class="ln">            .<span class="m">definitionKey</span>(<span class="ty">ModelConstants</span>.<span class="fld">SHOPPING_LIST</span>)</span><span class="ln">            .<span class="m">operation</span>(<span class="s">"</span><span class="car"></span><span class="s">"</span>)</span><span class="ln">            .<span class="m">value</span>(<span class="s">"owner"</span>, owner)</span><span class="ln">            .<span class="m">list</span>();</span><span class="ln">}</span>
+           <div class="popup" style="top:88px; left:196px; min-width:380px">
+             <div class="prow sel"><span class="picn o">O</span><span class="key">findByOwner</span><span class="hint">operation · shopping-list</span></div>
+             <div class="prow"><span class="picn o">O</span><span class="key">findByCategory</span><span class="hint">operation · shopping-list</span></div>
+             <div class="prow"><span class="picn o">O</span><span class="key">countOpenItems</span><span class="hint">operation · shopping-list</span></div>
+             <div class="prow"><span class="picn o">O</span><span class="key">markPurchased</span><span class="hint">operation · shopping-list</span></div>
+           </div>
+           <div class="docpop" style="top:250px; left:470px; min-width:300px">
+             <div class="h"><span class="picn o" style="width:18px;height:18px">O</span><span class="lbl">Data object model</span></div>
+             <div class="name">Shopping List</div>
+             <div class="kvp">key <span style="color:#6aab73">shopping-list</span></div>
+             <div class="kvp">table <span style="color:#6aab73">DEMO_SHOPPING_LIST</span> · 4 operations</div>
+             <div class="path">↳ data-object-models/shopping-list.data.json</div>
+           </div>
+         </div>
+       </div>
+       <div class="status"><span>⎇ main</span><span>Operations resolved from definitionKey(SHOPPING_LIST)</span><span class="rt">26:24 · Java</span></div>
+     </div>
+   </div>
+</div>

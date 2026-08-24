@@ -1,0 +1,41 @@
+<div class="mockfit ide" data-w="1180" data-h="406" style="width:1180px;height:406px">
+   <div class="title">
+     <span class="tl"><i class="r"></i><i class="y"></i><i class="g"></i></span>
+     <span class="proj">flowable-demo — <b>approval.form</b></span>
+   </div>
+   <div class="body">
+     <div class="tree">
+       <div class="ttl">Project</div>
+       <div class="row"><span class="caret">▾</span><span class="ic fold">📁</span>form-models</div>
+       <div class="row sel ind"><span class="caret hid">▸</span><span class="ic f">F</span>approval.form</div>
+       <div class="row"><span class="caret">▾</span><span class="ic fold">📁</span>bpmn-models</div>
+       <div class="row ind"><span class="caret hid">▸</span><span class="ic p">P</span>order-fulfilment.bpmn</div>
+     </div>
+     <div class="editor">
+       <div class="tabs"><div class="tab on"><span class="ic f" style="width:13px;height:13px">F</span>approval.form</div></div>
+       <div class="edscroll">
+         <div class="gutter"><span>52</span><span>53</span><span>54</span><span class="gi"><svg width="12" height="12" viewBox="0 0 24 24" fill="#d9a343"><path d="M12 2 1 21h22L12 2zm-1 6h2v7h-2V8zm0 9h2v2h-2v-2z"/></svg>55</span><span>56</span><span>57</span><span>58</span></div>
+         <div class="code"><span class="ln">  <span class="at">"id"</span>: <span class="s">"totalLine"</span>,</span><span class="ln">  <span class="at">"text"</span>: <span class="s">"{{flw.format.currency</span><span class="p1">(</span><span class="s">orderTotal, </span><span class="s">'EUR'</span><span class="p1">)</span><span class="s">}}"</span>,</span><span class="ln">  <span class="at">"visible"</span>: <span class="s">"{{orderTotal &gt; 1000 &amp;&amp; flw.isEmpty</span><span class="p1">(</span><span class="s">approver</span><span class="p1">)</span><span class="s">}}"</span>,</span><span class="ln">  <span class="at">"label"</span>: <span class="s">"{{flw.</span><span class="s sqw">formatt</span><span class="s">.date</span><span class="p1">(</span><span class="s">dueDate</span><span class="p1">)</span><span class="s">}}"</span>,</span><span class="ln">  <span class="at">"hint"</span>: <span class="s">"{{customer.name</span><span class="s">}}"</span>,</span><span class="ln">  <span class="at">"required"</span>: <span class="kw">true</span></span>
+           <div class="tooltip" style="top:84px; left:250px; width:420px">
+             <div style="display:flex; gap:8px">
+               <svg width="14" height="14" viewBox="0 0 24 24" fill="#d9a343" style="flex:none; margin-top:3px"><path d="M12 2 1 21h22L12 2zm-1 6h2v7h-2V8zm0 9h2v2h-2v-2z"/></svg>
+               <span>Unknown member <b style="color:#e8bf6a">flw.formatt</b> — did you mean <b style="color:#6aab73">flw.format</b>?</span>
+             </div>
+             <div style="margin-top:9px; padding-top:9px; border-top:1px solid #4b4e55; display:flex; gap:9px; align-items:center">
+               <span style="color:#5c9eff">Replace with 'flw.format'</span>
+               <span style="color:#7a7e85">·</span>
+               <span style="color:#5c9eff">Add to Flowable expression allowlist</span>
+             </div>
+           </div>
+           <div class="popup" style="top:170px; left:262px; min-width:400px">
+             <div class="prow sel"><span class="picn fx">ƒ</span><span class="key">customer<b>.name</b></span><span class="hint">String · form field</span></div>
+             <div class="prow"><span class="picn v">V</span><span class="key">customerEmail</span><span class="hint">String · process variable</span></div>
+             <div class="prow"><span class="picn fx">ƒ</span><span class="key">flw.isEmpty(value)</span><span class="hint">frontend function</span></div>
+             <div class="prow"><span class="picn fx">ƒ</span><span class="key">flw.format.currency(v, ccy)</span><span class="hint">frontend function</span></div>
+           </div>
+         </div>
+       </div>
+       <div class="status"><span>⎇ main</span><span>Flowable Frontend Expression · 1 warning</span><span class="rt">55:24 · JSON</span></div>
+     </div>
+   </div>
+</div>

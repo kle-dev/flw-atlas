@@ -1,0 +1,114 @@
+{
+  "metadata": {
+    "key": "onboardingForm",
+    "name": "Onboarding Form",
+    "modelType": "form"
+  },
+  "rows": [
+    [
+      {
+        "id": "companyName",
+        "type": "text",
+        "label": "Company name",
+        "isRequired": true
+      }
+    ],
+    [
+      {
+        "id": "country",
+        "type": "select",
+        "label": "Country",
+        "extraSettings": {
+          "dataObjectDefinitionKey": "orderDO",
+          "dataObjectOperationKey": "findAll"
+        }
+      }
+    ],
+    [
+      {
+        "id": "expectedVolume",
+        "type": "number",
+        "label": "Expected monthly volume"
+      }
+    ],
+    [
+      {
+        "id": "riskHint",
+        "type": "text",
+        "label": "Risk hint",
+        "value": "{{flw.string.upper(country)}}"
+      }
+    ],
+    [
+      {
+        "id": "orderLabel",
+        "type": "text",
+        "label": "Order label",
+        "value": "{{demofns.orderLabel(companyName, country)}}"
+      }
+    ],
+    [
+      {
+        "id": "volumeBand",
+        "type": "text",
+        "label": "Band",
+        "value": "{{expectedVolume |> flw.number.round(0)}}"
+      }
+    ],
+    [
+      {
+        "id": "badHint",
+        "type": "text",
+        "label": "Broken hint",
+        "value": "{{flw.strng.uppr(companyName)}}"
+      }
+    ],
+    [
+      {
+        "id": "riskButton",
+        "type": "restButton",
+        "extraSettings": {
+          "text": "Score risk",
+          "url": "{{endpoints.baseUrl}}/api/orders/{{companyName}}/risk",
+          "path": "data",
+          "responsePayloadMapping": [
+            {
+              "name": "$temp.riskLevel",
+              "expression": "{{$response.level}}"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      {
+        "id": "confirmButton",
+        "type": "workAction",
+        "label": "Confirm onboarding",
+        "extraSettings": {
+          "actionDefinitionKey": "notifyCustomerAction",
+          "sendPayloadMapping": [
+            {
+              "name": "customerEmail",
+              "expression": "{{companyName}}"
+            },
+            {
+              "name": "onboardingChannel",
+              "expression": "{{country}}"
+            }
+          ]
+        }
+      }
+    ]
+  ],
+  "outcomes": [
+    {
+      "value": "accept",
+      "label": "Accept"
+    },
+    {
+      "value": "reject",
+      "label": "Reject"
+    }
+  ]
+}

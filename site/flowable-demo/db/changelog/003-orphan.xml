@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Deliberately orphaned: no service and no data object references this table, so the
+     changelog-authority check has one real "orphan" row to report. -->
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog">
+  <changeSet id="003-legacy-audit" author="demo">
+    <createTable tableName="legacy_audit">
+      <column name="id_" type="VARCHAR(64)"/>
+      <column name="note_" type="VARCHAR(255)"/>
+    </createTable>
+  </changeSet>
+</databaseChangeLog>

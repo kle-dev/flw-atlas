@@ -1,0 +1,42 @@
+<div class="mockfit ide" data-w="1080" data-h="480" style="width:1080px;height:480px">
+   <div class="title">
+     <span class="tl"><i class="r"></i><i class="y"></i><i class="g"></i></span>
+     <span class="proj">flowable-demo — <b>Flowable Expressions</b></span>
+   </div>
+   <div class="body">
+     <div class="pg">
+       <div class="pgt">
+         <div class="seg"><span>Backend</span><span class="on">Frontend</span></div>
+         <span style="font-size:11.5px; color:#9aa4b2">Scope: <b style="color:#dfe1e5; font-family:ui-monospace,monospace">orders[1].items[0]</b></span>
+         <span class="btn">From Cursor</span>
+         <span style="margin-left:auto; display:flex; gap:8px; align-items:center; font-size:11.5px; color:#9aa4b2">
+           <span class="cbx on">✓</span>Show Sub-Expression Values
+         </span>
+       </div>
+
+       <div class="pglbl">Expression</div>
+       <div class="pgfield">{{flw.format.currency<span class="p1">(</span>$item.qty * $item.price, order.currency<span class="p1">)</span>}}</div>
+
+       <div class="pglbl">Result</div>
+       <div class="pgres">
+         <div class="pgrow"><b style="color:#87ba4d">"€ 47.70"</b><span class="ar">·</span><span>String</span><span style="margin-left:auto" class="ok">valid</span></div>
+         <div class="pgrow"><span>$item.qty</span><span class="ar">→</span><b>3</b></div>
+         <div class="pgrow"><span>$item.price</span><span class="ar">→</span><b>15.90</b></div>
+         <div class="pgrow"><span>$item.qty * $item.price</span><span class="ar">→</span><b>47.7</b></div>
+         <div class="pgrow"><span>order.currency</span><span class="ar">→</span><b>"EUR"</b></div>
+       </div>
+
+       <div class="pglbl">Payload (JSON, optional) — the expression is evaluated live against it.</div>
+       <div class="pgfield" style="font-size:12px; line-height:1.6; color:#9aa4b2">{ <span style="color:#c77dbb">"order"</span>: { <span style="color:#c77dbb">"currency"</span>: <span class="s">"EUR"</span> },
+  <span style="color:#c77dbb">"orders"</span>: [ { … }, { <span style="color:#c77dbb">"items"</span>: [ <span style="background:#2e436e; border-radius:3px">{ <span style="color:#c77dbb">"qty"</span>: <span class="num">3</span>, <span style="color:#c77dbb">"price"</span>: <span class="num">15.90</span> }</span> ] } ] }</div>
+
+       <div class="pgt" style="border-top:1px solid #1e1f22; border-bottom:0; margin-top:10px">
+         <span class="btn">Evaluate Against App</span>
+         <span class="lnk">Detect from project</span>
+         <span class="lnk">Sign in via browser (SSO)…</span>
+         <span class="lnk">Paste session from browser…</span>
+         <span style="margin-left:auto" class="lnk">Connection Settings…</span>
+       </div>
+     </div>
+   </div>
+</div>

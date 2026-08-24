@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://flowable.org/test">
+  <process id="orderProcess" name="Order Process" flowable:candidateStarterGroups="sales">
+    <documentation>Handles an order from entry to approval.</documentation>
+    <startEvent id="start" flowable:formKey="orderForm"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="calcTask"/>
+    <serviceTask id="calcTask" name="Calculate total"
+                 flowable:expression="${demoBean.run(execution)}"
+                 flowable:resultVariableName="total"/>
+    <sequenceFlow id="f2" sourceRef="calcTask" targetRef="approveTask">
+      <conditionExpression xsi:type="tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${total &gt; 100}</conditionExpression>
+    </sequenceFlow>
+    <userTask id="approveTask" name="Approve order"
+              flowable:candidateGroups="backoffice" flowable:formKey="orderForm">
+      <documentation>Backoffice checks the order total before it ships.</documentation>
+    </userTask>
+    <sequenceFlow id="f3" sourceRef="approveTask" targetRef="notifyTask">
+      <conditionExpression xsi:type="tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${vars:bogus(}</conditionExpression>
+    </sequenceFlow>
+    <serviceTask id="notifyTask" name="Notify"
+                 flowable:delegateExpression="${notifierBean}">
+      <extensionElements>
+        <flowable:executionListener event="end">
+          <flowable:script scriptFormat="groovy">execution.setVariable('notified', true)</flowable:script>
+        </flowable:executionListener>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="f4" sourceRef="notifyTask" targetRef="callSub"/>
+    <callActivity id="callSub" name="Fulfil" calledElement="fulfilmentProcess">
+      <extensionElements>
+        <!-- `subOrderId` is a name the callee never mentions at all: nothing anywhere reads it.
+             `orderId` is passed through under its own name and read here but not there — the two halves
+             of the unused-variable report, one mapping each. -->
+        <flowable:in source="orderId" target="subOrderId"/>
+        <flowable:in source="orderId" target="orderId"/>
+        <flowable:out source="subTotal" target="total"/>
+      </extensionElements>
+    </callActivity>
+    <sequenceFlow id="f5" sourceRef="callSub" targetRef="decideTask"/>
+    <serviceTask id="decideTask" name="Decide approval" flowable:type="dmn">
+      <extensionElements>
+        <flowable:field name="decisionTableReferenceKey">
+          <flowable:string>orderDecision</flowable:string>
+        </flowable:field>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="f6" sourceRef="decideTask" targetRef="waitShipped"/>
+    <receiveTask id="waitShipped" name="Wait for shipment">
+      <extensionElements>
+        <flowable:eventType>orderShipped</flowable:eventType>
+      </extensionElements>
+    </receiveTask>
+    <sequenceFlow id="f7" sourceRef="waitShipped" targetRef="stampTask"/>
+    <scriptTask id="stampTask" name="Stamp order" scriptFormat="groovy">
+      <documentation>Builds the shipping stamp from the order and the courier.</documentation>
+      <script>
+        def stamp = "shipped-" + orderId + "-" + courierCode
+        execution.setVariable('shippingStamp', stamp)
+      </script>
+    </scriptTask>
+    <sequenceFlow id="f8" sourceRef="stampTask" targetRef="end"/>
+    <!-- deliberately broken (like the ${vars:bogus(} expression above): the unclosed '(' feeds the
+         script-syntax check through every artifact — graph problems, overview marker, Checks tab -->
+    <scriptTask id="badStamp" name="Broken stamp" scriptFormat="groovy">
+      <script>execution.setVariable('shippingStamp', "x-" + orderId</script>
+    </scriptTask>
+    <!-- deliberately misspelled API member: pins the semantic (bindings-catalog) check end to end -->
+    <scriptTask id="badApi" name="Broken API call" scriptFormat="groovy">
+      <script>execution.setTransientVariabel('meta', orderId)</script>
+    </scriptTask>
+    <endEvent id="end"/>
+  </process>
+</definitions>

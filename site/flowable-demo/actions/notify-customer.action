@@ -1,0 +1,14 @@
+{
+  "key": "notifyCustomerAction",
+  "name": "Notify customer",
+  "botKey": "script-evaluation-bot",
+  "scopeType": "bpmn",
+  "signalVariableNames": ["notified"],
+  "config": {
+    "includeInstanceVariablesInResponse": true,
+    "scriptInfo": {
+      "language": "javascript",
+      "script": "var to = flw.getInput('customerEmail'); var amount = flw.getInput('orderTotal'); flw.setOutput('sent', true);"
+    }
+  }
+}

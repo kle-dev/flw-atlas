@@ -1,0 +1,10 @@
+{
+  "metadata": {"key": "customerOverviewPage", "name": "Customer overview", "modelType": "page"},
+  "rows": [
+    [{"id": "orderTable", "type": "dataTable", "label": "Orders",
+      "extraSettings": {"dataObjectDefinitionKey": "orderDO", "dataObjectDataTableCreateFormKey": "onboardingForm"}}],
+    [{"id": "openOrders", "type": "queryTable", "label": "Open orders",
+      "extraSettings": {"queryModelKey": "openOrdersQuery"}}]
+  ],
+  "outcomes": []
+}

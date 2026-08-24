@@ -1,0 +1,12 @@
+{
+  "key": "supportAgent",
+  "name": "Onboarding assistant",
+  "description": "Answers onboarding questions from the policy knowledge base.",
+  "systemPrompt": "You help a sales colleague onboard a new customer. Use only the onboarding policies.",
+  "knowledgeBases": ["onboardingPolicies"],
+  "tools": [
+    {"type": "service", "serviceModelKey": "orderService", "operationKey": "findByNumber"},
+    {"type": "process", "processModelKey": "orderProcess"}
+  ],
+  "variables": {"question": {"type": "string"}, "answer": {"type": "string"}}
+}

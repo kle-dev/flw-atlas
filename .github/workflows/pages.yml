@@ -1,0 +1,114 @@
+# Builds and deploys the documentation site to GitHub Pages.
+#
+# Why this is a separate workflow: it needs write access to Pages, which `build.yml` deliberately does
+# not have (its default token is read-only, and only the tag-triggered release job escalates). Keeping
+# the two apart means a documentation deploy can never touch a release artifact, and a push that only
+# edits `site/` does not pay for the Plugin Verifier.
+#
+# Why every image and the live demo are BUILT here rather than committed: `*.png` is gitignored in this
+# repository on purpose — it is what stops a screenshot of a customer's project from being committed by
+# accident. So the site's screenshots are generated on each deploy from `site/flowable-demo`, a sample
+# project with no customer data in it. A consequence worth knowing: the images can never show a version
+# of the product that no longer exists.
+#
+# `--strict` is the difference between this and a local build. Locally a missing screenshot is a
+# warning, so writing a page does not require Chrome; here it is a failure, so a deploy cannot go out
+# with a broken image or a dead link.
+#
+# One-time setup, in the repository settings: Pages → Build and deployment → Source: GitHub Actions.
+# Without it this workflow succeeds and deploys nowhere.
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'scripts/site-*.mjs'
+      - 'core/src/main/resources/frontend/**'   # the demo explorer is rendered from these
+      - 'CHANGELOG.md'                          # the release-notes page is generated from it
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time, and never cancel one in flight: a half-deployed site is worse than an old one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # Also validates gradle-wrapper.jar against Gradle's published checksums, which matters for a
+      # public repo: a tampered wrapper jar would otherwise execute unnoticed on every run.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Fail here, with a clear message, rather than deep inside a screenshot that silently comes back
+      # as a zero-byte file. The runner image ships Chrome; if a future image stops doing so, this is
+      # the line that says so.
+      - name: Locate Chrome
+        run: |
+          CHROME="$(command -v google-chrome || command -v chromium-browser || true)"
+          if [ -z "$CHROME" ]; then
+            echo "::error::No Chrome/Chromium on this runner — the site's screenshots cannot be rendered."
+            exit 1
+          fi
+          echo "CHROME_PATH=$CHROME" >> "$GITHUB_ENV"
+          echo "using $CHROME ($("$CHROME" --version))"
+
+      # The live demo: the real CLI over the real sample project, producing the real artifacts the site
+      # links and iframes. SiteDemoProjectTest (run by `./gradlew build`) is what keeps that sample
+      # producing an example of every health check.
+      - name: Generate the live demo artifacts
+        run: ./gradlew :cli:siteDemo --stacktrace
+
+      - name: Package the demo project for download
+        run: |
+          mkdir -p cli/build/site-demo
+          (cd site && zip -qr ../cli/build/site-demo/flowable-demo.zip flowable-demo)
+          ls -la cli/build/site-demo
+
+      # Screenshots of the generated explorer, the social card, and the geometry check that keeps a
+      # mockup from shipping with its popup clipped.
+      - name: Render screenshots
+        run: node scripts/site-shots.mjs --explorer cli/build/site-demo/flowable-demo.explorer.html
+
+      - name: Build the site
+        run: node scripts/site-build.mjs --demo cli/build/site-demo --strict
+
+      # What a static generator cannot see: a page that scrolls sideways on a phone, or one whose
+      # JavaScript throws on load. Both look fine in a diff.
+      - name: Check the built pages
+        run: node scripts/site-shots.mjs --check-site build/site
+
+      - name: Upload the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/site
+
+  deploy:
+    name: deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

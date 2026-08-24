@@ -1,0 +1,37 @@
+<div class="mockfit ide" data-w="1000" data-h="510" style="width:1000px;height:510px">
+   <div class="title">
+     <span class="tl"><i class="r"></i><i class="y"></i><i class="g"></i></span>
+     <span class="proj">flowable-demo</span>
+   </div>
+   <div class="body">
+     <div class="dlg">
+       <div class="dlgh">Generate Liquibase Changelogs</div>
+       <div class="dlgb">
+         <div class="fld2"><label>Source</label>
+           <span style="display:flex; gap:16px; align-items:center">
+             <span style="display:flex; gap:6px; align-items:center"><span class="cbx on">●</span>Data objects</span>
+             <span style="display:flex; gap:6px; align-items:center; color:#9aa4b2"><span class="cbx"></span>App exports</span>
+           </span>
+         </div>
+         <div class="fld2"><label>Output folder</label><span class="inp">src/main/resources/db/changelog</span></div>
+         <div class="fld2"><label>File name pattern</label><span class="inp">{serviceNo}-{key}-changelog.xml</span></div>
+         <div class="fld2"><label>Rename (regex)</label><span class="inp" style="flex:0 0 130px">^demo-</span><span style="color:#9aa4b2">→</span><span class="inp">db-</span></div>
+
+         <div style="font-size:10.5px; letter-spacing:.07em; text-transform:uppercase; color:#7a7e85; margin:14px 0 6px">Preview — 4 changelogs</div>
+         <table class="tbl">
+           <thead><tr><th style="width:28px"></th><th>Model key</th><th>Name</th><th>Origin</th><th>File</th><th>Status</th></tr></thead>
+           <tbody>
+             <tr><td><span class="cbx on">✓</span></td><td>shopping-list</td><td>Shopping List</td><td style="color:#87ba4d">extracted</td><td>db-0001-shopping-list-changelog.xml</td><td style="color:#87ba4d">new</td></tr>
+             <tr><td><span class="cbx on">✓</span></td><td>customer-profile</td><td>Customer Profile</td><td style="color:#87ba4d">extracted</td><td>db-0002-customer-profile-changelog.xml</td><td style="color:#87ba4d">new</td></tr>
+             <tr><td><span class="cbx on">✓</span></td><td>order-audit</td><td>Order Audit</td><td style="color:#ffc926">synthesized</td><td>db-0003-order-audit-changelog.xml</td><td style="color:#87ba4d">new</td></tr>
+             <tr><td><span class="cbx"></span></td><td>invoice-line</td><td>Invoice Line</td><td style="color:#87ba4d">extracted</td><td>db-0004-invoice-line-changelog.xml</td><td style="color:#a8bac1">exists</td></tr>
+           </tbody>
+         </table>
+         <div style="font-size:11.5px; color:#8a8f98; margin-top:9px">
+           Each generated file is registered in <b style="color:#c7cbd1">flowable-project-db-changelog.xml</b> with an include, added only if it is not already there.
+         </div>
+       </div>
+       <div class="dlgf"><span class="btn">Cancel</span><span class="btn pri">Generate 3 changelogs</span></div>
+     </div>
+   </div>
+</div>

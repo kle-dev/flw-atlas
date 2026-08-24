@@ -1,0 +1,11 @@
+{
+  "key": "approvalSla",
+  "name": "Approval SLA",
+  "scopeType": "bpmn",
+  "processDefinitionKey": "orderProcess",
+  "taskDefinitionKey": "approveTask",
+  "thresholds": [
+    {"type": "warning", "duration": "PT4H"},
+    {"type": "breach", "duration": "PT8H"}
+  ]
+}

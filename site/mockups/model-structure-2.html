@@ -1,0 +1,51 @@
+<div class="mockfit ide" data-w="1010" data-h="557" style="width:1010px;height:557px">
+   <div class="title">
+     <span class="tl"><i class="r"></i><i class="y"></i><i class="g"></i></span>
+     <span class="proj">flowable-demo — <b>Atlas Explorer</b></span>
+   </div>
+   <div class="body">
+     <div class="editor">
+       <div class="tabs"><div class="tab on"><span style="color:#3574f0">◈</span>Atlas Explorer</div></div>
+       <div class="exp">
+         <div class="expm">
+           <div style="display:flex; align-items:center; gap:8px">
+             <span style="width:8px;height:8px;border-radius:50%;background:#04478f;display:inline-block"></span>
+             <div class="exph" style="font-size:15px">Customer Onboarding</div>
+             <span class="tag o" style="font-size:10px">case</span>
+           </div>
+           <div class="expsub" style="font-family:ui-monospace,monospace">customer-onboarding &nbsp;·&nbsp; cmmn-models/customer-onboarding.cmmn.json</div>
+
+           <div class="sec">
+             <div class="sech"><span class="tri">▾</span>Plan model <span class="cnt">(6)</span></div>
+             <div class="secb">
+               <div class="ptree">
+                 <div class="pt">📁 Case plan model</div>
+                 <div class="pt" style="padding-left:16px">▸ Stage <b style="font-weight:400">Verification</b></div>
+                 <div class="pt" style="padding-left:32px">👤 Human task <b style="font-weight:400">Review</b> → <span class="lk">review.form</span></div>
+                 <div class="pt" style="padding-left:44px"><span class="dia">◇</span> <span class="crit">entry &nbsp;${documentsReceived}</span></div>
+                 <div class="pt" style="padding-left:44px"><span class="dia">◆</span> <span class="crit">exit &nbsp;${caseCancelled}</span></div>
+                 <div class="pt" style="padding-left:32px">⚙ Process task <b style="font-weight:400">Fulfil order</b> → <span class="lk">order-fulfilment</span></div>
+                 <div class="pt" style="padding-left:16px">Milestone <b style="font-weight:400">Onboarded</b></div>
+                 <div class="pt" style="padding-left:28px"><span class="dia">◇</span> <span class="crit">entry &nbsp;${approved &amp;&amp; contractSigned}</span></div>
+               </div>
+             </div>
+           </div>
+
+           <div class="sec">
+             <div class="sech"><span class="tri">▾</span>Sentries — entry/exit conditions <span class="cnt">(3)</span></div>
+             <div class="secb" style="padding:0">
+               <table class="ptbl" style="margin-top:0; border:0; border-radius:0">
+                 <tbody>
+                   <tr><td>entry of Review</td><td>${documentsReceived}</td></tr>
+                   <tr><td>exit of Review</td><td>${caseCancelled}</td></tr>
+                   <tr><td>entry of Onboarded</td><td>${approved &amp;&amp; contractSigned}</td></tr>
+                 </tbody>
+               </table>
+             </div>
+           </div>
+         </div>
+       </div>
+       <div class="status"><span>⎇ main</span><span>Atlas 0.10.10</span><span class="rt">🔗 copy link</span></div>
+     </div>
+   </div>
+</div>

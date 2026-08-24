@@ -1,0 +1,9 @@
+{
+  "key": "customerCreated",
+  "name": "Customer created",
+  "payload": [
+    {"name": "customerId", "type": "string", "correlationParameter": true},
+    {"name": "companyName", "type": "string"},
+    {"name": "campaign", "type": "string"}
+  ]
+}

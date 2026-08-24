@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/CMMN/20151109/MODEL"
+             xmlns:flowable="http://flowable.org/cmmn"
+             targetNamespace="http://flowable.org/test">
+  <case id="reviewCase" name="Review Case" flowable:candidateStarterGroups="auditors">
+    <casePlanModel id="planModel" name="Review plan">
+      <planItem id="pi_review" definitionRef="reviewTask"/>
+      <planItem id="pi_order" definitionRef="startOrder"/>
+      <planItem id="pi_lookup" definitionRef="lookupTask"/>
+      <humanTask id="reviewTask" name="Review order"
+                 flowable:candidateGroups="auditors" flowable:formKey="orderForm"/>
+      <processTask id="startOrder" name="Start order" processRef="orderProcess"/>
+      <task id="lookupTask" name="Lookup customer">
+        <extensionElements>
+          <flowable:serviceMapping serviceModelKey="customerService" operationKey="findAll"/>
+        </extensionElements>
+      </task>
+    </casePlanModel>
+  </case>
+</definitions>

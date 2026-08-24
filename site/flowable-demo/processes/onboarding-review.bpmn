@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Ties the onboarding models together, so the demo graph has a process that reaches a case, a
+     decision, an agent, a service and a Java delegate. -->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://flowable.org/demo">
+  <process id="onboardingReviewProcess" name="Onboarding Review"
+           flowable:candidateStarterGroups="sales,compliance">
+    <documentation>Reviews an onboarding application and scores its risk.</documentation>
+
+    <startEvent id="start" flowable:formKey="onboardingForm"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="enrich"/>
+
+    <serviceTask id="enrich" name="Enrich application"
+                 flowable:delegateExpression="${orderDelegate}">
+      <extensionElements>
+        <flowable:executionListener event="end" flowable:delegateExpression="${auditListener}"/>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="f2" sourceRef="enrich" targetRef="lookupOrder"/>
+
+    <serviceTask id="lookupOrder" name="Look up order" flowable:type="service-registry">
+      <extensionElements>
+        <flowable:field name="serviceKey"><flowable:string>orderService</flowable:string></flowable:field>
+        <flowable:field name="operationKey"><flowable:string>findByNumber</flowable:string></flowable:field>
+        <flowable:in source="orderNumber" target="orderNumber"/>
+        <flowable:out source="companyName" target="companyName"/>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="f3" sourceRef="lookupOrder" targetRef="scoreRisk"/>
+
+    <serviceTask id="scoreRisk" name="Score risk" flowable:type="dmn">
+      <extensionElements>
+        <flowable:field name="decisionTableReferenceKey">
+          <flowable:string>dec_risk</flowable:string>
+        </flowable:field>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="f4" sourceRef="scoreRisk" targetRef="askAssistant"/>
+
+    <serviceTask id="askAssistant" name="Ask the assistant" flowable:type="agent">
+      <extensionElements>
+        <flowable:field name="agentModelKey"><flowable:string>supportAgent</flowable:string></flowable:field>
+        <flowable:in source="companyName" target="question"/>
+        <flowable:out source="answer" target="assistantAnswer"/>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="f5" sourceRef="askAssistant" targetRef="reviewCase"/>
+
+    <caseTask id="reviewCase" name="Manual review" flowable:caseRef="DEMO-reviewCase">
+      <extensionElements>
+        <flowable:in source="companyName" target="companyName"/>
+        <!-- Never read on the other side: one honest `unreadInputs` row for the demo. -->
+        <flowable:in source="expectedVolume" target="applicationVolume"/>
+      </extensionElements>
+    </caseTask>
+    <sequenceFlow id="f6" sourceRef="reviewCase" targetRef="decide"/>
+
+    <userTask id="decide" name="Final decision"
+              flowable:candidateGroups="compliance" flowable:formKey="onboardingForm">
+      <documentation>Compliance signs off, or rejects with a reason.</documentation>
+    </userTask>
+    <sequenceFlow id="f7" sourceRef="decide" targetRef="stamp"/>
+
+    <scriptTask id="stamp" name="Record the decision" scriptFormat="groovy">
+      <documentation>Builds an audit note. `retryCount` is named only here — Atlas says so rather
+        than pretending to know where it comes from.</documentation>
+      <script>
+        def note = "reviewed:" + companyName + ":" + retryCount
+        execution.setVariable('auditNote', note)
+      </script>
+    </scriptTask>
+    <sequenceFlow id="f8" sourceRef="stamp" targetRef="end">
+      <conditionExpression xsi:type="tFormalExpression"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${myfns:isComplete(auditNote)}</conditionExpression>
+    </sequenceFlow>
+    <endEvent id="end"/>
+  </process>
+</definitions>

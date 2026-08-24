@@ -23,8 +23,14 @@ package com.flowable.atlas.graph
  */
 object Findings {
 
-    /** Check ids, in the order they are worth reading: broken first, then unfinished, then noise. */
-    private val CHECK_ORDER = listOf(
+    /**
+     * Check ids, in the order they are worth reading: broken first, then unfinished, then noise.
+     *
+     * `internal` rather than private so `SiteDocsCoverageTest` can assert that the documentation site
+     * describes every one of them — a new check that nobody documented should fail the build, not
+     * quietly make the published list wrong.
+     */
+    internal val CHECK_ORDER = listOf(
         "parseIssues", "invalidExpr", "scriptIssues", "missingRefs", "changelogIssues",
         "schemaGaps", "suspectExpr", "unusedForms", "unusedOps", "unusedFns",
         "unusedVars", "unreadInputs", "guessedVars",

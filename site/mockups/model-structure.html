@@ -1,0 +1,64 @@
+<div class="mockfit ide" data-w="1010" data-h="724" style="width:1010px;height:724px">
+   <div class="title">
+     <span class="tl"><i class="r"></i><i class="y"></i><i class="g"></i></span>
+     <span class="proj">flowable-demo — <b>Atlas Explorer</b></span>
+   </div>
+   <div class="body">
+     <div class="editor">
+       <div class="tabs"><div class="tab on"><span style="color:#3574f0">◈</span>Atlas Explorer</div></div>
+       <div class="exp">
+         <div class="expm">
+           <div style="display:flex; align-items:center; gap:8px">
+             <span style="width:8px;height:8px;border-radius:50%;background:#006276;display:inline-block"></span>
+             <div class="exph" style="font-size:15px">Order Fulfilment</div>
+             <span class="tag o" style="font-size:10px">process</span>
+             <span style="margin-left:auto" class="xall">⇕ collapse all</span>
+           </div>
+           <div class="expsub" style="font-family:ui-monospace,monospace">order-fulfilment &nbsp;·&nbsp; bpmn-models/order-fulfilment.bpmn</div>
+
+           <div class="sec">
+             <div class="sech"><span class="tri">▾</span>User tasks <span class="cnt">(2)</span></div>
+             <div class="secb" style="padding:0">
+               <table class="ptbl" style="margin-top:0; border:0; border-radius:0">
+                 <thead><tr><th>Task</th><th>Form</th><th>Candidate groups</th><th>Due</th></tr></thead>
+                 <tbody>
+                   <tr><td><span class="loc">⌖</span> Approve order</td><td><span class="lk">approval.form</span></td><td>sales</td><td>P2D</td></tr>
+                   <tr><td><span class="loc">⌖</span> Fix address</td><td><span class="lk">address.form</span></td><td>support</td><td>—</td></tr>
+                 </tbody>
+               </table>
+             </div>
+           </div>
+
+           <div class="sec">
+             <div class="sech"><span class="tri">▾</span>Script tasks <span class="cnt">(1)</span></div>
+             <div class="secb">
+               <div class="grow"><span class="loc">⌖</span>Auto-approve <span style="color:#79848f">· groovy</span></div>
+               <div class="code2">if (orderTotal &lt;= 1000) {
+    execution.setVariable('approved', true)
+    execution.setVariable('approvedBy', 'auto')
+}</div>
+             </div>
+           </div>
+
+           <div class="sec">
+             <div class="sech"><span class="tri">▾</span>Flow conditions <span class="cnt">(2)</span></div>
+             <div class="secb" style="padding:0">
+               <table class="ptbl" style="margin-top:0; border:0; border-radius:0">
+                 <thead><tr><th>From</th><th>To</th><th>Condition</th></tr></thead>
+                 <tbody>
+                   <tr><td><span class="loc">⌖</span> Check total</td><td>Approve order</td><td>${orderTotal &gt; 1000}</td></tr>
+                   <tr><td><span class="loc">⌖</span> Check total</td><td>Auto-approve</td><td style="color:#79848f">else</td></tr>
+                 </tbody>
+               </table>
+             </div>
+           </div>
+
+           <div class="sec"><div class="sech shut"><span class="tri">▸</span>Service tasks <span class="cnt">(2)</span></div></div>
+           <div class="sec"><div class="sech shut"><span class="tri">▸</span>Events &amp; timers <span class="cnt">(3)</span></div></div>
+           <div class="sec"><div class="sech shut"><span class="tri">▸</span>Listeners <span class="cnt">(1)</span></div></div>
+         </div>
+       </div>
+       <div class="status"><span>⎇ main</span><span>Atlas 0.10.10</span><span class="rt">🔗 copy link</span></div>
+     </div>
+   </div>
+</div>

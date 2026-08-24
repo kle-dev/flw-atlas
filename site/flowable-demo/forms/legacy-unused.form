@@ -1,0 +1,7 @@
+{
+  "metadata": {"key": "legacyUnusedForm", "name": "Legacy Intake (unused)", "modelType": "form"},
+  "rows": [
+    [{"id": "legacyRef", "type": "text", "label": "Legacy reference"}]
+  ],
+  "outcomes": []
+}
