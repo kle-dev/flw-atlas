@@ -1,5 +1,6 @@
 package com.flowable.atlas.graph
 
+import com.flowable.atlas.model.Dyn
 import java.io.File
 
 /**
@@ -252,7 +253,7 @@ object LiquibaseCoverage {
                     val lst = schema.getOrPut(tu) { ArrayList() }
                     val idx = HashMap<String, MutableMap<String, Any?>>()
                     for (c in lst) idx[c["_k"] as String] = c
-                    @Suppress("UNCHECKED_CAST") val columns = op["columns"] as List<Map<String, Any?>>
+                    val columns = Dyn.maps(op["columns"])
                     for (col in columns) {
                         val k = loose(col["name"] as? String)
                         val existing = idx[k]
@@ -285,7 +286,7 @@ object LiquibaseCoverage {
                     val tu = cur((op["table"] as? String ?: "").uppercase())
                     val lst = schema[tu]
                     if (lst != null) {
-                        @Suppress("UNCHECKED_CAST") val cols = op["columns"] as List<String>
+                        val cols = Dyn.strings(op["columns"])
                         val drop = cols.map { loose(it) }.toHashSet()
                         schema[tu] = ArrayList(lst.filter { it["_k"] !in drop })
                     }
@@ -344,8 +345,11 @@ object LiquibaseCoverage {
             for (lf in grp) { schemaOf[lf] = schema; aliasOf[lf] = alias }
         }
 
-        @Suppress("UNCHECKED_CAST")
-        val bucket = result["liquibase"] as MutableList<Any?>
+        // error(), not `?: return`: Atlas.extract seeds this bucket, so a missing or wrong-typed one is
+        // a programming error, and the previous `as MutableList` threw too. Degrading it to a silent
+        // skip would hide a broken result map behind an empty Liquibase section.
+        val bucket = Dyn.mutableListOrNull(result["liquibase"])
+            ?: error("result[\"liquibase\"] is missing or not a MutableList — Atlas.extract must seed it")
         for (lf in lbFiles) {
             val schema = schemaOf[lf] ?: emptyMap()
             val alias = aliasOf[lf] ?: emptyMap()
@@ -578,16 +582,13 @@ object LiquibaseCoverage {
     private fun relpath(root: File, path: File): String =
         root.toPath().relativize(path.toPath()).toString().replace(File.separatorChar, '/')
 
-    @Suppress("UNCHECKED_CAST")
-    private fun mapList(v: Any?): List<MutableMap<String, Any?>> =
-        (v as? List<*>).orEmpty().mapNotNull { it as? MutableMap<String, Any?> }
+    // Thin aliases over Dyn so the many call sites below stay short; the unchecked cast itself lives
+    // in Dyn, not here. Kept as names rather than inlined to avoid a 14-site rename for no gain.
+    private fun mapList(v: Any?): List<MutableMap<String, Any?>> = Dyn.mutableMaps(v)
 
-    @Suppress("UNCHECKED_CAST")
-    private fun mapListRO(v: Any?): List<Map<String, Any?>> =
-        (v as? List<*>).orEmpty().mapNotNull { it as? Map<String, Any?> }
+    private fun mapListRO(v: Any?): List<Map<String, Any?>> = Dyn.maps(v)
 
-    private fun asStrings(v: Any?): List<String> =
-        (v as? List<*>).orEmpty().mapNotNull { it as? String }
+    private fun asStrings(v: Any?): List<String> = Dyn.strings(v)
 
     /** Python truthiness for the `or []` / `if x` guards used above. */
     private fun truthy(v: Any?): Boolean = when (v) {

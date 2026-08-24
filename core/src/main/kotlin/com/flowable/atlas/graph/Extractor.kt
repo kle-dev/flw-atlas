@@ -1,5 +1,6 @@
 package com.flowable.atlas.graph
 
+import com.flowable.atlas.model.Dyn
 import com.flowable.atlas.expr.catalog.CustomFunctionCatalog
 import com.flowable.atlas.expr.catalog.CustomFunctionExtractor
 import com.flowable.atlas.parsing.Constants
@@ -143,7 +144,7 @@ object Atlas {
         // model, so keys resolve and the raw ${…}/{{…}} harvest attributes to it.
         fun dispatchDesignJson(folder: String?, data: ByteArray, label: String) {
             val wrapper = try {
-                com.flowable.atlas.model.MiniJson.parse(String(data, Charsets.UTF_8)) as? Map<String, Any?>
+                Dyn.mapOrNull(com.flowable.atlas.model.MiniJson.parse(String(data, Charsets.UTF_8)))
             } catch (e: Exception) { null } ?: return
             val key = wrapper["key"] as? String ?: return
             val ejRaw = wrapper["editorJson"] ?: return

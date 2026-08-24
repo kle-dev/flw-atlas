@@ -1,5 +1,5 @@
 package com.flowable.atlas.expr.eval
-
+import com.flowable.atlas.model.Dyn
 import com.flowable.atlas.model.MiniJson
 
 /** A runtime evaluation failure (unknown function, calling a non-function, unsupported operator, …). */
@@ -92,9 +92,5 @@ object Values {
         else -> null
     }
 
-    @Suppress("UNCHECKED_CAST")
-    fun asMap(v: Any?): Map<String, Any?>? = when (v) {
-        is Map<*, *> -> v as Map<String, Any?>
-        else -> null
-    }
+    fun asMap(v: Any?): Map<String, Any?>? = Dyn.mapOrNull(v)
 }

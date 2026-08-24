@@ -1,5 +1,6 @@
 package com.flowable.atlas.render
 
+import com.flowable.atlas.model.Dyn
 import com.flowable.atlas.model.DesignTerms
 import java.io.File
 
@@ -1250,9 +1251,11 @@ object OverviewRenderer {
         return out
     }
 
-    private fun asMap(v: Any?): Map<String, Any?> = (v as? Map<String, Any?>) ?: emptyMap()
+    // Delegate rather than re-cast: the unchecked cast belongs in Dyn, which is the one place auditing
+    // it. Kept as local names because this file calls them dozens of times.
+    private fun asMap(v: Any?): Map<String, Any?> = Dyn.map(v)
 
-    private fun asList(v: Any?): List<Any?> = (v as? List<Any?>) ?: emptyList()
+    private fun asList(v: Any?): List<Any?> = Dyn.list(v)
 
     /** Python truthiness. */
     private fun truthy(v: Any?): Boolean = when (v) {
