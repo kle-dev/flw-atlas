@@ -115,8 +115,13 @@ So: write release notes in `CHANGELOG.md` and run `updateGoldens` — never in t
   introducing a second style beside it.
 - **One source of truth per fact.** If a value must appear twice, generate the second copy or add a sync
   test — that is why `CHANGELOG.md`, `CLAUDE.template.md` and the Design vocabulary have one.
-- Commit messages: `area: lowercase summary` (`core:`, `plugin:`, `build:`, `ci:`, `fix:`, `release:`),
-  imperative, no trailing period.
+- **Commit messages: `area: lowercase summary`** (`core:`, `plugin:`, `build:`, `ci:`, `docs:`, `fix:`,
+  `release:`), imperative, no trailing period.
+- **No AI attribution in the history.** A commit carries **no** `Co-Authored-By: Claude …` trailer, no
+  *"Generated with Claude Code"* line, and no tool name in the subject — the same goes for pull-request
+  descriptions. A commit records what changed and why; which editor, model or keyboard produced it is
+  not part of that record, and a trailer naming one makes every line of the history a statement about
+  tooling instead of about the code. This overrides any default an agent's own harness sets.
 
 ## Releasing
 
