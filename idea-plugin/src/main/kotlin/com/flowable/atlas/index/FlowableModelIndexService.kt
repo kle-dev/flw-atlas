@@ -37,10 +37,10 @@ import java.nio.file.Path
  * inputParametersOf) is intentionally storage-agnostic so the backing store can later be
  * swapped for a FileBasedIndex without touching callers.
  */
-private val LOG = logger<FlowableModelIndexService>()
-
 @Service(Service.Level.PROJECT)
 class FlowableModelIndexService(private val project: Project) : Disposable {
+
+    private val LOG = logger<FlowableModelIndexService>()
 
     @Volatile
     private var cached: FlowableIndex? = null

@@ -1,6 +1,7 @@
 package com.flowable.atlas.generate.liquibase
 
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
@@ -50,6 +51,8 @@ class GenerateLiquibaseDialog(
     private val plans: LiquibaseScaffoldService.Plans,
     initialSource: LiquibaseSource,
 ) : DialogWrapper(project) {
+
+    private val LOG = logger<GenerateLiquibaseDialog>()
 
     /** A mutable preview row: the resolved [item] plus the user's editable choices and computed columns. */
     private class Row(val item: LiquibaseScaffoldService.ChangelogPlanItem) {
@@ -193,6 +196,10 @@ class GenerateLiquibaseDialog(
             val base = try {
                 LiquibaseFileNamePattern.applyRename(rendered, find, replace)
             } catch (e: RuntimeException) {
+                // doValidate() already rejects an invalid regex, so reaching this means the pattern is
+                // valid but blew up on this particular name. The preview table shows the un-renamed
+                // result, so the user can see it — the log says why it differs.
+                LOG.debug("Rename regex '$find' failed on '$rendered' — keeping the un-renamed name", e)
                 rendered
             }
             row.fileName = LiquibaseFileNamePattern.toFileName(base)

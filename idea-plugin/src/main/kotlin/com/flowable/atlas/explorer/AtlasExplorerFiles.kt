@@ -1,5 +1,6 @@
 package com.flowable.atlas.explorer
 
+import com.intellij.openapi.diagnostic.logger
 import java.io.IOException
 import java.nio.file.FileVisitResult
 import java.nio.file.Files
@@ -16,6 +17,8 @@ import java.nio.file.attribute.BasicFileAttributes
  */
 object AtlasExplorerFiles {
 
+    private val LOG = logger<AtlasExplorerFiles>()
+
     private const val MAX_RESULTS = 50
     private const val PROJECT_SCAN_DEPTH = 6
     private val SKIP_DIRS = setOf(
@@ -28,12 +31,18 @@ object AtlasExplorerFiles {
         val atlasOutput = base.resolve(outputDir)
         if (Files.isDirectory(atlasOutput)) walk(atlasOutput, Int.MAX_VALUE, found)
         if (found.isEmpty()) walk(base, PROJECT_SCAN_DEPTH, found)
+        // No logging in the sort key on purpose: it is evaluated O(n log n) times, and a file whose
+        // timestamp cannot be read simply sorts last, which is the right outcome anyway.
         return found.sortedByDescending {
             runCatching { Files.getLastModifiedTime(it).toMillis() }.getOrDefault(0L)
         }
     }
 
     private fun walk(root: Path, maxDepth: Int, into: MutableSet<Path>) {
+        // A failure here means the Atlas Hub shows "no explorer files" for a project that has them —
+        // indistinguishable from "none generated yet" unless it is logged. Individual unreadable files
+        // are already tolerated by visitFileFailed below, so reaching the catch means the whole walk
+        // died (root vanished mid-scan, permissions, a broken symlink loop).
         runCatching {
             Files.walkFileTree(root, emptySet(), maxDepth, object : SimpleFileVisitor<Path>() {
                 override fun preVisitDirectory(dir: Path, attrs: BasicFileAttributes): FileVisitResult {
@@ -51,6 +60,6 @@ object AtlasExplorerFiles {
 
                 override fun visitFileFailed(file: Path, exc: IOException): FileVisitResult = FileVisitResult.CONTINUE
             })
-        }
+        }.onFailure { LOG.warn("Scanning $root for *.explorer.html failed", it) }
     }
 }

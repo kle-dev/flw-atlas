@@ -16,6 +16,7 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
@@ -38,6 +39,8 @@ import java.nio.file.StandardCopyOption
  */
 internal fun removedModelKeys(previous: Set<String>?, current: Set<String>): List<String> =
     previous?.minus(current)?.sorted() ?: emptyList()
+
+private val LOG = logger<DesignPullService>()
 
 /**
  * Executes "Pull from Flowable Design": downloads each configured app's export ZIP into the
@@ -79,7 +82,11 @@ class DesignPullService(private val project: Project) {
             configureThenRetry()
             return
         }
-        val auth = runCatching { DesignCredentials.loadAuth(settings.designBaseUrl, settings.designAuthMode) }.getOrNull()
+        // Log the failure path: a broken/locked keychain looks exactly like "not configured yet" from
+        // here, so without this the user is bounced to Settings again and again with nothing to go on.
+        val auth = runCatching { DesignCredentials.loadAuth(settings.designBaseUrl, settings.designAuthMode) }
+            .onFailure { LOG.warn("Could not read Design credentials from the PasswordSafe", it) }
+            .getOrNull()
         if (auth == null) {
             configureThenRetry()   // e.g. keychain entry was deleted, or the chosen mode has no secret yet
             return
@@ -119,6 +126,9 @@ class DesignPullService(private val project: Project) {
                         val target = writeZip(targetDir, fileBase, export.value.bytes)
                         written += PulledApp(app, appKey, target, export.value.bytes.size)
                     } catch (e: IOException) {
+                        // The balloon gets e.message; the log gets the trace, which is what distinguishes
+                        // a read-only target dir from a full disk from a VFS lock.
+                        LOG.warn("Could not write the pulled ZIP for '$display' into $targetDir", e)
                         failed += "$display — could not write the ZIP (${e.message})"
                     }
                 }
@@ -311,7 +321,11 @@ class DesignPullService(private val project: Project) {
             for (appKey in appKeys) {
                 val legacyName = legacySanitize(appKey) + ".zip"
                 if (legacyName.lowercase() in current) continue   // it *is* a file we just wrote — keep it
+                // Debug, not warn: a locked/absent legacy ZIP only leaves a duplicate in the index, which
+                // the user can see and delete. Not worth a warning on every pull, but worth a trail when
+                // someone asks why the old archive is still there.
                 runCatching { Files.deleteIfExists(dir.resolve(legacyName)) }
+                    .onFailure { LOG.debug("Could not remove superseded legacy ZIP $legacyName in $dir", it) }
             }
         }
     }

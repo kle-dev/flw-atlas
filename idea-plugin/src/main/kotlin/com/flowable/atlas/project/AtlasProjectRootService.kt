@@ -8,6 +8,7 @@ import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
 import java.io.File
 import java.nio.file.Files
@@ -28,6 +29,8 @@ import java.nio.file.Path
 @Service(Service.Level.PROJECT)
 class AtlasProjectRootService(private val project: Project) {
 
+    private val LOG = logger<AtlasProjectRootService>()
+
     @Volatile
     private var detectedCache: List<ProjectDetection.SubProject>? = null
 
@@ -46,10 +49,13 @@ class AtlasProjectRootService(private val project: Project) {
         val base = project.basePath?.let { Path.of(it).normalize() } ?: return null
         val key = activeSubProject()
         if (key.isBlank()) return base
+        // Debug: falling back to the project base is a correct, safe answer (it just widens the scope),
+        // and an unparsable stored sub-project key is user data, not a defect.
         return runCatching {
             val resolved = base.resolve(key).normalize()
             if (resolved != base && resolved.startsWith(base) && Files.isDirectory(resolved)) resolved else base
-        }.getOrDefault(base)
+        }.onFailure { LOG.debug("Stored sub-project key '$key' does not resolve under $base", it) }
+            .getOrDefault(base)
     }
 
     /**
@@ -81,7 +87,11 @@ class AtlasProjectRootService(private val project: Project) {
         val base = project.basePath ?: return
         ApplicationManager.getApplication().executeOnPooledThread {
             if (project.isDisposed) return@executeOnPooledThread
-            val detected = runCatching { ProjectDetection.detect(File(base)) }.getOrDefault(emptyList())
+            // Warn: an empty result disables the whole sub-project switcher, so "detection crashed"
+            // must not look like "this is a single-project repo".
+            val detected = runCatching { ProjectDetection.detect(File(base)) }
+                .onFailure { LOG.warn("Flowable sub-project detection failed under $base", it) }
+                .getOrDefault(emptyList())
             detectedCache = detected
             onDone(detected)
         }

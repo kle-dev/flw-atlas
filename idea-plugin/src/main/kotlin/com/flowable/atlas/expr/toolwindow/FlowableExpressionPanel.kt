@@ -33,6 +33,7 @@ import com.intellij.openapi.application.WriteIntentReadAction
 import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.command.undo.UndoUtil
 import com.intellij.openapi.components.service
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
 import com.intellij.openapi.editor.ex.EditorEx
@@ -88,6 +89,8 @@ import javax.swing.SwingConstants
  */
 class FlowableExpressionPanel(val project: Project) :
     SimpleToolWindowPanel(true, true), Disposable {
+
+    private val LOG = logger<FlowableExpressionPanel>()
 
     data class ScopeItem(val key: String?, val label: String)
 
@@ -585,8 +588,12 @@ class FlowableExpressionPanel(val project: Project) :
     private fun prefillConnection() {
         ApplicationManager.getApplication().executeOnPooledThread {
             if (project.isDisposed) return@executeOnPooledThread
-            val stored = runCatching { InspectCredentials.load(settings.inspectBaseUrl) }.getOrNull()
-            val detected = runCatching { InspectConnectionDetector.detect(project) }.getOrNull()
+            val stored = runCatching { InspectCredentials.load(settings.inspectBaseUrl) }
+                .onFailure { LOG.warn("Could not read the Inspect password from the PasswordSafe — the playground will ask for it again", it) }
+                .getOrNull()
+            val detected = runCatching { InspectConnectionDetector.detect(project) }
+                .onFailure { LOG.warn("Inspect connection detection failed", it) }
+                .getOrNull()
             ApplicationManager.getApplication().invokeLater({
                 if (project.isDisposed) return@invokeLater
                 stored?.let { c ->
@@ -606,7 +613,9 @@ class FlowableExpressionPanel(val project: Project) :
     private fun applyDetectedConnection(force: Boolean) {
         ApplicationManager.getApplication().executeOnPooledThread {
             if (project.isDisposed) return@executeOnPooledThread
-            val c = runCatching { InspectConnectionDetector.detect(project) }.getOrNull() ?: return@executeOnPooledThread
+            val c = runCatching { InspectConnectionDetector.detect(project) }
+                .onFailure { LOG.warn("Inspect connection detection failed", it) }
+                .getOrNull() ?: return@executeOnPooledThread
             ApplicationManager.getApplication().invokeLater({
                 if (!project.isDisposed) applyConnection(c, force)
             }, ModalityState.any())
@@ -735,7 +744,10 @@ class FlowableExpressionPanel(val project: Project) :
             // the app answered (auth passed) → remember the credentials for this base URL, so the
             // password only has to be typed once per app (same PasswordSafe as the Design connection)
             if (outcome is InspectClient.Outcome.Evaluated) {
+                // Dropping this silently breaks the "type it once" promise in the comment above: the next
+                // evaluation asks again and the user has no way to tell why.
                 runCatching { InspectCredentials.save(req.baseUrl, req.username, req.password) }
+                    .onFailure { LOG.warn("Could not store the Inspect password for ${req.baseUrl} in the PasswordSafe", it) }
             }
             ApplicationManager.getApplication().invokeLater({
                 if (project.isDisposed) return@invokeLater

@@ -15,6 +15,7 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.components.service
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.options.ConfigurationException
 import com.intellij.openapi.project.Project
@@ -22,12 +23,12 @@ import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.openapi.vfs.JarFileSystem
 import com.intellij.ui.CheckBoxList
 import com.intellij.ui.JBColor
-import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.ui.components.ActionLink
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPasswordField
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextField
+import com.intellij.ui.dsl.listCellRenderer.textListCellRenderer
 import java.awt.Dimension
 import java.awt.FlowLayout
 import java.nio.file.InvalidPathException
@@ -58,6 +59,8 @@ import javax.swing.JPanel
  */
 class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable {
 
+    private val LOG = logger<DesignConnectionPanel>()
+
     private val settings = FlowableAtlasProjectSettings.getInstance(project)
 
     private val baseUrlField = JBTextField(30).apply {
@@ -66,7 +69,7 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
     private val usernameField = JBTextField(12)
     private val passwordField = JBPasswordField().apply { columns = 12 }
     private val authModeCombo = JComboBox(DesignAuthMode.values()).apply {
-        renderer = SimpleListCellRenderer.create("") { it.label }
+        renderer = textListCellRenderer("") { it.label }
     }
     private val tokenField = JBPasswordField().apply { columns = 32 }
     private val manageTokensLink = ActionLink("Manage in Design…") { openTokenManagement() }
@@ -78,7 +81,7 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
 
     private val refreshButton = JButton("Refresh Workspaces", AllIcons.Actions.Refresh)
     private val workspaceCombo = JComboBox<DesignClient.Workspace>().apply {
-        renderer = SimpleListCellRenderer.create("") { ws ->
+        renderer = textListCellRenderer("") { ws ->
             if (ws.name == ws.key) ws.key else "${ws.name} (${ws.key})"
         }
     }
@@ -203,8 +206,18 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
             // PasswordSafe can block on the OS keychain — save off the EDT (same as the old dialog).
             // Never clear the other mode's secret: switching back has to keep working.
             ApplicationManager.getApplication().executeOnPooledThread {
-                if (username.isNotBlank()) runCatching { DesignCredentials.save(baseUrl, username, password) }
-                if (token.isNotBlank()) runCatching { DesignCredentials.saveToken(baseUrl, token) }
+                // A swallowed failure here is the worst outcome in this dialog: Apply closes, the fields
+                // show the secret, and nothing was stored — so the next pull asks for credentials again
+                // with no explanation. The store itself can genuinely fail (locked keychain, "do not
+                // save passwords" mode, a KeePass file that moved), so it must leave a trace.
+                if (username.isNotBlank()) {
+                    runCatching { DesignCredentials.save(baseUrl, username, password) }
+                        .onFailure { LOG.warn("Could not store the Design password for $baseUrl in the PasswordSafe", it) }
+                }
+                if (token.isNotBlank()) {
+                    runCatching { DesignCredentials.saveToken(baseUrl, token) }
+                        .onFailure { LOG.warn("Could not store the Design access token for $baseUrl in the PasswordSafe", it) }
+                }
             }
         }
         // Let status surfaces (the Atlas Hub) re-read the just-saved connection immediately, instead
@@ -249,8 +262,14 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
         val baseUrl = settings.designBaseUrl
         if (baseUrl.isBlank()) return
         ApplicationManager.getApplication().executeOnPooledThread {
-            val credentials = runCatching { DesignCredentials.load(baseUrl) }.getOrNull()
-            val token = runCatching { DesignCredentials.loadToken(baseUrl) }.getOrNull()
+            // Warn, not debug: a read failure makes the panel look like "no credentials saved yet", which
+            // invites the user to retype a secret that is in fact already there.
+            val credentials = runCatching { DesignCredentials.load(baseUrl) }
+                .onFailure { LOG.warn("Could not read the Design password for $baseUrl from the PasswordSafe", it) }
+                .getOrNull()
+            val token = runCatching { DesignCredentials.loadToken(baseUrl) }
+                .onFailure { LOG.warn("Could not read the Design access token for $baseUrl from the PasswordSafe", it) }
+                .getOrNull()
             if (credentials == null && token == null) return@executeOnPooledThread
             ApplicationManager.getApplication().invokeLater({
                 if (disposed) return@invokeLater
@@ -339,7 +358,11 @@ class DesignConnectionPanel(private val project: Project) : JPanel(), Disposable
         if (settings.designTargetFolder.isNotBlank() && settings.designTargetFolder != default) return
         val base = AtlasProjectRootService.getInstance(project).activeProjectDir()?.toString() ?: return
         ApplicationManager.getApplication().executeOnPooledThread {
-            val suggestion = runCatching { modelArchiveFolder(base) }.getOrNull() ?: return@executeOnPooledThread
+            // Debug only: this is a convenience prefill. Failing just leaves the default folder in place,
+            // which is a correct value, so it must not produce a warning.
+            val suggestion = runCatching { modelArchiveFolder(base) }
+                .onFailure { LOG.debug("Could not derive a target-folder suggestion from the model index", it) }
+                .getOrNull() ?: return@executeOnPooledThread
             ApplicationManager.getApplication().invokeLater({
                 val current = targetFolderField.text.trim()
                 if (!disposed && (current.isBlank() || current == default)) targetFolderField.text = suggestion
