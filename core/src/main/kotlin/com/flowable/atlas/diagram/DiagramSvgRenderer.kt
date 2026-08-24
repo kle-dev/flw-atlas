@@ -154,7 +154,7 @@ object DiagramSvgRenderer {
         }
         taskIcon(sb, s)
         markers(sb, s)
-        centeredLabel(sb, s)
+        if (s.kind == ShapeKind.CMMN_STAGE) topLabel(sb, s) else centeredLabel(sb, s)
     }
 
     // ---- type glyphs ---------------------------------------------------------------------------
@@ -308,6 +308,21 @@ object DiagramSvgRenderer {
         val blockH = lines.size * LINE_HEIGHT
         val topY = s.centerY - blockH / 2
         textBlock(sb, s.centerX, topY, lines, "middle")
+    }
+
+    /**
+     * A stage's name belongs in its top-left corner, where CMMN and Design both put it — not in its
+     * middle. A case plan model is drawn *before* the plan items (see [isContainer]), so a centred label
+     * is either hidden behind the items painted over it or, in a stage tall enough to clear them, left
+     * floating in empty space that reads as a stray caption rather than the container's name.
+     */
+    private fun topLabel(sb: StringBuilder, s: DiaShape) {
+        val label = s.label?.takeIf { it.isNotBlank() } ?: return
+        // Clear the type glyph when there is one; [taskIcon] occupies the same corner.
+        val tx = s.x + if (s.icon != null) 26.0 else 10.0
+        val lines = wrap(label, maxChars(s.width - (tx - s.x) - 8), 2)
+        if (lines.isEmpty()) return
+        textBlock(sb, tx, s.y + 6, lines, "start")
     }
 
     private fun belowLabel(sb: StringBuilder, s: DiaShape) {
