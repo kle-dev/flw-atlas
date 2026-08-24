@@ -33,6 +33,15 @@ out/
 .vscode/
 .DS_Store
 
+# Release artifacts are NOT committed — they are attached to GitHub Releases instead.
+# They used to live in the repo so an offline machine could `git pull` them, but binaries do not
+# delta-compress: 87 stored copies had grown to 152 MB, 86% of the repository, and only the newest
+# is ever useful. The stated reason no longer held either — the git remote and the Releases page are
+# the same host, so a machine that can `git pull` can equally download a release asset.
+# Both directories keep their README (where to get the files) and are where a download belongs.
+idea-plugin/dist/*.zip
+lib/*.jar
+
 # Exception: committed Marketplace media for the IntelliJ plugin (intentional content)
 !idea-plugin/marketplace-assets/*.png
 !idea-plugin/marketplace-assets/*.gif
