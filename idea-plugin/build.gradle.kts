@@ -151,3 +151,11 @@ kotlin {
 tasks.named<org.gradle.api.tasks.bundling.Zip>("buildPlugin") {
     archiveBaseName.set("flowable-atlas")
 }
+
+// Make `./gradlew build` produce the installable ZIP. The IntelliJ Platform plugin does not attach
+// buildPlugin to the `build` lifecycle, so `build` compiled and tested everything and then stopped short
+// of the one artifact this project actually ships — which meant packaging was only ever exercised by
+// whoever remembered to type `buildPlugin`. CI found it the honest way: the workflow ran `build` and then
+// had no ZIP to upload. Wiring it here keeps the local build and CI producing the same thing, instead of
+// the workflow having to know about a module-specific task.
+tasks.named("build") { dependsOn("buildPlugin") }
