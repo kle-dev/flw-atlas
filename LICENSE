@@ -1,0 +1,32 @@
+Copyright (c) 2026 Flowable AG. All rights reserved.
+
+PROPRIETARY SOFTWARE — SOURCE AVAILABLE, NO LICENSE GRANTED
+
+This repository and everything in it — source code, build scripts, test fixtures,
+documentation, the prebuilt IntelliJ plugin distribution in `idea-plugin/dist/`
+and the prebuilt CLI in `lib/` — is the confidential and proprietary property of
+Flowable AG.
+
+The source is published here for visibility and for use by Flowable AG and its
+authorized users. Publication does NOT place it in the public domain and does NOT
+grant any license, express or implied.
+
+You may not, without prior written permission from Flowable AG:
+
+  - use, run, or deploy this software for any purpose;
+  - copy, reproduce, or redistribute it, in source or binary form;
+  - modify it or create derivative works from it;
+  - sublicense, sell, rent, or otherwise transfer it;
+  - remove or alter this notice or any copyright notice.
+
+No trademark rights are granted. "Flowable" and the Flowable logo are trademarks
+of Flowable AG.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL FLOWABLE AG BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+For licensing enquiries, contact Flowable AG: https://www.flowable.com
