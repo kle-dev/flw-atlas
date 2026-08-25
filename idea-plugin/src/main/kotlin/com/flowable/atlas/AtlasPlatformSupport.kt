@@ -13,8 +13,11 @@ import com.intellij.openapi.application.ApplicationInfo
  * colleague's IDE the day they upgrade, until a new release is cut and installed. Staying loadable is
  * the right trade-off for that distribution model.
  *
- * The honest part is here instead: the verified range is stated as a fact, and the Atlas Hub shows when
- * the running IDE is outside it, so "it works" is never confused with "it was tested".
+ * The honest part is here instead: the verified range is stated as a fact where the claim is actually
+ * load-bearing — the docs, and every bug report Atlas submits ([AtlasErrorReportSubmitter]) — so "it
+ * works" is never confused with "it was tested". The Atlas Hub used to carry the same line in its footer
+ * and no longer does: a permanent "verified on 2026.2 — 2026.1 is untested" is our release process on
+ * display in a panel people keep open all day, and nothing they can act on.
  *
  * ## When bumping to a new platform branch
  * 1. `./gradlew :idea-plugin:verifyPlugin -Patlas.verifyIdes="/Applications/IntelliJ IDEA.app"` against
@@ -62,8 +65,8 @@ object AtlasPlatformSupport {
         else "${branchName(VERIFIED_SINCE_BRANCH)}–${branchName(VERIFIED_THROUGH_BRANCH)}"
 
     /**
-     * The compatibility line for the Atlas Hub footer: normally just what was verified, but on a newer
-     * IDE it says so plainly, because that is the case where a bug report is worth filing.
+     * The compatibility line for a submitted bug report: normally just what was verified, but on an
+     * unverified IDE it says so plainly — which is exactly the context in which a report needs it.
      */
     fun compatibilityNote(): String =
         if (isUnverifiedPlatform) "verified on ${verifiedRange()} — ${branchName(runningBranch)} is untested"

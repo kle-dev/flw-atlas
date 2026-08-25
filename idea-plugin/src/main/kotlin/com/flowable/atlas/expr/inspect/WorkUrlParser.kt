@@ -98,10 +98,16 @@ object WorkUrlParser {
     }
 
     /**
-     * Finds the first `case`/`process`/`task` keyword in the path segments; the id is the next
-     * segment. A second keyword+id pair after it (e.g. `…/case/CAS-1/task/TSK-2`) becomes the
-     * sub-scope; a trailing `/tab/…` is ignored. Also handles the
-     * `/case-view/{caseInstanceId}[/task/{taskId}]` form (always a case → CMMN).
+     * Finds the first `case`/`process`/`task` keyword in the path segments; the id is the next segment.
+     *
+     * A trailing `/task/{id}` after a case or process is the **more specific scope**, not a sub-scope:
+     * it becomes `TASK` with that id. Flowable's `subScopeId` is a *plan item instance* id, which no
+     * Work route exposes, so putting a task id there produced a 500 — *"No plan item instance found for
+     * sub scope id TSK-…"* — from a link the user had simply copied out of the browser. The engine
+     * accepts the task id as a scope of its own and evaluates in the same context.
+     *
+     * A trailing `/tab/…` is ignored. Also handles the `/case-view/{caseInstanceId}[/task/{taskId}]`
+     * form (a case, unless it names a task).
      */
     private fun scopeFromSegments(segs: List<String>): ScopeHit {
         // `/case-view/…` is always a case (CMMN); handle it before the generic keyword scan so a
@@ -112,20 +118,24 @@ object WorkUrlParser {
             if (next.lowercase() in ELEMENT_TYPES) {
                 // explicit form: case-view/case/{id}
                 if (cv + 2 < segs.size) {
-                    val subId = idAfterKeyword(segs, cv + 3, ELEMENT_TYPES)
-                    return ScopeHit(scopeTypeOf(next), segs[cv + 2], subId, matchIndex = cv)
+                    val task = idAfterKeyword(segs, cv + 3, setOf("task"))
+                    return if (task != null) ScopeHit(InspectClient.ScopeType.TASK, task, matchIndex = cv)
+                    else ScopeHit(scopeTypeOf(next), segs[cv + 2], matchIndex = cv)
                 }
             } else {
-                // short form: case-view/{caseInstanceId}[/task/{taskId}]
-                val subId = idAfterKeyword(segs, cv + 2, setOf("task"))
-                return ScopeHit(InspectClient.ScopeType.CMMN, next, subId, matchIndex = cv)
+                // short form: case-view/{caseInstanceId}[/task/{taskId}] — the task, when named, is the
+                // scope; see the note above.
+                val task = idAfterKeyword(segs, cv + 2, setOf("task"))
+                return if (task != null) ScopeHit(InspectClient.ScopeType.TASK, task, matchIndex = cv)
+                else ScopeHit(InspectClient.ScopeType.CMMN, next, matchIndex = cv)
             }
         }
         // generic: first case/process/task keyword; the id is the next segment.
         val i = segs.indexOfFirst { it.lowercase() in ELEMENT_TYPES }
         if (i >= 0 && i + 1 < segs.size) {
-            val subId = idAfterKeyword(segs, i + 2, ELEMENT_TYPES)
-            return ScopeHit(scopeTypeOf(segs[i]), segs[i + 1], subId, matchIndex = i)
+            val task = idAfterKeyword(segs, i + 2, setOf("task"))
+            return if (task != null) ScopeHit(InspectClient.ScopeType.TASK, task, matchIndex = i)
+            else ScopeHit(scopeTypeOf(segs[i]), segs[i + 1], matchIndex = i)
         }
         return NO_HIT
     }
@@ -149,9 +159,10 @@ object WorkUrlParser {
             if (key.isNotEmpty() && value.isNotEmpty()) params[key] = value
         }
         val task = params["taskinstanceid"] ?: params["taskid"]
-        params["caseinstanceid"]?.let { return ScopeHit(InspectClient.ScopeType.CMMN, it, task) }
-        params["processinstanceid"]?.let { return ScopeHit(InspectClient.ScopeType.BPMN, it, task) }
+        // Same reasoning as the path form: a named task is the scope, not a sub-scope.
         if (task != null) return ScopeHit(InspectClient.ScopeType.TASK, task)
+        params["caseinstanceid"]?.let { return ScopeHit(InspectClient.ScopeType.CMMN, it) }
+        params["processinstanceid"]?.let { return ScopeHit(InspectClient.ScopeType.BPMN, it) }
         val id = params["id"]
         if (id != null) return ScopeHit(scopeTypeOf(params["type"]), id)
         return NO_HIT

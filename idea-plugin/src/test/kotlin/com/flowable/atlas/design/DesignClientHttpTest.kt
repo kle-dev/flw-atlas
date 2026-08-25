@@ -5,6 +5,8 @@ import com.sun.net.httpserver.HttpServer
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -188,6 +190,31 @@ class DesignClientHttpTest {
         val export = (out as DesignClient.Result.Success).value
         assertArrayEquals(zip, export.bytes)
         assertEquals("HR App.zip", export.fileName)
+    }
+
+    /**
+     * Plaintext `http://` must go out as plain HTTP/1.1. The JDK client defaults to HTTP/2, which over
+     * cleartext means an h2c *upgrade* request (`Connection: Upgrade` + `HTTP2-Settings`); a Design
+     * server that neither answers nor declines the upgrade leaves the request hanging until the timeout,
+     * reported as "Cannot reach … request timeout" while the very same URL answers a plain curl at once.
+     */
+    @Test fun sendsNoHttp2UpgradeOnCleartext() {
+        val headers = mutableMapOf<String, String?>()
+        server.createContext("/design-api/workspaces") { ex ->
+            headers["Connection"] = ex.requestHeaders.getFirst("Connection")
+            headers["Upgrade"] = ex.requestHeaders.getFirst("Upgrade")
+            headers["HTTP2-Settings"] = ex.requestHeaders.getFirst("HTTP2-Settings")
+            respond(ex, 200, """{"data":[],"total":0}""".toByteArray())
+        }
+
+        assertTrue(DesignClient.listWorkspaces(conn()) is DesignClient.Result.Success)
+
+        assertNull("no h2c upgrade offer", headers["Upgrade"])
+        assertNull("no h2c settings", headers["HTTP2-Settings"])
+        assertFalse(
+            "Connection header must not offer an upgrade: ${headers["Connection"]}",
+            headers["Connection"].orEmpty().contains("Upgrade", ignoreCase = true),
+        )
     }
 
     @Test fun rejectsNonZipExportResponse() {

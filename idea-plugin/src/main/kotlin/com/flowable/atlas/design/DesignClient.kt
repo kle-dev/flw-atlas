@@ -4,6 +4,9 @@ import com.flowable.atlas.model.MiniJson
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.progress.ProcessCanceledException
 import java.io.ByteArrayOutputStream
+import java.net.ConnectException
+import java.net.Inet6Address
+import java.net.InetAddress
 import java.net.URI
 import java.net.URLEncoder
 import java.net.http.HttpClient
@@ -118,6 +121,13 @@ object DesignClient {
     fun normalizeAccessToken(raw: String): String =
         raw.trim().trim('"', '\'').replace(Regex("^bearer\\s+", RegexOption.IGNORE_CASE), "").trim()
 
+    /** The `message` a Flowable error body carries, short enough for one status line — else null. */
+    internal fun serverMessage(body: String): String? {
+        val map = runCatching { MiniJson.parse(body) as? Map<*, *> }.getOrNull() ?: return null
+        val message = (map["message"] as? String)?.takeUnless { it.isBlank() } ?: return null
+        return if (message.length <= 120) message else message.take(117) + "…"
+    }
+
     private fun encode(pathSegment: String): String =
         URLEncoder.encode(pathSegment, StandardCharsets.UTF_8).replace("+", "%20")
 
@@ -166,7 +176,7 @@ object DesignClient {
                 .header("Accept", "application/zip")
                 .GET()
                 .build()
-            val resp = newClient().send(request, HttpResponse.BodyHandlers.ofByteArray())
+            val resp = sendTryingEveryAddress(newClient(), request, HttpResponse.BodyHandlers.ofByteArray())
             val body = resp.body() ?: ByteArray(0)
             when {
                 resp.statusCode() !in 200..299 -> failedForStatus(conn.auth, resp.statusCode(), String(body, StandardCharsets.UTF_8))
@@ -219,7 +229,7 @@ object DesignClient {
                 .header("Accept", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(MiniJson.stringify(fields)))
                 .build()
-            val resp = newClient().send(request, HttpResponse.BodyHandlers.ofString())
+            val resp = sendTryingEveryAddress(newClient(), request, HttpResponse.BodyHandlers.ofString())
             if (resp.statusCode() !in 200..299) {
                 return if (resp.statusCode() == 401) {
                     Result.Failed(
@@ -306,7 +316,7 @@ object DesignClient {
                     .header("Accept", "application/json")
                     .GET()
                     .build()
-                val resp = newClient().send(request, HttpResponse.BodyHandlers.ofString())
+                val resp = sendTryingEveryAddress(newClient(), request, HttpResponse.BodyHandlers.ofString())
                 if (resp.statusCode() !in 200..299) return failedForStatus(conn.auth, resp.statusCode(), resp.body())
                 val page = parse(resp.body())
                 all += page.data
@@ -325,7 +335,9 @@ object DesignClient {
         401 -> Result.Failed(unauthorizedMessage(auth))
         403 -> Result.Failed("No read access to this workspace/app (HTTP 403)")
         404 -> Result.Failed("Not found — is the base URL a Flowable Design server, and do workspace/app still exist? (HTTP 404)")
-        else -> Result.Failed("HTTP $code: ${body.take(200)}")
+        // The server's own message when it sent one, never the raw body: half a JSON document in a red
+        // status line tells the reader nothing they can act on, and the app's log holds the rest.
+        else -> Result.Failed("The server answered HTTP $code" + serverMessage(body)?.let { ": $it" }.orEmpty())
     }
 
     /** The 401 hint for the scheme actually used — a wrong password and a stale token need different fixes. */
@@ -363,7 +375,62 @@ object DesignClient {
         is Auth.Token -> "Bearer " + normalizeAccessToken(auth.token)
     }
 
-    private fun newClient(): HttpClient = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build()
+    /**
+     * Pinned to HTTP/1.1 on purpose. The JDK client defaults to HTTP/2, which over cleartext `http://`
+     * is an h2c *upgrade* request (`Connection: Upgrade` + `HTTP2-Settings`). A server that neither
+     * completes nor declines that upgrade — as a Design behind a plain dev port can do — leaves the
+     * request hanging until the timeout, so a URL that answers a curl instantly was reported as
+     * "Cannot reach … request timeout". Nothing here needs HTTP/2, and `https://` negotiates it via
+     * ALPN anyway, so there is no upside to trading that failure mode for.
+     */
+
+    /**
+     * Sends [request], retrying the host's other addresses when the connection itself fails.
+     *
+     * The JDK's `HttpClient` connects to the **first** address a name resolves to and does not fall
+     * back. On macOS `localhost` resolves to `127.0.0.1` and then `::1`, so a Design server bound to
+     * IPv6 only — which a node dev server is by default — is unreachable from Java while a browser and
+     * `curl` reach it, because they do fall back. Only a *connect* failure is retried; an HTTP answer of
+     * any status is the server's own answer.
+     */
+    private fun <T> sendTryingEveryAddress(
+        client: HttpClient,
+        request: HttpRequest,
+        handler: HttpResponse.BodyHandler<T>,
+    ): HttpResponse<T> {
+        val candidates = addressCandidates(request.uri())
+        candidates.forEachIndexed { index, uri ->
+            val attempt = if (uri == request.uri()) request else HttpRequest.newBuilder(request, { _, _ -> true })
+                .uri(uri)
+                .build()
+            try {
+                return client.send(attempt, handler)
+            } catch (e: ConnectException) {
+                if (index == candidates.lastIndex) throw e
+            }
+        }
+        throw ConnectException("No address for ${request.uri().host} accepted a connection")
+    }
+
+    /** The URI itself, then the same URI against each address its host resolves to. */
+    internal fun addressCandidates(uri: URI): List<URI> {
+        val host = uri.host ?: return listOf(uri)
+        if (host.startsWith("[") || host.firstOrNull()?.isDigit() == true) return listOf(uri)
+        val addresses = runCatching { InetAddress.getAllByName(host).toList() }.getOrDefault(emptyList())
+        if (addresses.size <= 1) return listOf(uri)
+        val port = if (uri.port > 0) ":${uri.port}" else ""
+        val query = uri.rawQuery?.let { "?$it" }.orEmpty()
+        return listOf(uri) + addresses.map { address ->
+            val literal = address.hostAddress.substringBefore('%')
+            val bracketed = if (address is Inet6Address) "[$literal]" else literal
+            URI.create("${uri.scheme}://$bracketed$port${uri.rawPath}$query")
+        }
+    }
+
+    private fun newClient(): HttpClient = HttpClient.newBuilder()
+        .version(HttpClient.Version.HTTP_1_1)
+        .connectTimeout(CONNECT_TIMEOUT)
+        .build()
 
     private fun isZip(body: ByteArray): Boolean =
         body.size >= 2 && body[0] == 'P'.code.toByte() && body[1] == 'K'.code.toByte()

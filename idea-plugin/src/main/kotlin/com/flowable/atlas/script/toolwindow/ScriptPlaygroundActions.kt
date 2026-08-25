@@ -72,3 +72,14 @@ internal class LoadScriptFromModelAction(private val panel: FlowableScriptPanel)
 
     override fun actionPerformed(e: AnActionEvent) = ScriptPicker.show(panel)
 }
+
+internal class LoadExampleScriptAction(private val panel: FlowableScriptPanel) : AnAction(
+    "Load Example…",
+    "Load a worked Flowable script example — one per context and language, ready to edit",
+    AllIcons.Nodes.Template,
+), DumbAware {
+
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+
+    override fun actionPerformed(e: AnActionEvent) = ScriptExamples.show(panel)
+}

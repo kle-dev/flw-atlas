@@ -1,15 +1,22 @@
 package com.flowable.atlas.settings
 
-import com.flowable.atlas.design.DesignAuthMode
 import com.flowable.atlas.expr.ExprProblem
 import com.flowable.atlas.expr.ExprProblemKind
 import com.flowable.atlas.expr.ExprSeverity
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FlowableAtlasProjectSettingsTest {
+
+    private fun target(environment: String, vararg apps: String, workspace: String = "") =
+        FlowableAtlasProjectSettings.DesignPullTarget(environment).also {
+            it.workspaceKey = workspace
+            it.appKeys = apps.toMutableList()
+        }
 
     private fun problem(kind: ExprProblemKind, subject: String?) =
         ExprProblem(0, 1, "m", ExprSeverity.WARNING, null, kind, subject)
@@ -78,50 +85,35 @@ class FlowableAtlasProjectSettingsTest {
     @Test
     fun `sub-project scopes are independent of the default scope`() {
         val s = FlowableAtlasProjectSettings(null)
-        s.scope("").designAppKeys = mutableListOf("root-app")   // "" == the flat default scope
-        s.scope("svc-a").designAppKeys = mutableListOf("a-app")
-        s.scope("svc-b").designAppKeys = mutableListOf("b-app")
-        assertEquals(listOf("root-app"), s.scope("").designAppKeys)
-        assertEquals(listOf("a-app"), s.scope("svc-a").designAppKeys)
-        assertEquals(listOf("b-app"), s.scope("svc-b").designAppKeys)
+        s.scope("").designPullTargets.add(target("DEV", "root-app"))   // "" == the flat default scope
+        s.scope("svc-a").designPullTargets.add(target("DEV", "a-app"))
+        s.scope("svc-b").designPullTargets.add(target("DEV", "b-app"))
+        assertEquals(listOf("root-app"), s.scope("").designPullTargets.single().appKeys)
+        assertEquals(listOf("a-app"), s.scope("svc-a").designPullTargets.single().appKeys)
+        assertEquals(listOf("b-app"), s.scope("svc-b").designPullTargets.single().appKeys)
     }
 
     @Test
-    fun `designAuthMode defaults to BASIC and is scoped per sub-project`() {
+    fun `getState keeps a sub-project whose only change is its workspace`() {
         val s = FlowableAtlasProjectSettings(null)
-        assertEquals(DesignAuthMode.BASIC, s.designAuthMode)
-        s.scope("svc-a").designAuthMode = DesignAuthMode.ACCESS_TOKEN
-        assertEquals(DesignAuthMode.BASIC, s.scope("").designAuthMode)
-        assertEquals(DesignAuthMode.ACCESS_TOKEN, s.scope("svc-a").designAuthMode)
-    }
-
-    @Test
-    fun `a file written before token auth keeps BASIC`() {
-        // A pre-0.10.15 State() carries no designAuthMode element at all.
-        val s = settings()
-        assertEquals(DesignAuthMode.BASIC, s.designAuthMode)
-    }
-
-    @Test
-    fun `getState keeps a sub-project whose only change is the auth mode`() {
-        val s = FlowableAtlasProjectSettings(null)
-        s.scope("tok").designAuthMode = DesignAuthMode.ACCESS_TOKEN
+        s.scope("svc").designPullTargets.add(target("DEV", workspace = "ws-1"))
         s.scope("untouched")                         // left at defaults → pruned
-        assertEquals(listOf("tok"), s.state.subProjects.map { it.path })
+        assertEquals(listOf("svc"), s.state.subProjects.map { it.path })
     }
 
     @Test
     fun `public accessors target the default scope when there is no project`() {
         val s = FlowableAtlasProjectSettings(null)
-        s.designAppKeys = mutableListOf("root")
-        assertEquals(listOf("root"), s.scope("").designAppKeys)   // written through to the flat fields
-        assertEquals(listOf("root"), s.designAppKeys)
+        s.pullTarget("DEV").appKeys = mutableListOf("root")
+        // written through to the flat fields, which are the "" scope
+        assertEquals(listOf("root"), s.scope("").designPullTargets.single().appKeys)
+        assertEquals(listOf("root"), s.pullTarget("DEV").appKeys)
     }
 
     @Test
     fun `getState keeps configured sub-projects sorted and prunes untouched ones`() {
         val s = FlowableAtlasProjectSettings(null)
-        s.scope("z-svc").designAppKeys = mutableListOf("z")
+        s.scope("z-svc").designPullTargets.add(target("DEV", "z"))
         s.scope("a-svc")                             // touched but left at defaults → pruned
         s.scope("m-svc").atlasOutputDir = "out"
         val out = s.state                            // getState()
@@ -133,31 +125,14 @@ class FlowableAtlasProjectSettingsTest {
         val s = FlowableAtlasProjectSettings(null)
         val state = FlowableAtlasProjectSettings.State()
         state.subProjects = mutableListOf(
-            FlowableAtlasProjectSettings.SubProjectState("").also { it.designAppKeys = mutableListOf("stray") },
-            FlowableAtlasProjectSettings.SubProjectState("svc").also { it.designAppKeys = mutableListOf("first") },
-            FlowableAtlasProjectSettings.SubProjectState("svc").also { it.designAppKeys = mutableListOf("second") },
+            FlowableAtlasProjectSettings.SubProjectState("").also { it.designPullTargets.add(target("DEV", "stray")) },
+            FlowableAtlasProjectSettings.SubProjectState("svc").also { it.designPullTargets.add(target("DEV", "first")) },
+            FlowableAtlasProjectSettings.SubProjectState("svc").also { it.designPullTargets.add(target("DEV", "second")) },
         )
         s.loadState(state)
         val subs = s.getState().subProjects
         assertEquals(listOf("svc"), subs.map { it.path })
-        assertEquals(listOf("second"), subs.single().designAppKeys)
-    }
-
-    @Test
-    fun `a legacy single-app file migrates designAppKey into designAppKeys and clears the legacy field`() {
-        val s = FlowableAtlasProjectSettings(null)
-        val flat = FlowableAtlasProjectSettings.State()
-        flat.designAppKey = "legacy"                 // pre-multi-app single-app field
-        flat.subProjects = mutableListOf(
-            FlowableAtlasProjectSettings.SubProjectState("svc").also { it.designAppKey = "sub-legacy" },
-        )
-        s.loadState(flat)
-        assertEquals(listOf("legacy"), s.designAppKeys)
-        assertEquals(listOf("sub-legacy"), s.scope("svc").designAppKeys)
-        // The legacy field is cleared so it never re-persists (SkipDefaultsSerializationFilter omits "").
-        val out = s.getState()
-        assertEquals("", out.designAppKey)
-        assertEquals("", out.subProjects.single { it.path == "svc" }.designAppKey)
+        assertEquals(listOf("second"), subs.single().designPullTargets.single().appKeys)
     }
 
     @Test
@@ -191,15 +166,33 @@ class FlowableAtlasProjectSettingsTest {
         assertEquals(listOf("configured", "patterned"), s.getState().subProjects.map { it.path })
     }
 
+
     @Test
-    fun `an old flat file loads with no sub-projects and behaves as the default scope`() {
+    fun `each environment keeps its own workspace and apps`() {
+        // A workspace key belongs to one server: DEV's does not exist on QA's Design instance, so one
+        // project-wide value would be right for at most one environment and quietly wrong elsewhere.
         val s = FlowableAtlasProjectSettings(null)
-        val flat = FlowableAtlasProjectSettings.State()
-        flat.designAppKey = "legacy"
-        flat.allowedNamespaces.add("myns")
-        s.loadState(flat)                            // no subProjects element, as a 0.8.0 file
-        assertEquals(listOf("legacy"), s.designAppKeys)
-        assertTrue(s.isAllowlisted(problem(ExprProblemKind.UNKNOWN_NAMESPACE, "myns")))
-        assertTrue(s.getState().subProjects.isEmpty())
+        s.pullTarget("DEV").also { it.workspaceKey = "dev-ws"; it.appKeys = mutableListOf("appA") }
+        s.pullTarget("QA").also { it.workspaceKey = "qa-ws"; it.appKeys = mutableListOf("appB", "appC") }
+        assertEquals("dev-ws", s.pullTargetOrNull("DEV")!!.workspaceKey)
+        assertEquals(listOf("appB", "appC"), s.pullTargetOrNull("QA")!!.appKeys)
+        assertNull("an environment nothing was picked in has no entry", s.pullTargetOrNull("PROD"))
+    }
+
+    @Test
+    fun `pullTarget creates on first use and returns the same entry afterwards`() {
+        val s = FlowableAtlasProjectSettings(null)
+        val first = s.pullTarget("QA")
+        first.workspaceKey = "qa-ws"
+        assertSame(first, s.pullTarget("QA"))
+        assertEquals("qa-ws", s.pullTarget(" QA ").workspaceKey)   // the name is trimmed
+    }
+
+    @Test
+    fun `an environment that was opened and left untouched never reaches the file`() {
+        val s = FlowableAtlasProjectSettings(null)
+        s.pullTarget("DEV").workspaceKey = "dev-ws"
+        s.pullTarget("QA")                                  // opened, nothing picked
+        assertEquals(listOf("DEV"), s.state.designPullTargets.map { it.environment })
     }
 }

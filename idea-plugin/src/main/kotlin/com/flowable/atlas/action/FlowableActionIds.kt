@@ -13,6 +13,8 @@ object FlowableActionIds {
     const val GENERATE_DTO_FROM_DATA_OBJECT = "Flowable.GenerateDtoFromDataObject"
     const val GENERATE_DTO_FROM_APPS = "Flowable.GenerateDtoFromApps"
     const val PULL_FROM_DESIGN = "Flowable.PullFromDesign"
-    const val CONFIGURE_DESIGN_CONNECTION = "Flowable.ConfigureDesignConnection"
+    const val MANAGE_ENVIRONMENTS = "Flowable.ManageEnvironments"
+    const val SWITCH_DESIGN_ENVIRONMENT = "Flowable.SwitchDesignEnvironment"
+    const val SWITCH_WORK_ENVIRONMENT = "Flowable.SwitchWorkEnvironment"
     const val REBUILD_MODEL_INDEX = "Flowable.RebuildModelIndex"
 }

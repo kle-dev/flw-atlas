@@ -29,22 +29,35 @@ you act on it without opening a menu.
 </figure>
 
 The Hub reports whether the model index has been built and when it was last scanned, which explorer was
-generated and whether the models have changed since, and whether a Flowable Design connection is
-configured. **Rebuild**, **Generate Constants…**, **Generate…**, **Open in Browser**, **Pull from
-Design** and **Configure…** each sit beside the thing they change. In a monorepo the *Flowable Project*
-section is a switcher: pick the sub-project Atlas operates on, and the index, the output folder and the
-Design target follow.
+generated and whether the models have changed since, and which environments this project is pointed at.
+**Rebuild**, **Generate Constants…**, **Generate…**, **Open in Browser** and **Pull from …** each sit
+beside the thing they change. In a monorepo the *Flowable Project* section is a switcher: pick the
+sub-project Atlas operates on, and the index, the output folder and the Design target follow.
 
-Its *Flowable Design* section lists the workspace's apps with checkboxes, pre-ticked from the configured
-default. Ticking differently is a **personal override** — stored workspace-locally, never in the
-VCS-shared settings — and the status line says *(personal selection)* while *Reset to configured* takes
-you back. Both the Hub link and the toolbar action pull that same effective selection, so they cannot
-disagree.
+Its *Flowable Design* section is the whole pull, top to bottom, in the order the work is done: pick the
+**environment**, pick the **workspace** in it, tick the **apps**, press **Pull from DEV1** — the link
+names its target, so what is about to happen is readable without opening anything. Both pickers are
+ordinary drop-downs, because switching is a choice made while working and should look like one; they
+open instantly, since the environment list is held in memory, and the workspace list is fetched the
+first time you open it rather than every time the panel is drawn. A *Expression Playground* section
+below carries the runtime environment the same way. The two are independent on purpose: a runtime on QA
+while models still come from DEV1 is a normal way to work, not a mistake to warn about.
+
+What you pick there **is** the project's setting — there is no second copy of it in a settings page.
+An earlier cut had a shared default in Settings and a personal override in the Hub, and the pair could
+not be told apart on screen: "is this the setting, or my copy of it?" had no answer, and an override
+that had drifted made every edit to the default look as if it had done nothing. The workspace and apps
+are stored per environment, because a workspace key belongs to one server and cannot mean the same
+thing on the next.
 
 The Hub never scans on its own: it subscribes to a project message bus that publishes
-index-invalidated, generation-finished and design-pull-finished events, so it reflects work started
-anywhere in the IDE without polling. Its footer states the platform range Atlas was actually verified
-against, and flags a running IDE outside it — in either direction.
+index-invalidated, generation-finished, design-pull-finished, sub-project-switched,
+settings-applied, environments-changed and connection-switched events, so it reflects work started
+anywhere in the IDE without polling. Every Atlas settings page publishes the settings-applied event
+from a `final` method, so a page added later cannot forget to — which is how changing the output folder
+once left the Hub listing artifacts from the old one. Its footer names the running Atlas version, and nothing else: the
+platform range Atlas was verified against is a fact about the release, and it belongs
+[in the reference](../plugin/reference/) and in a bug report — not in a panel that stays open all day.
 
 Reach it from the right stripe, or **Tools → Flowable Atlas → Atlas Hub**.
 
@@ -284,11 +297,27 @@ closes a loop measured in minutes down to one measured in keystrokes.
 
 A second **Scripts** tab does the same for script bodies, with the variables, reads, bindings and beans
 of the selected context as clickable chips, and *Load Script from Model…* to pull a real script out of
-an indexed model.
+an indexed model. *Load Example…* is the other direction — a library of complete, working scripts, at
+least one per context and per language, from variables and JSON through the engine services to an action
+bot's inputs and outputs, each one commented with the decision it demonstrates and edited like any other
+script in the tab.
 
-For apps behind single sign-on there are two routes: an embedded browser login that harvests the
-session, or pasting a session from your browser's dev tools. Captured headers stay in memory for the IDE
-session only; passwords go to the OS keychain.
+Which app it evaluates against is a choice, not a form: the card names the environment in a drop-down,
+and that is the whole connection UI. Everything else about getting there lives behind one button —
+**Paste Work URL…** — which is also the fastest way to arrive anywhere: paste the address of a case,
+process or task from Flowable Work and the dialog resolves the app, the scope and the instance id from
+it. When the app is not one of your environments it asks how to get in and tests the connection before it
+closes, so the next click actually evaluates — and it **creates nothing**: the app becomes a target for
+this IDE session, marked *(this session)* in the picker, with its credentials kept in memory. A link
+from a colleague should not leave an environment behind, and being made to name one first is a toll on
+the common case. Environments are something you decide to have, in *Settings → Environments*.
+
+Evaluating against a **Protected** environment asks first — but from a small confirmation with *Cancel*
+preselected, so declining is one keystroke, and the lock stays visible on the picker the whole time.
+
+For apps behind single sign-on there are two routes, both on the connection in *Settings → Environments*:
+an embedded browser login that harvests the session, or pasting a session from your browser's dev tools.
+Captured headers stay in memory for the IDE session only; passwords go to the OS keychain.
 
 Reach it from the bottom stripe, from **Tools → Flowable Atlas → Open Expression Playground**, or with
 Alt-Enter on any expression in a model. It is also a second tab on every generated explorer.
@@ -355,6 +384,10 @@ Files are written the way Design names its own exports, each through a temp file
 the model index is rebuilt afterwards. Authentication is a username and password or an access token —
 and it can create the token for you. Credentials go to the IDE's password safe, never to a shared file.
 
+The pull names the environment it is running against, in the progress bar and in the notification. An
+environment marked **Protected** asks first, modally, because a pull replaces archives in the working
+tree — and it asks every time, since a guard you can switch off is not a guard.
+
 ---
 
 ## Foundations
@@ -366,13 +399,21 @@ yours.
 
 <figure class="fig mock">
   <div class="body">{{mockup:settings}}</div>
-  <figcaption><b>One tree:</b> a root page under Tools, with Expressions, Generation and Connections
-  beneath it.</figcaption>
+  <figcaption><b>One tree:</b> a root page under Tools, with Environments, Expressions and Generation
+  beneath it. Servers are defined once; which one you use is picked where you use it.</figcaption>
 </figure>
 
 This is what makes the plugin usable by a team rather than by one enthusiast. The allowlist a colleague
 added arrives with a `git pull`; your pasted test payload does not. Shared settings live in a committed
 file under `.idea`; your own choices live in the workspace file, and secrets in the OS keychain.
+
+Servers are a third thing again, and they sit one level up: an environment list is **IDE-wide**, because
+a DEV or QA URL is the same in every Flowable repository you open, and typing it once per project is the
+tedium this removes. Settings holds only that list — which environment a given thing uses is picked at
+that thing, in the Atlas Hub or the playground, which is what keeps the two from ever disagreeing.
+The choice itself stays in your workspace file, since the ids belong to your IDE and would mean nothing
+in a colleague's; what a project pulls *from* an environment is committed like every other project
+setting.
 
 Monorepo scoping means the one repository holding four Flowable apps does not need four IDE profiles:
 **every project setting is stored per sub-project**, and the Hub switches between them. Older flat

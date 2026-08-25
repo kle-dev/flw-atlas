@@ -3,7 +3,6 @@ package com.flowable.atlas.settings
 import com.flowable.atlas.FlowableAtlasBundle
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.intellij.openapi.components.service
-import com.intellij.openapi.options.BoundSearchableConfigurable
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.ui.dsl.builder.bindSelected
@@ -14,10 +13,9 @@ import com.intellij.ui.dsl.builder.panel
  * Expression validation, generation output and the Design/Inspect connections live on the
  * project-level sub-pages (Expressions / Generation / Connections).
  */
-class FlowableAtlasConfigurable : BoundSearchableConfigurable(
+class FlowableAtlasConfigurable : AtlasApplicationConfigurable(
     FlowableAtlasBundle.message("configurable.atlas"),
-    helpTopic = "",
-    _id = "com.flowable.atlas.settings",
+    "com.flowable.atlas.settings",
 ) {
 
     override fun createPanel(): DialogPanel {

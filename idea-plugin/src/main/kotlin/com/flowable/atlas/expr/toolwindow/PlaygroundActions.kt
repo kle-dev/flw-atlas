@@ -1,7 +1,7 @@
 package com.flowable.atlas.expr.toolwindow
 
 import com.flowable.atlas.expr.ExpressionDialect
-import com.flowable.atlas.settings.ConnectionsConfigurable
+import com.flowable.atlas.settings.EnvironmentsConfigurable
 import com.flowable.atlas.settings.ExpressionsConfigurable
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.ActionUpdateThread
@@ -29,8 +29,11 @@ internal class DialectToggleAction(
 
     init {
         templatePresentation.text = if (dialect == ExpressionDialect.BACKEND) "Backend" else "Frontend"
+        // Frontend gets the form icon, not a globe: `AllIcons.General.Web` is the same globe as
+        // `Nodes.PpWeb` on "Open Atlas Explorer", and two buttons a few pixels apart that mean entirely
+        // different things must not share a silhouette. A form is also what a frontend expression sits in.
         templatePresentation.icon =
-            if (dialect == ExpressionDialect.BACKEND) AllIcons.Webreferences.Server else AllIcons.General.Web
+            if (dialect == ExpressionDialect.BACKEND) AllIcons.Webreferences.Server else AllIcons.FileTypes.UiForm
         templatePresentation.description = "Validate and evaluate as ${dialect.display}"
     }
 
@@ -112,7 +115,7 @@ internal class PlaygroundSettingsGroup(private val panel: FlowableExpressionPane
         add(object : AnAction("Connection Settings…"), DumbAware {
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
             override fun actionPerformed(e: AnActionEvent) =
-                ShowSettingsUtil.getInstance().showSettingsDialog(panel.project, ConnectionsConfigurable::class.java)
+                ShowSettingsUtil.getInstance().showSettingsDialog(panel.project, EnvironmentsConfigurable::class.java)
         })
     }
 

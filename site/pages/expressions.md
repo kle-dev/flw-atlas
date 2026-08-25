@@ -109,7 +109,9 @@ Two playgrounds, both in the *Flowable Expressions* tool window:
   inline. Backend expressions evaluate against a running Flowable instance, on a real process, case or
   task scope.
 - **Scripts** — a script editor with the variables, reads, bindings and beans of the selected context
-  as clickable chips, and *Load Script from Model…* to pull a real script body out of an indexed model.
+  as clickable chips, *Load Script from Model…* to pull a real script body out of an indexed model, and
+  *Load Example…* for a worked example instead: complete scripts for every context and language, each
+  commented with what it demonstrates, and all of them validated by the build against this same catalog.
 
 Alt-Enter on any expression in a model opens it in the playground, pre-filled with its dialect and its
 model's scope. Full details in the [plugin reference](../plugin/reference/#expressions).

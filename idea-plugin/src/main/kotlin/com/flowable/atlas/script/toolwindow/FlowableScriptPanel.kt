@@ -29,7 +29,8 @@ import javax.swing.JPanel
  * language editing (completion, syntax coloring — where the language plugin is available), live
  * structural validation from :core's ScriptValidator (squiggles + problem rows, exactly the checks
  * the CLI/explorer run), and the scope variables the script touches. The toolbar loads any script
- * task / listener / action-bot script straight from the project's models ([ScriptPicker]).
+ * task / listener / action-bot script straight from the project's models ([ScriptPicker]), or one of
+ * the worked examples of what a Flowable script can do ([ScriptExamples]).
  *
  * Sibling of [com.flowable.atlas.expr.toolwindow.FlowableExpressionPanel] (same skeleton, no
  * evaluation machinery); hosted as the "Scripts" tab of the Flowable Expressions tool window.
@@ -121,6 +122,7 @@ class FlowableScriptPanel(val project: Project) : SimpleToolWindowPanel(true, tr
         group.add(ScriptContextComboBoxAction(this))
         group.addSeparator()
         group.add(LoadScriptFromModelAction(this))
+        group.add(LoadExampleScriptAction(this))
         return group
     }
 

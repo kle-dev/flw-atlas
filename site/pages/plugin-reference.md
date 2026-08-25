@@ -11,7 +11,7 @@ registers languages and file types.
 | | |
 |---|---|
 | Installs on | IntelliJ IDEA **2026.1** and later (`since-build 261`, `until-build 299.*`) |
-| Verified against | **2026.2** — the Atlas Hub footer states this, and flags a running IDE outside the range in either direction |
+| Verified against | **2026.2** — what `verifyPlugin` actually runs against; a bug report submitted from Atlas states the running IDE's branch and whether it is inside that range |
 | Compiled against | The 2026.1 SDK, so one artifact loads on later versions |
 | Requires | Java 21+; the Java, XML and JSON platform modules |
 | Uses if present | The embedded browser (JCEF), for the explorer tab and the SSO login. Without it the explorer opens in an external browser instead |
@@ -27,30 +27,32 @@ context-menu or main-toolbar entries.
 |---|---|
 | Atlas Hub | — |
 | Open Atlas Explorer | Atlas Hub toolbar |
-| Open Expression Playground | — |
+| Open Expression Playground | Atlas Hub toolbar |
 | Search Models… | Atlas Hub, *Model Index* |
-| Generate → Generate Atlas Explorer… | Atlas Hub toolbar and link |
+| Generate → Generate Atlas Explorer… | Atlas Hub link |
 | Generate → Generate Model Constants… | Atlas Hub link |
 | Generate → Liquibase → From Data Object… | — |
 | Generate → Liquibase → From App(s)… | — |
 | Generate → Data-Object DTOs → From Data Object… | — |
 | Generate → Data-Object DTOs → From App(s)… | — |
-| Pull from Flowable Design | Atlas Hub toolbar and link |
-| Configure Design Connection… | Atlas Hub link |
+| Switch Design Environment… | Atlas Hub, *Flowable Design* |
+| Pull from Flowable Design | Atlas Hub link |
+| Switch Work Environment… | Atlas Hub, *Expression Playground*; the playground itself |
+| Manage Environments… | Atlas Hub link |
 | Rebuild Model Index | Atlas Hub link |
 | Dump Key Index (Internal) | Only visible in an internal-mode IDE |
 
 Panel toolbars carry a few more that are not registered actions, so they do not appear in *Find
-Action*: the Hub's *Refresh*; the explorer tab's *Regenerate*, *Reload* and *Open in Browser*; the
+Action*: the Hub's *Refresh* and, in its *Flowable Design* section, *Reload from Flowable Design*; the Environments page's *Test Connection*; the explorer tab's *Regenerate*, *Reload* and *Open in Browser*; the
 Expression Playground's dialect toggles, scope selector, *Evaluate Against App*, *Show Sub-Expression
 Values* and settings popup; and the Script Playground's language and context selectors with *Load Script
-from Model…*.
+from Model…* and *Load Example…*.
 
 ## Tool windows
 
 | Tool window | Where | Contents |
 |---|---|---|
-| **Atlas Hub** | Right stripe | Flowable Project · Model Index · Atlas Explorer · Flowable Design · footer. See [the Hub](../#the-atlas-hub) |
+| **Atlas Hub** | Right stripe | Flowable Project · Flowable Design (environment · workspace · apps · pull) · Expression Playground · Model Index · Atlas Explorer · footer. See [the Hub](../#the-atlas-hub) |
 | **Flowable Expressions** | Bottom stripe (secondary) | Two tabs: *Expressions* and *Scripts*. See [the playgrounds](../#the-playgrounds) |
 
 The generated explorer also opens as an editor tab with two tabs of its own: **Atlas Explorer** (the
@@ -170,33 +172,75 @@ The allowlist is the same store the Alt-Enter quick fix writes to. See
 
 ### → Generation
 
+Which artifacts *Generate Atlas Explorer…* produces and where, plus the folder a Design pull writes
+into. The three generators with shapes of their own are child pages — on one page they were four
+screens of fields with no hierarchy.
+
+
 | Option | Default |
 |---|---|
 | Atlas output folder | `atlas-output` |
 | Artifacts: Explorer HTML · Summary · Overview · Graph JSON · CLAUDE.md · Diagrams (SVG) | Explorer HTML only |
+| Pulled models folder (Flowable Design) | `flowable-models` |
 | Liquibase output folder | `src/main/resources/liquibase` |
-| Liquibase file name pattern (`{key} {name} {service} {servicePrefix} {serviceNo} {table}`) | `{key}` |
-| Liquibase rename (regex find / replace) | empty |
-| DTO package | `flowable.dto` |
-| DTO class name suffix | `Dto` |
-| DTO class name pattern (`{name} {shortName} {key} {app} {suffix}`) | `{name}{suffix}` |
-| DTO sub-package per app | off |
+
+#### → Generation → Model Constants
+
+| Option | Default |
+|---|---|
 | Model constants class (FQCN) | blank → `flowable.FlowableModelKeys` |
-| Keep the generated constants class in sync | on |
+| Keep the generated class in sync | on |
 | Constant identifier: key / name / name and key | name and key |
 | Constant format: class of `String`s, or enum | class |
 
-### → Connections
+#### → Generation → Liquibase
 
-**Flowable Design** — server URL; username and password *or* an access token (with a *Create Token…*
-dialog and a link to Design's own token page); *Refresh Workspaces*, which doubles as the connection
-test; workspace; apps; target folder (default `flowable-models`, validated to be inside the project).
+| Option | Default |
+|---|---|
+| Liquibase output folder | `src/main/resources/liquibase` |
+| File name pattern (`{key} {name} {service} {servicePrefix} {serviceNo} {table}`) | `{key}` |
+| Rename (regex find / replace) | empty |
 
-**Flowable Inspect** — app base URL, username, password, and *Detect from project*. Shared with the
-Expression Playground's backend evaluation.
+#### → Generation → Data-Object DTOs
 
-Non-secret values go to a committed file under `.idea`. Passwords and tokens go to the IDE's password
-safe, never to a shared file.
+| Option | Default |
+|---|---|
+| DTO package | `flowable.dto` |
+| Class name suffix | `Dto` |
+| Class name pattern (`{name} {shortName} {key} {app} {suffix}`) | `{name}{suffix}` |
+| Rename (regex find / replace) | empty |
+| Sub-package per app | off |
+
+### → Environments
+
+The DEV/QA/UAT/PROD list, **shared by every project in this IDE**. A tree of environments on the left,
+the selected node's form on the right; `+` adds an environment or a connection, the copy button clones
+an environment with its connections, and the arrows reorder — the list is a pipeline, and alphabetical
+would put PROD second.
+
+| Node | Fields |
+|---|---|
+| Environment | Name · *Ask before pulling from or evaluating against this environment* (**Protected**) |
+| Flowable Design | Server URL · authentication (username and password *or* an access token, with a *Create Token…* dialog and a link to Design's own token page) · *Test Connection* |
+| Flowable Work | App base URL · *Detect from Project* · username · password · browser session (*Sign in via Browser…*, *Paste Session…*) · *Test Connection* |
+
+An environment holds **at most one connection of each kind, and may hold only one of the two** — a QA
+stage with a running app and no Design server is an ordinary thing, shown without any warning. Two
+environments **may** point at the same server: one Design server commonly hosts a DEV workspace and a
+QA workspace, and they share the one saved credential that URL has, which is right — same server, same
+login.
+
+### Where the rest is chosen
+
+There is no page for "which environment this project uses". The Design environment, its workspace and
+its apps are picked in the Atlas Hub, beside the models they fetch; the runtime environment is picked in
+the Expression Playground, beside the expression it evaluates. That is deliberate: a settings page
+holding a second copy of those choices could not be told apart from the Hub's, and the pair drifting was
+the whole reason the feature was rebuilt.
+
+The workspace and app selection is stored **per environment** in the committed `.idea` settings — a
+workspace key belongs to one server, so one value could be right for at most one environment. Which
+environment is selected lives in your workspace file, since connection ids are per IDE.
 
 ### Elsewhere
 

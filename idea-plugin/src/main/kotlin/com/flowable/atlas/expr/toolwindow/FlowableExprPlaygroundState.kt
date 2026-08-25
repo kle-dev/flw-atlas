@@ -22,7 +22,14 @@ class FlowableExprPlaygroundState : PersistentStateComponent<FlowableExprPlaygro
 
     class State {
         var dialect: String = ExpressionDialect.BACKEND.name
-        var expression: String = ""
+        /**
+         * One scratch expression **per dialect**. They are different languages against different
+         * scopes, so carrying one across the toggle was not "keeping your text" — it silently replaced
+         * the other one, and the work you had done on it was gone with no way back.
+         */
+        var backendExpression: String = ""
+
+        var frontendExpression: String = ""
         var payload: String = ""
         var frontendScopePath: String = ""
         var scopeKey: String? = null
@@ -39,9 +46,14 @@ class FlowableExprPlaygroundState : PersistentStateComponent<FlowableExprPlaygro
         get() = runCatching { ExpressionDialect.valueOf(state.dialect) }.getOrDefault(ExpressionDialect.BACKEND)
         set(value) { state.dialect = value.name }
 
-    var expression: String
-        get() = state.expression
-        set(value) { state.expression = value }
+    /** The scratch expression for [dialect]; the two are kept apart on purpose. */
+    fun expression(dialect: ExpressionDialect): String =
+        if (dialect == ExpressionDialect.FRONTEND) state.frontendExpression else state.backendExpression
+
+    fun setExpression(dialect: ExpressionDialect, value: String) {
+        if (dialect == ExpressionDialect.FRONTEND) state.frontendExpression = value
+        else state.backendExpression = value
+    }
 
     var payload: String
         get() = state.payload

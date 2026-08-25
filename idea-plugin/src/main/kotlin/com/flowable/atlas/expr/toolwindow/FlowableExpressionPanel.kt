@@ -6,13 +6,18 @@ import com.flowable.atlas.expr.ExpressionDialect
 import com.flowable.atlas.expr.ExpressionScope
 import com.flowable.atlas.expr.eval.EvalResult
 import com.flowable.atlas.expr.eval.PayloadScopePath
+import com.flowable.atlas.environment.AtlasConnection
+import com.flowable.atlas.environment.AtlasConnectionSelection
+import com.flowable.atlas.environment.AtlasEnvironments
+import com.flowable.atlas.environment.AtlasProtection
+import com.flowable.atlas.environment.BaseUrls
+import com.flowable.atlas.environment.ConnectionKind
+import com.flowable.atlas.environment.ConnectionLabels
+import com.flowable.atlas.environment.EnvironmentNames
 import com.flowable.atlas.expr.inspect.InspectClient
-import com.flowable.atlas.expr.inspect.InspectConnectionDetector
 import com.flowable.atlas.expr.inspect.InspectCredentials
-import com.flowable.atlas.expr.inspect.InspectPasteSessionDialog
 import com.flowable.atlas.expr.inspect.InspectSession
-import com.flowable.atlas.expr.inspect.InspectSignInDialog
-import com.flowable.atlas.expr.inspect.WorkUrlParser
+import com.flowable.atlas.expr.inspect.PasteWorkUrlDialog
 import com.flowable.atlas.expr.lang.FlowableBackendExprFileType
 import com.flowable.atlas.expr.lang.FlowableExprFileType
 import com.flowable.atlas.expr.lang.FlowableFrontendExprFileType
@@ -51,15 +56,14 @@ import com.intellij.ui.AnimatedIcon
 import com.intellij.ui.JBColor
 import com.intellij.ui.JBSplitter
 import com.intellij.ui.LanguageTextField
+import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.ui.components.JBLabel
-import com.intellij.ui.components.JBPasswordField
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.Align
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.panel
-import com.intellij.ui.jcef.JBCefApp
 import com.intellij.util.SingleAlarm
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
@@ -68,6 +72,7 @@ import java.awt.Dimension
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
 import javax.swing.BoxLayout
+import javax.swing.DefaultComboBoxModel
 import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.SwingConstants
@@ -102,7 +107,7 @@ class FlowableExpressionPanel(val project: Project) :
 
     // -- expression editor + diagnostics ------------------------------------------------------
 
-    private val field: LanguageTextField = LanguageTextField(languageOf(state.dialect), project, state.expression, false).apply {
+    private val field: LanguageTextField = LanguageTextField(languageOf(state.dialect), project, state.expression(state.dialect), false).apply {
         border = JBUI.Borders.customLine(JBColor.border(), 1)
         // Floor the editor height so the splitter (once it honors component minimums) keeps it usable
         // even when the tool window is docked short at the bottom of the screen.
@@ -128,7 +133,7 @@ class FlowableExpressionPanel(val project: Project) :
         }
         addDocumentListener(object : DocumentListener {
             override fun documentChanged(event: DocumentEvent) {
-                state.expression = text
+                state.setExpression(dialect, text)
                 diagnostics.scheduleRevalidate()
             }
         })
@@ -201,11 +206,32 @@ class FlowableExpressionPanel(val project: Project) :
 
     // -- backend (Inspect) card ------------------------------------------------------------------
 
-    /** Paste-a-Work-URL field: its content is parsed into base URL / scope / instance id below. */
-    private val appUrlField = JBTextField()
-    private val baseUrlField = JBTextField(settings.inspectBaseUrl)
-    private val usernameField = JBTextField(settings.inspectUsername, 12)
-    private val passwordField = JBPasswordField()
+    /**
+     * Which app an evaluation runs against — a real combo, not a status line with a link. This is a
+     * choice the user makes while working, over and over, and it should look like one at a glance.
+     * `null` is the ad-hoc entry: a base URL pasted from a Work link that matches no environment.
+     */
+    private val connectionCombo = ComboBox<AtlasConnection?>().apply {
+        renderer = SimpleListCellRenderer.create<AtlasConnection?> { label, value, _ ->
+            label.text = value?.environmentName?.ifBlank { "unnamed" }
+                ?: oneOffBaseUrl.takeIf { it.isNotBlank() }
+                    ?.let { "${BaseUrls.host(it).ifBlank { it }} (this session)" }
+                ?: "no environment yet"
+            label.icon = if (value?.requiresConfirmation == true) AllIcons.Nodes.Padlock else null
+        }
+        addActionListener { if (!populatingConnection) chooseConnection(selectedItem) }
+    }
+    private var populatingConnection = false
+
+    /**
+     * A base URL from *Paste Work URL…* that is not one of the defined environments — kept **in memory
+     * only**, for as long as this tool window lives. Deliberately not persisted and deliberately not
+     * turned into an environment: a link from a colleague or a one-off look at a stage you do not work
+     * against should leave nothing behind. Its credentials live in [InspectSession], the same
+     * IDE-session store a browser sign-in uses, so nothing typed for it reaches the disk either.
+     */
+    private var oneOffBaseUrl: String = ""
+    private var connectionAnchor: javax.swing.JComponent? = null
     private val scopeTypeCombo = ComboBox(InspectClient.ScopeType.entries.toTypedArray()).apply {
         selectedItem = state.inspectScopeType
         addActionListener { (selectedItem as? InspectClient.ScopeType)?.let { state.inspectScopeType = it } }
@@ -218,13 +244,15 @@ class FlowableExpressionPanel(val project: Project) :
             override fun changedUpdate(e: javax.swing.event.DocumentEvent) = sync()
         })
     }
-    private val subScopeIdField = JBTextField(16)
-    private val backendResultPane = PlaygroundResultPane("Fill in the connection and evaluate against the running app")
+    // Named for what the engine actually wants: a *plan item instance* id. Calling it "optional" was
+    // true and useless, and a task id pasted here comes back as an internal server error.
+    private val subScopeIdField = JBTextField(16).apply { emptyText.text = "plan item instance id" }
+    private val backendResultPane = PlaygroundResultPane("Pick an environment, give a live instance id, and evaluate")
 
     var isEvaluating: Boolean = false
         private set
     val canEvaluateAgainstApp: Boolean
-        get() = baseUrlField.text.isNotBlank() && scopeIdField.text.isNotBlank()
+        get() = currentBaseUrl().isNotBlank() && scopeIdField.text.isNotBlank()
 
     // -- scope picker -----------------------------------------------------------------------------
 
@@ -234,7 +262,6 @@ class FlowableExpressionPanel(val project: Project) :
     private val scopeAlarm = SingleAlarm(::reloadScopeItems, 300, this)
 
     /** Debounces parsing of [appUrlField] so a paste fills the form once, not per keystroke. */
-    private val urlAlarm = SingleAlarm(::applyUrlFromField, 200, this)
 
     private val cards = JPanel(CardLayout())
 
@@ -294,14 +321,19 @@ class FlowableExpressionPanel(val project: Project) :
 
         project.messageBus.connect(this).subscribe(AtlasEvents.TOPIC, object : AtlasEventsListener {
             override fun modelIndexUpdated() = scopeAlarm.cancelAndRequest()
+            override fun settingsApplied() = adoptInspectSettings()
+            override fun environmentsChanged() = adoptInspectSettings()
+            override fun connectionSelectionChanged(kind: ConnectionKind) = adoptInspectSettings()
+            // A sub-project switch changes which connection this project points at, so the card has to
+            // re-read too — without this it kept showing (and evaluating against) the previous scope's.
+            override fun activeSubProjectChanged() = adoptInspectSettings()
         })
 
         reloadScopeItems()
         updateWrapperHint()
         applyScope()
         showCard()
-        prefillConnection()
-        installUrlAutoParse()
+        updateConnectionStatus()
         diagnostics.scheduleRevalidate()
     }
 
@@ -332,10 +364,14 @@ class FlowableExpressionPanel(val project: Project) :
      *  document listeners and re-runs the settings provider (which re-wires [diagnostics]) itself. */
     fun switchDialect(newDialect: ExpressionDialect) {
         if (newDialect == dialect) return
+        // Park what is on screen under the dialect it belongs to, and bring back the other one's.
+        // Carrying the text across looked like "your work is preserved" and was the opposite: a
+        // backend expression landed in the frontend editor and overwrote what had been there.
+        state.setExpression(dialect, field.text)
         dialect = newDialect
         state.dialect = newDialect
         val document = LanguageTextField.createDocument(
-            field.text, languageOf(newDialect), project, LanguageTextField.SimpleDocumentCreator(),
+            state.expression(newDialect), languageOf(newDialect), project, LanguageTextField.SimpleDocumentCreator(),
         )
         field.setNewDocumentAndFileType(fileTypeOf(newDialect), document)
         updateWrapperHint()
@@ -356,6 +392,9 @@ class FlowableExpressionPanel(val project: Project) :
 
     /** Open the playground pre-filled (used by the Alt+Enter intention on injected fragments). */
     fun openWithExpression(text: String, dialect: ExpressionDialect, scopeKey: String? = null) {
+        // Stored first, so switching *to* the dialect it belongs to brings this text and not the one
+        // parked there earlier.
+        state.setExpression(dialect, text)
         switchDialect(dialect)
         field.text = text
         pendingScopeKey = scopeKey
@@ -465,44 +504,18 @@ class FlowableExpressionPanel(val project: Project) :
     }
 
     private fun backendCard(): JComponent = panel {
-        row {
-            comment("Evaluates against a running Flowable app (Inspect REST API) — a live process/case/task instance id is required.")
-        }
-        row("App URL:") {
-            cell(appUrlField).align(AlignX.FILL)
-                .comment("Paste a Work URL (…/flowable-work/#/work/all/case/<id>) — base URL, scope and id fill in automatically")
-        }
-        row("App base URL:") {
-            cell(baseUrlField).align(AlignX.FILL)
-            button("Detect from project") { applyDetectedConnection(force = true) }
-        }
-        row("Username:") {
-            cell(usernameField).align(AlignX.FILL).resizableColumn()
-        }
-        row("Password:") {
-            cell(passwordField).align(AlignX.FILL).resizableColumn()
-                .comment("Remembered in the IDE Password Safe after a successful evaluation")
-        }
-        row("") {
-            button("Sign in via browser (SSO)…") { signInToApp() }
-            button("Paste session from browser…") { pasteSessionFromBrowser() }
-        }
-        row("") {
-            comment(
-                "For SSO/OAuth2-fronted apps, where basic auth can't pass. Both reuse your browser session for " +
-                    "this IDE session only. If the embedded sign-in is blocked by your IdP, use “Paste session” " +
-                    "(DevTools → Copy as cURL). Combine with the username/password above when Flowable also " +
-                    "requires basic auth behind the SSO layer.",
-            )
+        row("Environment:") {
+            cell(connectionCombo).align(AlignX.FILL).resizableColumn()
+                .applyToComponent { connectionAnchor = this }
+            button("Paste Work URL…") { pasteWorkUrl() }
+            link("Manage…") { manageEnvironments() }
         }
         row("Scope:") {
             cell(scopeTypeCombo)
             label("Instance id:")
-            cell(scopeIdField).align(AlignX.FILL)
+            cell(scopeIdField).align(AlignX.FILL).resizableColumn()
         }
-        row("Sub-scope id:") {
-            cell(subScopeIdField).comment("Optional")
-        }
+        row("Sub-scope id:") { cell(subScopeIdField) }
         row {
             cell(backendResultPane).align(Align.FILL)
         }.resizableRow()
@@ -580,175 +593,207 @@ class FlowableExpressionPanel(val project: Project) :
     // ---- backend (Inspect) evaluation ------------------------------------------------------------------
 
     /**
-     * Silent prefill on open: stored PasswordSafe credentials for the configured base URL first
-     * (username/password — saved by the last successful evaluation), then the project's Spring
-     * config for whatever is still blank. Keychain and filename-index access both run on a pooled
-     * thread (never the EDT); the result applies on the UI thread.
+     * The app an evaluation runs against: the chosen environment, else the one-off URL from a paste.
+     *
+     * The `explicit` check is the point. With a single Work environment defined, the selection resolves
+     * to it even when nothing was ever picked — a convenience that means the one-environment user never
+     * has to choose anything. That fallback must not outrank a URL the user has just pasted, or the
+     * one-off silently evaluates against the wrong app and the picker shows an environment the user did
+     * not choose. An *explicit* pick still wins: that is the user changing their mind.
      */
-    private fun prefillConnection() {
-        ApplicationManager.getApplication().executeOnPooledThread {
-            if (project.isDisposed) return@executeOnPooledThread
-            val stored = runCatching { InspectCredentials.load(settings.inspectBaseUrl) }
-                .onFailure { LOG.warn("Could not read the Inspect password from the PasswordSafe — the playground will ask for it again", it) }
-                .getOrNull()
-            val detected = runCatching { InspectConnectionDetector.detect(project) }
-                .onFailure { LOG.warn("Inspect connection detection failed", it) }
-                .getOrNull()
-            ApplicationManager.getApplication().invokeLater({
-                if (project.isDisposed) return@invokeLater
-                stored?.let { c ->
-                    if (usernameField.text.isBlank()) c.userName?.let { usernameField.text = it }
-                    if (passwordField.password.isEmpty()) c.getPasswordAsString()?.let { passwordField.text = it }
-                }
-                detected?.let { applyConnection(it, force = false) }
-            }, ModalityState.any())
-        }
+    private fun currentConnection(): AtlasConnection? {
+        val selected = AtlasConnectionSelection.resolution(project, ConnectionKind.WORK)
+            as? AtlasConnectionSelection.Resolution.Selected ?: return null
+        if (oneOffBaseUrl.isNotBlank() && !selected.explicit) return null
+        return selected.connection
     }
+
+    private fun currentBaseUrl(): String = currentConnection()?.baseUrl ?: oneOffBaseUrl
 
     /**
-     * Pre-fill the Inspect connection from the project's Spring config. [force] overwrites the fields
-     * (the button); otherwise only blanks are filled. Detection queries the filename index, so it runs
-     * on a pooled thread (never the EDT) and applies its result on the UI thread.
+     * The connection line, plus whether *Save as environment…* has anything to offer.
+     *
+     * An ad-hoc URL is shown by host rather than in full — the row also carries two links — and it is
+     * marked *not saved*, because an unnamed URL and a named environment are different things and the
+     * difference decides whether the protection rules apply.
      */
-    private fun applyDetectedConnection(force: Boolean) {
-        ApplicationManager.getApplication().executeOnPooledThread {
-            if (project.isDisposed) return@executeOnPooledThread
-            val c = runCatching { InspectConnectionDetector.detect(project) }
-                .onFailure { LOG.warn("Inspect connection detection failed", it) }
-                .getOrNull() ?: return@executeOnPooledThread
-            ApplicationManager.getApplication().invokeLater({
-                if (!project.isDisposed) applyConnection(c, force)
-            }, ModalityState.any())
+    private fun updateConnectionStatus() {
+        val connection = currentConnection()
+        val available = AtlasEnvironments.getInstance().connections(ConnectionKind.WORK)
+        populatingConnection = true
+        try {
+            connectionCombo.model = DefaultComboBoxModel<AtlasConnection?>().apply {
+                // The one-off target stays a listed choice for as long as it exists, not just while it
+                // happens to be selected: it is never added to the environment list, so if it vanished
+                // from the picker the moment you looked at another environment, there would be no way
+                // back to it short of pasting the link again.
+                if (connection == null || oneOffBaseUrl.isNotBlank()) addElement(null)
+                available.forEach { addElement(it) }
+            }
+            connectionCombo.selectedItem = connection
+        } finally {
+            populatingConnection = false
+        }
+        connectionCombo.toolTipText = connection?.let {
+            ConnectionLabels.tooltip(ConnectionKind.WORK, AtlasConnectionSelection.Resolution.Selected(it, true))
         }
     }
 
-    private fun applyConnection(c: InspectConnectionDetector.Connection, force: Boolean) {
-        if (!c.hasAny) {
-            if (force) backendResultPane.showInfo("No Flowable app config (application*.properties) found in the project.")
-            return
-        }
-        if (c.baseUrl != null && (force || baseUrlField.text.isBlank())) baseUrlField.text = c.baseUrl
-        if (c.username != null && (force || usernameField.text.isBlank())) usernameField.text = c.username
-        if (c.password != null && (force || passwordField.password.isEmpty())) passwordField.text = c.password
-        if (force) {
-            backendResultPane.showInfo(
-                "Detected from project config: ${c.baseUrl ?: "(no base URL)"}" +
-                    (c.username?.let { " · user '$it'" } ?: "") +
-                    (if (c.password != null) " · password from dev config" else ""),
-            )
-        }
-    }
-
-    /** Wire [appUrlField] so pasting a Work URL auto-fills base URL / scope / instance id (debounced). */
-    private fun installUrlAutoParse() {
-        appUrlField.document.addDocumentListener(object : javax.swing.event.DocumentListener {
-            private fun schedule() = urlAlarm.cancelAndRequest()
-            override fun insertUpdate(e: javax.swing.event.DocumentEvent) = schedule()
-            override fun removeUpdate(e: javax.swing.event.DocumentEvent) = schedule()
-            override fun changedUpdate(e: javax.swing.event.DocumentEvent) = schedule()
-        })
-    }
-
-    /**
-     * Parse [appUrlField] and fill the connection fields. Only a field the URL actually yields is
-     * touched: an unrecognised scope leaves the [scopeTypeCombo] on its current selection, and a
-     * base-URL-only link leaves scope/id alone.
-     */
-    private fun applyUrlFromField() {
-        if (project.isDisposed) return
-        val parsed = WorkUrlParser.parse(appUrlField.text)
-        if (!parsed.hasAny) return
-        parsed.baseUrl?.let { baseUrlField.text = it }
-        if (parsed.scopeId != null) {
-            parsed.scopeType?.let { scopeTypeCombo.selectedItem = it }
-            scopeIdField.text = parsed.scopeId
-            subScopeIdField.text = parsed.subScopeId ?: ""
-            val type = parsed.scopeType ?: scopeTypeCombo.selectedItem
-            val sub = parsed.subScopeId?.let { " (sub $it)" } ?: ""
-            backendResultPane.showInfo("Parsed URL → $type · ${parsed.scopeId}$sub")
+    private fun chooseConnection(item: Any?) {
+        val connection = item as? AtlasConnection
+        if (connection == null) {
+            // The one-off entry: going back to it is just dropping the environment selection, since
+            // that is what makes it current again.
+            if (oneOffBaseUrl.isNotBlank()) AtlasConnectionSelection.clear(project, ConnectionKind.WORK)
         } else {
-            backendResultPane.showInfo("Parsed base URL from link")
+            // Picking an environment *is* the switch — it never sends the user to Settings to first
+            // create what the entry already promised.
+            AtlasConnectionSelection.select(project, ConnectionKind.WORK, connection.id)
         }
+        updateConnectionStatus()
+    }
+
+    private fun manageEnvironments() {
+        com.intellij.openapi.options.ShowSettingsUtil.getInstance()
+            .showSettingsDialog(project, com.flowable.atlas.settings.EnvironmentsConfigurable::class.java)
     }
 
     /**
-     * Open the embedded-browser SSO login for the configured base URL and, on success, cache the
-     * captured session cookie for this IDE session ([InspectSession]) so [evaluateAgainstApp] can
-     * replay it. For apps fronted by an IdP (OAuth2/SAML), where basic auth can't pass the login.
+     * One gesture, one dialog: paste a Work link and it resolves the app, the scope and the instance —
+     * naming and checking the app when it is not one of your environments yet. This used to be a field,
+     * a sentence explaining the field, a *Save as environment…* link and an "unsaved" state in the
+     * picker, all sitting in the card whether or not anyone was pasting anything.
      */
-    private fun signInToApp() {
-        val baseUrl = baseUrlField.text.trim()
-        if (baseUrl.isBlank()) {
-            backendResultPane.showInfo("Enter the app base URL first, then sign in.")
-            return
-        }
-        if (!JBCefApp.isSupported()) {
-            backendResultPane.showInfo("The embedded browser (JCEF) isn't available in this IDE, so browser sign-in can't run.")
-            return
-        }
-        val dialog = InspectSignInDialog(project, baseUrl)
+    private fun pasteWorkUrl() {
+        val dialog = PasteWorkUrlDialog(project)
         if (!dialog.showAndGet()) return
-        val cookie = dialog.harvestedCookie
-        if (cookie.isNullOrBlank()) {
-            backendResultPane.showInfo("No session cookie was captured — make sure the login completed, then try again.")
+        applyPastedResult(dialog.result())
+    }
+
+    /**
+     * Points the card at what the paste dialog resolved. Separate from showing the dialog so the whole
+     * decision — known app, unknown app, credentials, scope — can be driven in a test without a window.
+     */
+    internal fun applyPastedResult(result: PasteWorkUrlDialog.Result) {
+        if (result.baseUrl.isBlank()) return
+        val known = result.connectionId
+        if (known != null) {
+            oneOffBaseUrl = ""
+            AtlasConnectionSelection.select(project, ConnectionKind.WORK, known)
         } else {
-            InspectSession.set(baseUrl, mapOf("Cookie" to cookie))
-            backendResultPane.showInfo("Signed in — session captured for this IDE session. You can evaluate against the app now.")
+            // Nothing is created and nothing is written: the target lives here for this session, and its
+            // credentials go to the in-memory session store as a basic Authorization header — the same
+            // header a browser sign-in or a pasted cURL would have put there.
+            oneOffBaseUrl = result.baseUrl
+            AtlasConnectionSelection.clear(project, ConnectionKind.WORK)
+            if (result.username.isNotBlank()) {
+                val encoded = java.util.Base64.getEncoder()
+                    .encodeToString("${result.username}:${result.password}".toByteArray())
+                InspectSession.set(result.baseUrl, mapOf("Authorization" to "Basic $encoded"))
+            }
         }
+        result.parsed.scopeId?.let { scopeId ->
+            result.parsed.scopeType?.let { scopeTypeCombo.selectedItem = it }
+            scopeIdField.text = scopeId
+            subScopeIdField.text = result.parsed.subScopeId ?: ""
+        }
+        updateConnectionStatus()
+        val where = currentConnection()?.environmentName ?: BaseUrls.host(result.baseUrl).ifBlank { result.baseUrl }
+        backendResultPane.showInfo("Using $where" + (result.parsed.scopeId?.let { " · $it" } ?: ""))
     }
 
     /**
-     * Capture the browser session from a pasted "Copy as cURL" (or raw Cookie header) — the reliable
-     * path when the embedded [InspectSignInDialog] login is blocked by the IdP. Extracted headers
-     * (Cookie / Authorization / CSRF) are stored in [InspectSession] for this IDE session.
+     * Re-reads the chosen connection. Subscribed to the catalog and selection events *and* to a
+     * sub-project switch, so the card can never keep showing a connection the project no longer uses —
+     * which is the class of bug this whole rework exists to remove.
      */
-    private fun pasteSessionFromBrowser() {
-        val dialog = InspectPasteSessionDialog(project)
-        if (!dialog.showAndGet()) return
-        val parsed = dialog.parsed
-        if (!parsed.hasAny) {
-            backendResultPane.showInfo("No session headers found in the pasted text — copy a request as cURL (or its Cookie header) and try again.")
-            return
-        }
-        if (baseUrlField.text.isBlank()) parsed.baseUrl?.let { baseUrlField.text = it }
-        val baseUrl = baseUrlField.text.trim()
-        if (baseUrl.isBlank()) {
-            backendResultPane.showInfo("Enter the app base URL first, then paste the session.")
-            return
-        }
-        InspectSession.set(baseUrl, parsed.headers)
-        backendResultPane.showInfo("Session captured (${parsed.headers.keys.joinToString(", ")}) for this IDE session. You can evaluate against the app now.")
+    private fun adoptInspectSettings() {
+        // The event contract allows any thread, and this touches Swing.
+        ApplicationManager.getApplication().invokeLater({
+            if (project.isDisposed) return@invokeLater
+            updateConnectionStatus()
+        }, ModalityState.any())
     }
 
-    /** POST the expression to the configured Flowable Inspect endpoint and show the result. */
+
+    /** For tests: the base URL the backend card would evaluate against. */
+    internal val inspectBaseUrlText: String get() = currentBaseUrl()
+
+    /** For tests: what is in the editor right now. `this.` because bare `field` is the accessor's
+     *  own backing field — the same reason [focusComponent] spells it out. */
+    internal val expressionForTest: String get() = this.field.text
+
+    internal fun setExpressionForTest(text: String) {
+        this.field.text = text
+    }
+
+    /** For tests: the environment the card would evaluate against, or "" when none is selected. */
+    internal val environmentNameForTest: String get() = currentConnection()?.environmentName.orEmpty()
+
+    /** For tests: how many choices the connection picker offers. */
+    internal fun connectionItemCountForTest(): Int = connectionCombo.itemCount
+
+    /** For tests: what the connection picker is showing right now. */
+    internal fun connectionComboLabelForTest(): String {
+        val renderer = connectionCombo.renderer
+        val component = renderer.getListCellRendererComponent(
+            javax.swing.JList(), connectionCombo.selectedItem as AtlasConnection?, -1, false, false,
+        )
+        return (component as? javax.swing.JLabel)?.text.orEmpty()
+    }
+
+    /**
+     * Evaluates against the chosen environment — or the ad-hoc URL — asking first when the environment
+     * is protected.
+     *
+     * Two things it deliberately no longer does. It does not write the base URL and username into the
+     * project settings: those are IDE-wide now, and an evaluation must not mutate an environment shared
+     * with every other project — a pasted QA link used to end up as the team's committed configuration
+     * that way. And it does not read credentials off the card, because the card no longer has any: they
+     * come from the connection and the PasswordSafe.
+     */
     fun evaluateAgainstApp() {
         if (isEvaluating) return
-        settings.inspectBaseUrl = baseUrlField.text.trim()
-        settings.inspectUsername = usernameField.text.trim()
+        val baseUrl = currentBaseUrl().trim()
+        if (baseUrl.isBlank()) {
+            backendResultPane.showInfo("Choose an environment with Change…, or paste a Work URL above.")
+            return
+        }
+        // Protection follows the URL, not the pointer: the card can hold a typed URL, so a guard keyed
+        // on the selected connection would be walked around by pasting PROD's link.
+        val protecting = AtlasProtection.protecting(
+            baseUrl, ConnectionKind.WORK, AtlasEnvironments.getInstance().connections(),
+        )
+        if (protecting != null) {
+            AtlasProtection.confirmEvaluate(protecting, connectionAnchor ?: this) { runEvaluation(baseUrl) }
+            return
+        }
+        runEvaluation(baseUrl)
+    }
+
+    private fun runEvaluation(baseUrl: String) {
+        val connection = currentConnection()
         val exprBody = field.text.trim()
         val expr = if (exprBody.startsWith("\${") || exprBody.startsWith("#{")) exprBody else "\${$exprBody}"
-        val req = InspectClient.Request(
-            baseUrl = baseUrlField.text.trim(),
-            expression = expr,
-            scopeType = scopeTypeCombo.selectedItem as InspectClient.ScopeType,
-            scopeId = scopeIdField.text.trim(),
-            subScopeId = subScopeIdField.text.trim().ifBlank { null },
-            username = usernameField.text.trim(),
-            password = String(passwordField.password),
-            sessionHeaders = InspectSession.get(baseUrlField.text.trim()),
-        )
         isEvaluating = true
         backendResultPane.showLoading()
         ApplicationManager.getApplication().executeOnPooledThread {
+            // The keychain can block, so the credential read happens here rather than on the EDT.
+            val stored = runCatching { InspectCredentials.load(baseUrl) }
+                .onFailure { LOG.warn("Could not read the Inspect password for $baseUrl from the PasswordSafe", it) }
+                .getOrNull()
+            val username = connection?.username?.takeIf { it.isNotBlank() } ?: stored?.userName.orEmpty()
+            val req = InspectClient.Request(
+                baseUrl = baseUrl,
+                expression = expr,
+                scopeType = scopeTypeCombo.selectedItem as InspectClient.ScopeType,
+                scopeId = scopeIdField.text.trim(),
+                subScopeId = subScopeIdField.text.trim().ifBlank { null },
+                username = username,
+                password = stored?.getPasswordAsString().orEmpty(),
+                sessionHeaders = InspectSession.get(baseUrl),
+            )
             val outcome = InspectClient.evaluate(req)
-            // the app answered (auth passed) → remember the credentials for this base URL, so the
-            // password only has to be typed once per app (same PasswordSafe as the Design connection)
-            if (outcome is InspectClient.Outcome.Evaluated) {
-                // Dropping this silently breaks the "type it once" promise in the comment above: the next
-                // evaluation asks again and the user has no way to tell why.
-                runCatching { InspectCredentials.save(req.baseUrl, req.username, req.password) }
-                    .onFailure { LOG.warn("Could not store the Inspect password for ${req.baseUrl} in the PasswordSafe", it) }
-            }
             ApplicationManager.getApplication().invokeLater({
                 if (project.isDisposed) return@invokeLater
                 isEvaluating = false

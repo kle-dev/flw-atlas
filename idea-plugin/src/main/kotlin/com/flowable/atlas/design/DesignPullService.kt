@@ -1,12 +1,18 @@
 package com.flowable.atlas.design
 
+import com.flowable.atlas.environment.AtlasConnectionSelection
+import com.flowable.atlas.environment.AtlasDesignTarget
+import com.flowable.atlas.environment.AtlasProtection
+import com.flowable.atlas.environment.ConnectionKind
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.explorer.AtlasExplorerFiles
 import com.flowable.atlas.explorer.AtlasGenerationRunner
 import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.project.AtlasProjectRootService
-import com.flowable.atlas.settings.ConnectionsConfigurable
+import com.flowable.atlas.project.AtlasScopedKeys
+import com.flowable.atlas.settings.EnvironmentsConfigurable
+import com.flowable.atlas.settings.connections.EnvironmentsTreePanel
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.notification.NotificationAction
@@ -61,49 +67,73 @@ class DesignPullService(private val project: Project) {
     /** One successfully written app, for the summary notification and VFS/index refresh. */
     private data class PulledApp(val app: DesignClient.App?, val appKey: String, val target: Path, val size: Int)
 
-    /** Queues the pull as a background task; safe to call from the EDT. Pulls the *effective*
-     *  selection: the Atlas Hub's personal override when one exists, else the configured default. */
+    /** Queues the pull as a background task; safe to call from the EDT. */
     fun pullInBackground() = pullInBackground(selection = null)
 
     /** Pull exactly [workspaceKey]/[appKeys] — the Atlas Hub's "pull selected" entry point. */
     fun pullInBackground(workspaceKey: String, appKeys: List<String>) =
-        pullInBackground(DesignPullSelection.Selection(workspaceKey, appKeys.toList()))
+        pullInBackground(DesignPullSelection(workspaceKey, appKeys.toList()))
 
-    private fun pullInBackground(selection: DesignPullSelection.Selection?) {
-        object : Task.Backgroundable(project, "Pulling app from Flowable Design", true) {
-            override fun run(indicator: ProgressIndicator) = pull(indicator, selection)
-        }.queue()
-    }
-
-    private fun pull(indicator: ProgressIndicator, requested: DesignPullSelection.Selection?) {
-        val settings = FlowableAtlasProjectSettings.getInstance(project)
-        val projectDir = AtlasProjectRootService.getInstance(project).activeProjectDir()
-        if (projectDir == null || !settings.isDesignConfigured()) {
+    /**
+     * Resolves the target and asks about a protected environment **before** queueing anything.
+     *
+     * The confirmation has to happen here rather than inside the background task: this is called from
+     * the EDT, resolving touches neither keychain nor network, and a modal dialog surfacing from under
+     * a progress indicator is exactly the kind of thing that gets dismissed without being read. A pull
+     * overwrites archives in the working tree, so the question is modal — the weight matches the
+     * consequence.
+     */
+    private fun pullInBackground(selection: DesignPullSelection?) {
+        val target = AtlasDesignTarget.resolve(project)
+        if (target == null) {
             configureThenRetry()
             return
         }
-        // Log the failure path: a broken/locked keychain looks exactly like "not configured yet" from
-        // here, so without this the user is bounced to Settings again and again with nothing to go on.
-        val auth = runCatching { DesignCredentials.loadAuth(settings.designBaseUrl, settings.designAuthMode) }
+        if (target.connection.requiresConfirmation &&
+            !AtlasProtection.confirmPull(project, target.connection, target.targetFolder)
+        ) {
+            return   // a cancelled action is not a failure: nothing is reported, nothing is changed
+        }
+        val title = "Pulling from ${target.connection.environmentName} (Flowable Design)"
+        object : Task.Backgroundable(project, title, true) {
+            override fun run(indicator: ProgressIndicator) = pull(indicator, target, selection)
+        }.queue()
+    }
+
+    private fun pull(
+        indicator: ProgressIndicator,
+        target: AtlasDesignTarget,
+        requested: DesignPullSelection?,
+    ) {
+        val projectDir = AtlasProjectRootService.getInstance(project).activeProjectDir()
+        if (projectDir == null) {
+            configureThenRetry()
+            return
+        }
+        val connection = target.connection
+        // Log the failure path: a broken or locked keychain looks exactly like "not configured yet"
+        // from here, so without this the user is bounced to Settings again and again with nothing to go on.
+        val auth = runCatching {
+            DesignCredentials.loadAuth(connection.baseUrl, connection.authMode, connection.username)
+        }
             .onFailure { LOG.warn("Could not read Design credentials from the PasswordSafe", it) }
             .getOrNull()
         if (auth == null) {
             configureThenRetry()   // e.g. keychain entry was deleted, or the chosen mode has no secret yet
             return
         }
-        val conn = DesignClient.Connection(settings.designBaseUrl, auth)
-        val selection = requested ?: DesignPullSelection.effective(
-            DesignPullSelection.Selection(settings.designWorkspaceKey, settings.designAppKeys.toList()),
-            DesignPullSelection.load(project),
-        )
-        val workspaceKey = selection.workspaceKey
-        val appKeys = selection.appKeys
-        if (appKeys.isEmpty()) {
-            notifyFailure("No apps selected — tick at least one app in the Atlas Hub or in Settings → Connections.")
+        val conn = DesignClient.Connection(connection.baseUrl, auth)
+        val workspaceKey = requested?.workspaceKey ?: target.workspaceKey
+        val appKeys = requested?.appKeys ?: target.appKeys
+        if (workspaceKey.isBlank()) {
+            notifyFailure("No workspace selected — pick one in the Atlas Hub.")
             return
         }
-        val targetDir = projectDir.resolve(settings.designTargetFolder.ifBlank { FlowableAtlasProjectSettings.DEFAULT_DESIGN_TARGET_FOLDER })
-            .normalize()
+        if (appKeys.isEmpty()) {
+            notifyFailure("No apps selected — tick at least one app in the Atlas Hub.")
+            return
+        }
+        val targetDir = projectDir.resolve(target.targetFolder).normalize()
 
         // Resolve display names/versions once, up front (best-effort — a list failure only degrades the
         // filename/notification to the raw key and never aborts the pull).
@@ -156,7 +186,7 @@ class DesignPullService(private val project: Project) {
         indicator.text = "Rebuilding Flowable index…"
         val removedKeys = removedModelKeys(previousKeys, modelKeys(indexService.refresh()))
 
-        notifySuccess(projectDir, written, failed, outsideContent, removedKeys)
+        notifySuccess(projectDir, connection.environmentName, written, failed, outsideContent, removedKeys)
     }
 
     /** The distinct model keys currently in [index] (for post-pull drift detection). */
@@ -197,21 +227,43 @@ class DesignPullService(private val project: Project) {
         return !anyInContent
     }
 
-    /** Opens the Connections settings page on the EDT and re-runs the pull once configured. */
+    /** Opens the settings on the EDT and re-runs the pull once it can actually run. */
     private fun configureThenRetry() {
         ApplicationManager.getApplication().invokeLater {
             if (project.isDisposed) return@invokeLater
-            ShowSettingsUtil.getInstance().showSettingsDialog(project, ConnectionsConfigurable::class.java)
-            if (FlowableAtlasProjectSettings.getInstance(project).isDesignConfigured()) pullInBackground()
+            openEnvironments()
+            if (AtlasDesignTarget.resolve(project)?.isPullReady() == true) pullInBackground()
         }
     }
 
-    private fun notifySuccess(projectDir: Path, written: List<PulledApp>, failed: List<String>, outsideContent: Boolean, removedKeys: List<String>) {
+    /**
+     * Opens the environment editor **on the connection this project uses**, when there is one. A
+     * "Configure…" that lands on a page with nothing selected leaves the reader to find the thing that
+     * just failed, which is the opposite of what the link promised.
+     */
+    private fun openEnvironments() {
+        val selected = AtlasConnectionSelection.selected(project, ConnectionKind.DESIGN)
+        ShowSettingsUtil.getInstance().showSettingsDialog(project, EnvironmentsConfigurable::class.java) { page ->
+            selected?.let { page.select(EnvironmentsTreePanel.SelectionTarget.Connection(it.id)) }
+        }
+    }
+
+    private fun notifySuccess(
+        projectDir: Path,
+        environmentName: String,
+        written: List<PulledApp>,
+        failed: List<String>,
+        outsideContent: Boolean,
+        removedKeys: List<String>,
+    ) {
+        // Naming the environment is the point: with several of them configured, "pulled 2 apps" alone
+        // leaves the reader to remember which server that was.
+        val from = environmentName.ifBlank { "Flowable Design" }
         val title = if (written.size == 1) {
             val only = written.first()
-            "Pulled ${only.app?.name ?: only.appKey}${only.app?.version?.let { " v$it" } ?: ""} from Flowable Design"
+            "Pulled ${only.app?.name ?: only.appKey}${only.app?.version?.let { " v$it" } ?: ""} from $from"
         } else {
-            "Pulled ${written.size} apps from Flowable Design"
+            "Pulled ${written.size} apps from $from"
         }
         var body = written.joinToString("<br>") { "${projectDir.relativize(it.target)} (${(it.size + 1023) / 1024} KB)" } +
             "<br>Flowable index refreshed"
@@ -248,8 +300,8 @@ class DesignPullService(private val project: Project) {
             .getNotificationGroup(GROUP_ID)
             .createNotification("Pull from Flowable Design failed", message, NotificationType.ERROR)
             .addAction(NotificationAction.createSimple("Configure…") {
-                ShowSettingsUtil.getInstance().showSettingsDialog(project, ConnectionsConfigurable::class.java)
-                if (FlowableAtlasProjectSettings.getInstance(project).isDesignConfigured()) pullInBackground()
+                openEnvironments()
+                if (AtlasDesignTarget.resolve(project)?.isPullReady() == true) pullInBackground()
             })
             .notify(project)
         recordPullFinished(succeeded = false)
@@ -260,7 +312,7 @@ class DesignPullService(private val project: Project) {
         if (succeeded) {
             // Workspace-local on purpose: a timestamp in the VCS-shared project settings would be noise.
             PropertiesComponent.getInstance(project)
-                .setValue(LAST_PULL_PROPERTY, System.currentTimeMillis().toString())
+                .setValue(lastPullKey(project), System.currentTimeMillis().toString())
         }
         project.messageBus.syncPublisher(AtlasEvents.TOPIC).designPullFinished(succeeded)
     }
@@ -271,8 +323,19 @@ class DesignPullService(private val project: Project) {
         /** Epoch millis of the last successful pull, in [PropertiesComponent] (workspace-local). */
         const val LAST_PULL_PROPERTY = "flowable.atlas.lastDesignPull"
 
+        /**
+         * Scoped per sub-project **and per Design connection**: "last pull" is a statement about one
+         * server, and reporting DEV's timestamp while the project is pointed at PROD is worse than
+         * reporting nothing.
+         */
+        private fun lastPullKey(project: Project): String = AtlasScopedKeys.scoped(
+            LAST_PULL_PROPERTY,
+            AtlasProjectRootService.getInstance(project).activeSubProject(),
+            AtlasConnectionSelection.scopingId(project, ConnectionKind.DESIGN),
+        )
+
         fun lastPullMillis(project: Project): Long? =
-            PropertiesComponent.getInstance(project).getValue(LAST_PULL_PROPERTY)?.toLongOrNull()
+            PropertiesComponent.getInstance(project).getValue(lastPullKey(project))?.toLongOrNull()
 
         fun getInstance(project: Project): DesignPullService = project.service()
 

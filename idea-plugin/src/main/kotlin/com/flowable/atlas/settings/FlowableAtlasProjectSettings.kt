@@ -1,6 +1,5 @@
 package com.flowable.atlas.settings
 
-import com.flowable.atlas.design.DesignAuthMode
 import com.flowable.atlas.explorer.AtlasArtifact
 import com.flowable.atlas.expr.ExprProblem
 import com.flowable.atlas.expr.ExprProblemKind
@@ -18,8 +17,14 @@ import com.intellij.openapi.project.Project
 
 /**
  * Project-level Flowable Atlas settings, stored in `.idea/flowable-atlas.xml` so a team can share
- * them via VCS. Holds the expression allowlist, the "Pull from Flowable Design" connection, the
- * Inspect connection and the Atlas generation options.
+ * them via VCS. Holds the expression allowlist, what a Design pull fetches (workspace, apps, target
+ * folder) and the Atlas generation options.
+ *
+ * The **servers** are not here. A Design or app URL is a fact about a server, identical in every
+ * project the developer opens, so it lives in the IDE-wide
+ * [com.flowable.atlas.environment.AtlasEnvironments] catalog; which of those a project uses is a
+ * workspace-local pointer ([com.flowable.atlas.environment.AtlasConnectionSelection]), because the
+ * ids are per developer and a committed one would mean nothing in a colleague's IDE.
  *
  * These are **scoped per Flowable sub-project** ([AtlasScope]) so that a monorepo whose IntelliJ root
  * holds several apps can point each one at a different Design app, output folder or allowlist. The
@@ -57,13 +62,29 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         var dtoRenameFind: String
         var dtoRenameReplace: String
         var dtoPackagePerApp: Boolean
-        var inspectBaseUrl: String
-        var inspectUsername: String
-        var designBaseUrl: String
-        var designAuthMode: DesignAuthMode
-        var designWorkspaceKey: String
-        var designAppKeys: MutableList<String>
+        var designPullTargets: MutableList<DesignPullTarget>
         var designTargetFolder: String
+    }
+
+    /**
+     * What a Design pull fetches from **one** environment: which workspace, and which of its apps.
+     *
+     * Per environment rather than per project, because a workspace key belongs to a server: DEV's
+     * workspace does not exist on QA's Design instance, so one project-wide value would be right for at
+     * most one environment and quietly wrong for every other. It also removes a question the settings
+     * page could not answer — "is this workspace the one for the environment above, or a default for
+     * all of them?" — because now the answer is always the former.
+     */
+    class DesignPullTarget() {
+        /** The environment's **name**, e.g. `QA` — see [pullTarget] for why not its id. */
+        var environment: String = ""
+        var workspaceKey: String = ""
+        var appKeys: MutableList<String> = mutableListOf()
+
+        constructor(environment: String) : this() { this.environment = environment }
+
+        /** True when nothing is picked — such entries are pruned so they never reach the XML. */
+        fun isEmpty(): Boolean = workspaceKey.isBlank() && appKeys.isEmpty()
     }
 
     /** One non-default sub-project's scope; [path] (root-relative) is its identity in [State.subProjects]. */
@@ -89,16 +110,8 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         override var dtoRenameFind: String = ""
         override var dtoRenameReplace: String = ""
         override var dtoPackagePerApp: Boolean = false
-        override var inspectBaseUrl: String = ""
-        override var inspectUsername: String = ""
-        override var designBaseUrl: String = ""
-        override var designAuthMode: DesignAuthMode = DesignAuthMode.BASIC
-        override var designWorkspaceKey: String = ""
-        override var designAppKeys: MutableList<String> = mutableListOf()
+        override var designPullTargets: MutableList<DesignPullTarget> = mutableListOf()
         override var designTargetFolder: String = DEFAULT_DESIGN_TARGET_FOLDER
-
-        /** Legacy single-app field; read once by [loadState] into [designAppKeys], then cleared. */
-        var designAppKey: String = ""
 
         constructor(path: String) : this() { this.path = path }
 
@@ -115,10 +128,7 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
                 dtoClassSuffix == DEFAULT_DTO_CLASS_SUFFIX && !dtoPackagePerApp &&
                 dtoClassNamePattern == DEFAULT_DTO_CLASS_PATTERN &&
                 dtoRenameFind.isEmpty() && dtoRenameReplace.isEmpty() &&
-                inspectBaseUrl.isEmpty() && inspectUsername.isEmpty() &&
-                designBaseUrl.isEmpty() && designWorkspaceKey.isEmpty() && designAppKeys.isEmpty() &&
-                designAppKey.isEmpty() && designAuthMode == DesignAuthMode.BASIC &&
-                designTargetFolder == DEFAULT_DESIGN_TARGET_FOLDER
+                designPullTargets.isEmpty() && designTargetFolder == DEFAULT_DESIGN_TARGET_FOLDER
     }
 
     class State {
@@ -183,29 +193,13 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         /** Nest each DTO in a per-app sub-package of [dtoPackage], so apps can never collide. */
         var dtoPackagePerApp: Boolean = false
 
-        /** Base URL of a running Flowable app for the playground's "Evaluate against app" (Inspect). */
-        var inspectBaseUrl: String = ""
-
-        /** Username for Inspect basic-auth (the password lives in the PasswordSafe, never in this XML). */
-        var inspectUsername: String = ""
-
-        /** Flowable Design base URL incl. context path, e.g. `http://localhost:8888/flowable-design`. */
-        var designBaseUrl: String = ""
 
         /**
-         * How the Design pull authenticates. The secret itself — password or access token — lives in the
-         * PasswordSafe, never in this XML.
+         * What this project pulls, **per environment**. A workspace key belongs to one server, so a
+         * single project-wide value could only ever be right for one environment and silently wrong for
+         * the next — and on the settings page it read as if it might be either.
          */
-        var designAuthMode: DesignAuthMode = DesignAuthMode.BASIC
-
-        /** Key of the Design workspace the pulled apps live in. */
-        var designWorkspaceKey: String = ""
-
-        /** Keys of the Design apps whose export ZIPs are pulled into the project. */
-        var designAppKeys: MutableList<String> = mutableListOf()
-
-        /** Legacy single-app field; read once by [loadState] into [designAppKeys], then cleared. */
-        var designAppKey: String = ""
+        var designPullTargets: MutableList<DesignPullTarget> = mutableListOf()
 
         /** Project-relative folder the pulled app ZIPs are written to. */
         var designTargetFolder: String = DEFAULT_DESIGN_TARGET_FOLDER
@@ -258,18 +252,8 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
             get() = state.dtoRenameReplace; set(v) { state.dtoRenameReplace = v }
         override var dtoPackagePerApp: Boolean
             get() = state.dtoPackagePerApp; set(v) { state.dtoPackagePerApp = v }
-        override var inspectBaseUrl: String
-            get() = state.inspectBaseUrl; set(v) { state.inspectBaseUrl = v }
-        override var inspectUsername: String
-            get() = state.inspectUsername; set(v) { state.inspectUsername = v }
-        override var designBaseUrl: String
-            get() = state.designBaseUrl; set(v) { state.designBaseUrl = v }
-        override var designAuthMode: DesignAuthMode
-            get() = state.designAuthMode; set(v) { state.designAuthMode = v }
-        override var designWorkspaceKey: String
-            get() = state.designWorkspaceKey; set(v) { state.designWorkspaceKey = v }
-        override var designAppKeys: MutableList<String>
-            get() = state.designAppKeys; set(v) { state.designAppKeys = v }
+        override var designPullTargets: MutableList<DesignPullTarget>
+            get() = state.designPullTargets; set(v) { state.designPullTargets = v }
         override var designTargetFolder: String
             get() = state.designTargetFolder; set(v) { state.designTargetFolder = v }
     }
@@ -292,6 +276,11 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
 
     override fun getState(): State {
         synchronized(scopeLock) {
+            // An environment the user opened and left untouched must not land in the shared file.
+            state.designPullTargets.removeAll { it.environment.isBlank() || it.isEmpty() }
+            state.subProjects.forEach { sub ->
+                sub.designPullTargets.removeAll { it.environment.isBlank() || it.isEmpty() }
+            }
             state.subProjects.removeAll { it.path.isBlank() || it.isUnconfigured() }
             state.subProjects.sortBy { it.path }
         }
@@ -303,19 +292,9 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         // dropped, and duplicate paths are collapsed (last wins) so a bad VCS merge can't corrupt us.
         newState.subProjects.removeAll { it.path.isBlank() }
         newState.subProjects = newState.subProjects.associateBy { it.path }.values.toMutableList()
-        // Migrate the pre-multi-app single `designAppKey` into `designAppKeys`, then clear the legacy
-        // field so it can never re-persist (SkipDefaultsSerializationFilter omits the now-"" value).
-        migrateLegacyAppKey(newState.designAppKeys, { newState.designAppKey }, { newState.designAppKey = it })
-        newState.subProjects.forEach { sub ->
-            migrateLegacyAppKey(sub.designAppKeys, { sub.designAppKey }, { sub.designAppKey = it })
-        }
         state = newState
     }
 
-    private inline fun migrateLegacyAppKey(keys: MutableList<String>, legacy: () -> String, clear: (String) -> Unit) {
-        if (keys.isEmpty() && legacy().isNotBlank()) keys.add(legacy())
-        clear("")
-    }
 
     /** True when [problem] refers to an allowlisted namespace/function/root — i.e. must not be reported. */
     fun isAllowlisted(problem: ExprProblem): Boolean {
@@ -426,37 +405,25 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         get() = active().dtoPackagePerApp
         set(value) { active().dtoPackagePerApp = value }
 
-    var inspectBaseUrl: String
-        get() = active().inspectBaseUrl
-        set(value) { active().inspectBaseUrl = value }
+    /**
+     * What this project pulls from the environment called [environment], creating the entry on first
+     * use. Keyed by the environment's **name** rather than a connection id: ids are generated per
+     * developer and would mean nothing in a colleague's clone, while "QA" is the same word for everyone.
+     */
+    fun pullTarget(environment: String): DesignPullTarget {
+        val key = environment.trim()
+        val targets = active().designPullTargets
+        targets.firstOrNull { it.environment == key }?.let { return it }
+        return DesignPullTarget(key).also { targets.add(it) }
+    }
 
-    var inspectUsername: String
-        get() = active().inspectUsername
-        set(value) { active().inspectUsername = value }
-
-    var designBaseUrl: String
-        get() = active().designBaseUrl
-        set(value) { active().designBaseUrl = value }
-
-    var designAuthMode: DesignAuthMode
-        get() = active().designAuthMode
-        set(value) { active().designAuthMode = value }
-
-    var designWorkspaceKey: String
-        get() = active().designWorkspaceKey
-        set(value) { active().designWorkspaceKey = value }
-
-    var designAppKeys: MutableList<String>
-        get() = active().designAppKeys
-        set(value) { active().designAppKeys = value }
+    /** The stored entry for [environment], or null when nothing has been picked there yet. */
+    fun pullTargetOrNull(environment: String): DesignPullTarget? =
+        active().designPullTargets.firstOrNull { it.environment == environment.trim() }
 
     var designTargetFolder: String
         get() = active().designTargetFolder
         set(value) { active().designTargetFolder = value }
-
-    /** True once server, workspace and at least one app are configured — i.e. a pull can run without the dialog. */
-    fun isDesignConfigured(): Boolean =
-        designBaseUrl.isNotBlank() && designWorkspaceKey.isNotBlank() && designAppKeys.isNotEmpty()
 
     companion object {
         const val DEFAULT_DESIGN_TARGET_FOLDER = "flowable-models"

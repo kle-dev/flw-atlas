@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.net.URI
 import java.util.Base64
 
 class DesignClientTest {
@@ -151,5 +152,21 @@ class DesignClientTest {
         // A non-UTF charset in the extended form is honored.
         val eAcute = String(byteArrayOf(0xE9.toByte()), Charsets.ISO_8859_1)
         assertEquals("$eAcute.zip", f("attachment; filename*=ISO-8859-1''%E9.zip"))
+    }
+
+    @Test
+    fun `a host name is retried against every address it resolves to`() {
+        // Same trap as the Inspect client: the JDK connects to the first resolved address and never
+        // falls back, so a Design server bound to IPv6 only is unreachable from Java while a browser
+        // reaches it.
+        val candidates = DesignClient.addressCandidates(URI.create("http://localhost:10014/design-api/workspaces"))
+        assertTrue(candidates.size > 1)
+        assertTrue(candidates.all { it.path == "/design-api/workspaces" })
+        assertTrue(candidates.all { it.port == 10014 })
+    }
+
+    @Test
+    fun `an address literal has nothing to fall back to`() {
+        assertEquals(1, DesignClient.addressCandidates(URI.create("http://127.0.0.1:10014/x")).size)
     }
 }

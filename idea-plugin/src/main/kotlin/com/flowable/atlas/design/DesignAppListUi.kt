@@ -3,11 +3,15 @@ package com.flowable.atlas.design
 import com.intellij.ui.CheckBoxList
 
 /**
- * Shared bits of the Design app checkbox list — used by both the Connections settings panel (the
- * team default) and the Atlas Hub (the personal pull selection), so the two render and read the
- * list identically.
+ * Shared bits of the Design workspace/app pickers — used by both the Connections settings panel (the
+ * team default) and the Atlas Hub (the personal pull selection), so the two render and read them
+ * identically.
  */
 internal object DesignAppListUi {
+
+    /** Label for a workspace in the settings combo and the Hub's picker: name (+ key when they differ). */
+    fun workspaceLabel(ws: DesignClient.Workspace): String =
+        if (ws.name == ws.key) ws.key else "${ws.name} (${ws.key})"
 
     /** Checkbox text for an app: display name (+ key when they differ) and version when known. */
     fun appLabel(app: DesignClient.App): String {

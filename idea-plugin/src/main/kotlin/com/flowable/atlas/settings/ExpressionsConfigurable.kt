@@ -3,7 +3,6 @@ package com.flowable.atlas.settings
 import com.flowable.atlas.FlowableAtlasBundle
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
-import com.intellij.openapi.options.BoundSearchableConfigurable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogPanel
 import com.intellij.ui.dsl.builder.AlignX
@@ -16,10 +15,10 @@ import com.intellij.ui.dsl.builder.panel
  * allowlist (one table over namespaces / functions / grounding roots — the same store the
  * Alt-Enter quick-fix writes to) and custom-function discovery for Atlas generation.
  */
-class ExpressionsConfigurable(private val project: Project) : BoundSearchableConfigurable(
+class ExpressionsConfigurable(project: Project) : AtlasProjectConfigurable(
+    project,
     FlowableAtlasBundle.message("configurable.atlas.expressions"),
-    helpTopic = "",
-    _id = "com.flowable.atlas.settings.expressions",
+    "com.flowable.atlas.settings.expressions",
 ) {
 
     private val allowlist = AllowlistTablePanel()

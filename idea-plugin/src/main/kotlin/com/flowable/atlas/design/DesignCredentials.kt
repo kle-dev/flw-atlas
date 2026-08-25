@@ -7,8 +7,9 @@ import com.intellij.ide.passwordSafe.PasswordSafe
 
 /**
  * PasswordSafe storage for the "Pull from Flowable Design" credentials, keyed by the normalized server
- * base URL — two projects (or sub-project scopes) against the same Design server share one entry, while
- * keeping independent [DesignAuthMode]s.
+ * base URL — two projects, or two environments, against the same Design server share one entry while
+ * keeping independent [DesignAuthMode]s. Sharing is the intended behaviour: it is one server and one
+ * login, so a password typed for DEV is the same password QA needs.
  *
  * The two schemes get **separate** entries: PasswordSafe holds one [Credentials] record per
  * [CredentialAttributes], so storing a token under the basic-auth service name would overwrite the
@@ -55,13 +56,18 @@ object DesignCredentials {
 
     /**
      * The [DesignClient.Auth] for [mode], or null when its secret is missing — the caller then opens the
-     * Connections settings page.
+     * Environments settings page.
+     *
+     * [username] comes from the connection, where it is now authoritative; the record's own account
+     * name is the fallback. Before environments existed the username lived *only* in the keychain,
+     * which is why the fallback stays: it keeps every credential that was stored under the old scheme
+     * working, without a re-key.
      */
-    fun loadAuth(baseUrl: String, mode: DesignAuthMode): DesignClient.Auth? = when (mode) {
+    fun loadAuth(baseUrl: String, mode: DesignAuthMode, username: String = ""): DesignClient.Auth? = when (mode) {
         DesignAuthMode.BASIC -> load(baseUrl)?.let { credentials ->
-            val username = credentials.userName
+            val user = username.ifBlank { credentials.userName.orEmpty() }
             val password = credentials.getPasswordAsString()
-            if (username.isNullOrBlank() || password == null) null else DesignClient.Auth.Basic(username, password)
+            if (user.isBlank() || password == null) null else DesignClient.Auth.Basic(user, password)
         }
         DesignAuthMode.ACCESS_TOKEN -> loadToken(baseUrl)?.let { DesignClient.Auth.Token(it) }
     }

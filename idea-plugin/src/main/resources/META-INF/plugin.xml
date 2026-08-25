@@ -79,17 +79,28 @@
               keep the plain expression injection. Atlas additionally runs its own dependency-free
               structural script check (unterminated strings/comments, unbalanced brackets,
               <code>scriptFormat</code> typos) in the CLI and the explorer's Checks tab.</li>
+          <li><b>Flowable environments</b> — define your DEV/QA/UAT/PROD servers once for the whole IDE
+              instead of once per repository, and pick them from a list. Each environment holds a Flowable
+              Design connection, a Flowable Work connection, or just one of the two; the Design pull and the
+              Expression Playground point independently, so running against QA while models still come from
+              DEV1 is an ordinary way to work. Mark an environment <i>Protected</i> and Atlas asks before
+              pulling from it or evaluating against it. Passwords and tokens stay in the IDE password
+              safe.</li>
           <li><b>Expression Playground</b> (the <i>Flowable Expressions</i> tool window) — type an
               expression, pick backend or frontend, and get instant validation and completion; scope
               completion to one model; evaluate a frontend expression live against a pasted JSON payload;
-              or evaluate a backend expression against a running app through the Flowable Inspect REST API
-              (connection auto-detected from the project's Spring configuration).</li>
+              or evaluate a backend expression against a running app through the Flowable Inspect REST API.
+              Which app it runs against is one of your <b>environments</b>, and the fastest way to switch is
+              to paste a Work URL: the environment, the scope and the instance id all fill in from the
+              link.</li>
           <li><b>Script Playground</b> (the <i>Scripts</i> tab of the same tool window) — paste or
               write a Groovy/JavaScript/Python script: the IDE's real language editing (completion,
               coloring) where the language plugin is available, live structural validation with
               squiggles and clickable problem rows (the same checks the CLI and the explorer's Checks
-              tab run), the scope variables the script touches as chips, and a picker that loads any
-              script task / listener / action-bot script straight from the project's models.</li>
+              tab run), the scope variables the script touches as chips, a picker that loads any
+              script task / listener / action-bot script straight from the project's models, and a
+              library of worked examples — a complete, commented script for every context and
+              language, to start from rather than from an empty editor.</li>
         </ul>
 
         <h3>3 &middot; Atlas explorer &amp; hub</h3>
@@ -129,6 +140,222 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.15.0</h3>
+        <ul>
+          <li><b>Flowable environments, defined once for every project</b> — the plugin knew exactly one
+              Design server and exactly one running app, so working against DEV1, DEV2, QA, UAT and PROD
+              meant retyping a URL, an auth mode, a workspace and an app list every time you switched, and
+              doing it again in the next repository. There is now an IDE-wide list of environments under
+              <i>Settings → Tools → Flowable Atlas → Environments</i>: a tree of environments, each holding
+              a <b>Flowable Design</b> connection, a <b>Flowable Work</b> connection, or one of the two — a
+              QA stage with a running app and no Design server is an ordinary thing, shown without any
+              warning. Copy an environment to clone it for the next stage; reorder them, because DEV → QA →
+              UAT → PROD is a pipeline and alphabetical puts PROD second. Passwords and tokens stay in the
+              IDE password safe, keyed by URL, so they are never in a shared file.</li>
+          <li><b>Which environment a project uses is two choices, not one</b> — the Design pull and the
+              Expression Playground point independently, and that is the point rather than an oversight:
+              running against QA while models still come from DEV1 is a normal way to work. Every picker
+              only offers environments that actually have a server of that kind, so choosing a runtime can
+              never leave you unable to pull. With a single environment configured, nothing has to be chosen
+              at all and no dropdown appears.</li>
+          <li><b>Pasting a Work URL is now the fastest way to switch environment</b> — the playground's
+              <i>App URL</i> field already filled in the scope and instance id from a pasted link; it now
+              recognises which of your environments the link belongs to and switches to it, so one paste
+              moves the connection, the scope and the instance together. A link matching no environment is
+              used as-is, marked <i>not saved</i>, with one link to turn it into one. What it no longer does
+              is write that URL into the project's committed settings — a QA link pasted for one evaluation
+              used to become the whole team's configured server.</li>
+          <li><b>Protected environments</b> — tick <i>Ask before pulling from or evaluating against this
+              environment</i> and Atlas asks first, and marks it with a lock wherever it can be picked. A
+              pull asks modally, because it replaces archives in the working tree; an evaluation asks from a
+              small confirmation with <i>Cancel</i> preselected, so declining is one keystroke. There is no
+              "don't ask again": a guard you can switch off is not a guard. The check follows the
+              <b>URL</b>, not the picked connection, so it cannot be walked around by pasting a link.</li>
+          <li><b>Settings and the Atlas Hub cannot drift apart any more</b> — configuring something and
+              seeing no effect in the Hub was a real defect, not a feeling. <i>Generation</i> had no
+              notification at all, so changing the Atlas output folder left the Hub listing artifacts from
+              the old one; every Atlas settings page now publishes from a <code>final</code> method, which
+              makes forgetting a compile error rather than something a review has to catch. Switching
+              connection now also drops the Hub's cached workspace and app lists, which used to keep showing
+              the previous server's app names. The playground re-reads on a sub-project switch. And a
+              personal app selection that the shared default has caught up with is dropped instead of
+              masking it — that mask was most of what "editing Settings does nothing" was made of.</li>
+          <li><b>Settings holds the environment list and nothing else</b> — no page for "which environment
+              this project uses", because a second copy of that choice could not be told apart from the one
+              in the Atlas Hub. There was a shared default in Settings and a personal override in the Hub,
+              and the pair drifting is most of what "I configure something and it has no effect" was made
+              of: the honest question — <i>is this the setting, or my copy of it?</i> — had no answer on
+              screen. Now the environment, its workspace and its apps are picked in the Hub, beside the
+              models they fetch; the runtime environment is picked in the playground, beside the expression
+              it evaluates; and what you pick <b>is</b> the setting. The one project-level field left, the
+              folder pulled archives are written to, moved to <i>Generation</i> next to the other output
+              folders.</li>
+          <li><b>The Atlas Hub's Design section is the whole pull, in order</b> — environment, workspace,
+              apps, <i>Pull from DEV1</i>. Both pickers are ordinary drop-downs rather than a status line
+              with a <i>Change…</i> link: the link cost the same clicks but did not look like a choice, and
+              switching is the gesture the panel is organised around. They open instantly, since the
+              environment list is in memory; the workspace list is fetched the first time the drop-down is
+              opened, not every time the panel is drawn. Everything a drop-down offers can be selected — an
+              entry that sends you to Settings to first create what it promised is not a choice. The runtime
+              environment sits in its own section beside <i>Open Playground</i>.</li>
+          <li><b>The workspace and app selection is per environment</b> — a workspace key belongs to one
+              server, so a single project-wide value was right for at most one environment and silently
+              wrong on the next.</li>
+          <li><b>Two environments may point at the same server</b> — one Design server hosting a DEV
+              workspace and a QA workspace is an ordinary setup, and the first cut refused to save it on the
+              grounds that the two would share a saved password. They do share it, and that is correct: same
+              server, same login. A rule derived from how credentials happen to be keyed had no business
+              forbidding a real-world layout.</li>
+          <li><b>A pasted link to a task inside a case evaluates</b> — it answered <i>"Internal server
+              error"</i> before. Flowable's <code>subScopeId</code> is a <b>plan item instance</b> id, and
+              no Work route exposes one, so putting the task id from <code>…/case/CAS-1/task/TSK-2</code>
+              there made the engine look for a plan item that does not exist. A named task is the more
+              specific scope and the engine evaluates it directly, so that is what a link now resolves to.
+              The playground's <i>Sub-scope id</i> field says what it wants, too: it read "Optional", which
+              was true and useless.</li>
+          <li><b>The paste dialog can fix credentials for an app it already knows</b> — it hid the username
+              and password once the app was recognised, which looked tidy and was a dead end: a saved
+              password that was empty or wrong could only be corrected in Settings, and the only clue was a
+              401 from the next evaluation. The fields are shown either way, prefilled from what is
+              stored.</li>
+          <li><b>An app or Design server bound to IPv6 only is reachable again</b> — and this was the most
+              misleading error Atlas could give: <i>"nothing is listening on that host and port"</i>, about
+              a server the user had open in a browser. The JDK's HTTP client connects to the <b>first</b>
+              address a name resolves to and never falls back to the others; on macOS <code>localhost</code>
+              resolves to <code>127.0.0.1</code> first, so a Vite/node dev server listening on
+              <code>[::1]</code> was unreachable from the IDE while <code>curl</code> reached it happily.
+              Both clients now retry the host's remaining addresses when the connection itself fails — an
+              HTTP answer of any status is still the server's own answer and is never retried.</li>
+          <li><b>A connection test says something a person can act on</b> — <i>Test Connection</i> on a
+              Flowable Work connection probed the Inspect endpoint with a <code>GET</code>, which Flowable
+              answers with a <i>500</i>: a perfectly healthy local app was reported as an internal server
+              error, spelled out as a slab of truncated JSON. It now probes the app itself and says what
+              happened — reachable, credentials rejected, wrong context path, or unreachable and why — and
+              no status line anywhere prints a raw response body. A failed test never blocked saving and now
+              says so, since an app that is simply not running yet is the most ordinary reason to see
+              one.</li>
+          <li><b>The connection fields are the width of the dialog</b> — a URL field rendered about as wide
+              as the word <code>http:</code>, because a filled cell still sits at its minimum width unless
+              its column may grow.</li>
+          <li><b>The environment editor's Add button opens its menu at the button</b> — it opened in the
+              bottom-left corner of the screen when the list was still empty, which is exactly when a
+              first-time user needs it, and a popup stranded there holds the whole Settings dialog, so every
+              other page looked as if it were loading forever.</li>
+          <li><b>The two expression dialects keep their own expression</b> — switching the playground
+              between Backend and Frontend carried the text across, which looked like "your work is
+              preserved" and was the opposite: the expression already parked in the other dialect was
+              replaced, with no way back to it. They are different languages against different scopes, and
+              each now has its own scratch text.</li>
+          <li><b>Pasting a Work URL is one dialog, and it checks the connection</b> — the playground's
+              backend card was carrying the whole flow in the open: a URL field, a sentence explaining what
+              the field does, a <i>Save as environment…</i> link that only sometimes applied, and an
+              "unsaved" state in the environment picker. Four controls and three sentences for something
+              that happens in one gesture. <b>Paste Work URL…</b> now opens a dialog that resolves the app,
+              the scope and the instance from the link, and — when the app is not one of your environments
+              yet — asks how to get in, and <i>tests the connection before it closes</i>. Getting in means
+              the same two routes the environment editor offers: a username and password in the open, since
+              that is the common case, and <i>Sign in via Browser…</i> / <i>Paste Session…</i> beside the
+              test for an app behind an identity provider — or for a bearer token pasted from a cURL. They
+              are links rather than a mode selector because they are not alternatives: an SSO-fronted
+              Flowable can want the session <i>and</i> basic auth behind it, and the request sends whatever
+              is there. A one-off target stays a listed choice in the picker for as long as it lives, marked
+              <i>(this session)</i> — it is never added to the environment list, so if it vanished the
+              moment you glanced at another environment there would be no way back to it short of pasting
+              the link again. And it outranks the "there is only one environment, use it" convenience: with
+              a single Work environment defined, that fallback used to quietly re-select it the instant a
+              link was pasted, so the pasted app never became the target and the picker showed an
+              environment nobody had chosen. An <i>explicit</i> pick still wins — that is the user changing
+              their mind. It <b>creates nothing</b>. A link from a colleague, a one-off look at a stage you
+              do not work against, an app you will never open again: none of those should leave an
+              environment behind, and being made to name one before you can evaluate is a toll on the common
+              case. An unknown app becomes a target for this IDE session — the picker says <i>"(this
+              session)"</i> — and its credentials go to the same in-memory store a browser sign-in uses, so
+              nothing typed there reaches the disk. An environment is something you decide to have, in
+              <i>Settings → Environments</i>. The card is down to the environment, the scope and the
+              instance id, with no explanatory text left to read. An app you have not registered is
+              therefore usable, with authentication, in one pass; before, an unknown URL could only be
+              evaluated against if its password happened to already be in the keychain.</li>
+          <li><b>Generation is a page with three child pages</b> — Model Constants, Liquibase and
+              Data-Object DTOs each get their own. On one page they were four screens of fields with no
+              hierarchy, so finding the DTO class-name pattern meant scrolling past the Liquibase rename
+              regex.</li>
+          <li><b>Two new actions and one rename</b> — <i>Switch Design Environment…</i> and <i>Switch Work
+              Environment…</i> put the switcher in the Tools menu and in Find Action; <i>Configure Design
+              Connection…</i> became <i>Manage Environments…</i>.</li>
+          <li><b>The Atlas Hub footer is just the version now</b> — it also read <i>"verified on 2026.2 —
+              2026.1 is untested"</i>, which is our release process on display in a panel people keep open
+              all day, and nothing a reader can act on. The verified range has not moved: it is still stated
+              in the reference documentation, and every bug report submitted from Atlas carries the running
+              IDE's branch and whether it is inside that range — which is the one place the distinction
+              changes what happens next.</li>
+          <li><b>A fresh Design connection no longer reads as "Not configured"</b> — the Hub called a
+              connection unconfigured until a workspace <i>and</i> at least one app had been saved, and hid
+              the whole section while it did. So a configured server whose default workspace holds no apps
+              left nothing to tick and no way to tick it: the pickers that finish the setup sat behind the
+              condition they exist to satisfy. <i>Not configured</i> now means <i>no server</i>; the
+              workspace and app pickers appear as soon as there is one, reading <i>none selected</i> and
+              <i>Choose a workspace</i> until something is picked. A pull that is missing a workspace or an
+              app now says which of the two it is, instead of reopening Settings.</li>
+          <li><b>Pick the Design workspace in the Hub</b> — the <i>Flowable Design</i> section let you
+              choose which apps a pull fetches, but not the workspace they come from: that was fixed to
+              whatever <i>Settings → Connections</i> held, so working against a second workspace for an
+              afternoon meant editing the shared project settings, which is a VCS-tracked file the whole
+              team reads. The workspace now has its own picker in the Hub, right above the app list, and it
+              is part of the same <b>personal override</b> — kept workspace-locally, marked <i>(personal
+              selection)</i>, undone by <i>Reset to configured</i>, and dropped by itself as soon as the
+              pick lands back on the configured workspace. A switch starts with nothing ticked, because one
+              workspace's apps do not exist in the next one.</li>
+          <li><b>A Design server on a plain <code>http://</code> port no longer times out</b> — pointing the
+              connection at, say, <code>http://localhost:10014</code> could fail with <i>"Cannot reach …
+              request timeout"</i> while the very same URL answered a <code>curl</code> instantly. The JDK's
+              HTTP client defaults to HTTP/2, which over cleartext is an h2c <i>upgrade</i> request, and a
+              server that neither completes nor declines that upgrade leaves the request hanging until the
+              timeout. The Design and Inspect clients now speak plain HTTP/1.1; <code>https://</code> still
+              negotiates HTTP/2 through ALPN, so nothing is given up for it.</li>
+          <li><b>One reload icon for the two Design lists</b> — the <i>Refresh apps</i> link sat under the
+              app list next to <i>Reset to configured</i>, where it read as part of resetting rather than as
+              a reload. It is now a refresh icon beside the workspace it re-reads, and it reloads both
+              server lists: the workspaces and the apps.</li>
+          <li><b>The Hub stops asking to be widened</b> — it is read in a side panel a few hundred pixels
+              wide, and a lot of it was sized as if that were negotiable. The app list pinned 320px of width
+              and now takes the width it is given; the Design status line spelled out every ticked app key
+              and now says <i>N apps selected</i> past three; a long workspace name pushed <i>Change…</i>
+              and the reload icon past the right edge and is now shortened, with the full name and key in
+              its tooltip. An explorer row showed the full project-relative path and a timestamp behind the
+              file name — it now shows the tail of the folder, with path and generation time in the row's
+              tooltip. An app list with nothing in it is a single line of text instead of a tall empty box
+              holding a centred label the panel then clipped.</li>
+          <li><b>Configuring Inspect in Settings now reaches the Expression Playground</b> — the
+              playground's backend card and <i>Settings → Connections</i> edit one and the same connection,
+              but the card read the settings only when it was first built and then outlived every trip to
+              Settings. So typing a base URL there changed nothing you could see, and the next <i>Evaluate
+              Against App</i> wrote the card's stale value straight back over what you had just configured.
+              Applying the settings now updates an open playground; a field you have typed into yourself
+              keeps its text, because the settings only reclaim what they put there.</li>
+          <li><b>The Frontend dialect no longer wears the Atlas Explorer's icon</b> — in the Expression
+              Playground the <i>Frontend</i> toggle used <code>AllIcons.General.Web</code>, the same globe
+              the <i>Open Atlas Explorer</i> button uses a few pixels away. It is now the form icon, which
+              is also where a frontend expression actually sits.</li>
+          <li><b>The Hub toolbar is openers only</b> — <i>Generate Atlas Explorer</i> and <i>Pull from
+              Design</i> were there twice over: once as a toolbar icon, once as a link in the very section
+              whose state they change. Doing something to the project belongs next to that thing's state, so
+              the toolbar now holds only ways to get somewhere: <i>Open Atlas Explorer</i>, the new <i>Open
+              Expression Playground</i> (the tool window's own icon — it had no button anywhere, only a link
+              at the very bottom of the panel), and <i>Refresh</i>. Both removed actions stay where they
+              were in the sections and under Tools → Flowable Atlas.</li>
+          <li><b>The Script Playground has examples to start from</b> — the <i>Scripts</i> tab could load a
+              script out of the project's own models, which is exactly the wrong direction when the question
+              is <i>how does one write these</i>: it can only show you what somebody already wrote. <i>Load
+              Example…</i> now offers a library of complete, working scripts, at least one for every script
+              context and every language the tab edits, from reading and writing variables through transient
+              and local scope, JSON, dates, the engine services, a multi-instance collection, raising a BPMN
+              error rather than failing the job, a CMMN plan item and an action bot's inputs and outputs.
+              Each one lands in the editor as ordinary text to edit, with the comments that explain the
+              decision it demonstrates — why a transient variable, why a task listener binds
+              <code>task</code> and never <code>execution</code>. They are held to the same standard as the
+              code around them: the build runs every example through the script validator in its own context
+              and fails on a single warning, so an example can never ship the squiggle it would draw.</li>
+        </ul>
         <h3>0.14.0</h3>
         <ul>
           <li><b>Atlas can update itself</b> — with no Marketplace listing, nothing ever told you a new
@@ -334,207 +561,6 @@
               a second <code>Esc</code> closes it, and the expanded and docked sizes are remembered
               separately, so clicking through elements stays in the mode you chose.</li>
         </ul>
-        <h3>0.11.0</h3>
-        <ul>
-          <li><b>The generated artifacts say what Atlas actually knows</b> — the Markdown/JSON artifacts had
-              been frozen since the Python port while the engine grew, so everything learned in 0.10.x lived
-              only in the explorer and the IDE. Now: <b>processes are listed in execution order</b>, each
-              step naming its successors and branch conditions (gateways, receive tasks and sub-processes
-              are rendered at all for the first time, and an element no sequence flow reaches is marked as
-              unreachable instead of looking sequenced); <b>CMMN criteria show their sentry's condition</b>;
-              <b>DMN rule rows</b>, <b>service operation in/out contracts</b> and the <b>data layer</b>
-              (service ↔ Liquibase table ↔ data object, with the gaps named) are included; <b>variables
-              carry their provenance</b> — scope, where set, where read, and a mark when the name is only
-              inferred from a script; expressions are grouped by callee with the invalid ones flagged.</li>
-          <li><b>Health findings are computed once, for every surface</b> — the eleven checks
-              (invalid/suspect expressions, script syntax, unparseable files, missing model references,
-              orphan/superseded changelogs, schema gaps, unused forms/operations/custom functions,
-              script-inferred variables) were JavaScript inside the explorer, so no other artifact could
-              state a single one. They are now <code>findings</code>/<code>checks</code> in
-              <code>:core</code>, feeding the summary's Health block, the overview's Findings section (with
-              <code>file:line</code> and the offending source line), a "known issues — do not copy these
-              patterns" list in <code>CLAUDE.md</code>, <code>graph.json</code>, the CLI status line and the
-              explorer's Checks tab. One definition, one number everywhere.</li>
-          <li><b>CLAUDE.md tells an agent what it may call</b> — a new cheatsheet, generated from the same
-              catalogs the expression and script validators use: every backend EL namespace and its
-              functions, the frontend <code>flw.</code> members, what each script context binds, the
-              platform beans, and the project's own discovered functions. Atlas used to report that
-              <code>${vars:bogus()}</code> is wrong while never saying what is right.</li>
-          <li><b>graph.json is half the size and queryable</b> — a model body is stored once in its bucket
-              and its node points there via <code>data.dataIn</code>, output is minified
-              (<code>--pretty</code> to indent), every node carries a <code>usedBy</code> reverse index, and
-              a <code>_schema</code> key documents the shape and ships <code>jq</code> recipes. 4.8 MB → 2.5
-              MB on a large real project.</li>
-          <li><b><code>--slice &lt;type:key&gt;</code></b> — one node with its full context in both
-              directions (what it uses, who uses it, the findings touching it): the tier between a few-KB
-              summary and megabytes of graph, for when the task is about one model.</li>
-          <li><b>Truth fixes</b> — the overview no longer signs itself "Generated by
-              flowable_project_overview.py"; Python <code>repr</code> output (<code>{'kind': 'rest',
-              …}</code>, <code>['total']</code>, <code>None</code>) no longer reaches the page (a test now
-              fails if it does); the summary prints the real variable scopes instead of the words "process /
-              form / case / java"; pointers name sibling files instead of CLI flags or explorer tabs;
-              <code>CLAUDE.template.md</code> is generated from the same source as the primer, so the two
-              can no longer drift; Gradle projects get their Flowable version detected; and a naming
-              convention is only claimed when it generalises.</li>
-        </ul>
-        <h3>0.10.17</h3>
-        <ul>
-          <li><b>Choose what "Pull from Design" fetches — in the Hub</b> — the Atlas Hub's <i>Flowable
-              Design</i> section now lists the workspace's apps with checkboxes, pre-ticked from the
-              configured default. Ticking differently is a <b>personal override</b>: stored
-              workspace-locally, never in the VCS-shared settings file, marked <i>(personal selection)</i>
-              in the status line, with <i>Reset to configured</i> to go back. The Hub link and the toolbar
-              action both pull that effective selection, and app names/versions load on demand so the Hub's
-              own refresh never calls Design. The Connections settings keep the shared team default (and the
-              first-time setup).</li>
-          <li><b>Generate data-object DTOs in bulk</b> — Tools → Flowable Atlas → Generate → <i>Data-Object
-              DTOs</i> → <i>From App(s)…</i> / <i>From Data Object…</i>: a preview table of exactly what
-              will be written — key, editable class name, owning app, field count, target file, and whether
-              it is new or overwrites — for a whole app at once or for hand-picked data objects. Target
-              source root, package, an optional <i>sub-package per app</i> and the class-name suffix
-              (default <code>Dto</code>) live in Settings → Flowable Atlas → <i>Generation</i>. Each class
-              is the same POJO the Alt-Enter action emits: typed fields, a <code>fromContainer(…)</code>
-              mapper and a fluent builder.</li>
-          <li><b>The DTO quick action finds the key</b> — Alt-Enter now recognises a data object behind a
-              <b>constant</b> (<code>definitionKey(ModelKeys.CUSTOMER)</code> — what <i>Generate Model
-              Constants</i> produces), not just an inline literal, and beyond API call sites it offers
-              itself on <b>any</b> string literal or constant whose value is an indexed data-object key.
-              Availability is a plain index lookup, so it no longer parses model files during highlighting;
-              resolving the fields moved into a cancellable progress that reports when a key has no model or
-              no field mappings instead of doing nothing.</li>
-        </ul>
-        <h3>0.10.16</h3>
-        <ul>
-          <li><b>Platform beans in the script catalog</b> — Work scripts resolve any Spring bean by name, so
-              the platform's default services (<code>dataObjectRuntimeService</code>,
-              <code>contentService</code>, <code>templateService</code>, <code>sequenceService</code>,
-              <code>platformIdentityService</code>, <code>actionRuntimeService</code>, ~25 more) come with
-              generated method surfaces: completion with signatures (typed as <i>Spring bean</i>),
-              member-typo checks and hover documentation — the sandbox strict-mode caveat is documented on
-              hover.</li>
-          <li><b>Script Playground chips, redesigned and clickable</b> — the info strip under the editor is
-              now a two-column layout (Variables · Reads · Bindings · Beans) with soft pill chips that wrap
-              instead of clipping, a click-to-expand <i>+N more</i> per row — and every chip inserts its
-              name at the caret when clicked (undoable, focus returns to the editor).</li>
-          <li><b>Explorer: work through search hits in bulk</b> — list rows support multi-selection
-              (⇧-arrows, ⌘/Ctrl-click, ⇧-click ranges, ⌘/Ctrl-A) and Enter opens every marked row as its own
-              detail tab; detail tabs remember scroll and search term, open in the background with
-              ⌘/Ctrl-click, and switch with Alt+1…9.</li>
-        </ul>
-        <h3>0.10.15</h3>
-        <ul>
-          <li><b>Design access tokens</b> — "Pull from Flowable Design" can authenticate with a Flowable
-              Design <i>personal access token</i> (<code>Authorization: Bearer …</code>) instead of a
-              username and password: the scheme Flowable's own CLI uses, and the only one that works when
-              Design sits behind SSO/OAuth2 (where basic auth is switched off). Pick the mode under Settings
-              → Tools → Flowable Atlas → <i>Connections</i>; workspace list, app list and app export all go
-              through it, and "Refresh Workspaces" still doubles as the connection test.</li>
-          <li><b>Mint a token without leaving the IDE</b> — <i>Create Token…</i> signs in once with your
-              username/password, creates a named token with a chosen validity and drops it straight into the
-              field, so afterwards <b>no password has to stay in the keychain</b>. <i>Manage in Design…</i>
-              opens Design's own token page. Password and token are stored as two separate IDE PasswordSafe
-              entries, never in a file, so switching auth modes back and forth loses neither.</li>
-          <li><b>Sharper sign-in errors</b> — an HTTP 401 now says which credential to fix: "check
-              username/password" in password mode, "the access token is invalid or expired" in token mode. A
-              blank token fails immediately instead of producing a pointless request.</li>
-        </ul>
-        <h3>0.10.14</h3>
-        <ul>
-          <li><b>Script Playground</b> — the Flowable Expressions tool window gains a <i>Scripts</i> tab:
-              paste or write a Groovy/JavaScript/Python script and get real-language completion and coloring
-              (where the IDE plugin is available), live structural validation with squiggles, clickable
-              problem rows and an error stripe, the scope variables the script touches as chips (API writes
-              vs ≈ heuristic reads), and <i>Load Script from Model…</i> to pull any script task, listener
-              script or action-bot script out of the project's models for inspection.</li>
-          <li><b>Real script-task validation</b> — BPMN/CMMN script tasks, listener scripts and action-bot
-              scripts get the IDE's own Groovy (bundled) / JavaScript (Ultimate) language injected inline:
-              compiler-grade syntax errors, highlighting and Alt-Enter fragment editing right in the model
-              file. GString <code>${…}</code> interpolation no longer double-injects the expression language
-              inside script bodies.</li>
-          <li><b>Script syntax checks everywhere</b> — a dependency-free structural validator (unterminated
-              strings/comments, unbalanced brackets, unclosed <code>${…}</code> interpolation,
-              <code>scriptFormat</code> typos with a did-you-mean) runs over every script during generation:
-              findings land in the explorer's Checks tab (new "Script syntax" card), as ⚠ badges in the
-              Script tasks tab and model detail panels, in the Markdown reports and the CLI status
-              line.</li>
-          <li><b>Script binding validation</b> — a catalog transcribed from the Flowable engine and platform
-              sources knows what each script context really binds (<code>execution</code> in BPMN script
-              tasks, only <code>task</code> in task-listener scripts,
-              <code>planItemInstance</code>/<code>caseInstance</code> in CMMN,
-              <code>flw</code>/<code>flwActionContext</code> in action bots) and the full API of those
-              objects: member typos get a did-you-mean (<code>setTransientVariabel</code> →
-              <i>setTransientVariable</i>), a root used in the wrong context is explained, EL-only
-              <code>flw.*</code> namespaces and case-sensitive <code>scriptFormat</code> values are flagged,
-              and a CMMN lifecycle listener with a script — which the engine silently ignores — gets a
-              warning. The Script Playground gains a context picker and shows the bound root objects as
-              chips.</li>
-          <li><b>Binding-aware script completion</b> — after <code>execution.</code> /
-              <code>flw.time.</code> the catalog offers the context's real API with parameter signatures
-              (<code>setTransientVariable(variableName, value)</code>), in the Script Playground and inside
-              injected script bodies in model files; the root bindings complete at the top level. The
-              Groovy/JS "unresolved" noise on those dynamic bindings (gray <code>execution</code>, <i>No
-              candidates found for method call</i>) is suppressed exactly inside Flowable script
-              bodies.</li>
-        </ul>
-        <h3>0.10.12</h3>
-        <ul>
-          <li><b>No more multi-second UI freezes while the model index builds</b> — the scan now only holds
-              the read lock to collect candidate files; parsing and regex work run lock-free, so typing and
-              VFS refreshes are never queued behind it.</li>
-          <li><b>Quieter shutdown</b> — the index scan stops when the project closes and the embedded
-              explorer editor no longer touches the VFS after disposal (no more AlreadyDisposedException
-              warnings in the log).</li>
-        </ul>
-        <h3>0.10.11</h3>
-        <ul>
-          <li><b>Schema gaps tab</b> — the dashboard's "Schema gaps" number unfolded into a view of its own
-              (sidebar, next to Overview): every service with Liquibase → Service → Data object coverage,
-              its unmapped columns front and center, fully-mapped services collapsed to a chip row. The
-              dashboard card now routes there.</li>
-          <li><b>Movable, resizable diagram info card</b> — the element card docks to the top-right of the
-              diagram (stable while clicking through elements), can be dragged by its header and resized via
-              the corner grip; width and position are remembered.</li>
-          <li><b>Entry/exit criteria show their condition</b> — in the plan-model tree (entry ◇ / exit ◆
-              chips), in the Sentries section (named "entry of Review" instead of a raw sentry id) and on
-              the diagram: criterion diamonds are rendered properly (entry hollow, exit filled) and clicking
-              one shows the guarded plan item and its sentry condition.</li>
-        </ul>
-        <h3>0.10.10</h3>
-        <ul>
-          <li><b>Legacy Design exports are no longer invisible</b> — the "typed-directory" export format
-              (<code>form-models/</code>, <code>service-models/</code>, <code>action-models/</code>, … with
-              each model wrapped in <code>{key, name, editorJson}</code>) is now unwrapped and parsed, from
-              a zip or a loose workspace directory. Services, data objects, actions, events, channels,
-              queries and policies go through their full parsers; old Oryx-editor forms/pages are at least
-              registered by key so references resolve and their <code>{{…}}</code> bindings are indexed; the
-              root app wrapper becomes the app node with <i>contains</i> membership.</li>
-          <li><b>Model data that was parsed but never shown</b> — new collapsible detail sections: a
-              form/page's <i>Fields</i> (id → variable link, label, type, required, bound value) and <i>Data
-              sources</i>; a process's <i>User tasks</i> (form, candidate groups, assignee, due
-              date/priority), <i>Script tasks</i> (with the script body), <i>Events &amp; timers</i>,
-              <i>Multi-instance</i>, <i>Flow conditions</i> and <i>Listeners</i>; a case's <i>Plan model</i>
-              tree (stages, milestones, tasks — each linking to the form/process/case/decision it uses),
-              <i>Sentries</i> and <i>Event listeners &amp; timers</i>; a security policy's
-              <i>Permissions</i> (roles link to groups); an agent's <i>Tools</i> and <i>Operations</i> (with
-              prompts); an app's <i>Variables</i> and <i>Pages</i>; an action's <i>Bot script</i>.</li>
-          <li><b>More links between the datasets</b> — form field ids and DMN decision inputs/outputs join
-              the variable graph (a variable page now shows the forms and decision tables that touch it);
-              events link to the channels that carry them and the data-dictionary types of their payload;
-              agents' service tools count as uses of the exact operation; services link to the services
-              their column relations join to; case-view/case-page <code>static-*-key</code> references and
-              create-instance buttons resolve to their process/case/form/decision; watcher / participant /
-              manual-activation / event-listener group permissions and form-button
-              <code>permissionGroups</code> feed the Access view.</li>
-          <li><b>Hover explanations now work in the IDE</b> — every <code>title=</code> tooltip (Design
-              vocabulary hints, copy buttons, badges) and the neighborhood graph's labels are served by the
-              Explorer's own tooltip bubble, which renders in the embedded JCEF viewer where native tooltips
-              never show.</li>
-          <li><b>Small things</b> — zero counts are no longer shown as rows; a decision service is labelled
-              as such; CMMN tasks reuse the BPMN task-type vocabulary (<i>Data object task</i>, not <i>task
-              · data-object</i>); search also matches form field ids/labels, app variables, agent tools,
-              policy permissions and dictionary types; user tasks pick up due date / priority /
-              category.</li>
-        </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>
 
@@ -577,11 +603,29 @@
                 key="configurable.atlas.generation"
                 instance="com.flowable.atlas.settings.GenerationConfigurable"/>
         <projectConfigurable
-                parentId="com.flowable.atlas.settings"
-                id="com.flowable.atlas.settings.connections"
+                parentId="com.flowable.atlas.settings.generation"
+                id="com.flowable.atlas.settings.generation.constants"
                 bundle="messages.FlowableAtlasBundle"
-                key="configurable.atlas.connections"
-                instance="com.flowable.atlas.settings.ConnectionsConfigurable"/>
+                key="configurable.atlas.generation.constants"
+                instance="com.flowable.atlas.settings.GenerationConstantsConfigurable"/>
+        <projectConfigurable
+                parentId="com.flowable.atlas.settings.generation"
+                id="com.flowable.atlas.settings.generation.liquibase"
+                bundle="messages.FlowableAtlasBundle"
+                key="configurable.atlas.generation.liquibase"
+                instance="com.flowable.atlas.settings.GenerationLiquibaseConfigurable"/>
+        <projectConfigurable
+                parentId="com.flowable.atlas.settings.generation"
+                id="com.flowable.atlas.settings.generation.dto"
+                bundle="messages.FlowableAtlasBundle"
+                key="configurable.atlas.generation.dto"
+                instance="com.flowable.atlas.settings.GenerationDtoConfigurable"/>
+        <projectConfigurable
+                parentId="com.flowable.atlas.settings"
+                id="com.flowable.atlas.settings.environments"
+                bundle="messages.FlowableAtlasBundle"
+                key="configurable.atlas.environments"
+                instance="com.flowable.atlas.settings.EnvironmentsConfigurable"/>
         <completion.contributor
                 language="JAVA"
                 implementationClass="com.flowable.atlas.completion.FlowableJavaCompletionContributor"/>
@@ -873,7 +917,8 @@
                     class="com.flowable.atlas.action.OpenAtlasExplorerAction"
                     icon="AllIcons.Nodes.PpWeb"/>
             <action id="Flowable.OpenExpressionPlayground"
-                    class="com.flowable.atlas.action.OpenExpressionPlaygroundAction"/>
+                    class="com.flowable.atlas.action.OpenExpressionPlaygroundAction"
+                    icon="/META-INF/expr-toolwindow.svg"/>
             <!-- Opens Search Everywhere on the "Flowable Model" tab — otherwise reachable only by
                  pressing Shift twice and tabbing across to it, which nobody discovers unaided. -->
             <action id="Flowable.SearchModels"
@@ -904,11 +949,15 @@
             <separator/>
 
             <!-- Flowable Design -->
+            <action id="Flowable.SwitchDesignEnvironment"
+                    class="com.flowable.atlas.action.SwitchDesignEnvironmentAction"/>
             <action id="Flowable.PullFromDesign"
                     class="com.flowable.atlas.action.PullFromDesignAction"
                     icon="AllIcons.Actions.Download"/>
-            <action id="Flowable.ConfigureDesignConnection"
-                    class="com.flowable.atlas.action.ConfigureDesignConnectionAction"/>
+            <action id="Flowable.SwitchWorkEnvironment"
+                    class="com.flowable.atlas.action.SwitchWorkEnvironmentAction"/>
+            <action id="Flowable.ManageEnvironments"
+                    class="com.flowable.atlas.action.ManageEnvironmentsAction"/>
             <separator/>
 
             <!-- Maintenance -->

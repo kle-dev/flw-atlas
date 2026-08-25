@@ -1,60 +1,29 @@
 package com.flowable.atlas.design
 
-import com.flowable.atlas.project.AtlasProjectRootService
-import com.intellij.ide.util.PropertiesComponent
-import com.intellij.openapi.project.Project
-
 /**
- * The user's *personal* pull selection — which workspace/apps "Pull from Design" actually fetches.
+ * What a Design pull fetches: one workspace and the apps ticked in it.
  *
- * Two layers, on purpose: the settings hold the VCS-shared team default
- * ([com.flowable.atlas.settings.FlowableAtlasProjectSettings.designWorkspaceKey]/`designAppKeys` in
- * `.idea/flowable-atlas.xml`), and this override is workspace-local ([PropertiesComponent], the same
- * non-VCS category as the active sub-project and the last-pull timestamp) so ticking apps in the
- * Atlas Hub for one pull never dirties the shared settings file. No override means "pull the
- * configured default". Stored per active sub-project, like every other Design setting.
+ * This used to carry a whole second layer — a workspace-local "personal override" sitting on top of a
+ * VCS-shared default, with a *(personal selection)* marker and a *Reset to configured* link. It went
+ * because it could not be told apart from the thing it overrode: with the picker in one place and the
+ * default in another, "is this the setting or my copy of it?" had no answer on screen, and an override
+ * that had quietly drifted made every edit to the shared default look as if it had done nothing.
+ *
+ * There is one value now, stored per environment in the project settings
+ * ([com.flowable.atlas.settings.FlowableAtlasProjectSettings.pullTarget]), and the Atlas Hub edits it
+ * directly. What you see is what a pull does.
  */
-object DesignPullSelection {
+data class DesignPullSelection(val workspaceKey: String, val appKeys: List<String>) {
 
-    data class Selection(val workspaceKey: String, val appKeys: List<String>)
+    companion object {
 
-    private const val PROPERTY = "flowable.atlas.designPullSelection"
+        val EMPTY = DesignPullSelection("", emptyList())
 
-    fun load(project: Project): Selection? =
-        parse(PropertiesComponent.getInstance(project).getValue(propertyKey(project)))
-
-    fun save(project: Project, selection: Selection) =
-        PropertiesComponent.getInstance(project).setValue(propertyKey(project), serialize(selection), null)
-
-    fun clear(project: Project) =
-        PropertiesComponent.getInstance(project).unsetValue(propertyKey(project))
-
-    private fun propertyKey(project: Project): String {
-        val scope = AtlasProjectRootService.getInstance(project).activeSubProject()
-        return if (scope.isEmpty()) PROPERTY else "$PROPERTY.$scope"
-    }
-
-    // ---- pure, testable core ----------------------------------------------------------------
-
-    /** The selection a pull runs with: the personal override when one exists, else the default. */
-    fun effective(default: Selection, override: Selection?): Selection = override ?: default
-
-    /** Whether [override] actually deviates (app order is irrelevant) — an identical override is
-     *  noise and should be cleared rather than stored. */
-    fun differsFromDefault(default: Selection, override: Selection?): Boolean =
-        override != null && (override.workspaceKey != default.workspaceKey ||
-            override.appKeys.toSet() != default.appKeys.toSet())
-
-    fun serialize(selection: Selection): String =
-        selection.workspaceKey + "|" + selection.appKeys.joinToString(",")
-
-    fun parse(raw: String?): Selection? {
-        if (raw.isNullOrBlank()) return null
-        val bar = raw.indexOf('|')
-        if (bar < 0) return null
-        val workspaceKey = raw.substring(0, bar)
-        if (workspaceKey.isBlank()) return null
-        val apps = raw.substring(bar + 1).split(',').map { it.trim() }.filter { it.isNotEmpty() }
-        return Selection(workspaceKey, apps)
+        /**
+         * The selection after switching to [workspaceKey]. Apps are per workspace, so the ticked ones
+         * do not carry over — the previous workspace's apps do not exist in the next one.
+         */
+        fun withWorkspace(current: DesignPullSelection, workspaceKey: String): DesignPullSelection =
+            if (workspaceKey == current.workspaceKey) current else DesignPullSelection(workspaceKey, emptyList())
     }
 }

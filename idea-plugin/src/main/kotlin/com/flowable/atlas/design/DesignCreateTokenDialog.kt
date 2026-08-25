@@ -16,7 +16,7 @@ import javax.swing.JPanel
  * Collects what [DesignClient.createAccessToken] needs so the user can mint a Design personal access
  * token without leaving the IDE — and, once stored, without a password in the keychain at all.
  *
- * **Input only:** the dialog performs no network or keychain access; [DesignConnectionPanel] runs the
+ * **Input only:** the dialog performs no network or keychain access; `DesignConnectionForm` runs the
  * call on a pooled thread after OK. The username/password typed here authenticate that one request and
  * are never persisted.
  */
