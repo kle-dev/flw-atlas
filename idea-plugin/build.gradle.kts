@@ -97,8 +97,9 @@ intellijPlatform {
     pluginVerification {
         // Only real breakage fails the check. The plugin knowingly touches a handful of internal /
         // experimental / deprecated platform APIs (AppMode, PluginManagerCore, the weighted
-        // Search-Everywhere contributor); those are reported in the HTML report but must not fail the
-        // gate, or the gate is useless. NOT_DYNAMIC is expected too — the plugin is require-restart.
+        // Search-Everywhere contributor, and VisualFormattingLayerService.disableForEditor — see
+        // FlowableModelVisualFormattingGuard); those are reported in the HTML report but must not fail
+        // the gate, or the gate is useless. NOT_DYNAMIC is expected too — the plugin is require-restart.
         failureLevel = listOf(
             VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS,
             VerifyPluginTask.FailureLevel.INVALID_PLUGIN,

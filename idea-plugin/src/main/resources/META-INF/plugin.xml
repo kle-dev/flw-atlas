@@ -149,6 +149,13 @@
               JetBrains' Plugin Verifier now all sit on 2026.2, and an IDE below that declines the plugin
               outright instead of loading a build nobody checked there. The visible consequence is the
               requirement itself; everything else is the same plugin.</li>
+          <li><b>No more IDE error after opening a model out of a <code>.bar</code>/<code>.zip</code></b> —
+              the IDE's Reader Mode reformats read-only files <i>virtually</i>, and on 2026.x that machinery
+              throws on <b>minified single-line JSON</b>, which is exactly what a Flowable Design export is.
+              It looked like an Atlas defect because Atlas is what had just opened the file: the <i>Flowable
+              Model</i> search tab is the only thing in the IDE that reaches inside an archive. Atlas now
+              switches the virtual reformatting off for model files — where it could never have applied
+              anything anyway, the file being read-only. The defect itself is the platform's.</li>
         </ul>
         <h3>0.17.0</h3>
         <ul>
@@ -827,6 +834,11 @@
                   extensions="form;action;page;data;dictionary;query;sequence;sla;event;channel;agent;service;tpl;policy;extractor;knowledgebase;masterdata;dashboardcomponent;document;palette;app"/>
         <!-- The XML-serialized models. .bpmn20.xml / .cmmn.xml / .dmn.xml already end in .xml. -->
         <fileType name="XML" extensions="bpmn;cmmn;dmn"/>
+        <!-- Reader Mode's visual formatting layer crashes on minified single-line JSON, which is what a
+             Design model export is; order="last" is load-bearing, because the platform enables the layer
+             from this same extension point. See FlowableModelVisualFormattingGuard. -->
+        <readerModeProvider implementation="com.flowable.atlas.model.FlowableModelVisualFormattingGuard"
+                            order="last"/>
         <!-- The Expression Playground: type an expression, get validation + completion. -->
         <toolWindow id="Flowable Expressions"
                     anchor="bottom"

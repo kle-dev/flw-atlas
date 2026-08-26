@@ -20,6 +20,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   paying: compile target, sandbox and JetBrains' Plugin Verifier now all sit on 2026.2, and an IDE below
   that declines the plugin outright instead of loading a build nobody checked there. The visible
   consequence is the requirement itself; everything else is the same plugin.
+- **No more IDE error after opening a model out of a `.bar`/`.zip`** — the IDE's Reader Mode reformats
+  read-only files *virtually*, and on 2026.x that machinery throws on **minified single-line JSON**, which
+  is exactly what a Flowable Design export is. It looked like an Atlas defect because Atlas is what had
+  just opened the file: the *Flowable Model* search tab is the only thing in the IDE that reaches inside an
+  archive. Atlas now switches the virtual reformatting off for model files — where it could never have
+  applied anything anyway, the file being read-only. The defect itself is the platform's.
 
 ## 0.17.0
 

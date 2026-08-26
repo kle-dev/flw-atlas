@@ -13,6 +13,11 @@ class ScriptProblemWiringTest {
     private fun problemsOf(rec: Map<String, Any?>?): List<Map<String, Any?>>? =
         rec?.get("problems") as? List<Map<String, Any?>>
 
+    /** The parsers hand back untyped `Map<String, Any?>` records; the cast lives here once instead of
+     *  at every call site. */
+    @Suppress("UNCHECKED_CAST")
+    private fun recordsOf(value: Any?): List<Map<String, Any?>> = (value as List<*>).map { it as Map<String, Any?> }
+
     @Test
     fun bpmnScriptTaskCarriesItsProblems() {
         val xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -28,7 +33,7 @@ class ScriptProblemWiringTest {
               </process>
             </definitions>"""
         val procs = BackendModelParsers.parseBpmn(xml.toByteArray(), Ctx(), "p.bpmn")
-        val tasks = (procs.single()["scriptTasks"] as List<*>).map { it as Map<String, Any?> }
+        val tasks = recordsOf(procs.single()["scriptTasks"])
         val bad = problemsOf(tasks.first { it["id"] == "bad" })!!
         assertEquals(1, bad.size)
         assertEquals("error", bad[0]["severity"])
@@ -49,7 +54,7 @@ class ScriptProblemWiringTest {
               </process>
             </definitions>"""
         val procs = BackendModelParsers.parseBpmn(xml.toByteArray(), Ctx(), "p.bpmn")
-        val task = (procs.single()["scriptTasks"] as List<*>).map { it as Map<String, Any?> }.single()
+        val task = recordsOf(procs.single()["scriptTasks"]).single()
         val problems = problemsOf(task)!!
         assertEquals(listOf("missing-format"), problems.map { it["kind"] })
         assertEquals("warning", problems[0]["severity"])
@@ -96,8 +101,8 @@ foo()</flowable:string>
               </process>
             </definitions>"""
         val procs = BackendModelParsers.parseBpmn(xml.toByteArray(), Ctx(), "p.bpmn")
-        val task = (procs.single()["serviceTasks"] as List<*>).map { it as Map<String, Any?> }.single()
-        val listener = (task["listeners"] as List<*>).map { it as Map<String, Any?> }.single()
+        val task = recordsOf(procs.single()["serviceTasks"]).single()
+        val listener = recordsOf(task["listeners"]).single()
         assertEquals("groovy", listener["scriptFormat"])
         val problems = problemsOf(listener)!!
         assertEquals(listOf("mismatched-closer"), problems.map { it["kind"] })
@@ -120,8 +125,8 @@ foo()</flowable:string>
               </process>
             </definitions>"""
         val procs = BackendModelParsers.parseBpmn(xml.toByteArray(), Ctx(), "p.bpmn")
-        val task = (procs.single()["userTasks"] as List<*>).map { it as Map<String, Any?> }.single()
-        val listener = (task["listeners"] as List<*>).map { it as Map<String, Any?> }.single()
+        val task = recordsOf(procs.single()["userTasks"]).single()
+        val listener = recordsOf(task["listeners"]).single()
         val problems = problemsOf(listener)!!
         assertEquals(listOf("wrong-context-root"), problems.map { it["kind"] })
         assertTrue((problems[0]["message"] as String).contains("task"))
@@ -147,7 +152,7 @@ foo()</flowable:string>
             </definitions>"""
         val cases = BackendModelParsers.parseCmmn(xml.toByteArray(), Ctx(), "c.cmmn")
         val node = findById(cases.single()["planModel"], "ht")!!
-        val listener = (node["listeners"] as List<*>).map { it as Map<String, Any?> }.single()
+        val listener = recordsOf(node["listeners"]).single()
         val problems = problemsOf(listener)!!
         assertEquals(listOf("unsupported-script-listener"), problems.map { it["kind"] })
         assertEquals("warning", problems[0]["severity"])
