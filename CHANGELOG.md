@@ -12,7 +12,7 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
-## 0.16.0
+## 0.17.0
 
 - **"Open Environment in Browser" works under Remote Dev** — it was greyed out for every remote
   developer, because one availability check served two different questions. Opening a generated
@@ -35,6 +35,8 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   which had to cover both what Atlas produces from your models and where your models come from: opposite
   directions of travel under one heading. Flowable Design is its own page now, and Generation is exactly
   what its name says.
+## 0.16.0
+
 - **One way to sign in, for Design and for the running app** — the two halves of the plugin had drifted
   into teaching different things about the same product. Design offered a username and password or an
   access token; the app offered a username and password, an embedded browser login and a pasted browser

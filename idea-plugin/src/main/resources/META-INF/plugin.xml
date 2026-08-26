@@ -140,7 +140,7 @@
     ]]></description>
 
     <change-notes><![CDATA[
-        <h3>0.16.0</h3>
+        <h3>0.17.0</h3>
         <ul>
           <li><b>"Open Environment in Browser" works under Remote Dev</b> — it was greyed out for every
               remote developer, because one availability check served two different questions. Opening a
@@ -164,6 +164,9 @@
               <i>Generation</i> settings page, which had to cover both what Atlas produces from your models
               and where your models come from: opposite directions of travel under one heading. Flowable
               Design is its own page now, and Generation is exactly what its name says.</li>
+        </ul>
+        <h3>0.16.0</h3>
+        <ul>
           <li><b>One way to sign in, for Design and for the running app</b> — the two halves of the plugin
               had drifted into teaching different things about the same product. Design offered a username
               and password or an access token; the app offered a username and password, an embedded browser
