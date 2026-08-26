@@ -255,6 +255,34 @@ class AtlasHubPanelTest : BasePlatformTestCase() {
      * second line below it — and the link was hidden whenever nothing had been detected yet, so in a
      * repository with several Flowable projects the answer to "can I pick one?" was a blank space.
      */
+    /**
+     * "No explorer generated yet" was a claim the panel cannot make: *Generate…* writes wherever you
+     * point it, and the search is scoped to the active Flowable project's output folder — so a page
+     * saved elsewhere is invisible here, and the old wording called that "not generated". Naming the
+     * folder turns a wrong claim into a findable mismatch.
+     */
+    fun testTheEmptyExplorerLineNamesTheFolderItSearched() {
+        val settings = FlowableAtlasProjectSettings.getInstance(project)
+        val rootService = AtlasProjectRootService.getInstance(project)
+        val panel = AtlasHubPanel(project)
+        val previous = settings.atlasOutputDir
+        try {
+            settings.atlasOutputDir = "atlas-output"
+            panel.refreshForTest()
+            assertEquals("No explorer in atlas-output/ yet", panel.explorerHintForTest())
+
+            // Scoped to a sub-project, the folder it searched is inside that sub-project — which is the
+            // whole reason someone's generated page can be missing from the list.
+            rootService.setActiveSubProject("orders-app")
+            panel.refreshForTest()
+            assertEquals("No explorer in orders-app/atlas-output/ yet", panel.explorerHintForTest())
+        } finally {
+            rootService.setActiveSubProject("")
+            settings.atlasOutputDir = previous
+            panel.dispose()
+        }
+    }
+
     fun testTheProjectPickerAlwaysOffersWholeProjectAndKeepsTheActiveOne() {
         val rootService = AtlasProjectRootService.getInstance(project)
         val panel = AtlasHubPanel(project)

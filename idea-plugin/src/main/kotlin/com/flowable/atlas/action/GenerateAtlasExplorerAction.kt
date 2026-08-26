@@ -69,8 +69,27 @@ class GenerateAtlasExplorerAction : AnAction() {
         AtlasGenerationRunner.generateAll(project, chosen.toNioPath())
     }
 
-    private fun safeName(project: Project): String =
-        project.name.ifBlank { "project" }.replace(Regex("""[^A-Za-z0-9._-]"""), "-")
+    /**
+     * What to call the page: the **directory Atlas analysed**, not the IntelliJ project.
+     *
+     * Those are the same thing in a single-project repository, and they are not when the IDE is opened
+     * on a folder that *contains* the Flowable project — the ordinary monorepo case, and the one where
+     * the name matters. The page then arrived called after the parent folder, which says nothing about
+     * what is in it, while the Atlas Hub was analysing (and searching) the sub-project all along.
+     */
+    internal fun safeName(project: Project): String {
+        val base = project.basePath?.let { Path.of(it).normalize() }
+        // Only when the scope is *narrower* than the project. Equal to the base means the whole
+        // repository is being analysed, and then `project.name` is the better answer: it is what the
+        // title bar says and it honours a project someone deliberately renamed. It also covers a stale
+        // sub-project — activeProjectDir() widens back to the base — so the page is never named after
+        // a folder that is gone.
+        val analysed = AtlasProjectRootService.getInstance(project).activeProjectDir()
+            ?.takeIf { it != base }
+            ?.fileName?.toString()
+        return (analysed ?: project.name).ifBlank { "project" }
+            .replace(Regex("""[^A-Za-z0-9._-]"""), "-")
+    }
 
     override fun update(e: AnActionEvent) {
         e.presentation.isEnabled = e.project?.basePath != null

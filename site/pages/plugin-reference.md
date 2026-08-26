@@ -181,8 +181,17 @@ screens of fields with no hierarchy.
 |---|---|
 | Atlas output folder | `atlas-output` |
 | Artifacts: Explorer HTML · Summary · Overview · Graph JSON · CLAUDE.md · Diagrams (SVG) | Explorer HTML only |
-| Pulled models folder (Flowable Design) | `flowable-models` |
 | Liquibase output folder | `src/main/resources/liquibase` |
+
+#### → Flowable Design
+
+| Option | Default |
+|---|---|
+| Pulled models folder | `flowable-models` |
+
+Its own page, not a group under *Generation*: a pull downloads what someone else authored, so it is
+the opposite direction of travel from everything on that page. Which environment it pulls from, and
+which of its apps, is chosen in the Atlas Hub.
 
 #### → Generation → Model Constants
 

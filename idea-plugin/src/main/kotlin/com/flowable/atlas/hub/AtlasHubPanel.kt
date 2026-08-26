@@ -112,6 +112,8 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         val designEnvironmentName: String,
         /** What a pull would fetch right now. */
         val pullSelection: DesignPullSelection,
+        /** Where the explorer search looked — what the empty state has to name to be believable. */
+        val searchedIn: String,
     )
 
     /**
@@ -322,7 +324,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
             override fun update(e: AnActionEvent) {
                 // Both halves matter: nothing to open, and nowhere to open it — under Remote Dev on a
                 // headless host a browse would simply do nothing at all.
-                e.presentation.isEnabled = AtlasBrowser.isAvailable() && !EnvironmentLinks.isEmpty(
+                e.presentation.isEnabled = AtlasBrowser.canOpenUrls() && !EnvironmentLinks.isEmpty(
                     AtlasCatalog.environments(project), AtlasCatalog.connections(project),
                 )
             }
@@ -566,11 +568,13 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         return Snapshot(
             detected?.map { it.relPath }.orEmpty(), active, projectNote,
             indexText, artifacts, designText,
-            designArtifactsStale, AtlasBrowser.isAvailable(),
+            designArtifactsStale, AtlasBrowser.canOpenFiles(),
             designConnection != null, designResolution, workResolution,
             AtlasCatalog.environments(project).isNotEmpty(),
             designConnection?.environmentName.orEmpty(),
             pullSelection,
+            searchedIn = listOfNotNull(active.ifBlank { null }, settings.atlasOutputDir)
+                .joinToString("/") + "/",
         )
     }
 
@@ -619,6 +623,16 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         artifactsScroll.revalidate()
         explorerListRow?.visible(snapshot.artifacts.isNotEmpty())
         explorerHintRow?.visible(snapshot.artifacts.isEmpty())
+        // Not "nothing has been generated" — this panel cannot know that. *Generate…* writes wherever
+        // you point it, and the search is scoped to the active Flowable project's output folder, so a
+        // page saved to the desktop or to a sibling project is invisible here and the old wording
+        // called that "not generated yet". Naming the folder turns a wrong claim into a findable
+        // mismatch.
+        // Plain text, not HTML: the value is a user-typed folder name, and a label that renders markup
+        // would have to escape it — a question this line does not need to have.
+        explorerHint.text = "No explorer in ${snapshot.searchedIn} yet"
+        explorerHint.toolTipText = "Generate… writes wherever you point it; the Hub lists this folder " +
+            "and a shallow scan of the Flowable project above."
     }
 
     /**
@@ -995,6 +1009,9 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
 
     /** Pick a Flowable project the way the combo does — for tests, which have no combo. */
     internal fun chooseProjectForTest(relPath: String?) = chooseSubProject(relPath)
+
+    /** For tests: the empty-state line under Atlas Explorer, which has to name where it looked. */
+    internal fun explorerHintForTest(): String = explorerHint.text
 
     /** For tests: how many rows the two lists reserve — the panel's height budget, in one number. */
     internal fun listRowsForTest(): Pair<Int, Int> = artifactsList.visibleRowCount to appList.visibleRowCount

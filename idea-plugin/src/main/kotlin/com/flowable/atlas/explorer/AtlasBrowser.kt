@@ -16,9 +16,27 @@ import java.nio.file.Path
  */
 object AtlasBrowser {
 
-    /** True when opening a browser can actually work: not the headless Remote-Dev host, and a browser is configured. */
-    fun isAvailable(): Boolean =
+    /**
+     * True when a **local file** can be opened in a browser: not the headless Remote-Dev host, and a
+     * browser is configured.
+     *
+     * A generated `explorer.html` lives on the backend's disk, and under Remote Dev the client cannot
+     * see that path — there is nothing to route, so the control is honestly disabled.
+     */
+    fun canOpenFiles(): Boolean =
         !AppMode.isRemoteDevHost() && WebBrowserManager.getInstance().activeBrowsers.isNotEmpty()
+
+    /**
+     * True when a **URL** can be opened — which is nearly always, and deliberately not the same question
+     * as [canOpenFiles].
+     *
+     * This used to share that check, and it was wrong in the one case it mattered: under Remote Dev the
+     * whole plugin runs on the backend, so *Open Environment in Browser* was greyed out for every
+     * remote developer. A URL is not a backend path. It means the same thing on the client, and
+     * [BrowserLauncher] is precisely the API that routes it there — which is why [open] uses it instead
+     * of `BrowserUtil`. Gating it on the backend having a browser configured asked the wrong machine.
+     */
+    fun canOpenUrls(): Boolean = true
 
     /** Open [path] in the default configured browser (the same as the built-in "Open in Browser"). */
     fun open(path: Path) {

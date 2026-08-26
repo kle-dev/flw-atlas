@@ -52,7 +52,7 @@ object AtlasExplorerNotifier {
             .createNotification(title, body, NotificationType.INFORMATION)
 
         if (explorerHtml != null) {
-            if (AtlasBrowser.isAvailable()) {
+            if (AtlasBrowser.canOpenFiles()) {
                 notification.addAction(NotificationAction.createSimple("Open in browser") {
                     AtlasBrowser.open(explorerHtml)
                 })

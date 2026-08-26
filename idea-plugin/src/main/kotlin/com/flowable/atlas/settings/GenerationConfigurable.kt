@@ -12,7 +12,11 @@ import com.intellij.ui.dsl.builder.panel
 
 /**
  * Settings → Tools → Flowable Atlas → **Generation**: which Atlas artifacts "Generate Atlas Explorer…"
- * produces and where, and the folder a Design pull writes its archives into.
+ * produces, and where.
+ *
+ * The Design pull's target folder used to sit here too, and it did not belong: a pull generates
+ * nothing, it downloads what someone else authored, so one heading had to cover both directions of
+ * travel. It has its own page now ([DesignConfigurable]).
  *
  * The three generators that have real shapes of their own — Liquibase changelogs, data-object DTOs and
  * the model-constants class — are child pages. On one page they were four screens of fields with no
@@ -28,25 +32,6 @@ class GenerationConfigurable(project: Project) : AtlasProjectConfigurable(
     override fun createPanel(): DialogPanel {
         val settings = FlowableAtlasProjectSettings.getInstance(project)
         return panel {
-            group("Flowable Design") {
-                row("Pulled models folder:") {
-                    textFieldWithBrowseButton(
-                        FileChooserDescriptorFactory.createSingleFolderDescriptor()
-                            .withTitle("Select Target Folder")
-                            .withDescription("The pulled app archives are written into this folder inside the project"),
-                        project,
-                    )
-                        .bindText(settings::designTargetFolder)
-                        .align(AlignX.FILL)
-                        .resizableColumn()
-                        .comment(
-                            "Where \"Pull from Flowable Design\" writes the app archives. Which environment it " +
-                                "pulls from, and which of its apps, is chosen in the Atlas Hub — beside the models " +
-                                "themselves rather than three pages away.",
-                        )
-                }
-            }
-
             group("Atlas Artifacts") {
                 row("Output folder:") {
                     textFieldWithBrowseButton(

@@ -14,6 +14,27 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
 
 ## 0.16.0
 
+- **"Open Environment in Browser" works under Remote Dev** — it was greyed out for every remote
+  developer, because one availability check served two different questions. Opening a generated
+  `explorer.html` really is impossible from a Remote-Dev backend: the file is on the backend's disk and
+  the client cannot see that path. Opening a **URL** is not the same thing — it means the same on the
+  client, and `BrowserLauncher` is precisely the API that routes it there, which is why Atlas uses it.
+  The two questions are now asked separately.
+- **The generated page is named after the project it describes** — with the IDE opened on a folder that
+  *contains* the Flowable project, the save dialog proposed the parent folder's name, which says nothing
+  about what is in the page, while the Atlas Hub had been analysing the sub-project all along. The name
+  follows the analysed scope now, and falls back to the project's own name when that scope is the whole
+  repository — so a renamed project keeps its name, and a sub-project that was moved away never names a
+  folder that is gone.
+- **The Atlas Hub stops claiming nothing was generated** — *Generate…* writes wherever you point it,
+  while the Hub lists one folder: the active Flowable project's output folder. A page saved anywhere
+  else was therefore reported as *"No explorer generated yet"*, which is a claim the panel is in no
+  position to make. It names the folder it searched instead, so a mismatch is visible rather than
+  mystifying.
+- **A Design pull is not "Generation"** — the pulled-models folder sat on the *Generation* settings page,
+  which had to cover both what Atlas produces from your models and where your models come from: opposite
+  directions of travel under one heading. Flowable Design is its own page now, and Generation is exactly
+  what its name says.
 - **One way to sign in, for Design and for the running app** — the two halves of the plugin had drifted
   into teaching different things about the same product. Design offered a username and password or an
   access token; the app offered a username and password, an embedded browser login and a pasted browser

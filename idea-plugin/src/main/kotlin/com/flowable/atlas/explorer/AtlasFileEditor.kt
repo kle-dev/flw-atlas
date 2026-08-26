@@ -133,7 +133,7 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
 
             // Hidden where a browser launch can't work (headless Remote-Dev host / no configured browser).
             override fun update(e: AnActionEvent) {
-                e.presentation.isEnabledAndVisible = AtlasBrowser.isAvailable()
+                e.presentation.isEnabledAndVisible = AtlasBrowser.canOpenFiles()
             }
 
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
