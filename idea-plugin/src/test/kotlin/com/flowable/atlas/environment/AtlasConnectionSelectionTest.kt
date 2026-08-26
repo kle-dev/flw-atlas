@@ -1,6 +1,6 @@
 package com.flowable.atlas.environment
 
-import com.flowable.atlas.design.DesignAuthMode
+import com.flowable.atlas.environment.auth.AuthMode
 import com.flowable.atlas.environment.AtlasConnectionSelection.Resolution
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -13,7 +13,7 @@ class AtlasConnectionSelectionTest {
         kind = ConnectionKind.DESIGN,
         baseUrl = url,
         username = "demo",
-        authMode = DesignAuthMode.BASIC,
+        authMode = AuthMode.BASIC,
         environmentId = env,
         environmentName = env.uppercase(),
         requiresConfirmation = false,

@@ -1,6 +1,6 @@
 package com.flowable.atlas.environment
 
-import com.flowable.atlas.design.DesignAuthMode
+import com.flowable.atlas.environment.auth.AuthMode
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.intellij.util.xmlb.XmlSerializer
 
@@ -24,7 +24,7 @@ class SharedEnvironmentsTest : BasePlatformTestCase() {
         store().share(
             "QA", requireConfirmation = true,
             listOf(
-                connection(ConnectionKind.DESIGN, "https://design-qa.example.com", "kevin", DesignAuthMode.ACCESS_TOKEN),
+                connection(ConnectionKind.DESIGN, "https://design-qa.example.com", "kevin", AuthMode.ACCESS_TOKEN),
                 connection(ConnectionKind.WORK, "https://work-qa.example.com", "kevin"),
             ),
         )
@@ -97,7 +97,7 @@ class SharedEnvironmentsTest : BasePlatformTestCase() {
         kind: ConnectionKind,
         url: String,
         username: String = "",
-        authMode: DesignAuthMode = DesignAuthMode.BASIC,
+        authMode: AuthMode = AuthMode.BASIC,
     ) = AtlasConnection(
         id = "local-${kind.name.lowercase()}",
         kind = kind,

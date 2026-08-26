@@ -6,7 +6,7 @@ import com.flowable.atlas.environment.ConnectionKind
 import com.flowable.atlas.environment.SharedEnvironments
 import com.flowable.atlas.expr.inspect.WorkUrlParser
 import com.flowable.atlas.expr.inspect.PasteWorkUrlDialog
-import com.flowable.atlas.expr.inspect.InspectSession
+import com.flowable.atlas.environment.auth.BrowserSessions
 import com.flowable.atlas.expr.inspect.InspectSessionTargets
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.expr.ExpressionDialect
@@ -147,7 +147,7 @@ class ExpressionToolWindowLayoutTest : BasePlatformTestCase() {
             assertEquals("", panel.environmentNameForTest)
             assertTrue(
                 "credentials for a one-off target stay in memory, never in the password safe",
-                InspectSession.get("http://localhost:9914")?.containsKey("Authorization") == true,
+                BrowserSessions.get("http://localhost:9914")?.containsKey("Authorization") == true,
             )
             assertTrue(
                 "nothing is added to the environment list",
@@ -155,7 +155,7 @@ class ExpressionToolWindowLayoutTest : BasePlatformTestCase() {
             )
         } finally {
             InspectSessionTargets.clear()
-            InspectSession.clear("http://localhost:9914")
+            BrowserSessions.clear("http://localhost:9914")
         }
     }
 
@@ -211,13 +211,13 @@ class ExpressionToolWindowLayoutTest : BasePlatformTestCase() {
             panel.applyPastedResult(
                 PasteWorkUrlDialog.Result(null, "http://localhost:9914", "demo", "secret", WorkUrlParser.parse("")),
             )
-            assertNotNull(InspectSession.get("http://localhost:9914"))
+            assertNotNull(BrowserSessions.get("http://localhost:9914"))
             panel.forgetSessionTargetForTest("http://localhost:9914")
-            assertNull(InspectSession.get("http://localhost:9914"))
+            assertNull(BrowserSessions.get("http://localhost:9914"))
             assertTrue(panel.sessionTargetsForTest().isEmpty())
         } finally {
             InspectSessionTargets.clear()
-            InspectSession.clear("http://localhost:9914")
+            BrowserSessions.clear("http://localhost:9914")
         }
     }
 
@@ -281,7 +281,7 @@ class ExpressionToolWindowLayoutTest : BasePlatformTestCase() {
             assertTrue("it is an environment now, not a session target", panel.sessionTargetsForTest().isEmpty())
         } finally {
             InspectSessionTargets.clear()
-            InspectSession.clear("http://localhost:9914")
+            BrowserSessions.clear("http://localhost:9914")
             AtlasConnectionSelection.clear(project, ConnectionKind.WORK)
             catalog.environments().forEach { catalog.removeEnvironment(it.id) }
         }
@@ -330,7 +330,7 @@ class ExpressionToolWindowLayoutTest : BasePlatformTestCase() {
                 listOf(
                     com.flowable.atlas.environment.AtlasConnection(
                         "ignored", ConnectionKind.WORK, "https://work-qa.example.com", "",
-                        com.flowable.atlas.design.DesignAuthMode.BASIC, "e", "QA", false,
+                        com.flowable.atlas.environment.auth.AuthMode.BASIC, "e", "QA", false,
                     ),
                 ),
             )

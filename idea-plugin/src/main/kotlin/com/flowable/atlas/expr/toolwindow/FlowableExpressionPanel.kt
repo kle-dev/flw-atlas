@@ -14,9 +14,11 @@ import com.flowable.atlas.environment.AtlasProtection
 import com.flowable.atlas.environment.BaseUrls
 import com.flowable.atlas.environment.ConnectionKind
 import com.flowable.atlas.environment.ConnectionLabels
+import com.flowable.atlas.environment.auth.AtlasCredentials
+import com.flowable.atlas.environment.auth.AuthContext
+import com.flowable.atlas.environment.auth.AuthMode
+import com.flowable.atlas.environment.auth.BrowserSessions
 import com.flowable.atlas.expr.inspect.InspectClient
-import com.flowable.atlas.expr.inspect.InspectCredentials
-import com.flowable.atlas.expr.inspect.InspectSession
 import com.flowable.atlas.expr.inspect.InspectSessionTargets
 import com.flowable.atlas.expr.inspect.PasteWorkUrlDialog
 import com.flowable.atlas.expr.inspect.SaveWorkTargetDialog
@@ -765,7 +767,7 @@ class FlowableExpressionPanel(val project: Project) :
             if (result.username.isNotBlank()) {
                 val encoded = java.util.Base64.getEncoder()
                     .encodeToString("${result.username}:${result.password}".toByteArray())
-                InspectSession.set(result.baseUrl, mapOf("Authorization" to "Basic $encoded"))
+                BrowserSessions.set(result.baseUrl, mapOf("Authorization" to "Basic $encoded"))
             }
         }
         result.parsed.scopeId?.let { scopeId ->
@@ -863,7 +865,7 @@ class FlowableExpressionPanel(val project: Project) :
      */
     private fun forgetSessionTarget(baseUrl: String) {
         InspectSessionTargets.remove(baseUrl)
-        InspectSession.clear(baseUrl)
+        BrowserSessions.clear(baseUrl)
         updateConnectionStatus()
         if (currentTarget() == Target.None) {
             backendResultPane.showInfo("Choose an environment, or paste a Work URL above.")
@@ -894,7 +896,7 @@ class FlowableExpressionPanel(val project: Project) :
         // then shadows the project's, exactly as picking that name anywhere else would.
         val environmentId = catalog.environments().firstOrNull { it.name.equals(name, ignoreCase = true) }?.id
             ?: catalog.addEnvironment(name, protected)
-        val captured = InspectSession.basicAuth(baseUrl)
+        val captured = BrowserSessions.basicAuth(baseUrl)
         val connectionId =
             catalog.addConnection(environmentId, ConnectionKind.WORK, baseUrl, captured?.first.orEmpty())
         if (connectionId == null) {
@@ -908,7 +910,7 @@ class FlowableExpressionPanel(val project: Project) :
         captured?.let { (username, password) ->
             // The PasswordSafe is the OS keychain, which can block or prompt.
             ApplicationManager.getApplication().executeOnPooledThread {
-                InspectCredentials.save(baseUrl, username, password)
+                AtlasCredentials.save(baseUrl, username, password)
             }
         }
         updateConnectionStatus()
@@ -1009,20 +1011,26 @@ class FlowableExpressionPanel(val project: Project) :
         isEvaluating = true
         backendResultPane.showLoading()
         ApplicationManager.getApplication().executeOnPooledThread {
-            // The keychain can block, so the credential read happens here rather than on the EDT.
-            val stored = runCatching { InspectCredentials.load(baseUrl) }
-                .onFailure { LOG.warn("Could not read the Inspect password for $baseUrl from the PasswordSafe", it) }
-                .getOrNull()
-            val username = connection?.username?.takeIf { it.isNotBlank() } ?: stored?.userName.orEmpty()
+            // The keychain can block, so the credential read happens here rather than on the EDT. One
+            // call assembles the stored secret for the connection's mode *and* any captured browser
+            // session — the same one a Design pull makes, so an app behind an identity provider is
+            // reached the same way whichever half of Atlas is asking.
+            val auth = runCatching {
+                AtlasCredentials.contextFor(
+                    baseUrl,
+                    connection?.authMode ?: AuthMode.BASIC,
+                    connection?.username.orEmpty(),
+                )
+            }
+                .onFailure { LOG.warn("Could not read the credentials for $baseUrl from the PasswordSafe", it) }
+                .getOrDefault(AuthContext(sessionHeaders = BrowserSessions.get(baseUrl).orEmpty()))
             val req = InspectClient.Request(
                 baseUrl = baseUrl,
                 expression = expr,
                 scopeType = scopeTypeCombo.selectedItem as InspectClient.ScopeType,
                 scopeId = scopeIdField.text.trim(),
                 subScopeId = subScopeIdField.text.trim().ifBlank { null },
-                username = username,
-                password = stored?.getPasswordAsString().orEmpty(),
-                sessionHeaders = InspectSession.get(baseUrl),
+                auth = auth,
             )
             val outcome = InspectClient.evaluate(req)
             ApplicationManager.getApplication().invokeLater({

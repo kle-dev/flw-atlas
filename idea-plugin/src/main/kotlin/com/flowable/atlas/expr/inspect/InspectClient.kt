@@ -1,5 +1,6 @@
 package com.flowable.atlas.expr.inspect
 
+import com.flowable.atlas.environment.auth.AuthContext
 import com.intellij.openapi.diagnostic.logger
 import com.flowable.atlas.model.MiniJson
 import com.intellij.openapi.progress.ProcessCanceledException
@@ -45,15 +46,13 @@ object InspectClient {
         val scopeType: ScopeType,
         val scopeId: String,
         val subScopeId: String? = null,
-        val username: String,
-        val password: String,
         /**
-         * Auth headers captured from the user's browser session (`Cookie`, and — from a pasted
-         * "Copy as cURL" — optionally `Authorization` and the CSRF token), replayed for apps behind
-         * SSO/OAuth2 where basic auth can't pass the login redirect. Null/empty when the app uses plain
-         * basic auth (a local dev instance). See [InspectSession] and [CurlAuthParser].
+         * How the request authenticates — the same [AuthContext] a Design request carries. It holds the
+         * credential (basic or token) *and* whatever a browser session contributed, and decides the
+         * precedence between them in one place; the three loose fields this replaced made every call
+         * site work that out again, and only one of them ever got tokens.
          */
-        val sessionHeaders: Map<String, String>? = null,
+        val auth: AuthContext = AuthContext(),
     )
 
     /** Mirrors the server `ExpressionValueDTO`. */
@@ -164,27 +163,22 @@ object InspectClient {
         throw ConnectException("No address for ${uri.host} accepted a connection")
     }
 
-    fun probe(baseUrl: String, username: String, password: String, sessionHeaders: Map<String, String>? = null): Outcome {
+    fun probe(baseUrl: String, auth: AuthContext): Outcome {
         if (baseUrl.isBlank()) return Outcome.Failed("Base URL is required")
         return try {
             val client = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(10))
                 .build()
-            val captured = sessionHeaders ?: emptyMap()
-            val hasCapturedAuth = captured.keys.any { it.equals("Authorization", ignoreCase = true) }
             val resp = sendTryingEveryAddress(client, URI.create(endpoint(baseUrl))) { uri ->
-                val builder = HttpRequest.newBuilder()
-                    .uri(uri)
-                    .timeout(Duration.ofSeconds(15))
-                    .header("Accept", "application/json")
+                auth.apply(
+                    HttpRequest.newBuilder()
+                        .uri(uri)
+                        .timeout(Duration.ofSeconds(15))
+                        .header("Accept", "application/json"),
+                )
                     .GET()
-                if (username.isNotBlank() && !hasCapturedAuth) {
-                    val auth = "Basic " + Base64.getEncoder().encodeToString("$username:$password".toByteArray())
-                    builder.header("Authorization", auth)
-                }
-                captured.forEach { (name, value) -> if (value.isNotBlank()) builder.header(name, value) }
-                builder.build()
+                    .build()
             }
             probeOutcome(resp.statusCode(), resp.body())
         } catch (pce: ProcessCanceledException) {
@@ -251,25 +245,19 @@ object InspectClient {
                 .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(10))
                 .build()
+            // A credential for a local dev app, captured browser-session headers for an IdP-fronted one,
+            // or both — the server's security chain uses whichever it honours. Which of them wins is
+            // AuthContext's decision, made once for every Flowable server Atlas talks to.
             val buildRequest: (URI) -> HttpRequest = { uri ->
-                val builder = HttpRequest.newBuilder()
-                    .uri(uri)
-                    .timeout(Duration.ofSeconds(20))
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
+                req.auth.apply(
+                    HttpRequest.newBuilder()
+                        .uri(uri)
+                        .timeout(Duration.ofSeconds(20))
+                        .header("Content-Type", "application/json")
+                        .header("Accept", "application/json"),
+                )
                     .POST(HttpRequest.BodyPublishers.ofString(body))
-            // Basic auth for local dev apps; captured browser-session headers (Cookie / CSRF token /
-            // bearer or basic Authorization) for IdP-fronted apps. Both may be present — the server uses
-            // whichever its security chain honours. `header()` appends, so only add basic auth when the
-            // capture didn't already bring an Authorization header (avoids two Authorization headers).
-            val captured = req.sessionHeaders ?: emptyMap()
-            val hasCapturedAuth = captured.keys.any { it.equals("Authorization", ignoreCase = true) }
-                if (req.username.isNotBlank() && !hasCapturedAuth) {
-                    val auth = "Basic " + Base64.getEncoder().encodeToString("${req.username}:${req.password}".toByteArray())
-                    builder.header("Authorization", auth)
-                }
-                captured.forEach { (name, value) -> if (value.isNotBlank()) builder.header(name, value) }
-                builder.build()
+                    .build()
             }
             val resp = sendTryingEveryAddress(client, URI.create(endpoint(req.baseUrl)), buildRequest)
             val parsed = runCatching { parseResponse(resp.body()) }.getOrNull()

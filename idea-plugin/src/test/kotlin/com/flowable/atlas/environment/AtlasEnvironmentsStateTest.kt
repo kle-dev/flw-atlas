@@ -1,6 +1,6 @@
 package com.flowable.atlas.environment
 
-import com.flowable.atlas.design.DesignAuthMode
+import com.flowable.atlas.environment.auth.AuthMode
 import com.flowable.atlas.environment.AtlasEnvironments.ConnectionState
 import com.flowable.atlas.environment.AtlasEnvironments.EnvironmentState
 import org.junit.Assert.assertEquals
@@ -30,7 +30,7 @@ class AtlasEnvironmentsStateTest {
         )
     }
 
-    private fun design(id: String, env: String, url: String, authMode: DesignAuthMode = DesignAuthMode.BASIC) =
+    private fun design(id: String, env: String, url: String, authMode: AuthMode = AuthMode.BASIC) =
         ConnectionState(id, env, ConnectionKind.DESIGN, url, "demo", authMode)
 
     private fun work(id: String, env: String, url: String) =
@@ -174,11 +174,11 @@ class AtlasEnvironmentsStateTest {
             listOf(EnvironmentState("dev1", "DEV1"), EnvironmentState("prod", "PROD", requireConfirmation = true)),
             listOf(
                 design("dev1-design", "dev1", "http://design-dev1.example.com"),
-                design("prod-design", "prod", "http://design.example.com", DesignAuthMode.ACCESS_TOKEN),
+                design("prod-design", "prod", "http://design.example.com", AuthMode.ACCESS_TOKEN),
             ),
         )
-        assertEquals(DesignAuthMode.BASIC, catalog.connection("dev1-design")?.authMode)
-        assertEquals(DesignAuthMode.ACCESS_TOKEN, catalog.connection("prod-design")?.authMode)
+        assertEquals(AuthMode.BASIC, catalog.connection("dev1-design")?.authMode)
+        assertEquals(AuthMode.ACCESS_TOKEN, catalog.connection("prod-design")?.authMode)
     }
 
     @Test

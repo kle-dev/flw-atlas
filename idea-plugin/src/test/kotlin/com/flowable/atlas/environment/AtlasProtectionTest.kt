@@ -1,6 +1,6 @@
 package com.flowable.atlas.environment
 
-import com.flowable.atlas.design.DesignAuthMode
+import com.flowable.atlas.environment.auth.AuthMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -9,7 +9,7 @@ import org.junit.Test
 class AtlasProtectionTest {
 
     private fun connection(id: String, env: String, url: String, kind: ConnectionKind, protected: Boolean) =
-        AtlasConnection(id, kind, url, "demo", DesignAuthMode.BASIC, "e-$id", env, protected)
+        AtlasConnection(id, kind, url, "demo", AuthMode.BASIC, "e-$id", env, protected)
 
     private val prodWork = connection("prod-work", "PROD", "https://work.example.com", ConnectionKind.WORK, true)
     private val devWork = connection("dev-work", "DEV", "http://localhost:8080", ConnectionKind.WORK, false)

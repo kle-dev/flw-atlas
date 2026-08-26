@@ -1,6 +1,6 @@
 package com.flowable.atlas.environment
 
-import com.flowable.atlas.design.DesignAuthMode
+import com.flowable.atlas.environment.auth.AuthMode
 import com.flowable.atlas.events.AtlasEvents
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.Service
@@ -101,7 +101,7 @@ class AtlasEnvironments : PersistentStateComponent<AtlasEnvironments.State> {
         var username: String = ""
 
         /** Only meaningful for [ConnectionKind.DESIGN]; a running app always uses basic auth. */
-        var authMode: DesignAuthMode = DesignAuthMode.BASIC
+        var authMode: AuthMode = AuthMode.BASIC
 
         constructor(
             id: String,
@@ -109,7 +109,7 @@ class AtlasEnvironments : PersistentStateComponent<AtlasEnvironments.State> {
             kind: ConnectionKind,
             baseUrl: String,
             username: String = "",
-            authMode: DesignAuthMode = DesignAuthMode.BASIC,
+            authMode: AuthMode = AuthMode.BASIC,
         ) : this() {
             this.id = id
             this.environmentId = environmentId
@@ -228,7 +228,7 @@ class AtlasEnvironments : PersistentStateComponent<AtlasEnvironments.State> {
         kind: ConnectionKind,
         baseUrl: String,
         username: String = "",
-        authMode: DesignAuthMode = DesignAuthMode.BASIC,
+        authMode: AuthMode = AuthMode.BASIC,
     ): String? = mutate {
         if (state.connections.any { it.environmentId == environmentId && it.resolvedKind() == kind }) {
             return@mutate null
@@ -243,7 +243,7 @@ class AtlasEnvironments : PersistentStateComponent<AtlasEnvironments.State> {
         id
     }
 
-    fun updateConnection(id: String, baseUrl: String, username: String, authMode: DesignAuthMode) = mutate {
+    fun updateConnection(id: String, baseUrl: String, username: String, authMode: AuthMode) = mutate {
         state.connections.firstOrNull { it.id == id }?.let {
             val kind = it.resolvedKind() ?: ConnectionKind.DESIGN
             it.baseUrl = BaseUrls.normalize(kind, baseUrl)

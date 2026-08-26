@@ -1,20 +1,24 @@
-package com.flowable.atlas.expr.inspect
+package com.flowable.atlas.environment.auth
 
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * In-memory (per-IDE-session) store of the auth headers captured from the user's browser session,
- * keyed by the normalized app base URL. This is the SSO/OAuth2 counterpart of the basic-auth
- * [InspectCredentials]: for an app fronted by an IdP, basic auth can't pass the login redirect, so the
- * playground replays the headers the browser already authenticates with. Those headers come either from
- * the embedded-browser login ([InspectSignInDialog], a `Cookie`) or from a pasted "Copy as cURL"
- * ([CurlAuthParser], which can also carry `Authorization` and the CSRF token).
+ * The auth headers captured from the user's own browser session, kept **in memory for this IDE
+ * session** and keyed by base URL — for any Flowable server behind an identity provider.
  *
- * Deliberately **not** persisted (unlike [InspectCredentials]): session cookies/tokens are short-lived
- * and sensitive, so they live only as long as the IDE runs — re-capturing re-populates them, and nothing
+ * This was `InspectSession`, and it served only the Expression Playground, which is why a Design
+ * server behind OAuth2 could not be reached at all: the capture existed, the client that needed it did
+ * not know about it. Nothing here was ever Work-specific — a cookie for a host is a cookie for a host —
+ * so it lives beside the rest of the auth machinery now and both clients read it.
+ *
+ * The headers come either from the embedded-browser login ([BrowserSignInDialog], a `Cookie`) or from a
+ * pasted "Copy as cURL" ([CurlAuthParser], which can also carry `Authorization` and the CSRF token).
+ *
+ * Deliberately **not** persisted, unlike [AtlasCredentials]: session cookies and tokens are short-lived
+ * and sensitive, so they live only as long as the IDE runs — re-capturing repopulates them, and nothing
  * is written to disk or the OS keychain. Purely in-memory, so it is safe to read on the EDT.
  */
-object InspectSession {
+object BrowserSessions {
 
     private val headersByBaseUrl = ConcurrentHashMap<String, Map<String, String>>()
 
@@ -39,7 +43,7 @@ object InspectSession {
      * The `username to password` pair behind a captured `Authorization: Basic …`, or null when this
      * session holds something else (an SSO cookie, a bearer token) or nothing at all.
      *
-     * Only ever decodes a header this plugin wrote itself — [PasteWorkUrlDialog] encodes what the user
+     * Only ever decodes a header this plugin wrote itself — the paste dialog encodes what the user
      * typed into its own fields — so that promoting a session target to a real environment can carry
      * those credentials into the PasswordSafe instead of asking for them a second time.
      */

@@ -12,6 +12,37 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.16.0
+
+- **One way to sign in, for Design and for the running app** — the two halves of the plugin had drifted
+  into teaching different things about the same product. Design offered a username and password or an
+  access token; the app offered a username and password, an embedded browser login and a pasted browser
+  session. Neither list was a subset of the other, so whichever page you learnt first, the other one had
+  controls missing and controls you had never seen, and nothing on either said why.
+  There is one model now: a **credential** — username and password, or an access token — plus, for a
+  server behind an identity provider, your **captured browser session**, which layers on top rather than
+  replacing it (an SSO-fronted Flowable often wants both, and its security chain takes whichever it
+  honours). Both kinds get all of it, in one form that differs only where the *servers* differ: what
+  *Test Connection* calls, *Create Token…* for Design, and *Detect from Project* for the app.
+- **A Design server behind OAuth2 can be pulled from at all** — this was the hole the asymmetry was
+  hiding. Design's answer for an identity provider is an access token, and *creating* one is itself a
+  username-and-password call: on the very server where a token is the only way in, the button could not
+  work, and the browser-session route that would have solved it lived a few classes away, wired only to
+  the playground. `DesignClient` set exactly one `Authorization` header and could not carry a cookie at
+  all. It carries the session now, the sign-in and paste-session controls are on the Design form, and
+  *Create Token…* says out loud that it needs the credentials SSO switches off.
+- **One password safe entry per server, not per feature** — there were two stores, `Flowable Atlas
+  Design` and `Flowable Atlas Inspect`, identical but for their name. Nothing about a password depends
+  on whether the server behind the URL serves models or runs processes. Records are keyed by URL, as
+  they already were, so Design and an app remain separate logins; only the redundant second lookup is
+  gone. **You may have to enter a stored password once more.**
+- **The shared machinery is no longer named after one of its users** — `AuthMode`, `AuthContext`,
+  `AtlasCredentials`, `BrowserSessions`, `BrowserSignInDialog`, `PasteSessionDialog` and the cURL parser
+  live in one `environment.auth` package. Half of them were sitting in the Expression Playground's
+  `expr.inspect`, which is exactly why the Design side never found them. Header precedence — a captured
+  `Authorization` beats a configured one, and is never sent twice — is decided in one tested place
+  instead of being re-derived at each call site.
+
 ## 0.15.0
 
 - **Flowable environments, defined once for every project** — the plugin knew exactly one Design server

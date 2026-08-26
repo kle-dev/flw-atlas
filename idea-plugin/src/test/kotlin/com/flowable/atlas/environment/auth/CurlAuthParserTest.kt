@@ -1,4 +1,4 @@
-package com.flowable.atlas.expr.inspect
+package com.flowable.atlas.environment.auth
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

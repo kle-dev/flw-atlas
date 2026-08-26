@@ -72,8 +72,10 @@ class EnvironmentsTreePanel(private val project: Project) : Disposable {
         cellRenderer = NodeRenderer()
     }
 
-    private val designForm = DesignConnectionForm(project)
-    private val workForm = WorkConnectionForm(project)
+    // One class, two instances: the form is identical for both kinds, but each keeps its own
+    // per-connection secret maps, so a password typed for DEV's Design is not in the app form's hands.
+    private val designForm = ServerConnectionForm(project, ConnectionKind.DESIGN)
+    private val workForm = ServerConnectionForm(project, ConnectionKind.WORK)
 
     /** One form for both link-only kinds: a Control URL and a Hub URL differ in nothing but the hint. */
     private val linkForm = LinkConnectionForm(project)
