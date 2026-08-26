@@ -7,11 +7,12 @@ The plugin ZIP is **not committed to this repository**. Download it from the
 ## Install (on any machine)
 
 1. Download `flowable-atlas-<version>.zip` from the latest release.
-2. IntelliJ IDEA **2026.1+** → **Settings → Plugins → ⚙ → Install Plugin from Disk…**
+2. IntelliJ IDEA **2026.2+** → **Settings → Plugins → ⚙ → Install Plugin from Disk…**
 3. Select the downloaded ZIP.
 4. **Restart** the IDE.
 
-Installs on **2026.1+**; verified on **2026.2** (JetBrains' Plugin Verifier runs on every push). The
+Needs **2026.2+**, and that is also the version it is built and verified against (JetBrains' Plugin
+Verifier runs on every push). The
 plugin bundles the Atlas generator — the pure-Kotlin `:core` engine, run in-process — so **Generate Atlas
 Explorer** (Tools → Flowable Atlas) needs only a **Java 21+** runtime, no external interpreter.
 

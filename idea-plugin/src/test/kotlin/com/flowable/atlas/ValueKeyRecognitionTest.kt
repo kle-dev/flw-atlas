@@ -74,18 +74,30 @@ class ValueKeyRecognitionTest : BasePlatformTestCase() {
         )
     }
 
+    // The two negatives assert on what the *reference resolves to*, not on whether one exists: since
+    // 2026.2 the platform hands back a PsiMultiReference for any Java string literal, so "there is no
+    // reference here" stopped being a statement about Atlas. Resolving to nothing is the user-visible
+    // property either way — Ctrl+click does nothing, Find Usages finds nothing — and the positive case
+    // above proves the opt-in really does resolve to the model file.
+
     fun testNoReferenceWhenDisabled() {
         addProcessModel()
         FlowableAtlasSettings.getInstance().recognizeModelKeysAnywhere = false
         myFixture.configureByText("A.java", "class A { String k = \"DEMO-onb<caret>oarding\"; }")
-        assertNull("without the opt-in, a non-call-site literal is not a reference", myFixture.getReferenceAtCaretPosition())
+        assertNull(
+            "without the opt-in, a non-call-site literal must not resolve to a model",
+            myFixture.getReferenceAtCaretPosition()?.resolve(),
+        )
     }
 
     fun testNoReferenceForUnknownString() {
         addProcessModel()
         FlowableAtlasSettings.getInstance().recognizeModelKeysAnywhere = true
         myFixture.configureByText("A.java", "class A { String k = \"not-a-mo<caret>del-key\"; }")
-        assertNull("a string that is not a known key is never a reference", myFixture.getReferenceAtCaretPosition())
+        assertNull(
+            "a string that is not a known key never resolves to a model",
+            myFixture.getReferenceAtCaretPosition()?.resolve(),
+        )
     }
 
     fun testHoverForValueMatchWhenEnabled() {

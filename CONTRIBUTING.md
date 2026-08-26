@@ -47,8 +47,10 @@ never mean "the frontend was never opened".
 `verifyPlugin` is the **only** check that sees plugin-descriptor defects — an invalid structure, or
 `<change-notes>` over its 65535-character cap — which `build` does not. Add
 `-Patlas.verifyIdes="/Applications/IntelliJ IDEA.app"` to verify against an IDE you already have
-instead of downloading one, and `./gradlew :idea-plugin:runIdeLocal -Patlas.runIdePath=…` to smoke-test
-in a real installation, which is the only check that exercises the real plugin classloader.
+instead of downloading one, and `./gradlew :idea-plugin:runIdeLocal` to smoke-test in a real
+installation, which is the only check that exercises the real plugin classloader (it takes the IDE
+installed in the standard location; `-Patlas.runIdePath=…` points it at another one). `runIde` starts a
+sandbox on the downloaded 2026.2 SDK — the same branch the build compiles against.
 
 Cutting a release: write the `CHANGELOG.md` entry, bump `version` in the root `build.gradle.kts`, run
 `./gradlew :core:updateGoldens`, get both gates green, then push a `v<version>` tag. CI builds from the

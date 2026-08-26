@@ -140,6 +140,16 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.17.1</h3>
+        <ul>
+          <li><b>Atlas needs IntelliJ IDEA 2026.2 from here on</b> — it used to be <i>compiled</i> against
+              2026.1 and only <i>verified</i> on 2026.2, which kept a single ZIP loadable on the older
+              branch at the price of never being able to use anything the newer one added. Nobody on the
+              team runs 2026.1 any more, so that trade stopped paying: compile target, sandbox and
+              JetBrains' Plugin Verifier now all sit on 2026.2, and an IDE below that declines the plugin
+              outright instead of loading a build nobody checked there. The visible consequence is the
+              requirement itself; everything else is the same plugin.</li>
+        </ul>
         <h3>0.17.0</h3>
         <ul>
           <li><b>"Open Environment in Browser" works under Remote Dev</b> — it was greyed out for every
@@ -492,59 +502,6 @@
               code around them: the build runs every example through the script validator in its own context
               and fails on a single warning, so an example can never ship the squiggle it would draw.</li>
         </ul>
-        <h3>0.14.0</h3>
-        <ul>
-          <li><b>Atlas can update itself</b> — with no Marketplace listing, nothing ever told you a new
-              version existed; the ZIP you installed months ago just kept running, silently old. Every
-              release now publishes a custom plugin repository, so adding one URL under <i>Settings →
-              Plugins → ⚙ → Manage Plugin Repositories…</i> puts Atlas in the normal update flow — update
-              badge, one click, no download. The URL always resolves to the newest release, and the
-              compatibility range in it is read out of the built plugin rather than written by hand, so it
-              cannot advertise a version the IDE would then refuse to install.</li>
-          <li><b>Cancelling is no longer reported as a failure</b> — pressing <i>Cancel</i> on a running
-              Atlas action told you it had broken. Generating the explorer or the artifact set said
-              <i>"Failed to generate the Atlas explorer"</i>, a Design pull or connection test said
-              <i>"Design request failed"</i>, and an Inspect evaluation reported an empty error. All three
-              were the cancellation itself being caught and dressed up as an error. Eleven places that catch
-              broadly now let a cancellation through untouched. The same bug had a quieter form in the
-              editor: when a background scan was cancelled mid-inspection, the <i>implicit usage</i> check
-              read that as "no index", and a class referenced only from a model could be greyed out as
-              unused.</li>
-          <li><b>Find Usages no longer blocks typing</b> — invoking <i>Find Usages</i> on a delegate class
-              or bean while the model index was cold built the whole index while holding the read lock, so
-              every keystroke and file refresh queued behind a full model scan. The lookup now reads the PSI
-              under a short lock, builds the index outside it, and takes the lock again only to report
-              results. The index service had always split itself this way internally; this one caller had
-              been wrapping the whole thing back up again.</li>
-          <li><b>Stricter XML parsing</b> — model files are treated as untrusted input, and the parser said
-              so, but only <i>external</i> DTDs and entities were actually refused. An internal DTD subset
-              still expanded, which is the shape a decompression-bomb document takes. A <code>DOCTYPE</code>
-              is now rejected outright — real model files never carry one. The parser also gets one instance
-              per thread instead of one shared across the IDE's index scan and the CLI's walk, where neither
-              class is specified as thread-safe.</li>
-          <li><b>Releases can be signed</b> — Atlas installs by side-loading a ZIP, with no Marketplace
-              vouching for it, so nothing distinguished our build from a substituted one. Release artifacts
-              are now signed when a key is configured, and the signature is verified before publishing.
-              <code>SHA256SUMS.txt</code> alone could never establish this: whoever can replace the download
-              can replace its checksum line in the same breath.</li>
-          <li><b>Attribution for the embedded typeface</b> — the explorer HTML embeds the Geist font, which
-              ships under the SIL Open Font License and obliges its notice to travel with the font. Because
-              a generated <code>.explorer.html</code> is a redistribution with no repository attached, the
-              notice now lives inside the generated stylesheet as well as in the new
-              <code>THIRD-PARTY-NOTICES.md</code>. The repository <code>LICENSE</code> had also claimed that
-              everything in it was Flowable AG's property, which stopped being true the day the font was
-              embedded; it now carves out the two third-party components and says in plain words that the
-              source is readable, not usable.</li>
-          <li><b><code>SECURITY.md</code> and <code>CONTRIBUTING.md</code></b> — a security problem now has
-              somewhere to go that is not a public issue, together with the design decisions worth knowing
-              before reporting one (Atlas transmits nothing on its own, credentials live in the
-              PasswordSafe, generated artifacts contain your project's data by construction).
-              <code>CONTRIBUTING.md</code> is honest about what the licence permits and documents the build,
-              the release gates and which files are generated rather than written.</li>
-          <li><b>Placeholder keys everywhere</b> — every example model key, namespace and table name in the
-              code, tests and documentation is a <code>DEMO-*</code> placeholder. Some had been carried over
-              from a real project, and this repository is public.</li>
-        </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>
 
@@ -554,12 +511,12 @@
     <depends>com.intellij.modules.xml</depends>
     <!-- JSON PSI for form-model {{…}} expression injection and the .form → JSON association. -->
     <depends>com.intellij.modules.json</depends>
-    <!-- JCEF (Atlas Hub, the explorer editor, the Inspect sign-in browser). Up to 2026.1 (build 261)
-         JCEF sits in the platform core; 2026.2 (262) moved it into the bundled "Web Browser (JCEF)"
-         plugin (id com.intellij.modules.jcef). Declared *optional* so one artifact covers both: on
-         262 it wires that plugin's classloader in, on 261 the id doesn't exist and the dependency is
-         simply skipped. Every JCEF call site is already guarded by JBCefApp.isSupported(), so a
-         remote-dev / no-JCEF IDE keeps working without it. -->
+    <!-- JCEF (Atlas Hub, the explorer editor, the Inspect sign-in browser). Up to 2026.1 JCEF sat in the
+         platform core; 2026.2 (build 262, the floor since the 2026.2 move) has it in the bundled
+         "Web Browser (JCEF)" plugin (id com.intellij.modules.jcef), which is also why :idea-plugin has to
+         put that plugin on its compile classpath. Still declared *optional*: someone who disables the
+         bundled plugin, or an IDE without JCEF at all (remote dev), should lose the browser panels rather
+         than the whole plugin — every call site is guarded by JBCefApp.isSupported() for exactly that. -->
     <depends optional="true" config-file="flowable-atlas-jcef.xml">com.intellij.modules.jcef</depends>
 
     <resource-bundle>messages.FlowableAtlasBundle</resource-bundle>

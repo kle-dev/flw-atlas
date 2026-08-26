@@ -5,7 +5,7 @@ import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 plugins {
     id("java")
     // Versions are declared once in the root build.gradle.kts (apply false); applied here without a
-    // version. Kotlin must be >= the version the target IDE is built with (2026.1 ships Kotlin 2.3.x),
+    // version. Kotlin must be >= the version the target IDE is built with (2.3.21 covers 2026.2),
     // otherwise the compiler can't read the platform's Kotlin metadata.
     id("org.jetbrains.kotlin.jvm")
     id("org.jetbrains.intellij.platform")
@@ -30,16 +30,19 @@ dependencies {
     implementation(project(":core"))
 
     intellijPlatform {
-        // Portable build against a downloaded IntelliJ IDEA 2026.1 SDK — no dependency on a locally
+        // Portable build against a downloaded IntelliJ IDEA 2026.2 SDK — no dependency on a locally
         // installed IDE, so it builds on any machine / CI. Since 2025.3 the separate Community SDK
         // (ideaIC) is no longer published; 2026.x ships a single "IntelliJ IDEA" distribution with a
         // free tier, requested via intellijIdea(...). The plugin only uses APIs available in that free
-        // tier (java/json/xml/platform). Compile target is the *oldest* supported platform, 2026.1
-        // (build 261) — building against the floor is what keeps one artifact loadable on 2026.2 and
-        // later. JCEF is in the platform core on 261 and in the bundled "Web Browser (JCEF)" plugin
-        // from 262 on; plugin.xml handles that with an optional <depends>, so nothing is needed here.
-        // `verifyPlugin` (below) proves both versions.
-        intellijIdea("2026.1")
+        // tier (java/json/xml/platform).
+        //
+        // 2026.2 is both the compile target and the floor (`sinceBuild 262` below): the previous split —
+        // compile against 2026.1, verify on 2026.2 — kept one artifact loadable on the older branch, and
+        // that is no longer worth the constraint now that the team develops on 2026.2. Compiling against
+        // the version we actually run means the sandbox, the verifier and the compiler all see the same
+        // platform. JCEF moved out of the platform core into the bundled "Web Browser (JCEF)" plugin in
+        // 262; plugin.xml links it with an optional <depends>, which is what makes it resolve here.
+        intellijIdea("2026.2")
 
         // Java PSI — required by the Java completion contributor.
         bundledPlugin("com.intellij.java")
@@ -48,7 +51,20 @@ dependencies {
         // ({{…}} inside JsonStringLiteral) and for treating .form files as JSON.
         bundledPlugin("com.intellij.modules.json")
 
-        // Functional tests (BasePlatformTestCase + completion fixtures).
+        // JCEF (Atlas Hub, the explorer editor tab, the Inspect sign-in browser). Up to 2026.1 the
+        // classes were in the platform core and nothing had to be declared; 262 moved them into the
+        // bundled "Web Browser (JCEF)" plugin, so compiling against 2026.2 without this line fails on
+        // every `JBCefApp` / `com.intellij.ui.jcef` reference. The runtime dependency in plugin.xml stays
+        // *optional* on purpose: someone who disables that bundled plugin should lose the browser panels,
+        // not the whole plugin — which is why every call site is still guarded by `JBCefApp.isSupported()`.
+        bundledPlugin("com.intellij.modules.jcef")
+
+        // Functional tests (BasePlatformTestCase + completion fixtures). Platform alone is not enough on
+        // 2026.2: the test IDE it assembles has no `intellij.platform.structureView` / `testRunner`
+        // modules, so the bundled Java and JSON plugins fail to load — and with them every Atlas
+        // extension, because plugin.xml depends on both. The failure looks like 143 unrelated assertion
+        // failures ("Unregistered inspections requested", empty completion lists), never like a missing
+        // module, which is why it is worth a comment.
         testFramework(TestFrameworkType.Platform)
 
         // Test-only: load the Groovy plugin into the test IDE so the script-injection/playground
@@ -69,10 +85,11 @@ intellijPlatform {
     // below. It is the only gate that sees descriptor defects `build` cannot (an invalid structure, or
     // <change-notes> over its 65535-character cap).
     //
-    // Verification targets 2026.2 only, by choice. Note that this is NARROWER than what the plugin
-    // installs on: since-build stays 261 and the SDK is still 2026.1, so Atlas remains loadable on
-    // 2026.1 — just unverified there. AtlasPlatformSupport carries that distinction and the Atlas Hub
-    // shows it, so "it loads" is never presented as "it was tested".
+    // Verification targets 2026.2 — which, since the compile SDK and `since-build` moved there too, is
+    // now exactly the floor rather than a branch above it. The gap it used to leave (loadable on 2026.1,
+    // verified only on 2026.2) is gone: an older IDE refuses the plugin instead of running something
+    // unverified. AtlasPlatformSupport still reports an IDE *newer* than this list, so "it loads" is
+    // never presented as "it was tested".
     //
     //   ./gradlew :idea-plugin:verifyPlugin                                          # downloads both IDEs (CI)
     //   ./gradlew :idea-plugin:verifyPlugin -Patlas.verifyIdes="/Applications/IntelliJ IDEA.app"
@@ -163,7 +180,7 @@ intellijPlatform {
 
     pluginConfiguration {
         ideaVersion {
-            sinceBuild = "261"   // 2026.1 — the branch :idea-plugin compiles against (the floor)
+            sinceBuild = "262"   // 2026.2 — the branch :idea-plugin compiles against (the floor)
             // Deliberately wide, NOT the last verified branch — and still wide now that a custom plugin
             // repository exists (see scripts/make-update-plugins.mjs and the release job). The channel
             // changes the argument but not the conclusion: a tight until-build WOULD now produce
@@ -180,13 +197,26 @@ intellijPlatform {
     }
 }
 
-// Sandbox IDE on a *locally installed* IDE instead of the downloaded 2026.1 SDK — the only way to
-// smoke-test against the real plugin classloader of another platform version (e.g. the JCEF plugin
-// split in 2026.2):
-//   ./gradlew :idea-plugin:runIdeLocal -Patlas.runIdePath="/Applications/IntelliJ IDEA.app"
-providers.gradleProperty("atlas.runIdePath").orNull?.takeIf { it.isNotBlank() }?.let { path ->
+// Two ways to start a sandbox:
+//
+//   :idea-plugin:runIde       the downloaded 2026.2 SDK — the compile target, and the everyday sandbox.
+//   :idea-plugin:runIdeLocal  a locally *installed* IDE — the only run that exercises the real plugin
+//                             classloader of a real installation, which is what caught the 2026.2 JCEF
+//                             plugin split. No download, and once the sandbox is activated it also loads
+//                             the paid-tier bundled plugins an unlicensed SDK sandbox cannot (that
+//                             "requires JetBrains Ultimate" wall of warnings in a `runIde` log).
+//
+// `-Patlas.runIdePath="…/IntelliJ IDEA.app"` points it anywhere; with the property absent the standard
+// macOS install locations are tried. Registered only when there is something to point at: a task that
+// exists but cannot run fails at the end of a build instead of being absent from `tasks` up front.
+val installedIdePath = providers.gradleProperty("atlas.runIdePath").orNull?.trim()?.takeIf { it.isNotEmpty() }
+    ?: listOf(
+        "/Applications/IntelliJ IDEA.app",
+        "${System.getProperty("user.home")}/Applications/IntelliJ IDEA.app",
+    ).firstOrNull { file(it).exists() }
+installedIdePath?.let { path ->
     intellijPlatformTesting.runIde.register("runIdeLocal") {
-        localPath = file(path.trim())
+        localPath = file(path)
     }
 }
 

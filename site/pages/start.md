@@ -30,9 +30,10 @@ as an update badge, with nothing to download by hand.
 [latest release](https://github.com/kle-dev/flw-atlas/releases/latest), then *Settings → Plugins → ⚙ →
 Install Plugin from Disk…* and restart.
 
-Installs on **IntelliJ IDEA 2026.1 and later**; verified on 2026.2. The Atlas Hub's footer states what
-was actually verified and flags a running IDE outside that range, in either direction. Releases are
-signed when a signing key is configured, and `SHA256SUMS.txt` in each release carries the checksums.
+Needs **IntelliJ IDEA 2026.2 or later** — the version Atlas is built against and verified on. A bug
+report submitted from the IDE states what was actually verified, so a newer IDE is never presented as
+covered. Releases are signed when a signing key is configured, and `SHA256SUMS.txt` in each release
+carries the checksums.
 
 There is nothing to configure. Open a project that contains Flowable models — an app `.zip` or
 deployment `.bar`, loose `.bpmn` / `.cmmn` / `.dmn` / `.form` / `.data` / `.service` files, or a Flowable

@@ -34,7 +34,7 @@ Both artifacts are attached to every
   `https://github.com/kle-dev/flw-atlas/releases/latest/download/updatePlugins.xml`, then install
   **Flowable Atlas** from the *Marketplace* tab. The URL always resolves to the newest release.
 - **IntelliJ plugin, by hand** — download `flowable-atlas-<version>.zip`, then *Settings → Plugins →
-  ⚙ → Install Plugin from Disk…* and restart. Installs on IDEA 2026.1+, verified on 2026.2. See
+  ⚙ → Install Plugin from Disk…* and restart. Needs IDEA 2026.2+, which is also what it is verified on. See
   [`idea-plugin/dist/README.md`](idea-plugin/dist/README.md).
 - **CLI** — download `cli-<version>-all.jar` into `lib/` and run `./atlas <project>`, or
   `java -jar cli-<version>-all.jar <project> --all`. Needs only a JRE 21+. See

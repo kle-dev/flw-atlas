@@ -12,6 +12,15 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.17.1
+
+- **Atlas needs IntelliJ IDEA 2026.2 from here on** — it used to be *compiled* against 2026.1 and only
+  *verified* on 2026.2, which kept a single ZIP loadable on the older branch at the price of never being
+  able to use anything the newer one added. Nobody on the team runs 2026.1 any more, so that trade stopped
+  paying: compile target, sandbox and JetBrains' Plugin Verifier now all sit on 2026.2, and an IDE below
+  that declines the plugin outright instead of loading a build nobody checked there. The visible
+  consequence is the requirement itself; everything else is the same plugin.
+
 ## 0.17.0
 
 - **"Open Environment in Browser" works under Remote Dev** — it was greyed out for every remote

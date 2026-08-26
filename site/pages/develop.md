@@ -67,10 +67,14 @@ before every release**: it is the only check that sees plugin-descriptor defects
 not.
 
 ```bash
-./gradlew :idea-plugin:runIdeLocal -Patlas.runIdePath="/Applications/IntelliJ IDEA.app"
+./gradlew :idea-plugin:runIde        # sandbox on the downloaded 2026.2 SDK
+./gradlew :idea-plugin:runIdeLocal   # sandbox on the IDE installed here — add
+                                     # -Patlas.runIdePath="…/IntelliJ IDEA.app" for a different one
 ```
 
-Runs a sandbox on a real installation — the only check that exercises the real plugin classloader.
+`runIdeLocal` runs on a real installation, which is the only check that exercises the real plugin
+classloader — and it needs no download. Without the property it takes the IDE in the standard install
+location, so the task is simply absent on a machine that has none.
 
 ## Where things live
 
@@ -88,14 +92,17 @@ Runs a sandbox on a real installation — the only check that exercises the real
 
 ## Supporting a new IDE version
 
-This is a verify job, not a rebuild job. The plugin compiles against the **oldest** supported platform
-(2026.1, `sinceBuild 261`) so one artifact loads on later versions; `until-build` is deliberately wide
-because Atlas ships as a ZIP with no Marketplace update channel, and a tight bound would make it vanish
-on an IDE upgrade instead of prompting for one.
+For a **newer** IDE this is a verify job, not a rebuild job. `until-build` is deliberately wide, because
+Atlas ships as a ZIP with no Marketplace update channel and a tight bound would make it vanish on an IDE
+upgrade instead of prompting for one. So: run `verifyPlugin` and `runIdeLocal` against the new IDE, and
+if both are clean, the existing artifact already supports it. A bug report submitted from the IDE states
+what was actually verified, so a newer IDE is never quietly presented as covered.
 
-So: run `verifyPlugin` and `runIdeLocal` against the new IDE, and if both are clean, the existing
-artifact already supports it. The Atlas Hub's footer states what was actually verified and flags a
-running IDE outside that range — in either direction.
+Moving the **floor** is the bigger step, and the 2026.2 move is the worked example: bump the SDK in
+`idea-plugin/build.gradle.kts` and `sinceBuild`, raise `AtlasPlatformSupport.VERIFIED_SINCE_BRANCH`, and
+expect to declare things the old platform gave you for free — JCEF left the platform core in 2026.2, so
+its bundled plugin had to join the compile classpath. Everyone below the new floor loses the plugin, so
+the version claims in the READMEs and on the getting-started page move with it.
 
 ## CI
 
