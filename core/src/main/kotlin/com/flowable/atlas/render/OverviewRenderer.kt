@@ -2,6 +2,7 @@ package com.flowable.atlas.render
 
 import com.flowable.atlas.model.Dyn
 import com.flowable.atlas.model.DesignTerms
+import com.flowable.atlas.parsing.ModelJsonReader
 import java.io.File
 
 /**
@@ -358,9 +359,26 @@ object OverviewRenderer {
                 val fields = asList(f["fields"])
                 for (fldAny in fields.take(FORM_FIELDS_LISTED)) {
                     val fld = asMap(fldAny)
-                    val b = if (truthy(fld["value"])) " ← `${pyStr(fld["value"])}`" else ""
-                    val req = if (truthy(fld["required"])) " *(req)*" else ""
-                    L.add("- `${pyStr(fld["id"])}` [${pyStr(fld["type"])}] ${orE(fld["label"])}$req$b")
+                    val label = orE(fld["label"])
+                    // A link button's caption *is* its `value`, so printing both says it twice.
+                    val b = if (truthy(fld["value"]) && pyStr(fld["value"]) != label)
+                        "← `${pyStr(fld["value"])}`" else ""
+                    val req = if (truthy(fld["required"])) "*(req)*" else ""
+                    // A button's line has to say what pressing it does: the model it invokes, and — on an
+                    // expression button — the expression it evaluates. Without those, a form's own section
+                    // named the button and left the reader to guess which action it was that the
+                    // references list said the form triggers. A data-source component's callee and a
+                    // button's endpoint are left out: the Data sources and REST calls lists below already
+                    // name both, and repeating them here only costs a reader tokens.
+                    val callee = asMap(fld["callee"])
+                    val to = if (truthy(callee["key"]) && callee["kind"] != "rest" &&
+                        fld["type"] in ModelJsonReader.BUTTON_TYPES)
+                        "→ ${pyStr(callee["kind"])} `${pyStr(callee["key"])}`" else ""
+                    val settings = asMap(fld["settings"])
+                    val script = settings["script"]
+                    val ex = if (truthy(script)) "= `${oneLine(script)}`" else ""
+                    L.add("- " + Fmt.join("`${pyStr(fld["id"])}`", "[${pyStr(fld["type"])}]",
+                        label, req, b, to, ex, gates(settings)))
                 }
                 if (fields.size > FORM_FIELDS_LISTED) {
                     L.add("- … (+${fields.size - FORM_FIELDS_LISTED} more fields — `fields` on the form " +
@@ -1276,6 +1294,42 @@ object OverviewRenderer {
 
     /** `v or ''` rendered through str(). */
     private fun orE(v: Any?): String = if (truthy(v)) pyStr(v) else ""
+
+    /**
+     * Whether a form component renders, can be used and is submitted, as the shortest true statement:
+     * `*(hidden)*` when the model settles it, `visible when \`{{…}}\`` when it is a condition. A reader who
+     * is told a form has a button and not told the button never appears has been told the wrong thing —
+     * 252 of 338 buttons in one real project are `visible: false`.
+     */
+    private fun gates(settings: Map<String, Any?>): String {
+        val out = ArrayList<String>()
+        for ((field, settled, word) in GATES) {
+            val v = settings[field] ?: continue
+            if (v == settled) out.add("*($word)*")
+            // `ignore` reads backwards as a condition ("ignore when x" sounds like an instruction), so it
+            // is phrased as what actually happens to the value.
+            else out.add((if (field == "ignore") "value dropped when" else "$field when") +
+                " `${oneLine(v, 60)}`")
+        }
+        return out.joinToString(" ")
+    }
+
+    /** `field`, the literal that settles it, and what that state is called. */
+    private val GATES = listOf(
+        Triple("visible", false, "hidden"),
+        Triple("enabled", false, "disabled"),
+        Triple("ignore", true, "not submitted"),
+    )
+
+    /**
+     * A code value on one Markdown line: whitespace collapsed, backticks stripped (they would end the
+     * inline code span), long bodies elided. An expression button's expression is usually a one-liner but
+     * nothing stops it being a formatted block.
+     */
+    private fun oneLine(v: Any?, max: Int = 120): String {
+        val s = pyStr(v).replace('`', '\'').replace(Regex("\\s+"), " ").trim()
+        return if (s.length <= max) s else s.take(max - 1) + "…"
+    }
 
     /** Format a number the way a Python f-string does (integral values drop the trailing `.0`). */
     private fun numStr(n: Number): String = when (n) {

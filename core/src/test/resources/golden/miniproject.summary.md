@@ -1,6 +1,6 @@
 # Flowable project — `miniproject` (quick overview)
 
-_13 model files · 2 Java files · 53 nodes · 41 relationships · 3 user groups. Compact summary — full report in `miniproject.overview.md`, full graph in `miniproject.graph.json`._
+_13 model files · 2 Java files · 64 nodes · 42 relationships · 3 user groups. Compact summary — full report in `miniproject.overview.md`, full graph in `miniproject.graph.json`._
 
 ⚠ **1 file(s) could not be fully analyzed** (parse/read failures) — the map below may be incomplete. Details: the Findings section of `miniproject.overview.md`, or `diagnostics` in `miniproject.graph.json`.
 
@@ -10,8 +10,8 @@ _13 model files · 2 Java files · 53 nodes · 41 relationships · 3 user groups
 ## Inventory
 Models: 2 processes · 1 case · 1 decision table · 1 form · 2 data objects · 1 service · 1 event · 1 action · 1 security policy · 1 Liquibase changelog
 Java: 1 controller · 1 component · 1 delegate
-Variables: 18 — scopes: process 8 · action 4 · form 3 · decision 2 · dataObject 2 · java 1 · app 1 · 1 inferred from scripts
-Expressions: 4 backend ${ } · 6 frontend {{ }} · 0 string literals
+Variables: 20 — scopes: process 8 · form 6 · action 4 · decision 2 · dataObject 2 · java 1 · app 1 · 1 inferred from scripts
+Expressions: 4 backend ${ } · 14 frontend {{ }} · 0 string literals
 
 ## Entry points — who can start what
 - **sales** ← process `orderProcess`
@@ -44,6 +44,7 @@ Events: orderShipped
 - liquibase `001-customer` — 001-customer.xml (referenced by 1)
 
 ## External surface
+- External REST URLs called: 1
 - Review (unresolved in project — likely missing/external): bean:notifierBean, process:courierProcess
 
 ## Health — 12 open finding(s)

@@ -549,12 +549,20 @@
     {
       "_uses": {
         "binding": [
+          "binding:{{!customer}}",
           "binding:{{$response.canEdit}}",
           "binding:{{$response.executionPayload.sent}}",
+          "binding:{{$response.scopeId}}",
+          "binding:{{$response.score}}",
+          "binding:{{$temp.score}}",
+          "binding:{{amount * 1.081}}",
+          "binding:{{amount > 0}}",
           "binding:{{amount}}",
           "binding:{{customer.email}}",
           "binding:{{customer}}",
-          "binding:{{endpoints.baseUrl}}"
+          "binding:{{endpoints.baseUrl}}",
+          "binding:{{isSupervisor}}",
+          "binding:{{orderTotal}}"
         ],
         "serviceOperation": [
           "serviceOperation:customerService#findAll"
@@ -562,7 +570,10 @@
         "variable": [
           "variable:amount",
           "variable:customer",
-          "variable:customerRecord"
+          "variable:customerRecord",
+          "variable:internalNote",
+          "variable:isSupervisor",
+          "variable:orderTotal"
         ]
       },
       "dataSources": [
@@ -583,17 +594,113 @@
       ],
       "fields": [
         {
+          "callee": {
+            "key": "/api/customers/{{customer}}/score",
+            "kind": "rest"
+          },
+          "description": "Hidden worker: refreshes the score whenever the customer changes.",
+          "id": "creditScore",
+          "label": "Refresh score",
+          "required": false,
+          "settings": {
+            "autoExecute": "{{customer}}",
+            "executeAlways": true,
+            "ignore": "{{!customer}}",
+            "valueExpression": "{{$response.score}}",
+            "visible": false
+          },
+          "stores": "{{$temp.score}}",
+          "type": "restButton",
+          "value": "{{$temp.score}}"
+        },
+        {
+          "callee": {
+            "key": "customerDO",
+            "kind": "dataObject"
+          },
+          "id": "customerRecord",
+          "label": "Customer record",
+          "required": false,
+          "type": "select",
+          "value": null
+        },
+        {
+          "callee": {
+            "key": "customerService",
+            "kind": "service"
+          },
+          "id": "lookupCustomer",
+          "label": "Lookup customer",
+          "required": false,
+          "type": "button",
+          "value": null
+        },
+        {
+          "callee": {
+            "key": "https://portal.example.com/{{customer}}",
+            "kind": "rest"
+          },
+          "id": "customerPortal",
+          "label": "Open customer portal",
+          "required": false,
+          "settings": {
+            "target": "_blank"
+          },
+          "type": "linkButton",
+          "value": "Open customer portal"
+        },
+        {
+          "callee": {
+            "key": "notifyCustomerAction",
+            "kind": "action"
+          },
+          "id": "escalate",
+          "label": null,
+          "payloadMode": {
+            "receive": "full-response",
+            "send": "full-payload"
+          },
+          "required": false,
+          "settings": {
+            "navigationUrl": "/work/case/{{$response.scopeId}}"
+          },
+          "type": "workAction",
+          "value": null
+        },
+        {
+          "callee": {
+            "key": "notifyCustomerAction",
+            "kind": "action"
+          },
+          "id": "notifyButton",
+          "label": "Notify customer",
+          "required": false,
+          "settings": {
+            "primary": true,
+            "visible": "{{amount > 0}}"
+          },
+          "type": "workAction",
+          "value": null
+        },
+        {
+          "callee": {
+            "key": "{{endpoints.baseUrl}}/api/customers/{{customer}}/canEdit",
+            "kind": "rest"
+          },
+          "id": "canEditButton",
+          "label": "Check if editable",
+          "required": false,
+          "settings": {
+            "path": "data"
+          },
+          "type": "restButton",
+          "value": null
+        },
+        {
           "id": "amount",
           "label": "Amount",
           "required": true,
           "type": "number",
-          "value": null
-        },
-        {
-          "id": "canEditButton",
-          "label": "Check if editable",
-          "required": false,
-          "type": "restButton",
           "value": null
         },
         {
@@ -604,25 +711,27 @@
           "value": null
         },
         {
-          "id": "customerRecord",
-          "label": "Customer record",
+          "id": "internalNote",
+          "label": "Internal note",
           "required": false,
-          "type": "select",
+          "settings": {
+            "enabled": "{{isSupervisor}}"
+          },
+          "type": "textarea",
           "value": null
         },
         {
-          "id": "lookupCustomer",
-          "label": "Lookup customer",
+          "id": "orderTotal",
+          "label": "Recalculate",
           "required": false,
-          "type": "button",
-          "value": null
-        },
-        {
-          "id": "notifyButton",
-          "label": "Notify customer",
-          "required": false,
-          "type": "workAction",
-          "value": null
+          "settings": {
+            "autoExecute": true,
+            "script": "{{amount * 1.081}}",
+            "timer": 30000.0
+          },
+          "stores": "{{orderTotal}}",
+          "type": "scriptButton",
+          "value": "{{orderTotal}}"
         },
         {
           "id": "totalDisplay",
@@ -634,6 +743,19 @@
       ],
       "file": "forms/order-form.form",
       "ioParameters": [
+        {
+          "dir": "in",
+          "element": "escalate",
+          "elementName": null,
+          "elementSubType": "action",
+          "elementType": "workAction",
+          "expression": true,
+          "kind": "sendPayloadMapping",
+          "refKey": "notifyCustomerAction",
+          "refKind": "action",
+          "source": "{{orderTotal}}",
+          "target": "orderTotal"
+        },
         {
           "dir": "in",
           "element": "notifyButton",
@@ -702,6 +824,18 @@
           "path": "data",
           "url": "{{endpoints.baseUrl}}/api/customers/{{customer}}/canEdit",
           "where": "canEditButton"
+        },
+        {
+          "method": "GET",
+          "path": null,
+          "url": "/api/customers/{{customer}}/score",
+          "where": "creditScore"
+        },
+        {
+          "method": "GET",
+          "path": null,
+          "url": "https://portal.example.com/{{customer}}",
+          "where": "customerPortal"
         }
       ],
       "subforms": []
@@ -846,6 +980,11 @@
       },
       {
         "rel": "rest-call",
+        "s": "form:orderForm",
+        "t": "external:https://portal.example.com/{{customer}}"
+      },
+      {
+        "rel": "rest-call",
         "s": "service:customerService",
         "t": "endpoint:GET /api/customers"
       },
@@ -920,12 +1059,20 @@
         "data": {
           "_uses": {
             "binding": [
+              "binding:{{!customer}}",
               "binding:{{$response.canEdit}}",
               "binding:{{$response.executionPayload.sent}}",
+              "binding:{{$response.scopeId}}",
+              "binding:{{$response.score}}",
+              "binding:{{$temp.score}}",
+              "binding:{{amount * 1.081}}",
+              "binding:{{amount > 0}}",
               "binding:{{amount}}",
               "binding:{{customer.email}}",
               "binding:{{customer}}",
-              "binding:{{endpoints.baseUrl}}"
+              "binding:{{endpoints.baseUrl}}",
+              "binding:{{isSupervisor}}",
+              "binding:{{orderTotal}}"
             ],
             "serviceOperation": [
               "serviceOperation:customerService#findAll"
@@ -933,7 +1080,10 @@
             "variable": [
               "variable:amount",
               "variable:customer",
-              "variable:customerRecord"
+              "variable:customerRecord",
+              "variable:internalNote",
+              "variable:isSupervisor",
+              "variable:orderTotal"
             ]
           },
           "dataSources": [
@@ -954,17 +1104,113 @@
           ],
           "fields": [
             {
+              "callee": {
+                "key": "/api/customers/{{customer}}/score",
+                "kind": "rest"
+              },
+              "description": "Hidden worker: refreshes the score whenever the customer changes.",
+              "id": "creditScore",
+              "label": "Refresh score",
+              "required": false,
+              "settings": {
+                "autoExecute": "{{customer}}",
+                "executeAlways": true,
+                "ignore": "{{!customer}}",
+                "valueExpression": "{{$response.score}}",
+                "visible": false
+              },
+              "stores": "{{$temp.score}}",
+              "type": "restButton",
+              "value": "{{$temp.score}}"
+            },
+            {
+              "callee": {
+                "key": "customerDO",
+                "kind": "dataObject"
+              },
+              "id": "customerRecord",
+              "label": "Customer record",
+              "required": false,
+              "type": "select",
+              "value": null
+            },
+            {
+              "callee": {
+                "key": "customerService",
+                "kind": "service"
+              },
+              "id": "lookupCustomer",
+              "label": "Lookup customer",
+              "required": false,
+              "type": "button",
+              "value": null
+            },
+            {
+              "callee": {
+                "key": "https://portal.example.com/{{customer}}",
+                "kind": "rest"
+              },
+              "id": "customerPortal",
+              "label": "Open customer portal",
+              "required": false,
+              "settings": {
+                "target": "_blank"
+              },
+              "type": "linkButton",
+              "value": "Open customer portal"
+            },
+            {
+              "callee": {
+                "key": "notifyCustomerAction",
+                "kind": "action"
+              },
+              "id": "escalate",
+              "label": null,
+              "payloadMode": {
+                "receive": "full-response",
+                "send": "full-payload"
+              },
+              "required": false,
+              "settings": {
+                "navigationUrl": "/work/case/{{$response.scopeId}}"
+              },
+              "type": "workAction",
+              "value": null
+            },
+            {
+              "callee": {
+                "key": "notifyCustomerAction",
+                "kind": "action"
+              },
+              "id": "notifyButton",
+              "label": "Notify customer",
+              "required": false,
+              "settings": {
+                "primary": true,
+                "visible": "{{amount > 0}}"
+              },
+              "type": "workAction",
+              "value": null
+            },
+            {
+              "callee": {
+                "key": "{{endpoints.baseUrl}}/api/customers/{{customer}}/canEdit",
+                "kind": "rest"
+              },
+              "id": "canEditButton",
+              "label": "Check if editable",
+              "required": false,
+              "settings": {
+                "path": "data"
+              },
+              "type": "restButton",
+              "value": null
+            },
+            {
               "id": "amount",
               "label": "Amount",
               "required": true,
               "type": "number",
-              "value": null
-            },
-            {
-              "id": "canEditButton",
-              "label": "Check if editable",
-              "required": false,
-              "type": "restButton",
               "value": null
             },
             {
@@ -975,25 +1221,27 @@
               "value": null
             },
             {
-              "id": "customerRecord",
-              "label": "Customer record",
+              "id": "internalNote",
+              "label": "Internal note",
               "required": false,
-              "type": "select",
+              "settings": {
+                "enabled": "{{isSupervisor}}"
+              },
+              "type": "textarea",
               "value": null
             },
             {
-              "id": "lookupCustomer",
-              "label": "Lookup customer",
+              "id": "orderTotal",
+              "label": "Recalculate",
               "required": false,
-              "type": "button",
-              "value": null
-            },
-            {
-              "id": "notifyButton",
-              "label": "Notify customer",
-              "required": false,
-              "type": "workAction",
-              "value": null
+              "settings": {
+                "autoExecute": true,
+                "script": "{{amount * 1.081}}",
+                "timer": 30000.0
+              },
+              "stores": "{{orderTotal}}",
+              "type": "scriptButton",
+              "value": "{{orderTotal}}"
             },
             {
               "id": "totalDisplay",
@@ -1005,6 +1253,19 @@
           ],
           "file": "forms/order-form.form",
           "ioParameters": [
+            {
+              "dir": "in",
+              "element": "escalate",
+              "elementName": null,
+              "elementSubType": "action",
+              "elementType": "workAction",
+              "expression": true,
+              "kind": "sendPayloadMapping",
+              "refKey": "notifyCustomerAction",
+              "refKind": "action",
+              "source": "{{orderTotal}}",
+              "target": "orderTotal"
+            },
             {
               "dir": "in",
               "element": "notifyButton",
@@ -1073,6 +1334,18 @@
               "path": "data",
               "url": "{{endpoints.baseUrl}}/api/customers/{{customer}}/canEdit",
               "where": "canEditButton"
+            },
+            {
+              "method": "GET",
+              "path": null,
+              "url": "/api/customers/{{customer}}/score",
+              "where": "creditScore"
+            },
+            {
+              "method": "GET",
+              "path": null,
+              "url": "https://portal.example.com/{{customer}}",
+              "where": "customerPortal"
             }
           ],
           "subforms": []
@@ -2078,6 +2351,17 @@
       },
       {
         "data": {
+          "external_url": true,
+          "method": "GET"
+        },
+        "file": null,
+        "id": "external:https://portal.example.com/{{customer}}",
+        "key": "https://portal.example.com/{{customer}}",
+        "label": "https://portal.example.com/{{customer}}",
+        "type": "external"
+      },
+      {
+        "data": {
           "file": "policies/case.policy",
           "key": "orderPolicy",
           "name": "Order policy",
@@ -2476,7 +2760,7 @@
               "target": "orderTotal"
             }
           ],
-          "readCount": 2,
+          "readCount": 3,
           "reads": [
             {
               "element": "script-evaluation-bot",
@@ -2488,10 +2772,15 @@
             {
               "model": "action:notifyCustomerAction",
               "via": "scriptApi"
+            },
+            {
+              "model": "form:orderForm",
+              "via": "binding"
             }
           ],
           "scopes": [
-            "action"
+            "action",
+            "form"
           ],
           "scriptSites": [
             {
@@ -2509,12 +2798,29 @@
                 "(in parameter on script-evaluation-bot) orderTotal",
                 "(script)"
               ]
+            },
+            {
+              "model": "form:orderForm",
+              "snippets": [
+                "(form field)",
+                "{{orderTotal}}"
+              ]
             }
           ],
           "usedBy": [
-            "action:notifyCustomerAction"
+            "action:notifyCustomerAction",
+            "form:orderForm"
           ],
-          "writeCount": 0
+          "writeCount": 1,
+          "writes": [
+            {
+              "element": "orderTotal",
+              "elementName": "Recalculate",
+              "elementType": "scriptButton",
+              "model": "form:orderForm",
+              "via": "scriptButton"
+            }
+          ]
         },
         "file": null,
         "id": "variable:orderTotal",
@@ -3025,6 +3331,49 @@
           "readCount": 1,
           "reads": [
             {
+              "element": "internalNote",
+              "elementName": "Internal note",
+              "elementType": "textarea",
+              "model": "form:orderForm",
+              "via": "formField"
+            }
+          ],
+          "scopes": [
+            "form"
+          ],
+          "usages": [
+            {
+              "model": "form:orderForm",
+              "snippets": [
+                "(form field)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "form:orderForm"
+          ],
+          "writeCount": 1,
+          "writes": [
+            {
+              "element": "internalNote",
+              "elementName": "Internal note",
+              "elementType": "textarea",
+              "model": "form:orderForm",
+              "via": "formField"
+            }
+          ]
+        },
+        "file": null,
+        "id": "variable:internalNote",
+        "key": "internalNote",
+        "label": "internalNote",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 1,
+          "reads": [
+            {
               "element": "packTask",
               "elementName": "Pack shipment",
               "elementType": "scriptTask",
@@ -3076,6 +3425,37 @@
       },
       {
         "data": {
+          "readCount": 1,
+          "reads": [
+            {
+              "model": "form:orderForm",
+              "via": "binding"
+            }
+          ],
+          "scopes": [
+            "form"
+          ],
+          "usages": [
+            {
+              "model": "form:orderForm",
+              "snippets": [
+                "{{isSupervisor}}"
+              ]
+            }
+          ],
+          "usedBy": [
+            "form:orderForm"
+          ],
+          "writeCount": 0
+        },
+        "file": null,
+        "id": "variable:isSupervisor",
+        "key": "isSupervisor",
+        "label": "isSupervisor",
+        "type": "variable"
+      },
+      {
+        "data": {
           "readCount": 2,
           "reads": [
             {
@@ -3098,6 +3478,8 @@
               "model": "form:orderForm",
               "snippets": [
                 "(form field)",
+                "{{amount * 1.081}}",
+                "{{amount > 0}}",
                 "{{amount}}"
               ]
             }
@@ -3178,6 +3560,18 @@
           ]
         },
         "file": null,
+        "id": "binding:{{!customer}}",
+        "key": "{{!customer}}",
+        "label": "{{!customer}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:orderForm"
+          ]
+        },
+        "file": null,
         "id": "binding:{{$response.canEdit}}",
         "key": "{{$response.canEdit}}",
         "label": "{{$response.canEdit}}",
@@ -3193,6 +3587,66 @@
         "id": "binding:{{$response.executionPayload.sent}}",
         "key": "{{$response.executionPayload.sent}}",
         "label": "{{$response.executionPayload.sent}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:orderForm"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{$response.scopeId}}",
+        "key": "{{$response.scopeId}}",
+        "label": "{{$response.scopeId}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:orderForm"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{$response.score}}",
+        "key": "{{$response.score}}",
+        "label": "{{$response.score}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:orderForm"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{$temp.score}}",
+        "key": "{{$temp.score}}",
+        "label": "{{$temp.score}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:orderForm"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{amount * 1.081}}",
+        "key": "{{amount * 1.081}}",
+        "label": "{{amount * 1.081}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:orderForm"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{amount > 0}}",
+        "key": "{{amount > 0}}",
+        "label": "{{amount > 0}}",
         "type": "binding"
       },
       {
@@ -3241,6 +3695,30 @@
         "id": "binding:{{endpoints.baseUrl}}",
         "key": "{{endpoints.baseUrl}}",
         "label": "{{endpoints.baseUrl}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:orderForm"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{isSupervisor}}",
+        "key": "{{isSupervisor}}",
+        "label": "{{isSupervisor}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:orderForm"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{orderTotal}}",
+        "key": "{{orderTotal}}",
+        "label": "{{orderTotal}}",
         "type": "binding"
       },
       {
@@ -3547,12 +4025,20 @@
   },
   "others": [],
   "placeholders": [
+    "{{!customer}}",
     "{{$response.canEdit}}",
     "{{$response.executionPayload.sent}}",
+    "{{$response.scopeId}}",
+    "{{$response.score}}",
+    "{{$temp.score}}",
+    "{{amount * 1.081}}",
+    "{{amount > 0}}",
     "{{amount}}",
     "{{customer.email}}",
     "{{customer}}",
-    "{{endpoints.baseUrl}}"
+    "{{endpoints.baseUrl}}",
+    "{{isSupervisor}}",
+    "{{orderTotal}}"
   ],
   "policies": [
     {
@@ -4150,6 +4636,28 @@
       "where": "canEditButton"
     },
     {
+      "kind": "form-button",
+      "looseMatches": [
+        "GET /api/customers -> CustomerController#customers (src/main/java/com/example/CustomerController.java:10)"
+      ],
+      "matches": [],
+      "method": "GET",
+      "source": "orderForm",
+      "sourceFile": "forms/order-form.form",
+      "url": "/api/customers/{{customer}}/score",
+      "where": "creditScore"
+    },
+    {
+      "kind": "form-button",
+      "looseMatches": [],
+      "matches": [],
+      "method": "GET",
+      "source": "orderForm",
+      "sourceFile": "forms/order-form.form",
+      "url": "https://portal.example.com/{{customer}}",
+      "where": "customerPortal"
+    },
+    {
       "kind": "form-query",
       "looseMatches": [],
       "matches": [
@@ -4277,12 +4785,12 @@
   "stats": {
     "archives": 0,
     "dynamicEdges": 0,
-    "edges": 41,
+    "edges": 42,
     "endpoints": 2,
     "groups": 3,
     "java": 2,
     "models": 13,
-    "nodes": 53,
+    "nodes": 64,
     "scriptIssues": 2,
     "suspectEdges": 0
   },
@@ -4312,7 +4820,9 @@
   "variables": [
     "amount",
     "customer",
+    "isSupervisor",
     "notifierBean",
+    "orderTotal",
     "total"
   ],
   "warnings": [

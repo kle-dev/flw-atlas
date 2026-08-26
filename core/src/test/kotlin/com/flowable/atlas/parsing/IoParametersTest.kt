@@ -522,6 +522,148 @@ class IoParametersTest {
         assertTrue(params(f).isEmpty())
     }
 
+    // ---------- what a button does, on the button's own record ----------
+    // The form's reference list always said an action was triggered; these pin the half that was
+    // missing — by which button, with which settings, and under which condition.
+
+    @Suppress("UNCHECKED_CAST")
+    private fun fields(model: Map<String, Any?>): List<Map<String, Any?>> =
+        model["fields"] as List<Map<String, Any?>>
+
+    @Test
+    fun anActionButtonCarriesTheActionItInvokes() {
+        val (f, _) = form(
+            """{"id":"btn","type":"workAction","visible":"{{amount > 0}}","enabled":true,"primary":true,
+                "extraSettings":{"text":"Notify","actionDefinitionKey":"notifyAction",
+                                 "navigationUrl":"/work/case/1","autoExecute":false}}"""
+        )
+        val b = fields(f).single()
+        assertEquals(mapOf("kind" to "action", "key" to "notifyAction"), b["callee"])
+        // `false` is the palette default on every flag and a literal `enabled:true` is every button
+        // there is; only a condition is news.
+        assertEquals(
+            mapOf("navigationUrl" to "/work/case/1", "primary" to true, "visible" to "{{amount > 0}}"),
+            b["settings"],
+        )
+        assertEquals("Notify", b["label"])
+    }
+
+    @Test
+    fun anExpressionButtonCarriesItsExpressionAndWritesItsResult() {
+        val (f, ctx) = form(
+            """{"id":"total","type":"scriptButton","value":"{{orderTotal}}","extraSettings":{
+                 "text":"Recalculate","script":"{{amount * 1.081}}","autoExecute":true,"timer":30000}}"""
+        )
+        val b = fields(f).single()
+        assertEquals(
+            mapOf("script" to "{{amount * 1.081}}", "timer" to 30000.0, "autoExecute" to true),
+            b["settings"],
+        )
+        // The result lands in the button's own binding, and nothing else in the model writes it — so
+        // without this site the target looked neither read nor written.
+        assertEquals(listOf("orderTotal|write|scriptButton"), ctx.varSites.map { siteSig(it) })
+    }
+
+    @Test
+    fun aCaptionlessButtonIsStillListedWithItsEndpoint() {
+        // Half the REST buttons of one real project have neither `label` nor `extraSettings.text`: they
+        // are icon-only, or captioned by `value`. They used to be dropped from the model entirely.
+        val (f, _) = form(
+            """{"id":"reload","type":"restButton","extraSettings":{"url":"/api/reload","method":"post"}}"""
+        )
+        val b = fields(f).single()
+        assertEquals("reload", b["id"])
+        assertEquals(mapOf("kind" to "rest", "key" to "/api/reload"), b["callee"])
+        // the endpoint itself stays a REST call keyed by the same element id — not copied onto the row
+        @Suppress("UNCHECKED_CAST")
+        val calls = f["restCalls"] as List<Map<String, Any?>>
+        assertEquals(listOf("reload" to "POST"), calls.map { it["where"] to it["method"] })
+    }
+
+    @Test
+    fun aLinkButtonIsCaptionedByItsValue() {
+        val (f, _) = form(
+            """{"id":"portal","type":"linkButton","value":"Open portal",
+                "extraSettings":{"url":"https://example.com","target":"_blank"}}"""
+        )
+        assertEquals("Open portal", fields(f).single()["label"])
+        assertEquals(mapOf("target" to "_blank"), fields(f).single()["settings"])
+    }
+
+    @Test
+    fun aFullPayloadFlagIsRecordedBecauseItOverridesTheMap() {
+        // The Work runtime sends the whole payload and ignores `sendPayloadMapping` — a reader shown the
+        // map alone would take it for the contract.
+        val (f, ctx) = form(
+            """{"id":"esc","type":"workAction","extraSettings":{"text":"Escalate",
+                 "actionDefinitionKey":{"key":"escalateAction","id":"ACTION_MODEL-7"},
+                 "sendFullPayload":true,"mapFullResponse":true,"mapResponseInsideScope":true,
+                 "sendPayloadMapping":[{"name":"total","expression":"{{orderTotal}}"}]}}"""
+        )
+        val b = fields(f).single()
+        assertEquals(mapOf("send" to "full-payload", "receive" to "full-response-in-scope"), b["payloadMode"])
+        // the newer Design editor writes the reference as {key, id} — the key is what the graph joins on
+        assertEquals(mapOf("kind" to "action", "key" to "escalateAction"), b["callee"])
+        assertTrue(ctx.refs.any { it["rel"] == "triggers-action" && it["value"] == "escalateAction" })
+        // the overridden mapping is still parsed: it is in the model, and the explorer marks it unused
+        assertEquals(listOf("in|sendPayloadMapping|{{orderTotal}}->total [expression=true]"), params(f).map { sig(it) })
+    }
+
+    @Test
+    fun aPlainFieldHasNothingToExpand() {
+        val (f, _) = form("""{"id":"amount","type":"number","label":"Amount","isRequired":true}""")
+        val b = fields(f).single()
+        assertTrue(b["callee"] == null && b["settings"] == null && b["payloadMode"] == null)
+    }
+
+    @Test
+    fun aHiddenAutoExecutingWorkerSaysSoAndStoresItsResponse() {
+        // The commonest button in a real project is not a button: `visible:false` + `autoExecute` is a
+        // worker that fires on its own. 252 of 338 buttons in one measured project are hidden this way.
+        val (f, ctx) = form(
+            """{"id":"score","type":"restButton","visible":false,"ignore":"{{!customer}}",
+                "value":"{{creditScore}}","description":"Hidden worker",
+                "i18n":{"en_us":{"extraSettings":{"text":"Refresh score"}}},
+                "extraSettings":{"url":"/api/score","autoExecute":"{{customer}}","executeAlways":true,
+                                 "valueExpression":"{{${'$'}response.score}}"}}"""
+        )
+        val b = fields(f).single()
+        // the caption exists only as a localised override — before, such a button had no name at all
+        assertEquals("Refresh score", b["label"])
+        assertEquals("Hidden worker", b["description"])
+        assertEquals("{{creditScore}}", b["stores"])
+        assertEquals(
+            mapOf("visible" to false, "ignore" to "{{!customer}}",
+                "valueExpression" to "{{\$response.score}}", "autoExecute" to "{{customer}}",
+                "executeAlways" to true),
+            b["settings"],
+        )
+        // the response lands in a variable, and this button is the only thing that writes it
+        assertEquals(listOf("creditScore|write|restButton"), ctx.varSites.map { siteSig(it) })
+    }
+
+    @Test
+    fun gatesAreRecordedOnlyWhenTheyDepartFromTheDefault() {
+        val (f, _) = form(
+            """{"id":"note","type":"textarea","label":"Note","visible":true,"enabled":"{{isBoss}}",
+                "ignore":false}"""
+        )
+        // `visible:true` and `ignore:false` are every component there is; only the condition is news
+        assertEquals(mapOf("enabled" to "{{isBoss}}"), fields(f).single()["settings"])
+    }
+
+    @Test
+    fun anActionButtonsPlaceholderValueIsNotAStoreTarget() {
+        // Design writes `value: "."` on an action button. Reading that as "the result is stored in ." is
+        // exactly the kind of thing a reader would then go looking for.
+        val (f, ctx) = form(
+            """{"id":"act","type":"workAction","value":".","extraSettings":{
+                 "text":"Go","actionDefinitionKey":"someAction"}}"""
+        )
+        assertEquals(null, fields(f).single()["stores"])
+        assertTrue(ctx.varSites.isEmpty())
+    }
+
     @Test
     fun serviceOperationCarriesBothHalvesOfItsContract() {
         val json = """{

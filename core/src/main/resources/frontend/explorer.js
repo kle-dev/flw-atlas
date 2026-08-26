@@ -94,6 +94,11 @@ const DESIGN_TERMS = {
   'el:restButton': ['REST button', 'A button that calls a URL directly.'],
   'el:workInvokeService': ['Service button', 'A button that calls a Service Registry operation.'],
   'el:workAgentButton': ['Agent button', 'A button that asks an AI agent.'],
+  'el:scriptButton': ['Expression button', 'Evaluates an expression and stores the result in its own binding.'],
+  'el:outcomeButton': ['Outcome button', 'Completes the task with an outcome.'],
+  'el:linkButton': ['Link button', 'Opens a URL; it calls nothing.'],
+  'el:createInstanceButton': ['Create-instance button', 'Starts a process or case.'],
+  'el:workUserEventListenerButton': ['User event button', 'Triggers a user event listener of the case.'],
   'el:actionBot': ['Action bot', 'The bot an action is dispatched to at runtime.'],
   'el:task': ['Task', 'A plain task; its flowable:type decides what it does.'],
   'el:decisionTask': ['Decision task', 'Evaluates a decision table from a case.'],
@@ -135,6 +140,16 @@ const DESIGN_TERMS = {
   'kind:errorResponsePayloadMapping': ['Error response map', 'Mapped instead of the response when the call fails.'],
   'kind:dataObjectDataTableCreatePayloadMapping': ['Create payload map', 'The values a data table sends when creating a row.'],
   'kind:header': ['HTTP header', 'Sent as a request header rather than in the body.'],
+  // Which payload side a button flag puts in force. The runtime picks one: a full-payload/full-response
+  // flag wins over the explicit map, and the map it beats is then never read.
+  'pmode:full-payload': ['the whole form payload', 'The button posts the entire form payload, so its send payload map is ignored.'],
+  'pmode:full-scope': ['the whole scope', 'The button posts the scope it sits in (a subform row, a list item), so its send payload map is ignored.'],
+  'pmode:full-response': ['the whole response', 'Every attribute of the response is written back into the form payload, so the response map is ignored.'],
+  'pmode:full-response-in-scope': ['the whole response, into the scope', 'Every attribute of the response is written into the surrounding scope rather than the form payload, so the response map is ignored.'],
+  // A component's state when the model settles it outright, rather than leaving it to a condition.
+  'gate:hidden': ['hidden', 'visible: false — this component never renders. A hidden button that auto-executes is a worker, not something anyone presses.'],
+  'gate:disabled': ['disabled', 'enabled: false — it renders but cannot be used, unless it also runs while disabled.'],
+  'gate:not submitted': ['not submitted', 'ignore: true — its value is computed but left out of the payload.'],
   'kind:signalVariable': ['Signal variable', 'Copied into the signalled instance as a variable.'],
   'kind:config': ['Bot configuration', 'A bot-specific setting from the action model, not a variable.'],
   'kind:flwScript': ['Script payload', 'Read or written by the action script through flw.getInput(…) / flw.setOutput(…).'],
@@ -1921,6 +1936,121 @@ function wireParamFilter(det){
   chips.forEach(c=>c.onclick=()=>{ chips.forEach(x=>x.classList.toggle('on', x===c)); apply(); });
 }
 
+// ---------- form / page components ----------
+// A field id like `customer.email` binds the variable root `customer`. Top-level because the Fields
+// rows and the REST-call rows both link ids this way.
+function fieldLink(id){
+  const s=String(id==null?'':id), r=s.replace(/^\$/,'').split('.')[0].split('[')[0];
+  return byId.get('variable:'+r)
+    ? '<span class="vlink" data-id="'+enc('variable:'+r)+'" tabindex="0" role="link">'+esc(s)+'</span>' : esc(s);
+}
+// What a button setting is called for a reader. Design has no dialog label for several of them, so the
+// wording says what the setting *does* — the raw key is the fallback, as everywhere else.
+const FSET_LABEL={script:'expression', timer:'re-runs every', autoExecute:'auto-execute',
+  executeAlways:'runs while disabled', method:'method', path:'response path',
+  valueExpression:'value expression', navigationUrl:'then opens', scopeType:'scope',
+  scopeId:'scope id', scopeDefinitionId:'scope definition',
+  invokeActionUrl:'invoke url', invokeServiceUrl:'invoke url', target:'opens in', primary:'primary',
+  ignoreValidation:'skips validation', ignorePayload:'sends no payload', keepInForm:'stays in the form',
+  visible:'visible when', enabled:'enabled when', ignore:'value dropped when'};
+// The order the body reads in, whatever order the model happened to store: what it evaluates, then what
+// it does with the result, then when it applies, then the plain on/off flags (which fall out last).
+const FSET_ORDER=['script','timer','method','path','valueExpression','navigationUrl','target',
+  'scopeType','scopeId','scopeDefinitionId','invokeActionUrl','invokeServiceUrl',
+  'visible','enabled','ignore'];
+// Whether it renders, can be used, and is submitted. A literal settles it — that belongs in the summary,
+// because you must not have to expand a row to learn the button never appears; an expression makes it
+// conditional, which belongs in the body where it fits. `ignore`'s default is the opposite of the others'.
+const FGATES=[['visible',false,'hidden'],['enabled',false,'disabled'],['ignore',true,'not submitted']];
+// `timer` is the `setInterval` delay the form runtime uses, i.e. milliseconds — shown as the interval a
+// reader thinks in.
+function fsetValue(k,v){
+  if(k!=='timer') return String(v);
+  const ms=Number(v);
+  return !isFinite(ms)?String(v):(ms%1000?ms+' ms':(ms/1000)+' s');
+}
+// one label/value line in an expanded component, in the row rhythm of the list around it
+function fldLine(label, html){
+  return '<div class="oprow" style="border:none">'+(label?'<span class="muted">'+esc(label)+'</span>':'')+
+    '<span style="flex:1;min-width:0">'+html+'</span></div>';
+}
+/**
+ * One row of a form/page's Fields list.
+ *
+ * A component that *acts* — every button flavour, a select bound to a data object — expands in place:
+ * what it invokes, the settings that decide what pressing it sends, and the payload it maps in and out.
+ * Before this the row carried id, caption and type, so a form could show that it triggers an action
+ * while staying silent about which button did it, with which values, under which condition. A plain
+ * input has nothing to add and stays the dense one-line row it always was.
+ */
+function fieldRowHtml(f, d){
+  const id=f.id==null?'':String(f.id);
+  const req=(f.required===true||f.required==='true')?'<span class="pt" title="Required field">required</span>':'';
+  // A link button's caption *is* its `value`, so the value column would only say it twice.
+  const val=(f.value!=null&&f.value!==''&&String(f.value)!==String(f.label==null?'':f.label))
+    ?'<span class="muted">←</span> <span class="mono">'+paramSide(String(f.value))+'</span>':'';
+  const ty=termHtml('el', f.type, 'pt')||'<span class="pt">'+esc(f.type||'')+'</span>';
+  const callee=f.callee, mode=f.payloadMode, st=f.settings||{};
+  // a model callee is a node to jump to; a REST callee is a URL, which belongs in the body where it fits
+  const cid=(callee&&callee.kind&&callee.kind!=='rest')?callee.kind+':'+callee.key:null;
+  const ps=(d.ioParameters||[]).filter(p=>String(p.element)===id);
+  const rcs=(d.restCalls||[]).filter(r=>String(r.where)===id);
+  // The overridden map is still in the model — and still rendered in the Parameters section — so the
+  // row that announces the override says which map stopped being the contract.
+  const overridden=dir=>ps.some(p=>p.dir===dir)
+    ? ' <span class="muted">— the '+(dir==='in'?'send payload map':'response map')+' below is not used</span>' : '';
+  // A definitive gate is a fact about the row, so it is stated on the row: 252 of 338 buttons in one real
+  // project are `visible:false` — auto-executing workers nobody ever presses — and a reader had no way to
+  // tell them from a button.
+  const gates=FGATES.filter(g=>st[g[0]]===g[1]).map(g=>termHtml('gate',g[2],'pt')).join('');
+  let b='';
+  // What the modeller wrote about it, first: it usually explains everything below.
+  if(f.description) b+=fldLine('note','<span class="muted">'+esc(String(f.description))+'</span>');
+  if(cid){ const chip=nodeChip(cid); if(chip) b+='<div class="opchips">'+chip+'</div>'; }
+  rcs.forEach(r=>{ b+=fldLine('endpoint','<span class="pt">'+esc(r.method||'')+'</span> '+
+    '<span class="mono" style="word-break:break-all">'+esc(r.url||'')+'</span>'+
+    (r.path?' <span class="muted">→</span> <span class="mono">'+esc(r.path)+'</span>':'')); });
+  if(callee&&callee.kind==='rest'&&!rcs.length)
+    b+=fldLine('endpoint','<span class="mono" style="word-break:break-all">'+esc(String(callee.key))+'</span>');
+  // Then where the result lands. The summary shows that binding in the value column like every other row;
+  // this says what it *means* on a button, which is the opposite of what it means on an input: the button
+  // writes it. (`valueExpression`, below, is which part of a response gets written.)
+  if(f.stores) b+=fldLine(f.type==='restButton'?'stores response in':'stores result in',
+    '<span class="mono">'+paramSide(String(f.stores))+'</span>');
+  if(mode&&mode.send) b+=fldLine('sends', termHtml('pmode',mode.send,'pt')+overridden('in'));
+  if(mode&&mode.receive) b+=fldLine('stores', termHtml('pmode',mode.receive,'pt')+overridden('out'));
+  // The expression an expression button evaluates *is* what the button is, so it leads — as code, in the
+  // same box a service task's script field gets. Then the values, then the plain on/off flags.
+  if(st.script!=null&&st.script!==''&&st.script!==true)
+    b+='<div class="parmgrid"><div class="pc" style="display:block"><span class="pd">expression</span>'+
+      '<pre class="scriptbox" style="margin:4px 0 2px">'+esc(String(st.script))+'</pre></div></div>';
+  // A gate already stated in the summary has nothing left to say here; a conditional one has everything.
+  const said=new Set(FGATES.filter(g=>st[g[0]]===g[1]).map(g=>g[0]));
+  const keys=Object.keys(st).filter(k=>k!=='script'&&st[k]!==true&&!said.has(k));
+  keys.sort((a,z)=>(FSET_ORDER.indexOf(a)+1||99)-(FSET_ORDER.indexOf(z)+1||99));
+  keys.forEach(k=>{
+    b+=fldLine(FSET_LABEL[k]||k,'<span class="mono">'+esc(fsetValue(k,st[k]))+'</span>');
+  });
+  const flags=Object.keys(st).filter(k=>st[k]===true&&!said.has(k));
+  if(flags.length) b+=fldLine('', flags.map(k=>'<span class="pt">'+esc(FSET_LABEL[k]||k)+'</span>').join(' '));
+  if(ps.length){
+    const shown=ps.slice(0,PARAM_ROWS_INLINE);
+    b+='<div class="parmgrid">'+shown.map(paramRow).join('')+'</div>'+
+      (ps.length>shown.length?'<div class="muted" style="font-size:var(--text-2xs);padding:2px var(--space-3)">+ '+
+        (ps.length-shown.length)+' more in the Parameters section</div>':'');
+  }
+  const head='<span class="mono fldid">'+fieldLink(f.id)+'</span>'+
+    '<span class="muted fldname">'+esc(f.label==null?'':String(f.label))+'</span>'+
+    (cid?'<span class="opref">→ '+esc(String(callee.key))+'</span>':'')+val+
+    (ps.length?'<span class="pt">'+esc(paramSummary(ps))+'</span>':'')+ty+req+gates;
+  if(!b) return '<div class="oprow"'+dataEl(f.id)+'>'+head+'</div>';
+  return '<details class="fldrow"'+dataEl(f.id)+'><summary>'+head+'</summary>'+
+    '<div class="fldbody">'+b+'</div></details>';
+}
+// Above this many mapping rows the component's own body stops being a summary; the rest stay one click
+// away in the Parameters section, which lists every mapping of the model with a filter of its own.
+const PARAM_ROWS_INLINE=10;
+
 function describe(n){
   const d=n.data||{}, rows=[];
   const add=(k,v)=>{ if(v!==undefined&&v!==null&&v!==''&&!(Array.isArray(v)&&!v.length)) rows.push([k,v]); };
@@ -2074,9 +2204,6 @@ function detailExtra(n){
   // Every value that names something else is a link when the target exists: a field id → its variable,
   // a task → its form and candidate groups, a plan item → the process/case/decision it starts.
   // (Field injections live inside each task's entry in the Service tasks section below.)
-  // a field id like `customer.email` binds the variable root `customer`
-  const fieldLink=id=>{const s=String(id==null?'':id); const r=s.replace(/^\$/,'').split('.')[0].split('[')[0];
-    return byId.get('variable:'+r)?'<span class="vlink" data-id="'+enc('variable:'+r)+'" tabindex="0" role="link">'+esc(s)+'</span>':esc(s);};
   if(n.type==='process' && (d.userTasks||[]).length){
     h+=section('usertasks','User tasks ('+d.userTasks.length+')','<div class="oplist">'+
       d.userTasks.map(t=>{
@@ -2250,14 +2377,8 @@ function detailExtra(n){
       }).join('')+'</div>');
   }
   if((n.type==='form'||n.type==='page') && (d.fields||[]).length){
-    h+=section('formfields','Fields ('+d.fields.length+')','<div class="oplist">'+
-      d.fields.map(f=>{
-        const req=(f.required===true||f.required==='true')?'<span class="pt" title="Required field">required</span>':'';
-        const val=(f.value!=null&&f.value!=='')?'<span class="muted">←</span> <span class="mono">'+paramSide(String(f.value))+'</span>':'';
-        return '<div class="oprow"><span class="mono" style="min-width:150px">'+fieldLink(f.id)+'</span>'+
-          '<span class="muted" style="flex:1">'+esc(f.label==null?'':String(f.label))+'</span>'+val+
-          '<span class="pt">'+esc(f.type||'')+'</span>'+req+'</div>';
-      }).join('')+'</div>');
+    h+=section('formfields','Fields ('+d.fields.length+')','<div class="oplist fldlist">'+
+      d.fields.map(f=>fieldRowHtml(f, d)).join('')+'</div>');
   }
   if((n.type==='form'||n.type==='page') && (d.dataSources||[]).length){
     h+=section('datasources','Data sources ('+d.dataSources.length+')','<div class="oplist">'+
@@ -3753,12 +3874,12 @@ function hayTokens(s){
   return out;
 }
 
-const SX_FACET_KEYS={t:'type',type:'type',file:'file',key:'key',in:'section'};
+const SX_FACET_KEYS={t:'type',type:'type',file:'file',key:'key',in:'section',id:'id'};
 /**
  * Parse a raw query into `{terms, phrases, facets}`.
  *  - terms   — order-independent, ALL must match somewhere (AND)
  *  - phrases — `"…"` quoted, must match contiguously
- *  - facets  — inline `t:`/`type:`/`file:`/`key:`/`in:` hard filters
+ *  - facets  — inline `t:`/`type:`/`file:`/`key:`/`in:`/`id:` hard filters
  */
 function qParse(q){
   const raw=String(q==null?'':q).trim();
@@ -3771,7 +3892,7 @@ function qParse(q){
     if(p) parsed.phrases.push(p);
     return ' ';
   });
-  rest=rest.replace(/(^|\s)(t|type|file|key|in):(\S+)/gi,(m,pre,k,v)=>{
+  rest=rest.replace(/(^|\s)(t|type|file|key|in|id):(\S+)/gi,(m,pre,k,v)=>{
     parsed.facets[SX_FACET_KEYS[k.toLowerCase()]]=v.toLowerCase();
     return ' ';
   });
@@ -3838,6 +3959,7 @@ function scoreIndex(sx, parsed, indeg){
   if(fc.type && (sx.type||'').indexOf(fc.type)<0) return null;
   if(fc.file && (sx.file||'').indexOf(fc.file)<0) return null;
   if(fc.key && (sx.key||'').indexOf(fc.key)<0) return null;
+  if(fc.id && (sx.ids||'').indexOf(fc.id)<0) return null;
   if(fc.section && (sx.section||'').toLowerCase().indexOf(fc.section)<0) return null;
   let score=0;
   const fields={};
@@ -3967,7 +4089,10 @@ function searchIndex(n){
     .map(p=>(p.name||'')+' '+(p.type||'')).join(' ');
   // form/page fields, app variables, agent tools, policy permissions and dictionary types are not
   // nodes of their own — index them here so their names surface the model that declares them.
-  if(n.type==='form'||n.type==='page') s+=' '+(d.fields||[]).map(f=>(f.id||'')+' '+(f.label||'')).join(' ')+
+  if(n.type==='form'||n.type==='page') s+=' '+(d.fields||[]).map(f=>(f.id||'')+' '+(f.label||'')+
+      // What a button invokes and the expression it evaluates are how people look for a button
+      // ("which form calls notifyCustomer?", "where is that {{total}} computed?").
+      ' '+((f.callee||{}).key||'')+' '+((f.settings||{}).script||'')).join(' ')+
     // A REST button's endpoint is the thing people search a form by ("which page calls /canEdit?"), so it
     // ranks as a member rather than sinking to free text. Templated hosts ({{endpoints.*}}) match on any
     // path fragment because the whole URL is one searchable string.
@@ -3976,6 +4101,16 @@ function searchIndex(n){
   if(n.type==='agent') s+=' '+(d.tools||[]).map(t=>t.key||'').join(' ');
   if(n.type==='securityPolicy') s+=' '+(d.permissions||[]).map(p=>(p.key||'')+' '+(p.label||'')+' '+(p.roles||[]).join(' ')).join(' ');
   if(n.type==='dataDictionary') s+=' '+(d.types||[]).join(' ');
+  // `id:` searches identifiers and nothing else — the model key plus every element id the model
+  // declares. Kept apart from the member haystack on purpose: `id:save` must not match a *caption* that
+  // reads "Save", which is exactly the confusion that made looking a button up by its id hopeless.
+  const ids=[n.key];
+  if(n.type==='process'||n.type==='case') ids.push(...SX_ENV.elementNames(n).keys());
+  if(n.type==='form'||n.type==='page'){
+    (d.fields||[]).forEach(f=>ids.push(f.id));
+    (d.restCalls||[]).forEach(r=>ids.push(r.where));
+  }
+  (d.ioParameters||[]).forEach(p=>ids.push(p.element));
   const entries=[];
   for(const k in d){ if(!HAY_SKIP.has(k)) walkHay(d[k], k, null, entries); }
   const name=String(n.label==null?'':n.label).toLowerCase();
@@ -3985,6 +4120,7 @@ function searchIndex(n){
   const mem=(s+' '+(d.botKey||'')).toLowerCase();
   n._idx={
     name, key, file, mem,
+    ids:ids.filter(x=>x!=null&&x!=='').join(' ').toLowerCase(),
     // Both the internal type and the Design wording, so `t:do`, `t:dataobject` and `t:data` all work.
     type:(n.type+' '+(tm[0]||'')).toLowerCase(),
     section:n.type==='external'?(d.flowableApi?'Integration':'Other'):(tm[1]||'Other'),
@@ -4005,6 +4141,18 @@ function paramHaystack(p){ return (p.source||'')+' '+(p.target||'')+' '+(p.eleme
 // `fields` is the winning-field set from scoreIndex: a pure name/key hit needs no explanation.
 function matchWhere(n,parsed,fields){
   if(!parsed||parsed.empty) return null;
+  // An `id:` search asked for one element by name, so the answer is that element — named in original
+  // case, because `el` has to match the row's `data-el` for the panel to open it.
+  const fid=parsed.facets&&parsed.facets.id;
+  if(fid){
+    const d=n.data||{};
+    const cands=[].concat(
+      (n.type==='process'||n.type==='case')?[...SX_ENV.elementNames(n).keys()]:[],
+      (d.fields||[]).map(f=>f.id), (d.restCalls||[]).map(r=>r.where),
+      (d.ioParameters||[]).map(p=>p.element));
+    const el=cands.find(x=>x!=null&&x!==''&&String(x).toLowerCase().indexOf(fid)>=0);
+    if(el!=null) return {hint:'id '+String(el), el:String(el)};
+  }
   // If the name or the key carried the match, the row already shows it: the label and the key are both
   // rendered with the hit highlighted, so the key stays the more useful hint. Explaining a name match by
   // digging through the walked entries produced hints like a bare "key" — the field the value came from,

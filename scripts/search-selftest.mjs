@@ -71,6 +71,8 @@ const rankOf = (hits, id) => hits.findIndex(h => h.n.id === id);
 // must not be edited to make a case pass — pick a different case instead.
 const DO_CUSTOMER = 'dataObject:customerDO';
 const DO_PRIORITY = 'dataObject:priorityMD';
+// The fixture form, whose buttons carry the ids / callees / expressions the `id:` cases look up.
+const FORM_ORDER = 'form:orderForm';
 
 const cases = [
   // --- the regression the whole change is about: words are independent and order-free ---
@@ -106,6 +108,20 @@ const cases = [
   { q: 'customer in:Code',      missing: DO_CUSTOMER, why: 'section facet excludes it' },
   { q: 'customer key:customerDO', has: DO_CUSTOMER, why: 'key facet' },
   { q: 'customer key:nope',     none: true,        why: 'key facet that matches nothing' },
+
+  // --- `id:` looks a model element up by its identifier, and only by that ---
+  { q: 'id:notifyButton',   top: FORM_ORDER, why: 'a form button id finds the form that declares it' },
+  { q: 'id:orderTotal',     has: FORM_ORDER, why: 'an expression button id, whose caption says nothing like it' },
+  { q: 'id:callSub',        has: 'process:orderProcess', why: 'a BPMN element id finds its process' },
+  { q: 'id:notify',         has: FORM_ORDER, why: 'a fragment of an id is enough' },
+  { q: 'id:Recalculate',    none: true,      why: 'a caption is not an id — that is the point of the facet' },
+  { q: 'id:zzzznope',       none: true,      why: 'an id that exists nowhere' },
+  { q: 'zzzznope id:notifyButton', none: true, why: 'the facet narrows, but the terms still have to match' },
+  { q: 'customer id:notifyButton', has: FORM_ORDER, why: 'and a term that does match keeps the node' },
+
+  // --- what a button invokes, and the expression it evaluates, are searchable ---
+  { q: 'notifyCustomerAction', has: FORM_ORDER, why: 'the action a button triggers surfaces the form' },
+  { q: 'orderTotal',           has: FORM_ORDER, why: 'the target an expression button writes' },
 
   // --- AND semantics: a word that matches nothing drops the node ---
   { q: 'customer zzzznope',  none: true, why: 'every word has to match' },

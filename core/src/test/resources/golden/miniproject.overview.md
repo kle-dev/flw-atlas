@@ -58,10 +58,15 @@ _Scanned 13 model files, 0 archives, 2 Java files, 2 REST endpoints. Generated b
 - `customer` [select] Customer
 - `amount` [number] Amount *(req)*
 - `totalDisplay` [text] Total ← `{{amount}}`
-- `lookupCustomer` [button] Lookup customer
+- `lookupCustomer` [button] Lookup customer → service `customerService`
 - `customerRecord` [select] Customer record
 - `canEditButton` [restButton] Check if editable
-- `notifyButton` [workAction] Notify customer
+- `notifyButton` [workAction] Notify customer → action `notifyCustomerAction` visible when `{{amount > 0}}`
+- `orderTotal` [scriptButton] Recalculate ← `{{orderTotal}}` = `{{amount * 1.081}}`
+- `escalate` [workAction] → action `notifyCustomerAction`
+- `customerPortal` [linkButton] Open customer portal
+- `creditScore` [restButton] Refresh score ← `{{$temp.score}}` *(hidden)* value dropped when `{{!customer}}`
+- `internalNote` [textarea] Internal note enabled when `{{isSupervisor}}`
 - outcomes: `approve`
 - 🔌 data source: rest `/api/customers`
 - 🔌 data source: service `customerService.findAll`
@@ -91,6 +96,11 @@ _Scanned 13 model files, 0 archives, 2 Java files, 2 REST endpoints. Generated b
 - `GET` {{endpoints.baseUrl}}/api/customers/{{customer}}/canEdit  _(from form-button `orderForm/canEditButton`)_
     - ✅ served by GET /api/customers/{id}/canEdit -> CustomerController#canEdit (src/main/java/com/example/CustomerController.java:15)
     - ≈ possibly GET /api/customers -> CustomerController#customers (src/main/java/com/example/CustomerController.java:10)
+- `GET` https://portal.example.com/{{customer}}  _(from form-button `orderForm/customerPortal`)_
+    - ⚠️ no matching controller in project (external or unimplemented)
+- `GET` /api/customers/{{customer}}/score  _(from form-button `orderForm/creditScore`)_
+    - ≈ possibly GET /api/customers -> CustomerController#customers (src/main/java/com/example/CustomerController.java:10)
+    - ⚠️ no matching controller in project (external or unimplemented)
 - `GET` /api/customers  _(from service-op `customerService/findAll`)_
     - ✅ served by GET /api/customers -> CustomerController#customers (src/main/java/com/example/CustomerController.java:10)
 
@@ -183,10 +193,10 @@ _component (1):_
 
 ## 13. Variables, beans & expressions
 
-**Variables (18)** — where each one lives, is set and is read:
+**Variables (20)** — where each one lives, is set and is read:
 
 - `amount` [form]
-    - used in: orderForm (form field), orderForm {{amount}}
+    - used in: orderForm (form field), orderForm {{amount * 1.081}}, orderForm {{amount > 0}}, orderForm {{amount}}
 - `appVar` [app]
     - used in: demoApp (app variable)
 - `approved` [decision]
@@ -201,6 +211,10 @@ _component (1):_
     - used in: notifyCustomerAction (script) · passed as: in on `script-evaluation-bot`: customerEmail
 - `customerRecord` [form]
     - used in: orderForm (form field)
+- `internalNote` [form]
+    - used in: orderForm (form field)
+- `isSupervisor` [form]
+    - used in: orderForm {{isSupervisor}}
 - `level` [dataObject]
     - used in: priorityMD (declared / mapped)
 - `notified` [action, process]
@@ -209,8 +223,8 @@ _component (1):_
     - used in: orderProcess (declared / mapped) · passed as: in on `callSub`: orderId→subOrderId, in on `callSub`: orderId · touched by scripts: `Stamp order`, `Broken stamp`, `Broken API call`
 - `orderNotes` [process]
     - used in: fulfilmentProcess (declared / mapped) · touched by scripts: `Pack shipment`
-- `orderTotal` [action]
-    - used in: notifyCustomerAction (script) · passed as: in on `script-evaluation-bot`: orderTotal
+- `orderTotal` [action, form]
+    - used in: orderForm (form field), orderForm {{orderTotal}}, notifyCustomerAction (script) · passed as: in on `script-evaluation-bot`: orderTotal
 - `sent` [action]
     - used in: notifyCustomerAction (script) · passed as: out on `script-evaluation-bot`: sent
 - `shippingStamp` [process]
@@ -224,22 +238,34 @@ _component (1):_
 
 **Beans/objects with method calls:** `demoBean`
 
-**Expressions (10)** — grouped by what they call:
+**Expressions (18)** — grouped by what they call:
 
-- `$response` (2)
+- `$response` (4)
     - `{{$response.canEdit}}` — in `orderForm`
     - `{{$response.executionPayload.sent}}` — in `orderForm`
+    - `{{$response.scopeId}}` — in `orderForm`
+    - `{{$response.score}}` — in `orderForm`
+- `amount` (3)
+    - `{{amount}}` — in `orderForm`
+    - `{{amount > 0}}` — in `orderForm`
+    - `{{amount * 1.081}}` — in `orderForm`
 - `customer` (2)
     - `{{customer}}` — in `orderForm`
     - `{{customer.email}}` — in `orderForm`
-- `amount` (1)
-    - `{{amount}}` — in `orderForm`
+- `$temp` (1)
+    - `{{$temp.score}}` — in `orderForm`
+- `(other)` (1)
+    - `{{!customer}}` — in `orderForm`
 - `demoBean` (1)
     - `${demoBean.run(execution)}` — in `orderProcess`
 - `endpoints` (1)
     - `{{endpoints.baseUrl}}` — in `orderForm`
+- `isSupervisor` (1)
+    - `{{isSupervisor}}` — in `orderForm`
 - `notifierBean` (1)
     - `${notifierBean}` — in `orderProcess`
+- `orderTotal` (1)
+    - `{{orderTotal}}` — in `orderForm`
 - `total` (1)
     - `${total > 100}` — in `orderProcess`
 - `vars:bogus` (1) — invalid: 1 ⚠

@@ -62,17 +62,33 @@ object ModelJsonReader {
         node["id"] is String && node.containsKey("type") && node.containsKey("label")
 
     /**
-     * A form/page **component** worth listing and searching: `id` + `type` and something to call it by.
+     * Every button flavour of the Design palettes, by the `type` a deployed `.form` / `.page` carries
+     * (the authoritative list is the platform's `DefaultFormComponentType`). A button is the one
+     * component that acts on its own — it calls an action, a service, a URL — so [isFormComponent]
+     * accepts it on its `type` alone, without insisting on a caption.
+     */
+    val BUTTON_TYPES: Set<String> = setOf(
+        "workAction", "restButton", "scriptButton", "outcomeButton", "linkButton",
+        "workAgentButton", "workInvokeService", "createInstanceButton", "workUserEventListenerButton",
+        // legacy / hand-written models call a plain button just that
+        "button",
+    )
+
+    /**
+     * A form/page **component** worth listing and searching: `id` + `type` and something to call it by
+     * — or a button, which counts on its `type` alone.
      *
-     * Buttons are the reason this is wider than [isFormField]. Every button flavour in the Design
-     * palettes (`base-rest-button`, `base-script-button`, `work-action`, `work-invoke-service`, …) keeps
-     * its caption in `extraSettings.text` and has **no** `label` at all, so the `label`-only predicate
-     * dropped them silently — id, caption and, for a REST button, the endpoint URL never reached the
-     * model data and were therefore unfindable. Containers still have neither, so they stay out.
+     * Buttons are the reason this is wider than [isFormField]. Their caption lives in
+     * `extraSettings.text`, not `label`, so a `label`-only predicate dropped them silently. And plenty
+     * carry neither: measured over one real project, half the REST buttons (50 of 87) and every link
+     * button are icon-only or captioned by `value`, so *they* were dropped in turn — id, endpoint and
+     * the action they invoke never reached the model data. Containers still need a caption, so they
+     * stay out.
      */
     fun isFormComponent(node: Map<*, *>): Boolean =
         node["id"] is String && node.containsKey("type") &&
-            (node.containsKey("label") || (node["extraSettings"] as? Map<*, *>)?.get("text") != null)
+            (node.containsKey("label") || (node["extraSettings"] as? Map<*, *>)?.get("text") != null ||
+                node["type"] in BUTTON_TYPES)
 
     /** Form field ids + outcomes of a `.form` model (used to build member vocabularies). */
     fun readForm(bytes: ByteArray): FormInfo {

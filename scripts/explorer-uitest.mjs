@@ -235,6 +235,74 @@ const probe = `<script>
        state.tabs.length+' tabs vs '+window.__refTabs.length);
   });
 
+  // --- a form's buttons: the Fields row expands into what the button does ---
+  // The row used to carry id, caption and type only, so a form could show that it triggers an action
+  // while staying silent about which button did it, with which payload. These checks pin the three
+  // things the row now has to answer without leaving the panel.
+  steps.push(()=>{ closeOtherTabs(); location.hash=enc('form:orderForm'); });
+  steps.push(()=>{
+    const sect=document.querySelector('#detail [data-sect="formfields"]');
+    ok('the form lists its fields', !!sect);
+    if(sect) sect.open=true;
+    const btn=document.querySelector('#detail details.fldrow[data-el="notifyButton"]');
+    ok('an action button is an expandable row', !!btn, 'no expandable row for notifyButton');
+    ok('the row names the action in its summary',
+       !!btn && /notifyCustomerAction/.test(btn.querySelector('summary').textContent),
+       btn?btn.querySelector('summary').textContent:'(no row)');
+    if(btn) btn.open=true;
+    window.__btn=btn;
+  });
+  steps.push(()=>{
+    const btn=window.__btn, body=btn&&btn.querySelector('.fldbody');
+    ok('the action is a chip you can follow', !!body&&!!body.querySelector('.nc[data-id]'));
+    ok('the payload it sends and stores is on the button',
+       !!body&&body.querySelectorAll('.parmgrid .pc').length>=3,
+       body?body.querySelectorAll('.parmgrid .pc').length+' mapping rows':'(no body)');
+    const scr=document.querySelector('#detail details.fldrow[data-el="orderTotal"]');
+    if(scr) scr.open=true;
+    ok('an expression button shows its expression',
+       !!scr && /amount \\* 1.081/.test(scr.textContent), scr?'no expression in the row':'(no row)');
+    ok('and the interval it re-runs on', !!scr && /30 s/.test(scr.textContent));
+    // The flag that overrides the map has to be louder than the map itself.
+    const esc=document.querySelector('#detail details.fldrow[data-el="escalate"]');
+    if(esc) esc.open=true;
+    ok('a full-payload button says the map is not used',
+       !!esc && /not used/.test(esc.textContent), esc?esc.textContent.slice(0,120):'(no row)');
+    // A plain input has nothing to expand and must stay the dense one-line row.
+    ok('a plain field is not expandable',
+       !document.querySelector('#detail details.fldrow[data-el="amount"]'));
+    // A hidden auto-executing worker is the commonest button in a real project and the one a reader is
+    // most likely to mistake for a button: the state has to be on the row, not behind a click.
+    const w=document.querySelector('#detail [data-sect="formfields"] [data-el="creditScore"]');
+    ok('a hidden button says so without being expanded',
+       !!w && /hidden/.test((w.querySelector('summary')||w).textContent),
+       w?(w.querySelector('summary')||w).textContent.slice(0,90):'(no row)');
+    if(w&&w.tagName==='DETAILS') w.open=true;
+    ok('and it names where the response is stored',
+       !!w && /stores response in/.test(w.textContent) && /creditScore/.test(w.textContent));
+    ok('its localised caption is the name it goes by', !!w && /Refresh score/.test(w.textContent));
+    ok('the note the modeller left is on it', !!w && /Hidden worker/.test(w.textContent));
+    // A condition is a different statement from a settled state and belongs in the body.
+    const n2=document.querySelector('#detail details.fldrow[data-el="internalNote"]');
+    if(n2) n2.open=true;
+    ok('a conditional gate shows its condition',
+       !!n2 && /enabled when/.test(n2.textContent) && /isSupervisor/.test(n2.textContent),
+       n2?n2.textContent.slice(0,80):'(no row)');
+  });
+  // An id search lands on the button's own row, not just on the form.
+  steps.push(()=>{ openPalette(); type('id:notifyButton'); });
+  steps.push(()=>{
+    ok('an id: query finds the form', rows().length>0, 'no hits for id:notifyButton');
+    ok('the hit says which element matched', /notifyButton/.test(rows()[0].textContent),
+       rows()[0].textContent);
+    click(rows()[0]);
+  });
+  steps.push(()=>{
+    const row=document.querySelector('#detail [data-sect="formfields"] [data-el="notifyButton"]');
+    ok('the hit opened that button\\'s row', !!row&&row.classList.contains('hit'),
+       row?'row not marked':'no row');
+  });
+
   // --- the unused-variables report (#/variables) ---
   // The verdict is computed in :core and only stamped onto the nodes, so a broken payload allowlist
   // renders an empty page with correct-looking counts and no error anywhere. Assert the rows exist and

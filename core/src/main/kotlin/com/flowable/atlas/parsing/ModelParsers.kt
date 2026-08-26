@@ -45,6 +45,9 @@ object ModelParsers {
     /** Field-id roots that are frontend scratch space, never process/case variables. */
     private val FIELD_ID_IGNORE = setOf("temp", "response", "payload", "root", "item", "self")
 
+    /** Buttons whose `value` binding is where the call's result is stored, not a caption or a placeholder. */
+    private val RESULT_BINDING_TYPES = setOf("scriptButton", "restButton")
+
     // A data-source / link / navigation URL can invoke a service operation with the target and operation
     // keys as *literal* query params even though the host is a dynamic `{{endpoints.*}}` placeholder — e.g.
     // `{{endpoints.dataobject}}/dataobject-runtime/data-object-instances?dataObjectDefinitionKey=<key>&dataObjectOperationKey=<op>&…`.
@@ -357,20 +360,40 @@ object ModelParsers {
         // write but not claiming to know its readers is the honest half.
         ctx.markReadsUnknown(doc["outcomevariablename"])
         fun visit(n: Map<String, Any?>) {
+            // The component's own record, kept mutable: what a *button* does lives in `extraSettings`,
+            // which this walk only reaches further down.
+            var component: MutableMap<String, Any?>? = null
             if (ModelJsonReader.isFormComponent(n)) {
-                // A button has no `label`; its caption is `extraSettings.text` (see [isFormComponent]).
-                val label = pyOr(n["label"], objOf(n["extraSettings"])?.get("text"))
-                fields.add(linkedMapOf(
+                val ftype = (n["type"] as? String) ?: ""
+                val isButton = ftype in ModelJsonReader.BUTTON_TYPES
+                // A button has no `label`; its caption is `extraSettings.text` (see [isFormComponent]),
+                // failing that a localised override, failing that — on an icon-only REST or link button —
+                // its literal `value`. A `{{…}}` value is a binding, not a caption: on an expression
+                // button it is where the *result* lands.
+                val label = pyOr(
+                    pyOr(pyOr(n["label"], objOf(n["extraSettings"])?.get("text")), i18nCaption(n)),
+                    if (isButton) (n["value"] as? String)?.takeIf { !it.contains("{{") } else null,
+                )
+                component = linkedMapOf(
                     "id" to n["id"], "type" to n["type"], "label" to label,
                     "required" to (n["isRequired"] ?: false), "value" to n["value"],
-                ))
+                )
+                // What the modeller wrote about this component for whoever reads the form next — the
+                // form equivalent of a BPMN element's documentation, and just as much the answer to "why
+                // is this here" ("Disabled for privileged users, because …").
+                if (truthy(n["description"])) component["description"] = n["description"]
+                // Whether it renders at all, whether it can be pressed, whether its value is submitted —
+                // recorded for every component, not just buttons: a hidden input matters as much as a
+                // hidden button, and 252 of 338 buttons in one real project are `visible: false` (the
+                // auto-executing worker pattern), which a reader has no way to guess.
+                gatingOf(n)?.let { component["settings"] = it }
+                fields.add(component)
                 if (n["type"] == "outcomeButton" && truthy(n["value"])) {
                     outcomes.add(linkedMapOf("value" to n["value"], "label" to label))
                 }
                 // A data-entry field's id is the variable path the form reads/writes at runtime — index
                 // its root so the form joins the variable graph. Buttons don't bind a variable, and a
                 // display component whose value is a {{…}} binding reads through the expression pass.
-                val ftype = (n["type"] as? String) ?: ""
                 val bound = (n["value"] as? String)?.contains("{{") == true
                 if (!bound && !NON_BINDING_FIELD_TYPES.contains(ftype) && !ftype.lowercase().contains("button")) {
                     val root = n["id"].toString().trimStart('$').substringBefore('.').substringBefore('[')
@@ -383,6 +406,21 @@ object ModelParsers {
                         for (d in listOf(Ctx.READ, Ctx.WRITE)) {
                             ctx.addVarSite(key, root, d, "formField", n["id"], label, ftype)
                         }
+                    }
+                }
+                // An expression button computes a value, a REST button takes one out of its response, and
+                // both hand it to their own `value` binding — that is where the result is stored, and it
+                // is measurably always a binding on those two (178 of 178 and 87 of 87 in one real
+                // project), while a `workAction` carries a placeholder `"."` there and stores nothing.
+                // Buttons are excluded from the binding pass above because they bind no input, so without
+                // this the target looked neither read nor written. The read side needs nothing: whoever
+                // renders `{{x}}` is picked up already.
+                if (ftype in RESULT_BINDING_TYPES) {
+                    val target = (n["value"] as? String)?.takeIf { it.contains("{{") }
+                    if (target != null) component["stores"] = target
+                    bindingRoot(target)?.let { root ->
+                        ctx.addVar(key, root, "form_field_use")
+                        ctx.addVarSite(key, root, Ctx.WRITE, ftype, n["id"], label, ftype)
                     }
                 }
             }
@@ -415,7 +453,11 @@ object ModelParsers {
                     if (truthy(es[fk])) ctx.addRef(key, mtype, ffile, fk, "form", es[fk])
                 }
                 if (truthy(es["expandablePanel"])) ctx.addRef(key, mtype, ffile, "datatable-detail-form", "form", es["expandablePanel"])
-                if (truthy(es["actionDefinitionKey"])) ctx.addRef(key, mtype, ffile, "triggers-action", "action", es["actionDefinitionKey"])
+                // Like the process/case references below, the newer Design editor writes the action
+                // reference as `{key, id}` rather than a bare key.
+                if (truthy(es["actionDefinitionKey"])) {
+                    ctx.addRef(key, mtype, ffile, "triggers-action", "action", modelRefKey(es["actionDefinitionKey"]))
+                }
                 // An agent button references an agent model the same way a service button references a
                 // service — this was the one model reference on a form that went unrecorded.
                 val am = objOf(es["agentModel"])
@@ -424,10 +466,9 @@ object ModelParsers {
                 }
                 // A create-instance button starts a process/case; a query data source runs a query
                 // model. The reference is a bare key or a {key: …} object, depending on the version.
-                fun refKey(v: Any?): Any? = if (v is Map<*, *>) v["key"] else v
-                ctx.addRef(key, mtype, ffile, "starts-process", "process", refKey(es["processReference"]))
-                ctx.addRef(key, mtype, ffile, "starts-case", "case", refKey(es["caseReference"]))
-                ctx.addRef(key, mtype, ffile, "runs-query", "query", refKey(es["query"]))
+                ctx.addRef(key, mtype, ffile, "starts-process", "process", modelRefKey(es["processReference"]))
+                ctx.addRef(key, mtype, ffile, "starts-case", "case", modelRefKey(es["caseReference"]))
+                ctx.addRef(key, mtype, ffile, "runs-query", "query", modelRefKey(es["query"]))
                 // A button/section can be gated to groups: ["group1"] or [{"permission-group": "group1"}].
                 val pgs = (es["permissionGroups"] as? List<*> ?: emptyList<Any?>())
                     .map { if (it is Map<*, *>) it["permission-group"] else it }
@@ -445,6 +486,21 @@ object ModelParsers {
                         ioParameters, key, n["id"], pyOr(n["label"], es["text"]),
                         (n["type"] as? String) ?: "button", payload, refKind,
                     )
+                }
+                // What this component *does*, on the component's own record — the model it calls, the
+                // settings that decide what pressing it sends, and which payload side is in force. The
+                // form's reference list said an action was triggered; only this says by which button,
+                // with what, and under which condition.
+                component?.let { c ->
+                    if (refKind != null && truthy(refKey)) {
+                        c["callee"] = linkedMapOf<String, Any?>("kind" to refKind, "key" to refKey)
+                    }
+                    buttonSettings(n, es)?.let { flavour ->
+                        @Suppress("UNCHECKED_CAST")
+                        val gates = c["settings"] as? MutableMap<String, Any?>
+                        if (gates == null) c["settings"] = flavour else gates.putAll(flavour)
+                    }
+                    payloadModes(es)?.let { c["payloadMode"] = it }
                 }
                 // Data-source / lookup / navigation URLs (queryUrl, lookupUrl, navigationUrl, …) can embed a
                 // dataObject/service operation as literal query params — pick those up as op-uses.
@@ -523,12 +579,130 @@ object ModelParsers {
         return out
     }
 
+    /**
+     * The `extraSettings` keys worth showing per button flavour — the ones that change what pressing it
+     * does.
+     *
+     * Per flavour on purpose: the palettes share one `extraSettings` bag and a stencil inherits keys its
+     * runtime never reads. `script` is honoured by the expression button alone, yet 32 of 53 action
+     * buttons in one real project carry a non-empty one — listing it there would state a behaviour that
+     * does not exist. A button's endpoint is not here either: it is already a [restCalls] entry keyed by
+     * the same element id.
+     */
+    private val BUTTON_SETTINGS: Map<String, List<String>> = mapOf(
+        "scriptButton" to listOf("script", "timer", "autoExecute", "executeAlways"),
+        "restButton" to listOf("method", "path", "valueExpression", "autoExecute", "executeAlways"),
+        "workAction" to listOf("navigationUrl", "scopeType", "scopeId", "scopeDefinitionId",
+            "invokeActionUrl", "autoExecute", "executeAlways"),
+        "workInvokeService" to listOf("invokeServiceUrl", "autoExecute", "executeAlways"),
+        "workAgentButton" to listOf("autoExecute", "executeAlways"),
+        "createInstanceButton" to listOf("navigationUrl", "autoExecute", "executeAlways"),
+        "workUserEventListenerButton" to listOf("autoExecute", "executeAlways"),
+        "linkButton" to listOf("target"),
+        "outcomeButton" to listOf("keepInForm"),
+    )
+
+    /** Node-level (not `extraSettings`) flags a reader cares about, on any button. */
+    private val BUTTON_NODE_FLAGS = listOf("primary", "ignoreValidation", "ignorePayload")
+
+    /**
+     * The flavour settings of one button, or null when it has none worth naming. `false` is the palette
+     * default on almost every flag, so only truthy values survive.
+     */
+    private fun buttonSettings(n: Map<String, Any?>, es: Map<String, Any?>): Map<String, Any?>? {
+        val type = (n["type"] as? String)?.takeIf { it in ModelJsonReader.BUTTON_TYPES } ?: return null
+        val out = linkedMapOf<String, Any?>()
+        for (k in BUTTON_SETTINGS[type].orEmpty()) if (truthy(es[k])) out[k] = es[k]
+        for (k in BUTTON_NODE_FLAGS) if (truthy(n[k])) out[k] = n[k]
+        return out.ifEmpty { null }
+    }
+
+    /**
+     * Whether a component renders, can be used, and is submitted — recorded whenever the model departs
+     * from the default (`visible`/`enabled` true, `ignore` false), never when it agrees with it.
+     *
+     * All three are `boolean | string` in the form runtime: a literal settles the question (`visible:
+     * false` is a component that is simply never there), an expression makes it conditional. Both are
+     * worth saying and they are not the same statement, so the value is kept as the model spells it.
+     * `ignore` excludes the component's binding from the payload — the value is computed and discarded.
+     */
+    private fun gatingOf(n: Map<String, Any?>): MutableMap<String, Any?>? {
+        val out = linkedMapOf<String, Any?>()
+        fun gate(field: String, default: Boolean) {
+            val v = n[field] ?: return
+            if (v != default) out[field] = v
+        }
+        gate("visible", true)
+        gate("enabled", true)
+        gate("ignore", false)
+        return out.ifEmpty { null }
+    }
+
+    /**
+     * The caption a localised component carries. Design keeps per-locale overrides of `label` /
+     * `extraSettings.text` under `i18n.<locale>`, and on many buttons that is the *only* place a caption
+     * exists (166 of 178 expression buttons in one real project carry one). The first locale wins: Atlas
+     * is naming the component for a reader, not rendering it for an end user.
+     */
+    private fun i18nCaption(n: Map<String, Any?>): Any? {
+        for (loc in objOf(n["i18n"])?.values.orEmpty()) {
+            val m = objOf(loc) ?: continue
+            val t = pyOr(m["label"], objOf(m["extraSettings"])?.get("text"))
+            if (truthy(t)) return t
+        }
+        return null
+    }
+
+    /**
+     * Which of a button's two payload sides is actually in force, when a flag overrides the mapping.
+     *
+     * The Work runtime picks exactly one on each side: `sendFullPayload` (the whole form payload) beats
+     * `sendFullScope` (the surrounding scope) beats the explicit `sendPayloadMapping`; coming back,
+     * `mapFullResponse` (every response key, into the scope when `mapResponseInsideScope`) beats
+     * `responsePayloadMapping`. An overridden mapping is never read — so Atlas must not present it as the
+     * contract. Recorded only when a flag *is* set; otherwise the mappings speak for themselves.
+     */
+    private fun payloadModes(es: Map<String, Any?>): Map<String, Any?>? {
+        val send = when {
+            truthy(es["sendFullPayload"]) -> "full-payload"
+            truthy(es["sendFullScope"]) -> "full-scope"
+            else -> null
+        }
+        val receive = when {
+            !truthy(es["mapFullResponse"]) -> null
+            truthy(es["mapResponseInsideScope"]) -> "full-response-in-scope"
+            else -> "full-response"
+        }
+        if (send == null && receive == null) return null
+        return linkedMapOf<String, Any?>().apply {
+            if (send != null) put("send", send)
+            if (receive != null) put("receive", receive)
+        }
+    }
+
+    /** A model reference: a bare key, or the `{key, id}` object the newer Design editor writes. */
+    private fun modelRefKey(v: Any?): Any? = if (v is Map<*, *>) v["key"] else v
+
+    /** The variable root a `{{binding}}` names, or null when the value is an expression, not a target. */
+    private fun bindingRoot(value: Any?): String? {
+        val raw = (value as? String)?.trim() ?: return null
+        if (!raw.startsWith("{{") || !raw.endsWith("}}")) return null
+        val inner = raw.removeSurrounding("{{", "}}").trim()
+        if (inner.isEmpty() || !inner.matches(Regex("[A-Za-z_$][A-Za-z0-9_.\\[\\]$]*"))) return null
+        val root = inner.trimStart('$').substringBefore('.').substringBefore('[')
+        return root.takeIf { it.isNotEmpty() && it !in FIELD_ID_IGNORE }
+    }
+
     /** What a button invokes, as `(kind, key)` — the callee its payload is mapped onto. */
     private fun calleeOf(es: Map<String, Any?>, n: Map<String, Any?>): Pair<String?, Any?> {
-        if (truthy(es["actionDefinitionKey"])) return "action" to es["actionDefinitionKey"]
+        if (truthy(es["actionDefinitionKey"])) return "action" to modelRefKey(es["actionDefinitionKey"])
         objOf(es["agentModel"])?.get("agentModelKey")?.let { if (truthy(it)) return "agent" to it }
         objOf(es["serviceModel"])?.get("serviceModelKey")?.let { if (truthy(it)) return "service" to it }
         if (truthy(es["dataObjectDefinitionKey"])) return "dataObject" to es["dataObjectDefinitionKey"]
+        // A create-instance button's callee is the process or case it starts — which is also the model
+        // whose contract its payload map has to match.
+        modelRefKey(es["processReference"])?.let { if (truthy(it)) return "process" to it }
+        modelRefKey(es["caseReference"])?.let { if (truthy(it)) return "case" to it }
         // `extraSettings.url` is where a real REST button keeps its endpoint; the component-level `url`
         // only occurs in hand-written and legacy models. Without the former, a REST button's payload and
         // header mappings carried no callee at all.

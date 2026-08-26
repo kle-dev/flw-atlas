@@ -63,6 +63,18 @@ own, and it is why the graph carries `usedBy`.
 Every section remembers whether you left it open, per section, across reloads. Up to twelve nodes can
 be open as **detail tabs**, which are viewports with their own history rather than pins.
 
+On a form or page, a row in **Fields** expands when the component does something: the model a button
+invokes (as a chip you can follow), the payload it sends and stores back, the `{{binding}}` its result is
+stored in, a REST button's endpoint with its verb and response path, an expression button's expression and
+the interval it re-runs on, whether it fires by itself, and the note the modeller left on it. A plain
+input has nothing to add and stays a one-line row.
+
+Two kinds of honesty live on that row. **Hidden**, **disabled** and **not submitted** are stated on the
+row itself, because a hidden button that auto-executes is a worker nobody presses and you should not have
+to expand anything to learn that — when the state is a condition instead, the condition is in the body.
+And when a button is configured to send the whole payload or store the whole response, that is said
+first and the mapping it overrides is marked unused, because the runtime never reads it.
+
 ## Diagrams
 
 Processes, cases and decisions render their diagram inline, from the layout already in your models —
@@ -89,7 +101,9 @@ instead.
 
 - **Every term must match, in any order.** `order form demo` finds the same thing as `demo form order`.
 - **Quoted phrases** are a hard, contiguous requirement.
-- **Facets** narrow inline: `t:` / `type:`, `file:`, `key:`, `in:`.
+- **Facets** narrow inline: `t:` / `type:`, `file:`, `key:`, `in:`, `id:`.
+- **`id:` looks an element up by its identifier** — `id:save-button` finds the model that declares it and
+  opens that element's row. It matches identifiers only, never a caption that happens to read *Save*.
 - **Word boundaries are understood** — `demo d05`, `demo-d05` and `demo_d05` are the same query, because
   tokens split at camelCase and letter↔digit boundaries as well as at punctuation.
 - **It searches inside models**, not just their names: element ids, in/out parameters, form fields,
