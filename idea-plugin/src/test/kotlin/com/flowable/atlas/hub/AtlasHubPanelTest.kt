@@ -1,9 +1,13 @@
 package com.flowable.atlas.hub
 
+import com.flowable.atlas.design.DesignAuthMode
+import com.flowable.atlas.environment.AtlasConnection
 import com.flowable.atlas.environment.AtlasConnectionSelection
 import com.flowable.atlas.environment.AtlasEnvironments
 import com.flowable.atlas.environment.ConnectionKind
+import com.flowable.atlas.environment.SharedEnvironments
 import com.flowable.atlas.events.AtlasEvents
+import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 
@@ -137,6 +141,187 @@ class AtlasHubPanelTest : BasePlatformTestCase() {
         } finally {
             AtlasConnectionSelection.clear(project, ConnectionKind.DESIGN)
             catalog.removeEnvironment(prod)
+            panel.dispose()
+        }
+    }
+
+    /**
+     * Switching environment has to *land* in the two pickers below it: each environment's workspace and
+     * apps are its own, and showing the previous one's is worse than showing none — it reads as the
+     * selection having carried over, which is exactly what a pull must never do.
+     */
+    fun testSwitchingEnvironmentSwapsTheWorkspaceAndAppSelection() {
+        val settings = FlowableAtlasProjectSettings.getInstance(project)
+        val catalog = AtlasEnvironments.getInstance()
+        val dev = catalog.addEnvironment("DEV")
+        val qa = catalog.addEnvironment("QA")
+        val panel = AtlasHubPanel(project)
+        try {
+            val devDesign = catalog.addConnection(dev, ConnectionKind.DESIGN, "http://design-dev.example.com")!!
+            val qaDesign = catalog.addConnection(qa, ConnectionKind.DESIGN, "http://design-qa.example.com")!!
+            settings.pullTarget("DEV").also {
+                it.workspaceKey = "dev-ws"
+                it.appKeys = mutableListOf("alpha", "beta")
+            }
+            settings.pullTarget("QA").also {
+                it.workspaceKey = "qa-ws"
+                it.appKeys = mutableListOf("gamma")
+            }
+
+            select(devDesign)
+            panel.refreshForTest()
+            assertEquals("dev-ws", panel.workspaceKeyForTest())
+            assertEquals(listOf("alpha", "beta"), panel.appKeysForTest())
+
+            select(qaDesign)
+            panel.refreshForTest()
+            assertEquals("qa-ws", panel.workspaceKeyForTest())
+            assertEquals(listOf("gamma"), panel.appKeysForTest())
+
+            // …and back, because "remembered per environment" is the whole claim.
+            select(devDesign)
+            panel.refreshForTest()
+            assertEquals("dev-ws", panel.workspaceKeyForTest())
+            assertEquals(listOf("alpha", "beta"), panel.appKeysForTest())
+        } finally {
+            listOf("DEV", "QA").forEach {
+                settings.pullTarget(it).also { target ->
+                    target.workspaceKey = ""
+                    target.appKeys = mutableListOf()
+                }
+            }
+            AtlasConnectionSelection.clear(project, ConnectionKind.DESIGN)
+            catalog.removeEnvironment(dev)
+            catalog.removeEnvironment(qa)
+            panel.dispose()
+        }
+    }
+
+    /**
+     * "Not set" is an answer, not a pause: what the pickers below show has to go with it.
+     *
+     * With **one** environment — the case this broke in. Picking *not set* used to unset the pointer,
+     * which let the single-connection fallback answer with that same environment, so the panel kept
+     * showing its workspace and its ticked apps under a picker reading *not set*.
+     */
+    fun testChoosingNotSetEmptiesTheWorkspaceAndAppPickers() {
+        val settings = FlowableAtlasProjectSettings.getInstance(project)
+        val catalog = AtlasEnvironments.getInstance()
+        val dev = catalog.addEnvironment("DEV")
+        val panel = AtlasHubPanel(project)
+        try {
+            val devDesign = catalog.addConnection(dev, ConnectionKind.DESIGN, "http://design-dev.example.com")!!
+            settings.pullTarget("DEV").also {
+                it.workspaceKey = "dev-ws"
+                it.appKeys = mutableListOf("alpha")
+            }
+            select(devDesign)
+            panel.refreshForTest()
+            assertEquals("dev-ws", panel.workspaceKeyForTest())
+            assertEquals(listOf("alpha"), panel.appKeysForTest())
+
+            panel.chooseNoEnvironmentForTest(ConnectionKind.DESIGN)
+            panel.refreshForTest()
+            assertNull("no environment, no workspace", panel.workspaceKeyForTest())
+            assertTrue("no environment, no apps", panel.appKeysForTest().isEmpty())
+            assertEquals("not set", panel.connectionLineForTest(ConnectionKind.DESIGN))
+            // The stored selection is untouched — saying "not set" is not deleting the settings, and
+            // choosing DEV again has to bring its workspace and apps back.
+            assertEquals("dev-ws", settings.pullTargetOrNull("DEV")!!.workspaceKey)
+
+            select(devDesign)
+            panel.refreshForTest()
+            assertEquals("dev-ws", panel.workspaceKeyForTest())
+            assertEquals(listOf("alpha"), panel.appKeysForTest())
+        } finally {
+            settings.pullTarget("DEV").also {
+                it.workspaceKey = ""
+                it.appKeys = mutableListOf()
+            }
+            AtlasConnectionSelection.clear(project, ConnectionKind.DESIGN)
+            catalog.removeEnvironment(dev)
+            panel.dispose()
+        }
+    }
+
+    /** Select a Design connection and tell the panel, the way any other surface would. */
+    private fun select(connectionId: String) {
+        AtlasConnectionSelection.select(project, ConnectionKind.DESIGN, connectionId)
+        project.messageBus.syncPublisher(AtlasEvents.TOPIC).connectionSelectionChanged(ConnectionKind.DESIGN)
+    }
+
+    /**
+     * The row has to look like the choice it is. It read as a status line with a *Change…* link on a
+     * second line below it — and the link was hidden whenever nothing had been detected yet, so in a
+     * repository with several Flowable projects the answer to "can I pick one?" was a blank space.
+     */
+    fun testTheProjectPickerAlwaysOffersWholeProjectAndKeepsTheActiveOne() {
+        val rootService = AtlasProjectRootService.getInstance(project)
+        val panel = AtlasHubPanel(project)
+        try {
+            panel.refreshForTest()
+            assertEquals("whole project is always a choice", listOf(""), panel.projectItemsForTest())
+
+            panel.chooseProjectForTest("apps/demo")
+            panel.refreshForTest()
+            assertEquals("apps/demo", rootService.activeSubProject())
+            // Detection has nothing to say about this fixture, so without carrying the active one over
+            // the row would read "Whole project" while Atlas was scoped to apps/demo.
+            assertTrue(panel.projectItemsForTest().contains("apps/demo"))
+
+            panel.chooseProjectForTest("")
+            panel.refreshForTest()
+            assertEquals("", rootService.activeSubProject())
+        } finally {
+            rootService.setActiveSubProject("")
+            panel.dispose()
+        }
+    }
+
+    /**
+     * The Hub shares one narrow stripe between five sections, so a list that reserves eight rows for
+     * content it does not have is the panel's height spent on nothing. Both lists are sized to what
+     * they hold — the ordinary project has exactly one generated explorer.
+     */
+    fun testTheListsAreSizedToTheirContent() {
+        val panel = AtlasHubPanel(project)
+        try {
+            panel.refreshForTest()
+            assertEquals(1 to 1, panel.listRowsForTest())
+        } finally {
+            panel.dispose()
+        }
+    }
+
+    /**
+     * The point of the committed file: a colleague clones the repository and the team's stages are
+     * simply there — offered, selectable, and marked so nobody wonders why they cannot edit the URL.
+     */
+    fun testAnEnvironmentTheProjectSharesIsOfferedLikeAnyOther() {
+        val shared = SharedEnvironments.getInstance(project)
+        val panel = AtlasHubPanel(project)
+        try {
+            shared.share(
+                "QA", requireConfirmation = false,
+                listOf(
+                    AtlasConnection(
+                        "ignored", ConnectionKind.DESIGN, "https://design-qa.example.com", "",
+                        DesignAuthMode.BASIC, "e", "QA", false,
+                    ),
+                ),
+            )
+            panel.refreshForTest()
+            assertTrue("nothing is defined in this IDE, and yet there is an environment", panel.hasAnyEnvironmentForTest)
+
+            AtlasConnectionSelection.select(
+                project, ConnectionKind.DESIGN, SharedEnvironments.connectionIdOf("QA", ConnectionKind.DESIGN),
+            )
+            panel.refreshForTest()
+            assertEquals("QA (project)", panel.connectionLineForTest(ConnectionKind.DESIGN))
+            assertEquals("Pull from QA", panel.pullLinkTextForTest())
+        } finally {
+            AtlasConnectionSelection.clear(project, ConnectionKind.DESIGN)
+            shared.unshare("QA")
             panel.dispose()
         }
     }

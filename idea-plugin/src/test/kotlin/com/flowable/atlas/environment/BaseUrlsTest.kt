@@ -53,4 +53,13 @@ class BaseUrlsTest {
         assertTrue(BaseUrls.isLoopback("127.0.0.1"))
         assertFalse(BaseUrls.isLoopback("design.example.com"))
     }
+
+    @Test
+    fun `dropping the scheme keeps what tells two local apps apart`() {
+        assertEquals("localhost:9914", BaseUrls.withoutScheme("http://localhost:9914"))
+        assertEquals("localhost:8080/flowable-work", BaseUrls.withoutScheme("http://localhost:8080/flowable-work/"))
+        assertEquals("work-qa.example.com", BaseUrls.withoutScheme("  https://work-qa.example.com/  "))
+        // Not a URL at all: shown as typed rather than blanked, since it is what the user has to read.
+        assertEquals("nonsense", BaseUrls.withoutScheme("nonsense"))
+    }
 }

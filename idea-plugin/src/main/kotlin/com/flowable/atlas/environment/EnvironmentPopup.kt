@@ -41,8 +41,7 @@ object EnvironmentPopup {
         near: Component,
         onChosen: (AtlasConnection) -> Unit,
     ): com.intellij.openapi.ui.popup.ListPopup {
-        val catalog = AtlasEnvironments.getInstance()
-        val available = catalog.connections(kind)
+        val available = AtlasCatalog.connections(project, kind)
         val currentId = AtlasConnectionSelection.selected(project, kind)?.id
         val group = DefaultActionGroup()
 

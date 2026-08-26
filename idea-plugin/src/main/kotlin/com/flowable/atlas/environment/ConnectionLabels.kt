@@ -48,14 +48,24 @@ object ConnectionLabels {
             if (resolution.connection.requiresConfirmation) {
                 append("<br>Protected — Atlas asks before using it.")
             }
+            if (resolution.connection.shared) {
+                append("<br>Defined by this project; your credentials stay in the IDE password safe.")
+            }
         }.let { "<html>$it</html>" }
         Resolution.NotSet -> "Choose the ${kind.display.lowercase()} connection this project uses"
         is Resolution.Dangling ->
             "The ${kind.display.lowercase()} connection this project used is no longer configured."
     }
 
-    /** What a picker row shows: the environment, since one connection per kind makes that unambiguous. */
-    fun pickerItem(connection: AtlasConnection): String = shortName(connection.environmentName)
+    /**
+     * What a picker row shows: the environment, since one connection per kind makes that unambiguous —
+     * plus `(project)` when the definition is the repository's rather than this IDE's.
+     *
+     * Provenance is on the row and not only in the tooltip because it changes what the reader can do
+     * with the entry: a shared environment's URL is not theirs to edit, and its credentials are.
+     */
+    fun pickerItem(connection: AtlasConnection): String =
+        shortName(connection.environmentName) + if (connection.shared) " (project)" else ""
 
     /**
      * How a pull's app selection reads. Spelling out every key made the Hub — and with it the whole

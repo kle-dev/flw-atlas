@@ -1,8 +1,10 @@
 package com.flowable.atlas.settings.connections
 
 import com.flowable.atlas.design.DesignAuthMode
+import com.flowable.atlas.environment.AtlasCatalog
 import com.flowable.atlas.environment.AtlasConnectionIds
 import com.flowable.atlas.environment.AtlasEnvironments
+import com.flowable.atlas.environment.SharedEnvironments
 import com.flowable.atlas.environment.BaseUrls
 import com.flowable.atlas.environment.ConnectionKind
 
@@ -23,9 +25,12 @@ import com.flowable.atlas.environment.ConnectionKind
 class ConnectionsDraft private constructor(
     val environments: MutableList<Env>,
     val connections: MutableList<Conn>,
+    /** Environment names the project's committed file already defines, lowercased. */
+    private val sharedNames: Set<String>,
 ) {
 
-    class Env(var id: String, var name: String, var requireConfirmation: Boolean)
+    /** [shared] entries come from the project's committed file — shown, never edited here. */
+    class Env(var id: String, var name: String, var requireConfirmation: Boolean, val shared: Boolean = false)
 
     class Conn(
         var id: String,
@@ -34,7 +39,22 @@ class ConnectionsDraft private constructor(
         var baseUrl: String,
         var username: String,
         var authMode: DesignAuthMode,
+        val shared: Boolean = false,
     )
+
+    /**
+     * What Apply should write to — or delete from — the project's committed file.
+     *
+     * Held here rather than written on click for the same reason the rest of this class exists: a
+     * settings page that changed a *committed file* the moment you pressed a toolbar button would make
+     * *Cancel* a lie about the one change with consequences beyond your own machine.
+     */
+    val sharedExports = mutableSetOf<String>()
+
+    val sharedRemovals = mutableSetOf<String>()
+
+    /** True when the project's file already defines an environment of this name. */
+    fun isSharedByProject(name: String): Boolean = name.trim().lowercase() in sharedNames
 
     // ---- queries ------------------------------------------------------------------------------
 
@@ -65,8 +85,12 @@ class ConnectionsDraft private constructor(
         return env
     }
 
-    /** Adds the [kind] connection of [environmentId], or null when that slot is already filled. */
+    /** True when this page may edit [environmentId] — false for what the project defines. */
+    fun isEditable(environmentId: String): Boolean = environment(environmentId)?.shared == false
+
+    /** Adds the [kind] connection of [environmentId], or null when the slot is filled or not ours. */
     fun addConnection(environmentId: String, kind: ConnectionKind): Conn? {
+        if (!isEditable(environmentId)) return null
         if (connectionsOf(environmentId).any { it.kind == kind }) return null
         val environmentName = environment(environmentId)?.name.orEmpty()
         val conn = Conn(
@@ -79,12 +103,13 @@ class ConnectionsDraft private constructor(
 
     /** Removing an environment removes its connections — an orphan would only be re-homed anyway. */
     fun removeEnvironment(id: String) {
+        if (!isEditable(id)) return
         environments.removeAll { it.id == id }
         connections.removeAll { it.environmentId == id }
     }
 
     fun removeConnection(id: String) {
-        connections.removeAll { it.id == id }
+        connections.removeAll { it.id == id && !it.shared }
     }
 
     /**
@@ -111,9 +136,11 @@ class ConnectionsDraft private constructor(
      * and every picker renders in this order; alphabetically PROD would land second.
      */
     fun moveEnvironment(id: String, delta: Int): Boolean {
+        if (!isEditable(id)) return false
         val from = environments.indexOfFirst { it.id == id }
         val to = from + delta
-        if (from < 0 || to !in environments.indices) return false
+        // Never past the shared block: its order is the committed file's, not this list's.
+        if (from < 0 || to !in environments.indices || environments[to].shared) return false
         environments.add(to, environments.removeAt(from))
         return true
     }
@@ -122,11 +149,15 @@ class ConnectionsDraft private constructor(
 
     /** The first problem a human should fix, or null. Wording is the dialog's message. */
     fun validate(): String? {
-        environments.firstOrNull { it.name.isBlank() }?.let { return "An environment needs a name." }
+        // Only what this page can actually fix. A shared entry comes from a committed file: holding
+        // Apply hostage to a colleague's typo would block the user from saving their own work, and the
+        // reader of that file is git, not this dialog.
+        val own = environments.filterNot { it.shared }
+        own.firstOrNull { it.name.isBlank() }?.let { return "An environment needs a name." }
         val seenNames = HashSet<String>()
-        environments.firstOrNull { !seenNames.add(it.name.lowercase()) }
+        own.firstOrNull { !seenNames.add(it.name.lowercase()) }
             ?.let { return "There is already an environment called \"${it.name}\"." }
-        connections.firstOrNull { it.baseUrl.isBlank() }?.let {
+        connections.filterNot { it.shared }.firstOrNull { it.baseUrl.isBlank() }?.let {
             return "The ${it.kind.display} connection of \"${environment(it.environmentId)?.name}\" needs a URL."
         }
         // Two environments on one URL are deliberately allowed. They share the one PasswordSafe record
@@ -138,15 +169,25 @@ class ConnectionsDraft private constructor(
 
     // ---- comparison and persistence -----------------------------------------------------------
 
-    /** A value the page compares for `isModified()`; ids included, since a copy is a real change. */
+    /**
+     * A value the page compares for `isModified()`; ids included, since a copy is a real change.
+     *
+     * Shared entries are left out — nothing here can change them, and a `git pull` landing while the
+     * dialog is open would otherwise register as *your* unsaved edit. What a pending share *is* part
+     * of it, because that is a change this page will make.
+     */
     fun snapshot(): List<String> =
-        environments.map { "E ${it.id}|${it.name}|${it.requireConfirmation}" } +
-            connections.map { "C ${it.id}|${it.environmentId}|${it.kind}|${it.baseUrl}|${it.username}|${it.authMode}" }
+        environments.filterNot { it.shared }.map { "E ${it.id}|${it.name}|${it.requireConfirmation}" } +
+            connections.filterNot { it.shared }
+                .map { "C ${it.id}|${it.environmentId}|${it.kind}|${it.baseUrl}|${it.username}|${it.authMode}" } +
+            sharedExports.sorted().map { "S+ $it" } +
+            sharedRemovals.sorted().map { "S- $it" }
 
     fun toEnvironmentStates(): List<AtlasEnvironments.EnvironmentState> =
-        environments.map { AtlasEnvironments.EnvironmentState(it.id, it.name.trim(), it.requireConfirmation) }
+        environments.filterNot { it.shared }
+            .map { AtlasEnvironments.EnvironmentState(it.id, it.name.trim(), it.requireConfirmation) }
 
-    fun toConnectionStates(): List<AtlasEnvironments.ConnectionState> = connections.map {
+    fun toConnectionStates(): List<AtlasEnvironments.ConnectionState> = connections.filterNot { it.shared }.map {
         AtlasEnvironments.ConnectionState(
             it.id, it.environmentId, it.kind, BaseUrls.normalize(it.kind, it.baseUrl), it.username.trim(), it.authMode,
         )
@@ -156,8 +197,14 @@ class ConnectionsDraft private constructor(
 
     private fun takenConnectionIds(): Set<String> = connections.mapTo(HashSet()) { it.id }
 
+    /**
+     * Only the developer's **own** names collide. A shared environment of the same name is shadowed by
+     * a local one on purpose ([com.flowable.atlas.environment.AtlasCatalog]), so copying the project's
+     * `QA` to change one URL has to be allowed to produce a local `QA` — turning it into `QA (2)` would
+     * leave the project's version still in every picker, which is the opposite of what was asked for.
+     */
     private fun uniqueName(wanted: String): String {
-        val taken = environments.mapTo(HashSet()) { it.name.lowercase() }
+        val taken = environments.filterNot { it.shared }.mapTo(HashSet()) { it.name.lowercase() }
         val base = wanted.trim().ifBlank { "New Environment" }
         if (base.lowercase() !in taken) return base
         var suffix = 2
@@ -167,12 +214,30 @@ class ConnectionsDraft private constructor(
 
     companion object {
 
-        fun from(catalog: AtlasEnvironments): ConnectionsDraft {
+        /**
+         * The developer's own list first, then whatever the project shares that it does not already
+         * shadow — the same order and the same shadowing rule the pickers use, so this page shows the
+         * list the rest of the plugin will offer rather than a second, differently-filtered one.
+         */
+        fun from(catalog: AtlasEnvironments, shared: SharedEnvironments): ConnectionsDraft {
             val environments = catalog.environments()
                 .mapTo(mutableListOf()) { Env(it.id, it.name, it.requireConfirmation) }
             val connections = catalog.connections()
                 .mapTo(mutableListOf()) { Conn(it.id, it.environmentId, it.kind, it.baseUrl, it.username, it.authMode) }
-            return ConnectionsDraft(environments, connections)
+            val sharedEnvironments = shared.environments()
+            val visible = AtlasCatalog.mergeEnvironments(catalog.environments(), sharedEnvironments)
+                .mapTo(HashSet()) { it.id }
+            sharedEnvironments.filter { it.id in visible }.forEach {
+                environments += Env(it.id, it.name, it.requireConfirmation, shared = true)
+            }
+            shared.connections().filter { it.environmentId in visible }.forEach {
+                connections += Conn(
+                    it.id, it.environmentId, it.kind, it.baseUrl, it.username, it.authMode, shared = true,
+                )
+            }
+            return ConnectionsDraft(
+                environments, connections, sharedEnvironments.mapTo(HashSet()) { it.name.trim().lowercase() },
+            )
         }
     }
 }

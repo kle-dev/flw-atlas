@@ -25,6 +25,12 @@ data class AtlasConnection(
     val environmentName: String,
     /** The environment is marked *Protected* — confirm before pulling from or evaluating against it. */
     val requiresConfirmation: Boolean,
+    /**
+     * Defined by the *project* rather than by this IDE — see [SharedEnvironments]. Pickers say so, and
+     * the settings page will not let it be edited: the definition lives in a committed file, so an edit
+     * here would be a local change to something the whole team reads.
+     */
+    val shared: Boolean = false,
 ) {
 
     /** `PROD · Design` — what a confirmation dialog and a wide status line name. */

@@ -2,6 +2,7 @@ package com.flowable.atlas.settings.connections
 
 import com.flowable.atlas.design.DesignAuthMode
 import com.flowable.atlas.environment.AtlasEnvironments
+import com.flowable.atlas.environment.SharedEnvironments
 import com.flowable.atlas.environment.ConnectionKind
 import com.intellij.openapi.util.Disposer
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
@@ -14,7 +15,7 @@ import com.intellij.testFramework.fixtures.BasePlatformTestCase
  */
 class ConnectionFormsTest : BasePlatformTestCase() {
 
-    private fun draft(): ConnectionsDraft = ConnectionsDraft.from(AtlasEnvironments())
+    private fun draft(): ConnectionsDraft = ConnectionsDraft.from(AtlasEnvironments(), SharedEnvironments())
 
     fun testTheDesignFormRoundTripsAConnectionThroughTheDraft() {
         val d = draft()

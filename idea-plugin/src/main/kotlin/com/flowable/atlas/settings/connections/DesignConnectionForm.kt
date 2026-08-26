@@ -15,7 +15,10 @@ import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPasswordField
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.AlignX
+import com.intellij.ui.dsl.builder.COLUMNS_MEDIUM
 import com.intellij.ui.dsl.builder.Row
+import com.intellij.ui.dsl.builder.RowsRange
+import com.intellij.ui.dsl.builder.columns
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.ui.dsl.listCellRenderer.textListCellRenderer
 import javax.swing.JButton
@@ -68,8 +71,10 @@ class DesignConnectionForm(private val project: Project) : Disposable {
         isVisible = false
     }
 
-    private lateinit var basicRow: Row
-    private lateinit var tokenRow: Row
+    private val sharedNote = JBLabel(FormStatus.html(SHARED_NOTE)).apply { foreground = JBColor.GRAY }
+    private lateinit var sharedRow: Row
+    private lateinit var basicRow: RowsRange
+    private lateinit var tokenRow: RowsRange
 
     /** Guards the listeners while fields are filled programmatically. */
     private var populating = false
@@ -98,19 +103,29 @@ class DesignConnectionForm(private val project: Project) : Disposable {
                     "Credentials go to the IDE password safe, never into a file.",
             )
         }
-        // resizableColumn() throughout: align(FILL) alone leaves a column at its minimum width, which
-        // renders a URL field about as wide as the word "http:".
-        row("Server URL:") { cell(baseUrlField).align(AlignX.FILL).resizableColumn() }
+        // Two things, and both are needed. resizableColumn(), because align(FILL) alone leaves a column
+        // at its minimum width, which renders a URL field about as wide as the word "http:". And
+        // columns(), because a JTextField with no column count reports its *text* as its preferred —
+        // and therefore its minimum — width: a long Design URL made this page demand more room than
+        // the settings dialog has, and everything to the right of it was pushed off the edge.
+        sharedRow = row("") { cell(sharedNote) }
+        row("Server URL:") { cell(baseUrlField).columns(COLUMNS_MEDIUM).align(AlignX.FILL).resizableColumn() }
         row("Authentication:") { cell(authModeCombo) }
-        basicRow = row("Username:") {
-            cell(usernameField).align(AlignX.FILL).resizableColumn()
-            label("Password:")
-            cell(passwordField).align(AlignX.FILL).resizableColumn()
+        // A row per field rather than username and password side by side. Two fields and a label in one
+        // row means the page cannot be narrower than both of them at once, and this page already gives
+        // a third of its width to the environment tree.
+        basicRow = rowsRange {
+            row("Username:") { cell(usernameField).columns(COLUMNS_MEDIUM).align(AlignX.FILL).resizableColumn() }
+            row("Password:") { cell(passwordField).columns(COLUMNS_MEDIUM).align(AlignX.FILL).resizableColumn() }
         }
-        tokenRow = row("Access token:") {
-            cell(tokenField).align(AlignX.FILL).resizableColumn()
-            button("Create Token…") { createToken() }
-            link("Manage in Design…") { openTokenManagement() }
+        tokenRow = rowsRange {
+            row("Access token:") {
+                cell(tokenField).columns(COLUMNS_MEDIUM).align(AlignX.FILL).resizableColumn()
+            }
+            row("") {
+                button("Create Token…") { createToken() }
+                link("Manage in Design…") { openTokenManagement() }
+            }
         }
         // The status gets a row of its own: sharing one with the button let a long message drive the
         // column's width, which pushed every field past the edge of the dialog.
@@ -144,6 +159,11 @@ class DesignConnectionForm(private val project: Project) : Disposable {
         } finally {
             populating = false
         }
+        // A shared connection's URL and auth mode belong to the committed file; the credentials below
+        // them do not, and are the whole reason this form still opens for one.
+        sharedRow.visible(conn.shared)
+        baseUrlField.isEditable = !conn.shared
+        authModeCombo.isEnabled = !conn.shared
         updateAuthRows()
         status.text = FormStatus.html("")
         saveAnywayHint.isVisible = false
@@ -160,10 +180,13 @@ class DesignConnectionForm(private val project: Project) : Disposable {
      */
     fun flush() {
         val conn = current ?: return
-        val normalized = DesignClient.normalizeBaseUrl(baseUrlField.text)
+        // A shared connection keeps the file's URL and mode whatever is on screen — the fields are not
+        // editable, and reading them back would be one accident away from a local override nobody asked
+        // for. The username still travels: it is this developer's, and it keys their keychain record.
+        val normalized = if (conn.shared) conn.baseUrl else DesignClient.normalizeBaseUrl(baseUrlField.text)
         conn.baseUrl = normalized
         conn.username = usernameField.text.trim()
-        conn.authMode = selectedAuthMode()
+        if (!conn.shared) conn.authMode = selectedAuthMode()
         typed[conn.id] = Secrets(
             normalized,
             conn.username,
@@ -369,6 +392,12 @@ class DesignConnectionForm(private val project: Project) : Disposable {
                 }
             }, ModalityState.any())
         }
+    }
+
+    private companion object {
+        const val SHARED_NOTE = "Defined by this project — the URL comes from the committed " +
+                    "<code>.idea/flowable-environments.xml</code>, so everyone who clones the repository has it. " +
+                    "Your username and password are yours alone and stay in the IDE password safe."
     }
 
     /**

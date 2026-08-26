@@ -39,4 +39,29 @@ class InspectSessionTest {
     @Test fun unknownBaseUrlReturnsNull() {
         assertNull(InspectSession.get("https://never/seen-${'$'}{}"))
     }
+
+    @Test fun basicAuthDecodesWhatThePasteDialogEncoded() {
+        val encoded = java.util.Base64.getEncoder().encodeToString("demo:secret".toByteArray())
+        InspectSession.set("https://host/basic", mapOf("Authorization" to "Basic $encoded"))
+        assertEquals("demo" to "secret", InspectSession.basicAuth("https://host/basic"))
+    }
+
+    @Test fun basicAuthKeepsColonsInThePassword() {
+        val encoded = java.util.Base64.getEncoder().encodeToString("demo:a:b:c".toByteArray())
+        InspectSession.set("https://host/colons", mapOf("Authorization" to "Basic $encoded"))
+        assertEquals("demo" to "a:b:c", InspectSession.basicAuth("https://host/colons"))
+    }
+
+    @Test fun basicAuthIgnoresEverythingThatIsNotBasic() {
+        InspectSession.set("https://host/cookie", mapOf("Cookie" to "SESSION=abc"))
+        assertNull("an SSO cookie has no credentials to carry over", InspectSession.basicAuth("https://host/cookie"))
+        InspectSession.set("https://host/bearer", mapOf("Authorization" to "Bearer abc.def"))
+        assertNull(InspectSession.basicAuth("https://host/bearer"))
+        assertNull(InspectSession.basicAuth("https://host/nothing-captured"))
+    }
+
+    @Test fun basicAuthSurvivesAHeaderThatIsNotDecodable() {
+        InspectSession.set("https://host/junk", mapOf("Authorization" to "Basic not-base64!!"))
+        assertNull(InspectSession.basicAuth("https://host/junk"))
+    }
 }

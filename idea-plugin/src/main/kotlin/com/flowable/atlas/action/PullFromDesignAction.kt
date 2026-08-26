@@ -2,7 +2,7 @@ package com.flowable.atlas.action
 
 import com.flowable.atlas.design.DesignPullService
 import com.flowable.atlas.environment.AtlasConnectionSelection
-import com.flowable.atlas.environment.AtlasEnvironments
+import com.flowable.atlas.environment.AtlasCatalog
 import com.flowable.atlas.environment.ConnectionKind
 import com.flowable.atlas.environment.EnvironmentPopup
 import com.flowable.atlas.settings.EnvironmentsConfigurable
@@ -35,7 +35,7 @@ class PullFromDesignAction : AnAction() {
         }
         // Nothing chosen. With connections to choose from, a popup is far cheaper than a settings
         // dialog; with none, the settings page is the only thing that helps.
-        val available = AtlasEnvironments.getInstance().connections(ConnectionKind.DESIGN)
+        val available = AtlasCatalog.connections(project, ConnectionKind.DESIGN)
         if (available.isEmpty()) {
             ShowSettingsUtil.getInstance().showSettingsDialog(project, EnvironmentsConfigurable::class.java)
             if (AtlasConnectionSelection.selected(project, ConnectionKind.DESIGN) != null) {

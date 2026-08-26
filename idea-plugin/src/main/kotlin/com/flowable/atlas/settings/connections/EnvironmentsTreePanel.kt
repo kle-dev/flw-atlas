@@ -3,6 +3,7 @@ package com.flowable.atlas.settings.connections
 import com.flowable.atlas.environment.AtlasConnectionSelection
 import com.flowable.atlas.environment.AtlasEnvironments
 import com.flowable.atlas.environment.ConnectionKind
+import com.flowable.atlas.environment.SharedEnvironments
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionUpdateThread
@@ -53,8 +54,9 @@ class EnvironmentsTreePanel(private val project: Project) : Disposable {
     }
 
     private val catalog = AtlasEnvironments.getInstance()
+    private val shared = SharedEnvironments.getInstance(project)
 
-    private var draft = ConnectionsDraft.from(catalog)
+    private var draft = ConnectionsDraft.from(catalog, shared)
 
     /** The state the draft is compared against for `isModified()`. */
     private var baseline = draft.snapshot()
@@ -72,6 +74,9 @@ class EnvironmentsTreePanel(private val project: Project) : Disposable {
 
     private val designForm = DesignConnectionForm(project)
     private val workForm = WorkConnectionForm(project)
+
+    /** One form for both link-only kinds: a Control URL and a Hub URL differ in nothing but the hint. */
+    private val linkForm = LinkConnectionForm(project)
     private val environmentForm = EnvironmentForm(
         onEditConnection = { kind -> selectedEnvironmentId()?.let { env -> selectConnection(env, kind) } },
         onAddConnection = { kind -> selectedEnvironmentId()?.let { env -> addConnection(env, kind) } },
@@ -83,6 +88,7 @@ class EnvironmentsTreePanel(private val project: Project) : Disposable {
         add(environmentForm.component, CARD_ENVIRONMENT)
         add(designForm.component, CARD_DESIGN)
         add(workForm.component, CARD_WORK)
+        add(linkForm.component, CARD_LINK)
     }
 
     /** Which form currently holds unflushed edits, so a node switch never loses typing. */
@@ -92,9 +98,15 @@ class EnvironmentsTreePanel(private val project: Project) : Disposable {
         firstComponent = ToolbarDecorator.createDecorator(tree)
             .setAddAction { button -> showAddPopup(button) }
             .setRemoveAction { removeSelected() }
+            // Greyed rather than silently inert: what the project defines is not this page's to delete
+            // or reorder, and a button that looks available and does nothing teaches nothing.
+            .setRemoveActionUpdater { selectionIsEditable() }
             .setMoveUpAction { moveSelected(-1) }
+            .setMoveUpActionUpdater { selectionIsEditable() }
             .setMoveDownAction { moveSelected(1) }
+            .setMoveDownActionUpdater { selectionIsEditable() }
             .addExtraAction(copyAction())
+            .addExtraAction(shareAction())
             .createPanel()
         secondComponent = JBScrollPane(detail).apply { border = JBUI.Borders.empty() }
     }
@@ -113,7 +125,7 @@ class EnvironmentsTreePanel(private val project: Project) : Disposable {
     // ---- the Configurable's contract ----------------------------------------------------------
 
     fun reset() {
-        draft = ConnectionsDraft.from(catalog)
+        draft = ConnectionsDraft.from(catalog, shared)
         baseline = draft.snapshot()
         loaded = null
         rebuildTree(select = null)
@@ -133,10 +145,43 @@ class EnvironmentsTreePanel(private val project: Project) : Disposable {
     fun apply() {
         flushCurrentForm()
         catalog.replaceAll(draft.toEnvironmentStates(), draft.toConnectionStates())
+        applySharing()
         designForm.saveSecrets()
         workForm.saveSecrets()
+        // The project's file may have gained or lost entries, so the draft is rebuilt from both stores
+        // rather than kept — otherwise a freshly shared environment would still read as "not shared".
+        draft = ConnectionsDraft.from(catalog, shared)
         baseline = draft.snapshot()
         rebuildTree(select = loaded)
+    }
+
+    /**
+     * Writes the pending shares into the project's committed file. Only URLs travel: [SharedEnvironments]
+     * has no field for a username or a secret, so this cannot leak one however it is called.
+     */
+    private fun applySharing() {
+        draft.sharedRemovals.forEach { shared.unshare(it) }
+        draft.sharedExports.forEach { id ->
+            val env = draft.environment(id) ?: return@forEach
+            shared.share(
+                env.name,
+                env.requireConfirmation,
+                draft.connectionsOf(id).map { conn ->
+                    com.flowable.atlas.environment.AtlasConnection(
+                        id = conn.id,
+                        kind = conn.kind,
+                        baseUrl = conn.baseUrl,
+                        username = "",
+                        authMode = conn.authMode,
+                        environmentId = env.id,
+                        environmentName = env.name,
+                        requiresConfirmation = env.requireConfirmation,
+                    )
+                },
+            )
+        }
+        draft.sharedExports.clear()
+        draft.sharedRemovals.clear()
     }
 
     override fun dispose() {}
@@ -224,6 +269,7 @@ class EnvironmentsTreePanel(private val project: Project) : Disposable {
             is Node.Conn -> {
                 designForm.flush()
                 workForm.flush()
+                linkForm.flush()
             }
             null -> Unit
         }
@@ -244,12 +290,21 @@ class EnvironmentsTreePanel(private val project: Project) : Disposable {
             }
             is Node.Conn -> {
                 val conn = draft.connection(node.id) ?: return showEmpty()
-                if (conn.kind == ConnectionKind.DESIGN) {
-                    designForm.load(conn)
-                    cards.show(detail, CARD_DESIGN)
-                } else {
-                    workForm.load(conn)
-                    cards.show(detail, CARD_WORK)
+                // Exhaustive rather than "Design, else Work": the else branch would have shown the app
+                // form — username, password, Test Connection — for a Control URL.
+                when (conn.kind) {
+                    ConnectionKind.DESIGN -> {
+                        designForm.load(conn)
+                        cards.show(detail, CARD_DESIGN)
+                    }
+                    ConnectionKind.WORK -> {
+                        workForm.load(conn)
+                        cards.show(detail, CARD_WORK)
+                    }
+                    ConnectionKind.CONTROL, ConnectionKind.HUB -> {
+                        linkForm.load(conn)
+                        cards.show(detail, CARD_LINK)
+                    }
                 }
                 loaded = node
             }
@@ -278,7 +333,10 @@ class EnvironmentsTreePanel(private val project: Project) : Disposable {
         if (free.isNotEmpty()) {
             group.addSeparator()
             free.forEach { kind ->
-                group.add(simpleAction("Flowable ${kind.display} Connection", null) {
+                // "URL" rather than "Connection" for the link-only kinds: nothing is connected to, and
+                // the word is what tells the user which of the two forms they are about to get.
+                val what = if (kind.linkOnly) "URL" else "Connection"
+                group.add(simpleAction("Flowable ${kind.display} $what", null) {
                     addConnection(environmentId!!, kind)
                 })
             }
@@ -351,6 +409,55 @@ class EnvironmentsTreePanel(private val project: Project) : Disposable {
             environmentForm.focusName()
         }
 
+    /**
+     * Puts the selected environment into — or takes it out of — the project's committed file, so a
+     * colleague who clones the repository has DEV/QA/PROD in every picker without configuring anything.
+     *
+     * Only the name, the *Protected* flag and one URL per kind travel. Usernames and passwords stay in
+     * this IDE's password safe: each developer signs in as themselves, which is what you want anyway —
+     * a shared login is one audit trail with everyone's name missing from it.
+     */
+    private fun shareAction(): AnAction =
+        object : AnAction("Share with Project", null, AllIcons.Actions.MenuSaveall) {
+            override fun actionPerformed(e: AnActionEvent) {
+                val env = selectedEnvironmentId()?.let { draft.environment(it) } ?: return
+                flushCurrentForm()
+                when {
+                    env.shared -> draft.sharedRemovals += env.name
+                    draft.sharedExports.remove(env.id) -> Unit          // clicked twice: undo it
+                    else -> {
+                        draft.sharedRemovals -= env.name
+                        draft.sharedExports += env.id
+                    }
+                }
+                repaintLabels()
+            }
+
+            override fun update(e: AnActionEvent) {
+                val env = selectedEnvironmentId()?.let { draft.environment(it) }
+                e.presentation.isEnabled = env != null
+                e.presentation.text = when {
+                    env == null -> "Share with Project"
+                    env.shared -> "Stop Sharing with Project"
+                    draft.sharedExports.contains(env.id) -> "Don't Share with Project"
+                    draft.isSharedByProject(env.name) -> "Update in Project"
+                    else -> "Share with Project"
+                }
+                e.presentation.description =
+                    "Put this environment's URLs in .idea/flowable-environments.xml, for everyone who " +
+                        "clones the repository. Credentials are never written there."
+            }
+
+            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+        }
+
+    /** False while the selection belongs to the project rather than to this IDE. */
+    private fun selectionIsEditable(): Boolean = when (val node = selectedNode()) {
+        is Node.Env -> draft.isEditable(node.id)
+        is Node.Conn -> draft.connection(node.id)?.shared == false
+        null -> false
+    }
+
     private fun simpleAction(text: String, icon: javax.swing.Icon?, run: () -> Unit): AnAction =
         object : AnAction(text, null, icon) {
             override fun actionPerformed(e: AnActionEvent) = run()
@@ -376,6 +483,17 @@ class EnvironmentsTreePanel(private val project: Project) : Disposable {
                     append(env.name.ifBlank { "(unnamed)" }, SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES)
                     // A padlock, not a warning: nothing is wrong with PROD, it is simply guarded.
                     if (env.requireConfirmation) icon = AllIcons.Nodes.Padlock
+                    // Where the definition lives — which is what decides whether the node can be edited
+                    // here at all, so it is not a detail to leave to a tooltip.
+                    when {
+                        env.shared && env.name in draft.sharedRemovals ->
+                            append("  project · will stop sharing", SimpleTextAttributes.GRAYED_ITALIC_ATTRIBUTES)
+                        env.shared -> append("  project", SimpleTextAttributes.GRAYED_ITALIC_ATTRIBUTES)
+                        env.id in draft.sharedExports ->
+                            append("  will share with project", SimpleTextAttributes.GRAYED_ITALIC_ATTRIBUTES)
+                        draft.isSharedByProject(env.name) ->
+                            append("  shadows the project's", SimpleTextAttributes.GRAYED_ITALIC_ATTRIBUTES)
+                    }
                     if (draft.connectionsOf(env.id).isEmpty()) {
                         append("  no connections", SimpleTextAttributes.GRAYED_ATTRIBUTES)
                     }
@@ -401,5 +519,6 @@ class EnvironmentsTreePanel(private val project: Project) : Disposable {
         const val CARD_ENVIRONMENT = "environment"
         const val CARD_DESIGN = "design"
         const val CARD_WORK = "work"
+        const val CARD_LINK = "link"
     }
 }

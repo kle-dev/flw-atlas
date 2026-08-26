@@ -23,6 +23,20 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   ordinary thing, shown without any warning. Copy an environment to clone it for the next stage; reorder
   them, because DEV → QA → UAT → PROD is a pipeline and alphabetical puts PROD second. Passwords and
   tokens stay in the IDE password safe, keyed by URL, so they are never in a shared file.
+- **Control and Hub addresses belong in the environment too** — a stage is not only the two servers
+  Atlas talks to; it is also the Flowable **Control** and Flowable **Hub** pages you open by hand, and
+  keeping those in bookmarks while the URLs beside them live in the IDE was the obvious gap. They are a
+  URL and nothing else: no username, no password, no *Test Connection*, because Atlas never calls them —
+  a form asking for a password nothing would read is worse than no form. Everything else about an
+  environment applies unchanged, including copying it for the next stage.
+- **Open an environment in the browser from the Atlas Hub** — its toolbar's *Open Environment in
+  Browser* lists every address in the catalog, grouped per stage, and hands the one you pick to the
+  browser: Design, the app, Control, Hub. Not just the two new kinds — a Design base URL *is* the Design
+  UI and a Work base URL *is* the app, so leaving them out would have meant keeping bookmarks for
+  exactly the two addresses Atlas knows best. It follows neither the pull's environment nor the
+  playground's: a third rule about which one it means is one more thing that can silently be wrong, so
+  it asks, and speed search makes the asking a keystroke. A protected stage shows its lock in the list
+  and nothing more — opening a page changes nothing, and a confirmation on a link would be theatre.
 - **Which environment a project uses is two choices, not one** — the Design pull and the Expression
   Playground point independently, and that is the point rather than an oversight: running against QA
   while models still come from DEV1 is a normal way to work. Every picker only offers environments that
@@ -31,9 +45,20 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
 - **Pasting a Work URL is now the fastest way to switch environment** — the playground's *App URL* field
   already filled in the scope and instance id from a pasted link; it now recognises which of your
   environments the link belongs to and switches to it, so one paste moves the connection, the scope and
-  the instance together. A link matching no environment is used as-is, marked *not saved*, with one link
-  to turn it into one. What it no longer does is write that URL into the project's committed settings —
-  a QA link pasted for one evaluation used to become the whole team's configured server.
+  the instance together. A link matching no environment is used as-is, as a target that lives for this
+  IDE session. What it no longer does is write that URL into the project's committed settings — a QA
+  link pasted for one evaluation used to become the whole team's configured server.
+- **Every pasted link keeps its own entry** — the playground held exactly one pasted target, so the
+  second link silently evicted the first, which is backwards: pasting two links is what you do when you
+  are comparing two apps, and re-pasting the one you just looked at was the cost of a decision you never
+  made. They all sit in the picker now, marked *(this session)*, and the button beside it is where they
+  are managed: **Forget** one, forget all of them, or — for the one that turns out to be a target you
+  keep coming back to — **Save as an Environment…**, which asks for the single thing that was missing.
+  The name may be one that already exists: a stage with a Design server and no app joins it rather than
+  making a second environment with the same label. Credentials typed in the paste dialog go with it,
+  into the password safe, so nothing has to be typed twice. Forgetting a target takes whatever was
+  captured for it along — a cookie left behind for a URL that is in no list any more is a credential
+  nobody can see and nobody asked to keep.
 - **Protected environments** — tick *Ask before pulling from or evaluating against this environment* and
   Atlas asks first, and marks it with a lock wherever it can be picked. A pull asks modally, because it
   replaces archives in the working tree; an evaluation asks from a small confirmation with *Cancel*
@@ -61,11 +86,54 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   from DEV1*. Both pickers are ordinary drop-downs rather than a status line with a *Change…* link: the
   link cost the same clicks but did not look like a choice, and switching is the gesture the panel is
   organised around. They open instantly, since the environment list is in memory; the workspace list is
-  fetched the first time the drop-down is opened, not every time the panel is drawn. Everything a
+  fetched when you switch environment or open the drop-down, not every time the panel is drawn. Everything a
   drop-down offers can be selected — an entry that sends you to Settings to first create what it
   promised is not a choice. The runtime environment sits in its own section beside *Open Playground*.
 - **The workspace and app selection is per environment** — a workspace key belongs to one server, so a
   single project-wide value was right for at most one environment and silently wrong on the next.
+  Switching environment lands in the two pickers below it: the new server's workspaces are read right
+  then, and that environment's saved workspace and apps come back ticked. A workspace or app list that
+  could not be read is no longer remembered as read, so the next refresh tries again instead of leaving
+  an empty list looking like an answer.
+- **Environments a repository ships to its team** — an environment list was a thing every developer
+  built by hand, from a wiki page or a colleague's screenshot, and four people typing four URLs get at
+  least one of them wrong. A project can now define its own: *Settings → Environments → **Share with
+  Project*** writes the selected environment into `.idea/flowable-environments.xml`, and everyone who
+  clones the repository has it in every picker, marked *(project)*, with no configuration at all.
+  Committed like `.idea/flowable-atlas.xml` beside it, so a URL that moves is a commit rather than six
+  settings dialogs.
+  **No credentials, and not as a rule someone has to remember** — the file's schema has a name, the
+  *Protected* flag and one URL per kind, and no field a username or a password could go in. Each
+  developer signs in as themselves, from the IDE password safe as before; a shared login is one audit
+  trail with everyone's name missing from it.
+  Your own list still wins: define an environment of the same name and it shadows the project's
+  entirely, which is how you point *QA* at your own instance without arguing with the repository. A
+  shared entry is read-only here — *Copy Environment* turns it into one of yours in one click — and the
+  file is re-read when a `git pull` changes it, so the Hub cannot go on offering a URL that has moved.
+- **The Environments page fits its dialog again** — username and password shared one row, and a text
+  field with no column count reports its *text* as its minimum width, so a long Design URL made the page
+  demand more room than the settings dialog has and pushed the password field off the right edge. A row
+  per field, and every URL field bounded.
+- **The Hub stops spending its height on empty boxes** — the explorer list reserved eight rows whether
+  or not anything had been generated, and the app list a fixed ~140px for a workspace that usually holds
+  one app: between them, most of a panel that has five sections to fit into one narrow stripe. Both are
+  sized to what they hold now, an empty section is a single grey line, and a workspace with twenty apps
+  scrolls at eight rows instead of pushing *Pull from …* off the bottom.
+- **“Which Flowable project” is a drop-down** — it was a line of text with a *Change…* link underneath,
+  and the link was hidden whenever detection had not turned anything up, so in a repository holding
+  several apps the answer to "can I pick one?" was a blank space. Now it is the same kind of picker as
+  the environment rows, always offering the whole repository, and it costs one line instead of two. The
+  amber *"3 found — choose one"* stays until a choice is actually made — including a deliberate
+  *whole repository*, which the plugin can tell apart from a default nobody looked at.
+- **“Not set” is now something the plugin can actually hold** — with a single environment defined,
+  picking *not set* did nothing: it unset the pointer, and "nothing stored" already meant *"you have one
+  environment, use it"*, so the rule answered with the same environment the user had just deselected.
+  The picker read *not set* while the workspace and the ticked apps underneath it stayed, and a pull
+  would have run against that environment. A deliberate *not set* is stored as such now — it beats the
+  single-environment convenience, which still applies when no choice was ever made — and it empties the
+  two pickers below, because a panel still showing the previous environment's apps reads as a selection
+  that carried over, which is exactly what a pull must never do. Choosing the environment again brings
+  its workspace and apps back; saying *not set* is not deleting anything.
 - **Two environments may point at the same server** — one Design server hosting a DEV workspace and a
   QA workspace is an ordinary setup, and the first cut refused to save it on the grounds that the two
   would share a saved password. They do share it, and that is correct: same server, same login. A rule

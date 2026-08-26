@@ -34,8 +34,11 @@ class EnvironmentsConfigurable(project: Project) : AtlasProjectConfigurable(
             row {
                 comment(
                     "Shared by every project in this IDE — define a server once and pick it anywhere. " +
-                        "Which of them <i>this</i> project uses is on the Connections page. Passwords and " +
-                        "access tokens go to the IDE password safe, never into a file.",
+                        "Passwords and access tokens go to the IDE password safe, never into a file.<br>" +
+                        "Entries marked <i>project</i> come from this repository's committed " +
+                        "<code>.idea/flowable-environments.xml</code> and are the same for everyone who " +
+                        "clones it; <b>Share with Project</b> puts one of yours there. Only URLs travel — " +
+                        "each developer signs in as themselves.",
                 )
             }
             row {

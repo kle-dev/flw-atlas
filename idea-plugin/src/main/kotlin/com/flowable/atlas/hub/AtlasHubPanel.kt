@@ -10,12 +10,14 @@ import com.flowable.atlas.design.DesignCredentials
 import com.flowable.atlas.design.DesignPullSelection
 import com.flowable.atlas.design.DesignPullService
 import com.flowable.atlas.events.AtlasEvents
+import com.flowable.atlas.environment.AtlasCatalog
 import com.flowable.atlas.environment.AtlasConnection
 import com.flowable.atlas.environment.AtlasConnectionSelection
 import com.flowable.atlas.environment.AtlasDesignTarget
 import com.flowable.atlas.environment.AtlasEnvironments
 import com.flowable.atlas.environment.ConnectionKind
 import com.flowable.atlas.environment.ConnectionLabels
+import com.flowable.atlas.environment.EnvironmentLinks
 import com.flowable.atlas.environment.EnvironmentPopup
 import com.flowable.atlas.events.AtlasEventsListener
 import com.flowable.atlas.explorer.AtlasBrowser
@@ -66,8 +68,6 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.actionButton
 import com.intellij.ui.dsl.listCellRenderer.textListCellRenderer
-import com.intellij.util.ui.JBUI
-import java.awt.Dimension
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.ui.jcef.JBCefApp
 import com.intellij.util.SingleAlarm
@@ -91,8 +91,12 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
     private data class ExplorerArtifact(val path: Path, val relative: String, val modified: Long)
 
     private data class Snapshot(
-        val projectText: String,
-        val showChangeLink: Boolean,
+        /** Detected Flowable sub-projects, root-relative — the picker's choices beside "whole project". */
+        val subProjects: List<String>,
+        /** The one in use; `""` is the whole repository. */
+        val activeSubProject: String,
+        /** Set only while a repository holds several and nobody has said which — otherwise blank. */
+        val projectNote: String,
         val indexText: String,
         val artifacts: List<ExplorerArtifact>,
         val designText: String,
@@ -110,7 +114,22 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         val pullSelection: DesignPullSelection,
     )
 
-    private val projectStatus = JBLabel()
+    /**
+     * Which Flowable project Atlas works on — a combo for the same reason the environment rows are one:
+     * a line reading *Whole project* with no control beside it answers "what is this?" but not "is this
+     * mine to change?", and in a repository holding several apps that second question is the whole
+     * point of the row. Closed, it costs the line the label cost, and it replaces the *Change…* link
+     * that sat on a second line below it.
+     */
+    private val projectCombo = ComboBox<String?>().apply {
+        renderer = SimpleListCellRenderer.create<String?> { label, value, _ ->
+            label.text = if (value.isNullOrBlank()) "Whole project" else value
+        }
+        addActionListener { if (!populatingCombos) chooseSubProject(selectedItem as? String) }
+    }
+
+    /** Amber, not red: several projects and no choice yet is a prompt, not a fault. */
+    private val projectNote = JBLabel().apply { foreground = JBColor.ORANGE }
     private val noEnvironmentsStatus = JBLabel("No environments yet")
 
     /**
@@ -138,14 +157,15 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
     private var designConnectionRow: com.intellij.ui.dsl.builder.Row? = null
     private var workConnectionRow: com.intellij.ui.dsl.builder.Row? = null
     private var pullLink: javax.swing.JComponent? = null
-    private var changeProjectLink: javax.swing.JComponent? = null
     private val indexStatus = JBLabel()
     private val designStatus = JBLabel()
     private var designStaleRow: com.intellij.ui.dsl.builder.Row? = null
     private var openInBrowserLink: javax.swing.JComponent? = null
     private val artifactsModel = CollectionListModel<ExplorerArtifact>()
     private val artifactsList = JBList(artifactsModel).apply {
-        visibleRowCount = 8
+        // Set from the content on every refresh — see [applyArtifacts]. A fixed eight rows meant a
+        // panel that is mostly empty box: the ordinary project generates *one* explorer.
+        visibleRowCount = 1
         setEmptyText("No explorer generated yet")
         cellRenderer = object : ColoredListCellRenderer<ExplorerArtifact>() {
             override fun customizeCellRenderer(
@@ -169,11 +189,18 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         })
     }
 
+    private val artifactsScroll = JBScrollPane(artifactsList)
+    private val explorerHint = JBLabel("No explorer generated yet").apply { foreground = JBColor.GRAY }
+    private var explorerListRow: com.intellij.ui.dsl.builder.Row? = null
+    private var explorerHintRow: com.intellij.ui.dsl.builder.Row? = null
+
     // -- Design pull selection (personal override of the configured default) ----------------------
 
     private val appList = CheckBoxList<DesignClient.App>().apply {
         setCheckBoxListListener { _, _ -> if (!populatingApps) onSelectionEdited() }
+        visibleRowCount = 1
     }
+    private val appsScroll = JBScrollPane(appList)
     /**
      * The workspace list is a server round-trip, so the combo starts holding the stored key as a
      * placeholder and fetches the real list the first time it is opened — the panel still never calls
@@ -182,7 +209,8 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
     private val workspaceCombo = ComboBox<DesignClient.Workspace>().apply {
         renderer = textListCellRenderer("none selected") { DesignAppListUi.workspaceLabel(it) }
         addPopupMenuListener(object : javax.swing.event.PopupMenuListener {
-            override fun popupMenuWillBecomeVisible(e: javax.swing.event.PopupMenuEvent) = loadWorkspaces(force = false)
+            override fun popupMenuWillBecomeVisible(e: javax.swing.event.PopupMenuEvent) =
+                loadWorkspaces(force = false, reveal = true)
             override fun popupMenuWillBecomeInvisible(e: javax.swing.event.PopupMenuEvent) = Unit
             override fun popupMenuCanceled(e: javax.swing.event.PopupMenuEvent) = Unit
         })
@@ -243,11 +271,11 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
     }
 
     /**
-     * Openers plus a refresh, and nothing else: the two explorers this plugin has, and the panel's own
-     * reload. *Generate Atlas Explorer* and *Pull from Design* used to sit here too, and both are already
-     * links inside the section whose state they change — a second copy only made the row wide and the
-     * choice ambiguous. Doing something to the project belongs next to that thing's state; getting
-     * somewhere belongs here.
+     * Openers plus a refresh, and nothing else: the two explorers this plugin has, the environment's own
+     * pages, and the panel's own reload. *Generate Atlas Explorer* and *Pull from Design* used to sit
+     * here too, and both are already links inside the section whose state they change — a second copy
+     * only made the row wide and the choice ambiguous. Doing something to the project belongs next to
+     * that thing's state; getting somewhere belongs here.
      */
     private fun buildToolbarGroup(): DefaultActionGroup {
         val am = ActionManager.getInstance()
@@ -256,6 +284,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
             FlowableActionIds.OPEN_ATLAS_EXPLORER,
             FlowableActionIds.OPEN_EXPRESSION_PLAYGROUND,
         ).forEach { id -> am.getAction(id)?.let(group::add) }
+        group.add(openEnvironmentAction())
         group.add(object : AnAction("Refresh", "Refresh the Atlas Hub", AllIcons.Actions.Refresh), DumbAware {
             override fun actionPerformed(e: AnActionEvent) = refreshAlarm.cancelAndRequest()
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
@@ -263,12 +292,77 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         return group
     }
 
+    /**
+     * Hands an environment's own pages to the browser — Design, the app, Control, Hub.
+     *
+     * The Hub already knows every stage's addresses; without this they were still bookmarks, and
+     * "which one was QA's Control again?" was answered in the browser rather than here. It is a chooser
+     * rather than a row of links because a link per environment per product is a grid, and the panel is
+     * a few hundred pixels wide.
+     *
+     * It follows **no** pointer. The Design pull and the playground each point at an environment, and a
+     * third rule about which one this opens would be one more thing that can silently be wrong — this
+     * asks, every time, and the asking is one keystroke with speed search.
+     */
+    private fun openEnvironmentAction(): AnAction =
+        object : AnAction(
+            "Open Environment in Browser",
+            "Open a Flowable Design, Work, Control or Hub page of one of your environments",
+            AllIcons.Ide.Link,
+        ), DumbAware {
+            override fun actionPerformed(e: AnActionEvent) {
+                JBPopupFactory.getInstance()
+                    .createActionGroupPopup(
+                        "Open in Browser", environmentLinkActions(), e.dataContext,
+                        JBPopupFactory.ActionSelectionAid.SPEEDSEARCH, true,
+                    )
+                    .showCenteredInCurrentWindow(project)
+            }
+
+            override fun update(e: AnActionEvent) {
+                // Both halves matter: nothing to open, and nowhere to open it — under Remote Dev on a
+                // headless host a browse would simply do nothing at all.
+                e.presentation.isEnabled = AtlasBrowser.isAvailable() && !EnvironmentLinks.isEmpty(
+                    AtlasCatalog.environments(project), AtlasCatalog.connections(project),
+                )
+            }
+
+            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
+        }
+
+    /** One separator per environment, one item per address — the environment names the group so the
+     *  items can be just "Control", which is what the reader is scanning for. */
+    private fun environmentLinkActions(): DefaultActionGroup {
+        val group = DefaultActionGroup()
+        EnvironmentLinks.grouped(
+            AtlasCatalog.environments(project), AtlasCatalog.connections(project),
+        ).forEach { environment ->
+            group.addSeparator(environment.environment.name.ifBlank { "unnamed" })
+            environment.links.forEach { connection ->
+                group.add(
+                    object : AnAction(
+                        connection.kind.display,
+                        connection.baseUrl,
+                        // A padlock, not a prompt: opening a page changes nothing, so PROD is shown
+                        // rather than guarded — but it is shown, so nobody clicks it by mistake.
+                        if (connection.requiresConfirmation) AllIcons.Nodes.Padlock else null,
+                    ), DumbAware {
+                        override fun actionPerformed(e: AnActionEvent) =
+                            AtlasBrowser.open(connection.baseUrl, project)
+
+                        override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+                    },
+                )
+            }
+        }
+        return group
+    }
+
     private fun buildContent() = panel {
         group("Flowable Project") {
-            row { cell(projectStatus) }
             row {
-                link("Change…") { chooseSubProject() }
-                    .applyToComponent { changeProjectLink = this }
+                cell(projectCombo).align(AlignX.FILL).resizableColumn()
+                cell(projectNote)
             }
         }
         group("Model Index") {
@@ -280,9 +374,12 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
             }
         }
         group("Atlas Explorer") {
-            row {
-                cell(JBScrollPane(artifactsList)).align(AlignX.FILL)
-            }
+            explorerListRow = row {
+                cell(artifactsScroll).align(AlignX.FILL)
+            }.visible(false)
+            // A list box holding one centred "nothing here" line is most of this panel's height spent
+            // saying nothing. One grey line where every other line starts says the same thing.
+            explorerHintRow = row { cell(explorerHint) }
             row {
                 link("Generate…") { invokeAction(FlowableActionIds.GENERATE_ATLAS_EXPLORER) }
                 // Selected entry, or the newest one when nothing is selected (the list is sorted
@@ -315,8 +412,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
             // Which apps a pull fetches — starting from the configured default; ticking them here is a
             // personal override that never touches the shared settings file.
             designAppsListRow = row {
-                cell(JBScrollPane(appList).apply { preferredSize = Dimension(JBUI.scale(160), JBUI.scale(140)) })
-                    .align(AlignX.FILL)
+                cell(appsScroll).align(AlignX.FILL)
             }.visible(false)
             // With no apps to tick, the list would be a tall empty box holding a centred label that a
             // narrow tool window clips. A line of text where every other line in the panel starts says
@@ -370,19 +466,13 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         ActionUtil.performAction(action, event)
     }
 
-    /** Popup to switch the active Flowable sub-project (or back to the whole project). */
-    private fun chooseSubProject() {
-        val rootService = AtlasProjectRootService.getInstance(project)
-        val detected = rootService.detectedOrNull().orEmpty()
-        val labels = listOf(WHOLE_PROJECT_LABEL) + detected.map { it.relPath }
-        JBPopupFactory.getInstance()
-            .createPopupChooserBuilder(labels)
-            .setTitle("Select Flowable Project")
-            .setItemChosenCallback { label ->
-                rootService.setActiveSubProject(if (label == WHOLE_PROJECT_LABEL) "" else label)
-            }
-            .createPopup()
-            .showCenteredInCurrentWindow(project)
+    /**
+     * Switches the active Flowable sub-project. Storing it also records that a choice was *made*, which
+     * is what retires the "choose one" note — `""` alone cannot tell a deliberate whole-repository from
+     * a default nobody looked at.
+     */
+    private fun chooseSubProject(relPath: String?) {
+        AtlasProjectRootService.getInstance(project).setActiveSubProject(relPath.orEmpty())
     }
 
     private fun selectedArtifact(): ExplorerArtifact? = artifactsList.selectedValue
@@ -425,16 +515,10 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         if (detected == null) rootService.detectAsync { refreshAlarm.cancelAndRequest() }
         val subCount = detected?.size ?: 0
         val chosen = rootService.hasChosenProject()
-        val projectText = when {
-            active.isNotBlank() -> "<html>Project: <b>$active</b></html>"
-            subCount >= 2 && !chosen -> "<html>⚠ $subCount Flowable projects found — choose one</html>"
-            else -> "Whole project"
-        }
-        // Show "Change…" whenever switching could change the scope: the chooser always offers
-        // "Whole project" plus every detected sub-project, so ≥1 detected sub-project already means a
-        // real alternative — and if a sub-project is active, the user must be able to revert to whole.
-        // (A stricter ">= 2" locked the user on "Whole project" once picked in a single-sub-project repo.)
-        val showChangeLink = subCount >= 1 || active.isNotBlank()
+        // The one thing the picker cannot say by itself: that a choice is *outstanding*. Several
+        // projects and nobody has picked means Atlas is indexing the whole repository by default, which
+        // is a decision the user never made.
+        val projectNote = if (subCount >= 2 && !chosen && active.isBlank()) "$subCount found — choose one" else ""
 
         val index = project.service<FlowableModelIndexService>().cachedOrNull()
         val indexText = if (index == null) {
@@ -480,10 +564,11 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
             isExplorerStale(artifacts.map { it.modified }, lastPullMillis)
 
         return Snapshot(
-            projectText, showChangeLink, indexText, artifacts, designText,
+            detected?.map { it.relPath }.orEmpty(), active, projectNote,
+            indexText, artifacts, designText,
             designArtifactsStale, AtlasBrowser.isAvailable(),
             designConnection != null, designResolution, workResolution,
-            AtlasEnvironments.getInstance().environments().isNotEmpty(),
+            AtlasCatalog.environments(project).isNotEmpty(),
             designConnection?.environmentName.orEmpty(),
             pullSelection,
         )
@@ -491,19 +576,49 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
 
     private fun apply(snapshot: Snapshot) {
         applyConnections(snapshot)
-        projectStatus.text = snapshot.projectText
-        changeProjectLink?.isVisible = snapshot.showChangeLink
+        applyProject(snapshot)
         indexStatus.text = snapshot.indexText
         designStatus.text = snapshot.designText
         designStaleRow?.visible(snapshot.designArtifactsStale)
         openInBrowserLink?.isVisible = snapshot.browserAvailable
+        applyArtifacts(snapshot)
+        applyPullSelection(snapshot)
+    }
+
+    /**
+     * Fills the project picker. The active sub-project is always in the list even when detection has
+     * not run yet, so the row can never show *Whole project* while Atlas is scoped to something else.
+     */
+    private fun applyProject(snapshot: Snapshot) {
+        val items = (listOf("") + snapshot.subProjects + snapshot.activeSubProject).distinct()
+        populatingCombos = true
+        try {
+            projectCombo.model = DefaultComboBoxModel<String?>().apply { items.forEach { addElement(it) } }
+            projectCombo.selectedItem = snapshot.activeSubProject
+        } finally {
+            populatingCombos = false
+        }
+        projectNote.text = snapshot.projectNote
+        projectCombo.toolTipText = when {
+            snapshot.activeSubProject.isNotBlank() -> snapshot.activeSubProject
+            snapshot.subProjects.isEmpty() -> "Atlas analyses the whole repository — no separate Flowable projects were detected"
+            else -> "Atlas analyses the whole repository; pick one of the ${snapshot.subProjects.size} " +
+                "Flowable projects in it to narrow that"
+        }
+    }
+
+    /** The generated pages, sized to how many there are — one project usually has exactly one. */
+    private fun applyArtifacts(snapshot: Snapshot) {
         val selected = selectedArtifact()?.path
         artifactsModel.replaceAll(snapshot.artifacts)
         selected?.let { keep ->
             snapshot.artifacts.firstOrNull { it.path == keep }
                 ?.let { artifactsList.setSelectedValue(it, false) }
         }
-        applyPullSelection(snapshot)
+        artifactsList.visibleRowCount = snapshot.artifacts.size.coerceIn(1, MAX_VISIBLE_ROWS)
+        artifactsScroll.revalidate()
+        explorerListRow?.visible(snapshot.artifacts.isNotEmpty())
+        explorerHintRow?.visible(snapshot.artifacts.isEmpty())
     }
 
     /**
@@ -514,9 +629,14 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
     private fun applyConnections(snapshot: Snapshot) {
         connectionsEmptyRow?.visible(!snapshot.hasAnyEnvironment)
         designConnectionRow?.visible(snapshot.hasAnyEnvironment)
-        val catalog = AtlasEnvironments.getInstance()
-        fillConnections(designEnvCombo, designEnvNote, catalog.connections(ConnectionKind.DESIGN), snapshot.designResolution)
-        fillConnections(workEnvCombo, workEnvNote, catalog.connections(ConnectionKind.WORK), snapshot.workResolution)
+        fillConnections(
+            designEnvCombo, designEnvNote,
+            AtlasCatalog.connections(project, ConnectionKind.DESIGN), snapshot.designResolution,
+        )
+        fillConnections(
+            workEnvCombo, workEnvNote,
+            AtlasCatalog.connections(project, ConnectionKind.WORK), snapshot.workResolution,
+        )
         (pullLink as? com.intellij.ui.components.ActionLink)?.text =
             if (snapshot.designEnvironmentName.isBlank()) "Pull from Design"
             else "Pull from ${snapshot.designEnvironmentName}"
@@ -554,13 +674,16 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
     /** Renders an environment with a padlock when it is protected; `null` is the "not set" entry. */
     private fun connectionRenderer() =
         SimpleListCellRenderer.create<AtlasConnection?> { label, value, _ ->
-            label.text = value?.environmentName?.ifBlank { "unnamed" } ?: "not set"
+            label.text = value?.let { ConnectionLabels.pickerItem(it) } ?: "not set"
             label.icon = if (value?.requiresConfirmation == true) AllIcons.Nodes.Padlock else null
         }
 
     private fun chooseConnection(kind: ConnectionKind, item: Any?) {
         val connection = item as? AtlasConnection
-        if (connection == null) AtlasConnectionSelection.clear(project, kind)
+        // "not set" is a choice the user made, not the absence of one — so it is *stored* as such.
+        // Merely unsetting the pointer let the single-environment fallback answer again, and the panel
+        // below went on showing that environment's workspace and apps.
+        if (connection == null) AtlasConnectionSelection.selectNone(project, kind)
         else AtlasConnectionSelection.select(project, kind, connection.id)
     }
 
@@ -574,21 +697,38 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
 
     /** Renders the workspace and the app list from the effective selection. Seeds key-only
      *  placeholders so the panel shows the selection without a network call; real names arrive with
-     *  [loadApps] and the workspace picker's own fetch. */
+     *  [loadApps] and — after an environment switch — [loadWorkspaces]. */
     private fun applyPullSelection(snapshot: Snapshot) {
-        if (designCachesStale) {
+        // True exactly on the passes that follow a switch (environment picked, catalog edited): the one
+        // moment both server lists are known to be wrong, and the one moment it is right to go and ask.
+        val switched = designCachesStale
+        if (switched) {
             designCachesStale = false
             fetchedWorkspaces = null       // the picker must show the new server's list
             fetchedAppsWorkspace = null    // …and the app list must be re-fetched, same key or not
         }
         designWorkspaceRow?.visible(snapshot.designServerSet)
         if (!snapshot.designServerSet) {
+            // "not set" is a state, not a pause: leaving the previous environment's workspace and apps
+            // in the (hidden) controls means the next time they are shown, they are shown wrong.
+            fetchedAppsWorkspace = null
+            fillWorkspaces("")
+            populatingApps = true
+            try {
+                DesignAppListUi.populateApps(appList, emptyList(), emptySet())
+            } finally {
+                populatingApps = false
+            }
             designAppsListRow?.visible(false)
             designAppsHintRow?.visible(false)
             return
         }
         val workspaceKey = snapshot.pullSelection.workspaceKey
         fillWorkspaces(workspaceKey)
+        // The stored key alone is a placeholder nobody can choose from. Picking an environment is a
+        // gesture that deserves the real list behind it — so the fetch happens here rather than waiting
+        // for the user to discover that the combo has to be opened twice.
+        if (switched) loadWorkspaces(force = true, reveal = false)
         val checked = snapshot.pullSelection.appKeys.toSet()
         val known = (0 until appList.model.size).mapNotNull { appList.getItemAt(it) }
         // Keep the fetched apps (real names/versions) while the workspace still matches. A switched
@@ -609,6 +749,10 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
     /** Shows either the checkbox list or a one-line hint — never an empty list box. */
     private fun applyAppsRows(workspaceKey: String) {
         val hasApps = appList.model.size > 0
+        // Sized to the workspace: one app is one row, and a workspace with twenty scrolls at the cap
+        // rather than pushing everything below it off the panel.
+        appList.visibleRowCount = appList.model.size.coerceIn(1, MAX_VISIBLE_ROWS)
+        appsScroll.revalidate()
         designAppsListRow?.visible(hasApps)
         designAppsHintRow?.visible(!hasApps)
         if (hasApps) return
@@ -631,13 +775,18 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         loadingApps = true
         ApplicationManager.getApplication().executeOnPooledThread {
             if (project.isDisposed) return@executeOnPooledThread
-            val conn = designConnection() ?: return@executeOnPooledThread
-            val result = DesignClient.listApps(conn, workspaceKey)
+            // Not an early return: an unreadable credential has to travel back to the EDT like any other
+            // failure, or the hint below stays on "Loading apps…" for the rest of the session.
+            val conn = designConnection()
+            val result = conn?.let { DesignClient.listApps(it, workspaceKey) }
             val apps = (result as? DesignClient.Result.Success)?.value
             ApplicationManager.getApplication().invokeLater({
                 if (project.isDisposed || fetchedAppsWorkspace != workspaceKey) return@invokeLater
                 loadingApps = false
-                // A failed fetch leaves the list as it was; only a successful one replaces it.
+                // A failed fetch leaves the list as it was; only a successful one replaces it — and it
+                // is not remembered as a fetch, so the next refresh or Reload tries again instead of
+                // treating an empty list as this workspace's answer.
+                if (apps == null) fetchedAppsWorkspace = null
                 if (apps != null) {
                     val checked = DesignAppListUi.checkedAppKeys(appList).toSet()
                         .ifEmpty { currentSelection().appKeys.toSet() }
@@ -677,7 +826,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         ), DumbAware {
             override fun actionPerformed(e: AnActionEvent) {
                 fetchedWorkspaces = null   // so the combo shows the server's current list
-                loadWorkspaces(force = true)
+                loadWorkspaces(force = true, reveal = false)
                 loadApps(force = true)
             }
 
@@ -710,10 +859,15 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
     }
 
     /**
-     * Reads the server's workspace list, once, unless [force]. Called when the combo is opened rather
-     * than when the panel is built — a picker nobody opened must not cost a round-trip.
+     * Reads the server's workspace list, once, unless [force]. Never on a plain render — a panel nobody
+     * touched must not cost a round-trip — but on the two gestures that invalidate the list: opening the
+     * picker, and switching environment.
+     *
+     * [reveal] is the difference between those two. A click on the closed combo has to end with the list
+     * open, or the user clicks twice for one list; a fetch nobody asked for must not throw a popup over
+     * the panel, so the switch and the reload button pass false.
      */
-    private fun loadWorkspaces(force: Boolean) {
+    private fun loadWorkspaces(force: Boolean, reveal: Boolean) {
         if (!force && fetchedWorkspaces != null) return
         val selected = AtlasConnectionSelection.selected(project, ConnectionKind.DESIGN) ?: return
         ApplicationManager.getApplication().executeOnPooledThread {
@@ -734,7 +888,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
                         fetchedWorkspaces = result.value
                         fillWorkspaces(currentSelection().workspaceKey)
                         // Reopen, so the click that asked for the list actually shows it.
-                        if (!workspaceCombo.isPopupVisible) workspaceCombo.showPopup()
+                        if (reveal && !workspaceCombo.isPopupVisible) workspaceCombo.showPopup()
                     }
                 }
             }, ModalityState.any())
@@ -811,7 +965,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
     internal fun connectionLineForTest(kind: ConnectionKind): String {
         val combo = if (kind == ConnectionKind.DESIGN) designEnvCombo else workEnvCombo
         val note = if (kind == ConnectionKind.DESIGN) designEnvNote else workEnvNote
-        val name = (combo.selectedItem as? AtlasConnection)?.environmentName ?: "not set"
+        val name = (combo.selectedItem as? AtlasConnection)?.let { ConnectionLabels.pickerItem(it) } ?: "not set"
         return if (note.text.isBlank()) name else "$name ${note.text}"
     }
 
@@ -821,13 +975,36 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
 
     /** For tests: whether the empty-state row is the one showing. */
     internal val hasAnyEnvironmentForTest: Boolean
-        get() = AtlasEnvironments.getInstance().environments().isNotEmpty()
+        get() = AtlasCatalog.environments(project).isNotEmpty()
 
     /** Pick a workspace the way the popup's callback does — for tests, which have no popup. */
     internal fun selectWorkspaceForTest(workspaceKey: String) = selectWorkspace(workspaceKey)
 
+    /** Pick the combo's "not set" entry the way a click does — for tests, which have no combo. */
+    internal fun chooseNoEnvironmentForTest(kind: ConnectionKind) = chooseConnection(kind, null)
+
+    /** For tests: the workspace the picker is showing, or null when it shows none. */
+    internal fun workspaceKeyForTest(): String? =
+        (workspaceCombo.selectedItem as? DesignClient.Workspace)?.key
+
+    /** For tests: what the project picker is offering, `""` first. */
+    internal fun projectItemsForTest(): List<String> =
+        (0 until projectCombo.itemCount).map { projectCombo.getItemAt(it).orEmpty() }
+
+    /** Pick a Flowable project the way the combo does — for tests, which have no combo. */
+    internal fun chooseProjectForTest(relPath: String?) = chooseSubProject(relPath)
+
+    /** For tests: how many rows the two lists reserve — the panel's height budget, in one number. */
+    internal fun listRowsForTest(): Pair<Int, Int> = artifactsList.visibleRowCount to appList.visibleRowCount
+
+    /** For tests: the app keys the checkbox list is offering. */
+    internal fun appKeysForTest(): List<String> =
+        (0 until appList.model.size).mapNotNull { appList.getItemAt(it)?.key }
+
     companion object {
-        private const val WHOLE_PROJECT_LABEL = "Whole project (repository root)"
+        /** How tall a list in this panel may grow before it scrolls. The Hub lives in a side stripe
+         *  shared by five sections; past this, one of them owns the panel. */
+        private const val MAX_VISIBLE_ROWS = 8
 
         /** The last two segments of a project-relative folder, `…/` prefixed when more were dropped. */
         internal fun shortFolder(relative: String): String {

@@ -30,7 +30,9 @@ object BaseUrls {
      */
     fun normalize(kind: ConnectionKind, raw: String): String = when (kind) {
         ConnectionKind.DESIGN -> DesignClient.normalizeBaseUrl(raw)
-        ConnectionKind.WORK -> raw.trim().trimEnd('/')
+        // Work and the link-only kinds are stored as typed, minus the trailing slash: only Design has a
+        // suffix (`/design-api`) that a user reliably pastes and never means.
+        ConnectionKind.WORK, ConnectionKind.CONTROL, ConnectionKind.HUB -> raw.trim().trimEnd('/')
     }
 
     /**
@@ -71,6 +73,21 @@ object BaseUrls {
         val hostOnly = if (authority.startsWith("[")) authority.substringBefore(']') + "]"
         else authority.substringBefore(':')
         return hostOnly.substringAfter('@').lowercase()   // drop any user-info prefix
+    }
+
+    /**
+     * [raw] without its scheme — `localhost:9914`, `localhost:8080/flowable-work`. What a picker shows
+     * for an app that has no name yet.
+     *
+     * Not [host]: the two apps a developer actually has open at once are on the same machine and differ
+     * only by port or context path, and labelling both of them `localhost` makes the picker read as if
+     * the second one had never been added. The port and the path are the whole distinction, so they
+     * stay; the scheme is dropped because it never is one.
+     */
+    fun withoutScheme(raw: String): String {
+        val trimmed = raw.trim().trimEnd('/')
+        val separator = trimmed.indexOf("://")
+        return if (separator < 0) trimmed else trimmed.substring(separator + 3)
     }
 
     /** True when [host] names the developer's own machine. */

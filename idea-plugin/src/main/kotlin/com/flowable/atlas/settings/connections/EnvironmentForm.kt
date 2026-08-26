@@ -16,7 +16,9 @@ import javax.swing.JComponent
  * The summary is not decoration: it is where a half-configured environment gets finished. An
  * environment with a running app and no Design server is a perfectly ordinary thing (a QA stage nobody
  * models against), so it is shown **without any warning marker** — but the *Add* link is right there
- * for when it simply was not done yet, instead of only on a toolbar button the user has to find.
+ * for when it simply was not done yet, instead of only on a toolbar button the user has to find. The
+ * same goes for the link-only kinds: most environments will never have a Hub address, and one that
+ * does not is not incomplete.
  */
 class EnvironmentForm(
     private val onEditConnection: (ConnectionKind) -> Unit,
@@ -25,13 +27,18 @@ class EnvironmentForm(
 
     private val nameField = JBTextField(28)
     private val protectedBox = JCheckBox("Ask before pulling from or evaluating against this environment")
-    private val designSummary = JBLabel()
-    private val workSummary = JBLabel()
 
-    private lateinit var designEdit: JComponent
-    private lateinit var designAdd: JComponent
-    private lateinit var workEdit: JComponent
-    private lateinit var workAdd: JComponent
+    /**
+     * A row per [ConnectionKind], built from the enum rather than written out. The two that existed
+     * were four fields and two hand-copied rows; a fifth product would have been four more of each, and
+     * the first one anybody forgot would simply be missing from this page with nothing to notice.
+     */
+    private val rows = LinkedHashMap<ConnectionKind, Slot>()
+
+    private class Slot(val summary: JBLabel = JBLabel()) {
+        lateinit var edit: JComponent
+        lateinit var add: JComponent
+    }
 
     private var current: ConnectionsDraft.Env? = null
 
@@ -41,19 +48,18 @@ class EnvironmentForm(
         row("") {
             comment(
                 "Atlas asks before pulling from a protected environment or evaluating an expression against " +
-                    "it, and marks it with a lock wherever it can be picked.",
+                    "it, and marks it with a lock wherever it can be picked. The Control and Hub addresses " +
+                    "are links, so nothing asks before opening one.",
             )
         }
         separator()
-        row("Flowable Design:") {
-            cell(designSummary)
-            link("Edit") { onEditConnection(ConnectionKind.DESIGN) }.applyToComponent { designEdit = this }
-            link("Add") { onAddConnection(ConnectionKind.DESIGN) }.applyToComponent { designAdd = this }
-        }
-        row("Flowable Work:") {
-            cell(workSummary)
-            link("Edit") { onEditConnection(ConnectionKind.WORK) }.applyToComponent { workEdit = this }
-            link("Add") { onAddConnection(ConnectionKind.WORK) }.applyToComponent { workAdd = this }
+        ConnectionKind.entries.forEach { kind ->
+            val slot = Slot().also { rows[kind] = it }
+            row("Flowable ${kind.display}:") {
+                cell(slot.summary)
+                link("Edit") { onEditConnection(kind) }.applyToComponent { slot.edit = this }
+                link("Add") { onAddConnection(kind) }.applyToComponent { slot.add = this }
+            }
         }
     }
 
@@ -61,13 +67,20 @@ class EnvironmentForm(
         current = env
         nameField.text = env.name
         protectedBox.isSelected = env.requireConfirmation
+        // Name and protection come from the committed file for a shared environment. Editing them here
+        // would be a local override of something the whole team reads — copy it instead, which the tree
+        // offers and which produces a local environment that shadows this one.
+        nameField.isEditable = !env.shared
+        protectedBox.isEnabled = !env.shared
         val connections = draft.connectionsOf(env.id)
-        apply(ConnectionKind.DESIGN, connections.firstOrNull { it.kind == ConnectionKind.DESIGN }, designSummary, designEdit, designAdd)
-        apply(ConnectionKind.WORK, connections.firstOrNull { it.kind == ConnectionKind.WORK }, workSummary, workEdit, workAdd)
+        rows.forEach { (kind, slot) ->
+            apply(kind, connections.firstOrNull { it.kind == kind }, slot.summary, slot.edit, slot.add)
+        }
     }
 
     fun flush() {
         val env = current ?: return
+        if (env.shared) return
         env.name = nameField.text.trim()
         env.requireConfirmation = protectedBox.isSelected
     }
@@ -87,7 +100,11 @@ class EnvironmentForm(
     ) {
         summary.text = connection?.baseUrl?.ifBlank { "(no URL yet)" } ?: "not configured"
         summary.foreground = if (connection == null) JBColor.GRAY else JBColor.foreground()
-        summary.toolTipText = if (connection == null) "This environment has no ${kind.display} server" else null
+        summary.toolTipText = when {
+            connection != null -> null
+            kind.linkOnly -> "This environment has no ${kind.display} address to open"
+            else -> "This environment has no ${kind.display} server"
+        }
         edit.isVisible = connection != null
         add.isVisible = connection == null
     }

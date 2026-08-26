@@ -32,7 +32,33 @@ The Hub reports whether the model index has been built and when it was last scan
 generated and whether the models have changed since, and which environments this project is pointed at.
 **Rebuild**, **Generate Constants…**, **Generate…**, **Open in Browser** and **Pull from …** each sit
 beside the thing they change. In a monorepo the *Flowable Project* section is a switcher: pick the
-sub-project Atlas operates on, and the index, the output folder and the Design target follow.
+sub-project Atlas operates on, and the index, the output folder and the Design target follow. It is a
+drop-down like the environment pickers below it, always offering the whole repository, so "is this mine
+to change?" is answered by the control rather than by trying it.
+
+Every list in the panel is sized to what it holds. The Hub shares one narrow stripe between five
+sections, so a box reserving eight rows for the one generated explorer that the ordinary project has is
+that stripe spent on nothing; an empty section is a single grey line instead. A workspace with twenty
+apps scrolls at eight rows rather than pushing the pull button off the panel.
+
+A repository can define environments of its own. **Share with Project** in *Settings → Environments*
+writes the selected one into `.idea/flowable-environments.xml` — committed, like the Atlas project
+settings beside it — and everyone who clones the repository finds it in every picker, marked
+*(project)*, having configured nothing. The file holds a name, the *Protected* flag and one URL per
+kind, and has **no field a credential could go in**: each developer signs in as themselves, from the
+IDE password safe, which is what you want anyway. Your own list still wins — an environment you define
+with the same name shadows the project's entirely, which is how *QA* points at your own instance
+without arguing with the repository. Shared entries are read-only in the editor; *Copy Environment*
+makes one yours in a click, and a `git pull` that moves a URL reaches the pickers without anyone
+reopening Settings.
+
+Its toolbar also opens the environments themselves: **Open Environment in Browser** lists every address
+in the catalog — Design, the app, Control, Hub — grouped by stage, and hands the one you pick to your
+browser. The Hub knows those URLs already; without this they stayed bookmarks, and *which one was QA's
+Control again?* was a question answered in the browser rather than here. It follows neither of the two
+pointers below it, because a third rule about which environment it means is one more thing that could
+quietly be wrong — it asks, and with speed search the asking is a keystroke. Protected stages carry
+their lock in the list but no prompt: opening a page changes nothing.
 
 Its *Flowable Design* section is the whole pull, top to bottom, in the order the work is done: pick the
 **environment**, pick the **workspace** in it, tick the **apps**, press **Pull from DEV1** — the link
@@ -312,6 +338,13 @@ this IDE session, marked *(this session)* in the picker, with its credentials ke
 from a colleague should not leave an environment behind, and being made to name one first is a toll on
 the common case. Environments are something you decide to have, in *Settings → Environments*.
 
+Every pasted link keeps its own entry, so comparing two apps does not mean re-pasting the first one. The
+button beside the picker is where those entries are managed: **Forget** one, forget all of them, or —
+for the one that turns out to be somewhere you keep coming back to — **Save as an Environment…**, which
+asks for the single thing that was missing. Give it a name that already exists and it joins that
+environment instead of making a second one with the same label; credentials typed in the paste dialog go
+along, into the password safe. Forgetting a target takes whatever was captured for it with it.
+
 Evaluating against a **Protected** environment asks first — but from a small confirmation with *Cancel*
 preselected, so declining is one keystroke, and the lock stays visible on the picker the whole time.
 
@@ -411,6 +444,10 @@ Servers are a third thing again, and they sit one level up: an environment list 
 a DEV or QA URL is the same in every Flowable repository you open, and typing it once per project is the
 tedium this removes. Settings holds only that list — which environment a given thing uses is picked at
 that thing, in the Atlas Hub or the playground, which is what keeps the two from ever disagreeing.
+An environment can hold four addresses: the **Design** server and the **Work** app that Atlas signs in
+to and calls, plus **Control** and **Hub**, which it only ever hands to a browser. Those two are a URL
+and nothing else — no username, no password, no *Test Connection* — because nothing is authenticated
+and nothing is stored.
 The choice itself stays in your workspace file, since the ids belong to your IDE and would mean nothing
 in a colleague's; what a project pulls *from* an environment is committed like every other project
 setting.

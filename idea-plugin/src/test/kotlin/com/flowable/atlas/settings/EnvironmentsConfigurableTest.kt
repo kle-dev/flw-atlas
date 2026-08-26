@@ -1,5 +1,6 @@
 package com.flowable.atlas.settings
 
+import com.flowable.atlas.environment.AtlasConnectionSelection
 import com.flowable.atlas.environment.AtlasEnvironments
 import com.flowable.atlas.environment.ConnectionKind
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
@@ -47,6 +48,41 @@ class EnvironmentsConfigurableTest : BasePlatformTestCase() {
         } finally {
             page.disposeUIResources()
         }
+    }
+
+    /**
+     * Control and Hub are addresses, not servers: they round-trip through the editor with a URL and
+     * nothing else, and no project ever points at one — which is the part that had to be made
+     * explicit, because the pointer used to be "Design, or else Work" and would have swallowed them.
+     */
+    fun testALinkOnlyConnectionAppliesAndIsNeverPointedAt() {
+        val id = catalog.addEnvironment("DEV1")
+        catalog.addConnection(id, ConnectionKind.CONTROL, "http://localhost:8081/flowable-control/")
+        val page = EnvironmentsConfigurable(project)
+        try {
+            page.createComponent()
+            page.reset()
+            page.apply()
+        } finally {
+            page.disposeUIResources()
+        }
+        val control = catalog.connection(id, ConnectionKind.CONTROL)!!
+        assertEquals("http://localhost:8081/flowable-control", control.baseUrl)
+        assertEquals("", control.username)
+
+        AtlasConnectionSelection.select(project, ConnectionKind.CONTROL, control.id)
+        assertNull(
+            "a link has no pointer — storing one would have landed in the Work pointer",
+            AtlasConnectionSelection.storedId(project, ConnectionKind.CONTROL),
+        )
+        assertNull(
+            "and it must not have leaked into another kind's pointer either",
+            AtlasConnectionSelection.storedId(project, ConnectionKind.WORK),
+        )
+        assertEquals(
+            AtlasConnectionSelection.Resolution.NotSet,
+            AtlasConnectionSelection.resolution(project, ConnectionKind.CONTROL),
+        )
     }
 
     fun testTheCatalogIsUntouchedUntilApply() {

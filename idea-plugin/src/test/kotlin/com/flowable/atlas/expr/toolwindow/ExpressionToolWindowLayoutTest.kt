@@ -3,9 +3,11 @@ package com.flowable.atlas.expr.toolwindow
 import com.flowable.atlas.environment.AtlasConnectionSelection
 import com.flowable.atlas.environment.AtlasEnvironments
 import com.flowable.atlas.environment.ConnectionKind
+import com.flowable.atlas.environment.SharedEnvironments
 import com.flowable.atlas.expr.inspect.WorkUrlParser
 import com.flowable.atlas.expr.inspect.PasteWorkUrlDialog
 import com.flowable.atlas.expr.inspect.InspectSession
+import com.flowable.atlas.expr.inspect.InspectSessionTargets
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.expr.ExpressionDialect
 import com.flowable.atlas.script.toolwindow.FlowableScriptPanel
@@ -152,6 +154,69 @@ class ExpressionToolWindowLayoutTest : BasePlatformTestCase() {
                 AtlasEnvironments.getInstance().connections(ConnectionKind.WORK).isEmpty(),
             )
         } finally {
+            InspectSessionTargets.clear()
+            InspectSession.clear("http://localhost:9914")
+        }
+    }
+
+    /**
+     * Pasting a second link is how someone compares two apps, so the second one must not evict the
+     * first — the one-slot version of this made "look at the other app and come back" mean pasting the
+     * first link again.
+     */
+    fun testEveryPastedUrlKeepsItsOwnEntry() {
+        val toolWindow = ToolWindowHeadlessManagerImpl.MockToolWindow(project)
+        FlowableExpressionToolWindowFactory().createToolWindowContent(project, toolWindow)
+        val panel = toolWindow.contentManager.contents[0].component as FlowableExpressionPanel
+        try {
+            panel.applyPastedResult(
+                PasteWorkUrlDialog.Result(null, "http://localhost:9914", "", "", WorkUrlParser.parse("")),
+            )
+            panel.applyPastedResult(
+                PasteWorkUrlDialog.Result(null, "http://localhost:8080/flowable-work", "", "", WorkUrlParser.parse("")),
+            )
+            assertEquals(
+                listOf("http://localhost:9914", "http://localhost:8080/flowable-work"),
+                panel.sessionTargetsForTest(),
+            )
+            assertEquals("the newest paste is the one in use", "http://localhost:8080/flowable-work", panel.inspectBaseUrlText)
+
+            // The same app again — a trailing slash and a route are not a second app.
+            panel.applyPastedResult(
+                PasteWorkUrlDialog.Result(null, "http://localhost:9914/", "", "", WorkUrlParser.parse("")),
+            )
+            assertEquals(2, panel.sessionTargetsForTest().size)
+            assertEquals("http://localhost:9914", panel.inspectBaseUrlText)
+
+            panel.forgetSessionTargetForTest("http://localhost:9914")
+            assertEquals(listOf("http://localhost:8080/flowable-work"), panel.sessionTargetsForTest())
+            assertEquals(
+                "forgetting the target in use leaves nothing selected, never the other one",
+                "", panel.inspectBaseUrlText,
+            )
+        } finally {
+            InspectSessionTargets.clear()
+        }
+    }
+
+    /**
+     * Forgetting a target has to take its captured credentials with it: a cookie left behind for a URL
+     * that is in no list any more is a credential nobody can see and nobody asked to keep.
+     */
+    fun testForgettingATargetDropsWhatWasCapturedForIt() {
+        val toolWindow = ToolWindowHeadlessManagerImpl.MockToolWindow(project)
+        FlowableExpressionToolWindowFactory().createToolWindowContent(project, toolWindow)
+        val panel = toolWindow.contentManager.contents[0].component as FlowableExpressionPanel
+        try {
+            panel.applyPastedResult(
+                PasteWorkUrlDialog.Result(null, "http://localhost:9914", "demo", "secret", WorkUrlParser.parse("")),
+            )
+            assertNotNull(InspectSession.get("http://localhost:9914"))
+            panel.forgetSessionTargetForTest("http://localhost:9914")
+            assertNull(InspectSession.get("http://localhost:9914"))
+            assertTrue(panel.sessionTargetsForTest().isEmpty())
+        } finally {
+            InspectSessionTargets.clear()
             InspectSession.clear("http://localhost:9914")
         }
     }
@@ -177,16 +242,113 @@ class ExpressionToolWindowLayoutTest : BasePlatformTestCase() {
             AtlasConnectionSelection.select(project, ConnectionKind.WORK, id)
             project.messageBus.syncPublisher(AtlasEvents.TOPIC).connectionSelectionChanged(ConnectionKind.WORK)
             UIUtil.dispatchAllInvocationEvents()
-            assertEquals("QA", panel.environmentNameForTest)
+            assertEquals("an environment picked elsewhere wins over the pasted target", "QA", panel.environmentNameForTest)
             assertTrue("the one-off is still offered", panel.connectionItemCountForTest() == 2)
 
-            AtlasConnectionSelection.clear(project, ConnectionKind.WORK)
-            project.messageBus.syncPublisher(AtlasEvents.TOPIC).connectionSelectionChanged(ConnectionKind.WORK)
-            UIUtil.dispatchAllInvocationEvents()
+            // Back to it the way the user does it: by picking it in the picker. Clearing the environment
+            // deliberately does *not* promote a session target — "not set" is an answer, not a gap.
+            panel.selectSessionTargetForTest("http://localhost:9914")
             assertEquals("and going back to it works", "http://localhost:9914", panel.inspectBaseUrlText)
+            assertEquals("", panel.environmentNameForTest)
         } finally {
+            InspectSessionTargets.clear()
             AtlasConnectionSelection.clear(project, ConnectionKind.WORK)
             catalog.removeEnvironment(environmentId)
         }
     }
+
+    /**
+     * A target you keep coming back to should stop being a one-off, and the only thing missing is its
+     * name. Saving it makes an ordinary environment — and takes the target out of the session list,
+     * because it now exists somewhere the picker already shows.
+     */
+    fun testSavingASessionTargetMakesItAnEnvironmentAndClearsTheOneOff() {
+        val toolWindow = ToolWindowHeadlessManagerImpl.MockToolWindow(project)
+        FlowableExpressionToolWindowFactory().createToolWindowContent(project, toolWindow)
+        val panel = toolWindow.contentManager.contents[0].component as FlowableExpressionPanel
+        val catalog = AtlasEnvironments.getInstance()
+        try {
+            panel.applyPastedResult(
+                PasteWorkUrlDialog.Result(null, "http://localhost:9914", "demo", "secret", WorkUrlParser.parse("")),
+            )
+            panel.saveSessionTargetForTest("http://localhost:9914", "Local", protected = false)
+
+            val saved = catalog.connections(ConnectionKind.WORK).single()
+            assertEquals("Local", saved.environmentName)
+            assertEquals("http://localhost:9914", saved.baseUrl)
+            assertEquals("the username typed in the paste dialog carries over", "demo", saved.username)
+            assertEquals("Local", panel.environmentNameForTest)
+            assertTrue("it is an environment now, not a session target", panel.sessionTargetsForTest().isEmpty())
+        } finally {
+            InspectSessionTargets.clear()
+            InspectSession.clear("http://localhost:9914")
+            AtlasConnectionSelection.clear(project, ConnectionKind.WORK)
+            catalog.environments().forEach { catalog.removeEnvironment(it.id) }
+        }
+    }
+
+    /**
+     * An environment that already exists is joined, not duplicated: a stage with a Design server and no
+     * app is the ordinary way this happens, and two environments called `QA` make every picker in the
+     * plugin ambiguous.
+     */
+    fun testSavingUnderAnExistingNameJoinsThatEnvironment() {
+        val toolWindow = ToolWindowHeadlessManagerImpl.MockToolWindow(project)
+        FlowableExpressionToolWindowFactory().createToolWindowContent(project, toolWindow)
+        val panel = toolWindow.contentManager.contents[0].component as FlowableExpressionPanel
+        val catalog = AtlasEnvironments.getInstance()
+        val environmentId = catalog.addEnvironment("QA")
+        try {
+            catalog.addConnection(environmentId, ConnectionKind.DESIGN, "https://design-qa.example.com")
+            panel.applyPastedResult(
+                PasteWorkUrlDialog.Result(null, "https://work-qa.example.com", "", "", WorkUrlParser.parse("")),
+            )
+            panel.saveSessionTargetForTest("https://work-qa.example.com", "QA", protected = false)
+
+            assertEquals("no second QA", 1, catalog.environments().size)
+            val work = catalog.connection(environmentId, ConnectionKind.WORK)
+            assertNotNull("the app joined the environment that was already there", work)
+            assertEquals("https://work-qa.example.com", work!!.baseUrl)
+        } finally {
+            InspectSessionTargets.clear()
+            AtlasConnectionSelection.clear(project, ConnectionKind.WORK)
+            catalog.environments().forEach { catalog.removeEnvironment(it.id) }
+        }
+    }
+    /**
+     * The playground resolves its environment through the same merged catalog, so a stage the
+     * repository defines is evaluated against like any other — with this developer's own credentials.
+     */
+    fun testAnEnvironmentTheProjectSharesCanBeEvaluatedAgainst() {
+        val toolWindow = ToolWindowHeadlessManagerImpl.MockToolWindow(project)
+        FlowableExpressionToolWindowFactory().createToolWindowContent(project, toolWindow)
+        val panel = toolWindow.contentManager.contents[0].component as FlowableExpressionPanel
+        val shared = SharedEnvironments.getInstance(project)
+        try {
+            shared.share(
+                "QA", requireConfirmation = false,
+                listOf(
+                    com.flowable.atlas.environment.AtlasConnection(
+                        "ignored", ConnectionKind.WORK, "https://work-qa.example.com", "",
+                        com.flowable.atlas.design.DesignAuthMode.BASIC, "e", "QA", false,
+                    ),
+                ),
+            )
+            AtlasConnectionSelection.select(
+                project, ConnectionKind.WORK, SharedEnvironments.connectionIdOf("QA", ConnectionKind.WORK),
+            )
+            project.messageBus.syncPublisher(AtlasEvents.TOPIC).connectionSelectionChanged(ConnectionKind.WORK)
+            UIUtil.dispatchAllInvocationEvents()
+            assertEquals("QA", panel.environmentNameForTest)
+            assertEquals("https://work-qa.example.com", panel.inspectBaseUrlText)
+            assertTrue(
+                "and it says whose definition it is",
+                panel.connectionComboLabelForTest().contains("project"),
+            )
+        } finally {
+            AtlasConnectionSelection.clear(project, ConnectionKind.WORK)
+            shared.unshare("QA")
+        }
+    }
+
 }

@@ -47,7 +47,7 @@ class AtlasEnvironmentsStateTest {
         assertEquals(1, catalog.environments().size)
         assertEquals(emptyList<AtlasConnection>(), catalog.connections(ConnectionKind.DESIGN))
         assertNotNull(catalog.connection("qa", ConnectionKind.WORK))
-        assertFalse(catalog.hasBothKinds("qa"))
+        assertFalse(catalog.hasBothServers("qa"))
         assertEquals(setOf(ConnectionKind.WORK), catalog.occupiedKinds("qa"))
     }
 
@@ -104,7 +104,7 @@ class AtlasEnvironmentsStateTest {
             ),
         )
         assertEquals(2, catalog.connections().size)
-        assertTrue(catalog.hasBothKinds("local"))
+        assertTrue(catalog.hasBothServers("local"))
     }
 
     @Test

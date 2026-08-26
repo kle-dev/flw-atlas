@@ -18,6 +18,8 @@ import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPasswordField
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.AlignX
+import com.intellij.ui.dsl.builder.COLUMNS_MEDIUM
+import com.intellij.ui.dsl.builder.columns
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.ui.jcef.JBCefApp
 import javax.swing.JButton
@@ -54,6 +56,9 @@ class WorkConnectionForm(private val project: Project) : Disposable {
         isVisible = false
     }
 
+    private val sharedNote = JBLabel(FormStatus.html(SHARED_NOTE)).apply { foreground = JBColor.GRAY }
+    private lateinit var sharedRow: com.intellij.ui.dsl.builder.Row
+
     private var disposed = false
 
     private var current: ConnectionsDraft.Conn? = null
@@ -78,17 +83,20 @@ class WorkConnectionForm(private val project: Project) : Disposable {
                     "password safe, never into a file.",
             )
         }
+        sharedRow = row("") { cell(sharedNote) }
         row("App base URL:") {
-            // resizableColumn(), not just align(FILL): without it the column keeps the field at its
-            // minimum width and a URL field renders about as wide as the word "http:".
-            cell(baseUrlField).align(AlignX.FILL).resizableColumn()
+            // Two things, and both are needed. resizableColumn(), because align(FILL) alone leaves the
+            // column at its minimum width and a URL field renders about as wide as the word "http:".
+            // And columns(), because a JTextField with no column count reports its *text* as its
+            // preferred — and therefore minimum — width, so a long URL made this page demand more room
+            // than the settings dialog has and pushed the fields past its edge.
+            cell(baseUrlField).columns(COLUMNS_MEDIUM).align(AlignX.FILL).resizableColumn()
             cell(detectButton)
         }
-        row("Username:") {
-            cell(usernameField).align(AlignX.FILL).resizableColumn()
-            label("Password:")
-            cell(passwordField).align(AlignX.FILL).resizableColumn()
-        }
+        // A row per field: two fields and a label in one row means the page cannot be narrower than
+        // both at once, and a third of its width already belongs to the environment tree.
+        row("Username:") { cell(usernameField).columns(COLUMNS_MEDIUM).align(AlignX.FILL).resizableColumn() }
+        row("Password:") { cell(passwordField).columns(COLUMNS_MEDIUM).align(AlignX.FILL).resizableColumn() }
         row("") {
             cell(sessionStatus)
             link("Sign in via Browser…") { signIn() }
@@ -121,6 +129,10 @@ class WorkConnectionForm(private val project: Project) : Disposable {
         current = conn
         baseUrlField.text = conn.baseUrl
         usernameField.text = conn.username
+        // The URL is the project's; the credentials under it are this developer's.
+        sharedRow.visible(conn.shared)
+        baseUrlField.isEditable = !conn.shared
+        detectButton.isEnabled = !conn.shared
         status.text = FormStatus.html("")
         saveAnywayHint.isVisible = false
         updateSessionStatus()
@@ -134,7 +146,10 @@ class WorkConnectionForm(private val project: Project) : Disposable {
      */
     fun flush() {
         val conn = current ?: return
-        val normalized = BaseUrls.normalize(ConnectionKind.WORK, baseUrlField.text)
+        // A shared connection keeps the file's URL whatever is on screen; the username is still this
+        // developer's and keys their keychain record.
+        val normalized =
+            if (conn.shared) conn.baseUrl else BaseUrls.normalize(ConnectionKind.WORK, baseUrlField.text)
         conn.baseUrl = normalized
         conn.username = usernameField.text.trim()
         typed[conn.id] = Secrets(normalized, conn.username, String(passwordField.password))
@@ -320,6 +335,12 @@ class WorkConnectionForm(private val project: Project) : Disposable {
         status.foreground = JBColor.foreground()
         status.text = FormStatus.html("Session captured (${parsed.headers.keys.joinToString(", ")}) for this IDE session.")
         updateSessionStatus()
+    }
+
+    private companion object {
+        const val SHARED_NOTE = "Defined by this project — the URL comes from the committed " +
+                    "<code>.idea/flowable-environments.xml</code>, so everyone who clones the repository has it. " +
+                    "Your username and password are yours alone and stay in the IDE password safe."
     }
 
     /**

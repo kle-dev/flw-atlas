@@ -1,5 +1,6 @@
 package com.flowable.atlas.expr.inspect
 
+import com.flowable.atlas.environment.AtlasCatalog
 import com.flowable.atlas.environment.AtlasConnection
 import com.flowable.atlas.environment.AtlasEnvironments
 import com.flowable.atlas.environment.ConnectionKind
@@ -141,7 +142,7 @@ class PasteWorkUrlDialog(private val project: Project) : DialogWrapper(project) 
         parsed = WorkUrlParser.parse(urlField.text)
         match = WorkConnectionMatcher.match(
             parsed.baseUrl,
-            AtlasEnvironments.getInstance().connections(ConnectionKind.WORK),
+            AtlasCatalog.connections(project, ConnectionKind.WORK),
         )
         val known = match
         recognised.foreground = JBColor.foreground()

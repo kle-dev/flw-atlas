@@ -34,4 +34,24 @@ object InspectSession {
     fun clear(baseUrl: String) {
         if (baseUrl.isNotBlank()) headersByBaseUrl.remove(normalize(baseUrl))
     }
+
+    /**
+     * The `username to password` pair behind a captured `Authorization: Basic …`, or null when this
+     * session holds something else (an SSO cookie, a bearer token) or nothing at all.
+     *
+     * Only ever decodes a header this plugin wrote itself — [PasteWorkUrlDialog] encodes what the user
+     * typed into its own fields — so that promoting a session target to a real environment can carry
+     * those credentials into the PasswordSafe instead of asking for them a second time.
+     */
+    fun basicAuth(baseUrl: String): Pair<String, String>? {
+        val header = get(baseUrl)?.get("Authorization")?.trim() ?: return null
+        if (!header.startsWith("Basic ", ignoreCase = true)) return null
+        val decoded = runCatching {
+            String(java.util.Base64.getDecoder().decode(header.substring("Basic ".length).trim()))
+        }.getOrNull() ?: return null
+        // A password may contain ':'; a username may not — so the first separator is the only one.
+        val separator = decoded.indexOf(':')
+        if (separator < 0) return null
+        return decoded.substring(0, separator) to decoded.substring(separator + 1)
+    }
 }

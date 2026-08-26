@@ -152,6 +152,22 @@
               warning. Copy an environment to clone it for the next stage; reorder them, because DEV → QA →
               UAT → PROD is a pipeline and alphabetical puts PROD second. Passwords and tokens stay in the
               IDE password safe, keyed by URL, so they are never in a shared file.</li>
+          <li><b>Control and Hub addresses belong in the environment too</b> — a stage is not only the two
+              servers Atlas talks to; it is also the Flowable <b>Control</b> and Flowable <b>Hub</b> pages
+              you open by hand, and keeping those in bookmarks while the URLs beside them live in the IDE
+              was the obvious gap. They are a URL and nothing else: no username, no password, no <i>Test
+              Connection</i>, because Atlas never calls them — a form asking for a password nothing would
+              read is worse than no form. Everything else about an environment applies unchanged, including
+              copying it for the next stage.</li>
+          <li><b>Open an environment in the browser from the Atlas Hub</b> — its toolbar's <i>Open
+              Environment in Browser</i> lists every address in the catalog, grouped per stage, and hands
+              the one you pick to the browser: Design, the app, Control, Hub. Not just the two new kinds — a
+              Design base URL <i>is</i> the Design UI and a Work base URL <i>is</i> the app, so leaving them
+              out would have meant keeping bookmarks for exactly the two addresses Atlas knows best. It
+              follows neither the pull's environment nor the playground's: a third rule about which one it
+              means is one more thing that can silently be wrong, so it asks, and speed search makes the
+              asking a keystroke. A protected stage shows its lock in the list and nothing more — opening a
+              page changes nothing, and a confirmation on a link would be theatre.</li>
           <li><b>Which environment a project uses is two choices, not one</b> — the Design pull and the
               Expression Playground point independently, and that is the point rather than an oversight:
               running against QA while models still come from DEV1 is a normal way to work. Every picker
@@ -162,9 +178,21 @@
               <i>App URL</i> field already filled in the scope and instance id from a pasted link; it now
               recognises which of your environments the link belongs to and switches to it, so one paste
               moves the connection, the scope and the instance together. A link matching no environment is
-              used as-is, marked <i>not saved</i>, with one link to turn it into one. What it no longer does
-              is write that URL into the project's committed settings — a QA link pasted for one evaluation
-              used to become the whole team's configured server.</li>
+              used as-is, as a target that lives for this IDE session. What it no longer does is write that
+              URL into the project's committed settings — a QA link pasted for one evaluation used to become
+              the whole team's configured server.</li>
+          <li><b>Every pasted link keeps its own entry</b> — the playground held exactly one pasted target,
+              so the second link silently evicted the first, which is backwards: pasting two links is what
+              you do when you are comparing two apps, and re-pasting the one you just looked at was the cost
+              of a decision you never made. They all sit in the picker now, marked <i>(this session)</i>,
+              and the button beside it is where they are managed: <b>Forget</b> one, forget all of them, or
+              — for the one that turns out to be a target you keep coming back to — <b>Save as an
+              Environment…</b>, which asks for the single thing that was missing. The name may be one that
+              already exists: a stage with a Design server and no app joins it rather than making a second
+              environment with the same label. Credentials typed in the paste dialog go with it, into the
+              password safe, so nothing has to be typed twice. Forgetting a target takes whatever was
+              captured for it along — a cookie left behind for a URL that is in no list any more is a
+              credential nobody can see and nobody asked to keep.</li>
           <li><b>Protected environments</b> — tick <i>Ask before pulling from or evaluating against this
               environment</i> and Atlas asks first, and marks it with a lock wherever it can be picked. A
               pull asks modally, because it replaces archives in the working tree; an evaluation asks from a
@@ -194,13 +222,59 @@
               apps, <i>Pull from DEV1</i>. Both pickers are ordinary drop-downs rather than a status line
               with a <i>Change…</i> link: the link cost the same clicks but did not look like a choice, and
               switching is the gesture the panel is organised around. They open instantly, since the
-              environment list is in memory; the workspace list is fetched the first time the drop-down is
-              opened, not every time the panel is drawn. Everything a drop-down offers can be selected — an
-              entry that sends you to Settings to first create what it promised is not a choice. The runtime
-              environment sits in its own section beside <i>Open Playground</i>.</li>
+              environment list is in memory; the workspace list is fetched when you switch environment or
+              open the drop-down, not every time the panel is drawn. Everything a drop-down offers can be
+              selected — an entry that sends you to Settings to first create what it promised is not a
+              choice. The runtime environment sits in its own section beside <i>Open Playground</i>.</li>
           <li><b>The workspace and app selection is per environment</b> — a workspace key belongs to one
               server, so a single project-wide value was right for at most one environment and silently
-              wrong on the next.</li>
+              wrong on the next. Switching environment lands in the two pickers below it: the new server's
+              workspaces are read right then, and that environment's saved workspace and apps come back
+              ticked. A workspace or app list that could not be read is no longer remembered as read, so the
+              next refresh tries again instead of leaving an empty list looking like an answer.</li>
+          <li><b>Environments a repository ships to its team</b> — an environment list was a thing every
+              developer built by hand, from a wiki page or a colleague's screenshot, and four people typing
+              four URLs get at least one of them wrong. A project can now define its own: <i>Settings →
+              Environments → <b>Share with Project</b></i> writes the selected environment into
+              <code>.idea/flowable-environments.xml</code>, and everyone who clones the repository has it in
+              every picker, marked <i>(project)</i>, with no configuration at all. Committed like
+              <code>.idea/flowable-atlas.xml</code> beside it, so a URL that moves is a commit rather than
+              six settings dialogs. <b>No credentials, and not as a rule someone has to remember</b> — the
+              file's schema has a name, the <i>Protected</i> flag and one URL per kind, and no field a
+              username or a password could go in. Each developer signs in as themselves, from the IDE
+              password safe as before; a shared login is one audit trail with everyone's name missing from
+              it. Your own list still wins: define an environment of the same name and it shadows the
+              project's entirely, which is how you point <i>QA</i> at your own instance without arguing with
+              the repository. A shared entry is read-only here — <i>Copy Environment</i> turns it into one
+              of yours in one click — and the file is re-read when a <code>git pull</code> changes it, so
+              the Hub cannot go on offering a URL that has moved.</li>
+          <li><b>The Environments page fits its dialog again</b> — username and password shared one row, and
+              a text field with no column count reports its <i>text</i> as its minimum width, so a long
+              Design URL made the page demand more room than the settings dialog has and pushed the password
+              field off the right edge. A row per field, and every URL field bounded.</li>
+          <li><b>The Hub stops spending its height on empty boxes</b> — the explorer list reserved eight
+              rows whether or not anything had been generated, and the app list a fixed ~140px for a
+              workspace that usually holds one app: between them, most of a panel that has five sections to
+              fit into one narrow stripe. Both are sized to what they hold now, an empty section is a single
+              grey line, and a workspace with twenty apps scrolls at eight rows instead of pushing <i>Pull
+              from …</i> off the bottom.</li>
+          <li><b>“Which Flowable project” is a drop-down</b> — it was a line of text with a <i>Change…</i>
+              link underneath, and the link was hidden whenever detection had not turned anything up, so in
+              a repository holding several apps the answer to "can I pick one?" was a blank space. Now it is
+              the same kind of picker as the environment rows, always offering the whole repository, and it
+              costs one line instead of two. The amber <i>"3 found — choose one"</i> stays until a choice is
+              actually made — including a deliberate <i>whole repository</i>, which the plugin can tell
+              apart from a default nobody looked at.</li>
+          <li><b>“Not set” is now something the plugin can actually hold</b> — with a single environment
+              defined, picking <i>not set</i> did nothing: it unset the pointer, and "nothing stored"
+              already meant <i>"you have one environment, use it"</i>, so the rule answered with the same
+              environment the user had just deselected. The picker read <i>not set</i> while the workspace
+              and the ticked apps underneath it stayed, and a pull would have run against that environment.
+              A deliberate <i>not set</i> is stored as such now — it beats the single-environment
+              convenience, which still applies when no choice was ever made — and it empties the two pickers
+              below, because a panel still showing the previous environment's apps reads as a selection that
+              carried over, which is exactly what a pull must never do. Choosing the environment again
+              brings its workspace and apps back; saying <i>not set</i> is not deleting anything.</li>
           <li><b>Two environments may point at the same server</b> — one Design server hosting a DEV
               workspace and a QA workspace is an ordinary setup, and the first cut refused to save it on the
               grounds that the two would share a saved password. They do share it, and that is correct: same
@@ -475,91 +549,6 @@
               <code>DEMO-D009</code>) also shortens while an acronym (<code>IBANCheck</code>) is left
               intact. <code>{shortName}{suffix}</code> is the one-token way to
               <code>PodMemberDto</code>.</li>
-        </ul>
-        <h3>0.12.0</h3>
-        <ul>
-          <li><b>A "Flowable Model" tab in Search Everywhere</b> — open it from <i>Tools → Flowable Atlas →
-              Search Models…</i>, from the Atlas Hub's <i>Model Index</i> row, or by pressing Shift twice
-              and tabbing across to it, and search <i>only</i> Flowable models, without your project's
-              classes, files and symbols mixed in. Models are matched on their <b>key</b> and on their
-              <b>file path</b>, and every row names where it came from: <code>app.zip →
-              processes/invoice.bpmn</code>. Model keys stay searchable in the Symbols tab as before — the
-              new tab is a second, focused way in, not a replacement.</li>
-          <li><b>Your archives are searchable at last</b> — a model packed in a <code>.bar</code>/
-              <code>.zip</code> is invisible to IntelliJ: it appears in neither the Files tab nor Find in
-              Files, because an archive is not part of any content or library root. The new tab searches
-              those entries — by name <i>and</i> by content — so you no longer unpack an archive by hand to
-              find out which process references a variable.</li>
-          <li><b>Full text, live</b> — from two characters on, the tab also greps the content of every
-              model, with each occurrence its own row showing the matched line and its line number; Enter
-              jumps straight there. The scan is cancelled on the next keystroke and its results are cached,
-              so it stays responsive on large repositories. It runs only while the tab is selected, never in
-              the general "All" results.</li>
-          <li><b>Models open with their content</b> — <code>.bpmn</code>, <code>.cmmn</code> and
-              <code>.dmn</code> are now recognised as XML, and the remaining JSON model types
-              (<code>.data</code>, <code>.service</code>, <code>.agent</code>, <code>.event</code>,
-              <code>.query</code>, <code>.app</code>, …) as JSON. Previously IntelliJ classified them as
-              unknown and showed a "file type not associated" placeholder instead of the file — most visibly
-              for an entry opened out of an archive.</li>
-        </ul>
-        <h3>0.11.3</h3>
-        <ul>
-          <li><b>Unused variables, on their own page</b> — the Explorer gains a <i>Variables → Unused
-              variables</i> tab listing every variable something <b>writes</b> that nothing <b>reads</b>.
-              Two findings: a variable no model reads anywhere, and one <b>mapped into a called model that
-              never reads it</b> — the dead <code>flowable:in</code>, where the caller's own use of the name
-              says nothing about the callee. Each row names the write to delete in Design's words (<i>Result
-              variable "Calculate total"</i>, <i>Decision output</i>, <i>In parameter "Fulfil"</i>), links
-              the model and jumps to the element on its diagram.</li>
-          <li><b>The variable graph now knows read from write</b> — it recorded only that a name occurred
-              somewhere. Direction is now tracked for every kind of evidence: <code>setVariable</code> vs
-              <code>getVariable</code>, a decision's inputs vs its outputs, each side of every in/out
-              mapping, a process-level <code>&lt;dataObject&gt;</code> declaration, and a form field as
-              <i>both</i> (a field is prefilled from the variable and writes it back). A variable's page
-              gains a <b>Written / read</b> list, so the finding can be checked rather than trusted.</li>
-          <li><b>The check would rather say nothing than guess</b> — it stays silent wherever a read could
-              exist out of view: a construct whose direction Flowable does not fix, a value consumed outside
-              the models (an action's response payload, an extracted variable a query indexes, a form's
-              outcome variable, a loop counter), a name written into a container object, a bare-EL
-              Init-Variables value, a name the <code>{{…}}</code> harvester ignores, a name passed as a
-              string literal, any scope whose script or Java code reads the whole variable map at once, and
-              a mapping into a model outside the project. The page says how many variables it declined to
-              judge, and why.</li>
-          <li><b>Also newly visible</b> — a process's <code>&lt;dataObject&gt;</code> variable declarations
-              and legacy <code>&lt;flowable:formProperty&gt;</code> fields are parsed into the graph, an
-              event task's <code>eventInParameter</code> source is recorded at all (both sides used to be
-              dropped), and a Java class evaluating Flowable EL from a string (<code>resolveValue(task,
-              "${vars:get(flagReturn)}")</code>) counts as reading that variable.</li>
-        </ul>
-        <h3>0.11.2</h3>
-        <ul>
-          <li><b>The diagram icon follows a key held in a constant or variable</b> — it used to appear only
-              on an inline literal, so extracting the key (<code>String key = "DEMO-P039";</code> …
-              <code>.processDefinitionKey(key)</code>) or using the generated model constants
-              (<code>.processDefinitionKey(ModelKeys.ONBOARDING)</code>) lost it. The compile-time value is
-              now resolved at every Flowable key call site, and the icon sits on the call line.</li>
-          <li><b>Action keys are labelled with the action's name</b> — an inline hint after a string literal
-              that is an <code>.action</code> key, so a constants class of <code>DEMO-Annn</code> reads as
-              what each one starts. The counterpart of the data-object table-name hint; toggle under
-              <i>Settings → Editor → Inlay Hints → Values</i> or <i>Settings → Tools → Flowable Atlas →
-              Inline Hints</i>.</li>
-          <li><b>Decision tables open as tables</b> — a Design decision table has no canvas and therefore no
-              DMN layout to draw, so clicking the diagram icon on a decision key reported "no diagram
-              layout" for nearly every decision. Atlas now paints the <b>decision table</b> itself: hit
-              policy, input band (label plus the expression it evaluates), output band, one numbered row per
-              rule with its annotation. A decision requirement diagram still renders from its layout, and
-              the Explorer keeps showing rules as its own searchable table.</li>
-        </ul>
-        <h3>0.11.1</h3>
-        <ul>
-          <li><b>The diagram's element card can be expanded over the whole page</b> — it starts docked to
-              the diagram's top-right corner, where its resize handle has nothing left to grow into: in a
-              narrow tool window you could not drag it past the drawing. <b>⤢</b> in the header (or a
-              double-click on the header) now lifts it out of the corner into a centered overlay across the
-              entire app — dimmed behind, above even the full-screen diagram, as tall as its content needs
-              and still resizable. Clicking the backdrop or <code>Esc</code> shrinks it back to the corner,
-              a second <code>Esc</code> closes it, and the expanded and docked sizes are remembered
-              separately, so clicking through elements stays in the mode you chose.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

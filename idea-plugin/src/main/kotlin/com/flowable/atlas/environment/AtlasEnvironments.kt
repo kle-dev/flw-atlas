@@ -16,9 +16,9 @@ import com.intellij.openapi.components.service
  *
  * ### Two entities, and at most one connection per kind
  *
- * An environment holds **at most one** [ConnectionKind.DESIGN] and **at most one**
- * [ConnectionKind.WORK] connection — and, importantly, may hold only one of the two. `qa`
- * legitimately has a running app and no Design server; `dev1` has both.
+ * An environment holds **at most one** connection of each [ConnectionKind] — and, importantly, may
+ * hold any subset of them. `qa` legitimately has a running app and no Design server; `dev1` has both;
+ * either may add the Control and Hub addresses, which are links rather than servers Atlas talks to.
  *
  * Two *different* environments may point at the same server, and that is not a mistake to guard
  * against: one Design server commonly hosts a DEV workspace and a QA workspace. They share the single
@@ -185,9 +185,11 @@ class AtlasEnvironments : PersistentStateComponent<AtlasEnvironments.State> {
     fun occupiedKinds(environmentId: String): Set<ConnectionKind> =
         connections().filter { it.environmentId == environmentId }.mapTo(HashSet()) { it.kind }
 
-    /** True when [environmentId] holds both kinds — the "use one environment for both" case. */
-    fun hasBothKinds(environmentId: String): Boolean =
-        occupiedKinds(environmentId).containsAll(ConnectionKind.entries.toSet())
+    /** True when [environmentId] holds a Design *and* a Work server — the "one environment for both"
+     *  case. Named for the two it means: the link-only kinds are not part of being fully configured,
+     *  and counting them here would make an environment with a Control URL look half-finished. */
+    fun hasBothServers(environmentId: String): Boolean =
+        occupiedKinds(environmentId).containsAll(ConnectionKind.SERVERS)
 
     /** Every connection of [kind] addressing [baseUrl] — more than one when stages share a server. */
     fun byBaseUrl(kind: ConnectionKind, baseUrl: String): List<AtlasConnection> =

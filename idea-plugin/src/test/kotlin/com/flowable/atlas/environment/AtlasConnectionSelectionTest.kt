@@ -59,4 +59,23 @@ class AtlasConnectionSelectionTest {
     fun `a blank pointer is treated as never chosen`() {
         assertEquals(Resolution.Selected(prod, explicit = false), resolve("", candidates = listOf(prod)))
     }
+
+    @Test
+    fun `not set, once chosen, is never talked out of by the single-connection rule`() {
+        // The bug this is here for: with one environment defined, picking "not set" unset the pointer,
+        // the rule above answered with that same environment, and the Atlas Hub kept showing its
+        // workspace and apps under a picker that read "not set".
+        assertEquals(Resolution.NotSet, resolve(AtlasConnectionSelection.NONE, candidates = listOf(prod)))
+        assertEquals(Resolution.NotSet, resolve(AtlasConnectionSelection.NONE))
+        // Nor is it a pointer at something deleted: nothing was deleted, the user said no.
+        assertEquals(Resolution.NotSet, resolve(AtlasConnectionSelection.NONE, candidates = emptyList()))
+    }
+
+    @Test
+    fun `no environment can be named into a collision with the not-set marker`() {
+        // Ids are `[a-z0-9-]+`, so an environment called "@none" — or anything else — slugs to
+        // something that cannot be it.
+        assertEquals("none", AtlasConnectionIds.slug("@none"))
+        assertEquals(Resolution.Dangling("none"), resolve("none", candidates = listOf(prod)))
+    }
 }
