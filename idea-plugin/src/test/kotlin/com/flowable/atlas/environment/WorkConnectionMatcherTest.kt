@@ -1,6 +1,6 @@
 package com.flowable.atlas.environment
 
-import com.flowable.atlas.design.DesignAuthMode
+import com.flowable.atlas.environment.auth.AuthMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -8,10 +8,10 @@ import org.junit.Test
 class WorkConnectionMatcherTest {
 
     private fun work(id: String, url: String) =
-        AtlasConnection(id, ConnectionKind.WORK, url, "demo", DesignAuthMode.BASIC, "e-$id", id.uppercase(), false)
+        AtlasConnection(id, ConnectionKind.WORK, url, "demo", AuthMode.BASIC, "e-$id", id.uppercase(), false)
 
     private fun design(id: String, url: String) =
-        AtlasConnection(id, ConnectionKind.DESIGN, url, "demo", DesignAuthMode.BASIC, "e-$id", id.uppercase(), false)
+        AtlasConnection(id, ConnectionKind.DESIGN, url, "demo", AuthMode.BASIC, "e-$id", id.uppercase(), false)
 
     private val qa = work("qa", "https://work-qa.example.com/flowable-work")
     private val prod = work("prod", "https://work.example.com/flowable-work")

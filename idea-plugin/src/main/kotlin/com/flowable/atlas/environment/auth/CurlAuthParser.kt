@@ -1,10 +1,9 @@
-package com.flowable.atlas.expr.inspect
+package com.flowable.atlas.environment.auth
 
 /**
  * Parses the auth-relevant request headers out of text copied from a browser's DevTools — either a
- * full "Copy as cURL" command or a block of raw `Name: value` header lines — so the playground's
- * "Paste session from browser" can replay the user's already-authenticated browser session against the
- * Inspect endpoint. This is the reliable alternative to the embedded-browser login ([InspectSignInDialog])
+ * full "Copy as cURL" command or a block of raw `Name: value` header lines — so *Paste Session…* can
+ * replay the user's already-authenticated browser session against any Flowable server. This is the reliable alternative to the embedded-browser login ([BrowserSignInDialog])
  * for apps behind SSO/OAuth2 that block embedded webviews (e.g. Microsoft Entra Conditional Access).
  *
  * Only a small allow-list of headers is kept — [ALLOWLIST] (`Cookie`, `Authorization`, the XSRF/CSRF

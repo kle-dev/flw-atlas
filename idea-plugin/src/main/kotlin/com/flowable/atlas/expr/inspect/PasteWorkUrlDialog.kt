@@ -5,6 +5,11 @@ import com.flowable.atlas.environment.AtlasConnection
 import com.flowable.atlas.environment.AtlasEnvironments
 import com.flowable.atlas.environment.ConnectionKind
 import com.flowable.atlas.environment.WorkConnectionMatcher
+import com.flowable.atlas.environment.auth.AtlasCredentials
+import com.flowable.atlas.environment.auth.AuthContext
+import com.flowable.atlas.environment.auth.BrowserSessions
+import com.flowable.atlas.environment.auth.BrowserSignInDialog
+import com.flowable.atlas.environment.auth.PasteSessionDialog
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.project.Project
@@ -176,7 +181,7 @@ class PasteWorkUrlDialog(private val project: Project) : DialogWrapper(project) 
         passwordField.text = ""
         val baseUrl = connection.baseUrl
         ApplicationManager.getApplication().executeOnPooledThread {
-            val stored = runCatching { InspectCredentials.load(baseUrl) }.getOrNull()
+            val stored = runCatching { AtlasCredentials.load(baseUrl) }.getOrNull()
             ApplicationManager.getApplication().invokeLater({
                 if (prefilledFor != connection.id) return@invokeLater   // the URL changed while we read
                 if (usernameField.text.isBlank()) usernameField.text = stored?.userName.orEmpty()
@@ -205,14 +210,14 @@ class PasteWorkUrlDialog(private val project: Project) : DialogWrapper(project) 
             testStatus.text = "The embedded browser (JCEF) isn't available in this IDE."
             return
         }
-        val dialog = InspectSignInDialog(project, baseUrl)
+        val dialog = BrowserSignInDialog(project, baseUrl)
         if (!dialog.showAndGet()) return
         val cookie = dialog.harvestedCookie
         if (cookie.isNullOrBlank()) {
             testStatus.foreground = JBColor.RED
             testStatus.text = "No session cookie was captured — make sure the login completed."
         } else {
-            InspectSession.set(baseUrl, mapOf("Cookie" to cookie))
+            BrowserSessions.set(baseUrl, mapOf("Cookie" to cookie))
         }
         updateSessionStatus()
     }
@@ -220,7 +225,7 @@ class PasteWorkUrlDialog(private val project: Project) : DialogWrapper(project) 
     /** The reliable route when the embedded login is blocked: DevTools → Copy as cURL. */
     private fun pasteSession() {
         val baseUrl = parsed.baseUrl ?: return
-        val dialog = InspectPasteSessionDialog(project)
+        val dialog = PasteSessionDialog(project)
         if (!dialog.showAndGet()) return
         val captured = dialog.parsed
         if (!captured.hasAny) {
@@ -228,14 +233,14 @@ class PasteWorkUrlDialog(private val project: Project) : DialogWrapper(project) 
             testStatus.text = "No session headers found in the pasted text."
             return
         }
-        InspectSession.set(baseUrl, captured.headers)
+        BrowserSessions.set(baseUrl, captured.headers)
         updateSessionStatus()
     }
 
     /** A pure in-memory lookup, so it costs nothing to keep current. */
     private fun updateSessionStatus() {
         val baseUrl = parsed.baseUrl
-        val headers = baseUrl?.let { InspectSession.get(it) }
+        val headers = baseUrl?.let { BrowserSessions.get(it) }
         sessionStatus.text = if (headers == null) {
             "Browser session: none"
         } else {
@@ -252,7 +257,9 @@ class PasteWorkUrlDialog(private val project: Project) : DialogWrapper(project) 
         testStatus.foreground = JBColor.foreground()
         testStatus.text = "Connecting…"
         ApplicationManager.getApplication().executeOnPooledThread {
-            val outcome = InspectClient.probe(baseUrl, username, password, InspectSession.get(baseUrl))
+            val outcome = InspectClient.probe(
+                baseUrl, AuthContext.basic(username, password, BrowserSessions.get(baseUrl).orEmpty()),
+            )
             ApplicationManager.getApplication().invokeLater({
                 testButton.isEnabled = true
                 when (outcome) {

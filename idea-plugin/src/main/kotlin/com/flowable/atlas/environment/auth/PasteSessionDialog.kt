@@ -1,4 +1,4 @@
-package com.flowable.atlas.expr.inspect
+package com.flowable.atlas.environment.auth
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
@@ -13,14 +13,14 @@ import javax.swing.JPanel
 
 /**
  * "Paste session from browser" for the "Evaluate Against App" flow: the reliable alternative to the
- * embedded-browser login ([InspectSignInDialog]) for apps whose IdP blocks embedded webviews. The user
+ * embedded-browser login ([BrowserSignInDialog]) for apps whose IdP blocks embedded webviews. The user
  * logs into the app in their **normal** browser, copies an authenticated request from DevTools
  * (Network → right-click → Copy → Copy as cURL, or the raw `Cookie` header), and pastes it here; the
  * auth-relevant headers are extracted by [CurlAuthParser] and replayed by [InspectClient].
  *
  * Pure UI — the parsing is a pure function, so no network or EDT-blocking work happens here.
  */
-class InspectPasteSessionDialog(project: Project) : DialogWrapper(project) {
+class PasteSessionDialog(project: Project) : DialogWrapper(project) {
 
     private val textArea = JBTextArea(12, 70).apply {
         lineWrap = true

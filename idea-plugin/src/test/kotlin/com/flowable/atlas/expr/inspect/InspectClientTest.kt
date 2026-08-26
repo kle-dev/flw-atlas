@@ -1,5 +1,6 @@
 package com.flowable.atlas.expr.inspect
 
+import com.flowable.atlas.environment.auth.AuthContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -41,7 +42,7 @@ class InspectClientTest {
 
     @Test fun evaluateRejectsMissingScopeId() {
         val out = InspectClient.evaluate(
-            InspectClient.Request("https://host", "\${x}", InspectClient.ScopeType.BPMN, "", null, "u", "p"),
+            InspectClient.Request("https://host", "\${x}", InspectClient.ScopeType.BPMN, "", null, AuthContext.basic("u", "p")),
         )
         assertTrue(out is InspectClient.Outcome.Failed)
         assertTrue((out as InspectClient.Outcome.Failed).message.contains("scope id"))

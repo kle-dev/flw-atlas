@@ -1,6 +1,6 @@
 package com.flowable.atlas.environment
 
-import com.flowable.atlas.design.DesignAuthMode
+import com.flowable.atlas.environment.auth.AuthMode
 
 /**
  * An immutable view of one catalog entry, with its environment's name and protection folded in.
@@ -20,7 +20,7 @@ data class AtlasConnection(
     val kind: ConnectionKind,
     val baseUrl: String,
     val username: String,
-    val authMode: DesignAuthMode,
+    val authMode: AuthMode,
     val environmentId: String,
     val environmentName: String,
     /** The environment is marked *Protected* — confirm before pulling from or evaluating against it. */

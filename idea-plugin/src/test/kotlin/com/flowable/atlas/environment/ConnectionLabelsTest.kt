@@ -1,6 +1,6 @@
 package com.flowable.atlas.environment
 
-import com.flowable.atlas.design.DesignAuthMode
+import com.flowable.atlas.environment.auth.AuthMode
 import com.flowable.atlas.environment.AtlasConnectionSelection.Resolution
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -11,7 +11,7 @@ import org.junit.Test
 class ConnectionLabelsTest {
 
     private fun connection(env: String, url: String = "http://work-qa.example.com", protected: Boolean = false) =
-        AtlasConnection("c", ConnectionKind.WORK, url, "demo", DesignAuthMode.BASIC, "e", env, protected)
+        AtlasConnection("c", ConnectionKind.WORK, url, "demo", AuthMode.BASIC, "e", env, protected)
 
     @Test
     fun `the narrow line names the environment and nothing else`() {

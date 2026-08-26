@@ -1,6 +1,6 @@
 package com.flowable.atlas.settings.connections
 
-import com.flowable.atlas.design.DesignAuthMode
+import com.flowable.atlas.environment.auth.AuthMode
 import com.flowable.atlas.environment.AtlasEnvironments
 import com.flowable.atlas.environment.AtlasConnection
 import com.flowable.atlas.environment.SharedEnvironments
@@ -174,7 +174,7 @@ class ConnectionsDraftTest {
                 listOf(
                     AtlasConnection(
                         "x", ConnectionKind.WORK, "https://work-qa.example.com", "",
-                        DesignAuthMode.BASIC, "e", "QA", true,
+                        AuthMode.BASIC, "e", "QA", true,
                     ),
                 ),
             )

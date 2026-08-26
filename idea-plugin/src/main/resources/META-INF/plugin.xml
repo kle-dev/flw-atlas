@@ -140,6 +140,43 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.16.0</h3>
+        <ul>
+          <li><b>One way to sign in, for Design and for the running app</b> — the two halves of the plugin
+              had drifted into teaching different things about the same product. Design offered a username
+              and password or an access token; the app offered a username and password, an embedded browser
+              login and a pasted browser session. Neither list was a subset of the other, so whichever page
+              you learnt first, the other one had controls missing and controls you had never seen, and
+              nothing on either said why. There is one model now: a <b>credential</b> — username and
+              password, or an access token — plus, for a server behind an identity provider, your
+              <b>captured browser session</b>, which layers on top rather than replacing it (an SSO-fronted
+              Flowable often wants both, and its security chain takes whichever it honours). Both kinds get
+              all of it, in one form that differs only where the <i>servers</i> differ: what <i>Test
+              Connection</i> calls, <i>Create Token…</i> for Design, and <i>Detect from Project</i> for the
+              app.</li>
+          <li><b>A Design server behind OAuth2 can be pulled from at all</b> — this was the hole the
+              asymmetry was hiding. Design's answer for an identity provider is an access token, and
+              <i>creating</i> one is itself a username-and-password call: on the very server where a token
+              is the only way in, the button could not work, and the browser-session route that would have
+              solved it lived a few classes away, wired only to the playground. <code>DesignClient</code>
+              set exactly one <code>Authorization</code> header and could not carry a cookie at all. It
+              carries the session now, the sign-in and paste-session controls are on the Design form, and
+              <i>Create Token…</i> says out loud that it needs the credentials SSO switches off.</li>
+          <li><b>One password safe entry per server, not per feature</b> — there were two stores,
+              <code>Flowable Atlas Design</code> and <code>Flowable Atlas Inspect</code>, identical but for
+              their name. Nothing about a password depends on whether the server behind the URL serves
+              models or runs processes. Records are keyed by URL, as they already were, so Design and an app
+              remain separate logins; only the redundant second lookup is gone. <b>You may have to enter a
+              stored password once more.</b></li>
+          <li><b>The shared machinery is no longer named after one of its users</b> — <code>AuthMode</code>,
+              <code>AuthContext</code>, <code>AtlasCredentials</code>, <code>BrowserSessions</code>,
+              <code>BrowserSignInDialog</code>, <code>PasteSessionDialog</code> and the cURL parser live in
+              one <code>environment.auth</code> package. Half of them were sitting in the Expression
+              Playground's <code>expr.inspect</code>, which is exactly why the Design side never found them.
+              Header precedence — a captured <code>Authorization</code> beats a configured one, and is never
+              sent twice — is decided in one tested place instead of being re-derived at each call
+              site.</li>
+        </ul>
         <h3>0.15.0</h3>
         <ul>
           <li><b>Flowable environments, defined once for every project</b> — the plugin knew exactly one
@@ -482,73 +519,6 @@
           <li><b>Placeholder keys everywhere</b> — every example model key, namespace and table name in the
               code, tests and documentation is a <code>DEMO-*</code> placeholder. Some had been carried over
               from a real project, and this repository is public.</li>
-        </ul>
-        <h3>0.13.0</h3>
-        <ul>
-          <li><b>Report a problem straight from the error dialog</b> — an Atlas exception used to reach the
-              IDE's generic "Report to JetBrains" dialog, which discards third-party plugin reports, so the
-              only way to hand one over was to dig <code>idea.log</code> out of <i>Help → Show Log</i>. The
-              dialog now offers <b>Report Flowable Atlas Problem…</b>: it assembles the environment (Atlas
-              and IDE version, verified platform range, OS, JRE) plus the stack traces, copies that to the
-              clipboard and opens the issue tracker. Nothing is transmitted by the plugin itself — a trace
-              can carry model keys and file paths from your project, so you see the text before it
-              moves.</li>
-          <li><b>Failures leave a trail</b> — around forty places swallowed their exception silently. The
-              worst were the credential stores: typing a Design or Inspect password and hitting <i>Apply</i>
-              could fail to write it to the PasswordSafe (locked keychain, "do not save passwords" mode) and
-              say nothing, so the next pull asked again for no visible reason. Those now log, as do a failed
-              Design pull, custom-function extraction (whose failure made the inspection flag your own
-              <code>flw.*</code> functions as unknown), sub-project detection and explorer discovery. Hot
-              paths log at debug or once, never per file, so <code>idea.log</code> stays readable.</li>
-          <li><b>The Atlas Hub states what was actually verified</b> — its footer reads <i>"verified on
-              2026.2"</i> and flags the running IDE whenever it falls outside that, in either direction.
-              Atlas installs on 2026.1 and later on purpose: it ships as a ZIP with no update channel, so a
-              tight <code>until-build</code> would make it vanish on the day you upgrade the IDE rather than
-              prompt for an update. That makes the range it <i>installs</i> on wider than the range it is
-              <i>verified</i> on, so a 2026.1 install is flagged as untested too — "it loads" is no longer
-              confused with "it was tested".</li>
-          <li><b>A CHANGELOG in the repository</b> — the release history only existed inside the plugin
-              descriptor, where the IDE's plugin manager shows it, leaving CLI users and anyone reading the
-              repo on GitHub with no way to see what changed. <code>CHANGELOG.md</code> is now generated
-              from these very notes, so the two cannot drift.</li>
-          <li><b>Removed a platform API scheduled for deletion</b> — three combo/list renderers used a
-              <code>SimpleListCellRenderer.create</code> overload JetBrains has marked for removal, which
-              would have broken the plugin on a future IDE. Replaced with the supported
-              <code>textListCellRenderer</code>. JetBrains' Plugin Verifier now reports no
-              scheduled-for-removal usage at all.</li>
-          <li><b>Fixed two gates that were not gating</b> — the tests that keep
-              <code>CLAUDE.template.md</code> and <code>CHANGELOG.md</code> in step with their generators
-              compare files outside the module's source sets, which Gradle could not see: hand-editing
-              either left <code>./gradlew build</code> green on exactly the drift those tests exist to
-              catch. They are declared inputs now, verified by injecting a change and watching the build
-              fail. Also added the repository's <code>LICENSE</code>.</li>
-        </ul>
-        <h3>0.12.2</h3>
-        <ul>
-          <li><b>Runs on IntelliJ IDEA 2026.2</b> — one ZIP for 2026.1 and 2026.2, both checked with
-              JetBrains' Plugin Verifier. 2026.2 moved JCEF (the Atlas Hub, the explorer editor, the Inspect
-              sign-in browser) out of the platform core into the bundled <i>Web Browser (JCEF)</i> plugin;
-              Atlas now declares that plugin as an <i>optional</i> dependency, so the same build picks it up
-              on 2026.2 and ignores it on 2026.1.</li>
-        </ul>
-        <h3>0.12.1</h3>
-        <ul>
-          <li><b>DTO class names come from a pattern</b> — <i>Generate → Data-Object DTOs</i> names its
-              classes the way the Liquibase dialog names its changelog files: a token pattern (<code>{name}
-              {shortName} {key} {app} {suffix}</code>) plus an optional regex rename, rendered live into the
-              preview's <i>Class name</i> and <i>Target file</i> columns. The default
-              <code>{name}{suffix}</code> is the name you got before, a class name typed into the table
-              outranks the pattern for that row, and the Alt-Enter intention proposes the same name the bulk
-              dialog would. Pattern and rename are remembered per project (and per sub-project) under
-              <i>Settings → Flowable Atlas → Generation</i>.</li>
-          <li><b>Class names without the model key</b> — Design model names usually carry their key
-              (<code>DEMO-D009 Pod Member</code>), which the derived class name repeated as noise:
-              <code>DEMOD009PodMemberDto</code>. <code>{shortName}</code> drops it — the key itself when the
-              name starts with it, otherwise a leading capitals-and-digits run before the first word, so a
-              key written differently from the key model (<code>DEMO-D9</code> against
-              <code>DEMO-D009</code>) also shortens while an acronym (<code>IBANCheck</code>) is left
-              intact. <code>{shortName}{suffix}</code> is the one-token way to
-              <code>PodMemberDto</code>.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

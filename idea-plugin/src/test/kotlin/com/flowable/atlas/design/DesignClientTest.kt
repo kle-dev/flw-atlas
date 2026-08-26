@@ -1,5 +1,6 @@
 package com.flowable.atlas.design
 
+import com.flowable.atlas.environment.auth.AuthContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -50,21 +51,24 @@ class DesignClientTest {
     }
 
     @Test fun unauthorizedMessageIsModeSpecific() {
-        val basic = DesignClient.unauthorizedMessage(DesignClient.Auth.Basic("u", "p"))
+        val basic = DesignClient.unauthorizedMessage(AuthContext.basic("u", "p"))
         assertTrue(basic.contains("username/password"))
-        val token = DesignClient.unauthorizedMessage(DesignClient.Auth.Token("t"))
+        val token = DesignClient.unauthorizedMessage(AuthContext.token("t"))
         assertTrue(token.contains("access token"))
         assertTrue(token.contains("expired"))
         assertFalse(token.contains("username"))
+        // A rejected cookie is neither: the fix is to sign in again, not to hunt for a password.
+        val session = DesignClient.unauthorizedMessage(AuthContext.session(mapOf("Cookie" to "S=1")))
+        assertTrue(session.contains("browser session"))
     }
 
     @Test fun authorizationHeaderPerScheme() {
         assertEquals(
             "Basic " + Base64.getEncoder().encodeToString("u:p".toByteArray()),
-            DesignClient.authorizationHeader(DesignClient.Auth.Basic("u", "p")),
+            AuthContext.basic("u", "p").authorizationHeader(),
         )
         // A pasted "Bearer …" must not double up.
-        assertEquals("Bearer T0K", DesignClient.authorizationHeader(DesignClient.Auth.Token("Bearer T0K")))
+        assertEquals("Bearer T0K", AuthContext.token("Bearer T0K").authorizationHeader())
     }
 
     @Test fun parsesNewToken() {
@@ -133,7 +137,7 @@ class DesignClientTest {
 
     /** A blank token must fail before a socket is opened — the URL here is never reachable. */
     @Test fun listWorkspacesRejectsBlankAccessToken() {
-        val out = DesignClient.listWorkspaces(DesignClient.Connection("https://host", DesignClient.Auth.Token("  ")))
+        val out = DesignClient.listWorkspaces(DesignClient.Connection("https://host", AuthContext.token("  ")))
         assertTrue(out is DesignClient.Result.Failed)
         assertTrue((out as DesignClient.Result.Failed).message.contains("access token"))
     }

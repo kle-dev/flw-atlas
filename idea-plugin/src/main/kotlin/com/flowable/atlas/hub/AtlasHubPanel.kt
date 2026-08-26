@@ -6,7 +6,7 @@ import com.flowable.atlas.action.GenerateModelConstantsAction
 import com.flowable.atlas.action.RebuildModelIndexAction
 import com.flowable.atlas.design.DesignAppListUi
 import com.flowable.atlas.design.DesignClient
-import com.flowable.atlas.design.DesignCredentials
+import com.flowable.atlas.environment.auth.AtlasCredentials
 import com.flowable.atlas.design.DesignPullSelection
 import com.flowable.atlas.design.DesignPullService
 import com.flowable.atlas.events.AtlasEvents
@@ -802,17 +802,19 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         }
     }
 
-    /** The connection a list fetch runs with, or null when no credential can be read (a cleared or
-     *  locked keychain entry). Reads the PasswordSafe, so it must stay off the EDT. */
+    /** The connection a list fetch runs with, or null when nothing would authenticate it (a cleared or
+     *  locked keychain entry, and no captured browser session). Reads the PasswordSafe, so it must stay
+     *  off the EDT. */
     private fun designConnection(): DesignClient.Connection? {
         val selected = AtlasConnectionSelection.selected(project, ConnectionKind.DESIGN) ?: return null
         val auth = try {
-            DesignCredentials.loadAuth(selected.baseUrl, selected.authMode, selected.username)
+            AtlasCredentials.contextFor(selected.baseUrl, selected.authMode, selected.username)
         } catch (pce: ProcessCanceledException) {
             throw pce                      // a cancelled action is not a failure
         } catch (e: Exception) {
             null
         } ?: return null
+        if (auth.isEmpty) return null
         return DesignClient.Connection(selected.baseUrl, auth)
     }
 

@@ -1,6 +1,6 @@
 package com.flowable.atlas.environment
 
-import com.flowable.atlas.design.DesignAuthMode
+import com.flowable.atlas.environment.auth.AuthMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -15,7 +15,7 @@ class AtlasCatalogTest {
             kind = kind,
             baseUrl = url,
             username = "",
-            authMode = DesignAuthMode.BASIC,
+            authMode = AuthMode.BASIC,
             environmentId = environment.lowercase(),
             environmentName = environment,
             requiresConfirmation = false,

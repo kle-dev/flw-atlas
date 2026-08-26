@@ -1,6 +1,7 @@
 package com.flowable.atlas.design
 
 import com.flowable.atlas.environment.AtlasConnectionSelection
+import com.flowable.atlas.environment.auth.AtlasCredentials
 import com.flowable.atlas.environment.AtlasDesignTarget
 import com.flowable.atlas.environment.AtlasProtection
 import com.flowable.atlas.environment.ConnectionKind
@@ -114,11 +115,13 @@ class DesignPullService(private val project: Project) {
         // Log the failure path: a broken or locked keychain looks exactly like "not configured yet"
         // from here, so without this the user is bounced to Settings again and again with nothing to go on.
         val auth = runCatching {
-            DesignCredentials.loadAuth(connection.baseUrl, connection.authMode, connection.username)
+            AtlasCredentials.contextFor(connection.baseUrl, connection.authMode, connection.username)
         }
             .onFailure { LOG.warn("Could not read Design credentials from the PasswordSafe", it) }
             .getOrNull()
-        if (auth == null) {
+        // Empty, not null: a captured browser session authenticates on its own, so "no stored secret"
+        // is only a dead end when there is no session either.
+        if (auth == null || auth.isEmpty) {
             configureThenRetry()   // e.g. keychain entry was deleted, or the chosen mode has no secret yet
             return
         }

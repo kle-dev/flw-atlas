@@ -1,6 +1,6 @@
 package com.flowable.atlas.settings.connections
 
-import com.flowable.atlas.design.DesignAuthMode
+import com.flowable.atlas.environment.auth.AuthMode
 import com.flowable.atlas.environment.AtlasCatalog
 import com.flowable.atlas.environment.AtlasConnectionIds
 import com.flowable.atlas.environment.AtlasEnvironments
@@ -38,7 +38,7 @@ class ConnectionsDraft private constructor(
         val kind: ConnectionKind,
         var baseUrl: String,
         var username: String,
-        var authMode: DesignAuthMode,
+        var authMode: AuthMode,
         val shared: Boolean = false,
     )
 
@@ -95,7 +95,7 @@ class ConnectionsDraft private constructor(
         val environmentName = environment(environmentId)?.name.orEmpty()
         val conn = Conn(
             AtlasConnectionIds.newConnectionId(environmentName, kind.display, takenConnectionIds()),
-            environmentId, kind, "", "", DesignAuthMode.BASIC,
+            environmentId, kind, "", "", AuthMode.BASIC,
         )
         connections.add(conn)
         return conn

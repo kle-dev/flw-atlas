@@ -348,9 +348,13 @@ along, into the password safe. Forgetting a target takes whatever was captured f
 Evaluating against a **Protected** environment asks first — but from a small confirmation with *Cancel*
 preselected, so declining is one keystroke, and the lock stays visible on the picker the whole time.
 
-For apps behind single sign-on there are two routes, both on the connection in *Settings → Environments*:
-an embedded browser login that harvests the session, or pasting a session from your browser's dev tools.
-Captured headers stay in memory for the IDE session only; passwords go to the OS keychain.
+Signing in is the same question for every Flowable server Atlas talks to, and it is asked in one place:
+the connection in *Settings → Environments*. A username and password, or an access token — and, for a
+server behind single sign-on, your own browser session, captured either by an embedded login or by
+pasting a request from your browser's dev tools. The session layers *on top of* a credential rather than
+replacing it, because an SSO-fronted Flowable often wants both and its security chain takes whichever it
+honours. Captured headers stay in memory for the IDE session only; passwords and tokens go to the OS
+keychain, keyed by URL — so a Design server and an app are separate logins, as they always were.
 
 Reach it from the bottom stripe, from **Tools → Flowable Atlas → Open Expression Playground**, or with
 Alt-Enter on any expression in a model. It is also a second tab on every generated explorer.
@@ -414,8 +418,11 @@ still compiles and now points at nothing. Atlas names the keys that vanished sin
 offers to regenerate the explorer.
 
 Files are written the way Design names its own exports, each through a temp file and an atomic move, and
-the model index is rebuilt afterwards. Authentication is a username and password or an access token —
-and it can create the token for you. Credentials go to the IDE's password safe, never to a shared file.
+the model index is rebuilt afterwards. Authentication is a username and password, an access token — it
+can create the token for you — or, behind an identity provider, your captured browser session. Note that
+*creating* a token is itself a username-and-password call, so on a server where SSO has switched those
+off, the browser session is the route that works. Credentials go to the IDE's password safe, never to a
+shared file.
 
 The pull names the environment it is running against, in the progress bar and in the notification. An
 environment marked **Protected** asks first, modally, because a pull replaces archives in the working

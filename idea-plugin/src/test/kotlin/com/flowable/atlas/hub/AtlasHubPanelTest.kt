@@ -1,6 +1,6 @@
 package com.flowable.atlas.hub
 
-import com.flowable.atlas.design.DesignAuthMode
+import com.flowable.atlas.environment.auth.AuthMode
 import com.flowable.atlas.environment.AtlasConnection
 import com.flowable.atlas.environment.AtlasConnectionSelection
 import com.flowable.atlas.environment.AtlasEnvironments
@@ -306,7 +306,7 @@ class AtlasHubPanelTest : BasePlatformTestCase() {
                 listOf(
                     AtlasConnection(
                         "ignored", ConnectionKind.DESIGN, "https://design-qa.example.com", "",
-                        DesignAuthMode.BASIC, "e", "QA", false,
+                        AuthMode.BASIC, "e", "QA", false,
                     ),
                 ),
             )

@@ -1,6 +1,6 @@
 package com.flowable.atlas.environment
 
-import com.flowable.atlas.design.DesignAuthMode
+import com.flowable.atlas.environment.auth.AuthMode
 import com.flowable.atlas.events.AtlasEvents
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.Service
@@ -52,9 +52,9 @@ class SharedEnvironments : PersistentStateComponent<SharedEnvironments.State> {
         /** By name with a blank default, for the reason spelled out on [AtlasEnvironments.ConnectionState]. */
         var kind: String = ""
         var baseUrl: String = ""
-        var authMode: DesignAuthMode = DesignAuthMode.BASIC
+        var authMode: AuthMode = AuthMode.BASIC
 
-        constructor(kind: ConnectionKind, baseUrl: String, authMode: DesignAuthMode = DesignAuthMode.BASIC) : this() {
+        constructor(kind: ConnectionKind, baseUrl: String, authMode: AuthMode = AuthMode.BASIC) : this() {
             this.kind = kind.name
             this.baseUrl = baseUrl
             this.authMode = authMode

@@ -1,4 +1,4 @@
-package com.flowable.atlas.expr.inspect
+package com.flowable.atlas.environment.auth
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
@@ -25,11 +25,16 @@ import javax.swing.JComponent
 import javax.swing.JPanel
 
 /**
- * An embedded-browser SSO login for the "Evaluate Against App" flow: opens the app's base URL in a
- * JCEF browser, lets the user complete the real IdP login (Microsoft/Keycloak/…), then harvests the
- * resulting session cookie for the app host from JCEF's shared cookie store. The harvested `Cookie`
- * header ([harvestedCookie]) is replayed by [InspectClient] so the request rides the user's own
- * authenticated session — no OAuth2 flow is implemented here; the app and IdP do the whole dance.
+ * An embedded-browser SSO login for **any** Flowable server: opens its base URL in a JCEF browser,
+ * lets the user complete the real IdP login (Microsoft/Keycloak/…), then harvests the resulting session
+ * cookie for that host from JCEF's shared cookie store. The harvested `Cookie` header
+ * ([harvestedCookie]) goes into [BrowserSessions] and is replayed on every request to that server, so
+ * it rides the user's own authenticated session — no OAuth2 flow is implemented here; the server and
+ * the IdP do the whole dance.
+ *
+ * It served only the running app before, which is the reason a Design server behind OAuth2 was
+ * unreachable: Design's only answer was an access token, and minting one needs the basic auth that
+ * OAuth2 switches off.
  *
  * Provider-agnostic by construction: nothing but the base URL (from the connection panel) drives it,
  * and cookies are collected for whatever host that URL resolves to. Cookie collection runs on the CEF
@@ -37,7 +42,7 @@ import javax.swing.JPanel
  *
  * Caller must check [com.intellij.ui.jcef.JBCefApp.isSupported] before constructing this.
  */
-class InspectSignInDialog(project: Project, private val baseUrl: String) : DialogWrapper(project) {
+class BrowserSignInDialog(project: Project, private val baseUrl: String) : DialogWrapper(project) {
 
     private val browser = JBCefBrowser()
     private val host: String = runCatching { URI(baseUrl).host }.getOrNull().orEmpty()
