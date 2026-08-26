@@ -53,8 +53,8 @@ object EndpointModelScan {
      */
     fun affectedModelFiles(project: Project, endpoints: List<EndpointPsi.Endpoint>): List<VirtualFile> {
         if (endpoints.none { meaningful(it) }) return emptyList()
-        return ReadAction.compute<List<VirtualFile>, RuntimeException> {
-            if (project.isDisposed) return@compute emptyList()
+        return ReadAction.computeBlocking<List<VirtualFile>, RuntimeException> {
+            if (project.isDisposed) return@computeBlocking emptyList()
             val found = LinkedHashSet<VirtualFile>()
             ModelReferenceScan.forEachModelText(project) { vf, text ->
                 if (usageRanges(text, endpoints).isNotEmpty()) found.add(vf)

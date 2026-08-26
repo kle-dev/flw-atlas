@@ -8,7 +8,7 @@ import com.intellij.navigation.ChooseByNameContributorEx
 import com.intellij.navigation.ItemPresentation
 import com.intellij.navigation.NavigationItem
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.runReadAction
+import com.intellij.openapi.application.runReadActionBlocking
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.IconLoader
@@ -48,7 +48,7 @@ class FlowableKeyGotoSymbolContributor : ChooseByNameContributorEx {
         for (entry in index.keysOfType(ModelType.ACTION)) entry.members.botKey
             ?.takeIf { it.isNotBlank() }?.let { processor.process(it) }
         // Bot keys declared by Java BotService implementors.
-        runReadAction { botClasses(project, scope).keys.forEach { processor.process(it) } }
+        runReadActionBlocking { botClasses(project, scope).keys.forEach { processor.process(it) } }
     }
 
     override fun processElementsWithName(
@@ -60,7 +60,7 @@ class FlowableKeyGotoSymbolContributor : ChooseByNameContributorEx {
         val project = scope.project ?: return
         val service = project.service<FlowableModelIndexService>()
         val index = service.cachedOrNull() ?: return
-        runReadAction {
+        runReadActionBlocking {
             val psiManager = PsiManager.getInstance(project)
             val seenFiles = HashSet<String>()
 

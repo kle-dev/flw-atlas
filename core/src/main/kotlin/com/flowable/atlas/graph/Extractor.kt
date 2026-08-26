@@ -174,7 +174,7 @@ object Atlas {
             } else if (oryx) {
                 return  // an Oryx body for a non-form type — nothing a parser could read
             } else {
-                doc.putAll(body!!)
+                doc.putAll(body)
                 doc.putIfAbsent("key", key)
                 if (truthyStr(wrapper["name"])) doc.putIfAbsent("name", wrapper["name"])
                 if (truthyStr(wrapper["description"])) doc.putIfAbsent("description", wrapper["description"])

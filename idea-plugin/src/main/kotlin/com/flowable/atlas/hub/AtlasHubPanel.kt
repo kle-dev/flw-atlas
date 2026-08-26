@@ -59,7 +59,6 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.ui.CollectionListModel
 import com.intellij.ui.JBColor
 import com.intellij.ui.ColoredListCellRenderer
-import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBList
@@ -67,6 +66,7 @@ import com.intellij.ui.CheckBoxList
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.actionButton
+import com.intellij.ui.dsl.listCellRenderer.listCellRenderer
 import com.intellij.ui.dsl.listCellRenderer.textListCellRenderer
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.ui.jcef.JBCefApp
@@ -124,9 +124,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
      * that sat on a second line below it.
      */
     private val projectCombo = ComboBox<String?>().apply {
-        renderer = SimpleListCellRenderer.create<String?> { label, value, _ ->
-            label.text = if (value.isNullOrBlank()) "Whole project" else value
-        }
+        renderer = textListCellRenderer { if (it.isNullOrBlank()) "Whole project" else it }
         addActionListener { if (!populatingCombos) chooseSubProject(selectedItem as? String) }
     }
 
@@ -687,9 +685,9 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
 
     /** Renders an environment with a padlock when it is protected; `null` is the "not set" entry. */
     private fun connectionRenderer() =
-        SimpleListCellRenderer.create<AtlasConnection?> { label, value, _ ->
-            label.text = value?.let { ConnectionLabels.pickerItem(it) } ?: "not set"
-            label.icon = if (value?.requiresConfirmation == true) AllIcons.Nodes.Padlock else null
+        listCellRenderer<AtlasConnection?> {
+            if (value?.requiresConfirmation == true) icon(AllIcons.Nodes.Padlock)
+            text(value?.let { ConnectionLabels.pickerItem(it) } ?: "not set")
         }
 
     private fun chooseConnection(kind: ConnectionKind, item: Any?) {

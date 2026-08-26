@@ -10,6 +10,7 @@ import com.intellij.ide.actions.searcheverywhere.SearchEverywhereManager
 import com.intellij.ide.actions.searcheverywhere.WeightedSearchEverywhereContributor
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
+import com.intellij.openapi.actionSystem.DataSink
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -22,6 +23,7 @@ import com.intellij.psi.codeStyle.NameUtil
 import com.intellij.util.Processor
 import com.intellij.util.text.Matcher
 import com.intellij.util.text.matching.MatchingMode
+import java.util.function.BiConsumer
 import javax.swing.ListCellRenderer
 
 /**
@@ -163,8 +165,10 @@ class FlowableModelSeContributor(private val project: Project) :
     override fun getElementsRenderer(): ListCellRenderer<in FlowableSeItem> =
         FlowableModelSeRenderer { highlightMatcher }
 
-    override fun getDataForItem(element: FlowableSeItem, dataId: String): Any? =
-        if (CommonDataKeys.VIRTUAL_FILE.`is`(dataId)) element.file else null
+    /** What the popup's own actions see as the selected item: the model file behind the row. Replaces
+     *  the deprecated dataId-based `getDataForItem` — same data, pushed into a typed sink. */
+    override fun getDataProviders(): List<BiConsumer<FlowableSeItem, DataSink>> =
+        listOf(BiConsumer { item, sink -> sink[CommonDataKeys.VIRTUAL_FILE] = item.file })
 
     override fun getItemDescription(element: FlowableSeItem): String = element.displayPath
 

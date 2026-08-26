@@ -416,7 +416,7 @@ class GenerateDataObjectDtoDialog(
 
     private inner class IncludeColumn : ColumnInfo<Row, Boolean>("") {
         override fun valueOf(row: Row): Boolean = row.include
-        override fun getColumnClass(): Class<*> = java.lang.Boolean::class.java
+        override fun getColumnClass(): Class<*> = Boolean::class.javaObjectType
         override fun isCellEditable(row: Row): Boolean = row.item.generatable
         override fun setValue(row: Row, value: Boolean) {
             row.include = value

@@ -86,8 +86,8 @@ class FlowableModelTextScanner(private val project: Project) : Disposable {
 
     /** Phase 1 — the read-locked part: which files are worth reading. Touches no content. */
     private fun collectCandidates(): List<VirtualFile> =
-        ReadAction.compute<List<VirtualFile>, RuntimeException> {
-            if (project.isDisposed) return@compute emptyList()
+        ReadAction.computeBlocking<List<VirtualFile>, RuntimeException> {
+            if (project.isDisposed) return@computeBlocking emptyList()
             val out = ArrayList<VirtualFile>()
             ProjectFileIndex.getInstance(project).iterateContent { file ->
                 if (!file.isDirectory && !ModelFiles.isExcluded(file.path) &&

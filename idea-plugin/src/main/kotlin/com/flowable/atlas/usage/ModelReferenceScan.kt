@@ -42,8 +42,8 @@ object ModelReferenceScan {
      */
     fun affectedModelFiles(project: Project, names: Set<String>): List<VirtualFile> {
         if (names.isEmpty()) return emptyList()
-        return ReadAction.compute<List<VirtualFile>, RuntimeException> {
-            if (project.isDisposed) return@compute emptyList()
+        return ReadAction.computeBlocking<List<VirtualFile>, RuntimeException> {
+            if (project.isDisposed) return@computeBlocking emptyList()
             val found = LinkedHashSet<VirtualFile>()
             forEachModelText(project) { vf, text ->
                 if (names.any { text.contains(it) } && ModelUsageLocator.findUsages(text, names).isNotEmpty()) {

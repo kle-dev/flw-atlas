@@ -43,7 +43,7 @@ import com.intellij.openapi.actionSystem.impl.ActionButton
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.application.WriteIntentReadAction
-import com.intellij.openapi.application.runReadAction
+import com.intellij.openapi.application.runReadActionBlocking
 import com.intellij.openapi.command.undo.UndoUtil
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.logger
@@ -66,7 +66,7 @@ import com.intellij.ui.AnimatedIcon
 import com.intellij.ui.JBColor
 import com.intellij.ui.JBSplitter
 import com.intellij.ui.LanguageTextField
-import com.intellij.ui.SimpleListCellRenderer
+import com.intellij.ui.SimpleColoredComponent
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextArea
@@ -75,6 +75,7 @@ import com.intellij.ui.dsl.builder.Align
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.actionButton
 import com.intellij.ui.dsl.builder.panel
+import com.intellij.ui.dsl.listCellRenderer.listCellRenderer
 import com.intellij.util.SingleAlarm
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
@@ -242,18 +243,19 @@ class FlowableExpressionPanel(val project: Project) :
      * choice the user makes while working, over and over, and it should look like one at a glance.
      */
     private val connectionCombo = ComboBox<Target?>().apply {
-        renderer = SimpleListCellRenderer.create<Target?> { label, value, _ ->
-            label.text = when (value) {
-                is Target.Env -> ConnectionLabels.pickerItem(value.connection)
-                // Host, port and path — the scheme is the only part that never tells two of these
-                // apart, and two apps on one machine differ by exactly the parts that stay.
-                // "(this session)" is what says it is not one of the environments.
-                is Target.Session -> "${BaseUrls.withoutScheme(value.baseUrl)} (this session)"
-                else -> "no environment yet"
-            }
-            label.icon =
-                if ((value as? Target.Env)?.connection?.requiresConfirmation == true) AllIcons.Nodes.Padlock
-                else null
+        renderer = listCellRenderer<Target?> {
+            val target = value
+            if ((target as? Target.Env)?.connection?.requiresConfirmation == true) icon(AllIcons.Nodes.Padlock)
+            text(
+                when (target) {
+                    is Target.Env -> ConnectionLabels.pickerItem(target.connection)
+                    // Host, port and path — the scheme is the only part that never tells two of these
+                    // apart, and two apps on one machine differ by exactly the parts that stay.
+                    // "(this session)" is what says it is not one of the environments.
+                    is Target.Session -> "${BaseUrls.withoutScheme(target.baseUrl)} (this session)"
+                    else -> "no environment yet"
+                },
+            )
         }
         addActionListener { if (!populatingConnection) chooseTarget(selectedItem) }
     }
@@ -544,7 +546,7 @@ class FlowableExpressionPanel(val project: Project) :
         if (valid.path.isRoot) return
         // no commit here: PSI may lag the document for a moment, but every diagnostics pass re-fires
         // onScopeStatus, so a stale/missing highlight self-heals; PSI reads still need a read lock
-        val range = runReadAction {
+        val range = runReadActionBlocking {
             PsiDocumentManager.getInstance(project).getPsiFile(payloadField.document)
                 ?.let { PayloadJsonPaths.rangeOf(it, valid.path) }
         } ?: return
@@ -952,14 +954,27 @@ class FlowableExpressionPanel(val project: Project) :
     /** For tests: how many choices the connection picker offers. */
     internal fun connectionItemCountForTest(): Int = connectionCombo.itemCount
 
-    /** For tests: what the connection picker is showing right now. */
+    /**
+     * For tests: what the connection picker is showing right now.
+     *
+     * The text is collected from the rendered component *tree*: the platform's `listCellRenderer` DSL
+     * paints into a nested SimpleColoredComponent instead of being a JLabel itself, so the cast that
+     * the deprecated SimpleListCellRenderer allowed silently yielded "" and made the picker read as
+     * empty to every assertion here.
+     */
     internal fun connectionComboLabelForTest(): String {
-        val renderer = connectionCombo.renderer
-        val component = renderer.getListCellRendererComponent(
+        val component = connectionCombo.renderer.getListCellRendererComponent(
             javax.swing.JList(), connectionCombo.selectedItem as Target?, -1, false, false,
         )
-        return (component as? javax.swing.JLabel)?.text.orEmpty()
+        return renderedTexts(component).joinToString(" ").trim()
     }
+
+    private fun renderedTexts(component: java.awt.Component): List<String> = when (component) {
+        is SimpleColoredComponent -> listOf(component.getCharSequence(false).toString())
+        is javax.swing.JLabel -> listOfNotNull(component.text)
+        is java.awt.Container -> component.components.flatMap { renderedTexts(it) }
+        else -> emptyList()
+    }.filter { it.isNotBlank() }
 
     /** For tests: the session targets the picker is offering, by base URL. */
     internal fun sessionTargetsForTest(): List<String> =

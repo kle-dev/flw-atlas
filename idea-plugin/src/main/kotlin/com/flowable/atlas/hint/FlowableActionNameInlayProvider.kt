@@ -4,6 +4,7 @@ import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
 import com.flowable.atlas.settings.FlowableAtlasSettings
+import com.intellij.codeInsight.hints.declarative.HintFormat
 import com.intellij.codeInsight.hints.declarative.InlayHintsCollector
 import com.intellij.codeInsight.hints.declarative.InlayHintsProvider
 import com.intellij.codeInsight.hints.declarative.InlayTreeSink
@@ -50,7 +51,9 @@ class FlowableActionNameInlayProvider : InlayHintsProvider {
             val name = (element.value as? String)?.let { names[it] } ?: return
             sink.addPresentation(
                 InlineInlayPosition(element.textRange.endOffset, relatedToPrevious = true),
-                hasBackground = true,
+                // HintFormat.default is the boxed inlay the `hasBackground = true` overload used to mean;
+                // that overload is deprecated in favour of passing the format itself.
+                hintFormat = HintFormat.default,
             ) { text(name) }
         }
     }
