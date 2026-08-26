@@ -140,6 +140,63 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.18.0</h3>
+        <ul>
+          <li><b>A form's buttons say what they do</b> — the Fields list named a button and its type, and
+              stopped there. The form's references said <i>an action is triggered</i>; which button
+              triggered it, with which values, under which condition, and where you land afterwards were
+              nowhere on the page. A button row expands in place now: the model it invokes as a chip you can
+              follow, the payload it sends and stores back, the endpoint of a REST button with its verb and
+              response path, an expression button's expression and the interval it re-runs on, whether it
+              fires by itself or runs even while disabled, the scope an action runs against, and where it
+              navigates when it returns. A plain input has nothing to add and stays the one-line row it
+              always was.</li>
+          <li><b>A hidden button is no longer drawn as a button</b> — <code>visible: false</code> is the
+              commonest configuration a button has: <b>252 of 338</b> in one real project, because a hidden
+              button that auto-executes is how a form calls an endpoint or computes a value on its own.
+              Atlas listed them exactly like a button someone presses. Every component now states the three
+              things that decide whether it is there at all — <b>hidden</b>, <b>disabled</b>, <b>not
+              submitted</b> on the row itself when the model settles it, and the condition in the body when
+              it is an expression (<code>visible when {{…}}</code>). It applies to inputs too: a hidden
+              field was just as invisible.</li>
+          <li><b>Where the result is stored</b> — an expression button's computed value and a REST button's
+              response land in the button's own <code>{{binding}}</code>: 265 buttons in that project write
+              one. The row names the target, and the write is now in the variable graph, so a variable that
+              only a button ever sets is no longer invisible on both counts. An action button's
+              <code>value</code> is Design's placeholder <code>"."</code> and is deliberately <i>not</i>
+              read as a target.</li>
+          <li><b>Localised captions, and the modeller's own note</b> — a caption may exist only as an
+              <code>i18n</code> override, which left some buttons with no name at all in the report; that
+              override is now the fallback. And a component's <code>description</code> — <i>"Disabled for
+              privileged users, because …"</i> — is shown where it explains everything else on the row.</li>
+          <li><b>A full-payload button no longer shows a map it never uses</b> — an action button can send
+              the whole form payload (or the whole scope) and store the whole response, in which case the
+              runtime ignores the send and response maps entirely. Atlas rendered those maps as the contract
+              regardless. The override is stated first now, and the map it beats is marked as unused rather
+              than presented as the truth.</li>
+          <li><b>Buttons with no caption are on the page at all</b> — a component needed a
+              <code>label</code> or an <code>extraSettings.text</code> to be listed, which is not something
+              a button has to have: measured over one real project, <b>50 of 87 REST buttons and every link
+              button</b> are icon-only or captioned by their <code>value</code>, so they were dropped from
+              the model data — invisible in the report, unsearchable, and unable to explain the action
+              reference they were the source of. A button is now listed on its <code>type</code> alone, and
+              takes its caption from <code>value</code> when that is where Design put it.</li>
+          <li><b><code>id:</code> searches identifiers, and only identifiers</b> — ⌘K gained a facet beside
+              <code>t:</code> / <code>key:</code> / <code>in:</code>: <code>id:save-button</code> finds the
+              model that declares that element and opens its row, and it will not match a <i>caption</i>
+              that reads "Save", which is what made looking a button up by its id hopeless before. What a
+              button invokes and the expression it evaluates are indexed too, so
+              <code>notifyCustomerAction</code> finds the forms whose buttons call it.</li>
+          <li><b>An expression button's result counts as a write</b> — every expression button hands its
+              value to its own <code>{{binding}}</code>, and buttons were excluded from the variable graph
+              wholesale, so that target looked neither read nor written (178 of them in one real project).
+              The write is recorded with the button as its site; the read side needed nothing, as whoever
+              renders the binding was already picked up.</li>
+          <li><b>An action reference written the new way resolves</b> — the Design editor also persists a
+              button's action as <code>{key, id}</code> rather than a bare key, the shape already unwrapped
+              for process, case and query references. That one was not, so such an export produced a
+              reference key nothing could match.</li>
+        </ul>
         <h3>0.17.1</h3>
         <ul>
           <li><b>Atlas needs IntelliJ IDEA 2026.2 from here on</b> — it used to be <i>compiled</i> against
@@ -218,296 +275,6 @@
               Header precedence — a captured <code>Authorization</code> beats a configured one, and is never
               sent twice — is decided in one tested place instead of being re-derived at each call
               site.</li>
-        </ul>
-        <h3>0.15.0</h3>
-        <ul>
-          <li><b>Flowable environments, defined once for every project</b> — the plugin knew exactly one
-              Design server and exactly one running app, so working against DEV1, DEV2, QA, UAT and PROD
-              meant retyping a URL, an auth mode, a workspace and an app list every time you switched, and
-              doing it again in the next repository. There is now an IDE-wide list of environments under
-              <i>Settings → Tools → Flowable Atlas → Environments</i>: a tree of environments, each holding
-              a <b>Flowable Design</b> connection, a <b>Flowable Work</b> connection, or one of the two — a
-              QA stage with a running app and no Design server is an ordinary thing, shown without any
-              warning. Copy an environment to clone it for the next stage; reorder them, because DEV → QA →
-              UAT → PROD is a pipeline and alphabetical puts PROD second. Passwords and tokens stay in the
-              IDE password safe, keyed by URL, so they are never in a shared file.</li>
-          <li><b>Control and Hub addresses belong in the environment too</b> — a stage is not only the two
-              servers Atlas talks to; it is also the Flowable <b>Control</b> and Flowable <b>Hub</b> pages
-              you open by hand, and keeping those in bookmarks while the URLs beside them live in the IDE
-              was the obvious gap. They are a URL and nothing else: no username, no password, no <i>Test
-              Connection</i>, because Atlas never calls them — a form asking for a password nothing would
-              read is worse than no form. Everything else about an environment applies unchanged, including
-              copying it for the next stage.</li>
-          <li><b>Open an environment in the browser from the Atlas Hub</b> — its toolbar's <i>Open
-              Environment in Browser</i> lists every address in the catalog, grouped per stage, and hands
-              the one you pick to the browser: Design, the app, Control, Hub. Not just the two new kinds — a
-              Design base URL <i>is</i> the Design UI and a Work base URL <i>is</i> the app, so leaving them
-              out would have meant keeping bookmarks for exactly the two addresses Atlas knows best. It
-              follows neither the pull's environment nor the playground's: a third rule about which one it
-              means is one more thing that can silently be wrong, so it asks, and speed search makes the
-              asking a keystroke. A protected stage shows its lock in the list and nothing more — opening a
-              page changes nothing, and a confirmation on a link would be theatre.</li>
-          <li><b>Which environment a project uses is two choices, not one</b> — the Design pull and the
-              Expression Playground point independently, and that is the point rather than an oversight:
-              running against QA while models still come from DEV1 is a normal way to work. Every picker
-              only offers environments that actually have a server of that kind, so choosing a runtime can
-              never leave you unable to pull. With a single environment configured, nothing has to be chosen
-              at all and no dropdown appears.</li>
-          <li><b>Pasting a Work URL is now the fastest way to switch environment</b> — the playground's
-              <i>App URL</i> field already filled in the scope and instance id from a pasted link; it now
-              recognises which of your environments the link belongs to and switches to it, so one paste
-              moves the connection, the scope and the instance together. A link matching no environment is
-              used as-is, as a target that lives for this IDE session. What it no longer does is write that
-              URL into the project's committed settings — a QA link pasted for one evaluation used to become
-              the whole team's configured server.</li>
-          <li><b>Every pasted link keeps its own entry</b> — the playground held exactly one pasted target,
-              so the second link silently evicted the first, which is backwards: pasting two links is what
-              you do when you are comparing two apps, and re-pasting the one you just looked at was the cost
-              of a decision you never made. They all sit in the picker now, marked <i>(this session)</i>,
-              and the button beside it is where they are managed: <b>Forget</b> one, forget all of them, or
-              — for the one that turns out to be a target you keep coming back to — <b>Save as an
-              Environment…</b>, which asks for the single thing that was missing. The name may be one that
-              already exists: a stage with a Design server and no app joins it rather than making a second
-              environment with the same label. Credentials typed in the paste dialog go with it, into the
-              password safe, so nothing has to be typed twice. Forgetting a target takes whatever was
-              captured for it along — a cookie left behind for a URL that is in no list any more is a
-              credential nobody can see and nobody asked to keep.</li>
-          <li><b>Protected environments</b> — tick <i>Ask before pulling from or evaluating against this
-              environment</i> and Atlas asks first, and marks it with a lock wherever it can be picked. A
-              pull asks modally, because it replaces archives in the working tree; an evaluation asks from a
-              small confirmation with <i>Cancel</i> preselected, so declining is one keystroke. There is no
-              "don't ask again": a guard you can switch off is not a guard. The check follows the
-              <b>URL</b>, not the picked connection, so it cannot be walked around by pasting a link.</li>
-          <li><b>Settings and the Atlas Hub cannot drift apart any more</b> — configuring something and
-              seeing no effect in the Hub was a real defect, not a feeling. <i>Generation</i> had no
-              notification at all, so changing the Atlas output folder left the Hub listing artifacts from
-              the old one; every Atlas settings page now publishes from a <code>final</code> method, which
-              makes forgetting a compile error rather than something a review has to catch. Switching
-              connection now also drops the Hub's cached workspace and app lists, which used to keep showing
-              the previous server's app names. The playground re-reads on a sub-project switch. And a
-              personal app selection that the shared default has caught up with is dropped instead of
-              masking it — that mask was most of what "editing Settings does nothing" was made of.</li>
-          <li><b>Settings holds the environment list and nothing else</b> — no page for "which environment
-              this project uses", because a second copy of that choice could not be told apart from the one
-              in the Atlas Hub. There was a shared default in Settings and a personal override in the Hub,
-              and the pair drifting is most of what "I configure something and it has no effect" was made
-              of: the honest question — <i>is this the setting, or my copy of it?</i> — had no answer on
-              screen. Now the environment, its workspace and its apps are picked in the Hub, beside the
-              models they fetch; the runtime environment is picked in the playground, beside the expression
-              it evaluates; and what you pick <b>is</b> the setting. The one project-level field left, the
-              folder pulled archives are written to, moved to <i>Generation</i> next to the other output
-              folders.</li>
-          <li><b>The Atlas Hub's Design section is the whole pull, in order</b> — environment, workspace,
-              apps, <i>Pull from DEV1</i>. Both pickers are ordinary drop-downs rather than a status line
-              with a <i>Change…</i> link: the link cost the same clicks but did not look like a choice, and
-              switching is the gesture the panel is organised around. They open instantly, since the
-              environment list is in memory; the workspace list is fetched when you switch environment or
-              open the drop-down, not every time the panel is drawn. Everything a drop-down offers can be
-              selected — an entry that sends you to Settings to first create what it promised is not a
-              choice. The runtime environment sits in its own section beside <i>Open Playground</i>.</li>
-          <li><b>The workspace and app selection is per environment</b> — a workspace key belongs to one
-              server, so a single project-wide value was right for at most one environment and silently
-              wrong on the next. Switching environment lands in the two pickers below it: the new server's
-              workspaces are read right then, and that environment's saved workspace and apps come back
-              ticked. A workspace or app list that could not be read is no longer remembered as read, so the
-              next refresh tries again instead of leaving an empty list looking like an answer.</li>
-          <li><b>Environments a repository ships to its team</b> — an environment list was a thing every
-              developer built by hand, from a wiki page or a colleague's screenshot, and four people typing
-              four URLs get at least one of them wrong. A project can now define its own: <i>Settings →
-              Environments → <b>Share with Project</b></i> writes the selected environment into
-              <code>.idea/flowable-environments.xml</code>, and everyone who clones the repository has it in
-              every picker, marked <i>(project)</i>, with no configuration at all. Committed like
-              <code>.idea/flowable-atlas.xml</code> beside it, so a URL that moves is a commit rather than
-              six settings dialogs. <b>No credentials, and not as a rule someone has to remember</b> — the
-              file's schema has a name, the <i>Protected</i> flag and one URL per kind, and no field a
-              username or a password could go in. Each developer signs in as themselves, from the IDE
-              password safe as before; a shared login is one audit trail with everyone's name missing from
-              it. Your own list still wins: define an environment of the same name and it shadows the
-              project's entirely, which is how you point <i>QA</i> at your own instance without arguing with
-              the repository. A shared entry is read-only here — <i>Copy Environment</i> turns it into one
-              of yours in one click — and the file is re-read when a <code>git pull</code> changes it, so
-              the Hub cannot go on offering a URL that has moved.</li>
-          <li><b>The Environments page fits its dialog again</b> — username and password shared one row, and
-              a text field with no column count reports its <i>text</i> as its minimum width, so a long
-              Design URL made the page demand more room than the settings dialog has and pushed the password
-              field off the right edge. A row per field, and every URL field bounded.</li>
-          <li><b>The Hub stops spending its height on empty boxes</b> — the explorer list reserved eight
-              rows whether or not anything had been generated, and the app list a fixed ~140px for a
-              workspace that usually holds one app: between them, most of a panel that has five sections to
-              fit into one narrow stripe. Both are sized to what they hold now, an empty section is a single
-              grey line, and a workspace with twenty apps scrolls at eight rows instead of pushing <i>Pull
-              from …</i> off the bottom.</li>
-          <li><b>“Which Flowable project” is a drop-down</b> — it was a line of text with a <i>Change…</i>
-              link underneath, and the link was hidden whenever detection had not turned anything up, so in
-              a repository holding several apps the answer to "can I pick one?" was a blank space. Now it is
-              the same kind of picker as the environment rows, always offering the whole repository, and it
-              costs one line instead of two. The amber <i>"3 found — choose one"</i> stays until a choice is
-              actually made — including a deliberate <i>whole repository</i>, which the plugin can tell
-              apart from a default nobody looked at.</li>
-          <li><b>“Not set” is now something the plugin can actually hold</b> — with a single environment
-              defined, picking <i>not set</i> did nothing: it unset the pointer, and "nothing stored"
-              already meant <i>"you have one environment, use it"</i>, so the rule answered with the same
-              environment the user had just deselected. The picker read <i>not set</i> while the workspace
-              and the ticked apps underneath it stayed, and a pull would have run against that environment.
-              A deliberate <i>not set</i> is stored as such now — it beats the single-environment
-              convenience, which still applies when no choice was ever made — and it empties the two pickers
-              below, because a panel still showing the previous environment's apps reads as a selection that
-              carried over, which is exactly what a pull must never do. Choosing the environment again
-              brings its workspace and apps back; saying <i>not set</i> is not deleting anything.</li>
-          <li><b>Two environments may point at the same server</b> — one Design server hosting a DEV
-              workspace and a QA workspace is an ordinary setup, and the first cut refused to save it on the
-              grounds that the two would share a saved password. They do share it, and that is correct: same
-              server, same login. A rule derived from how credentials happen to be keyed had no business
-              forbidding a real-world layout.</li>
-          <li><b>A pasted link to a task inside a case evaluates</b> — it answered <i>"Internal server
-              error"</i> before. Flowable's <code>subScopeId</code> is a <b>plan item instance</b> id, and
-              no Work route exposes one, so putting the task id from <code>…/case/CAS-1/task/TSK-2</code>
-              there made the engine look for a plan item that does not exist. A named task is the more
-              specific scope and the engine evaluates it directly, so that is what a link now resolves to.
-              The playground's <i>Sub-scope id</i> field says what it wants, too: it read "Optional", which
-              was true and useless.</li>
-          <li><b>The paste dialog can fix credentials for an app it already knows</b> — it hid the username
-              and password once the app was recognised, which looked tidy and was a dead end: a saved
-              password that was empty or wrong could only be corrected in Settings, and the only clue was a
-              401 from the next evaluation. The fields are shown either way, prefilled from what is
-              stored.</li>
-          <li><b>An app or Design server bound to IPv6 only is reachable again</b> — and this was the most
-              misleading error Atlas could give: <i>"nothing is listening on that host and port"</i>, about
-              a server the user had open in a browser. The JDK's HTTP client connects to the <b>first</b>
-              address a name resolves to and never falls back to the others; on macOS <code>localhost</code>
-              resolves to <code>127.0.0.1</code> first, so a Vite/node dev server listening on
-              <code>[::1]</code> was unreachable from the IDE while <code>curl</code> reached it happily.
-              Both clients now retry the host's remaining addresses when the connection itself fails — an
-              HTTP answer of any status is still the server's own answer and is never retried.</li>
-          <li><b>A connection test says something a person can act on</b> — <i>Test Connection</i> on a
-              Flowable Work connection probed the Inspect endpoint with a <code>GET</code>, which Flowable
-              answers with a <i>500</i>: a perfectly healthy local app was reported as an internal server
-              error, spelled out as a slab of truncated JSON. It now probes the app itself and says what
-              happened — reachable, credentials rejected, wrong context path, or unreachable and why — and
-              no status line anywhere prints a raw response body. A failed test never blocked saving and now
-              says so, since an app that is simply not running yet is the most ordinary reason to see
-              one.</li>
-          <li><b>The connection fields are the width of the dialog</b> — a URL field rendered about as wide
-              as the word <code>http:</code>, because a filled cell still sits at its minimum width unless
-              its column may grow.</li>
-          <li><b>The environment editor's Add button opens its menu at the button</b> — it opened in the
-              bottom-left corner of the screen when the list was still empty, which is exactly when a
-              first-time user needs it, and a popup stranded there holds the whole Settings dialog, so every
-              other page looked as if it were loading forever.</li>
-          <li><b>The two expression dialects keep their own expression</b> — switching the playground
-              between Backend and Frontend carried the text across, which looked like "your work is
-              preserved" and was the opposite: the expression already parked in the other dialect was
-              replaced, with no way back to it. They are different languages against different scopes, and
-              each now has its own scratch text.</li>
-          <li><b>Pasting a Work URL is one dialog, and it checks the connection</b> — the playground's
-              backend card was carrying the whole flow in the open: a URL field, a sentence explaining what
-              the field does, a <i>Save as environment…</i> link that only sometimes applied, and an
-              "unsaved" state in the environment picker. Four controls and three sentences for something
-              that happens in one gesture. <b>Paste Work URL…</b> now opens a dialog that resolves the app,
-              the scope and the instance from the link, and — when the app is not one of your environments
-              yet — asks how to get in, and <i>tests the connection before it closes</i>. Getting in means
-              the same two routes the environment editor offers: a username and password in the open, since
-              that is the common case, and <i>Sign in via Browser…</i> / <i>Paste Session…</i> beside the
-              test for an app behind an identity provider — or for a bearer token pasted from a cURL. They
-              are links rather than a mode selector because they are not alternatives: an SSO-fronted
-              Flowable can want the session <i>and</i> basic auth behind it, and the request sends whatever
-              is there. A one-off target stays a listed choice in the picker for as long as it lives, marked
-              <i>(this session)</i> — it is never added to the environment list, so if it vanished the
-              moment you glanced at another environment there would be no way back to it short of pasting
-              the link again. And it outranks the "there is only one environment, use it" convenience: with
-              a single Work environment defined, that fallback used to quietly re-select it the instant a
-              link was pasted, so the pasted app never became the target and the picker showed an
-              environment nobody had chosen. An <i>explicit</i> pick still wins — that is the user changing
-              their mind. It <b>creates nothing</b>. A link from a colleague, a one-off look at a stage you
-              do not work against, an app you will never open again: none of those should leave an
-              environment behind, and being made to name one before you can evaluate is a toll on the common
-              case. An unknown app becomes a target for this IDE session — the picker says <i>"(this
-              session)"</i> — and its credentials go to the same in-memory store a browser sign-in uses, so
-              nothing typed there reaches the disk. An environment is something you decide to have, in
-              <i>Settings → Environments</i>. The card is down to the environment, the scope and the
-              instance id, with no explanatory text left to read. An app you have not registered is
-              therefore usable, with authentication, in one pass; before, an unknown URL could only be
-              evaluated against if its password happened to already be in the keychain.</li>
-          <li><b>Generation is a page with three child pages</b> — Model Constants, Liquibase and
-              Data-Object DTOs each get their own. On one page they were four screens of fields with no
-              hierarchy, so finding the DTO class-name pattern meant scrolling past the Liquibase rename
-              regex.</li>
-          <li><b>Two new actions and one rename</b> — <i>Switch Design Environment…</i> and <i>Switch Work
-              Environment…</i> put the switcher in the Tools menu and in Find Action; <i>Configure Design
-              Connection…</i> became <i>Manage Environments…</i>.</li>
-          <li><b>The Atlas Hub footer is just the version now</b> — it also read <i>"verified on 2026.2 —
-              2026.1 is untested"</i>, which is our release process on display in a panel people keep open
-              all day, and nothing a reader can act on. The verified range has not moved: it is still stated
-              in the reference documentation, and every bug report submitted from Atlas carries the running
-              IDE's branch and whether it is inside that range — which is the one place the distinction
-              changes what happens next.</li>
-          <li><b>A fresh Design connection no longer reads as "Not configured"</b> — the Hub called a
-              connection unconfigured until a workspace <i>and</i> at least one app had been saved, and hid
-              the whole section while it did. So a configured server whose default workspace holds no apps
-              left nothing to tick and no way to tick it: the pickers that finish the setup sat behind the
-              condition they exist to satisfy. <i>Not configured</i> now means <i>no server</i>; the
-              workspace and app pickers appear as soon as there is one, reading <i>none selected</i> and
-              <i>Choose a workspace</i> until something is picked. A pull that is missing a workspace or an
-              app now says which of the two it is, instead of reopening Settings.</li>
-          <li><b>Pick the Design workspace in the Hub</b> — the <i>Flowable Design</i> section let you
-              choose which apps a pull fetches, but not the workspace they come from: that was fixed to
-              whatever <i>Settings → Connections</i> held, so working against a second workspace for an
-              afternoon meant editing the shared project settings, which is a VCS-tracked file the whole
-              team reads. The workspace now has its own picker in the Hub, right above the app list, and it
-              is part of the same <b>personal override</b> — kept workspace-locally, marked <i>(personal
-              selection)</i>, undone by <i>Reset to configured</i>, and dropped by itself as soon as the
-              pick lands back on the configured workspace. A switch starts with nothing ticked, because one
-              workspace's apps do not exist in the next one.</li>
-          <li><b>A Design server on a plain <code>http://</code> port no longer times out</b> — pointing the
-              connection at, say, <code>http://localhost:10014</code> could fail with <i>"Cannot reach …
-              request timeout"</i> while the very same URL answered a <code>curl</code> instantly. The JDK's
-              HTTP client defaults to HTTP/2, which over cleartext is an h2c <i>upgrade</i> request, and a
-              server that neither completes nor declines that upgrade leaves the request hanging until the
-              timeout. The Design and Inspect clients now speak plain HTTP/1.1; <code>https://</code> still
-              negotiates HTTP/2 through ALPN, so nothing is given up for it.</li>
-          <li><b>One reload icon for the two Design lists</b> — the <i>Refresh apps</i> link sat under the
-              app list next to <i>Reset to configured</i>, where it read as part of resetting rather than as
-              a reload. It is now a refresh icon beside the workspace it re-reads, and it reloads both
-              server lists: the workspaces and the apps.</li>
-          <li><b>The Hub stops asking to be widened</b> — it is read in a side panel a few hundred pixels
-              wide, and a lot of it was sized as if that were negotiable. The app list pinned 320px of width
-              and now takes the width it is given; the Design status line spelled out every ticked app key
-              and now says <i>N apps selected</i> past three; a long workspace name pushed <i>Change…</i>
-              and the reload icon past the right edge and is now shortened, with the full name and key in
-              its tooltip. An explorer row showed the full project-relative path and a timestamp behind the
-              file name — it now shows the tail of the folder, with path and generation time in the row's
-              tooltip. An app list with nothing in it is a single line of text instead of a tall empty box
-              holding a centred label the panel then clipped.</li>
-          <li><b>Configuring Inspect in Settings now reaches the Expression Playground</b> — the
-              playground's backend card and <i>Settings → Connections</i> edit one and the same connection,
-              but the card read the settings only when it was first built and then outlived every trip to
-              Settings. So typing a base URL there changed nothing you could see, and the next <i>Evaluate
-              Against App</i> wrote the card's stale value straight back over what you had just configured.
-              Applying the settings now updates an open playground; a field you have typed into yourself
-              keeps its text, because the settings only reclaim what they put there.</li>
-          <li><b>The Frontend dialect no longer wears the Atlas Explorer's icon</b> — in the Expression
-              Playground the <i>Frontend</i> toggle used <code>AllIcons.General.Web</code>, the same globe
-              the <i>Open Atlas Explorer</i> button uses a few pixels away. It is now the form icon, which
-              is also where a frontend expression actually sits.</li>
-          <li><b>The Hub toolbar is openers only</b> — <i>Generate Atlas Explorer</i> and <i>Pull from
-              Design</i> were there twice over: once as a toolbar icon, once as a link in the very section
-              whose state they change. Doing something to the project belongs next to that thing's state, so
-              the toolbar now holds only ways to get somewhere: <i>Open Atlas Explorer</i>, the new <i>Open
-              Expression Playground</i> (the tool window's own icon — it had no button anywhere, only a link
-              at the very bottom of the panel), and <i>Refresh</i>. Both removed actions stay where they
-              were in the sections and under Tools → Flowable Atlas.</li>
-          <li><b>The Script Playground has examples to start from</b> — the <i>Scripts</i> tab could load a
-              script out of the project's own models, which is exactly the wrong direction when the question
-              is <i>how does one write these</i>: it can only show you what somebody already wrote. <i>Load
-              Example…</i> now offers a library of complete, working scripts, at least one for every script
-              context and every language the tab edits, from reading and writing variables through transient
-              and local scope, JSON, dates, the engine services, a multi-instance collection, raising a BPMN
-              error rather than failing the job, a CMMN plan item and an action bot's inputs and outputs.
-              Each one lands in the editor as ordinary text to edit, with the comments that explain the
-              decision it demonstrates — why a transient variable, why a task listener binds
-              <code>task</code> and never <code>execution</code>. They are held to the same standard as the
-              code around them: the build runs every example through the script validator in its own context
-              and fails on a single warning, so an example can never ship the squiggle it would draw.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

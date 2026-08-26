@@ -12,6 +12,55 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.18.0
+
+- **A form's buttons say what they do** — the Fields list named a button and its type, and stopped there.
+  The form's references said *an action is triggered*; which button triggered it, with which values,
+  under which condition, and where you land afterwards were nowhere on the page. A button row expands in
+  place now: the model it invokes as a chip you can follow, the payload it sends and stores back, the
+  endpoint of a REST button with its verb and response path, an expression button's expression and the
+  interval it re-runs on, whether it fires by itself or runs even while disabled, the scope an action runs
+  against, and where it navigates when it returns. A plain input has nothing to add and stays the
+  one-line row it always was.
+- **A hidden button is no longer drawn as a button** — `visible: false` is the commonest configuration a
+  button has: **252 of 338** in one real project, because a hidden button that auto-executes is how a form
+  calls an endpoint or computes a value on its own. Atlas listed them exactly like a button someone
+  presses. Every component now states the three things that decide whether it is there at all —
+  **hidden**, **disabled**, **not submitted** on the row itself when the model settles it, and the
+  condition in the body when it is an expression (`visible when {{…}}`). It applies to inputs too: a
+  hidden field was just as invisible.
+- **Where the result is stored** — an expression button's computed value and a REST button's response land
+  in the button's own `{{binding}}`: 265 buttons in that project write one. The row names the target, and
+  the write is now in the variable graph, so a variable that only a button ever sets is no longer
+  invisible on both counts. An action button's `value` is Design's placeholder `"."` and is deliberately
+  *not* read as a target.
+- **Localised captions, and the modeller's own note** — a caption may exist only as an `i18n` override,
+  which left some buttons with no name at all in the report; that override is now the fallback. And a
+  component's `description` — *"Disabled for privileged users, because …"* — is shown where it explains
+  everything else on the row.
+- **A full-payload button no longer shows a map it never uses** — an action button can send the whole form
+  payload (or the whole scope) and store the whole response, in which case the runtime ignores the send
+  and response maps entirely. Atlas rendered those maps as the contract regardless. The override is
+  stated first now, and the map it beats is marked as unused rather than presented as the truth.
+- **Buttons with no caption are on the page at all** — a component needed a `label` or an
+  `extraSettings.text` to be listed, which is not something a button has to have: measured over one real
+  project, **50 of 87 REST buttons and every link button** are icon-only or captioned by their `value`, so
+  they were dropped from the model data — invisible in the report, unsearchable, and unable to explain the
+  action reference they were the source of. A button is now listed on its `type` alone, and takes its
+  caption from `value` when that is where Design put it.
+- **`id:` searches identifiers, and only identifiers** — ⌘K gained a facet beside `t:` / `key:` / `in:`:
+  `id:save-button` finds the model that declares that element and opens its row, and it will not match a
+  *caption* that reads "Save", which is what made looking a button up by its id hopeless before. What a
+  button invokes and the expression it evaluates are indexed too, so `notifyCustomerAction` finds the
+  forms whose buttons call it.
+- **An expression button's result counts as a write** — every expression button hands its value to its own
+  `{{binding}}`, and buttons were excluded from the variable graph wholesale, so that target looked
+  neither read nor written (178 of them in one real project). The write is recorded with the button as its
+  site; the read side needed nothing, as whoever renders the binding was already picked up.
+- **An action reference written the new way resolves** — the Design editor also persists a button's action
+  as `{key, id}` rather than a bare key, the shape already unwrapped for process, case and query
+  references. That one was not, so such an export produced a reference key nothing could match.
+
 ## 0.17.1
 
 - **Atlas needs IntelliJ IDEA 2026.2 from here on** — it used to be *compiled* against 2026.1 and only
