@@ -2,6 +2,10 @@
 // JSON.parse is faster than a JS literal for large payloads and needs no JS escaping.
 const DATA = JSON.parse(document.getElementById('atlas-data').textContent);
 const nodes = DATA.nodes, edges = DATA.edges;
+// Business-flow narratives — one FlowStory per startable BPMN process / CMMN case. See
+// features/business-workflow-narrative/flow-story-schema.md for the JSON shape.
+const stories = DATA.stories || [];
+const storyByKey = new Map(stories.map(s => [s.key, s]));
 const byId = new Map(nodes.map(n => [n.id, n]));
 const diags = DATA.diagnostics || [];
 const cfns = DATA.customFunctions;
@@ -382,8 +386,9 @@ const isUnusedForm = n => n.type==='form' && !(incM.get(n.id)||[]).some(e=>e.rel
 // `focusEl` is the model element a search hit came from — the detail panel opens that row directly.
 // `tabs`/`tab` are the open detail tabs (node ids + active index). Invariant: while the browse view
 // shows a node, `sel === tabs[tab]` — that is what keeps every existing `state.sel` reader correct.
-let state = {view:'overview', cat:null, sel:null, filter:'', sort:'name', focus:'', focusEl:'',
-             tabs:[], tab:-1};
+// `storyKey` is the active Business-flow Storyline key when `view === 'flow'`.
+let state = {view:'overview', cat:null, sel:null, storyKey:null, filter:'', sort:'name',
+             focus:'', focusEl:'', tabs:[], tab:-1};
 
 // ---------- categories ----------
 function categories(){
@@ -553,6 +558,10 @@ function parseHash(){
     const cat = dec(raw.slice(8));
     return CATS.some(c=>c.id===cat) ? {view:'browse', cat} : {view:'overview'};
   }
+  if(raw.indexOf('/flow/')===0){
+    const key = dec(raw.slice(6));
+    return storyByKey.has(key) ? {view:'flow', story:key} : {view:'overview'};
+  }
   if(raw.charAt(0)==='/') return {view:'overview'};      // unknown route
   // A node route may carry the search term that led here and the element the hit came from:
   // `#<encId>&q=<encTerm>&e=<encElementId>`. Every part is URI-encoded, so a literal '&' cannot occur
@@ -573,6 +582,7 @@ function showView(v){
   document.getElementById('view-checks').hidden = v!=='checks';
   document.getElementById('view-variables').hidden = v!=='variables';
   document.getElementById('view-browse').hidden = v!=='browse';
+  document.getElementById('view-flow').hidden = v!=='flow';
 }
 let _navCount = 0;
 function route(){
@@ -582,24 +592,28 @@ function route(){
   state.focus = r.q || '';
   state.focusEl = r.e || '';
   if(r.view==='overview'){
-    state.view='overview'; state.sel=null;
+    state.view='overview'; state.sel=null; state.storyKey=null;
     showView('overview'); renderDashboard();
     renderSidebarActive(); renderCrumbs();
   } else if(r.view==='schema'){
-    state.view='schema'; state.sel=null;
+    state.view='schema'; state.sel=null; state.storyKey=null;
     showView('schema'); renderSchema();
     renderSidebarActive(); renderCrumbs();
   } else if(r.view==='scripts'){
-    state.view='scripts'; state.sel=null;
+    state.view='scripts'; state.sel=null; state.storyKey=null;
     showView('scripts'); renderScripts();
     renderSidebarActive(); renderCrumbs();
   } else if(r.view==='checks'){
-    state.view='checks'; state.sel=null;
+    state.view='checks'; state.sel=null; state.storyKey=null;
     showView('checks'); renderChecks();
     renderSidebarActive(); renderCrumbs();
   } else if(r.view==='variables'){
-    state.view='variables'; state.sel=null;
+    state.view='variables'; state.sel=null; state.storyKey=null;
     showView('variables'); renderVariables();
+    renderSidebarActive(); renderCrumbs();
+  } else if(r.view==='flow'){
+    state.view='flow'; state.storyKey=r.story; state.sel=null;
+    showView('flow'); renderFlow(storyByKey.get(r.story));
     renderSidebarActive(); renderCrumbs();
   } else if(r.sel){
     applySelection(r.sel);                                // handles view/list/detail/crumbs
@@ -610,7 +624,7 @@ function route(){
     // The category listing has no active node, so no tab renders as current. `state.tab` is NOT
     // reset here: it stays a valid write pointer, because "no active tab" would make syncTabsWith
     // append — and then every sidebar category visit would silently grow the tab set.
-    state.sel=null;
+    state.sel=null; state.storyKey=null;
     showView('browse'); renderList(); renderTabs(); renderDetail();
     renderSidebarActive(); renderCrumbs();
   }
@@ -641,6 +655,22 @@ function renderSidebar(){
   ov.dataset.route='/overview';
   ov.onclick=()=>{ location.hash='/overview'; };
   nav.appendChild(ov);
+  // Business flow — one Storyline entry per startable process/case, right after Overview so it is
+  // easy to find. See features/business-workflow-narrative/flow-story-schema.md for the payload.
+  if(stories.length){
+    const gh=document.createElement('div'); gh.className='side-group'; gh.textContent='Business flow';
+    nav.appendChild(gh);
+    stories.forEach(s=>{
+      const label = s.name || s.key;
+      const el = mkItem(
+        '<span class="dot" style="background:'+color(s.kind==='case'?'case':'process')+'"></span>'+
+        '<span class="lbl">'+esc(label)+'</span>',
+        label+' — Storyline');
+      el.dataset.story = s.key;
+      el.onclick = ()=>{ location.hash = '/flow/'+enc(s.key); };
+      nav.appendChild(el);
+    });
+  }
   // A tab belongs to a section like any other list — "Script tasks" is an Integration thing, the
   // review reports belong under Checks. `pri` keeps a section's tabs above its drill-down lists.
   const items=[...CATS];
@@ -693,8 +723,10 @@ function renderSidebar(){
 }
 function renderSidebarActive(){
   document.querySelectorAll('#nav .side-item').forEach(el=>{
-    const on = el.dataset.route ? el.dataset.route==='/'+state.view
-                                : (state.view==='browse' && state.cat===el.dataset.cat);
+    let on;
+    if(el.dataset.story) on = state.view==='flow' && state.storyKey===el.dataset.story;
+    else if(el.dataset.route) on = el.dataset.route==='/'+state.view;
+    else on = state.view==='browse' && state.cat===el.dataset.cat;
     el.classList.toggle('on', on);
     el.setAttribute('aria-pressed', on?'true':'false');
   });
@@ -722,6 +754,11 @@ function renderCrumbs(){
   } else if(state.view==='variables'){
     h=link(DATA.project,'#/overview')+sep+cur('Unused variables');
     title='Unused variables — Flowable Atlas';
+  } else if(state.view==='flow'){
+    const s = storyByKey.get(state.storyKey);
+    const nm = s ? (s.name||s.key) : state.storyKey;
+    h = link(DATA.project,'#/overview') + sep + link('Business flow','#/overview') + sep + cur(nm);
+    title = nm + ' — Business flow — Flowable Atlas';
   } else {
     const cat=CATS.find(x=>x.id===state.cat);
     const n=state.sel&&byId.get(state.sel);
@@ -4874,6 +4911,349 @@ function wireRailAutoCollapse(){
     const a=document.activeElement;
     if(a&&a!==document.body&&sidebar.contains(a)) a.blur();      // release :focus-within → collapse on mouse-out
   });
+}
+
+// ---------- Storyline view (#/flow/<key>) ----------
+// Renders one FlowStory as a fully-expanded nested tree — every branch visible at once so the
+// overall business logic can be read at a glance. Schema/display concept lives in
+// features/business-workflow-narrative/flow-story-schema.md.
+
+const FLOW_MARKERS = {
+  start:'▶', end:'▶',
+  userTask:'👤', serviceTask:'⚙', scriptTask:'⌨', businessRuleTask:'📊',
+  receiveTask:'⤓', sendTask:'⤒', manualTask:'✋', task:'▪',
+  gateway:'◆', call:'↪', event:'⚡', subProcess:'▣', planItem:'▣', milestone:'●',
+  stage:'⬚',
+};
+
+function renderFlow(story){
+  const v = document.getElementById('view-flow');
+  if(!story){ v.innerHTML = '<div class="flow-empty">No story selected.</div>'; return; }
+  const sb = story.startedBy || {};
+  const who = [].concat(sb.groups||[], sb.users||[]).join(', ') || '(no restriction)';
+  const warns = (story.meta && story.meta.warnings) || [];
+  let h = '<div class="flow-page">';
+  h += '<div class="flow-header">';
+  h += '<div class="flow-title-lg">' + esc(story.name || story.key) + '</div>';
+  h += '<div class="flow-sub">'
+     +   '<span class="flow-kind-badge">'+esc(story.kind)+'</span>'
+     +   ' <span class="flow-key mono">'+esc(story.key)+'</span>'
+     +   ' · started by: <span class="flow-started">'+esc(who)+'</span>'
+     +   ' · <span class="flow-file mono">'+esc(story.file||'')+'</span>'
+     + '</div>';
+  if(warns.length){
+    h += '<div class="flow-warnings">⚠ ' + warns.map(esc).join(' · ') + '</div>';
+  }
+  h += '</div>';
+  const body = story.body || {};
+  if(body.kind === 'process'){
+    h += '<div class="flow-scope">' + renderSteps(body.steps||[]) + '</div>';
+  } else if(body.kind === 'case'){
+    h += '<div class="flow-scope">' + renderPlanItems(body.planItems||[]) + '</div>';
+  } else {
+    h += '<div class="flow-empty">Story body missing.</div>';
+  }
+  h += '</div>';
+  v.innerHTML = h;
+  wireNodeLinks(v, '.vlink');
+}
+
+function renderSteps(steps, inCase){ return steps.map(s => renderStep(s, !!inCase)).join(''); }
+
+/**
+ * Render one Step. [inCase] tells us we're rendering CMMN plan items (top-level of a case body, or
+ * nested inside a stage), which changes two things:
+ *   - the "when active" trigger line is emitted for *every* plan item (defaulting to
+ *     "Available when the case opens." when there are no criteria), so no card is silent
+ *     about its trigger — that's what makes the vertical layout stop reading as a chain.
+ *   - the marker/prose/etc. still work the same; only the trigger fallback flips.
+ * BPMN steps (inCase=false) keep the original behaviour — no fallback line.
+ */
+function renderStep(step, inCase){
+  const kind = step.kind;
+  const marker = FLOW_MARKERS[kind] || '▪';
+  const title = esc(stepTitle(step));
+  const proseHtml = proseFor(step);              // may contain <code> — trusted, built from esc()'d parts
+  const trigger = triggerLineFor(step, !!inCase);
+  let h = '<div class="flow-step" data-kind="'+esc(kind)+'">';
+  h += '<span class="flow-marker" aria-hidden="true">'+marker+'</span>';
+  h += '<div class="flow-body">';
+  h += '<div class="flow-title">'+title+'</div>';
+  if(trigger)   h += '<div class="flow-trigger">'+trigger+'</div>';
+  if(proseHtml) h += '<div class="flow-meta">'+proseHtml+'</div>';
+  h += '</div></div>';
+  // Nested — gateway branches (BPMN)
+  if(kind === 'gateway' && step.branches && step.branches.length){
+    h += '<div class="flow-branches" data-kind="'+esc(step.gatewayKind||'exclusive')+'">';
+    step.branches.forEach(b=>{
+      let label;
+      if(b.isDefault) label = 'Otherwise (the default path):';
+      else if(b.condition) label = 'If '+codeSpan(b.condition)+':';
+      else label = 'When the condition holds:';
+      h += '<div class="flow-branch" data-default="'+(b.isDefault?'true':'false')+'">';
+      h += '<div class="flow-branch-label">'+label+'</div>';
+      h += '<div class="flow-branch-steps">'+renderSteps(b.steps||[], false)+'</div>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+  // Nested — inlined call activity (Q2: one level deep). Deeper hops render as a compact reference.
+  // The inlined body is always a BPMN process (call.target.kind is "process"), so inCase=false.
+  if(kind === 'call' && step.inline){
+    if(step.inline.resolved){
+      const t = step.targetName || step.targetKey || '';
+      h += '<div class="flow-inline">';
+      h += '<div class="flow-inline-label">↳ Inside '+codeSpan(t)+", these steps run:</div>";
+      h += '<div class="flow-inline-steps">'+renderSteps(step.inline.steps||[], false)+'</div>';
+      h += '</div>';
+    } else {
+      h += '<div class="flow-ref">'+unresolvedProse(step)+'</div>';
+    }
+  }
+  // Nested — CMMN stage: recursive container of plan items. Nested plan items are still CMMN
+  // (inCase stays true) so their "when active" line fires correctly.
+  if(kind === 'stage' && step.steps && step.steps.length){
+    h += '<div class="flow-inline">';
+    h += '<div class="flow-inline-label">↳ Inside this stage, these plan items are available:</div>';
+    h += '<div class="flow-inline-steps">'+renderSteps(step.steps, true)+'</div>';
+    h += '</div>';
+  }
+  return h;
+}
+
+// ---------- Storyline: prose generators ----------
+// Templated, deterministic prose. No LLM; runs offline. Consumers who want polished natural language
+// can point an external LLM at <project>.flow.json instead (see Decisions Q4).
+
+function stepTitle(step){
+  if(step.name) return step.name;
+  // Fall back to the step id (e.g. "ExpandedStage_2") — never a generic type label like "Stage",
+  // because entryCriteria sentences reference other steps by id, and a generic label breaks the
+  // visual match ("Activates when 'ExpandedStage_1' completes" is meaningless if both stages just
+  // read "Stage"). Only use a type label as a *last* resort when no id exists either.
+  if(step.id) return step.id;
+  if(step.kind === 'start') return 'Start';
+  if(step.kind === 'end') return 'End';
+  if(step.kind === 'gateway'){
+    const k = step.gatewayKind || 'exclusive';
+    return k.charAt(0).toUpperCase()+k.slice(1)+' gateway';
+  }
+  if(step.kind === 'call') return step.targetName || step.targetKey || 'Call another process';
+  if(step.kind === 'stage') return 'Stage';
+  return step.kind;
+}
+
+function codeSpan(s){ return '<code>'+esc(String(s==null?'':s))+'</code>'; }
+
+// A codeSpan that routes to a node when clicked, when that node exists in the current graph. Falls
+// back to a plain codeSpan when the id is unknown (form/decision/process not in this project), so
+// prose reads the same either way.
+function codeLink(id, text){
+  return byId.get(id)
+    ? '<code class="vlink" data-id="'+enc(id)+'" tabindex="0" role="link">'+esc(String(text==null?'':text))+'</code>'
+    : codeSpan(text);
+}
+// A `formKey` may resolve to a form or to a page (Design collapses both under one attribute).
+function formLink(key){
+  const id = byId.get('form:'+key) ? 'form:'+key
+           : (byId.get('page:'+key) ? 'page:'+key : 'form:'+key);
+  return codeLink(id, key);
+}
+
+function joinNaturally(list){
+  if(!list || !list.length) return '';
+  if(list.length === 1) return codeSpan(list[0]);
+  if(list.length === 2) return codeSpan(list[0])+' or '+codeSpan(list[1]);
+  return list.slice(0,-1).map(codeSpan).join(', ')+', or '+codeSpan(list[list.length-1]);
+}
+
+function proseFor(step){
+  const k = step.kind;
+  if(k === 'start')            return startProse(step);
+  if(k === 'end')              return endProse(step);
+  if(k === 'userTask')         return userTaskProse(step);
+  if(k === 'serviceTask' ||
+     k === 'sendTask')         return serviceTaskProse(step);
+  if(k === 'scriptTask')       return scriptProse(step);
+  if(k === 'businessRuleTask') return ruleProse(step);
+  if(k === 'receiveTask')      return 'The flow waits here until an incoming message arrives.';
+  if(k === 'manualTask')       return 'A user performs this step manually — nothing is automated here.';
+  if(k === 'task')             return 'A generic task runs at this point.';
+  if(k === 'gateway')          return gatewayProse(step);
+  if(k === 'call')             return callProse(step);
+  if(k === 'event')            return eventProse(step);
+  if(k === 'stage')            return stageProse(step);
+  return '';
+}
+
+function startProse(s){
+  let out = 'The process starts';
+  if(s.formKey)                                     out += ' when someone submits the '+formLink(s.formKey)+' form';
+  else if(s.trigger === 'message' && s.triggerRef)  out += ' when the '+codeSpan(s.triggerRef)+' message arrives';
+  else if(s.trigger === 'timer'   && s.triggerRef)  out += ' on the '+codeSpan(s.triggerRef)+' schedule';
+  else if(s.trigger === 'signal'  && s.triggerRef)  out += ' when the '+codeSpan(s.triggerRef)+' signal is broadcast';
+  else if(s.trigger === 'conditional')              out += ' when a specific condition becomes true';
+  else if(s.trigger === 'error'   && s.triggerRef)  out += ' in response to the '+codeSpan(s.triggerRef)+' error';
+  else if(s.trigger && s.trigger !== 'none')        out += ' on a '+esc(s.trigger)+' event';
+  return out + '.';
+}
+
+function endProse(s){
+  if(s.reason === 'terminate')                      return 'The process ends immediately, stopping any parallel work still in flight.';
+  if(s.reason === 'message' && s.reasonRef)         return 'The process ends by publishing the '+codeSpan(s.reasonRef)+' message.';
+  if(s.reason === 'signal'  && s.reasonRef)         return 'The process ends by broadcasting the '+codeSpan(s.reasonRef)+' signal.';
+  if(s.reason === 'error'   && s.reasonRef)         return 'The process ends with an error ('+codeSpan(s.reasonRef)+').';
+  if(s.reason === 'escalation' && s.reasonRef)      return 'The process ends with an escalation ('+codeSpan(s.reasonRef)+').';
+  return 'The process ends.';
+}
+
+function userTaskProse(s){
+  const groups = (s.candidateGroups && s.candidateGroups.length) ? s.candidateGroups : null;
+  const users  = (s.candidateUsers  && s.candidateUsers.length)  ? s.candidateUsers  : null;
+  let actor;
+  if(s.assignee)     actor = codeSpan(s.assignee);
+  else if(groups)    actor = 'Someone from '+(groups.length===1 ? 'the '+codeSpan(groups[0])+' group' : 'the '+joinNaturally(groups)+' groups');
+  else if(users)     actor = 'Any of '+joinNaturally(users);
+  else               actor = 'A user';
+  let out = actor+' handles this task';
+  if(s.formKey) out += ', filling in the '+formLink(s.formKey)+' form';
+  return out+'.';
+}
+
+function serviceTaskProse(s){
+  const verb = s.kind === 'sendTask' ? 'sends' : 'runs';
+  const d = s.delegate;
+  let call;
+  if(d && d.serviceModelKey && d.operationKey){
+    // Service-registry task: prefer the concrete service operation over the generic delegate
+    // expression (which is always `${serviceRegistryService}` and carries no information).
+    const opId = 'serviceOperation:'+d.serviceModelKey+'#'+d.operationKey;
+    call = 'the '+codeLink(opId, d.serviceModelKey+'#'+d.operationKey)+' service operation';
+  }
+  else if(!d)                  call = 'an automated action';
+  else if(d['class'])          call = 'the '+codeSpan(d['class'])+' Java delegate';
+  else if(d.delegateExpression) call = codeSpan(d.delegateExpression);
+  else if(d.expression)        call = codeSpan(d.expression);
+  else if(d.type)              call = 'a '+codeSpan(d.type)+' task';
+  else                         call = 'an automated action';
+  let out = 'The system '+verb+' '+call;
+  if(d && d.resultVariable) out += ', storing the result in '+codeSpan(d.resultVariable);
+  return out+'.';
+}
+
+function scriptProse(s){
+  let out = 'The system runs a script';
+  if(s.script && s.script.language)       out += ' ('+esc(s.script.language)+')';
+  if(s.script && s.script.resultVariable) out += ', storing the result in '+codeSpan(s.script.resultVariable);
+  return out+'.';
+}
+
+function ruleProse(s){
+  if(s.decisionRef) return 'The system evaluates decision '+codeLink('decision:'+s.decisionRef, s.decisionRef)+' and applies its outcome.';
+  return 'The system evaluates a business rule.';
+}
+
+function gatewayProse(s){
+  const gk = s.gatewayKind || 'exclusive';
+  if(gk === 'exclusive')  return 'The flow branches — exactly one path below is taken, based on the conditions.';
+  if(gk === 'parallel')   return 'The flow splits — every path below runs in parallel; the flow rejoins once they all finish.';
+  if(gk === 'inclusive')  return 'The flow branches — every path below whose condition holds runs in parallel.';
+  if(gk === 'eventBased') return 'The flow waits — whichever event listed below happens first decides the path taken.';
+  return 'The flow branches at this gateway.';
+}
+
+function callProse(s){
+  const t = s.targetKey || 'an unknown target';
+  const tSpan = s.targetKey
+    ? codeLink((s.targetKind === 'case' ? 'case:' : 'process:') + s.targetKey, s.targetKey)
+    : codeSpan(t);
+  if(s.callType === 'signalThrow')  return 'The flow broadcasts a signal to '+tSpan+'.';
+  if(s.callType === 'messageThrow') return 'The flow sends a message to '+tSpan+'.';
+  if(s.inline && s.inline.resolved) return 'The flow calls another process, '+tSpan+'. Its steps continue below.';
+  if(s.targetKind === 'external' || s.targetKind === 'unresolved')
+                                    return 'The flow hands off to '+tSpan+", which isn't defined in this project.";
+  return 'The flow calls another process, '+tSpan+'.';
+}
+
+function eventProse(s){
+  const et = s.eventType || 'event';
+  const catching = s.eventKind === 'intermediateCatch';
+  const spec = s.spec;
+  if(catching){
+    if(et === 'message') return 'The flow pauses until the '+codeSpan(spec||'expected')+' message arrives.';
+    if(et === 'timer')   return 'The flow pauses'+(spec?' for '+codeSpan(spec):'')+' before continuing.';
+    if(et === 'signal')  return 'The flow pauses until the '+codeSpan(spec||'expected')+' signal is broadcast.';
+    if(et === 'error')   return 'The flow pauses for an error ('+codeSpan(spec||'')+').';
+    return 'The flow pauses for a '+esc(et)+' event.';
+  }
+  if(et === 'message')    return 'The flow sends the '+codeSpan(spec||'')+' message.';
+  if(et === 'signal')     return 'The flow broadcasts the '+codeSpan(spec||'')+' signal.';
+  if(et === 'error')      return 'The flow raises an error ('+codeSpan(spec||'')+').';
+  if(et === 'escalation') return 'The flow raises an escalation ('+codeSpan(spec||'')+').';
+  return 'The flow throws a '+esc(et)+' event.';
+}
+
+function stageProse(s){
+  const bits = [];
+  bits.push('This stage groups a set of related plan items');
+  if(s.autoComplete) bits.push('. It auto-completes once every non-required item is settled');
+  return bits.join('')+'.';
+}
+
+/**
+ * A one-liner that says WHEN a CMMN plan item becomes active (or terminates). Empty string for BPMN
+ * steps or plan items with no criteria — the case intro banner covers the "auto-active on entry"
+ * default in that case.
+ */
+function triggerLineFor(step, inCase){
+  const entry = step.entryCriteria || [];
+  const exit  = step.exitCriteria  || [];
+  const manual = !!step.manualActivation;
+  // A CMMN plan item is always independent — the layout stops reading as a chain only when every
+  // card carries a positive "when active" statement. BPMN steps keep the original behaviour (no
+  // fallback line — they *are* a chain and their order does the talking).
+  if(!entry.length && !exit.length && !manual){
+    return inCase ? 'Available when the case opens.' : '';
+  }
+  const bits = [];
+  if(entry.length === 1)      bits.push('Activates '+proseWithCode(entry[0]));
+  else if(entry.length > 1)   bits.push('Activates '+entry.map(proseWithCode).join(', or '));
+  if(manual)                  bits.push(entry.length ? 'and only if manually started' : 'Only starts when a user triggers it');
+  if(exit.length === 1)       bits.push('exits '+proseWithCode(exit[0]));
+  else if(exit.length > 1)    bits.push('exits '+exit.map(proseWithCode).join(', or '));
+  return bits.join('; ')+'.';
+}
+
+/**
+ * Renders a prose string that uses Markdown-style backticks as code delimiters — the criteria
+ * templates in FlowTraversal.describeSentry emit things like *"when 'X' completes and `${cond}` is
+ * true"*, and we want the `${cond}` portion to render as a proper <code> span rather than literal
+ * backticks. Odd-indexed segments (between backticks) become code; even-indexed are prose.
+ */
+function proseWithCode(s){
+  const parts = String(s == null ? '' : s).split('`');
+  return parts.map((p, i) => (i % 2) ? '<code>'+esc(p)+'</code>' : esc(p)).join('');
+}
+
+function unresolvedProse(step){
+  const t = step.targetKey || '(unknown target)';
+  const reason = step.inline && step.inline.reason;
+  if(reason === 'deeper-than-one-level'){
+    const c = step.inline.stepCount;
+    return '→ Continues into '+codeSpan(t)+(c?', which has '+c+' more steps you can open separately':'')+'.';
+  }
+  if(reason === 'external') return '→ Hands off to '+codeSpan(t)+', an external process outside this project.';
+  return "→ Continues into "+codeSpan(t)+", which isn't defined in this project.";
+}
+
+function renderPlanItems(items){
+  if(!items.length) return '<div class="flow-empty">This case has no plan items.</div>';
+  // Every plan item now carries its own "when active" line (see triggerLineFor), so no additional
+  // context is needed — the intro just names the mental model. Items are wrapped in
+  // .flow-planitem so the CSS can spatially separate them (a subtle divider between siblings)
+  // without implying a sequence between them.
+  const intro = '<div class="flow-case-intro">Plan items activate independently — each shows its own trigger below the title. They do not run in sequence, even when one references another.</div>';
+  return intro + items.map(x => '<div class="flow-planitem">'+renderStep(x, true)+'</div>').join('');
 }
 
 // ---------- boot ----------
