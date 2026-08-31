@@ -2,26 +2,53 @@
 <!-- The sub-process `order.bpmn`'s `callSub` call activity invokes. It exists to make the cross-model
      variable checks real: the caller maps `orderId` in as `subOrderId`, and nothing here ever reads that
      name (the `unreadInputs` check), while `orderNotes` is declared as a `<dataObject>` and *is* read, so
-     the declaration path is covered without adding a second finding. -->
+     the declaration path is covered without adding a second finding. Also carries the element shapes the
+     structural extraction has to keep covered: lanes, a boundary event on its host, a gateway with a
+     default flow, a conditional catch event, and an async activity. -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:flowable="http://flowable.org/bpmn"
              targetNamespace="http://flowable.org/test">
   <process id="fulfilmentProcess" name="Fulfilment Process">
     <documentation>Ships an approved order and reports the shipping total back to its caller.</documentation>
+    <laneSet id="fLanes">
+      <lane id="laneWarehouse" name="Warehouse">
+        <flowNodeRef>packTask</flowNodeRef>
+      </lane>
+      <lane id="laneLogistics" name="Logistics">
+        <flowNodeRef>callCourier</flowNodeRef>
+      </lane>
+    </laneSet>
     <dataObject id="orderNotes" name="orderNotes" itemSubjectRef="xsd:string"/>
     <startEvent id="fStart"/>
     <sequenceFlow id="ff1" sourceRef="fStart" targetRef="packTask"/>
-    <scriptTask id="packTask" name="Pack shipment" scriptFormat="groovy">
+    <scriptTask id="packTask" name="Pack shipment" scriptFormat="groovy" flowable:async="true">
       <script>
         def label = "pack:" + orderNotes
         execution.setVariable('subTotal', 10)
       </script>
     </scriptTask>
-    <sequenceFlow id="ff2" sourceRef="packTask" targetRef="callCourier"/>
+    <sequenceFlow id="ff2" sourceRef="packTask" targetRef="shipGw"/>
+    <exclusiveGateway id="shipGw" name="Courier needed?" default="ffPickup"/>
+    <sequenceFlow id="ff2b" name="courier" sourceRef="shipGw" targetRef="callCourier">
+      <conditionExpression>${subTotal &gt; 5}</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="ffPickup" name="pickup" sourceRef="shipGw" targetRef="stockOk"/>
     <!-- Deliberately dangling: `courierProcess` is not modelled here, which keeps the missing-model
          check exercised end to end (it used to rest on `fulfilmentProcess` itself being absent). -->
     <callActivity id="callCourier" name="Book courier" calledElement="courierProcess"/>
-    <sequenceFlow id="ff3" sourceRef="callCourier" targetRef="fEnd"/>
+    <boundaryEvent id="courierLate" name="Courier late" attachedToRef="callCourier" cancelActivity="false">
+      <timerEventDefinition>
+        <timeDuration>PT2H</timeDuration>
+      </timerEventDefinition>
+    </boundaryEvent>
+    <sequenceFlow id="ffLate" sourceRef="courierLate" targetRef="fEnd"/>
+    <sequenceFlow id="ff3" sourceRef="callCourier" targetRef="stockOk"/>
+    <intermediateCatchEvent id="stockOk" name="Stock confirmed">
+      <conditionalEventDefinition>
+        <condition>${stockLevel &gt; 0}</condition>
+      </conditionalEventDefinition>
+    </intermediateCatchEvent>
+    <sequenceFlow id="ff4" sourceRef="stockOk" targetRef="fEnd"/>
     <endEvent id="fEnd"/>
   </process>
 </definitions>

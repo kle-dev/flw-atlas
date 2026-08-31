@@ -1,0 +1,21 @@
+{
+  "key": "orderVarExtractor",
+  "name": "Order variables",
+  "description": "Promotes order totals into indexed work variables.",
+  "sourceIndex": "work-instances",
+  "variableExtractors": [
+    {
+      "filter": {"name": "total", "scopeDefinitionKey": "orderProcess"},
+      "path": "total",
+      "to": "orderTotalIndexed",
+      "type": "number"
+    },
+    {
+      "filter": {"name": "courierCode", "scopeDefinitionKey": "reviewCase"},
+      "path": "courierCode",
+      "to": "courierIndexed",
+      "type": "string"
+    }
+  ],
+  "fullTextVariables": ["customerName"]
+}

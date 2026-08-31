@@ -42,14 +42,23 @@ object ModelKinds {
         Kind("dataObject", "dataObjects", "dataObject"),
         Kind("securityPolicy", "policies", "securityPolicy"),
         Kind("action", "actions", "action"),
+        // Structured parsers whose records keep living in the `others` bucket (the result shape and
+        // graph.json stay stable); GraphBuilder node-ifies `others` entries via their `modelType`.
+        Kind("query", "others", "query"),
+        Kind("sequence", "others", "sequence"),
+        Kind("sla", "others", "sla"),
+        Kind("template", "others", "template"),
+        Kind("knowledgeBase", "others", "knowledgeBase"),
+        Kind("variableExtractor", "others", "variableExtractor"),
+        Kind("document", "others", "document"),
     )
 
     /** model type → result bucket. */
     val MODEL_BUCKET: Map<String, String> = MODEL_KINDS.associate { it.mtype to it.bucket }
 
-    /** Unique bucket names in declaration order, plus the two non-parser buckets. */
+    /** Unique bucket names in declaration order, plus the two catch-all buckets (always last). */
     val MODEL_BUCKETS: List<String> =
-        MODEL_KINDS.map { it.bucket }.distinct() + listOf("liquibase", "others")
+        MODEL_KINDS.map { it.bucket }.distinct().filter { it != "others" } + listOf("liquibase", "others")
 
     /** Model types whose graph/index type differs from the parser key (bpmn→process, cmmn→case, …). */
     val NORMALIZE_TYPE: Map<String, String> =

@@ -1,6 +1,6 @@
 # Flowable project — `miniproject` (quick overview)
 
-_13 model files · 2 Java files · 64 nodes · 42 relationships · 3 user groups. Compact summary — full report in `miniproject.overview.md`, full graph in `miniproject.graph.json`._
+_21 model files · 2 Java files · 91 nodes · 48 relationships · 3 user groups. Compact summary — full report in `miniproject.overview.md`, full graph in `miniproject.graph.json`._
 
 ⚠ **1 file(s) could not be fully analyzed** (parse/read failures) — the map below may be incomplete. Details: the Findings section of `miniproject.overview.md`, or `diagnostics` in `miniproject.graph.json`.
 
@@ -8,10 +8,10 @@ _13 model files · 2 Java files · 64 nodes · 42 relationships · 3 user groups
 - **Demo App** (`demoApp`) — 5 models
 
 ## Inventory
-Models: 2 processes · 1 case · 1 decision table · 1 form · 2 data objects · 1 service · 1 event · 1 action · 1 security policy · 1 Liquibase changelog
+Models: 2 processes · 1 case · 1 decision table · 1 form · 2 data objects · 1 service · 1 event · 1 action · 1 query · 1 template · 1 sequence · 1 security policy · 1 variable extractor · 1 Liquibase changelog
 Java: 1 controller · 1 component · 1 delegate
-Variables: 20 — scopes: process 8 · form 6 · action 4 · decision 2 · dataObject 2 · java 1 · app 1 · 1 inferred from scripts
-Expressions: 4 backend ${ } · 14 frontend {{ }} · 0 string literals
+Variables: 30 — scopes: process 9 · form 6 · action 4 · template 3 · decision 2 · sla 2 · query 2 · dataObject 2 · variableExtractor 2 · java 1 · document 1 · app 1 · 1 inferred from scripts
+Expressions: 11 backend ${ } · 16 frontend {{ }} · 0 string literals
 
 ## Entry points — who can start what
 - **sales** ← process `orderProcess`
@@ -30,18 +30,18 @@ Events: orderShipped
 **Delegates (1):** DemoBean
 
 ## Hotspots — most-referenced (central) artifacts
+- process `orderProcess` — Order Process (referenced by 4)
+- form `orderForm` — Order Form (referenced by 4)
 - service `customerService` — Customer Service (referenced by 3)
-- process `orderProcess` — Order Process (referenced by 3)
 - java `com.example.DemoBean` — DemoBean (referenced by 3)
-- form `orderForm` — Order Form (referenced by 3)
 - endpoint `GET /api/customers`  (referenced by 3)
+- case `reviewCase` — Review Case (referenced by 3)
 - securityPolicy `orderPolicy` — Order policy (referenced by 2)
+- process `fulfilmentProcess` — Fulfilment Process (referenced by 2)
 - endpoint `GET /api/customers/{id}/canEdit`  (referenced by 2)
 - dataObject `customerDO` — Customer (referenced by 2)
-- case `reviewCase` — Review Case (referenced by 2)
 - app `demoApp` — Demo App (referenced by 2)
-- process `fulfilmentProcess` — Fulfilment Process (referenced by 1)
-- liquibase `001-customer` — 001-customer.xml (referenced by 1)
+- query `openOrdersQuery` — Open orders (referenced by 1)
 
 ## External surface
 - External REST URLs called: 1

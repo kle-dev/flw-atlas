@@ -21,6 +21,16 @@
       "users": []
     },
     {
+      "action": "download",
+      "groups": [
+        "sales"
+      ],
+      "model": "contractDocument",
+      "modelType": "document",
+      "scope": "document",
+      "users": []
+    },
+    {
       "action": "open-app",
       "groups": [
         "backoffice",
@@ -39,6 +49,16 @@
       "model": "customerDO",
       "modelType": "dataObject",
       "scope": "definition",
+      "users": []
+    },
+    {
+      "action": "query",
+      "groups": [
+        "sales"
+      ],
+      "model": "openOrdersQuery",
+      "modelType": "query",
+      "scope": "query",
       "users": []
     },
     {
@@ -371,6 +391,13 @@
       },
       "file": "decisions/order-decision.dmn",
       "hitPolicy": "FIRST",
+      "inputDefs": [
+        {
+          "expression": "total",
+          "label": "total",
+          "type": "number"
+        }
+      ],
       "inputExpressions": [
         "total"
       ],
@@ -379,6 +406,13 @@
       ],
       "key": "orderDecision",
       "name": "Order decision",
+      "outputDefs": [
+        {
+          "label": "approved",
+          "name": "approved",
+          "type": "boolean"
+        }
+      ],
       "outputs": [
         "approved"
       ],
@@ -436,14 +470,28 @@
       "key": "orderShipped",
       "name": "Order shipped",
       "payload": [
-        "carrier",
-        "orderId"
+        {
+          "correlation": true,
+          "name": "orderId",
+          "type": "string"
+        },
+        {
+          "name": "carrier",
+          "type": "string"
+        }
       ]
     }
   ],
   "expressions": [
+    "${!managerApproved}",
+    "${customerName}",
     "${demoBean.run(execution)}",
+    "${grandTotal}",
+    "${manager}",
     "${notifierBean}",
+    "${orderNumber}",
+    "${stockLevel > 0}",
+    "${subTotal > 5}",
     "${total > 100}",
     "${vars:bogus(}"
   ],
@@ -919,6 +967,31 @@
         "t": "java:com.example.DemoBean"
       },
       {
+        "rel": "document-view-form",
+        "s": "document:contractDocument",
+        "t": "form:orderForm"
+      },
+      {
+        "rel": "download",
+        "s": "group:sales",
+        "t": "document:contractDocument"
+      },
+      {
+        "rel": "escalation-starts",
+        "s": "sla:approvalSla",
+        "t": "process:fulfilmentProcess"
+      },
+      {
+        "rel": "extracts-from",
+        "s": "variableExtractor:orderVarExtractor",
+        "t": "case:reviewCase"
+      },
+      {
+        "rel": "extracts-from",
+        "s": "variableExtractor:orderVarExtractor",
+        "t": "process:orderProcess"
+      },
+      {
         "rel": "field-dataObject",
         "s": "form:orderForm",
         "t": "dataObject:customerDO"
@@ -952,6 +1025,11 @@
         "rel": "query",
         "s": "group:sales",
         "t": "dataObject:customerDO"
+      },
+      {
+        "rel": "query",
+        "s": "group:sales",
+        "t": "query:openOrdersQuery"
       },
       {
         "rel": "read",
@@ -1359,6 +1437,156 @@
       {
         "data": {
           "_uses": {
+            "binding": [
+              "binding:{{minTotal}}",
+              "binding:{{orderId}}"
+            ],
+            "variable": [
+              "variable:minTotal",
+              "variable:orderId"
+            ]
+          },
+          "description": "Work list of orders still awaiting approval.",
+          "file": "queries/open-orders.query",
+          "groups": [],
+          "key": "openOrdersQuery",
+          "modelType": "query",
+          "name": "Open orders",
+          "parameters": [
+            {
+              "label": "Minimum total",
+              "name": "minTotal",
+              "required": null,
+              "type": "number"
+            },
+            {
+              "label": "Order",
+              "name": "orderId",
+              "required": true,
+              "type": "string"
+            }
+          ],
+          "sortParameters": [
+            "total"
+          ],
+          "sourceIndex": "work-instances",
+          "templateContent": "{\"bool\": {\"must\": [{\"term\": {\"variables.orderId\": \"{{orderId}}\"}}, {\"range\": {\"variables.total\": {\"gte\": \"{{minTotal}}\"}}}]}}",
+          "type": "workInstanceQuery"
+        },
+        "file": "queries/open-orders.query",
+        "id": "query:openOrdersQuery",
+        "key": "openOrdersQuery",
+        "label": "Open orders",
+        "type": "query"
+      },
+      {
+        "data": {
+          "_uses": {
+            "expression": [
+              "expression:${!managerApproved}",
+              "expression:${manager}"
+            ],
+            "variable": [
+              "variable:manager",
+              "variable:managerApproved"
+            ]
+          },
+          "businessCalendarType": "standard",
+          "completionActions": [
+            {
+              "action": "removeEscalation",
+              "on": "complete"
+            }
+          ],
+          "completionDueDateTimeUnit": "hours",
+          "completionDueDateValue": 8.0,
+          "description": "An order approval must complete within a business day.",
+          "escalations": [
+            {
+              "action": "assignment",
+              "assignee": "${manager}",
+              "condition": "${!managerApproved}",
+              "relativeType": "after",
+              "stepId": "escalateOnBreach",
+              "timeUnit": "hours",
+              "timeValue": 0.0
+            },
+            {
+              "action": "startProcess",
+              "relativeType": "before",
+              "starts": "fulfilmentProcess",
+              "stepId": "warnBeforeBreach",
+              "timeUnit": "hours",
+              "timeValue": 1.0
+            }
+          ],
+          "file": "slas/approval-sla.sla",
+          "inProgressStartDueDateTimeUnit": "hours",
+          "inProgressStartDueDateValue": 4.0,
+          "inProgressStartOnClaim": true,
+          "key": "approvalSla",
+          "modelType": "sla",
+          "name": "Approval SLA",
+          "slaType": "task",
+          "suspendAllowed": true
+        },
+        "file": "slas/approval-sla.sla",
+        "id": "sla:approvalSla",
+        "key": "approvalSla",
+        "label": "Approval SLA",
+        "type": "sla"
+      },
+      {
+        "data": {
+          "_uses": {
+            "expression": [
+              "expression:${customerName}",
+              "expression:${grandTotal}",
+              "expression:${orderNumber}"
+            ],
+            "variable": [
+              "variable:customerName",
+              "variable:grandTotal",
+              "variable:orderNumber"
+            ]
+          },
+          "description": "Confirmation message sent to the customer once an order is approved.",
+          "file": "templates/order-confirmation.tpl",
+          "key": "orderConfirmationTemplate",
+          "modelType": "template",
+          "name": "Order confirmation",
+          "templateType": "text",
+          "type": "text",
+          "variationParameters": [
+            {
+              "defaultValue": "email",
+              "name": "channel"
+            }
+          ],
+          "variations": [
+            {
+              "parameters": {
+                "channel": "email"
+              },
+              "text": "Dear ${customerName}, your order ${orderNumber} for ${grandTotal} has been confirmed."
+            },
+            {
+              "parameters": {
+                "channel": "sms"
+              },
+              "text": "Order ${orderNumber} confirmed."
+            }
+          ]
+        },
+        "file": "templates/order-confirmation.tpl",
+        "id": "template:orderConfirmationTemplate",
+        "key": "orderConfirmationTemplate",
+        "label": "Order confirmation",
+        "type": "template"
+      },
+      {
+        "data": {
+          "_uses": {
             "expression": [
               "expression:${demoBean.run(execution)}",
               "expression:${notifierBean}",
@@ -1635,6 +1863,170 @@
       {
         "data": {
           "_uses": {
+            "expression": [
+              "expression:${stockLevel > 0}",
+              "expression:${subTotal > 5}"
+            ],
+            "variable": [
+              "variable:orderNotes",
+              "variable:stockLevel",
+              "variable:subTotal"
+            ]
+          },
+          "callActivities": [
+            {
+              "calledElement": "courierProcess",
+              "calledElementType": null,
+              "id": "callCourier",
+              "name": "Book courier"
+            }
+          ],
+          "candidateStarterGroups": null,
+          "conditions": [
+            {
+              "condition": "${subTotal > 5}",
+              "from": "shipGw",
+              "id": "ff2b",
+              "to": "callCourier"
+            }
+          ],
+          "dataObjects": [
+            {
+              "default": null,
+              "id": "orderNotes",
+              "name": "orderNotes",
+              "type": "xsd:string"
+            }
+          ],
+          "documentation": "Ships an approved order and reports the shipping total back to its caller.",
+          "events": [
+            {
+              "attachedTo": "callCourier",
+              "cancelActivity": "false",
+              "def": "timer",
+              "id": "courierLate",
+              "name": "Courier late",
+              "type": "boundaryEvent",
+              "value": "PT2H"
+            },
+            {
+              "def": "conditional",
+              "id": "stockOk",
+              "name": "Stock confirmed",
+              "type": "intermediateCatchEvent",
+              "value": "${stockLevel > 0}"
+            },
+            {
+              "def": null,
+              "id": "fEnd",
+              "name": null,
+              "type": "endEvent",
+              "value": null
+            },
+            {
+              "def": null,
+              "id": "fStart",
+              "name": null,
+              "type": "startEvent",
+              "value": null
+            }
+          ],
+          "file": "processes/fulfilment.bpmn",
+          "flows": [
+            {
+              "condition": "${subTotal > 5}",
+              "from": "shipGw",
+              "id": "ff2b",
+              "name": "courier",
+              "to": "callCourier"
+            },
+            {
+              "default": true,
+              "from": "shipGw",
+              "id": "ffPickup",
+              "name": "pickup",
+              "to": "stockOk"
+            },
+            {
+              "from": "callCourier",
+              "id": "ff3",
+              "to": "stockOk"
+            },
+            {
+              "from": "courierLate",
+              "id": "ffLate",
+              "to": "fEnd"
+            },
+            {
+              "from": "fStart",
+              "id": "ff1",
+              "to": "packTask"
+            },
+            {
+              "from": "packTask",
+              "id": "ff2",
+              "to": "shipGw"
+            },
+            {
+              "from": "stockOk",
+              "id": "ff4",
+              "to": "fEnd"
+            }
+          ],
+          "gateways": [
+            {
+              "default": "ffPickup",
+              "id": "shipGw",
+              "name": "Courier needed?",
+              "type": "exclusiveGateway"
+            }
+          ],
+          "ioParameters": [],
+          "key": "fulfilmentProcess",
+          "lanes": [
+            {
+              "elements": [
+                "callCourier"
+              ],
+              "id": "laneLogistics",
+              "name": "Logistics"
+            },
+            {
+              "elements": [
+                "packTask"
+              ],
+              "id": "laneWarehouse",
+              "name": "Warehouse"
+            }
+          ],
+          "listeners": [],
+          "multiInstance": [],
+          "name": "Fulfilment Process",
+          "otherTasks": [],
+          "ruleTasks": [],
+          "scriptTasks": [
+            {
+              "async": "true",
+              "format": "groovy",
+              "id": "packTask",
+              "name": "Pack shipment",
+              "resultVariable": null,
+              "script": "def label = \"pack:\" + orderNotes\n        execution.setVariable('subTotal', 10)"
+            }
+          ],
+          "serviceTasks": [],
+          "subProcesses": [],
+          "userTasks": []
+        },
+        "file": "processes/fulfilment.bpmn",
+        "id": "process:fulfilmentProcess",
+        "key": "fulfilmentProcess",
+        "label": "Fulfilment Process",
+        "type": "process"
+      },
+      {
+        "data": {
+          "_uses": {
             "serviceOperation": [
               "serviceOperation:customerService#findAll"
             ]
@@ -1756,6 +2148,13 @@
           },
           "file": "decisions/order-decision.dmn",
           "hitPolicy": "FIRST",
+          "inputDefs": [
+            {
+              "expression": "total",
+              "label": "total",
+              "type": "number"
+            }
+          ],
           "inputExpressions": [
             "total"
           ],
@@ -1764,6 +2163,13 @@
           ],
           "key": "orderDecision",
           "name": "Order decision",
+          "outputDefs": [
+            {
+              "label": "approved",
+              "name": "approved",
+              "type": "boolean"
+            }
+          ],
           "outputs": [
             "approved"
           ],
@@ -1830,6 +2236,86 @@
         "key": "priorityMD",
         "label": "Priority",
         "type": "dataObject"
+      },
+      {
+        "data": {
+          "_uses": {
+            "variable": [
+              "variable:contractType"
+            ]
+          },
+          "actionPermissions": [
+            {
+              "action": "download",
+              "groups": [
+                "sales"
+              ]
+            }
+          ],
+          "aiInstructions": "Classify the contract type from the first page.",
+          "description": "The customer contract uploaded with an order.",
+          "file": "documents/contract.document",
+          "forms": {
+            "view": "orderForm"
+          },
+          "initialState": "draft",
+          "initialType": "upload",
+          "key": "contractDocument",
+          "modelType": "document",
+          "name": "Contract",
+          "variables": [
+            {
+              "key": "contractType",
+              "type": "string"
+            }
+          ],
+          "versioning": true
+        },
+        "file": "documents/contract.document",
+        "id": "document:contractDocument",
+        "key": "contractDocument",
+        "label": "Contract",
+        "type": "document"
+      },
+      {
+        "data": {
+          "_uses": {
+            "variable": [
+              "variable:courierIndexed",
+              "variable:orderTotalIndexed"
+            ]
+          },
+          "description": "Promotes order totals into indexed work variables.",
+          "extractors": [
+            {
+              "from": "courierCode",
+              "path": "courierCode",
+              "scope": "reviewCase",
+              "to": "courierIndexed",
+              "type": "string"
+            },
+            {
+              "from": "total",
+              "path": "total",
+              "scope": "orderProcess",
+              "to": "orderTotalIndexed",
+              "type": "number"
+            }
+          ],
+          "file": "extractors/order-vars.extractor",
+          "fullTextVariables": [
+            "customerName"
+          ],
+          "key": "orderVarExtractor",
+          "modelType": "variableExtractor",
+          "name": "Order variables",
+          "sourceIndex": "work-instances"
+        },
+        "file": "extractors/order-vars.extractor",
+        "id": "variableExtractor:orderVarExtractor",
+        "key": "orderVarExtractor",
+        "label": "Order variables",
+        "type": "variableExtractor"
       },
       {
         "data": {
@@ -1916,94 +2402,6 @@
         "key": "notifyCustomerAction",
         "label": "Notify customer",
         "type": "action"
-      },
-      {
-        "data": {
-          "_uses": {
-            "variable": [
-              "variable:orderNotes",
-              "variable:subTotal"
-            ]
-          },
-          "callActivities": [
-            {
-              "calledElement": "courierProcess",
-              "calledElementType": null,
-              "id": "callCourier",
-              "name": "Book courier"
-            }
-          ],
-          "candidateStarterGroups": null,
-          "conditions": [],
-          "dataObjects": [
-            {
-              "default": null,
-              "id": "orderNotes",
-              "name": "orderNotes",
-              "type": "xsd:string"
-            }
-          ],
-          "documentation": "Ships an approved order and reports the shipping total back to its caller.",
-          "events": [
-            {
-              "def": null,
-              "id": "fEnd",
-              "name": null,
-              "type": "endEvent",
-              "value": null
-            },
-            {
-              "def": null,
-              "id": "fStart",
-              "name": null,
-              "type": "startEvent",
-              "value": null
-            }
-          ],
-          "file": "processes/fulfilment.bpmn",
-          "flows": [
-            {
-              "from": "callCourier",
-              "id": "ff3",
-              "to": "fEnd"
-            },
-            {
-              "from": "fStart",
-              "id": "ff1",
-              "to": "packTask"
-            },
-            {
-              "from": "packTask",
-              "id": "ff2",
-              "to": "callCourier"
-            }
-          ],
-          "gateways": [],
-          "ioParameters": [],
-          "key": "fulfilmentProcess",
-          "listeners": [],
-          "multiInstance": [],
-          "name": "Fulfilment Process",
-          "otherTasks": [],
-          "ruleTasks": [],
-          "scriptTasks": [
-            {
-              "format": "groovy",
-              "id": "packTask",
-              "name": "Pack shipment",
-              "resultVariable": null,
-              "script": "def label = \"pack:\" + orderNotes\n        execution.setVariable('subTotal', 10)"
-            }
-          ],
-          "serviceTasks": [],
-          "subProcesses": [],
-          "userTasks": []
-        },
-        "file": "processes/fulfilment.bpmn",
-        "id": "process:fulfilmentProcess",
-        "key": "fulfilmentProcess",
-        "label": "Fulfilment Process",
-        "type": "process"
       },
       {
         "data": {
@@ -2250,6 +2648,22 @@
       },
       {
         "data": {
+          "category": "demo",
+          "file": "palettes/demo.palette",
+          "key": "demoPalette",
+          "modelType": "palette",
+          "name": "Demo palette",
+          "paletteItemsCount": 2,
+          "propertyPackagesCount": 1
+        },
+        "file": "palettes/demo.palette",
+        "id": "palette:demoPalette",
+        "key": "demoPalette",
+        "label": "Demo palette",
+        "type": "palette"
+      },
+      {
+        "data": {
           "class": "com.example.DemoBean",
           "declaredIn": "java:com.example.DemoBean",
           "name": "run"
@@ -2304,6 +2718,32 @@
       },
       {
         "data": {
+          "contentItemsPath": "docs/couriers",
+          "description": "Shipping instructions the fulfilment assistant may cite.",
+          "file": "knowledgebase/courier-manuals.knowledgebase",
+          "inputSource": "contentItems",
+          "key": "courierManuals",
+          "modelType": "knowledgeBase",
+          "name": "Courier manuals",
+          "similarityThreshold": 0.7,
+          "topK": 5.0,
+          "type": "processAndSearch",
+          "vectorStore": {
+            "credentials": "apiKey",
+            "dimension": 1536.0,
+            "embedding": "openai",
+            "embeddingModel": "text-embedding-3-small",
+            "type": "elasticsearch"
+          }
+        },
+        "file": "knowledgebase/courier-manuals.knowledgebase",
+        "id": "knowledgeBase:courierManuals",
+        "key": "courierManuals",
+        "label": "Courier manuals",
+        "type": "knowledgeBase"
+      },
+      {
+        "data": {
           "controller": "CustomerController",
           "handler": "canEdit",
           "http": "GET",
@@ -2339,8 +2779,15 @@
           "key": "orderShipped",
           "name": "Order shipped",
           "payload": [
-            "carrier",
-            "orderId"
+            {
+              "correlation": true,
+              "name": "orderId",
+              "type": "string"
+            },
+            {
+              "name": "carrier",
+              "type": "string"
+            }
           ]
         },
         "file": "events/order-shipped.event",
@@ -2348,6 +2795,24 @@
         "key": "orderShipped",
         "label": "Order shipped",
         "type": "event"
+      },
+      {
+        "data": {
+          "cycle": false,
+          "description": "Human-readable order numbers on every new order.",
+          "file": "sequences/order-number.sequence",
+          "format": "ORD-{seq:6}",
+          "increment": 1.0,
+          "key": "orderNumberSequence",
+          "modelType": "sequence",
+          "name": "Order number",
+          "start": 1000.0
+        },
+        "file": "sequences/order-number.sequence",
+        "id": "sequence:orderNumberSequence",
+        "key": "orderNumberSequence",
+        "label": "Order number",
+        "type": "sequence"
       },
       {
         "data": {
@@ -2480,7 +2945,7 @@
               "target": "subOrderId"
             }
           ],
-          "readCount": 4,
+          "readCount": 5,
           "reads": [
             {
               "element": "badApi",
@@ -2512,10 +2977,15 @@
               "guess": true,
               "model": "process:orderProcess",
               "via": "scriptRead"
+            },
+            {
+              "model": "query:openOrdersQuery",
+              "via": "binding"
             }
           ],
           "scopes": [
-            "process"
+            "process",
+            "query"
           ],
           "scriptSites": [
             {
@@ -2554,10 +3024,17 @@
                 "(script ≈ read · Broken stamp)",
                 "(script ≈ read · Stamp order)"
               ]
+            },
+            {
+              "model": "query:openOrdersQuery",
+              "snippets": [
+                "{{orderId}}"
+              ]
             }
           ],
           "usedBy": [
-            "process:orderProcess"
+            "process:orderProcess",
+            "query:openOrdersQuery"
           ],
           "writeCount": 1,
           "writes": [
@@ -2933,7 +3410,7 @@
               "target": "total"
             }
           ],
-          "readCount": 1,
+          "readCount": 2,
           "reads": [
             {
               "element": "callSub",
@@ -2942,6 +3419,10 @@
               "model": "process:orderProcess",
               "scope": "process:fulfilmentProcess",
               "via": "outParameterSource"
+            },
+            {
+              "model": "process:fulfilmentProcess",
+              "via": "expression"
             }
           ],
           "scopes": [
@@ -2960,6 +3441,7 @@
             {
               "model": "process:fulfilmentProcess",
               "snippets": [
+                "${subTotal > 5}",
                 "(script · Pack shipment)"
               ]
             },
@@ -3117,6 +3599,72 @@
       {
         "data": {
           "readCount": 0,
+          "readsUnknown": true,
+          "scopes": [
+            "variableExtractor"
+          ],
+          "usages": [
+            {
+              "model": "variableExtractor:orderVarExtractor",
+              "snippets": [
+                "(declared / mapped)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "variableExtractor:orderVarExtractor"
+          ],
+          "writeCount": 1,
+          "writes": [
+            {
+              "elementType": "variableExtractor",
+              "model": "variableExtractor:orderVarExtractor",
+              "via": "variableExtractor"
+            }
+          ]
+        },
+        "file": null,
+        "id": "variable:courierIndexed",
+        "key": "courierIndexed",
+        "label": "courierIndexed",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 0,
+          "readsUnknown": true,
+          "scopes": [
+            "variableExtractor"
+          ],
+          "usages": [
+            {
+              "model": "variableExtractor:orderVarExtractor",
+              "snippets": [
+                "(declared / mapped)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "variableExtractor:orderVarExtractor"
+          ],
+          "writeCount": 1,
+          "writes": [
+            {
+              "elementType": "variableExtractor",
+              "model": "variableExtractor:orderVarExtractor",
+              "via": "variableExtractor"
+            }
+          ]
+        },
+        "file": null,
+        "id": "variable:orderTotalIndexed",
+        "key": "orderTotalIndexed",
+        "label": "orderTotalIndexed",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 0,
           "scopes": [
             "app"
           ],
@@ -3222,6 +3770,31 @@
         "id": "variable:approved",
         "key": "approved",
         "label": "approved",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 0,
+          "scopes": [
+            "document"
+          ],
+          "usages": [
+            {
+              "model": "document:contractDocument",
+              "snippets": [
+                "(declared / mapped)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "document:contractDocument"
+          ],
+          "writeCount": 0
+        },
+        "file": null,
+        "id": "variable:contractType",
+        "key": "contractType",
+        "label": "contractType",
         "type": "variable"
       },
       {
@@ -3452,6 +4025,223 @@
         "id": "variable:isSupervisor",
         "key": "isSupervisor",
         "label": "isSupervisor",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 1,
+          "reads": [
+            {
+              "model": "process:fulfilmentProcess",
+              "via": "expression"
+            }
+          ],
+          "scopes": [
+            "process"
+          ],
+          "usages": [
+            {
+              "model": "process:fulfilmentProcess",
+              "snippets": [
+                "${stockLevel > 0}"
+              ]
+            }
+          ],
+          "usedBy": [
+            "process:fulfilmentProcess"
+          ],
+          "writeCount": 0
+        },
+        "file": null,
+        "id": "variable:stockLevel",
+        "key": "stockLevel",
+        "label": "stockLevel",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 1,
+          "reads": [
+            {
+              "model": "query:openOrdersQuery",
+              "via": "binding"
+            }
+          ],
+          "scopes": [
+            "query"
+          ],
+          "usages": [
+            {
+              "model": "query:openOrdersQuery",
+              "snippets": [
+                "{{minTotal}}"
+              ]
+            }
+          ],
+          "usedBy": [
+            "query:openOrdersQuery"
+          ],
+          "writeCount": 0
+        },
+        "file": null,
+        "id": "variable:minTotal",
+        "key": "minTotal",
+        "label": "minTotal",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 1,
+          "reads": [
+            {
+              "model": "sla:approvalSla",
+              "via": "expression"
+            }
+          ],
+          "scopes": [
+            "sla"
+          ],
+          "usages": [
+            {
+              "model": "sla:approvalSla",
+              "snippets": [
+                "${!managerApproved}"
+              ]
+            }
+          ],
+          "usedBy": [
+            "sla:approvalSla"
+          ],
+          "writeCount": 0
+        },
+        "file": null,
+        "id": "variable:managerApproved",
+        "key": "managerApproved",
+        "label": "managerApproved",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 1,
+          "reads": [
+            {
+              "model": "sla:approvalSla",
+              "via": "expression"
+            }
+          ],
+          "scopes": [
+            "sla"
+          ],
+          "usages": [
+            {
+              "model": "sla:approvalSla",
+              "snippets": [
+                "${manager}"
+              ]
+            }
+          ],
+          "usedBy": [
+            "sla:approvalSla"
+          ],
+          "writeCount": 0
+        },
+        "file": null,
+        "id": "variable:manager",
+        "key": "manager",
+        "label": "manager",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 1,
+          "reads": [
+            {
+              "model": "template:orderConfirmationTemplate",
+              "via": "expression"
+            }
+          ],
+          "scopes": [
+            "template"
+          ],
+          "usages": [
+            {
+              "model": "template:orderConfirmationTemplate",
+              "snippets": [
+                "${customerName}"
+              ]
+            }
+          ],
+          "usedBy": [
+            "template:orderConfirmationTemplate"
+          ],
+          "writeCount": 0
+        },
+        "file": null,
+        "id": "variable:customerName",
+        "key": "customerName",
+        "label": "customerName",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 1,
+          "reads": [
+            {
+              "model": "template:orderConfirmationTemplate",
+              "via": "expression"
+            }
+          ],
+          "scopes": [
+            "template"
+          ],
+          "usages": [
+            {
+              "model": "template:orderConfirmationTemplate",
+              "snippets": [
+                "${grandTotal}"
+              ]
+            }
+          ],
+          "usedBy": [
+            "template:orderConfirmationTemplate"
+          ],
+          "writeCount": 0
+        },
+        "file": null,
+        "id": "variable:grandTotal",
+        "key": "grandTotal",
+        "label": "grandTotal",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 1,
+          "reads": [
+            {
+              "model": "template:orderConfirmationTemplate",
+              "via": "expression"
+            }
+          ],
+          "scopes": [
+            "template"
+          ],
+          "usages": [
+            {
+              "model": "template:orderConfirmationTemplate",
+              "snippets": [
+                "${orderNumber}"
+              ]
+            }
+          ],
+          "usedBy": [
+            "template:orderConfirmationTemplate"
+          ],
+          "writeCount": 0
+        },
+        "file": null,
+        "id": "variable:orderNumber",
+        "key": "orderNumber",
+        "label": "orderNumber",
         "type": "variable"
       },
       {
@@ -3724,6 +4514,30 @@
       {
         "data": {
           "usedBy": [
+            "process:fulfilmentProcess"
+          ]
+        },
+        "file": null,
+        "id": "expression:${stockLevel > 0}",
+        "key": "${stockLevel > 0}",
+        "label": "${stockLevel > 0}",
+        "type": "expression"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "process:fulfilmentProcess"
+          ]
+        },
+        "file": null,
+        "id": "expression:${subTotal > 5}",
+        "key": "${subTotal > 5}",
+        "label": "${subTotal > 5}",
+        "type": "expression"
+      },
+      {
+        "data": {
+          "usedBy": [
             "process:orderProcess"
           ]
         },
@@ -3755,6 +4569,90 @@
         "id": "expression:${total > 100}",
         "key": "${total > 100}",
         "label": "${total > 100}",
+        "type": "expression"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "query:openOrdersQuery"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{minTotal}}",
+        "key": "{{minTotal}}",
+        "label": "{{minTotal}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "query:openOrdersQuery"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{orderId}}",
+        "key": "{{orderId}}",
+        "label": "{{orderId}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "sla:approvalSla"
+          ]
+        },
+        "file": null,
+        "id": "expression:${!managerApproved}",
+        "key": "${!managerApproved}",
+        "label": "${!managerApproved}",
+        "type": "expression"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "sla:approvalSla"
+          ]
+        },
+        "file": null,
+        "id": "expression:${manager}",
+        "key": "${manager}",
+        "label": "${manager}",
+        "type": "expression"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "template:orderConfirmationTemplate"
+          ]
+        },
+        "file": null,
+        "id": "expression:${customerName}",
+        "key": "${customerName}",
+        "label": "${customerName}",
+        "type": "expression"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "template:orderConfirmationTemplate"
+          ]
+        },
+        "file": null,
+        "id": "expression:${grandTotal}",
+        "key": "${grandTotal}",
+        "label": "${grandTotal}",
+        "type": "expression"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "template:orderConfirmationTemplate"
+          ]
+        },
+        "file": null,
+        "id": "expression:${orderNumber}",
+        "key": "${orderNumber}",
+        "label": "${orderNumber}",
         "type": "expression"
       },
       {
@@ -4016,14 +4914,257 @@
     "dataObject:customerDO": "data/customer.data",
     "dataObject:priorityMD": "data/priority.data",
     "decision:orderDecision": "decisions/order-decision.dmn",
+    "document:contractDocument": "documents/contract.document",
     "event:orderShipped": "events/order-shipped.event",
     "form:orderForm": "forms/order-form.form",
+    "knowledgeBase:courierManuals": "knowledgebase/courier-manuals.knowledgebase",
+    "palette:demoPalette": "palettes/demo.palette",
     "process:fulfilmentProcess": "processes/fulfilment.bpmn",
     "process:orderProcess": "processes/order.bpmn",
+    "query:openOrdersQuery": "queries/open-orders.query",
     "securityPolicy:orderPolicy": "policies/case.policy",
-    "service:customerService": "services/customer.service"
+    "sequence:orderNumberSequence": "sequences/order-number.sequence",
+    "service:customerService": "services/customer.service",
+    "sla:approvalSla": "slas/approval-sla.sla",
+    "template:orderConfirmationTemplate": "templates/order-confirmation.tpl",
+    "variableExtractor:orderVarExtractor": "extractors/order-vars.extractor"
   },
-  "others": [],
+  "others": [
+    {
+      "_uses": {
+        "binding": [
+          "binding:{{minTotal}}",
+          "binding:{{orderId}}"
+        ],
+        "variable": [
+          "variable:minTotal",
+          "variable:orderId"
+        ]
+      },
+      "description": "Work list of orders still awaiting approval.",
+      "file": "queries/open-orders.query",
+      "groups": [],
+      "key": "openOrdersQuery",
+      "modelType": "query",
+      "name": "Open orders",
+      "parameters": [
+        {
+          "label": "Minimum total",
+          "name": "minTotal",
+          "required": null,
+          "type": "number"
+        },
+        {
+          "label": "Order",
+          "name": "orderId",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "sortParameters": [
+        "total"
+      ],
+      "sourceIndex": "work-instances",
+      "templateContent": "{\"bool\": {\"must\": [{\"term\": {\"variables.orderId\": \"{{orderId}}\"}}, {\"range\": {\"variables.total\": {\"gte\": \"{{minTotal}}\"}}}]}}",
+      "type": "workInstanceQuery"
+    },
+    {
+      "_uses": {
+        "expression": [
+          "expression:${!managerApproved}",
+          "expression:${manager}"
+        ],
+        "variable": [
+          "variable:manager",
+          "variable:managerApproved"
+        ]
+      },
+      "businessCalendarType": "standard",
+      "completionActions": [
+        {
+          "action": "removeEscalation",
+          "on": "complete"
+        }
+      ],
+      "completionDueDateTimeUnit": "hours",
+      "completionDueDateValue": 8.0,
+      "description": "An order approval must complete within a business day.",
+      "escalations": [
+        {
+          "action": "assignment",
+          "assignee": "${manager}",
+          "condition": "${!managerApproved}",
+          "relativeType": "after",
+          "stepId": "escalateOnBreach",
+          "timeUnit": "hours",
+          "timeValue": 0.0
+        },
+        {
+          "action": "startProcess",
+          "relativeType": "before",
+          "starts": "fulfilmentProcess",
+          "stepId": "warnBeforeBreach",
+          "timeUnit": "hours",
+          "timeValue": 1.0
+        }
+      ],
+      "file": "slas/approval-sla.sla",
+      "inProgressStartDueDateTimeUnit": "hours",
+      "inProgressStartDueDateValue": 4.0,
+      "inProgressStartOnClaim": true,
+      "key": "approvalSla",
+      "modelType": "sla",
+      "name": "Approval SLA",
+      "slaType": "task",
+      "suspendAllowed": true
+    },
+    {
+      "_uses": {
+        "expression": [
+          "expression:${customerName}",
+          "expression:${grandTotal}",
+          "expression:${orderNumber}"
+        ],
+        "variable": [
+          "variable:customerName",
+          "variable:grandTotal",
+          "variable:orderNumber"
+        ]
+      },
+      "description": "Confirmation message sent to the customer once an order is approved.",
+      "file": "templates/order-confirmation.tpl",
+      "key": "orderConfirmationTemplate",
+      "modelType": "template",
+      "name": "Order confirmation",
+      "templateType": "text",
+      "type": "text",
+      "variationParameters": [
+        {
+          "defaultValue": "email",
+          "name": "channel"
+        }
+      ],
+      "variations": [
+        {
+          "parameters": {
+            "channel": "email"
+          },
+          "text": "Dear ${customerName}, your order ${orderNumber} for ${grandTotal} has been confirmed."
+        },
+        {
+          "parameters": {
+            "channel": "sms"
+          },
+          "text": "Order ${orderNumber} confirmed."
+        }
+      ]
+    },
+    {
+      "_uses": {
+        "variable": [
+          "variable:contractType"
+        ]
+      },
+      "actionPermissions": [
+        {
+          "action": "download",
+          "groups": [
+            "sales"
+          ]
+        }
+      ],
+      "aiInstructions": "Classify the contract type from the first page.",
+      "description": "The customer contract uploaded with an order.",
+      "file": "documents/contract.document",
+      "forms": {
+        "view": "orderForm"
+      },
+      "initialState": "draft",
+      "initialType": "upload",
+      "key": "contractDocument",
+      "modelType": "document",
+      "name": "Contract",
+      "variables": [
+        {
+          "key": "contractType",
+          "type": "string"
+        }
+      ],
+      "versioning": true
+    },
+    {
+      "_uses": {
+        "variable": [
+          "variable:courierIndexed",
+          "variable:orderTotalIndexed"
+        ]
+      },
+      "description": "Promotes order totals into indexed work variables.",
+      "extractors": [
+        {
+          "from": "courierCode",
+          "path": "courierCode",
+          "scope": "reviewCase",
+          "to": "courierIndexed",
+          "type": "string"
+        },
+        {
+          "from": "total",
+          "path": "total",
+          "scope": "orderProcess",
+          "to": "orderTotalIndexed",
+          "type": "number"
+        }
+      ],
+      "file": "extractors/order-vars.extractor",
+      "fullTextVariables": [
+        "customerName"
+      ],
+      "key": "orderVarExtractor",
+      "modelType": "variableExtractor",
+      "name": "Order variables",
+      "sourceIndex": "work-instances"
+    },
+    {
+      "category": "demo",
+      "file": "palettes/demo.palette",
+      "key": "demoPalette",
+      "modelType": "palette",
+      "name": "Demo palette",
+      "paletteItemsCount": 2,
+      "propertyPackagesCount": 1
+    },
+    {
+      "contentItemsPath": "docs/couriers",
+      "description": "Shipping instructions the fulfilment assistant may cite.",
+      "file": "knowledgebase/courier-manuals.knowledgebase",
+      "inputSource": "contentItems",
+      "key": "courierManuals",
+      "modelType": "knowledgeBase",
+      "name": "Courier manuals",
+      "similarityThreshold": 0.7,
+      "topK": 5.0,
+      "type": "processAndSearch",
+      "vectorStore": {
+        "credentials": "apiKey",
+        "dimension": 1536.0,
+        "embedding": "openai",
+        "embeddingModel": "text-embedding-3-small",
+        "type": "elasticsearch"
+      }
+    },
+    {
+      "cycle": false,
+      "description": "Human-readable order numbers on every new order.",
+      "file": "sequences/order-number.sequence",
+      "format": "ORD-{seq:6}",
+      "increment": 1.0,
+      "key": "orderNumberSequence",
+      "modelType": "sequence",
+      "name": "Order number",
+      "start": 1000.0
+    }
+  ],
   "placeholders": [
     "{{!customer}}",
     "{{$response.canEdit}}",
@@ -4038,6 +5179,8 @@
     "{{customer}}",
     "{{endpoints.baseUrl}}",
     "{{isSupervisor}}",
+    "{{minTotal}}",
+    "{{orderId}}",
     "{{orderTotal}}"
   ],
   "policies": [
@@ -4336,8 +5479,13 @@
     },
     {
       "_uses": {
+        "expression": [
+          "expression:${stockLevel > 0}",
+          "expression:${subTotal > 5}"
+        ],
         "variable": [
           "variable:orderNotes",
+          "variable:stockLevel",
           "variable:subTotal"
         ]
       },
@@ -4350,7 +5498,14 @@
         }
       ],
       "candidateStarterGroups": null,
-      "conditions": [],
+      "conditions": [
+        {
+          "condition": "${subTotal > 5}",
+          "from": "shipGw",
+          "id": "ff2b",
+          "to": "callCourier"
+        }
+      ],
       "dataObjects": [
         {
           "default": null,
@@ -4361,6 +5516,22 @@
       ],
       "documentation": "Ships an approved order and reports the shipping total back to its caller.",
       "events": [
+        {
+          "attachedTo": "callCourier",
+          "cancelActivity": "false",
+          "def": "timer",
+          "id": "courierLate",
+          "name": "Courier late",
+          "type": "boundaryEvent",
+          "value": "PT2H"
+        },
+        {
+          "def": "conditional",
+          "id": "stockOk",
+          "name": "Stock confirmed",
+          "type": "intermediateCatchEvent",
+          "value": "${stockLevel > 0}"
+        },
         {
           "def": null,
           "id": "fEnd",
@@ -4379,8 +5550,27 @@
       "file": "processes/fulfilment.bpmn",
       "flows": [
         {
+          "condition": "${subTotal > 5}",
+          "from": "shipGw",
+          "id": "ff2b",
+          "name": "courier",
+          "to": "callCourier"
+        },
+        {
+          "default": true,
+          "from": "shipGw",
+          "id": "ffPickup",
+          "name": "pickup",
+          "to": "stockOk"
+        },
+        {
           "from": "callCourier",
           "id": "ff3",
+          "to": "stockOk"
+        },
+        {
+          "from": "courierLate",
+          "id": "ffLate",
           "to": "fEnd"
         },
         {
@@ -4391,12 +5581,40 @@
         {
           "from": "packTask",
           "id": "ff2",
-          "to": "callCourier"
+          "to": "shipGw"
+        },
+        {
+          "from": "stockOk",
+          "id": "ff4",
+          "to": "fEnd"
         }
       ],
-      "gateways": [],
+      "gateways": [
+        {
+          "default": "ffPickup",
+          "id": "shipGw",
+          "name": "Courier needed?",
+          "type": "exclusiveGateway"
+        }
+      ],
       "ioParameters": [],
       "key": "fulfilmentProcess",
+      "lanes": [
+        {
+          "elements": [
+            "callCourier"
+          ],
+          "id": "laneLogistics",
+          "name": "Logistics"
+        },
+        {
+          "elements": [
+            "packTask"
+          ],
+          "id": "laneWarehouse",
+          "name": "Warehouse"
+        }
+      ],
       "listeners": [],
       "multiInstance": [],
       "name": "Fulfilment Process",
@@ -4404,6 +5622,7 @@
       "ruleTasks": [],
       "scriptTasks": [
         {
+          "async": "true",
           "format": "groovy",
           "id": "packTask",
           "name": "Pack shipment",
@@ -4417,6 +5636,37 @@
     }
   ],
   "resolvedRefs": [
+    {
+      "fallbackType": "case",
+      "from": "orderVarExtractor",
+      "fromFile": "extractors/order-vars.extractor",
+      "fromType": "variableExtractor",
+      "kind": "process",
+      "rel": "extracts-from",
+      "target": "cases/review.cmmn",
+      "targetType": "model",
+      "value": "reviewCase"
+    },
+    {
+      "from": "approvalSla",
+      "fromFile": "slas/approval-sla.sla",
+      "fromType": "sla",
+      "kind": "process",
+      "rel": "escalation-starts",
+      "target": "processes/fulfilment.bpmn",
+      "targetType": "model",
+      "value": "fulfilmentProcess"
+    },
+    {
+      "from": "contractDocument",
+      "fromFile": "documents/contract.document",
+      "fromType": "document",
+      "kind": "form",
+      "rel": "document-view-form",
+      "target": "forms/order-form.form",
+      "targetType": "model",
+      "value": "orderForm"
+    },
     {
       "from": "customerDO",
       "fromFile": "data/customer.data",
@@ -4588,6 +5838,16 @@
       "target": "processes/fulfilment.bpmn",
       "targetType": "model",
       "value": "fulfilmentProcess"
+    },
+    {
+      "from": "orderVarExtractor",
+      "fromFile": "extractors/order-vars.extractor",
+      "fromType": "variableExtractor",
+      "kind": "process",
+      "rel": "extracts-from",
+      "target": "processes/order.bpmn",
+      "targetType": "model",
+      "value": "orderProcess"
     },
     {
       "from": "reviewCase",
@@ -4785,12 +6045,12 @@
   "stats": {
     "archives": 0,
     "dynamicEdges": 0,
-    "edges": 42,
+    "edges": 48,
     "endpoints": 2,
     "groups": 3,
     "java": 2,
-    "models": 13,
-    "nodes": 64,
+    "models": 21,
+    "nodes": 91,
     "scriptIssues": 2,
     "suspectEdges": 0
   },
@@ -4820,9 +6080,18 @@
   "variables": [
     "amount",
     "customer",
+    "customerName",
+    "grandTotal",
     "isSupervisor",
+    "manager",
+    "managerApproved",
+    "minTotal",
     "notifierBean",
+    "orderId",
+    "orderNumber",
     "orderTotal",
+    "stockLevel",
+    "subTotal",
     "total"
   ],
   "warnings": [

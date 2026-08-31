@@ -1,0 +1,9 @@
+{
+  "key": "orderNumberSequence",
+  "name": "Order number",
+  "description": "Human-readable order numbers on every new order.",
+  "format": {"prefix": "ORD-", "digits": 6},
+  "start": 1000,
+  "increment": 1,
+  "cycle": false
+}

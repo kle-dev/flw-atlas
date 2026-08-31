@@ -123,10 +123,13 @@ object BackendModelParsers {
                 }
             }
 
+            // flow ids that some gateway/activity names as its default path (marked onto `flows` below)
+            val defaultFlows = HashSet<String>()
             for (el in iterAll(proc)) {
                 val tag = el.tag
                 val eid = el.attr("id")
                 val ename = el.attr("name")
+                if (tag != "sequenceFlow") el.attr("default")?.ifEmpty { null }?.let { defaultFlows.add(it) }
                 // forms linked via Design extension elements (work-/start-form) anywhere in the tree
                 for ((rel, fk) in XmlHelpers.designFormKeys(el)) {
                     ctx.addRef(pkey, "bpmn", ffile, rel, "form", fk)
@@ -338,9 +341,15 @@ object BackendModelParsers {
                     }
                     tag in XmlHelpers.BPMN_EVENT_TAGS -> {
                         val (k, v) = XmlHelpers.eventInfo(el)
-                        events.add(withElementExtras(
-                            linkedMapOf("id" to eid, "name" to ename, "type" to tag, "def" to k, "value" to v),
-                            el, elListeners))
+                        val ev = linkedMapOf<String, Any?>(
+                            "id" to eid, "name" to ename, "type" to tag, "def" to k, "value" to v)
+                        // A boundary event is meaningless without the activity it hangs on — record the
+                        // host, and whether triggering it cancels that activity.
+                        if (tag == "boundaryEvent") {
+                            el.attr("attachedToRef")?.ifEmpty { null }?.let { ev["attachedTo"] = it }
+                            el.attr("cancelActivity")?.ifEmpty { null }?.let { ev["cancelActivity"] = it }
+                        }
+                        events.add(withElementExtras(ev, el, elListeners))
                         if (tag == "startEvent" && truthy(el.attr("formKey"))) {
                             ctx.addRef(pkey, "bpmn", ffile, "start-form", "form", el.attr("formKey"))
                         }
@@ -353,8 +362,11 @@ object BackendModelParsers {
                         }
                     }
                     tag in XmlHelpers.BPMN_GW_TAGS -> {
-                        gateways.add(withElementExtras(
-                            linkedMapOf("id" to eid, "name" to ename, "type" to tag), el, elListeners))
+                        val gw = linkedMapOf<String, Any?>("id" to eid, "name" to ename, "type" to tag)
+                        // the flow taken when no condition matches — as much a part of the gateway's
+                        // logic as the conditions themselves
+                        el.attr("default")?.ifEmpty { null }?.let { gw["default"] = it }
+                        gateways.add(withElementExtras(gw, el, elListeners))
                     }
                     tag in listOf("sendTask", "receiveTask", "manualTask", "task") -> {
                         otherTasks.add(withElementExtras(
@@ -384,6 +396,26 @@ object BackendModelParsers {
                     }
                 }
             }
+            // mark the flow a gateway/activity declared as its default path
+            if (defaultFlows.isNotEmpty()) {
+                for (f in flows) {
+                    @Suppress("UNCHECKED_CAST") val fm = f as LinkedHashMap<String, Any?>
+                    if (fm["id"] in defaultFlows) fm["default"] = true
+                }
+            }
+            // Lanes: who works which part of the process. Only painted in the diagram until now —
+            // a lane's name was neither searchable nor stated anywhere in the report.
+            val lanes = ArrayList<Any?>()
+            for (ls in proc.findChildren("laneSet")) {
+                for (lane in ls.findChildren("lane")) {
+                    lanes.add(linkedMapOf(
+                        "id" to lane.attr("id"), "name" to lane.attr("name"),
+                        "elements" to lane.findChildren("flowNodeRef")
+                            .mapNotNull { it.text?.trim() }.filter { it.isNotEmpty() },
+                    ))
+                }
+            }
+            if (lanes.isNotEmpty()) info["lanes"] = lanes
             processes.add(info)
         }
         return processes
@@ -715,6 +747,11 @@ object BackendModelParsers {
         rec: LinkedHashMap<String, Any?>, el: El, listeners: List<Map<String, Any?>>,
     ): LinkedHashMap<String, Any?> {
         el.childText("documentation")?.let { rec["documentation"] = it }
+        // engine-behaviour flags, only when the model departs from the default: async continuation
+        // and the expression that lets the engine skip the element entirely
+        for (a in listOf("async", "asyncLeave", "skipExpression")) {
+            el.attr(a)?.ifEmpty { null }?.takeIf { it != "false" }?.let { rec[a] = it }
+        }
         if (listeners.isNotEmpty()) rec["listeners"] = listeners
         return rec
     }

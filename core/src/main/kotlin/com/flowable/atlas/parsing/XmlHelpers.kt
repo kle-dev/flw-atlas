@@ -356,6 +356,8 @@ object XmlHelpers {
                 val value = c.childText("timeDuration") ?: c.childText("timeCycle")
                     ?: c.childText("timeDate") ?: c.attr("messageRef") ?: c.attr("signalRef")
                     ?: c.attr("errorRef") ?: c.attr("escalationRef")
+                    // a conditional event's whole meaning is its condition body
+                    ?: c.textOfDescendant("condition")
                 return kind to value
             }
         }

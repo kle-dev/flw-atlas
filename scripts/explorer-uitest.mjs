@@ -346,6 +346,48 @@ const probe = `<script>
     key('Escape');
   });
 
+  // --- a facet hit lights its value; Tab cycles the dialog instead of being swallowed ---
+  steps.push(()=>{ openPalette(); type('label:Recalculate'); });
+  steps.push(()=>{
+    ok('a facet hit highlights the value it matched', !!rows()[0]&&!!rows()[0].querySelector('mark.hl'),
+       rows()[0]?rows()[0].textContent.slice(0,80):'(no rows)');
+    ok('the page behind the open dialog is inert', document.querySelector('.shell').inert===true);
+    key('Tab');
+    const fc=document.activeElement;
+    ok('Tab reaches the dialog controls', fc!==palq && !!fc.closest('.pal-panel'),
+       'focus on '+(fc&&(fc.className||fc.tagName)));
+    key('Escape');
+  });
+  steps.push(()=>{
+    ok('closing the palette lifts inert again', document.querySelector('.shell').inert===false);
+  });
+
+  // --- the browse list explains a non-obvious match, like the palette does ---
+  steps.push(()=>{ closeOtherTabs();
+    const c=[...document.querySelectorAll('#nav .side-item')].find(el=>/Processes/.test(el.textContent));
+    if(c) click(c); else say('note','no Processes category');
+  });
+  steps.push(()=>{
+    const lf=document.getElementById('lf');
+    if(lf){ lf.value='setVariable'; lf.dispatchEvent(new Event('input')); }
+  });
+  steps.push(()=>{
+    const it=document.querySelector('#listitems .item[data-id]');
+    ok('a script-body match still shows rows', !!it);
+    ok('and the row says why it matched', !!it && /script/.test((it.querySelector('.sub')||{}).textContent||''),
+       it?((it.querySelector('.sub')||{}).textContent||'(no sub)'):'(none)');
+  });
+
+  // --- nothing extracted is invisible: unconsumed data renders as Other attributes ---
+  steps.push(()=>{ closeOtherTabs(); location.hash=enc('sla:approvalSla'); });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    ok('an SLA renders its escalations', !!det.querySelector('[data-sect="escalations"]'));
+    const oa=det.querySelector('[data-sect="otherattrs"]');
+    ok('unconsumed parsed data lands in Other attributes', !!oa && /completionActions/.test(oa.textContent),
+       oa?oa.textContent.slice(0,120):'(no section)');
+  });
+
   // Design's model Description used to render for apps only, because each type spelled the row itself.
   steps.push(()=>{ closeOtherTabs(); location.hash=enc('app:demoApp'); });
   steps.push(()=>{

@@ -32,6 +32,13 @@ object ModelParsers {
         "dataObject" to ::parseDataObject,
         "securityPolicy" to ::parsePolicy,
         "action" to ::parseAction,
+        "query" to ::parseQuery,
+        "sequence" to ::parseSequence,
+        "sla" to ::parseSla,
+        "template" to ::parseTemplate,
+        "knowledgeBase" to ::parseKnowledgeBase,
+        "variableExtractor" to ::parseVariableExtractor,
+        "document" to ::parseDocumentModel,
     )
 
     private val GENERIC_KEYS = listOf("key", "name", "description", "type", "subType", "modelType")
@@ -169,6 +176,26 @@ object ModelParsers {
                 // that expression is what a reader looks for when tracing a variable into a decision.
                 val inputExprs = t.findChildren("input").mapNotNull { it.textOfDescendant("text") }
                 if (inputExprs.isNotEmpty()) info["inputExpressions"] = inputExprs
+                // Column metadata beyond the label lists: declared type and allowed values. A separate
+                // record list, so `inputs`/`outputs` stay the plain label lists search and describe read.
+                val inputDefs = t.findChildren("input").map { inp ->
+                    val rec = linkedMapOf<String, Any?>("label" to inp.attr("label"))
+                    inp.findChild("inputExpression")?.let { ie ->
+                        ie.childText("text")?.let { rec["expression"] = it }
+                        ie.attr("typeRef")?.ifEmpty { null }?.let { rec["type"] = it }
+                    }
+                    inp.findChild("inputValues")?.childText("text")?.let { rec["allowed"] = it }
+                    rec
+                }
+                if (inputDefs.any { it.containsKey("type") || it.containsKey("allowed") }) info["inputDefs"] = inputDefs
+                val outputDefs = t.findChildren("output").map { o ->
+                    val rec = linkedMapOf<String, Any?>("label" to (o.attr("label") ?: o.attr("name")))
+                    o.attr("name")?.ifEmpty { null }?.let { rec["name"] = it }
+                    o.attr("typeRef")?.ifEmpty { null }?.let { rec["type"] = it }
+                    o.findChild("outputValues")?.childText("text")?.let { rec["allowed"] = it }
+                    rec
+                }
+                if (outputDefs.any { it.containsKey("type") || it.containsKey("allowed") }) info["outputDefs"] = outputDefs
                 // A decision table reads its input variables from, and writes its output names back
                 // into, the calling scope — index both so decisions join the variable graph.
                 for (inp in t.findChildren("input")) {
@@ -227,7 +254,15 @@ object ModelParsers {
         return withDesc(linkedMapOf(
             "key" to doc["key"], "name" to doc["name"], "file" to ffile,
             "correlation" to correlation,
-            "payload" to payload.map { it["name"] },
+            // the whole payload contract, not just the names — a payload field's type and whether it
+            // correlates is what a consumer has to match
+            "payload" to payload.map { p ->
+                val rec = linkedMapOf<String, Any?>("name" to p["name"])
+                p["type"]?.let { rec["type"] = it }
+                if (truthy(p["required"])) rec["required"] = true
+                if (p["correlationParameter"] == true) rec["correlation"] = true
+                rec
+            },
         ), doc)
     }
 
@@ -296,10 +331,16 @@ object ModelParsers {
         return info
     }
 
-    /** Parameters a service operation declares (its contract towards a caller), name + type. */
+    /** Parameters a service operation declares (its contract towards a caller): name, type, and —
+     *  only when stated — whether the caller must pass it and what it defaults to. */
     private fun operationParams(params: Any?): List<Map<String, Any?>> =
         listOfObjs(params).filter { it["name"] != null }
-            .map { linkedMapOf("name" to it["name"], "type" to it["type"]) }
+            .map { p ->
+                val rec = linkedMapOf<String, Any?>("name" to p["name"], "type" to p["type"])
+                if (truthy(p["required"])) rec["required"] = true
+                p["defaultValue"]?.let { rec["default"] = it }
+                rec
+            }
 
     /** `.policy` — a security policy's permission → roles mapping (dict or list shape). */
     fun parsePolicy(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
@@ -411,6 +452,25 @@ object ModelParsers {
                 // form equivalent of a BPMN element's documentation, and just as much the answer to "why
                 // is this here" ("Disabled for privileged users, because …").
                 if (truthy(n["description"])) component["description"] = n["description"]
+                // Every localised caption, not just the one that names the component: each entry keeps
+                // its text under `label`, which is what the search index treats as a caption — so a
+                // German caption finds the form as well as the English one does.
+                val i18nLabels = ArrayList<Map<String, Any?>>()
+                for ((loc, ov) in objOf(n["i18n"]).orEmpty()) {
+                    val m = objOf(ov) ?: continue
+                    val t = pyOr(m["label"], objOf(m["extraSettings"])?.get("text"))
+                    if (truthy(t) && t != label) i18nLabels.add(linkedMapOf("locale" to loc, "label" to t))
+                }
+                if (i18nLabels.isNotEmpty()) component["i18nLabels"] = i18nLabels
+                // A select/radio's static options are the values the field can take — read both
+                // persisted homes (component-level and extraSettings; either may hold the list).
+                val opts = (n["options"] as? List<*> ?: objOf(n["extraSettings"])?.get("options") as? List<*>)
+                    ?.mapNotNull { o ->
+                        if (o is Map<*, *>) pyOr(pyOr(o["text"], o["label"]), o["value"]) else o
+                    }?.filter { truthy(it) }
+                if (!opts.isNullOrEmpty()) component["options"] = opts
+                (objOf(n["extraSettings"])?.get("optionsExpression") as? String)?.takeIf { it.isNotBlank() }
+                    ?.let { component["optionsExpression"] = it }
                 // Whether it renders at all, whether it can be pressed, whether its value is submitted —
                 // recorded for every component, not just buttons: a hidden input matters as much as a
                 // hidden button, and 252 of 338 buttons in one real project are `visible: false` (the
@@ -791,10 +851,12 @@ object ModelParsers {
         guardrailEvaluatorRefs(doc)
         for (op in listOfObjs(doc["operations"])) {
             val beh = objOf(op["behavior"]) ?: emptyMap()
+            // The prompts ARE the agent's behaviour — the old 200-char cap cut most of them off,
+            // making the interesting part unreadable and unsearchable.
             operations.add(linkedMapOf(
                 "key" to op["key"], "name" to op["name"],
-                "systemMessage" to ((beh["systemMessage"] as? String) ?: "").take(200),
-                "userMessage" to ((beh["userMessage"] as? String) ?: "").take(200),
+                "systemMessage" to capText((beh["systemMessage"] as? String) ?: ""),
+                "userMessage" to capText((beh["userMessage"] as? String) ?: ""),
             ))
             for (t in (op["tools"] as? List<*> ?: emptyList<Any?>())) toolRef(t)
             behaviorTemplateRefs(beh)
@@ -912,14 +974,39 @@ object ModelParsers {
         return out
     }
 
-    /** `.dictionary` — a data dictionary's declared type names. */
+    /** `.dictionary` — the declared type names plus, when the model states them, each type's
+     *  parent and properties (`typeDefs`). Handles both persisted shapes: a name → definition map
+     *  and a list of `{key, name, …}` entries. */
     fun parseDictionary(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
         val doc = json(data)
-        val types = objOf(doc["types"]) ?: emptyMap()
-        return withDesc(
-            linkedMapOf("key" to doc["key"], "name" to doc["name"], "file" to ffile, "types" to types.keys.toList()),
+        val typeNames = ArrayList<Any?>()
+        val typeDefs = ArrayList<Map<String, Any?>>()
+        fun propsOf(dm: Map<String, Any?>): List<Map<String, Any?>> = when (val p = dm["properties"]) {
+            is Map<*, *> -> p.entries.map { (pn, pv) ->
+                linkedMapOf<String, Any?>("name" to pn, "type" to (objOf(pv)?.get("type") ?: pv))
+            }
+            is List<*> -> listOfObjs(p).map {
+                linkedMapOf<String, Any?>("name" to (it["name"] ?: it["key"]), "type" to it["type"])
+            }
+            else -> emptyList()
+        }
+        fun def(name: Any?, dm: Map<String, Any?>) {
+            typeNames.add(name)
+            val rec = linkedMapOf<String, Any?>("name" to name)
+            (dm["parent"] ?: dm["extends"])?.let { rec["parent"] = it }
+            propsOf(dm).takeIf { it.isNotEmpty() }?.let { rec["properties"] = it }
+            if (rec.size > 1) typeDefs.add(rec)
+        }
+        when (val t = doc["types"]) {
+            is Map<*, *> -> for ((name, d) in t) def(name, objOf(d) ?: emptyMap())
+            is List<*> -> for (dm in listOfObjs(t)) def(dm["key"] ?: dm["name"] ?: continue, dm)
+        }
+        val info = withDesc(
+            linkedMapOf("key" to doc["key"], "name" to doc["name"], "file" to ffile, "types" to typeNames),
             doc,
         )
+        if (typeDefs.isNotEmpty()) info["typeDefs"] = typeDefs
+        return info
     }
 
     /** `.data` (data object / masterData) — columns, backing service/dictionary, relations, access. */
@@ -965,7 +1052,236 @@ object ModelParsers {
         return withDesc(out, doc)
     }
 
-    /** Fallback for model types without a dedicated parser (query/sequence/sla/template/…) → `others`. */
+    /** Long free-text bodies (template variations, query DSL, prompts) are capped at this many chars. */
+    private const val TEXT_CAP = 4000
+
+    private fun capText(v: Any?): Any? = if (v is String && v.length > TEXT_CAP) v.take(TEXT_CAP) else v
+
+    /** The identity + description head every `others`-bucket record starts with. */
+    private fun othersHead(doc: Map<String, Any?>, ffile: String, mtype: String): MutableMap<String, Any?> =
+        withDesc(linkedMapOf(
+            "key" to doc["key"], "name" to doc["name"], "file" to ffile, "modelType" to mtype,
+        ), doc)
+
+    /** `.query` — source index, declared parameters/columns, sort keys and the query body itself. */
+    fun parseQuery(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
+        val doc = json(data)
+        val key = doc["key"]
+        val info = othersHead(doc, ffile, "query")
+        for (k in listOf("type", "subType", "sourceIndex")) if (truthy(doc[k])) info[k] = doc[k]
+        // Two persisted shapes: the platform keeps `parameters` as a name → definition map; older and
+        // hand-written models list `columns` [{name, label, variableName}]. Both are the query's contract.
+        val params = ArrayList<Map<String, Any?>>()
+        when (val p = doc["parameters"]) {
+            is Map<*, *> -> for ((n, def) in p) {
+                val dm = objOf(def) ?: emptyMap()
+                params.add(linkedMapOf("name" to n, "type" to dm["type"], "label" to dm["label"], "required" to dm["required"]))
+            }
+            is List<*> -> for (dm in listOfObjs(p)) params.add(
+                linkedMapOf("name" to dm["name"], "type" to dm["type"], "label" to dm["label"], "required" to dm["required"]),
+            )
+        }
+        if (params.isNotEmpty()) info["parameters"] = params
+        val columns = listOfObjs(doc["columns"]).map {
+            linkedMapOf("name" to it["name"], "label" to it["label"], "variableName" to it["variableName"])
+        }
+        if (columns.isNotEmpty()) info["columns"] = columns
+        (doc["sortParameters"] as? List<*>)?.mapNotNull { if (it is Map<*, *>) it["name"] else it }
+            ?.takeIf { it.isNotEmpty() }?.let { info["sortParameters"] = it }
+        // the search-template body is the query's actual logic — searchable once it is here
+        for (k in listOf("templateContent", "templateFilter")) {
+            (doc[k] as? String)?.takeIf { it.isNotBlank() }?.let { info[k] = capText(it) }
+        }
+        // builder queries: name the aggregations without embedding the whole configuration tree
+        objOf(doc["configuration"])?.let { cfg ->
+            val aggs = listOfObjs(cfg["aggregations"]).mapNotNull { it["name"] ?: it["type"] }
+            if (aggs.isNotEmpty()) info["aggregations"] = aggs
+        }
+        // demo/legacy shape: the query is pinned to one process definition
+        ctx.addRef(key, "query", ffile, "queries-process", "process", doc["processDefinitionKey"])
+        // who may run it (same identityLinks shape as a data object's)
+        (objOf(doc["identityLinks"]) ?: emptyMap()).forEach { (action, links) ->
+            val groups = (objOf(links)?.get("groups") as? List<*>)?.filterIsInstance<String>() ?: return@forEach
+            if (groups.isEmpty()) return@forEach
+            ctx.groups.addAll(groups)
+            ctx.addAccess(key, "query", "query", action, groups.joinToString(","))
+        }
+        return info
+    }
+
+    /** `.sequence` — the number format and its counters. */
+    fun parseSequence(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
+        val doc = json(data)
+        val info = othersHead(doc, ffile, "sequence")
+        // `format` is a display string ("ORD-{seq:6}") or an object {prefix, digits, suffix}
+        when (val f = doc["format"]) {
+            is String -> info["format"] = f
+            is Map<*, *> -> {
+                val digits = (f["digits"] as? Number)?.toInt() ?: 0
+                info["format"] = "" + (f["prefix"] ?: "") +
+                    (if (digits > 0) "{seq:$digits}" else "{seq}") + (f["suffix"] ?: "")
+            }
+        }
+        for (k in listOf("start", "startValue", "increment", "min", "max", "cycle")) {
+            if (doc[k] != null) info[k] = doc[k]
+        }
+        return info
+    }
+
+    /** `.sla` — due-date targets and what happens when they are missed. */
+    fun parseSla(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
+        val doc = json(data)
+        val key = doc["key"]
+        val info = othersHead(doc, ffile, "sla")
+        for (k in listOf(
+            "slaType", "scopeType", "businessCalendarType", "businessCalendarValue",
+            "completionDueDateValue", "completionDueDateTimeUnit", "completionDueDateExpression",
+            "inProgressStartDueDateValue", "inProgressStartDueDateTimeUnit", "inProgressStartDueDateExpression",
+            "inProgressStartOnClaim", "suspendAllowed", "taskDefinitionKey",
+        )) if (doc[k] != null) info[k] = doc[k]
+        // demo/legacy shape: thresholds [{type, duration}]
+        val thresholds = listOfObjs(doc["thresholds"]).map { linkedMapOf("type" to it["type"], "duration" to it["duration"]) }
+        if (thresholds.isNotEmpty()) info["thresholds"] = thresholds
+        // escalation / lifecycle actions; a start-process/start-case action is a real model reference
+        fun actions(listKey: String, outKey: String) {
+            val recs = listOfObjs(doc[listKey]).map { e ->
+                val cfg = objOf(e["actionConfiguration"]) ?: objOf(e["actionConfig"]) ?: emptyMap()
+                val rec = linkedMapOf<String, Any?>()
+                for (k in listOf("stepId", "on", "relativeType", "timeValue", "timeUnit", "action", "condition")) {
+                    if (e[k] != null) rec[k] = e[k]
+                }
+                when (e["action"]) {
+                    "startProcess" -> (cfg["processDefinitionKey"] ?: cfg["key"])?.also {
+                        rec["starts"] = it
+                        ctx.addRef(key, "sla", ffile, "escalation-starts", "process", it)
+                    }
+                    "startCase" -> (cfg["caseDefinitionKey"] ?: cfg["key"])?.also {
+                        rec["starts"] = it
+                        ctx.addRef(key, "sla", ffile, "escalation-starts", "case", it)
+                    }
+                    "assignment" -> cfg["assignee"]?.also { rec["assignee"] = it }
+                }
+                rec
+            }.filter { it.isNotEmpty() }
+            if (recs.isNotEmpty()) info[outKey] = recs
+        }
+        actions("escalationDefinitions", "escalations")
+        actions("initializationDefinitions", "initializationActions")
+        actions("assignmentDefinitions", "assignmentActions")
+        actions("completionDefinitions", "completionActions")
+        // demo/legacy shape: the SLA is pinned to one process definition
+        ctx.addRef(key, "sla", ffile, "sla-of-process", "process", doc["processDefinitionKey"])
+        return info
+    }
+
+    /** `.tpl` — the template's body/variations: the actual text a reader searches for. */
+    fun parseTemplate(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
+        val doc = json(data)
+        val key = doc["key"]
+        val info = othersHead(doc, ffile, "template")
+        for (k in listOf("type", "subType", "templateType", "documentType")) if (truthy(doc[k])) info[k] = doc[k]
+        // demo/legacy shape keeps the body at the top level; Design persists it under `editorJson`
+        (doc["content"] as? String)?.takeIf { it.isNotBlank() }?.let { info["content"] = capText(it) }
+        val ej = objOf(doc["editorJson"]) ?: emptyMap()
+        if (truthy(ej["templateType"]) && info["templateType"] == null) info["templateType"] = ej["templateType"]
+        val varParams = listOfObjs(ej["variationParameters"]).map {
+            linkedMapOf("name" to it["name"], "defaultValue" to it["defaultValue"])
+        }
+        if (varParams.isNotEmpty()) info["variationParameters"] = varParams
+        val variations = listOfObjs(ej["templateVariations"]).map { v ->
+            val rec = linkedMapOf<String, Any?>()
+            objOf(v["parameterValues"])?.let { rec["parameters"] = it }
+            (v["text"] as? String)?.let { rec["text"] = capText(it) }
+            v["resource"]?.let { rec["resource"] = it }
+            rec
+        }.filter { it.isNotEmpty() }
+        if (variations.isNotEmpty()) info["variations"] = variations
+        ctx.addRef(key, "template", ffile, "template-form", "form", doc["formKey"])
+        return info
+    }
+
+    /** `.knowledgebase` — retrieval settings; credentials stay out (only their *type* is kept). */
+    fun parseKnowledgeBase(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
+        val doc = json(data)
+        val info = othersHead(doc, ffile, "knowledgeBase")
+        for (k in listOf("type", "subType", "inputSource", "contentItemsPath", "topK", "similarityThreshold")) {
+            if (doc[k] != null) info[k] = doc[k]
+        }
+        val sources = listOfObjs(doc["sources"]).map { linkedMapOf("type" to it["type"], "path" to it["path"]) }
+        if (sources.isNotEmpty()) info["sources"] = sources
+        // Only the shape of the store, NEVER its credentials: the report must not carry an apiKey even
+        // when the model does — `credentials` says what kind of secret is needed, and no more.
+        objOf(doc["vectorStore"])?.let { vs ->
+            val emb = objOf(vs["embeddingSettings"]) ?: emptyMap()
+            info["vectorStore"] = linkedMapOf<String, Any?>(
+                "type" to vs["type"],
+                "embedding" to emb["type"], "embeddingModel" to emb["modelName"], "dimension" to emb["dimension"],
+                "credentials" to objOf(vs["credentials"])?.get("type"),
+            )
+        }
+        return info
+    }
+
+    /** `.extractor` — which indexed variables it writes, from which scope. */
+    fun parseVariableExtractor(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
+        val doc = json(data)
+        val key = doc["key"]
+        val info = othersHead(doc, ffile, "variableExtractor")
+        (doc["sourceIndex"] ?: doc["extends"])?.let { info["sourceIndex"] = it }
+        val extractors = ArrayList<Map<String, Any?>>()
+        for (ve in listOfObjs(doc["variableExtractors"])) {
+            val filter = objOf(ve["filter"]) ?: emptyMap()
+            extractors.add(linkedMapOf(
+                "from" to filter["name"], "path" to ve["path"], "to" to ve["to"],
+                "type" to ve["type"], "scope" to filter["scopeDefinitionKey"],
+            ))
+            // The scope key may name a process or a case — the resolver's process→case fallback covers both.
+            ctx.addRef(key, "variableExtractor", ffile, "extracts-from", "process", filter["scopeDefinitionKey"])
+            ctx.addVar(key, ve["to"])
+            // An extracted variable exists precisely so that queries, task lists and dashboards can
+            // index it — none of which Atlas parses. It is a write whose readers are out of reach.
+            ctx.addVarSite(key, ve["to"], Ctx.WRITE, "variableExtractor", elementType = "variableExtractor")
+            ctx.markReadsUnknown(ve["to"])
+        }
+        if (extractors.isNotEmpty()) info["extractors"] = extractors
+        (doc["fullTextVariables"] as? List<*>)?.takeIf { it.isNotEmpty() }?.let { info["fullTextVariables"] = it }
+        return info
+    }
+
+    /** `.document` — content-model settings, per-action forms and permissions. */
+    fun parseDocumentModel(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
+        val doc = json(data)
+        val key = doc["key"]
+        val info = othersHead(doc, ffile, "document")
+        for (k in listOf("type", "subType", "versioning", "initialState", "initialType")) {
+            if (doc[k] != null) info[k] = doc[k]
+        }
+        (doc["aiInstructions"] as? String)?.takeIf { it.isNotBlank() }?.let { info["aiInstructions"] = capText(it) }
+        objOf(doc["forms"])?.let { forms ->
+            info["forms"] = forms
+            forms.forEach { (op, fk) -> ctx.addRef(key, "document", ffile, "document-$op-form", "form", fk) }
+        }
+        objOf(doc["actionPermissions"])?.let { perms ->
+            val recs = perms.entries.map { (action, groups) ->
+                val gs = (groups as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+                ctx.groups.addAll(gs)
+                ctx.addAccess(key, "document", "document", action, gs.joinToString(","))
+                linkedMapOf("action" to action, "groups" to gs)
+            }
+            if (recs.isNotEmpty()) info["actionPermissions"] = recs
+        }
+        objOf(doc["variables"])?.let { vars ->
+            info["variables"] = vars.entries.map { linkedMapOf("key" to it.key, "type" to objOf(it.value)?.get("type")) }
+            for (n in vars.keys) {
+                ctx.addVar(key, n)
+                // like a data object's columns: read by the Work UI / REST clients Atlas cannot see
+                ctx.markReadsUnknown(n)
+            }
+        }
+        return info
+    }
+
+    /** Fallback for model types without a dedicated parser (masterData/dashboardComponent/palette/…) → `others`. */
     fun parseGeneric(data: ByteArray, ctx: Ctx, ffile: String, mtype: String): Map<String, Any?> {
         val doc = try { MiniJson.parse(String(data, Charsets.UTF_8)) } catch (e: Exception) { null }
         if (doc !is Map<*, *>) return linkedMapOf("key" to null, "name" to null, "file" to ffile, "modelType" to mtype)
@@ -973,16 +1289,16 @@ object ModelParsers {
         val out = linkedMapOf<String, Any?>("file" to ffile, "modelType" to mtype)
         for (k in GENERIC_KEYS) if (truthy(d[k])) out[k] = d[k]
         objOf(d["queryModel"])?.let { qm -> if (truthy(qm["key"])) ctx.addRef(d["key"], mtype, ffile, "queryModel", "query", qm["key"]) }
-        if (mtype == "variableExtractor") for (ve in listOfObjs(d["variableExtractors"])) {
-            ctx.addRef(d["key"], mtype, ffile, "extracts-from", "process", objOf(ve["filter"])?.get("scopeDefinitionKey"))
-            ctx.addVar(d["key"], ve["to"])
-            // An extracted variable exists precisely so that queries, task lists and dashboards can
-            // index it — none of which Atlas parses. It is a write whose readers are out of reach.
-            ctx.addVarSite(d["key"], ve["to"], Ctx.WRITE, "variableExtractor", elementType = "variableExtractor")
-            ctx.markReadsUnknown(ve["to"])
+        // A palette's identity keys are `Palette-Id` / `title`, not `key` / `name` — without this
+        // every palette came out as `key: None` and could not become a node at all.
+        if (mtype == "palette") {
+            if (!truthy(out["key"])) d["Palette-Id"]?.let { out["key"] = it }
+            if (!truthy(out["name"])) d["title"]?.let { out["name"] = it }
+            for (k in listOf("category", "scopeType")) if (truthy(d[k])) out[k] = d[k]
+            for (k in listOf("paletteItems", "stencils", "propertyPackages")) {
+                (d[k] as? List<*>)?.takeIf { it.isNotEmpty() }?.let { out["${k}Count"] = it.size }
+            }
         }
-        if (mtype == "template" && truthy(d["formKey"])) ctx.addRef(d["key"], mtype, ffile, "template-form", "form", d["formKey"])
-        if (mtype == "document") objOf(d["forms"])?.forEach { (op, fk) -> ctx.addRef(d["key"], mtype, ffile, "document-$op-form", "form", fk) }
         return out
     }
 

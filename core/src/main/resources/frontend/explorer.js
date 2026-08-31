@@ -22,6 +22,7 @@ const TM = {
   query:['Queries','Other'],template:['Templates','Other'],sequence:['Sequences','Other'],
   document:['Content','Other'],variableExtractor:['Variable extractors','Other'],
   sla:['SLAs','Other'],dashboardComponent:['Dashboard components','Other'],
+  palette:['Palettes','Other'],
   securityPolicy:['Security policies','Access'],group:['User groups','Access'],
   variable:['Variables','Variables'],
   expression:['Backend expressions ${ }','Expressions'],binding:['Frontend bindings {{ }}','Expressions'],
@@ -264,6 +265,11 @@ const DESIGN_TERMS = {
   'rel:view': ['May view', 'Who may view it.'],
   'rel:document-create-form': ['Document create form', 'Creating a document opens that form.'],
   'rel:document-edit-form': ['Document edit form', 'Editing a document opens that form.'],
+  'rel:document-view-form': ['Document view form', 'Viewing a document opens that form.'],
+  'rel:download': ['May download', 'Who may download it.'],
+  'rel:escalation-starts': ['Escalation starts', 'Missing the SLA target starts that model.'],
+  'rel:queries-process': ['Queries process', 'The query lists instances of that process.'],
+  'rel:sla-of-process': ['SLA of process', 'The SLA applies to instances of that process.'],
   'rel:dataObjectDataTableCreateFormKey': ['Data table create form', 'Creating a row opens that form.'],
   'rel:dataObjectDataTableEditFormKey': ['Data table edit form', 'Editing a row opens that form.'],
   'rel:dataObjectDataTableViewFormKey': ['Data table view form', 'Viewing a row opens that form.'],
@@ -1678,9 +1684,13 @@ function renderItems(cat, wrap){
     el.tabIndex=-1;
     el.style.animationDelay=Math.min(i*8,300)+'ms';
     const rn=INSIGHTS.indeg.get(n.id)||0;
+    // Why this row matched, same as in the palette: a hit from a script body or a mapping used to
+    // show a row with no visible reason at all. Falls back to the key — the line it always showed.
+    const w=parsed.empty?null:matchWhere(n, parsed);
+    const sub=(w&&w.hint)||n.key;
     el.innerHTML='<span class="dot" style="margin-top:5px;background:'+nodeColor(n)+'"></span>'+
       '<div class="meta"><div class="nm">'+hlHtml(n.label, parsed)+authBadge(n)+
-      '</div><div class="sub">'+hlHtml(n.key, parsed)+'</div></div>'+
+      '</div><div class="sub" title="'+esc(sub)+'">'+hlHtml(sub, parsed)+'</div></div>'+
       (rn?'<span class="refn" title="referenced by '+rn+' node'+(rn>1?'s':'')+'">'+rn+'</span>':'')+
       '<span class="ck" aria-hidden="true">✓</span>';
     // ⌘/Ctrl+click toggles and Shift+click extends — the list-selection convention, not the
@@ -1700,7 +1710,9 @@ function renderItems(cat, wrap){
         syncListMarks(); setMarkNote(refused?CAP_NOTE():''); return;
       }
       if(listMarks.size){ listMarksClear(); setMarkNote(''); }
-      select(n.id);
+      // carry the filter term and the matched element, exactly like a palette hit — the detail panel
+      // then opens and highlights the row the match came from
+      select(n.id, parsed.empty?undefined:state.filter, (w&&w.el)||undefined);
     };
     el.onmousedown=e=>{ if(e.button===1) e.preventDefault(); };   // no autoscroll cursor
     el.onauxclick=e=>{ if(e.button===1){ e.preventDefault(); openTabs([n.id], {background:true}); } };
@@ -2006,6 +2018,13 @@ function fieldRowHtml(f, d){
   let b='';
   // What the modeller wrote about it, first: it usually explains everything below.
   if(f.description) b+=fldLine('note','<span class="muted">'+esc(String(f.description))+'</span>');
+  // The values a select/radio can take — static options, or the expression that computes them.
+  if((f.options||[]).length) b+=fldLine('options','<span class="mono">'+esc(f.options.slice(0,20).join(' · '))+'</span>'+
+    (f.options.length>20?' <span class="muted">+'+(f.options.length-20)+' more</span>':''));
+  if(f.optionsExpression) b+=fldLine('options from','<span class="mono">'+esc(String(f.optionsExpression))+'</span>');
+  // Every localised caption, not just the one that names the row — all of them are searchable.
+  if((f.i18nLabels||[]).length) b+=fldLine('translations', f.i18nLabels.map(l=>
+    '<span class="pt">'+esc(String(l.locale||''))+'</span> '+esc(String(l.label||''))).join(' · '));
   if(cid){ const chip=nodeChip(cid); if(chip) b+='<div class="opchips">'+chip+'</div>'; }
   rcs.forEach(r=>{ b+=fldLine('endpoint','<span class="pt">'+esc(r.method||'')+'</span> '+
     '<span class="mono" style="word-break:break-all">'+esc(r.url||'')+'</span>'+
@@ -2077,6 +2096,9 @@ function describe(n){
     addCount('Milestones',(d.milestones||[]).length); addCount('Event listeners',(d.eventListeners||[]).length);
     add('Parameters', paramSummary(d.ioParameters)); add('Documentation',d.documentation); }
   else if(n.type==='decision'){ if(d.decisionService) add('Kind','Decision service');
+    // a decision service's members, each a decision of its own
+    if(d.decisionService&&(d.decisions||[]).length)
+      rows.push(['Decisions',{html:d.decisions.map(k=>byId.get('decision:'+k)?vlink('decision:'+k,k):esc(String(k))).join(', ')}]);
     add('Hit policy',d.hitPolicy); addCount('Rules',d.ruleCount);
     if((d.inputs||[]).length) rows.push(['Inputs',varList(d.inputs)]);
     // the expression behind a labelled input — that is what actually reads a variable
@@ -2114,14 +2136,48 @@ function describe(n){
     if(d.knowledgeBase) rows.push(['Knowledge base',{html:vlink('knowledgeBase:'+d.knowledgeBase, d.knowledgeBase)}]); }
   else if(n.type==='channel'){ add('Direction',d.channelType); add('Type',d.type); add('Topics',(d.topics||[]).join(', ')); add('Destination',d.destination);
     if(d.eventKey&&d.eventKey.fixedValue) rows.push(['Event',{html:vlink('event:'+d.eventKey.fixedValue, d.eventKey.fixedValue)}]); }
-  else if(n.type==='event'){ if((d.payload||[]).length) rows.push(['Payload',varList(d.payload)]);
+  else if(n.type==='event'){
+    // payload entries are `{name, type, …}` records (older payloads were bare names)
+    const pl=(d.payload||[]).map(p=>(p&&typeof p==='object')?p:{name:p});
+    if(pl.length) rows.push(['Payload',varList(pl.map(p=>p.name))]);
     add('Correlation',(d.correlation||[]).join(', ')); }
   else if(n.type==='java'){ add('Package',d.package); add('Roles',(d.roles||[]).join(', ')); add('Bot key',d.botKey); add('Implements',(d.interfaces||[]).join(', ')); addCount('Methods',(d.methods||[]).length); add('Called from models',(d.calledMethods||[]).join(', ')); }
   else if(n.type==='endpoint'){ add('Method',d.http); add('Path',d.path);
     rows.push(['Handler',{html:vlink(incFrom(n.id,'serves'), (d.controller||'')+'#'+(d.handler||'')), copy:d.controller||undefined}]); }  // FQN for 'Go to Class'
   else if(n.type==='method'){ if(d.name) rows.push(['Method',{html:esc(d.name)+'()', copy:d.name}]);  // copy the bare name for IntelliJ 'Go to Symbol'
     if(d.class) rows.push(['Declared in',{html:vlink(d.declaredIn||'java:'+d.class, d.class), copy:d.class}]); }  // FQN for 'Go to Class'
-  else if(n.type==='query'){ add('Source index',d.sourceIndex); add('Parameters',(d.parameters||[]).join(', ')); add('Filters by groups',(d.groups||[]).length); }
+  else if(n.type==='query'){ add('Source index',d.sourceIndex); add('Type',d.type);
+    // parameters are `{name, type, …}` records (the legacy regex pass produced bare names)
+    add('Parameters',(d.parameters||[]).map(p=>(p&&typeof p==='object')?p.name:p).filter(Boolean).join(', '));
+    add('Sort by',(d.sortParameters||[]).join(', '));
+    add('Aggregations',(d.aggregations||[]).join(', '));
+    add('Filters by groups',(d.groups||[]).length); }
+  else if(n.type==='sla'){ add('Type',d.slaType||d.scopeType); add('Calendar',d.businessCalendarType);
+    if(d.completionDueDateValue!=null) add('Completion due',d.completionDueDateValue+' '+(d.completionDueDateTimeUnit||''));
+    else add('Completion due',d.completionDueDateExpression);
+    if(d.inProgressStartDueDateValue!=null) add('In-progress due',d.inProgressStartDueDateValue+' '+(d.inProgressStartDueDateTimeUnit||''));
+    if(d.inProgressStartOnClaim!=null) add('Starts on claim',String(d.inProgressStartOnClaim));
+    add('Task',d.taskDefinitionKey);
+    addCount('Escalations',(d.escalations||[]).length); addCount('Thresholds',(d.thresholds||[]).length); }
+  else if(n.type==='sequence'){ add('Format',d.format);
+    add('Start',d.start!=null?d.start:d.startValue); add('Increment',d.increment);
+    if(d.cycle) add('Cycle','true'); }
+  else if(n.type==='template'){ add('Type',d.templateType||d.documentType||d.type);
+    addCount('Variations',(d.variations||[]).length);
+    if((d.variationParameters||[]).length) rows.push(['Variation parameters',
+      {html:d.variationParameters.map(p=>esc(String(p.name||''))+(p.defaultValue!=null?' <span class="pt">'+esc(String(p.defaultValue))+'</span>':'')).join(', ')}]); }
+  else if(n.type==='knowledgeBase'){ add('Type',d.type); add('Input source',d.inputSource);
+    add('Content path',d.contentItemsPath); add('Top K',d.topK); add('Similarity',d.similarityThreshold);
+    const vs=d.vectorStore||{};
+    if(vs.type) add('Vector store',vs.type+(vs.embeddingModel?' · '+vs.embeddingModel:''));
+    if(vs.credentials) add('Credentials',vs.credentials);
+    addCount('Sources',(d.sources||[]).length); }
+  else if(n.type==='variableExtractor'){ add('Source index',d.sourceIndex);
+    addCount('Extractors',(d.extractors||[]).length);
+    if((d.fullTextVariables||[]).length) rows.push(['Full-text',varList(d.fullTextVariables)]); }
+  else if(n.type==='document'){ if(d.versioning!=null) add('Versioning',String(d.versioning));
+    add('Initial state',d.initialState); add('Initial type',d.initialType);
+    addCount('Variables',(d.variables||[]).length); add('AI instructions',d.aiInstructions); }
   else if(n.type==='action'){
     // Link the bot to whatever the graph resolved (action --bot--> java:<fqn> | bot:<key> | model node):
     // a Java bot keeps its class chip; any other resolved bot gets an inline link; only a truly
@@ -2176,8 +2232,20 @@ function describe(n){
     add('Signature', d.member+'('+(d.signature!=null?d.signature:'…')+')');
     add('Registered in',(d.sources||[]).join(', ')); add('Used by', (d.usedBy||[]).length+' form(s) / model(s)'); }
   else if(n.type==='external'){ add('Kind',d.flowableApi?'Flowable platform API':d.route?'In-app navigation route':d.platform?'Flowable platform bean':d.missingModel?'Missing model reference ('+(d.kind||'model')+')':d.dynamic?'Dynamic reference (expression) — expected '+(d.kind||'model'):(d.external_url?'External URL':d.kind||'external')); if(d.method&&d.method!=='(button)') add('Method',d.method); }
-  else { Object.keys(d).forEach(k=>{ const v=d[k];
-    if(k!=='description'&&(typeof v==='string'||typeof v==='number')) add(k,v); }); }
+  else { Object.keys(d).forEach(k=>{
+    // property probes, not reads: reading `d[k]` here would mark every container as consumed for the
+    // "Other attributes" fallback while rendering only the scalars
+    const desc=Object.getOwnPropertyDescriptor(d,k), v=desc&&desc.value;
+    if(k!=='description'&&(typeof v==='string'||typeof v==='number')) add(k,d[k]); }); }
+  // Model-level references a process/case declares (SLA, security policy, event, channel, dictionary,
+  // sequence) — the answer to "which SLA governs this" without scanning the edge groups below.
+  const MR={'sla-definition-key':['SLA','sla'],'security-policy-model':['Security policy','securityPolicy'],
+    'eventType':['Event type','event'],'channelKey':['Channel','channel'],
+    'data-dictionary':['Data dictionary','dataDictionary'],'sequence':['Sequence','sequence']};
+  (d.modelRefs||[]).forEach(r=>{ if(!r||r.key==null) return;
+    const mr=MR[r.rel]||[r.rel,null];
+    const id=mr[1]&&byId.get(mr[1]+':'+r.key)?mr[1]+':'+r.key:null;
+    rows.push([mr[0],{html:id?vlink(id,r.key):esc(String(r.key))}]); });
   return rows;
 }
 
@@ -2186,6 +2254,9 @@ function detailExtra(n){
   const hasDg=!!d.diagram;                      // rows for diagram elements get a ⌖ locate button
   const EM=elementNames(n);                     // element id -> name/type, for readable references
   const loc=(id,name)=>hasDg&&id!=null&&id!==''?locateBtn(String(id), name):'';
+  // element *name* with the raw id as tooltip — shared by the flow-shaped sections
+  const elRef=id=>{ const nm=elName(EM,id);
+    return '<span'+(nm!==String(id)?' data-tip="'+esc(String(id))+'"':'')+'>'+esc(nm)+'</span>'; };
   // What this model passes into, and takes back out of, everything it calls.
   if((d.ioParameters||[]).length) h+=paramSection(d.ioParameters, hasDg);
   // The mirror image: what this node actually receives from its callers. A payload is modelled on the
@@ -2251,6 +2322,9 @@ function detailExtra(n){
     if(evs.length) h+=section('events','Events ('+evs.length+')','<div class="oplist">'+
       evs.map(e=>'<div class="oprow"'+dataEl(e.id)+'><span style="min-width:150px">'+esc(e.name||e.id||'')+'</span>'+loc(e.id,e.name)+
         '<span class="opkey">'+elementTerm(e.type)+'</span>'+(e.def?'<span class="pt">'+esc(e.def)+'</span>':'')+
+        // a boundary event's host activity, and whether triggering interrupts it
+        (e.attachedTo?'<span class="muted">on</span> '+elRef(e.attachedTo)+
+          (String(e.cancelActivity)==='false'?'<span class="pt">non-interrupting</span>':''):'')+
         (e.value?'<span class="mono" style="color:var(--ink-faint)">'+esc(e.value)+'</span>':'')+'</div>').join('')+'</div>');
   }
   if(n.type==='process' && (d.multiInstance||[]).length){
@@ -2265,13 +2339,40 @@ function detailExtra(n){
     // Element *names* instead of raw ids (the id stays as a tooltip), a ⌖ that highlights the flow's
     // arrow on the diagram, and gateway grouping via the from-element — the old raw `sid-… → sid-…`
     // rows were impossible to map to anything.
-    const elRef=id=>{ const nm=elName(EM,id);
-      return '<span'+(nm!==String(id)?' data-tip="'+esc(String(id))+'"':'')+'>'+esc(nm)+'</span>'; };
     h+=section('conditions','Sequence flow conditions ('+d.conditions.length+')','<div class="oplist">'+
       d.conditions.map(c=>'<div class="oprow"'+dataEl(c.id)+'>'+
         '<span class="cflow" style="min-width:150px">'+elRef(c.from)+' <span class="pa">→</span> '+elRef(c.to)+'</span>'+
         loc(c.id)+
         '<span class="mono" style="flex:1">'+esc(c.condition||'')+'</span></div>').join('')+'</div>');
+  }
+  // The full topology, in document order — what runs after what, the most basic question about a
+  // process. `conditions` above stays as the conditional subset matched to the diagram's edges.
+  if(n.type==='process' && (d.flows||[]).length){
+    h+=section('flows','Sequence flows ('+d.flows.length+')','<div class="oplist">'+
+      d.flows.map(f=>'<div class="oprow"'+dataEl(f.id)+'>'+
+        '<span class="cflow" style="min-width:150px">'+elRef(f.from)+' <span class="pa">→</span> '+elRef(f.to)+'</span>'+
+        loc(f.id)+
+        (f.name?'<span class="muted">'+esc(f.name)+'</span>':'')+
+        (f.default?'<span class="pt" data-tip="Taken when no other outgoing flow’s condition matches">default</span>':'')+
+        (f.condition?'<span class="mono" style="flex:1">'+esc(f.condition)+'</span>':'')+
+        '</div>').join('')+'</div>');
+  }
+  // Lanes: who works which part of the process — until now painted in the diagram and stated nowhere.
+  if(n.type==='process' && (d.lanes||[]).length){
+    h+=section('lanes','Lanes ('+d.lanes.length+')','<div class="oplist">'+
+      d.lanes.map(l=>'<div class="oprow"'+dataEl(l.id)+'><span style="min-width:150px">'+esc(l.name||l.id||'')+'</span>'+loc(l.id,l.name)+
+        '<span style="flex:1;display:flex;gap:6px;flex-wrap:wrap">'+
+        (l.elements||[]).map(id=>'<span class="pt" data-tip="'+esc(String(id))+'">'+esc(elName(EM,id))+'</span>').join('')+
+        '</span></div>').join('')+'</div>');
+  }
+  // The process's own <dataObject> declarations — its variables, with type and default.
+  if(n.type==='process' && (d.dataObjects||[]).length){
+    h+=section('declaredvars','Declared data objects ('+d.dataObjects.length+')','<div class="oplist">'+
+      d.dataObjects.map(o=>{ const nm=o.name||o.id||'';
+        return '<div class="oprow"'+dataEl(o.id)+'><span style="min-width:150px">'+vlink('variable:'+nm, nm)+'</span>'+
+          (o.type?'<span class="pt">'+esc(String(o.type).replace(/^xsd:/,''))+'</span>':'')+
+          (o.default!=null&&o.default!==''?'<span class="muted">default</span><span class="mono">'+esc(String(o.default))+'</span>':'')+
+          '</div>'; }).join('')+'</div>');
   }
   // Two things every element can carry, both previously dropped on the floor: the documentation the
   // modeller wrote about it, and the listeners it runs (only the process/case level and BPMN user tasks
@@ -2386,6 +2487,12 @@ function detailExtra(n){
     h+=section('formfields','Fields ('+d.fields.length+')','<div class="oplist fldlist">'+
       d.fields.map(f=>fieldRowHtml(f, d)).join('')+'</div>');
   }
+  // Subforms — parsed and referenced for years, rendered nowhere until now.
+  if((n.type==='form'||n.type==='page') && (d.subforms||[]).length){
+    h+=section('subforms','Subforms ('+d.subforms.length+')','<div class="nodechips">'+
+      d.subforms.map(k=>byId.get('form:'+k)?nodeChip('form:'+k)
+        :'<span class="nc"><span class="nm">'+esc(String(k))+'</span><span class="ty">form</span></span>').join('')+'</div>');
+  }
   if((n.type==='form'||n.type==='page') && (d.dataSources||[]).length){
     h+=section('datasources','Data sources ('+d.dataSources.length+')','<div class="oplist">'+
       d.dataSources.map(s=>{
@@ -2412,6 +2519,95 @@ function detailExtra(n){
         (p.label&&p.key&&p.label!==p.key?'<span class="opid">'+esc(p.key)+'</span>':'')+
         '<span style="flex:1">'+(p.roles||[]).map(r=>vlink('group:'+r,r)).join(', ')+'</span></div>').join('')+'</div>');
   }
+  // A dictionary's types with their declared properties — the names list alone said nothing.
+  if(n.type==='dataDictionary' && (d.typeDefs||[]).length){
+    h+=section('dicttypes','Type definitions ('+d.typeDefs.length+')',
+      d.typeDefs.map(t=>{ const props=t.properties||[];
+        const head='<span class="opname">'+esc(String(t.name||''))+'</span>'+
+          (t.parent?'<span class="pt">extends '+esc(String(t.parent))+'</span>':'');
+        if(!props.length) return '<div class="op flat">'+head+'</div>';
+        return '<details class="op"><summary>'+head+'<span class="opcount">'+props.length+' propert'+(props.length>1?'ies':'y')+'</span></summary>'+
+          '<div class="parmgrid">'+props.map(p=>'<div class="pc"><span class="pn">'+esc(String(p.name||''))+'</span>'+
+            (p.type?'<span class="pt">'+esc(String(p.type))+'</span>':'')+'</div>').join('')+'</div></details>';
+      }).join(''));
+  }
+  // An SLA's consequences: what happens, when, relative to which deadline.
+  if(n.type==='sla' && (d.escalations||[]).length){
+    h+=section('escalations','Escalations ('+d.escalations.length+')','<div class="oplist">'+
+      d.escalations.map(e=>'<div class="oprow"><span style="min-width:150px">'+esc(String(e.stepId||e.on||''))+'</span>'+
+        (e.timeValue!=null?'<span class="pt">'+esc(String(e.timeValue))+' '+esc(String(e.timeUnit||''))+' '+esc(String(e.relativeType||''))+'</span>':'')+
+        (e.action?'<span class="muted">'+esc(String(e.action))+'</span>':'')+
+        (e.starts?vlink(byId.get('process:'+e.starts)?'process:'+e.starts:'case:'+e.starts, e.starts):'')+
+        (e.assignee?'<span class="mono">'+esc(String(e.assignee))+'</span>':'')+
+        (e.condition?'<span class="mono" style="flex:1">'+esc(String(e.condition))+'</span>':'')+
+        '</div>').join('')+'</div>');
+  }
+  if(n.type==='sla' && (d.thresholds||[]).length){
+    h+=section('thresholds','Thresholds ('+d.thresholds.length+')','<div class="oplist">'+
+      d.thresholds.map(t=>'<div class="oprow"><span style="min-width:150px">'+esc(String(t.type||''))+'</span>'+
+        '<span class="mono">'+esc(String(t.duration||''))+'</span></div>').join('')+'</div>');
+  }
+  // The template's actual text — the thing a reader searches for.
+  if(n.type==='template' && (d.content||(d.variations||[]).length)){
+    let b='';
+    if(d.content) b+=codeBoxHtml(d.content, 'freemarker');
+    (d.variations||[]).forEach(v=>{
+      const params=v.parameters?Object.entries(v.parameters).map(([k,val])=>'<span class="pt">'+esc(k)+': '+esc(String(val))+'</span>').join(''):'';
+      b+='<div style="margin:6px 0">'+(params?'<div class="opchips">'+params+'</div>':'')+
+        (v.text?codeBoxHtml(v.text,'freemarker'):(v.resource!=null?'<div class="muted" style="padding:2px 10px">resource: '+esc(String(v.resource))+'</div>':''))+'</div>';
+    });
+    h+=section('templatebody','Template body', b);
+  }
+  // A query's contract and body: parameters, legacy columns, and the search template it runs.
+  if(n.type==='query' && ((d.parameters||[]).length||(d.columns||[]).length||d.templateContent)){
+    let b='';
+    if((d.parameters||[]).length) b+='<div class="parmgrid">'+d.parameters.map(p=>
+      '<div class="pc"><span class="pn">'+esc(String(p.name||''))+'</span>'+
+      (p.type?'<span class="pt">'+esc(String(p.type))+'</span>':'')+
+      (p.required?'<span class="pd">required</span>':'')+
+      (p.label?'<span class="muted">'+esc(String(p.label))+'</span>':'')+'</div>').join('')+'</div>';
+    if((d.columns||[]).length) b+='<div class="oplist">'+d.columns.map(c=>
+      '<div class="oprow"><span>'+esc(String(c.name||''))+'</span><span class="muted">'+esc(String(c.label||''))+'</span>'+
+      (c.variableName?'<span class="mono" style="margin-left:auto">'+vlink('variable:'+c.variableName, c.variableName)+'</span>':'')+'</div>').join('')+'</div>';
+    if(d.templateContent) b+=codeBoxHtml(d.templateContent, 'json');
+    h+=section('querydef','Query definition', b);
+  }
+  // A document model's per-action forms and who may do what with it.
+  if(n.type==='document' && (d.forms||(d.actionPermissions||[]).length)){
+    let b='';
+    if(d.forms) b+='<div class="oplist">'+Object.entries(d.forms).map(([op,fk])=>
+      '<div class="oprow"><span class="pt">'+esc(op)+'</span><span style="flex:1">'+
+      (byId.get('form:'+fk)?nodeChip('form:'+fk):esc(String(fk)))+'</span></div>').join('')+'</div>';
+    if((d.actionPermissions||[]).length) b+='<div class="oplist">'+d.actionPermissions.map(a=>
+      '<div class="oprow"><span class="pt">'+esc(String(a.action||''))+'</span><span style="flex:1">'+
+      (a.groups||[]).map(g=>vlink('group:'+g,g)).join(', ')+'</span></div>').join('')+'</div>';
+    h+=section('docconfig','Forms & permissions', b);
+  }
+  // Which variable each extractor writes, from which scope's payload.
+  if(n.type==='variableExtractor' && (d.extractors||[]).length){
+    h+=section('extractors','Extracted variables ('+d.extractors.length+')','<div class="oplist">'+
+      d.extractors.map(x=>{ const sid=x.scope?(byId.get('process:'+x.scope)?'process:'+x.scope:(byId.get('case:'+x.scope)?'case:'+x.scope:null)):null;
+        return '<div class="oprow">'+
+          (sid?nodeChip(sid):(x.scope?'<span class="muted">'+esc(String(x.scope))+'</span>':''))+
+          '<span class="mono">'+esc(String(x.from||x.path||''))+'</span><span class="pa">→</span>'+
+          '<span class="mono">'+vlink('variable:'+x.to, x.to)+'</span>'+
+          (x.type?'<span class="pt">'+esc(String(x.type))+'</span>':'')+'</div>'; }).join('')+'</div>');
+  }
+  // Where a knowledge base's documents come from.
+  if(n.type==='knowledgeBase' && (d.sources||[]).length){
+    h+=section('kbsources','Sources ('+d.sources.length+')','<div class="oplist">'+
+      d.sources.map(s=>'<div class="oprow"><span class="pt">'+esc(String(s.type||''))+'</span>'+
+        '<span class="mono" style="flex:1">'+esc(String(s.path||''))+'</span></div>').join('')+'</div>');
+  }
+  // An event payload's full contract, when the model states more than names.
+  if(n.type==='event' && (d.payload||[]).some(p=>p&&typeof p==='object'&&(p.type||p.required))){
+    h+=section('payload','Payload ('+d.payload.length+')','<div class="parmgrid">'+
+      d.payload.map(p=>{ const o=(p&&typeof p==='object')?p:{name:p};
+        return '<div class="pc"><span class="pn">'+esc(String(o.name||''))+'</span>'+
+          (o.type?'<span class="pt">'+esc(String(o.type))+'</span>':'')+
+          (o.required?'<span class="pd">required</span>':'')+
+          (o.correlation?'<span class="pd">correlates</span>':'')+'</div>'; }).join('')+'</div>');
+  }
   if(n.type==='agent' && (d.tools||[]).length){
     h+=section('tools','Tools ('+d.tools.length+') — what the agent may call','<div class="nodechips">'+
       d.tools.map(t=>{const id=(t.type||'service')+':'+(t.key||'');
@@ -2423,10 +2619,11 @@ function detailExtra(n){
         const msgs=[['system',o.systemMessage],['user',o.userMessage]].filter(m=>m[1]);
         const key=(o.key&&o.key!==(o.name||o.key))?'<span class="opkey">'+esc(o.key)+'</span>':'';
         if(!msgs.length) return '<div class="op flat"><span class="opname">'+esc(o.name||o.key||'')+'</span>'+key+'</div>';
+        // prompts are multi-paragraph text now that the parser keeps them whole — a code box, not a one-liner
         return '<details class="op"><summary><span class="opname">'+esc(o.name||o.key||'')+'</span>'+key+
           '<span class="opcount">'+msgs.length+' prompt'+(msgs.length>1?'s':'')+'</span></summary>'+
-          '<div class="parmgrid">'+msgs.map(m=>'<div class="pc"><span class="pd">'+m[0]+'</span>'+
-            '<span class="pn mono">'+esc(m[1])+'</span></div>').join('')+'</div></details>';
+          '<div class="parmgrid">'+msgs.map(m=>'<div class="pc" style="display:block"><span class="pd">'+m[0]+'</span>'+
+            '<pre class="scriptbox" style="margin:4px 0 2px;white-space:pre-wrap">'+esc(m[1])+'</pre></div>').join('')+'</div></details>';
       }).join(''));
   }
   if(n.type==='app' && (d.variables||[]).length){
@@ -2463,7 +2660,9 @@ function detailExtra(n){
           '<div class="parmgrid">'+decl.map(([dir,p])=>
             '<div class="pc"><span class="pd" style="color:var('+PDIR_COLOR[dir]+')">'+dir+'</span>'+
             '<span class="pn">'+esc(p.name)+'</span>'+
-            (p.type?'<span class="pt">'+esc(p.type)+'</span>':'')+'</div>').join('')+'</div></details>';
+            (p.type?'<span class="pt">'+esc(p.type)+'</span>':'')+
+            (p.required?'<span class="pd">required</span>':'')+
+            (p.default!=null?'<span class="muted">default '+esc(String(p.default))+'</span>':'')+'</div>').join('')+'</div></details>';
       }).join(''));
   }
   if(n.type==='service' && d.schemaCoverage && (d.schemaCoverage.rows||[]).length){
@@ -2731,6 +2930,43 @@ function jchip(id,label){
   return '<span class="nc" data-id="'+enc(id)+'" tabindex="0" role="link" style="flex:none"><span class="dot" style="background:'+color('java')+'"></span><span class="nm">'+esc(label)+'</span>'+copyBtn(k,'class')+'</span>';
 }
 
+// ---------- "Other attributes" — the structural guarantee that nothing extracted is invisible ----------
+// renderDetail wraps the node's data in a recording proxy: every key a specific renderer *reads* is
+// consumed, and whatever remains is rendered here as a generic key/value tree. A future parser field
+// is therefore visible by default; writing it a proper section later removes it from this list with
+// zero bookkeeping. (The Kotlin mirror: PayloadCompletenessTest keeps the payload projection honest.)
+const KV_MAX_ROWS=200;   // per container — a pathological model must not freeze the panel
+const KV_MAX_TEXT=4000;  // per value — same cap the search index uses
+function kvValueHtml(v){
+  return '<span class="mono" style="flex:1;word-break:break-word;white-space:pre-wrap">'+
+    esc(String(v).slice(0,KV_MAX_TEXT))+'</span>';
+}
+function kvEntry(k,v,depth){
+  if(v==null||v==='') return '';
+  if(typeof v!=='object')
+    return '<div class="oprow" style="border:none"><span class="muted" style="min-width:150px">'+
+      esc(String(k))+'</span>'+kvValueHtml(v)+'</div>';
+  const inner=kvTree(v,depth+1);
+  if(!inner) return '';
+  return '<details class="uses"'+(depth<1?' open':'')+'><summary>'+esc(String(k))+'</summary>'+
+    '<div style="padding:2px 0 2px 12px">'+inner+'</div></details>';
+}
+function kvTree(v,depth){
+  depth=depth||0;
+  if(v==null) return '';
+  if(Array.isArray(v)){
+    if(!v.length) return '';
+    if(v.every(x=>x==null||typeof x!=='object'))
+      return '<div class="oprow" style="border:none">'+kvValueHtml(v.slice(0,KV_MAX_ROWS).join(', '))+'</div>';
+    return v.slice(0,KV_MAX_ROWS).map((x,i)=>kvEntry(
+      x&&typeof x==='object'?(x.id||x.name||x.key||('#'+(i+1))):String(x), x, depth)).join('');
+  }
+  if(typeof v==='object') return Object.keys(v).slice(0,KV_MAX_ROWS).map(k=>kvEntry(k, v[k], depth)).join('');
+  return kvValueHtml(v);
+}
+const kvTruthy=v=>!(v==null||v===''||(Array.isArray(v)&&!v.length)||
+  (typeof v==='object'&&!Array.isArray(v)&&!Object.keys(v).length));
+
 function renderDetail(){
   const det=document.getElementById('detail');
   // The info card lives on <body> now, so it survives this re-render — drop it, or it would keep
@@ -2741,11 +2977,19 @@ function renderDetail(){
     det.innerHTML='<div class="estate"><div class="estate-ic" aria-hidden="true">⌕</div>'+
       '<div class="et">'+(state.cat?'Nothing selected':'Flowable Atlas')+'</div>'+
       '<div class="eh">Pick an item from the list — click any relationship to travel the graph.<br>'+
-      'Mark several with <b>⇧↑↓</b> or <b>'+MODK+'-click</b> and press <b>Enter</b> to open them as tabs · '+
+      'Search everything with <b>/</b> or <b>'+MODK+'K</b> · '+
+      'mark several with <b>⇧↑↓</b> or <b>'+MODK+'-click</b> and press <b>Enter</b> to open them as tabs · '+
       'switch with <b>'+alt+'1…9</b> or <b>'+alt+'←→</b> · close with <b>'+alt+'W</b>.</div></div>';
     return;
   }
   const n=byId.get(state.sel);
+  // Recording wrapper: every data key describe()/diagramView()/detailExtra() (and their helpers —
+  // elementNames, elementRecords, caseCriteria, paramSection all receive this node) actually reads is
+  // marked consumed; the "Other attributes" fallback below renders the rest.
+  const consumed=new Set();
+  const rn={...n, data:new Proxy(n.data||{}, {
+    get:(t,k)=>{ if(typeof k==='string') consumed.add(k); return t[k]; },
+  })};
   const out=groupRels(outM.get(n.id)), inc=groupRels(incM.get(n.id));
   let h='';
   h+='<div class="dhead">'+(_navCount>1?'<button id="back">← back</button>':'')+
@@ -2758,7 +3002,7 @@ function renderDetail(){
   h+='<div class="dtitle">'+esc(n.label)+authBadge(n)+'</div>';
   h+='<div class="dkey mono">'+esc(n.key)+copyBtn(n.key,'key')+'</div>';
   if(n.file) h+='<div class="dfile" title="click to copy" data-copy="'+enc(n.file)+'"><span class="fp">'+esc(n.file)+'</span>'+copyBtn(n.file,'path')+'</div>';
-  const rows=describe(n);
+  const rows=describe(rn);
   if(rows.length){ h+='<div class="grid">'+rows.map(r=>{
       const v=r[1], isHtml=v&&v.html!==undefined;
       const shown=isHtml?v.html:esc(String(v));
@@ -2766,9 +3010,17 @@ function renderDetail(){
       const ct=isHtml?(v.copy!=null?String(v.copy):null):(typeof v==='number'?null:String(v));
       return '<div class="cell"><div class="k">'+esc(r[0])+'</div><div class="v mono">'+shown+copyBtn(ct,r[0])+'</div></div>';
     }).join('')+'</div>'; }
-  h+=diagramView(n);
+  h+=diagramView(rn);
   h+=neighborhoodSvg(n);
-  h+=detailExtra(n);
+  h+=detailExtra(rn);
+  // Whatever no renderer above consumed. Identity fields live in the header; HAY_SKIP is the same
+  // bookkeeping the search index skips.
+  {
+    const skip=new Set([...HAY_SKIP,'key','name','file','description','modelType','type','label']);
+    const rest=Object.keys(n.data||{}).filter(k=>!consumed.has(k)&&!skip.has(k)&&kvTruthy((n.data||{})[k]));
+    if(rest.length) h+=section('otherattrs','Other attributes ('+rest.length+')',
+      rest.map(k=>kvEntry(k,(n.data||{})[k],0)).join(''));
+  }
   // The gesture is stated where the reference chips actually are. Walking a fan of references is the
   // case it exists for: without it, every chip you follow costs you the node you started from.
   const relHint='<div class="relhint">click follows · <b>'+MODK+'-click</b> or middle-click opens a tab</div>';
@@ -3015,6 +3267,7 @@ function elementNames(n){
   (d.gateways||[]).forEach(g=>put(g.id,g.name,g.type));
   (d.otherTasks||[]).forEach(t=>put(t.id,t.name,t.type));
   (d.eventListeners||[]).forEach(e=>put(e.id,e.name,e.type));
+  (d.lanes||[]).forEach(l=>put(l.id,l.name,'lane'));
   (d.milestones||[]).forEach(x=>{ if(x&&typeof x==='object') put(x.id,x.name,'milestone'); });
   if(d.planModel)(function walk(nd){ put(nd.id,nd.name,nd.type,nd.serviceTaskType); (nd.children||[]).forEach(walk); })(d.planModel);
   // criterion diamonds: named after the plan item they guard, typed entry/exitCriterion.
@@ -3456,13 +3709,26 @@ function dgCardHtml(n, elId, g){
 // place, not a text guess.
 function applyFocus(det){
   if(state.focusEl && revealByEl(det, state.focusEl)) return;
-  const q=(state.focus||'').trim().toLowerCase();
-  if(!q) return;
-  const match=el=>(el.dataset.hay||el.textContent||'').toLowerCase().indexOf(q)>=0;
-  let rows=[...det.querySelectorAll('.pc, .oprow')].filter(match);
+  const raw=(state.focus||'').trim();
+  if(!raw) return;
+  // The engine's grammar, not the raw string: strip facets, keep words and phrases. The old matcher
+  // did one contiguous indexOf of the whole query, so a faceted or multi-word hit (which the engine
+  // matched word-by-word) highlighted nothing on this page.
+  const parsed=qParse(raw);
+  const needles=parsed.phrases.concat(parsed.terms,
+    SX_HL_FACETS.filter(k=>parsed.facets[k]).map(k=>parsed.facets[k]));
+  if(!needles.length) return;
+  const textOf=el=>(el.dataset.hay||el.textContent||'').toLowerCase();
+  // a row carrying every word wins; failing that, any word — same AND-first contract as the search
+  const pick=sel=>{
+    const els=[...det.querySelectorAll(sel)];
+    const all=els.filter(el=>{ const t=textOf(el); return needles.every(nd=>t.indexOf(nd)>=0); });
+    return all.length?all:els.filter(el=>{ const t=textOf(el); return needles.some(nd=>t.indexOf(nd)>=0); });
+  };
+  let rows=pick('.pc, .oprow');
   // script bodies / operation blocks, flow conditions and DMN cells — a free-text hit usually lands here
-  if(!rows.length) rows=[...det.querySelectorAll('details.op, .dgcond, .dmntab td')].filter(match);
-  if(!rows.length) rows=[...det.querySelectorAll('.cell')].filter(match);
+  if(!rows.length) rows=pick('details.op, .dgcond, .dmntab td');
+  if(!rows.length) rows=pick('.cell');
   if(!rows.length) return;
   rows.forEach(el=>{ el.classList.add('hit'); if(el.tagName==='DETAILS') el.open=true; });
   for(let p=rows[0].parentElement; p && p!==det; p=p.parentElement){
@@ -3975,7 +4241,7 @@ const SX_KIND_BOOST={
   form:190, page:190, dataDictionary:190, masterData:190, template:170,
   action:150, agent:150, service:150, query:150, securityPolicy:150,
   channel:140, event:140, knowledgeBase:140, sequence:140, document:140,
-  variableExtractor:140, sla:140, dashboardComponent:140,
+  variableExtractor:140, sla:140, dashboardComponent:140, palette:100,
   bot:130, serviceOperation:120, topic:120, signal:120, message:120, error:120, escalation:120,
   group:110, endpoint:100, java:90, liquibase:90, method:70, variable:60,
   customFunction:40, expression:10, binding:10, string:0, external:0,
@@ -4086,6 +4352,29 @@ function fuzzyScore(s, term){
   return Math.max(1, 1000-gaps*8-first*4-Math.max(0, low.length-term.length));
 }
 
+/** The facet keys whose value is text a reader sees on a row — these highlight like terms. */
+const SX_HL_FACETS=['lab','desc','key','id'];
+
+/**
+ * "Did you mean" score of one node's index against the query's words: every word must come close to
+ * the name, the key or one caption line (AND — same contract as the real search), and closeness is
+ * [fuzzyScore]'s subsequence measure. Caption lines are scanned because a mistyped *caption* is the
+ * most common misspelling of all — the old name/key-only scan had no suggestion for it. The lab blob
+ * is line-per-caption; the scan is capped so the zero-result path stays cheap.
+ */
+function suggestScore(ix, needles){
+  const labs=ix.lab?ix.lab.split('\n').slice(0,60):[];
+  let total=0;
+  for(let j=0;j<needles.length;j++){
+    const t=needles[j];
+    let sc=Math.max(fuzzyScore(ix.name, t), fuzzyScore(ix.key, t));
+    for(let i=0;i<labs.length&&sc<1000;i++) sc=Math.max(sc, fuzzyScore(labs[i], t));
+    if(sc<=0) return 0;
+    total+=sc;
+  }
+  return total;
+}
+
 /**
  * Split `text` into `{t, hit}` segments covering every matched range of `parsed`. Returns segments
  * rather than HTML on purpose: the caller escapes each one, so a highlight can never inject markup
@@ -4095,7 +4384,10 @@ function hlite(text, parsed){
   const s=String(text==null?'':text);
   if(!s||!parsed||parsed.empty) return [{t:s, hit:false}];
   const low=s.toLowerCase();
-  const needles=parsed.phrases.concat(parsed.terms);
+  // Bound facet values highlight like terms: `label:Recalculate` finds rows BY that caption, so the
+  // caption must light up. Only the content facets — a type:/in:/file: value names a bucket, not text.
+  const fvals=SX_HL_FACETS.filter(k=>parsed.facets[k]).map(k=>parsed.facets[k]);
+  const needles=parsed.phrases.concat(parsed.terms, fvals);
   const marks=[];
   for(let i=0;i<needles.length;i++){
     const nd=needles[i];
@@ -4286,7 +4578,10 @@ function matchWhere(n,parsed,fields){
   if(ffac||fdes){
     const keys=ffac?HAY_LAB_KEYS:HAY_DESC_KEYS;
     const hit=ent.find(x=>keys.has(x.k)&&anyIn(x.v));
-    if(hit) return {hint:(HAY_LABEL[hit.k]||hit.k)+(hit.id?' · '+hit.id:''), el:hit.id||''};
+    // The matched text leads the hint: it is what the reader searched for, and it is what the
+    // highlighter can light up — "label · orderTotal" named the owner but never showed the caption.
+    if(hit){ const v=String(hit.v), short=v.length>48?v.slice(0,47)+'…':v;
+      return {hint:(HAY_LABEL[hit.k]||hit.k)+' · '+short+(hit.id?' @'+hit.id:''), el:hit.id||''}; }
     // A BPMN/CMMN element's name never reaches the walked entries — it arrives through elementNames() —
     // so a `label:` hit on a task's caption has to be looked up where it actually lives.
     if(ffac && (n.type==='process'||n.type==='case'))
@@ -4423,6 +4718,9 @@ function openPalette(prefill){
   hideDgCard();                                  // the card floats above the palette (z-index 120 > 100)
   _palPrevFocus=document.activeElement;
   pal.hidden=false;
+  // A real modal: the page behind the dialog is inert (unfocusable, invisible to a screen reader)
+  // while it is open. #palette lives outside .shell, so this cannot disable the dialog itself.
+  try{ document.querySelector('.shell').inert=true; }catch(e){}
   // With a prefill, palAuto lets palRender() pick the best-scoring row; without one there is nothing
   // ranked to select (the empty query lists Recent).
   palq.value=prefill||''; palSel=-1;
@@ -4433,6 +4731,7 @@ function openPalette(prefill){
 function closePalette(){
   if(pal.hidden) return;
   pal.hidden=true;
+  try{ document.querySelector('.shell').inert=false; }catch(e){}
   palMarksClear(); _palNote=''; if(palFoot) palFoot.hidden=true;
   try{ if(_palPrevFocus && document.contains(_palPrevFocus)) _palPrevFocus.focus(); }catch(e){}
   _palPrevFocus=null;
@@ -4614,14 +4913,14 @@ function palWireSyntax(bar){
   });
 }
 /** Up to 5 "did you mean" nodes. Subsequence matching only, and only ever shown on a zero-result
- *  query — it is far too loose to mix into the real ranking. */
+ *  query — it is far too loose to mix into the real ranking. Words are matched one by one (the old
+ *  `join('')` glued `custmer nam` into one needle no real name resembles). */
 function palSuggest(parsed){
-  const term=parsed.terms.concat(parsed.phrases).join('');
-  if(term.length<3) return [];
+  const needles=parsed.terms.concat(parsed.phrases).filter(t=>t.length>=3);
+  if(!needles.length) return [];
   const out=[];
   nodes.forEach(n=>{
-    const ix=searchIndex(n);
-    const sc=Math.max(fuzzyScore(ix.name, term), fuzzyScore(ix.key, term));
+    const sc=suggestScore(searchIndex(n), needles);
     if(sc>0) out.push({n, sc});
   });
   out.sort((a,b)=>b.sc-a.sc||(a.n.label<b.n.label?-1:1));
@@ -4649,7 +4948,8 @@ function palEmptyHtml(parsed, hidden){
     'descriptions, files, element ids, script bodies, documentation, conditions, endpoints, groups. '+
     'Narrow with <code>label:</code> <code>desc:</code> <code>key:</code> <code>id:</code> '+
     '<code>type:</code> <code>file:</code> <code>in:</code>; quote <code>"…"</code> for an exact '+
-    'phrase — alone, or as a facet value: <code>label: "Customer name"</code>.</div></div>';
+    'phrase — alone, or as a facet value: <code>label: "Customer name"</code>. '+
+    'Open this search anywhere with <code>/</code> or '+MODK+'K.</div></div>';
 }
 function palRender(){
   const raw=palq.value.trim();
@@ -4716,7 +5016,8 @@ function palRender(){
   }
   palList=[]; let h='';
   groups.forEach(g=>{
-    h+='<div class="pal-group">'+esc(g.label)+'</div>';
+    // presentation: a listbox may only own options — the heading is visual structure, not an option
+    h+='<div class="pal-group" role="presentation">'+esc(g.label)+'</div>';
     g.items.forEach(hit=>{
       const n=hit.n, i=palList.length;
       // Hits that did not come from the name explain themselves: "script · scriptTask1", "doc · order".
@@ -4791,11 +5092,16 @@ palq.addEventListener('keydown',e=>{
     e.preventDefault();
     const j=e.key==='ArrowDown'?Math.min(palSel+1,palList.length-1):Math.max(palSel-1,0);
     if(e.shiftKey && palList.length){
+      // marks changed → rows changed → a real re-render
       if(palAnchor<0) palAnchor=palSel>=0?palSel:j;
       palMarks.clear();
       _palNote=palMarkRange(palAnchor, j)?('marking stops at '+MAX_TABS+' — that is the tab limit'):'';
+      palSel=j; palRender();
+    } else {
+      // a plain arrow moves one class — rebuilding all 60 rows (and re-running matchWhere on each)
+      // per keypress made large corpora feel sticky
+      palSel=j; palSelUpdate();
     }
-    palSel=j; palRender();
   }
   else if(e.key==='Enter'){
     // ⌘/Ctrl+Enter batches: open what is marked, keep the palette up for the next query. Without
@@ -4815,7 +5121,29 @@ palq.addEventListener('keydown',e=>{
     if(palMarks.size){ e.preventDefault(); e.stopPropagation(); palMarksClear(); _palNote=''; palRender(); }
     else closePalette();
   }
-  else if(e.key==='Tab'){ e.preventDefault(); }            // the input is the only tabbable — trap
+});
+/** Move the selection highlight without rebuilding the list. */
+function palSelUpdate(){
+  palres.querySelectorAll('.pal-item.sel').forEach(el=>{
+    el.classList.remove('sel'); el.setAttribute('aria-selected','false'); });
+  const el=palSel>=0?document.getElementById('pal-'+palSel):null;
+  if(el){
+    el.classList.add('sel'); el.setAttribute('aria-selected','true');
+    el.scrollIntoView({block:'nearest'});
+    palq.setAttribute('aria-activedescendant','pal-'+palSel);
+  } else palq.removeAttribute('aria-activedescendant');
+}
+// Tab cycles the dialog's own controls — input, facet chips, unfacet ×, "Show more", "Did you mean" —
+// instead of being swallowed. The old trap made every discovery affordance mouse-only. Bound on the
+// dialog (not the input) so Tab keeps cycling once focus sits on a chip; focus never leaves the dialog
+// because the page behind it is inert.
+pal.addEventListener('keydown',e=>{
+  if(e.key!=='Tab') return;
+  e.preventDefault();
+  const els=[palq, ...palPanel.querySelectorAll('button')].filter(el=>el.offsetParent!==null && !el.disabled);
+  if(!els.length) return;
+  const i=els.indexOf(document.activeElement);
+  els[(i+(e.shiftKey?-1:1)+els.length)%els.length].focus();
 });
 pal.addEventListener('mousedown',e=>{ if(e.target.closest('[data-close]')) closePalette(); });
 document.addEventListener('keydown',e=>{

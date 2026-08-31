@@ -1,0 +1,14 @@
+{
+  "key": "openOrdersQuery",
+  "name": "Open orders",
+  "description": "Work list of orders still awaiting approval.",
+  "type": "workInstanceQuery",
+  "sourceIndex": "work-instances",
+  "parameters": {
+    "orderId": {"type": "string", "label": "Order", "required": true},
+    "minTotal": {"type": "number", "label": "Minimum total"}
+  },
+  "sortParameters": ["total"],
+  "templateContent": "{\"bool\": {\"must\": [{\"term\": {\"variables.orderId\": \"{{orderId}}\"}}, {\"range\": {\"variables.total\": {\"gte\": \"{{minTotal}}\"}}}]}}",
+  "identityLinks": {"query": {"groups": ["sales"]}}
+}

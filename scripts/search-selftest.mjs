@@ -32,7 +32,7 @@ if (a < 0 || b < 0 || b < a) {
 const block = source.slice(a + START.length, b);
 
 const engine = new Function(`"use strict";${block};return {
-  qParse, hayTokens, scoreIndex, searchIndex, matchWhere, hlite, fuzzyScore, SX_ENV
+  qParse, hayTokens, scoreIndex, searchIndex, matchWhere, hlite, fuzzyScore, suggestScore, SX_ENV
 };`)();
 
 /** Lift a whole top-level function out of explorer.js by name, or say so and stop. Plain string
@@ -268,6 +268,21 @@ unit('hlite leaves a non-matching string in one piece',
   engine.hlite('nothing here', engine.qParse('zzz')), [{ t: 'nothing here', hit: false }]);
 unit('fuzzyScore finds a typo as a subsequence', engine.fuzzyScore('customer', 'custmer') > 0, true);
 unit('fuzzyScore rejects a non-subsequence', engine.fuzzyScore('customer', 'zzz'), 0);
+// The regression this guards: `label:Recalculate` returned the right rows with zero <mark> on them —
+// facet values never entered the highlight needles, so a facet hit looked like no hit at all.
+unit('hlite marks a bound facet value like a term',
+  engine.hlite('Recalculate total', engine.qParse('label:Recalculate')).some(s => s.hit), true);
+unit('hlite does not highlight a bucket facet value (type:)',
+  engine.hlite('form of forms', engine.qParse('t:form')).some(s => s.hit), false);
+// The regressions these guard: the old suggester glued `custmer nam` into the single needle
+// `custmernam` (matching nothing sensible), and scanned only name/key — a mistyped *caption* got no
+// suggestion at all.
+unit('suggestScore matches each mistyped word on its own',
+  engine.suggestScore({ name: 'customer name', key: 'customerName', lab: '' }, ['custmer', 'nam']) > 0, true);
+unit('suggestScore reaches captions, not just name and key',
+  engine.suggestScore({ name: 'order form', key: 'orderForm', lab: 'kundennummer\nrecalculate' }, ['recalculte']) > 0, true);
+unit('suggestScore is AND across words',
+  engine.suggestScore({ name: 'customer name', key: 'customerName', lab: '' }, ['custmer', 'zzz']), 0);
 
 // Every caption the Fields section renders MUST be in the index. This is the invariant that a report
 // of "labels are not searchable" actually tests, and nothing checked it — which is why three fixes went
@@ -321,11 +336,14 @@ function whyOf(q, id) {
   const w = r && engine.matchWhere(n, p, r.fields);
   return w ? w.hint : null;
 }
-unit('a label: hit is explained by a label', whyOf('label:Recalculate', FORM_ORDER), 'label · orderTotal');
+// The hint leads with the matched text itself — it is what was searched for, and it is what the
+// highlighter lights up; the owner follows after @.
+unit('a label: hit is explained by the caption it matched',
+  whyOf('label:Recalculate', FORM_ORDER), 'label · Recalculate @orderTotal');
 unit('a label: hit on a task caption names that element',
   whyOf('label:approval', PROC_ORDER), 'label · Decide approval');
-unit('a desc: hit is explained by the documentation it came from',
-  whyOf('desc:Backoffice', PROC_ORDER), 'doc · approveTask');
+unit('a desc: hit is explained by the sentence it came from',
+  whyOf('desc:Backoffice', PROC_ORDER), 'doc · Backoffice checks the order total before it shi… @approveTask');
 unit("a label: hit on the node's own label leaves the hint to the key",
   whyOf('label:priority', DO_PRIORITY), null);
 

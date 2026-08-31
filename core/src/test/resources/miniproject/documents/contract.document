@@ -1,0 +1,12 @@
+{
+  "key": "contractDocument",
+  "name": "Contract",
+  "description": "The customer contract uploaded with an order.",
+  "versioning": true,
+  "initialState": "draft",
+  "initialType": "upload",
+  "forms": {"view": "orderForm"},
+  "actionPermissions": {"download": ["sales"]},
+  "variables": {"contractType": {"type": "string"}},
+  "aiInstructions": "Classify the contract type from the first page."
+}

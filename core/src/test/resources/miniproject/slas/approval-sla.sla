@@ -1,0 +1,35 @@
+{
+  "key": "approvalSla",
+  "name": "Approval SLA",
+  "description": "An order approval must complete within a business day.",
+  "slaType": "task",
+  "businessCalendarType": "standard",
+  "completionDueDateValue": 8,
+  "completionDueDateTimeUnit": "hours",
+  "inProgressStartDueDateValue": 4,
+  "inProgressStartDueDateTimeUnit": "hours",
+  "inProgressStartOnClaim": true,
+  "suspendAllowed": true,
+  "escalationDefinitions": [
+    {
+      "stepId": "warnBeforeBreach",
+      "relativeType": "before",
+      "timeValue": 1,
+      "timeUnit": "hours",
+      "action": "startProcess",
+      "actionConfiguration": {"processDefinitionKey": "fulfilmentProcess"}
+    },
+    {
+      "stepId": "escalateOnBreach",
+      "relativeType": "after",
+      "timeValue": 0,
+      "timeUnit": "hours",
+      "action": "assignment",
+      "actionConfiguration": {"assignee": "${manager}"},
+      "condition": "${!managerApproved}"
+    }
+  ],
+  "completionDefinitions": [
+    {"on": "complete", "action": "removeEscalation"}
+  ]
+}

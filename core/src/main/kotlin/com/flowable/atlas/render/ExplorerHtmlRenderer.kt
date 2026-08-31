@@ -116,39 +116,59 @@ object ExplorerHtmlRenderer {
     }
 
     /**
+     * Container `node.data` keys deliberately kept OUT of the explorer payload, each with its reason.
+     * [PayloadCompletenessTest] asserts every container key a parser emits is either allowlisted in
+     * [FRONTEND_DATA_KEYS] or consciously listed here — so a new parser key can never be silently
+     * invisible again: the build fails until the developer decides.
+     */
+    internal val STRIPPED_DATA_KEYS: Set<String> = setOf(
+        "childModels", // redundant: parseApp records a `contains` ref per child, rendered as edges
+        "_uses", // reverse artifact map for graph.json/overview.md; the explorer derives it from edges
+    )
+
+    /**
      * The `node.data` keys `explorer.js` consumes. Scalars survive regardless (see [slimData]), so this
      * only has to enumerate the *container* fields the detail view reads; extra names are harmless.
      * Derived from every `d.<field>` / `n.data.<field>` access in `explorer.js` — keep in sync if the
-     * frontend starts reading a new nested field.
+     * frontend starts reading a new nested field ([PayloadCompletenessTest] fails when a parser emits
+     * a container key that is neither here nor in [STRIPPED_DATA_KEYS]).
      */
-    private val FRONTEND_DATA_KEYS = setOf(
-        "aiVendor", "annotation", "auth", "authority", "baseUrl", "beanNames", "bindings", "botKey",
-        "callActivities",
+    internal val FRONTEND_DATA_KEYS = setOf(
+        "actionPermissions", "aggregations",
+        "aiVendor", "annotation", "assignmentActions", "auth", "authority", "baseUrl", "beanNames",
+        "bindings", "botKey",
+        "callActivities", "completionActions",
         "calledMethods", "calls", "candidateStarterGroups", "channels", "channelType", "class", "className",
         "columns", "conditions",
-        "controller", "correlation", "coverage", "dataObjectType", "dataSources", "declaredIn",
+        "controller", "correlation", "coverage", "dataObjects", "dataObjectType", "dataSources",
+        "declaredIn", "decisions",
         "destination", "dictionary",
-        "documentation", "dynamic", "effectiveTables", "enableApiEndpoint", "endpoints", "eventKey",
+        "documentation", "dynamic", "effectiveTables", "enableApiEndpoint", "endpoints", "escalations",
+        "eventKey",
         "eventListeners", "events", "external",
-        "external_url", "fields", "flowableApi", "formKey", "fullUrl", "gateways", "groups", "handler",
+        "external_url", "extractors", "fields", "flowableApi", "flows", "formKey", "forms", "fullUrl",
+        "fullTextVariables", "gateways", "groups", "handler",
         "hitPolicy",
-        "http", "initiatorVariableName", "inputExpressions", "inputs", "interfaces", "ioParameters",
+        "http", "initializationActions", "initiatorVariableName", "inputDefs", "inputExpressions",
+        "inputs", "interfaces", "ioParameters",
         "ioParams", "kind",
-        "knowledgeBase", "listeners", "member", "message", "method", "methods", "milestones",
-        "missingModel", "modelName", "multiInstance", "name",
-        "namespace", "operations", "otherTasks", "outcomes", "outParams", "outputs", "package",
-        "parameters", "params",
+        "knowledgeBase", "lanes", "listeners", "member", "message", "method", "methods", "milestones",
+        "missingModel", "modelName", "modelRefs", "multiInstance", "name",
+        "namespace", "operations", "otherTasks", "outcomes", "outParams", "outputDefs", "outputs",
+        "package",
+        "pages", "parameters", "params",
         "path", "payload", "permissionGroups", "permissions", "planModel", "platform", "problems",
         "readCount", "reads", "readsUnknown",
         "referencedLiquibaseModelKey", "restCalls", "roles", "route", "ruleCount", "rules", "ruleTasks",
         "schemaCoverage", "scope", "scopes", "scopeUnresolved",
         "scopeType", "scriptProblems", "scriptSites", "scriptTasks", "sentries", "service",
         "serviceTableName", "serviceTasks",
-        "signalName", "signature", "sourceId",
+        "signalName", "signature", "sortParameters", "sourceId",
         "sourceIndex", "sources", "subforms", "subProcesses", "tableName", "tables", "temperature",
-        "tools", "topics",
-        "type", "types", "unread", "unreadIn", "url", "usages",
-        "usedBy", "userTasks", "variables", "writeCount", "writes",
+        "thresholds", "tools", "topics",
+        "type", "typeDefs", "types", "unread", "unreadIn", "url", "usages",
+        "usedBy", "userTasks", "variables", "variationParameters", "variations", "vectorStore",
+        "writeCount", "writes",
     )
 
     /** The full explorer HTML page (CSS/JS inlined; `__ATLAS_DATA__` still unresolved). */

@@ -527,7 +527,8 @@ object OverviewRenderer {
             for (evAny in eventsList) {
                 val ev = asMap(evAny)
                 val attrs = Fmt.fields(
-                    "payload" to Fmt.codeList(ev["payload"]),
+                    // payload entries are `{name, type, …}` records; the overview names them
+                    "payload" to Fmt.codeList(asList(ev["payload"]).map { (it as? Map<*, *>)?.get("name") ?: it }),
                     "correlation" to Fmt.codeList(ev["correlation"]),
                 )
                 L.add("- `${pyStr(ev["key"])}`" + (if (attrs.isEmpty()) "" else " — $attrs"))

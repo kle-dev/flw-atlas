@@ -1,0 +1,12 @@
+{
+  "Palette-Id": "demoPalette",
+  "title": "Demo palette",
+  "category": "demo",
+  "paletteItems": [
+    {"id": "customServiceTask"},
+    {"id": "customFormField"}
+  ],
+  "propertyPackages": [
+    {"id": "customProperties"}
+  ]
+}

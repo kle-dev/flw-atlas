@@ -64,7 +64,10 @@ try{
   <div class="main">
     <header class="topbar">
       <nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav>
-      <button class="searchbtn" id="searchbtn" aria-haspopup="dialog" aria-controls="palette">
+      <!-- aria-label carries the name even below 1100px, where the placeholder span is display:none
+           and the accessible name would otherwise collapse to "⌘K" -->
+      <button class="searchbtn" id="searchbtn" aria-haspopup="dialog" aria-controls="palette"
+              aria-label="Search everything" title="Search everything — press / or the shortcut">
         <span class="ic" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></span>
         <span class="ph">Search everything…</span>
         <kbd class="kbd" id="searchkbd">⌘K</kbd>
@@ -110,7 +113,7 @@ try{
     <!-- Result count + section chips. Sibling of the scrolling list, so the count stays put while the
          results scroll under it. Populated by palRenderFacets(); hidden while the query is empty. -->
     <div class="pal-facets" id="palfacets" hidden></div>
-    <div class="pal-results" id="palresults" role="listbox" aria-label="Search results"></div>
+    <div class="pal-results" id="palresults" role="listbox" aria-label="Search results" aria-multiselectable="true"></div>
     <!-- Sibling of the scrolling result list, so the multi-select hint stays pinned to the bottom. -->
     <div class="pal-foot" id="palfoot" hidden></div>
   </div>
