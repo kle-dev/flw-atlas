@@ -31,11 +31,29 @@ if (a < 0 || b < 0 || b < a) {
 }
 const block = source.slice(a + START.length, b);
 
-// The engine's only outside dependencies are injected through SX_ENV, so a stub is enough here: the
-// element-name walk only adds process/case element ids, which none of the cases below rely on.
 const engine = new Function(`"use strict";${block};return {
-  qParse, hayTokens, scoreIndex, searchIndex, hlite, fuzzyScore, SX_ENV
+  qParse, hayTokens, scoreIndex, searchIndex, matchWhere, hlite, fuzzyScore, SX_ENV
 };`)();
+
+/** Lift a whole top-level function out of explorer.js by name, or say so and stop. Plain string
+ *  scanning rather than a regex: the marker it looks for is `\n}` at column zero, which is exactly
+ *  how every top-level function in the file ends. */
+function lift(name) {
+  const at = source.indexOf(`\nfunction ${name}(`);
+  const end = at < 0 ? -1 : source.indexOf('\n}\n', at);
+  if (at < 0 || end < 0) {
+    console.error(`search-selftest: function ${name}() not found in ${JS_PATH} — was it renamed?\n` +
+      'The engine needs it through SX_ENV; a stub would silently empty a haystack.');
+    process.exit(2);
+  }
+  return source.slice(at, end + 3);
+}
+// elementNames() is the one thing the engine takes from the app, and it is not optional: `lab` gets
+// every BPMN/CMMN element's *name* from it and `ids` every element *id*, so the empty-Map stub this
+// used to pass would let the label cases pass for the wrong reason. Both functions are pure, so they
+// are lifted out of the source the same way the engine block is.
+engine.SX_ENV.elementNames = new Function(
+  `"use strict";${lift('caseCriteria')}${lift('elementNames')};return elementNames;`)();
 
 // ---------- load the report ----------
 const reportPath = process.argv[2];
@@ -73,6 +91,14 @@ const DO_CUSTOMER = 'dataObject:customerDO';
 const DO_PRIORITY = 'dataObject:priorityMD';
 // The fixture form, whose buttons carry the ids / callees / expressions the `id:` cases look up.
 const FORM_ORDER = 'form:orderForm';
+// The label / description cases below read fixture content that is there for its own sake:
+// order.bpmn documents its process and two of its elements, demo.app has a Description,
+// order-form.form labels its fields and gives one component a description, order-decision.dmn
+// annotates a rule, customer.data labels its columns and case.policy its permissions.
+const APP_DEMO = 'app:demoApp';
+const PROC_ORDER = 'process:orderProcess';
+const DEC_ORDER = 'decision:orderDecision';
+const POLICY_ORDER = 'securityPolicy:orderPolicy';
 
 const cases = [
   // --- the regression the whole change is about: words are independent and order-free ---
@@ -123,6 +149,43 @@ const cases = [
   { q: 'notifyCustomerAction', has: FORM_ORDER, why: 'the action a button triggers surfaces the form' },
   { q: 'orderTotal',           has: FORM_ORDER, why: 'the target an expression button writes' },
 
+  // --- an explicit facet is a FILTER: it returns everything that has the thing, and nothing that
+  //     merely mentions it. A variable's own label is its identifier, not a caption, so `label:` must
+  //     not answer with the variable a field binds to — which is what buried the forms. ---
+  { q: 'label:orderTotal', missing: 'variable:orderTotal', why: "a variable's identifier is not a label" },
+  { q: 'label:order',      missing: 'expression:${total > 100}', why: 'nor is an expression\'s text' },
+  { q: 'label:amount',     missing: 'binding:{{amount}}',   why: 'nor a binding\'s' },
+
+  // --- `label:` narrows to the captions a person reads, wherever they sit ---
+  { q: 'label:recalculate', has: FORM_ORDER,   why: 'a button caption is a label' },
+  { q: 'label:approve',     has: FORM_ORDER,   why: 'an outcome button caption is a label' },
+  { q: 'label:priority',    has: DO_CUSTOMER,  why: 'a data object column label' },
+  { q: 'label:update',      has: POLICY_ORDER, why: 'a permission label' },
+  { q: 'label:approval',    has: PROC_ORDER,   why: 'a BPMN element name is its caption on the canvas' },
+  { q: 'label:internal',    has: FORM_ORDER,   why: 'a field label, reachable by one of its words' },
+  // The mirror image of the `id:Recalculate` case above: an id is not a caption either.
+  { q: 'label:notifyButton', none: true,       why: 'an element id is not a label' },
+  { q: 'label:zzzznope',    none: true,        why: 'a caption that exists nowhere' },
+  { q: 'zzzznope label:approve', none: true,   why: 'the facet narrows, but the terms still have to match' },
+
+  // --- `desc:` narrows to the prose the modeller wrote about the thing ---
+  { q: 'desc:miniature',    top: APP_DEMO,     why: "Design's model Description on the app" },
+  { q: 'desc:entry',        has: PROC_ORDER,   why: 'the process documentation' },
+  { q: 'desc:backoffice',   top: PROC_ORDER,   why: 'a BPMN element documentation — and NOT the group of that name' },
+  { q: 'desc:hidden',       top: FORM_ORDER,   why: 'a form component description' },
+  { q: 'desc:approval',     has: DEC_ORDER,    why: 'a DMN rule annotation' },
+  { q: 'desc:zzzznope',     none: true,        why: 'a description that exists nowhere' },
+
+  // --- a facet tolerates the space and the casing people actually type ---
+  { q: 'desc: backoffice',  top: PROC_ORDER,  why: 'a space after the colon is how people type it first' },
+  { q: 'label: recalculate', has: FORM_ORDER, why: 'and it holds for every facet, not just desc:' },
+  { q: 'DESC: BACKOFFICE',  top: PROC_ORDER,  why: 'prefix and value are both case-insensitive' },
+  { q: 'CUSTOMER T: DATAOBJECT', has: DO_CUSTOMER, why: 'so are the terms beside it' },
+
+  // --- and the point of it all: prose is findable without knowing the facet exists ---
+  { q: 'backoffice checks', top: PROC_ORDER, why: 'two words that only ever occur in one documentation' },
+  { q: 'shipping stamp',    has: PROC_ORDER, why: 'an element documentation, as a plain query' },
+
   // --- AND semantics: a word that matches nothing drops the node ---
   { q: 'customer zzzznope',  none: true, why: 'every word has to match' },
 ];
@@ -155,6 +218,20 @@ unit('hayTokens splits camelCase + digits',
 unit('qParse separates facets from terms',
   (p => [p.terms, p.facets])(engine.qParse('shopping template t:dataObject')),
   [['shopping','template'], { type: 'dataobject' }]);
+unit('qParse separates the label/desc facets',
+  (p => [p.terms, p.facets])(engine.qParse('order label:Approve desc:Backoffice')),
+  [['order'], { lab: 'approve', desc: 'backoffice' }]);
+unit('qParse accepts a space after the colon',
+  [engine.qParse('desc: approval').facets, engine.qParse('label:  courier').facets],
+  [{ desc: 'approval' }, { lab: 'courier' }]);
+// The regression this guards: without the space the query became the two TERMS `label` and `courier`,
+// and answered with whichever node had the word "label" in a script body — a silent wrong hit.
+unit('a spaced facet leaves no stray term behind', engine.qParse('label: courier').terms, []);
+unit('qParse is case-insensitive on both halves',
+  engine.qParse('DESC:Approval').facets, { desc: 'approval' });
+unit('qParse accepts the desc: aliases',
+  [engine.qParse('description:x').facets, engine.qParse('doc:x').facets],
+  [{ desc: 'x' }, { desc: 'x' }]);
 unit('qParse keeps a quoted phrase whole',
   engine.qParse('"get outreach" key').phrases, ['get outreach']);
 unit('hlite marks every occurrence, merged and escaped-safe',
@@ -164,6 +241,66 @@ unit('hlite leaves a non-matching string in one piece',
   engine.hlite('nothing here', engine.qParse('zzz')), [{ t: 'nothing here', hit: false }]);
 unit('fuzzyScore finds a typo as a subsequence', engine.fuzzyScore('customer', 'custmer') > 0, true);
 unit('fuzzyScore rejects a non-subsequence', engine.fuzzyScore('customer', 'zzz'), 0);
+
+// Every caption the Fields section renders MUST be in the index. This is the invariant that a report
+// of "labels are not searchable" actually tests, and nothing checked it — which is why three fixes went
+// to extraction and matching before the real cause (the page not drawing the row) was found.
+{
+  const missing = [];
+  for (const n of nodes) {
+    if (n.type !== 'form' && n.type !== 'page') continue;
+    const lab = engine.searchIndex(n).lab;
+    for (const f of (n.data || {}).fields || [])
+      if (f.label && !lab.includes(String(f.label).toLowerCase())) missing.push(`${n.id}#${f.id}=${f.label}`);
+  }
+  unit('every field caption the panel renders is in the search index', missing, []);
+}
+
+// palWindow() belongs to the palette, not the engine, but it is pure and it is the reason a form whose
+// caption matched could be absent from the screen while the search had found it. Lifted the same way.
+const palWindow = new Function('searchIndex', `${lift('palWindow')}return palWindow;`)(engine.searchIndex);
+{
+  const isModels = h => engine.searchIndex(h.n).section === 'Models';
+  const others = nodes.filter(n => engine.searchIndex(n).section !== 'Models').map(n => ({ n }));
+  const models = nodes.filter(n => engine.searchIndex(n).section === 'Models').map(n => ({ n }));
+  // The worst case the palette actually hits: every other section outranks Models, and there are more
+  // of those than the page holds. A plain score cut renders no Models group at all.
+  const list = others.concat(models);
+  const secs = new Set(list.map(h => engine.searchIndex(h.n).section)).size;
+  ran++;
+  if (others.length <= secs || models.length < 2) {
+    failed++;
+    console.error('FAIL  palWindow case cannot be built from this report');
+  } else console.log('ok    palWindow case is meaningful (' + others.length + ' non-Models hits)');
+  unit('a plain score cut would hide the Models group', list.slice(0, secs).some(isModels), false);
+  unit('the shared page keeps a slot for every section', palWindow(list, secs).some(isModels), true);
+  unit('…and still fills the page', palWindow(list, secs).length, secs);
+  // The regression that a per-section FLOOR introduced: three rows guaranteed became three rows total,
+  // so ten forms carrying the searched caption were reported as three.
+  const shown = Math.min(20, list.length - 1);
+  unit('a section gets a share of the page, not a fixed floor',
+    palWindow(list, shown).filter(isModels).length >= Math.min(models.length, Math.floor(shown / secs)),
+    true);
+  unit('a section that runs out leaves its share to the others', palWindow(list, shown).length, shown);
+  unit('a page that fits everything is returned untouched', palWindow(list, list.length + 1), list);
+}
+
+// The row's "why did this match" hint. A facet query has to be explained by a field OF THAT KIND:
+// answering `label:volume` with "id · expectedVolume" names the very field the facet exists to exclude.
+function whyOf(q, id) {
+  const p = engine.qParse(q);
+  const n = nodes.find(x => x.id === id);
+  const r = n && engine.scoreIndex(engine.searchIndex(n), p, 0);
+  const w = r && engine.matchWhere(n, p, r.fields);
+  return w ? w.hint : null;
+}
+unit('a label: hit is explained by a label', whyOf('label:Recalculate', FORM_ORDER), 'label · orderTotal');
+unit('a label: hit on a task caption names that element',
+  whyOf('label:approval', PROC_ORDER), 'label · Decide approval');
+unit('a desc: hit is explained by the documentation it came from',
+  whyOf('desc:Backoffice', PROC_ORDER), 'doc · approveTask');
+unit("a label: hit on the node's own label leaves the hint to the key",
+  whyOf('label:priority', DO_PRIORITY), null);
 
 // A zero-result query must still be able to suggest something (the palette's "did you mean").
 ran++;

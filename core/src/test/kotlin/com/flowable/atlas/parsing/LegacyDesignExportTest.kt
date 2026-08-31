@@ -24,6 +24,13 @@ class LegacyDesignExportTest {
     private fun wrapper(key: String, name: String, editorJson: String): String =
         """{"id": "MODEL-$key", "key": "$key", "name": "$name", "tenantId": "", "editorJson": $editorJson}"""
 
+    /** The same wrapper with `editorJson` as an escaped JSON **string** — how Design actually persists
+     *  it (`MODEL_EDITOR_JSON` is a CLOB), and the shape that lost every form component. */
+    private fun stringWrapper(key: String, name: String, editorJson: String): String {
+        val escaped = editorJson.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ")
+        return """{"id": "MODEL-$key", "key": "$key", "name": "$name", "editorJson": "$escaped"}"""
+    }
+
     private val serviceJson = wrapper(
         "legacySvc", "Legacy Service",
         """{"type": "REST", "config": {"baseUrl": "https://api.example.com"},
@@ -41,6 +48,13 @@ class LegacyDesignExportTest {
         """{"botKey": "bpmn-start-process-instance-bot", "signalName": "someProcess",
             "form": "legacyForm", "permissionGroups": ["sales"]}""",
     )
+    /** A modern form body: `rows` of `cols` of components, exactly what Design writes today. */
+    private val modernFormBody =
+        """{"rows": [{"cols": [{"id": "text1", "type": "text", "label": "One Field",
+                               "value": "{{oneField}}"}]}],
+            "metadata": {"key": "modernForm", "name": "Modern Form",
+                         "description": "Captures the one field.", "modelType": "form"}}"""
+
     // Oryx (old form editor) shape — only registration + binding harvest are possible
     private val formJson = wrapper(
         "legacyForm", "Legacy Form",
@@ -112,4 +126,34 @@ class LegacyDesignExportTest {
         assertTrue("app contains the legacy service", contains.contains("service:legacySvc"))
         assertTrue("app contains the legacy form", contains.contains("form:legacyForm"))
     }
+
+    /**
+     * A **modern** form body inside a workspace wrapper — the case the two tests above never covered,
+     * because their form is Oryx-shaped and has no components a parser can read anyway.
+     *
+     * `editorJson` is an escaped JSON *string* in a real export, and a form's components are reached by
+     * walking maps, so every field of every form came out empty: no ids, no labels, no descriptions,
+     * and nothing for ⌘K to find. Both spellings of the wrapper are checked, because an export that
+     * nests `editorJson` as an object used to be the only one that worked.
+     */
+    @Test
+    fun aModernFormInAWorkspaceExportKeepsItsFields() {
+        for ((shape, json) in listOf(
+            "editorJson as a string" to stringWrapper("modernForm", "Modern Form", modernFormBody),
+            "editorJson as an object" to wrapper("modernForm", "Modern Form", modernFormBody),
+        )) {
+            val root = tmp.newFolder("ws-" + shape.filter { it.isLetter() })
+            File(root, "form-models").mkdirs()
+            File(root, "form-models/modernForm.json").writeText(json)
+            val forms = Atlas.extract(root)["forms"] as List<*>
+            val form = forms.firstOrNull { (it as Map<*, *>)["key"] == "modernForm" } as Map<*, *>?
+            assertTrue("$shape: the form is missing entirely", form != null)
+            @Suppress("UNCHECKED_CAST")
+            val fields = form!!["fields"] as List<Map<String, Any?>>
+            assertEquals("$shape: field ids", listOf("text1"), fields.map { it["id"] })
+            assertEquals("$shape: the label the modeller typed", listOf("One Field"), fields.map { it["label"] })
+            assertEquals("$shape: the model description", "Captures the one field.", form["description"])
+        }
+    }
+
 }

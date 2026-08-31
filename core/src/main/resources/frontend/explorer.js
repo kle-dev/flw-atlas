@@ -2061,6 +2061,11 @@ function describe(n){
     if(p.length) rows.push(['Starter groups',{html:p.map(g=>vlink('group:'+g,g)).join(', ')}]); };
   // a list of names, each linked to its variable node when one exists (else plain text)
   const varList=a=>({html:(a||[]).filter(x=>x!=null&&x!=='').map(x=>vlink('variable:'+String(x).split('.')[0], x)).join(', ')});
+  // Design's model Description, before any per-type row: it is the sentence that says why the model
+  // exists, it reads the same on every type, and a panel that shows it only for apps is the reason
+  // nobody knew it was there. Types that add a `documentation` row keep it — on a process the two are
+  // different fields (Design's metadata vs. the BPMN element's own text).
+  add('Description',d.description);
   if(n.type==='process'){ addStarters(d.candidateStarterGroups); addCount('User tasks',(d.userTasks||[]).length);
     addCount('Service tasks',(d.serviceTasks||[]).length); addCount('Call activities',(d.callActivities||[]).length);
     addCount('Script tasks',(d.scriptTasks||[]).length); addCount('Decision tasks',(d.ruleTasks||[]).length);
@@ -2081,7 +2086,7 @@ function describe(n){
   else if(n.type==='form'||n.type==='page'){ addCount('Fields',(d.fields||[]).length);
     addCount('Data sources',(d.dataSources||[]).length);
     add('Outcomes',(d.outcomes||[]).map(o=>o.value).filter(Boolean).join(', ')); }
-  else if(n.type==='app'){ add('Description',d.description); add('Theme',d.theme);
+  else if(n.type==='app'){ add('Theme',d.theme);
     addCount('Variables',(d.variables||[]).length); addCount('Pages',(d.pages||[]).length);
     const ga=String(d.groupsAccess||'').split(/[,;]/).map(s=>s.trim()).filter(Boolean);
     if(ga.length) rows.push(['Groups with access',{html:ga.map(g=>vlink('group:'+g,g)).join(', ')}]); }
@@ -2171,7 +2176,8 @@ function describe(n){
     add('Signature', d.member+'('+(d.signature!=null?d.signature:'…')+')');
     add('Registered in',(d.sources||[]).join(', ')); add('Used by', (d.usedBy||[]).length+' form(s) / model(s)'); }
   else if(n.type==='external'){ add('Kind',d.flowableApi?'Flowable platform API':d.route?'In-app navigation route':d.platform?'Flowable platform bean':d.missingModel?'Missing model reference ('+(d.kind||'model')+')':d.dynamic?'Dynamic reference (expression) — expected '+(d.kind||'model'):(d.external_url?'External URL':d.kind||'external')); if(d.method&&d.method!=='(button)') add('Method',d.method); }
-  else { Object.keys(d).forEach(k=>{ const v=d[k]; if(typeof v==='string'||typeof v==='number') add(k,v); }); }
+  else { Object.keys(d).forEach(k=>{ const v=d[k];
+    if(k!=='description'&&(typeof v==='string'||typeof v==='number')) add(k,v); }); }
   return rows;
 }
 
@@ -3819,6 +3825,16 @@ const SX_ENV={TM:{}, elementNames:()=>new Map()};
 // One field per haystack, because "find everything" and "rank sensibly" pull in opposite directions:
 // the scorer weights them (see SX_FIELDS), so a name hit can never be buried by a script-body hit.
 //   name / key  — the node's own identity, also kept pre-tokenised (see hayTokens).
+//   lab         — every caption a *person* reads on screen: the node's own label, a form field's or a
+//                 data object column's label, an outcome button's caption, a permission's label, a
+//                 BPMN/CMMN element's name, a decision table's column headers. Collected by field NAME
+//                 during the walk (HAY_LAB_KEYS), so a label a parser starts emitting somewhere new is
+//                 searchable without a change here. `label:` narrows to it.
+//   desc        — the prose the modeller wrote *about* the thing: Design's model Description, BPMN /
+//                 CMMN `documentation` (model and element), a form component's description, a DMN
+//                 rule's annotation. Same collect-by-name trick (HAY_DESC_KEYS); `desc:` narrows to it.
+//                 Kept out of `text` on purpose — a sentence somebody wrote to explain a model is not
+//                 the same kind of evidence as a script body that happens to contain the word.
 //   file / type — where it lives and what it is; `type` carries Design's wording too, so `t:` works.
 //   mem         — names of things that are NOT nodes of their own (element ids, in/out parameters, form
 //                 fields, columns, permissions …). Enumerated on purpose: their shape carries meaning.
@@ -3837,6 +3853,24 @@ const HAY_SKIP=new Set([
 // The index is built in the browser and never embedded in the report, so a generous entry cap costs
 // runtime memory only — not a byte of report size. 400 silently lost the tail of big models.
 const HAY_MAX_VALUE=4000, HAY_MAX_ENTRIES=1200;
+// Field names that carry a caption / a description, wherever in a node they sit. Nested `name` is
+// deliberately NOT a label key: on a column, a parameter or an operation it is the technical
+// identifier, and `mem` already carries those — a BPMN/CMMN element's name reaches `lab` through
+// elementNames(), the one place that knows those names really are the canvas captions.
+const HAY_LAB_KEYS=new Set(['label','elementName']);
+// Node kinds whose own `label` is NOT a caption anybody wrote: a variable's identifier, an expression's
+// or a binding's source text, a string literal, a Java FQN, a method signature, a REST path, a changelog
+// file name, a worker topic, a group id. Atlas synthesised every one of them out of something else.
+// `label:` means "the words a person reads in a model", and putting these in it is what made
+// `label:octo` answer with the variable `octoCaseId` — the identifier a field binds to, not its caption.
+// Those nodes stay findable by name, key and free text, exactly as before; they are simply not labels.
+const LAB_NOT_A_CAPTION=new Set(['variable','expression','binding','string','customFunction','external',
+  'java','method','endpoint','liquibase','topic','group']);
+const HAY_DESC_KEYS=new Set(['description','documentation','annotation']);
+// Labels and descriptions get their own cap, not a share of HAY_MAX_ENTRIES: `id`/`type`/`value` fill
+// the generic bag four times faster than labels arrive, so a 500-field form would have lost the tail of
+// its captions — the half of the form a search most needs to reach.
+const HAY_MAX_NAMED=3000;
 // Field name → what to call it in the "why did this match" hint.
 const HAY_LABEL={
   script:'script', documentation:'doc', condition:'condition', conditions:'condition',
@@ -3844,6 +3878,7 @@ const HAY_LABEL={
   candidateGroups:'groups', candidateUsers:'users', assignee:'assignee', resultVariable:'result var',
   inputs:'DMN input', outputs:'DMN output', rules:'DMN rule', inputExpressions:'DMN input',
   annotation:'DMN annotation', fields:'field', topic:'topic', url:'url', tableName:'table',
+  elementName:'element', label:'label', description:'description',
 };
 // ---------- query parsing + scoring ----------
 // The old matcher did `haystack.indexOf(wholeQuery)`, which made word order and adjacency mandatory:
@@ -3874,12 +3909,13 @@ function hayTokens(s){
   return out;
 }
 
-const SX_FACET_KEYS={t:'type',type:'type',file:'file',key:'key',in:'section',id:'id'};
+const SX_FACET_KEYS={t:'type',type:'type',file:'file',key:'key',in:'section',id:'id',
+  label:'lab',desc:'desc',description:'desc',doc:'desc'};
 /**
  * Parse a raw query into `{terms, phrases, facets}`.
  *  - terms   — order-independent, ALL must match somewhere (AND)
  *  - phrases — `"…"` quoted, must match contiguously
- *  - facets  — inline `t:`/`type:`/`file:`/`key:`/`in:`/`id:` hard filters
+ *  - facets  — inline `t:`/`type:`/`file:`/`key:`/`in:`/`id:`/`label:`/`desc:` hard filters
  */
 function qParse(q){
   const raw=String(q==null?'':q).trim();
@@ -3892,7 +3928,13 @@ function qParse(q){
     if(p) parsed.phrases.push(p);
     return ' ';
   });
-  rest=rest.replace(/(^|\s)(t|type|file|key|in|id):(\S+)/gi,(m,pre,k,v)=>{
+  // `\s*` after the colon because `desc: approval` is what people type first, and without it the query
+  // did not merely miss — it read as the two terms `desc` and `approval` and answered with whichever
+  // node happened to have the word "desc" in a script body. A silent wrong hit is worse than none.
+  // Longest alternative first so the intent is readable; the engine would backtrack into it either way.
+  // Case is irrelevant on both halves: the prefix through /i, the value through toLowerCase() below
+  // against haystacks that are lowercased when the index is built.
+  rest=rest.replace(/(^|\s)(description|label|type|desc|file|doc|key|in|id|t):\s*(\S+)/gi,(m,pre,k,v)=>{
     parsed.facets[SX_FACET_KEYS[k.toLowerCase()]]=v.toLowerCase();
     return ' ';
   });
@@ -3918,10 +3960,18 @@ const SX_KIND_BOOST={
   group:110, endpoint:100, java:90, liquibase:90, method:70, variable:60,
   customFunction:40, expression:10, binding:10, string:0, external:0,
 };
+// Ordered by weight, descending: the phrase loop in scoreIndex() takes the first field that contains
+// the phrase, so the order is part of the ranking, not cosmetic.
 const SX_FIELDS=[
   {f:'name', ex:1000, pre:700, sub:500},
   {f:'key',  ex:900,  pre:650, sub:450},
+  // A caption sits between the node's own name and its internal members: it is what somebody typed for
+  // a human to read, so "Kundennummer" finding the form that shows it outranks an element id match.
+  {f:'lab',  ex:600,  pre:430, sub:300},
   {f:'mem',  ex:400,  pre:300, sub:200},
+  // Below members, above free text: a description explains the thing, but the words in it are prose —
+  // an incidental "customer" in a sentence must not outrank a parameter actually named customer.
+  {f:'desc', ex:280,  pre:230, sub:180},
   {f:'file', ex:170,  pre:150, sub:120},
   {f:'type', ex:150,  pre:140, sub:110},
   {f:'text', ex:90,   pre:90,  sub:60},
@@ -3959,6 +4009,8 @@ function scoreIndex(sx, parsed, indeg){
   if(fc.type && (sx.type||'').indexOf(fc.type)<0) return null;
   if(fc.file && (sx.file||'').indexOf(fc.file)<0) return null;
   if(fc.key && (sx.key||'').indexOf(fc.key)<0) return null;
+  if(fc.lab && (sx.lab||'').indexOf(fc.lab)<0) return null;
+  if(fc.desc && (sx.desc||'').indexOf(fc.desc)<0) return null;
   if(fc.id && (sx.ids||'').indexOf(fc.id)<0) return null;
   if(fc.section && (sx.section||'').toLowerCase().indexOf(fc.section)<0) return null;
   let score=0;
@@ -3982,6 +4034,10 @@ function scoreIndex(sx, parsed, indeg){
     // The whole query, in order, inside the name — "shopping list template" should still beat a node
     // that merely contains those three words in three unrelated places.
     if(sx.name && sx.name.indexOf(parsed.terms.join(' '))>=0) score+=400;
+    // A caption that reads exactly like what was typed is nearly as strong a signal as the node's own
+    // name: someone who types "OCTO ID" in full means the form that displays those words, not the two
+    // words happening to land in the same haystack. Below the name bonus, and never both.
+    else if(sx.lab && sx.lab.indexOf(parsed.terms.join(' '))>=0) score+=300;
     if(Object.keys(fields).length===1) score+=150;
   }
   if(sx.name){
@@ -4051,26 +4107,37 @@ function hlite(text, parsed){
  * element id, which is what lets a hit jump straight to the right row.
  * Strings only: numbers and booleans ("true", counts) match everything and mean nothing here.
  */
-function walkHay(v, key, owner, out){
-  if(out.length>=HAY_MAX_ENTRIES || v==null) return;
+function walkHay(v, key, owner, out, lab, desc){
+  if(v==null) return;
+  // Three bags, three caps: the walk may only give up once ALL of them are full. Returning at the
+  // generic cap alone is what would starve `lab`/`desc` on a large model (see HAY_MAX_NAMED).
+  if(out.length>=HAY_MAX_ENTRIES && lab.length>=HAY_MAX_NAMED && desc.length>=HAY_MAX_NAMED) return;
   if(typeof v==='string'){
-    if(v) out.push({k:key, id:owner, v:v.length>HAY_MAX_VALUE?v.slice(0,HAY_MAX_VALUE):v});
+    if(!v) return;
+    const t=v.length>HAY_MAX_VALUE?v.slice(0,HAY_MAX_VALUE):v;
+    if(out.length<HAY_MAX_ENTRIES) out.push({k:key, id:owner, v:t});
+    // A caption/description stays in `out` as well: that is what lets matchWhere() explain the hit
+    // ("label · amount"), and `text` is a superset by design.
+    if(HAY_LAB_KEYS.has(key)){ if(lab.length<HAY_MAX_NAMED) lab.push(t); }
+    else if(HAY_DESC_KEYS.has(key) && desc.length<HAY_MAX_NAMED) desc.push(t);
     return;
   }
-  if(Array.isArray(v)){ v.forEach(x=>walkHay(x, key, owner, out)); return; }
+  if(Array.isArray(v)){ v.forEach(x=>walkHay(x, key, owner, out, lab, desc)); return; }
   if(typeof v!=='object') return;
   // the element this sub-object belongs to — `where` is how a form/page REST call names its button
   const own=v.id||v.name||v.key||v.where||owner;
-  for(const k in v){ if(!HAY_SKIP.has(k)) walkHay(v[k], k, own, out); }
+  for(const k in v){ if(!HAY_SKIP.has(k)) walkHay(v[k], k, own, out, lab, desc); }
 }
 function searchIndex(n){
   if(n._idx) return n._idx;                    // node data never changes at runtime — build once
   const d=n.data||{};
   let s='';
+  // Built once and reused three times below (members, `lab`, `ids`): elementNames() rebuilds its Map
+  // on every call, and this is the hot path the palette pays for on the first keystroke.
+  const els=(n.type==='process'||n.type==='case')?SX_ENV.elementNames(n):null;
   // model element ids + names (tasks, gateways, events, plan items) — an element id from the BPMN
   // XML or the diagram surfaces its model in ⌘K
-  if(n.type==='process'||n.type==='case')
-    s+=' '+[...SX_ENV.elementNames(n).entries()].map(([id,e])=>id+' '+(e.name||'')).join(' ');
+  if(els) s+=' '+[...els.entries()].map(([id,e])=>id+' '+(e.name||'')).join(' ');
   // A column's own name matters as much as its label ("customerName" is what a script writes), and the
   // referenced data object is how you find the owner of a relation — both were tier-3-only before.
   if(n.type==='dataObject') s+=' '+(d.fields||[]).join(' ')+' '+(d.serviceTableName||'')+' '+
@@ -4105,14 +4172,29 @@ function searchIndex(n){
   // declares. Kept apart from the member haystack on purpose: `id:save` must not match a *caption* that
   // reads "Save", which is exactly the confusion that made looking a button up by its id hopeless.
   const ids=[n.key];
-  if(n.type==='process'||n.type==='case') ids.push(...SX_ENV.elementNames(n).keys());
+  if(els) ids.push(...els.keys());
   if(n.type==='form'||n.type==='page'){
     (d.fields||[]).forEach(f=>ids.push(f.id));
     (d.restCalls||[]).forEach(r=>ids.push(r.where));
   }
   (d.ioParameters||[]).forEach(p=>ids.push(p.element));
-  const entries=[];
-  for(const k in d){ if(!HAY_SKIP.has(k)) walkHay(d[k], k, null, entries); }
+  const entries=[], labs=[], descs=[];
+  for(const k in d){ if(!HAY_SKIP.has(k)) walkHay(d[k], k, null, entries, labs, descs); }
+  // The label people mean first is the node's own, and the walk only ever sees node.data — unless this
+  // kind's label is an identifier rather than a caption (see LAB_NOT_A_CAPTION).
+  if(n.label!=null&&n.label!==''&&!LAB_NOT_A_CAPTION.has(n.type)) labs.push(String(n.label));
+  // A BPMN/CMMN element's `name` IS its caption on the canvas — the one context in which a nested
+  // `name` is a label rather than an identifier, which is why it is added here and not by key.
+  if(els) for(const e of els.values()) if(e.name) labs.push(String(e.name));
+  // A decision table's input/output prefer their label over the expression behind them (see the DMN
+  // parser), so the column headers of a decision are captions too.
+  if(n.type==='decision')
+    (d.inputs||[]).concat(d.outputs||[]).forEach(x=>{ if(typeof x==='string'&&x) labs.push(x); });
+  // Tokenised from the ORIGINAL case: hayTokens() splits at camelCase humps, which a pre-lowercased
+  // join would have thrown away.
+  // Joined by a newline, not a space: the phrase test in scoreIndex() must not be able to match across
+  // two unrelated captions ("Second field" + "One human task" would otherwise contain "field one").
+  const labRaw=labs.join('\n'), descRaw=descs.join('\n');
   const name=String(n.label==null?'':n.label).toLowerCase();
   const key=String(n.key==null?'':n.key).toLowerCase();
   const file=String(n.file||'').toLowerCase();
@@ -4120,6 +4202,7 @@ function searchIndex(n){
   const mem=(s+' '+(d.botKey||'')).toLowerCase();
   n._idx={
     name, key, file, mem,
+    lab:labRaw.toLowerCase(), desc:descRaw.toLowerCase(),
     ids:ids.filter(x=>x!=null&&x!=='').join(' ').toLowerCase(),
     // Both the internal type and the Design wording, so `t:do`, `t:dataobject` and `t:data` all work.
     type:(n.type+' '+(tm[0]||'')).toLowerCase(),
@@ -4130,6 +4213,7 @@ function searchIndex(n){
     // ranking benefit; it is matched by substring at the lowest weight.
     nameTok:hayTokens(n.label), keyTok:hayTokens(n.key),
     fileTok:hayTokens(n.file), memTok:hayTokens(mem),
+    labTok:hayTokens(labRaw), descTok:hayTokens(descRaw),
     entries,
   };
   return n._idx;
@@ -4158,15 +4242,41 @@ function matchWhere(n,parsed,fields){
   // digging through the walked entries produced hints like a bare "key" — the field the value came from,
   // which is exactly the thing the row was already displaying.
   if(fields && (fields.name || fields.key)) return null;
-  if(fields && !fields.mem && !fields.text && !fields.file) return null;
+  // A facet-only query (`label:save`, `desc:approval`) has no term to explain the hit with, and the
+  // facet IS the reason — the same case the `id:` branch above handles. Its value joins the needles, so
+  // the walk below names the caption or the sentence that matched and hands back its element: clicking
+  // the row opens the field that reads "Save", not just the form that contains it.
+  const ffac=(parsed.facets&&parsed.facets.lab)||null, fdes=(parsed.facets&&parsed.facets.desc)||null;
+  if(fields && !fields.mem && !fields.text && !fields.file && !fields.lab && !fields.desc
+     && !ffac && !fdes) return null;
   const needles=parsed.phrases.concat(parsed.terms);
+  if(ffac) needles.push(ffac);
+  if(fdes) needles.push(fdes);
   const anyIn=s=>{ const t=String(s||'').toLowerCase(); return needles.some(nd=>t.indexOf(nd)>=0); };
   const p=((n.data||{}).ioParameters||[]).find(x=>anyIn(paramHaystack(x)));
   if(p){
     const flow=[p.source,p.target].filter(x=>x!=null&&x!=='').join(' → ');
     return {hint:p.dir+' '+flow+(p.element?' @'+p.element:''), el:p.element||''};
   }
-  const e=searchIndex(n).entries.find(x=>anyIn(x.v));
+  const ent=searchIndex(n).entries;
+  // A `label:` / `desc:` facet has to be explained by a field OF THAT KIND. The plain scan below takes
+  // the first entry that merely CONTAINS the word, which answered `label:volume` with "id ·
+  // expectedVolume" and `label:update` with "key · update" — naming the very field the facet exists to
+  // exclude, and contradicting what the reader had just typed.
+  if(ffac||fdes){
+    const keys=ffac?HAY_LAB_KEYS:HAY_DESC_KEYS;
+    const hit=ent.find(x=>keys.has(x.k)&&anyIn(x.v));
+    if(hit) return {hint:(HAY_LABEL[hit.k]||hit.k)+(hit.id?' · '+hit.id:''), el:hit.id||''};
+    // A BPMN/CMMN element's name never reaches the walked entries — it arrives through elementNames() —
+    // so a `label:` hit on a task's caption has to be looked up where it actually lives.
+    if(ffac && (n.type==='process'||n.type==='case'))
+      for(const [id,el] of SX_ENV.elementNames(n))
+        if(anyIn(el.name)) return {hint:'label · '+el.name, el:String(id)};
+    // Nothing but the node's OWN label matched, and the row is already showing that. Falling through
+    // would dig up some unrelated entry and hint the bare word "key"; the key itself is more use.
+    if(ffac && String(n.label==null?'':n.label).toLowerCase().indexOf(ffac)>=0) return null;
+  }
+  const e=ent.find(x=>anyIn(x.v));
   if(!e) return null;
   return {hint:(HAY_LABEL[e.k]||e.k)+(e.id?' · '+e.id:''), el:e.id||''};
 }
@@ -4321,6 +4431,43 @@ function pushRecent(id){
 // The old code scored everything but sliced at 60 with no way to reach the rest — a genuine hit could
 // sit at rank 61 and simply never appear.
 const PAL_LIMIT=400, PAL_PAGE=60;
+// Rows every section with hits is guaranteed on the visible page. See palWindow().
+/**
+ * The rows to render out of `list` (already best-first): the page is shared out across the sections
+ * round-robin, taking each one's next-best hit in turn, rather than cut off by score.
+ *
+ * Sections render in a fixed order precisely so that a Java class cannot push the whole Models group
+ * below Code — but taking the top `shown` BY SCORE undid exactly that, and the two attempts before this
+ * one are worth recording. A score cut left the Models group undrawn entirely. Guaranteeing each section
+ * three rows fixed that and turned the floor into a ceiling: with 190 hits over ten forms, Models got its
+ * three and the rest of the page went to higher-scoring nodes, so ten forms all carrying the searched
+ * caption were shown as three. A floor was never what was needed; a fair share is.
+ *
+ * A section that runs out of hits leaves its share to the others, so a result set that really is all one
+ * kind still fills the page with it. Order inside a section is untouched, and the best hit overall is
+ * always in — it is the first thing taken in the first round.
+ */
+function palWindow(list, shown){
+  if(list.length<=shown) return list;
+  const queues=new Map();
+  for(let i=0;i<list.length;i++){
+    const sec=searchIndex(list[i].n).section;
+    if(!queues.has(sec)) queues.set(sec, []);
+    queues.get(sec).push(i);
+  }
+  const keep=new Set();
+  let served=true;
+  while(keep.size<shown && served){
+    served=false;
+    for(const q of queues.values()){
+      if(keep.size>=shown) break;
+      if(!q.length) continue;
+      keep.add(q.shift());
+      served=true;
+    }
+  }
+  return list.filter((_,i)=>keep.has(i));
+}
 let palShown=PAL_PAGE;        // grows via the "show more" button; reset on every query change
 let palFacet='';              // active section chip ('' = all) — Models / Integration / Code / …
 let palType='';               // active category chip within that section ('' = all of it)
@@ -4419,10 +4566,11 @@ function palEmptyHtml(parsed, hidden){
     (sug.length?'<div class="pal-sug">Did you mean '+sug.map(n=>
       '<button class="pal-link" type="button" data-sug="'+esc(n.id)+'">'+esc(n.label)+'</button>'
       ).join(' · ')+'</div>':'')+
-    '<div class="pal-tip">Every word has to match, in any order. Searched: names, keys, files, element '+
-    'ids, script bodies, documentation, conditions, endpoints, groups. Narrow with <code>t:</code> '+
-    '<code>file:</code> <code>key:</code> <code>in:</code>; quote <code>"…"</code> for an exact phrase.'+
-    '</div></div>';
+    '<div class="pal-tip">Every word has to match, in any order. Searched: names, keys, labels and '+
+    'descriptions, files, element ids, script bodies, documentation, conditions, endpoints, groups. '+
+    'Narrow with <code>t:</code> <code>file:</code> <code>key:</code> <code>in:</code> '+
+    '<code>label:</code> <code>desc:</code> <code>id:</code>; quote <code>"…"</code> for an exact '+
+    'phrase.</div></div>';
 }
 function palRender(){
   const raw=palq.value.trim();
@@ -4462,7 +4610,7 @@ function palRender(){
     if(list.length>PAL_LIMIT) list=list.slice(0, PAL_LIMIT);   // the count line says when this bites
     dropped=Math.max(0, list.length-palShown);
     const bySec={};
-    list.slice(0, palShown).forEach(hit=>{
+    palWindow(list, palShown).forEach(hit=>{
       const s=searchIndex(hit.n).section;
       (bySec[s]=bySec[s]||[]).push(hit);
     });

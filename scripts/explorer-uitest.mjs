@@ -303,6 +303,31 @@ const probe = `<script>
        row?'row not marked':'no row');
   });
 
+  // A caption and the prose behind it are searchable in their own right, and the row has to say which
+  // one matched — otherwise a hit on a description that is not on screen looks arbitrary.
+  steps.push(()=>{ openPalette(); type('label:Recalculate'); });
+  steps.push(()=>{
+    ok('a label: query finds the form that shows that caption', rows().length>0,
+       'no hits for label:Recalculate');
+    ok('and the row explains itself with the label it matched',
+       /label/i.test(rows()[0].textContent), rows()[0].textContent);
+  });
+  steps.push(()=>{ type('desc:Backoffice'); });
+  steps.push(()=>{
+    ok('a desc: query finds the element documentation', rows().length>0, 'no hits for desc:Backoffice');
+    ok('and it finds the process, not the group of the same name',
+       /Order Process/.test(rows()[0].textContent), rows()[0].textContent);
+    key('Escape');
+  });
+
+  // Design's model Description used to render for apps only, because each type spelled the row itself.
+  steps.push(()=>{ closeOtherTabs(); location.hash=enc('app:demoApp'); });
+  steps.push(()=>{
+    const txt=document.getElementById('detail').textContent;
+    ok('the detail panel shows the model Description', /Description/.test(txt)&&/Miniature fixture app/.test(txt),
+       txt.slice(0,140));
+  });
+
   // --- the unused-variables report (#/variables) ---
   // The verdict is computed in :core and only stamped onto the nodes, so a broken payload allowlist
   // renders an empty page with correct-looking counts and no error anywhere. Assert the rows exist and

@@ -101,17 +101,52 @@ instead.
 
 - **Every term must match, in any order.** `order form demo` finds the same thing as `demo form order`.
 - **Quoted phrases** are a hard, contiguous requirement.
-- **Facets** narrow inline: `t:` / `type:`, `file:`, `key:`, `in:`, `id:`.
+- **Facets** narrow inline: `t:` / `type:`, `file:`, `key:`, `in:`, `id:`, `label:`, `desc:` (spelled
+  `description:` or `doc:` if you prefer). A space after the colon is fine — `desc: approval` is the same
+  query as `desc:approval` — and nothing about a search is case-sensitive: not the terms, not the facet
+  name, not its value.
+- **A facet is a filter, not a hint.** You have named the field, so the answer is everything that has the
+  thing and nothing that merely mentions it: `label:` matches captions only, never the identifier of a
+  variable, the text of an expression or binding, a Java class name or a REST path. Those stay findable
+  by name, key and free text — they are simply not labels.
 - **`id:` looks an element up by its identifier** — `id:save-button` finds the model that declares it and
   opens that element's row. It matches identifiers only, never a caption that happens to read *Save*.
+- **`label:` is the other half of that pair** — every caption a person reads is searchable and ranked as
+  one: a form field's label, a data object column's label, an outcome button's caption, a permission's
+  label, a BPMN/CMMN element's name, a decision table's column headers, and a model's own name.
+  `label:save` finds the button that reads *Save*, whatever its id is — and, like `id:`, opens that
+  element's row rather than leaving you on the model.
+- **`desc:` searches the prose somebody wrote about the thing** — Design's model **Description**, BPMN
+  and CMMN `documentation` (on the model *and* on each element), a form component's description, a DMN
+  rule's annotation. `desc:approval` finds the task documented as needing one. A plain query searches
+  these too, so you do not have to know the facet exists.
 - **Word boundaries are understood** — `demo d05`, `demo-d05` and `demo_d05` are the same query, because
   tokens split at camelCase and letter↔digit boundaries as well as at punctuation.
 - **It searches inside models**, not just their names: element ids, in/out parameters, form fields,
-  columns, permissions, bot keys, agent tools, REST endpoints, and a deep walk over each node's data.
-- **It tells you why a row matched**, and on zero results it suggests the nearest real names.
+  columns, permissions, bot keys, agent tools, REST endpoints, labels, descriptions, and a deep walk
+  over each node's data.
+- **It tells you why a row matched** — and for a facet, with a field of that kind: `label:` is answered
+  by the caption that matched, never by the id beside it. On zero results it suggests the nearest real
+  names.
+
+Every one of these works in the live demo linked above. `desc:approval` lands on the process documented
+as needing one *and* on the DMN rule that says so; `label:volume` on the form field captioned *Expected
+monthly volume*; `label:courier` on the task named *Book courier*; `desc:cite` on the knowledge base the
+onboarding assistant may quote from.
 
 Results are ranked — an exact name beats a prefix beats a substring, a model outranks a string literal,
-and a heavily-referenced node outranks an isolated one. Facet chips appear in two tiers, section first,
+and a heavily-referenced node outranks an isolated one. Labels rank just under the node's own name and
+key, descriptions above the free-text walk: a caption somebody typed for a reader counts for more than
+the same word occurring in a script body, and a caption that reads like the whole query counts for
+nearly as much as the node's own name.
+
+Results group by section in a fixed order, and **the page is shared out across the sections** rather
+than cut off by score. That matters more than it sounds: searching for a form field's caption also
+matches the variable and the `{{binding}}` Atlas derived from that same field, and those score higher,
+because the words sit in their own *name* where the form carries them in a label. Ten forms and eighty
+derived nodes is an ordinary result set, and a page filled by score alone is all derived nodes. A
+section that runs out of hits leaves its share to the others, so a result that really is all one kind
+still fills the page with it. Facet chips appear in two tiers, section first,
 then category. An empty query shows your eight most recent selections.
 
 The list filter inside a category uses the same engine, and tells you how many matches exist *outside*

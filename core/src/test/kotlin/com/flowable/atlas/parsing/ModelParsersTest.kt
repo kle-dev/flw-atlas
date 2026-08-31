@@ -2,6 +2,7 @@ package com.flowable.atlas.parsing
 
 import com.flowable.atlas.graph.Ctx
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -104,4 +105,56 @@ class ModelParsersTest {
         assertTrue(Triple("contains", "model:bpmn", "p1") in refs(ctx))
         assertEquals(listOf("g1"), ctx.access[0]["groups"])
     }
+
+    @Test
+    fun modelDescriptionSurvivesEveryParser() {
+        // Design keeps a Description on the model, and it is usually the only sentence in the file that
+        // says why the model exists. Each parser builds its own result map, so each one dropped it and
+        // the explorer could search everything about a model except that.
+        val d = "Why this model exists"
+        fun descOf(parsed: Map<String, Any?>) = parsed["description"]
+        assertEquals(d, descOf(ModelParsers.parseService(
+            """{"key": "s1", "name": "S", "description": "$d"}""".toByteArray(), Ctx(), "s.service")))
+        assertEquals(d, descOf(ModelParsers.parseAgent(
+            """{"key": "a1", "name": "A", "description": "$d"}""".toByteArray(), Ctx(), "a.agent")))
+        assertEquals(d, descOf(ModelParsers.parseAction(
+            """{"key": "ac1", "name": "Ac", "description": "$d"}""".toByteArray(), Ctx(), "ac.action")))
+        assertEquals(d, descOf(ModelParsers.parseChannel(
+            """{"key": "c1", "name": "C", "description": "$d"}""".toByteArray(), Ctx(), "c.channel")))
+        assertEquals(d, descOf(ModelParsers.parseEvent(
+            """{"key": "e1", "name": "E", "description": "$d"}""".toByteArray(), Ctx(), "e.event")))
+        assertEquals(d, descOf(ModelParsers.parsePolicy(
+            """{"key": "p1", "name": "P", "description": "$d"}""".toByteArray(), Ctx(), "p.policy")))
+        assertEquals(d, descOf(ModelParsers.parseDictionary(
+            """{"key": "dd1", "name": "DD", "description": "$d"}""".toByteArray(), Ctx(), "dd.dictionary")))
+        assertEquals(d, descOf(ModelParsers.parseDataObject(
+            """{"key": "do1", "name": "DO", "description": "$d"}""".toByteArray(), Ctx(), "do.data")))
+        assertEquals(d, descOf(ModelParsers.parseGeneric(
+            """{"key": "q1", "name": "Q", "description": "$d"}""".toByteArray(), Ctx(), "q.query", "query")))
+        // A form/page keeps its key and name in a `metadata` header, so look there as well as at the
+        // top level — a deployment `.form` and a Design export do not agree on which one it is.
+        assertEquals(d, descOf(ModelParsers.parseForm(
+            """{"metadata": {"key": "f1", "name": "F", "description": "$d"}}""".toByteArray(), Ctx(), "f.form")))
+        assertEquals(d, descOf(ModelParsers.parseForm(
+            """{"metadata": {"key": "f1", "name": "F"}, "description": "$d"}""".toByteArray(), Ctx(), "f.form")))
+        // A DMN decision carries it as a child element. `<description>` inside a `<rule>` is the row
+        // annotation and must not be mistaken for the table's own description.
+        val dmn = """<definitions>
+                       <decision id="d1" name="D">
+                         <description>$d</description>
+                         <decisionTable><rule><description>row note</description></rule></decisionTable>
+                       </decision>
+                     </definitions>"""
+        val dec = ModelParsers.parseDmn(dmn.toByteArray(), Ctx(), "d.dmn")[0]
+        assertEquals(d, descOf(dec))
+    }
+
+    @Test
+    fun aModelWithoutADescriptionGetsNoDescriptionKey() {
+        // Not a `null` value: a key on every model of every project is a line of noise in the goldens
+        // and a byte on every node of the explorer payload.
+        val info = ModelParsers.parseService("""{"key": "s1", "name": "S"}""".toByteArray(), Ctx(), "s.service")
+        assertFalse("empty description must not be written at all", info.containsKey("description"))
+    }
+
 }

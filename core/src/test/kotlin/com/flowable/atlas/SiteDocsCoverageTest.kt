@@ -88,6 +88,17 @@ class SiteDocsCoverageTest {
     }
 
     @Test
+    fun everySearchFacetIsDocumented() {
+        // The inline `t:` / `key:` / `label:` prefixes are the one part of the search a reader cannot
+        // discover by typing, so the page has to list all of them — aliases included.
+        val js = source("core/src/main/resources/frontend/explorer.js")
+        val block = Regex("const SX_FACET_KEYS=\\{([^}]*)\\}").find(js)?.groupValues?.get(1)
+        assertTrue("SX_FACET_KEYS not found in explorer.js — did the search facets move?", block != null)
+        val prefixes = Regex("(\\w+):'").findAll(block!!).map { it.groupValues[1] + ":" }.toSortedSet()
+        assertDocumented("search facet prefix(es)", "explorer", prefixes)
+    }
+
+    @Test
     fun everyInspectionIsDocumented() {
         val xml = source("idea-plugin/src/main/resources/META-INF/plugin.xml")
         val names = Regex("displayName=\"([^\"]+)\"").findAll(xml)

@@ -140,6 +140,54 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.18.1</h3>
+        <ul>
+          <li><b>Labels and descriptions are searchable, and ranked as what they are</b> — a form field's
+              label, a data object column's label, an outcome button's caption, a permission's label, a
+              BPMN/CMMN element's name and a decision table's column headers are one ranked field
+              (<code>label:</code>), just under the node's own name; the prose somebody wrote <i>about</i> a
+              thing is another (<code>desc:</code>, also spelled <code>description:</code> /
+              <code>doc:</code>) — Design's model <b>Description</b>, <code>documentation</code> on a
+              process/case <i>and</i> on each of its elements, a form component's description, a DMN rule's
+              annotation. Both were reachable only through the free-text walk before, at the same weight as
+              a script body, so searching for a caption a user reads on screen ranked below any script that
+              happened to mention the word. Both are collected by field <i>name</i> during the walk, so a
+              label a parser starts emitting somewhere new is searchable without a change to the
+              engine.</li>
+          <li><b>A facet is a filter: it answers with all of them, and with nothing else</b> — you have
+              named the field, so <code>label:</code> matches captions only. The display name of a variable,
+              an expression, a binding, a string literal, a Java class, a method, a REST endpoint, a
+              changelog, a worker topic or a group is an identifier Atlas synthesised out of something else,
+              not a caption anybody wrote; those stay findable by name, key and free text, but they are not
+              labels. A space after the colon is fine — <code>desc: approval</code> is the same query as
+              <code>desc:approval</code> — and nothing about a query is case-sensitive: not the terms, not
+              the facet name, not its value. The row says <i>why</i> it matched with a field of the kind you
+              asked for, and <code>label:save</code> opens the field that reads "Save" rather than leaving
+              you on the form.</li>
+          <li><b>Design's model Description is no longer thrown away</b> — every parser built its own record
+              and only the app parser kept the <code>description</code> the modeller wrote, so for a
+              process, case, form, page, service, data object, action, agent, channel, event, dictionary,
+              policy or decision it never reached the report: not shown, not searchable. It is carried
+              through now and shown at the top of the detail panel for every model type that has one.</li>
+          <li><b>A form in a Design workspace export has its fields</b> — Design persists a model's body as
+              an escaped JSON <i>string</i> (<code>editorJson</code>), and a form's components are reached
+              by walking maps, so the string was never opened: every form and page exported that way came
+              out with an empty field list. No ids, no labels, no descriptions, no outcomes. A
+              <code>.form</code> from an app zip or a deployment bar was never affected, and neither was an
+              export that happens to nest <code>editorJson</code> as an object, which is why it survived
+              this long. The model's own metadata header — including its description — is kept rather than
+              overwritten.</li>
+          <li><b>The result page is shared out across the sections</b> — searching for a form field's
+              caption also matches whatever else carries the word, and a page cut off purely by score could
+              fill itself with one kind and leave the group holding the answer undrawn. Every section with
+              hits now gets a share of the page, and a section that runs out leaves its share to the others,
+              so a result that really is all one kind still fills the page with it.</li>
+          <li><b><code>scripts/search-diagnose.mjs</code></b> — point it at an existing report and a query
+              and it separates the three things a search failure can be: the string never reached the
+              report, it is there but does not match, or it matches and the page does not draw it. It uses
+              the engine embedded in <i>that</i> report, so it diagnoses the version in the file rather than
+              the checkout's. Developer tool; not shipped in the plugin or the CLI.</li>
+        </ul>
         <h3>0.18.0</h3>
         <ul>
           <li><b>A form's buttons say what they do</b> — the Fields list named a button and its type, and

@@ -119,6 +119,26 @@ the version claims in the READMEs and on the getting-started page move with it.
 Cutting a release is therefore: update `CHANGELOG.md`, bump the version, `./gradlew
 :core:updateGoldens`, run `verifyPlugin`, then push a `v<version>` tag.
 
+## When a search does not find something
+
+A report carries its own copy of the search engine, so a failure has three possible causes and they need
+different fixes. `search-diagnose.mjs` tells them apart against an existing report, using **that
+report's** engine and data rather than the checkout's:
+
+```bash
+node scripts/search-diagnose.mjs <project>.explorer.html "the query"
+```
+
+It prints, in order: which generator wrote the report; whether the string is in any node's data at all
+(if not, it is an extraction problem and the search can do nothing); how the query parsed and how many
+nodes it matched, naming any node that carries the string in the field the query asked for and still
+does not match; and finally which rows the first page actually draws, grouped as the palette groups
+them, naming any matching node the page leaves out.
+
+Reach for it **before** theorising. Reproducing a reported search failure from a hand-built fixture cost
+four releases once, three of them fixing something other than the reported defect: extraction and
+matching were fine, and the row was simply never drawn.
+
 ## This site
 
 The site sources are in `site/`, and it is built by a dependency-free Node script:

@@ -12,6 +12,46 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.18.1
+
+- **Labels and descriptions are searchable, and ranked as what they are** — a form field's label, a data
+  object column's label, an outcome button's caption, a permission's label, a BPMN/CMMN element's name and
+  a decision table's column headers are one ranked field (`label:`), just under the node's own name; the
+  prose somebody wrote *about* a thing is another (`desc:`, also spelled `description:` / `doc:`) —
+  Design's model **Description**, `documentation` on a process/case *and* on each of its elements, a form
+  component's description, a DMN rule's annotation. Both were reachable only through the free-text walk
+  before, at the same weight as a script body, so searching for a caption a user reads on screen ranked
+  below any script that happened to mention the word. Both are collected by field *name* during the walk,
+  so a label a parser starts emitting somewhere new is searchable without a change to the engine.
+- **A facet is a filter: it answers with all of them, and with nothing else** — you have named the field,
+  so `label:` matches captions only. The display name of a variable, an expression, a binding, a string
+  literal, a Java class, a method, a REST endpoint, a changelog, a worker topic or a group is an
+  identifier Atlas synthesised out of something else, not a caption anybody wrote; those stay findable by
+  name, key and free text, but they are not labels. A space after the colon is fine — `desc: approval` is
+  the same query as `desc:approval` — and nothing about a query is case-sensitive: not the terms, not the
+  facet name, not its value. The row says *why* it matched with a field of the kind you asked for, and
+  `label:save` opens the field that reads "Save" rather than leaving you on the form.
+- **Design's model Description is no longer thrown away** — every parser built its own record and only the
+  app parser kept the `description` the modeller wrote, so for a process, case, form, page, service, data
+  object, action, agent, channel, event, dictionary, policy or decision it never reached the report: not
+  shown, not searchable. It is carried through now and shown at the top of the detail panel for every
+  model type that has one.
+- **A form in a Design workspace export has its fields** — Design persists a model's body as an escaped
+  JSON *string* (`editorJson`), and a form's components are reached by walking maps, so the string was
+  never opened: every form and page exported that way came out with an empty field list. No ids, no
+  labels, no descriptions, no outcomes. A `.form` from an app zip or a deployment bar was never affected,
+  and neither was an export that happens to nest `editorJson` as an object, which is why it survived this
+  long. The model's own metadata header — including its description — is kept rather than overwritten.
+- **The result page is shared out across the sections** — searching for a form field's caption also
+  matches whatever else carries the word, and a page cut off purely by score could fill itself with one
+  kind and leave the group holding the answer undrawn. Every section with hits now gets a share of the
+  page, and a section that runs out leaves its share to the others, so a result that really is all one
+  kind still fills the page with it.
+- **`scripts/search-diagnose.mjs`** — point it at an existing report and a query and it separates the three
+  things a search failure can be: the string never reached the report, it is there but does not match, or
+  it matches and the page does not draw it. It uses the engine embedded in *that* report, so it diagnoses
+  the version in the file rather than the checkout's. Developer tool; not shipped in the plugin or the CLI.
+
 ## 0.18.0
 
 - **A form's buttons say what they do** — the Fields list named a button and its type, and stopped there.

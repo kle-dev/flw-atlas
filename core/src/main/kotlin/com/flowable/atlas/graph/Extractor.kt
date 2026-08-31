@@ -165,12 +165,27 @@ object Atlas {
             val oryx = body == null || body.containsKey("childShapes") || body.containsKey("stencil")
             val doc = LinkedHashMap<String, Any?>()
             if (mtype == "form" || mtype == "page" || (oryx && mtype == "app")) {
-                // keep the whole wrapper (the expression harvest still sees every {{…}} in editorJson)
-                // and add the modern metadata header the form parser registers models from
+                // The wrapper first: it carries the model's name, and keeping it means the raw
+                // ${…}/{{…}} harvest still sees an Oryx body that no parser can structurally read.
                 doc.putAll(wrapper)
-                doc["metadata"] = linkedMapOf(
-                    "key" to key, "name" to wrapper["name"], "modelType" to mtype,
-                )
+                // Then the PARSED body on top, with the now-redundant `editorJson` dropped. Design
+                // persists `editorJson` as an escaped JSON *string*, and a form's components are reached
+                // by walking maps (parseForm also reads `outcomes` / `outcomevariablename` at the top
+                // level) — so a modern-shaped form or page in a Design workspace export produced a node
+                // with no fields at all: no ids, no labels, no descriptions, nothing to search. Dropping
+                // `editorJson` is what stops the walk from finding every component a second time.
+                // Left alone for an Oryx body, where the merge would add nothing a parser can use.
+                if (body != null && !oryx) {
+                    doc.putAll(body)
+                    doc.remove("editorJson")
+                }
+                // A modern body brings its own metadata header — including the model's description — so
+                // build on it rather than replacing it; only the identity is the wrapper's to state.
+                val bodyMeta = Dyn.mapOrNull(doc["metadata"])?.toMutableMap() ?: LinkedHashMap()
+                bodyMeta["key"] = key
+                bodyMeta["modelType"] = mtype
+                if (truthyStr(wrapper["name"])) bodyMeta["name"] = wrapper["name"]
+                doc["metadata"] = bodyMeta
             } else if (oryx) {
                 return  // an Oryx body for a non-form type — nothing a parser could read
             } else {

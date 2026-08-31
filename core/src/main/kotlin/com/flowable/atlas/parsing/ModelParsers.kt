@@ -100,6 +100,30 @@ object ModelParsers {
     @Suppress("UNCHECKED_CAST")
     private fun objOf(v: Any?): Map<String, Any?>? = v as? Map<String, Any?>
 
+    /**
+     * Carry Design's model **Description** into the parsed record.
+     *
+     * Design keeps a Description on the model itself, beside its key and name — usually the only
+     * sentence in a model that says *why* it exists. Every parser builds its own result map, so every
+     * one of them dropped it: the explorer could render it for apps and could find it nowhere. Called
+     * on the way out of a parser rather than spelled into eleven map literals, so a parser added later
+     * inherits it by calling one function.
+     *
+     * Written only when the model has one — a `"description": null` on every model of every project is
+     * noise in the goldens and a byte on every node of the explorer payload. [from] is tried in order,
+     * because a form/page keeps its metadata in a `metadata` header rather than at the top level.
+     */
+    private fun withDesc(
+        info: MutableMap<String, Any?>,
+        vararg from: Map<String, Any?>,
+    ): MutableMap<String, Any?> {
+        for (src in from) if (truthy(src["description"])) {
+            info["description"] = src["description"]
+            break
+        }
+        return info
+    }
+
     private fun listOfObjs(v: Any?): List<Map<String, Any?>> =
         (v as? List<*>).orEmpty().mapNotNull { objOf(it) }
 
@@ -115,6 +139,9 @@ object ModelParsers {
             val info = linkedMapOf<String, Any?>(
                 "key" to key, "name" to dec.attr("name"), "file" to ffile,
             )
+            // The decision's own child element — `textOfDescendant` would have found the first rule's
+            // description instead, which is the annotation and belongs to the row, not the table.
+            dec.childText("description")?.let { info["description"] = it }
             val t = dec.findDescendant("decisionTable")
             if (t != null) {
                 info["hitPolicy"] = t.attr("hitPolicy") ?: "UNIQUE"
@@ -197,11 +224,11 @@ object ModelParsers {
             ctx.addRef(doc["key"], "event", ffile, "typed-by-dictionary", "dataDictionary",
                 objOf(p["extensionProperties"])?.get("dataDictionaryModelKey"))
         }
-        return linkedMapOf(
+        return withDesc(linkedMapOf(
             "key" to doc["key"], "name" to doc["name"], "file" to ffile,
             "correlation" to correlation,
             "payload" to payload.map { it["name"] },
-        )
+        ), doc)
     }
 
     /** `.service` — connector metadata, column mappings and operations; records REST calls in [Ctx]. */
@@ -219,6 +246,7 @@ object ModelParsers {
             "tableName" to doc["tableName"], "referencedLiquibaseModelKey" to doc["referencedLiquibaseModelKey"],
             "referenceKey" to doc["referenceKey"], "columns" to columns, "operations" to operations,
         )
+        withDesc(info, doc)
         // Cross-model references (parity with the platform's ServiceModelReferenceExtractor):
         // referenceKey → data object; typeReference.modelKey → data dictionary (output and
         // per-operation input/output parameters); operation body templates → template model;
@@ -294,10 +322,10 @@ object ModelParsers {
             ctx.addAccess(doc["key"], "securityPolicy", "policy", pk?.toString() ?: "permission",
                 roles.joinToString(","))
         }
-        return linkedMapOf(
+        return withDesc(linkedMapOf(
             "key" to doc["key"], "name" to doc["name"], "file" to ffile,
             "type" to doc["type"], "permissions" to perms,
-        )
+        ), doc)
     }
 
     /** `.app` — the app's metadata, variables, pages and child-model list; records access + contains. */
@@ -348,6 +376,7 @@ object ModelParsers {
             "fields" to fields, "outcomes" to outcomes, "dataSources" to dataSources, "subforms" to subforms,
             "ioParameters" to ioParameters, "restCalls" to restCalls,
         )
+        withDesc(info, doc, meta)
         for (oc in listOfObjs(doc["outcomes"])) {
             outcomes.add(linkedMapOf("value" to oc["value"], "label" to oc["label"]))
             ctx.addRef(key, mtype, ffile, "outcome-form", "form", oc["outcomeFormKey"])
@@ -723,6 +752,7 @@ object ModelParsers {
             "aiVendor" to ms["aiVendor"], "modelName" to ms["modelName"], "temperature" to ms["temperature"],
             "operations" to operations, "tools" to tools, "knowledgeBase" to null, "enableApiEndpoint" to doc["enableApiEndpoint"],
         )
+        withDesc(info, doc)
         fun toolRef(t: Any?) {
             val tm = objOf(t) ?: return
             if (!truthy(tm["key"])) return
@@ -794,11 +824,11 @@ object ModelParsers {
         val doc = json(data)
         val ek = objOf(doc["channelEventKeyDetection"]) ?: emptyMap()
         ctx.addRef(doc["key"], "channel", ffile, "channel-event", "event", ek["fixedValue"])
-        return linkedMapOf(
+        return withDesc(linkedMapOf(
             "key" to doc["key"], "name" to doc["name"], "file" to ffile,
             "channelType" to doc["channelType"], "type" to doc["type"],
             "topics" to doc["topics"], "destination" to doc["destination"], "eventKey" to ek,
-        )
+        ), doc)
     }
 
     /** `.action` — a bot/action model; records form/channel/signal refs + script vars. */
@@ -833,6 +863,7 @@ object ModelParsers {
             "script" to script, "scriptLanguage" to scriptInfo["language"],
             "ioParameters" to actionParams(ctx, key, doc, config, script),
         )
+        withDesc(rec, doc)
         // named scriptProblems, not problems: the action record is the node's data wholesale, and
         // node.data.problems already means "expression problems" to the explorer
         ScriptValidator.problemDicts(script, scriptInfo["language"] as? String,
@@ -885,7 +916,10 @@ object ModelParsers {
     fun parseDictionary(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
         val doc = json(data)
         val types = objOf(doc["types"]) ?: emptyMap()
-        return linkedMapOf("key" to doc["key"], "name" to doc["name"], "file" to ffile, "types" to types.keys.toList())
+        return withDesc(
+            linkedMapOf("key" to doc["key"], "name" to doc["name"], "file" to ffile, "types" to types.keys.toList()),
+            doc,
+        )
     }
 
     /** `.data` (data object / masterData) — columns, backing service/dictionary, relations, access. */
@@ -928,7 +962,7 @@ object ModelParsers {
         for (k in listOf("type", "subType", "keyField", "idField", "nameField", "supportsNameFiltering")) {
             if (doc[k] != null) out[k] = doc[k]
         }
-        return out
+        return withDesc(out, doc)
     }
 
     /** Fallback for model types without a dedicated parser (query/sequence/sla/template/…) → `others`. */
