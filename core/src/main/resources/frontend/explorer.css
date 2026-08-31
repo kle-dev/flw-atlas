@@ -354,6 +354,10 @@
   .pal-frow2 .pchip{font-size:var(--text-2xs)}
   .pal-in{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint)}
   .pal-count{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint);margin-right:var(--space-1)}
+  /* The syntax row: chips that ARE query text, so they render in the query's own face. */
+  .pal-syn .pchip{font-family:var(--mono)}
+  .pal-synq{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint);margin-left:auto;cursor:default}
+  .pal-pend{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-dim)}
   /* The hit highlight. `mark` carries a UA default (yellow on black) that has to be overridden in both
      themes, and inside the selected row the tint must still separate from the accent background. */
   mark.hl{background:var(--hl-bg);color:var(--hl-ink);border-radius:var(--radius-xs);padding:0 1px}

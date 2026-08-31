@@ -187,6 +187,22 @@
               report, it is there but does not match, or it matches and the page does not draw it. It uses
               the engine embedded in <i>that</i> report, so it diagnoses the version in the file rather than
               the checkout's. Developer tool; not shipped in the plugin or the CLI.</li>
+          <li><b>A facet takes a quoted value</b> — <code>label: "Customer name"</code> is the only way to
+              ask a facet for a multi-word caption, and it fell apart: the phrase pass stripped the quotes
+              before the facet pass ran, the colon was left with nothing to bind, and the word
+              <code>label</code> degraded into a free-text term — the query answered with whichever nodes
+              happened to <i>mention</i> the word "label" instead of everything that carries the caption.
+              The quoted value now binds to its facet first, stays contiguous like any phrase, and works
+              spaced, unspaced and in any casing. (<code>"label: thing"</code> entirely inside quotes is
+              still a literal phrase.)</li>
+          <li><b>The palette teaches its own filters</b> — before you type, the bar under the input offers
+              one chip per facet (<code>label:</code>, <code>desc:</code>, <code>key:</code>,
+              <code>id:</code>, <code>type:</code>, <code>file:</code>, <code>in:</code>), each glossed with
+              what it searches; clicking one types the prefix for you. A facet typed through the colon but
+              not given a value yet says what it is waiting for instead of searching for the word
+              <code>label</code>. And every facet that binds shows as a lit chip beside the result count —
+              proof the filter took effect, a reminder it is still on, and, when clicked, the way to remove
+              it from the query.</li>
         </ul>
         <h3>0.18.0</h3>
         <ul>

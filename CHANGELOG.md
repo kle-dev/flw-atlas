@@ -51,6 +51,19 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   things a search failure can be: the string never reached the report, it is there but does not match, or
   it matches and the page does not draw it. It uses the engine embedded in *that* report, so it diagnoses
   the version in the file rather than the checkout's. Developer tool; not shipped in the plugin or the CLI.
+- **A facet takes a quoted value** — `label: "Customer name"` is the only way to ask a facet for a
+  multi-word caption, and it fell apart: the phrase pass stripped the quotes before the facet pass ran,
+  the colon was left with nothing to bind, and the word `label` degraded into a free-text term — the
+  query answered with whichever nodes happened to *mention* the word "label" instead of everything that
+  carries the caption. The quoted value now binds to its facet first, stays contiguous like any phrase,
+  and works spaced, unspaced and in any casing. (`"label: thing"` entirely inside quotes is still a
+  literal phrase.)
+- **The palette teaches its own filters** — before you type, the bar under the input offers one chip per
+  facet (`label:`, `desc:`, `key:`, `id:`, `type:`, `file:`, `in:`), each glossed with what it searches;
+  clicking one types the prefix for you. A facet typed through the colon but not given a value yet says
+  what it is waiting for instead of searching for the word `label`. And every facet that binds shows as a
+  lit chip beside the result count — proof the filter took effect, a reminder it is still on, and, when
+  clicked, the way to remove it from the query.
 
 ## 0.18.0
 

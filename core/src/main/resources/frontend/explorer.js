@@ -3912,18 +3912,30 @@ function hayTokens(s){
 const SX_FACET_KEYS={t:'type',type:'type',file:'file',key:'key',in:'section',id:'id',
   label:'lab',desc:'desc',description:'desc',doc:'desc'};
 /**
- * Parse a raw query into `{terms, phrases, facets}`.
+ * Parse a raw query into `{terms, phrases, facets, pending}`.
  *  - terms   — order-independent, ALL must match somewhere (AND)
  *  - phrases — `"…"` quoted, must match contiguously
  *  - facets  — inline `t:`/`type:`/`file:`/`key:`/`in:`/`id:`/`label:`/`desc:` hard filters
+ *  - pending — a facet typed through the colon but not given a value yet (`label:` at the end)
  */
 function qParse(q){
   const raw=String(q==null?'':q).trim();
-  const parsed={raw, terms:[], phrases:[], facets:{}, empty:true};
+  const parsed={raw, terms:[], phrases:[], facets:{}, pending:null, empty:true};
   if(!raw) return parsed;
-  // Quoted phrases come out first: inside quotes the separators are literal, so a user who really
-  // wants an adjacent match can still ask for one.
-  let rest=raw.replace(/"([^"]*)"/g,(m,inner)=>{
+  // A facet whose VALUE is quoted comes out before the phrase pass, or it never comes out at all:
+  // `label: "Mein Label"` is the only way to ask a facet for a multi-word caption, and the phrase pass
+  // used to strip the quotes first — leaving `label:` with nothing to bind, so the facet regex below
+  // gave up and the word "label" degraded into a free-text term. The query then answered with whichever
+  // nodes happened to contain both the word "label" and the phrase — three arbitrary hits instead of
+  // every node carrying that caption. The value stays contiguous, exactly as a quoted phrase would.
+  let rest=raw.replace(/(^|\s)(description|label|type|desc|file|doc|key|in|id|t):\s*"([^"]*)"/gi,(m,pre,k,inner)=>{
+    const v=inner.trim().toLowerCase();
+    if(v) parsed.facets[SX_FACET_KEYS[k.toLowerCase()]]=v;
+    return ' ';
+  });
+  // Quoted phrases next: inside quotes the separators are literal, so a user who really wants an
+  // adjacent match can still ask for one. After the facet-value pass, so `"label: foo"` stays a phrase.
+  rest=rest.replace(/"([^"]*)"/g,(m,inner)=>{
     const p=inner.trim().toLowerCase();
     if(p) parsed.phrases.push(p);
     return ' ';
@@ -3936,6 +3948,14 @@ function qParse(q){
   // against haystacks that are lowercased when the index is built.
   rest=rest.replace(/(^|\s)(description|label|type|desc|file|doc|key|in|id|t):\s*(\S+)/gi,(m,pre,k,v)=>{
     parsed.facets[SX_FACET_KEYS[k.toLowerCase()]]=v.toLowerCase();
+    return ' ';
+  });
+  // A facet with no value yet is someone mid-thought (they clicked the `label:` chip, or typed the
+  // colon and are about to type the caption). It must not fall through as the term "label" — that is
+  // the degraded query this parser exists to prevent — so it is claimed here and surfaced as `pending`
+  // for the palette to explain instead of answering.
+  rest=rest.replace(/(^|\s)(description|label|type|desc|file|doc|key|in|id|t):\s*$/i,(m,pre,k)=>{
+    parsed.pending=SX_FACET_KEYS[k.toLowerCase()];
     return ' ';
   });
   rest.split(SX_SEP).forEach(t=>{ if(t) parsed.terms.push(t.toLowerCase()); });
@@ -4491,10 +4511,40 @@ function typeLabel(t){ return (TM[t] && TM[t][0]) || t; }
  * objects, Forms, Java classes …). Both stay small this way — a flat list of every node type would be
  * 20-odd chips. The `t:` query prefix does the same thing for people who would rather type.
  */
-function palRenderFacets(counts, total, typeCounts){
+/** The typed filters, in the order the chips teach them. `k` is the canonical facet key qParse
+ *  produces, `t` what a person types (the long alias, because `t:` explains nothing), `re` every
+ *  alias that parses to it (for removal), `gloss` the two words on the chip that say what the prefix
+ *  means, and the title carries the sentence for whoever hovers. */
+const PAL_FACET_HELP=[
+  {k:'lab',    t:'label:', re:'label',                gloss:'caption',     hint:'Only captions people read — field labels, element names, column labels. Multi-word: label: "Customer name"'},
+  {k:'desc',   t:'desc:',  re:'description|desc|doc', gloss:'description', hint:'Only the prose the modeller wrote — documentation, descriptions, annotations'},
+  {k:'key',    t:'key:',   re:'key',                  gloss:'model key',   hint:'The model key'},
+  {k:'id',     t:'id:',    re:'id',                   gloss:'element id',  hint:'Element ids — a button, a task, a mapping target'},
+  {k:'type',   t:'type:',  re:'t|type',               gloss:'e.g. form',   hint:'Kind of node — type:form, type:process, type:dataObject (t: for short)'},
+  {k:'file',   t:'file:',  re:'file',                 gloss:'path',        hint:'Source file path'},
+  {k:'section',t:'in:',    re:'in',                   gloss:'section',     hint:'Result section — in:Models, in:Code'},
+];
+function palRenderFacets(counts, total, typeCounts, parsed){
   const bar=document.getElementById('palfacets');
   if(!bar) return;
-  if(!counts){ bar.hidden=true; bar.innerHTML=''; return; }
+  const pending=parsed&&parsed.pending?PAL_FACET_HELP.find(f=>f.k===parsed.pending):null;
+  if(!counts){
+    // No result set means no count row — but an empty palette is exactly when the typed filters are
+    // worth teaching, and this bar is where their live chips will appear once one is used. A chip
+    // inserts its prefix; a facet typed through the colon (`label:`) highlights its chip and says
+    // what it is waiting for, instead of degrading into a search for the word "label".
+    let s='<div class="pal-frow pal-syn">'+
+      (pending?'<span class="pal-pend">'+esc(pending.t)+' now type its value — quote a multi-word one</span>'
+              :'<span class="pal-in">narrow</span>');
+    PAL_FACET_HELP.forEach(f=>{
+      s+='<button class="pchip'+(pending===f?' on':'')+'" type="button" data-syn="'+esc(f.t)+'" title="'+esc(f.hint)+'">'+
+         esc(f.t)+'<span class="pchipn">'+esc(f.gloss)+'</span></button>';
+    });
+    if(!pending) s+='<span class="pal-synq" title="Quotes match contiguously — alone as a phrase, after a facet as its value">"…" exact</span>';
+    bar.hidden=false; bar.innerHTML=s+'</div>';
+    palWireSyntax(bar);
+    return;
+  }
   bar.hidden=false;
   const secs=SECTIONS.filter(s=>counts[s])
     .concat(Object.keys(counts).filter(s=>SECTIONS.indexOf(s)<0).sort());
@@ -4503,6 +4553,14 @@ function palRenderFacets(counts, total, typeCounts){
   let h='<div class="pal-frow"><span class="pal-count">'+total+(total===1?' result':' results')+
         (total>PAL_LIMIT?' · top '+PAL_LIMIT+' listed':'')+'</span>'+
         '<span class="vh" aria-live="polite">'+total+' results</span>';
+  // Every inline facet that bound gets a lit chip: the proof it took effect (the silent failure this
+  // bar exists to prevent), the reminder it is still on, and — clicked — the way out of it.
+  if(parsed) PAL_FACET_HELP.forEach(f=>{
+    const v=parsed.facets[f.k];
+    if(v) h+='<button class="pchip on" type="button" data-unfacet="'+esc(f.k)+'"'+
+             ' title="Remove this filter from the query">'+esc(f.t)+' '+esc(v)+'<span class="pchipn">×</span></button>';
+  });
+  if(pending) h+='<span class="pal-pend">'+esc(pending.t)+' now type its value</span>';
   if(secs.length>1){
     h+='<button class="pchip'+(palFacet?'':' on')+'" type="button" data-facet=""'+
        ' aria-pressed="'+(!palFacet)+'">All</button>';
@@ -4533,6 +4591,27 @@ function palRenderFacets(counts, total, typeCounts){
     reset();
   });
   bar.querySelectorAll('[data-type]').forEach(b=>b.onclick=()=>{ palType=b.dataset.type||''; reset(); });
+  // Removing a facet means editing the QUERY, not some side state — the chip mirrors typed text, so
+  // its × strips that text (under any of its aliases, quoted or bare) and lets a re-parse do the rest.
+  bar.querySelectorAll('[data-unfacet]').forEach(b=>b.onclick=()=>{
+    const f=PAL_FACET_HELP.find(x=>x.k===b.dataset.unfacet);
+    if(f) palq.value=palq.value
+      .replace(new RegExp('(^|\\s)(?:'+f.re+'):\\s*("[^"]*"|\\S+)','gi'),' ')
+      .replace(/\s+/g,' ').trim();
+    reset();
+  });
+}
+/** Chip → query text: append the prefix and hand the cursor back, so the value can be typed at once.
+ *  A dangling prefix already at the end is replaced, not stacked — clicking `desc:` after `label:`
+ *  means "I picked the other one", and `label: desc:` would parse `desc:` as label's value. */
+function palWireSyntax(bar){
+  bar.querySelectorAll('[data-syn]').forEach(b=>b.onclick=()=>{
+    const v=palq.value.replace(/(^|\s)(description|label|type|desc|file|doc|key|in|id|t):\s*$/i,'$1').replace(/\s+$/,'');
+    palq.value=(v?v+' ':'')+b.dataset.syn;
+    palShown=PAL_PAGE; palAuto=true; palMarksClear(); _palNote='';
+    palRender(); palq.focus();
+    palq.setSelectionRange(palq.value.length, palq.value.length);
+  });
 }
 /** Up to 5 "did you mean" nodes. Subsequence matching only, and only ever shown on a zero-result
  *  query — it is far too loose to mix into the real ranking. */
@@ -4568,9 +4647,9 @@ function palEmptyHtml(parsed, hidden){
       ).join(' · ')+'</div>':'')+
     '<div class="pal-tip">Every word has to match, in any order. Searched: names, keys, labels and '+
     'descriptions, files, element ids, script bodies, documentation, conditions, endpoints, groups. '+
-    'Narrow with <code>t:</code> <code>file:</code> <code>key:</code> <code>in:</code> '+
-    '<code>label:</code> <code>desc:</code> <code>id:</code>; quote <code>"…"</code> for an exact '+
-    'phrase.</div></div>';
+    'Narrow with <code>label:</code> <code>desc:</code> <code>key:</code> <code>id:</code> '+
+    '<code>type:</code> <code>file:</code> <code>in:</code>; quote <code>"…"</code> for an exact '+
+    'phrase — alone, or as a facet value: <code>label: "Customer name"</code>.</div></div>';
 }
 function palRender(){
   const raw=palq.value.trim();
@@ -4657,7 +4736,7 @@ function palRender(){
   if(!h) h=palEmptyHtml(parsed, hidden);
   else if(dropped) h+='<button class="pal-more" type="button" id="palmore">'+
     'Show '+Math.min(dropped, PAL_PAGE)+' more of '+dropped+' remaining</button>';
-  palRenderFacets(facetCounts, total, typeCounts);
+  palRenderFacets(facetCounts, total, typeCounts, parsed);
   palres.innerHTML=h;
   const more=document.getElementById('palmore');
   if(more) more.onclick=()=>{ palShown+=PAL_PAGE; palRender(); palq.focus(); };

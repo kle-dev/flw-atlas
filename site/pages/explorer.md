@@ -104,7 +104,13 @@ instead.
 - **Facets** narrow inline: `t:` / `type:`, `file:`, `key:`, `in:`, `id:`, `label:`, `desc:` (spelled
   `description:` or `doc:` if you prefer). A space after the colon is fine — `desc: approval` is the same
   query as `desc:approval` — and nothing about a search is case-sensitive: not the terms, not the facet
-  name, not its value.
+  name, not its value. A multi-word value goes in quotes: `label: "Customer name"` matches that caption
+  contiguously, exactly as a quoted phrase would.
+- **The empty palette teaches the facets.** Before you type, the bar under the input offers one chip per
+  facet, each glossed with what it searches — click one and the prefix is typed for you. A facet you have
+  typed through the colon but not given a value yet says what it is waiting for instead of searching for
+  the word `label`. And every facet that binds appears as a lit chip beside the result count: proof the
+  filter took effect, and — clicked — the way to remove it from the query.
 - **A facet is a filter, not a hint.** You have named the field, so the answer is everything that has the
   thing and nothing that merely mentions it: `label:` matches captions only, never the identifier of a
   variable, the text of an expression or binding, a Java class name or a REST path. Those stay findable

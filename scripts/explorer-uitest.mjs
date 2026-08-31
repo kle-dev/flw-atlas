@@ -144,6 +144,32 @@ const probe = `<script>
     ok('selection followed into the narrowed list', !!document.querySelector('.pal-item.sel'));
     closePalette();
   });
+  // --- the typed filters teach themselves: chips while empty, a lit chip once one binds ---
+  steps.push(()=>{ openPalette(); type(''); });
+  steps.push(()=>{
+    const syn=[...document.querySelectorAll('#palfacets [data-syn]')];
+    ok('an empty palette offers the filter chips', syn.length>=6, 'only '+syn.length);
+    const lab=syn.find(b=>b.dataset.syn==='label:');
+    if(lab) click(lab); else say('note','no label: chip to click');
+  });
+  steps.push(()=>{
+    ok('the label: chip filled the input', /label:$/.test(palq.value), 'value="'+palq.value+'"');
+    ok('an unvalued facet says what it waits for instead of searching for the word "label"',
+       !!document.querySelector('#palfacets .pal-pend'));
+    type('label: "Internal note"');
+  });
+  steps.push(()=>{
+    ok('a quoted facet value binds and lights its chip',
+       !!document.querySelector('#palfacets [data-unfacet="lab"]'));
+    ok('the quoted caption found its form', rows().length>0, 'no rows');
+    const off=document.querySelector('#palfacets [data-unfacet="lab"]');
+    if(off) click(off);
+  });
+  steps.push(()=>{
+    ok('removing the chip strips the facet from the query itself', palq.value.indexOf('label')<0,
+       'value="'+palq.value+'"');
+    closePalette();
+  });
   // --- the browse list: navigation and the bridge to the palette ---
   steps.push(()=>{
     const c=[...document.querySelectorAll('#nav .side-item')].find(e=>/Data objects/.test(e.textContent));

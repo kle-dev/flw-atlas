@@ -179,6 +179,15 @@ const cases = [
   // --- a facet tolerates the space and the casing people actually type ---
   { q: 'desc: backoffice',  top: PROC_ORDER,  why: 'a space after the colon is how people type it first' },
   { q: 'label: recalculate', has: FORM_ORDER, why: 'and it holds for every facet, not just desc:' },
+
+  // --- a facet value in quotes: the only way to ask a facet for a multi-word caption. The regression:
+  //     the phrase pass used to strip the quotes first, so `label: "Internal note"` degraded into the
+  //     TERM `label` plus a phrase — three arbitrary nodes mentioning the word "label" instead of the
+  //     form that carries the caption. ---
+  { q: 'label: "Internal note"', has: FORM_ORDER, why: 'quoted facet value, spaced — the query people actually type' },
+  { q: 'label:"internal note"',  has: FORM_ORDER, why: 'unspaced and lowercased, same answer' },
+  { q: 'label:"note internal"',  none: true,      why: 'a quoted facet value stays contiguous, like any phrase' },
+  { q: 'zzzznope label: "Internal note"', none: true, why: 'terms beside a quoted facet still AND in' },
   { q: 'DESC: BACKOFFICE',  top: PROC_ORDER,  why: 'prefix and value are both case-insensitive' },
   { q: 'CUSTOMER T: DATAOBJECT', has: DO_CUSTOMER, why: 'so are the terms beside it' },
 
@@ -234,6 +243,24 @@ unit('qParse accepts the desc: aliases',
   [{ desc: 'x' }, { desc: 'x' }]);
 unit('qParse keeps a quoted phrase whole',
   engine.qParse('"get outreach" key').phrases, ['get outreach']);
+// The regression this guards: the phrase pass ran first and ate the quotes, so the query below became
+// the TERM `label` plus the phrase `mein label` — answering with nodes that merely mention the word
+// "label" instead of everything carrying that caption.
+unit('qParse binds a quoted value to its facet, not to the phrase list',
+  (p => [p.terms, p.phrases, p.facets])(engine.qParse('label: "Mein Label"')),
+  [[], [], { lab: 'mein label' }]);
+unit('a quoted facet value works unspaced, for every facet',
+  [engine.qParse('desc:"two words"').facets, engine.qParse('key:"x"').facets],
+  [{ desc: 'two words' }, { key: 'x' }]);
+unit('a quoted phrase containing a facet-shaped word stays a phrase',
+  (p => [p.phrases, p.facets])(engine.qParse('"the label: thing"')),
+  [['the label: thing'], {}]);
+unit('a facet typed through the colon but unvalued is pending, never the term "label"',
+  (p => [p.terms, p.facets, p.pending])(engine.qParse('customer label:')),
+  [['customer'], {}, 'lab']);
+unit('a lone pending facet keeps the query empty instead of searching for the prefix word',
+  (p => [p.empty, p.pending])(engine.qParse('label: ')),
+  [true, 'lab']);
 unit('hlite marks every occurrence, merged and escaped-safe',
   engine.hlite('Template of a template', engine.qParse('template')).map(s => (s.hit ? '[' : '') + s.t + (s.hit ? ']' : '')).join(''),
   '[Template] of a [template]');
