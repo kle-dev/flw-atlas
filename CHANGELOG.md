@@ -12,6 +12,50 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.19.0
+
+- **Ten model types stop being name-only stubs** — queries, sequences, SLAs, templates, knowledge
+  bases, variable extractors and document (content) models are parsed structurally: a query's
+  parameters, sort keys and search-template body; a sequence's number format and counters; an SLA's
+  due-date targets, escalations and lifecycle actions (a start-process/start-case escalation is a real
+  model reference now); a template's variations and their actual text; a knowledge base's retrieval
+  settings (credentials never leave the model — only their *type* is kept); a variable extractor's
+  extracted variables (each an honest "write whose readers are out of reach"); a document model's
+  per-action forms, permissions and variables. Palettes keep their `Palette-Id`/`title` identity
+  instead of coming out as `key: None`. Master data and dashboard components stay generic for now —
+  no corpus in reach contains a body to design against.
+- **What the parser knows, the page shows — structurally guaranteed.** Every parsed attribute now
+  either has a renderer or lands in a collapsed **Other attributes** key/value tree on the detail
+  page, tracked at render time, so a future parser field is visible by default. The Kotlin mirror:
+  `PayloadCompletenessTest` fails the build when a parser emits a container key the explorer payload
+  would silently drop — each key must be allowlisted (visible + searchable) or consciously stripped
+  with a reason. Six parsed-but-invisible keys render now: a process's full **sequence-flow
+  topology** (default flows marked), its declared **data objects**, its model-level **references**
+  (SLA, security policy, event, channel, dictionary, sequence), an app's **pages**, a decision
+  service's **decisions**, a form's **subforms**.
+- **BPMN/CMMN extraction closes its attribute gaps** — boundary events name the activity they hang
+  on (and whether they interrupt it), conditional events keep their condition, gateways and flows
+  keep the default-flow marker, `flowable:async`/`skipExpression` surface when set, lanes are
+  extracted (and searchable via `label:`/`id:`), event payloads carry type/required/correlation
+  instead of bare names, DMN columns keep their declared types and allowed values, service-operation
+  parameters keep `required` and defaults, data-dictionary types keep their properties, form selects
+  keep their options and every localised caption (each searchable as a `label:`), and agent prompts
+  are no longer cut off at 200 characters.
+- **Search: a facet hit lights up what it matched** — the bound value of `label:` / `desc:` / `key:`
+  / `id:` highlights in the result rows like any term, and the row's hint leads with the matched text
+  itself (`label · Recalculate @orderTotal`). The detail page highlights faceted and multi-word
+  queries too — it used to look for the raw query as one substring, so exactly the queries the engine
+  is best at highlighted nothing there. "Did you mean" matches each word on its own and reaches
+  captions, not just names and keys.
+- **The browse list explains its hits** — a row matched through a script body or a mapping says why
+  (`script · stampTask`), exactly like the palette, and clicking it opens the detail panel with that
+  element revealed and highlighted.
+- **The search dialog is keyboard-complete** — Tab cycles the dialog's own controls (facet chips,
+  their ×, "Show more", "Did you mean") instead of being swallowed, the page behind the open dialog
+  is inert to focus and screen readers, arrows move the selection without rebuilding the whole list
+  (noticeable on 3000-node reports), and the `/` shortcut is finally written down — on the search
+  button, in the zero-result tip and on the empty detail panel.
+
 ## 0.18.1
 
 - **Labels and descriptions are searchable, and ranked as what they are** — a form field's label, a data

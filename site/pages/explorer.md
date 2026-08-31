@@ -63,6 +63,19 @@ own, and it is why the graph carries `usedBy`.
 Every section remembers whether you left it open, per section, across reloads. Up to twelve nodes can
 be open as **detail tabs**, which are viewports with their own history rather than pins.
 
+Nothing the parser extracted is invisible: whatever no specific section consumed renders at the bottom
+as a collapsed **Other attributes** key/value tree. When a new model attribute starts being parsed, it
+shows up there by default — a dedicated section is an upgrade, not a precondition for seeing it. The
+same rule holds structurally on the generator side: a parsed field the report would silently drop
+fails the build.
+
+Beyond processes, cases, decisions, forms and the integration models, the structured types now include
+queries (parameters, sort keys, the search-template body), SLAs (due-date targets, escalations —
+including the process or case an escalation starts), sequences (the number format), templates (their
+variations' actual text), knowledge bases (retrieval settings; credentials never leave the model, only
+their kind), variable extractors (which indexed variable is written from which scope) and document
+models (per-action forms and permissions).
+
 On a form or page, a row in **Fields** expands when the component does something: the model a button
 invokes (as a chip you can follow), the payload it sends and stores back, the `{{binding}}` its result is
 stored in, a REST button's endpoint with its verb and response path, an expression button's expression and
@@ -163,6 +176,7 @@ the category you are in, with a button to widen the search.
 | Keys | Where | Action |
 |---|---|---|
 | `⌘K` / `Ctrl+K`, or `/` | anywhere | Open the search palette |
+| `Tab` / `⇧Tab` | palette | Cycle the dialog's controls — facet chips, ×, "Show more", "Did you mean" |
 | `↑` `↓` | palette, list | Move |
 | `⇧↑` `⇧↓` | palette, list | Extend the marked range |
 | `Enter` | palette, list | Open — or open everything marked, as tabs |
