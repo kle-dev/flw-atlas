@@ -224,6 +224,13 @@
               "nothing yet" until it lands, at which point the editor's markers, hints and inspections are
               re-run. Only completion and the explicit actions may wait for a build. The Hub says
               <i>Scanning the project…</i> and resolves itself.</li>
+          <li><b>Inspections stop re-reading the model files per literal.</b> The key inspections rebuilt
+              the set of known keys for every literal they looked at, the value-field inspection re-read and
+              re-parsed the backing <code>.service</code> model for every <code>value("…")</code> in a file
+              — a DAO with twenty query builders parsed the same JSON twenty times per highlighting pass —
+              and the Liquibase coverage inspection parsed every <code>.service</code> model in the project
+              for every changelog. All of that is now computed once per index snapshot and dropped with
+              it.</li>
           <li><b>The error reporter is finally in the IDE.</b> 0.13.0 announced <i>Report a problem straight
               from the error dialog</i>, and the reporter was there — but never registered in the plugin
               descriptor, so the button never appeared and the reference page had to carry a "known gap"

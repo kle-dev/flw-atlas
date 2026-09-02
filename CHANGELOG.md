@@ -80,6 +80,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   yet" until it lands, at which point the editor's markers, hints and inspections are re-run. Only
   completion and the explicit actions may wait for a build. The Hub says *Scanning the project…* and
   resolves itself.
+- **Inspections stop re-reading the model files per literal.** The key inspections rebuilt the set
+  of known keys for every literal they looked at, the value-field inspection re-read and re-parsed the
+  backing `.service` model for every `value("…")` in a file — a DAO with twenty query builders parsed
+  the same JSON twenty times per highlighting pass — and the Liquibase coverage inspection parsed every
+  `.service` model in the project for every changelog. All of that is now computed once per index
+  snapshot and dropped with it.
 - **The error reporter is finally in the IDE.** 0.13.0 announced *Report a problem straight from the
   error dialog*, and the reporter was there — but never registered in the plugin descriptor, so the button
   never appeared and the reference page had to carry a "known gap" paragraph. It is registered now:

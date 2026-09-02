@@ -44,6 +44,14 @@ class FlowableIndex(
             .mapValues { (_, list) -> list.distinctBy { it.key }.sortedBy { it.key } }
     }
 
+    private val keySetByType: Map<ModelType, Set<String>> by lazy {
+        distinctByType.mapValues { (_, list) -> list.mapTo(LinkedHashSet()) { it.key } }
+    }
+
+    /** The distinct keys of one model type, as a set — what a key inspection asks per literal, so it is
+     *  computed once per snapshot rather than once per literal. */
+    fun keySetOf(type: ModelType): Set<String> = keySetByType[type] ?: emptySet()
+
     /** Distinct models of a type (one per key), sorted by key — the completion candidate set. */
     fun keysOfType(type: ModelType): List<ModelEntry> = distinctByType[type] ?: emptyList()
 

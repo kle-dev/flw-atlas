@@ -1,6 +1,8 @@
 package com.flowable.atlas.liquibase
 
+import com.flowable.atlas.index.FlowableModelIndexService
 import com.intellij.codeInspection.LocalInspectionTool
+import com.intellij.openapi.components.service
 import com.intellij.codeInspection.ProblemHighlightType
 import com.intellij.codeInspection.ProblemsHolder
 import com.intellij.psi.PsiElementVisitor
@@ -27,6 +29,9 @@ class LiquibaseCoverageInspection : LocalInspectionTool() {
         val file = holder.file as? XmlFile ?: return PsiElementVisitor.EMPTY_VISITOR
         val text = file.text
         if (!text.contains("databaseChangeLog")) return PsiElementVisitor.EMPTY_VISITOR
+        // A highlighting pass reads the cached index only (see FlowableModelIndexService.index): on a
+        // cold index there is no verdict, and the daemon re-runs once the build lands.
+        if (file.project.service<FlowableModelIndexService>().cachedOrRequest() == null) return PsiElementVisitor.EMPTY_VISITOR
 
         val serviceColumns = resolveServiceColumns(holder, file, text) ?: return PsiElementVisitor.EMPTY_VISITOR
         val ops = LiquibaseChangelog.parseOps(text)

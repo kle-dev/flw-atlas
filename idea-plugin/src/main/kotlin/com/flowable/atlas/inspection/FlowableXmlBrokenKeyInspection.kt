@@ -80,8 +80,9 @@ class FlowableXmlBrokenKeyInspection : LocalInspectionTool() {
     /** The cached index only — a highlighting pass must not build it; empty means "no verdict". */
     private fun knownKeys(service: FlowableModelIndexService, types: Collection<ModelType>): Set<String> {
         val index = service.cachedOrRequest() ?: return emptySet()
+        if (types.size == 1) return index.keySetOf(types.first())
         val keys = LinkedHashSet<String>()
-        for (type in types) index.keysOfType(type).forEach { keys.add(it.key) }
+        for (type in types) keys.addAll(index.keySetOf(type))
         return keys
     }
 

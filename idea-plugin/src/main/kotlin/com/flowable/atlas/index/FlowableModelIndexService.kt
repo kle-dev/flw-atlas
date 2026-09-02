@@ -55,6 +55,15 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
     @Volatile
     private var dataObjectTablesCache: Map<String, String>? = null
 
+    // Per-snapshot memos of what the JSON model files say, dropped with [cached]. The inspections ask
+    // for these per literal on every highlighting pass — a DAO with twenty query builders re-read and
+    // re-parsed the same `.service` model twenty times, and the Liquibase coverage inspection parsed
+    // every `.service` in the project for every changelog it looked at.
+    @Volatile
+    private var serviceTablesCache: List<ServiceTable>? = null
+    private val backingServiceKeyCache = java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<String>>()
+    private val operationsCache = java.util.concurrent.ConcurrentHashMap<String, List<OperationInfo>>()
+
     /** The one background build in flight, if any — every [ensureBuilding] while it runs joins it. */
     private val inFlight = AtomicReference<CompletableFuture<FlowableIndex>?>()
 
@@ -80,6 +89,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
     private fun drop() {
         generation.incrementAndGet()
         cached = null; dataObjectTablesCache = null
+        serviceTablesCache = null; backingServiceKeyCache.clear(); operationsCache.clear()
     }
 
     /**
@@ -220,10 +230,13 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
      * declared on this service model — see [operationsOf].
      */
     fun backingServiceKey(dataObjectKey: String): String? {
+        backingServiceKeyCache[dataObjectKey]?.let { return it.orElse(null) }
         val dataFile = index().find(dataObjectKey, ModelType.DATA_OBJECT)?.file ?: return null
-        return ReadAction.computeBlocking<String?, RuntimeException> {
+        val key = ReadAction.computeBlocking<String?, RuntimeException> {
             JsonUtil.topLevelString(dataFile, "referencedServiceDefinitionModelKey")
         }
+        backingServiceKeyCache[dataObjectKey] = java.util.Optional.ofNullable(key)
+        return key
     }
 
     /** Operations available on a data object, resolved via its backing service model. */
@@ -234,10 +247,13 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
 
     /** Operations declared directly on a service model. */
     fun operationsOfService(serviceKey: String): List<OperationInfo> {
+        operationsCache[serviceKey]?.let { return it }
         val serviceFile = index().find(serviceKey, ModelType.SERVICE)?.file ?: return emptyList()
-        return ReadAction.computeBlocking<List<OperationInfo>, RuntimeException> {
+        val ops = ReadAction.computeBlocking<List<OperationInfo>, RuntimeException> {
             JsonUtil.readOperations(serviceFile)
         }
+        operationsCache[serviceKey] = ops
+        return ops
     }
 
     /** Input value fields required by a data object's operation. */
@@ -332,9 +348,15 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
         return map
     }
 
-    /** All indexed database `.service` models (for the Liquibase-coverage inspection). */
-    fun allServiceTables(): List<ServiceTable> = ReadAction.computeBlocking<List<ServiceTable>, RuntimeException> {
-        index().keysOfType(ModelType.SERVICE).mapNotNull { JsonUtil.readServiceTable(it.file) }
+    /** All indexed database `.service` models (for the Liquibase-coverage inspection). Memoised per
+     *  index snapshot: the inspection asks for every changelog it highlights. */
+    fun allServiceTables(): List<ServiceTable> {
+        serviceTablesCache?.let { return it }
+        val tables = ReadAction.computeBlocking<List<ServiceTable>, RuntimeException> {
+            index().keysOfType(ModelType.SERVICE).mapNotNull { JsonUtil.readServiceTable(it.file) }
+        }
+        serviceTablesCache = tables
+        return tables
     }
 
     /** All indexed `.data` models. */
