@@ -193,8 +193,20 @@
   .side-logo svg text{font-family:var(--sans)}
   .side-logo .logo-mark{display:none;height:22px}
   .side-nav{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:var(--space-25) var(--space-2)}
-  .side-group{font-size:var(--text-2xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;
-    color:var(--ink-faint);padding:var(--space-35) var(--space-3) var(--space-15)}
+  /* A group header is a button that folds its entries. The count shows only while folded (open, the
+     entries carry their own); the dot says "the active entry is in here" and only while folded too. */
+  .side-group{display:flex;align-items:center;gap:var(--space-15);width:100%;background:none;border:none;cursor:pointer;
+    text-align:left;font-family:inherit;font-size:var(--text-2xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--ink-faint);padding:var(--space-35) var(--space-2) var(--space-15) var(--space-2);border-radius:var(--radius-md)}
+  .side-group:hover{color:var(--ink-dim);background:var(--hover)}
+  .side-group .lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .side-group .ui{width:10px;height:10px;transition:transform .12s ease}
+  .side-group[aria-expanded=false] .ui{transform:rotate(-90deg)}
+  .side-group .n{display:none;font-weight:500;letter-spacing:0;font-variant-numeric:tabular-nums}
+  .side-group[aria-expanded=false] .n{display:inline}
+  .side-group[aria-expanded=false].has-on::after{content:"";width:5px;height:5px;border-radius:50%;background:var(--sel-bar);flex:none}
+  @media (prefers-reduced-motion: reduce){ .side-group .ui{transition:none} }
+  .navpick{display:none}
   .side-item{position:relative;display:flex;align-items:center;gap:var(--space-2);height:34px;padding:0 var(--space-3);
     border-radius:var(--radius-md);cursor:pointer;color:var(--ink-dim);font-weight:500}
   .side-item:hover{background:var(--hover);color:var(--ink)}
@@ -863,7 +875,8 @@
     .shell.rail .sidebar:not(:hover):not(:focus-within) .side-logo .logo-full{display:none}
     .shell.rail .sidebar:not(:hover):not(:focus-within) .side-logo .logo-mark{display:block}
     .shell.rail .sidebar:not(:hover):not(:focus-within) .side-nav{padding:var(--space-25) var(--space-15)}
-    .shell.rail .sidebar:not(:hover):not(:focus-within) .side-group{border-top:1px solid var(--line);margin:var(--space-25) var(--space-25) var(--space-05);padding:0;height:0;overflow:hidden;color:transparent}
+    .shell.rail .sidebar:not(:hover):not(:focus-within) .side-group{border-top:1px solid var(--line);margin:var(--space-25) var(--space-25) var(--space-05);padding:0;height:0;overflow:hidden;color:transparent;width:auto}
+    .shell.rail .sidebar:not(:hover):not(:focus-within) .side-group>*{display:none}
     .shell.rail .sidebar:not(:hover):not(:focus-within) .side-item{justify-content:center;padding:0}
     .shell.rail .sidebar:not(:hover):not(:focus-within) .side-item .lbl,
     .shell.rail .sidebar:not(:hover):not(:focus-within) .side-item .n{display:none}
@@ -894,11 +907,14 @@
     .side-logo .logo-full{display:block}
     .side-logo .logo-mark{display:none}
     .side-logo svg{height:30px}
-    .side-nav{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:var(--space-05);padding:var(--space-1) 0;overflow:visible}
-    .side-group{display:none}
-    .side-item{height:30px;padding:0 var(--space-25);justify-content:flex-start}
-    .side-item .lbl,.side-item .n{display:inline}
-    .side-foot{display:flex;border-top:none;padding:0;margin-left:auto;flex-direction:row}
+    /* Sixty categories as a wrapped chip cloud were fourteen rows of chrome before any content. A
+       <select> holds the same list in one row beside the logo and the footer. */
+    .side-nav{display:none}
+    .navpick{display:block;flex:1;min-width:120px;height:30px;margin:0 var(--space-2);background:var(--input);
+      border:1px solid var(--line2);color:var(--ink);border-radius:var(--radius-md);padding:0 var(--space-2);
+      font-family:var(--sans);font-size:var(--text-sm);outline:none}
+    .navpick:focus{border-color:var(--accent)}
+    .side-foot{display:flex;border-top:none;padding:0;margin-left:auto;flex-direction:row;gap:var(--space-2)}
     .side-foot .proj{display:block}
     .content{min-height:0}
     .view-browse{display:flex;flex-direction:column;height:auto}

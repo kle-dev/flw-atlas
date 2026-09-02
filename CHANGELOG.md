@@ -33,6 +33,15 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   the title. Smaller things: the attribute grid no longer shows a grey box where its last row runs out
   of cells, list rows no longer animate in on every re-render, and the last five hard-coded font sizes
   now follow `A−` / `A+` like everything else.
+- **The sidebar folds, and fits a narrow window.** Every group header — Models, Integration, Code,
+  Expressions, Checks, Variables, Access, Other — is a button that folds its entries, and the fold is
+  remembered, so a project with forty variable scopes need not show them on every visit. A folded group
+  whose entry is the active one marks that on its header and stays folded; the sidebar never reopens
+  itself behind your back. The keyboard walks it too: `↑` `↓` skip folded entries, `←` folds the group
+  you are in, `→` unfolds a header. Below 800px — a split editor, a narrow tool window — the category
+  list used to wrap into fourteen rows of chips above the content; it is a picker beside the search button
+  now, one row. The UI test covers both: the desktop run folds and re-renders, a second run at 800×600
+  picks a category.
 
 ## 0.20.0
 

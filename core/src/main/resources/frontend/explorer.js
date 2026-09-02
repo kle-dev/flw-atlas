@@ -759,8 +759,35 @@ function route(){
 }
 
 // ---------- sidebar ----------
+// Which groups are folded, remembered like the detail sections are (atlas-sect). Absent = open.
+const NAVG_STORE='atlas-navgroups';
+function navGroups(){ try{ return JSON.parse(localStorage.getItem(NAVG_STORE)||'{}')||{}; }catch(e){ return {}; } }
+function navGroupRemember(sec, open){
+  try{ const m=navGroups(); m[sec]=open; localStorage.setItem(NAVG_STORE, JSON.stringify(m)); }catch(e){}
+}
 function renderSidebar(){
   const nav = document.getElementById('nav'); nav.innerHTML='';
+  // One keyboard model for headers and entries: ↑/↓ walk what is visible (a folded group's entries are
+  // skipped), ← folds the group you are in and lands on its header, → unfolds a folded header,
+  // Home/End jump. Headers are real <button>s, so Enter/Space toggle them natively.
+  const stops=()=>[...nav.querySelectorAll('.side-group, .side-item')].filter(x=>!x.closest('[hidden]'));
+  const navKeys = el => e => {
+    const isHdr=el.classList.contains('side-group');
+    if(e.key==='Enter'||e.key===' '){ if(!isHdr){ e.preventDefault(); el.click(); } }
+    else if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+      e.preventDefault();
+      const s=stops(), i=s.indexOf(el)+(e.key==='ArrowDown'?1:-1);
+      if(s[i]) s[i].focus();
+    }
+    else if(e.key==='Home'||e.key==='End'){ e.preventDefault(); const s=stops(); (e.key==='Home'?s[0]:s[s.length-1]).focus(); }
+    else if(e.key==='ArrowLeft'){
+      const hdr=isHdr?el:(el.parentElement&&el.parentElement.previousElementSibling);
+      if(hdr&&hdr.classList.contains('side-group')){ e.preventDefault(); if(hdr.getAttribute('aria-expanded')==='true') hdr.click(); hdr.focus(); }
+    }
+    else if(e.key==='ArrowRight'){
+      if(isHdr&&el.getAttribute('aria-expanded')==='false'){ e.preventDefault(); el.click(); }
+    }
+  };
   const mkItem = (html, title) => {
     const el=document.createElement('div');
     el.className='side-item'; el.setAttribute('role','button'); el.tabIndex=0;
@@ -768,15 +795,7 @@ function renderSidebar(){
     // the cursor while you slide down the list is pure noise. In rail mode the sidebar flies out on
     // hover, so the label is never actually hidden. The text stays available to screen readers.
     el.setAttribute('aria-pressed','false'); el.setAttribute('aria-label', title); el.innerHTML=html;
-    el.onkeydown=e=>{
-      if(e.key==='Enter'||e.key===' '){ e.preventDefault(); el.click(); }
-      else if(e.key==='ArrowDown'||e.key==='ArrowUp'){
-        e.preventDefault();
-        const items=[...nav.querySelectorAll('.side-item')];
-        const i=items.indexOf(el)+(e.key==='ArrowDown'?1:-1);
-        if(items[i]) items[i].focus();
-      }
-    };
+    el.onkeydown=navKeys(el);
     return el;
   };
   const ov = mkItem(typeIcon('overview',{color:'var(--accent)'})+'<span class="lbl">Overview</span>','Overview');
@@ -809,16 +828,41 @@ function renderSidebar(){
   }
   items.sort((a,b)=> (SECTIONS.indexOf(a.sec)-SECTIONS.indexOf(b.sec)) ||
                      ((a.pri==null?2:a.pri)-(b.pri==null?2:b.pri)) || a.label.localeCompare(b.label));
-  let cur='';
+  // Groups fold. The header is a <button aria-expanded>, its entries live in a <div role=group> that
+  // hides with the `hidden` attribute, and the fold is remembered per section. Sixty entries in eight
+  // groups is the ordinary size of this list; the reader decides which groups earn their space.
+  // The same walk fills #navpick, the <select> that stands in for the list below 800px (CSS decides).
+  const folded=navGroups();
+  const pick=document.getElementById('navpick');
+  pick.innerHTML='<option value="/overview">Overview</option>';
+  let cur='', grp=null, og=null;
   items.forEach(c=>{
-    if(c.sec!==cur){ cur=c.sec; const h=document.createElement('div'); h.className='side-group'; h.textContent=cur; nav.appendChild(h); }
+    if(c.sec!==cur){
+      cur=c.sec;
+      const sec=cur;   // `cur` keeps moving; the click handler below must remember this group's name
+      const id='navgrp-'+sec.toLowerCase(), isOpen=folded[sec]!==false, n=items.filter(x=>x.sec===sec).length;
+      const btn=document.createElement('button');
+      btn.type='button'; btn.className='side-group'; btn.dataset.group=sec;
+      btn.setAttribute('aria-expanded', String(isOpen)); btn.setAttribute('aria-controls', id);
+      btn.innerHTML=uiIcon('chevron')+'<span class="lbl">'+esc(sec)+'</span><span class="n">'+n+'</span>';
+      const g=document.createElement('div');
+      g.className='side-grp'; g.id=id; g.setAttribute('role','group'); g.setAttribute('aria-label', sec); g.hidden=!isOpen;
+      btn.onclick=()=>{ const o=g.hidden; g.hidden=!o; btn.setAttribute('aria-expanded', String(o)); navGroupRemember(sec, o); };
+      btn.onkeydown=navKeys(btn);
+      nav.appendChild(btn); nav.appendChild(g); grp=g;
+      og=document.createElement('optgroup'); og.label=sec; pick.appendChild(og);
+    }
     const el = mkItem(typeIcon(c.icon,{color:c.color})+'<span class="lbl">'+esc(c.label)+'</span>'+
                       (c.count?'<span class="n">'+c.count+'</span>':''),
                       c.tip||(c.label+' ('+c.count+')'));
-    if(c.route){ el.dataset.route=c.route; el.onclick=()=>{ location.hash=c.route; }; }
-    else { el.dataset.cat=c.id; el.onclick=()=>{ location.hash='/browse/'+enc(c.id); }; }
-    nav.appendChild(el);
+    const target=c.route||('/browse/'+enc(c.id));
+    if(c.route) el.dataset.route=c.route; else el.dataset.cat=c.id;
+    el.onclick=()=>{ location.hash=target; };
+    grp.appendChild(el);
+    const opt=document.createElement('option');
+    opt.value=target; opt.textContent=c.label+(c.count?' · '+c.count:''); og.appendChild(opt);
   });
+  pick.onchange=()=>{ if(pick.value) location.hash=pick.value; };
   // footer warning chip — routes to the dashboard and reveals the diagnostics list
   if(diags.length+cfnDiags.length){
     const chip=document.getElementById('diagchip');
@@ -840,6 +884,14 @@ function renderSidebarActive(){
     el.classList.toggle('on', on);
     el.setAttribute('aria-pressed', on?'true':'false');
   });
+  // A folded group whose entry is the active one says so on its header — and stays folded: the fold was
+  // the reader's choice, and a sidebar that reopens itself on every navigation is one nobody can shape.
+  document.querySelectorAll('#nav .side-group').forEach(h=>{
+    const g=document.getElementById(h.getAttribute('aria-controls'));
+    h.classList.toggle('has-on', !!(g&&g.querySelector('.side-item.on')));
+  });
+  const pick=document.getElementById('navpick');
+  if(pick) pick.value = state.view==='browse' ? (state.cat?'/browse/'+enc(state.cat):'') : '/'+state.view;
 }
 
 // ---------- topbar breadcrumbs ----------

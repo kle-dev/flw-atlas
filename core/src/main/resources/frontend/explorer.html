@@ -52,6 +52,8 @@ try{
       </svg>
     </div>
     <nav class="side-nav" id="nav" aria-label="Categories"></nav>
+    <!-- Below 800px the list above is hidden and this picker stands in for it (filled by renderSidebar). -->
+    <select class="navpick" id="navpick" aria-label="Go to"></select>
     <!-- Two rows on a 2-column grid (explorer.css .side-foot): project · parse-issue chip / provenance ·
          text size. The old single flex row overflowed the 240px sidebar as soon as the version stamp
          grew a "generated 3 days ago" — the project name shrank to one letter and the buttons clipped.

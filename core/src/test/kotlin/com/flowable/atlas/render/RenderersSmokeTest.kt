@@ -221,5 +221,8 @@ class RenderersSmokeTest {
         assertTrue("expected the node-type icon table from explorer.js", html.contains("const TYPE_ICONS={"))
         assertTrue("expected the icon builder from explorer.js", html.contains("function typeIcon("))
         assertTrue("expected the icon sizing from explorer.css", html.contains(".ti{"))
+        // Sidebar groups fold and are remembered; below 800px a <select> stands in for the list.
+        assertTrue("expected the folded-groups store from explorer.js", html.contains("atlas-navgroups"))
+        assertTrue("expected the category picker from explorer.html", html.contains("id=\"navpick\""))
     }
 }

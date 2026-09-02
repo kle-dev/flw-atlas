@@ -455,6 +455,40 @@ const probe = `<script>
        decodeURIComponent(location.hash).indexOf('&f=zzz-none')>0, 'hash='+location.hash);
   });
 
+  // --- sidebar groups fold and remember ---
+  steps.push(()=>{
+    const h=document.querySelector('#nav .side-group[data-group="Models"]');
+    ok('the sidebar has group headers that are buttons', !!h && h.tagName==='BUTTON' && h.getAttribute('aria-expanded')==='true');
+    if(h) click(h);
+  });
+  steps.push(()=>{
+    const h=document.querySelector('#nav .side-group[data-group="Models"]'), g=document.getElementById('navgrp-models');
+    ok('a click folds the group', !!h && h.getAttribute('aria-expanded')==='false' && !!g && g.hidden);
+    let st=null; try{ st=JSON.parse(localStorage.getItem('atlas-navgroups')); }catch(e){}
+    ok('the fold is remembered', !!st && st.Models===false, JSON.stringify(st));
+    renderSidebar(); renderSidebarActive();   // a cold re-render — the closest thing to a reload inside one page
+  });
+  steps.push(()=>{
+    const h=document.querySelector('#nav .side-group[data-group="Models"]');
+    ok('a re-render keeps the group folded', !!h && h.getAttribute('aria-expanded')==='false');
+    location.hash='/browse/'+enc('process');
+  });
+  steps.push(()=>{
+    const h=document.querySelector('#nav .side-group[data-group="Models"]');
+    ok('a folded group marks the active entry on its header and stays folded',
+       !!h && h.classList.contains('has-on') && h.getAttribute('aria-expanded')==='false');
+    ok('a folded entry is not a keyboard stop', !document.querySelector('#nav .side-item.on') ||
+       document.querySelector('#nav .side-item.on').closest('[hidden]')!==null);
+    if(h) click(h);
+    try{ localStorage.removeItem('atlas-navgroups'); }catch(e){}
+  });
+  steps.push(()=>{
+    const h=document.querySelector('#nav .side-group[data-group="Models"]');
+    const on=document.querySelector('#nav .side-item.on');
+    ok('a second click unfolds it and the active entry is visible again',
+       !!h && h.getAttribute('aria-expanded')==='true' && !!on && on.closest('[hidden]')===null);
+  });
+
   // --- the sidebar footer fits its column ---
   // At the default 240px the old single-row footer squeezed the project name to one letter and pushed the
   // buttons out past the sidebar's edge; the theme toggle also existed twice.
@@ -557,31 +591,73 @@ const probe = `<script>
 const html = fs.readFileSync(reportPath, 'utf8');
 if (!html.includes('</body>')) { console.error('explorer-uitest: not an explorer report'); process.exit(2); }
 const tmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-uitest-')), 'report.html');
-fs.writeFileSync(tmp, html.replace('</body>', probe + '</body>'));
 
-let dom;
-try {
-  dom = execFileSync(chrome, [
-    '--headless', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
-    // Chrome's default viewport is 800x600 — exactly the stacked (<=800px) layout. The desktop shell
-    // with its sidebar is what most steps mean to exercise, so ask for one.
-    '--window-size=1400,900',
-    // ~72 steps at 300ms each: the budget is virtual time the page may consume, so it only needs to outlast the run
-    '--virtual-time-budget=45000', '--dump-dom', 'file://' + tmp,
-  ], { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024, timeout: 120000 });
-} catch (e) {
-  console.error('explorer-uitest: Chrome failed to run —', e.message);
-  process.exit(1);
+// The stacked layout (<=800px) is a different page: the category list becomes a <select>. A second, short
+// run at Chrome's old default size covers it — the window size is a launch flag, not something a page
+// can change about itself.
+const narrowProbe = `<script>
+(function(){
+  const log=[], errs=[];
+  const ok=(k,cond,detail)=>log.push(k+': '+(cond?'ok':'FAIL '+(detail||'')));
+  window.addEventListener('error', e=>errs.push(e.message));
+  const vis=el=>!!el && el.offsetParent!==null;
+  const steps=[];
+  steps.push(()=>{
+    const pick=document.getElementById('navpick');
+    ok('the category picker replaces the sidebar list', vis(pick) && !vis(document.getElementById('nav')));
+    ok('the search button stays', vis(document.getElementById('searchbtn')));
+    ok('the picker lists every category', !!pick && pick.querySelectorAll('option').length===document.querySelectorAll('#nav .side-item').length);
+    if(pick){ pick.value='/browse/'+enc('process'); pick.dispatchEvent(new Event('change')); }
+  });
+  steps.push(()=>{
+    ok('picking a category routes to it', state.view==='browse' && state.cat==='process', location.hash);
+    const pick=document.getElementById('navpick');
+    ok('the picker shows where you are', !!pick && pick.value==='/browse/'+enc('process'));
+    ok('no horizontal page scroll', document.documentElement.scrollWidth<=window.innerWidth+1,
+       document.documentElement.scrollWidth+' > '+window.innerWidth);
+  });
+  let i=0;(function run(){
+    if(i>=steps.length){
+      log.push('uncaught errors: '+(errs.length?('FAIL '+errs.join(' | ')):'none'));
+      document.title='UITEST_BEGIN '+log.join(' ;; ')+' UITEST_END';
+      return;
+    }
+    try{ steps[i++](); }catch(e){ log.push('FAIL threw in step '+i+': '+e.message); }
+    setTimeout(run, 300);
+  })();
+})();
+</script>`;
+
+function runProbe(probeHtml, windowSize, label) {
+  fs.writeFileSync(tmp, html.replace('</body>', probeHtml + '</body>'));
+  let dom;
+  try {
+    dom = execFileSync(chrome, [
+      '--headless', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
+      // Chrome's default viewport is 800x600 — exactly the stacked (<=800px) layout. The desktop shell
+      // with its sidebar is what most steps mean to exercise, so the main run asks for one.
+      '--window-size=' + windowSize,
+      // ~72 steps at 300ms each: the budget is virtual time the page may consume, so it only needs to outlast the run
+      '--virtual-time-budget=45000', '--dump-dom', 'file://' + tmp,
+    ], { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024, timeout: 120000 });
+  } catch (e) {
+    console.error(`explorer-uitest (${label}): Chrome failed to run —`, e.message);
+    process.exit(1);
+  }
+  const m = dom.match(/UITEST_BEGIN([\s\S]*?)UITEST_END/);
+  if (!m) {
+    console.error(`explorer-uitest (${label}): the probe never finished — the page most likely threw during boot.`);
+    const t = dom.match(/<title>([\s\S]*?)<\/title>/);
+    console.error('  title was:', t ? t[1].slice(0, 300) : '(none)');
+    process.exit(1);
+  }
+  return m[1].split(' ;; ').map(s => s.trim()).filter(Boolean);
 }
 
-const m = dom.match(/UITEST_BEGIN([\s\S]*?)UITEST_END/);
-if (!m) {
-  console.error('explorer-uitest: the probe never finished — the page most likely threw during boot.');
-  const t = dom.match(/<title>([\s\S]*?)<\/title>/);
-  console.error('  title was:', t ? t[1].slice(0, 300) : '(none)');
-  process.exit(1);
-}
-const lines = m[1].split(' ;; ').map(s => s.trim()).filter(Boolean);
+const lines = [
+  ...runProbe(probe, '1400,900', 'desktop'),
+  ...runProbe(narrowProbe, '800,600', 'narrow').map(l => '[800px] ' + l),
+];
 let failed = 0;
 for (const l of lines) {
   const bad = l.includes('FAIL');

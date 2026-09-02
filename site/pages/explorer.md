@@ -56,6 +56,12 @@ appears — the browse list, the chips, the detail tabs, the breadcrumb, the sea
 form and a service tell apart at a glance in a long list, and in the collapsed sidebar rail the icons are
 the navigation. The icons scale with the text (see [Themes and text size](#themes-and-text-size)).
 
+Each group folds — click its header, or press `←` on any of its entries — and the fold is remembered, so
+a project with forty variable scopes need not show them on every visit. A folded group whose entry is
+the one you are on says so with a dot on its header, and stays folded: the sidebar never reopens itself
+behind your back. Below 800px the list gives way to a picker beside the search button, one row instead of
+fourteen rows of chips.
+
 ## The detail panel
 
 Selecting a node gives you its attributes, its diagram, an ego graph of its immediate neighbourhood,
@@ -203,6 +209,9 @@ the category you are in, with a button to widen the search.
 | `⌘/Ctrl+A` | list | Mark every rendered row |
 | `Home` / `End` | list | First / last row |
 | `Escape` | palette, list | Clear marks, then close |
+| `↑` `↓` / `Home` `End` | sidebar | Move between group headers and entries (folded entries are skipped) |
+| `Enter` / `Space` | sidebar group header | Fold or unfold the group |
+| `←` / `→` | sidebar | Fold the group you are in and land on its header / unfold a folded header |
 | `Alt+1`…`Alt+9` | browse | Activate that detail tab |
 | `Alt+[` / `Alt+]` | browse | Previous / next tab |
 | `Alt+W` | browse | Close the active tab |
