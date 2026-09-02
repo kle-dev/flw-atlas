@@ -62,6 +62,10 @@ type-specific sections — and then the two lists that are the point of the whol
 Both directions, always, for every node type. That is the question a model file cannot answer on its
 own, and it is why the graph carries `usedBy`.
 
+Inside IntelliJ the panel also opens code: the `↗` beside a source path and every `:line` on a method
+or endpoint open that file in an editor tab (see [the plugin](../plugin/#the-atlas-explorer-inside-the-ide)).
+In a browser those affordances are not shown — the page cannot open a file there.
+
 Every section remembers whether you left it open, per section, across reloads. Up to twelve nodes can
 be open as **detail tabs**, which are viewports with their own history rather than pins. The split
 between the list and the panel is yours to move — drag the handle between them, `←`/`→` nudge it,

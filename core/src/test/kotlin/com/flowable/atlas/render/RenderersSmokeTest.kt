@@ -55,6 +55,9 @@ class RenderersSmokeTest {
         assertTrue("expected the atlasCopy helper from explorer.js", html.contains("function atlasCopy"))
         assertTrue("expected the copy-button class from explorer.js/css", html.contains("class=\"cpy\"") || html.contains(".cpy{"))
         assertTrue("expected the __atlasCopy IDE bridge hook from explorer.js", html.contains("__atlasCopy"))
+        // The other half of the IDE bridge: a file path / file:line in the page opens the source.
+        assertTrue("expected the __atlasOpen IDE bridge hook from explorer.js", html.contains("__atlasOpen"))
+        assertTrue("expected the open-in-IDE button builder", html.contains("function openBtn("))
         // The graph payload is inlined — a known model key must appear.
         assertTrue("expected the substituted graph data", html.contains("orderProcess"))
         // In/out parameters survive `slimData`'s allowlist (they are nested lists, not scalars) and the

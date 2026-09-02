@@ -113,8 +113,11 @@ our terms to read it.
 
 The tab is the generated HTML in an embedded browser, handed the IDE's theme on load and restyled live
 when you switch it. Every tooltip is drawn by the page's own bubble rather than the browser's, because
-native tooltips never appear in the embedded viewer — and the plugin injects a clipboard bridge, because
-copy is blocked for local files there.
+native tooltips never appear in the embedded viewer — and the plugin injects two bridges: a clipboard
+one, because copy is blocked for local files there, and **Open in IDE** — the `↗` beside every model's
+and Java class's source path, and every `:line` on a method or REST handler, opens that file in an editor
+tab, a model inside a `.bar` included. That is the jump from reading a model to editing the code around
+it, and only the embedded tab offers it: the same page in a browser has nowhere to open a file.
 
 Generate it from **Tools → Flowable Atlas → Generate → Generate Atlas Explorer…** — the page opens as a
 tab the moment it is written — reopen it later with **Open Atlas Explorer**, and choose which artifacts a

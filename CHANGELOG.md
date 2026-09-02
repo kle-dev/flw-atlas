@@ -86,6 +86,13 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   the canvas, not only in its rows. Every shape is a keyboard stop with a name for a screen reader, and
   Enter or Space opens its card. A cancelled drag no longer leaves the diagram panning with no button
   held, and each info card's size observer is disconnected with the card instead of piling up.
+- **From the explorer straight into the code.** Inside IntelliJ the embedded explorer offered a
+  clipboard bridge and nothing else, so the source path it shows for every model and Java class, and the
+  line it shows for every method and REST handler, could be copied but not followed. The plugin now
+  injects a second bridge: `↗` beside a source path opens the file in an editor tab, a `:line` opens it
+  at that line, a model inside a `.bar` opens read-only from the archive. Read the model here, edit the
+  code there — the seam Atlas is built on, one click wide. The same page in a browser shows none of it,
+  because it could not honour the click.
 - **A reload brings the list back as you left it.** The link carried the view, the category, the node
   and the search term — not the filter you had typed nor the sort you had picked, so coming back to a
   report mid-investigation cost you the whole setup. Both travel in the link now (`&f=`, `&s=`), written

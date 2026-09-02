@@ -2743,12 +2743,12 @@ function detailExtra(n){
   }
   if(n.type==='java' && (d.endpoints||[]).length){
     h+=section('endpoints','Endpoints served','<div class="oplist">'+
-      d.endpoints.map(e=>'<div class="oprow"><span class="verb" style="color:'+color("endpoint")+'">'+esc(e.http)+'</span><span>'+esc(e.path)+'</span><span class="muted">'+esc(e.handler)+'() :'+e.line+'</span></div>').join('')+'</div>');
+      d.endpoints.map(e=>'<div class="oprow"><span class="verb" style="color:'+color("endpoint")+'">'+esc(e.http)+'</span><span>'+esc(e.path)+'</span><span class="muted">'+esc(e.handler)+'() '+lineRef(n.file,e.line)+'</span></div>').join('')+'</div>');
   }
   if(n.type==='java' && (d.methods||[]).length){
     const cm=new Set(d.calledMethods||[]);
     h+=section('methods','Declared methods ('+d.methods.length+')','<div class="oplist">'+
-      d.methods.slice(0,80).map(m=>'<div class="oprow"><span>'+esc(m.name)+'('+m.params+')</span><span class="muted">:'+m.line+(cm.has(m.name)?'  ◀ called by models':'')+'</span></div>').join('')+'</div>');
+      d.methods.slice(0,80).map(m=>'<div class="oprow"><span>'+esc(m.name)+'('+m.params+')</span><span class="muted">'+lineRef(n.file,m.line)+(cm.has(m.name)?'  ◀ called by models':'')+'</span></div>').join('')+'</div>');
   }
   if((n.type==='process') && (d.serviceTasks||[]).length){
     // One entry per task with everything it owns folded in — implementation, callee, result variable,
@@ -3068,7 +3068,7 @@ function renderDetail(){
      '<span class="dot" style="background:'+nodeColor(n)+'"></span>'+esc(nodeKind(n))+'</span>';
   h+='<div class="dtitle">'+esc(n.label)+authBadge(n)+'</div>';
   h+='<div class="dkey mono">'+esc(n.key)+copyBtn(n.key,'key')+'</div>';
-  if(n.file) h+='<div class="dfile" title="click to copy" data-copy="'+enc(n.file)+'"><span class="fp">'+esc(n.file)+'</span>'+copyBtn(n.file,'path')+'</div>';
+  if(n.file) h+='<div class="dfile" title="click to copy" data-copy="'+enc(n.file)+'"><span class="fp">'+esc(n.file)+'</span>'+copyBtn(n.file,'path')+openBtn(n.file)+'</div>';
   const rows=describe(rn);
   if(rows.length){ h+='<div class="grid">'+rows.map(r=>{
       const v=r[1], isHtml=v&&v.html!==undefined;
@@ -3143,6 +3143,7 @@ function renderDetail(){
         setTimeout(()=>{ b.classList.remove('ok'); b.innerHTML=old; delete b.dataset.busy; },1200); }); };
     b.onkeydown=e=>{ if(e.key==='Enter'||e.key===' ') e.stopPropagation(); };   // keep Enter/Space from the parent's nav
   });
+  wireOpenButtons(det);                 // ↗ open the file / file:line in the IDE (no-ops in a browser)
   // ⌖ locate-on-diagram buttons; preventDefault keeps a click inside a <summary> from toggling it
   det.querySelectorAll('.dgloc').forEach(b=>{
     b.onclick=e=>{ e.preventDefault(); e.stopPropagation(); locateOnDiagram(det, b.dataset.elRef, b.dataset.elName); };
@@ -5365,6 +5366,37 @@ function copyBtn(text,what){
   const lbl='Copy'+(what?' '+what:'');
   return '<button type="button" class="cpy" data-copy="'+enc(String(text))+'" title="'+esc(lbl)+'" aria-label="'+esc(lbl)+'">'+CPY_SVG+'</button>';
 }
+// ---------- open in the IDE ----------
+// Inside IntelliJ the host injects window.__atlasOpen(file, line) (see AtlasFileEditor): a file path
+// or a `file:line` in this page opens the source in an editor tab. That is the seam the product is
+// built on — models are read here, code is edited there — and until now the path was only copyable.
+// The buttons render always and show only under html.ide, which the bridge's arrival sets, so a page
+// opened in a plain browser never offers a jump it cannot make.
+const OPN_SVG='<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
+function openBtn(file,line){
+  if(!file) return '';
+  const lbl='Open in IDE'+(line?' at line '+line:'');
+  return '<button type="button" class="cpy opn" data-open="'+enc(String(file))+'"'+(line?' data-line="'+esc(String(line))+'"':'')+
+    ' data-tip="'+esc(lbl)+'" aria-label="'+esc(lbl)+'">'+OPN_SVG+'</button>';
+}
+/** `:12` that opens the file at that line in the IDE (plain text elsewhere). */
+function lineRef(file,line){
+  if(line==null||line==='') return '';
+  return file?'<span class="opn-line" data-open="'+enc(String(file))+'" data-line="'+esc(String(line))+'" data-tip="Open in IDE at line '+esc(String(line))+'">:'+esc(String(line))+'</span>':':'+esc(String(line));
+}
+function atlasOpen(file,line){
+  if(!window.__atlasOpen) return false;
+  try{ window.__atlasOpen(String(file), String(line==null?'':line)); return true; }catch(e){ return false; }
+}
+function wireOpenButtons(root){
+  root.querySelectorAll('[data-open]').forEach(b=>{
+    b.onclick=e=>{ e.preventDefault(); e.stopPropagation(); atlasOpen(dec(b.dataset.open), b.dataset.line||''); };
+    b.onkeydown=e=>{ if(e.key==='Enter'||e.key===' ') e.stopPropagation(); };
+  });
+}
+function markIdeBridge(){ if(window.__atlasOpen) document.documentElement.classList.add('ide'); }
+window.addEventListener('atlas-ide-bridge', markIdeBridge);
+markIdeBridge();
 // Single copy path for every affordance. Order: IDE bridge → clipboard API → execCommand → prompt.
 // onOk fires only on genuine success, so the UI never shows a false "✓ copied" (the embedded JCEF
 // file:// viewer blocks navigator.clipboard — window.__atlasCopy is injected there by the IDE host).

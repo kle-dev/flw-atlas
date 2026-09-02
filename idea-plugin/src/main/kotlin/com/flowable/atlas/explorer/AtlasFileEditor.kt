@@ -2,6 +2,7 @@ package com.flowable.atlas.explorer
 
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.events.AtlasEventsListener
+import com.flowable.atlas.project.AtlasProjectRootService
 import com.intellij.icons.AllIcons
 import com.intellij.ide.ui.LafManagerListener
 import com.intellij.openapi.actionSystem.ActionManager
@@ -10,14 +11,19 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.Separator
+import com.intellij.notification.NotificationGroupManager
+import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileEditor.FileEditor
+import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
+import com.intellij.openapi.vfs.JarFileSystem
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.EditorNotifications
 import com.intellij.ui.JBColor
@@ -56,20 +62,35 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
     // navigator.clipboard is blocked; the page falls back to this via window.__atlasCopy.
     private val copyQuery = JBCefJSQuery.create(browser as JBCefBrowserBase)
 
+    // JS→Kotlin channel for "open this file (at this line) in the IDE" — window.__atlasOpen. The page
+    // shows the source path of every model and Java class and the line of every method and endpoint;
+    // this is the jump from reading a model to editing the code around it, the seam the plugin exists for.
+    private val openQuery = JBCefJSQuery.create(browser as JBCefBrowserBase)
+
     private val loadHandler = object : CefLoadHandlerAdapter() {
         override fun onLoadEnd(cefBrowser: CefBrowser, frame: CefFrame, httpStatusCode: Int) {
             // Re-push after any (re)load: the query param goes stale when the IDE theme switched
             // between load and reload. The page-side `window.__atlasSetIdeTheme &&` guard makes an
-            // early or racing push a harmless no-op. The copy bridge is (re)installed the same way.
-            if (frame.isMain) { installCopyBridge(); pushIdeTheme() }
+            // early or racing push a harmless no-op. The bridges are (re)installed the same way.
+            if (frame.isMain) { installBridges(); pushIdeTheme() }
         }
     }
 
     init {
         Disposer.register(this, browser)
         Disposer.register(this, copyQuery)
+        Disposer.register(this, openQuery)
         copyQuery.addHandler { text ->
             CopyPasteManager.getInstance().setContents(StringSelection(text))
+            null
+        }
+        openQuery.addHandler { payload ->
+            // "<file label>|<line or empty>" — the label is what the report carries: relative to the
+            // analysed root, `archive!entry` for a model inside a .bar/.zip.
+            val bar = payload.lastIndexOf('|')
+            val label = if (bar >= 0) payload.substring(0, bar) else payload
+            val line = if (bar >= 0) payload.substring(bar + 1).toIntOrNull() else null
+            ApplicationManager.getApplication().invokeLater({ openInIde(label, line) }, project.disposed)
             null
         }
         browser.jbCefClient.addLoadHandler(loadHandler, browser.cefBrowser)
@@ -124,13 +145,51 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
         )
     }
 
-    private fun installCopyBridge() {
-        // Define window.__atlasCopy(text) → route the string to copyQuery's handler (system clipboard).
+    private fun installBridges() {
+        // window.__atlasCopy(text) → copyQuery (system clipboard); window.__atlasOpen(file, line) →
+        // openQuery (an editor tab). The event tells the page the bridges exist, so it shows the open
+        // buttons only here and never in a plain browser.
         browser.cefBrowser.executeJavaScript(
-            "window.__atlasCopy = function(text){ ${copyQuery.inject("text")} };",
+            "window.__atlasCopy = function(text){ ${copyQuery.inject("text")} };" +
+                "window.__atlasOpen = function(file, line){ ${openQuery.inject("file + '|' + (line || '')")} };" +
+                "window.dispatchEvent(new Event('atlas-ide-bridge'));",
             browser.cefBrowser.url,
             0,
         )
+    }
+
+    /** Resolve a report file label to a VirtualFile and open it — at [line] (1-based) when given. */
+    private fun openInIde(label: String, line: Int?) {
+        if (project.isDisposed) return
+        val vf = resolveLabel(label)
+        if (vf == null) {
+            NotificationGroupManager.getInstance().getNotificationGroup("Flowable Atlas")
+                .createNotification(
+                    "File not found",
+                    "$label is not under the analysed project folder any more — regenerate the explorer.",
+                    NotificationType.WARNING,
+                )
+                .notify(project)
+            return
+        }
+        val descriptor = if (line != null && line > 0) OpenFileDescriptor(project, vf, line - 1, 0) else OpenFileDescriptor(project, vf)
+        descriptor.navigate(true)
+    }
+
+    /**
+     * A label is relative to the folder the report was generated from (the active Flowable project);
+     * `archive!entry` names a model inside a .bar/.zip, which the jar file system mounts read-only. A
+     * doubly nested `archive!inner.bar!entry` cannot be mounted, so the outer archive opens instead.
+     */
+    private fun resolveLabel(label: String): VirtualFile? {
+        val root = AtlasProjectRootService.getInstance(project).activeProjectDir() ?: return null
+        val lfs = LocalFileSystem.getInstance()
+        val bang = label.indexOf('!')
+        if (bang < 0) return lfs.refreshAndFindFileByNioFile(root.resolve(label))
+        val archive = lfs.refreshAndFindFileByNioFile(root.resolve(label.substring(0, bang))) ?: return null
+        val entry = label.substring(bang + 1)
+        if (entry.contains('!')) return archive
+        return JarFileSystem.getInstance().findFileByPath(archive.path + JarFileSystem.JAR_SEPARATOR + entry) ?: archive
     }
 
     private fun buildToolbarGroup() = DefaultActionGroup(

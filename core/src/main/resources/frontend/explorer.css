@@ -597,6 +597,11 @@
   .cpy:hover{color:var(--accent);border-color:var(--line2);background:var(--panel)}
   .cpy:focus-visible{outline:2px solid var(--accent);outline-offset:1px;color:var(--accent)}
   .cpy.ok{color:var(--cov-good,#2e7d32);border-color:transparent;background:transparent}
+  /* open-in-IDE affordances exist only where the IDE host injected its bridge (html.ide) */
+  .opn{display:none}
+  html.ide .opn{display:inline-flex}
+  html.ide .opn-line{cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px}
+  html.ide .opn-line:hover{color:var(--accent)}
   .cpy svg{display:block}
   /* reveal on hover inside dense contexts (chips, grid cells) so they stay uncluttered */
   .nc .cpy,.cell .cpy{opacity:0;transition:opacity .1s ease}
