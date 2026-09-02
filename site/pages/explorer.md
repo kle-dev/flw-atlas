@@ -51,6 +51,11 @@ grouped into **Models · Integration · Code · Expressions · Checks · Variabl
   expressions, suspect expressions, changelog issues, guessed variables, unused variables, unread inputs,
   script syntax.
 
+Every category carries a small icon for its type in the type's colour, and so does every node wherever it
+appears — the browse list, the chips, the detail tabs, the breadcrumb, the search results. A process, a
+form and a service tell apart at a glance in a long list, and in the collapsed sidebar rail the icons are
+the navigation. The icons scale with the text (see [Themes and text size](#themes-and-text-size)).
+
 ## The detail panel
 
 Selecting a node gives you its attributes, its diagram, an ego graph of its immediate neighbourhood,

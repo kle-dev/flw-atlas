@@ -216,5 +216,10 @@ class RenderersSmokeTest {
         assertTrue("expected Design's wording for a mapped-in parameter", html.contains("'via:inParameter'"))
         assertTrue("expected the silence rules in the payload", html.contains("silenceRules"))
         assertTrue("expected the write/read styling from explorer.css", html.contains(".vw{color:var(--bad-text)}"))
+        // Node-type icons: the table, the builder and the CSS that sizes them in --ui-scale units. A bare
+        // coloured dot is what these replaced; the docs mockups lift TYPE_ICONS out of explorer.js by name.
+        assertTrue("expected the node-type icon table from explorer.js", html.contains("const TYPE_ICONS={"))
+        assertTrue("expected the icon builder from explorer.js", html.contains("function typeIcon("))
+        assertTrue("expected the icon sizing from explorer.css", html.contains(".ti{"))
     }
 }

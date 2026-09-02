@@ -92,3 +92,6 @@ Copyright (c) 2026 Flowable AG. All rights reserved.
 Proprietary — source available, **no license granted**. The source is published for visibility and for
 use by Flowable AG and its authorized users; publication grants no right to use, copy, modify or
 redistribute it. See [LICENSE](LICENSE) for the full terms and for licensing enquiries.
+
+The bundled third-party components — the Geist font, the Lucide icons and, in the CLI jar, the Kotlin
+standard library — are listed with their licences in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

@@ -166,6 +166,7 @@
 .ide .expsr{display:flex; align-items:center; gap:7px; padding:3px 13px; color:#4c5b6a}
 .ide .expsr.on{background:#e5f0ff; color:#131e29; font-weight:500; border-left:2px solid #0f55d6; padding-left:11px}
 .ide .expsr .dt{width:6px; height:6px; border-radius:50%; flex:none}
+.ide .ti{width:11px; height:11px; flex:none}
 .ide .expsr .ct{margin-left:auto; font-size:10px; color:#79848f; font-family:ui-monospace,monospace}
 .ide .expm{flex:1; min-width:0; padding:13px 15px; overflow:hidden}
 .ide .exph{font-size:16px; font-weight:600; color:#131e29}

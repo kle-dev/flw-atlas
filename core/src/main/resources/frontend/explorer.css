@@ -22,8 +22,8 @@
        IDE's embedded browser applies none of the IDE's font scaling, so this is the one knob. */
     --ui-scale:1;
     --text-2xs:calc(10px*var(--ui-scale)); --text-xs:calc(11px*var(--ui-scale)); --text-sm:calc(12px*var(--ui-scale));
-    --text-md:calc(13px*var(--ui-scale)); --text-lg:calc(14px*var(--ui-scale)); --text-xl:calc(22px*var(--ui-scale));
-    --text-2xl:calc(28px*var(--ui-scale));
+    --text-md:calc(13px*var(--ui-scale)); --text-lg:calc(14px*var(--ui-scale)); --text-xl:calc(20px*var(--ui-scale));
+    --text-2xl:calc(26px*var(--ui-scale));
     --list-w:330px;             /* live width of the browse list column (JS-set via its drag handle) */
     --bg:#fafafa; --panel:#ffffff; --panel2:#f8fafc; --line:#e2e8f0; --line2:#d2d6da;
     --ink:#131e29; --ink-dim:#4c5b6a; --ink-faint:#79848f; --accent:#0f55d6;
@@ -137,6 +137,14 @@
   a{color:inherit}
   :focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-radius:var(--radius-sm)}
   .dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--ink-faint)}
+  /* Node-type icon (typeIcon() in explorer.js). Sized in --ui-scale units like every text token, so
+     A−/A+ scales an icon with the label beside it; coloured through the same --c-* variable the dot
+     used to carry. Sizes step with the density of the place: 16 in the sidebar and detail header,
+     14 in lists and rows, 13 inside chips, tabs, crumbs and search results. */
+  .ti{flex:none;display:inline-block;vertical-align:-.15em;width:calc(14px*var(--ui-scale));height:calc(14px*var(--ui-scale))}
+  .side-item .ti,.dhead .ti{width:calc(16px*var(--ui-scale));height:calc(16px*var(--ui-scale))}
+  .nc .ti,.pal-item .ti,.dtab .ti,.crumbs .ti{width:calc(13px*var(--ui-scale));height:calc(13px*var(--ui-scale))}
+  .item .ti{margin-top:2px}
   .kbd{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-dim);border:1px solid var(--line);
     background:var(--panel2);border-radius:var(--radius-sm);padding:1px var(--space-1);flex:none}
   .tbtn{background:var(--panel);border:1px solid var(--line2);color:var(--ink-dim);cursor:pointer;
@@ -155,8 +163,8 @@
   .atlas-tip.show{opacity:1;transform:none}
 
   /* semantic tone pills (Hub recipe: tone-50 bg / tone-300 border / tone-700 text) */
-  .pill{display:inline-flex;align-items:center;gap:var(--space-1);font-family:var(--mono);font-size:var(--text-2xs);
-    letter-spacing:.04em;text-transform:uppercase;border-radius:var(--radius-full);border:1px solid var(--neutral-border);
+  .pill{display:inline-flex;align-items:center;gap:var(--space-1);font-size:var(--text-2xs);font-weight:500;
+    font-variant-numeric:tabular-nums;border-radius:var(--radius-full);border:1px solid var(--neutral-border);
     background:var(--neutral-bg);color:var(--neutral-text);padding:1px var(--space-2);vertical-align:middle;white-space:nowrap}
   .pill-ok{background:var(--ok-bg);border-color:var(--ok-border);color:var(--ok-text)}
   .pill-warn{background:var(--warn-bg);border-color:var(--warn-border);color:var(--warn-text)}
@@ -183,7 +191,7 @@
   .side-logo svg text{font-family:var(--sans)}
   .side-logo .logo-mark{display:none;height:26px}
   .side-nav{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:var(--space-25) var(--space-2)}
-  .side-group{font-family:var(--mono);font-size:var(--text-2xs);letter-spacing:.14em;text-transform:uppercase;
+  .side-group{font-size:var(--text-2xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;
     color:var(--ink-faint);padding:var(--space-35) var(--space-3) var(--space-15)}
   .side-item{position:relative;display:flex;align-items:center;gap:var(--space-2);height:34px;padding:0 var(--space-3);
     border-radius:var(--radius-md);cursor:pointer;color:var(--ink-dim);font-weight:500}
@@ -192,14 +200,14 @@
   .side-item.on::before{content:"";position:absolute;left:var(--space-05);top:var(--space-2);bottom:var(--space-2);width:2px;
     border-radius:var(--radius-full);background:var(--sel-bar)}
   .side-item .lbl{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .side-item .n{font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-faint);flex:none}
+  .side-item .n{font-size:var(--text-xs);font-variant-numeric:tabular-nums;color:var(--ink-faint);flex:none}
   .side-item.on .n{color:var(--sel-text)}
   .side-foot{flex:none;display:flex;align-items:center;gap:var(--space-2);border-top:1px solid var(--line);padding:var(--space-25) var(--space-3)}
-  .side-foot .proj{flex:1;min-width:0;font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-dim);
+  .side-foot .proj{flex:1;min-width:0;font-size:var(--text-xs);font-weight:500;color:var(--ink-dim);
     border:1px solid var(--line2);padding:var(--space-05) var(--space-2);border-radius:var(--radius-full);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .side-foot .atlasver{flex:none;font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-dim);opacity:.72;white-space:nowrap}
+  .side-foot .atlasver{flex:none;font-size:var(--text-2xs);color:var(--ink-dim);opacity:.72;white-space:nowrap}
   .side-warn{display:flex;align-items:center;gap:var(--space-1);background:var(--warn-bg);border:1px solid var(--warn-border);
-    color:var(--warn-text);cursor:pointer;border-radius:var(--radius-full);padding:var(--space-05) var(--space-2);font-family:var(--mono);font-size:var(--text-2xs);flex:none}
+    color:var(--warn-text);cursor:pointer;border-radius:var(--radius-full);padding:var(--space-05) var(--space-2);font-size:var(--text-2xs);font-weight:500;flex:none}
   .side-warn:hover{border-color:var(--warn-text)}
   .main{display:flex;flex-direction:column;min-width:0;min-height:0}
 
@@ -220,6 +228,7 @@
   .topbar{flex:none;display:flex;align-items:center;gap:var(--space-35);height:64px;padding:0 var(--space-4);
     background:var(--panel);border-bottom:1px solid var(--line)}
   .crumbs{display:flex;align-items:center;gap:var(--space-25);font-size:var(--text-md);min-width:0;flex:1;white-space:nowrap}
+  .crumbs .crumb{display:inline-flex;align-items:center;gap:var(--space-1);min-width:0}
   .crumbs a.crumb{color:var(--ink-dim);font-weight:500;text-decoration:none}
   .crumbs a.crumb:hover{color:var(--ink);text-decoration:underline}
   .crumbs .crumb.cur{color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis}
@@ -254,11 +263,11 @@
   .dash{padding:var(--space-6) var(--space-7) 40px;max-width:1160px}
   .dash-title{font-size:var(--text-xl);font-weight:600;letter-spacing:-.01em}
   .dash-sub{color:var(--ink-faint);font-size:var(--text-sm);margin-top:var(--space-05)}
-  .seclabel{font-size:var(--text-xs);font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  .seclabel{font-size:var(--text-xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;
     color:var(--ink-dim);margin:26px 0 var(--space-25)}
   .metrics{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:var(--space-35)}
   .metric{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-md);padding:var(--space-35) var(--space-4)}
-  .metric .mk,.hcard .mk{font-size:var(--text-2xs);font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
+  .metric .mk,.hcard .mk{font-size:var(--text-2xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}
   .metric .mv,.hcard .mv{font-size:var(--text-2xl);font-weight:600;margin-top:var(--space-05);letter-spacing:-.01em}
   .metric .ms,.hcard .ms{font-size:var(--text-xs);color:var(--ink-faint);margin-top:var(--space-05);line-height:1.4}
   .health{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:var(--space-35)}
@@ -275,7 +284,7 @@
   .dashrow[data-id]{cursor:pointer}
   .dashrow[data-id]:hover{background:var(--hover)}
   .dashrow .nm{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-  .dashrow .ty{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em;flex:none}
+  .dashrow .ty{font-size:var(--text-2xs);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em;flex:none}
   .dashrow .pill{margin-left:auto;flex:none}
   .dashrow .sep{color:var(--ink-faint);flex:none}
   /* Unused-variables report (#/variables). A row carries more than a name — the construct that writes
@@ -290,15 +299,15 @@
   .varwhy{margin:var(--space-15) 0;padding-left:var(--space-4);color:var(--ink-dim);font-size:var(--text-xs)}
   .varwhy li{margin:var(--space-1) 0}
   #diaglist{margin:var(--space-25) 0 0;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-md);overflow:hidden}
-  #diaglist>summary{cursor:pointer;padding:var(--space-2) var(--space-35);font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-dim);list-style:none}
+  #diaglist>summary{cursor:pointer;padding:var(--space-2) var(--space-35);font-size:var(--text-xs);font-weight:500;color:var(--ink-dim);list-style:none}
   #diaglist>summary::-webkit-details-marker{display:none}
   #diaglist>summary:before{content:"▸ ";color:var(--ink-faint)}
   #diaglist[open]>summary:before{content:"▾ "}
   #diaglist[open]>summary{border-bottom:1px solid var(--line);color:var(--ink)}
   .dp-row{display:flex;gap:var(--space-25);align-items:baseline;padding:var(--space-2) var(--space-35);border-bottom:1px solid var(--line);font-size:var(--text-xs)}
   .dp-row:last-child{border-bottom:none}
-  .dp-kind{color:var(--c-suspectExpr);font-family:var(--mono);flex:none}
-  .dp-path{color:var(--ink);flex:none;max-width:40%;overflow:hidden;text-overflow:ellipsis}
+  .dp-kind{color:var(--c-suspectExpr);font-weight:600;flex:none}
+  .dp-path{font-family:var(--mono);color:var(--ink);flex:none;max-width:40%;overflow:hidden;text-overflow:ellipsis}
   .dp-msg{color:var(--ink-dim)}
 
   /* ------------------------------------------------------------------ */
@@ -325,7 +334,7 @@
      adds .sized and the list takes whatever height the panel now has. */
   .pal-results{flex:1 1 auto;min-height:0;max-height:var(--pal-res-max,320px);overflow-y:auto;padding:var(--space-15) 0 var(--space-2)}
   .pal-panel.sized{--pal-res-max:none}
-  .pal-group{font-size:var(--text-2xs);font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  .pal-group{font-size:var(--text-2xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;
     color:var(--ink-faint);padding:var(--space-25) var(--space-4) var(--space-1)}
   /* min-height, not height: a long name or URL wraps to a second line instead of being cut off. */
   .pal-item{display:flex;align-items:center;gap:var(--space-2);min-height:38px;margin:1px var(--space-2);padding:var(--space-05) var(--space-25);
@@ -343,7 +352,7 @@
   .pal-item:hover .ck{visibility:visible}
   .pal-item.mark .ck{background:var(--accent);border-color:var(--accent);visibility:visible}
   .pal-foot{flex:none;padding:var(--space-2) var(--space-4);border-top:1px solid var(--line);
-    font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint);display:flex;gap:var(--space-2)}
+    font-size:var(--text-2xs);color:var(--ink-faint);display:flex;gap:var(--space-2)}
   .pal-foot b{color:var(--accent);font-weight:600}
   .pal-foot .pf-note{margin-left:auto;color:var(--warn-text)}
   .pal-item .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:0 1 auto}
@@ -368,11 +377,11 @@
   .pal-frow2{padding-left:var(--space-2);border-left:2px solid var(--line2)}
   .pal-frow2 .pchip{font-size:var(--text-2xs)}
   .pal-in{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint)}
-  .pal-count{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint);margin-right:var(--space-1)}
+  .pal-count{font-size:var(--text-2xs);color:var(--ink-faint);margin-right:var(--space-1)}
   /* The syntax row: chips that ARE query text, so they render in the query's own face. */
   .pal-syn .pchip{font-family:var(--mono)}
   .pal-synq{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint);margin-left:auto;cursor:default}
-  .pal-pend{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-dim)}
+  .pal-pend{font-size:var(--text-2xs);color:var(--ink-dim)}
   /* The hit highlight. `mark` carries a UA default (yellow on black) that has to be overridden in both
      themes, and inside the selected row the tint must still separate from the accent background. */
   mark.hl{background:var(--hl-bg);color:var(--hl-ink);border-radius:var(--radius-xs);padding:0 1px}
@@ -390,7 +399,7 @@
   .dgbar{display:flex;align-items:center;gap:var(--space-15);flex-wrap:wrap;margin:0 0 var(--space-2)}
   .dgbar button{background:var(--panel);border:1px solid var(--line2);color:var(--ink-dim);
     border-radius:var(--radius-md);padding:var(--space-05) var(--space-2);cursor:pointer;
-    font-family:var(--mono);font-size:var(--text-xs);min-width:26px}
+    font-size:var(--text-xs);min-width:26px}
   .dgbar button:hover{color:var(--ink);border-color:var(--accent)}
   .dgpct{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint);min-width:3.5em}
   .dghint{margin-left:auto;font-size:var(--text-2xs);color:var(--ink-faint)}
@@ -447,11 +456,11 @@
   .dgcard-id{color:var(--ink-faint);font-size:var(--text-2xs);margin:1px 0 var(--space-1);
     display:flex;align-items:center;gap:var(--space-1);word-break:break-all}
   .dgrow{display:flex;gap:var(--space-2);padding:2px 0;align-items:baseline;font-size:var(--text-xs)}
-  .dgrow .k{flex:none;width:72px;color:var(--ink-faint);font-size:var(--text-2xs);
-    text-transform:uppercase;letter-spacing:.04em}
+  .dgrow .k{flex:none;width:72px;color:var(--ink-faint);font-size:var(--text-2xs);font-weight:600;
+    text-transform:uppercase;letter-spacing:.06em}
   .dgrow .v{min-width:0;word-break:break-word}
   .dgsec{margin:var(--space-2) 0 2px;font-size:var(--text-2xs);font-weight:600;color:var(--ink-dim);
-    text-transform:uppercase;letter-spacing:.05em}
+    text-transform:uppercase;letter-spacing:.06em}
   .dgcond{display:flex;gap:var(--space-2);align-items:baseline;padding:2px 0;font-size:var(--text-xs)}
   .dgcond .cflow{flex:none;color:var(--ink-dim);max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .dgcond code{font-family:var(--mono);color:var(--ink-dim);word-break:break-all}
@@ -477,27 +486,28 @@
   /* Browse: list column                                                 */
   /* ------------------------------------------------------------------ */
   .listhead{position:sticky;top:0;background:var(--panel2);border-bottom:1px solid var(--line);padding:var(--space-25);z-index:5}
-  .listhead .t{font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-dim);margin-bottom:var(--space-2);display:flex;justify-content:space-between}
+  .listhead .t{font-size:var(--text-2xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-dim);
+    margin-bottom:var(--space-2);display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
   .lh-controls{display:flex;gap:var(--space-15)}
   .listhead input{flex:1;min-width:0;background:var(--input);border:1px solid var(--line2);color:var(--ink);
-    font-family:var(--mono);font-size:var(--text-sm);padding:var(--space-15) var(--space-2);border-radius:var(--radius-md);outline:none}
+    font-family:var(--sans);font-size:var(--text-sm);padding:var(--space-15) var(--space-2);border-radius:var(--radius-md);outline:none}
   .listhead input:focus{border-color:var(--accent)}
   #lsort{background:var(--input);border:1px solid var(--line2);color:var(--ink-dim);
-    font-family:var(--mono);font-size:var(--text-xs);border-radius:var(--radius-md);padding:0 var(--space-15);outline:none;flex:none}
+    font-family:var(--sans);font-size:var(--text-xs);border-radius:var(--radius-md);padding:0 var(--space-15);outline:none;flex:none}
   #lsort:focus{border-color:var(--accent)}
   /* "N marked" button in the list head, shown only while a multi-selection exists. */
   .lh-open{width:100%;margin-top:var(--space-15);background:var(--accent);border:1px solid var(--accent);
     color:#fff;border-radius:var(--radius-md);padding:var(--space-1) var(--space-2);cursor:pointer;
-    font-family:var(--mono);font-size:var(--text-xs)}
+    font-family:var(--sans);font-size:var(--text-xs);font-weight:500}
   .lh-open:hover{background:var(--accent-hover)}
-  .lh-note{margin-top:var(--space-1);font-family:var(--mono);font-size:var(--text-2xs);color:var(--warn-text)}
+  .lh-note{margin-top:var(--space-1);font-size:var(--text-2xs);color:var(--warn-text)}
   /* "N matches in other categories · search everything" — the list filter is category-scoped by design,
      so this is the hand-off to ⌘K instead of leaving the user to conclude nothing exists. Quieter than
      .lh-open: it is an offer, not the primary action. */
   .lh-wider{width:100%;margin-top:var(--space-15);background:var(--warn-bg);
     border:1px solid var(--warn-border);color:var(--warn-text);border-radius:var(--radius-md);
     padding:var(--space-1) var(--space-2);cursor:pointer;text-align:left;
-    font-family:var(--mono);font-size:var(--text-2xs);line-height:1.4}
+    font-family:var(--sans);font-size:var(--text-xs);line-height:1.4}
   .lh-wider:hover{border-color:var(--warn-bar)}
   /* Off-screen but announced — carries the bare "N marked" counter for screen readers. */
   .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
@@ -521,7 +531,7 @@
   .item .meta{min-width:0;flex:1}
   .item .nm{color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .item .sub{font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .refn{flex:none;align-self:center;font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint);
+  .refn{flex:none;align-self:center;font-size:var(--text-2xs);font-variant-numeric:tabular-nums;color:var(--ink-faint);
     border:1px solid var(--line);border-radius:var(--radius-full);padding:0 var(--space-15)}
   .sentinel{height:1px}
   @keyframes rise{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
@@ -559,7 +569,7 @@
   .dtab:hover .x,.dtab:focus-within .x,.dtab.on .x,.dtab .x:focus-visible{opacity:1}
   .dtab .x:hover{background:var(--bad-bg);color:var(--bad-text)}
   .dtabs .dtclose{flex:none;margin-left:auto;align-self:center;background:transparent;border:none;
-    color:var(--ink-faint);cursor:pointer;font-family:var(--mono);font-size:var(--text-2xs);
+    color:var(--ink-faint);cursor:pointer;font-size:var(--text-2xs);
     padding:0 var(--space-15);border-radius:var(--radius-sm);white-space:nowrap}
   .dtabs .dtclose:hover{color:var(--ink);background:var(--hover)}
 
@@ -578,11 +588,11 @@
   .dhead{position:sticky;top:0;z-index:6;display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-4);
     background:var(--panel);border-bottom:1px solid var(--line)}
   .dhead button{background:var(--panel);border:1px solid var(--line2);color:var(--ink-dim);
-    border-radius:var(--radius-md);padding:var(--space-1) var(--space-2);cursor:pointer;font-family:var(--mono);font-size:var(--text-xs)}
+    border-radius:var(--radius-md);padding:var(--space-1) var(--space-2);cursor:pointer;font-size:var(--text-xs)}
   .dhead button:hover{color:var(--ink);border-color:var(--accent)}
   .dhead #permalink{margin-left:auto;flex:none}
   .dbody{padding:22px 26px;max-width:1000px}
-  .chip{display:inline-flex;align-items:center;gap:var(--space-15);font-family:var(--mono);font-size:var(--text-xs);
+  .chip{display:inline-flex;align-items:center;gap:var(--space-15);font-size:var(--text-xs);font-weight:500;
     border:1px solid var(--line2);border-radius:var(--radius-full);padding:var(--space-05) var(--space-2);color:var(--ink-dim)}
   .dtitle{font-family:var(--sans);font-weight:600;letter-spacing:-.01em;font-size:var(--text-2xl);line-height:1.2;margin:var(--space-3) 0 var(--space-1)}
   .dkey{font-family:var(--mono);font-size:var(--text-sm);color:var(--accent)}
@@ -609,19 +619,19 @@
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1px;
     background:var(--line);border:1px solid var(--line);border-radius:var(--radius-md);overflow:hidden;margin:var(--space-4) 0}
   .cell{background:var(--panel);padding:var(--space-25) var(--space-3)}
-  .cell .k{font-family:var(--mono);font-size:var(--text-2xs);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
+  .cell .k{font-size:var(--text-2xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}
   .cell .v{margin-top:var(--space-1);color:var(--ink);word-break:break-word}
   .cell .v.mono{font-family:var(--mono);font-size:var(--text-sm)}
   .vlink{color:var(--accent);cursor:pointer;border-bottom:1px dotted var(--accent)}
   .vlink:hover{color:var(--accent-hover);border-bottom-style:solid}
   .vlink:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--radius-xs)}
-  h3.rel{font-size:var(--text-xs);font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  h3.rel{font-size:var(--text-xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;
     color:var(--ink-dim);margin:var(--space-6) 0 var(--space-25);display:flex;align-items:center;gap:var(--space-2)}
   h3.rel:before{content:"";flex:none;width:14px;height:1px;background:var(--line2)}
   /* collapsible detail section — same heading typography as h3.rel, plus a disclosure marker */
   details.sect{margin:var(--space-5) 0 0;border-top:1px solid var(--line)}
   details.sect>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:var(--space-2);
-    padding:var(--space-25) 0;font-size:var(--text-xs);font-weight:600;letter-spacing:.08em;
+    padding:var(--space-25) 0;font-size:var(--text-xs);font-weight:600;letter-spacing:.06em;
     text-transform:uppercase;color:var(--ink-dim)}
   details.sect>summary::-webkit-details-marker{display:none}
   details.sect>summary:before{content:"▸";flex:none;color:var(--ink-faint);font-size:var(--text-2xs)}
@@ -634,13 +644,13 @@
   .relhint{font-size:var(--text-2xs);color:var(--ink-faint);margin:0 0 var(--space-25)}
   .relhint b{font-weight:600;color:var(--ink-dim)}
   .relgrp{margin:0 0 var(--space-35)}
-  .relgrp .lab{font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-faint);margin:0 0 var(--space-15)}
+  .relgrp .lab{font-size:var(--text-xs);font-weight:500;color:var(--ink-faint);margin:0 0 var(--space-15)}
   .nodechips{display:flex;flex-wrap:wrap;gap:var(--space-15)}
   .nc{display:inline-flex;align-items:center;gap:var(--space-15);background:var(--panel);border:1px solid var(--line2);
     border-radius:var(--radius-md);padding:var(--space-1) var(--space-25);cursor:pointer;max-width:380px}
   .nc:hover{border-color:var(--accent);background:var(--hover)}
   .nc .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .nc .ty{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em}
+  .nc .ty{font-size:var(--text-2xs);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em}
   /* uncertain links: suspect (loose/cross-type match) and dynamic (expression-valued) */
   .nc.nc-sus,.nc.nc-dyn{border-style:dashed;opacity:.85}
   .nc .ncflag{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint);flex:none;cursor:help}
@@ -683,14 +693,14 @@
   .fldbody .oprow{padding-top:var(--space-1);padding-bottom:var(--space-1)}
   .fldbody .parmgrid{margin:var(--space-1) 0}
   .verb{font-weight:600;min-width:48px}
-  .tag{font-family:var(--mono);font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.05em;
+  .tag{font-size:var(--text-2xs);font-weight:500;text-transform:uppercase;letter-spacing:.04em;
     border:1px solid var(--line2);border-radius:var(--radius-sm);padding:1px var(--space-15);color:var(--ink-dim)}
 
   /* schema coverage (Liquibase -> service -> data object) */
   .covmeta{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);font-family:var(--mono);
     font-size:var(--text-xs);color:var(--ink-dim);margin:var(--space-2) 0}
   .covbadges{margin:var(--space-15) 0 var(--space-1)}
-  .cov-badge{display:inline-block;font-family:var(--mono);font-size:var(--text-2xs);border-radius:var(--radius-full);
+  .cov-badge{display:inline-block;font-size:var(--text-2xs);font-weight:500;border-radius:var(--radius-full);
     padding:var(--space-05) var(--space-2);margin:0 var(--space-15) var(--space-15) 0;border:1px solid var(--line2);color:var(--ink-dim)}
   .cov-badge.cov-bad{color:var(--cov-bad);border-color:var(--cov-bad)}
   .cov-badge.cov-warn{color:var(--cov-warn);border-color:var(--cov-warn)}
@@ -702,7 +712,7 @@
   .authnote .nc{margin-top:var(--space-1)}
   .covwrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius-md);margin:var(--space-2) 0}
   table.cov{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:var(--text-sm)}
-  table.cov th{text-align:left;font-weight:500;color:var(--ink-faint);background:var(--panel2);
+  table.cov th{text-align:left;font-family:var(--sans);font-weight:600;color:var(--ink-faint);background:var(--panel2);
     padding:var(--space-15) var(--space-3);border-bottom:1px solid var(--line2);font-size:var(--text-2xs);
     letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
   table.cov td{padding:var(--space-15) var(--space-3);border-bottom:1px solid var(--line);vertical-align:top}
@@ -731,7 +741,7 @@
   details.op>summary:hover{background:var(--hover)}
   details.op[open]>summary{border-bottom:1px solid var(--line)}
   .opname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .opcount{margin-left:auto;flex:none;color:var(--ink-faint);font-size:var(--text-2xs);
+  .opcount{margin-left:auto;flex:none;font-family:var(--sans);color:var(--ink-faint);font-size:var(--text-2xs);
     border:1px solid var(--line2);border-radius:var(--radius-full);padding:1px var(--space-2)}
   .opkey{flex:none;color:var(--ink-faint)}
   /* what the group's parameters are mapped onto: the key inline in the summary, the chip in the body */
@@ -779,19 +789,18 @@
   .parmgrid .pn{color:var(--ink-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
   .parmgrid .pt{color:var(--ink-faint);flex:none}
   /* in/out direction column of a parameter mapping; the colour is set inline per direction */
-  .parmgrid .pd{flex:none;min-width:4.75em;font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.04em}
+  .parmgrid .pd{flex:none;min-width:4.75em;font-family:var(--sans);font-weight:500;font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.04em}
   .parmgrid .pa{color:var(--ink-faint);padding:0 var(--space-05)}
   /* per-section filter for a long parameter list: text box + direction chips */
   .pbar{display:flex;align-items:center;gap:var(--space-15);flex-wrap:wrap;margin:0 0 var(--space-2)}
   .pbar .pf{flex:1;min-width:140px;background:var(--input);border:1px solid var(--line2);color:var(--ink);
-    font-family:var(--mono);font-size:var(--text-sm);padding:var(--space-1) var(--space-2);
+    font-family:var(--sans);font-size:var(--text-sm);padding:var(--space-1) var(--space-2);
     border-radius:var(--radius-md);outline:none}
   .pbar .pf:focus{border-color:var(--accent)}
-  .pbar .pcount{flex:none;font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint)}
+  .pbar .pcount{flex:none;font-size:var(--text-2xs);color:var(--ink-faint)}
   .pchip{display:inline-flex;align-items:center;gap:var(--space-1);background:var(--panel);
     border:1px solid var(--line2);color:var(--ink-dim);border-radius:var(--radius-full);
-    padding:var(--space-05) var(--space-2);cursor:pointer;font-family:var(--mono);font-size:var(--text-2xs);
-    text-transform:uppercase;letter-spacing:.04em}
+    padding:var(--space-05) var(--space-2);cursor:pointer;font-size:var(--text-xs);font-weight:500}
   .pchip:hover{color:var(--ink);border-color:var(--accent)}
   .pchip.on{background:var(--active);border-color:var(--accent);color:var(--sel-text)}
   .pchipn{color:var(--ink-faint)}

@@ -140,6 +140,20 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.21.0</h3>
+        <ul>
+          <li><b>Every node type has a face.</b> A process, a form, a service and forty other kinds of node
+              were told apart by a coloured dot, and forty hues nobody can tell apart is no distinction at
+              all. Every place a node appears — the sidebar, the browse list, the chips, the detail tabs,
+              the breadcrumb, the search results — now carries a small stroke icon for its type
+              ([Lucide](https://lucide.dev), ISC) in the type's colour, and in the collapsed sidebar rail
+              the icons are the navigation. They scale with <code>A−</code> / <code>A+</code> like the text
+              beside them. In the same pass every label that names a section or a column speaks in one voice
+              — Geist, small, semibold, tracked capitals — and monospace is reserved for what a machine
+              reads: keys, paths, code, expressions. Section headings, list heads, table headers, pills and
+              filter chips used to pick their own face and tracking, and the sidebar footer read like a
+              terminal.</li>
+        </ul>
         <h3>0.20.0</h3>
         <ul>
           <li><b>A model's "Uses — variables &amp; expressions" section is back.</b> The generator strips
@@ -483,63 +497,6 @@
               <code>label</code>. And every facet that binds shows as a lit chip beside the result count —
               proof the filter took effect, a reminder it is still on, and, when clicked, the way to remove
               it from the query.</li>
-        </ul>
-        <h3>0.18.0</h3>
-        <ul>
-          <li><b>A form's buttons say what they do</b> — the Fields list named a button and its type, and
-              stopped there. The form's references said <i>an action is triggered</i>; which button
-              triggered it, with which values, under which condition, and where you land afterwards were
-              nowhere on the page. A button row expands in place now: the model it invokes as a chip you can
-              follow, the payload it sends and stores back, the endpoint of a REST button with its verb and
-              response path, an expression button's expression and the interval it re-runs on, whether it
-              fires by itself or runs even while disabled, the scope an action runs against, and where it
-              navigates when it returns. A plain input has nothing to add and stays the one-line row it
-              always was.</li>
-          <li><b>A hidden button is no longer drawn as a button</b> — <code>visible: false</code> is the
-              commonest configuration a button has: <b>252 of 338</b> in one real project, because a hidden
-              button that auto-executes is how a form calls an endpoint or computes a value on its own.
-              Atlas listed them exactly like a button someone presses. Every component now states the three
-              things that decide whether it is there at all — <b>hidden</b>, <b>disabled</b>, <b>not
-              submitted</b> on the row itself when the model settles it, and the condition in the body when
-              it is an expression (<code>visible when {{…}}</code>). It applies to inputs too: a hidden
-              field was just as invisible.</li>
-          <li><b>Where the result is stored</b> — an expression button's computed value and a REST button's
-              response land in the button's own <code>{{binding}}</code>: 265 buttons in that project write
-              one. The row names the target, and the write is now in the variable graph, so a variable that
-              only a button ever sets is no longer invisible on both counts. An action button's
-              <code>value</code> is Design's placeholder <code>"."</code> and is deliberately <i>not</i>
-              read as a target.</li>
-          <li><b>Localised captions, and the modeller's own note</b> — a caption may exist only as an
-              <code>i18n</code> override, which left some buttons with no name at all in the report; that
-              override is now the fallback. And a component's <code>description</code> — <i>"Disabled for
-              privileged users, because …"</i> — is shown where it explains everything else on the row.</li>
-          <li><b>A full-payload button no longer shows a map it never uses</b> — an action button can send
-              the whole form payload (or the whole scope) and store the whole response, in which case the
-              runtime ignores the send and response maps entirely. Atlas rendered those maps as the contract
-              regardless. The override is stated first now, and the map it beats is marked as unused rather
-              than presented as the truth.</li>
-          <li><b>Buttons with no caption are on the page at all</b> — a component needed a
-              <code>label</code> or an <code>extraSettings.text</code> to be listed, which is not something
-              a button has to have: measured over one real project, <b>50 of 87 REST buttons and every link
-              button</b> are icon-only or captioned by their <code>value</code>, so they were dropped from
-              the model data — invisible in the report, unsearchable, and unable to explain the action
-              reference they were the source of. A button is now listed on its <code>type</code> alone, and
-              takes its caption from <code>value</code> when that is where Design put it.</li>
-          <li><b><code>id:</code> searches identifiers, and only identifiers</b> — ⌘K gained a facet beside
-              <code>t:</code> / <code>key:</code> / <code>in:</code>: <code>id:save-button</code> finds the
-              model that declares that element and opens its row, and it will not match a <i>caption</i>
-              that reads "Save", which is what made looking a button up by its id hopeless before. What a
-              button invokes and the expression it evaluates are indexed too, so
-              <code>notifyCustomerAction</code> finds the forms whose buttons call it.</li>
-          <li><b>An expression button's result counts as a write</b> — every expression button hands its
-              value to its own <code>{{binding}}</code>, and buttons were excluded from the variable graph
-              wholesale, so that target looked neither read nor written (178 of them in one real project).
-              The write is recorded with the button as its site; the read side needed nothing, as whoever
-              renders the binding was already picked up.</li>
-          <li><b>An action reference written the new way resolves</b> — the Design editor also persists a
-              button's action as <code>{key, id}</code> rather than a bare key, the shape already unwrapped
-              for process, case and query references. That one was not, so such an export produced a
-              reference key nothing could match.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

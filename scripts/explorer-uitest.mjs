@@ -459,11 +459,18 @@ const probe = `<script>
   steps.push(()=>{
     const plus=document.querySelector('[data-ui-scale="+"]');
     ok('the footer offers a text-size control', !!plus);
+    // remembered so the next step can prove the knob reaches a sans label and an icon, not only the tokens
+    const g=document.querySelector('#nav .side-group'), ic=document.querySelector('#nav .ti');
+    window.__scaleBefore={lbl:g?parseFloat(getComputedStyle(g).fontSize):0, ic:ic?ic.getBoundingClientRect().width:0};
     if(plus) click(plus);
   });
   steps.push(()=>{
     const s=parseFloat(document.documentElement.style.getPropertyValue('--ui-scale'));
     ok('A+ scales the text tokens', s>1, '--ui-scale='+s);
+    const b=window.__scaleBefore||{}, g=document.querySelector('#nav .side-group'), ic=document.querySelector('#nav .ti');
+    const lbl=g?parseFloat(getComputedStyle(g).fontSize):0, icw=ic?ic.getBoundingClientRect().width:0;
+    ok('A+ scales a sidebar group label', b.lbl>0 && Math.abs(lbl/b.lbl-s)<0.03, b.lbl+'px → '+lbl+'px at '+s);
+    ok('A+ scales the type icons', b.ic>0 && Math.abs(icw/b.ic-s)<0.03, b.ic+'px → '+icw+'px at '+s);
     try{ localStorage.removeItem('atlas-ui-scale'); }catch(e){}
     const h=document.getElementById('listresize');
     ok('the list/detail split has a drag handle', !!h && h.getAttribute('role')==='separator');
@@ -543,6 +550,9 @@ let dom;
 try {
   dom = execFileSync(chrome, [
     '--headless', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
+    // Chrome's default viewport is 800x600 — exactly the stacked (<=800px) layout. The desktop shell
+    // with its sidebar is what most steps mean to exercise, so ask for one.
+    '--window-size=1400,900',
     // ~72 steps at 300ms each: the budget is virtual time the page may consume, so it only needs to outlast the run
     '--virtual-time-budget=45000', '--dump-dom', 'file://' + tmp,
   ], { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024, timeout: 120000 });

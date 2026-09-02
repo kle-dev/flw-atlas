@@ -12,6 +12,18 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.21.0
+
+- **Every node type has a face.** A process, a form, a service and forty other kinds of node were told
+  apart by a coloured dot, and forty hues nobody can tell apart is no distinction at all. Every place a
+  node appears — the sidebar, the browse list, the chips, the detail tabs, the breadcrumb, the search
+  results — now carries a small stroke icon for its type ([Lucide](https://lucide.dev), ISC) in the
+  type's colour, and in the collapsed sidebar rail the icons are the navigation. They scale with `A−` /
+  `A+` like the text beside them. In the same pass every label that names a section or a column speaks
+  in one voice — Geist, small, semibold, tracked capitals — and monospace is reserved for what a machine
+  reads: keys, paths, code, expressions. Section headings, list heads, table headers, pills and filter
+  chips used to pick their own face and tracking, and the sidebar footer read like a terminal.
+
 ## 0.20.0
 
 - **A model's "Uses — variables & expressions" section is back.** The generator strips the `_uses` map

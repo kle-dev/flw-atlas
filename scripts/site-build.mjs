@@ -256,6 +256,38 @@ function inlineMockups(html, where) {
   });
 }
 
+/**
+ * {{icon:type}} -> the explorer's own node-type icon, lifted out of explorer.js's TYPE_ICONS table and
+ * coloured with the light `--c-<type>` token from explorer.css. A mockup that drew its own dots drifted
+ * from the product the moment a colour or a glyph changed; this way it cannot — it has no copy.
+ */
+const ICON_TABLE = (() => {
+  const js = read(path.join(ROOT, 'core/src/main/resources/frontend/explorer.js'));
+  const m = js.match(/\nconst TYPE_ICONS=\{\n([\s\S]*?)\n\};\n/);
+  if (!m) { fail('explorer.js', 'the TYPE_ICONS table is gone — {{icon:…}} in the mockups has nothing to draw'); return {}; }
+  const out = {};
+  for (const line of m[1].split('\n')) {
+    const e = line.match(/^\s*(\w+):'(.*)',$/);
+    if (e) out[e[1]] = e[2];
+  }
+  return out;
+})();
+const ICON_COLORS = (() => {
+  const css = read(path.join(ROOT, 'core/src/main/resources/frontend/explorer.css'));
+  const light = css.slice(0, css.indexOf(':root[data-theme=dark]'));
+  const out = {};
+  for (const m of light.matchAll(/--c-(\w+):(#[0-9a-fA-F]{6})/g)) out[m[1]] = m[2];
+  return out;
+})();
+function inlineIcons(html, where) {
+  return html.replace(/\{\{icon:(\w+)\}\}/g, (_, type) => {
+    const body = ICON_TABLE[type];
+    if (!body) { fail(where, `unknown icon "${type}" (no TYPE_ICONS.${type} in explorer.js)`); return ''; }
+    return `<svg class="ti" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"` +
+      ` stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:${ICON_COLORS[type] || '#79848f'}">${body}</svg>`;
+  });
+}
+
 /* ---------------------------------------------------------------------- output */
 
 fs.rmSync(OUT, { recursive: true, force: true });
@@ -273,7 +305,7 @@ for (let idx = 0; idx < pages.length; idx++) {
   const where = path.relative(ROOT, srcPath);
   const md = read(srcPath).replace(/\{\{VERSION\}\}/g, VERSION);
   const rendered = renderMarkdown(md, where);
-  const html = inlineMockups(rendered.html, where);
+  const html = inlineIcons(inlineMockups(rendered.html, where), where);
   const headings = rendered.headings;
 
   // The first plain paragraph is the meta description.

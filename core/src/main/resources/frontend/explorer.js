@@ -42,6 +42,89 @@ const TM = {
   external:['External / library','Other'],
 };
 
+// ---------- node-type icons ----------
+// One stroke icon per node type (Lucide, ISC — see THIRD-PARTY-NOTICES.md), keyed like the --c-* palette
+// so the icon and its colour come from the same name. Values are the inner markup of a 24×24 icon, not
+// a whole <svg>: the same string is wrapped for HTML by typeIcon() and dropped into the neighborhood
+// diagram as a <g>. Bare coloured dots used to stand for forty types whose hues nobody can tell apart.
+//
+// Lucide Icons — ISC License. Copyright (c) 2026 Lucide Icons and Contributors (https://lucide.dev).
+// Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is
+// hereby granted, provided that the above copyright notice and this permission notice appear in all
+// copies. THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS
+// SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR
+// BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER
+// RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+// TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+// circle, code, database, radio, search and table-2 derive from Feather — MIT License, Copyright (c)
+// 2013-present Cole Bemis; the full text is in THIRD-PARTY-NOTICES.md.
+const TYPE_ICONS={
+  app:'<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+  process:'<rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/>',
+  case:'<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/><path d="M8 10v4"/><path d="M12 10v2"/><path d="M16 10v6"/>',
+  decision:'<path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>',
+  form:'<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/>',
+  page:'<rect width="18" height="7" x="3" y="3" rx="1"/><rect width="9" height="7" x="3" y="14" rx="1"/><rect width="5" height="7" x="16" y="14" rx="1"/>',
+  dataObject:'<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/>',
+  dataDictionary:'<path d="M12 5v16"/><path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z"/>',
+  masterData:'<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
+  service:'<path d="M12 22v-5"/><path d="M15 8V2"/><path d="M17 8a1 1 0 0 1 1 1v4a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1z"/><path d="M9 8V2"/>',
+  serviceOperation:'<path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/>',
+  agent:'<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',
+  channel:'<path d="M16.247 7.761a6 6 0 0 1 0 8.478"/><path d="M19.075 4.933a10 10 0 0 1 0 14.134"/><path d="M4.925 19.067a10 10 0 0 1 0-14.134"/><path d="M7.753 16.239a6 6 0 0 1 0-8.478"/><circle cx="12" cy="12" r="2"/>',
+  event:'<path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z"/>',
+  knowledgeBase:'<path d="m16 6 4 14"/><path d="M12 6v14"/><path d="M8 8v12"/><path d="M4 4v16"/>',
+  signal:'<path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5"/><circle cx="12" cy="9" r="2"/><path d="M16.2 4.8c2 2 2.26 5.11.8 7.47"/><path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1"/><path d="M9.5 18h5"/><path d="m8 22 4-11 4 11"/>',
+  message:'<path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/>',
+  error:'<path d="M12 16h.01"/><path d="M12 8v4"/><path d="M15.312 2a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586l-4.688-4.688A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2z"/>',
+  escalation:'<circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4"/><path d="M12 16V8"/>',
+  topic:'<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  endpoint:'<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+  java:'<path d="M10 2v2"/><path d="M14 2v2"/><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1"/><path d="M6 2v2"/>',
+  method:'<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3"/><path d="M9 11.2h5.7"/>',
+  liquibase:'<path d="M15 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M21 9H3"/><path d="M21 15H3"/>',
+  action:'<path d="M14 4.1 12 6"/><path d="m5.1 8-2.9-.8"/><path d="m6 12-1.9 2"/><path d="M7.2 2.2 8 5.1"/><path d="M9.037 9.69a.498.498 0 0 1 .653-.653l11 4.5a.5.5 0 0 1-.074.949l-4.349 1.041a1 1 0 0 0-.74.739l-1.04 4.35a.5.5 0 0 1-.95.074z"/>',
+  bot:'<path d="M12 6V2H8"/><path d="M15 11v2"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M20 16a2 2 0 0 1-2 2H8.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 4 20.286V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z"/><path d="M9 11v2"/>',
+  query:'<path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/>',
+  template:'<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  sequence:'<path d="M11 5h10"/><path d="M11 12h10"/><path d="M11 19h10"/><path d="M4 4h1v5"/><path d="M4 9h2"/><path d="M6.5 20H3.4c0-1 2.6-1.925 2.6-3.5a1.5 1.5 0 0 0-2.6-1.02"/>',
+  document:'<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/>',
+  variableExtractor:'<path d="M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z"/>',
+  sla:'<line x1="10" x2="14" y1="2" y2="2"/><line x1="12" x2="15" y1="14" y2="11"/><circle cx="12" cy="14" r="8"/>',
+  dashboardComponent:'<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+  palette:'<path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/>',
+  securityPolicy:'<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+  group:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/>',
+  variable:'<path d="M8 21s-4-3-4-9 4-9 4-9"/><path d="M16 3s4 3 4 9-4 9-4 9"/><line x1="15" x2="9" y1="9" y2="15"/><line x1="9" x2="15" y1="9" y2="15"/>',
+  expression:'<path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/>',
+  binding:'<path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/>',
+  string:'<path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>',
+  customFunction:'<path d="M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z"/>',
+  external:'<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M12 22V12"/><polyline points="3.29 7 12 12 20.71 7"/><path d="m7.5 4.27 9 5.15"/>',
+  invalidExpr:'<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
+  suspectExpr:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  overview:'<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+  scripts:'<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 12.5 8 15l2 2.5"/><path d="m14 12.5 2 2.5-2 2.5"/>',
+  checks:'<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  schema:'<path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/>',
+  _:'<circle cx="12" cy="12" r="10"/>',
+};
+// The icon carries no width/height: CSS sizes .ti in --ui-scale units, so A−/A+ scales icons with
+// their labels. Colour stays a var() reference like color(), so a theme switch restyles without re-render.
+function typeIcon(t, o){
+  o=o||{};
+  const body=TYPE_ICONS[t]||TYPE_ICONS._;
+  return '<svg class="ti'+(o.cls?' '+o.cls:'')+'" viewBox="0 0 24 24" fill="none" stroke="currentColor"'+
+    ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"'+
+    ' style="color:'+(o.color||color(t))+'">'+body+'</svg>';
+}
+// external nodes split three ways (Flowable API / navigation route / library), exactly as nodeColor() does.
+function nodeIcon(n, o){
+  const d=(n&&n.data)||{};
+  const t=n.type==='external'?(d.flowableApi?'endpoint':d.route?'page':'external'):n.type;
+  return typeIcon(t, Object.assign({color:nodeColor(n)}, o||{}));
+}
+
 // ---------- Flowable Design vocabulary ----------
 // Atlas's internal names (`ruleTask-decision`, `sendPayloadMapping`, `workAction`) are precise but only
 // mean something if you built Atlas. This table gives each one the word Design uses plus a sentence
@@ -413,7 +496,7 @@ function categories(){
       const roles = {};
       byType.java.forEach(n=>(n.data.roles||[]).forEach(r=>roles[r]=(roles[r]||0)+1));
       Object.keys(roles).sort().forEach(r=>cats.push({
-        id:'java::'+r, label:'Java · '+r, sec:'Code', color:color('java'), count:roles[r],
+        id:'java::'+r, label:'Java · '+r, sec:'Code', color:color('java'), icon:'java', count:roles[r],
         match:n=>n.type==='java' && (n.data.roles||[]).includes(r)}));
     } else if(t==='variable'){
       // group variables by the model type(s) that use them (process / form / case / java …)
@@ -421,39 +504,39 @@ function categories(){
       byType.variable.forEach(n=>(n.data.scopes||[]).forEach(s=>scopes[s]=(scopes[s]||0)+1));
       Object.keys(scopes).sort().forEach(s=>cats.push({
         id:'variable::'+s, label:'Variable · '+s, sec:'Variables',
-        color:color('variable'), count:scopes[s], match:n=>n.type==='variable' && (n.data.scopes||[]).includes(s)}));
+        color:color('variable'), icon:'variable', count:scopes[s], match:n=>n.type==='variable' && (n.data.scopes||[]).includes(s)}));
       // Cross-cutting lens: the variables that actually travel through an in/out parameter mapping.
       const isParamVar=n=>n.type==='variable' && ((n.data||{}).ioParams||[]).length>0;
       const pc=byType.variable.filter(isParamVar).length;
       if(pc) cats.push({id:'variable::parameter', label:'Variable · parameter', sec:'Variables',
-        color:color('variable'), count:pc, match:isParamVar});
+        color:color('variable'), icon:'variable', count:pc, match:isParamVar});
     } else if(t==='external'){
       // external nodes are not all "library": split out Flowable platform API calls
       // (endpoints.*) and in-app navigation routes (#/...) from real third-party deps.
-      [{id:'external::api',  label:'Flowable API',        sec:'Integration', color:color('endpoint'), match:n=>n.type==='external'&&n.data.flowableApi},
-       {id:'external::route',label:'Navigation · routes', sec:'Other',       color:color('page'),     match:n=>n.type==='external'&&n.data.route},
-       {id:'external::missing',label:'Missing model refs',sec:'Checks',      color:color('external'), match:n=>n.type==='external'&&n.data.missingModel},
-       {id:'external::lib',  label:'External / library',  sec:'Other',       color:color('external'), match:n=>n.type==='external'&&!n.data.flowableApi&&!n.data.route&&!n.data.missingModel}
+      [{id:'external::api',  label:'Flowable API',        sec:'Integration', color:color('endpoint'), icon:'endpoint', match:n=>n.type==='external'&&n.data.flowableApi},
+       {id:'external::route',label:'Navigation · routes', sec:'Other',       color:color('page'),     icon:'page',     match:n=>n.type==='external'&&n.data.route},
+       {id:'external::missing',label:'Missing model refs',sec:'Checks',      color:color('external'), icon:'invalidExpr', match:n=>n.type==='external'&&n.data.missingModel},
+       {id:'external::lib',  label:'External / library',  sec:'Other',       color:color('external'), icon:'external', match:n=>n.type==='external'&&!n.data.flowableApi&&!n.data.route&&!n.data.missingModel}
       ].forEach(c=>{ const count=byType.external.filter(c.match).length; if(count) cats.push(Object.assign({count}, c)); });
     } else {
       const m = TM[t]||[t,'Other'];
-      cats.push({id:t,label:m[0],sec:m[1],color:color(t),count:byType[t].length,match:n=>n.type===t});
+      cats.push({id:t,label:m[0],sec:m[1],color:color(t),icon:t,count:byType[t].length,match:n=>n.type===t});
     }
   });
   // a review list: forms that nothing links to (orphaned UI models worth pruning)
   const unusedForms = nodes.filter(isUnusedForm);
   if(unusedForms.length) cats.push({id:'unused-form', label:'Forms · unused', sec:'Checks',
-    color:color('form'), count:unusedForms.length, match:isUnusedForm});
+    color:color('form'), icon:'form', count:unusedForms.length, match:isUnusedForm});
   // The two other "registered but never called" findings get review lists of their own, so the Checks
   // page's "open the list" lands on the 3 unused operations and not on all 40 (same rule as Findings.kt).
   const isUnusedOp = n => n.type==='serviceOperation' && !((n.data||{}).usedBy||[]).length;
   const unusedOps = nodes.filter(isUnusedOp);
   if(unusedOps.length) cats.push({id:'unused-op', label:'Service operations · unused', sec:'Checks',
-    color:color('serviceOperation'), count:unusedOps.length, match:isUnusedOp});
+    color:color('serviceOperation'), icon:'serviceOperation', count:unusedOps.length, match:isUnusedOp});
   const isUnusedFn = n => n.type==='customFunction' && !((n.data||{}).usedBy||[]).length;
   const unusedFns = nodes.filter(isUnusedFn);
   if(unusedFns.length) cats.push({id:'unused-fn', label:'Custom functions · unused', sec:'Checks',
-    color:color('customFunction'), count:unusedFns.length, match:isUnusedFn});
+    color:color('customFunction'), icon:'customFunction', count:unusedFns.length, match:isUnusedFn});
   // Review lists for flagged expressions/bindings. Structural syntax errors make an
   // expression *invalid*; catalog findings (unknown function/namespace — the catalog may
   // simply not know a project-registered function) only make it *suspect*.
@@ -462,35 +545,35 @@ function categories(){
   const hasWarnOnly = n => isExprN(n) && (n.data.problems||[]).length && !(n.data.problems||[]).some(p=>p.severity==='error');
   const invalidExprs = nodes.filter(hasErr);
   if(invalidExprs.length) cats.push({id:'invalid-expr', label:'Invalid — syntax ⚠', sec:'Checks',
-    color:color('invalidExpr'), count:invalidExprs.length, match:hasErr});
+    color:color('invalidExpr'), icon:'invalidExpr', count:invalidExprs.length, match:hasErr});
   const suspectExprs = nodes.filter(hasWarnOnly);
   if(suspectExprs.length) cats.push({id:'suspect-expr', label:'Suspect — review', sec:'Checks',
-    color:color('suspectExpr'), count:suspectExprs.length, match:hasWarnOnly});
+    color:color('suspectExpr'), icon:'suspectExpr', count:suspectExprs.length, match:hasWarnOnly});
   // A changelog nobody references, or one superseded by a later revision, is a schema surprise waiting.
   const isChangelogIssue = n => n.type==='liquibase' &&
     ['orphan','superseded'].indexOf(((n.data||{}).authority||{}).status)>=0;
   const clIssues = nodes.filter(isChangelogIssue);
   if(clIssues.length) cats.push({id:'changelog-issue', label:'Changelogs · orphan / superseded', sec:'Checks',
-    color:color('liquibase'), count:clIssues.length, match:isChangelogIssue});
+    color:color('liquibase'), icon:'liquibase', count:clIssues.length, match:isChangelogIssue});
   // Variables whose only evidence is a bare identifier in a script — probably real, not provable.
   const isGuessedVar = n => n.type==='variable' && (n.data||{}).heuristic===true;
   const guessed = nodes.filter(isGuessedVar);
   if(guessed.length) cats.push({id:'guessed-var', label:'Variables · script guess ≈', sec:'Checks',
-    color:color('variable'), count:guessed.length, match:isGuessedVar});
+    color:color('variable'), icon:'variable', count:guessed.length, match:isGuessedVar});
   // Something writes them and nothing reads them. Kept beside the script-guess list so all three
   // variable reviews read as one family; the full report with the definition sites is #/variables.
   const isUnusedVar = n => n.type==='variable' && (n.data||{}).unread===true;
   const unusedVars = nodes.filter(isUnusedVar);
   if(unusedVars.length) cats.push({id:'unused-var', label:'Variables · never read', sec:'Checks',
-    color:color('variable'), count:unusedVars.length, match:isUnusedVar});
+    color:color('variable'), icon:'variable', count:unusedVars.length, match:isUnusedVar});
   const isUnreadInput = n => n.type==='variable' && ((n.data||{}).unreadIn||[]).length>0;
   const unreadInputs = nodes.filter(isUnreadInput);
   if(unreadInputs.length) cats.push({id:'unread-input', label:'Variables · unread call input', sec:'Checks',
-    color:color('variable'), count:unreadInputs.length, match:isUnreadInput});
+    color:color('variable'), icon:'variable', count:unreadInputs.length, match:isUnreadInput});
   // Models with a script whose body (or scriptFormat) fails the structural syntax check.
   const scriptIssueModels = new Set(allScripts().filter(s=>(s.problems||[]).length).map(s=>s.model));
   if(scriptIssueModels.size) cats.push({id:'script-syntax', label:'Scripts · syntax ⚠', sec:'Checks',
-    color:color('invalidExpr'), count:scriptIssueModels.size, match:n=>scriptIssueModels.has(n.id)});
+    color:color('invalidExpr'), icon:'scripts', count:scriptIssueModels.size, match:n=>scriptIssueModels.has(n.id)});
   cats.sort((a,b)=> (SECTIONS.indexOf(a.sec)-SECTIONS.indexOf(b.sec)) || a.label.localeCompare(b.label));
   return cats;
 }
@@ -684,7 +767,7 @@ function renderSidebar(){
     };
     return el;
   };
-  const ov = mkItem('<span class="dot" style="background:var(--accent)"></span><span class="lbl">Overview</span>','Overview');
+  const ov = mkItem(typeIcon('overview',{color:'var(--accent)'})+'<span class="lbl">Overview</span>','Overview');
   ov.dataset.route='/overview';
   ov.onclick=()=>{ location.hash='/overview'; };
   nav.appendChild(ov);
@@ -692,22 +775,22 @@ function renderSidebar(){
   // review reports belong under Checks. `pri` keeps a section's tabs above its drill-down lists.
   const items=[...CATS];
   const scriptCount=allScripts().length;
-  if(scriptCount) items.push({route:'/scripts', label:'Script tasks', sec:'Integration', pri:0,
+  if(scriptCount) items.push({route:'/scripts', label:'Script tasks', sec:'Integration', pri:0, icon:'scripts',
     color:color('process'), count:scriptCount,
     tip:'Script tasks ('+scriptCount+') — every script task, listener script and bot script'});
   const openChecks=INSIGHTS.checksOpen;
-  items.push({route:'/checks', label:'Checks', sec:'Checks', pri:0,
+  items.push({route:'/checks', label:'Checks', sec:'Checks', pri:0, icon:'checks',
     color:covColor(openChecks?'bad':'good'), count:openChecks,
     tip:'Everything worth a look — parse issues, flagged expressions, schema gaps, unused and unproven models'});
   if(INSIGHTS.totalCovServices>0){
     const gaps=INSIGHTS.health.schemaGaps;
-    items.push({route:'/schema', label:'Schema gaps', sec:'Checks', pri:1,
+    items.push({route:'/schema', label:'Schema gaps', sec:'Checks', pri:1, icon:'schema',
       color:covColor(gaps?'bad':'good'), count:gaps,
       tip:'Schema gaps — Liquibase → Service → Data object coverage'});
   }
   if(INSIGHTS.totalDirectedVars>0){
     const unusedVars=INSIGHTS.health.unusedVars+INSIGHTS.health.unreadInputs;
-    items.push({route:'/variables', label:'Unused variables', sec:'Variables', pri:0,
+    items.push({route:'/variables', label:'Unused variables', sec:'Variables', pri:0, icon:'variable',
       color:covColor(unusedVars?'bad':'good'), count:unusedVars,
       tip:'Variables something writes and nothing reads, and inputs mapped into a model that never '+
           'reads them'});
@@ -717,7 +800,7 @@ function renderSidebar(){
   let cur='';
   items.forEach(c=>{
     if(c.sec!==cur){ cur=c.sec; const h=document.createElement('div'); h.className='side-group'; h.textContent=cur; nav.appendChild(h); }
-    const el = mkItem('<span class="dot" style="background:'+c.color+'"></span><span class="lbl">'+esc(c.label)+'</span>'+
+    const el = mkItem(typeIcon(c.icon,{color:c.color})+'<span class="lbl">'+esc(c.label)+'</span>'+
                       (c.count?'<span class="n">'+c.count+'</span>':''),
                       c.tip||(c.label+' ('+c.count+')'));
     if(c.route){ el.dataset.route=c.route; el.onclick=()=>{ location.hash=c.route; }; }
@@ -751,8 +834,8 @@ function renderSidebarActive(){
 function renderCrumbs(){
   const c=document.getElementById('crumbs');
   const sep='<span class="crumb-sep">/</span>';
-  const link=(txt,href)=>'<a class="crumb" href="'+href+'">'+esc(txt)+'</a>';
-  const cur=(txt)=>'<span class="crumb cur">'+esc(txt)+'</span>';
+  const link=(txt,href,ic)=>'<a class="crumb" href="'+href+'">'+(ic||'')+esc(txt)+'</a>';
+  const cur=(txt,ic)=>'<span class="crumb cur">'+(ic||'')+esc(txt)+'</span>';
   let h, title;
   if(state.view==='overview'){
     h=link(DATA.project,'#/overview')+sep+cur('Overview');
@@ -773,8 +856,9 @@ function renderCrumbs(){
     const cat=CATS.find(x=>x.id===state.cat);
     const n=state.sel&&byId.get(state.sel);
     h=link(DATA.project,'#/overview');
-    if(cat) h+=sep+(n?link(cat.label,'#/browse/'+enc(cat.id)):cur(cat.label));
-    if(n) h+=sep+cur(n.label);
+    const ci=typeIcon(cat?cat.icon:'_',{color:cat?cat.color:''});
+    if(cat) h+=sep+(n?link(cat.label,'#/browse/'+enc(cat.id),ci):cur(cat.label,ci));
+    if(n) h+=sep+cur(n.label,nodeIcon(n));
     title=(n?n.label:(cat?cat.label:'Browse'))+' — Flowable Atlas';
   }
   c.innerHTML=h;
@@ -815,7 +899,7 @@ function renderDashboard(){
     INSIGHTS.hotspots.forEach(x=>{
       const n=byId.get(x.id);
       h+='<div class="dashrow" data-id="'+enc(x.id)+'" role="link" tabindex="0">'+
-         '<span class="dot" style="background:'+nodeColor(n)+'"></span>'+
+         nodeIcon(n)+
          '<span class="nm">'+esc(n.label)+'</span><span class="ty">'+esc(nodeKind(n))+'</span>'+
          '<span class="pill">'+x.count+' refs</span></div>';
     });
@@ -827,7 +911,7 @@ function renderDashboard(){
     INSIGHTS.apps.forEach(a=>{
       const n=byId.get(a.id); if(!n) return;
       h+='<div class="dashrow" data-id="'+enc(a.id)+'" role="link" tabindex="0">'+
-         '<span class="dot" style="background:'+color('app')+'"></span>'+
+         typeIcon('app')+
          '<span class="nm">'+esc(n.label)+'</span>'+
          (a.groups?'<span class="ty">'+a.groups+' group'+(a.groups>1?'s':'')+' can open</span>':'')+
          '<span class="pill">'+a.models+' models</span></div>';
@@ -1749,7 +1833,7 @@ function renderItems(cat, wrap){
     // show a row with no visible reason at all. Falls back to the key — the line it always showed.
     const w=parsed.empty?null:matchWhere(n, parsed);
     const sub=(w&&w.hint)||n.key;
-    el.innerHTML='<span class="dot" style="margin-top:5px;background:'+nodeColor(n)+'"></span>'+
+    el.innerHTML=nodeIcon(n)+
       '<div class="meta"><div class="nm">'+hlHtml(n.label, parsed)+authBadge(n)+
       '</div><div class="sub" title="'+esc(sub)+'">'+hlHtml(sub, parsed)+'</div></div>'+
       (rn?'<span class="refn" title="referenced by '+rn+' node'+(rn>1?'s':'')+'">'+rn+'</span>':'')+
@@ -1813,7 +1897,7 @@ function nodeChip(id,f){
   const cls=f&&f.sus?' nc-sus':f&&f.dyn?' nc-dyn':'';
   const flag=f&&f.sus?'<span class="ncflag" title="suspect — loose or cross-type match">≈</span>'
            :f&&f.dyn?'<span class="ncflag" title="dynamic — reference is an expression">ƒ</span>':'';
-  return '<span class="nc'+cls+'" data-id="'+enc(id)+'" tabindex="0" role="link"><span class="dot" style="background:'+nodeColor(n)+'"></span>'+
+  return '<span class="nc'+cls+'" data-id="'+enc(id)+'" tabindex="0" role="link">'+nodeIcon(n)+
     '<span class="nm">'+esc(n.label)+'</span>'+flag+'<span class="ty">'+esc(nodeKind(n))+'</span>'+copyBtn(n.key,nodeKind(n)+' key')+'</span>';
 }
 // `label ↓` — one element inside a model, opened where it lives. `data-goto`/`data-goto-el` is the
@@ -2994,7 +3078,7 @@ function implLink(s){
 }
 function jchip(id,label){
   const k=(byId.get(id)||{}).key||label;
-  return '<span class="nc" data-id="'+enc(id)+'" tabindex="0" role="link" style="flex:none"><span class="dot" style="background:'+color('java')+'"></span><span class="nm">'+esc(label)+'</span>'+copyBtn(k,'class')+'</span>';
+  return '<span class="nc" data-id="'+enc(id)+'" tabindex="0" role="link" style="flex:none">'+typeIcon('java')+'<span class="nm">'+esc(label)+'</span>'+copyBtn(k,'class')+'</span>';
 }
 
 // ---------- "Other attributes" — the structural guarantee that nothing extracted is invisible ----------
@@ -3065,7 +3149,7 @@ function renderDetail(){
   h+='<div class="dbody">';
   const kindHint=term('type', n.type).hint;
   h+='<span class="chip"'+(kindHint?' title="'+esc(kindHint)+'"':'')+'>'+
-     '<span class="dot" style="background:'+nodeColor(n)+'"></span>'+esc(nodeKind(n))+'</span>';
+     nodeIcon(n)+esc(nodeKind(n))+'</span>';
   h+='<div class="dtitle">'+esc(n.label)+authBadge(n)+'</div>';
   h+='<div class="dkey mono">'+esc(n.key)+copyBtn(n.key,'key')+'</div>';
   if(n.file) h+='<div class="dfile" title="click to copy" data-copy="'+enc(n.file)+'"><span class="fp">'+esc(n.file)+'</span>'+copyBtn(n.file,'path')+openBtn(n.file)+'</div>';
@@ -4007,7 +4091,7 @@ function renderTabs(){
     const hint=i<9 ? '  ('+(IS_MAC?'⌥':'Alt+')+(i+1)+')' : '';
     return '<div class="dtab'+(on?' on':'')+'" id="dtab-'+i+'" role="tab" data-i="'+i+'"'+
       ' aria-selected="'+on+'" tabindex="'+(on?0:-1)+'" data-tip="'+esc(n.label+' · '+nodeKind(n)+hint)+'">'+
-      '<span class="dot" style="background:'+nodeColor(n)+'"></span>'+
+      nodeIcon(n)+
       '<span class="nm">'+esc(n.label)+'</span>'+
       '<button class="x" tabindex="-1" aria-label="'+esc('Close '+n.label)+'" data-close-i="'+i+'">×</button></div>';
   }).join('');
@@ -5154,7 +5238,7 @@ function palRender(){
       h+='<div class="pal-item'+(i===palSel?' sel':'')+(mk?' mark':'')+'" id="pal-'+i+'" role="option"'+
          ' aria-selected="'+(i===palSel)+'" aria-checked="'+mk+'" data-i="'+i+'">'+
          '<span class="ck" aria-hidden="true">✓</span>'+
-         '<span class="dot" style="background:'+nodeColor(n)+'"></span>'+
+         nodeIcon(n)+
          '<span class="nm" title="'+esc(n.label)+'">'+hlHtml(n.label, parsed)+'</span>'+
          '<span class="hint" title="'+esc(hint)+'">'+hlHtml(hint, parsed)+'</span></div>';
     });
