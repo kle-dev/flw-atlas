@@ -2,6 +2,7 @@ package com.flowable.atlas.diagram
 
 import java.io.File
 import java.util.zip.ZipFile
+import java.util.zip.ZipInputStream
 
 /**
  * Resolves the raw bytes of a model given the `file` label the graph carries for it — the single place
@@ -27,7 +28,7 @@ object ModelBytes {
         val bang = fileLabel.indexOf('!') // Extractor archive label: "$rel!${entry.name}"
         if (bang >= 0) {
             val archiveRel = fileLabel.substring(0, bang)
-            val entryName = fileLabel.substring(bang + 1)
+            val entryPath = fileLabel.substring(bang + 1)
             // When the project input is itself a single archive (`./atlas app.zip`), `Extractor.relOf`
             // labels every model "<archive-name>!<entry>" with `root` set to the archive file. A plain
             // `File(root, archiveRel)` would then look for the archive INSIDE itself and silently fail.
@@ -35,13 +36,34 @@ object ModelBytes {
             if (!archive.isFile) return null
             return runCatching {
                 ZipFile(archive).use { zf ->
-                    val entry = zf.getEntry(entryName) ?: return null
+                    // An archive inside the archive (a Design export packing one .bar per app) gives a
+                    // label with a second `!`: read the inner archive's bytes and descend.
+                    val outerName = entryPath.substringBefore('!')
+                    val entry = zf.getEntry(outerName) ?: return null
                     val bytes = zf.getInputStream(entry).use { it.readBytes() }
-                    bytes to entryName.substringAfterLast('/')
+                    if (!entryPath.contains('!')) return bytes to outerName.substringAfterLast('/')
+                    resolveNested(bytes, entryPath.substringAfter('!'))
                 }
             }.getOrNull()
         }
         val f = File(root, fileLabel)
         return if (f.isFile) runCatching { f.readBytes() }.getOrNull()?.let { it to f.name } else null
+    }
+
+    /** [entryPath] inside the archive whose bytes are [archiveBytes]; one more `!` descends again. */
+    private fun resolveNested(archiveBytes: ByteArray, entryPath: String): Pair<ByteArray, String>? {
+        val wanted = entryPath.substringBefore('!')
+        ZipInputStream(archiveBytes.inputStream()).use { zin ->
+            var e = zin.nextEntry
+            while (e != null) {
+                if (!e.isDirectory && e.name == wanted) {
+                    val bytes = zin.readBytes()
+                    return if (entryPath.contains('!')) resolveNested(bytes, entryPath.substringAfter('!'))
+                    else bytes to wanted.substringAfterLast('/')
+                }
+                e = zin.nextEntry
+            }
+        }
+        return null
     }
 }

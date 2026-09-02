@@ -17,7 +17,13 @@ object DiagramArtifacts {
      * graph-node order, skipping models whose file is unreadable or carries no drawable diagram.
      * [root] is the project root the node `file` paths are relative to.
      */
-    fun render(result: Map<String, Any?>, root: File): Map<String, String> {
+    fun render(
+        result: Map<String, Any?>,
+        root: File,
+        /** Told about every model whose diagram could not be produced — an unreadable source or a
+         *  renderer failure; a model that simply has no layout is not reported. */
+        onFailure: ((key: String, reason: String) -> Unit)? = null,
+    ): Map<String, String> {
         val graph = result["graph"] as? Map<*, *> ?: return emptyMap()
         val nodes = graph["nodes"] as? List<*> ?: return emptyMap()
         val out = LinkedHashMap<String, String>()
@@ -27,8 +33,12 @@ object DiagramArtifacts {
             val key = node["key"] as? String ?: continue
             val filePath = node["file"] as? String ?: continue
             // ModelBytes handles both loose files and "<archive>!<entry>" labels (see ModelBytes).
-            val (bytes, name) = ModelBytes.resolve(root, filePath) ?: continue
-            val svg = runCatching { DiagramRenderer.renderSvg(bytes, name, type) }.getOrNull() ?: continue
+            val resolved = ModelBytes.resolve(root, filePath)
+            if (resolved == null) { onFailure?.invoke(key, "model source could not be read from $filePath"); continue }
+            val (bytes, name) = resolved
+            val svg = runCatching { DiagramRenderer.renderSvg(bytes, name, type) }
+                .onFailure { onFailure?.invoke(key, it.message ?: it.javaClass.simpleName) }
+                .getOrNull() ?: continue
             out.putIfAbsent(sanitize(key) + ".svg", svg)
         }
         return out

@@ -50,7 +50,13 @@ element, the line and a snippet, so it is actionable rather than merely true.
 ### `parseIssues` — files Atlas could not read
 
 Every entry in the run's diagnostics: a model whose XML or JSON would not parse, a file that could not
-be read, an archive entry that could not be opened, and any failure while extracting custom functions.
+be read, an archive entry that could not be opened, a Java source that could not be read, and any
+failure while extracting custom functions. It also lists what Atlas decided **not** to read, as `skip`
+entries — a JSON in a Design export that is no model wrapper, a legacy wrapper without a body, a
+process in the old editor's JSON format with no XML twin, an archive nested two levels deep, a model
+file above the 32 MB limit — because a file that was skipped on purpose is no less absent from the
+report than one that failed. An archive *inside* an archive (a Design export packing one `.bar` per
+app) is opened one level down and its models are read like any other.
 
 One entry is a warning rather than an error: a **key shared by two model types** — a form and a page
 both called `customer`, say. Both models are read completely and a reference that states its type

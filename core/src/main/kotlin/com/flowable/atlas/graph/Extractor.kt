@@ -17,11 +17,19 @@ import java.io.File
  * expressions / bindings / declared variables / delegate classes it references into the shared [Ctx],
  * and assembles the `result` structure.
  *
- * Ported incrementally: Java parsing, reference resolution, Liquibase coverage and `_build_graph`
- * (which sets each model's `_uses` and the node/edge graph) are added in later increments. Model
- * types whose parser is not yet ported would be skipped, but all parse_* are now wired.
+ * The tail of [extract] runs the Java pass and reference resolution ([ReferenceResolver]), the
+ * Liquibase schema coverage ([LiquibaseCoverage]) and the graph build ([GraphBuilder], which also sets
+ * each model's `_uses`). A model type without a structured parser goes through
+ * [ModelParsers.parseGeneric] and is registered by key, name and description.
+ *
+ * Nothing is dropped silently: a file or archive entry that is not read — unparseable, not a model
+ * wrapper, above [MAX_MODEL_BYTES], nested too deep — leaves a diagnostic behind, so the report can say
+ * what it did not see.
  */
 object Atlas {
+
+    /** A model file or archive entry above this is not read; a `.form` with embedded images stays far below. */
+    internal const val MAX_MODEL_BYTES: Long = 32L shl 20
 
     private val QUERY_KEY_RE = Regex("\"key\"\\s*:\\s*\"([^\"]+)\"")
     private val QUERY_GROUPS_RE = Regex("seq_contains\\(\\s*\\\\?\"([A-Za-z0-9_.\\-]+)")
@@ -169,26 +177,44 @@ object Atlas {
         // invisible: modern-shaped bodies go straight to their parser (wrapper key/name injected);
         // Oryx-shaped bodies (stencil/childShapes — the old form/page editor) at least register the
         // model, so keys resolve and the raw ${…}/{{…}} harvest attributes to it.
+        // Oryx-JSON twins of a process/case/decision that were skipped in favour of an XML sibling —
+        // checked after discovery: a twin with no sibling was a whole model, silently.
+        val skippedOryxTwins = ArrayList<Triple<String, String, String>>()   // (nodeType, key, label)
+
         fun dispatchDesignJson(folder: String?, data: ByteArray, label: String) {
             val wrapper = try {
                 Dyn.mapOrNull(com.flowable.atlas.model.MiniJson.parse(String(data, Charsets.UTF_8)))
-            } catch (e: Exception) { null } ?: return
-            val key = wrapper["key"] as? String ?: return
-            val ejRaw = wrapper["editorJson"] ?: return
+            } catch (e: Exception) {
+                diag("parse", label, "(design json) ${e.message}"); return
+            } ?: run { diag("skip", label, "JSON is not an object — not a Design model wrapper"); return }
+            val key = wrapper["key"] as? String
+                ?: run { diag("skip", label, "JSON carries no model key — not a Design model wrapper"); return }
+            val ejRaw = wrapper["editorJson"]
+                ?: run { diag("skip", label, "Design wrapper for '$key' carries no editorJson body"); return }
             @Suppress("UNCHECKED_CAST")
             val body: Map<String, Any?>? = when (ejRaw) {
                 is Map<*, *> -> ejRaw as Map<String, Any?>
-                is String -> try { com.flowable.atlas.model.MiniJson.parse(ejRaw) as? Map<String, Any?> } catch (e: Exception) { null }
+                is String -> try {
+                    com.flowable.atlas.model.MiniJson.parse(ejRaw) as? Map<String, Any?>
+                } catch (e: Exception) {
+                    diag("parse", label, "(editorJson of '$key') ${e.message}"); null
+                }
                 else -> null
             }
             val mt = com.flowable.atlas.model.ModelType.byDesignFolder(folder)
             // a root-level wrapper whose body carries the app manifest is the (legacy) app model
                 ?: if (body != null && (body.containsKey("flowApp") || body["models"] is List<*>)) {
                     com.flowable.atlas.model.ModelType.APP
-                } else return
+                } else {
+                    diag("skip", label, "'$key' sits in '${folder ?: "/"}', which is not a Design model folder — type unknown, not parsed")
+                    return
+                }
             val mtype = mt.parserKey
-            // bpmn/cmmn/dmn json is the Oryx twin of an XML sibling in the same export — skip the copy
-            if (mtype in setOf("bpmn", "cmmn", "dmn")) return
+            // bpmn/cmmn/dmn json is the Oryx twin of an XML sibling in the same export — skip the copy,
+            // but remember it: if no sibling turns up, that was the only copy.
+            if (mtype in setOf("bpmn", "cmmn", "dmn")) {
+                skippedOryxTwins.add(Triple(ModelKinds.NORMALIZE_TYPE[mtype] ?: mtype, key, label)); return
+            }
             val oryx = body == null || body.containsKey("childShapes") || body.containsKey("stencil")
             val doc = LinkedHashMap<String, Any?>()
             if (mtype == "form" || mtype == "page" || (oryx && mtype == "app")) {
@@ -214,7 +240,10 @@ object Atlas {
                 if (truthyStr(wrapper["name"])) bodyMeta["name"] = wrapper["name"]
                 doc["metadata"] = bodyMeta
             } else if (oryx) {
-                return  // an Oryx body for a non-form type — nothing a parser could read
+                // an Oryx body for a non-form type — nothing a parser could read, and no wrapper-only
+                // registration either: say so rather than let the model vanish
+                diag("skip", label, "'$key' ($mtype) has an Oryx-shaped body Atlas has no parser for — not registered")
+                return
             } else {
                 doc.putAll(body)
                 doc.putIfAbsent("key", key)
@@ -230,15 +259,66 @@ object Atlas {
         val isDir = root.isDirectory
         fun relOf(f: File): String = if (isDir) relativize(root, f) else f.name
 
+        fun tooLarge(label: String, size: Long): Boolean {
+            if (size <= MAX_MODEL_BYTES) return false
+            diag("skip", label, "${size shr 20} MB is above the ${MAX_MODEL_BYTES shr 20} MB limit for one model file — not read")
+            return true
+        }
+
         for (path in discovered.models) {
             val rel = relOf(path)
             try {
+                if (tooLarge(rel, path.length())) continue
                 val mt = ModelKinds.modelTypeFor(path.name)
                 if (mt != null) dispatch(mt, path.readBytes(), rel)
                 else dispatchDesignJson(path.parentFile?.name, path.readBytes(), rel)
             } catch (e: Exception) {
                 diag("read", rel, e.message ?: e.toString())
             }
+        }
+
+        /**
+         * One archive entry: a model goes to its parser, a legacy-export JSON wrapper to
+         * [dispatchDesignJson], and an archive *inside* the archive — a Design app export packing one
+         * `.bar` per app is an ordinary shape — is opened one level down. [size] is -1 when the container
+         * does not know it up front (a nested stream); then the cap is checked after reading.
+         */
+        fun scanEntry(entryName: String, size: Long, label: String, depth: Int, read: () -> ByteArray) {
+            val base = entryName.substringAfterLast('/')
+            if (size >= 0 && tooLarge(label, size)) return
+            if (com.flowable.atlas.model.ModelPaths.isArchive(base)) {
+                if (depth >= 1) { diag("skip", label, "archive nested two levels deep — not opened"); return }
+                val bytes = read()
+                if (size < 0 && tooLarge(label, bytes.size.toLong())) return
+                java.util.zip.ZipInputStream(bytes.inputStream()).use { zin ->
+                    var inner = zin.nextEntry
+                    while (inner != null) {
+                        if (!inner.isDirectory) {
+                            val innerLabel = "$label!${inner.name}"
+                            try {
+                                val innerBytes = zin.readBytes()
+                                scanEntry(inner.name, innerBytes.size.toLong(), innerLabel, depth + 1) { innerBytes }
+                            } catch (e: Exception) {
+                                diag("archive", innerLabel, e.message ?: e.toString())
+                            }
+                        }
+                        inner = zin.nextEntry
+                    }
+                }
+                return
+            }
+            val mt = ModelKinds.modelTypeFor(base)
+            if (mt != null) {
+                val bytes = read()
+                if (size < 0 && tooLarge(label, bytes.size.toLong())) return
+                dispatch(mt, bytes, label)
+                return
+            }
+            // legacy-export JSON: `<type>-models/x.json` anywhere, or an app wrapper at the root
+            if (!base.lowercase().endsWith(".json")) return
+            val folder = entryName.split('/').dropLast(1).lastOrNull()
+            if (com.flowable.atlas.model.ModelType.byDesignFolder(folder) == null && entryName.contains('/')) return
+            dispatchDesignJson(folder, read(), label)
         }
 
         for (arc in discovered.archives) {
@@ -249,21 +329,12 @@ object Atlas {
                     while (entries.hasMoreElements()) {
                         val entry = entries.nextElement()
                         if (entry.name.endsWith("/")) continue
-                        val base = entry.name.substringAfterLast('/')
-                        val mt = ModelKinds.modelTypeFor(base)
-                        if (mt != null) {
-                            val bytes = zf.getInputStream(entry).use { it.readBytes() }
-                            dispatch(mt, bytes, "$rel!${entry.name}")
-                            continue
+                        val label = "$rel!${entry.name}"
+                        try {
+                            scanEntry(entry.name, entry.size, label, 0) { zf.getInputStream(entry).use { it.readBytes() } }
+                        } catch (e: Exception) {
+                            diag("archive", label, e.message ?: e.toString())
                         }
-                        // legacy-export JSON: `<type>-models/x.json` anywhere, or an app wrapper at the root
-                        if (!base.lowercase().endsWith(".json")) continue
-                        val folder = entry.name.split('/').dropLast(1).lastOrNull()
-                        if (com.flowable.atlas.model.ModelType.byDesignFolder(folder) == null &&
-                            entry.name.contains('/')
-                        ) continue
-                        val bytes = zf.getInputStream(entry).use { it.readBytes() }
-                        dispatchDesignJson(folder, bytes, "$rel!${entry.name}")
                     }
                 }
             } catch (e: Exception) {
@@ -271,11 +342,16 @@ object Atlas {
             }
         }
 
-        // Java parsing, reference resolution, REST matching and the result-section assembly.
-        // (Liquibase coverage and the navigable graph are added in later increments.)
-        // The returned holder carries the internal structures the graph builder consumes —
-        // the full resolved-refs list (with `targetFqn`), `all_java` (fqn → parsed java) and
-        // the `bean.method()` map — plus `byKey` above; wired into GraphBuilder.build(...) below.
+        // A skipped Oryx twin whose XML sibling never turned up was the only copy of that model.
+        for ((nodeType, key, label) in skippedOryxTwins) {
+            if (modelIndex[nodeType to key] == null) {
+                diag("skip", label, "'$key' is a $nodeType in the legacy editor's JSON format with no XML twin in this project — not parsed")
+            }
+        }
+
+        // Java parsing, reference resolution and REST matching. The returned holder carries the internal
+        // structures the graph builder consumes — the full resolved-refs list (with `targetFqn`),
+        // `all_java` (fqn → parsed java) and the `bean.method()` map — plus `byKey` above.
         val resolvedData = ReferenceResolver.resolve(
             result, ctx, modelIndex, byKey, discovered.javas,
             { f -> relOf(f) }, { kind, path, msg -> diag(kind, path, msg) },

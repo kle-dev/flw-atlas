@@ -93,8 +93,15 @@ object ExplorerHtmlRenderer {
             val data = Dyn.anyMutableMapOrNull(node["data"]) ?: continue
             // Resolve via ModelBytes (handles loose files AND "<archive>!<entry>" labels) — a plain
             // File(root, file) silently fails for models packaged inside a .zip/.bar/Design export.
-            val (bytes, name) = ModelBytes.resolve(root, file) ?: continue
-            val svg = runCatching { DiagramRenderer.renderSvg(bytes, name, type) }.getOrNull() ?: continue
+            // A model that has no layout gets no diagram and nothing else; a model whose diagram could
+            // not be produced says so on its page (`diagramError` lands in Other attributes), because
+            // "no diagram" and "the diagram failed" used to look the same.
+            val resolved = ModelBytes.resolve(root, file)
+            if (resolved == null) { data["diagramError"] = "model source could not be read from $file"; continue }
+            val (bytes, name) = resolved
+            val svg = runCatching { DiagramRenderer.renderSvg(bytes, name, type) }
+                .onFailure { data["diagramError"] = "diagram could not be rendered: ${it.message ?: it.javaClass.simpleName}" }
+                .getOrNull() ?: continue
             data["diagram"] = svg
         }
         return list

@@ -36,6 +36,17 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   never calls the bean, and a variable written in one process and read in the next judged in the wrong
   scope. Each process, case or decision now gets the text inside its own element; only what stands
   outside all of them — the definitions header, its messages and signals — still belongs to every one.
+- **Nothing is dropped silently, and an archive inside an archive is read.** A Design export that packs
+  one `.bar` per app produced a clean run with zero models: the inner archive matched no model extension
+  and was skipped without a word. It is opened now, one level down, and its models carry a
+  `export.zip!apps/inner.bar!processes/x.bpmn` label the diagram renderers resolve too. Everything else
+  Atlas decides not to read leaves a `skip` diagnostic behind — a JSON in an export that is no model
+  wrapper, a legacy wrapper without a body or of a type Atlas has no parser for, a process in the old
+  editor's JSON format whose XML twin never turned up, an archive nested two levels deep, a model file
+  above a 32 MB limit — where each of those used to be indistinguishable from an empty project. An
+  unreadable Java source costs that one file instead of aborting the run with a stack trace, and a model
+  whose diagram could not be produced says so on its page (`diagramError`) and on the CLI, instead of
+  looking like a model that simply has no layout.
 
 ## 0.19.0
 

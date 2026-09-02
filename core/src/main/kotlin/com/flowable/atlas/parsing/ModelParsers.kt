@@ -11,8 +11,9 @@ import com.flowable.atlas.script.ScriptValidator
  * project-relative path; it returns the parsed model as an ordered map (or a list of them, for XML
  * containers that may declare several definitions).
  *
- * Ported incrementally (TDD, one family at a time, each verified against the golden). [PARSERS] maps a
- * model type to its parser; types without an entry are still discovered/indexed but not yet parsed.
+ * [PARSERS] maps a model type to its structured parser. A type without an entry (master data, dashboard
+ * components, palettes — no corpus to design a parser against yet) goes through [parseGeneric], which
+ * registers it by key, name and description so it is indexed, searchable and navigable all the same.
  */
 object ModelParsers {
 

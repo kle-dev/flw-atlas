@@ -207,7 +207,9 @@ fun run(args: Array<String>): Int {
         // Diagrams: render each process/case/decision's DI layout to an SVG in `<name>.diagrams/`.
         // Additive post-pass over the finished result (never touches the graph); a project with no
         // BPMN/CMMN/DMN layout produces no files here.
-        val diagrams = DiagramArtifacts.render(result, root)
+        val diagrams = DiagramArtifacts.render(result, root) { key, why ->
+            if (!quiet) errln("  $WARN_SIGN diagram $key: $why")
+        }
         if (diagrams.isNotEmpty()) {
             val diagramsDir = File(outdir, "$name.diagrams")
             diagramsDir.mkdirs()

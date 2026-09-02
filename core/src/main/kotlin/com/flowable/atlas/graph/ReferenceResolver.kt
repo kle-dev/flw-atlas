@@ -114,8 +114,11 @@ object ReferenceResolver {
         val ambiguousSimple = HashSet<String>()
         for (path in javas) {
             val rel = relOf(path)
-            val srcText = String(path.readBytes(), Charsets.UTF_8)
+            // The read is inside the try as well: one unreadable source used to abort the whole run
+            // with a stack trace instead of costing that one file.
+            val srcText: String
             val jc: Map<String, Any?> = try {
+                srcText = String(path.readBytes(), Charsets.UTF_8)
                 JavaParser.parseJava(srcText, rel)
             } catch (e: Exception) {
                 diag("java", rel, e.message ?: e.toString())
