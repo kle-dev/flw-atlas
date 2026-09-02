@@ -21,7 +21,12 @@ import java.io.File
  */
 object ExplorerHtmlRenderer {
 
-    fun render(result: Map<String, Any?>, root: File, version: String = AtlasBuildInfo.VERSION): String {
+    fun render(
+        result: Map<String, Any?>,
+        root: File,
+        version: String = AtlasBuildInfo.VERSION,
+        generatedAt: java.time.Instant = java.time.Instant.now(),
+    ): String {
         // error() rather than an empty map: every caller passes an Atlas.extract result, which always
         // carries "graph". The previous `as Map` threw here too — an explorer page silently rendered
         // with no graph would be worse than a stack trace.
@@ -30,6 +35,9 @@ object ExplorerHtmlRenderer {
         // Same payload object html_render builds, in the same key order.
         val payload = LinkedHashMap<String, Any?>()
         payload["project"] = root.absoluteFile.name.ifEmpty { "project" }
+        // Provenance: a page mailed to a reviewer could be a day or six months old and could not say.
+        payload["generatedAt"] = generatedAt.toString()
+        payload["atlasVersion"] = version
         payload["stats"] = result["stats"]
         payload["diagnostics"] = result["diagnostics"] ?: ArrayList<Any?>()
         payload["customFunctions"] = result["customFunctions"]

@@ -86,6 +86,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   the canvas, not only in its rows. Every shape is a keyboard stop with a name for a screen reader, and
   Enter or Space opens its card. A cancelled drag no longer leaves the diagram panning with no button
   held, and each info card's size observer is disconnected with the card instead of piling up.
+- **A report says when it was made.** The explorer's payload carried the project name, the graph and
+  the counts — not the moment it was generated, so a page mailed to a reviewer could be a day or six
+  months old and could not say. The page now carries `generatedAt` and `atlasVersion`; the sidebar
+  footer reads *Atlas 0.20.0 · generated 3 days ago* with the exact time on hover, and `graph.json`
+  gains a `_generated` block beside `_schema` for whatever reads it by machine.
 - **`@Bean` factory methods are beans, and Kotlin sources are read.** Bean resolution knew only the
   stereotype annotations on a class — `@Component`, `@Service`, `@Repository`, `@Named` — so a delegate
   registered the standard way for code you do not own, a `@Bean` method in a `@Configuration` class, was

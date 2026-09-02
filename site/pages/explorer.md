@@ -213,6 +213,12 @@ The explorer never presents a guess as a fact:
 - Liquibase changelogs carry **live / superseded / orphan**, and services carry per-column schema
   coverage badges.
 
+## Provenance
+
+The sidebar footer names the Atlas version that generated the page and when — *Atlas 0.20.0 ·
+generated 3 days ago*, the exact time on hover. A page mailed to a reviewer could otherwise be a day or
+six months old and could not say. The same two facts sit in `graph.json` under `_generated`.
+
 ## Themes
 
 Light by default, with a `☀ / ☾ / ◐` toggle that cycles light → dark → auto and is remembered. Inside

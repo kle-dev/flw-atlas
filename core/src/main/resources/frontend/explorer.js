@@ -5277,6 +5277,19 @@ document.addEventListener('keydown',e=>{
     }
   }
 });
+// The footer says when this page was generated — "Atlas 0.20.0 · generated 3 days ago", the exact time
+// on hover — because a page mailed to a reviewer cannot otherwise say how old it is.
+function stampProvenance(){
+  const el=document.getElementById('atlasver'); if(!el||!DATA.generatedAt) return;
+  const t=Date.parse(DATA.generatedAt); if(isNaN(t)) return;
+  const d=new Date(t), diff=Math.max(0, Date.now()-t);
+  const m=Math.round(diff/60000), h=Math.round(diff/3600000), days=Math.round(diff/86400000);
+  const rel=m<2?'just now':m<60?m+' min ago':h<48?h+' h ago':days<60?days+' days ago':Math.round(days/30)+' months ago';
+  const ver=DATA.atlasVersion?'Atlas '+DATA.atlasVersion:el.textContent;
+  el.textContent=ver+' · generated '+rel;
+  el.setAttribute('data-tip','Generated '+d.toLocaleString()+' by '+ver);   // JCEF shows no title= tooltips
+  el.removeAttribute('title');
+}
 function wireSearchTrigger(){
   // Wrapped, not passed by reference: openPalette takes a prefill string and a click Event is not one.
   document.getElementById('searchbtn').onclick=()=>openPalette();
@@ -5546,6 +5559,7 @@ applySidebar();
 wireSidebarResize();
 wireRailAutoCollapse();
 wireSearchTrigger();
+stampProvenance();
 wirePaletteResize();
 wireLinkFilter();
 tabsRestore();                  // before route(): a permalink then ADDS to the restored set

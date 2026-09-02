@@ -20,7 +20,9 @@ name the file yourself — see the [CLI reference](../cli/#output-format).
 
 A single self-contained page: the CSS, the JavaScript, the embedded font and the whole graph as a JSON
 island, inlined into one file with no external requests. Copy it, mail it, open it on a machine with no
-network — it works. In the IDE the same file renders as an editor tab, theme-synced with the IDE.
+network — it works. In the IDE the same file renders as an editor tab, theme-synced with the IDE. Its
+footer says which Atlas version generated it and when, so a page that has travelled can still tell you
+how old it is.
 
 This is the artifact for a human who wants to *understand* a project. It has its own page:
 [The Atlas explorer](../explorer/).
@@ -58,6 +60,8 @@ It is designed to make that easy:
 
 - A **`_schema`** key comes first and describes the file's own shape, including six ready-made `jq`
   recipes. An agent that opens the file learns how to use it from the file.
+- A **`_generated`** key beside it says when the file was written and by which Atlas version, so a
+  graph pasted into a ticket or kept as a pipeline artifact carries its own age.
 - Every node carries **`usedBy`**, so relationships resolve in both directions without a second pass.
 - It is **minified** by default, and a model's body is stored once in a top-level bucket with its graph
   node pointing there via `data.dataIn`. Together that roughly halves the file — 4.8 MB → 2.5 MB on a

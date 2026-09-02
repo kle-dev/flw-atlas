@@ -34,16 +34,25 @@ object GraphJsonRenderer {
         "dataObject" to "dataObjects", "securityPolicy" to "policies", "action" to "actions",
     )
 
-    fun render(result: Map<String, Any?>, pretty: Boolean = false): String =
-        if (pretty) MiniJson.stringify(project(result), 2) else MiniJson.stringify(project(result))
+    fun render(
+        result: Map<String, Any?>,
+        pretty: Boolean = false,
+        generatedAt: java.time.Instant = java.time.Instant.now(),
+    ): String {
+        val projected = project(result, generatedAt)
+        return if (pretty) MiniJson.stringify(projected, 2) else MiniJson.stringify(projected)
+    }
 
     /**
      * Build the serializable projection. Nothing in [result] is mutated: the same result object is shared
      * with the other renderers in one in-process run (and with the IDE plugin's caller).
      */
-    fun project(result: Map<String, Any?>): Map<String, Any?> {
+    fun project(result: Map<String, Any?>, generatedAt: java.time.Instant = java.time.Instant.now()): Map<String, Any?> {
         val out = LinkedHashMap<String, Any?>()
         out["_schema"] = SCHEMA
+        // Provenance for whatever reads the file by machine: a graph.json in a ticket or a pipeline
+        // artifact could not say how old it was, nor which Atlas produced it.
+        out["_generated"] = linkedMapOf("at" to generatedAt.toString(), "atlas" to com.flowable.atlas.AtlasBuildInfo.VERSION)
         val graph = Dyn.mapOrNull(result["graph"])
         val nodes = graph?.let { Dyn.maps(it["nodes"]) }
         val edges = graph?.let { Dyn.maps(it["edges"]) }

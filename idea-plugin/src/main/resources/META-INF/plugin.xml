@@ -228,6 +228,13 @@
               screen reader, and Enter or Space opens its card. A cancelled drag no longer leaves the
               diagram panning with no button held, and each info card's size observer is disconnected with
               the card instead of piling up.</li>
+          <li><b>A report says when it was made.</b> The explorer's payload carried the project name, the
+              graph and the counts — not the moment it was generated, so a page mailed to a reviewer could
+              be a day or six months old and could not say. The page now carries <code>generatedAt</code>
+              and <code>atlasVersion</code>; the sidebar footer reads <i>Atlas 0.20.0 · generated 3 days
+              ago</i> with the exact time on hover, and <code>graph.json</code> gains a
+              <code>_generated</code> block beside <code>_schema</code> for whatever reads it by
+              machine.</li>
           <li><b><code>@Bean</code> factory methods are beans, and Kotlin sources are read.</b> Bean
               resolution knew only the stereotype annotations on a class — <code>@Component</code>,
               <code>@Service</code>, <code>@Repository</code>, <code>@Named</code> — so a delegate

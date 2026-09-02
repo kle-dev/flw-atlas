@@ -66,6 +66,10 @@ class RenderersSmokeTest {
         // nodes' `usedBy` lists; the payload does not carry `_uses` (its transpose) and must not need to.
         assertTrue("expected the usesIndex builder from explorer.js", html.contains("function usesIndex("))
         assertFalse("`_uses` leaked into the explorer payload", html.contains("\"_uses\""))
+        // Provenance travels with the page: when it was generated and by which Atlas.
+        assertTrue("expected generatedAt in the payload", html.contains("\"generatedAt\":\""))
+        assertTrue("expected atlasVersion in the payload", html.contains("\"atlasVersion\":\""))
+        assertTrue("expected the footer to render the generation time", html.contains("function stampProvenance"))
         assertTrue("expected the parameter direction styling from explorer.css", html.contains(".parmgrid .pd{"))
         // A form button's payload mapping reaches the page — the name the action script reads back.
         assertTrue("expected the action button's payload key in the payload", html.contains("customerEmail"))

@@ -63,9 +63,10 @@ class CliTest {
         val golden = MiniJson.parse(goldenFile("miniproject.graph.json").readText()) as Map<String, Any?>
 
         assertTrue("graph.json must describe its own shape", written.containsKey("_schema"))
+        assertTrue("graph.json must say when and by which Atlas it was generated", written.containsKey("_generated"))
         assertEquals(
-            "graph.json top-level keys differ from the golden result (plus _schema)",
-            (golden.keys + "_schema").sorted(), written.keys.sorted(),
+            "graph.json top-level keys differ from the golden result (plus _schema and _generated)",
+            (golden.keys + "_schema" + "_generated").sorted(), written.keys.sorted(),
         )
         // Every top-level section except `graph` is passed through untouched.
         for (key in golden.keys) {
