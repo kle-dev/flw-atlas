@@ -84,10 +84,26 @@ const probe = `<script>
       if(!sect) continue;
       sect.open=true; await tick(250);                  // a kept-closed section only fits on reveal
       view=sect.querySelector('.dgview');
-      g=view&&view.querySelector('[data-el]');
+      // a shape, not an edge: edges carry data-el too (their fat invisible twin is the click target)
+      g=view&&(view.querySelector('g[data-el][tabindex]')||view.querySelector('[data-el]'));
       if(g){ say('diagram found on', n.id); break; }
     }
     if(!g){ ok('a model with a rendered diagram', false, 'no [data-el] in any .dgview'); return finish(); }
+    view.scrollIntoView({block:'center'}); await tick(150);
+    // --- shapes are keyboard stops, and the selection joins the link ---
+    ok('a shape is focusable', g.getAttribute('tabindex')==='0' && g.getAttribute('role')==='button');
+    ok('and named for a screen reader', !!g.getAttribute('aria-label'));
+    g.focus(); g.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true})); await tick(150);
+    ok('Enter on a focused shape opens its card', !!document.querySelector('.dgcard'));
+    ok('the element is in the link', decodeURIComponent(location.hash).indexOf('&e='+g.dataset.el)>0, 'hash='+location.hash);
+    esc(); await tick(100);
+    // a deep link with &e= locates the element on the canvas, not only in its rows
+    const nodeId=state.sel; location.hash='#/overview'; await tick(200);
+    location.hash='#'+encodeURIComponent(nodeId)+'&e='+encodeURIComponent(g.dataset.el); await tick(400);
+    view=document.querySelector('#detail details.sect[data-sect="diagram"] .dgview');
+    ok('following a &e= link selects the element on the diagram', !!view && !!view.querySelector('[data-el].dgsel'),
+       view?'no .dgsel':'no diagram view');
+    g=view&&view.querySelector('[data-el="'+g.dataset.el+'"]'); if(!g){ ok('the element is still there', false); return finish(); }
     view.scrollIntoView({block:'center'}); await tick(150);
     // --- the card: a window on <body>, docked to the viewport corner ---
     click(g); await tick(150);

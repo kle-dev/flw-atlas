@@ -1,3 +1,15 @@
+// If anything in the synchronous boot below throws — a truncated data island, a malformed node — the
+// loading overlay would sit there forever and say nothing. The first uncaught error before boot
+// completes replaces the overlay's card with the error and what to do about it.
+let _booted=false;
+window.addEventListener('error', e=>{ if(!_booted) bootFailed(e.error||e.message); });
+function bootFailed(err){
+  const card=document.querySelector('#atlas-boot .boot-card'); if(!card) return;
+  const text=String((err&&err.stack)||err||'unknown error');
+  card.innerHTML='<div class="boot-fail"><b>This explorer could not start.</b>'+
+    '<pre>'+text.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))+'</pre>'+
+    'Regenerate the page with Atlas (Tools → Flowable Atlas → Generate, or the CLI). If it fails again, the text above is what to report.</div>';
+}
 // Data arrives as a JSON island (<script type="application/json" id="atlas-data">):
 // JSON.parse is faster than a JS literal for large payloads and needs no JS escaping.
 const DATA = JSON.parse(document.getElementById('atlas-data').textContent);
@@ -432,6 +444,16 @@ function categories(){
   const unusedForms = nodes.filter(isUnusedForm);
   if(unusedForms.length) cats.push({id:'unused-form', label:'Forms · unused', sec:'Checks',
     color:color('form'), count:unusedForms.length, match:isUnusedForm});
+  // The two other "registered but never called" findings get review lists of their own, so the Checks
+  // page's "open the list" lands on the 3 unused operations and not on all 40 (same rule as Findings.kt).
+  const isUnusedOp = n => n.type==='serviceOperation' && !((n.data||{}).usedBy||[]).length;
+  const unusedOps = nodes.filter(isUnusedOp);
+  if(unusedOps.length) cats.push({id:'unused-op', label:'Service operations · unused', sec:'Checks',
+    color:color('serviceOperation'), count:unusedOps.length, match:isUnusedOp});
+  const isUnusedFn = n => n.type==='customFunction' && !((n.data||{}).usedBy||[]).length;
+  const unusedFns = nodes.filter(isUnusedFn);
+  if(unusedFns.length) cats.push({id:'unused-fn', label:'Custom functions · unused', sec:'Checks',
+    color:color('customFunction'), count:unusedFns.length, match:isUnusedFn});
   // Review lists for flagged expressions/bindings. Structural syntax errors make an
   // expression *invalid*; catalog findings (unknown function/namespace — the catalog may
   // simply not know a project-registered function) only make it *suspect*.
@@ -922,10 +944,10 @@ const CHECK_CARDS = [
   {k:'guessedVars', label:'Variables · script guess', cat:'guessed-var', jump:'chk-guessed',
    sub:c=>c?'only a bare identifier in a script names them':'every variable is declared somewhere',
    show:()=>true},
-  {k:'unusedOps', label:'Unused operations', cat:'serviceOperation', jump:'chk-unusedops',
+  {k:'unusedOps', label:'Unused operations', cat:'unused-op', jump:'chk-unusedops',
    sub:c=>c?c+' of '+INSIGHTS.totalOps+' operations are never called from a model':'every operation is used',
    show:()=>INSIGHTS.totalOps>0},
-  {k:'unusedFns', label:'Unused custom functions', cat:'customFunction', jump:'chk-unusedfns',
+  {k:'unusedFns', label:'Unused custom functions', cat:'unused-fn', jump:'chk-unusedfns',
    sub:c=>c?c+' of '+INSIGHTS.totalFns+' functions are never called':'every function is used',
    show:()=>INSIGHTS.totalFns>0},
   {k:'unusedVars', label:'Variables · never read', route:'/variables', jump:'chk-unusedvars',
@@ -1052,9 +1074,9 @@ function renderChecks(){
     '<div class="dashrow"><button class="dgbtn" data-route="/variables">open the full report ↗</button></div>'+
     '</div>', 'unread-input');
   h+=findingBlock('chk-unusedops','Unused service operations', H.unusedOps,
-    chips(nodes.filter(n=>n.type==='serviceOperation'&&!((n.data||{}).usedBy||[]).length)), 'serviceOperation');
+    chips(nodes.filter(n=>n.type==='serviceOperation'&&!((n.data||{}).usedBy||[]).length)), 'unused-op');
   h+=findingBlock('chk-unusedfns','Unused custom functions', H.unusedFns,
-    chips(nodes.filter(n=>n.type==='customFunction'&&!((n.data||{}).usedBy||[]).length)), 'customFunction');
+    chips(nodes.filter(n=>n.type==='customFunction'&&!((n.data||{}).usedBy||[]).length)), 'unused-fn');
   // uncertain edges are a property of the graph, not of one node — say so once
   const suN=st.suspectEdges||0, dyN=st.dynamicEdges||0;
   if(suN+dyN){
@@ -2151,7 +2173,11 @@ function describe(n){
     add('Name',d.name); add('Method',d.method); add('URL',d.fullUrl||d.url);
     add('Params',(d.params||[]).map(p=>p.name+(p.type?': '+p.type:'')).join(', '));
     add('Used by', (d.usedBy||[]).length+' model(s)'); }
-  else if(n.type==='agent'){ add('Vendor / model',(d.aiVendor||'')+' / '+(d.modelName||'')); add('Temperature',d.temperature); add('API endpoint',String(d.enableApiEndpoint));
+  else if(n.type==='agent'){
+    // compose only what is there — "Vendor / model: /" and "API endpoint: undefined" were rows once
+    add('Vendor / model',[d.aiVendor,d.modelName].filter(Boolean).join(' / '));
+    add('Temperature',d.temperature);
+    if(d.enableApiEndpoint!=null) add('API endpoint', d.enableApiEndpoint?'enabled':'disabled');
     addCount('Tools',(d.tools||[]).length); addCount('Operations',(d.operations||[]).length);
     if(d.knowledgeBase) rows.push(['Knowledge base',{html:vlink('knowledgeBase:'+d.knowledgeBase, d.knowledgeBase)}]); }
   else if(n.type==='channel'){ add('Direction',d.channelType); add('Type',d.type); add('Topics',(d.topics||[]).join(', ')); add('Destination',d.destination);
@@ -2163,7 +2189,7 @@ function describe(n){
     add('Correlation',(d.correlation||[]).join(', ')); }
   else if(n.type==='java'){ add('Package',d.package); add('Roles',(d.roles||[]).join(', ')); add('Bot key',d.botKey); add('Implements',(d.interfaces||[]).join(', ')); addCount('Methods',(d.methods||[]).length); add('Called from models',(d.calledMethods||[]).join(', ')); }
   else if(n.type==='endpoint'){ add('Method',d.http); add('Path',d.path);
-    rows.push(['Handler',{html:vlink(incFrom(n.id,'serves'), (d.controller||'')+'#'+(d.handler||'')), copy:d.controller||undefined}]); }  // FQN for 'Go to Class'
+    if(d.controller||d.handler) rows.push(['Handler',{html:vlink(incFrom(n.id,'serves'), [d.controller,d.handler].filter(Boolean).join('#')), copy:d.controller||undefined}]); }  // FQN for 'Go to Class'
   else if(n.type==='method'){ if(d.name) rows.push(['Method',{html:esc(d.name)+'()', copy:d.name}]);  // copy the bare name for IntelliJ 'Go to Symbol'
     if(d.class) rows.push(['Declared in',{html:vlink(d.declaredIn||'java:'+d.class, d.class), copy:d.class}]); }  // FQN for 'Go to Class'
   else if(n.type==='query'){ add('Source index',d.sourceIndex); add('Type',d.type);
@@ -2248,8 +2274,8 @@ function describe(n){
       'probably real, but Atlas cannot prove it.">≈ script read only</span>',copy:null}]); }
   else if(n.type==='string'){ add('Used in', (d.usages||[]).length+' model(s)'); }
   else if(n.type==='customFunction'){
-    add('Kind', d.kind==='namespace'?('namespace '+d.namespace+'.*'):d.kind==='flw'?'flw.* member':'top-level');
-    add('Signature', d.member+'('+(d.signature!=null?d.signature:'…')+')');
+    add('Kind', d.kind==='namespace'?('namespace '+(d.namespace||'?')+'.*'):d.kind==='flw'?'flw.* member':'top-level');
+    add('Signature', (d.member||n.label||'')+'('+(d.signature!=null?d.signature:'…')+')');
     add('Registered in',(d.sources||[]).join(', ')); add('Used by', (d.usedBy||[]).length+' form(s) / model(s)'); }
   else if(n.type==='external'){ add('Kind',d.flowableApi?'Flowable platform API':d.route?'In-app navigation route':d.platform?'Flowable platform bean':d.missingModel?'Missing model reference ('+(d.kind||'model')+')':d.dynamic?'Dynamic reference (expression) — expected '+(d.kind||'model'):(d.external_url?'External URL':d.kind||'external')); if(d.method&&d.method!=='(button)') add('Method',d.method); }
   else { Object.keys(d).forEach(k=>{
@@ -3077,8 +3103,9 @@ function renderDetail(){
     // strip ?ideTheme=… (IDE embedding seed) — a stale param in a shared link only confuses
     const url=location.search?location.href.replace(location.search,''):location.href;
     const done=()=>{ pl.textContent='✓ link copied'; setTimeout(()=>{ pl.textContent='🔗 copy link'; },1500); };
-    if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done,()=>prompt('Copy link:',url));
-    else prompt('Copy link:',url);   // clipboard API is unavailable on file:// in some browsers
+    // The same path as every other copy button — inside the IDE, navigator.clipboard is blocked and
+    // window.__atlasCopy is the only route; this button used to be the one that fell through to prompt().
+    atlasCopy(url, done);
   };
   // A relationship chip is a link, not a list row, so ⌘/Ctrl+click and middle-click follow the
   // browser convention here. `[data-goto]` joins the same contract: it travels to another node AND
@@ -3134,6 +3161,13 @@ function zoomable(view, opts){
     const natural=w?parseFloat(w):svg.getBoundingClientRect().width/z.scale;
     // clientWidth is 0 while the section is collapsed — never derive a zero/negative scale from it
     z.scale=(natural>0&&view.clientWidth>16)?Math.min(1, (view.clientWidth-8)/natural):1;
+    // Full screen has a fixed height too: a tall case diagram fitted to the width alone was still cut
+    // off at the bottom. (The inline view sizes its height from the scale below, so width is all.)
+    if(!opts.modWheel){
+      const hN=parseFloat(svg.getAttribute('height'))||0;
+      if(hN>0 && view.clientHeight>16) z.scale=Math.min(z.scale, (view.clientHeight-8)/hN);
+    }
+    z.userZoomed=false;
     z.tx=0; z.ty=0; z.apply();
     // Inline only: a transform doesn't shrink layout height, so a wide diagram scaled down would
     // leave a tall white gap under itself — size the viewport to the scaled drawing instead.
@@ -3143,6 +3177,7 @@ function zoomable(view, opts){
     }
   };
   z.zoom=(factor, ox, oy)=>{
+    z.userZoomed=true;                             // a hand-set scale is kept across panel resizes
     const next=Math.min(8, Math.max(0.1, z.scale*factor));
     if(ox!=null){                                  // keep the point under the cursor put
       const k=next/z.scale;
@@ -3169,8 +3204,12 @@ function zoomable(view, opts){
       z.tx=ev.clientX-sx; z.ty=ev.clientY-sy; z.apply();
     };
     const up=()=>{ view.classList.remove('grabbing');
-      view.removeEventListener('pointermove',move); view.removeEventListener('pointerup',up); };
+      view.removeEventListener('pointermove',move); view.removeEventListener('pointerup',up);
+      view.removeEventListener('pointercancel',up); };
     view.addEventListener('pointermove',move); view.addEventListener('pointerup',up);
+    // A cancelled gesture (a touch interrupted, the JCEF surface losing the pointer) never fires
+    // pointerup — without this the diagram kept panning with no button held.
+    view.addEventListener('pointercancel',up);
   });
   return z;
 }
@@ -3203,6 +3242,15 @@ function wireDiagram(det){
   tryFit();
   const sect=view.closest('details');
   if(sect) sect.addEventListener('toggle',()=>{ if(sect.open) tryFit(); });
+  // The panel changes width (the splitter, the IDE tool window) and the drawing kept its old scale —
+  // small in a tall box, or clipped. Re-fit on a real width change unless the user zoomed by hand.
+  if(window.ResizeObserver){
+    let lastW=view.clientWidth;
+    new ResizeObserver(()=>{
+      const w=view.clientWidth;
+      if(w>0 && Math.abs(w-lastW)>8){ lastW=w; if(z._fitted && !z.userZoomed) z.fit(); }
+    }).observe(view);
+  }
   liftSvgTitles(view);
   wireDgClicks(view, false);
   const bar=det.querySelector('.dgbar');
@@ -3400,6 +3448,7 @@ function revealByEl(det, elId){
 // ---------- element info card (click a diagram element) ----------
 let _dgCard=null, _dgScrim=null;
 function hideDgCard(){
+  if(_dgCard&&_dgCard._ro) _dgCard._ro.disconnect();     // else every card ever shown stays observed
   if(_dgCard&&_dgCard.parentNode) _dgCard.parentNode.removeChild(_dgCard);
   _dgCard=null; dgScrim(false);
 }
@@ -3522,7 +3571,7 @@ function wireDgCardMoveResize(view, card){
   // native corner resize (CSS resize:both) — remember the size the user settles on
   if(window.ResizeObserver){
     let first=true;
-    new ResizeObserver(()=>{
+    const ro=new ResizeObserver(()=>{
       if(first){ first=false; return; }                    // the observe() call itself fires once
       clearTimeout(card._rszT);
       card._rszT=setTimeout(()=>{
@@ -3531,7 +3580,9 @@ function wireDgCardMoveResize(view, card){
         if(card.classList.contains('big')) dgCardRemember({bw:card.offsetWidth, bh:card.offsetHeight});
         else dgCardRemember({w:card.offsetWidth, h:card.offsetHeight});
       }, 300);
-    }).observe(card);
+    });
+    ro.observe(card);
+    card._ro=ro;                                           // disconnected by hideDgCard()
   }
 }
 window.addEventListener('resize',()=>{
@@ -3554,6 +3605,14 @@ function wireDgClicks(view, inModal){
     dgSelect(view, g);
     showDgCard(view, g, e, inModal);
   });
+  // Shapes are focusable (the renderer stamps tabindex/role): Enter or Space on one is a click.
+  view.addEventListener('keydown', e=>{
+    if(e.key!=='Enter' && e.key!==' ') return;
+    const g=e.target&&e.target.closest?e.target.closest('[data-el]'):null;
+    if(!g||!view.contains(g)) return;
+    e.preventDefault();
+    g.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+  });
 }
 // The id the parsed data knows this diagram element by. Usually data-el itself; CMMN DI references
 // plan item ids while the parsed plan tree keys the *definitions* — there the element name bridges.
@@ -3570,6 +3629,9 @@ function showDgCard(view, g, e, inModal){
   const n=state.sel&&byId.get(state.sel);
   if(!n) return;
   const elId=dgEffectiveId(n, g);
+  // The selection joins the URL (`&e=`), so a copied link or a reload lands on this element — without
+  // a history entry or a re-route, which replaceState guarantees and setting location.hash would not.
+  try{ history.replaceState(null, '', '#'+enc(n.id)+'&e='+enc(String(elId))); }catch(err){}
   const card=document.createElement('div'); card.className='dgcard';
   card.setAttribute('role','dialog');
   card.setAttribute('aria-label','Element details — drag the header to move, drag the corner to resize, ⤢ to expand over the page');
@@ -3730,7 +3792,11 @@ function dgCardHtml(n, elId, g){
 // element it came from (a script task, a flow condition), that element's rows win: they are the exact
 // place, not a text guess.
 function applyFocus(det){
-  if(state.focusEl && revealByEl(det, state.focusEl)) return;
+  if(state.focusEl && revealByEl(det, state.focusEl)){
+    // …and the other half of a `&e=` link: the element on the canvas, not only its rows.
+    locateOnDiagram(det, state.focusEl);
+    return;
+  }
   const raw=(state.focus||'').trim();
   if(!raw) return;
   // The engine's grammar, not the raw string: strip facets, keep words and phrases. The old matcher
@@ -3803,7 +3869,9 @@ function applySelection(id){
       cat=CATS.find(c=>c.id==='variable::'+(n.data.scopes||[])[0]);
     }
     cat=cat||CATS.find(c=>c.id===n.type);
-    if(cat && cat.id!==state.cat){ state.cat=cat.id; catChanged=true; }
+    // A filter typed in one category has no business in the next — following a chip out of a
+    // filtered Forms list used to open the Java list pre-filtered, reading "Nothing here".
+    if(cat && cat.id!==state.cat){ state.cat=cat.id; state.filter=''; catChanged=true; }
   }
   if(catChanged || !document.getElementById('listitems')) renderList();
   syncListSelection();
@@ -3859,20 +3927,25 @@ function syncTabsWith(id, append){
   else if(append || _tabsBooting || state.tab<0 || state.tab>=state.tabs.length){
     // Boot (a permalink alongside the restored set) or no active tab → append rather than replace,
     // so restoring tabs and opening a shared link never costs the user a tab.
-    if(state.tabs.length>=MAX_TABS) evictTab();
+    if(state.tabs.length>=MAX_TABS){
+      // Say so: openTabs() reports a refused open, and this path silently destroyed the oldest tab.
+      const gone=evictTab(), n=gone&&byId.get(gone);
+      toast('closed “'+(n?n.label:gone)+'” — '+MAX_TABS+' tabs is the limit');
+    }
     state.tabs.push(id); state.tab=state.tabs.length-1;
   } else {
     state.tabs[state.tab]=id;                                 // the active tab travels
   }
   tabsRemember();
 }
-/** Make room under the cap by dropping the leftmost tab that is not the active one. */
+/** Make room under the cap by dropping the leftmost tab that is not the active one; returns its id. */
 function evictTab(){
   let i=state.tabs.findIndex((id,ix)=>ix!==state.tab);
   if(i<0) i=0;
   const [gone]=state.tabs.splice(i,1);
   delete _tabView[gone];
   if(state.tab>i) state.tab--;
+  return gone;
 }
 
 function rememberTabScroll(){
@@ -4758,14 +4831,18 @@ function closePalette(){
   try{ if(_palPrevFocus && document.contains(_palPrevFocus)) _palPrevFocus.focus(); }catch(e){}
   _palPrevFocus=null;
 }
+// Scoped to the project like the tabs (tabsRemember): every report on a file:// origin shares one
+// localStorage, and an unscoped list filled its eight slots with another report's ids — filtered out
+// on read, so the Recent list shrank every time you switched reports.
+const RECENT_STORE='atlas-recent:'+(DATA.project||'');
 function getRecents(){
-  try{ return (JSON.parse(localStorage.getItem('atlas-recent')||'[]')||[]).filter(id=>byId.get(id)); }
+  try{ return (JSON.parse(localStorage.getItem(RECENT_STORE)||'[]')||[]).filter(id=>byId.get(id)); }
   catch(e){ return []; }
 }
 function pushRecent(id){
   try{
     const r=getRecents().filter(x=>x!==id); r.unshift(id);
-    localStorage.setItem('atlas-recent', JSON.stringify(r.slice(0,8)));
+    localStorage.setItem(RECENT_STORE, JSON.stringify(r.slice(0,8)));
   }catch(e){}
 }
 // How many hits are ranked at all, and how many of those are rendered before the "show more" button.
@@ -5170,13 +5247,19 @@ pal.addEventListener('keydown',e=>{
 pal.addEventListener('mousedown',e=>{ if(e.target.closest('[data-close]')) closePalette(); });
 document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey) && (e.key==='k'||e.key==='K')){
-    e.preventDefault(); pal.hidden?openPalette():closePalette();
+    e.preventDefault();
+    // The fullscreen diagram sits on the palette's layer and later in the DOM: opening the palette
+    // underneath it meant typing into an invisible input. Searching leaves full screen first.
+    if(dgmodal && !dgmodal.hidden) closeDiagramModal();
+    pal.hidden?openPalette():closePalette();
   } else if(e.key==='/' && pal.hidden && !e.target.closest('input,textarea,select,[contenteditable]')){
     e.preventDefault(); openPalette();                     // guarded: '/' typed in a filter stays there
   } else if(e.key==='Escape' && !pal.hidden){
     closePalette();
   } else if(e.altKey && !e.metaKey && pal.hidden && state.view==='browse'
-            && (!dgmodal || dgmodal.hidden)){
+            && (!dgmodal || dgmodal.hidden)
+            && !e.target.closest('input,textarea,select,[contenteditable]')){
+    // …and never inside a text field: on a Mac, Alt+←/→ is word-wise caret movement in the list filter.
     // Tab shortcuts are deliberately Alt-based: Chrome reserves ⌘/Ctrl+1..9, ⌘W and Ctrl+Tab for
     // itself and a page cannot preventDefault them, and inside the IDE ⌘W would close the JCEF
     // editor tab. Everything goes through e.code, because Alt+1 yields '¡' and Alt+[ yields '“'
@@ -5229,7 +5312,9 @@ function wireLinkFilter(){
 // ---------- utils ----------
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function enc(s){ return encodeURIComponent(s); }
-function dec(s){ return decodeURIComponent(s); }
+// A malformed `%` in a hand-edited or truncated link used to throw out of route() on every hashchange,
+// freezing navigation for good; an undecodable part simply resolves to nothing (→ the overview).
+function dec(s){ try{ return decodeURIComponent(s); }catch(e){ return ''; } }
 
 // ---------- copy ----------
 // feather "copy" (two overlapping rounded rects) + a check for the success flash.
@@ -5472,5 +5557,6 @@ prewarmSearchIndex();           // after the first render: the first ⌘K query 
 // ---------- boot done: dismiss the loading overlay ----------
 // The overlay (explorer.html #atlas-boot) covered the file read + this synchronous boot;
 // fade it out now that the initial view is rendered, then remove it after the transition.
+_booted=true;
 const _boot=document.getElementById('atlas-boot');
 if(_boot){ _boot.classList.add('boot--done'); setTimeout(()=>_boot.remove(),400); }

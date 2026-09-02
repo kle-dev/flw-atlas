@@ -199,6 +199,35 @@
               <code>}</code>) gets no verdict, as before — but it is counted
               (<code>stats.exprSkippedNested</code>) and its page says <i>not validated</i> and why, so an
               unjudged expression cannot pass for a clean one.</li>
+          <li><b>The explorer fails loudly, and its links cannot freeze it.</b> Any error during the page's
+              boot — a truncated data island, a malformed node — left the <i>Loading…</i> overlay up forever
+              with no word; the overlay now shows the error and what to do about it. A malformed
+              <code>%</code> in a hand-edited or truncated link threw out of the router on every navigation,
+              freezing the page for good; an undecodable part resolves to the overview instead. Following a
+              chip out of a filtered list into another category carried the filter text along and often read
+              <i>Nothing here</i>; the filter is per category. When a followed link pushes the tab strip
+              past twelve, the tab that made room is named — the other opening path always said so, this one
+              destroyed the oldest tab silently. Recents are kept per report, so two reports on one machine
+              no longer eat each other's eight slots. An agent page no longer reads <i>Vendor / model: /</i>
+              or <i>API endpoint: undefined</i>, a custom function without a namespace no longer reads
+              <code>namespace undefined.*</code>, an endpoint without a handler no longer shows a bare
+              <code>#</code>. The Checks page's <i>open the list</i> for unused operations and unused custom
+              functions opens a review list of exactly those, instead of the full category.</li>
+          <li><b>Shortcuts, copying and the fullscreen diagram stop getting in each other's way.</b> Alt+←/→
+              and Alt+W cycled and closed detail tabs even while the cursor sat in the list filter — on a
+              Mac that is word-wise caret movement — and now leave text fields alone. <i>copy link</i> was
+              the one copy button that bypassed the IDE's clipboard bridge and fell through to a prompt
+              inside the embedded viewer. ⌘K opened the search palette <i>underneath</i> the fullscreen
+              diagram, so you typed into an invisible input; searching leaves full screen first.</li>
+          <li><b>Diagrams re-fit, remember the element in the link, and work from the keyboard.</b> The
+              drawing kept its scale when the panel changed width — small in a tall box, or clipped in a
+              narrower IDE tool window — and re-fits now unless you zoomed by hand; full screen fits the
+              height too. Clicking an element puts it in the link
+              (<code>#&lt;node&gt;&amp;e=&lt;element&gt;</code>), and following such a link locates the
+              element on the canvas, not only in its rows. Every shape is a keyboard stop with a name for a
+              screen reader, and Enter or Space opens its card. A cancelled drag no longer leaves the
+              diagram panning with no button held, and each info card's size observer is disconnected with
+              the card instead of piling up.</li>
           <li><b><code>@Bean</code> factory methods are beans, and Kotlin sources are read.</b> Bean
               resolution knew only the stereotype annotations on a class — <code>@Component</code>,
               <code>@Service</code>, <code>@Repository</code>, <code>@Named</code> — so a delegate
@@ -509,43 +538,6 @@
               <i>Generation</i> settings page, which had to cover both what Atlas produces from your models
               and where your models come from: opposite directions of travel under one heading. Flowable
               Design is its own page now, and Generation is exactly what its name says.</li>
-        </ul>
-        <h3>0.16.0</h3>
-        <ul>
-          <li><b>One way to sign in, for Design and for the running app</b> — the two halves of the plugin
-              had drifted into teaching different things about the same product. Design offered a username
-              and password or an access token; the app offered a username and password, an embedded browser
-              login and a pasted browser session. Neither list was a subset of the other, so whichever page
-              you learnt first, the other one had controls missing and controls you had never seen, and
-              nothing on either said why. There is one model now: a <b>credential</b> — username and
-              password, or an access token — plus, for a server behind an identity provider, your
-              <b>captured browser session</b>, which layers on top rather than replacing it (an SSO-fronted
-              Flowable often wants both, and its security chain takes whichever it honours). Both kinds get
-              all of it, in one form that differs only where the <i>servers</i> differ: what <i>Test
-              Connection</i> calls, <i>Create Token…</i> for Design, and <i>Detect from Project</i> for the
-              app.</li>
-          <li><b>A Design server behind OAuth2 can be pulled from at all</b> — this was the hole the
-              asymmetry was hiding. Design's answer for an identity provider is an access token, and
-              <i>creating</i> one is itself a username-and-password call: on the very server where a token
-              is the only way in, the button could not work, and the browser-session route that would have
-              solved it lived a few classes away, wired only to the playground. <code>DesignClient</code>
-              set exactly one <code>Authorization</code> header and could not carry a cookie at all. It
-              carries the session now, the sign-in and paste-session controls are on the Design form, and
-              <i>Create Token…</i> says out loud that it needs the credentials SSO switches off.</li>
-          <li><b>One password safe entry per server, not per feature</b> — there were two stores,
-              <code>Flowable Atlas Design</code> and <code>Flowable Atlas Inspect</code>, identical but for
-              their name. Nothing about a password depends on whether the server behind the URL serves
-              models or runs processes. Records are keyed by URL, as they already were, so Design and an app
-              remain separate logins; only the redundant second lookup is gone. <b>You may have to enter a
-              stored password once more.</b></li>
-          <li><b>The shared machinery is no longer named after one of its users</b> — <code>AuthMode</code>,
-              <code>AuthContext</code>, <code>AtlasCredentials</code>, <code>BrowserSessions</code>,
-              <code>BrowserSignInDialog</code>, <code>PasteSessionDialog</code> and the cURL parser live in
-              one <code>environment.auth</code> package. Half of them were sitting in the Expression
-              Playground's <code>expr.inspect</code>, which is exactly why the Design side never found them.
-              Header precedence — a captured <code>Authorization</code> beats a configured one, and is never
-              sent twice — is decided in one tested place instead of being re-derived at each call
-              site.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

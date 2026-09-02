@@ -408,6 +408,27 @@ const probe = `<script>
        sect?sect.textContent.slice(0,120):'(no section)');
   });
 
+  // --- a malformed link cannot freeze the router; a filter does not travel between categories ---
+  steps.push(()=>{ closeOtherTabs(); location.hash='#process%E0%A4%A'; });
+  steps.push(()=>{
+    ok('an undecodable hash lands on the overview instead of throwing', state.view==='overview', 'view='+state.view);
+    location.hash=enc('process:orderProcess');
+  });
+  steps.push(()=>{
+    ok('the router still works after the bad link', state.sel==='process:orderProcess', 'sel='+state.sel);
+    const lf=document.getElementById('lf');
+    if(lf){ lf.value='zzz-no-match'; lf.dispatchEvent(new Event('input')); }
+  });
+  steps.push(()=>{
+    // follow a chip into another category: the filter typed in Processes must not come along
+    const chip=[...document.querySelectorAll('#detail .nc[data-id]')].find(c=>decodeURIComponent(c.dataset.id).indexOf('process:')!==0);
+    if(chip) click(chip); else say('note','no cross-category chip on the process');
+  });
+  steps.push(()=>{
+    const lf=document.getElementById('lf');
+    ok('the list filter is cleared when the category changes', !lf || lf.value==='', lf?('filter="'+lf.value+'"'):'');
+  });
+
   // --- the unused-variables report (#/variables) ---
   // The verdict is computed in :core and only stamped onto the nodes, so a broken payload allowlist
   // renders an empty page with correct-looking counts and no error anywhere. Assert the rows exist and

@@ -46,8 +46,9 @@ grouped into **Models · Integration · Code · Expressions · Checks · Variabl
   component, bot;
 - one per **variable scope**, plus the variables that travel through an in/out mapping;
 - **external** buckets — API, route, missing, library;
-- and the **review lists**: unused forms, invalid expressions, suspect expressions, changelog issues,
-  guessed variables, unused variables, unread inputs, script syntax.
+- and the **review lists**: unused forms, unused service operations, unused custom functions, invalid
+  expressions, suspect expressions, changelog issues, guessed variables, unused variables, unread inputs,
+  script syntax.
 
 ## The detail panel
 
@@ -96,7 +97,11 @@ no Design instance is contacted.
 
 Drag to pan, ⌘/Ctrl-scroll to zoom, `−` `fit` `+` to step, `⤢` for full screen. Clicking an element
 opens a draggable, resizable info card — and the `⌖` buttons in the detail panel work the other way
-round, locating an element on the diagram from its row in a list.
+round, locating an element on the diagram from its row in a list. Every shape is a keyboard stop:
+Tab through them, Enter or Space opens the card. The selection joins the link (`#<node>&e=<element>`),
+so a copied link or a reload lands on the element, on the canvas as well as in its rows; and the
+drawing re-fits itself when the panel changes width — a splitter, a narrower IDE tool window — unless
+you zoomed by hand. Full screen fits the height too, so a tall case diagram is not cut off at the bottom.
 
 A decision table has no canvas, so there is nothing to lay out: its rules render as a real table
 instead.
@@ -189,6 +194,8 @@ the category you are in, with a button to widen the search.
 | `Alt+[` / `Alt+]` | browse | Previous / next tab |
 | `Alt+W` | browse | Close the active tab |
 | `+` `-` `0` | diagram (full screen) | Zoom in, out, fit |
+| `Tab` / `⇧Tab` | diagram | Move between elements |
+| `Enter` / `Space` | diagram element | Open its info card |
 | `Escape` | diagram, info card | Close |
 
 Tab shortcuts are Alt-based on purpose: browsers reserve ⌘/Ctrl+1…9 and ⌘W for themselves.

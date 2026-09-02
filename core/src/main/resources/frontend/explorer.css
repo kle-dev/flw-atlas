@@ -116,6 +116,10 @@
   }
   .boot-title{ font-family:var(--sans); font-weight:600; font-size:var(--text-lg); color:var(--ink); }
   .boot-msg{ font-family:var(--sans); font-size:var(--text-sm); color:var(--ink-dim); max-width:24rem; }
+  /* boot failed: the card keeps its place and says what went wrong (explorer.js bootFailed) */
+  .boot-fail{ font-family:var(--sans); font-size:var(--text-sm); color:var(--ink); text-align:left; max-width:40rem; }
+  .boot-fail pre{ font-family:var(--mono); font-size:var(--text-xs); white-space:pre-wrap; max-height:40vh; overflow:auto;
+    margin:var(--space-2) 0; padding:var(--space-2); background:var(--panel2); border-radius:var(--radius-1); }
   @keyframes boot-spin{ to{ transform:rotate(360deg); } }
   @media (prefers-reduced-motion:reduce){
     .boot-spinner{ animation:none; opacity:.7; }
@@ -396,6 +400,9 @@
   .dgview svg [data-el]{cursor:pointer}
   .dgview svg [data-el]:hover{filter:drop-shadow(0 0 2.5px rgba(15,85,214,.7))}
   .dgview svg [data-el].dgsel{filter:drop-shadow(0 0 2px rgba(15,85,214,.9)) drop-shadow(0 0 7px rgba(15,85,214,.45))}
+  /* shapes are keyboard stops (tabindex from the renderer): the focused one shows like a selection */
+  .dgview svg [data-el]:focus{outline:none}
+  .dgview svg [data-el]:focus-visible{filter:drop-shadow(0 0 2px rgba(15,85,214,.9)) drop-shadow(0 0 7px rgba(15,85,214,.45))}
   .dgwheelhint{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);pointer-events:none;z-index:5;
     background:rgba(19,30,41,.85);color:#fff;font-family:var(--sans);font-size:var(--text-xs);
     padding:var(--space-1) var(--space-25);border-radius:var(--radius-full);opacity:0;transition:opacity .18s}

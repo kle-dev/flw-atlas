@@ -60,6 +60,32 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   skipped now. And an expression whose harvested body still holds a `{` (the harvester may have cut it
   short at the first `}`) gets no verdict, as before — but it is counted (`stats.exprSkippedNested`) and
   its page says *not validated* and why, so an unjudged expression cannot pass for a clean one.
+- **The explorer fails loudly, and its links cannot freeze it.** Any error during the page's boot —
+  a truncated data island, a malformed node — left the *Loading…* overlay up forever with no word; the
+  overlay now shows the error and what to do about it. A malformed `%` in a hand-edited or truncated
+  link threw out of the router on every navigation, freezing the page for good; an undecodable part
+  resolves to the overview instead. Following a chip out of a filtered list into another category
+  carried the filter text along and often read *Nothing here*; the filter is per category. When a
+  followed link pushes the tab strip past twelve, the tab that made room is named — the other opening
+  path always said so, this one destroyed the oldest tab silently. Recents are kept per report, so two
+  reports on one machine no longer eat each other's eight slots. An agent page no longer reads
+  *Vendor / model: /* or *API endpoint: undefined*, a custom function without a namespace no longer reads
+  `namespace undefined.*`, an endpoint without a handler no longer shows a bare `#`. The Checks page's
+  *open the list* for unused operations and unused custom functions opens a review list of exactly
+  those, instead of the full category.
+- **Shortcuts, copying and the fullscreen diagram stop getting in each other's way.** Alt+←/→ and
+  Alt+W cycled and closed detail tabs even while the cursor sat in the list filter — on a Mac that is
+  word-wise caret movement — and now leave text fields alone. *copy link* was the one copy button that
+  bypassed the IDE's clipboard bridge and fell through to a prompt inside the embedded viewer. ⌘K
+  opened the search palette *underneath* the fullscreen diagram, so you typed into an invisible input;
+  searching leaves full screen first.
+- **Diagrams re-fit, remember the element in the link, and work from the keyboard.** The drawing kept
+  its scale when the panel changed width — small in a tall box, or clipped in a narrower IDE tool
+  window — and re-fits now unless you zoomed by hand; full screen fits the height too. Clicking an
+  element puts it in the link (`#<node>&e=<element>`), and following such a link locates the element on
+  the canvas, not only in its rows. Every shape is a keyboard stop with a name for a screen reader, and
+  Enter or Space opens its card. A cancelled drag no longer leaves the diagram panning with no button
+  held, and each info card's size observer is disconnected with the card instead of piling up.
 - **`@Bean` factory methods are beans, and Kotlin sources are read.** Bean resolution knew only the
   stereotype annotations on a class — `@Component`, `@Service`, `@Repository`, `@Named` — so a delegate
   registered the standard way for code you do not own, a `@Bean` method in a `@Configuration` class, was

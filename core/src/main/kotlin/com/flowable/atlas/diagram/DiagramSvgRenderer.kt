@@ -109,7 +109,14 @@ object DiagramSvgRenderer {
      */
     private fun drawShape(sb: StringBuilder, s: DiaShape) {
         sb.append("<g")
-        if (s.elementId.isNotBlank()) sb.append(""" data-el="${esc(s.elementId)}"""")
+        if (s.elementId.isNotBlank()) {
+            sb.append(""" data-el="${esc(s.elementId)}"""")
+            // Reachable by keyboard and named for a screen reader — the explorer's ego graph does the
+            // same; the diagram was mouse-only. The explorer maps Enter/Space on a shape to a click.
+            val name = listOfNotNull(s.label?.takeIf { it.isNotBlank() }, s.typeLabel).joinToString(" — ")
+            sb.append(""" tabindex="0" role="button"""")
+            if (name.isNotBlank()) sb.append(""" aria-label="${esc(name)}"""")
+        }
         s.icon?.let { sb.append(""" data-icon="${it.slug}"""") }
         sb.append(">")
         tooltip(sb, s)
