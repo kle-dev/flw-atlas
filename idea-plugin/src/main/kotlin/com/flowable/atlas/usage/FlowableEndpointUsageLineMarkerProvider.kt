@@ -38,10 +38,7 @@ class FlowableEndpointUsageLineMarkerProvider : LineMarkerProvider {
         // kick a background build and show nothing this pass; markers appear once the index exists.
         // Without the build, a cold index is indistinguishable from "no model calls this endpoint".
         val service = elements.first().project.service<FlowableModelIndexService>()
-        val index = service.cachedOrNull() ?: run {
-            ApplicationManager.getApplication().executeOnPooledThread { runCatching { service.index() } }
-            return
-        }
+        val index = service.cachedOrRequest() ?: return
         for (element in elements) {
             if (element !is PsiIdentifier) continue
             val method = element.parent as? PsiMethod ?: continue

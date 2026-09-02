@@ -10,7 +10,6 @@ import com.intellij.codeInsight.hints.declarative.InlayHintsProvider
 import com.intellij.codeInsight.hints.declarative.InlayTreeSink
 import com.intellij.codeInsight.hints.declarative.InlineInlayPosition
 import com.intellij.codeInsight.hints.declarative.SharedBypassCollector
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Editor
 import com.intellij.psi.PsiElement
@@ -37,10 +36,7 @@ class FlowableActionNameInlayProvider : InlayHintsProvider {
         val service = file.project.service<FlowableModelIndexService>()
         // Never build the (blocking) index from a hint pass. If it isn't ready yet, kick a background
         // build and show nothing this pass; hints appear once the index exists.
-        val index = service.cachedOrNull() ?: run {
-            ApplicationManager.getApplication().executeOnPooledThread { runCatching { service.index() } }
-            return null
-        }
+        val index = service.cachedOrRequest() ?: return null
         val names = actionNames(index)
         return if (names.isEmpty()) null else Collector(names)
     }

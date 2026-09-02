@@ -117,8 +117,11 @@ private class FlowableOperationModelReference(
         val chain = FluentChain.collectCalls(call)
         val keyCall = FluentChain.findCall(chain, keyMethod) ?: return ResolveResult.EMPTY_ARRAY
         val siblingKey = FluentChain.constantStringArg(keyCall, 0, project) ?: return ResolveResult.EMPTY_ARRAY
+        val service = project.service<FlowableModelIndexService>()
+        // A reference resolves under the read lock — the cached index only, never a build here.
+        if (service.cachedOrRequest() == null) return ResolveResult.EMPTY_ARRAY
         val serviceKey = if (keyIsService) siblingKey
-            else project.service<FlowableModelIndexService>().backingServiceKey(siblingKey) ?: return ResolveResult.EMPTY_ARRAY
+            else service.backingServiceKey(siblingKey) ?: return ResolveResult.EMPTY_ARRAY
         return resolveKeyToModelFiles(project, serviceKey, listOf(ModelType.SERVICE))
     }
 
@@ -166,7 +169,8 @@ private fun valueKeyReference(literal: PsiLiteralExpression): PsiReference? {
     if (!ValueKeyMatching.enabled()) return null
     val value = literal.value as? String ?: return null
     if (!ValueKeyMatching.plausible(value)) return null
-    val index = literal.project.service<FlowableModelIndexService>().cachedOrNull() ?: return null
+    val service = literal.project.service<FlowableModelIndexService>()
+    val index = service.cachedOrRequest() ?: return null
     if (index.find(value).isEmpty()) return null
     return FlowableValueKeyReference(literal)
 }

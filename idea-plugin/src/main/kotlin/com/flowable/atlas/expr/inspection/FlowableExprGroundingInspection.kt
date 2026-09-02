@@ -31,10 +31,13 @@ class FlowableExprGroundingInspection : LocalInspectionTool() {
         if (dialectOf(file.language) != ExpressionDialect.BACKEND) return null
 
         val service = file.project.service<FlowableModelIndexService>()
+        // No index, no verdict: without the project's variables and referenced names every root would
+        // look unknown, and building the index under the daemon's read lock is what froze the IDE.
+        val index = service.cachedOrRequest() ?: return null
         val known = HashSet<String>()
         known += FlowableExpressionCatalog.rootNames(ExpressionDialect.BACKEND)
-        known += service.variables()
-        known += service.index().referencedIdentifiers
+        known += index.variables
+        known += index.referencedIdentifiers
 
         val allowlist = FlowableAtlasProjectSettings.getInstance(file.project)
         val problems = BackendGrounding

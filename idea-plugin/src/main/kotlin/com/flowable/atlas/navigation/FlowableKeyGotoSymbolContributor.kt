@@ -7,7 +7,6 @@ import com.intellij.icons.AllIcons
 import com.intellij.navigation.ChooseByNameContributorEx
 import com.intellij.navigation.ItemPresentation
 import com.intellij.navigation.NavigationItem
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.runReadActionBlocking
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
@@ -38,10 +37,7 @@ class FlowableKeyGotoSymbolContributor : ChooseByNameContributorEx {
     override fun processNames(processor: Processor<in String>, scope: GlobalSearchScope, filter: IdFilter?) {
         val project = scope.project ?: return
         val service = project.service<FlowableModelIndexService>()
-        val index = service.cachedOrNull() ?: run {
-            ApplicationManager.getApplication().executeOnPooledThread { runCatching { service.index() } }
-            return
-        }
+        val index = service.cachedOrRequest() ?: return
         // Model keys (actions, processes, cases, forms, agents, services, data objects, …).
         for (entry in index.allDistinct()) if (entry.key.isNotBlank()) processor.process(entry.key)
         // Bot keys referenced by actions (covers platform bots with no project class too).

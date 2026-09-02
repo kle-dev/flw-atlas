@@ -56,6 +56,8 @@ class FlowableValueFieldInspection : LocalInspectionTool() {
                     ?.let { FluentChain.constantStringArg(it, 0, project) } ?: return
 
                 val service = project.service<FlowableModelIndexService>()
+                // no index, no verdict — and no build under the daemon's read lock
+                if (service.cachedOrRequest() == null) return
                 val operations = if (site.keyIsService) service.operationsOfService(modelKey) else service.operationsOf(modelKey)
                 val operation = operations.firstOrNull { it.key == operationKey } ?: return
 

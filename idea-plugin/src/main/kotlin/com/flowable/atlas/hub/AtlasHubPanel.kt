@@ -520,9 +520,13 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         // is a decision the user never made.
         val projectNote = if (subCount >= 2 && !chosen && active.isBlank()) "$subCount found — choose one" else ""
 
-        val index = project.service<FlowableModelIndexService>().cachedOrNull()
+        val indexService = project.service<FlowableModelIndexService>()
+        val index = indexService.cachedOrNull()
+        // No index yet? Ask for one (a single background build, joined by every other asker) — the
+        // panel redraws on modelIndexUpdated, so "scanning" resolves itself without a click.
+        if (index == null) indexService.ensureBuilding()
         val indexText = if (index == null) {
-            "Not scanned yet — Rebuild scans the project"
+            "Scanning the project…"
         } else {
             val byType = index.allDistinct().groupBy { it.type }
             val counts = ModelType.entries.mapNotNull { t -> byType[t]?.let { t.display to it.size } }

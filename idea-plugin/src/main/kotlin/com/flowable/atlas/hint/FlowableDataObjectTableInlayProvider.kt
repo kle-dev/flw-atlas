@@ -8,7 +8,6 @@ import com.intellij.codeInsight.hints.declarative.InlayHintsProvider
 import com.intellij.codeInsight.hints.declarative.InlayTreeSink
 import com.intellij.codeInsight.hints.declarative.InlineInlayPosition
 import com.intellij.codeInsight.hints.declarative.SharedBypassCollector
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Editor
 import com.intellij.psi.PsiElement
@@ -29,12 +28,9 @@ class FlowableDataObjectTableInlayProvider : InlayHintsProvider {
     override fun createCollector(file: PsiFile, editor: Editor): InlayHintsCollector? {
         if (!FlowableAtlasSettings.getInstance().showDataObjectTableInlay) return null
         val service = file.project.service<FlowableModelIndexService>()
-        // Never build the (blocking) index from a hint pass. If it isn't ready yet, kick a background
-        // build and show nothing this pass; hints appear once the index exists.
-        if (service.cachedOrNull() == null) {
-            ApplicationManager.getApplication().executeOnPooledThread { runCatching { service.index() } }
-            return null
-        }
+        // Never build the (blocking) index from a hint pass: the cached index or a background request;
+        // hints appear once the index exists and the daemon re-runs.
+        if (service.cachedOrRequest() == null) return null
         val tables = service.dataObjectTables()
         return if (tables.isEmpty()) null else Collector(tables)
     }

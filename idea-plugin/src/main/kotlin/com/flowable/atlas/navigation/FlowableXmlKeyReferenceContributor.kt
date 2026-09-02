@@ -50,7 +50,10 @@ private class FlowableXmlKeyReference(
         val key = element.value
         if (!FlowableXmlKeyCatalog.isResolvableKey(key)) return ResolveResult.EMPTY_ARRAY
         val psiManager = PsiManager.getInstance(element.project)
-        return element.project.service<FlowableModelIndexService>().find(key)
+        // A reference resolves under the read lock — the cached index only, never a build here.
+        val service = element.project.service<FlowableModelIndexService>()
+        val index = service.cachedOrRequest() ?: return ResolveResult.EMPTY_ARRAY
+        return index.find(key)
             .filter { it.type in site.types }
             .mapNotNull { psiManager.findFile(it.file) }
             .map { PsiElementResolveResult(it) }

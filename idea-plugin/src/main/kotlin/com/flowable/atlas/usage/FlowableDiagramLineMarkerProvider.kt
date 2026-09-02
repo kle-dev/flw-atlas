@@ -10,7 +10,6 @@ import com.intellij.codeInsight.daemon.LineMarkerInfo
 import com.intellij.codeInsight.daemon.LineMarkerProvider
 import com.intellij.codeInsight.hint.HintManager
 import com.intellij.icons.AllIcons
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.markup.GutterIconRenderer
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -48,10 +47,7 @@ class FlowableDiagramLineMarkerProvider : LineMarkerProvider {
         // cachedOrNull() only — never build the index from a highlighting pass. If it isn't ready yet,
         // kick a background build and show nothing this pass; markers appear once the index exists.
         val service = elements.first().project.service<FlowableModelIndexService>()
-        val index = service.cachedOrNull() ?: run {
-            ApplicationManager.getApplication().executeOnPooledThread { runCatching { service.index() } }
-            return
-        }
+        val index = service.cachedOrRequest() ?: return
         val valueBased = ValueKeyMatching.enabled()
         for (element in elements) {
             val (key, site) = keyAnchor(element) ?: continue

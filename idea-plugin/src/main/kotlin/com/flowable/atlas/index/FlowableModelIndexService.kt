@@ -15,7 +15,9 @@ import com.flowable.atlas.parsing.OperationInfo
 import com.flowable.atlas.parsing.RestCallScanner
 import com.flowable.atlas.parsing.ParamInfo
 import com.flowable.atlas.parsing.ServiceTable
+import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.components.Service
@@ -30,6 +32,9 @@ import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import java.nio.file.Path
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Project-wide index of Flowable model keys and the query facade used by the completion
@@ -50,13 +55,21 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
     @Volatile
     private var dataObjectTablesCache: Map<String, String>? = null
 
+    /** The one background build in flight, if any — every [ensureBuilding] while it runs joins it. */
+    private val inFlight = AtomicReference<CompletableFuture<FlowableIndex>?>()
+
+    /** Bumped on every invalidation, so a build that started before the change cannot cache its stale
+     *  snapshot over a newer one (a pull rewrites the archives, the VFS invalidates, a rebuild runs —
+     *  and an older scan that is still finishing must lose). */
+    private val generation = AtomicLong()
+
     init {
         project.messageBus.connect(this).subscribe(
             VirtualFileManager.VFS_CHANGES,
             object : BulkFileListener {
                 override fun after(events: MutableList<out VFileEvent>) {
                     if (events.any { ModelFiles.isModelPath(it.path) }) {
-                        cached = null; dataObjectTablesCache = null
+                        drop()
                         publishUpdated()
                     }
                 }
@@ -64,21 +77,108 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
         )
     }
 
-    /** The current index, building it on first use / after invalidation. */
+    private fun drop() {
+        generation.incrementAndGet()
+        cached = null; dataObjectTablesCache = null
+    }
+
+    /**
+     * The current index, building it on first use / after invalidation.
+     *
+     * **Who may call this.** Only a context that is allowed to wait: completion (cancellable), a
+     * `Task.Backgroundable`, a Design pull, the generators, the Rebuild action. A daemon pass, a
+     * reference resolve or a line-marker provider must read [cachedOrNull] and call [ensureBuilding]
+     * instead — those run under the read lock, and a multi-second scan under the read lock is what
+     * "the IDE freezes while I type" looks like.
+     *
+     * Inside a read action the build runs inline rather than waiting for another thread's: that
+     * thread needs the read lock too, and with a write action pending the wait would deadlock. The
+     * phase-1/phase-2 split in [buildAndCache] keeps the lock held for milliseconds either way.
+     */
     fun index(): FlowableIndex {
         cached?.let { return it }
         // A torn scan during shutdown is worthless — and iterating a disposing VFS spams the log.
         if (project.isDisposed) return build(emptyList())
-        // Phase 1, under a (short) read action: only COLLECT the candidate files — no file content is
-        // read while the lock is held. Phase 2 (bytes + parse + regex) runs lock-free, so a pending
-        // write action (typing, VFS refresh) never queues behind a multi-second scan. One long read
-        // action here used to freeze the EDT for seconds on large workspaces.
+        if (ApplicationManager.getApplication().isReadAccessAllowed) return buildAndCache()
+        return startOrJoin().get()
+    }
+
+    /**
+     * Make sure an index exists or is being built, without waiting. The one call every read-context
+     * consumer makes when [cachedOrNull] is empty: one background build for any number of callers, and
+     * when it lands the daemon restarts so markers, hints and inspections appear without retyping.
+     */
+    fun ensureBuilding() {
+        if (cached != null || project.isDisposed) return
+        // A light test runs highlighting synchronously on the EDT and asserts on its result at once; a
+        // build that lands later would make every inspection test a race. Inline there — the production
+        // path is [ensureBuildingAsync], and ModelIndexEnsureBuildingTest exercises it on purpose.
+        if (ApplicationManager.getApplication().isUnitTestMode) { buildAndCache(); return }
+        ensureBuildingAsync()
+    }
+
+    /** The background half of [ensureBuilding]: one pooled build, joined by every caller until it lands. */
+    internal fun ensureBuildingAsync() {
+        if (cached != null || project.isDisposed) return
+        startOrJoin()
+    }
+
+    /**
+     * What a read-context consumer calls: the cached index, or — after asking for a background build —
+     * null, meaning "no verdict this pass; the daemon restarts when the index lands and asks again".
+     */
+    fun cachedOrRequest(): FlowableIndex? {
+        cached?.let { return it }
+        ensureBuilding()
+        return cached
+    }
+
+    private fun startOrJoin(): CompletableFuture<FlowableIndex> {
+        while (true) {
+            inFlight.get()?.let { return it }
+            val future = CompletableFuture<FlowableIndex>()
+            if (inFlight.compareAndSet(null, future)) {
+                ApplicationManager.getApplication().executeOnPooledThread {
+                    try {
+                        future.complete(buildAndCache())
+                    } catch (t: Throwable) {
+                        future.completeExceptionally(t)
+                    } finally {
+                        inFlight.compareAndSet(future, null)
+                    }
+                }
+                return future
+            }
+        }
+    }
+
+    /**
+     * Phase 1, under a (short) read action: only COLLECT the candidate files — no file content is read
+     * while the lock is held. Phase 2 (bytes + parse + regex) runs lock-free, so a pending write action
+     * (typing, VFS refresh) never queues behind a multi-second scan. One long read action here used to
+     * freeze the EDT for seconds on large workspaces.
+     */
+    private fun buildAndCache(): FlowableIndex {
+        val gen = generation.get()
         val candidates = ReadAction.computeBlocking<List<VirtualFile>, RuntimeException> { collectCandidates() }
         val built = build(candidates)
         if (project.isDisposed) return built           // don't cache what a dying scan produced
+        if (generation.get() != gen) return built      // invalidated meanwhile — a newer build owns the cache
         cached = built
         publishUpdated()
+        restartDaemon()
         return built
+    }
+
+    /** A build landing means markers and hints that were skipped on a cold index can now be drawn. */
+    private fun restartDaemon() {
+        // A light test pumps the event queue *during* highlighting, where the platform forbids a daemon
+        // restart; tests that need one call it themselves.
+        if (ApplicationManager.getApplication().isUnitTestMode) return
+        ApplicationManager.getApplication().invokeLater(
+            { if (!project.isDisposed) DaemonCodeAnalyzer.getInstance(project).restart("Flowable model index built") },
+            project.disposed,
+        )
     }
 
     /**
@@ -87,15 +187,16 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
      */
     fun cachedOrNull(): FlowableIndex? = cached
 
-    /** Force a rebuild and return the fresh index. */
+    /** Force a rebuild and return the fresh index. Deliberately does not join a build already in
+     *  flight — it may have started before the files this rebuild is about were written. */
     fun refresh(): FlowableIndex {
-        cached = null; dataObjectTablesCache = null
-        return index()
+        drop()
+        return buildAndCache()
     }
 
     /** Drop the cached index so it is rebuilt lazily on next use (cheap; safe on the EDT). */
     fun invalidate() {
-        cached = null
+        drop()
         publishUpdated()
     }
 

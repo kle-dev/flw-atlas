@@ -11,7 +11,6 @@ import com.intellij.ide.actions.searcheverywhere.WeightedSearchEverywhereContrib
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.DataSink
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
@@ -102,10 +101,7 @@ class FlowableModelSeContributor(private val project: Project) :
         consumer: Processor<in FoundItemDescriptor<FlowableSeItem>>,
     ): Boolean {
         val service = project.service<FlowableModelIndexService>()
-        val index = service.cachedOrNull() ?: run {
-            ApplicationManager.getApplication().executeOnPooledThread { runCatching { service.index() } }
-            return true
-        }
+        val index = service.cachedOrRequest() ?: return true
         var emitted = 0
         for (entry in index.allEntries()) {
             indicator.checkCanceled()

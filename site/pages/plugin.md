@@ -76,7 +76,11 @@ that had drifted made every edit to the default look as if it had done nothing. 
 are stored per environment, because a workspace key belongs to one server and cannot mean the same
 thing on the next.
 
-The Hub never scans on its own: it subscribes to a project message bus that publishes
+The index is built when the project opens, in the background, and the Hub asks for one whenever it
+finds none — one build for any number of askers, and the editor's markers, hints and inspections are
+re-run when it lands. Nothing that runs under the editor's read lock (a highlighting pass, a
+reference, Find Usages) ever builds the index itself; only completion and the explicit actions may
+wait for it. Apart from that the Hub never scans on its own: it subscribes to a project message bus that publishes
 index-invalidated, generation-finished, design-pull-finished, sub-project-switched,
 settings-applied, environments-changed and connection-switched events, so it reflects work started
 anywhere in the IDE without polling. Every Atlas settings page publishes the settings-applied event

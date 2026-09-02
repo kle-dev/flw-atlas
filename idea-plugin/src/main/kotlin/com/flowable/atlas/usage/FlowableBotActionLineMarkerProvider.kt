@@ -32,7 +32,8 @@ class FlowableBotActionLineMarkerProvider : LineMarkerProvider {
         result: MutableCollection<in LineMarkerInfo<*>>,
     ) {
         if (elements.isEmpty()) return
-        val index = elements.first().project.service<FlowableModelIndexService>().cachedOrNull() ?: return
+        val service = elements.first().project.service<FlowableModelIndexService>()
+        val index = service.cachedOrRequest() ?: return
         for (element in elements) {
             if (element !is PsiIdentifier) continue
             val cls = element.parent as? PsiClass ?: continue

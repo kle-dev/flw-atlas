@@ -32,6 +32,7 @@ class FlowableKeyDocumentationProvider : AbstractDocumentationProvider() {
             if (literal != null) {
                 val k = literal.value as? String ?: return null
                 val site = SiteMatching.keySiteForLiteral(literal)
+                if (service.cachedOrNull() == null) service.ensureBuilding()   // hover again once it exists
                 when {
                     site != null -> Triple(site.targetTypes, k, literal as PsiElement)
                     // Fallback: a plain data-object key string (a constant's value / bare literal),

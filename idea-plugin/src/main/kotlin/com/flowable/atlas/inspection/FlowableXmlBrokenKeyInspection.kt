@@ -3,6 +3,7 @@ package com.flowable.atlas.inspection
 import com.flowable.atlas.completion.FlowableXmlKeyCatalog
 import com.flowable.atlas.completion.FlowableXmlKeyCatalog.XmlKeySite
 import com.flowable.atlas.index.FlowableModelIndexService
+import com.flowable.atlas.model.ModelType
 import com.intellij.codeInspection.LocalInspectionTool
 import com.intellij.codeInspection.LocalQuickFix
 import com.intellij.codeInspection.ProblemDescriptor
@@ -35,7 +36,7 @@ class FlowableXmlBrokenKeyInspection : LocalInspectionTool() {
                 if (!FlowableXmlKeyCatalog.isResolvableKey(value)) return
 
                 val service = attribute.project.service<FlowableModelIndexService>()
-                val knownKeys = knownKeys(service, site)
+                val knownKeys = knownKeys(service, site.types)
                 if (knownKeys.isEmpty()) return          // nothing indexed for this type — don't guess
                 if (value in knownKeys) return
 
@@ -60,8 +61,7 @@ class FlowableXmlBrokenKeyInspection : LocalInspectionTool() {
                 if (!FlowableXmlKeyCatalog.isResolvableKey(value)) return
 
                 val service = text.project.service<FlowableModelIndexService>()
-                val knownKeys = LinkedHashSet<String>()
-                for (type in site.types) service.keysOfType(type).forEach { knownKeys.add(it.key) }
+                val knownKeys = knownKeys(service, site.types)
                 if (knownKeys.isEmpty()) return          // nothing indexed for this type — don't guess
                 if (value in knownKeys) return
 
@@ -77,9 +77,11 @@ class FlowableXmlBrokenKeyInspection : LocalInspectionTool() {
         }
     }
 
-    private fun knownKeys(service: FlowableModelIndexService, site: XmlKeySite): Set<String> {
+    /** The cached index only — a highlighting pass must not build it; empty means "no verdict". */
+    private fun knownKeys(service: FlowableModelIndexService, types: Collection<ModelType>): Set<String> {
+        val index = service.cachedOrRequest() ?: return emptySet()
         val keys = LinkedHashSet<String>()
-        for (type in site.types) service.keysOfType(type).forEach { keys.add(it.key) }
+        for (type in types) index.keysOfType(type).forEach { keys.add(it.key) }
         return keys
     }
 

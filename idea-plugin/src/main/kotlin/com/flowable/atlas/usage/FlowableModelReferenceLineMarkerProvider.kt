@@ -38,7 +38,8 @@ class FlowableModelReferenceLineMarkerProvider : LineMarkerProvider {
         if (elements.isEmpty()) return
         // cachedOrNull() only — never build the index from a highlighting pass. Markers appear once the
         // index exists (it is built lazily by completion / implicit-usage / Rebuild).
-        val index = elements.first().project.service<FlowableModelIndexService>().cachedOrNull() ?: return
+        val service = elements.first().project.service<FlowableModelIndexService>()
+        val index = service.cachedOrRequest() ?: return
         for (element in elements) {
             if (element !is PsiIdentifier) continue
             val names = referencedNames(element, index) ?: continue
