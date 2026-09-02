@@ -23,7 +23,10 @@ object Constants {
     )
 
     // Harvesting regexes — ported from flowable_atlas.py (~lines 69-72, 1296).
-    val EXPR_RE = Regex("[#$]\\{[^}]*\\}")
+    // A backslash before the `$`/`#` is the author saying "literal, do not evaluate" — in a Groovy
+    // GString, in a Java string, in a JSON body — so `\${x}` is not an expression and is not harvested;
+    // it used to be validated like one and could only ever come out wrong.
+    val EXPR_RE = Regex("(?<!\\\\)[#$]\\{[^}]*\\}")
     val MUSTACHE_RE = Regex("\\{\\{[^}]*\\}\\}")
     val METHOD_CALL_FULL_RE = Regex("(?<![\\w.\$])([A-Za-z_][\\w]*)\\s*\\.\\s*([A-Za-z_][\\w]*)\\s*\\(")
     val DELEGATE_CLASS_RE = Regex("(?:flowable|activiti):class=\"([^\"]+)\"")

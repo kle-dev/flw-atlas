@@ -189,6 +189,14 @@
               <code>@RestController</code> became an endpoint the models could supposedly reach. Models
               under <code>src/test/resources</code> are still read — a test process is a model somebody has
               to keep in step.</li>
+          <li><b><code>\${…}</code> is not an expression, and "not judged" is no longer silent.</b> A
+              backslash before the dollar sign — in a Groovy string, a Java string, a JSON body — means
+              <i>literal, do not evaluate</i>; Atlas harvested it like any other expression and validated
+              it, which could only ever come out wrong. It is skipped now. And an expression whose harvested
+              body still holds a <code>{</code> (the harvester may have cut it short at the first
+              <code>}</code>) gets no verdict, as before — but it is counted
+              (<code>stats.exprSkippedNested</code>) and its page says <i>not validated</i> and why, so an
+              unjudged expression cannot pass for a clean one.</li>
         </ul>
         <h3>0.19.0</h3>
         <ul>

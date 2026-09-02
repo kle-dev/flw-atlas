@@ -80,7 +80,12 @@ are not validated at all — validating them against the wrong grammar would pro
 positives.
 
 Atlas also declines to judge an expression whose harvested text looks truncated: after unescaping, if
-the body still contains a stray `{`, the harvester probably cut it short, so no verdict is issued.
+the body still contains a stray `{`, the harvester probably cut it short, so no verdict is issued. Those
+are counted — `stats.exprSkippedNested` in `graph.json`, and the expression's own page says *not
+validated* and why — so "no problems" and "not judged" cannot be confused.
+
+A backslash in front of the dollar sign, `\${…}`, is the author saying *literal, do not evaluate* — in a
+Groovy string, a Java string, a JSON body. It is not an expression and is not harvested at all.
 
 ## Scripts
 

@@ -232,6 +232,10 @@ object GraphBuilder {
         for (g in ctx.groups) addNode("group", g, g, null, linkedMapOf<String, Any?>())
 
         // --- expression / binding nodes (with the models that use them) ---
+        // Expressions the harvester may have cut short (a `{` left inside the body) get no verdict —
+        // counted, so "n expressions were not judged" is a number the report can state instead of a
+        // silence nobody can tell from "all fine".
+        var exprSkippedNested = 0
         fun usageNodes(ntype: String, usage: Map<String, MutableSet<String>>) {
             val dialect = if (ntype == "expression") ExpressionDialect.BACKEND else ExpressionDialect.FRONTEND
             for ((text, keys) in usage) {
@@ -241,6 +245,7 @@ object GraphBuilder {
                 val usedTypes = used.mapNotNull { nodes[it]?.get("type") as? String }.toSet()
                 if (!FREEMARKER_MODEL_TYPES.containsAll(usedTypes)) {
                     var problems = validateHarvestedExpr(text, dialect, custom)
+                    if (problems == null) { exprSkippedNested++; data["notValidated"] = "nested braces — harvested text may be truncated" }
                     if (problems != null && problems.isNotEmpty() && exprAllowlist != null) {
                         problems = problems.filter { !exprProblemAllowlisted(it, exprAllowlist) }
                     }
@@ -909,6 +914,7 @@ object GraphBuilder {
             "nodes" to nodeList.size,
             "edges" to uniq.size,
             "suspectEdges" to uniq.count { it["suspect"] == true },
+            "exprSkippedNested" to exprSkippedNested,
             "dynamicEdges" to uniq.count { it["dynamic"] == true },
             "scriptIssues" to countScriptIssues(result),
         )

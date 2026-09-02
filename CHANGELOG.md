@@ -52,6 +52,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   write, so a variable only a test ever set could be reported as written-but-never-read, and a test
   `@RestController` became an endpoint the models could supposedly reach. Models under
   `src/test/resources` are still read — a test process is a model somebody has to keep in step.
+- **`\${…}` is not an expression, and "not judged" is no longer silent.** A backslash before the dollar
+  sign — in a Groovy string, a Java string, a JSON body — means *literal, do not evaluate*; Atlas
+  harvested it like any other expression and validated it, which could only ever come out wrong. It is
+  skipped now. And an expression whose harvested body still holds a `{` (the harvester may have cut it
+  short at the first `}`) gets no verdict, as before — but it is counted (`stats.exprSkippedNested`) and
+  its page says *not validated* and why, so an unjudged expression cannot pass for a clean one.
 
 ## 0.19.0
 

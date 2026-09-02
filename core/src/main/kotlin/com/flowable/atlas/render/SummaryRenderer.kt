@@ -268,6 +268,13 @@ object SummaryRenderer {
             if (errors > 5) L.add("- … (+${errors - 5} more errors — see `$an.overview.md`)")
             L.add("")
         }
+        // Expressions that got no verdict are not "fine": say how many, so the health block above is
+        // read as "of what was judged".
+        val notJudged = ((result["stats"] as? Map<*, *>)?.get("exprSkippedNested") as? Number)?.toInt() ?: 0
+        if (notJudged > 0) {
+            L.add("_${notJudged} expression(s) not validated — the harvested text holds a nested `{` and may be truncated._")
+            L.add("")
+        }
 
         L.add("---\n_Next: `$an.overview.md` has every model, relationship and the access map · " +
                 "`$an.graph.json` is the traversable graph to query · `$an.explorer.html` is the clickable view · " +
