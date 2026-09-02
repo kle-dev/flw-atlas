@@ -20,6 +20,15 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   but the detail panel still read that key, so for a whole run of releases no process, case or form
   listed what it touches. The page now rebuilds the map from those `usedBy` lists on first use; the
   payload did not grow by a byte, and the release build fails if the section's builder ever goes missing.
+- **A reference lands on the model of its own type.** The graph looked every target up by key alone,
+  first model registered wins — so with a process and a form both called `orderX`, a `formKey` of `orderX`
+  drew a clean process → process edge, although the resolver had already worked out the right type. The
+  resolved type now travels with the reference and the edge follows it; the key-only map is the fallback,
+  not the rule. In the same pass, two models of different types sharing one key both survive — a form and
+  a page, or a query and a template, live in one result bucket and the second used to be dropped as a
+  "duplicate" without a word — and the shared key is reported once, as a `parseIssues` *warning* naming
+  both files, because a key-only lookup (and the harvested variables and expressions) can still only go
+  to one of them.
 
 ## 0.19.0
 

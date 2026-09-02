@@ -64,7 +64,22 @@ object Atlas {
             val key = (obj as? Map<*, *>)?.get("key") as? String ?: return
             val norm = ModelKinds.NORMALIZE_TYPE[mtype] ?: mtype
             modelIndex[norm to key] = label
-            byKey.getOrPut(key) { ArrayList() }.add(norm to label)
+            val known = byKey.getOrPut(key) { ArrayList() }
+            // Two models of different types sharing one key is legal in Flowable and rare in practice,
+            // and it is the one thing a key alone cannot settle: a reference that names only the key,
+            // and the variables and expressions harvested under it, go to whichever type Atlas lists
+            // first. Said once per (key, type), as a warning, so the reader knows which pages to doubt.
+            // The same model loose and inside a .bar is the same type twice — not a conflict.
+            if (known.none { it.first == norm }) {
+                known.firstOrNull { it.first != norm }?.let { (otherType, otherLabel) ->
+                    diag(
+                        "conflict", label,
+                        "key '$key' is shared with the $otherType model $otherLabel — references that " +
+                            "name only the key, and the harvested variables and expressions, go to one of them",
+                    )
+                }
+            }
+            known.add(norm to label)
         }
 
         fun dispatch(mtype: String?, data: ByteArray, label: String) {

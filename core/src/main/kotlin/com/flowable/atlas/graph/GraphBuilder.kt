@@ -105,6 +105,15 @@ object GraphBuilder {
 
         fun kn(key: Any?): String? = (key as? String)?.let { keyToNode[it] }
 
+        /** The node of a model whose type is known — `(type, key)` first, the key-only map as fallback.
+         *  Two models of different types may share a key, and the type-blind map hands the first
+         *  registered one to every caller; wherever a ref carries its type that guess is avoidable. */
+        fun knt(type: Any?, key: Any?): String? {
+            val k = key as? String ?: return null
+            val t = (type as? String)?.let { ModelKinds.NORMALIZE_TYPE[it] ?: it }
+            return t?.let { nodes["$it:$k"]?.get("id") as? String } ?: keyToNode[k]
+        }
+
         // --- model nodes from buckets (explicit semantic order — key_to_node is first-wins). ---
         val nodeTypeByBucket = ModelKinds.MODEL_KINDS.associate { it.bucket to it.nodeType }
         val modelBucketOrder = listOf(
@@ -550,9 +559,9 @@ object GraphBuilder {
         // model -> model / java (a `suspect` ref — incompatible cross-type fallback, ref-by-id,
         // ambiguous simple-name match — keeps the flag on its edge so the explorer can mark it)
         for (r in resolved) {
-            val s = kn(r["from"])
+            val s = knt(r["fromType"], r["from"])
             val t: String? = when {
-                r["targetType"] == "model" -> kn(r["value"])
+                r["targetType"] == "model" -> knt(r["targetNodeType"], r["value"])
                 truthy(r["targetFqn"]) -> "java:${r["targetFqn"]}"
                 else -> null
             }
@@ -568,7 +577,7 @@ object GraphBuilder {
                 val mname = rel.substring(6).trim().trimEnd('(', ')')
                 val mid = "method:$fqn#$mname"
                 val info = methodsCalled.getOrPut(mid) { Triple(fqn, mname, LinkedHashSet()) }
-                kn(r["from"])?.let { info.third.add(it) }
+                knt(r["fromType"], r["from"])?.let { info.third.add(it) }
             }
         }
         for ((mid, info) in methodsCalled) {
@@ -615,7 +624,7 @@ object GraphBuilder {
                         "file" to null, "data" to linkedMapOf<String, Any?>(),
                     )
                 }
-                addEdge(kn(r["from"]), nid, r["rel"] as String, suspect = r["suspect"] == true)
+                addEdge(knt(r["fromType"], r["from"]), nid, r["rel"] as String, suspect = r["suspect"] == true)
                 continue
             }
             val data: LinkedHashMap<String, Any?> = when {
@@ -642,14 +651,14 @@ object GraphBuilder {
                     "id" to nid, "type" to "external", "label" to value, "key" to value, "file" to null, "data" to data,
                 )
             }
-            addEdge(kn(r["from"]), nid, r["rel"] as String, suspect = r["suspect"] == true)
+            addEdge(knt(r["fromType"], r["from"]), nid, r["rel"] as String, suspect = r["suspect"] == true)
         }
 
         // dynamic (expression-valued) references — best-effort resolved by the reference resolver
         // (constant-backed `${ident}` → model), else an expression placeholder node. Both variants
         // carry `dynamic=true` so the explorer renders them dashed and they stay filterable.
         for (r in (result["dynamicRefs"] as? List<Map<String, Any?>> ?: emptyList())) {
-            val s = kn(r["from"]) ?: continue
+            val s = knt(r["fromType"], r["from"]) ?: continue
             val rel = r["rel"] as? String ?: continue
             val kind = r["kind"] as? String ?: continue
             val resolvedNode = (r["resolvedValue"] as? String)?.let { kn(it) }

@@ -153,7 +153,9 @@ object Findings {
         for (d in (result["diagnostics"] as? List<Map<String, Any?>> ?: emptyList())) {
             findings.add(linkedMapOf(
                 "check" to "parseIssues",
-                "severity" to ERROR,
+                // A key shared by two model types is read completely — nothing was lost, only a
+                // key-only lookup is ambiguous — so it is a warning where a file that would not parse is an error.
+                "severity" to (if (d["kind"] == "conflict") WARNING else ERROR),
                 "node" to null,
                 "label" to (d["path"] ?: "?"),
                 "message" to "${d["kind"]}: ${d["message"]}",

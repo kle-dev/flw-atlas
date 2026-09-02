@@ -28,7 +28,7 @@ noise.
 
 | Check | Severity | What it means |
 |---|---|---|
-| `parseIssues` | error | A file could not be read or fully parsed. |
+| `parseIssues` | error · warning | A file could not be read or fully parsed; as a warning, one key shared by two model types. |
 | `invalidExpr` | error | An expression has a structural syntax error. |
 | `scriptIssues` | error / warning | A script body has a syntax problem, or calls something its context does not bind. |
 | `missingRefs` | error | A model key is referenced but no model in the project defines it. |
@@ -51,6 +51,13 @@ element, the line and a snippet, so it is actionable rather than merely true.
 
 Every entry in the run's diagnostics: a model whose XML or JSON would not parse, a file that could not
 be read, an archive entry that could not be opened, and any failure while extracting custom functions.
+
+One entry is a warning rather than an error: a **key shared by two model types** — a form and a page
+both called `customer`, say. Both models are read completely and a reference that states its type
+(a `formKey`, a `calledElement`) reaches the right one; what stays ambiguous is anything that names the
+key alone, and the variables and expressions Atlas harvests from a file, which are credited to whichever
+of the two it registered first. The warning names both files so you know which pages to read with that
+in mind.
 
 This is the one check you should never carry. A parse failure does not just cost you that file — every
 reference into and out of it disappears too, which makes the rest of the report quietly less complete.

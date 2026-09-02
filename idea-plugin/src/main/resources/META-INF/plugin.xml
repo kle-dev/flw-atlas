@@ -150,6 +150,16 @@
               The page now rebuilds the map from those <code>usedBy</code> lists on first use; the payload
               did not grow by a byte, and the release build fails if the section's builder ever goes
               missing.</li>
+          <li><b>A reference lands on the model of its own type.</b> The graph looked every target up by key
+              alone, first model registered wins — so with a process and a form both called
+              <code>orderX</code>, a <code>formKey</code> of <code>orderX</code> drew a clean process →
+              process edge, although the resolver had already worked out the right type. The resolved type
+              now travels with the reference and the edge follows it; the key-only map is the fallback, not
+              the rule. In the same pass, two models of different types sharing one key both survive — a
+              form and a page, or a query and a template, live in one result bucket and the second used to
+              be dropped as a "duplicate" without a word — and the shared key is reported once, as a
+              <code>parseIssues</code> <i>warning</i> naming both files, because a key-only lookup (and the
+              harvested variables and expressions) can still only go to one of them.</li>
         </ul>
         <h3>0.19.0</h3>
         <ul>

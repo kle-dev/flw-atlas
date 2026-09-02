@@ -175,9 +175,13 @@ object ReferenceResolver {
         replaceInPlace(ctx.restCalls, dedupe(ctx.restCalls) { rc -> listOf(rc["source"], rc["where"], rc["url"]) })
         for (bucket in ModelKinds.MODEL_BUCKETS) {
             val cur = bucketList(bucket)
+            // Identity is (type, key), never the key alone: a form and a page, or a query and a
+            // template, share a bucket and may legitimately share a key — the second one used to be
+            // dropped here as a "duplicate", without a trace.
             replaceInPlace(cur, dedupe(cur) { o ->
-                val k = (o as? Map<*, *>)?.get("key")
-                if (k is String && k.isNotEmpty()) k else Any()
+                val m = o as? Map<*, *>
+                val k = m?.get("key")
+                if (k is String && k.isNotEmpty()) listOf(m["modelType"] ?: bucket, k) else Any()
             })
         }
         replaceInPlace(ctx.access, dedupe(ctx.access) { a ->
@@ -220,6 +224,10 @@ object ReferenceResolver {
                     target = modelIndex[norm to value]
                     ref2["target"] = target
                     ref2["targetType"] = "model"
+                    // The resolved node type travels with the ref: the graph builder used to look the
+                    // target up by key alone, so a formKey naming `orderX` landed on the *process*
+                    // `orderX` whenever both existed — a clean-looking edge to the wrong model.
+                    if (target != null) ref2["targetNodeType"] = norm
                     if (target == null && value in byKey) {
                         // Fallback across model types: prefer a same-type entry, then a semantically
                         // compatible one ([FALLBACK_COMPAT]) — anything else stays resolvable but is
@@ -231,6 +239,7 @@ object ReferenceResolver {
                             ?: entries[0]
                         target = match.second
                         ref2["target"] = target
+                        ref2["targetNodeType"] = match.first
                         if (match.first != norm) {
                             ref2["fallbackType"] = match.first
                             if (match.first !in compat) ref2["suspect"] = true
