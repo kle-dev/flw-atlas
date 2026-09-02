@@ -1337,6 +1337,26 @@ function codeBoxHtml(body, lang, problems){
     return '<span class="'+cls+'"'+tip+'><span class="lno">'+(i+1)+'</span>'+l+'</span>';
   }).join('')+'</pre>';
 }
+/** model id → `{type: [artifact ids]}`: the variables, expressions, bindings, string literals, custom
+ *  functions and service operations a model uses, inverted from those nodes' `usedBy` lists. None of
+ *  them has an edge (they would flood every ego graph and hotspot count), and the generator strips the
+ *  equivalent `_uses` map from the payload because this is its exact transpose. Built once, on demand. */
+const USES_TYPES=new Set(['variable','expression','binding','string','customFunction','serviceOperation']);
+let _usesIdx=null;
+function usesIndex(){
+  const m=new Map();
+  nodes.forEach(n=>{
+    if(!USES_TYPES.has(n.type)) return;
+    ((n.data||{}).usedBy||[]).forEach(mid=>{
+      if(!byId.has(mid)) return;
+      let e=m.get(mid); if(!e){ e={}; m.set(mid,e); }
+      (e[n.type]=e[n.type]||[]).push(n.id);
+    });
+  });
+  m.forEach(e=>{ Object.keys(e).forEach(t=>e[t].sort()); });
+  return m;
+}
+function usesOf(id){ if(!_usesIdx) _usesIdx=usesIndex(); return _usesIdx.get(id); }
 /** `"<model>|<element>"` → the variables that script touches, inverted from the variable nodes. */
 function scriptVarIndex(){
   const m=new Map();
@@ -2846,12 +2866,14 @@ function detailExtra(n){
     h+=section('usedin','Used in ('+d.usages.length+' models) — effective occurrences', b);
   }
   // Reverse direction: a model lists all the variables/expressions/strings it uses (collapsible).
-  if(d._uses){
+  // Derived from the artifact nodes' `usedBy` (see usesIndex) — the payload carries no `_uses`.
+  const uses=usesOf(n.id);
+  if(uses){
     const ord=[['variable','Variables'],['expression','Backend expressions ${ }'],
                ['binding','Frontend bindings {{ }}'],['customFunction','Custom functions 🧩'],
                ['serviceOperation','Service operations'],['string','String literals']];
     let parts='';
-    ord.forEach(([t,lbl])=>{ const ids=(d._uses||{})[t]; if(ids&&ids.length)
+    ord.forEach(([t,lbl])=>{ const ids=uses[t]; if(ids&&ids.length)
       parts+='<details class="uses"><summary>'+lbl+' ('+ids.length+')</summary><div class="nodechips">'+ids.map(nodeChip).join('')+'</div></details>'; });
     h+=section('uses','Uses — variables &amp; expressions', parts);
   }

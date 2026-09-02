@@ -396,6 +396,18 @@ const probe = `<script>
        txt.slice(0,140));
   });
 
+  // --- a model lists what it uses: the section is rebuilt from the artifact nodes' usedBy ---
+  // The generator strips _uses from the payload, and for a whole run of releases the panel still
+  // read that key — so "which variables does this process touch" rendered nowhere.
+  steps.push(()=>{ closeOtherTabs(); location.hash=enc('process:orderProcess'); });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    const sect=det.querySelector('[data-sect="uses"]');
+    ok('a model lists the variables and expressions it uses', !!sect, 'no [data-sect="uses"] on the process');
+    ok('and each one is a chip you can follow', !!sect && !!sect.querySelector('details.uses .nc[data-id^="variable"]'),
+       sect?sect.textContent.slice(0,120):'(no section)');
+  });
+
   // --- the unused-variables report (#/variables) ---
   // The verdict is computed in :core and only stamped onto the nodes, so a broken payload allowlist
   // renders an empty page with correct-looking counts and no error anywhere. Assert the rows exist and

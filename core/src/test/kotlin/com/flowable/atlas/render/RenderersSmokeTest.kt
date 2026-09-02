@@ -62,6 +62,10 @@ class RenderersSmokeTest {
         assertTrue("expected the call activity's in-mapping in the payload", html.contains("subOrderId"))
         assertTrue("expected the parameter renderer from explorer.js", html.contains("function paramSection"))
         assertTrue("expected the parameter search haystack from explorer.js", html.contains("function paramHaystack"))
+        // A model's "Uses — variables & expressions" section is rebuilt in the browser from the artifact
+        // nodes' `usedBy` lists; the payload does not carry `_uses` (its transpose) and must not need to.
+        assertTrue("expected the usesIndex builder from explorer.js", html.contains("function usesIndex("))
+        assertFalse("`_uses` leaked into the explorer payload", html.contains("\"_uses\""))
         assertTrue("expected the parameter direction styling from explorer.css", html.contains(".parmgrid .pd{"))
         // A form button's payload mapping reaches the page — the name the action script reads back.
         assertTrue("expected the action button's payload key in the payload", html.contains("customerEmail"))

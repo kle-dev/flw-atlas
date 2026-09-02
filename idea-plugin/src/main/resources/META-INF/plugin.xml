@@ -140,6 +140,17 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.20.0</h3>
+        <ul>
+          <li><b>A model's "Uses — variables &amp; expressions" section is back.</b> The generator strips
+              the <code>_uses</code> map from the explorer payload — correctly, it is a byte-for-byte
+              transpose of the <code>usedBy</code> lists every variable, expression, binding, string
+              literal, custom function and service operation already carries — but the detail panel still
+              read that key, so for a whole run of releases no process, case or form listed what it touches.
+              The page now rebuilds the map from those <code>usedBy</code> lists on first use; the payload
+              did not grow by a byte, and the release build fails if the section's builder ever goes
+              missing.</li>
+        </ul>
         <h3>0.19.0</h3>
         <ul>
           <li><b>Ten model types stop being name-only stubs</b> — queries, sequences, SLAs, templates,

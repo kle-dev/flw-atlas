@@ -12,6 +12,15 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.20.0
+
+- **A model's "Uses — variables & expressions" section is back.** The generator strips the `_uses` map
+  from the explorer payload — correctly, it is a byte-for-byte transpose of the `usedBy` lists every
+  variable, expression, binding, string literal, custom function and service operation already carries —
+  but the detail panel still read that key, so for a whole run of releases no process, case or form
+  listed what it touches. The page now rebuilds the map from those `usedBy` lists on first use; the
+  payload did not grow by a byte, and the release build fails if the section's builder ever goes missing.
+
 ## 0.19.0
 
 - **Ten model types stop being name-only stubs** — queries, sequences, SLAs, templates, knowledge

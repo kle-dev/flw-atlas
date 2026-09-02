@@ -123,7 +123,9 @@ object ExplorerHtmlRenderer {
      */
     internal val STRIPPED_DATA_KEYS: Set<String> = setOf(
         "childModels", // redundant: parseApp records a `contains` ref per child, rendered as edges
-        "_uses", // reverse artifact map for graph.json/overview.md; the explorer derives it from edges
+        // reverse artifact map for graph.json/overview.md; the explorer rebuilds it from the artifact
+        // nodes' `usedBy` lists (`usesIndex()` in explorer.js), of which it is the exact transpose
+        "_uses",
     )
 
     /**
