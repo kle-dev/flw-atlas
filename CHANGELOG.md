@@ -12,6 +12,19 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.21.1
+
+- **The explorer opens in seconds under Remote Development, not minutes.** On a Remote Dev host the
+  embedded browser is the thin client's, and everything it shows — a local file included — crosses the
+  IDE connection in 16 KB packets, one round trip each: a 3.5 MB report was 200+ sequential round trips,
+  half a minute on a 150 ms link, for a file the host reads in milliseconds. The editor now loads a small
+  stand-in page at the report's URL, which pulls the report through the IDE bridge in a few large parts
+  fired together — one round trip however large the report — and keeps it in the client's browser storage
+  under its content hash, so reopening the tab (or the IDE) transfers nothing and a regenerated report is
+  fetched once. *Reload* re-reads the file there, so a page rewritten by the CLI shows up too. A local IDE
+  is untouched: there the file is a disk read, and the generated page stays one self-contained file for
+  browsers and the CLI.
+
 ## 0.21.0
 
 - **Every node type has a face.** A process, a form, a service and forty other kinds of node were told

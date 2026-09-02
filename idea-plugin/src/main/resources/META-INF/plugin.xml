@@ -140,6 +140,20 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.21.1</h3>
+        <ul>
+          <li><b>The explorer opens in seconds under Remote Development, not minutes.</b> On a Remote Dev
+              host the embedded browser is the thin client's, and everything it shows — a local file
+              included — crosses the IDE connection in 16 KB packets, one round trip each: a 3.5 MB report
+              was 200+ sequential round trips, half a minute on a 150 ms link, for a file the host reads in
+              milliseconds. The editor now loads a small stand-in page at the report's URL, which pulls the
+              report through the IDE bridge in a few large parts fired together — one round trip however
+              large the report — and keeps it in the client's browser storage under its content hash, so
+              reopening the tab (or the IDE) transfers nothing and a regenerated report is fetched once.
+              <i>Reload</i> re-reads the file there, so a page rewritten by the CLI shows up too. A local
+              IDE is untouched: there the file is a disk read, and the generated page stays one
+              self-contained file for browsers and the CLI.</li>
+        </ul>
         <h3>0.21.0</h3>
         <ul>
           <li><b>Every node type has a face.</b> A process, a form, a service and forty other kinds of node
@@ -479,70 +493,6 @@
               the whole list (noticeable on 3000-node reports), and the <code>/</code> shortcut is finally
               written down — on the search button, in the zero-result tip and on the empty detail
               panel.</li>
-        </ul>
-        <h3>0.18.1</h3>
-        <ul>
-          <li><b>Labels and descriptions are searchable, and ranked as what they are</b> — a form field's
-              label, a data object column's label, an outcome button's caption, a permission's label, a
-              BPMN/CMMN element's name and a decision table's column headers are one ranked field
-              (<code>label:</code>), just under the node's own name; the prose somebody wrote <i>about</i> a
-              thing is another (<code>desc:</code>, also spelled <code>description:</code> /
-              <code>doc:</code>) — Design's model <b>Description</b>, <code>documentation</code> on a
-              process/case <i>and</i> on each of its elements, a form component's description, a DMN rule's
-              annotation. Both were reachable only through the free-text walk before, at the same weight as
-              a script body, so searching for a caption a user reads on screen ranked below any script that
-              happened to mention the word. Both are collected by field <i>name</i> during the walk, so a
-              label a parser starts emitting somewhere new is searchable without a change to the
-              engine.</li>
-          <li><b>A facet is a filter: it answers with all of them, and with nothing else</b> — you have
-              named the field, so <code>label:</code> matches captions only. The display name of a variable,
-              an expression, a binding, a string literal, a Java class, a method, a REST endpoint, a
-              changelog, a worker topic or a group is an identifier Atlas synthesised out of something else,
-              not a caption anybody wrote; those stay findable by name, key and free text, but they are not
-              labels. A space after the colon is fine — <code>desc: approval</code> is the same query as
-              <code>desc:approval</code> — and nothing about a query is case-sensitive: not the terms, not
-              the facet name, not its value. The row says <i>why</i> it matched with a field of the kind you
-              asked for, and <code>label:save</code> opens the field that reads "Save" rather than leaving
-              you on the form.</li>
-          <li><b>Design's model Description is no longer thrown away</b> — every parser built its own record
-              and only the app parser kept the <code>description</code> the modeller wrote, so for a
-              process, case, form, page, service, data object, action, agent, channel, event, dictionary,
-              policy or decision it never reached the report: not shown, not searchable. It is carried
-              through now and shown at the top of the detail panel for every model type that has one.</li>
-          <li><b>A form in a Design workspace export has its fields</b> — Design persists a model's body as
-              an escaped JSON <i>string</i> (<code>editorJson</code>), and a form's components are reached
-              by walking maps, so the string was never opened: every form and page exported that way came
-              out with an empty field list. No ids, no labels, no descriptions, no outcomes. A
-              <code>.form</code> from an app zip or a deployment bar was never affected, and neither was an
-              export that happens to nest <code>editorJson</code> as an object, which is why it survived
-              this long. The model's own metadata header — including its description — is kept rather than
-              overwritten.</li>
-          <li><b>The result page is shared out across the sections</b> — searching for a form field's
-              caption also matches whatever else carries the word, and a page cut off purely by score could
-              fill itself with one kind and leave the group holding the answer undrawn. Every section with
-              hits now gets a share of the page, and a section that runs out leaves its share to the others,
-              so a result that really is all one kind still fills the page with it.</li>
-          <li><b><code>scripts/search-diagnose.mjs</code></b> — point it at an existing report and a query
-              and it separates the three things a search failure can be: the string never reached the
-              report, it is there but does not match, or it matches and the page does not draw it. It uses
-              the engine embedded in <i>that</i> report, so it diagnoses the version in the file rather than
-              the checkout's. Developer tool; not shipped in the plugin or the CLI.</li>
-          <li><b>A facet takes a quoted value</b> — <code>label: "Customer name"</code> is the only way to
-              ask a facet for a multi-word caption, and it fell apart: the phrase pass stripped the quotes
-              before the facet pass ran, the colon was left with nothing to bind, and the word
-              <code>label</code> degraded into a free-text term — the query answered with whichever nodes
-              happened to <i>mention</i> the word "label" instead of everything that carries the caption.
-              The quoted value now binds to its facet first, stays contiguous like any phrase, and works
-              spaced, unspaced and in any casing. (<code>"label: thing"</code> entirely inside quotes is
-              still a literal phrase.)</li>
-          <li><b>The palette teaches its own filters</b> — before you type, the bar under the input offers
-              one chip per facet (<code>label:</code>, <code>desc:</code>, <code>key:</code>,
-              <code>id:</code>, <code>type:</code>, <code>file:</code>, <code>in:</code>), each glossed with
-              what it searches; clicking one types the prefix for you. A facet typed through the colon but
-              not given a value yet says what it is waiting for instead of searching for the word
-              <code>label</code>. And every facet that binds shows as a lit chip beside the result count —
-              proof the filter took effect, a reminder it is still on, and, when clicked, the way to remove
-              it from the query.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>
