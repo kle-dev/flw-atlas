@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Flowable Atlas</title>
+<!-- The IDE's stand-in for the explorer under Remote Development (RemoteExplorerPage.kt in the plugin).
+     There the embedded browser is the thin client's, and every resource it shows crosses the IDE
+     connection in 16 KB packets, one round trip each — so the editor loads this page instead of the
+     report. It is small enough to arrive in one packet, pulls the report through the JS bridge in a few
+     large parts fired together (one round trip, whatever the size), keeps it in the client's localStorage
+     under its content hash so the next open transfers nothing, and then replaces itself with the report
+     via document.write — URL and window intact, so ?ideTheme/?idePal still reach the page, the IDE's
+     bridges stay installed and the page's localStorage preferences are the same file:// origin's. -->
+<script>
+/* Same pre-paint as explorer.html: theme and the IDE's surfaces from the URL, so the card does not flash. */
+try{
+  var _q=new URLSearchParams(location.search), _t=_q.get('ideTheme');
+  document.documentElement.dataset.theme=(_t==='light'||_t==='dark')?_t:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+  var _pal=_q.get('idePal'), _c=_pal?_pal.split('.'):[];
+  if(_c.length===9&&_c.every(function(x){return /^[0-9a-f]{6}$/i.test(x);})){
+    var _s=document.documentElement.style;
+    _s.setProperty('--bg','#'+_c[0]); _s.setProperty('--line','#'+_c[3]); _s.setProperty('--ink','#'+_c[4]);
+    _s.setProperty('--ink-dim','#'+_c[5]); _s.setProperty('--accent','#'+_c[6]);
+  }
+}catch(e){}
+</script>
+<style>
+:root{--bg:#fafafa;--line:#e2e8f0;--ink:#131e29;--ink-dim:#4c5b6a;--accent:#0f55d6}
+:root[data-theme="dark"]{--bg:#0c141c;--line:#1f3245;--ink:#e9eef0;--ink-dim:#a5adb5;--accent:#6f99e6}
+html,body{margin:0;height:100%;background:var(--bg)}
+.boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.boot-card{display:flex;flex-direction:column;align-items:center;gap:16px;padding:24px;text-align:center}
+.boot-spinner{width:28px;height:28px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;
+  animation:boot-spin .8s linear infinite}
+.boot-title{font-weight:600;font-size:16px;color:var(--ink)}
+.boot-msg{font-size:13px;color:var(--ink-dim);max-width:26rem}
+.boot-fail{font-size:13px;color:var(--ink);text-align:left;max-width:40rem}
+.boot-fail pre{font:12px ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;max-height:40vh;overflow:auto;
+  margin:8px 0;padding:8px;background:rgba(127,127,127,.12);border-radius:6px}
+@keyframes boot-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.boot-spinner{animation:none;opacity:.7}}
+</style>
+</head>
+<body>
+<div class="boot" id="atlas-boot">
+  <div class="boot-card">
+    <div class="boot-spinner"></div>
+    <div class="boot-title">Flowable Atlas</div>
+    <div class="boot-msg" id="atlas-boot-msg">Loading…</div>
+  </div>
+</div>
+<script>
+(function(){
+  // Stamped by RemoteExplorerPage.kt: the report's SHA-256 (its cache key), how many parts the bridge
+  // serves it in, and its size as the card states it.
+  var HASH='__ATLAS_HASH__', PARTS=__ATLAS_PARTS__, SIZE='__ATLAS_SIZE__';
+  var msg=document.getElementById('atlas-boot-msg');
+  function say(t){ if(msg) msg.textContent=t; }
+  function fail(err){
+    var card=document.querySelector('#atlas-boot .boot-card'); if(!card) return;
+    var text=String((err&&err.stack)||err||'unknown error').replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});
+    card.innerHTML='<div class="boot-fail"><b>The explorer could not be loaded from the IDE host.</b><pre>'+text+'</pre>'+
+      'Use Reload in the editor toolbar. If it fails again, the text above is what to report.</div>';
+  }
+
+  // ---- the client-side cache: localStorage under the file:// origin, keyed by content hash ----
+  // localStorage rather than IndexedDB: it is synchronous, it works for file:// pages in Chromium, and it
+  // cannot hang the load — IndexedDB's open() never called back for a file:// page in headless Chromium,
+  // and a cache that can stall is worse than none. The price is Chromium's 10 MiB-per-origin quota: one
+  // page at a time, none above CACHE_MAX chars (a report that large is still one round trip away — it is
+  // fetched on every open instead of the first).
+  var KEY='atlas-page:'+HASH, CACHE_MAX=4000000;
+  function cacheGet(){ try{ return localStorage.getItem(KEY); }catch(e){ return null; } }
+  function cachePut(html){
+    if(html.length>CACHE_MAX) return;
+    try{
+      for(var i=localStorage.length-1;i>=0;i--){ var k=localStorage.key(i); if(k&&k.indexOf('atlas-page:')===0&&k!==KEY) localStorage.removeItem(k); }
+      localStorage.setItem(KEY, html);
+    }catch(e){}
+  }
+
+  // ---- the IDE bridge: window.__atlasFetch(i, ok, fail) is installed by the host once this page has loaded ----
+  function bridge(){
+    if(window.__atlasFetch) return Promise.resolve();
+    return new Promise(function(res){
+      window.addEventListener('atlas-ide-bridge', function h(){ if(window.__atlasFetch){ window.removeEventListener('atlas-ide-bridge',h); res(); } });
+    });
+  }
+  function part(i){
+    return new Promise(function(res,rej){
+      window.__atlasFetch(i, res, function(code,m){ rej(new Error('part '+(i+1)+' of '+PARTS+' failed: '+(m||code))); });
+    });
+  }
+  function fetchAll(){
+    var ps=[]; for(var i=0;i<PARTS;i++) ps.push(part(i));   // all in flight at once: one round trip
+    return Promise.all(ps).then(function(a){ return a.join(''); });
+  }
+
+  // Replace this document with the report. document.open() keeps the window — its properties, which is
+  // where the IDE's bridges live, and its URL — and drops its listeners; the report's script registers
+  // its own during the write, so the bridge event is raised once more for the page to notice the IDE.
+  function show(html){
+    document.open(); document.write(html); document.close();
+    setTimeout(function(){ window.dispatchEvent(new Event('atlas-ide-bridge')); }, 0);
+  }
+
+  // Deferred past the stub's own parse: document.open() is a no-op while a parser is still active, and a
+  // cached page is shown synchronously.
+  setTimeout(function(){
+    var cached=cacheGet();
+    if(cached){ show(cached); return; }
+    say('Loading '+SIZE+' over the IDE connection…');
+    bridge().then(fetchAll).then(function(html){ cachePut(html); show(html); }).catch(fail);
+  }, 0);
+})();
+</script>
+</body>
+</html>

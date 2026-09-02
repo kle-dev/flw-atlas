@@ -158,7 +158,30 @@ val diagramUiTest by tasks.registering(Exec::class) {
     )
 }
 
-tasks.named("check") { dependsOn(searchSelfTest, explorerUiTest, diagramUiTest) }
+// The Remote Development stub (frontend/remote-stub.html): the stand-in page the plugin loads instead of the
+// report under Remote Dev, which pulls the report through the JS bridge and caches it in the client's
+// IndexedDB. Its contract with RemoteExplorerPage.kt (placeholders, the part protocol) and the
+// document.write hand-over are runtime behaviour only a browser can prove; the stub is a :core asset, so
+// its test runs here with the other frontend tests, against the miniproject report.
+val remoteStubUiTest by tasks.registering(Exec::class) {
+    description = "Drives the Remote-Dev explorer stub in headless Chrome (skipped without node/Chrome)."
+    group = "verification"
+    dependsOn(searchSelfTestReport)
+    val script = rootProject.file("scripts/remote-stub-uitest.mjs")
+    val stub = rootProject.file("core/src/main/resources/frontend/remote-stub.html")
+    inputs.file(script)
+    inputs.file(stub)
+    inputs.dir(rootProject.file("core/src/main/resources/frontend"))
+    onlyIf { nodePresentOrFail("remoteStubUiTest") }
+    commandLine(
+        nodeExecutable ?: "node",
+        script.absolutePath,
+        searchSelfTestDir.get().asFile.resolve("miniproject.explorer.html").absolutePath,
+        "--stub", stub.absolutePath,
+    )
+}
+
+tasks.named("check") { dependsOn(searchSelfTest, explorerUiTest, diagramUiTest, remoteStubUiTest) }
 
 // ---- documentation site (site/ -> build/site) ----
 // The site lives here rather than in the root build because everything it needs is already wired up

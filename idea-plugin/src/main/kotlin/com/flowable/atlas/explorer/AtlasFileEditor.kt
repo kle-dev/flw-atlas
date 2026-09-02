@@ -14,6 +14,7 @@ import com.intellij.openapi.actionSystem.Separator
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.editor.colors.EditorColorsListener
 import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.fileEditor.FileEditor
@@ -55,6 +56,10 @@ import javax.swing.JPanel
  * the page's `auto` preference, while an explicit in-page override still wins — and drops the IDE
  * colours for the Hub palette of the mode the reader asked for (see the theme section of `explorer.js`
  * for the contract; [IdePalette] for where the colours come from).
+ *
+ * Under Remote Development the page is not loaded from its file: the thin client's browser would pull
+ * it from the host 16 KB at a time. A stub at the page's URL fetches it through the JS bridge in one
+ * round trip and caches it client-side instead — see [RemoteExplorerPage].
  */
 class AtlasFileEditor(private val project: Project, private val file: VirtualFile) :
     UserDataHolderBase(), FileEditor {
@@ -70,6 +75,13 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
     // shows the source path of every model and Java class and the line of every method and endpoint;
     // this is the jump from reading a model to editing the code around it, the seam the plugin exists for.
     private val openQuery = JBCefJSQuery.create(browser as JBCefBrowserBase)
+
+    // JS→Kotlin channel that carries the page itself under Remote Dev — window.__atlasFetch(i, ok, fail)
+    // answers with part i of the prepared report. One query, one response, any size: the channel the
+    // 16 KB resource packets never get (see RemoteExplorerPage).
+    private val fetchQuery = JBCefJSQuery.create(browser as JBCefBrowserBase)
+    private val remote = RemoteExplorerPage.isRemoteDevHost()
+    @Volatile private var remotePage: RemoteExplorerPage.Transfer? = null
 
     // The LaF colours, cached as the two strings the page takes. Computed on the EDT (JBColor resolves
     // there) whenever the LaF or the editor scheme changes; read from the CEF thread in onLoadEnd.
@@ -89,6 +101,13 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
         Disposer.register(this, browser)
         Disposer.register(this, copyQuery)
         Disposer.register(this, openQuery)
+        Disposer.register(this, fetchQuery)
+        fetchQuery.addHandler { index ->
+            val page = remotePage
+            val i = index.toIntOrNull()
+            if (page == null || i == null || i !in page.parts.indices) JBCefJSQuery.Response(null, 1, "no page part $index")
+            else JBCefJSQuery.Response(page.parts[i])
+        }
         copyQuery.addHandler { text ->
             CopyPasteManager.getInstance().setContents(StringSelection(text))
             null
@@ -152,7 +171,23 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
     }
 
     private fun load() {
-        browser.loadURL(file.url + "?ideTheme=" + ideTheme() + "&idePal=" + paletteParam)
+        val url = file.url + "?ideTheme=" + ideTheme() + "&idePal=" + paletteParam
+        if (!remote) { browser.loadURL(url); return }
+        // Off the EDT: a report can be several MB. The stub is loaded *at the page's URL* (plus its hash,
+        // so a regeneration is a fresh navigation), which is what keeps ?ideTheme/?idePal reaching the
+        // page and its localStorage preferences on the same file:// origin. If the file cannot be read
+        // the viewer falls back to loading it directly — slow, but not blank.
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val page = runCatching { RemoteExplorerPage.prepare(file.toNioPath()) }
+                .onFailure { LOG.warn("Atlas explorer: could not prepare ${file.path} for the Remote Dev viewer; loading it directly", it) }
+                .getOrNull()
+            ApplicationManager.getApplication().invokeLater({
+                if (Disposer.isDisposed(this)) return@invokeLater
+                if (page == null) { browser.loadURL(url); return@invokeLater }
+                remotePage = page
+                browser.loadHTML(page.stub, "$url&page=${page.hash.take(12)}")
+            }, project.disposed)
+        }
     }
 
     private fun pushIdeTheme() {
@@ -170,6 +205,7 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
         browser.cefBrowser.executeJavaScript(
             "window.__atlasCopy = function(text){ ${copyQuery.inject("text")} };" +
                 "window.__atlasOpen = function(file, line){ ${openQuery.inject("file + '|' + (line || '')")} };" +
+                "window.__atlasFetch = function(i, ok, fail){ ${fetchQuery.inject("String(i)", "ok", "fail")} };" +
                 "window.dispatchEvent(new Event('atlas-ide-bridge'));",
             browser.cefBrowser.url,
             0,
@@ -224,7 +260,9 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
         },
         object : AnAction("Reload", "Reload the page without regenerating", AllIcons.Actions.Refresh), DumbAware {
             override fun actionPerformed(e: AnActionEvent) {
-                browser.cefBrowser.reloadIgnoreCache()
+                // Under Remote Dev a reload re-reads the file: the stub's cache is keyed by content, so a
+                // page rewritten by the CLI would otherwise come back from the cache as it was.
+                if (remote) load() else browser.cefBrowser.reloadIgnoreCache()
             }
         },
         Separator.getInstance(),
@@ -256,5 +294,9 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
 
     override fun dispose() {
         browser.jbCefClient.removeLoadHandler(loadHandler, browser.cefBrowser)
+    }
+
+    private companion object {
+        val LOG = logger<AtlasFileEditor>()
     }
 }
