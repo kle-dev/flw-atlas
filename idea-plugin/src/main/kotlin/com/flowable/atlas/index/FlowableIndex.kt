@@ -40,6 +40,9 @@ class FlowableIndex(
      *  nothing was scanned. What "have the models changed since this report was generated?" compares
      *  against — [builtAtMillis] measures the scan, not the models, and would flag every report on Rebuild. */
     val newestModelMtime: Long = 0L,
+    /** Names of the `.bar`/`.zip` archives in scope that could not be opened or read — what the Hub has
+     *  to say, because an unindexed archive is otherwise indistinguishable from an empty project. */
+    val skippedArchives: List<String> = emptyList(),
 ) {
 
     private val distinctByType: Map<ModelType, List<ModelEntry>> by lazy {

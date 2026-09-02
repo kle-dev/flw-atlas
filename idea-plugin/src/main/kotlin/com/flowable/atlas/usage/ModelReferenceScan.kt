@@ -1,12 +1,11 @@
 package com.flowable.atlas.usage
 
 import com.flowable.atlas.index.ArchiveModelScanner
+import com.flowable.atlas.index.ProjectModelScope
 import com.flowable.atlas.model.ModelFiles
 import com.flowable.atlas.parsing.ModelUsageLocator
 import com.intellij.openapi.application.ReadAction
-import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
@@ -59,8 +58,10 @@ object ModelReferenceScan {
      * its decoded UTF-8 text. Must be called inside a read action (each caller wraps it).
      */
     fun forEachModelText(project: Project, consumer: (VirtualFile, String) -> Unit) {
-        ProjectFileIndex.getInstance(project).iterateContent { file ->
-            ProgressManager.checkCanceled()
+        // The same scope as the model index (the active sub-project, else the content roots) — a
+        // Find Usages that answered from every app while the index was narrowed to one was two scopes
+        // for one query.
+        ProjectModelScope.iterateFiles(project) { file ->
             if (!file.isDirectory && !ModelFiles.isExcluded(file.path)) {
                 when {
                     ModelFiles.typeOf(file) != null ->

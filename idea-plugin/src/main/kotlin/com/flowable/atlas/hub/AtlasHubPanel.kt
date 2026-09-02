@@ -26,6 +26,7 @@ import com.flowable.atlas.explorer.AtlasExplorerOpener
 import com.flowable.atlas.explorer.AtlasExplorerStaleness
 import com.flowable.atlas.explorer.AtlasGenerationRunner
 import com.flowable.atlas.index.FlowableModelIndexService
+import com.flowable.atlas.index.ProjectModelScope
 import com.flowable.atlas.model.ModelType
 import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.FlowableAtlasConfigurable
@@ -544,7 +545,14 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
             val more = (counts.size - 4).takeIf { it > 0 }?.let { " · +$it more" } ?: ""
             val scanned = index.builtAtMillis.takeIf { it > 0 }
                 ?.let { "<br>Last scanned: ${DateFormatUtil.formatPrettyDateTime(it)}" } ?: ""
-            "<html><b>${index.distinctCount()}</b> models indexed<br>$top$more$scanned</html>"
+            // Where the index looked, when that is narrower than the repository — and what it could
+            // not look into: an unreadable .bar used to be indistinguishable from an empty project.
+            val scope = ProjectModelScope.label(project)?.let { " in $it" } ?: ""
+            val skipped = index.skippedArchives.takeIf { it.isNotEmpty() }?.let { names ->
+                val shown = names.take(3).joinToString(", ") + (if (names.size > 3) ", …" else "")
+                "<br>⚠ ${names.size} archive(s) could not be read: $shown"
+            } ?: ""
+            "<html><b>${index.distinctCount()}</b> models indexed$scope<br>$top$more$scanned$skipped</html>"
         }
 
         val artifacts = base?.let { b ->

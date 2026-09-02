@@ -474,7 +474,10 @@ setting.
 Monorepo scoping means the one repository holding four Flowable apps does not need four IDE profiles:
 **every project setting is stored per sub-project**, and the Hub switches between them. Older flat
 settings files still load without a migration step, so upgrading never asks anyone to reconfigure
-anything.
+anything. The chosen scope is the scope of *everything* — the model index, the Search Everywhere tab's
+full-text half, Find Usages into models, the REST-endpoint gutter — and the Hub's index line names it
+(*312 models indexed in apps/onboarding*), along with any archive in scope it could not read, because an
+unreadable `.bar` must not look like an empty project.
 
 Every option, inspection, action and file type is listed on the
 [plugin reference](reference/) page.

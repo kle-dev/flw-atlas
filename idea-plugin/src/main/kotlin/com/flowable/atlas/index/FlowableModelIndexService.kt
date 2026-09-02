@@ -4,9 +4,7 @@ import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.events.AtlasEventsListener
 import com.flowable.atlas.model.JsonUtil
 import com.flowable.atlas.model.ModelFiles
-import com.flowable.atlas.model.ModelPaths
 import com.flowable.atlas.model.ModelType
-import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.parsing.DataObjectInfo
 import com.flowable.atlas.parsing.ModelMemberExtractor
 import com.flowable.atlas.parsing.ModelMembers
@@ -24,14 +22,10 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.roots.ProjectFileIndex
-import com.intellij.openapi.vfs.LocalFileSystem
-import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
-import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -377,33 +371,13 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
      */
     private fun collectCandidates(): List<VirtualFile> {
         val out = ArrayList<VirtualFile>()
-        val collect = { file: VirtualFile ->
+        // The scope — the active sub-project's subtree, else the content roots — is ProjectModelScope's
+        // to define, so the Search Everywhere scan and Find Usages into models walk the same files.
+        ProjectModelScope.iterateFiles(project) { file ->
             if (!file.isDirectory && !ModelFiles.isExcluded(file.path) &&
                 (ModelFiles.typeOf(file) != null || ArchiveModelScanner.isArchive(file))
             ) out.add(file)
-        }
-        // When an active Flowable sub-project is selected, scan only its subtree (a direct VFS walk,
-        // not a ProjectFileIndex prefix-filter, so a folder outside all content roots is still
-        // indexed). Otherwise fall back to the whole project's content roots — the historical scope.
-        val activeDir = AtlasProjectRootService.getInstance(project).activeProjectDir()
-        val base = project.basePath?.let { Path.of(it).normalize() }
-        val scopedRoot = if (activeDir != null && base != null && activeDir != base) {
-            LocalFileSystem.getInstance().findFileByNioFile(activeDir)
-        } else {
-            null
-        }
-        if (scopedRoot != null) {
-            VfsUtilCore.iterateChildrenRecursively(
-                scopedRoot,
-                { vf -> !(vf.isDirectory && vf.name in ModelPaths.EXCLUDE_DIRS) },
-                { file -> ProgressManager.checkCanceled(); collect(file); !project.isDisposed },
-            )
-        } else {
-            ProjectFileIndex.getInstance(project).iterateContent { file ->
-                ProgressManager.checkCanceled()   // let a long scan be interrupted (e.g. during completion)
-                collect(file)
-                !project.isDisposed
-            }
+            true
         }
         return out
     }
@@ -419,6 +393,9 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
         val userTaskIds = HashSet<String>()
         val activityIds = HashSet<String>()
         val restCalls = HashSet<RestCallScanner.RestRef>()
+        // Archives Atlas could not look into. Logged at debug before, which made "the only .bar in the
+        // repository is unreadable" indistinguishable from "this project has no models".
+        val skippedArchives = ArrayList<String>()
         // Index one model's content, associating its entry with [navFile] for navigation
         // (a loose file, or a navigable entry inside a .bar/.zip archive).
         fun processModel(fileName: String, bytes: ByteArray, type: ModelType, navFile: VirtualFile) {
@@ -461,6 +438,8 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
                             processModel(name, bytes, entryType, entryFile)
                         }
                     }.onFailure { LOG.debug("skipping unreadable archive ${file.name}", it) }
+                        .getOrDefault(false)
+                        .let { opened -> if (!opened) skippedArchives.add(file.name) }
             }
         }
         return FlowableIndex(
@@ -471,6 +450,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
             builtAtMillis = System.currentTimeMillis(),
             // `timeStamp` is a cached VFS attribute — no I/O — and the candidates were visited anyway.
             newestModelMtime = candidates.maxOfOrNull { it.timeStamp } ?: 0L,
+            skippedArchives = skippedArchives.sorted(),
         )
     }
 

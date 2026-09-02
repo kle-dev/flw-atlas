@@ -3,13 +3,13 @@ package com.flowable.atlas.navigation.se
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.events.AtlasEventsListener
 import com.flowable.atlas.index.ArchiveModelScanner
+import com.flowable.atlas.index.ProjectModelScope
 import com.flowable.atlas.model.ModelFiles
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.vfs.VirtualFile
 import java.lang.ref.SoftReference
 import java.util.concurrent.ConcurrentHashMap
@@ -89,13 +89,15 @@ class FlowableModelTextScanner(private val project: Project) : Disposable {
         ReadAction.computeBlocking<List<VirtualFile>, RuntimeException> {
             if (project.isDisposed) return@computeBlocking emptyList()
             val out = ArrayList<VirtualFile>()
-            ProjectFileIndex.getInstance(project).iterateContent { file ->
+            // The model index's scope, not the whole repository: with a sub-project chosen in the Hub,
+            // the keys half of the Search Everywhere tab was narrowed and this full-text half was not.
+            ProjectModelScope.iterateFiles(project) { file ->
                 if (!file.isDirectory && !ModelFiles.isExcluded(file.path) &&
                     (ModelFiles.typeOf(file) != null || ArchiveModelScanner.isArchive(file))
                 ) {
                     out.add(file)
                 }
-                !project.isDisposed
+                true
             }
             out
         }

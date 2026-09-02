@@ -117,6 +117,13 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   is the one action that competes with Shift-Shift for the hand, and a right-click on a folder, a model
   file or an archive in the Project view offers *Generate Atlas Explorer…* and *Search Models…* — on
   nothing else, so the menu stays as short as it was on every other file.
+- **One scope for everything, and the Hub says what it could not read.** With a sub-project chosen in
+  a monorepo, the model index narrowed itself to it — but the Search Everywhere tab's full-text half,
+  Find Usages into models and the REST-endpoint gutter still walked the whole repository, so one query
+  answered from two scopes. Every walk goes through one definition now. The Hub's index line names the
+  scope when it is narrower than the repository, and lists the `.bar`/`.zip` archives in scope it could
+  not open — which were logged at debug level, leaving a repository whose only archive is unreadable
+  looking exactly like one with no models.
 - **Generating the explorer opens it.** The first generation ended in a balloon whose *Open in IDE*
   action expired with the balloon; the page you asked for now opens as a tab the moment it is written —
   from the menu action as well as from the editor's Regenerate. In the Hub, *Open in Browser* is hidden

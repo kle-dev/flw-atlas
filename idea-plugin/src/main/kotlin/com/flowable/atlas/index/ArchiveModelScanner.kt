@@ -31,16 +31,18 @@ object ArchiveModelScanner {
      * must pass `false`: refreshing from inside a read action risks a deadlock, and there it is
      * better to miss a never-yet-mounted archive than to freeze the IDE.
      */
+    /** @return whether the archive could be opened at all — false for a non-archive, or one the jar
+     *  file system cannot mount (corrupt, encrypted, or never refreshed when [allowRefresh] is off). */
     fun scan(
         archive: VirtualFile,
         allowRefresh: Boolean = true,
         consume: (String, ByteArray, ModelType, VirtualFile) -> Unit,
-    ) {
-        if (!isArchive(archive)) return
+    ): Boolean {
+        if (!isArchive(archive)) return false
         val jarFs = JarFileSystem.getInstance()
         val root = jarFs.getJarRootForLocalFile(archive)
             ?: (if (allowRefresh) jarFs.refreshAndFindFileByPath(archive.path + JarFileSystem.JAR_SEPARATOR) else null)
-            ?: return
+            ?: return false
         VfsUtilCore.visitChildrenRecursively(root, object : VirtualFileVisitor<Unit>() {
             override fun visitFile(entry: VirtualFile): Boolean {
                 if (!entry.isDirectory) {
@@ -56,5 +58,6 @@ object ArchiveModelScanner {
                 return true
             }
         })
+        return true
     }
 }
