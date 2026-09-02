@@ -174,7 +174,10 @@ The allowlist is the same store the Alt-Enter quick fix writes to. See
 
 Which artifacts *Generate Atlas Explorer…* produces and where, plus the folder a Design pull writes
 into. The three generators with shapes of their own are child pages — on one page they were four
-screens of fields with no hierarchy.
+screens of fields with no hierarchy. Every folder field on these pages is project-relative, and its
+browse button writes the chosen folder relative to the active Flowable project (an absolute path only
+for a folder outside it). Unticking every artifact is not a way to generate nothing: the selection
+falls back to the explorer HTML.
 
 
 | Option | Default |
@@ -197,7 +200,7 @@ which of its apps, is chosen in the Atlas Hub.
 
 | Option | Default |
 |---|---|
-| Model constants class (FQCN) | blank → `flowable.FlowableModelKeys` |
+| Model constants class (FQCN) — validated as you type; renaming it leaves the file generated under the old name where it is, no longer kept in sync, and says so | blank → `flowable.FlowableModelKeys` |
 | Keep the generated class in sync | on |
 | Constant identifier: key / name / name and key | name and key |
 | Constant format: class of `String`s, or enum | class |

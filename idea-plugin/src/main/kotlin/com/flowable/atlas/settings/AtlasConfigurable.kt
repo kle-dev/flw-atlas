@@ -1,9 +1,43 @@
 package com.flowable.atlas.settings
 
 import com.flowable.atlas.events.AtlasEvents
+import com.flowable.atlas.project.AtlasProjectRootService
+import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.openapi.options.BoundSearchableConfigurable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
+import com.intellij.openapi.vfs.VirtualFile
+import java.nio.file.Path
+import kotlin.io.path.invariantSeparatorsPathString
+
+/**
+ * Re-run highlighting in every open project — for a setting that decides what a highlighting pass
+ * shows (an inlay, a gutter icon, an injected language). Without it the already-open editors kept
+ * the old picture until the user typed into them; the allowlist on the Expressions page did this
+ * from the start, the toggles on the root page never did.
+ */
+internal fun restartHighlightingEverywhere(reason: String) {
+    ProjectManager.getInstance().openProjects.forEach { if (!it.isDisposed) DaemonCodeAnalyzer.getInstance(it).restart(reason) }
+}
+
+/**
+ * What a browse button writes into a field documented as *project-relative*: the chosen folder or
+ * file relative to the active Flowable project, when it lies inside it. The DSL's default wrote the
+ * absolute path, `Path.resolve(absolute)` then ignored the project root, and a pull could land outside
+ * the repository — with the notification reading `../../..`.
+ */
+internal fun projectRelativeChooser(project: Project): (VirtualFile) -> String = { chosen ->
+    val base = AtlasProjectRootService.getInstance(project).activeProjectDir()
+    val path = runCatching { chosen.toNioPath() }.getOrNull()
+    if (base != null && path != null) relativeToProject(base, path) else chosen.presentableUrl
+}
+
+/** The pure half of [projectRelativeChooser]: [chosen] relative to [base] if inside it, else absolute. */
+internal fun relativeToProject(base: Path, chosen: Path): String {
+    val b = base.toAbsolutePath().normalize()
+    val c = chosen.toAbsolutePath().normalize()
+    return if (c.startsWith(b)) b.relativize(c).invariantSeparatorsPathString.ifEmpty { "." } else c.toString()
+}
 
 /**
  * Base class for every Atlas settings page, existing for exactly one reason: to make "the page was

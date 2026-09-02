@@ -40,6 +40,7 @@ class FlowableAtlasConfigurable : AtlasApplicationConfigurable(
                                 "key. Hover/Ctrl-Q always shows it regardless of this setting.",
                         )
                         .bindSelected(settings::showDataObjectTableInlay)
+                        .onApply { restartHighlightingEverywhere("Flowable Atlas inlay hints toggled") }
                 }
                 row {
                     checkBox("Action names")
@@ -48,6 +49,7 @@ class FlowableAtlasConfigurable : AtlasApplicationConfigurable(
                                 "key — so an opaque key in a constants class reads as what it starts.",
                         )
                         .bindSelected(settings::showActionNameInlay)
+                        .onApply { restartHighlightingEverywhere("Flowable Atlas inlay hints toggled") }
                 }
             }
             group("Navigation") {
@@ -61,8 +63,9 @@ class FlowableAtlasConfigurable : AtlasApplicationConfigurable(
                                 "a literal that happens to equal a short/common real key can also light up.",
                         )
                         .bindSelected(settings::recognizeModelKeysAnywhere)
-                        // Takes effect on the next highlighting pass (edit or reopen the file) — the same
-                        // way the index toggle above applies; no explicit daemon restart needed.
+                        // The gutter icons and references this decides are drawn by the highlighting pass,
+                        // and an open file does not get another one until something makes it — so make it.
+                        .onApply { restartHighlightingEverywhere("Flowable Atlas key recognition toggled") }
                 }
             }
             group("Model Index") {

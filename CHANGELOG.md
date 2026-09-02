@@ -86,6 +86,17 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   the same JSON twenty times per highlighting pass — and the Liquibase coverage inspection parsed every
   `.service` model in the project for every changelog. All of that is now computed once per index
   snapshot and dropped with it.
+- **The settings pages say what they do.** Unticking every artifact on the Generation page left an
+  empty selection — the checkboxes mutated the set in place and skipped the setter where "an empty
+  selection falls back to the explorer HTML" lives — so *Generate Atlas Explorer…* wrote nothing and
+  reported success; the page writes through the setter now. The four folder fields documented as
+  project-relative wrote an absolute path whenever the browse button was used, which a pull then
+  resolved outside the repository; the button writes the folder relative to the active project. The
+  constants class name is validated as you type, and renaming it no longer silently ends auto-refresh —
+  the file generated under the old name is named, with a *Generate now* action for the new one. The
+  inlay-hint, key-recognition and Java-expression toggles re-run highlighting when applied instead of
+  waiting for you to type into every open file, and the "invalid class name" balloon opens the page the
+  class name is actually on.
 - **The error reporter is finally in the IDE.** 0.13.0 announced *Report a problem straight from the
   error dialog*, and the reporter was there — but never registered in the plugin descriptor, so the button
   never appeared and the reference page had to carry a "known gap" paragraph. It is registered now:

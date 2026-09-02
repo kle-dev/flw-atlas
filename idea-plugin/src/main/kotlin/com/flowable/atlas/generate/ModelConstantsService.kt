@@ -1,7 +1,11 @@
 package com.flowable.atlas.generate
 
+import com.flowable.atlas.action.GenerateModelConstantsAction
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
+import com.intellij.notification.NotificationAction
+import com.intellij.notification.NotificationGroupManager
+import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.command.WriteCommandAction
@@ -55,6 +59,25 @@ class ModelConstantsService(private val project: Project) {
         ApplicationManager.getApplication().invokeLater {
             if (!project.isDisposed && existing.isValid) writeFile(fqcn, root, source)
         }
+    }
+
+    /**
+     * The configured class name changed. The file generated under [oldFqcn] stays where it is and is no
+     * longer kept in sync — said in a balloon, with the way to get the new class, instead of going quiet.
+     */
+    fun noteRenamed(oldFqcn: String) {
+        val state = ModelConstantsSettings.getInstance(project).state
+        val root = VirtualFileManager.getInstance().findFileByUrl(state.sourceRootUrl) ?: return
+        val old = resolveTargetFile(oldFqcn, root) ?: return
+        NotificationGroupManager.getInstance().getNotificationGroup("Flowable Atlas")
+            .createNotification(
+                "Model constants class renamed",
+                "${old.name} was generated as $oldFqcn and stays where it is, no longer kept in sync. " +
+                    "Generate Model Constants creates ${state.fqcn.ifBlank { "the default class" }}.",
+                NotificationType.INFORMATION,
+            )
+            .addAction(NotificationAction.createSimple("Generate now") { GenerateModelConstantsAction.generate(project) })
+            .notify(project)
     }
 
     private fun buildSource(fqcn: String): String {

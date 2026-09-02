@@ -38,6 +38,7 @@ class GenerationConfigurable(project: Project) : AtlasProjectConfigurable(
                         FileChooserDescriptorFactory.createSingleFolderDescriptor()
                             .withTitle("Select Atlas Output Folder"),
                         project,
+                        projectRelativeChooser(project),
                     )
                         .align(AlignX.FILL)
                         .comment("Default location the generate action proposes and \"Open Atlas Explorer\" searches first (project-relative).")
@@ -52,8 +53,13 @@ class GenerationConfigurable(project: Project) : AtlasProjectConfigurable(
                             .bindSelected(
                                 { artifact in settings.atlasArtifacts },
                                 { selected ->
-                                    if (selected) settings.atlasArtifacts.add(artifact)
-                                    else settings.atlasArtifacts.remove(artifact)
+                                    // Through the property setter, not the live set: the setter is where
+                                    // "an empty selection falls back to the explorer HTML" lives, and
+                                    // mutating the set in place used to bypass it — leaving an empty set,
+                                    // a generate run that wrote nothing, and a balloon saying it had.
+                                    val next = settings.atlasArtifacts.toMutableSet()
+                                    if (selected) next.add(artifact) else next.remove(artifact)
+                                    settings.atlasArtifacts = next
                                 },
                             )
                     }

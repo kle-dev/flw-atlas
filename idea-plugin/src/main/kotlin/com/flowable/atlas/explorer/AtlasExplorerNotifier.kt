@@ -43,6 +43,18 @@ object AtlasExplorerNotifier {
         quiet: Boolean = false,
     ) {
         if (quiet) return
+        if (written.isEmpty()) {
+            // Not a success: nothing was written. (The artifact setter keeps the selection non-empty,
+            // so this is a guard, not a path anyone should reach.)
+            NotificationGroupManager.getInstance().getNotificationGroup(GROUP_ID)
+                .createNotification(
+                    "Nothing generated",
+                    "No Atlas artifacts are selected — choose at least one in Settings → Flowable Atlas → Generation.",
+                    NotificationType.WARNING,
+                )
+                .notify(project)
+            return
+        }
         val title = if (written.size <= 1) TITLE_EXPLORER_GENERATED
         else "$TITLE_ARTIFACTS_GENERATED (${written.size} files)"
         val body = written.joinToString("<br>") { it.fileName.toString() }

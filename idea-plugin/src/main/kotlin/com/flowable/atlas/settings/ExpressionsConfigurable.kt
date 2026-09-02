@@ -41,6 +41,9 @@ class ExpressionsConfigurable(project: Project) : AtlasProjectConfigurable(
                                 "Squiggles for malformed expressions also require \"Validate expression syntax\" above.",
                         )
                         .bindSelected(app::injectJavaExpressions)
+                        // Injection results are cached per PSI element: open Java files keep the old
+                        // picture until highlighting re-runs.
+                        .onApply { restartHighlightingEverywhere("Flowable Atlas Java expression injection toggled") }
                 }
                 row {
                     comment(
@@ -81,6 +84,7 @@ class ExpressionsConfigurable(project: Project) : AtlasProjectConfigurable(
                         FileChooserDescriptorFactory.createSingleFileOrFolderDescriptor()
                             .withTitle("Select Customization Source"),
                         project,
+                        projectRelativeChooser(project),
                     )
                         .align(AlignX.FILL)
                         .comment("Optional: a specific file or folder to read custom functions from (project-relative); leave empty for auto-discovery.")

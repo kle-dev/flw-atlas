@@ -1,11 +1,14 @@
 package com.flowable.atlas.settings
 
+import com.flowable.atlas.explorer.AtlasArtifact
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import java.nio.file.Path
 
 /**
- * The Generation settings page builds and round-trips its bindings. A slip in the Kotlin UI DSL (or a
- * field bound to nothing) only surfaces when the page is opened, which no other test does — this is
- * that opening, plus the reset/apply round-trip for the DTO class-name pattern and its regex rename.
+ * The Generation settings page builds and round-trips what it actually binds — the output folder and
+ * the artifact checkboxes — and the artifact selection can never end up empty, whichever way it is
+ * written. (An earlier version of this test asserted on the DTO pattern, which had long moved to its
+ * own page; it passed because it set the value itself.)
  */
 class GenerationConfigurableTest : BasePlatformTestCase() {
 
@@ -13,35 +16,49 @@ class GenerationConfigurableTest : BasePlatformTestCase() {
     override fun tearDown() {
         try {
             val settings = FlowableAtlasProjectSettings.getInstance(project)
-            settings.dtoClassNamePattern = FlowableAtlasProjectSettings.DEFAULT_DTO_CLASS_PATTERN
-            settings.dtoRenameFind = ""
-            settings.dtoRenameReplace = ""
+            settings.atlasArtifacts = mutableSetOf(AtlasArtifact.EXPLORER_HTML)
+            settings.atlasOutputDir = FlowableAtlasProjectSettings.DEFAULT_ATLAS_OUTPUT_DIR
         } finally {
             super.tearDown()
         }
     }
 
-    fun testThePageBuildsAndRoundTripsTheDtoClassNamePattern() {
+    fun testThePageBuildsAndRoundTripsTheArtifactSelection() {
         val settings = FlowableAtlasProjectSettings.getInstance(project)
-        settings.dtoClassNamePattern = "{app}{name}Bean"
-        settings.dtoRenameFind = "^DEMO"
-        settings.dtoRenameReplace = "Demo"
+        settings.atlasArtifacts = mutableSetOf(AtlasArtifact.EXPLORER_HTML, AtlasArtifact.SUMMARY_MD)
 
         val configurable = GenerationConfigurable(project)
         try {
             assertNotNull("the page must build — a DSL slip only shows when Settings opens", configurable.createComponent())
             assertFalse("freshly built from the settings, nothing is modified", configurable.isModified)
 
-            // Changed behind the panel's back → reset pulls the new values in, apply writes them back.
-            settings.dtoClassNamePattern = "Demo{name}Dto"
+            settings.atlasArtifacts = mutableSetOf(AtlasArtifact.GRAPH_JSON)
+            settings.atlasOutputDir = "reports/atlas"
             configurable.reset()
             assertFalse(configurable.isModified)
             configurable.apply()
-            assertEquals("Demo{name}Dto", settings.dtoClassNamePattern)
-            assertEquals("^DEMO", settings.dtoRenameFind)
-            assertEquals("Demo", settings.dtoRenameReplace)
+            assertEquals(setOf(AtlasArtifact.GRAPH_JSON), settings.atlasArtifacts)
+            assertEquals("reports/atlas", settings.atlasOutputDir)
         } finally {
             configurable.disposeUIResources()
         }
+    }
+
+    fun testAnEmptyArtifactSelectionFallsBackToTheExplorer() {
+        val settings = FlowableAtlasProjectSettings.getInstance(project)
+        settings.atlasArtifacts = mutableSetOf()
+        assertEquals(
+            "the setter is where the fallback lives — the page must write through it",
+            setOf(AtlasArtifact.EXPLORER_HTML), settings.atlasArtifacts,
+        )
+    }
+
+    fun testABrowseButtonWritesAProjectRelativePath() {
+        val base = Path.of("/work/repo")
+        assertEquals("atlas-output", relativeToProject(base, Path.of("/work/repo/atlas-output")))
+        assertEquals("src/main/resources/liquibase", relativeToProject(base, Path.of("/work/repo/src/main/resources/liquibase")))
+        assertEquals(".", relativeToProject(base, Path.of("/work/repo")))
+        assertEquals("/elsewhere/models", relativeToProject(base, Path.of("/elsewhere/models")))
+        assertEquals("/work/repo-two/x", relativeToProject(base, Path.of("/work/repo-two/x")))
     }
 }

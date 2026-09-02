@@ -3,7 +3,7 @@ package com.flowable.atlas.action
 import com.flowable.atlas.generate.JavaSourceRoots
 import com.flowable.atlas.generate.ModelConstantsService
 import com.flowable.atlas.generate.ModelConstantsSettings
-import com.flowable.atlas.settings.GenerationConfigurable
+import com.flowable.atlas.settings.GenerationConstantsConfigurable
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
@@ -52,7 +52,7 @@ class GenerateModelConstantsAction : AnAction() {
                 if (fqcn.endsWith(".") || fqcn.substringAfterLast('.').isBlank()) {
                     notify(
                         project, "Invalid class name '$fqcn'",
-                        "Fix the class name in Settings → Flowable Atlas → Generation.",
+                        "Fix the class name in Settings → Flowable Atlas → Generation → Model Constants.",
                         NotificationType.ERROR, withSettings = true,
                     )
                     return
@@ -80,7 +80,7 @@ class GenerateModelConstantsAction : AnAction() {
                 if (usedDefault) {
                     notify(
                         project, "Generated $fqcn",
-                        "Change the class name any time in Settings → Flowable Atlas → Generation.",
+                        "Change the class name any time in Settings → Flowable Atlas → Generation → Model Constants.",
                         NotificationType.INFORMATION, withSettings = true,
                     )
                 }
@@ -106,8 +106,9 @@ class GenerateModelConstantsAction : AnAction() {
                 .getNotificationGroup(GROUP_ID)
                 .createNotification(title, message, type)
             if (withSettings) {
-                notification.addAction(NotificationAction.createSimple("Open Generation settings") {
-                    ShowSettingsUtil.getInstance().showSettingsDialog(project, GenerationConfigurable::class.java)
+                notification.addAction(NotificationAction.createSimple("Open Model Constants settings") {
+                    // the FQCN lives on the child page, not on Generation itself
+                    ShowSettingsUtil.getInstance().showSettingsDialog(project, GenerationConstantsConfigurable::class.java)
                 })
             }
             notification.notify(project)

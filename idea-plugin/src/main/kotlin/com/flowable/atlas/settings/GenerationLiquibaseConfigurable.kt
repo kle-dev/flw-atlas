@@ -27,6 +27,7 @@ group("Liquibase Changelogs") {
                         FileChooserDescriptorFactory.createSingleFolderDescriptor()
                             .withTitle("Select Liquibase Output Folder"),
                         project,
+                        projectRelativeChooser(project),
                     )
                         .align(AlignX.FILL)
                         .comment("Where \"Generate → Liquibase\" writes changelogs and the master flowable-project-db-changelog.xml (project-relative).")

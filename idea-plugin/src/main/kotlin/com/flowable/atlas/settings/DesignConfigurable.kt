@@ -38,6 +38,7 @@ class DesignConfigurable(project: Project) : AtlasProjectConfigurable(
                         .withTitle("Select Target Folder")
                         .withDescription("The pulled app archives are written into this folder inside the project"),
                     project,
+                    projectRelativeChooser(project),
                 )
                     .bindText(settings::designTargetFolder)
                     .align(AlignX.FILL)
