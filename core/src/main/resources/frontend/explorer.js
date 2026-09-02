@@ -578,20 +578,36 @@ function parseHash(){
   if(raw==='/checks') return {view:'checks'};
   if(raw==='/variables') return {view:'variables'};
   if(raw.indexOf('/browse/')===0){
-    const cat = dec(raw.slice(8));
-    return CATS.some(c=>c.id===cat) ? {view:'browse', cat} : {view:'overview'};
+    const parts = raw.slice(8).split('&');
+    const cat = dec(parts[0]), ctx = hashContext(parts.slice(1));
+    return CATS.some(c=>c.id===cat) ? {view:'browse', cat, f:ctx.f, s:ctx.s} : {view:'overview'};
   }
   if(raw.charAt(0)==='/') return {view:'overview'};      // unknown route
-  // A node route may carry the search term that led here and the element the hit came from:
-  // `#<encId>&q=<encTerm>&e=<encElementId>`. Every part is URI-encoded, so a literal '&' cannot occur
-  // inside one and the splits are unambiguous.
-  const amp = raw.indexOf('&q=');
-  const ael = raw.indexOf('&e=');
-  const cut = amp<0 ? ael : (ael<0 ? amp : Math.min(amp, ael));
-  const id  = dec(cut<0 ? raw : raw.slice(0, cut));
-  const q   = amp<0 ? '' : dec(ael>amp ? raw.slice(amp+3, ael) : raw.slice(amp+3));
-  const e   = ael<0 ? '' : dec(raw.slice(ael+3));
-  return byId.get(id) ? {view:'browse', sel:id, q, e} : {view:'overview'};
+  // A node route may carry the search term that led here (&q=), the element the hit came from (&e=)
+  // and the list context the panel had (&f= filter, &s= sort): `#<encId>&q=…&e=…&f=…&s=…`. Every part
+  // is URI-encoded, so a literal '&' cannot occur inside one and the split is unambiguous.
+  const parts = raw.split('&');
+  const id = dec(parts[0]), ctx = hashContext(parts.slice(1));
+  return byId.get(id) ? {view:'browse', sel:id, q:ctx.q, e:ctx.e, f:ctx.f, s:ctx.s} : {view:'overview'};
+}
+/** The `k=v` pairs behind a route's first part; unknown keys are ignored, absent ones stay undefined. */
+function hashContext(pairs){
+  const out={q:'', e:'', f:undefined, s:undefined};
+  pairs.forEach(p=>{ const i=p.indexOf('='); if(i<0) return; const k=p.slice(0,i); if(k in out) out[k]=dec(p.slice(i+1)); });
+  return out;
+}
+// Keep the URL's &f=/&s= in step with the list, without a history entry or a re-route (replaceState),
+// so a reload or a copied link brings the filter and the sort back — the panel's context, not only its
+// node. `&q=`/`&e=` travel the same way once a selection carries them.
+function syncHashContext(){
+  if(state.view!=='browse') return;
+  const base=state.sel?enc(state.sel):(state.cat?'/browse/'+enc(state.cat):'');
+  if(!base) return;
+  let h=base;
+  if(state.sel){ if(state.focus) h+='&q='+enc(state.focus); if(state.focusEl) h+='&e='+enc(state.focusEl); }
+  if(state.filter) h+='&f='+enc(state.filter);
+  if(state.sort && state.sort!=='name') h+='&s='+enc(state.sort);
+  if(location.hash.slice(1)!==h){ try{ history.replaceState(null, '', '#'+h); }catch(e){} }
 }
 function showView(v){
   if(v!=='browse') listMarksClear();          // a multi-selection cannot outlive the list it was made in
@@ -630,10 +646,12 @@ function route(){
     showView('variables'); renderVariables();
     renderSidebarActive(); renderCrumbs();
   } else if(r.sel){
-    applySelection(r.sel);                                // handles view/list/detail/crumbs
+    applySelection(r.sel, {filter:r.f, sort:r.s});        // handles view/list/detail/crumbs
   } else {
     state.view='browse';
-    if(state.cat!==r.cat){ state.cat=r.cat; state.filter=''; listMarksClear(); }
+    if(state.cat!==r.cat){ state.cat=r.cat; state.filter=''; state.sort='name'; listMarksClear(); }
+    if(r.f!=null) state.filter=r.f;                      // a reload or a shared link brings the list context back
+    if(r.s!=null) state.sort=r.s;
     rememberTabScroll();
     // The category listing has no active node, so no tab renders as current. `state.tab` is NOT
     // reset here: it stays a valid write pointer, because "no active tab" would make syncTabsWith
@@ -641,6 +659,7 @@ function route(){
     state.sel=null;
     showView('browse'); renderList(); renderTabs(); renderDetail();
     renderSidebarActive(); renderCrumbs();
+    syncHashContext();
   }
 }
 
@@ -1588,9 +1607,9 @@ function renderList(){
   renderItems(cat, wrap);
   // The input lives outside the re-rendered items wrap, so typing never loses focus.
   const lf=document.getElementById('lf'); lf.value=state.filter;
-  lf.oninput=debounce(()=>{ state.filter=lf.value; renderItems(cat, wrap); },120);
+  lf.oninput=debounce(()=>{ state.filter=lf.value; renderItems(cat, wrap); syncHashContext(); },120);
   const ls=document.getElementById('lsort'); ls.value=state.sort;
-  ls.onchange=()=>{ state.sort=ls.value; renderItems(cat, wrap); };
+  ls.onchange=()=>{ state.sort=ls.value; renderItems(cat, wrap); syncHashContext(); };
   // Arrow/Enter keyboard navigation over the items (roving focus), plus Shift+Arrow multi-select.
   wrap.onkeydown=e=>{
     const els=[...wrap.querySelectorAll('.item[data-id]')];
@@ -3630,8 +3649,9 @@ function showDgCard(view, g, e, inModal){
   if(!n) return;
   const elId=dgEffectiveId(n, g);
   // The selection joins the URL (`&e=`), so a copied link or a reload lands on this element — without
-  // a history entry or a re-route, which replaceState guarantees and setting location.hash would not.
-  try{ history.replaceState(null, '', '#'+enc(n.id)+'&e='+enc(String(elId))); }catch(err){}
+  // a history entry or a re-route, which replaceState (in syncHashContext) guarantees and setting
+  // location.hash would not.
+  state.focusEl=String(elId); syncHashContext();
   const card=document.createElement('div'); card.className='dgcard';
   card.setAttribute('role','dialog');
   card.setAttribute('aria-label','Element details — drag the header to move, drag the corner to resize, ⤢ to expand over the page');
@@ -3842,8 +3862,9 @@ function select(id, q, el){
   location.hash=hash;
 }
 
-function applySelection(id){
+function applySelection(id, ctx){
   if(!byId.get(id)) return;
+  ctx=ctx||{};
   // Read before state.view is overwritten. The overview / schema / scripts / checks routes have no
   // tab of their own AND hide the strip, so letting the active tab travel from there would drop a
   // node the user never saw leave. From those views a link APPENDS; from the browse list it does
@@ -3871,14 +3892,18 @@ function applySelection(id){
     cat=cat||CATS.find(c=>c.id===n.type);
     // A filter typed in one category has no business in the next — following a chip out of a
     // filtered Forms list used to open the Java list pre-filtered, reading "Nothing here".
-    if(cat && cat.id!==state.cat){ state.cat=cat.id; state.filter=''; catChanged=true; }
+    if(cat && cat.id!==state.cat){ state.cat=cat.id; state.filter=''; state.sort='name'; catChanged=true; }
   }
+  // The list context a link or a reload carries (&f=, &s=) wins over whatever the panel had.
+  if(ctx.filter!=null && ctx.filter!==state.filter){ state.filter=ctx.filter; catChanged=true; }
+  if(ctx.sort!=null && ctx.sort!==state.sort){ state.sort=ctx.sort; catChanged=true; }
   if(catChanged || !document.getElementById('listitems')) renderList();
   syncListSelection();
   renderTabs();
   renderDetail();
   restoreTabScroll();                      // after renderDetail(), which resets scrollTop to 0
   renderSidebarActive(); renderCrumbs();
+  syncHashContext();
 }
 
 // ---------- detail tabs ----------
@@ -5406,6 +5431,30 @@ document.querySelectorAll('[data-theme-btn]').forEach(b=>b.onclick=cycleTheme);
 matchMedia('(prefers-color-scheme: light)').addEventListener('change',applyThemePref);
 applyThemePref();
 
+// ---------- text size ----------
+// Every font size is a px token, and the IDE's embedded browser applies none of the IDE's font scaling
+// — so metadata at 10–11px stayed 10–11px on a dense monitor. `--ui-scale` multiplies the --text-*
+// tokens (explorer.css); A−/A+ in the footer step it and the choice is remembered per browser.
+const UI_SCALES=[0.85,1,1.15,1.3,1.5];
+function uiScale(){ let v=NaN; try{ v=parseFloat(localStorage.getItem('atlas-ui-scale')); }catch(e){} return UI_SCALES.indexOf(v)>=0?v:1; }
+function applyUiScale(){
+  const s=uiScale();
+  document.documentElement.style.setProperty('--ui-scale', String(s));
+  document.querySelectorAll('[data-ui-scale]').forEach(b=>{
+    const i=UI_SCALES.indexOf(s), dir=b.dataset.uiScale;
+    b.disabled = dir==='+' ? i>=UI_SCALES.length-1 : i<=0;
+    const tip=(dir==='+'?'Larger text':'Smaller text')+' (now '+Math.round(s*100)+'%)';
+    b.setAttribute('data-tip', tip); b.setAttribute('aria-label', tip);
+  });
+}
+function stepUiScale(dir){
+  const i=UI_SCALES.indexOf(uiScale()), j=Math.max(0, Math.min(UI_SCALES.length-1, i+(dir==='+'?1:-1)));
+  try{ localStorage.setItem('atlas-ui-scale', String(UI_SCALES[j])); }catch(e){}
+  applyUiScale();
+}
+document.querySelectorAll('[data-ui-scale]').forEach(b=>b.onclick=()=>stepUiScale(b.dataset.uiScale));
+applyUiScale();
+
 // ---------- hover tooltips ----------
 // A DOM bubble for elements carrying [data-tip]. Native title= tooltips don't render in the embedded
 // JCEF viewer (off-screen rendering, especially over Remote Dev), so we draw our own — it shows
@@ -5533,6 +5582,42 @@ function wireSidebarResize(){
   _sbNarrow.addEventListener('change',()=>{ if(!sbPref()) applySidebar(); });
 }
 
+// The list/detail split. The sidebar has had a drag handle with a remembered width for a while; the
+// browse split was a fixed 330px, which in a narrow IDE tool window let the list eat half the panel.
+// Same contract as the sidebar handle: drag, ←/→ by 16px, Home resets, double-click resets.
+const LW_MIN=200, LW_MAX=640, LW_DEF=330;
+function lwClamp(v){ return Math.max(LW_MIN, Math.min(LW_MAX, v)); }
+function listWidth(){ let w=NaN; try{ w=parseInt(localStorage.getItem('atlas-list-w'),10); }catch(e){} return (w>=LW_MIN&&w<=LW_MAX)?w:LW_DEF; }
+function setListWidth(w){
+  const v=lwClamp(w), vb=document.getElementById('view-browse');
+  if(vb) vb.style.setProperty('--list-w', v+'px');
+  try{ if(v===LW_DEF) localStorage.removeItem('atlas-list-w'); else localStorage.setItem('atlas-list-w', String(v)); }catch(e){}
+}
+function wireListResize(){
+  const h=document.getElementById('listresize'), vb=document.getElementById('view-browse');
+  if(!h||!vb) return;
+  setListWidth(listWidth());
+  let startX=0, startW=0, dragging=false;
+  h.addEventListener('pointerdown',e=>{
+    dragging=true; startX=e.clientX; startW=parseInt(vb.style.getPropertyValue('--list-w'),10)||LW_DEF;
+    try{ h.setPointerCapture(e.pointerId); }catch(_){}
+    e.preventDefault();
+  });
+  h.addEventListener('pointermove',e=>{ if(dragging) vb.style.setProperty('--list-w', lwClamp(startW+(e.clientX-startX))+'px'); });
+  const end=e=>{
+    if(!dragging) return; dragging=false;
+    try{ h.releasePointerCapture(e.pointerId); }catch(_){}
+    setListWidth(parseInt(vb.style.getPropertyValue('--list-w'),10)||LW_DEF);
+  };
+  h.addEventListener('pointerup',end);
+  h.addEventListener('pointercancel',end);
+  h.addEventListener('dblclick',()=>setListWidth(LW_DEF));
+  h.addEventListener('keydown',e=>{
+    if(e.key==='ArrowLeft'||e.key==='ArrowRight'){ e.preventDefault(); setListWidth(listWidth()+(e.key==='ArrowRight'?16:-16)); }
+    else if(e.key==='Home'){ e.preventDefault(); setListWidth(LW_DEF); }
+  });
+}
+
 // In rail mode the collapsed sidebar flies out on :hover/:focus-within. A mouse
 // click on a nav item (or a footer button) leaves that element focused, so
 // :focus-within stays true and the rail never collapses when the pointer leaves.
@@ -5557,6 +5642,7 @@ computeInsights();
 renderSidebar();
 applySidebar();
 wireSidebarResize();
+wireListResize();
 wireRailAutoCollapse();
 wireSearchTrigger();
 stampProvenance();

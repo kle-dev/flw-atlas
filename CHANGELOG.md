@@ -86,6 +86,16 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   the canvas, not only in its rows. Every shape is a keyboard stop with a name for a screen reader, and
   Enter or Space opens its card. A cancelled drag no longer leaves the diagram panning with no button
   held, and each info card's size observer is disconnected with the card instead of piling up.
+- **A reload brings the list back as you left it.** The link carried the view, the category, the node
+  and the search term — not the filter you had typed nor the sort you had picked, so coming back to a
+  report mid-investigation cost you the whole setup. Both travel in the link now (`&f=`, `&s=`), written
+  as you type or pick without a history entry, and a category change resets them instead of carrying
+  "Most referenced" silently into the next list, where it had been overriding the relevance ranking of
+  every later filter.
+- **Text size, and a list you can resize.** `A−` / `A+` in the sidebar footer step every font size on
+  the page between 85 % and 150 % — the IDE's embedded browser applies none of the IDE's font scaling,
+  so the 10–11 px metadata stayed 10–11 px on a dense monitor. The split between the list and the detail
+  panel, fixed at 330 px, is a drag handle now (arrow keys nudge it, Home resets it) and is remembered.
 - **A report says when it was made.** The explorer's payload carried the project name, the graph and
   the counts — not the moment it was generated, so a page mailed to a reviewer could be a day or six
   months old and could not say. The page now carries `generatedAt` and `atlasVersion`; the sidebar

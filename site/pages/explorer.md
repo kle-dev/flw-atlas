@@ -30,7 +30,8 @@ view you are looking at can be copied as a link.
 | `#/browse/<category>` | A category list — one per node type, Java role, variable scope and review list |
 | `#<nodeId>` | Browse with that node selected. This is the permalink form |
 | `#<nodeId>&q=<term>` | …with the search term that led there highlighted |
-| `#<nodeId>&e=<elementId>` | …with a specific model element opened |
+| `#<nodeId>&e=<elementId>` | …with a specific model element opened — and selected on the diagram |
+| `…&f=<filter>&s=<sort>` | On a node or a category route: the list's filter text and sort order. Written by the page as you type or pick (no history entry), so a reload or a copied link brings the list back as you left it |
 
 An unknown route or an unresolvable node id falls back to the overview rather than showing an error.
 
@@ -62,7 +63,10 @@ Both directions, always, for every node type. That is the question a model file 
 own, and it is why the graph carries `usedBy`.
 
 Every section remembers whether you left it open, per section, across reloads. Up to twelve nodes can
-be open as **detail tabs**, which are viewports with their own history rather than pins.
+be open as **detail tabs**, which are viewports with their own history rather than pins. The split
+between the list and the panel is yours to move — drag the handle between them, `←`/`→` nudge it,
+`Home` resets — and it is remembered, which matters most in a narrow IDE tool window where the list
+used to take half the width.
 
 Nothing the parser extracted is invisible: whatever no specific section consumed renders at the bottom
 as a collapsed **Other attributes** key/value tree. When a new model attribute starts being parsed, it
@@ -194,6 +198,7 @@ the category you are in, with a button to widen the search.
 | `Alt+[` / `Alt+]` | browse | Previous / next tab |
 | `Alt+W` | browse | Close the active tab |
 | `+` `-` `0` | diagram (full screen) | Zoom in, out, fit |
+| `←` `→` / `Home` | list splitter (focused) | Nudge the list width / reset it |
 | `Tab` / `⇧Tab` | diagram | Move between elements |
 | `Enter` / `Space` | diagram element | Open its info card |
 | `Escape` | diagram, info card | Close |
@@ -219,8 +224,12 @@ The sidebar footer names the Atlas version that generated the page and when — 
 generated 3 days ago*, the exact time on hover. A page mailed to a reviewer could otherwise be a day or
 six months old and could not say. The same two facts sit in `graph.json` under `_generated`.
 
-## Themes
+## Themes and text size
 
 Light by default, with a `☀ / ☾ / ◐` toggle that cycles light → dark → auto and is remembered. Inside
 the IDE the page starts in `auto` and follows the IDE's theme live, including a theme switch while it is
 open — but an explicit choice you make in the page still wins.
+
+Beside it, `A−` / `A+` step the text size (85 % to 150 %) and remember the choice. Every font size on
+the page is a token that this one knob multiplies; the IDE's embedded browser applies none of the IDE's
+own font scaling, so without it the element ids and hints stayed at 10–11 px on a dense monitor.

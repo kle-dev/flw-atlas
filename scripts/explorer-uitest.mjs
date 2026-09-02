@@ -429,6 +429,52 @@ const probe = `<script>
     ok('the list filter is cleared when the category changes', !lf || lf.value==='', lf?('filter="'+lf.value+'"'):'');
   });
 
+  // --- the list context travels in the link, and comes back on reload ---
+  steps.push(()=>{ closeOtherTabs(); location.hash='/browse/'+enc('process'); });
+  steps.push(()=>{
+    const lf=document.getElementById('lf'), ls=document.getElementById('lsort');
+    if(lf){ lf.value='order'; lf.dispatchEvent(new Event('input')); }
+    if(ls){ ls.value='refs'; ls.dispatchEvent(new Event('change')); }
+  });
+  steps.push(()=>{
+    const h=decodeURIComponent(location.hash);
+    ok('the filter is in the link', h.indexOf('&f=order')>0, 'hash='+h);
+    ok('and so is the sort', h.indexOf('&s=refs')>0, 'hash='+h);
+    // a "reload": route the same link cold
+    state.filter=''; state.sort='name'; state.cat=null;
+    location.hash='/browse/'+enc('form')+'&f=zzz-none&s=refs';
+  });
+  steps.push(()=>{
+    const lf=document.getElementById('lf'), ls=document.getElementById('lsort');
+    ok('a link with &f= restores the filter', !!lf && lf.value==='zzz-none', lf?('filter="'+lf.value+'"'):'no #lf');
+    ok('a link with &s= restores the sort', !!ls && ls.value==='refs', ls?('sort="'+ls.value+'"'):'no #lsort');
+    location.hash=enc('form:orderForm');
+  });
+  steps.push(()=>{
+    ok('following a node in that category keeps its list context in the link',
+       decodeURIComponent(location.hash).indexOf('&f=zzz-none')>0, 'hash='+location.hash);
+  });
+
+  // --- text size and the list splitter ---
+  steps.push(()=>{
+    const plus=document.querySelector('[data-ui-scale="+"]');
+    ok('the footer offers a text-size control', !!plus);
+    if(plus) click(plus);
+  });
+  steps.push(()=>{
+    const s=parseFloat(document.documentElement.style.getPropertyValue('--ui-scale'));
+    ok('A+ scales the text tokens', s>1, '--ui-scale='+s);
+    try{ localStorage.removeItem('atlas-ui-scale'); }catch(e){}
+    const h=document.getElementById('listresize');
+    ok('the list/detail split has a drag handle', !!h && h.getAttribute('role')==='separator');
+    if(h){ h.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true})); }
+  });
+  steps.push(()=>{
+    const w=parseInt(document.getElementById('view-browse').style.getPropertyValue('--list-w'),10);
+    ok('the arrow key widens the list', w===346, '--list-w='+w);
+    try{ localStorage.removeItem('atlas-list-w'); }catch(e){}
+  });
+
   // --- the unused-variables report (#/variables) ---
   // The verdict is computed in :core and only stamped onto the nodes, so a broken payload allowlist
   // renders an empty page with correct-looking counts and no error anywhere. Assert the rows exist and
@@ -497,7 +543,8 @@ let dom;
 try {
   dom = execFileSync(chrome, [
     '--headless', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
-    '--virtual-time-budget=20000', '--dump-dom', 'file://' + tmp,
+    // ~72 steps at 300ms each: the budget is virtual time the page may consume, so it only needs to outlast the run
+    '--virtual-time-budget=45000', '--dump-dom', 'file://' + tmp,
   ], { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024, timeout: 120000 });
 } catch (e) {
   console.error('explorer-uitest: Chrome failed to run —', e.message);

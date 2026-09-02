@@ -228,6 +228,18 @@
               screen reader, and Enter or Space opens its card. A cancelled drag no longer leaves the
               diagram panning with no button held, and each info card's size observer is disconnected with
               the card instead of piling up.</li>
+          <li><b>A reload brings the list back as you left it.</b> The link carried the view, the category,
+              the node and the search term — not the filter you had typed nor the sort you had picked, so
+              coming back to a report mid-investigation cost you the whole setup. Both travel in the link
+              now (<code>&amp;f=</code>, <code>&amp;s=</code>), written as you type or pick without a
+              history entry, and a category change resets them instead of carrying "Most referenced"
+              silently into the next list, where it had been overriding the relevance ranking of every later
+              filter.</li>
+          <li><b>Text size, and a list you can resize.</b> <code>A−</code> / <code>A+</code> in the sidebar
+              footer step every font size on the page between 85 % and 150 % — the IDE's embedded browser
+              applies none of the IDE's font scaling, so the 10–11 px metadata stayed 10–11 px on a dense
+              monitor. The split between the list and the detail panel, fixed at 330 px, is a drag handle
+              now (arrow keys nudge it, Home resets it) and is remembered.</li>
           <li><b>A report says when it was made.</b> The explorer's payload carried the project name, the
               graph and the counts — not the moment it was generated, so a page mailed to a reviewer could
               be a day or six months old and could not say. The page now carries <code>generatedAt</code>
@@ -520,31 +532,6 @@
               Model</i> search tab is the only thing in the IDE that reaches inside an archive. Atlas now
               switches the virtual reformatting off for model files — where it could never have applied
               anything anyway, the file being read-only. The defect itself is the platform's.</li>
-        </ul>
-        <h3>0.17.0</h3>
-        <ul>
-          <li><b>"Open Environment in Browser" works under Remote Dev</b> — it was greyed out for every
-              remote developer, because one availability check served two different questions. Opening a
-              generated <code>explorer.html</code> really is impossible from a Remote-Dev backend: the file
-              is on the backend's disk and the client cannot see that path. Opening a <b>URL</b> is not the
-              same thing — it means the same on the client, and <code>BrowserLauncher</code> is precisely
-              the API that routes it there, which is why Atlas uses it. The two questions are now asked
-              separately.</li>
-          <li><b>The generated page is named after the project it describes</b> — with the IDE opened on a
-              folder that <i>contains</i> the Flowable project, the save dialog proposed the parent folder's
-              name, which says nothing about what is in the page, while the Atlas Hub had been analysing the
-              sub-project all along. The name follows the analysed scope now, and falls back to the
-              project's own name when that scope is the whole repository — so a renamed project keeps its
-              name, and a sub-project that was moved away never names a folder that is gone.</li>
-          <li><b>The Atlas Hub stops claiming nothing was generated</b> — <i>Generate…</i> writes wherever
-              you point it, while the Hub lists one folder: the active Flowable project's output folder. A
-              page saved anywhere else was therefore reported as <i>"No explorer generated yet"</i>, which
-              is a claim the panel is in no position to make. It names the folder it searched instead, so a
-              mismatch is visible rather than mystifying.</li>
-          <li><b>A Design pull is not "Generation"</b> — the pulled-models folder sat on the
-              <i>Generation</i> settings page, which had to cover both what Atlas produces from your models
-              and where your models come from: opposite directions of travel under one heading. Flowable
-              Design is its own page now, and Generation is exactly what its name says.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>
