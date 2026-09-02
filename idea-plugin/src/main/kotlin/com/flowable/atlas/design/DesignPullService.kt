@@ -47,6 +47,53 @@ import java.nio.file.StandardCopyOption
 internal fun removedModelKeys(previous: Set<String>?, current: Set<String>): List<String> =
     previous?.minus(current)?.sorted() ?: emptyList()
 
+/**
+ * What one pull changed in one app's export, entry by entry: the model files that are new, gone, or
+ * have different content (a CRC-32 over the entry) compared with the export that was on disk before.
+ * The removed-*keys* drift above is the code-impact signal (a key nobody can resolve any more); this is
+ * the modeller's changelog — "what did I just pull?" — which the balloon never answered.
+ */
+internal data class ArchiveDiff(val added: List<String>, val removed: List<String>, val changed: List<String>) {
+    val isEmpty: Boolean get() = added.isEmpty() && removed.isEmpty() && changed.isEmpty()
+
+    /** `3 changed, 1 added, 2 removed`, omitting zero counts; `unchanged` when nothing moved. */
+    fun summary(): String {
+        val parts = listOfNotNull(
+            changed.size.takeIf { it > 0 }?.let { "$it changed" },
+            added.size.takeIf { it > 0 }?.let { "$it added" },
+            removed.size.takeIf { it > 0 }?.let { "$it removed" },
+        )
+        return if (parts.isEmpty()) "unchanged" else parts.joinToString(", ")
+    }
+}
+
+/** [previous] and [current] are `entry name → CRC-32`; a null [previous] (first export) yields null. */
+internal fun archiveDiff(previous: Map<String, Long>?, current: Map<String, Long>): ArchiveDiff? {
+    if (previous == null) return null
+    return ArchiveDiff(
+        added = (current.keys - previous.keys).sorted(),
+        removed = (previous.keys - current.keys).sorted(),
+        changed = current.keys.intersect(previous.keys).filter { previous[it] != current[it] }.sorted(),
+    )
+}
+
+/** `entry name → CRC-32 of its content` for every model entry of a zip's [bytes] (a nested `.bar` counts as one entry). */
+internal fun modelEntryChecksums(bytes: ByteArray): Map<String, Long> {
+    val out = LinkedHashMap<String, Long>()
+    java.util.zip.ZipInputStream(bytes.inputStream()).use { zin ->
+        var e = zin.nextEntry
+        while (e != null) {
+            if (!e.isDirectory && com.flowable.atlas.model.ModelFiles.isModelPath(e.name)) {
+                val crc = java.util.zip.CRC32()
+                crc.update(zin.readBytes())
+                out[e.name] = crc.value
+            }
+            e = zin.nextEntry
+        }
+    }
+    return out
+}
+
 private val LOG = logger<DesignPullService>()
 
 /**
@@ -66,7 +113,14 @@ private val LOG = logger<DesignPullService>()
 class DesignPullService(private val project: Project) {
 
     /** One successfully written app, for the summary notification and VFS/index refresh. */
-    private data class PulledApp(val app: DesignClient.App?, val appKey: String, val target: Path, val size: Int)
+    private data class PulledApp(
+        val app: DesignClient.App?,
+        val appKey: String,
+        val target: Path,
+        val size: Int,
+        /** Against the export that was on disk before; null for a first export. */
+        val diff: ArchiveDiff?,
+    )
 
     /** Queues the pull as a background task; safe to call from the EDT. */
     fun pullInBackground() = pullInBackground(selection = null)
@@ -145,19 +199,26 @@ class DesignPullService(private val project: Project) {
         val written = mutableListOf<PulledApp>()
         val failed = mutableListOf<String>()
         val usedNames = mutableSetOf<String>()
-        for (appKey in appKeys) {
+        // A three-app pull is minutes of network time; a bar that never moves reads as a hang.
+        indicator.isIndeterminate = false
+        for ((i, appKey) in appKeys.withIndex()) {
             indicator.checkCanceled()
+            indicator.fraction = i.toDouble() / appKeys.size
             val app = apps.firstOrNull { it.key == appKey }
             val display = app?.name ?: appKey
-            indicator.text = "Exporting '$display' from Flowable Design…"
+            indicator.text = "Exporting '$display' from Flowable Design… (${i + 1} of ${appKeys.size})"
             when (val export = DesignClient.exportApp(conn, workspaceKey, appKey)) {
                 is DesignClient.Result.Failed -> failed += "$display — ${export.message}"
                 is DesignClient.Result.Success -> {
                     val fileBase = uniqueFileBase(export.value.fileName, app?.name, appKey, usedNames)
                     indicator.text = "Writing $fileBase.zip…"
                     try {
+                        // What was there before the overwrite is the baseline for "what did I pull?".
+                        val previous = targetDir.resolve("$fileBase.zip").takeIf { Files.isRegularFile(it) }
+                            ?.let { runCatching { modelEntryChecksums(Files.readAllBytes(it)) }.getOrNull() }
                         val target = writeZip(targetDir, fileBase, export.value.bytes)
-                        written += PulledApp(app, appKey, target, export.value.bytes.size)
+                        val diff = archiveDiff(previous, modelEntryChecksums(export.value.bytes))
+                        written += PulledApp(app, appKey, target, export.value.bytes.size, diff)
                     } catch (e: IOException) {
                         // The balloon gets e.message; the log gets the trace, which is what distinguishes
                         // a read-only target dir from a full disk from a VFS lock.
@@ -230,6 +291,21 @@ class DesignPullService(private val project: Project) {
         return !anyInContent
     }
 
+    private fun isUnauthorized(message: String): Boolean = message.contains("401")
+
+    /**
+     * The most common pull failure is an expired token or a changed password, and the fix was "find
+     * the connection, clear it, sign in, pull again" across two dialogs: this does the clearing and
+     * opens the connection to sign in, then pulls again once it can.
+     */
+    private fun addSignOutAndRetry(notification: com.intellij.notification.Notification) {
+        val conn = AtlasConnectionSelection.selected(project, ConnectionKind.DESIGN) ?: return
+        notification.addAction(NotificationAction.createSimple("Sign out & retry") {
+            AtlasCredentials.clear(conn.baseUrl)
+            configureThenRetry()
+        })
+    }
+
     /** Opens the settings on the EDT and re-runs the pull once it can actually run. */
     private fun configureThenRetry() {
         ApplicationManager.getApplication().invokeLater {
@@ -268,8 +344,18 @@ class DesignPullService(private val project: Project) {
         } else {
             "Pulled ${written.size} apps from $from"
         }
-        var body = written.joinToString("<br>") { "${projectDir.relativize(it.target)} (${(it.size + 1023) / 1024} KB)" } +
-            "<br>Flowable index refreshed"
+        var body = written.joinToString("<br>") { pulled ->
+            val line = "${projectDir.relativize(pulled.target)} (${(pulled.size + 1023) / 1024} KB)"
+            // What this pull changed in the app, against the export that was on disk before it.
+            when (val d = pulled.diff) {
+                null -> "$line — first export"
+                else -> {
+                    val names = (d.changed + d.added).map { it.substringAfterLast('/') }
+                    val shown = if (names.isEmpty() || names.size > 6) "" else ": " + names.joinToString(", ")
+                    "$line — ${d.summary()}$shown"
+                }
+            }
+        } + "<br>Flowable index refreshed"
         if (outsideContent) {
             body += "<br>The target folder is outside the project's content roots — models in it will not be indexed."
         }
@@ -294,19 +380,21 @@ class DesignPullService(private val project: Project) {
                 AtlasGenerationRunner.regenerate(project)
             })
         }
+        if (failed.any(::isUnauthorized)) addSignOutAndRetry(notification)
         notification.notify(project)
         recordPullFinished(succeeded = true)
     }
 
     private fun notifyFailure(message: String) {
-        NotificationGroupManager.getInstance()
+        val notification = NotificationGroupManager.getInstance()
             .getNotificationGroup(GROUP_ID)
             .createNotification("Pull from Flowable Design failed", message, NotificationType.ERROR)
             .addAction(NotificationAction.createSimple("Configure…") {
                 openEnvironments()
                 if (AtlasDesignTarget.resolve(project)?.isPullReady() == true) pullInBackground()
             })
-            .notify(project)
+        if (isUnauthorized(message)) addSignOutAndRetry(notification)
+        notification.notify(project)
         recordPullFinished(succeeded = false)
     }
 

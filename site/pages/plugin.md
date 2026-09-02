@@ -423,7 +423,11 @@ Pull the app export straight from a Design server into the repository, and get t
 
 A modeller renames or deletes a model in Design; a developer pulls; the code that referenced the old key
 still compiles and now points at nothing. Atlas names the keys that vanished since the last pull, and
-offers to regenerate the explorer.
+offers to regenerate the explorer. The same balloon says what the pull *brought*, per app — how many
+models changed, were added or removed against the export that was on disk before, and which ones when
+there are few — so "what did I just pull?" is answered where you are standing. The progress bar moves
+per app, and a pull refused with HTTP 401 offers **Sign out & retry**: it clears the stored credential
+for that server, opens the connection to sign in again, and pulls once it can.
 
 Files are written the way Design names its own exports, each through a temp file and an atomic move, and
 the model index is rebuilt afterwards. Authentication is a username and password, an access token — it

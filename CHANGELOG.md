@@ -104,6 +104,13 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   archives it scanned; the Hub row compares against that (or the pull, whichever is newer) with no
   connection required, and an open explorer tab shows a banner with *Regenerate* on it. Both clear
   themselves when the page is regenerated.
+- **A pull says what it brought, not only what disappeared.** The post-pull balloon named the model
+  keys that vanished project-wide — the code-impact signal — and nothing else, so "what did I just pull?"
+  had no answer. Each pulled app now reports how many of its model files changed, were added or removed
+  against the export that was on disk before (by content, entry by entry), naming them when there are
+  few; a first export says so. The progress bar advances per app instead of sitting still for the whole
+  download, and a pull refused with HTTP 401 — the expired token, the changed password — offers *Sign out
+  & retry*, which clears the stored credential, opens the connection to sign in, and pulls again.
 - **Generating the explorer opens it.** The first generation ended in a balloon whose *Open in IDE*
   action expired with the balloon; the page you asked for now opens as a tab the moment it is written —
   from the menu action as well as from the editor's Regenerate. In the Hub, *Open in Browser* is hidden
