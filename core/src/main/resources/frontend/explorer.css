@@ -282,24 +282,48 @@
   /* ------------------------------------------------------------------ */
   /* Dashboard (#/overview)                                              */
   /* ------------------------------------------------------------------ */
-  .dash{padding:var(--space-6) var(--space-7) 40px;max-width:1160px}
+  .dash{padding:var(--space-5) var(--space-6) var(--space-8);max-width:1160px}
   .dash-title{font-size:var(--text-xl);font-weight:600;letter-spacing:-.01em}
   .dash-sub{color:var(--ink-faint);font-size:var(--text-sm);margin-top:var(--space-05)}
   .seclabel{font-size:var(--text-xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;
     color:var(--ink-dim);margin:26px 0 var(--space-25)}
   .seclabel.row{display:flex;align-items:center;gap:var(--space-2)}
-  .metrics{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:var(--space-35)}
-  .metric{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-md);padding:var(--space-35) var(--space-4)}
-  .metric .mk,.hcard .mk{font-size:var(--text-2xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}
-  .metric .mv,.hcard .mv{font-size:var(--text-2xl);font-weight:600;margin-top:var(--space-05);letter-spacing:-.01em}
-  .metric .ms,.hcard .ms{font-size:var(--text-xs);color:var(--ink-faint);margin-top:var(--space-05);line-height:1.4}
-  .health{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:var(--space-35)}
-  .hcard{background:var(--panel);border:1px solid var(--line);border-left-width:4px;border-radius:var(--radius-md);padding:var(--space-3) var(--space-35)}
-  .hcard.tone-ok{border-left-color:var(--ok-bar)}
-  .hcard.tone-warn{border-left-color:var(--warn-bar)}
-  .hcard.tone-bad{border-left-color:var(--bad-bar)}
-  .hcard.click{cursor:pointer}
-  .hcard.click:hover{background:var(--hover)}
+  /* Inventory: one chip per node type — icon, count, Design's name; a chip with a list opens it */
+  .inv{display:flex;flex-wrap:wrap;gap:var(--space-15)}
+  .invc{display:inline-flex;align-items:center;gap:var(--space-15);background:var(--panel);border:1px solid var(--line);
+    border-radius:var(--radius-md);padding:var(--space-1) var(--space-25);font-size:var(--text-sm);color:var(--ink-dim)}
+  .invc b{font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;margin-right:1px}
+  .invc[data-cat]{cursor:pointer}
+  .invc[data-cat]:hover{border-color:var(--accent);color:var(--ink)}
+  /* Two columns of sections where there is room — health beside hotspots, apps beside entry points */
+  .dash-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 var(--space-6);align-items:start}
+  .dash-col{min-width:0}
+  @media (max-width:1000px){ .dash-cols{grid-template-columns:minmax(0,1fr)} }
+  /* Health list: tone bar · count · check · reason, sorted bad → warn; the clean ones fold under one line */
+  .hlist{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-md);overflow:hidden}
+  .hrow{display:grid;grid-template-columns:3px 2.5ch minmax(0,auto) minmax(0,1fr);align-items:center;gap:var(--space-25);
+    padding:var(--space-15) var(--space-3) var(--space-15) 0;border-bottom:1px solid var(--line);font-size:var(--text-md);min-height:32px}
+  .hlist>.hrow:last-child,.hclean .hrow:last-child{border-bottom:none}
+  .hrow .hbar{align-self:stretch;background:var(--line)}
+  .hrow.tone-bad .hbar{background:var(--bad-bar)}
+  .hrow.tone-warn .hbar{background:var(--warn-bar)}
+  .hrow.tone-ok .hbar{background:var(--ok-bar)}
+  .hrow .hn{font-weight:600;font-variant-numeric:tabular-nums;text-align:right;display:flex;justify-content:flex-end}
+  .hrow.tone-bad .hn{color:var(--bad-text)}
+  .hrow.tone-warn .hn{color:var(--warn-text)}
+  .hrow.tone-ok .hn{color:var(--ok-text)}
+  .hrow .hn .ui{width:14px;height:14px}
+  .hrow .hl{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hrow .hs{color:var(--ink-faint);font-size:var(--text-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hrow[data-jump]{cursor:pointer}
+  .hrow[data-jump]:hover{background:var(--hover)}
+  .hclean>summary{cursor:pointer;list-style:none;padding:var(--space-15) var(--space-3);font-size:var(--text-xs);color:var(--ink-faint)}
+  .hclean>summary::-webkit-details-marker{display:none}
+  .hclean>summary:before{content:"+ ";font-family:var(--mono)}
+  .hclean[open]>summary:before{content:"− "}
+  .hclean>summary:hover{color:var(--ink-dim);background:var(--hover)}
+  .hlist>.hrow+.hclean>summary,.hclean[open]>summary{border-top:1px solid var(--line)}
+  .hlist>.hrow:last-of-type{border-bottom:none}
   .dashrows{display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);
     border-radius:var(--radius-md);overflow:hidden}
   .dashrow{display:flex;align-items:center;gap:var(--space-25);padding:var(--space-2) var(--space-35);border-bottom:1px solid var(--line);font-size:var(--text-md);min-width:0}

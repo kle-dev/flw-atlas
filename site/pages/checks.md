@@ -18,9 +18,9 @@ The findings are ordered by how much they deserve your attention: broken first, 
 noise.
 
 <figure class="fig">
-  <div class="body"><img class="only-light" src="../assets/img/checks-page.png" alt="The explorer's Checks page: a card per check, then a block per finding kind" width="1400" height="900"><img class="only-dark" src="../assets/img/checks-page-dark.png" alt="The explorer's Checks page: a card per check, then a block per finding kind" width="1400" height="900"></div>
-  <figcaption><b>The Checks page of the live demo.</b> Every card is clickable when its count is
-  above zero, and every row navigates to the model it belongs to.
+  <div class="body"><img class="only-light" src="../assets/img/checks-page.png" alt="The explorer's Checks page: a row per check, then a block per finding kind" width="1400" height="900"><img class="only-dark" src="../assets/img/checks-page-dark.png" alt="The explorer's Checks page: a row per check, then a block per finding kind" width="1400" height="900"></div>
+  <figcaption><b>The Checks page of the live demo.</b> Every check row is clickable when its
+  count is above zero, and every finding row navigates to the model it belongs to.
   <a href="../demo/explorer.html#/checks" target="_blank" rel="noopener">Open it ↗</a></figcaption>
 </figure>
 
@@ -159,5 +159,5 @@ eight cases in which this check deliberately says nothing.
 | `<project>.overview.md` | Section 14, *Findings*, with `file:line` for each. |
 | `<project>.graph.json` | `findings` (itemised) and `checks` (per-check counts plus `open`). |
 | `<project>.CLAUDE.md` | A findings summary, so an agent starts from what is already known to be wrong. |
-| The explorer | The **Checks** page (`#/checks`): a card per check, then a block per finding kind, each row clicking through to the model it belongs to. |
+| The explorer | The **Checks** page (`#/checks`): a row per check — worst first, the clean ones folded — then a block per finding kind, each row clicking through to the model it belongs to. |
 | The IDE | The same findings, in the Atlas Hub's *Checks* tab. |

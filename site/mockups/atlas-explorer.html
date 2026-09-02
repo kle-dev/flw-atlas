@@ -38,23 +38,35 @@
              </div>
              <div class="expsearch">⌘K &nbsp;Search everything…</div>
            </div>
-           <div class="mcards">
-             <div class="mcard"><div class="mv">21</div><div class="mk">Models</div></div>
-             <div class="mcard"><div class="mv">12</div><div class="mk">Java classes</div></div>
-             <div class="mcard"><div class="mv">7</div><div class="mk">REST endpoints</div></div>
-             <div class="mcard"><div class="mv">5</div><div class="mk">User groups</div></div>
+           <div class="inv">
+             <span class="invc">{{icon:process}}<b>4</b>Processes</span>
+             <span class="invc">{{icon:case}}<b>2</b>Cases</span>
+             <span class="invc">{{icon:decision}}<b>2</b>Decision tables</span>
+             <span class="invc">{{icon:form}}<b>6</b>Forms</span>
+             <span class="invc">{{icon:service}}<b>3</b>Services</span>
+             <span class="invc">{{icon:endpoint}}<b>7</b>REST endpoints</span>
+             <span class="invc">{{icon:java}}<b>12</b>Java classes</span>
+             <span class="invc">{{icon:group}}<b>5</b>User groups</span>
            </div>
-           <div class="hcards">
-             <div class="hcard" style="border-left-color:#ef4444"><div class="hv" style="color:#be2323">2</div><div class="hk">Invalid expressions</div></div>
-             <div class="hcard" style="border-left-color:#f59e0b"><div class="hv" style="color:#cc6100">3</div><div class="hk">Unused forms</div></div>
-             <div class="hcard" style="border-left-color:#f59e0b"><div class="hv" style="color:#cc6100">1</div><div class="hk">Schema gap</div></div>
-           </div>
-           <div class="rowlist">
-             <div class="rl" style="font-size:9.5px; text-transform:uppercase; letter-spacing:.08em; color:#79848f; background:#f8fafc">Hotspots — most referenced</div>
-             <div class="rl">{{icon:process}}order-fulfilment<span class="rk2">18 refs</span></div>
-             <div class="rl">{{icon:form}}approval.form<span class="rk2">11 refs</span></div>
-             <div class="rl">{{icon:service}}crm.service<span class="rk2">9 refs</span></div>
-             <div class="rl">{{icon:java}}NotifyCustomer<span class="rk2">6 refs</span></div>
+           <div class="dcols">
+             <div>
+               <div class="dlbl">Health <span class="dbtn">6 findings to review ↗</span></div>
+               <div class="hlist">
+                 <div class="hrow"><i class="hbar" style="background:#ef4444"></i><b class="hn" style="color:#be2323">2</b><span class="hl">Invalid expressions</span><span class="hs">syntax errors in ${ } / {{ }}</span></div>
+                 <div class="hrow"><i class="hbar" style="background:#f59e0b"></i><b class="hn" style="color:#cc6100">3</b><span class="hl">Unused forms</span><span class="hs">no model links to them</span></div>
+                 <div class="hrow"><i class="hbar" style="background:#f59e0b"></i><b class="hn" style="color:#cc6100">1</b><span class="hl">Schema gaps</span><span class="hs">columns not mapped through</span></div>
+                 <div class="hrow hsum">+ 10 checks clean</div>
+               </div>
+             </div>
+             <div>
+               <div class="dlbl">Hotspots — most referenced</div>
+               <div class="rowlist">
+                 <div class="rl">{{icon:process}}order-fulfilment<span class="rk2">18 refs</span></div>
+                 <div class="rl">{{icon:form}}approval.form<span class="rk2">11 refs</span></div>
+                 <div class="rl">{{icon:service}}crm.service<span class="rk2">9 refs</span></div>
+                 <div class="rl">{{icon:java}}NotifyCustomer<span class="rk2">6 refs</span></div>
+               </div>
+             </div>
            </div>
          </div>
        </div>

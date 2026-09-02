@@ -224,5 +224,9 @@ class RenderersSmokeTest {
         // Sidebar groups fold and are remembered; below 800px a <select> stands in for the list.
         assertTrue("expected the folded-groups store from explorer.js", html.contains("atlas-navgroups"))
         assertTrue("expected the category picker from explorer.html", html.contains("id=\"navpick\""))
+        // The health list replaced the card wall on the overview, the Checks page and the variables report.
+        assertTrue("expected the health list builder from explorer.js", html.contains("function healthListHtml("))
+        assertTrue("expected the health list styling from explorer.css", html.contains(".hlist{"))
+        assertFalse("the health card grid is gone", html.contains(".hcard"))
     }
 }

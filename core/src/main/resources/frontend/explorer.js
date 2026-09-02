@@ -118,6 +118,7 @@ const UI_ICONS={
   expand:'<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>',
   link:'<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
   chevron:'<path d="m6 9 6 6 6-6"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
 };
 function uiIcon(name){
   return '<svg class="ui ui-'+name+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"'+
@@ -935,31 +936,29 @@ function renderCrumbs(){
 let _checkJump=null;
 function renderDashboard(){
   const v=document.getElementById('view-overview');
-  const st=DATA.stats||{}, H=INSIGHTS.health;
+  const st=DATA.stats||{};
   let h='<div class="dash">';
   const suN=st.suspectEdges||0, dyN=st.dynamicEdges||0;
   const uncertain=(suN||dyN)?' · '+[suN?suN+' suspect':'',dyN?dyN+' dynamic':''].filter(Boolean).join(' + ')
-    +' <span title="suspect = loose/cross-type match — dynamic = expression-valued reference">link'+((suN+dyN)>1?'s':'')+'</span>':'';
+    +' <span data-tip="suspect = loose/cross-type match — dynamic = expression-valued reference">link'+((suN+dyN)>1?'s':'')+'</span>':'';
   h+='<div class="dash-title">'+esc(DATA.project)+'</div>'+
      '<div class="dash-sub">'+nodes.length+' nodes · '+edges.length+' links'+uncertain+' across the model &amp; code graph</div>';
-  // inventory
-  h+='<div class="seclabel">Inventory</div><div class="metrics">';
-  [['Models',st.models,'published model files'],['Java classes',st.java,'scanned source classes'],
-   ['REST endpoints',st.endpoints,'served by controllers'],['User groups',st.groups,'referenced in access rules']]
-    .forEach(m=>{ h+='<div class="metric"><div class="mk">'+m[0]+'</div><div class="mv">'+(m[1]||0)+'</div><div class="ms">'+m[2]+'</div></div>'; });
-  h+='</div>';
-  // health — the same cards the Checks tab shows; the overview stays a summary and links there for the
+  h+='<div class="seclabel">Inventory</div>'+inventoryHtml();
+  // Two columns from here: health beside hotspots, apps beside entry points — the four things a reader
+  // came for, above the fold on an ordinary screen instead of below thirteen cards.
+  h+='<div class="dash-cols">';
+  // health — the same list the Checks tab opens with; the overview stays a summary and links there for the
   // findings themselves (one place to review, instead of two that drift apart)
-  const cardsHtml=healthCardsHtml();
-  if(cardsHtml){
+  const list=healthListHtml();
+  if(list){
     const open=INSIGHTS.checksOpen;
-    h+='<div class="seclabel row">Health'+
+    h+='<div class="dash-col"><div class="seclabel row">Health'+
        '<button class="dgbtn" data-route="/checks">'+
-       (open?open+' finding'+(open>1?'s':'')+' to review ↗':'open Checks ↗')+'</button></div>'+cardsHtml;
+       (open?open+' finding'+(open>1?'s':'')+' to review ↗':'open Checks ↗')+'</button></div>'+list+'</div>';
   }
   // hotspots
   if(INSIGHTS.hotspots.length){
-    h+='<div class="seclabel">Hotspots — most referenced</div><div class="dashrows">';
+    h+='<div class="dash-col"><div class="seclabel">Hotspots — most referenced</div><div class="dashrows">';
     INSIGHTS.hotspots.forEach(x=>{
       const n=byId.get(x.id);
       h+='<div class="dashrow" data-id="'+enc(x.id)+'" role="link" tabindex="0">'+
@@ -967,11 +966,11 @@ function renderDashboard(){
          '<span class="nm">'+esc(n.label)+'</span><span class="ty">'+esc(nodeKind(n))+'</span>'+
          '<span class="pill">'+x.count+' refs</span></div>';
     });
-    h+='</div>';
+    h+='</div></div>';
   }
   // apps
   if(INSIGHTS.apps.length){
-    h+='<div class="seclabel">Apps</div><div class="dashrows">';
+    h+='<div class="dash-col"><div class="seclabel">Apps</div><div class="dashrows">';
     INSIGHTS.apps.forEach(a=>{
       const n=byId.get(a.id); if(!n) return;
       h+='<div class="dashrow" data-id="'+enc(a.id)+'" role="link" tabindex="0">'+
@@ -980,29 +979,39 @@ function renderDashboard(){
          (a.groups?'<span class="ty">'+a.groups+' group'+(a.groups>1?'s':'')+' can open</span>':'')+
          '<span class="pill">'+a.models+' models</span></div>';
     });
-    h+='</div>';
+    h+='</div></div>';
   }
   // entry points — who can start what
   if(INSIGHTS.entryPoints.length){
     const eps=INSIGHTS.entryPoints.slice(0,50);
-    h+='<div class="seclabel">Entry points — who can start what</div><div class="dashrows">';
+    h+='<div class="dash-col"><div class="seclabel">Entry points — who can start what</div><div class="dashrows">';
     eps.forEach(ep=>{
       h+='<div class="dashrow">'+nodeChip(ep.group)+'<span class="sep">can start</span>'+nodeChip(ep.model)+'</div>';
     });
     if(INSIGHTS.entryPoints.length>eps.length)
       h+='<div class="dashrow muted">+ '+(INSIGHTS.entryPoints.length-eps.length)+' more</div>';
-    h+='</div>';
+    h+='</div></div>';
   }
-  h+='</div>';
+  h+='</div></div>';
   v.innerHTML=h;
-  wireNodeLinks(v, '[data-id]', {first:e=>{
-    const jump=e.target.closest('[data-jump]');
-    if(jump){ _checkJump=jump.dataset.jump; location.hash='/checks'; return true; }
-    const rtEl=e.target.closest('[data-route]');
-    if(rtEl){ location.hash=rtEl.dataset.route; return true; }
-    const catEl=e.target.closest('[data-cat]');
-    if(catEl){ location.hash='/browse/'+enc(catEl.dataset.cat); return true; }
-  }});
+  wireNodeLinks(v, '[data-id]', {first:reportNav});
+}
+// One chip per node type present — the icon, the count, Design's name — in sidebar order; a chip opens the
+// type's browse list. The four metric cards this replaces (models / Java / endpoints / groups) were four
+// numbers with forty pixels of air around each; the strip says the same and names every type it counted.
+// Derived nodes (variables, expressions, bindings, literals, externals) are not inventory and stay out.
+function inventoryHtml(){
+  const byType={};
+  nodes.forEach(n=>{ byType[n.type]=(byType[n.type]||0)+1; });
+  const skip=new Set(['variable','expression','binding','string','external']);
+  const order=t=>SECTIONS.indexOf((TM[t]||[t,'Other'])[1]);
+  const types=Object.keys(byType).filter(t=>!skip.has(t))
+    .sort((a,b)=>order(a)-order(b)||(byType[b]-byType[a])||a.localeCompare(b));
+  if(!types.length) return '';
+  return '<div class="inv">'+types.map(t=>{
+    const attrs=CATS.some(c=>c.id===t)?' data-cat="'+esc(t)+'" role="link" tabindex="0"':'';
+    return '<span class="invc"'+attrs+'>'+typeIcon(t)+'<b>'+byType[t]+'</b>'+esc(typeLabel(t))+'</span>';
+  }).join('')+'</div>';
 }
 
 // ---------- schema coverage: one renderer for the service detail AND the schema tab ----------
@@ -1125,18 +1134,33 @@ const CHECK_CARDS = [
    sub:c=>c?'mapped into a called model that never reads them':'every mapped input is read by its callee',
    show:()=>INSIGHTS.totalDirectedVars>0},
 ];
-/** The health grid. [keys] narrows it to a subset, so a page can show only the cards it is about. */
-function healthCardsHtml(keys){
+/** The health list: one row per check — tone bar, count, name, one-line reason — sorted bad → warn →
+ *  clean, and the clean ones folded under a single summary line. [keys] narrows it to a subset, so a page
+ *  shows only the checks it has blocks for. Thirteen cards with the same shape said "1" thirteen times
+ *  in 28px; a sorted list says what is wrong first and lets the clean rest step back. */
+const TONE_RANK={bad:0,warn:1,ok:2};
+function healthRows(keys){
   const H=INSIGHTS.health;
-  const cards=CHECK_CARDS.filter(c=>(!keys||keys.indexOf(c.k)>=0)&&c.show());
-  if(!cards.length) return '';
-  return '<div class="health">'+cards.map(c=>{
-    const n=H[c.k], tone=n===0?'ok':(c.bad?'bad':'warn');
-    const attrs=n>0?' data-jump="'+c.jump+'" role="button" tabindex="0"':'';
-    return '<div class="hcard tone-'+tone+(n>0?' click':'')+'"'+attrs+'>'+
-      '<div class="mk">'+esc(c.label)+'</div><div class="mv">'+n+'</div>'+
-      '<div class="ms">'+esc(c.sub(n))+'</div></div>';
-  }).join('')+'</div>';
+  return CHECK_CARDS.filter(c=>(!keys||keys.indexOf(c.k)>=0)&&c.show()).map(c=>{
+    const n=H[c.k]||0, tone=n===0?'ok':(c.bad?'bad':'warn');
+    return {k:c.k, label:c.label, n, tone, sub:c.sub(n), jump:c.jump};
+  }).sort((a,b)=>TONE_RANK[a.tone]-TONE_RANK[b.tone] || b.n-a.n || a.label.localeCompare(b.label));
+}
+function healthListHtml(keys){
+  const rows=healthRows(keys);
+  if(!rows.length) return '';
+  // `data-jump` is what reportNav() already understands: a block on this page scrolls into view, a block
+  // on the Checks page is opened there. Clean rows have nowhere to go, so they are not links.
+  const row=r=>'<div class="hrow tone-'+r.tone+'"'+(r.n>0?' data-jump="'+r.jump+'" role="button" tabindex="0"':'')+'>'+
+    '<span class="hbar"></span><span class="hn">'+r.n+'</span><span class="hl">'+esc(r.label)+'</span>'+
+    '<span class="hs" title="'+esc(r.sub)+'">'+esc(r.sub)+'</span></div>';
+  const open=rows.filter(r=>r.n>0), clean=rows.filter(r=>!r.n);
+  let h='<div class="hlist">'+open.map(row).join('');
+  if(!open.length) h+='<div class="hrow tone-ok hall"><span class="hbar"></span><span class="hn">'+uiIcon('check')+'</span>'+
+    '<span class="hl">All '+clean.length+' checks clean</span><span class="hs">nothing flagged in this report</span></div>';
+  if(clean.length) h+='<details class="hclean"><summary>'+clean.length+' check'+(clean.length>1?'s':'')+' clean</summary>'+
+    clean.map(row).join('')+'</details>';
+  return h+'</div>';
 }
 /** One finding's section: its heading, the count, and — when the finding has a browse list of its own —
  *  the button into it. Nothing at all when the count is zero, so a page lists only what it found. */
@@ -1152,8 +1176,14 @@ function findingBlock(id,title,count,body,cat){
  *  was a navigation of its own and must not also be read as a node link. */
 function reportNav(e){
   const jump=e.target.closest('[data-jump]');
-  if(jump){ const t=document.getElementById(jump.dataset.jump);
-    if(t) t.scrollIntoView({block:'start'}); return true; }
+  if(jump){
+    // A block rendered earlier on a page that is now hidden still has its id; scrolling to it would do
+    // nothing visible. Only a target on the page you are looking at counts as "here".
+    const t=document.getElementById(jump.dataset.jump);
+    if(t && !t.closest('.view[hidden]')) t.scrollIntoView({block:'start'});
+    else { _checkJump=jump.dataset.jump; location.hash='/checks'; }   // every finding block lives on Checks
+    return true;
+  }
   const cat=e.target.closest('[data-cat]');
   if(cat){ location.hash='/browse/'+enc(cat.dataset.cat); return true; }
   const route=e.target.closest('[data-route]');
@@ -1169,7 +1199,7 @@ function renderChecks(){
        ? open+' finding'+(open>1?'s':'')+' worth a look — none of them is automatically a bug, each one is a '+
          'question Atlas cannot answer on its own'
        : 'nothing flagged — no parse issues, no broken expressions, nothing unused or unproven')+'</div>';
-  h+=healthCardsHtml();
+  h+=healthListHtml();
   // one block per finding, with the actual items rather than only a number
   const chips=list=>'<div class="nodechips">'+list.map(n=>nodeChip(n.id)).join('')+'</div>';
   // parse issues — the analyzer's own honesty about what it could not read
@@ -1330,7 +1360,7 @@ function renderVariables(){
        : 'nothing flagged — every variable that is written is read somewhere in these models')+'</div>';
   // Only the two checks this page has blocks for. The script-guess card belongs to the Checks tab: its
   // `jump` names a block that does not exist here, so showing it would be a card that does nothing.
-  h+=healthCardsHtml(['unusedVars','unreadInputs']);
+  h+=healthListHtml(['unusedVars','unreadInputs']);
 
   if(open){
     // one filter row over both blocks: the write construct, and free text over names and models

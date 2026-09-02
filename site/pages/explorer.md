@@ -22,7 +22,7 @@ view you are looking at can be copied as a link.
 
 | Hash | View |
 |---|---|
-| *(empty)* or `#/overview` | The dashboard: inventory, health, hotspots, apps, entry points |
+| *(empty)* or `#/overview` | The dashboard: the inventory by type, the health list, hotspots, apps and entry points |
 | `#/checks` | Every [finding](../checks/) in one place |
 | `#/variables` | The [unused-variable](../variables/) report and what Atlas could not judge |
 | `#/scripts` | Every script body in the project |

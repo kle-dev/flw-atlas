@@ -502,6 +502,26 @@ const probe = `<script>
     ok('exactly one theme toggle', document.querySelectorAll('[data-theme-btn]').length===1);
   });
 
+  // --- the overview's health list ---
+  steps.push(()=>{ location.hash='/overview'; });
+  steps.push(()=>{
+    const rows=[...document.querySelectorAll('#view-overview .hlist .hrow')];
+    ok('the overview has a health list', rows.length>0);
+    const rank=r=>r.classList.contains('tone-bad')?0:r.classList.contains('tone-warn')?1:2;
+    ok('health rows are sorted bad → warn → clean', rows.every((r,i)=>!i||rank(rows[i-1])<=rank(r)));
+    ok('only rows with findings are links', rows.every(r=>r.classList.contains('hall') ||
+       r.hasAttribute('data-jump')===(parseInt(r.querySelector('.hn').textContent,10)>0)));
+    ok('clean checks are folded away', rows.filter(r=>r.classList.contains('tone-ok')&&!r.classList.contains('hall')).every(r=>!!r.closest('details.hclean')));
+    ok('the inventory names the types', document.querySelectorAll('#view-overview .invc[data-cat]').length>0);
+    const first=document.querySelector('#view-overview .hrow[data-jump]');
+    ok('this report has a finding to click', !!first);
+    if(first) click(first);
+  });
+  steps.push(()=>{
+    ok('a health row opens the Checks page', location.hash==='#/checks' && !!document.querySelector('#view-checks .hlist'));
+    ok('no health card wall anywhere', !document.querySelector('.hcard'));
+  });
+
   // --- text size and the list splitter ---
   steps.push(()=>{
     const plus=document.querySelector('[data-ui-scale="+"]');

@@ -42,6 +42,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   list used to wrap into fourteen rows of chips above the content; it is a picker beside the search button
   now, one row. The UI test covers both: the desktop run folds and re-renders, a second run at 800×600
   picks a category.
+- **The overview reads top to bottom.** The thirteen health cards — the same shape thirteen times, a
+  28px number for a count of one — are a list: one row per check with its tone bar, count, name and
+  one-line reason, worst first, the clean ones folded under a single line. The four inventory cards are
+  one strip with a chip per node type the report found, each opening that type's list. Health sits beside
+  the hotspots and the apps beside the entry points, so the four things a reader came for are above the
+  fold on an ordinary screen. The Checks page and the unused-variables report open with the same list.
 
 ## 0.20.0
 
