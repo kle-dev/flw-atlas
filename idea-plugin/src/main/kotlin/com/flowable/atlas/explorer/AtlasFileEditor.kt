@@ -14,6 +14,8 @@ import com.intellij.openapi.actionSystem.Separator
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.editor.colors.EditorColorsListener
+import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.fileEditor.FileEditorState
@@ -47,10 +49,12 @@ import javax.swing.JPanel
  * file (see [AtlasFileEditorProvider]), so a page generated into the project can be viewed without
  * leaving the IDE.
  *
- * The page follows the IDE theme: the initial load seeds `?ideTheme=light|dark` (no flash) and a
- * [LafManagerListener] pushes live theme switches via the page's `window.__atlasSetIdeTheme` hook —
- * the IDE theme drives the page's `auto` preference, while an explicit in-page override still wins
- * (see the theme section of `explorer.js` for the contract).
+ * The page follows the IDE theme — and wears its colours: the initial load seeds `?ideTheme=light|dark`
+ * plus `&idePal=<nine colours>` (no flash), and a [LafManagerListener] / editor-scheme listener pushes
+ * live switches via the page's `window.__atlasSetIdeTheme(mode, palette)` hook. The IDE theme drives
+ * the page's `auto` preference, while an explicit in-page override still wins — and drops the IDE
+ * colours for the Hub palette of the mode the reader asked for (see the theme section of `explorer.js`
+ * for the contract; [IdePalette] for where the colours come from).
  */
 class AtlasFileEditor(private val project: Project, private val file: VirtualFile) :
     UserDataHolderBase(), FileEditor {
@@ -66,6 +70,11 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
     // shows the source path of every model and Java class and the line of every method and endpoint;
     // this is the jump from reading a model to editing the code around it, the seam the plugin exists for.
     private val openQuery = JBCefJSQuery.create(browser as JBCefBrowserBase)
+
+    // The LaF colours, cached as the two strings the page takes. Computed on the EDT (JBColor resolves
+    // there) whenever the LaF or the editor scheme changes; read from the CEF thread in onLoadEnd.
+    @Volatile private var paletteJs = "null"
+    @Volatile private var paletteParam = ""
 
     private val loadHandler = object : CefLoadHandlerAdapter() {
         override fun onLoadEnd(cefBrowser: CefBrowser, frame: CefFrame, httpStatusCode: Int) {
@@ -94,8 +103,11 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
             null
         }
         browser.jbCefClient.addLoadHandler(loadHandler, browser.cefBrowser)
-        ApplicationManager.getApplication().messageBus.connect(this)
-            .subscribe(LafManagerListener.TOPIC, LafManagerListener { pushIdeTheme() })
+        refreshPalette()
+        val appBus = ApplicationManager.getApplication().messageBus.connect(this)
+        appBus.subscribe(LafManagerListener.TOPIC, LafManagerListener { refreshPalette(); pushIdeTheme() })
+        // the editor scheme can change without a LaF change, and it is where the page's raised surface comes from
+        appBus.subscribe(EditorColorsManager.TOPIC, EditorColorsListener { refreshPalette(); pushIdeTheme() })
         // The "models changed since this was generated" banner (AtlasExplorerStaleNotificationProvider)
         // is re-evaluated whenever what it compares moves: the index (newest model mtime), a pull, or a
         // regeneration — which clears it, since the runner publishes artifactsGenerated after writing.
@@ -123,6 +135,12 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
 
     private fun ideTheme(): String = if (JBColor.isBright()) "light" else "dark"
 
+    private fun refreshPalette() {
+        val p = IdePalette.current()
+        paletteJs = IdePalette.toJs(p)
+        paletteParam = IdePalette.toUrlParam(p)
+    }
+
     /** Schedule-only, as the listener contract asks: EditorNotifications batches and runs it itself. */
     private fun refreshBanner() {
         if (!project.isDisposed) EditorNotifications.getInstance(project).updateNotifications(file)
@@ -134,12 +152,12 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
     }
 
     private fun load() {
-        browser.loadURL(file.url + "?ideTheme=" + ideTheme())
+        browser.loadURL(file.url + "?ideTheme=" + ideTheme() + "&idePal=" + paletteParam)
     }
 
     private fun pushIdeTheme() {
         browser.cefBrowser.executeJavaScript(
-            "window.__atlasSetIdeTheme && window.__atlasSetIdeTheme('${ideTheme()}');",
+            "window.__atlasSetIdeTheme && window.__atlasSetIdeTheme('${ideTheme()}', $paletteJs);",
             browser.cefBrowser.url,
             0,
         )

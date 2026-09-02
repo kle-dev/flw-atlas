@@ -232,5 +232,8 @@ class RenderersSmokeTest {
         assertTrue("expected the neighborhood section id from explorer.js", html.contains("section('neighborhood'"))
         assertTrue("expected the neighborhood styling from explorer.css", html.contains(".nb-label{"))
         assertFalse("the radial star's legend is gone", html.contains("Neighborhood — solid: uses"))
+        // The IDE palette bridge: the page takes nine LaF colours from the URL and the live push.
+        assertTrue("expected the IDE palette applier from explorer.js", html.contains("function applyIdePalette("))
+        assertTrue("expected the idePal URL seed in explorer.html", html.contains("idePal"))
     }
 }

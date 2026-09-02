@@ -16,7 +16,19 @@ try{
   var _p=null; try{_p=localStorage.getItem('atlas-theme');}catch(e){}
   _p=_p||(_ide?'auto':'light');
   var _sys=_ide||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');
-  document.documentElement.dataset.theme=(_p==='auto')?_sys:_p;
+  var _theme=(_p==='auto')?_sys:_p;
+  document.documentElement.dataset.theme=_theme;
+  /* The IDE's colours (?idePal=, nine 6-hex groups — see IdePalette.kt): only the surfaces that would
+     otherwise flash in Hub colours before boot; explorer.js applies the full derived set right after. */
+  var _pal=new URLSearchParams(location.search).get('idePal');
+  if(_pal&&_ide&&_theme===_ide){
+    var _c=_pal.split('.');
+    if(_c.length===9&&_c.every(function(x){return /^[0-9a-f]{6}$/i.test(x);})){
+      var _s=document.documentElement.style;
+      _s.setProperty('--bg','#'+_c[0]); _s.setProperty('--panel','#'+_c[1]); _s.setProperty('--panel2','#'+_c[2]);
+      _s.setProperty('--line','#'+_c[3]); _s.setProperty('--ink','#'+_c[4]); _s.setProperty('--ink-dim','#'+_c[5]); _s.setProperty('--accent','#'+_c[6]);
+    }
+  }
 }catch(e){}
 </script>
 <style>

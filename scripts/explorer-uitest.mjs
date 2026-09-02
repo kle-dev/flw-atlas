@@ -546,6 +546,33 @@ const probe = `<script>
     ok('no health card wall anywhere', !document.querySelector('.hcard'));
   });
 
+  // --- the IDE palette bridge ---
+  // A host pushes (mode, nine colours); the page wears them while it shows the IDE's mode, and drops them
+  // — property by property, never the whole inline style — when the reader forces the other mode or an
+  // older host pushes the mode alone.
+  const PAL={bg:'#123456',panel:'#234567',panel2:'#345678',line:'#456789',ink:'#fedcba',inkDim:'#edcba9',accent:'#dcba98',selBg:'#cba987',selText:'#ffffff'};
+  steps.push(()=>{
+    window.__atlasSetIdeTheme('light', PAL);
+    const bg=getComputedStyle(document.body).backgroundColor;
+    ok('the pushed palette colours the page', bg==='rgb(18, 52, 86)' && document.documentElement.classList.contains('idepal'), bg);
+    ok('the text-size knob survives the palette', document.documentElement.style.getPropertyValue('--ui-scale')!=='');
+    try{ localStorage.setItem('atlas-theme','dark'); }catch(e){}
+    window.__atlasSetIdeTheme('light', PAL);
+  });
+  steps.push(()=>{
+    const bg=getComputedStyle(document.body).backgroundColor;
+    ok('a forced opposite theme shows the Hub palette instead', document.documentElement.dataset.theme==='dark' &&
+       !document.documentElement.classList.contains('idepal') && bg!=='rgb(18, 52, 86)', bg);
+    try{ localStorage.removeItem('atlas-theme'); }catch(e){}
+    window.__atlasSetIdeTheme('light');   // an older host: mode only
+  });
+  steps.push(()=>{
+    const bg=getComputedStyle(document.body).backgroundColor;
+    ok('a mode-only push clears the palette', bg==='rgb(250, 250, 250)' && !document.documentElement.classList.contains('idepal'), bg);
+    ok('…and leaves --ui-scale alone', document.documentElement.style.getPropertyValue('--ui-scale')!=='');
+    window.__atlasSetIdeTheme('none');    // back to standalone
+  });
+
   // --- text size and the list splitter ---
   steps.push(()=>{
     const plus=document.querySelector('[data-ui-scale="+"]');

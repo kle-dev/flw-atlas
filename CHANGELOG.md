@@ -55,6 +55,14 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   remember. The drawing is a section now like every other — remembered, part of *expand all* — the
   most-referenced neighbours come first, each side stops at twelve with a *+N more* that opens the full
   list below, and every neighbour carries its type icon and is a link.
+- **Inside the IDE, the page wears the IDE's colours.** The embedded explorer took the IDE's light or
+  dark mode and then painted Hub navy next to Darcula grey. The plugin now hands the page nine colours
+  of the current look-and-feel — panel, editor and tool-window background, border, text, secondary text,
+  link accent, selection — on the URL (so nothing flashes before the first frame) and on every theme or
+  editor-scheme change, and the page maps them onto its tokens and derives hover, selection and focus
+  from them. The type colours, the tone colours and the search highlight stay. This holds while the page
+  shows the IDE's mode — following it, or set to the same mode by hand; force the other mode and you get
+  the page's own palette for it. A browser sees none of this.
 
 ## 0.20.0
 

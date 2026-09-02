@@ -5646,21 +5646,65 @@ window.__ideTheme=(()=>{ try{
   const t=new URLSearchParams(location.search).get('ideTheme');
   return (t==='light'||t==='dark')?t:null;
 }catch(e){ return null; } })();
-window.__atlasSetIdeTheme=t=>{
+// The IDE's own colours, nine of them (IdePalette.kt), so the embedded page wears the LaF instead of the
+// Hub palette: seeded from ?idePal=<6hex.6hex…> (no flash on load), replaced by the live push. Any value
+// that is not #rrggbb voids the whole set — these strings end up in style properties.
+const IDE_PAL_KEYS=['bg','panel','panel2','line','ink','inkDim','accent','selBg','selText'];
+function sanitizePal(p){
+  if(!p||typeof p!=='object') return null;
+  const out={};
+  for(const k of IDE_PAL_KEYS){ const v=String(p[k]||''); if(!/^#[0-9a-f]{6}$/i.test(v)) return null; out[k]=v.toLowerCase(); }
+  return out;
+}
+window.__idePal=(()=>{ try{
+  const raw=new URLSearchParams(location.search).get('idePal'); if(!raw) return null;
+  const parts=raw.split('.'); if(parts.length!==IDE_PAL_KEYS.length) return null;
+  const p={}; IDE_PAL_KEYS.forEach((k,i)=>{ p[k]='#'+parts[i]; }); return sanitizePal(p);
+}catch(e){ return null; } })();
+window.__atlasSetIdeTheme=(t,pal)=>{
   window.__ideTheme=(t==='light'||t==='dark')?t:null;
+  window.__idePal=sanitizePal(pal);   // the 1-arg call of an older host clears it: no palette, Hub colours
   applyThemePref();
 };
+// Exactly the properties applyIdePalette() sets — and the ones clearIdePalette() removes. Never
+// style.cssText='': --ui-scale lives on the same element. The tone colours, the --c-* type palette,
+// overlays and the search highlight stay from the [data-theme] block; only the surfaces, the ink, the
+// accent and what derives from them change. The derivations keep hover/active/selection legible on any
+// LaF instead of guessing nine more colours.
+const IDE_PAL_PROPS=['--bg','--panel','--panel2','--line','--line2','--ink','--ink-dim','--ink-faint','--accent','--accent-hover',
+  '--accent-subtle','--hover','--active','--input','--sel-text','--sel-bar','--on-accent','--focus','--scroll','--scroll-hover'];
+function applyIdePalette(p){
+  const st=document.documentElement.style, mix=(a,pct,b)=>'color-mix(in srgb, '+a+' '+pct+'%, '+b+')';
+  st.setProperty('--bg',p.bg); st.setProperty('--panel',p.panel); st.setProperty('--panel2',p.panel2);
+  st.setProperty('--line',p.line); st.setProperty('--line2',mix(p.line,70,p.ink));
+  st.setProperty('--ink',p.ink); st.setProperty('--ink-dim',p.inkDim); st.setProperty('--ink-faint',mix(p.inkDim,70,p.panel));
+  st.setProperty('--accent',p.accent); st.setProperty('--accent-hover',mix(p.accent,80,p.ink)); st.setProperty('--accent-subtle',mix(p.accent,12,p.panel));
+  st.setProperty('--hover',mix(p.ink,6,p.panel)); st.setProperty('--active',mix(p.selBg,30,p.panel)); st.setProperty('--input',p.panel);
+  st.setProperty('--sel-text',mix(p.selBg,65,p.ink)); st.setProperty('--sel-bar',p.accent); st.setProperty('--on-accent',p.selText);
+  st.setProperty('--focus',mix(p.accent,20,'transparent')); st.setProperty('--scroll',mix(p.line,70,p.ink)); st.setProperty('--scroll-hover',mix(p.inkDim,70,p.panel));
+  document.documentElement.classList.add('idepal');
+}
+function clearIdePalette(){
+  const st=document.documentElement.style;
+  IDE_PAL_PROPS.forEach(k=>st.removeProperty(k));
+  document.documentElement.classList.remove('idepal');
+}
 function themePref(){ let p=null; try{ p=localStorage.getItem('atlas-theme'); }catch(e){} return p||(window.__ideTheme?'auto':'light'); }
 function applyThemePref(){
   const pref=themePref();
   const sys=window.__ideTheme||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');
   const theme = pref==='auto'?sys:pref;
   document.documentElement.dataset.theme = theme;
+  // The IDE's colours apply while the page shows the IDE's own mode — following it, or asked for the same
+  // mode explicitly. A light page forced inside a dark IDE gets the Hub light palette, not IDE-dark greys
+  // under light tokens.
+  const usePal=!!(window.__idePal&&window.__ideTheme&&theme===window.__ideTheme);
+  if(usePal) applyIdePalette(window.__idePal); else clearIdePalette();
   const mt=document.querySelector('meta[name=theme-color]');
-  if(mt) mt.content = theme==='dark'?'#0c141c':'#ffffff';
+  if(mt) mt.content = usePal?window.__idePal.bg:(theme==='dark'?'#0c141c':'#ffffff');
   document.querySelectorAll('[data-theme-btn]').forEach(b=>{
     b.textContent = pref==='auto'?'◐':(pref==='light'?'☀':'☾');
-    const tip='Theme: '+pref+(pref==='auto'&&window.__ideTheme?' (follows IDE)':'')+' — click to switch';
+    const tip='Theme: '+pref+(pref==='auto'&&window.__ideTheme?' (follows IDE)':'')+(usePal?' · IDE colours':'')+' — click to switch';
     b.setAttribute('data-tip', tip); b.setAttribute('aria-label', tip);   // data-tip drives the hover bubble
   });
 }
