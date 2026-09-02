@@ -197,6 +197,10 @@
               <code>}</code>) gets no verdict, as before — but it is counted
               (<code>stats.exprSkippedNested</code>) and its page says <i>not validated</i> and why, so an
               unjudged expression cannot pass for a clean one.</li>
+          <li><b>An expanded sub-process no longer wears the collapsed <code>[+]</code> marker.</b> The
+              diagram painted it on every sub-process, over the children an expanded one lays out inside
+              itself. It is read from the diagram interchange now (<code>isExpanded="false"</code>, or
+              Design's collapsed stencil) and drawn only there.</li>
         </ul>
         <h3>0.19.0</h3>
         <ul>

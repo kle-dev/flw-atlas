@@ -58,6 +58,9 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   skipped now. And an expression whose harvested body still holds a `{` (the harvester may have cut it
   short at the first `}`) gets no verdict, as before — but it is counted (`stats.exprSkippedNested`) and
   its page says *not validated* and why, so an unjudged expression cannot pass for a clean one.
+- **An expanded sub-process no longer wears the collapsed `[+]` marker.** The diagram painted it on
+  every sub-process, over the children an expanded one lays out inside itself. It is read from the
+  diagram interchange now (`isExpanded="false"`, or Design's collapsed stencil) and drawn only there.
 
 ## 0.19.0
 

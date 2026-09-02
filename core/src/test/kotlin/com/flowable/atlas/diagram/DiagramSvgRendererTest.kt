@@ -125,6 +125,29 @@ class DiagramSvgRendererTest {
     }
 
     @Test
+    fun onlyACollapsedSubProcessWearsThePlusMarker() {
+        val xml = """<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                       xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                       xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC">
+              <process id="p">
+                <subProcess id="open" name="Expanded"><userTask id="inner"/></subProcess>
+                <subProcess id="closed" name="Collapsed"/>
+              </process>
+              <bpmndi:BPMNDiagram><bpmndi:BPMNPlane bpmnElement="p">
+                <bpmndi:BPMNShape bpmnElement="open" isExpanded="true"><omgdc:Bounds x="0" y="0" width="300" height="200"/></bpmndi:BPMNShape>
+                <bpmndi:BPMNShape bpmnElement="inner"><omgdc:Bounds x="20" y="20" width="100" height="80"/></bpmndi:BPMNShape>
+                <bpmndi:BPMNShape bpmnElement="closed" isExpanded="false"><omgdc:Bounds x="400" y="0" width="100" height="80"/></bpmndi:BPMNShape>
+              </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+            </definitions>""".toByteArray()
+        val g = XmlDiExtractor.extract(xml, DiagramGeometry.Notation.BPMN)
+        assertTrue(DiaMarker.COLLAPSED in g.shapes.single { it.elementId == "closed" }.markers)
+        assertTrue(DiaMarker.COLLAPSED !in g.shapes.single { it.elementId == "open" }.markers)
+        val svg = DiagramSvgRenderer.render(g)!!
+        // the [+] box is a 14×14 rect; exactly one, under the collapsed sub-process
+        assertEquals(1, Regex("""width="14" height="14"""").findAll(svg).count())
+    }
+
+    @Test
     fun nonInterruptingBoundaryEventIsDashedAndMultiInstanceIsMarked() {
         val g = XmlDiExtractor.extract(bytes("DEMO-tasktypes.bpmn20.xml"), DiagramGeometry.Notation.BPMN)
         assertTrue(DiaMarker.NON_INTERRUPTING in g.shapes.single { it.elementId == "b1" }.markers)

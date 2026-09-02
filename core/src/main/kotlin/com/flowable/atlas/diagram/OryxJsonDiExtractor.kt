@@ -67,12 +67,13 @@ object OryxJsonDiExtractor {
             val name = ((child["properties"] as? Map<*, *>)?.get("name") as? String)?.takeIf { it.isNotBlank() }
             // A workspace shape names its Design stencil outright — the most precise type source there is.
             val resolved = DiagramIcons.resolve(stencil, null, stencil, null)
-            shapes.add(
-                DiaShape(
-                    id, DiagramKinds.shapeKind(stencil, notation, stencil), ax, ay, w, h, name,
-                    resolved.icon, resolved.typeLabel,
-                ),
-            )
+            val kind = DiagramKinds.shapeKind(stencil, notation, stencil)
+            // Design draws a collapsed sub-process from its own stencil (`CollapsedSubProcess`); that is
+            // the only sub-process that earns the [+] marker.
+            val markers = if (kind == ShapeKind.SUBPROCESS && stencil.contains("collapsed", ignoreCase = true)) {
+                setOf(DiaMarker.COLLAPSED)
+            } else emptySet()
+            shapes.add(DiaShape(id, kind, ax, ay, w, h, name, resolved.icon, resolved.typeLabel, markers))
             centers[id] = Point(ax + w / 2, ay + h / 2)
 
             (child["outgoing"] as? List<*>)?.forEach { o ->

@@ -74,6 +74,10 @@ enum class DiaMarker {
     /** Standard/loop marker (↻). */
     LOOP,
 
+    /** A sub-process drawn collapsed — `isExpanded="false"` in BPMN DI, Design's collapsed stencil in a
+     *  workspace model — which is the one case that earns the `[+]` box at the bottom edge. */
+    COLLAPSED,
+
     /** A boundary event with `cancelActivity="false"`, or an event sub-process start that does not
      *  interrupt — drawn with a dashed circle rather than a solid one. */
     NON_INTERRUPTING,

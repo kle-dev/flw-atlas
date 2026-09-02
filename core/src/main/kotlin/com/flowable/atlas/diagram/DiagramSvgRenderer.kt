@@ -145,8 +145,8 @@ object DiagramSvgRenderer {
             """<rect x="${fmt(s.x)}" y="${fmt(s.y)}" width="${fmt(s.width)}" height="${fmt(s.height)}" """ +
                 """rx="${fmt(rx)}" ry="${fmt(rx)}" fill="$fill" stroke="$STROKE" stroke-width="${fmt(strokeW)}"$dash/>""",
         )
-        if (s.kind == ShapeKind.SUBPROCESS) {
-            // collapsed-subprocess [+] marker, bottom-centre
+        if (s.kind == ShapeKind.SUBPROCESS && DiaMarker.COLLAPSED in s.markers) {
+            // collapsed-subprocess [+] marker, bottom-centre — an expanded sub-process shows its children
             val bx = s.centerX - 7
             val by = s.y + s.height - 16
             sb.append("""<rect x="${fmt(bx)}" y="${fmt(by)}" width="14" height="14" fill="none" stroke="$STROKE" stroke-width="1.2"/>""")

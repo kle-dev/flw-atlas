@@ -62,15 +62,19 @@ object XmlDiExtractor {
             val tag = resolvedTag(ref) ?: ""
             val f = resolvedFacts(ref)
             val resolved = DiagramIcons.resolve(f.stencil, f.flowableType, tag, f.eventDef)
+            val kind = DiagramKinds.shapeKind(tag, notation, f.stencil)
+            // BPMN DI says whether a sub-process is drawn expanded (its children laid out inside it) or
+            // collapsed (`isExpanded="false"`: a box with a [+]); the marker used to be painted on every
+            // sub-process, so an expanded one said "collapsed" over its own children.
+            val collapsed = kind == ShapeKind.SUBPROCESS &&
+                shape.attr("isExpanded")?.equals("false", ignoreCase = true) == true
+            val markers = if (collapsed) f.markers + DiaMarker.COLLAPSED else f.markers
             // CMMN DI references the planItem, but everything parsed from the model (plan tree,
             // parameters, script bodies) is keyed by the *definition* — emit the definition's id so
             // the explorer joins diagram ↔ details by id, not by a name heuristic.
             val elementId = planItemDefRef[ref] ?: ref
             shapes.add(
-                DiaShape(
-                    elementId, DiagramKinds.shapeKind(tag, notation, f.stencil), x, y, w, h, resolvedName(ref),
-                    resolved.icon, resolved.typeLabel, f.markers,
-                ),
+                DiaShape(elementId, kind, x, y, w, h, resolvedName(ref), resolved.icon, resolved.typeLabel, markers),
             )
         }
 
