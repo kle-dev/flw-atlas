@@ -2033,7 +2033,7 @@ const incFrom= (id,rel)=>{ const e=(incM.get(id)||[]).find(x=>x.rel===rel); retu
 // Open/closed is remembered per SECTION (not per node) in localStorage: a section you open stays open as
 // you walk the graph. Everything defaults to closed except the diagram — see DEFAULT_OPEN_SECTIONS.
 const SECT_STORE='atlas-sect';
-const DEFAULT_OPEN_SECTIONS={diagram:true};
+const DEFAULT_OPEN_SECTIONS={diagram:true, neighborhood:true};
 function sectAll(){ try{ return JSON.parse(localStorage.getItem(SECT_STORE)||'{}')||{}; }catch(e){ return {}; } }
 function sectRemember(id, open){
   try{ const m=sectAll(); m[id]=open; localStorage.setItem(SECT_STORE, JSON.stringify(m)); }catch(e){}
@@ -3122,43 +3122,66 @@ function diagramView(n){
 }
 
 // ---------- neighborhood graph (ego view: selected node + 1-hop neighbors) ----------
-const GRAPH_MAX_NEIGHBORS = 26;
+// Per side — what this node uses on the left, what uses it on the right — sorted by how referenced the
+// neighbour is and cut here; the two chip sections below carry the rest, and a "+N more" row jumps there.
+const GRAPH_MAX_PER_SIDE = 12;
 function neighborhoodSvg(n){
-  // Collect unique neighbors with direction + relation (a node can appear on both sides).
-  const seen=new Map();
-  (outM.get(n.id)||[]).forEach(e=>{ if(byId.get(e.id)&&!seen.has(e.id)) seen.set(e.id,{id:e.id,rel:e.rel,dir:'out'}); });
-  (incM.get(n.id)||[]).forEach(e=>{ if(byId.get(e.id)&&!seen.has(e.id)) seen.set(e.id,{id:e.id,rel:e.rel,dir:'in'}); });
-  const all=[...seen.values()];
-  if(!all.length) return '';
-  const shown=all.slice(0,GRAPH_MAX_NEIGHBORS);
-  const W=680,H=340,CX=W/2,CY=H/2,RX=CX-130,RY=CY-40;
+  // A neighbour can sit on both sides (a form the process opens that also writes back to it) and then
+  // appears in both columns — that is the truth of the graph. The radial star this replaces put it on
+  // whichever side was seen first and encoded direction as dashing, which nobody read.
+  const side=m=>{ const seen=new Map(); (m.get(n.id)||[]).forEach(e=>{ if(byId.get(e.id)&&!seen.has(e.id)) seen.set(e.id,e); }); return [...seen.values()]; };
+  const rank=(a,b)=>(INSIGHTS.indeg.get(b.id)||0)-(INSIGHTS.indeg.get(a.id)||0)||byId.get(a.id).label.localeCompare(byId.get(b.id).label);
+  const L=side(outM).sort(rank), R=side(incM).sort(rank);
+  const total=L.length+R.length;
+  if(!total) return '';
+  const l=L.slice(0,GRAPH_MAX_PER_SIDE), r=R.slice(0,GRAPH_MAX_PER_SIDE);
+  const moreL=L.length-l.length, moreR=R.length-r.length;
+  // viewBox units; the <svg> scales to the column width and keeps this aspect, so no resize code
+  const W=680, COLW=220, ROW=22, HEAD=16, PAD=8, CX=W/2;
+  const nL=l.length+(moreL?1:0), nR=r.length+(moreR?1:0);
+  const H=HEAD+2*PAD+ROW*Math.max(nL,nR,3);
+  const yc=HEAD+PAD+(H-HEAD-2*PAD)/2;
+  const y0=cnt=>HEAD+PAD+(H-HEAD-2*PAD-cnt*ROW)/2+ROW/2;
   const trunc=(s,len)=>s.length>len?s.slice(0,len-1)+'…':s;
-  let g='';
-  shown.forEach((e,i)=>{
-    const nn=byId.get(e.id);
-    const a=-Math.PI/2 + i*2*Math.PI/shown.length;
-    const x=CX+RX*Math.cos(a), y=CY+RY*Math.sin(a);
-    const dash=e.dir==='in'?' stroke-dasharray="4 3"':'';
-    const dim=(e.sus||e.dyn)?' stroke-opacity="0.45"':'';
-    const flagTxt=e.sus?' (suspect)':e.dyn?' (dynamic)':'';
-    // tooltips via data-tip (the DOM bubble), not <title> children — SVG-native tooltips never
-    // render in the embedded JCEF viewer
-    const relTerm=term('rel', e.rel).label;
-    g+='<line x1="'+CX+'" y1="'+CY+'" x2="'+x.toFixed(1)+'" y2="'+y.toFixed(1)+'" stroke="var(--line2)" stroke-width="1"'+dash+dim+' data-tip="'+esc(relTerm+flagTxt+(e.dir==='in'?' (incoming)':''))+'"/>';
-    const anchor=Math.cos(a)>0.25?'start':Math.cos(a)<-0.25?'end':'middle';
-    const tx=x+(anchor==='start'?9:anchor==='end'?-9:0), ty=y+(anchor==='middle'?(Math.sin(a)>0?16:-10):4);
-    g+='<g class="gn" data-id="'+enc(e.id)+'" tabindex="0" role="link" style="cursor:pointer"'+
-       ' data-tip="'+esc(nn.label+' — '+relTerm)+'" aria-label="'+esc(nn.label+' — '+relTerm)+'">'+
-       '<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="5" fill="'+nodeColor(nn)+'"/>'+
-       '<text x="'+tx.toFixed(1)+'" y="'+ty.toFixed(1)+'" text-anchor="'+anchor+'" font-size="10" font-family="var(--mono)" fill="var(--ink-dim)">'+esc(trunc(nn.label,26))+'</text></g>';
-  });
-  // center node on top of the lines
-  g+='<circle cx="'+CX+'" cy="'+CY+'" r="8" fill="'+nodeColor(n)+'" stroke="var(--panel)" stroke-width="2"/>'+
-     '<text x="'+CX+'" y="'+(CY+22)+'" text-anchor="middle" font-size="11" font-weight="600" font-family="var(--mono)" fill="var(--ink)">'+esc(trunc(n.label,32))+'</text>';
-  const more=all.length>shown.length?'<div class="muted nbmore">showing '+shown.length+' of '+all.length+' neighbors — the full list is below</div>':'';
-  return '<details class="uses" open><summary>Neighborhood — solid: uses, dashed: used by</summary>'+
-    '<div style="padding:4px 10px 8px">'+more+
-    '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;max-width:820px;display:block" role="img" aria-label="Relationship graph of '+esc(n.label)+'">'+g+'</svg></div></details>';
+  const f=v=>v.toFixed(1);
+  // the same TYPE_ICONS body typeIcon() wraps for HTML, placed on the SVG grid
+  const icon=(nn,x,y,size)=>{
+    const d=nn.data||{}, t=nn.type==='external'?(d.flowableApi?'endpoint':d.route?'page':'external'):nn.type;
+    return '<g transform="translate('+f(x-size/2)+' '+f(y-size/2)+') scale('+(size/24).toFixed(3)+')" fill="none" stroke="'+nodeColor(nn)+
+      '" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'+(TYPE_ICONS[t]||TYPE_ICONS._)+'</g>';
+  };
+  let g='<defs><marker id="nbh-arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">'+
+    '<path d="M1 1 7 4 1 7" fill="none" stroke="var(--line2)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>';
+  g+='<text class="nb-head" x="'+COLW+'" y="'+(HEAD-4)+'" text-anchor="end">USES</text>'+
+     '<text class="nb-head" x="'+(W-COLW)+'" y="'+(HEAD-4)+'" text-anchor="start">USED BY</text>';
+  // tooltips via data-tip (the DOM bubble), not <title> children — SVG-native tooltips never render in JCEF
+  const rowHtml=(e,y,left)=>{
+    const nn=byId.get(e.id), relTerm=term('rel', e.rel).label;
+    const flag=e.sus?' ≈':e.dyn?' ƒ':'', flagTxt=e.sus?' (suspect)':e.dyn?' (dynamic)':'';
+    const dim=(e.sus||e.dyn)?' stroke-dasharray="4 3" stroke-opacity=".45"':'';
+    const ix=left?COLW-7:W-COLW+7, tx=left?COLW-18:W-COLW+18;
+    // the arrow points the way the reference goes: out of the node into what it uses, out of a user into the node
+    const path=left
+      ? 'M'+(CX-16)+' '+f(yc)+' C'+(CX-70)+' '+f(yc)+' '+(CX-70)+' '+f(y)+' '+(COLW+8)+' '+f(y)
+      : 'M'+(W-COLW-8)+' '+f(y)+' C'+(CX+70)+' '+f(y)+' '+(CX+70)+' '+f(yc)+' '+(CX+16)+' '+f(yc);
+    return '<path d="'+path+'" fill="none" stroke="var(--line2)" stroke-width="1" marker-end="url(#nbh-arr)"'+dim+
+             ' data-tip="'+esc(relTerm+flagTxt)+'"/>'+
+           '<g class="gn" data-id="'+enc(e.id)+'" tabindex="0" role="link" style="cursor:pointer"'+
+             ' data-tip="'+esc(nn.label+' — '+relTerm+flagTxt)+'" aria-label="'+esc(nn.label+' — '+relTerm+flagTxt)+'">'+
+             icon(nn,ix,y,14)+
+             '<text class="nb-label" x="'+tx+'" y="'+f(y+4)+'" text-anchor="'+(left?'end':'start')+'">'+esc(trunc(nn.label,26))+flag+'</text></g>';
+  };
+  const moreHtml=(cnt,x,y,left,sect)=>'<text class="nb-more" x="'+x+'" y="'+f(y+4)+'" text-anchor="'+(left?'end':'start')+
+    '" data-jump-sect="'+sect+'" tabindex="0" role="button">+'+cnt+' more…</text>';
+  let y=y0(nL); l.forEach(e=>{ g+=rowHtml(e,y,true); y+=ROW; }); if(moreL) g+=moreHtml(moreL,COLW-18,y,true,'rels-out');
+  y=y0(nR); r.forEach(e=>{ g+=rowHtml(e,y,false); y+=ROW; }); if(moreR) g+=moreHtml(moreR,W-COLW+18,y,false,'rels-in');
+  // the node itself, on top of the connectors
+  g+='<circle cx="'+CX+'" cy="'+f(yc)+'" r="15" fill="var(--panel)" stroke="'+nodeColor(n)+'" stroke-width="1.5"/>'+icon(n,CX,yc,16)+
+     '<text class="nb-self" x="'+CX+'" y="'+f(yc+30)+'" text-anchor="middle">'+esc(trunc(n.label,30))+'</text>';
+  const svg='<svg class="nbh-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMin meet" role="img"'+
+    ' aria-label="'+esc('Relationship graph of '+n.label+': what it uses on the left, what uses it on the right')+'">'+g+'</svg>';
+  // a section like every other: remembered, and part of "expand all"
+  return section('neighborhood','Neighborhood <span class="muted">('+total+')</span>','<div class="nbh">'+svg+'</div>');
 }
 
 // Resolve a service-task implementation to a clickable Java node chip + method.
@@ -3330,6 +3353,15 @@ function renderDetail(){
   // "N parameter mappings ↓" inside a service task — jumps to that element's mapping group
   det.querySelectorAll('[data-reveal-el]').forEach(b=>{
     b.onclick=e=>{ e.stopPropagation(); revealByEl(det, b.dataset.revealEl); };
+  });
+  // "+N more…" in the neighborhood — opens the chip section that lists the rest and scrolls to it
+  det.querySelectorAll('[data-jump-sect]').forEach(b=>{
+    const open=()=>{
+      const d=det.querySelector('details.sect[data-sect="'+b.dataset.jumpSect+'"]'); if(!d) return;
+      d.open=true; sectRemember(b.dataset.jumpSect, true); d.scrollIntoView({block:'start'});
+    };
+    b.onclick=e=>{ e.stopPropagation(); open(); };
+    b.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } };
   });
   wireParamFilter(det);
   wireDiagram(det);

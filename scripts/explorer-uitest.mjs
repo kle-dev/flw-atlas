@@ -455,6 +455,30 @@ const probe = `<script>
        decodeURIComponent(location.hash).indexOf('&f=zzz-none')>0, 'hash='+location.hash);
   });
 
+  // --- the neighborhood is a section: remembered, left-to-right, and its rows are links ---
+  steps.push(()=>{
+    const pr=nodes.find(n=>n.type==='process' && (outM.get(n.id)||[]).length);
+    ok('the fixture has a process with references', !!pr);
+    if(pr) location.hash=enc(pr.id);
+  });
+  steps.push(()=>{
+    const s=document.querySelector('#detail details.sect[data-sect="neighborhood"]');
+    ok('the neighborhood is a section, open by default', !!s && s.open);
+    ok('it reads uses on the left, used by on the right', !!s && s.querySelectorAll('.nb-head').length===2 && s.querySelectorAll('.gn[data-id]').length>0);
+    ok('the radial star is gone', ![...document.querySelectorAll('#detail details.uses>summary')].some(x=>/Neighborhood/.test(x.textContent)));
+    if(s) s.open=false;
+  });
+  steps.push(()=>{
+    let st=null; try{ st=JSON.parse(localStorage.getItem('atlas-sect')); }catch(e){}
+    ok('closing the neighborhood is remembered', !!st && st.neighborhood===false, JSON.stringify(st));
+    if(st){ delete st.neighborhood; try{ localStorage.setItem('atlas-sect', JSON.stringify(st)); }catch(e){} }
+    const s=document.querySelector('#detail details.sect[data-sect="neighborhood"]');
+    if(s){ s.open=true; const g=s.querySelector('.gn[data-id]'); window.__nbFrom=state.sel; if(g) click(g); }
+  });
+  steps.push(()=>{
+    ok('a neighbour in the drawing is a link', !!state.sel && state.sel!==window.__nbFrom, 'sel='+state.sel);
+  });
+
   // --- sidebar groups fold and remember ---
   steps.push(()=>{
     const h=document.querySelector('#nav .side-group[data-group="Models"]');

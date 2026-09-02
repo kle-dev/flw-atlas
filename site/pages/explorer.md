@@ -64,14 +64,20 @@ fourteen rows of chips.
 
 ## The detail panel
 
-Selecting a node gives you its attributes, its diagram, an ego graph of its immediate neighbourhood,
-type-specific sections — and then the two lists that are the point of the whole thing:
+Selecting a node gives you its attributes, its diagram, its neighbourhood, type-specific sections — and
+then the two lists that are the point of the whole thing:
 
 - **Uses / references** — what this node points at.
 - **Used by / referenced from** — what points at it.
 
 Both directions, always, for every node type. That is the question a model file cannot answer on its
 own, and it is why the graph carries `usedBy`.
+
+The **neighbourhood** draws the same two lists as a picture that reads left to right: what the node uses in
+a column on the left, what uses it on the right, the node in the middle, the arrows pointing the way each
+reference goes. A dashed connector with `≈` or `ƒ` is an uncertain link, the most-referenced neighbours
+come first, and *+N more* opens the full list below. It is a section like the others — remembered, and
+part of *expand all*.
 
 Inside IntelliJ the panel also opens code: the `↗` beside a source path and every `:line` on a method
 or endpoint open that file in an editor tab (see [the plugin](../plugin/#the-atlas-explorer-inside-the-ide)).

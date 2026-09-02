@@ -748,7 +748,17 @@
   /* a component's type at the end of its row, and a snippet of the code it runs — quiet, in the token scale */
   .fldtype{margin-left:auto;color:var(--ink-faint);font-size:var(--text-2xs)}
   .snip{color:var(--ink-faint);font-size:var(--text-2xs)}
-  .nbmore{font-size:var(--text-2xs);margin:2px 0 6px}
+  /* Neighborhood: what the node uses in a column on the left, what uses it on the right. Font sizes are
+     viewBox units on purpose — the drawing scales with the column, and so does its lettering. */
+  .nbh{padding:var(--space-1) 0 var(--space-2)}
+  .nbh-svg{width:100%;max-width:820px;height:auto;display:block}
+  .nb-head{font-family:var(--sans);font-size:9.5px;font-weight:600;letter-spacing:.06em;fill:var(--ink-faint)}
+  .nb-label{font-family:var(--sans);font-size:11px;fill:var(--ink-dim)}
+  .gn:hover .nb-label,.gn:focus-visible .nb-label{fill:var(--accent)}
+  .gn:focus{outline:none}
+  .nb-self{font-family:var(--sans);font-size:11px;font-weight:600;fill:var(--ink)}
+  .nb-more{font-family:var(--sans);font-size:10.5px;fill:var(--accent);cursor:pointer}
+  .nb-more:hover,.nb-more:focus-visible{text-decoration:underline}
   /* the "Other attributes" key/value tree */
   .kvrow{border:none}
   .kvk{min-width:150px}

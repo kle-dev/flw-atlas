@@ -228,5 +228,9 @@ class RenderersSmokeTest {
         assertTrue("expected the health list builder from explorer.js", html.contains("function healthListHtml("))
         assertTrue("expected the health list styling from explorer.css", html.contains(".hlist{"))
         assertFalse("the health card grid is gone", html.contains(".hcard"))
+        // The neighborhood is a bipartite drawing inside a remembered section, no longer a radial star.
+        assertTrue("expected the neighborhood section id from explorer.js", html.contains("section('neighborhood'"))
+        assertTrue("expected the neighborhood styling from explorer.css", html.contains(".nb-label{"))
+        assertFalse("the radial star's legend is gone", html.contains("Neighborhood — solid: uses"))
     }
 }

@@ -48,6 +48,13 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   one strip with a chip per node type the report found, each opening that type's list. Health sits beside
   the hotspots and the apps beside the entry points, so the four things a reader came for are above the
   fold on an ordinary screen. The Checks page and the unused-variables report open with the same list.
+- **A node's neighbourhood reads left to right.** What the node uses stands in a column on the left, what
+  uses it on the right, the node in the middle, and the arrows point the way each reference goes. The
+  radial star it replaces put every neighbour on a circle and told direction apart by dashing, which
+  nobody read; it also took 340px whatever it showed and was the one collapsible block the page did not
+  remember. The drawing is a section now like every other — remembered, part of *expand all* — the
+  most-referenced neighbours come first, each side stops at twelve with a *+N more* that opens the full
+  list below, and every neighbour carries its type icon and is a link.
 
 ## 0.20.0
 
