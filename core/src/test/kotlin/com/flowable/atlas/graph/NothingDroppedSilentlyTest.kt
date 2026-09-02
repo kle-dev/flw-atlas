@@ -43,7 +43,11 @@ class NothingDroppedSilentlyTest {
                 "apps/inner.bar" to inner,
                 "manifest.json" to """{"generatedBy":"design"}""".toByteArray(),
                 "form-models/orphan.json" to """{"key":"orphanForm","name":"Orphan"}""".toByteArray(),
+                "logo.png" to ByteArray(64),
             ))
+            // a Helm chart template wears a Flowable template's extension and is not JSON
+            File(dir, "chart/templates/_helpers.tpl").apply { parentFile.mkdirs() }
+                .writeText("{{- define \"app.name\" -}}{{ .Chart.Name }}{{- end -}}")
             result = Atlas.extract(dir)
         }
 
@@ -85,12 +89,20 @@ class NothingDroppedSilentlyTest {
             skips["export.zip!manifest.json"]?.contains("no model key") == true)
         assertTrue("a wrapper without a body is said: $skips",
             skips["export.zip!form-models/orphan.json"]?.contains("no editorJson") == true)
+        assertTrue("a .tpl that is not JSON is a skip, not a parse error: $skips",
+            skips["chart/templates/_helpers.tpl"]?.contains("not a JSON document") == true)
+        assertTrue("an image inside the archive is nobody's business", skips.keys.none { it.endsWith("logo.png") })
+        assertTrue("no parse errors at all", diagnostics().none { it["kind"] == "parse" })
+        @Suppress("UNCHECKED_CAST")
+        val bindings = ((result["graph"] as Map<String, Any?>)["nodes"] as List<Map<String, Any?>>).filter { it["type"] == "binding" }
+        assertTrue("Go-template braces are not frontend bindings", bindings.isEmpty())
     }
 
     @Test
-    fun theSkipsAreParseIssueFindings() {
+    fun theSkipsAreParseIssueWarnings() {
         @Suppress("UNCHECKED_CAST")
         val parse = (result["findings"] as List<Map<String, Any?>>).filter { it["check"] == "parseIssues" }
         assertEquals(diagnostics().size, parse.size)
+        assertTrue(parse.all { it["severity"] == "warning" })
     }
 }

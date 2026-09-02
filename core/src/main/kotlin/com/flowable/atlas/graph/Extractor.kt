@@ -31,6 +31,18 @@ object Atlas {
     /** A model file or archive entry above this is not read; a `.form` with embedded images stays far below. */
     internal const val MAX_MODEL_BYTES: Long = 32L shl 20
 
+    private val XML_MODEL_TYPES = setOf("bpmn", "cmmn", "dmn")
+
+    private fun looksLikeJson(raw: String): Boolean {
+        val i = raw.indexOfFirst { !it.isWhitespace() && it != '﻿' }
+        if (i < 0) return false
+        if (raw[i] == '[') return true
+        if (raw[i] != '{') return false
+        // `{{` opens a Go/Helm template, not a JSON object: after `{` JSON allows only `"` or `}`
+        val j = raw.withIndex().drop(i + 1).firstOrNull { !it.value.isWhitespace() }?.value ?: return false
+        return j == '"' || j == '}'
+    }
+
     private val QUERY_KEY_RE = Regex("\"key\"\\s*:\\s*\"([^\"]+)\"")
     private val QUERY_GROUPS_RE = Regex("seq_contains\\(\\s*\\\\?\"([A-Za-z0-9_.\\-]+)")
     private val QUERY_SOURCE_RE = Regex("\"sourceIndex\"\\s*:\\s*\"([^\"]+)\"")
@@ -94,6 +106,13 @@ object Atlas {
         fun dispatch(mtype: String?, data: ByteArray, label: String) {
             if (mtype == null) return
             val raw = String(data, Charsets.UTF_8)
+            // A JSON model type whose file is not JSON is not a Flowable model that failed to parse — it
+            // is somebody else's file with the same extension (a Helm chart's `_helpers.tpl`, say). Said
+            // as a skip, and before the harvest: a Go template is full of `{{ }}` that are not bindings.
+            if (mtype !in XML_MODEL_TYPES && !looksLikeJson(raw)) {
+                diag("skip", label, "not a JSON document — a .${label.substringAfterLast('.')} file that is no Flowable $mtype model")
+                return
+            }
             val exprs = Constants.EXPR_RE.findAll(raw).map { Constants.htmlUnescape(it.value) }.toCollection(LinkedHashSet())
             val musts = Constants.MUSTACHE_RE.findAll(raw).map { Constants.htmlUnescape(it.value) }.toCollection(LinkedHashSet())
             ctx.expr.addAll(exprs)
@@ -285,8 +304,13 @@ object Atlas {
          */
         fun scanEntry(entryName: String, size: Long, label: String, depth: Int, read: () -> ByteArray) {
             val base = entryName.substringAfterLast('/')
+            val mt = ModelKinds.modelTypeFor(base)
+            val isArchive = com.flowable.atlas.model.ModelPaths.isArchive(base)
+            val isJson = base.lowercase().endsWith(".json")
+            if (mt == null && !isArchive && !isJson) return    // an image, a class file — never read, nothing to say
+            // The cap applies to what would be read; a 1 GB test image inside a zip is nobody's business.
             if (size >= 0 && tooLarge(label, size)) return
-            if (com.flowable.atlas.model.ModelPaths.isArchive(base)) {
+            if (isArchive) {
                 if (depth >= 1) { diag("skip", label, "archive nested two levels deep — not opened"); return }
                 val bytes = read()
                 if (size < 0 && tooLarge(label, bytes.size.toLong())) return
@@ -307,7 +331,6 @@ object Atlas {
                 }
                 return
             }
-            val mt = ModelKinds.modelTypeFor(base)
             if (mt != null) {
                 val bytes = read()
                 if (size < 0 && tooLarge(label, bytes.size.toLong())) return
@@ -315,7 +338,6 @@ object Atlas {
                 return
             }
             // legacy-export JSON: `<type>-models/x.json` anywhere, or an app wrapper at the root
-            if (!base.lowercase().endsWith(".json")) return
             val folder = entryName.split('/').dropLast(1).lastOrNull()
             if (com.flowable.atlas.model.ModelType.byDesignFolder(folder) == null && entryName.contains('/')) return
             dispatchDesignJson(folder, read(), label)

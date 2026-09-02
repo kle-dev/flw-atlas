@@ -174,14 +174,16 @@
               archive matched no model extension and was skipped without a word. It is opened now, one level
               down, and its models carry a <code>export.zip!apps/inner.bar!processes/x.bpmn</code> label the
               diagram renderers resolve too. Everything else Atlas decides not to read leaves a
-              <code>skip</code> diagnostic behind — a JSON in an export that is no model wrapper, a legacy
-              wrapper without a body or of a type Atlas has no parser for, a process in the old editor's
-              JSON format whose XML twin never turned up, an archive nested two levels deep, a model file
-              above a 32 MB limit — where each of those used to be indistinguishable from an empty project.
-              An unreadable Java source costs that one file instead of aborting the run with a stack trace,
-              and a model whose diagram could not be produced says so on its page
-              (<code>diagramError</code>) and on the CLI, instead of looking like a model that simply has no
-              layout.</li>
+              <code>skip</code> diagnostic behind, at warning level because nothing failed — a file with a
+              model extension that is not JSON at all (a Helm chart's <code>_helpers.tpl</code> used to be a
+              parse <i>error</i>, and its <code>{{ }}</code> were harvested as frontend bindings), a JSON in
+              an export that is no model wrapper, a legacy wrapper without a body or of a type Atlas has no
+              parser for, a process in the old editor's JSON format whose XML twin never turned up, an
+              archive nested two levels deep, a model file above a 32 MB limit — where each of those used to
+              be indistinguishable from an empty project. An unreadable Java source costs that one file
+              instead of aborting the run with a stack trace, and a model whose diagram could not be
+              produced says so on its page (<code>diagramError</code>) and on the CLI, instead of looking
+              like a model that simply has no layout.</li>
           <li><b>Test code is not the project.</b> Java under <code>src/test</code>,
               <code>src/integrationTest</code> and any other test source set is no longer scanned: a JUnit
               class calling <code>setVariable("foo", …)</code> registered a production write, so a variable
@@ -210,6 +212,18 @@
               — so a Kotlin <code>JavaDelegate</code> or <code>@RestController</code> is a real node with
               real edges instead of an unresolved external. A bean name two classes both claim resolves, but
               the edge is flagged suspect, as an ambiguous class name always was.</li>
+          <li><b>The model index has one build policy, and it no longer freezes the editor.</b> The index
+              was built by whoever asked first — and when that was the unused-declaration inspection, a
+              reference resolve or Find Usages, the whole model scan ran under the daemon's read lock, which
+              on a large repository is "the IDE freezes while I type". Five other consumers each launched
+              their own background build on a cold index, two never asked for one at all, and nothing built
+              it when a project opened, so the Atlas Hub greeted you with <i>Not scanned yet</i> until you
+              clicked Rebuild or happened to open a Java file. Now: the index starts building when the
+              project opens; every read-context consumer reads the cache and calls
+              <code>ensureBuilding()</code> — one background build for any number of askers — and answers
+              "nothing yet" until it lands, at which point the editor's markers, hints and inspections are
+              re-run. Only completion and the explicit actions may wait for a build. The Hub says
+              <i>Scanning the project…</i> and resolves itself.</li>
           <li><b>The error reporter is finally in the IDE.</b> 0.13.0 announced <i>Report a problem straight
               from the error dialog</i>, and the reporter was there — but never registered in the plugin
               descriptor, so the button never appeared and the reference page had to carry a "known gap"
@@ -816,6 +830,9 @@
         <!-- "Report Flowable Atlas Problem…" in the IDE's error dialog: builds the report, copies it to
              the clipboard and opens the issue tracker — nothing is transmitted by the plugin itself. -->
         <errorHandler implementation="com.flowable.atlas.AtlasErrorReportSubmitter"/>
+        <!-- Starts the model-index build when a project opens, so the Hub, the markers and the
+             inspections do not wait for the first completion or Rebuild click to ask for one. -->
+        <postStartupActivity implementation="com.flowable.atlas.index.FlowableIndexWarmUp"/>
     </extensions>
 
     <projectListeners>

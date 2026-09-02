@@ -28,7 +28,7 @@ noise.
 
 | Check | Severity | What it means |
 |---|---|---|
-| `parseIssues` | error · warning | A file could not be read or fully parsed; as a warning, one key shared by two model types. |
+| `parseIssues` | error · warning | A file could not be read or fully parsed; as warnings, what Atlas decided not to read and a key shared by two model types. |
 | `invalidExpr` | error | An expression has a structural syntax error. |
 | `scriptIssues` | error / warning | A script body has a syntax problem, or calls something its context does not bind. |
 | `missingRefs` | error | A model key is referenced but no model in the project defines it. |
@@ -52,7 +52,8 @@ element, the line and a snippet, so it is actionable rather than merely true.
 Every entry in the run's diagnostics: a model whose XML or JSON would not parse, a file that could not
 be read, an archive entry that could not be opened, a Java source that could not be read, and any
 failure while extracting custom functions. It also lists what Atlas decided **not** to read, as `skip`
-entries — a JSON in a Design export that is no model wrapper, a legacy wrapper without a body, a
+entries at warning level — a file with a model extension that is not JSON at all (a Helm chart's
+`_helpers.tpl`), a JSON in a Design export that is no model wrapper, a legacy wrapper without a body, a
 process in the old editor's JSON format with no XML twin, an archive nested two levels deep, a model
 file above the 32 MB limit — because a file that was skipped on purpose is no less absent from the
 report than one that failed. An archive *inside* an archive (a Design export packing one `.bar` per
