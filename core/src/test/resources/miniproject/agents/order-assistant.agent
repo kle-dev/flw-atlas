@@ -1,0 +1,13 @@
+{
+  "key": "orderAssistant",
+  "name": "Order assistant",
+  "description": "Answers questions about an order and its shipment",
+  "type": "conversational",
+  "enableApiEndpoint": true,
+  "modelSettings": {"aiVendor": "openai", "modelName": "gpt-4o", "temperature": 0.2},
+  "systemMessageTemplate": "You help the order team. The order is {{orderId}}; the customer is {{customerName}}.",
+  "knowledgeBase": {"knowledgeBaseModelReference": {"key": "courierManuals"}},
+  "tools": [
+    {"key": "customerService", "modelType": "service", "operationKey": "findAll"}
+  ]
+}

@@ -424,7 +424,10 @@ object OverviewRenderer {
             L.add("## 5c. Data dictionaries\n")
             for (dAny in dictionaries) {
                 val d = asMap(dAny)
-                L.add("- `${pyStr(d["key"])}` — types: ${pyStr(d["types"])} — `${pyStr(d["file"])}`")
+                // the type names as a code list, not a Python repr of the list (the first fixture with
+                // a dictionary read "types: ['Address', 'Customer']")
+                val types = Fmt.codeList(d["types"]).takeIf { it.isNotBlank() }?.let { " — types: $it" } ?: ""
+                L.add("- `${pyStr(d["key"])}`$types — `${pyStr(d["file"])}`")
             }
             L.add("")
         }
@@ -454,11 +457,19 @@ object OverviewRenderer {
             hdr(6, "AI agents & bots")
             for (aAny in agents) {
                 val a = asMap(aAny)
-                L.add("### `${pyStr(a["key"])}` — ${orE(a["name"])} (${pyStr(a["type"])}) — `${pyStr(a["file"])}`")
-                L.add(
-                    "- model: ${pyStr(a["aiVendor"])}/${pyStr(a["modelName"])} (temp ${pyStr(a["temperature"])}), " +
-                        "apiEndpoint=${pyStr(a["enableApiEndpoint"])}"
+                // Only what the model states: an agent without a type or a vendor used to read
+                // "(None)" and "model: None/None (temp None)" — the fixture that first carried an agent
+                // caught it.
+                val type = Fmt.scalar(a["type"])?.takeIf { it.isNotEmpty() }?.let { " ($it)" } ?: ""
+                L.add("### `${pyStr(a["key"])}` — ${orE(a["name"])}$type — `${pyStr(a["file"])}`")
+                val model = listOfNotNull(Fmt.scalar(a["aiVendor"]), Fmt.scalar(a["modelName"]))
+                    .filter { it.isNotEmpty() }.joinToString("/")
+                val modelLine = Fmt.fields(
+                    "model" to model,
+                    "temperature" to (Fmt.scalar(a["temperature"]) ?: ""),
+                    "apiEndpoint" to (Fmt.scalar(a["enableApiEndpoint"]) ?: ""),
                 )
+                if (modelLine.isNotBlank()) L.add("- $modelLine")
                 if (truthy(a["knowledgeBase"])) L.add("- 📚 knowledgeBase → `${pyStr(a["knowledgeBase"])}`")
                 for (tAny in asList(a["tools"])) {
                     val t = asMap(tAny)

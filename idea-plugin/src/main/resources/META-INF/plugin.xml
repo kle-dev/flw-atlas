@@ -359,6 +359,13 @@
               paragraph. It is registered now: <b>Report Flowable Atlas Problem…</b> copies the report to
               the clipboard and opens the issue tracker, transmitting nothing on its own. The reference page
               also stops claiming 2026.1 support: 2026.2 has been the floor since 0.17.</li>
+          <li><b>Two <code>overview.md</code> lines stop leaking the generator's internals.</b> An AI
+              agent's heading read <code>(None)</code> when the model states no type, and its model line
+              <code>model: None/None (temp None)</code> when the settings are absent — both omit what is
+              unset now. A data dictionary's line printed its types as a Python list literal, <code>types:
+              ['Address', 'Customer']</code>; it is a code list. Both surfaced the moment the test fixture
+              gained an agent and a dictionary — it now carries every model type the parsers know, plus a
+              Design export with a <code>.bar</code> nested inside it.</li>
           <li><b>An expanded sub-process no longer wears the collapsed <code>[+]</code> marker.</b> The
               diagram painted it on every sub-process, over the children an expanded one lays out inside
               itself. It is read from the diagram interchange now (<code>isExpanded="false"</code>, or
@@ -533,23 +540,6 @@
               button's action as <code>{key, id}</code> rather than a bare key, the shape already unwrapped
               for process, case and query references. That one was not, so such an export produced a
               reference key nothing could match.</li>
-        </ul>
-        <h3>0.17.1</h3>
-        <ul>
-          <li><b>Atlas needs IntelliJ IDEA 2026.2 from here on</b> — it used to be <i>compiled</i> against
-              2026.1 and only <i>verified</i> on 2026.2, which kept a single ZIP loadable on the older
-              branch at the price of never being able to use anything the newer one added. Nobody on the
-              team runs 2026.1 any more, so that trade stopped paying: compile target, sandbox and
-              JetBrains' Plugin Verifier now all sit on 2026.2, and an IDE below that declines the plugin
-              outright instead of loading a build nobody checked there. The visible consequence is the
-              requirement itself; everything else is the same plugin.</li>
-          <li><b>No more IDE error after opening a model out of a <code>.bar</code>/<code>.zip</code></b> —
-              the IDE's Reader Mode reformats read-only files <i>virtually</i>, and on 2026.x that machinery
-              throws on <b>minified single-line JSON</b>, which is exactly what a Flowable Design export is.
-              It looked like an Atlas defect because Atlas is what had just opened the file: the <i>Flowable
-              Model</i> search tab is the only thing in the IDE that reaches inside an archive. Atlas now
-              switches the virtual reformatting off for model files — where it could never have applied
-              anything anyway, the file being read-only. The defect itself is the platform's.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

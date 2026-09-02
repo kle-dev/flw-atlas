@@ -71,20 +71,63 @@ class SiteDocsCoverageTest {
         assertDocumented("variable silence rule(s)", "variables", fragments)
     }
 
+    /** The long flags Main.kt parses (`"--x" ->`) and the short ones (`'x' ->` in the cluster loop). */
+    private fun cliFlags(): Pair<Set<String>, Set<String>> {
+        val main = source("cli/src/main/kotlin/com/flowable/atlas/cli/Main.kt")
+        val long = Regex("\"(--[a-z-]+)\" ->").findAll(main).map { it.groupValues[1] }.toSortedSet()
+        val short = Regex("'([a-z])' ->").findAll(main).map { "-" + it.groupValues[1] }.toSortedSet()
+        return long to short
+    }
+
     @Test
     fun everyCliFlagIsDocumented() {
-        val flags = Regex("\"(--[a-z-]+)\" ->").findAll(source("cli/src/main/kotlin/com/flowable/atlas/cli/Main.kt"))
-            .map { it.groupValues[1] }.toSortedSet()
-        assertDocumented("CLI flag(s)", "cli", flags)
+        val (long, short) = cliFlags()
+        assertDocumented("CLI flag(s)", "cli", long + short)
+    }
+
+    /**
+     * The other direction: a flag the page still lists but the CLI no longer parses is a lie a reader
+     * acts on. The launcher's own flags (`--no-open`) are documented on the page and are not the jar's.
+     */
+    @Test
+    fun noDocumentedCliFlagIsGone() {
+        val (long, short) = cliFlags()
+        val launcherFlags = setOf("--no-open")
+        val documented = Regex("`(-{1,2}[a-z][a-z-]*)`").findAll(page("cli"))
+            .map { it.groupValues[1] }.toSortedSet() - launcherFlags - "--"
+        // a short cluster (`-vq`) is fine when every letter in it is a short flag
+        val isCluster = { f: String -> f.length > 2 && !f.startsWith("--") && f.drop(1).all { c -> "-$c" in short } }
+        val gone = documented.filterNot { it in long || it in short || isCluster(it) }
+        assertTrue("site/pages/cli.md documents flag(s) the CLI does not parse: $gone", gone.isEmpty())
     }
 
     @Test
     fun everyExplorerRouteIsDocumented() {
+        assertDocumented("explorer route(s)", "explorer", explorerRoutes())
+    }
+
+    private fun explorerRoutes(): Set<String> =
         // explorer.js writes `raw==='/schema'` — three equals signs, no spaces.
-        val routes = Regex("raw\\s*={2,3}\\s*'(/[a-z]+)'")
+        Regex("raw\\s*={2,3}\\s*'(/[a-z]+)'")
             .findAll(source("core/src/main/resources/frontend/explorer.js"))
             .map { "#" + it.groupValues[1] }.toSortedSet()
-        assertDocumented("explorer route(s)", "explorer", routes)
+
+    /** A route the page lists that the router no longer answers sends the reader to the overview. */
+    @Test
+    fun noDocumentedExplorerRouteIsGone() {
+        val documented = Regex("`(#/[a-z]+)`").findAll(page("explorer")).map { it.groupValues[1] }.toSortedSet()
+        val gone = documented.filterNot { it in explorerRoutes() || it == "#/browse" }
+        assertTrue("site/pages/explorer.md documents route(s) explorer.js does not route: $gone", gone.isEmpty())
+    }
+
+    /** A check id in the checks table that Findings no longer produces would be a count of nothing. */
+    @Test
+    fun noDocumentedHealthCheckIsGone() {
+        val documented = Regex("^\\| `([a-zA-Z]+)` \\|", RegexOption.MULTILINE).findAll(page("checks"))
+            .map { it.groupValues[1] }.toSortedSet()
+        assertTrue("no check ids found in the checks table — did the table change shape?", documented.isNotEmpty())
+        val gone = documented.filterNot { it in Findings.CHECK_ORDER }
+        assertTrue("site/pages/checks.md lists check(s) Findings does not produce: $gone", gone.isEmpty())
     }
 
     @Test

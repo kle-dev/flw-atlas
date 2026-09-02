@@ -1,0 +1,16 @@
+{
+  "metadata": {"key": "orderPage", "name": "Order Page", "modelType": "page", "description": "Landing page for the order team"},
+  "rows": [
+    [
+      {"id": "welcome", "type": "text", "label": "Open orders", "value": "{{openOrderCount}} orders waiting"}
+    ],
+    [
+      {
+        "id": "startOrder",
+        "type": "button",
+        "label": "Start an order",
+        "extraSettings": {"actionType": "startProcess", "processDefinitionKey": "orderProcess"}
+      }
+    ]
+  ]
+}

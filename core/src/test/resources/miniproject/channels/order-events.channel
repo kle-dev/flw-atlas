@@ -1,0 +1,8 @@
+{
+  "key": "orderEvents",
+  "name": "Order events",
+  "channelType": "inbound",
+  "type": "jms",
+  "destination": "orders.shipped",
+  "channelEventKeyDetection": {"fixedValue": "orderShipped"}
+}

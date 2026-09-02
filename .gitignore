@@ -55,3 +55,6 @@ lib/*.jar
 *.pem
 *.crt
 *.p12
+
+# Claude Code worktrees (full duplicate checkouts) — never staged, never grepped as source
+.claude/worktrees/

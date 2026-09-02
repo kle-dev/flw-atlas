@@ -179,7 +179,7 @@ Two tests in `./gradlew build` keep the site honest, so a page cannot quietly go
 
 | Test | What it holds |
 |---|---|
-| `SiteDocsCoverageTest` | Reads the real check ids, variable silence rules, CLI flags, explorer routes, inspections and actions out of the source, and fails if any of them is undocumented. A new flag without a line on the [CLI page](../cli/) is a red build, not a stale page. |
+| `SiteDocsCoverageTest` | Reads the real check ids, variable silence rules, CLI flags (long and short), explorer routes, inspections and actions out of the source, and fails if any of them is undocumented. A new flag without a line on the [CLI page](../cli/) is a red build, not a stale page. It gates the other way too: a flag, route or check id the pages still list but the code no longer has is a red build as well, because a documented thing that is gone misleads a reader as surely as a missing one. |
 | `SiteDemoProjectTest` | `site/flowable-demo` still produces at least one finding for **every** check, and exactly one deliberate parse issue — the screenshots claim all of them are real. |
 
 There is nothing to re-baseline for either: the fix is to write the sentence, because the point is that

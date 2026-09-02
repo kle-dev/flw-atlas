@@ -183,7 +183,41 @@
       "signalName": null
     }
   ],
-  "agents": [],
+  "agents": [
+    {
+      "_uses": {
+        "binding": [
+          "binding:{{customerName}}",
+          "binding:{{orderId}}"
+        ],
+        "serviceOperation": [
+          "serviceOperation:customerService#findAll"
+        ],
+        "variable": [
+          "variable:customerName",
+          "variable:orderId"
+        ]
+      },
+      "aiVendor": "openai",
+      "description": "Answers questions about an order and its shipment",
+      "enableApiEndpoint": true,
+      "file": "agents/order-assistant.agent",
+      "key": "orderAssistant",
+      "knowledgeBase": "courierManuals",
+      "modelName": "gpt-4o",
+      "name": "Order assistant",
+      "operations": [],
+      "temperature": 0.2,
+      "tools": [
+        {
+          "key": "customerService",
+          "operation": "findAll",
+          "type": "service"
+        }
+      ],
+      "type": "conversational"
+    }
+  ],
   "apps": [
     {
       "_uses": {
@@ -294,13 +328,26 @@
       "sentries": []
     }
   ],
-  "channels": [],
+  "channels": [
+    {
+      "channelType": "inbound",
+      "destination": "orders.shipped",
+      "eventKey": {
+        "fixedValue": "orderShipped"
+      },
+      "file": "channels/order-events.channel",
+      "key": "orderEvents",
+      "name": "Order events",
+      "topics": null,
+      "type": "jms"
+    }
+  ],
   "checks": {
     "guessedVars": 1,
     "invalidExpr": 2,
     "missingRefs": 1,
-    "open": 12,
-    "parseIssues": 1,
+    "open": 13,
+    "parseIssues": 2,
     "schemaGaps": 1,
     "scriptIssues": 2,
     "unreadInputs": 1,
@@ -437,9 +484,57 @@
       "kind": "parse",
       "message": "(form) Expecting property name enclosed in double quotes: line 2 column 1 (char 37)",
       "path": "broken.form"
+    },
+    {
+      "kind": "skip",
+      "message": "JSON carries no model key — not a Design model wrapper",
+      "path": "archives/demo-export.zip!manifest.json"
     }
   ],
-  "dictionaries": [],
+  "dictionaries": [
+    {
+      "description": "Shared structured types for the order models",
+      "file": "dictionaries/order-types.dictionary",
+      "key": "orderTypes",
+      "name": "Order types",
+      "typeDefs": [
+        {
+          "name": "Address",
+          "properties": [
+            {
+              "name": "city",
+              "type": "string"
+            },
+            {
+              "name": "countryCode",
+              "type": "string"
+            },
+            {
+              "name": "street",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "name": "Customer",
+          "properties": [
+            {
+              "name": "billingAddress",
+              "type": "Address"
+            },
+            {
+              "name": "customerName",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "types": [
+        "Address",
+        "Customer"
+      ]
+    }
+  ],
   "dynamicRefs": [],
   "endpoints": [
     {
@@ -525,6 +620,14 @@
       "message": "referenced model does not exist in this project",
       "node": "external:courierProcess",
       "severity": "error"
+    },
+    {
+      "check": "parseIssues",
+      "file": "archives/demo-export.zip!manifest.json",
+      "label": "archives/demo-export.zip!manifest.json",
+      "message": "skip: JSON carries no model key — not a Design model wrapper",
+      "node": null,
+      "severity": "warning"
     },
     {
       "check": "parseIssues",
@@ -887,6 +990,42 @@
         }
       ],
       "subforms": []
+    },
+    {
+      "_uses": {
+        "binding": [
+          "binding:{{openOrderCount}}"
+        ],
+        "variable": [
+          "variable:openOrderCount"
+        ]
+      },
+      "dataSources": [],
+      "description": "Landing page for the order team",
+      "fields": [
+        {
+          "id": "startOrder",
+          "label": "Start an order",
+          "required": false,
+          "type": "button",
+          "value": null
+        },
+        {
+          "id": "welcome",
+          "label": "Open orders",
+          "required": false,
+          "type": "text",
+          "value": "{{openOrderCount}} orders waiting"
+        }
+      ],
+      "file": "pages/order-page.page",
+      "ioParameters": [],
+      "key": "orderPage",
+      "modelType": "page",
+      "name": "Order Page",
+      "outcomes": [],
+      "restCalls": [],
+      "subforms": []
     }
   ],
   "graph": {
@@ -935,6 +1074,11 @@
         "rel": "calls",
         "s": "process:orderProcess",
         "t": "method:com.example.DemoBean#run"
+      },
+      {
+        "rel": "channel-event",
+        "s": "channel:orderEvents",
+        "t": "event:orderShipped"
       },
       {
         "rel": "contains",
@@ -1005,6 +1149,11 @@
         "rel": "humanTask-form",
         "s": "case:reviewCase",
         "t": "form:orderForm"
+      },
+      {
+        "rel": "knowledgeBase",
+        "s": "agent:orderAssistant",
+        "t": "knowledgeBase:courierManuals"
       },
       {
         "rel": "open-app",
@@ -1117,6 +1266,11 @@
         "t": "form:orderForm"
       },
       {
+        "rel": "tool",
+        "s": "agent:orderAssistant",
+        "t": "service:customerService"
+      },
+      {
         "rel": "triggers-action",
         "s": "form:orderForm",
         "t": "action:notifyCustomerAction"
@@ -1125,6 +1279,11 @@
         "rel": "update",
         "s": "group:backoffice",
         "t": "securityPolicy:orderPolicy"
+      },
+      {
+        "rel": "userTask-form",
+        "s": "process:archivedProcess",
+        "t": "form:orderForm"
       },
       {
         "rel": "userTask-form",
@@ -1438,6 +1597,46 @@
         "data": {
           "_uses": {
             "binding": [
+              "binding:{{customerName}}",
+              "binding:{{orderId}}"
+            ],
+            "serviceOperation": [
+              "serviceOperation:customerService#findAll"
+            ],
+            "variable": [
+              "variable:customerName",
+              "variable:orderId"
+            ]
+          },
+          "aiVendor": "openai",
+          "description": "Answers questions about an order and its shipment",
+          "enableApiEndpoint": true,
+          "file": "agents/order-assistant.agent",
+          "key": "orderAssistant",
+          "knowledgeBase": "courierManuals",
+          "modelName": "gpt-4o",
+          "name": "Order assistant",
+          "operations": [],
+          "temperature": 0.2,
+          "tools": [
+            {
+              "key": "customerService",
+              "operation": "findAll",
+              "type": "service"
+            }
+          ],
+          "type": "conversational"
+        },
+        "file": "agents/order-assistant.agent",
+        "id": "agent:orderAssistant",
+        "key": "orderAssistant",
+        "label": "Order assistant",
+        "type": "agent"
+      },
+      {
+        "data": {
+          "_uses": {
+            "binding": [
               "binding:{{minTotal}}",
               "binding:{{orderId}}"
             ],
@@ -1478,6 +1677,49 @@
         "key": "openOrdersQuery",
         "label": "Open orders",
         "type": "query"
+      },
+      {
+        "data": {
+          "_uses": {
+            "binding": [
+              "binding:{{openOrderCount}}"
+            ],
+            "variable": [
+              "variable:openOrderCount"
+            ]
+          },
+          "dataSources": [],
+          "description": "Landing page for the order team",
+          "fields": [
+            {
+              "id": "startOrder",
+              "label": "Start an order",
+              "required": false,
+              "type": "button",
+              "value": null
+            },
+            {
+              "id": "welcome",
+              "label": "Open orders",
+              "required": false,
+              "type": "text",
+              "value": "{{openOrderCount}} orders waiting"
+            }
+          ],
+          "file": "pages/order-page.page",
+          "ioParameters": [],
+          "key": "orderPage",
+          "modelType": "page",
+          "name": "Order Page",
+          "outcomes": [],
+          "restCalls": [],
+          "subforms": []
+        },
+        "file": "pages/order-page.page",
+        "id": "page:orderPage",
+        "key": "orderPage",
+        "label": "Order Page",
+        "type": "page"
       },
       {
         "data": {
@@ -2648,6 +2890,69 @@
       },
       {
         "data": {
+          "callActivities": [],
+          "candidateStarterGroups": null,
+          "conditions": [],
+          "dataObjects": [],
+          "documentation": null,
+          "events": [
+            {
+              "def": null,
+              "id": "end",
+              "name": null,
+              "type": "endEvent",
+              "value": null
+            },
+            {
+              "def": null,
+              "id": "start",
+              "name": null,
+              "type": "startEvent",
+              "value": null
+            }
+          ],
+          "file": "archives/demo-export.zip!apps/demo.bar!processes/archived.bpmn",
+          "flows": [
+            {
+              "from": "confirm",
+              "id": "f2",
+              "to": "end"
+            },
+            {
+              "from": "start",
+              "id": "f1",
+              "to": "confirm"
+            }
+          ],
+          "gateways": [],
+          "ioParameters": [],
+          "key": "archivedProcess",
+          "listeners": [],
+          "multiInstance": [],
+          "name": "Archived Process",
+          "otherTasks": [],
+          "ruleTasks": [],
+          "scriptTasks": [],
+          "serviceTasks": [],
+          "subProcesses": [],
+          "userTasks": [
+            {
+              "assignee": null,
+              "candidateGroups": null,
+              "formKey": "orderForm",
+              "id": "confirm",
+              "name": "Confirm order"
+            }
+          ]
+        },
+        "file": "archives/demo-export.zip!apps/demo.bar!processes/archived.bpmn",
+        "id": "process:archivedProcess",
+        "key": "archivedProcess",
+        "label": "Archived Process",
+        "type": "process"
+      },
+      {
+        "data": {
           "category": "demo",
           "file": "palettes/demo.palette",
           "key": "demoPalette",
@@ -2661,6 +2966,25 @@
         "key": "demoPalette",
         "label": "Demo palette",
         "type": "palette"
+      },
+      {
+        "data": {
+          "channelType": "inbound",
+          "destination": "orders.shipped",
+          "eventKey": {
+            "fixedValue": "orderShipped"
+          },
+          "file": "channels/order-events.channel",
+          "key": "orderEvents",
+          "name": "Order events",
+          "topics": null,
+          "type": "jms"
+        },
+        "file": "channels/order-events.channel",
+        "id": "channel:orderEvents",
+        "key": "orderEvents",
+        "label": "Order events",
+        "type": "channel"
       },
       {
         "data": {
@@ -2816,6 +3140,55 @@
       },
       {
         "data": {
+          "description": "Shared structured types for the order models",
+          "file": "dictionaries/order-types.dictionary",
+          "key": "orderTypes",
+          "name": "Order types",
+          "typeDefs": [
+            {
+              "name": "Address",
+              "properties": [
+                {
+                  "name": "city",
+                  "type": "string"
+                },
+                {
+                  "name": "countryCode",
+                  "type": "string"
+                },
+                {
+                  "name": "street",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "name": "Customer",
+              "properties": [
+                {
+                  "name": "billingAddress",
+                  "type": "Address"
+                },
+                {
+                  "name": "customerName",
+                  "type": "string"
+                }
+              ]
+            }
+          ],
+          "types": [
+            "Address",
+            "Customer"
+          ]
+        },
+        "file": "dictionaries/order-types.dictionary",
+        "id": "dataDictionary:orderTypes",
+        "key": "orderTypes",
+        "label": "Order types",
+        "type": "dataDictionary"
+      },
+      {
+        "data": {
           "external_url": true,
           "method": "GET"
         },
@@ -2865,6 +3238,7 @@
           "service": "customerService",
           "url": "/api/customers",
           "usedBy": [
+            "agent:orderAssistant",
             "case:reviewCase",
             "form:orderForm"
           ]
@@ -2945,7 +3319,7 @@
               "target": "subOrderId"
             }
           ],
-          "readCount": 5,
+          "readCount": 6,
           "reads": [
             {
               "element": "badApi",
@@ -2979,11 +3353,16 @@
               "via": "scriptRead"
             },
             {
+              "model": "agent:orderAssistant",
+              "via": "binding"
+            },
+            {
               "model": "query:openOrdersQuery",
               "via": "binding"
             }
           ],
           "scopes": [
+            "agent",
             "process",
             "query"
           ],
@@ -3015,6 +3394,12 @@
           ],
           "usages": [
             {
+              "model": "agent:orderAssistant",
+              "snippets": [
+                "{{orderId}}"
+              ]
+            },
+            {
               "model": "process:orderProcess",
               "snippets": [
                 "(declared / mapped)",
@@ -3033,6 +3418,7 @@
             }
           ],
           "usedBy": [
+            "agent:orderAssistant",
             "process:orderProcess",
             "query:openOrdersQuery"
           ],
@@ -4032,6 +4418,37 @@
           "readCount": 1,
           "reads": [
             {
+              "model": "page:orderPage",
+              "via": "binding"
+            }
+          ],
+          "scopes": [
+            "page"
+          ],
+          "usages": [
+            {
+              "model": "page:orderPage",
+              "snippets": [
+                "{{openOrderCount}}"
+              ]
+            }
+          ],
+          "usedBy": [
+            "page:orderPage"
+          ],
+          "writeCount": 0
+        },
+        "file": null,
+        "id": "variable:openOrderCount",
+        "key": "openOrderCount",
+        "label": "openOrderCount",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 1,
+          "reads": [
+            {
               "model": "process:fulfilmentProcess",
               "via": "expression"
             }
@@ -4149,37 +4566,6 @@
         "id": "variable:manager",
         "key": "manager",
         "label": "manager",
-        "type": "variable"
-      },
-      {
-        "data": {
-          "readCount": 1,
-          "reads": [
-            {
-              "model": "template:orderConfirmationTemplate",
-              "via": "expression"
-            }
-          ],
-          "scopes": [
-            "template"
-          ],
-          "usages": [
-            {
-              "model": "template:orderConfirmationTemplate",
-              "snippets": [
-                "${customerName}"
-              ]
-            }
-          ],
-          "usedBy": [
-            "template:orderConfirmationTemplate"
-          ],
-          "writeCount": 0
-        },
-        "file": null,
-        "id": "variable:customerName",
-        "key": "customerName",
-        "label": "customerName",
         "type": "variable"
       },
       {
@@ -4342,6 +4728,74 @@
         "key": "customer",
         "label": "customer",
         "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 2,
+          "reads": [
+            {
+              "model": "agent:orderAssistant",
+              "via": "binding"
+            },
+            {
+              "model": "template:orderConfirmationTemplate",
+              "via": "expression"
+            }
+          ],
+          "scopes": [
+            "agent",
+            "template"
+          ],
+          "usages": [
+            {
+              "model": "agent:orderAssistant",
+              "snippets": [
+                "{{customerName}}"
+              ]
+            },
+            {
+              "model": "template:orderConfirmationTemplate",
+              "snippets": [
+                "${customerName}"
+              ]
+            }
+          ],
+          "usedBy": [
+            "agent:orderAssistant",
+            "template:orderConfirmationTemplate"
+          ],
+          "writeCount": 0
+        },
+        "file": null,
+        "id": "variable:customerName",
+        "key": "customerName",
+        "label": "customerName",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "agent:orderAssistant",
+            "query:openOrdersQuery"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{orderId}}",
+        "key": "{{orderId}}",
+        "label": "{{orderId}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "agent:orderAssistant"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{customerName}}",
+        "key": "{{customerName}}",
+        "label": "{{customerName}}",
+        "type": "binding"
       },
       {
         "data": {
@@ -4514,6 +4968,18 @@
       {
         "data": {
           "usedBy": [
+            "page:orderPage"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{openOrderCount}}",
+        "key": "{{openOrderCount}}",
+        "label": "{{openOrderCount}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
             "process:fulfilmentProcess"
           ]
         },
@@ -4581,18 +5047,6 @@
         "id": "binding:{{minTotal}}",
         "key": "{{minTotal}}",
         "label": "{{minTotal}}",
-        "type": "binding"
-      },
-      {
-        "data": {
-          "usedBy": [
-            "query:openOrdersQuery"
-          ]
-        },
-        "file": null,
-        "id": "binding:{{orderId}}",
-        "key": "{{orderId}}",
-        "label": "{{orderId}}",
         "type": "binding"
       },
       {
@@ -4909,8 +5363,11 @@
   ],
   "modelIndex": {
     "action:notifyCustomerAction": "actions/notify-customer.action",
+    "agent:orderAssistant": "agents/order-assistant.agent",
     "app:demoApp": "apps/demo.app",
     "case:reviewCase": "cases/review.cmmn",
+    "channel:orderEvents": "channels/order-events.channel",
+    "dataDictionary:orderTypes": "dictionaries/order-types.dictionary",
     "dataObject:customerDO": "data/customer.data",
     "dataObject:priorityMD": "data/priority.data",
     "decision:orderDecision": "decisions/order-decision.dmn",
@@ -4918,7 +5375,9 @@
     "event:orderShipped": "events/order-shipped.event",
     "form:orderForm": "forms/order-form.form",
     "knowledgeBase:courierManuals": "knowledgebase/courier-manuals.knowledgebase",
+    "page:orderPage": "pages/order-page.page",
     "palette:demoPalette": "palettes/demo.palette",
+    "process:archivedProcess": "archives/demo-export.zip!apps/demo.bar!processes/archived.bpmn",
     "process:fulfilmentProcess": "processes/fulfilment.bpmn",
     "process:orderProcess": "processes/order.bpmn",
     "query:openOrdersQuery": "queries/open-orders.query",
@@ -5176,10 +5635,12 @@
     "{{amount > 0}}",
     "{{amount}}",
     "{{customer.email}}",
+    "{{customerName}}",
     "{{customer}}",
     "{{endpoints.baseUrl}}",
     "{{isSupervisor}}",
     "{{minTotal}}",
+    "{{openOrderCount}}",
     "{{orderId}}",
     "{{orderTotal}}"
   ],
@@ -5633,6 +6094,62 @@
       "serviceTasks": [],
       "subProcesses": [],
       "userTasks": []
+    },
+    {
+      "callActivities": [],
+      "candidateStarterGroups": null,
+      "conditions": [],
+      "dataObjects": [],
+      "documentation": null,
+      "events": [
+        {
+          "def": null,
+          "id": "end",
+          "name": null,
+          "type": "endEvent",
+          "value": null
+        },
+        {
+          "def": null,
+          "id": "start",
+          "name": null,
+          "type": "startEvent",
+          "value": null
+        }
+      ],
+      "file": "archives/demo-export.zip!apps/demo.bar!processes/archived.bpmn",
+      "flows": [
+        {
+          "from": "confirm",
+          "id": "f2",
+          "to": "end"
+        },
+        {
+          "from": "start",
+          "id": "f1",
+          "to": "confirm"
+        }
+      ],
+      "gateways": [],
+      "ioParameters": [],
+      "key": "archivedProcess",
+      "listeners": [],
+      "multiInstance": [],
+      "name": "Archived Process",
+      "otherTasks": [],
+      "ruleTasks": [],
+      "scriptTasks": [],
+      "serviceTasks": [],
+      "subProcesses": [],
+      "userTasks": [
+        {
+          "assignee": null,
+          "candidateGroups": null,
+          "formKey": "orderForm",
+          "id": "confirm",
+          "name": "Confirm order"
+        }
+      ]
     }
   ],
   "resolvedRefs": [
@@ -5658,6 +6175,17 @@
       "targetNodeType": "process",
       "targetType": "model",
       "value": "fulfilmentProcess"
+    },
+    {
+      "from": "archivedProcess",
+      "fromFile": "archives/demo-export.zip!apps/demo.bar!processes/archived.bpmn",
+      "fromType": "bpmn",
+      "kind": "form",
+      "rel": "userTask-form",
+      "target": "forms/order-form.form",
+      "targetNodeType": "form",
+      "targetType": "model",
+      "value": "orderForm"
     },
     {
       "from": "contractDocument",
@@ -5746,6 +6274,39 @@
       "targetNodeType": "service",
       "targetType": "model",
       "value": "customerService"
+    },
+    {
+      "from": "orderAssistant",
+      "fromFile": "agents/order-assistant.agent",
+      "fromType": "agent",
+      "kind": "knowledgeBase",
+      "rel": "knowledgeBase",
+      "target": "knowledgebase/courier-manuals.knowledgebase",
+      "targetNodeType": "knowledgeBase",
+      "targetType": "model",
+      "value": "courierManuals"
+    },
+    {
+      "from": "orderAssistant",
+      "fromFile": "agents/order-assistant.agent",
+      "fromType": "agent",
+      "kind": "service",
+      "rel": "tool",
+      "target": "services/customer.service",
+      "targetNodeType": "service",
+      "targetType": "model",
+      "value": "customerService"
+    },
+    {
+      "from": "orderEvents",
+      "fromFile": "channels/order-events.channel",
+      "fromType": "channel",
+      "kind": "event",
+      "rel": "channel-event",
+      "target": "events/order-shipped.event",
+      "targetNodeType": "event",
+      "targetType": "model",
+      "value": "orderShipped"
     },
     {
       "from": "orderForm",
@@ -6065,15 +6626,15 @@
     }
   ],
   "stats": {
-    "archives": 0,
+    "archives": 1,
     "dynamicEdges": 0,
-    "edges": 48,
+    "edges": 52,
     "endpoints": 2,
     "exprSkippedNested": 0,
     "groups": 3,
     "java": 2,
-    "models": 21,
-    "nodes": 91,
+    "models": 25,
+    "nodes": 99,
     "scriptIssues": 2,
     "suspectEdges": 0
   },
@@ -6110,6 +6671,7 @@
     "managerApproved",
     "minTotal",
     "notifierBean",
+    "openOrderCount",
     "orderId",
     "orderNumber",
     "orderTotal",
@@ -6118,6 +6680,7 @@
     "total"
   ],
   "warnings": [
-    "parse broken.form: (form) Expecting property name enclosed in double quotes: line 2 column 1 (char 37)"
+    "parse broken.form: (form) Expecting property name enclosed in double quotes: line 2 column 1 (char 37)",
+    "skip archives/demo-export.zip!manifest.json: JSON carries no model key — not a Design model wrapper"
   ]
 }

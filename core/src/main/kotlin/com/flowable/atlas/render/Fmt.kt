@@ -99,7 +99,7 @@ internal object Fmt {
      * the rest of the report prints them (integral values without a trailing `.0`), because the extract
      * tree carries JSON numbers as [Double].
      */
-    private fun scalar(v: Any?): String? = when (v) {
+    fun scalar(v: Any?): String? = when (v) {
         null -> null
         is Boolean -> if (v) "yes" else "no"
         is Double -> if (v.isFinite() && v == Math.floor(v)) v.toLong().toString() else v.toString()

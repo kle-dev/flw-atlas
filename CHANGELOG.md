@@ -200,6 +200,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   **Report Flowable Atlas Problem…** copies the report to the clipboard and opens the issue tracker,
   transmitting nothing on its own. The reference page also stops claiming 2026.1 support: 2026.2 has been
   the floor since 0.17.
+- **Two `overview.md` lines stop leaking the generator's internals.** An AI agent's heading read
+  `(None)` when the model states no type, and its model line `model: None/None (temp None)` when the
+  settings are absent — both omit what is unset now. A data dictionary's line printed its types as a
+  Python list literal, `types: ['Address', 'Customer']`; it is a code list. Both surfaced the moment
+  the test fixture gained an agent and a dictionary — it now carries every model type the parsers
+  know, plus a Design export with a `.bar` nested inside it.
 - **An expanded sub-process no longer wears the collapsed `[+]` marker.** The diagram painted it on
   every sub-process, over the children an expanded one lays out inside itself. It is read from the
   diagram interchange now (`isExpanded="false"`, or Design's collapsed stencil) and drawn only there.
