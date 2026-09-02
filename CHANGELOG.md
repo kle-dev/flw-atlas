@@ -111,6 +111,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   few; a first export says so. The progress bar advances per app instead of sitting still for the whole
   download, and a pull refused with HTTP 401 — the expired token, the changed password — offers *Sign out
   & retry*, which clears the stored credential, opens the connection to sign in, and pulls again.
+- **One shortcut, and a context menu on the models.** The reference page said it plainly: no action had
+  a shortcut and there was no context menu, the Hub being the surface. That stays true for everything
+  except the two that earn an exception: **Search Models…** has `Ctrl+Alt+Shift+M` (`⌥⇧⌘M`), because it
+  is the one action that competes with Shift-Shift for the hand, and a right-click on a folder, a model
+  file or an archive in the Project view offers *Generate Atlas Explorer…* and *Search Models…* — on
+  nothing else, so the menu stays as short as it was on every other file.
 - **Generating the explorer opens it.** The first generation ended in a balloon whose *Open in IDE*
   action expired with the balloon; the page you asked for now opens as a tab the moment it is written —
   from the menu action as well as from the editor's Regenerate. In the Hub, *Open in Browser* is hidden

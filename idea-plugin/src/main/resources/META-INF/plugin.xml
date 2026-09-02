@@ -258,6 +258,13 @@
               per app instead of sitting still for the whole download, and a pull refused with HTTP 401 —
               the expired token, the changed password — offers <i>Sign out &amp; retry</i>, which clears the
               stored credential, opens the connection to sign in, and pulls again.</li>
+          <li><b>One shortcut, and a context menu on the models.</b> The reference page said it plainly: no
+              action had a shortcut and there was no context menu, the Hub being the surface. That stays
+              true for everything except the two that earn an exception: <b>Search Models…</b> has
+              <code>Ctrl+Alt+Shift+M</code> (<code>⌥⇧⌘M</code>), because it is the one action that competes
+              with Shift-Shift for the hand, and a right-click on a folder, a model file or an archive in
+              the Project view offers <i>Generate Atlas Explorer…</i> and <i>Search Models…</i> — on nothing
+              else, so the menu stays as short as it was on every other file.</li>
           <li><b>Generating the explorer opens it.</b> The first generation ended in a balloon whose <i>Open
               in IDE</i> action expired with the balloon; the page you asked for now opens as a tab the
               moment it is written — from the menu action as well as from the editor's Regenerate. In the
@@ -914,7 +921,10 @@
                  pressing Shift twice and tabbing across to it, which nobody discovers unaided. -->
             <action id="Flowable.SearchModels"
                     class="com.flowable.atlas.action.SearchFlowableModelsAction"
-                    icon="AllIcons.Actions.Search"/>
+                    icon="AllIcons.Actions.Search">
+                <!-- The one action that competes with Shift-Shift for the hand: worth a chord. -->
+                <keyboard-shortcut keymap="$default" first-keystroke="control alt shift M"/>
+            </action>
             <separator/>
 
             <!-- Generate (submenu, with a nested Liquibase submenu) -->
@@ -957,6 +967,15 @@
             <!-- Debug helper; visible only with idea.is.internal=true. -->
             <action id="Flowable.DumpKeyIndex" internal="true"
                     class="com.flowable.atlas.action.DumpFlowableIndexAction"/>
+        </group>
+
+        <!-- Right-click on a folder, a model file or an archive in the Project view: the two actions
+             that are about the thing under the cursor. Hidden elsewhere (FlowableProjectViewGroup). -->
+        <group id="Flowable.ProjectViewPopup" class="com.flowable.atlas.action.FlowableProjectViewGroup" popup="false">
+            <separator/>
+            <reference ref="Flowable.GenerateAtlasExplorer"/>
+            <reference ref="Flowable.SearchModels"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
         </group>
     </actions>
 </idea-plugin>

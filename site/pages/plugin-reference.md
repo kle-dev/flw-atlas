@@ -19,17 +19,21 @@ registers languages and file types.
 
 ## Actions
 
-All actions live under **Tools → Flowable Atlas**, and are also reachable through *Find Action*.
-**None of them has a keyboard shortcut** — the Hub is the plugin's visible surface, and there are no
-context-menu or main-toolbar entries.
+All actions live under **Tools → Flowable Atlas**, and are also reachable through *Find Action*. The
+Hub is the plugin's visible surface, so there are no main-toolbar entries and only one shortcut:
+**Search Models…** is `Ctrl+Alt+Shift+M` (`⌥⇧⌘M` on macOS), because it is the one action that competes
+with Shift-Shift for the hand; rebind it under *Settings → Keymap → Plugins → Flowable Atlas*. A
+right-click on a **folder, a model file or an archive** in the Project view offers *Generate Atlas
+Explorer…* and *Search Models…* — the two actions that are about the thing under the cursor — and
+nothing on any other file.
 
 | Action | Also in |
 |---|---|
 | Atlas Hub | — |
 | Open Atlas Explorer | Atlas Hub toolbar |
 | Open Expression Playground | Atlas Hub toolbar |
-| Search Models… | Atlas Hub, *Model Index* |
-| Generate → Generate Atlas Explorer… | Atlas Hub link |
+| Search Models… | Atlas Hub, *Model Index*; Project view context menu; `Ctrl+Alt+Shift+M` |
+| Generate → Generate Atlas Explorer… | Atlas Hub link; Project view context menu |
 | Generate → Generate Model Constants… | Atlas Hub link |
 | Generate → Liquibase → From Data Object… | — |
 | Generate → Liquibase → From App(s)… | — |
