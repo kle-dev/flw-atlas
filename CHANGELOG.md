@@ -29,6 +29,13 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   "duplicate" without a word — and the shared key is reported once, as a `parseIssues` *warning* naming
   both files, because a key-only lookup (and the harvested variables and expressions) can still only go
   to one of them.
+- **A file with several processes credits each one with its own text.** The raw-text harvests — every
+  `${…}` and `{{…}}`, every `${bean.method()}` call, every declared or mapped variable — worked on the
+  whole file and attributed it to every model in it, so a deployment `.bpmn20.xml` holding two processes
+  gave each the other's expressions and variables: `usedBy` inflated, a bean-call edge from a process that
+  never calls the bean, and a variable written in one process and read in the next judged in the wrong
+  scope. Each process, case or decision now gets the text inside its own element; only what stands
+  outside all of them — the definitions header, its messages and signals — still belongs to every one.
 
 ## 0.19.0
 

@@ -7,6 +7,7 @@ import com.flowable.atlas.parsing.Constants
 import com.flowable.atlas.parsing.Discovery
 import com.flowable.atlas.parsing.ModelKinds
 import com.flowable.atlas.parsing.ModelParsers
+import com.flowable.atlas.parsing.ModelSpans
 import com.flowable.atlas.parsing.VarHarvest
 import java.io.File
 
@@ -111,29 +112,40 @@ object Atlas {
                             mkeys.add((parsed as? Map<*, *>)?.get("key"))
                         }
                     }
+                }
+            } catch (e: Exception) {
+                diag("parse", label, "($mtype) ${e.message}")
+            }
+
+            // Attribute what the raw text carries — every ${…} / {{…}}, every ${bean.method()} call,
+            // every declared or mapped variable — to the model(s) in this file. A deployment XML may hold
+            // several processes (or cases, or decisions): each gets only the text inside its own element,
+            // and what sits outside all of them (the definitions header, messages, signals) goes to every
+            // one. See ModelSpans for why crediting the whole file to each model was wrong.
+            for ((keys, text) in ModelSpans.split(raw, mtype, mkeys)) {
+                val ks = keys.filterNotNull()
+                if (ks.isEmpty()) continue
+                for (e in Constants.EXPR_RE.findAll(text).map { Constants.htmlUnescape(it.value) }) {
+                    for (k in ks) ctx.exprUse.getOrPut(e) { LinkedHashSet() }.add(k.toString())
+                }
+                for (m in Constants.MUSTACHE_RE.findAll(text).map { Constants.htmlUnescape(it.value) }) {
+                    for (k in ks) ctx.mustacheUse.getOrPut(m) { LinkedHashSet() }.add(k.toString())
+                }
+                if (parser != null) {
                     // Make ${bean.method()} references in this model visible (model → bean, labelled).
                     val calls = LinkedHashSet<Pair<String, String>>()
-                    for (em in Constants.EXPR_RE.findAll(raw)) {
+                    for (em in Constants.EXPR_RE.findAll(text)) {
                         for (cm in Constants.METHOD_CALL_FULL_RE.findAll(em.value)) {
                             val b = cm.groupValues[1]
                             val meth = cm.groupValues[2]
                             if (b !in Constants.FLOWABLE_CONTEXT && b !in Constants.JAVA_LITERALS) calls.add(b to meth)
                         }
                     }
-                    for (k in mkeys) for ((b, meth) in calls) ctx.addRef(k, mtype, label, "calls $meth()", "bean", b)
+                    for (k in ks) for ((b, meth) in calls) ctx.addRef(k, mtype, label, "calls $meth()", "bean", b)
                 }
-            } catch (e: Exception) {
-                diag("parse", label, "($mtype) ${e.message}")
+                VarHarvest.collectDeclaredVars(ctx, text, ks)
+                VarHarvest.collectDirectedVars(ctx, text, ks)
             }
-
-            // Attribute every ${…} / {{…}} occurrence to the model(s) in this file.
-            for (k in mkeys) {
-                if (k == null) continue
-                for (e in exprs) ctx.exprUse.getOrPut(e) { LinkedHashSet() }.add(k.toString())
-                for (m in musts) ctx.mustacheUse.getOrPut(m) { LinkedHashSet() }.add(k.toString())
-            }
-            VarHarvest.collectDeclaredVars(ctx, raw, mkeys)
-            VarHarvest.collectDirectedVars(ctx, raw, mkeys)
 
             if (mtype == "query") {
                 QUERY_KEY_RE.find(raw)?.let { km ->

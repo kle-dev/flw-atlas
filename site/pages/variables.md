@@ -46,6 +46,12 @@ get reported as a write nothing reads, when the reader is the engine.
 Identical sites collapse, so a variable written twice from the same element in the same way is one row,
 not two.
 
+A deployment file may hold several processes (or cases, or decisions). Each of them is credited only
+with what stands inside its own element — its expressions, its bean calls, its declared and mapped
+variables — and only what sits outside every element, the definitions header with its messages and
+signals, belongs to all of them. Crediting the whole file to each model would make a variable written
+in one process and read in the next look like a read and a write in both.
+
 ## The two verdicts
 
 The check is deliberately lopsided. A **proven** read counts. A **suspected** read counts. A construct

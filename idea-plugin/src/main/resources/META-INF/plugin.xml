@@ -160,6 +160,15 @@
               be dropped as a "duplicate" without a word — and the shared key is reported once, as a
               <code>parseIssues</code> <i>warning</i> naming both files, because a key-only lookup (and the
               harvested variables and expressions) can still only go to one of them.</li>
+          <li><b>A file with several processes credits each one with its own text.</b> The raw-text harvests
+              — every <code>${…}</code> and <code>{{…}}</code>, every <code>${bean.method()}</code> call,
+              every declared or mapped variable — worked on the whole file and attributed it to every model
+              in it, so a deployment <code>.bpmn20.xml</code> holding two processes gave each the other's
+              expressions and variables: <code>usedBy</code> inflated, a bean-call edge from a process that
+              never calls the bean, and a variable written in one process and read in the next judged in the
+              wrong scope. Each process, case or decision now gets the text inside its own element; only
+              what stands outside all of them — the definitions header, its messages and signals — still
+              belongs to every one.</li>
         </ul>
         <h3>0.19.0</h3>
         <ul>
