@@ -210,6 +210,12 @@
               — so a Kotlin <code>JavaDelegate</code> or <code>@RestController</code> is a real node with
               real edges instead of an unresolved external. A bean name two classes both claim resolves, but
               the edge is flagged suspect, as an ambiguous class name always was.</li>
+          <li><b>The error reporter is finally in the IDE.</b> 0.13.0 announced <i>Report a problem straight
+              from the error dialog</i>, and the reporter was there — but never registered in the plugin
+              descriptor, so the button never appeared and the reference page had to carry a "known gap"
+              paragraph. It is registered now: <b>Report Flowable Atlas Problem…</b> copies the report to
+              the clipboard and opens the issue tracker, transmitting nothing on its own. The reference page
+              also stops claiming 2026.1 support: 2026.2 has been the floor since 0.17.</li>
           <li><b>An expanded sub-process no longer wears the collapsed <code>[+]</code> marker.</b> The
               diagram painted it on every sub-process, over the children an expanded one lays out inside
               itself. It is read from the diagram interchange now (<code>isExpanded="false"</code>, or
@@ -807,6 +813,9 @@
                     anchor="right"
                     icon="/META-INF/atlas-hub.svg"
                     factoryClass="com.flowable.atlas.hub.AtlasHubToolWindowFactory"/>
+        <!-- "Report Flowable Atlas Problem…" in the IDE's error dialog: builds the report, copies it to
+             the clipboard and opens the issue tracker — nothing is transmitted by the plugin itself. -->
+        <errorHandler implementation="com.flowable.atlas.AtlasErrorReportSubmitter"/>
     </extensions>
 
     <projectListeners>

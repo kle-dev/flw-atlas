@@ -10,9 +10,9 @@ registers languages and file types.
 
 | | |
 |---|---|
-| Installs on | IntelliJ IDEA **2026.1** and later (`since-build 261`, `until-build 299.*`) |
+| Installs on | IntelliJ IDEA **2026.2** and later (`since-build 262`, `until-build 299.*`) |
 | Verified against | **2026.2** — what `verifyPlugin` actually runs against; a bug report submitted from Atlas states the running IDE's branch and whether it is inside that range |
-| Compiled against | The 2026.1 SDK, so one artifact loads on later versions |
+| Compiled against | The 2026.2 SDK — the floor, the compile target and the verified branch are one and the same, so one artifact loads on every later version |
 | Requires | Java 21+; the Java, XML and JSON platform modules |
 | Uses if present | The embedded browser (JCEF), for the explorer tab and the SSO login. Without it the explorer opens in an external browser instead |
 | Distribution | A ZIP attached to each [release](https://github.com/kle-dev/flw-atlas/releases/latest), signed when a signing key is configured. Not on the JetBrains Marketplace, but the release publishes an `updatePlugins.xml`, so adding it as a plugin repository puts Atlas in the IDE's normal update flow — see [getting started](../../start/#the-intellij-plugin). `until-build` stays deliberately wide, so an IDE upgrade cannot make the plugin vanish |
@@ -289,9 +289,11 @@ choice never lands in version control.
 One group, **Flowable Atlas**, used for generation results, model-index rebuilds, Design pulls, rename
 warnings, and the code generators. Generation failures offer *Show details* or *Open log*.
 
-## Known gap: the error reporter
+## Reporting a problem
 
-The 0.13.0 release notes announce *"Report a problem straight from the error dialog"*. The reporter is
-implemented, but it is **not registered in the plugin descriptor**, so it does not appear in the IDE.
-Until that is fixed, hand over an Atlas exception the old way: *Help → Show Log in Finder/Explorer*, then
-attach `idea.log` to an [issue](https://github.com/kle-dev/flw-atlas/issues/new).
+An exception raised by Atlas shows up in the IDE's error dialog with a **Report Flowable Atlas
+Problem…** button. It assembles the report — the stack trace, the plugin and IDE versions, whether the
+running IDE is inside the verified range — copies it to your clipboard and opens the
+[issue tracker](https://github.com/kle-dev/flw-atlas/issues/new) in your browser. Nothing is transmitted
+by the plugin itself: review the text before pasting, because a stack trace can carry model keys, file
+paths and expression text from your project.

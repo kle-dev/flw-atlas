@@ -67,6 +67,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   `fun`, `val`/`var` properties and `const val` constants are all read — so a Kotlin `JavaDelegate` or
   `@RestController` is a real node with real edges instead of an unresolved external. A bean name two
   classes both claim resolves, but the edge is flagged suspect, as an ambiguous class name always was.
+- **The error reporter is finally in the IDE.** 0.13.0 announced *Report a problem straight from the
+  error dialog*, and the reporter was there — but never registered in the plugin descriptor, so the button
+  never appeared and the reference page had to carry a "known gap" paragraph. It is registered now:
+  **Report Flowable Atlas Problem…** copies the report to the clipboard and opens the issue tracker,
+  transmitting nothing on its own. The reference page also stops claiming 2026.1 support: 2026.2 has been
+  the floor since 0.17.
 - **An expanded sub-process no longer wears the collapsed `[+]` marker.** The diagram painted it on
   every sub-process, over the children an expanded one lays out inside itself. It is read from the
   diagram interchange now (`isExpanded="false"`, or Design's collapsed stencil) and drawn only there.
