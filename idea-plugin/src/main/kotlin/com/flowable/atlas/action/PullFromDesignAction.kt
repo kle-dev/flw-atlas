@@ -6,8 +6,10 @@ import com.flowable.atlas.environment.AtlasCatalog
 import com.flowable.atlas.environment.ConnectionKind
 import com.flowable.atlas.environment.EnvironmentPopup
 import com.flowable.atlas.settings.EnvironmentsConfigurable
+import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.wm.WindowManager
 
@@ -25,7 +27,7 @@ import com.intellij.openapi.wm.WindowManager
  * there is something to choose from. A missing workspace or app is reported by the pull itself, which
  * beats reopening Settings and keeps the two entry points from disagreeing.
  */
-class PullFromDesignAction : AnAction() {
+class PullFromDesignAction : AnAction(), DumbAware {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
@@ -52,4 +54,6 @@ class PullFromDesignAction : AnAction() {
     override fun update(e: AnActionEvent) {
         e.presentation.isEnabled = e.project?.basePath != null
     }
+
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 }

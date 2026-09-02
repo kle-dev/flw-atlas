@@ -113,9 +113,10 @@ when you switch it. Every tooltip is drawn by the page's own bubble rather than 
 native tooltips never appear in the embedded viewer — and the plugin injects a clipboard bridge, because
 copy is blocked for local files there.
 
-Generate it from **Tools → Flowable Atlas → Generate → Generate Atlas Explorer…**, reopen it with **Open
-Atlas Explorer**, and choose which artifacts a run produces in *Settings → Tools → Flowable Atlas →
-Generation*. Full detail: [The Atlas explorer](../explorer/).
+Generate it from **Tools → Flowable Atlas → Generate → Generate Atlas Explorer…** — the page opens as a
+tab the moment it is written — reopen it later with **Open Atlas Explorer**, and choose which artifacts a
+run produces in *Settings → Tools → Flowable Atlas → Generation*. Full detail:
+[The Atlas explorer](../explorer/).
 
 ### In and out parameter tracing
 

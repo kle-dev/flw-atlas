@@ -6,9 +6,8 @@ import com.intellij.notification.NotificationType
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
-import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
-import java.nio.file.Files
+import com.intellij.testFramework.LightVirtualFile
 import java.nio.file.Path
 
 /**
@@ -97,11 +96,9 @@ object AtlasExplorerNotifier {
         notification.notify(project)
     }
 
-    /** Writes the full [log] to a temp file and opens it as an editor tab (no truncation). */
+    /** Opens the full [log] as an in-memory editor tab (no truncation, no temp file written on the EDT). */
     private fun openLogInEditor(project: Project, log: String) {
-        val path = Files.createTempFile("flowable-atlas-generation-", ".log")
-        Files.writeString(path, log)
-        LocalFileSystem.getInstance().refreshAndFindFileByNioFile(path)
-            ?.let { FileEditorManager.getInstance(project).openFile(it, true) }
+        val file = LightVirtualFile("flowable-atlas-generation.log", log)
+        FileEditorManager.getInstance(project).openFile(file, true)
     }
 }

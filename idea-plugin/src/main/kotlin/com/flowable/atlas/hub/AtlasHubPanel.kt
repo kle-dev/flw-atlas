@@ -155,7 +155,6 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
     private var populatingCombos = false
     private var connectionsEmptyRow: com.intellij.ui.dsl.builder.Row? = null
     private var designConnectionRow: com.intellij.ui.dsl.builder.Row? = null
-    private var workConnectionRow: com.intellij.ui.dsl.builder.Row? = null
     private var pullLink: javax.swing.JComponent? = null
     private val indexStatus = JBLabel()
     private val designStatus = JBLabel()
@@ -383,11 +382,11 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
             row {
                 link("Generate…") { invokeAction(FlowableActionIds.GENERATE_ATLAS_EXPLORER) }
                 // Selected entry, or the newest one when nothing is selected (the list is sorted
-                // most-recently-modified first) — the link must never be a silent no-op.
+                // most-recently-modified first). Hidden while there is nothing to open — it used to
+                // fall through to the generate dialog, which is not what a link called "Open" does;
+                // "Generate…" sits right beside it.
                 link("Open in Browser") {
-                    (selectedArtifact() ?: artifactsModel.items.firstOrNull())
-                        ?.let { AtlasBrowser.open(it.path) }
-                        ?: invokeAction(FlowableActionIds.GENERATE_ATLAS_EXPLORER)
+                    (selectedArtifact() ?: artifactsModel.items.firstOrNull())?.let { AtlasBrowser.open(it.path) }
                 }.applyToComponent { openInBrowserLink = this }
             }
         }
@@ -437,7 +436,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         // The runtime connection has one interesting fact in a status panel — which environment — and it
         // belongs to the playground rather than to the pull, so it lives beside the thing that uses it.
         group("Expression Playground") {
-            workConnectionRow = row("Environment:") {
+            row("Environment:") {
                 cell(workEnvCombo).align(AlignX.FILL).resizableColumn()
                 cell(workEnvNote)
             }
@@ -488,7 +487,15 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         val vf = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(artifact.path)
         when {
             vf != null && JBCefApp.isSupported() -> AtlasExplorerOpener.openInIde(project, vf)
-            else -> AtlasBrowser.open(artifact.path)   // JCEF unavailable → external browser
+            AtlasBrowser.canOpenFiles() -> AtlasBrowser.open(artifact.path)   // JCEF unavailable → external browser
+            else -> NotificationGroupManager.getInstance().getNotificationGroup("Flowable Atlas")
+                .createNotification(
+                    "Cannot open the explorer here",
+                    "This IDE has neither an embedded browser nor a way to launch one (a Remote Dev backend, say). " +
+                        "Open ${artifact.path.fileName} from the client machine instead.",
+                    NotificationType.WARNING,
+                )
+                .notify(project)
         }
     }
 
@@ -586,7 +593,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         indexStatus.text = snapshot.indexText
         designStatus.text = snapshot.designText
         designStaleRow?.visible(snapshot.designArtifactsStale)
-        openInBrowserLink?.isVisible = snapshot.browserAvailable
+        openInBrowserLink?.isVisible = snapshot.browserAvailable && snapshot.artifacts.isNotEmpty()
         applyArtifacts(snapshot)
         applyPullSelection(snapshot)
     }
@@ -702,12 +709,6 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         if (connection == null) AtlasConnectionSelection.selectNone(project, kind)
         else AtlasConnectionSelection.select(project, kind, connection.id)
     }
-
-    /** A padlock, not a warning: nothing is wrong with PROD, it is simply guarded. */
-    private fun lockIcon(resolution: AtlasConnectionSelection.Resolution): javax.swing.Icon? =
-        (resolution as? AtlasConnectionSelection.Resolution.Selected)
-            ?.takeIf { it.connection.requiresConfirmation }
-            ?.let { AllIcons.Nodes.Padlock }
 
     // -- pull selection ---------------------------------------------------------------------------
 

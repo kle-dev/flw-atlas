@@ -97,6 +97,19 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   inlay-hint, key-recognition and Java-expression toggles re-run highlighting when applied instead of
   waiting for you to type into every open file, and the "invalid class name" balloon opens the page the
   class name is actually on.
+- **Generating the explorer opens it.** The first generation ended in a balloon whose *Open in IDE*
+  action expired with the balloon; the page you asked for now opens as a tab the moment it is written —
+  from the menu action as well as from the editor's Regenerate. In the Hub, *Open in Browser* is hidden
+  while there is nothing to open instead of quietly turning into the generate dialog, and a double-click
+  on an artifact where neither an embedded nor an external browser exists (a Remote Dev backend) says so
+  rather than doing nothing.
+- **Menu actions stay usable while the IDE indexes, and never freeze it.** Every Atlas action greyed out
+  in dumb mode — right after opening a project, when *Pull from Design* and *Rebuild Model Index* are
+  what you want and neither needs the IDE's indices; the actions that need no PSI are `DumbAware` now.
+  *Open Atlas Explorer* walked the project six levels deep on the UI thread when the output folder was
+  empty (a visible freeze on a cold monorepo) — it searches in the background. The generation-failure
+  log opens as an in-memory tab instead of a temp file written on the UI thread, sub-project detection
+  runs once at a time instead of once per Hub event, and two dead fields left the Hub.
 - **The error reporter is finally in the IDE.** 0.13.0 announced *Report a problem straight from the
   error dialog*, and the reporter was there — but never registered in the plugin descriptor, so the button
   never appeared and the reference page had to carry a "known gap" paragraph. It is registered now:

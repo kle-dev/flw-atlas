@@ -6,6 +6,7 @@ import com.flowable.atlas.settings.EnvironmentsConfigurable
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.wm.WindowManager
 
@@ -14,7 +15,7 @@ import com.intellij.openapi.wm.WindowManager
  * but the Hub is a tool window someone may not have open — and *Find Action* is how a lot of this
  * plugin's users reach everything else, so the switch belongs there too.
  */
-abstract class SwitchEnvironmentAction(private val kind: ConnectionKind) : AnAction() {
+abstract class SwitchEnvironmentAction(private val kind: ConnectionKind) : AnAction(), DumbAware {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
@@ -34,7 +35,7 @@ class SwitchDesignEnvironmentAction : SwitchEnvironmentAction(ConnectionKind.DES
 class SwitchWorkEnvironmentAction : SwitchEnvironmentAction(ConnectionKind.WORK)
 
 /** Opens the environment editor — replaces the old "Configure Design Connection…". */
-class ManageEnvironmentsAction : AnAction() {
+class ManageEnvironmentsAction : AnAction(), DumbAware {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return

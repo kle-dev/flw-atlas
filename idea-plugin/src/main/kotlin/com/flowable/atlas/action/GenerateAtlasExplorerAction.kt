@@ -1,11 +1,14 @@
 package com.flowable.atlas.action
 
 import com.flowable.atlas.explorer.AtlasArtifact
+import com.flowable.atlas.explorer.AtlasExplorerOpener
 import com.flowable.atlas.explorer.AtlasGenerationRunner
 import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
+import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.fileChooser.FileChooserFactory
@@ -13,6 +16,7 @@ import com.intellij.openapi.fileChooser.FileSaverDescriptor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.VirtualFile
 import java.nio.file.Path
 
 /**
@@ -24,7 +28,7 @@ import java.nio.file.Path
  * external browser or inside the IDE; generated files stay in the project so they can be reopened
  * later.
  */
-class GenerateAtlasExplorerAction : AnAction() {
+class GenerateAtlasExplorerAction : AnAction(), DumbAware {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
@@ -55,7 +59,13 @@ class GenerateAtlasExplorerAction : AnAction() {
         val wrapper = FileChooserFactory.getInstance()
             .createSaveFileDialog(descriptor, project)
             .save(baseDir, defaultName) ?: return   // user cancelled
-        AtlasGenerationRunner.generateExplorer(project, wrapper.file.toPath())
+        AtlasGenerationRunner.generateExplorer(project, wrapper.file.toPath(), onSuccess = openWhenDone(project))
+    }
+
+    /** The page you asked for opens when it is ready — the balloon's "Open in IDE" used to be the
+     *  only way there, and it expired with the balloon. */
+    private fun openWhenDone(project: Project): (VirtualFile?) -> Unit = { vf ->
+        if (vf != null && !project.isDisposed) AtlasExplorerOpener.openInIde(project, vf)
     }
 
     private fun generateAllToFolder(project: Project, projectDir: Path) {
@@ -66,7 +76,7 @@ class GenerateAtlasExplorerAction : AnAction() {
             .withTitle("Select Output Folder for Atlas Artifacts")
             .withDescription("The artifacts selected in Settings are written here")
         val chosen = FileChooser.chooseFile(descriptor, project, preselect) ?: return   // user cancelled
-        AtlasGenerationRunner.generateAll(project, chosen.toNioPath())
+        AtlasGenerationRunner.generateAll(project, chosen.toNioPath(), onSuccess = openWhenDone(project))
     }
 
     /**
@@ -94,4 +104,6 @@ class GenerateAtlasExplorerAction : AnAction() {
     override fun update(e: AnActionEvent) {
         e.presentation.isEnabled = e.project?.basePath != null
     }
+
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 }

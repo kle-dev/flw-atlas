@@ -5,6 +5,7 @@ import com.intellij.ide.actions.searcheverywhere.SearchEverywhereManager
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.ui.Messages
 
@@ -16,7 +17,7 @@ import com.intellij.openapi.ui.Messages
  * something anyone discovers on their own — so the plugin's own surfaces (this menu entry and the
  * Atlas Hub's *Model Index* row) point at it.
  */
-class SearchFlowableModelsAction : AnAction() {
+class SearchFlowableModelsAction : AnAction(), DumbAware {
 
     private val LOG = logger<SearchFlowableModelsAction>()
 

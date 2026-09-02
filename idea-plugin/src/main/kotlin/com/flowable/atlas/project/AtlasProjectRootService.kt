@@ -85,17 +85,27 @@ class AtlasProjectRootService(private val project: Project) {
     /** Detect sub-projects on a pooled thread (never the EDT), cache it, then run [onDone] with it. */
     fun detectAsync(onDone: (List<ProjectDetection.SubProject>) -> Unit) {
         val base = project.basePath ?: return
+        // One walk at a time: the Hub asks on every refresh until a result exists, and a burst of
+        // events (settings applied, environments changed, index updated) used to queue a full
+        // detection per event. The running walk's onDone refreshes the Hub for all of them.
+        if (!detecting.compareAndSet(false, true)) return
         ApplicationManager.getApplication().executeOnPooledThread {
-            if (project.isDisposed) return@executeOnPooledThread
-            // Warn: an empty result disables the whole sub-project switcher, so "detection crashed"
-            // must not look like "this is a single-project repo".
-            val detected = runCatching { ProjectDetection.detect(File(base)) }
-                .onFailure { LOG.warn("Flowable sub-project detection failed under $base", it) }
-                .getOrDefault(emptyList())
-            detectedCache = detected
-            onDone(detected)
+            try {
+                if (project.isDisposed) return@executeOnPooledThread
+                // Warn: an empty result disables the whole sub-project switcher, so "detection crashed"
+                // must not look like "this is a single-project repo".
+                val detected = runCatching { ProjectDetection.detect(File(base)) }
+                    .onFailure { LOG.warn("Flowable sub-project detection failed under $base", it) }
+                    .getOrDefault(emptyList())
+                detectedCache = detected
+                onDone(detected)
+            } finally {
+                detecting.set(false)
+            }
         }
     }
+
+    private val detecting = java.util.concurrent.atomic.AtomicBoolean()
 
     companion object {
         /** Whether the user has made an explicit project choice, in [PropertiesComponent] (workspace-local). */

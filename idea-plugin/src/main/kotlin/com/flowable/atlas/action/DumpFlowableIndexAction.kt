@@ -2,6 +2,7 @@ package com.flowable.atlas.action
 
 import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.FlowableModelIndexService
+import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
@@ -33,4 +34,6 @@ class DumpFlowableIndexAction : AnAction() {
     override fun update(e: AnActionEvent) {
         e.presentation.isEnabled = e.getData(CommonDataKeys.PROJECT) != null
     }
+
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 }

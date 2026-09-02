@@ -6,8 +6,12 @@ import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.actionSystem.ex.ActionUtil
+import com.intellij.openapi.project.DumbAware
+import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.popup.JBPopupFactory
@@ -23,7 +27,7 @@ import java.nio.file.Path
  * Discovery (see [AtlasExplorerFiles]) looks under the configured output folder first, falling back
  * to a bounded scan of the project. Zero matches offers to generate one; one opens directly; several show a chooser.
  */
-class OpenAtlasExplorerAction : AnAction() {
+class OpenAtlasExplorerAction : AnAction(), DumbAware {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
@@ -33,12 +37,26 @@ class OpenAtlasExplorerAction : AnAction() {
             return
         }
 
-        val files = AtlasExplorerFiles.find(base, FlowableAtlasProjectSettings.getInstance(project).atlasOutputDir)
-        when (files.size) {
-            0 -> offerToGenerate(project, e)
-            1 -> openExplorer(project, files.first())
-            else -> chooseAndOpen(project, base, files)
-        }
+        val outputDir = FlowableAtlasProjectSettings.getInstance(project).atlasOutputDir
+        // The search walks the project six levels deep when the output folder is empty — on a cold
+        // filesystem cache over a monorepo that is a visible freeze from a menu click, so it runs in
+        // the background and comes back to the EDT with what it found.
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Looking for Atlas explorer files", true) {
+            private var files: List<Path> = emptyList()
+
+            override fun run(indicator: ProgressIndicator) {
+                files = AtlasExplorerFiles.find(base, outputDir)
+            }
+
+            override fun onSuccess() {
+                if (project.isDisposed) return
+                when (files.size) {
+                    0 -> offerToGenerate(project, e.place)
+                    1 -> openExplorer(project, files.first())
+                    else -> chooseAndOpen(project, base, files)
+                }
+            }
+        })
     }
 
     /** Resolve [path] to a (freshly refreshed) VirtualFile and show it in the embedded viewer. */
@@ -72,7 +90,7 @@ class OpenAtlasExplorerAction : AnAction() {
             .showCenteredInCurrentWindow(project)
     }
 
-    private fun offerToGenerate(project: Project, e: AnActionEvent) {
+    private fun offerToGenerate(project: Project, place: String) {
         val outputDir = FlowableAtlasProjectSettings.getInstance(project).atlasOutputDir
         val choice = Messages.showYesNoDialog(
             project,
@@ -84,12 +102,15 @@ class OpenAtlasExplorerAction : AnAction() {
             Messages.getQuestionIcon(),
         )
         if (choice == Messages.YES) {
+            // A fresh data context: the original event is stale after the background search.
             ActionManager.getInstance().getAction(FlowableActionIds.GENERATE_ATLAS_EXPLORER)
-                ?.let { ActionUtil.performAction(it, e) }
+                ?.let { ActionManager.getInstance().tryToExecute(it, null, null, place, true) }
         }
     }
 
     override fun update(e: AnActionEvent) {
         e.presentation.isEnabled = e.project?.basePath != null
     }
+
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 }

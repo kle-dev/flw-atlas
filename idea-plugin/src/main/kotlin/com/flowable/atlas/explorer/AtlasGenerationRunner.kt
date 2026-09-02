@@ -36,10 +36,16 @@ object AtlasGenerationRunner {
         }
     }
 
-    /** Generate the artifacts selected in the project settings into [outputDir]. */
-    fun generateAll(project: Project, outputDir: Path, quiet: Boolean = false) {
+    /** Generate the artifacts selected in the project settings into [outputDir]. [onSuccess] runs on
+     *  the EDT with the explorer page's VirtualFile — null when the selection did not include it. */
+    fun generateAll(
+        project: Project,
+        outputDir: Path,
+        quiet: Boolean = false,
+        onSuccess: ((explorerVf: VirtualFile?) -> Unit)? = null,
+    ) {
         val projectDir = projectDir(project) ?: return
-        run(project, "Generating Flowable Atlas artifacts", quiet, onSuccess = null) { indicator ->
+        run(project, "Generating Flowable Atlas artifacts", quiet, onSuccess) { indicator ->
             AtlasGeneratorService.getInstance(project).generateAll(projectDir, outputDir, indicator)
         }
     }
