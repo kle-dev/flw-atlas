@@ -47,6 +47,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   unreadable Java source costs that one file instead of aborting the run with a stack trace, and a model
   whose diagram could not be produced says so on its page (`diagramError`) and on the CLI, instead of
   looking like a model that simply has no layout.
+- **Test code is not the project.** Java under `src/test`, `src/integrationTest` and any other test
+  source set is no longer scanned: a JUnit class calling `setVariable("foo", …)` registered a production
+  write, so a variable only a test ever set could be reported as written-but-never-read, and a test
+  `@RestController` became an endpoint the models could supposedly reach. Models under
+  `src/test/resources` are still read — a test process is a model somebody has to keep in step.
 
 ## 0.19.0
 

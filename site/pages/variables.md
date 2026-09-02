@@ -37,7 +37,7 @@ The sites come from everywhere a name can appear:
 | DMN inputs and outputs | read and write |
 | Form fields, form properties, form outcomes | write |
 | Data objects, multi-instance elements and collections, the initiator, variable extractors | write |
-| Java `setVariable` / `getVariable` calls | write and read |
+| Java `setVariable` / `getVariable` calls — in production sources only; `src/test/**` and every other test source set are not scanned | write and read |
 
 Three kinds of name are dropped before they ever become a site: beans, Flowable's own context roots,
 and Java string literals. That last one matters specifically so a Java `setVariable("…", …)` does not

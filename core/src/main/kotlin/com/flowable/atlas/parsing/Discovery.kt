@@ -35,7 +35,10 @@ object Discovery {
             .forEach { f ->
                 val low = f.name.lowercase()
                 when {
-                    low.endsWith(".java") -> javas.add(f)
+                    // Test code is not the project (see ModelPaths.isTestSource); models under a test
+                    // source set still are, which is why this is a per-file rule and not a pruned directory.
+                    low.endsWith(".java") ->
+                        if (!ModelPaths.isTestSource(f.relativeTo(root).invariantSeparatorsPath)) javas.add(f)
                     ModelPaths.isArchive(low) -> archives.add(f)
                     ModelKinds.modelTypeFor(f.name) != null -> models.add(f)
                     // legacy Design-workspace layout: per-model JSON wrappers inside `<type>-models/`

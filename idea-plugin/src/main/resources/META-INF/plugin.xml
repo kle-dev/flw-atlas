@@ -182,6 +182,13 @@
               and a model whose diagram could not be produced says so on its page
               (<code>diagramError</code>) and on the CLI, instead of looking like a model that simply has no
               layout.</li>
+          <li><b>Test code is not the project.</b> Java under <code>src/test</code>,
+              <code>src/integrationTest</code> and any other test source set is no longer scanned: a JUnit
+              class calling <code>setVariable("foo", …)</code> registered a production write, so a variable
+              only a test ever set could be reported as written-but-never-read, and a test
+              <code>@RestController</code> became an endpoint the models could supposedly reach. Models
+              under <code>src/test/resources</code> are still read — a test process is a model somebody has
+              to keep in step.</li>
         </ul>
         <h3>0.19.0</h3>
         <ul>
