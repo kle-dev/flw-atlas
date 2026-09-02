@@ -133,6 +133,31 @@ class CliTest {
         assertEquals(2, run(arrayOf("/no/such/path")))
     }
 
+    /**
+     * `--fail-on` is what makes Atlas usable as a CI gate: the fixture carries a deliberately broken
+     * form (a parse *error*), so `--fail-on error` returns 1 — with every artifact still written, because
+     * a pipeline wants the report as well as the red build. A check nobody has heard of is a misuse.
+     */
+    @Test
+    fun failOnTurnsFindingsIntoExitOneButStillWrites() {
+        val out = tempDir()
+        assertEquals(1, run(arrayOf(fixtureDir().path, "--all", "-o", out.path, "-q", "--fail-on", "error")))
+        assertEquals("the artifacts are written before the verdict", 5, out.listFiles()!!.count { it.isFile })
+        assertEquals(1, run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--fail-on", "parseIssues")))
+        assertEquals(1, run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--fail-on=warning,missingRefs")))
+        assertEquals(2, run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--fail-on", "nosuchcheck")))
+    }
+
+    @Test
+    fun theJarAnswersHelpAndRefusesAllWithSlice() {
+        assertEquals(0, run(arrayOf("--help")))
+        assertEquals(0, run(arrayOf("-h")))
+        // `--all` used to win over `--slice` silently; every other flag conflict was already an error.
+        assertEquals(2, run(arrayOf(fixtureDir().path, "--all", "--slice", "orderProcess", "-q")))
+        // -v is read now (it lists the parse issues); it must not change the exit code
+        assertEquals(0, run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-v")))
+    }
+
     // ---- helpers ----
 
     private fun tempDir(): File = Files.createTempDirectory("atlas-cli-test").toFile()

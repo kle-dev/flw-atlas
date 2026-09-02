@@ -86,6 +86,15 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   the canvas, not only in its rows. Every shape is a keyboard stop with a name for a screen reader, and
   Enter or Space opens its card. A cancelled drag no longer leaves the diagram panning with no button
   held, and each info card's size observer is disconnected with the card instead of piling up.
+- **The CLI can fail a build.** Every run exited 0 whatever it found, so Atlas could describe a broken
+  project but never stop one — and none of the four reference projects had a model check in CI.
+  `--fail-on error`, `--fail-on warning`, or a list of check ids (`--fail-on missingRefs,invalidExpr`)
+  makes the run exit 1 when a finding matches, *after* writing every artifact, so a pipeline gets the
+  report and the red build; an unknown value is a misuse. Three smaller truths on the way: `java -jar
+  … --help` prints the usage instead of exit 2 (only the launcher had a help), `-v` lists the parse
+  issues the status line has been counting all along instead of being parsed and never read, and
+  `--all --slice` is the argument error every other flag conflict already was rather than a silent win
+  for `--all`.
 - **From the explorer straight into the code.** Inside IntelliJ the embedded explorer offered a
   clipboard bridge and nothing else, so the source path it shows for every model and Java class, and the
   line it shows for every method and REST handler, could be copied but not followed. The plugin now

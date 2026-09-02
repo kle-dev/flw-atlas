@@ -30,7 +30,7 @@ object Findings {
      * describes every one of them — a new check that nobody documented should fail the build, not
      * quietly make the published list wrong.
      */
-    internal val CHECK_ORDER = listOf(
+    val CHECK_ORDER = listOf(
         "parseIssues", "invalidExpr", "scriptIssues", "missingRefs", "changelogIssues",
         "schemaGaps", "suspectExpr", "unusedForms", "unusedOps", "unusedFns",
         "unusedVars", "unreadInputs", "guessedVars",

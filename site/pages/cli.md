@@ -86,9 +86,21 @@ single-artifact run writes `APP_OVERVIEW.*` unless you name the file with `-o`. 
 | `--expr-allowlist <list>` | Comma-separated expression namespaces / functions your project registers itself, so they stop being reported as *suspect*. See [Expressions](../expressions/#the-allowlist). |
 | `--custom-functions <path>` | Where to look for frontend customisation sources, instead of the project root. |
 | `--no-custom-functions` | Do not discover custom functions at all. |
+| `--fail-on <list>` | Make the run **exit 1** when findings match — a comma-separated list of `error`, `warning` and/or [check ids](../checks/) (`--fail-on error`, `--fail-on missingRefs,invalidExpr`). Every artifact is still written first: a pipeline wants the report as well as the red build. An unknown value is a misuse (exit 2). |
 | `-q`, `--quiet` | Silence the status lines on stderr. |
-| `-v`, `--verbose` | Accepted and counted, but **currently has no effect** — the flag is parsed and never read. |
+| `-v`, `--verbose` | List every parse issue the status line counts, one per line, after it. |
+| `-h`, `--help` | Print the usage text and exit 0. |
 | `--` | End of options; the next token is the path. |
+
+The one-line CI recipe:
+
+```bash
+java -jar cli-<version>-all.jar . --all -o atlas-output --fail-on error
+```
+
+writes the five artifacts (keep them as build artifacts) and fails the job on any error-level finding —
+a model that would not parse, an expression with a syntax error, a reference to a model that does not
+exist. Tighten to `--fail-on warning` once the project is clean.
 
 Short flags cluster: `-vq`, `-qv` and `-oreport.md` all work, and `o` consumes the rest of its token
 or the next one.
@@ -98,7 +110,7 @@ or the next one.
 `--slice` and `--pretty` sit outside the mutually-exclusive format group, which has two consequences
 worth knowing because nothing warns you:
 
-- `--all --slice X` writes the five artifacts and **ignores the slice**.
+- `--all --slice X` is an error (exit 2), like any other conflict between two output requests.
 - `--slice X --json` writes the slice and **ignores `--json`**.
 - `--claude-template` returns before the path is even checked, and ignores `--stdout` (it prints to
   stdout anyway when no `-o` is given).
@@ -108,7 +120,8 @@ worth knowing because nothing warns you:
 | Code | When |
 |---|---|
 | `0` | Success. |
-| `2` | Argument misuse: an unknown flag, two format flags, a missing option value, a second positional, a path that does not exist, a missing path, or a `--slice` that matches no node. |
+| `1` | The run succeeded and wrote its artifacts, but a finding matched `--fail-on`. |
+| `2` | Argument misuse: an unknown flag, two format flags, `--all` with `--slice`, an unknown `--fail-on` value, a missing option value, a second positional, a path that does not exist, a missing path, or a `--slice` that matches no node. |
 
 ## The status line
 

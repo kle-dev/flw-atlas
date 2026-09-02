@@ -49,9 +49,10 @@ fun run(args: Array<String>): Int {
     var stdout = false; var open = false; var noCustom = false; var quiet = false
     var pretty = false
     var slice: String? = null
-    @Suppress("UNUSED_VARIABLE") var verbose = 0
+    var verbose = 0
     var exprAllowlist = ""
     var customFunctions: String? = null
+    var failOn: String? = null
 
     var i = 0
     var endOpts = false
@@ -94,8 +95,10 @@ fun run(args: Array<String>): Int {
                     "--expr-allowlist" -> exprAllowlist = value(name, inline) ?: return 2
                     "--custom-functions" -> customFunctions = value(name, inline) ?: return 2
                     "--no-custom-functions" -> noCustom = true
+                    "--fail-on" -> failOn = value(name, inline) ?: return 2
                     "--verbose" -> verbose++
                     "--quiet" -> quiet = true
+                    "--help" -> { System.out.write(usage().toByteArray(Charsets.UTF_8)); System.out.flush(); return 0 }
                     else -> { errln("error: unrecognized arguments: $tok"); return 2 }
                 }
             }
@@ -107,6 +110,7 @@ fun run(args: Array<String>): Int {
                     when (val c = tok[j]) {
                         'v' -> verbose++
                         'q' -> quiet = true
+                        'h' -> { System.out.write(usage().toByteArray(Charsets.UTF_8)); System.out.flush(); return 0 }
                         'o' -> {
                             val inline = if (j + 1 < tok.length) tok.substring(j + 1) else null
                             output = value("-o", inline) ?: return 2
@@ -126,6 +130,18 @@ fun run(args: Array<String>): Int {
     if (listOf(all, json, html, summary, claude, claudeTemplate).count { it } > 1) {
         errln("error: argument --all/--json/--html/--summary/--claude/--claude-template: " +
             "not allowed with one another")
+        return 2
+    }
+    // `--all` used to win over `--slice` without a word — the one flag conflict that was not an error.
+    if (all && slice != null) {
+        errln("error: argument --slice: not allowed with --all")
+        return 2
+    }
+    // `--fail-on` names severities and/or check ids; an unknown one is a misuse, not a silent no-match.
+    val failOnTerms = failOn?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+    val knownChecks = com.flowable.atlas.graph.Findings.CHECK_ORDER
+    failOnTerms.firstOrNull { it != "error" && it != "warning" && it !in knownChecks }?.let { bad ->
+        errln("error: argument --fail-on: unknown value '$bad' — expected error, warning or one of ${knownChecks.joinToString(", ")}")
         return 2
     }
 
@@ -181,6 +197,31 @@ fun run(args: Array<String>): Int {
         if (scriptIssuesN > 0) append(" $MIDDLE_DOT $WARN_SIGN $scriptIssuesN script issue(s)")
         if (nDiag > 0) append(" $MIDDLE_DOT $WARN_SIGN $nDiag parse issue(s), see -v")
     }
+    // -v: the parse issues the status line counts, one per line — the flag was accepted and never read.
+    val diagnosticLines: List<String> = if (verbose > 0) {
+        (result["diagnostics"] as? List<*>).orEmpty().mapNotNull { d ->
+            (d as? Map<*, *>)?.let { "  ${it["kind"]} ${it["path"]}: ${it["message"]}" }
+        }
+    } else emptyList()
+
+    // --fail-on: the findings that make this run a failure. Every artifact is still written — a CI job
+    // wants the report AND the red build — and the exit code becomes 1 after the output.
+    @Suppress("UNCHECKED_CAST")
+    val findings = (result["findings"] as? List<Map<String, Any?>>).orEmpty()
+    val failing = findings.filter { f ->
+        val sev = f["severity"] as? String
+        failOnTerms.any { t -> (t == "error" && sev == "error") || (t == "warning") || t == f["check"] }
+    }
+    fun exitAfterOutput(): Int {
+        if (!quiet) diagnosticLines.forEach(::errln)
+        if (failing.isEmpty()) return 0
+        if (!quiet) {
+            val byCheck = failing.groupingBy { it["check"].toString() }.eachCount()
+                .entries.sortedByDescending { it.value }.joinToString(", ") { "${it.value} ${it.key}" }
+            errln("$WARN_SIGN --fail-on ${failOnTerms.joinToString(",")}: ${failing.size} finding(s) — $byCheck")
+        }
+        return 1
+    }
 
     // name = os.path.splitext(os.path.basename(os.path.abspath(path.rstrip('/'))))[0] or "project"
     val abs = File(projectPath.trimEnd('/').ifEmpty { "." }).absoluteFile.normalize()
@@ -224,7 +265,7 @@ fun run(args: Array<String>): Int {
             for (p in written) errln("  $CHECK ${p.path}")
         }
         if (open) written.firstOrNull { it.path.endsWith(".html") }?.let { openFile(it.path) }
-        return 0
+        return exitAfterOutput()
     }
 
     // ---- --slice: one node with its context, in both directions ----
@@ -243,7 +284,7 @@ fun run(args: Array<String>): Int {
             System.out.write((text + "\n").toByteArray(Charsets.UTF_8))
             System.out.flush()
         }
-        return 0
+        return exitAfterOutput()
     }
 
     // ---- single-artifact modes ----
@@ -259,7 +300,7 @@ fun run(args: Array<String>): Int {
         // sys.stdout.write(out + "\n")
         System.out.write((out + "\n").toByteArray(Charsets.UTF_8))
         System.out.flush()
-        return 0
+        return exitAfterOutput()
     }
 
     val target: String = if (output != null) {
@@ -272,8 +313,43 @@ fun run(args: Array<String>): Int {
     File(target).writeText(out, Charsets.UTF_8)
     if (!quiet) errln("wrote $target $EM_DASH $status")
     if (open && ext == "html") openFile(target)
-    return 0
+    return exitAfterOutput()
 }
+
+/** `--help`: the flags, in the order the reference page lists them. The launcher had a help; the jar answered exit 2. */
+private fun usage(): String = """
+Flowable Atlas — map a Flowable project (models and Java) into readable, clickable, queryable artifacts.
+
+usage: java -jar cli-<version>-all.jar <path> [options]
+       <path> is a project directory, a single model file, or an exported .zip / .bar archive
+
+output (mutually exclusive):
+  (none)              the full Markdown report (APP_OVERVIEW.md)
+  --all               all five artifacts into a directory (-o, default .), plus <name>.diagrams/
+  --summary           the compact LLM-first overview
+  --html              the interactive explorer
+  --json              the traversable graph
+  --claude            drop-in agent context (CLAUDE.md)
+  --claude-template   the project-independent Flowable primer (needs no path)
+
+options:
+  -o, --output <path>         output file — or, with --all, the output directory
+  --slice <type:key>          render one node with its full context (not with --all)
+  --stdout                    write the single artifact to stdout
+  --open                      open the result in a browser (--all, --html)
+  --pretty                    indent graph.json
+  --expr-allowlist <list>     comma-separated expression namespaces/functions the project registers itself
+  --custom-functions <path>   where to look for frontend customisation sources
+  --no-custom-functions       do not discover custom functions
+  --fail-on <list>            exit 1 when findings match: error, warning, and/or check ids
+                              (${com.flowable.atlas.graph.Findings.CHECK_ORDER.joinToString(", ")})
+  -v, --verbose               list every parse issue the status line counts
+  -q, --quiet                 silence the status lines on stderr
+  -h, --help                  this text
+  --                          end of options; the next token is the path
+
+exit codes: 0 success · 1 a --fail-on finding matched (artifacts are still written) · 2 argument misuse
+""".trimStart()
 
 /**
  * Faithful port of `os.path.splitext(basename)[0]`: split off the last extension, but treat leading

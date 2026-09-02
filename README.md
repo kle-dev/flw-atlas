@@ -38,7 +38,8 @@ Both artifacts are attached to every
   [`idea-plugin/dist/README.md`](idea-plugin/dist/README.md).
 - **CLI** — download `cli-<version>-all.jar` into `lib/` and run `./atlas <project>`, or
   `java -jar cli-<version>-all.jar <project> --all`. Needs only a JRE 21+. See
-  [`lib/README.md`](lib/README.md).
+  [`lib/README.md`](lib/README.md). In CI, add `--fail-on error` and the job fails on any error-level
+  finding while the artifacts are still written.
 
 `SHA256SUMS.txt` in each release carries the checksums; releases are signed when a signing key is
 configured. Building from source instead: `./gradlew :idea-plugin:buildPlugin :cli:shadowJar`.
