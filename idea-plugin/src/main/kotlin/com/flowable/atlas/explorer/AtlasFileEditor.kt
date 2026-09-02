@@ -1,5 +1,7 @@
 package com.flowable.atlas.explorer
 
+import com.flowable.atlas.events.AtlasEvents
+import com.flowable.atlas.events.AtlasEventsListener
 import com.intellij.icons.AllIcons
 import com.intellij.ide.ui.LafManagerListener
 import com.intellij.openapi.actionSystem.ActionManager
@@ -17,6 +19,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.ui.EditorNotifications
 import com.intellij.ui.JBColor
 import com.intellij.ui.jcef.JBCefBrowser
 import com.intellij.ui.jcef.JBCefBrowserBase
@@ -28,6 +31,7 @@ import org.cef.handler.CefLoadHandlerAdapter
 import java.awt.BorderLayout
 import java.awt.datatransfer.StringSelection
 import java.beans.PropertyChangeListener
+import java.nio.file.Path
 import javax.swing.JComponent
 import javax.swing.JPanel
 
@@ -71,6 +75,17 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
         browser.jbCefClient.addLoadHandler(loadHandler, browser.cefBrowser)
         ApplicationManager.getApplication().messageBus.connect(this)
             .subscribe(LafManagerListener.TOPIC, LafManagerListener { pushIdeTheme() })
+        // The "models changed since this was generated" banner (AtlasExplorerStaleNotificationProvider)
+        // is re-evaluated whenever what it compares moves: the index (newest model mtime), a pull, or a
+        // regeneration — which clears it, since the runner publishes artifactsGenerated after writing.
+        project.messageBus.connect(this).subscribe(
+            AtlasEvents.TOPIC,
+            object : AtlasEventsListener {
+                override fun modelIndexUpdated() = refreshBanner()
+                override fun artifactsGenerated(explorerHtml: Path?, written: List<Path>) = refreshBanner()
+                override fun designPullFinished(succeeded: Boolean) = refreshBanner()
+            },
+        )
 
         val toolbar = ActionManager.getInstance()
             .createActionToolbar("AtlasExplorerEditor", buildToolbarGroup(), true)
@@ -86,6 +101,16 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
     }
 
     private fun ideTheme(): String = if (JBColor.isBright()) "light" else "dark"
+
+    /** Schedule-only, as the listener contract asks: EditorNotifications batches and runs it itself. */
+    private fun refreshBanner() {
+        if (!project.isDisposed) EditorNotifications.getInstance(project).updateNotifications(file)
+    }
+
+    /** Re-run the generator for this page and reload it — the toolbar's Regenerate, and the banner's. */
+    internal fun regenerate() {
+        AtlasGenerationRunner.generateExplorer(project, file.toNioPath(), quiet = true) { load() }
+    }
 
     private fun load() {
         browser.loadURL(file.url + "?ideTheme=" + ideTheme())
@@ -111,7 +136,7 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
     private fun buildToolbarGroup() = DefaultActionGroup(
         object : AnAction("Regenerate", "Re-run the Atlas generator for this file and reload", AllIcons.Actions.ForceRefresh), DumbAware {
             override fun actionPerformed(e: AnActionEvent) {
-                AtlasGenerationRunner.generateExplorer(project, file.toNioPath(), quiet = true) { load() }
+                regenerate()
             }
 
             override fun update(e: AnActionEvent) {

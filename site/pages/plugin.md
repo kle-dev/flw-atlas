@@ -29,7 +29,10 @@ you act on it without opening a menu.
 </figure>
 
 The Hub reports whether the model index has been built and when it was last scanned, which explorer was
-generated and whether the models have changed since, and which environments this project is pointed at.
+generated and whether the models have changed since — any model in scope newer than the newest page
+counts, whether it arrived through a Design pull, a `git pull`, an unzipped export or a hand edit — and
+which environments this project is pointed at. The same comparison puts a banner above an open explorer
+tab, with *Regenerate* on it, so a stale page says so where you are reading it.
 **Rebuild**, **Generate Constants…**, **Generate…**, **Open in Browser** and **Pull from …** each sit
 beside the thing they change. In a monorepo the *Flowable Project* section is a switcher: pick the
 sub-project Atlas operates on, and the index, the output folder and the Design target follow. It is a

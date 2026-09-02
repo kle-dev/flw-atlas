@@ -36,6 +36,10 @@ class FlowableIndex(
     val restCalls: Set<RestCallScanner.RestRef> = emptySet(),
     /** Wall-clock time this snapshot was built (epoch millis); 0 when not set by the scanner. */
     val builtAtMillis: Long = 0L,
+    /** The newest modification time among the model files and archives scanned (epoch millis); 0 when
+     *  nothing was scanned. What "have the models changed since this report was generated?" compares
+     *  against — [builtAtMillis] measures the scan, not the models, and would flag every report on Rebuild. */
+    val newestModelMtime: Long = 0L,
 ) {
 
     private val distinctByType: Map<ModelType, List<ModelEntry>> by lazy {

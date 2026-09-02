@@ -469,6 +469,11 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
             userTaskIds = userTaskIds, activityIds = activityIds,
             restCalls = restCalls,
             builtAtMillis = System.currentTimeMillis(),
+            // `timeStamp` is a cached VFS attribute — no I/O — and the candidates were visited anyway.
+            newestModelMtime = candidates.maxOfOrNull { it.timeStamp } ?: 0L,
         )
     }
+
+    /** When a model or archive in scope was last modified, per the cached index; null before a build. */
+    fun newestModelMtimeOrNull(): Long? = cachedOrNull()?.newestModelMtime?.takeIf { it > 0 }
 }

@@ -23,6 +23,7 @@ import com.flowable.atlas.events.AtlasEventsListener
 import com.flowable.atlas.explorer.AtlasBrowser
 import com.flowable.atlas.explorer.AtlasExplorerFiles
 import com.flowable.atlas.explorer.AtlasExplorerOpener
+import com.flowable.atlas.explorer.AtlasExplorerStaleness
 import com.flowable.atlas.explorer.AtlasGenerationRunner
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
@@ -100,7 +101,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         val indexText: String,
         val artifacts: List<ExplorerArtifact>,
         val designText: String,
-        val designArtifactsStale: Boolean,
+        val explorerStale: Boolean,
         val browserAvailable: Boolean,
         /** A Design connection resolved — enough to show (and use) the workspace/app pickers. */
         val designServerSet: Boolean,
@@ -158,7 +159,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
     private var pullLink: javax.swing.JComponent? = null
     private val indexStatus = JBLabel()
     private val designStatus = JBLabel()
-    private var designStaleRow: com.intellij.ui.dsl.builder.Row? = null
+    private var staleRow: com.intellij.ui.dsl.builder.Row? = null
     private var openInBrowserLink: javax.swing.JComponent? = null
     private val artifactsModel = CollectionListModel<ExplorerArtifact>()
     private val artifactsList = JBList(artifactsModel).apply {
@@ -389,6 +390,13 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
                     (selectedArtifact() ?: artifactsModel.items.firstOrNull())?.let { AtlasBrowser.open(it.path) }
                 }.applyToComponent { openInBrowserLink = this }
             }
+            // Shown when a model in scope is newer than the newest generated page — after a Design pull,
+            // a git pull, an unzipped export, a hand edit alike (AtlasExplorerStaleness). The index
+            // follows such changes on its own; the generated HTML does not, so offer the regenerate here.
+            staleRow = row {
+                label("Models changed since the last generation.")
+                link("Regenerate Atlas Explorer") { AtlasGenerationRunner.regenerate(project) }
+            }.visible(false)
         }
         // One section, one task, in the order the work is actually done: which environment, which
         // workspace in it, which apps, pull. Splitting the first two into a separate "Connections"
@@ -426,12 +434,6 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
                 link("Manage environments…") { invokeAction(FlowableActionIds.MANAGE_ENVIRONMENTS) }
             }
             row { cell(designStatus) }
-            // Shown only when models were pulled after the Atlas Explorer was last generated: the index
-            // rebuilds on pull, but the generated explorer HTML does not — offer a one-click regenerate.
-            designStaleRow = row {
-                label("Models changed since the last generation.")
-                link("Regenerate Atlas Explorer") { AtlasGenerationRunner.regenerate(project) }
-            }.visible(false)
         }
         // The runtime connection has one interesting fact in a status panel — which environment — and it
         // belongs to the playground rather than to the pull, so it lives beside the thing that uses it.
@@ -571,13 +573,14 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
             ""
         }
         // Stale when the last pull happened after the newest generated explorer artifact.
-        val designArtifactsStale = designConnection != null &&
-            isExplorerStale(artifacts.map { it.modified }, lastPullMillis)
+        val explorerStale = AtlasExplorerStaleness.isStale(
+            artifacts.map { it.modified }, AtlasExplorerStaleness.latestModelChange(project),
+        )
 
         return Snapshot(
             detected?.map { it.relPath }.orEmpty(), active, projectNote,
             indexText, artifacts, designText,
-            designArtifactsStale, AtlasBrowser.canOpenFiles(),
+            explorerStale, AtlasBrowser.canOpenFiles(),
             designConnection != null, designResolution, workResolution,
             AtlasCatalog.environments(project).isNotEmpty(),
             designConnection?.environmentName.orEmpty(),
@@ -592,7 +595,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         applyProject(snapshot)
         indexStatus.text = snapshot.indexText
         designStatus.text = snapshot.designText
-        designStaleRow?.visible(snapshot.designArtifactsStale)
+        staleRow?.visible(snapshot.explorerStale)
         openInBrowserLink?.isVisible = snapshot.browserAvailable && snapshot.artifacts.isNotEmpty()
         applyArtifacts(snapshot)
         applyPullSelection(snapshot)
@@ -1040,7 +1043,8 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         private const val GROUP_ID = "Flowable Atlas"
 
         /** A generated explorer is stale when something was pulled after its newest artifact was written. */
-        internal fun isExplorerStale(artifactMtimes: List<Long>, lastPullMillis: Long?): Boolean =
-            lastPullMillis != null && artifactMtimes.isNotEmpty() && artifactMtimes.max() < lastPullMillis
+        /** The predicate lives in [AtlasExplorerStaleness] now (shared with the editor banner). */
+        internal fun isExplorerStale(artifactMtimes: List<Long>, changedAt: Long?): Boolean =
+            AtlasExplorerStaleness.isStale(artifactMtimes, changedAt)
     }
 }

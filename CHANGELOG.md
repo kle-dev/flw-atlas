@@ -97,6 +97,13 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   inlay-hint, key-recognition and Java-expression toggles re-run highlighting when applied instead of
   waiting for you to type into every open file, and the "invalid class name" balloon opens the page the
   class name is actually on.
+- **A stale explorer says so — after any change, not only a Design pull.** The Hub's "models changed
+  since the last generation" row compared the page against the last pull alone, and only with a Design
+  connection configured, so a team that gets its models through git never saw it, and the explorer tab
+  itself never said anything. The index now carries the newest modification time of the models and
+  archives it scanned; the Hub row compares against that (or the pull, whichever is newer) with no
+  connection required, and an open explorer tab shows a banner with *Regenerate* on it. Both clear
+  themselves when the page is regenerated.
 - **Generating the explorer opens it.** The first generation ended in a balloon whose *Open in IDE*
   action expired with the balloon; the page you asked for now opens as a tab the moment it is written —
   from the menu action as well as from the editor's Regenerate. In the Hub, *Open in Browser* is hidden
