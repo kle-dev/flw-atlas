@@ -20,7 +20,7 @@ That writes five artifacts to `./atlas-output/<project>/` and opens the explorer
 | `<project>.CLAUDE.md` | Drop-in context for AI agents — a Flowable primer plus this project's discovered facts. Copy it to your repo root as `CLAUDE.md`. |
 
 It resolves the relationships a Flowable repository does not state: app → models, process → the case,
-decision or form it calls, `${bean.method()}` → the **Java class and method** with `file:line`, form →
+decision or form it calls, `${bean.method()}` → the **Java or Kotlin class and method** with `file:line` (a `@Bean` factory method included), form →
 REST endpoint → controller, action → bot, data object → service → Liquibase table, and who can start
 what. Whatever cannot be resolved is listed separately, so a real gap stands out.
 

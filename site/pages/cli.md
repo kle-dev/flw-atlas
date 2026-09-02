@@ -119,6 +119,8 @@ Atlas understood your project:
 412 models · 88 java · 3104 nodes · 5192 links · 412 resolved / 23 unresolved refs · 17 suspect / 4 dynamic links · ⚠ 3 parse issue(s)
 ```
 
+- **java** — the Java *and Kotlin* sources read (one parser handles both); test source sets are not
+  counted, because they are not scanned.
 - **resolved / unresolved refs** — references Atlas could and could not tie to something real.
 - **suspect / dynamic links** — resolved, but not certainly: *suspect* came from a loose or
   cross-type match, *dynamic* from an expression-valued reference.

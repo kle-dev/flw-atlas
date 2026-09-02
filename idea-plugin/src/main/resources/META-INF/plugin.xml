@@ -197,6 +197,19 @@
               <code>}</code>) gets no verdict, as before — but it is counted
               (<code>stats.exprSkippedNested</code>) and its page says <i>not validated</i> and why, so an
               unjudged expression cannot pass for a clean one.</li>
+          <li><b><code>@Bean</code> factory methods are beans, and Kotlin sources are read.</b> Bean
+              resolution knew only the stereotype annotations on a class — <code>@Component</code>,
+              <code>@Service</code>, <code>@Repository</code>, <code>@Named</code> — so a delegate
+              registered the standard way for code you do not own, a <code>@Bean</code> method in a
+              <code>@Configuration</code> class, was invisible: every model naming it resolved to nothing.
+              Such a bean now resolves to <i>its method's line</i>, named after the method unless the
+              annotation says otherwise. And <code>.kt</code> files go through the same pass as
+              <code>.java</code> — package, <code>class</code>/<code>object</code>/<code>enum class</code>,
+              the supertype list after the primary constructor, <code>fun</code>,
+              <code>val</code>/<code>var</code> properties and <code>const val</code> constants are all read
+              — so a Kotlin <code>JavaDelegate</code> or <code>@RestController</code> is a real node with
+              real edges instead of an unresolved external. A bean name two classes both claim resolves, but
+              the edge is flagged suspect, as an ambiguous class name always was.</li>
           <li><b>An expanded sub-process no longer wears the collapsed <code>[+]</code> marker.</b> The
               diagram painted it on every sub-process, over the children an expanded one lays out inside
               itself. It is read from the diagram interchange now (<code>isExpanded="false"</code>, or

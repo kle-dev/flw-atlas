@@ -110,8 +110,10 @@ object ReferenceResolver {
         val javaConstants = LinkedHashMap<String, String>()
         val javaOpCalls = LinkedHashMap<String, List<Map<String, String>>>()
         // Simple class names shared by more than one class — resolving through them is a guess
-        // (first-wins), so any ref that falls back to such a name is flagged `suspect`.
+        // (first-wins), so any ref that falls back to such a name is flagged `suspect`. The same for a
+        // bean name two classes both claim (`@Component("x")` twice, or a factory method of that name).
         val ambiguousSimple = HashSet<String>()
+        val ambiguousBeans = HashSet<String>()
         for (path in javas) {
             val rel = relOf(path)
             // The read is inside the try as well: one unreadable source used to abort the whole run
@@ -126,7 +128,7 @@ object ReferenceResolver {
             }
             val primary = jc["primary"] as String
             val fqn = jc["fqn"] as String
-            for (b in jc["beanNames"] as Collection<String>) beanIndex.putIfAbsent(b, jc)
+            for (b in jc["beanNames"] as Collection<String>) if (beanIndex.putIfAbsent(b, jc) != null) ambiguousBeans.add(b)
             if (classIndex.putIfAbsent(primary, jc) != null) ambiguousSimple.add(primary)
             fqnIndex[fqn] = jc
             for (ep in jc["endpoints"] as List<Map<String, Any?>>) {
@@ -252,12 +254,16 @@ object ReferenceResolver {
                 kind == "bean" -> {
                     val cap = if (value.isNotEmpty()) value[0].uppercaseChar() + value.substring(1) else value
                     val jc = beanIndex[value] ?: classIndex[cap]
-                    target = if (jc != null) "${jc["file"]}:${jc["line"]} (${jc["fqn"]})" else null
+                    // A factory bean points at its @Bean method, not at the configuration class's header.
+                    val line = (jc?.get("beanMethods") as? Map<*, *>)?.get(value) ?: jc?.get("line")
+                    target = if (jc != null) "${jc["file"]}:$line (${jc["fqn"]})" else null
                     ref2["target"] = target
                     ref2["targetType"] = "bean"
                     ref2["targetFqn"] = jc?.get("fqn")
-                    // Resolved through a shared simple name — first-wins guess, keep it flagged.
+                    // Resolved through a shared simple name or a bean name two classes claim — a
+                    // first-wins guess either way, so keep it flagged.
                     if (jc != null && beanIndex[value] == null && cap in ambiguousSimple) ref2["suspect"] = true
+                    if (jc != null && value in ambiguousBeans) ref2["suspect"] = true
                 }
                 kind == "class" -> {
                     val simple = value.substringAfterLast('.')

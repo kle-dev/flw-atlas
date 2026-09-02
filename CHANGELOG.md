@@ -58,6 +58,15 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   skipped now. And an expression whose harvested body still holds a `{` (the harvester may have cut it
   short at the first `}`) gets no verdict, as before — but it is counted (`stats.exprSkippedNested`) and
   its page says *not validated* and why, so an unjudged expression cannot pass for a clean one.
+- **`@Bean` factory methods are beans, and Kotlin sources are read.** Bean resolution knew only the
+  stereotype annotations on a class — `@Component`, `@Service`, `@Repository`, `@Named` — so a delegate
+  registered the standard way for code you do not own, a `@Bean` method in a `@Configuration` class, was
+  invisible: every model naming it resolved to nothing. Such a bean now resolves to *its method's line*,
+  named after the method unless the annotation says otherwise. And `.kt` files go through the same pass
+  as `.java` — package, `class`/`object`/`enum class`, the supertype list after the primary constructor,
+  `fun`, `val`/`var` properties and `const val` constants are all read — so a Kotlin `JavaDelegate` or
+  `@RestController` is a real node with real edges instead of an unresolved external. A bean name two
+  classes both claim resolves, but the edge is flagged suspect, as an ambiguous class name always was.
 - **An expanded sub-process no longer wears the collapsed `[+]` marker.** The diagram painted it on
   every sub-process, over the children an expanded one lays out inside itself. It is read from the
   diagram interchange now (`isExpanded="false"`, or Design's collapsed stencil) and drawn only there.

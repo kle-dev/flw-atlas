@@ -114,8 +114,8 @@ It discovers models — `.bpmn`, `.cmmn`, `.dmn`, `.form`, `.app`, `.service`, `
 and Liquibase changelogs. Then it resolves the relationships between them:
 
 - app → its models; process or case → the process, case, decision or form it calls;
-- `${bean.method()}`, `delegateExpression` and listeners → the **Java class and method**, with
-  `file:line`;
+- `${bean.method()}`, `delegateExpression` and listeners → the **Java or Kotlin class and method**, a
+  `@Bean` factory method included, with `file:line`;
 - form or process → **REST endpoint** → the controller that serves it;
 - action → the Java `BotService` that implements it; agent → its tools;
 - data object → its backing service, its columns and its **Liquibase** table;

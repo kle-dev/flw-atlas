@@ -30,6 +30,73 @@ class JavaParserTest {
 
     @Test
     @Suppress("UNCHECKED_CAST")
+    fun factoryMethodsDeclareBeansNamedAfterTheMethodOrTheAnnotation() {
+        val src = """package com.x;
+            @Configuration
+            public class Delegates {
+                @Bean
+                public JavaDelegate approveOrder() { return e -> {}; }
+
+                @Bean("legacyNotifier")
+                @Primary
+                public JavaDelegate notifier() { return e -> {}; }
+
+                @Bean(name = "auditHook")
+                JavaDelegate audit() { return e -> {}; }
+            }"""
+        val jc = JavaParser.parseJava(src, "Delegates.java")
+        val beans = jc["beanNames"] as Set<String>
+        assertEquals(setOf("approveOrder", "legacyNotifier", "auditHook"), beans)
+        val lines = jc["beanMethods"] as Map<String, Int>
+        assertEquals(4, lines["approveOrder"])
+        assertEquals(7, lines["legacyNotifier"])
+        assertTrue("configuration" in (jc["roles"] as Set<String>))
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun kotlinSourcesAreReadWithTheSamePass() {
+        val src = """package com.x.kt
+
+            import org.springframework.stereotype.Component
+
+            const val SCORE_PROCESS = "scoreProcess"
+
+            @Component
+            class ScoreService(private val repo: ScoreRepo) : JavaDelegate, ExecutionListener {
+                override fun execute(execution: DelegateExecution) {
+                    execution.setVariable("score", repo.compute())
+                    runtimeService.startProcessInstanceByKey("scoreProcess")
+                }
+                fun helper(a: Int, b: String) = a
+            }"""
+        val jc = JavaParser.parseJava(src, "ScoreService.kt")
+        assertEquals("ScoreService", jc["primary"])
+        assertEquals("com.x.kt.ScoreService", jc["fqn"])
+        assertTrue("scoreService" in (jc["beanNames"] as Set<String>))
+        assertEquals(setOf("JavaDelegate", "ExecutionListener"), jc["interfaces"] as Set<String>)
+        assertTrue("delegate" in (jc["roles"] as Set<String>))
+        assertTrue((jc["isGlue"] as Boolean))
+        assertEquals(listOf("execute", "helper"), (jc["methods"] as List<Map<String, Any?>>).map { it["name"] })
+        assertTrue("ScoreRepo" in (jc["deps"] as Set<String>))
+        assertTrue("score" in (jc["varWrites"] as List<String>))
+        assertTrue("scoreProcess" in (jc["keyedStrings"] as Set<String>))
+        assertEquals(mapOf("SCORE_PROCESS" to "scoreProcess"), JavaParser.stringConstants(src))
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun kotlinObjectsAndEnumClassesAreTypes() {
+        val src = """package com.x
+            enum class Status { OPEN, CLOSED }
+            object Keys { const val A: String = "a" }"""
+        val jc = JavaParser.parseJava(src, "Status.kt")
+        assertEquals(listOf("Status", "Keys"), jc["types"] as List<String>)
+        assertEquals("Status", jc["primary"])
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
     fun variableAccessesAreSplitByVerb() {
         val src = """package com.x;
             public class MyBean {

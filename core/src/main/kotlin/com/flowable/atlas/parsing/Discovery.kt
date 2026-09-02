@@ -6,8 +6,8 @@ import java.io.File
 /**
  * Walks a project directory (or classifies a single archive) into the file lists Atlas analyses —
  * a port of `flowable_atlas.py` `discover` (~line 1250). Build-output directories ([ModelPaths.EXCLUDE_DIRS])
- * are pruned; the rest are bucketed into Flowable models, `.zip`/`.bar` archives, `.java` sources, and
- * `.xml`/`.sql` Liquibase-changelog candidates.
+ * are pruned; the rest are bucketed into Flowable models, `.zip`/`.bar` archives, `.java` and `.kt`
+ * sources (one parser reads both — see [JavaParser]), and `.xml`/`.sql` Liquibase-changelog candidates.
  */
 object Discovery {
 
@@ -37,7 +37,7 @@ object Discovery {
                 when {
                     // Test code is not the project (see ModelPaths.isTestSource); models under a test
                     // source set still are, which is why this is a per-file rule and not a pruned directory.
-                    low.endsWith(".java") ->
+                    low.endsWith(".java") || low.endsWith(".kt") ->
                         if (!ModelPaths.isTestSource(f.relativeTo(root).invariantSeparatorsPath)) javas.add(f)
                     ModelPaths.isArchive(low) -> archives.add(f)
                     ModelKinds.modelTypeFor(f.name) != null -> models.add(f)

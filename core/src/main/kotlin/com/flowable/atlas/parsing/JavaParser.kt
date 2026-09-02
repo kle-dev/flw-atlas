@@ -9,10 +9,24 @@ package com.flowable.atlas.parsing
  */
 object JavaParser {
 
-    private val PKG_RE = Regex("""^\s*package\s+([\w.]+)\s*;""", RegexOption.MULTILINE)
-    private val TYPE_RE = Regex("""\b(?:public\s+|final\s+|abstract\s+)*(class|interface|enum)\s+(\w+)""")
+    // Java and Kotlin share one pass: the annotations Spring and Flowable care about are spelled the
+    // same, so the regexes only have to tolerate Kotlin's spellings of the surrounding syntax — no `;`
+    // after the package, `object`/`enum class`, a supertype list after the primary constructor, `fun`.
+    private val PKG_RE = Regex("""^\s*package\s+([\w.]+)\s*;?""", RegexOption.MULTILINE)
+    private val TYPE_RE = Regex("""\b(?:(?:public|final|abstract|open|data|internal|sealed|private)\s+)*(class|interface|enum\s+class|enum|object)\s+(\w+)""")
     private val BEAN_ANN_RE = Regex("""@(Component|Service|Repository|Named)\s*(?:\(\s*(?:value\s*=\s*)?"([^"]+)"\s*\))?""")
+    // `@Bean` / `@Bean("name")` / `@Bean(name = "name")` on a factory method: the bean is what the method
+    // returns, named after the method unless the annotation says otherwise. Beans declared this way —
+    // in a @Configuration class, for a delegate one does not own — were invisible: every model that
+    // named one resolved to nothing.
+    private val BEAN_METHOD_ANN_RE = Regex("""@Bean\b(?:\s*\((?:[^)"]*?(?:name|value)\s*=\s*)?\{?\s*"([^"]+)"[^)]*\))?""")
+    private val ANNOTATION_RE = Regex("""@\w+(?:\.\w+)*(?:\s*\([^)]*\))?""")
+    private val FIRST_CALLABLE_RE = Regex("""\b(\w+)\s*\(""")
     private val IMPLEMENTS_RE = Regex("""\bimplements\s+([\w.,\s<>]+?)\s*\{""")
+    // Kotlin: `class X(…) : A, B(), C<T> {` — the supertype list after the primary constructor.
+    private val KT_SUPERTYPES_RE = Regex("""\b(?:class|object)\s+\w+(?:<[^>]*>)?(?:\s*\([^)]*\))?\s*:\s*([\w.,\s<>()]+?)\s*\{""")
+    private val KT_METHOD_RE = Regex("""\bfun\s+(?:<[^>]*>\s*)?(?:[\w.]+\.)?(\w+)\s*\(([^)]*)\)""")
+    private val KT_PROP_RE = Regex("""\b(?:val|var)\s+\w+\s*:\s*([A-Z]\w+)""")
     private val MAPPING_RE = Regex("""@(Get|Post|Put|Delete|Patch|Request)Mapping\b\s*(?:\(([^)]*)\))?""")
     private val CONTROLLER_RE = Regex("""@(RestController|Controller)\b""")
     private val METHOD_RE = Regex("""(?:public|protected|private)\s+(?:[\w${'$'}<>\[\].,]+\s+)+?(\w+)\s*\(([^;{)]*)\)\s*(?:throws[\w.,\s]+)?\{""")
@@ -43,7 +57,7 @@ object JavaParser {
 
     // `static final String NAME = "value";` constant declarations — used to resolve a data-object key
     // referenced by a constant (e.g. a generated model-keys class field) back to its literal value.
-    private val STRING_CONST_RE = Regex("""\bstatic\s+final\s+String\s+(\w+)\s*=\s*"([^"]+)"""")
+    private val STRING_CONST_RE = Regex("""\b(?:static\s+final\s+String|const\s+val)\s+(\w+)\s*(?::\s*String)?\s*=\s*"([^"]+)"""")
 
     // A string literal that is the first argument of a method call — `method("literal"` — so the
     // literal's call context is known. Literals passed to a known key-taking Flowable API produce a
@@ -95,6 +109,7 @@ object JavaParser {
 
     fun parseJava(rawText: String, ffile: String): Map<String, Any?> {
         val text = blankComments(rawText)
+        val kotlin = ffile.lowercase().endsWith(".kt")
         fun lineOf(idx: Int): Int = text.substring(0, idx).count { it == '\n' } + 1
 
         val pkg = PKG_RE.find(text)?.groupValues?.get(1) ?: ""
@@ -105,10 +120,23 @@ object JavaParser {
         for (m in BEAN_ANN_RE.findAll(text)) {
             beanNames.add(m.groupValues[2].ifEmpty { decap(primary) })
         }
+        // Factory beans: the method after the annotation (other annotations in between skipped).
+        val beanMethods = LinkedHashMap<String, Int>()
+        for (m in BEAN_METHOD_ANN_RE.findAll(text)) {
+            val tail = text.substring(m.range.last + 1, minOf(m.range.last + 1 + 400, text.length))
+            val method = FIRST_CALLABLE_RE.find(ANNOTATION_RE.replace(tail, " "))?.groupValues?.get(1)
+                ?.takeIf { it !in CONTROL_KEYWORDS } ?: continue
+            val name = m.groupValues[1].ifEmpty { method }
+            beanNames.add(name)
+            beanMethods.putIfAbsent(name, lineOf(m.range.first))
+        }
         val interfaces = LinkedHashSet<String>()
-        for (m in IMPLEMENTS_RE.findAll(text)) {
-            for (it in m.groupValues[1].split(",")) {
-                interfaces.add(Regex("<.*?>").replace(it, "").trim().substringAfterLast('.'))
+        val supertypeLists = IMPLEMENTS_RE.findAll(text).map { it.groupValues[1] } +
+            (if (kotlin) KT_SUPERTYPES_RE.findAll(text).map { it.groupValues[1] } else emptySequence())
+        for (list in supertypeLists) {
+            for (it in list.split(",")) {
+                // `AbstractServiceTask()` — a Kotlin superclass constructor call — is the type without the parens
+                interfaces.add(Regex("<.*?>").replace(it, "").replace("()", "").trim().substringAfterLast('.'))
             }
         }
 
@@ -140,7 +168,7 @@ object JavaParser {
 
         val methods = ArrayList<Map<String, Any?>>()
         val seenM = HashSet<String>()
-        for (m in METHOD_RE.findAll(text)) {
+        for (m in (if (kotlin) KT_METHOD_RE else METHOD_RE).findAll(text)) {
             val nm = m.groupValues[1]
             if (nm in CONTROL_KEYWORDS) continue
             val params = m.groupValues[2].trim()
@@ -151,11 +179,16 @@ object JavaParser {
         }
 
         val deps = LinkedHashSet<String>()
-        FIELD_RE.findAll(text).forEach { deps.add(it.groupValues[1]) }
-        val ctorRe = Regex("""(?:public|protected)\s+""" + Regex.escape(primary) + """\s*\(([^)]*)\)""")
-        val ctorParamRe = Regex("""\b([A-Z]\w+)(?:<[^>]*>)?\s+\w+""")
-        for (cm in ctorRe.findAll(text)) {
-            ctorParamRe.findAll(cm.groupValues[1]).forEach { deps.add(it.groupValues[1]) }
+        if (kotlin) {
+            // properties and primary-constructor parameters alike: `val repo: ScoreRepo`
+            KT_PROP_RE.findAll(text).forEach { deps.add(it.groupValues[1]) }
+        } else {
+            FIELD_RE.findAll(text).forEach { deps.add(it.groupValues[1]) }
+            val ctorRe = Regex("""(?:public|protected)\s+""" + Regex.escape(primary) + """\s*\(([^)]*)\)""")
+            val ctorParamRe = Regex("""\b([A-Z]\w+)(?:<[^>]*>)?\s+\w+""")
+            for (cm in ctorRe.findAll(text)) {
+                ctorParamRe.findAll(cm.groupValues[1]).forEach { deps.add(it.groupValues[1]) }
+            }
         }
 
         val roles = LinkedHashSet<String>()
@@ -202,7 +235,7 @@ object JavaParser {
             }
         }
 
-        return linkedMapOf(
+        val out = linkedMapOf<String, Any?>(
             "file" to ffile, "package" to pkg, "primary" to primary,
             "fqn" to (if (pkg.isNotEmpty()) "$pkg.$primary" else primary),
             "types" to types, "beanNames" to beanNames, "interfaces" to interfaces, "roles" to roles,
@@ -217,6 +250,9 @@ object JavaParser {
             "topics" to TOPIC_CALL_RE.findAll(text).map { it.groupValues[1] }.toSortedSet().toList(),
             "line" to (if (classDeclIdx != -1) lineOf(classDeclIdx) else 1),
         )
+        // bean name → line of its @Bean factory method, so a reference lands on the method, not the class
+        if (beanMethods.isNotEmpty()) out["beanMethods"] = beanMethods
+        return out
     }
 
     /** A `static final String NAME = "value"` constant declared in the source (name → value). */
