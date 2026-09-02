@@ -15,6 +15,7 @@
     --space-3:12px; --space-35:14px; --space-4:16px; --space-5:20px; --space-6:24px;
     --space-7:28px; --space-8:32px;
     --sidebar-w:240px;          /* live width of the expanded sidebar (JS-set via the drag handle) */
+    --topbar-h:48px;            /* the logo row and the topbar share it, so the two columns line up */
     --pal-w:576px;              /* live width of the ⌘K palette (JS-set from the remembered size) */
     --radius-xs:2px; --radius-sm:4px; --radius-md:6px; --radius-lg:8px;
     --radius-xl:12px; --radius-2xl:16px; --radius-full:999px;
@@ -28,7 +29,7 @@
     --bg:#fafafa; --panel:#ffffff; --panel2:#f8fafc; --line:#e2e8f0; --line2:#d2d6da;
     --ink:#131e29; --ink-dim:#4c5b6a; --ink-faint:#79848f; --accent:#0f55d6;
     --accent-hover:#0c44ab; --accent-subtle:#eff6ff; --hover:#f1f5f9; --active:#e5f0ff; --input:#ffffff;
-    --sel-text:#1d4ed8; --sel-bar:#2563eb;
+    --sel-text:#1d4ed8; --sel-bar:#2563eb; --on-accent:#ffffff;
     /* Search-hit highlight. Deliberately NOT the accent: the accent already means "selected row", and a
        hit inside a selected row has to stay readable against it. */
     --hl-bg:#fde68a; --hl-ink:#422d00;
@@ -63,7 +64,7 @@
     --bg:#0c141c; --panel:#131e29; --panel2:#111c26; --line:#1f3245; --line2:#415161;
     --ink:#e9eef0; --ink-dim:#a5adb5; --ink-faint:#62707d; --accent:#6f99e6;
     --accent-hover:#9bb5d2; --accent-subtle:rgba(111,153,230,.12); --hover:#1a2b3b; --active:#1c3551; --input:#111c26;
-    --sel-text:#cfddf7; --sel-bar:#6f99e6;
+    --sel-text:#cfddf7; --sel-bar:#6f99e6; --on-accent:#ffffff;
     --hl-bg:rgba(250,204,21,.28); --hl-ink:#fde68a;
     --scroll:#415161; --scroll-hover:#62707d;
     --shadow:0 10px 15px -3px rgba(0,0,0,.5),0 4px 6px -4px rgba(0,0,0,.5);
@@ -147,8 +148,9 @@
   .item .ti{margin-top:2px}
   .kbd{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-dim);border:1px solid var(--line);
     background:var(--panel2);border-radius:var(--radius-sm);padding:1px var(--space-1);flex:none}
-  .tbtn{background:var(--panel);border:1px solid var(--line2);color:var(--ink-dim);cursor:pointer;
-    border-radius:var(--radius-md);padding:var(--space-1) var(--space-2);font-size:var(--text-sm);line-height:1;flex:none}
+  .tbtn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-1);height:28px;min-width:28px;
+    background:var(--panel);border:1px solid var(--line2);color:var(--ink-dim);cursor:pointer;
+    border-radius:var(--radius-md);padding:0 var(--space-15);font-size:var(--text-sm);line-height:1;flex:none}
   .tbtn:hover{color:var(--ink);border-color:var(--accent)}
   .tbtn svg{display:block}  /* align the reload icon within the button padding */
 
@@ -185,11 +187,11 @@
   /* ------------------------------------------------------------------ */
   .shell{position:relative;display:grid;grid-template-columns:var(--sidebar-w) 1fr;grid-template-rows:100%;height:100vh}
   .sidebar{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--panel2);border-right:1px solid var(--line)}
-  .side-logo{display:flex;align-items:center;height:64px;flex:none;padding:0 var(--space-4);
+  .side-logo{display:flex;align-items:center;height:var(--topbar-h);flex:none;padding:0 var(--space-4);
     border-bottom:1px solid var(--line);color:var(--ink)}
-  .side-logo svg{height:36px;width:auto;display:block}
+  .side-logo svg{height:28px;width:auto;display:block}
   .side-logo svg text{font-family:var(--sans)}
-  .side-logo .logo-mark{display:none;height:26px}
+  .side-logo .logo-mark{display:none;height:22px}
   .side-nav{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:var(--space-25) var(--space-2)}
   .side-group{font-size:var(--text-2xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;
     color:var(--ink-faint);padding:var(--space-35) var(--space-3) var(--space-15)}
@@ -202,10 +204,16 @@
   .side-item .lbl{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .side-item .n{font-size:var(--text-xs);font-variant-numeric:tabular-nums;color:var(--ink-faint);flex:none}
   .side-item.on .n{color:var(--sel-text)}
-  .side-foot{flex:none;display:flex;align-items:center;gap:var(--space-2);border-top:1px solid var(--line);padding:var(--space-25) var(--space-3)}
-  .side-foot .proj{flex:1;min-width:0;font-size:var(--text-xs);font-weight:500;color:var(--ink-dim);
-    border:1px solid var(--line2);padding:var(--space-05) var(--space-2);border-radius:var(--radius-full);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .side-foot .atlasver{flex:none;font-size:var(--text-2xs);color:var(--ink-dim);opacity:.72;white-space:nowrap}
+  /* Two rows, two columns, explicit areas — nothing here may ever push past the sidebar's edge again.
+     minmax(0,1fr) lets the text column shrink below its content so the ellipsis can take over. */
+  .side-foot{flex:none;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;
+    gap:var(--space-1) var(--space-2);border-top:1px solid var(--line);padding:var(--space-2) var(--space-3)}
+  .side-foot .proj{grid-area:1/1;min-width:0;font-size:var(--text-xs);font-weight:500;color:var(--ink);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .side-foot .side-warn{grid-area:1/2;justify-self:end}
+  .side-foot .atlasver{grid-area:2/1;min-width:0;font-size:var(--text-2xs);color:var(--ink-faint);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .side-foot .footbtns{grid-area:2/2;justify-self:end}
   .side-warn{display:flex;align-items:center;gap:var(--space-1);background:var(--warn-bg);border:1px solid var(--warn-border);
     color:var(--warn-text);cursor:pointer;border-radius:var(--radius-full);padding:var(--space-05) var(--space-2);font-size:var(--text-2xs);font-weight:500;flex:none}
   .side-warn:hover{border-color:var(--warn-text)}
@@ -225,7 +233,7 @@
   .shell.dragging{cursor:col-resize;user-select:none}
 
   /* topbar: breadcrumbs / ⌘K trigger / theme */
-  .topbar{flex:none;display:flex;align-items:center;gap:var(--space-35);height:64px;padding:0 var(--space-4);
+  .topbar{flex:none;display:flex;align-items:center;gap:var(--space-2);height:var(--topbar-h);padding:0 var(--space-4);
     background:var(--panel);border-bottom:1px solid var(--line)}
   .crumbs{display:flex;align-items:center;gap:var(--space-25);font-size:var(--text-md);min-width:0;flex:1;white-space:nowrap}
   .crumbs .crumb{display:inline-flex;align-items:center;gap:var(--space-1);min-width:0}
@@ -233,7 +241,8 @@
   .crumbs a.crumb:hover{color:var(--ink);text-decoration:underline}
   .crumbs .crumb.cur{color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis}
   .crumb-sep{color:var(--line2);flex:none}
-  .searchbtn{display:flex;align-items:center;gap:var(--space-2);width:min(340px,40vw);height:36px;padding:0 var(--space-25);
+  .searchbtn{display:flex;align-items:center;gap:var(--space-2);width:min(320px,40vw);height:30px;padding:0 var(--space-25);
+    margin-right:var(--space-15);
     background:var(--input);border:1px solid var(--line);border-radius:var(--radius-md);cursor:pointer;
     color:var(--ink-faint);font-family:var(--sans);font-size:var(--text-md);flex:none}
   .searchbtn:hover{background:var(--panel2)}
@@ -248,6 +257,7 @@
   .listresize{position:absolute;top:0;bottom:0;left:calc(var(--list-w) - 3px);width:6px;z-index:20;cursor:col-resize;touch-action:none}
   .listresize:hover,.listresize:focus-visible{background:var(--accent-subtle);outline:none}
   .footbtns{display:inline-flex;gap:var(--space-05)}
+  .footbtns .tbtn{height:22px;min-width:24px;padding:0 var(--space-1)}
   .footbtns .tbtn[data-ui-scale]{font-family:var(--sans);font-size:var(--text-2xs);letter-spacing:-.02em}
   .footbtns .tbtn:disabled{opacity:.35;cursor:default}
   .listcol{overflow:auto;border-right:1px solid var(--line);background:var(--panel)}
@@ -265,6 +275,7 @@
   .dash-sub{color:var(--ink-faint);font-size:var(--text-sm);margin-top:var(--space-05)}
   .seclabel{font-size:var(--text-xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;
     color:var(--ink-dim);margin:26px 0 var(--space-25)}
+  .seclabel.row{display:flex;align-items:center;gap:var(--space-2)}
   .metrics{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:var(--space-35)}
   .metric{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-md);padding:var(--space-35) var(--space-4)}
   .metric .mk,.hcard .mk{font-size:var(--text-2xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}
@@ -348,7 +359,7 @@
      reflows the labels — same reasoning as .item .ck. */
   .pal-item .ck{flex:none;width:13px;height:13px;border:1px solid var(--line2);border-radius:var(--radius-xs);
     display:flex;align-items:center;justify-content:center;font-size:var(--text-2xs);line-height:1;
-    color:#fff;background:transparent;visibility:hidden}
+    color:var(--on-accent);background:transparent;visibility:hidden}
   .pal-item:hover .ck{visibility:visible}
   .pal-item.mark .ck{background:var(--accent);border-color:var(--accent);visibility:visible}
   .pal-foot{flex:none;padding:var(--space-2) var(--space-4);border-top:1px solid var(--line);
@@ -465,7 +476,7 @@
   .dgcond .cflow{flex:none;color:var(--ink-dim);max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .dgcond code{font-family:var(--mono);color:var(--ink-dim);word-break:break-all}
   .dgcard-foot{margin-top:var(--space-2)}
-  .dgbtn{background:var(--accent-subtle);border:1px solid var(--accent);color:var(--sel-text);
+  .dgbtn{background:var(--accent-subtle);border:1px solid var(--accent);color:var(--accent);
     border-radius:var(--radius-md);padding:var(--space-05) var(--space-25);cursor:pointer;font-size:var(--text-xs)}
   .dgbtn:hover{background:var(--active)}
   /* ⌖ locate-on-diagram, on rows/groups that correspond to a diagram element */
@@ -497,7 +508,7 @@
   #lsort:focus{border-color:var(--accent)}
   /* "N marked" button in the list head, shown only while a multi-selection exists. */
   .lh-open{width:100%;margin-top:var(--space-15);background:var(--accent);border:1px solid var(--accent);
-    color:#fff;border-radius:var(--radius-md);padding:var(--space-1) var(--space-2);cursor:pointer;
+    color:var(--on-accent);border-radius:var(--radius-md);padding:var(--space-1) var(--space-2);cursor:pointer;
     font-family:var(--sans);font-size:var(--text-xs);font-weight:500}
   .lh-open:hover{background:var(--accent-hover)}
   .lh-note{margin-top:var(--space-1);font-size:var(--text-2xs);color:var(--warn-text)}
@@ -511,8 +522,7 @@
   .lh-wider:hover{border-color:var(--warn-bar)}
   /* Off-screen but announced — carries the bare "N marked" counter for screen readers. */
   .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-  .item{display:flex;align-items:flex-start;gap:var(--space-2);padding:var(--space-2) var(--space-3);cursor:pointer;border-bottom:1px solid var(--line);
-    animation:rise .25s ease both}
+  .item{display:flex;align-items:flex-start;gap:var(--space-2);padding:var(--space-2) var(--space-3);cursor:pointer;border-bottom:1px solid var(--line)}
   .item:hover{background:var(--hover)}
   /* `.mark` (multi-selection) and `.on` (what the active tab shows) are different things and must
      read differently: mark is a soft tint + a dashed accent bar, on is the solid selection bar.
@@ -525,7 +535,7 @@
      reflows the labels of the rows you are looking at. */
   .item .ck{flex:none;align-self:center;width:13px;height:13px;border:1px solid var(--line2);border-radius:var(--radius-xs);
     display:flex;align-items:center;justify-content:center;font-size:var(--text-2xs);line-height:1;
-    color:#fff;visibility:hidden}
+    color:var(--on-accent);visibility:hidden}
   .item:hover .ck{visibility:visible;border-color:var(--line2)}
   .item.mark .ck{visibility:visible;background:var(--accent);border-color:var(--accent)}
   .item .meta{min-width:0;flex:1}
@@ -534,8 +544,7 @@
   .refn{flex:none;align-self:center;font-size:var(--text-2xs);font-variant-numeric:tabular-nums;color:var(--ink-faint);
     border:1px solid var(--line);border-radius:var(--radius-full);padding:0 var(--space-15)}
   .sentinel{height:1px}
-  @keyframes rise{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
-  @media (prefers-reduced-motion: reduce){ .item{animation:none} .pal-panel{animation:none} }
+  @media (prefers-reduced-motion: reduce){ .pal-panel{animation:none} }
 
   /* ------------------------------------------------------------------ */
   /* Browse: detail column                                               */
@@ -585,16 +594,23 @@
     transition:opacity .16s,transform .16s}
   .toast.show{opacity:1;transform:none}
 
-  .dhead{position:sticky;top:0;z-index:6;display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-4);
-    background:var(--panel);border-bottom:1px solid var(--line)}
-  .dhead button{background:var(--panel);border:1px solid var(--line2);color:var(--ink-dim);
-    border-radius:var(--radius-md);padding:var(--space-1) var(--space-2);cursor:pointer;font-size:var(--text-xs)}
+  /* The identity bar: what kind of node this is on the left, the page actions on the right. Sticky, so
+     the actions and the kind stay in reach while the body scrolls. The title itself stays in the body —
+     at 26px it is the one thing a reader should not have pinned over what they are reading. */
+  .dhead{position:sticky;top:0;z-index:6;display:flex;align-items:center;gap:var(--space-15);min-height:40px;
+    padding:var(--space-15) var(--space-4);background:var(--panel);border-bottom:1px solid var(--line)}
+  .dkind{display:inline-flex;align-items:center;gap:var(--space-15);min-width:0;font-size:var(--text-xs);font-weight:600;
+    letter-spacing:.06em;text-transform:uppercase;color:var(--ink-dim);white-space:nowrap}
+  .dhead-sp{flex:1}
+  .dhead button{display:inline-flex;align-items:center;gap:var(--space-1);flex:none;height:26px;
+    background:var(--panel);border:1px solid var(--line2);color:var(--ink-dim);
+    border-radius:var(--radius-md);padding:0 var(--space-2);cursor:pointer;font-size:var(--text-xs)}
   .dhead button:hover{color:var(--ink);border-color:var(--accent)}
-  .dhead #permalink{margin-left:auto;flex:none}
-  .dbody{padding:22px 26px;max-width:1000px}
+  .ui{flex:none;width:12px;height:12px;display:inline-block;vertical-align:-.1em}
+  .dbody{padding:var(--space-4) var(--space-6) var(--space-8);max-width:1000px}
   .chip{display:inline-flex;align-items:center;gap:var(--space-15);font-size:var(--text-xs);font-weight:500;
     border:1px solid var(--line2);border-radius:var(--radius-full);padding:var(--space-05) var(--space-2);color:var(--ink-dim)}
-  .dtitle{font-family:var(--sans);font-weight:600;letter-spacing:-.01em;font-size:var(--text-2xl);line-height:1.2;margin:var(--space-3) 0 var(--space-1)}
+  .dtitle{font-family:var(--sans);font-weight:600;letter-spacing:-.01em;font-size:var(--text-2xl);line-height:1.2;margin:0 0 var(--space-1)}
   .dkey{font-family:var(--mono);font-size:var(--text-sm);color:var(--accent)}
   .dfile{font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-faint);margin-top:var(--space-15);cursor:copy}
   .dfile:hover{color:var(--ink-dim)}
@@ -616,9 +632,9 @@
   /* reveal on hover inside dense contexts (chips, grid cells) so they stay uncluttered */
   .nc .cpy,.cell .cpy{opacity:0;transition:opacity .1s ease}
   .nc:hover .cpy,.nc:focus-within .cpy,.cell:hover .cpy,.cell:focus-within .cpy,.cpy:focus-visible{opacity:1}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1px;
-    background:var(--line);border:1px solid var(--line);border-radius:var(--radius-md);overflow:hidden;margin:var(--space-4) 0}
-  .cell{background:var(--panel);padding:var(--space-25) var(--space-3)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-md);overflow:hidden;margin:var(--space-4) 0}
+  .cell{background:var(--panel);padding:var(--space-25) var(--space-3);box-shadow:-1px -1px 0 0 var(--line)}
   .cell .k{font-size:var(--text-2xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}
   .cell .v{margin-top:var(--space-1);color:var(--ink);word-break:break-word}
   .cell .v.mono{font-family:var(--mono);font-size:var(--text-sm)}
@@ -693,6 +709,15 @@
   .fldbody .oprow{padding-top:var(--space-1);padding-bottom:var(--space-1)}
   .fldbody .parmgrid{margin:var(--space-1) 0}
   .verb{font-weight:600;min-width:48px}
+  /* a component's type at the end of its row, and a snippet of the code it runs — quiet, in the token scale */
+  .fldtype{margin-left:auto;color:var(--ink-faint);font-size:var(--text-2xs)}
+  .snip{color:var(--ink-faint);font-size:var(--text-2xs)}
+  .nbmore{font-size:var(--text-2xs);margin:2px 0 6px}
+  /* the "Other attributes" key/value tree */
+  .kvrow{border:none}
+  .kvk{min-width:150px}
+  .kvv{flex:1;word-break:break-word;white-space:pre-wrap}
+  .kvsub{padding:2px 0 2px 12px}
   .tag{font-size:var(--text-2xs);font-weight:500;text-transform:uppercase;letter-spacing:.04em;
     border:1px solid var(--line2);border-radius:var(--radius-sm);padding:1px var(--space-15);color:var(--ink-dim)}
 
@@ -843,7 +868,7 @@
     .shell.rail .sidebar:not(:hover):not(:focus-within) .side-item .lbl,
     .shell.rail .sidebar:not(:hover):not(:focus-within) .side-item .n{display:none}
     .shell.rail .sidebar:not(:hover):not(:focus-within) .side-item.on::before{left:1px}
-    .shell.rail .sidebar:not(:hover):not(:focus-within) .side-foot{flex-direction:column;gap:var(--space-15);padding:var(--space-2) var(--space-15)}
+    .shell.rail .sidebar:not(:hover):not(:focus-within) .side-foot{display:flex;flex-direction:column;gap:var(--space-15);padding:var(--space-2) var(--space-15)}
     .shell.rail .sidebar:not(:hover):not(:focus-within) .side-foot .proj{display:none}
     .shell.rail .sidebar:not(:hover):not(:focus-within) .side-foot .atlasver{display:none}
     .shell.rail .sidebar:not(:hover):not(:focus-within) .side-warn .wtxt{display:none}
@@ -873,7 +898,7 @@
     .side-group{display:none}
     .side-item{height:30px;padding:0 var(--space-25);justify-content:flex-start}
     .side-item .lbl,.side-item .n{display:inline}
-    .side-foot{border-top:none;padding:0;margin-left:auto;flex-direction:row}
+    .side-foot{display:flex;border-top:none;padding:0;margin-left:auto;flex-direction:row}
     .side-foot .proj{display:block}
     .content{min-height:0}
     .view-browse{display:flex;flex-direction:column;height:auto}
@@ -887,7 +912,7 @@
     /* width:auto so the panel still fills a narrow viewport — the remembered --pal-w is a desktop size */
     .pal-panel{margin:var(--space-6) var(--space-3);width:auto}
     .dash{padding:var(--space-4) var(--space-35) var(--space-8)}
-    .dbody{padding:var(--space-4) var(--space-35)}
+    .dbody{padding:var(--space-4) var(--space-35) var(--space-6)}
   }
 
 /* __GEIST_EMBED_BEGIN__ (generated by scripts/embed-geist.mjs — do not edit) */

@@ -52,14 +52,17 @@ try{
       </svg>
     </div>
     <nav class="side-nav" id="nav" aria-label="Categories"></nav>
+    <!-- Two rows on a 2-column grid (explorer.css .side-foot): project · parse-issue chip / provenance ·
+         text size. The old single flex row overflowed the 240px sidebar as soon as the version stamp
+         grew a "generated 3 days ago" — the project name shrank to one letter and the buttons clipped.
+         The theme toggle lives in the topbar only; two of them was one too many. -->
     <div class="side-foot" id="sidefoot">
-      <div class="proj mono" id="proj"></div>
-      <div class="atlasver mono" id="atlasver" title="Flowable Atlas generator version">__ATLAS_VERSION__</div>
+      <div class="proj" id="proj"></div>
       <button class="side-warn" id="diagchip" hidden></button>
+      <div class="atlasver" id="atlasver" title="Flowable Atlas generator version">__ATLAS_VERSION__</div>
       <span class="footbtns">
         <button class="tbtn" data-ui-scale="-" aria-label="Smaller text">A−</button>
         <button class="tbtn" data-ui-scale="+" aria-label="Larger text">A+</button>
-        <button class="tbtn" data-theme-btn aria-label="Switch color theme"></button>
       </span>
     </div>
   </aside>

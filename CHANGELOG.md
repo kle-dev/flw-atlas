@@ -23,6 +23,16 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   in one voice — Geist, small, semibold, tracked capitals — and monospace is reserved for what a machine
   reads: keys, paths, code, expressions. Section headings, list heads, table headers, pills and filter
   chips used to pick their own face and tracking, and the sidebar footer read like a terminal.
+- **The chrome gets out of the way.** The top bar and the logo row are 48px instead of 64, the search
+  field and the buttons sized to match, and there is one theme toggle — in the top bar — instead of one
+  there and another in the sidebar footer. That footer is two rows on a grid now (project · parse-issue
+  chip / *Atlas 0.21.0 · 3 days ago* · `A−` `A+`): the old single row overflowed the 240px sidebar as
+  soon as the version stamp grew a date, squeezing the project name to one letter and pushing the
+  buttons out over the page. A node's detail page opens with one sticky bar — its kind on the left,
+  *back* / *expand all* / *copy link* on the right — instead of a row of buttons above a kind chip above
+  the title. Smaller things: the attribute grid no longer shows a grey box where its last row runs out
+  of cells, list rows no longer animate in on every re-render, and the last five hard-coded font sizes
+  now follow `A−` / `A+` like everything else.
 
 ## 0.20.0
 

@@ -230,12 +230,12 @@ The explorer never presents a guess as a fact:
 ## Provenance
 
 The sidebar footer names the Atlas version that generated the page and when — *Atlas {{VERSION}} ·
-generated 3 days ago*, the exact time on hover. A page mailed to a reviewer could otherwise be a day or
+3 days ago*, the exact time on hover. A page mailed to a reviewer could otherwise be a day or
 six months old and could not say. The same two facts sit in `graph.json` under `_generated`.
 
 ## Themes and text size
 
-Light by default, with a `☀ / ☾ / ◐` toggle that cycles light → dark → auto and is remembered. Inside
+Light by default, with a `☀ / ☾ / ◐` toggle in the top bar that cycles light → dark → auto and is remembered. Inside
 the IDE the page starts in `auto` and follows the IDE's theme live, including a theme switch while it is
 open — but an explicit choice you make in the page still wins.
 

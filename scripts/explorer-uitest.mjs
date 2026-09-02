@@ -455,6 +455,19 @@ const probe = `<script>
        decodeURIComponent(location.hash).indexOf('&f=zzz-none')>0, 'hash='+location.hash);
   });
 
+  // --- the sidebar footer fits its column ---
+  // At the default 240px the old single-row footer squeezed the project name to one letter and pushed the
+  // buttons out past the sidebar's edge; the theme toggle also existed twice.
+  steps.push(()=>{
+    const f=document.getElementById('sidefoot'), fr=f.getBoundingClientRect();
+    const kids=[...f.children].filter(c=>!c.hidden);
+    ok('the sidebar footer does not overflow its column', f.scrollWidth<=f.clientWidth+0.5 &&
+       kids.every(c=>c.getBoundingClientRect().right<=fr.right+0.5), f.scrollWidth+' vs '+f.clientWidth);
+    const pw=document.getElementById('proj').getBoundingClientRect().width;
+    ok('the project name stays readable in the footer', pw>=48, 'width='+pw);
+    ok('exactly one theme toggle', document.querySelectorAll('[data-theme-btn]').length===1);
+  });
+
   // --- text size and the list splitter ---
   steps.push(()=>{
     const plus=document.querySelector('[data-ui-scale="+"]');

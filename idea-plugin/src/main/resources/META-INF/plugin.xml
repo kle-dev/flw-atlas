@@ -153,6 +153,18 @@
               reads: keys, paths, code, expressions. Section headings, list heads, table headers, pills and
               filter chips used to pick their own face and tracking, and the sidebar footer read like a
               terminal.</li>
+          <li><b>The chrome gets out of the way.</b> The top bar and the logo row are 48px instead of 64,
+              the search field and the buttons sized to match, and there is one theme toggle — in the top
+              bar — instead of one there and another in the sidebar footer. That footer is two rows on a
+              grid now (project · parse-issue chip / <i>Atlas 0.21.0 · 3 days ago</i> · <code>A−</code>
+              <code>A+</code>): the old single row overflowed the 240px sidebar as soon as the version stamp
+              grew a date, squeezing the project name to one letter and pushing the buttons out over the
+              page. A node's detail page opens with one sticky bar — its kind on the left, <i>back</i> /
+              <i>expand all</i> / <i>copy link</i> on the right — instead of a row of buttons above a kind
+              chip above the title. Smaller things: the attribute grid no longer shows a grey box where its
+              last row runs out of cells, list rows no longer animate in on every re-render, and the last
+              five hard-coded font sizes now follow <code>A−</code> / <code>A+</code> like everything
+              else.</li>
         </ul>
         <h3>0.20.0</h3>
         <ul>

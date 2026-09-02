@@ -111,6 +111,18 @@ const TYPE_ICONS={
 };
 // The icon carries no width/height: CSS sizes .ti in --ui-scale units, so A−/A+ scales icons with
 // their labels. Colour stays a var() reference like color(), so a theme switch restyles without re-render.
+// Chrome glyphs (back, expand all, copy link, disclosure chevron) — also Lucide, also inline SVG: the
+// characters they replace (← ⇕ 🔗 ▸) are outside the embedded Geist subset and rendered in the system face.
+const UI_ICONS={
+  back:'<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+  expand:'<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>',
+  link:'<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  chevron:'<path d="m6 9 6 6 6-6"/>',
+};
+function uiIcon(name){
+  return '<svg class="ui ui-'+name+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"'+
+    ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(UI_ICONS[name]||'')+'</svg>';
+}
 function typeIcon(t, o){
   o=o||{};
   const body=TYPE_ICONS[t]||TYPE_ICONS._;
@@ -889,7 +901,7 @@ function renderDashboard(){
   const cardsHtml=healthCardsHtml();
   if(cardsHtml){
     const open=INSIGHTS.checksOpen;
-    h+='<div class="seclabel" style="display:flex;align-items:center;gap:var(--space-2)">Health'+
+    h+='<div class="seclabel row">Health'+
        '<button class="dgbtn" data-route="/checks">'+
        (open?open+' finding'+(open>1?'s':'')+' to review ↗':'open Checks ↗')+'</button></div>'+cardsHtml;
   }
@@ -1080,7 +1092,7 @@ function findingBlock(id,title,count,body,cat){
   if(!count) return '';
   const list=cat&&CATS.some(x=>x.id===cat)
     ? '<button class="dgbtn" data-cat="'+esc(cat)+'">open the list ↗</button>' : '';
-  return '<div class="seclabel" id="'+id+'" style="display:flex;align-items:center;gap:var(--space-2)">'+
+  return '<div class="seclabel row" id="'+id+'">'+
     esc(title)+' <span class="muted">'+count+'</span>'+list+'</div>'+body;
 }
 /** The click hook a report page hands [wireNodeLinks]: `data-jump` scrolls to a section of this page,
@@ -1532,7 +1544,7 @@ function renderScripts(){
        '<button class="pchip" id="scriptsall"></button><span class="pcount"></span></div>';
     models.forEach(mid=>{
       const rows=byModel.get(mid);
-      h+='<div class="seclabel" style="display:flex;align-items:center;gap:var(--space-2)">'+
+      h+='<div class="seclabel row">'+
          nodeChip(mid)+'<span class="muted">'+rows.length+' script'+(rows.length>1?'s':'')+'</span></div>';
       h+=rows.map(s=>{
         const vars=varIdx.get(s.model+'|'+(s.el==null?'':s.el))||[];
@@ -1827,7 +1839,6 @@ function renderItems(cat, wrap){
     el.setAttribute('aria-selected', state.sel===n.id?'true':'false');
     el.setAttribute('aria-checked', listMarks.has(n.id)?'true':'false');
     el.tabIndex=-1;
-    el.style.animationDelay=Math.min(i*8,300)+'ms';
     const rn=INSIGHTS.indeg.get(n.id)||0;
     // Why this row matched, same as in the palette: a hit from a script body or a mapping used to
     // show a row with no visible reason at all. Falls back to the key — the line it always showed.
@@ -2822,7 +2833,7 @@ function detailExtra(n){
     h+=section('columns','Column mappings ('+d.columns.length+')','<div class="oplist">'+
       d.columns.map(c=>'<div class="oprow"><span>'+esc(c.name||'')+'</span>'+
         (c.columnName&&c.columnName!==c.name?'<span class="muted">'+esc(c.columnName)+'</span>':'')+
-        (c.type?'<span class="mono" style="margin-left:auto;color:var(--ink-faint);font-size:10px">'+esc(c.type)+'</span>':'')+
+        (c.type?'<span class="mono fldtype">'+esc(c.type)+'</span>':'')+
         '</div>').join('')+'</div>');
   }
   if(n.type==='java' && (d.endpoints||[]).length){
@@ -2883,7 +2894,7 @@ function detailExtra(n){
     h+=section('columns','Field mappings ('+d.columns.length+')','<div class="oplist">'+
       d.columns.map(c=>'<div class="oprow"><span>'+esc(c.name)+'</span><span class="muted">'+esc(c.label||'')+'</span>'+
         (c.refDataObject?'<span class="vlink" data-id="'+enc('dataObject:'+c.refDataObject)+'" tabindex="0" role="link">→ '+esc(c.refDataObject)+(c.relationship?' ('+esc(c.relationship)+')':'')+'</span>':'')+
-        (c.type?'<span class="mono" style="margin-left:auto;color:var(--ink-faint);font-size:10px">'+esc(c.type)+'</span>':'')+
+        (c.type?'<span class="mono fldtype">'+esc(c.type)+'</span>':'')+
         '</div>').join('')+'</div>');
   }
   if(n.type==='liquibase'){
@@ -2910,7 +2921,7 @@ function detailExtra(n){
           return '<div class="oprow'+(st==='bad'?' cov-bad':st==='warn'?' cov-warn':'')+'">'+
           (cov?'<span class="covdot" title="'+stTitle[st]+'" style="background:'+covColor(st)+'"></span>':'')+
           '<span>'+esc(c.name)+'</span>'+
-          (c.type?'<span class="mono" style="margin-left:auto;color:var(--ink-faint);font-size:10px">'+esc(c.type)+'</span>':'')+
+          (c.type?'<span class="mono fldtype">'+esc(c.type)+'</span>':'')+
           '</div>'; }).join('')+'</div></div>';
     });
     h+=section('columns','Columns ('+d.columns.length+')'+(cov?' — mapping coverage':''), b);
@@ -2923,7 +2934,7 @@ function detailExtra(n){
         const snip=p.snippet||'';
         return '<div class="oprow"><span class="verb" style="color:'+col+'">'+(isErr?'error':'warning')+'</span>'+
           '<span style="flex:1">'+esc(p.message)+'</span>'+
-          (snip?'<span class="mono" style="color:var(--ink-faint);font-size:10px">'+esc(snip)+'</span>':'')+
+          (snip?'<span class="mono snip">'+esc(snip)+'</span>':'')+
           '</div>';
       }).join('')+'</div>');
   }
@@ -3062,7 +3073,7 @@ function neighborhoodSvg(n){
   // center node on top of the lines
   g+='<circle cx="'+CX+'" cy="'+CY+'" r="8" fill="'+nodeColor(n)+'" stroke="var(--panel)" stroke-width="2"/>'+
      '<text x="'+CX+'" y="'+(CY+22)+'" text-anchor="middle" font-size="11" font-weight="600" font-family="var(--mono)" fill="var(--ink)">'+esc(trunc(n.label,32))+'</text>';
-  const more=all.length>shown.length?'<div class="muted" style="font-size:10.5px;margin:2px 0 6px">showing '+shown.length+' of '+all.length+' neighbors — the full list is below</div>':'';
+  const more=all.length>shown.length?'<div class="muted nbmore">showing '+shown.length+' of '+all.length+' neighbors — the full list is below</div>':'';
   return '<details class="uses" open><summary>Neighborhood — solid: uses, dashed: used by</summary>'+
     '<div style="padding:4px 10px 8px">'+more+
     '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;max-width:820px;display:block" role="img" aria-label="Relationship graph of '+esc(n.label)+'">'+g+'</svg></div></details>';
@@ -3089,18 +3100,18 @@ function jchip(id,label){
 const KV_MAX_ROWS=200;   // per container — a pathological model must not freeze the panel
 const KV_MAX_TEXT=4000;  // per value — same cap the search index uses
 function kvValueHtml(v){
-  return '<span class="mono" style="flex:1;word-break:break-word;white-space:pre-wrap">'+
+  return '<span class="mono kvv">'+
     esc(String(v).slice(0,KV_MAX_TEXT))+'</span>';
 }
 function kvEntry(k,v,depth){
   if(v==null||v==='') return '';
   if(typeof v!=='object')
-    return '<div class="oprow" style="border:none"><span class="muted" style="min-width:150px">'+
+    return '<div class="oprow kvrow"><span class="muted kvk">'+
       esc(String(k))+'</span>'+kvValueHtml(v)+'</div>';
   const inner=kvTree(v,depth+1);
   if(!inner) return '';
   return '<details class="uses"'+(depth<1?' open':'')+'><summary>'+esc(String(k))+'</summary>'+
-    '<div style="padding:2px 0 2px 12px">'+inner+'</div></details>';
+    '<div class="kvsub">'+inner+'</div></details>';
 }
 function kvTree(v,depth){
   depth=depth||0;
@@ -3108,7 +3119,7 @@ function kvTree(v,depth){
   if(Array.isArray(v)){
     if(!v.length) return '';
     if(v.every(x=>x==null||typeof x!=='object'))
-      return '<div class="oprow" style="border:none">'+kvValueHtml(v.slice(0,KV_MAX_ROWS).join(', '))+'</div>';
+      return '<div class="oprow kvrow">'+kvValueHtml(v.slice(0,KV_MAX_ROWS).join(', '))+'</div>';
     return v.slice(0,KV_MAX_ROWS).map((x,i)=>kvEntry(
       x&&typeof x==='object'?(x.id||x.name||x.key||('#'+(i+1))):String(x), x, depth)).join('');
   }
@@ -3143,13 +3154,14 @@ function renderDetail(){
   })};
   const out=groupRels(outM.get(n.id)), inc=groupRels(incM.get(n.id));
   let h='';
-  h+='<div class="dhead">'+(_navCount>1?'<button id="back">← back</button>':'')+
-     '<button id="sectall" title="Expand or collapse every section on this page">⇕ expand all</button>'+
-     '<button id="permalink" title="Copy a shareable link to this node">🔗 copy link</button></div>';
-  h+='<div class="dbody">';
   const kindHint=term('type', n.type).hint;
-  h+='<span class="chip"'+(kindHint?' title="'+esc(kindHint)+'"':'')+'>'+
-     nodeIcon(n)+esc(nodeKind(n))+'</span>';
+  h+='<div class="dhead">'+
+     '<span class="dkind"'+(kindHint?' title="'+esc(kindHint)+'"':'')+'>'+nodeIcon(n)+esc(nodeKind(n))+'</span>'+
+     '<span class="dhead-sp"></span>'+
+     (_navCount>1?'<button id="back">'+uiIcon('back')+'back</button>':'')+
+     '<button id="sectall" title="Expand or collapse every section on this page">'+uiIcon('expand')+'expand all</button>'+
+     '<button id="permalink" title="Copy a shareable link to this node">'+uiIcon('link')+'copy link</button></div>';
+  h+='<div class="dbody">';
   h+='<div class="dtitle">'+esc(n.label)+authBadge(n)+'</div>';
   h+='<div class="dkey mono">'+esc(n.key)+copyBtn(n.key,'key')+'</div>';
   if(n.file) h+='<div class="dfile" title="click to copy" data-copy="'+enc(n.file)+'"><span class="fp">'+esc(n.file)+'</span>'+copyBtn(n.file,'path')+openBtn(n.file)+'</div>';
@@ -5396,7 +5408,7 @@ function stampProvenance(){
   const m=Math.round(diff/60000), h=Math.round(diff/3600000), days=Math.round(diff/86400000);
   const rel=m<2?'just now':m<60?m+' min ago':h<48?h+' h ago':days<60?days+' days ago':Math.round(days/30)+' months ago';
   const ver=DATA.atlasVersion?'Atlas '+DATA.atlasVersion:el.textContent;
-  el.textContent=ver+' · generated '+rel;
+  el.textContent=ver+' · '+rel;
   el.setAttribute('data-tip','Generated '+d.toLocaleString()+' by '+ver);   // JCEF shows no title= tooltips
   el.removeAttribute('title');
 }
