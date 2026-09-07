@@ -1932,9 +1932,10 @@ function renderItems(cat, wrap){
       (rn?'<span class="refn" title="referenced by '+rn+' node'+(rn>1?'s':'')+'">'+rn+'</span>':'')+
       '<span class="ck" aria-hidden="true">✓</span>';
     // ⌘/Ctrl+click toggles and Shift+click extends — the list-selection convention, not the
-    // browser's "open in new tab" one (middle-click and ⌘/Ctrl+Enter cover that).
+    // browser's "open in new tab" one (middle-click and ⌘/Ctrl+Enter cover that). The box that
+    // appears on hover is the same toggle: a checkbox you can see is a checkbox you can click.
     el.onclick=e=>{
-      if(modKey(e)){
+      if(modKey(e) || (e.target.closest&&e.target.closest('.ck'))){
         e.preventDefault();
         let refused=0;
         if(listMarks.has(n.id)) listMarks.delete(n.id); else { refused=listMarkAdd([n.id]); listAnchor=n.id; }
@@ -5395,8 +5396,10 @@ function palRender(){
   palres.querySelectorAll('.pal-item').forEach(el=>el.onclick=ev=>{
     const i=+el.dataset.i, hit=palList[i];
     if(!hit) return;
-    // ⌘/Ctrl+click toggles, Shift+click extends — same convention as the browse list.
-    if(modKey(ev)){
+    // ⌘/Ctrl+click toggles, Shift+click extends — same convention as the browse list; the hover
+    // checkbox itself is the toggle too.
+    if(modKey(ev) || (ev.target.closest&&ev.target.closest('.ck'))){
+
       ev.preventDefault();
       if(palMarks.has(hit.n.id)) palMarks.delete(hit.n.id);
       else if(palMarks.size<MAX_TABS){ palMarks.add(hit.n.id); palAnchor=i; }

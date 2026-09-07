@@ -197,6 +197,34 @@ const probe = `<script>
     const b=document.getElementById('lwiderbtn');
     say('bridge offered', b?('yes — '+b.textContent.trim()):'no (term also matches in this category)');
   });
+  // --- the hover checkbox on a row IS the mark toggle: a plain click on it marks, it does not navigate ---
+  // It used to appear on hover and do nothing on click — only ⌘-click on the row toggled the mark.
+  steps.push(()=>{
+    const lf=document.getElementById('lf');
+    if(lf){ lf.value=''; lf.dispatchEvent(new Event('input')); }
+  });
+  steps.push(()=>{
+    const it=document.querySelectorAll('#listitems .item[data-id]')[1]||document.querySelector('#listitems .item[data-id]');
+    window.__selBefore=state.sel; window.__ckRow=it;
+    if(it) click(it.querySelector('.ck'));
+  });
+  steps.push(()=>{
+    const it=window.__ckRow;
+    ok('clicking the row checkbox marks the row', !!it && it.getAttribute('aria-checked')==='true' && it.classList.contains('mark'));
+    ok('and does not change the selection', state.sel===window.__selBefore, state.sel+' vs '+window.__selBefore);
+    if(it) click(it.querySelector('.ck'));
+  });
+  steps.push(()=>{
+    ok('clicking it again unmarks', document.querySelectorAll('#listitems .item.mark').length===0);
+    openPalette(); type('customer');
+  });
+  steps.push(()=>{ click(rows()[1].querySelector('.ck')); });
+  steps.push(()=>{
+    ok('the palette checkbox marks too', document.querySelectorAll('.pal-item.mark').length===1);
+    ok('and keeps the palette open', !pal.hidden);
+    closePalette();
+  });
+
   // --- reference links obey the tab contract on EVERY surface, not just the detail panel ---
   // Counted off state.tabs rather than the DOM: the strip is hidden below two tabs and hidden again
   // on the #/checks route, so the rendered markup cannot answer "how many tabs are open".

@@ -395,7 +395,11 @@
      reflows the labels — same reasoning as .item .ck. */
   .pal-item .ck{flex:none;width:13px;height:13px;border:1px solid var(--line2);border-radius:var(--radius-xs);
     display:flex;align-items:center;justify-content:center;font-size:var(--text-2xs);line-height:1;
-    color:var(--on-accent);background:transparent;visibility:hidden}
+    color:var(--on-accent);background:transparent;visibility:hidden;position:relative;cursor:pointer}
+  /* The box is a click target of its own (it toggles the mark), so it gets a hit area a finger or a
+     hurried pointer can land on without changing the 13px it draws. */
+  .pal-item .ck::before,.item .ck::before{content:"";position:absolute;inset:-6px}
+  .pal-item .ck:hover,.item .ck:hover{border-color:var(--accent)}
   .pal-item:hover .ck{visibility:visible}
   .pal-item.mark .ck{background:var(--accent);border-color:var(--accent);visibility:visible}
   .pal-foot{flex:none;padding:var(--space-2) var(--space-4);border-top:1px solid var(--line);
@@ -571,7 +575,8 @@
      reflows the labels of the rows you are looking at. */
   .item .ck{flex:none;align-self:center;width:13px;height:13px;border:1px solid var(--line2);border-radius:var(--radius-xs);
     display:flex;align-items:center;justify-content:center;font-size:var(--text-2xs);line-height:1;
-    color:var(--on-accent);visibility:hidden}
+    color:var(--on-accent);visibility:hidden;position:relative;cursor:pointer}
+
   .item:hover .ck{visibility:visible;border-color:var(--line2)}
   .item.mark .ck{visibility:visible;background:var(--accent);border-color:var(--accent)}
   .item .meta{min-width:0;flex:1}
