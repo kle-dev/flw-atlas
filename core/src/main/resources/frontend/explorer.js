@@ -1063,27 +1063,29 @@ function renderSchema(){
     .sort((a,b)=> (b.gaps+b.extra)-(a.gaps+a.extra) || a.n.label.localeCompare(b.n.label));
   const dirty=svcs.filter(s=>s.gaps||s.extra), clean=svcs.filter(s=>!s.gaps&&!s.extra);
   const total=svcs.reduce((a,s)=>a+s.gaps,0);
-  let h='<div class="dash">';
-  h+='<div class="dash-title">Schema gaps</div>'+
-     '<div class="dash-sub">Liquibase → Service → Data object — '+
-     (svcs.length===0?'no service declares schema coverage data'
-      :total?total+' column'+(total>1?'s':'')+' not mapped through, in '+dirty.length+' of '+svcs.length+' service'+(svcs.length>1?'s':'')
-      :'every column of all '+svcs.length+' service'+(svcs.length>1?'s':'')+' maps through cleanly')+'</div>';
+  _sectReg=[];
+  let b='';
+  dirty.forEach(s=>{
+    b+=section('rpt-schema-'+s.n.key, nodeIcon(s.n)+' '+esc(s.n.label)+(s.sc.table?' <span class="mono muted">'+esc(s.sc.table)+'</span>':''),
+      schemaCoverageHtml(s.sc, true, s.n.id), {count:s.gaps+s.extra, nav:s.n.label, hint:'columns that do not map through'});
+  });
+  if(clean.length) b+=section('rpt-schema-clean','Fully mapped','<div class="nodechips">'+clean.map(s=>nodeChip(s.n.id)).join('')+'</div>',
+    {count:clean.length, hint:'every column of these services maps through cleanly'});
+  const reg=_sectReg; _sectReg=null;
+  let h='<div class="dash" data-fscope>';
+  h+=pageHeader({icon:'schema', color:color('schema'), title:'Schema gaps', sub:'Liquibase → Service → Data object — '+
+    (svcs.length===0?'no service declares schema coverage data'
+     :total?total+' column'+(total>1?'s':'')+' not mapped through, in '+dirty.length+' of '+svcs.length+' service'+(svcs.length>1?'s':'')
+     :'every column of all '+svcs.length+' service'+(svcs.length>1?'s':'')+' maps through cleanly')});
   if(!svcs.length){
     h+='<div class="estate"><div class="estate-ic" aria-hidden="true">▦</div>'+
        '<div class="et">Nothing to check</div>'+
        '<div class="eh">No service in this project references a Liquibase changelog, so there is no schema to compare against.</div></div>';
   }
-  dirty.forEach(s=>{
-    h+='<div class="seclabel">'+esc(s.n.label)+(s.sc.table?' — <span class="mono">'+esc(s.sc.table)+'</span>':'')+'</div>'+
-       '<div class="schemasvc">'+schemaCoverageHtml(s.sc, true, s.n.id)+'</div>';
-  });
-  if(clean.length){
-    h+='<div class="seclabel">Fully mapped ('+clean.length+')</div><div class="nodechips">'+
-       clean.map(s=>nodeChip(s.n.id)).join('')+'</div>';
-  }
+  h+=secnavHtml(reg)+b;
   h+='</div>';
   v.innerHTML=h;
+  wireReport(v);
   wireNodeLinks(v, '[data-id]');
 }
 
@@ -1155,14 +1157,37 @@ function healthListHtml(keys){
     clean.map(row).join('')+'</details>';
   return h+'</div>';
 }
-/** One finding's section: its heading, the count, and — when the finding has a browse list of its own —
- *  the button into it. Nothing at all when the count is zero, so a page lists only what it found. */
-function findingBlock(id,title,count,body,cat){
+/** One finding's section: heading, count, the items, and — when the finding has a browse list of its
+ *  own — the button into it. Nothing at all when the count is zero, so a page lists only what it found.
+ *  The section carries `id` too: the health rows' `data-jump` and the overview's hand-off land on it. */
+function findingBlock(id,title,count,body,cat,extraTools){
   if(!count) return '';
   const list=cat&&CATS.some(x=>x.id===cat)
-    ? '<button class="dgbtn" data-cat="'+esc(cat)+'">open the list ↗</button>' : '';
-  return '<div class="seclabel row" id="'+id+'">'+
-    esc(title)+' <span class="muted">'+count+'</span>'+list+'</div>'+body;
+    ? '<button type="button" class="dgbtn" data-cat="'+esc(cat)+'">open the list ↗</button>' : '';
+  const tools=[list, extraTools||''].filter(Boolean).join(' ');
+  return section(id, esc(title), body, {count, attrs:' id="'+esc(id)+'"', tools:tools?'<div class="toolrow">'+tools+'</div>':''});
+}
+/** The header of a report page — the hero without the sticky bar: icon tile, title, one line saying
+ *  what the page is, and the page's own numbers as facts. */
+function pageHeader(o){
+  const col=o.color||'var(--accent)';
+  return '<div class="dhero rpt"><div class="dhero-top"><span class="dtile" style="--tc:'+col+'">'+typeIcon(o.icon||'_',{color:col})+'</span>'+
+    '<div class="dhero-main"><div class="dtitle">'+esc(o.title)+'</div>'+(o.sub?'<p class="ddesc">'+o.sub+'</p>':'')+'</div></div>'+
+    props(o.facts||[],{cls:'facts'})+'</div>';
+}
+/** What every report view needs once its HTML is in place: section memory, navigator chips, filters,
+ *  copy buttons, open-in-IDE. The node-link wiring stays with the caller (each page has its own hook). */
+function wireReport(v){
+  v.querySelectorAll('details.sect').forEach(s=>s.addEventListener('toggle',()=>sectRemember(dec(s.dataset.sect), s.open)));
+  v.querySelectorAll('[data-jump-sect]').forEach(b=>{
+    const open=()=>{ const d=v.querySelector('details.sect[data-sect="'+b.dataset.jumpSect+'"]'); if(!d) return;
+      d.open=true; sectRemember(dec(b.dataset.jumpSect), true); d.scrollIntoView({block:'start'}); };
+    b.onclick=e=>{ e.stopPropagation(); open(); };
+    b.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } };
+  });
+  wireSectionFilter(v);
+  wireCopyButtons(v);
+  wireOpenButtons(v);
 }
 /** The click hook a report page hands [wireNodeLinks]: `data-jump` scrolls to a section of this page,
  *  `data-cat` opens a finding's browse list, `data-route` switches tab. Returning true says the click
@@ -1173,7 +1198,7 @@ function reportNav(e){
     // A block rendered earlier on a page that is now hidden still has its id; scrolling to it would do
     // nothing visible. Only a target on the page you are looking at counts as "here".
     const t=document.getElementById(jump.dataset.jump);
-    if(t && !t.closest('.view[hidden]')) t.scrollIntoView({block:'start'});
+    if(t && !t.closest('.view[hidden]')){ if(t.tagName==='DETAILS'){ t.open=true; sectRemember(jump.dataset.jump, true); } t.scrollIntoView({block:'start'}); }
     else { _checkJump=jump.dataset.jump; location.hash='/checks'; }   // every finding block lives on Checks
     return true;
   }
@@ -1186,107 +1211,87 @@ function renderChecks(){
   const v=document.getElementById('view-checks');
   const H=INSIGHTS.health, st=DATA.stats||{};
   const open=INSIGHTS.checksOpen;
-  let h='<div class="dash">';
-  h+='<div class="dash-title">Checks</div>'+
-     '<div class="dash-sub">'+(open
-       ? open+' finding'+(open>1?'s':'')+' worth a look — none of them is automatically a bug, each one is a '+
-         'question Atlas cannot answer on its own'
-       : 'nothing flagged — no parse issues, no broken expressions, nothing unused or unproven')+'</div>';
-  h+=healthListHtml();
-  // one block per finding, with the actual items rather than only a number
   const chips=list=>'<div class="nodechips">'+list.map(n=>nodeChip(n.id)).join('')+'</div>';
+  const byCat=id=>{ const c=CATS.find(x=>x.id===id); return c?nodes.filter(c.match):[]; };
+  const routeBtn=(route,label)=>'<button type="button" class="dgbtn" data-route="'+esc(route)+'">'+esc(label)+' ↗</button>';
+  _sectReg=[];
+  let b='';
   // parse issues — the analyzer's own honesty about what it could not read
   if(diags.length+cfnDiags.length){
-    h+=findingBlock('chk-parse','Parse issues', diags.length+cfnDiags.length,
-      '<div class="dashrows">'+
-      diags.map(d=>'<div class="dp-row"><span class="dp-kind">'+esc(d.kind)+'</span>'+
-        '<span class="dp-path mono">'+esc(d.path)+'</span><span class="dp-msg">'+esc(d.message)+'</span></div>').join('')+
-      cfnDiags.map(m=>'<div class="dp-row"><span class="dp-kind">custom-fn</span>'+
-        '<span class="dp-msg">'+esc(m)+'</span></div>').join('')+'</div>');
+    b+=findingBlock('chk-parse','Parse issues', diags.length+cfnDiags.length,
+      tbl([{k:'kind',label:'Kind',w:'minmax(8ch,.7fr)',cls:'tags'},{k:'path',label:'File',w:'minmax(14ch,1.4fr)',mono:true},{k:'msg',label:'Message',w:'minmax(20ch,3fr)',cls:'wrap dim'}],
+        diags.map(d=>({hay:elHay(d.kind,d.path,d.message), cells:{kind:'<span class="tag sev-warn">'+esc(d.kind)+'</span>', path:esc(d.path), msg:esc(d.message)}}))
+        .concat(cfnDiags.map(m=>({hay:m, cells:{kind:'<span class="tag sev-warn">custom-fn</span>', path:'', msg:esc(m)}})))));
   }
   // flagged expressions: the message and who uses them, so the fix is one click away
-  const exprRows=list=>'<div class="dashrows">'+list.slice(0,60).map(n=>{
-    const pr=(n.data||{}).problems||[];
-    return '<div class="dashrow" style="align-items:flex-start;flex-wrap:wrap">'+
-      '<span class="nm mono" data-id="'+enc(n.id)+'" role="link" tabindex="0" style="flex:1;min-width:200px">'+
-        esc(n.label)+'</span>'+
-      '<span class="ty">'+esc(pr.map(p=>p.message).join(' · '))+'</span>'+
-      ((n.data||{}).usedBy||[]).slice(0,4).map(id=>byId.get(id)?nodeChip(id):'').join('')+
-      '</div>';
-  }).join('')+(list.length>60?'<div class="dashrow muted">+ '+(list.length-60)+' more — open the list</div>':'')+'</div>';
-  const byCat=id=>{ const c=CATS.find(x=>x.id===id); return c?nodes.filter(c.match):[]; };
-  h+=findingBlock('chk-invalid','Invalid expressions — syntax', H.invalidExpr, exprRows(byCat('invalid-expr')), 'invalid-expr');
-  h+=findingBlock('chk-suspect','Suspect expressions — review', H.suspectExpr, exprRows(byCat('suspect-expr')), 'suspect-expr');
+  const exprTable=list=>tbl([{k:'x',label:'Expression',w:'minmax(16ch,2fr)',mono:true},{k:'p',label:'Finding',w:'minmax(16ch,2fr)',cls:'wrap dim',opt:true},{k:'u',label:'Used by',w:'minmax(14ch,1.6fr)',cls:'tags',opt:true}],
+    list.map(n=>{ const pr=(n.data||{}).problems||[];
+      return {hay:elHay(n.label,pr.map(p=>p.message).join(' ')), cells:{x:vlink(n.id, n.label), p:esc(pr.map(p=>p.message).join(' · ')),
+        u:((n.data||{}).usedBy||[]).slice(0,4).map(id=>byId.get(id)?nodeChip(id):'').join('')}}; }),
+    {placeholder:'filter expressions…', more:list.length>200?'showing 200 of '+list.length+' — open the list for all':''});
+  const inv=byCat('invalid-expr'), sus=byCat('suspect-expr');
+  b+=findingBlock('chk-invalid','Invalid expressions — syntax', H.invalidExpr, exprTable(inv.slice(0,200)), 'invalid-expr');
+  b+=findingBlock('chk-suspect','Suspect expressions — review', H.suspectExpr, exprTable(sus.slice(0,200)), 'suspect-expr');
   // script syntax findings: model, element, language, then each finding with its line and code
   if(H.scriptIssues){
     const rows=allScripts().filter(s=>(s.problems||[]).length);
-    h+=findingBlock('chk-scripts','Script syntax findings', H.scriptIssues,
-      '<div class="dashrows">'+rows.map(s=>{
-        const kind=scriptKindLabel(s);
-        const title=s.elName||s.el||(s.group==='bot'?s.modelLabel:kind);
-        return '<div class="dashrow" style="align-items:flex-start;flex-wrap:wrap">'+
-          nodeChip(s.model)+
-          '<span class="nm mono" style="min-width:140px">'+esc(title)+'</span>'+
-          '<span class="pt">'+esc(kind)+'</span>'+
-          (s.lang?'<span class="pt">'+esc(s.lang)+'</span>':'')+
-          '<span class="ty" style="flex-basis:100%;display:flex;flex-direction:column;gap:2px">'+
-            s.problems.map(p=>'<span><span style="color:var(--'+(p.severity==='error'?'bad':'warn')+'-text)">'+
-              esc(p.severity)+'</span> '+esc(p.message)+
-              (p.line?' <span class="muted">· line '+p.line+'</span>':'')+
-              (p.snippet?' <span class="mono muted">'+esc(p.snippet)+'</span>':'')+'</span>').join('')+
-          '</span></div>';
-      }).join('')+
-      '<div class="dashrow"><button class="dgbtn" data-route="/scripts">open the scripts tab ↗</button></div>'+
-      '</div>', 'script-syntax');
+    b+=findingBlock('chk-scripts','Script syntax findings', H.scriptIssues,
+      tbl([{k:'model',label:'Model',w:'minmax(12ch,1.2fr)'},{k:'el',label:'Script',w:'minmax(12ch,1.2fr)'},{k:'kind',label:'Kind',w:'minmax(10ch,1fr)',cls:'tags',opt:true},{k:'f',label:'Findings',w:'minmax(20ch,3fr)',cls:'wrap'}],
+        rows.map(s=>{ const kind=scriptKindLabel(s), title=s.elName||s.el||(s.group==='bot'?s.modelLabel:kind);
+          return {hay:elHay(s.modelLabel,title,kind,s.lang,s.problems.map(p=>p.message).join(' ')), cells:{
+            model:vlink(s.model, s.modelLabel), el:s.el?elJumpHtml(s.model, s.el, title, 'Open this script in its model'):esc(title), kind:tag(kind)+tag(s.lang),
+            f:s.problems.map(p=>'<div><span class="sev sev-'+(p.severity==='error'?'bad':'warn')+'">'+esc(p.severity)+'</span> '+esc(p.message)+
+              (p.line?' <span class="muted">· line '+p.line+'</span>':'')+(p.snippet?' <span class="mono muted">'+esc(p.snippet)+'</span>':'')+'</div>').join('')}}; })),
+      'script-syntax', routeBtn('/scripts','open the scripts tab'));
   }
   // schema gaps: the per-service summary; the full column table lives in its own tab
   if(H.schemaGaps){
     const svcs=nodes.filter(n=>n.type==='service'&&((n.data||{}).schemaCoverage||{}).counts)
       .map(n=>{ const c=n.data.schemaCoverage.counts; return {n, gaps:(c.noService||0)+(c.noDataObject||0)}; })
       .filter(x=>x.gaps).sort((a,b)=>b.gaps-a.gaps);
-    h+=findingBlock('chk-schema','Schema gaps', H.schemaGaps,
-      '<div class="dashrows">'+svcs.map(x=>'<div class="dashrow">'+nodeChip(x.n.id)+
-        '<span class="ty">'+x.gaps+' column'+(x.gaps>1?'s':'')+' not mapped through</span></div>').join('')+
-      '<div class="dashrow"><button class="dgbtn" data-route="/schema">open the full report ↗</button></div></div>');
+    b+=findingBlock('chk-schema','Schema gaps', H.schemaGaps,
+      tbl([{k:'svc',label:'Service',w:'minmax(14ch,2fr)'},{k:'gaps',label:'Not mapped through',w:'minmax(10ch,1fr)',cls:'num'}],
+        svcs.map(x=>({hay:x.n.label, cells:{svc:vlink(x.n.id, x.n.label), gaps:x.gaps+' column'+(x.gaps>1?'s':'')}}))),
+      null, routeBtn('/schema','open the full report'));
   }
-  h+=findingBlock('chk-missing','Missing model references', H.missingRefs, chips(byCat('external::missing')), 'external::missing');
-  h+=findingBlock('chk-unusedforms','Unused forms', H.unusedForms, chips(byCat('unused-form')), 'unused-form');
-  h+=findingBlock('chk-changelogs','Changelogs · orphan / superseded', H.changelogIssues,
-    chips(byCat('changelog-issue')), 'changelog-issue');
-  h+=findingBlock('chk-guessed','Variables · only a script guess ≈', H.guessedVars, chips(byCat('guessed-var')), 'guessed-var');
+  b+=findingBlock('chk-missing','Missing model references', H.missingRefs, chips(byCat('external::missing')), 'external::missing');
+  b+=findingBlock('chk-unusedforms','Unused forms', H.unusedForms, chips(byCat('unused-form')), 'unused-form');
+  b+=findingBlock('chk-changelogs','Changelogs · orphan / superseded', H.changelogIssues, chips(byCat('changelog-issue')), 'changelog-issue');
+  b+=findingBlock('chk-guessed','Variables · only a script guess ≈', H.guessedVars, chips(byCat('guessed-var')), 'guessed-var');
   // The two unused-variable checks summarise as chips here; the full report names the write to delete.
-  h+=findingBlock('chk-unusedvars','Variables · written, never read', H.unusedVars,
-    '<div class="dashrows"><div class="dashrow" style="display:block">'+chips(byCat('unused-var'))+'</div>'+
-    '<div class="dashrow"><button class="dgbtn" data-route="/variables">open the full report ↗</button></div>'+
-    '</div>', 'unused-var');
-  h+=findingBlock('chk-unreadinputs','Variables · mapped into a model that never reads them', H.unreadInputs,
-    '<div class="dashrows"><div class="dashrow" style="display:block">'+chips(byCat('unread-input'))+'</div>'+
-    '<div class="dashrow"><button class="dgbtn" data-route="/variables">open the full report ↗</button></div>'+
-    '</div>', 'unread-input');
-  h+=findingBlock('chk-unusedops','Unused service operations', H.unusedOps,
+  b+=findingBlock('chk-unusedvars','Variables · written, never read', H.unusedVars, chips(byCat('unused-var')), 'unused-var', routeBtn('/variables','open the full report'));
+  b+=findingBlock('chk-unreadinputs','Variables · mapped into a model that never reads them', H.unreadInputs, chips(byCat('unread-input')), 'unread-input', routeBtn('/variables','open the full report'));
+  b+=findingBlock('chk-unusedops','Unused service operations', H.unusedOps,
     chips(nodes.filter(n=>n.type==='serviceOperation'&&!((n.data||{}).usedBy||[]).length)), 'unused-op');
-  h+=findingBlock('chk-unusedfns','Unused custom functions', H.unusedFns,
+  b+=findingBlock('chk-unusedfns','Unused custom functions', H.unusedFns,
     chips(nodes.filter(n=>n.type==='customFunction'&&!((n.data||{}).usedBy||[]).length)), 'unused-fn');
   // uncertain edges are a property of the graph, not of one node — say so once
   const suN=st.suspectEdges||0, dyN=st.dynamicEdges||0;
   if(suN+dyN){
-    h+='<div class="seclabel">Uncertain links <span class="muted">'+(suN+dyN)+'</span></div>'+
-       '<div class="dashrows"><div class="dashrow muted">'+
-       (suN?suN+' suspect (≈ resolved by a loose or cross-type match)':'')+
-       (suN&&dyN?' · ':'')+(dyN?dyN+' dynamic (ƒ expression-valued reference)':'')+
-       ' — the ≈ button in the toolbar hides them everywhere.</div></div>';
+    b+=section('chk-uncertain','Uncertain links','<p class="ddesc">'+
+       (suN?suN+' suspect (≈ resolved by a loose or cross-type match)':'')+(suN&&dyN?' · ':'')+
+       (dyN?dyN+' dynamic (ƒ expression-valued reference)':'')+' — the ≈ button in the toolbar hides them everywhere.</p>',
+       {count:suN+dyN, attrs:' id="chk-uncertain"'});
   }
+  const reg=_sectReg; _sectReg=null;
+  let h='<div class="dash" data-fscope>';
+  h+=pageHeader({icon:'checks', color:color('checks'), title:'Checks', sub:open
+       ? open+' finding'+(open>1?'s':'')+' worth a look — none of them is automatically a bug, each one is a question Atlas cannot answer on its own'
+       : 'nothing flagged — no parse issues, no broken expressions, nothing unused or unproven'});
+  h+=healthListHtml();
+  h+=secnavHtml(reg)+b;
   if(!open) h+='<div class="estate"><div class="estate-ic" aria-hidden="true">✓</div>'+
     '<div class="et">Nothing to check</div>'+
     '<div class="eh">No parse issue, no flagged expression, no unused or unresolved model.</div></div>';
   h+='</div>';
   v.innerHTML=h;
-  wireNodeLinks(v, '[data-id]', {first:reportNav});
+  wireReport(v);
+  wireNodeLinks(v, '[data-goto],[data-id]', {first:reportNav});
   // arrived from a health card or the parse-issue chip: land on the block it asked for
   if(_checkJump){
     const target=document.getElementById(_checkJump);
     _checkJump=null;
-    if(target) requestAnimationFrame(()=>target.scrollIntoView({block:'start'}));
+    if(target){ if(target.tagName==='DETAILS') target.open=true; requestAnimationFrame(()=>target.scrollIntoView({block:'start'})); }
   }
 }
 
@@ -1307,30 +1312,27 @@ function varSiteLabel(s, varName){
 }
 
 /** One row per variable: name, how it is written, where, and the read/write tally. */
-function varRowHtml(n, opts){
+function varRow(n, opts){
   const d=n.data||{};
   const writes=d.writes||[];
   // The models a write happens in, deduped — a variable written by three script tasks of one process
   // should say that process once.
   const models=[...new Set(writes.map(w=>w.model))];
   const jumps=writes.filter(w=>w.element).slice(0,4)
-    .map(w=>elJumpHtml(w.model, w.element, w.elementName||w.element, 'Open this element in its model')).join('');
+    .map(w=>elJumpHtml(w.model, w.element, w.elementName||w.element, 'Open this element in its model')).join(' ');
   const vias=[...new Set(writes.map(w=>w.via))];
   const hay=[n.label, vias.map(x=>term('via',x).label).join(' '),
     models.map(m=>(byId.get(m)||{}).label||m).join(' '),
-    (d.unreadIn||[]).map(m=>(byId.get(m)||{}).label||m).join(' ')].join(' ').toLowerCase();
-  return '<div class="dashrow varrow" data-varrow data-via="'+esc(vias[0]||'')+'"'+
-    ' data-hay="'+esc(hay)+'">'+
-    '<span class="nm mono" data-id="'+enc(n.id)+'" role="link" tabindex="0">'+esc(n.label)+'</span>'+
-    '<span class="varvias">'+writes.map(w=>varSiteLabel(w, n.label)).join('')+'</span>'+
-    '<span class="nodechips">'+models.map(m=>nodeChip(m)).join('')+
-      (opts&&opts.callee ? '<span class="varnote">never read in</span>'+
-        (d.unreadIn||[]).map(m=>nodeChip(m)).join('') : '')+'</span>'+
-    jumps+
-    '<span class="vcount"><span class="vw">'+(d.writeCount||0)+' written</span> · '+
-      '<span class="vr">'+(d.readCount||0)+' read</span></span>'+
-    '</div>';
+    (d.unreadIn||[]).map(m=>(byId.get(m)||{}).label||m).join(' ')].join(' ');
+  return {hay, attrs:' data-varrow data-via="'+esc(vias[0]||'')+'"', cells:{
+    name:vlink(n.id, n.label), via:writes.map(w=>varSiteLabel(w, n.label)).join(' '),
+    model:models.map(m=>nodeChip(m)).join(''), el:jumps,
+    never:(opts&&opts.callee)?(d.unreadIn||[]).map(m=>nodeChip(m)).join(''):'',
+    tally:'<span class="vw">'+(d.writeCount||0)+' written</span> · <span class="vr">'+(d.readCount||0)+' read</span>'}};
 }
+const VAR_COLS=[{k:'name',label:'Variable',w:'minmax(12ch,1.2fr)',mono:true},{k:'via',label:'Written via',w:'minmax(12ch,1.2fr)',cls:'tags',opt:true},
+  {k:'model',label:'Model',w:'minmax(14ch,1.6fr)',cls:'tags'},{k:'el',label:'Element',w:'minmax(10ch,1.2fr)',opt:true},{k:'tally',label:'',w:'minmax(12ch,1fr)',cls:'num faint',opt:true}];
+const VAR_COLS_CALLEE=VAR_COLS.slice(0,4).concat([{k:'never',label:'Never read in',w:'minmax(14ch,1.6fr)',cls:'tags'}], VAR_COLS.slice(4));
 
 function renderVariables(){
   const v=document.getElementById('view-variables');
@@ -1344,83 +1346,50 @@ function renderVariables(){
   const declared=vars.filter(n=>!(n.data||{}).writeCount&&!(n.data||{}).readCount);
   const open=unread.length+unreadIn.length;
   const total=INSIGHTS.totalDirectedVars, silent=INSIGHTS.silentVars;
-
-  let h='<div class="dash">';
-  h+='<div class="dash-title">Unused variables</div>'+
-     '<div class="dash-sub">'+(open
-       ? open+' of '+total+' variable'+(total>1?'s':'')+' worth a look — something writes them and '+
-         'nothing Atlas can see reads them back'
-       : 'nothing flagged — every variable that is written is read somewhere in these models')+'</div>';
+  _sectReg=[];
+  let b='';
+  b+=findingBlock('chk-unusedvars','Written, never read', unread.length, tbl(VAR_COLS, unread.map(n=>varRow(n)), {filter:false}));
+  b+=findingBlock('chk-unreadinputs','Mapped into a model that never reads it', unreadIn.length, tbl(VAR_COLS_CALLEE, unreadIn.map(n=>varRow(n,{callee:true})), {filter:false}));
+  b+=findingBlock('chk-declaredvars','Declared — readers live outside the models', declared.length,
+    tbl([{k:'name',label:'Variable',w:'minmax(12ch,1fr)',mono:true},{k:'u',label:'Declared by',w:'minmax(16ch,3fr)',cls:'tags'}],
+      declared.map(n=>({hay:n.label, cells:{name:vlink(n.id, n.label), u:((n.data||{}).usedBy||[]).map(m=>nodeChip(m)).join('')}})), {filter:false})+
+    '<p class="ddesc">An app variable, a data-object column or an extracted variable is read by the Work UI, a query or a dashboard — '+
+    'none of which Atlas parses. They are listed here rather than reported, because "unused" would be a guess.</p>');
+  // What this page cannot know. The count of names Atlas declined to judge is the honest denominator of
+  // everything above it, and the reason the rows above can be trusted.
+  b+=section('chk-varcaveat','What Atlas cannot see',
+     '<p class="ddesc">Atlas stayed silent about <strong>'+silent+'</strong> further variable'+(silent===1?'':'s')+
+     ' it would otherwise have listed, because it saw one of these:</p>'+
+     '<ul class="varwhy">'+(DATA.silenceRules||[]).map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul>'+
+     '<p class="ddesc">Query, dashboard and master-data models are not analysed for variable references, and the Work UI or any REST client '+
+     'is outside this project. A variable listed above is one that nothing <em>in these models</em> reads — not proof that nothing anywhere does.</p>',
+     {attrs:' id="chk-varcaveat"', hint:'the limits of the verdict above'});
+  const reg=_sectReg; _sectReg=null;
+  let h='<div class="dash" data-fscope>';
+  h+=pageHeader({icon:'variable', color:color('variable'), title:'Unused variables', sub:open
+       ? open+' of '+total+' variable'+(total>1?'s':'')+' worth a look — something writes them and nothing Atlas can see reads them back'
+       : 'nothing flagged — every variable that is written is read somewhere in these models'});
   // Only the two checks this page has blocks for. The script-guess card belongs to the Checks tab: its
   // `jump` names a block that does not exist here, so showing it would be a card that does nothing.
   h+=healthListHtml(['unusedVars','unreadInputs']);
-
   if(open){
-    // one filter row over both blocks: the write construct, and free text over names and models
+    // one filter row over both blocks: the write construct, and free text over names and models. A chip
+    // selects on the row's *first* write construct — the one varRow puts in `data-via` — so that is what
+    // its count has to be, or the number would promise rows the filter does not show.
     const flagged=unread.concat(unreadIn);
-    // A chip selects on the row's *first* write construct — the one varRowHtml puts in `data-via` — so
-    // that is what its count has to be, or the number would promise rows the filter does not show.
     const perVia=new Map();
-    flagged.forEach(n=>{ const first=(((n.data||{}).writes||[])[0]||{}).via;
-      if(first) perVia.set(first,(perVia.get(first)||0)+1); });
-    const vias=[...new Set(flagged.flatMap(n=>((n.data||{}).writes||[]).map(w=>w.via)))];
-    const chip=(id,label,n)=>'<button class="pchip'+(id==='all'?' on':'')+'" data-via="'+esc(id)+'">'+
-      esc(label)+'<span class="pchipn">'+n+'</span></button>';
-    h+='<div class="pbar"><input class="pf" type="search" placeholder="filter variables — name, model…" '+
-       'aria-label="Filter unused variables">'+
-       chip('all','All',open)+
-       vias.filter(x=>perVia.get(x)).map(x=>chip(x, term('via',x).label, perVia.get(x))).join('')+
-       '<span class="pcount"></span></div>';
+    flagged.forEach(n=>{ const first=(((n.data||{}).writes||[])[0]||{}).via; if(first) perVia.set(first,(perVia.get(first)||0)+1); });
+    const vias=[...new Set(flagged.flatMap(n=>((n.data||{}).writes||[]).map(w=>w.via)))].filter(x=>perVia.get(x));
+    h+='<div class="pagebar">'+filterBar({placeholder:'filter variables — name, model…', label:'Filter unused variables', total:open,
+      chips:[{fk:'via',fv:'all',label:'All',n:open}].concat(vias.map(x=>({fk:'via',fv:x,label:term('via',x).label,n:perVia.get(x)})))})+'</div>';
   }
-  h+=findingBlock('chk-unusedvars','Written, never read', unread.length,
-    '<div class="dashrows">'+unread.map(n=>varRowHtml(n)).join('')+'</div>');
-  h+=findingBlock('chk-unreadinputs','Mapped into a model that never reads it', unreadIn.length,
-    '<div class="dashrows">'+unreadIn.map(n=>varRowHtml(n,{callee:true})).join('')+'</div>');
-  if(!open){
-    h+='<div class="estate"><div class="estate-ic" aria-hidden="true">✓</div>'+
+  h+=secnavHtml(reg)+b;
+  if(!open) h+='<div class="estate"><div class="estate-ic" aria-hidden="true">✓</div>'+
        '<div class="et">Nothing written and forgotten</div>'+
-       '<div class="eh">Every variable a model writes is read somewhere — by an expression, a script, '+
-       'a form field, a decision or a called model.</div></div>';
-  }
-  h+=findingBlock('chk-declaredvars','Declared — readers live outside the models', declared.length,
-    '<div class="dashrows">'+declared.map(n=>
-      '<div class="dashrow"><span class="nm mono" data-id="'+enc(n.id)+'" role="link" tabindex="0">'+
-      esc(n.label)+'</span><span class="nodechips">'+
-      ((n.data||{}).usedBy||[]).map(m=>nodeChip(m)).join('')+'</span></div>').join('')+
-    '</div><div class="muted" style="padding:var(--space-2) 0">An app variable, a data-object column or '+
-    'an extracted variable is read by the Work UI, a query or a dashboard — none of which Atlas parses. '+
-    'They are listed here rather than reported, because "unused" would be a guess.</div>');
-
-  // What this page cannot know. The count of names Atlas declined to judge is the honest denominator of
-  // everything above it, and the reason the rows above can be trusted.
-  h+='<div class="seclabel" id="chk-varcaveat">What Atlas cannot see</div>'+
-     '<div class="dashrows"><div class="dashrow" style="display:block">'+
-     '<div class="muted">Atlas stayed silent about <strong>'+silent+'</strong> further variable'+
-     (silent===1?'':'s')+' it would otherwise have listed, because it saw one of these:</div>'+
-     '<ul class="varwhy">'+(DATA.silenceRules||[]).map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul>'+
-     '<div class="muted">Query, dashboard and master-data models are not analysed for variable '+
-     'references, and the Work UI or any REST client is outside this project. A variable listed above is '+
-     'one that nothing <em>in these models</em> reads — not proof that nothing anywhere does.</div>'+
-     '</div></div>';
+       '<div class="eh">Every variable a model writes is read somewhere — by an expression, a script, a form field, a decision or a called model.</div></div>';
   h+='</div>';
   v.innerHTML=h;
-
-  const pf=v.querySelector('.pf'), count=v.querySelector('.pcount');
-  if(pf){
-    const chips=[...v.querySelectorAll('.pchip[data-via]')];
-    const apply=()=>{
-      const q=(pf.value||'').trim().toLowerCase();
-      const via=(chips.find(c=>c.classList.contains('on'))||{dataset:{}}).dataset.via||'all';
-      let shown=0;
-      v.querySelectorAll('[data-varrow]').forEach(r=>{
-        const on=(via==='all'||r.dataset.via===via)&&(!q||(r.dataset.hay||'').indexOf(q)>=0);
-        r.hidden=!on; if(on) shown++;
-      });
-      count.textContent=(q||via!=='all')?shown+' of '+open:'';
-    };
-    pf.oninput=debounce(apply,120);
-    chips.forEach(c=>c.onclick=()=>{ chips.forEach(x=>x.classList.toggle('on', x===c)); apply(); });
-  }
+  wireReport(v);
   // The health cards of this page jump within it, so there is no `_checkJump` hand-off to honour here:
   // the only route that sets one is `/checks`, which consumes it itself.
   wireNodeLinks(v, '[data-goto],[data-id]', {first:reportNav});
@@ -1594,99 +1563,51 @@ function renderScripts(){
   });
   const totalLines=all.reduce((a,s)=>a+lines(s),0);
   const withIssues=all.filter(s=>(s.problems||[]).length).length;
-  let h='<div class="dash">';
-  h+='<div class="dash-title">Script tasks</div>'+
-     '<div class="dash-sub">'+(all.length
-       ? all.length+' script'+(all.length>1?'s':'')+' in '+models.length+' model'+(models.length>1?'s':'')+
-         ' · '+totalLines+' line'+(totalLines>1?'s':'')+
-         (withIssues?' · <span style="color:var(--bad-text)">⚠ '+withIssues+' with syntax findings</span>':'')+
-         ' — script tasks, listener scripts and bot scripts, with the variables each one touches'
-       : 'no model in this project carries a script')+'</div>';
+  _sectReg=[];
+  let b='';
+  models.forEach(mid=>{
+    const rows=byModel.get(mid), mn=byId.get(mid)||{label:mid};
+    b+=section('rpt-scripts-'+mid, nodeIcon(mn)+' '+esc(mn.label), cards(rows.map(s=>{
+      const vars=varIdx.get(s.model+'|'+(s.el==null?'':s.el))||[];
+      const chips=vars.map(x=>'<span class="'+(x.api?'':'muted ')+'mono">'+vlink('variable:'+x.name, (x.api?'':'≈ ')+x.name)+'</span>').join(' ');
+      // a bot script IS its model, and a model-level listener has only its kind to go by
+      const kind=scriptKindLabel(s);
+      const title=s.elName||s.el||(s.group==='bot'?s.modelLabel:kind);
+      return scriptCard({id:s.el, name:title, format:s.lang, script:s.body, documentation:s.doc, resultVariable:s.out, problems:s.problems}, null,
+        {extra:tag(kind)+(chips?'<span class="card-vars">'+chips+'</span>':''), right:(s.el?elJumpHtml(s.model, s.el, 'in model', 'Open this element in its model'):''),
+         attrs:' data-scriptrow data-group="'+esc(s.group)+'"', open:all.length<=6, hay:mn.label+' '+kind});
+    })), {count:rows.length, nav:mn.label, attrs:' data-model="'+enc(mid)+'"'});
+  });
+  const reg=_sectReg; _sectReg=null;
+  let h='<div class="dash" data-fscope>';
+  h+=pageHeader({icon:'scripts', color:color('scripts'), title:'Script tasks',
+    sub:all.length?'script tasks, listener scripts and bot scripts — every script body in the project, with the variables each one touches':'no model in this project carries a script',
+    facts:all.length?[['Scripts',all.length],['Models',models.length],['Lines',totalLines],
+      ['With findings',{html:withIssues?'<span class="sev sev-bad">⚠ '+withIssues+'</span>':'0',copy:null}]]:[]});
   if(!all.length){
     h+='<div class="estate"><div class="estate-ic" aria-hidden="true">{ }</div>'+
        '<div class="et">No script tasks</div>'+
        '<div class="eh">Nothing to show — no script task, listener script or bot script was found.</div></div>';
   } else {
-    // chips narrow by kind (same single-select pattern as the parameter sections), the text box searches
-    // names, languages and the code itself
-    const chip=(id,label,n)=>'<button class="pchip'+(id==='all'?' on':'')+'" data-group="'+id+'">'+
-      esc(label)+'<span class="pchipn">'+n+'</span></button>';
-    h+='<div class="pbar"><input class="pf" type="search" placeholder="filter scripts — name, language, code…" '+
-       'aria-label="Filter script tasks">'+
-       chip('all','All',all.length)+
-       SCRIPT_GROUPS.filter(g=>all.some(s=>s.group===g.id))
-         .map(g=>chip(g.id,g.label,all.filter(s=>s.group===g.id).length)).join('')+
-       '<button class="pchip" id="scriptsall"></button><span class="pcount"></span></div>';
-    models.forEach(mid=>{
-      const rows=byModel.get(mid);
-      h+='<div class="seclabel row">'+
-         nodeChip(mid)+'<span class="muted">'+rows.length+' script'+(rows.length>1?'s':'')+'</span></div>';
-      h+=rows.map(s=>{
-        const vars=varIdx.get(s.model+'|'+(s.el==null?'':s.el))||[];
-        const chips=vars.map(x=>'<span class="'+(x.api?'':'muted ')+'">'+
-          vlink('variable:'+x.name, (x.api?'':'≈ ')+x.name)+'</span>').join(' ');
-        // a bot script IS its model, and a model-level listener has only its kind to go by
-        const kind=scriptKindLabel(s);
-        const title=s.elName||s.el||(s.group==='bot'?s.modelLabel:kind);
-        const jump=elJumpHtml(s.model, s.el, 'in model', 'Open this element in its model');
-        const hay=[title, kind, s.lang||'', s.el||'', (byId.get(mid)||{}).label||'', s.body||'',
-          (s.problems||[]).map(p=>p.message).join(' ')].join(' ').toLowerCase();
-        // a handful of scripts: show the code straight away; a big project starts collapsed
-        return '<details class="op" data-scriptrow data-group="'+esc(s.group)+'"'+
-          (all.length<=6||(s.problems||[]).length?' open':'')+' data-hay="'+esc(hay)+'">'+
-          '<summary><span class="opname">'+esc(title)+'</span>'+
-          (s.el&&s.el!==title?'<span class="opid">'+esc(String(s.el))+'</span>':'')+
-          '<span class="pt">'+esc(kind)+'</span>'+
-          (s.lang?'<span class="pt">'+esc(s.lang)+'</span>':'')+
-          '<span class="pt">'+lines(s)+' line'+(lines(s)>1?'s':'')+'</span>'+
-          scriptIssueBadge(s.problems)+
-          (s.out?'<span class="pd" style="color:var(--ok-text)">out</span> <span class="mono">'+
-            paramSide(s.out)+'</span>':'')+
-          (chips?'<span style="flex:1;display:flex;gap:6px;flex-wrap:wrap;min-width:0">'+chips+'</span>':'')+
-          jump+'</summary>'+
-          (s.doc?'<div class="muted" style="padding:4px 10px 0">'+esc(s.doc)+'</div>':'')+
-          scriptProblemsHtml(s.problems)+
-          codeBoxHtml(s.body, s.lang, s.problems)+'</details>';
-      }).join('');
-    });
+    // chips narrow by kind (same single-select pattern as every filter bar), the text box searches names,
+    // languages and the code itself; one control opens or closes every body at once — reading a
+    // project's scripts top to bottom is the point of this view, and clicking 40 triangles is not
+    h+='<div class="pagebar">'+filterBar({placeholder:'filter scripts — name, language, code…', label:'Filter script tasks', total:all.length,
+      chips:[{fk:'group',fv:'all',label:'All',n:all.length}].concat(SCRIPT_GROUPS.filter(g=>all.some(s=>s.group===g.id))
+        .map(g=>({fk:'group',fv:g.id,label:g.label,n:all.filter(s=>s.group===g.id).length}))),
+      extra:'<button type="button" class="pchip" id="scriptsall"></button>'})+'</div>';
+    h+=secnavHtml(reg)+b;
   }
   h+='</div>';
   v.innerHTML=h;
-  // kind chips + one text filter over every row: model, element, language and the code itself
-  const pf=v.querySelector('.pf'), count=v.querySelector('.pcount');
-  if(pf){
-    const chips=[...v.querySelectorAll('.pchip[data-group]')];
-    const apply=()=>{
-      const q=(pf.value||'').trim().toLowerCase();
-      const group=(chips.find(c=>c.classList.contains('on'))||{dataset:{}}).dataset.group||'all';
-      let shown=0;
-      v.querySelectorAll('[data-scriptrow]').forEach(r=>{
-        const on=(group==='all'||r.dataset.group===group) && (!q||(r.dataset.hay||'').indexOf(q)>=0);
-        r.hidden=!on; if(on) shown++;
-        if(q&&on) r.open=true;
-      });
-      // hide a model heading whose scripts are all filtered out
-      v.querySelectorAll('.seclabel').forEach(lab=>{
-        let any=false;
-        for(let e=lab.nextElementSibling; e&&!e.classList.contains('seclabel'); e=e.nextElementSibling){
-          if(e.hasAttribute('data-scriptrow')&&!e.hidden) any=true;
-        }
-        lab.hidden=!any;
-      });
-      count.textContent=(q||group!=='all')?shown+' of '+all.length:'';
-      syncAll();
-    };
-    pf.oninput=debounce(apply,120);
-    chips.forEach(c=>c.onclick=()=>{ chips.forEach(x=>x.classList.toggle('on', x===c)); apply(); });
-    // one control for every body at once — reading a project's scripts top to bottom is the point of
-    // this view, and clicking 40 triangles is not
-    const all2=()=>[...v.querySelectorAll('[data-scriptrow]')].filter(r=>!r.hidden);
-    const toggle=v.querySelector('#scriptsall');
-    const syncAll=()=>{ const rows=all2();
-      toggle.textContent=(rows.length&&rows.every(r=>r.open))?'⇕ collapse all':'⇕ expand all'; };
-    toggle.onclick=()=>{ const rows=all2(), open=!rows.every(r=>r.open);
-      rows.forEach(r=>{ r.open=open; }); syncAll(); };
+  wireReport(v);
+  const toggle=v.querySelector('#scriptsall');
+  if(toggle){
+    const rows=()=>[...v.querySelectorAll('[data-scriptrow]')].filter(r=>!r.hidden);
+    const syncAll=()=>{ const rs=rows(); toggle.textContent=(rs.length&&rs.every(r=>r.open))?'⇕ collapse all':'⇕ expand all'; };
+    toggle.onclick=()=>{ const rs=rows(), open=!rs.every(r=>r.open); rs.forEach(r=>{ r.open=open; }); syncAll(); };
     v.querySelectorAll('[data-scriptrow]').forEach(r=>r.addEventListener('toggle',syncAll));
+    v.querySelectorAll('.fbar .pf, .fbar .pchip').forEach(el=>el.addEventListener(el.tagName==='INPUT'?'input':'click', ()=>setTimeout(syncAll,150)));
     syncAll();
   }
   wireNodeLinks(v, '[data-goto],[data-id]');
@@ -2037,7 +1958,8 @@ function sectRemember(id, open){
 }
 function sectIsOpen(id){
   const m=sectAll();
-  return id in m ? !!m[id] : !!DEFAULT_OPEN_SECTIONS[id];
+  // a report page's findings are its point — its sections start open; a node page starts folded
+  return id in m ? !!m[id] : (!!DEFAULT_OPEN_SECTIONS[id] || /^(chk|rpt)-/.test(id));
 }
 // What rendered, in page order: `section()` appends to it while a page is being built and the section
 // navigator reads it afterwards — so the navigator lists exactly the sections that exist, never one that
@@ -2062,7 +1984,7 @@ function section(id, titleHtml, bodyHtml, o){
     if(m){ count=+m[2]; title=m[1]+(m[3]||''); }
   }
   if(_sectReg) _sectReg.push({id, title:o.nav||stripTags(title).replace(/\s*—[\s\S]*$/,''), count});
-  return '<details class="sect" data-sect="'+enc(id)+'"'+(sectIsOpen(id)?' open':'')+'>'+
+  return '<details class="sect" data-sect="'+enc(id)+'"'+(o.attrs||'')+(sectIsOpen(id)?' open':'')+'>'+
     '<summary><span class="st">'+(o.count!=null||count==null?titleHtml:esc(title))+'</span>'+
     (count!=null?'<span class="scount">'+esc(String(count))+'</span>':'')+
     (o.hint?'<span class="shint">'+esc(o.hint)+'</span>':'')+'</summary>'+
@@ -2096,7 +2018,7 @@ function tbl(cols, rows, o){
     cols.map(c=>'<span class="'+tdCls(c)+'">'+esc(c.label||'')+'</span>').join('')+'</div>';
   const body=rows.map(r=>{
     const cells=cols.map(c=>{ const v=r.cells[c.k]; return '<span class="'+tdCls(c)+'">'+(v==null?'':v)+'</span>'; }).join('');
-    const attrs=dataEl(r.el)+hayAttr(r.hay);
+    const attrs=dataEl(r.el)+hayAttr(r.hay)+(r.attrs||'');
     if(r.body) return '<details class="tr'+(r.cls?' '+r.cls:'')+'"'+attrs+(r.open?' open':'')+
       '><summary class="trs"><span class="td tdc">'+uiIcon('chevron')+'</span>'+cells+'</summary>'+
       '<div class="tx'+(r.bodyCls?' '+r.bodyCls:'')+'">'+r.body+'</div></details>';
@@ -2173,11 +2095,11 @@ function filterBar(o){
  */
 function wireSectionFilter(root){
   root.querySelectorAll('.fbar').forEach(bar=>{
-    const scope=bar.closest('.sb')||bar.parentElement;
+    const scope=bar.closest('.sb')||bar.closest('[data-fscope]')||bar.parentElement;
     const input=bar.querySelector('.pf'), chips=[...bar.querySelectorAll('.pchip[data-fv]')], count=bar.querySelector('.pcount');
     const all=[...scope.querySelectorAll('[data-hay]')].filter(el=>!el.closest('.fbar'));
     const leaves=all.filter(el=>!el.querySelector('[data-hay]'));
-    const containers=[...scope.querySelectorAll('details.card, details.tr, details.op, .fgroup')].filter(c=>c.querySelector('[data-hay]'));
+    const containers=[...scope.querySelectorAll('details.card, details.tr, details.sect, .fgroup')].filter(c=>c.querySelector('[data-hay]'));
     const apply=()=>{
       const q=(input.value||'').trim().toLowerCase();
       const on=chips.find(c=>c.classList.contains('on'));
@@ -2616,8 +2538,10 @@ S.subforms={id:'subforms', title:'Subforms', hint:'forms embedded in this one',
 // --- data object ---
 S.properties={id:'columns', title:'Properties', hint:'the fields of the object, typed, with the objects they point at',
   count:(n,c)=>(c.d.columns||[]).length,
-  build:(n,c)=>{ const cs=c.d.columns||[]; if(!cs.length) return '';
+  build:(n,c)=>{ const cs=c.d.columns||[]; void c.d.fields;   // `fields` is columns[].name again — read, so it does not surface as an "other attribute"
+    if(!cs.length) return '';
     return tbl([{k:'name',label:'Name',w:'minmax(10ch,1.2fr)',mono:true},{k:'label',label:'Label',w:'minmax(10ch,1.4fr)',cls:'dim',opt:true},
+
                 {k:'type',label:'Type',w:'minmax(8ch,.8fr)',cls:'tags'},{k:'ref',label:'Relation',w:'minmax(10ch,1.2fr)',opt:true}],
       cs.map(col=>({hay:(col.name||'')+' '+(col.label||'')+' '+(col.type||'')+' '+(col.refDataObject||''), cells:{
         name:esc(col.name||''), label:esc(col.label||''), type:tag(col.type),
@@ -2692,7 +2616,7 @@ function scriptCard(t, c, o){
   const fmt=t.format||t.scriptFormat, label=t.name||t.id||'';
   const body=(t.documentation?'<p class="ddesc card-doc">'+esc(t.documentation)+'</p>':'')+
     (t.script?codeblk(t.script, fmt, t.problems):'<div class="muted tbl-empty">no script body</div>');
-  return {el:t.id, hay:elHay(label,t.id,fmt,t.script), name:esc(label)+(c?c.loc(t.id,t.name):''), id:t.id&&t.id!==label?t.id:null,
+  return {el:t.id, hay:elHay(label,t.id,fmt,t.script,o.hay), name:esc(label)+(c?c.loc(t.id,t.name):''), id:t.id&&t.id!==label?t.id:null,
     badges:[tag(fmt), t.resultVariable?'<span class="dir" data-dir="out">out</span> <span class="mono">'+paramSide(t.resultVariable)+'</span>':'',
       scriptIssueBadge(t.problems), elementTags(t), o.extra||''],
     right:o.right||'', body, open:!!(t.problems||[]).length||!!o.open, attrs:o.attrs||''};
@@ -3501,13 +3425,7 @@ function renderDetail(){
   const fp=det.querySelector('.dfile');
   if(fp) fp.onclick=e=>{ if(e.target.closest('.cpy')) return;
     atlasCopy(dec(fp.dataset.copy), ()=>{ fp.classList.add('copied'); setTimeout(()=>fp.classList.remove('copied'),1200); }); };
-  det.querySelectorAll('.cpy').forEach(b=>{
-    b.onclick=e=>{ e.stopPropagation(); e.preventDefault();   // don't navigate the chip/link or toggle the row this button sits in
-      atlasCopy(dec(b.dataset.copy), ()=>{ if(b.dataset.busy) return; b.dataset.busy='1';
-        const old=b.innerHTML; b.classList.add('ok'); b.innerHTML=CPY_OK_SVG;
-        setTimeout(()=>{ b.classList.remove('ok'); b.innerHTML=old; delete b.dataset.busy; },1200); }); };
-    b.onkeydown=e=>{ if(e.key==='Enter'||e.key===' ') e.stopPropagation(); };   // keep Enter/Space from the parent's nav
-  });
+  wireCopyButtons(det);
   wireOpenButtons(det);                 // ↗ open the file / file:line in the IDE (no-ops in a browser)
   // ⌖ locate-on-diagram buttons; preventDefault keeps a click inside a <summary> from toggling it
   det.querySelectorAll('.dgloc').forEach(b=>{
@@ -5764,6 +5682,16 @@ function lineRef(file,line){
 function atlasOpen(file,line){
   if(!window.__atlasOpen) return false;
   try{ window.__atlasOpen(String(file), String(line==null?'':line)); return true; }catch(e){ return false; }
+}
+/** Every copy button under `root`: copies through atlasCopy and flashes a check mark on success. */
+function wireCopyButtons(root){
+  root.querySelectorAll('.cpy').forEach(b=>{
+    b.onclick=e=>{ e.stopPropagation(); e.preventDefault();   // don't navigate the chip/link or toggle the row this button sits in
+      atlasCopy(dec(b.dataset.copy), ()=>{ if(b.dataset.busy) return; b.dataset.busy='1';
+        const old=b.innerHTML; b.classList.add('ok'); b.innerHTML=CPY_OK_SVG;
+        setTimeout(()=>{ b.classList.remove('ok'); b.innerHTML=old; delete b.dataset.busy; },1200); }); };
+    b.onkeydown=e=>{ if(e.key==='Enter'||e.key===' ') e.stopPropagation(); };   // keep Enter/Space from the parent's nav
+  });
 }
 function wireOpenButtons(root){
   root.querySelectorAll('[data-open]').forEach(b=>{

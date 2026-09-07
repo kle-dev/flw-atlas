@@ -337,10 +337,6 @@
   /* Unused-variables report (#/variables). A row carries more than a name — the construct that writes
      the variable, the models involved, and the write/read tally — so it wraps instead of truncating,
      and the counts stay legible as the one thing a reader scans down the column. */
-  .varrow{align-items:flex-start;flex-wrap:wrap}
-  .varvias{display:flex;flex-wrap:wrap;gap:var(--space-15);align-items:center;min-width:0}
-  .varnote{color:var(--ink-faint);font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.06em;flex:none}
-  .vcount{margin-left:auto;flex:none;font-size:var(--text-2xs);color:var(--ink-faint);white-space:nowrap}
   .vw{color:var(--bad-text)}
   .vr{color:var(--ok-text)}
   .varwhy{margin:var(--space-15) 0;padding-left:var(--space-4);color:var(--ink-dim);font-size:var(--text-xs)}
@@ -351,12 +347,6 @@
   #diaglist>summary:before{content:"▸ ";color:var(--ink-faint)}
   #diaglist[open]>summary:before{content:"▾ "}
   #diaglist[open]>summary{border-bottom:1px solid var(--line);color:var(--ink)}
-  .dp-row{display:flex;gap:var(--space-25);align-items:baseline;padding:var(--space-2) var(--space-35);border-bottom:1px solid var(--line);font-size:var(--text-xs)}
-  .dp-row:last-child{border-bottom:none}
-  .dp-kind{color:var(--c-suspectExpr);font-weight:600;flex:none}
-  .dp-path{font-family:var(--mono);color:var(--ink);flex:none;max-width:40%;overflow:hidden;text-overflow:ellipsis}
-  .dp-msg{color:var(--ink-dim)}
-
   /* ------------------------------------------------------------------ */
   /* Command palette (⌘K)                                                */
   /* ------------------------------------------------------------------ */
@@ -696,6 +686,13 @@
   .snc:hover{color:var(--ink);border-color:var(--accent)}
   .snc:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
   .snn{font-variant-numeric:tabular-nums;color:var(--ink-faint);font-weight:400}
+  /* report pages share the hero (no sticky bar): the filter row sits under it, tool buttons at the top
+     of a section, and a script card lists the variables it touches beside its badges */
+  .dash>.dhero{padding-top:0}
+  .dash .hlist{margin-top:var(--space-3)}
+  .pagebar{margin:var(--space-4) 0 var(--space-1)}
+  .toolrow{display:flex;flex-wrap:wrap;gap:var(--space-15)}
+  .card-vars{display:inline-flex;flex-wrap:wrap;gap:var(--space-15);font-size:var(--text-xs)}
   /* ---- copy-to-clipboard icon button (keys, values, "used by" badges) ---- */
   .cpy{display:inline-flex;align-items:center;justify-content:center;flex:none;width:20px;height:20px;padding:0;
     margin-left:var(--space-1);vertical-align:middle;line-height:0;background:transparent;
@@ -780,7 +777,7 @@
   .kvk{min-width:150px}
   .kvv{flex:1;word-break:break-word;white-space:pre-wrap}
   .kvsub{padding:2px 0 2px 12px}
-  .tag{font-size:var(--text-2xs);font-weight:500;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;
+  .tag,.pt{font-size:var(--text-2xs);font-weight:500;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;
     border:1px solid var(--line2);border-radius:var(--radius-sm);padding:1px var(--space-15);color:var(--ink-dim)}
 
   /* schema coverage (Liquibase -> service -> data object) */
@@ -804,26 +801,6 @@
   .tbl>.tr.cov-warn{background:var(--status-warn-bg);box-shadow:inset 3px 0 0 var(--cov-warn)}
   .tbl>.tr.cov-info{background:var(--status-info-bg)}
 
-  /* operations — each collapsible, params reveal as a single-column list */
-  details.op,.op.flat{border:1px solid var(--line);border-radius:var(--radius-md);margin:var(--space-15) 0;
-    background:var(--panel);overflow:hidden}
-  details.op>summary,.op.flat{display:flex;align-items:center;gap:var(--space-25);padding:var(--space-2) var(--space-3);
-    font-family:var(--mono);font-size:var(--text-sm);color:var(--ink)}
-  details.op>summary{cursor:pointer;list-style:none}
-  details.op>summary::-webkit-details-marker{display:none}
-  details.op>summary:before{content:"▸";color:var(--ink-faint);flex:none;font-size:var(--text-2xs)}
-  details.op[open]>summary:before{content:"▾"}
-  .op.flat:before{content:"·";color:var(--ink-faint);flex:none;font-size:var(--text-2xs)}
-  details.op>summary:hover{background:var(--hover)}
-  details.op[open]>summary{border-bottom:1px solid var(--line)}
-  .opname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .opcount{margin-left:auto;flex:none;font-family:var(--sans);color:var(--ink-faint);font-size:var(--text-2xs);
-    border:1px solid var(--line2);border-radius:var(--radius-full);padding:1px var(--space-2)}
-  .opkey{flex:none;color:var(--ink-faint)}
-  /* what the group's parameters are mapped onto: the key inline in the summary, the chip in the body */
-  .opid{flex:none;color:var(--ink-faint);font-size:var(--text-2xs);overflow:hidden;text-overflow:ellipsis;
-    white-space:nowrap;max-width:30%}
-  .opsub{color:var(--ink-faint)}
   /* a term that carries an explanation: the dotted underline is the affordance for "hover me" */
   .term[title]{text-decoration:underline dotted var(--line2);text-underline-offset:2px;cursor:help}
   .term[title]:hover{text-decoration-color:var(--accent)}
@@ -852,13 +829,11 @@
   .dmntab th{background:var(--panel2);color:var(--ink-dim);font-family:var(--sans);font-weight:600}
   .dmntab td{color:var(--ink-dim)}
   .dmntab .o{border-left:2px solid var(--line2)}          /* where inputs end and outputs begin */
-  /* CMMN plan-model tree: indent each nested stage under its parent */
-  .plantree{border-left:1px solid var(--line2);margin:0 0 var(--space-15) var(--space-2);
-    padding-left:var(--space-25)}
-  .plantree .oprow{font-size:var(--text-sm)}
-  .plantree details.uses{margin:var(--space-1) 0}
   .opref{flex:none;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:45%}
-  .opchips{padding:var(--space-2) var(--space-3) 0}
+  .card-r .opref,.tbl .opref{max-width:none}
+  /* the element an id-shaped label belongs to, beside a term ("In parameter · Manual review") */
+  .opid{color:var(--ink-faint);font-size:var(--text-2xs);margin-left:var(--space-1)}
+
   .parmgrid{display:grid;grid-template-columns:1fr;gap:1px;background:var(--line)}
   .parmgrid .pc{display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-25);
     background:var(--panel);padding:var(--space-1) var(--space-3);min-width:0;font-family:var(--mono);font-size:var(--text-sm)}

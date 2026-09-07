@@ -249,6 +249,12 @@ class RenderersSmokeTest {
         assertTrue("expected the navigator styling from explorer.css", html.contains(".secnav{"))
         assertTrue("expected the table styling from explorer.css", html.contains(".tbl{"))
         assertFalse("the stat-cell grid is gone", html.contains(".cell{"))
+        // The report pages share the detail page's bones: the same header, sections and tables.
+        assertTrue("expected the report page header from explorer.js", html.contains("function pageHeader("))
+        assertTrue("expected the report wiring from explorer.js", html.contains("function wireReport("))
+        assertFalse("the old operation card styling is gone", html.contains("details.op>summary"))
+        assertFalse("the old row list styling is gone", html.contains(".oplist{"))
+
 
     }
 }

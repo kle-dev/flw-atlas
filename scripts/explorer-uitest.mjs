@@ -604,7 +604,32 @@ const probe = `<script>
   steps.push(()=>{
     ok('a health row opens the Checks page', location.hash==='#/checks' && !!document.querySelector('#view-checks .hlist'));
     ok('no health card wall anywhere', !document.querySelector('.hcard'));
+    const cv=document.getElementById('view-checks');
+    ok('the Checks page has the shared header', !!cv.querySelector('.dhero .dtitle'));
+    const secs=[...cv.querySelectorAll('details.sect[data-sect^="chk-"]')];
+    ok('each finding is a section that starts open', secs.length>0 && secs.every(s=>s.open), secs.length+' sections');
+    ok('a finding section carries the id the health rows jump to', secs.every(s=>s.id===decodeURIComponent(s.dataset.sect)));
+    ok('the navigator lists the findings', cv.querySelectorAll('.secnav .snc').length===secs.length);
   });
+  // --- the Scripts page: every script body, as the same card the process page shows ---
+  steps.push(()=>{ location.hash='/scripts'; });
+  steps.push(()=>{
+    const sv=document.getElementById('view-scripts');
+    const cards=[...sv.querySelectorAll('details.card[data-scriptrow]')];
+    ok('the Scripts page lists every script as a card', cards.length>0 && cards.length===sv.querySelectorAll('[data-scriptrow]').length);
+    ok('grouped under one section per model', sv.querySelectorAll('details.sect[data-sect^="rpt-scripts-"]').length>0);
+    ok('the header counts the scripts', /Scripts/.test((sv.querySelector('.facts')||{}).textContent||''));
+    const pf=sv.querySelector('.pf');
+    if(pf){ pf.value='zzzznope'; pf.dispatchEvent(new Event('input')); }
+  });
+  steps.push(()=>{
+    const sv=document.getElementById('view-scripts');
+    const shown=[...sv.querySelectorAll('[data-scriptrow]')].filter(r=>!r.hidden);
+    ok('the scripts filter hides every card for a term matching nothing', shown.length===0, shown.length+' still shown');
+    ok('and folds the model sections they were in', [...sv.querySelectorAll('details.sect[data-sect^="rpt-scripts-"]')].every(s=>s.hidden));
+    const pf=sv.querySelector('.pf'); if(pf){ pf.value=''; pf.dispatchEvent(new Event('input')); }
+  });
+
 
   // --- the IDE palette bridge ---
   // A host pushes (mode, nine colours); the page wears them while it shows the IDE's mode, and drops them
@@ -675,12 +700,15 @@ const probe = `<script>
     ok('the fixture reports the unused variables it deliberately contains', declared>0,
        'no unused-variable findings in the payload at all');
     // Each row must name the write to delete: the construct in Design's words, and the model.
-    const withVia=rows.filter(r=>r.querySelector('.varvias .term')).length;
+    const withVia=rows.filter(r=>r.querySelector('.term')).length;
     ok('each row names how the variable is written', withVia===rows.length,
        withVia+' of '+rows.length+' rows carry a write construct');
-    const withModel=rows.filter(r=>r.querySelector('.nodechips .nc[data-id]')).length;
+    const withModel=rows.filter(r=>r.querySelector('.nc[data-id]')).length;
     ok('each row links the model that writes it', withModel===rows.length,
        withModel+' of '+rows.length+' rows link a model');
+    // The report pages are built from the detail page's parts: a hero, sections, column-headed tables.
+    ok('the variables page has the shared header', !!view.querySelector('.dhero .dtitle'));
+    ok('its findings are sections with a table', view.querySelectorAll('details.sect[data-sect^="chk-"] .tbl .th').length>0);
     // The caveat block is what keeps the report honest about its own limits.
     ok('the page states what Atlas cannot see',
        (document.getElementById('chk-varcaveat')||{}) && document.querySelectorAll('#view-variables .varwhy li').length>0);
