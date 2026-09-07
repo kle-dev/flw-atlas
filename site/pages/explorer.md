@@ -70,7 +70,7 @@ IntelliJ — and the description the modeller wrote in Design, as prose. Under i
 handful of properties that describe the model itself (a data object's backing service and table, a
 decision table's hit policy, a service's base URL). Counts are not facts here — every section carries
 its own count in its heading. A sticky bar keeps the kind and the page actions (*back*, *expand all*,
-*copy link*) in reach, and shows the title once the header has scrolled away.
+*copy link*) in reach while the page scrolls.
 
 Then a row of **chips, one per section**, each with the section's count. A process has twenty
 sections; the chips are its map — click one and the section opens and scrolls into view.

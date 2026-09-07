@@ -2151,21 +2151,6 @@ function secnavHtml(reg){
     '<button type="button" class="snc" data-jump-sect="'+enc(s.id)+'">'+esc(s.title)+
     (s.count!=null?'<span class="snn">'+esc(String(s.count))+'</span>':'')+'</button>').join('')+'</nav>';
 }
-/** The sticky bar shows the title once the hero has scrolled out from under it. Disposed on every
- *  re-render — the panel's innerHTML is replaced, and an observer on dead nodes leaks per navigation. */
-function wireHeroObserver(det){
-  if(det._heroIO){ det._heroIO.disconnect(); det._heroIO=null; }
-  const hero=det.querySelector('.dhero'), head=det.querySelector('.dhead');
-  if(!hero||!head||!window.IntersectionObserver) return;
-  // Desktop: #detail is the scroller. Stacked (≤800px): the page is, so the viewport is the root.
-  const stacked=!!(window.matchMedia&&window.matchMedia('(max-width:800px)').matches);
-  const io=new IntersectionObserver(es=>{
-    es.forEach(e=>head.classList.toggle('scrolled', !e.isIntersecting && e.boundingClientRect.top<0));
-  }, {root: stacked?null:det, rootMargin:'-44px 0px 0px 0px', threshold:0});
-  io.observe(hero);
-  det._heroIO=io;
-}
-
 // ---------- in/out parameters ----------
 // A model's `parameters` is one flat list of {element,elementName,elementType,elementSubType,dir,kind,
 // source,target,…} records — every flavour of Flowable variable mapping normalised to source -> target.
@@ -3327,9 +3312,8 @@ const kvTruthy=v=>!(v==null||v===''||(Array.isArray(v)&&!v.length)||
 function renderDetail(){
   const det=document.getElementById('detail');
   // The info card lives on <body> now, so it survives this re-render — drop it, or it would keep
-  // showing an element of the model we are navigating away from. Same for the hero observer.
+  // showing an element of the model we are navigating away from.
   hideDgCard();
-  if(det._heroIO){ det._heroIO.disconnect(); det._heroIO=null; }
   if(!state.sel || !byId.get(state.sel)){
     const alt=IS_MAC?'⌥':'Alt+';
     det.innerHTML='<div class="estate"><div class="estate-ic" aria-hidden="true">⌕</div>'+
@@ -3378,11 +3362,11 @@ function renderDetail(){
   if(ik.length) body+=section('rels-in','Used by / referenced from', relBody(inc), {count:ik.reduce((a,k)=>a+inc[k].size,0), nav:'Used by'});
   if(!ok.length && !ik.length) body+='<p class="muted" style="margin-top:18px">No relationships recorded for this node.</p>';
   const reg=_sectReg; _sectReg=null;
-  // The sticky bar: kind on the left, the title once the hero has scrolled away, the actions right.
+  // The sticky bar: kind on the left, the actions right. The title stays in the body — at 26px it is
+  // the one thing a reader should not have pinned over what they are reading.
   const kindHint=term('type', n.type).hint;
   let h='<div class="dhead">'+
      '<span class="dkind"'+(kindHint?' data-tip="'+esc(kindHint)+'"':'')+'>'+nodeIcon(n)+esc(nodeKind(n))+'</span>'+
-     '<span class="dhead-title" aria-hidden="true">'+esc(n.label)+'</span>'+
      '<span class="dhead-actions">'+
      (_navCount>1?'<button id="back" data-tip="Back to the previous node">'+uiIcon('back')+'<span class="lbl">back</span></button>':'')+
      '<button id="sectall" data-tip="Expand or collapse every section on this page">'+uiIcon('expand')+'<span class="lbl">expand all</span></button>'+
@@ -3447,7 +3431,6 @@ function renderDetail(){
   });
   wireSectionFilter(det);
   wireDiagram(det);
-  wireHeroObserver(det);
   applyFocus(det);
 }
 

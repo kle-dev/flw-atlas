@@ -19,7 +19,7 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   now with the type's icon in a tinted tile, the title, one identity line (kind · key · path, each
   copyable, the path opening the file inside IntelliJ), Design's description as prose, and the facts as a
   definition list — the handful of properties that describe the model itself, never a count. The sticky
-  bar keeps the kind and the actions in reach and shows the title once the header has scrolled away.
+  bar keeps the kind and the actions in reach.
 - **Sections come in reading order, and the page says which ones it has.** Every node type has an ordered
   list of sections now: what the model *is* first (a form's fields, a data object's properties, a
   process's tasks, a decision table's inputs, outputs and rules, a service's operations), then how it

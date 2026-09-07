@@ -432,7 +432,6 @@ const probe = `<script>
     // --- the page header: title in the hero, the same title in the sticky bar, the identity line ---
     const title=det.querySelector('.dhero .dtitle');
     ok('the hero carries the title', !!title && /Demo App/.test(title.textContent), title?title.textContent:'(none)');
-    ok('the sticky bar carries a copy for when the hero scrolls away', !!det.querySelector('.dhead .dhead-title'));
     ok('the identity line names kind, key and path', !!det.querySelector('.dident .dkey') && /demoApp/.test(det.querySelector('.dident').textContent));
     ok('the actions are one group with labels', det.querySelectorAll('.dhead .dhead-actions button .lbl').length>=2);
   });
