@@ -64,8 +64,31 @@ fourteen rows of chips.
 
 ## The detail panel
 
-Selecting a node gives you its attributes, its diagram, its neighbourhood, type-specific sections — and
-then the two lists that are the point of the whole thing:
+Selecting a node opens its page. It starts with a **header**: the type's icon in a tinted tile, the
+title, one identity line — kind · key · file path, each copyable, the path opening the file inside
+IntelliJ — and the description the modeller wrote in Design, as prose. Under it the **facts**: the
+handful of properties that describe the model itself (a data object's backing service and table, a
+decision table's hit policy, a service's base URL). Counts are not facts here — every section carries
+its own count in its heading. A sticky bar keeps the kind and the page actions (*back*, *expand all*,
+*copy link*) in reach, and shows the title once the header has scrolled away.
+
+Then a row of **chips, one per section**, each with the section's count. A process has twenty
+sections; the chips are its map — click one and the section opens and scrolls into view.
+
+<figure class="fig">
+  <div class="body"><img class="only-light" src="../assets/img/detail-form.png" alt="A form's detail page: the header with icon tile, title and identity line, the section chips, and the Fields table with column headers" width="1400" height="1000"><img class="only-dark" src="../assets/img/detail-form-dark.png" alt="A form's detail page: the header with icon tile, title and identity line, the section chips, and the Fields table with column headers" width="1400" height="1000"></div>
+  <figcaption><b>A form's page</b> — the header, the chips that map the sections, and the Fields table:
+  every component, what it is bound to, and what a button does.
+  <a href="../demo/explorer.html#form%3AorderForm" target="_blank" rel="noopener">Open it ↗</a></figcaption>
+</figure>
+
+The sections come in reading order, not parser order, and each node type has its own list: what the
+model *is* first (a form's fields, a data object's properties, a process's user, service and script
+tasks, a decision table's inputs, outputs and rules, a service's operations), then how it behaves
+(events, gateways, sequence flows with their conditions, lanes, multi-instance, listeners,
+documentation), then what flows through it (**Parameters** — every in/out mapping, grouped by the
+element that declares it — and **Called with**, the mirror image: what callers actually pass in), and
+last the two lists that are the point of the whole thing:
 
 - **Uses / references** — what this node points at.
 - **Used by / referenced from** — what points at it.
@@ -73,21 +96,30 @@ then the two lists that are the point of the whole thing:
 Both directions, always, for every node type. That is the question a model file cannot answer on its
 own, and it is why the graph carries `usedBy`.
 
-The **neighbourhood** draws the same two lists as a picture that reads left to right: what the node uses in
-a column on the left, what uses it on the right, the node in the middle, the arrows pointing the way each
-reference goes. A dashed connector with `≈` or `ƒ` is an uncertain link, the most-referenced neighbours
-come first, and *+N more* opens the full list below. It is a section like the others — remembered, and
-part of *expand all*.
+Every list is a **table with column headers** — names and captions in the text face, identifiers,
+expressions, paths and code in monospace — and a row with more to say expands in place: a form button
+into the model it invokes, the payload it sends and stores, its settings and its expression; a script
+task into its code with line numbers and the validator's findings; a service task into its
+implementation, the operation it calls and its field injections. A long table gets a filter of its own.
+In a narrow panel — an IntelliJ tool window — the optional columns drop under the row instead of being
+clipped, and nothing scrolls sideways.
+
+The **neighbourhood** draws the two reference lists as a picture that reads left to right: what the node
+uses in a column on the left, what uses it on the right, the node in the middle, the arrows pointing the
+way each reference goes. A dashed connector with `≈` or `ƒ` is an uncertain link, the most-referenced
+neighbours come first, and *+N more* opens the full list below. It is a section like the others —
+remembered, and part of *expand all*.
 
 Inside IntelliJ the panel also opens code: the `↗` beside a source path and every `:line` on a method
 or endpoint open that file in an editor tab (see [the plugin](../plugin/#the-atlas-explorer-inside-the-ide)).
 In a browser those affordances are not shown — the page cannot open a file there.
 
-Every section remembers whether you left it open, per section, across reloads. Up to twelve nodes can
-be open as **detail tabs**, which are viewports with their own history rather than pins. The split
-between the list and the panel is yours to move — drag the handle between them, `←`/`→` nudge it,
-`Home` resets — and it is remembered, which matters most in a narrow IDE tool window where the list
-used to take half the width.
+Every section remembers whether you left it open, per section, across reloads; the section that *is*
+the model (a form's Fields, a service's Operations, a process's tasks) starts open, everything else
+starts folded. Up to twelve nodes can be open as **detail tabs**, which are viewports with their own
+history rather than pins. The split between the list and the panel is yours to move — drag the handle
+between them, `←`/`→` nudge it, `Home` resets — and it is remembered, which matters most in a narrow
+IDE tool window where the list used to take half the width.
 
 Nothing the parser extracted is invisible: whatever no specific section consumed renders at the bottom
 as a collapsed **Other attributes** key/value tree. When a new model attribute starts being parsed, it
@@ -95,12 +127,15 @@ shows up there by default — a dedicated section is an upgrade, not a precondit
 same rule holds structurally on the generator side: a parsed field the report would silently drop
 fails the build.
 
-Beyond processes, cases, decisions, forms and the integration models, the structured types now include
-queries (parameters, sort keys, the search-template body), SLAs (due-date targets, escalations —
-including the process or case an escalation starts), sequences (the number format), templates (their
-variations' actual text), knowledge bases (retrieval settings; credentials never leave the model, only
-their kind), variable extractors (which indexed variable is written from which scope) and document
-models (per-action forms and permissions).
+A process page shows what its diagram alone does not: call activities and sub-processes with the
+process each one calls, gateways with their default flow, receive, send and manual tasks, every event
+with what it is attached to, every sequence flow with its condition, and the `async` and skip flags on
+the rows that carry them. Beyond processes, cases, decisions, forms and the integration models, the
+structured types include queries (parameters, result columns, the search-template body), SLAs (due-date
+targets, escalations — including the process or case an escalation starts), sequences (the number
+format), templates (their variations' actual text), knowledge bases (retrieval settings; credentials
+never leave the model, only their kind), variable extractors (which indexed variable is written from
+which scope) and document models (per-action forms and permissions).
 
 On a form or page, a row in **Fields** expands when the component does something: the model a button
 invokes (as a chip you can follow), the payload it sends and stores back, the `{{binding}}` its result is
@@ -113,6 +148,11 @@ row itself, because a hidden button that auto-executes is a worker nobody presse
 to expand anything to learn that — when the state is a condition instead, the condition is in the body.
 And when a button is configured to send the whole payload or store the whole response, that is said
 first and the mapping it overrides is marked unused, because the runtime never reads it.
+
+The report pages — `#/checks`, `#/scripts`, `#/variables`, `#/schema` — are built from the same parts:
+the same header with the page's own numbers as facts, the same sections with their chips, the same
+tables. A script on the Scripts page is the card the process page shows; a finding on the Checks page
+is a section the health rows jump to.
 
 ## Diagrams
 

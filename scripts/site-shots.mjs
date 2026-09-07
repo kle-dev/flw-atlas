@@ -163,7 +163,11 @@ const SHOTS = [
   ['#/variables', 'variables-page', { w: 1400, h: 900 }],
   ['#/schema', 'schema-page', { w: 1400, h: 800 }],
   ['#/scripts', 'scripts-page', { w: 1400, h: 900 }],
+  // Two detail pages: a form (the Fields table) and a process (twenty sections and their chips).
+  ['#form%3AorderForm', 'detail-form', { w: 1400, h: 1000 }],
+  ['#process%3AorderProcess', 'detail-process', { w: 1400, h: 1000 }],
 ];
+
 /* Each shot twice, because a light screenshot on a dark documentation page looks like a mistake. The
    page picks one with CSS (see .only-light / .only-dark in site.css), so it follows the reader's
    theme toggle and not just their OS setting.

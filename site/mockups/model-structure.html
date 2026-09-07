@@ -1,4 +1,4 @@
-<div class="mockfit ide" data-w="1010" data-h="724" style="width:1010px;height:724px">
+<div class="mockfit ide" data-w="1010" data-h="812" style="width:1010px;height:812px">
    <div class="title">
      <span class="tl"><i class="r"></i><i class="y"></i><i class="g"></i></span>
      <span class="proj">flowable-demo — <b>Atlas Explorer</b></span>
@@ -8,57 +8,58 @@
        <div class="tabs"><div class="tab on"><span style="color:#3574f0">◈</span>Atlas Explorer</div></div>
        <div class="exp">
          <div class="expm">
-           <div style="display:flex; align-items:center; gap:8px">
-             <span style="width:8px;height:8px;border-radius:50%;background:#006276;display:inline-block"></span>
-             <div class="exph" style="font-size:15px">Order Fulfilment</div>
-             <span class="tag o" style="font-size:10px">process</span>
-             <span style="margin-left:auto" class="xall">⇕ collapse all</span>
+           <div class="xhero">
+             <span class="xtile" style="--tc:#006276">{{icon:process}}</span>
+             <div class="xmain">
+               <div class="xtitle">Order Fulfilment</div>
+               <div class="xident">Processes · <span class="lk mono">order-fulfilment</span> · <span class="mono dim">bpmn-models/order-fulfilment.bpmn</span></div>
+               <div class="xdesc">Takes an order from entry to the shipping confirmation.</div>
+             </div>
+             <span class="xall">⇕ collapse all</span>
            </div>
-           <div class="expsub" style="font-family:ui-monospace,monospace">order-fulfilment &nbsp;·&nbsp; bpmn-models/order-fulfilment.bpmn</div>
+           <dl class="xfacts"><div><dt>Starter groups</dt><dd class="lk">sales</dd></div><div><dt>SLA</dt><dd class="lk">order-sla</dd></div></dl>
+           <div class="xchips"><span class="xchip">Diagram</span><span class="xchip">Neighborhood <b>9</b></span><span class="xchip">User tasks <b>2</b></span><span class="xchip">Service tasks <b>2</b></span><span class="xchip">Script tasks <b>1</b></span><span class="xchip">Events <b>3</b></span><span class="xchip">Sequence flows <b>6</b></span><span class="xchip">Execution listeners <b>1</b></span><span class="xchip">Parameters <b>8</b></span><span class="xchip">References <b>7</b></span><span class="xchip">Used by <b>3</b></span></div>
 
-           <div class="sec">
-             <div class="sech"><span class="tri">▾</span>User tasks <span class="cnt">(2)</span></div>
-             <div class="secb" style="padding:0">
-               <table class="ptbl" style="margin-top:0; border:0; border-radius:0">
-                 <thead><tr><th>Task</th><th>Form</th><th>Candidate groups</th><th>Due</th></tr></thead>
-                 <tbody>
-                   <tr><td><span class="loc">⌖</span> Approve order</td><td><span class="lk">approval.form</span></td><td>sales</td><td>P2D</td></tr>
-                   <tr><td><span class="loc">⌖</span> Fix address</td><td><span class="lk">address.form</span></td><td>support</td><td>—</td></tr>
-                 </tbody>
-               </table>
+           <div class="xsec">
+             <div class="xsech"><span class="tri">▾</span>User tasks <span class="cnt">2</span><span class="hint">who works on what, with which form</span></div>
+             <table class="xtbl">
+               <thead><tr><th></th><th>Task</th><th>Form</th><th>Candidate groups</th><th>Assignee</th><th></th></tr></thead>
+               <tbody>
+                 <tr><td></td><td>Approve order <span class="loc">⌖</span></td><td class="mono lk">approval.form</td><td class="lk">sales</td><td class="mono dim">—</td><td><span class="xtag">due P2D</span></td></tr>
+                 <tr><td></td><td>Fix address <span class="loc">⌖</span></td><td class="mono lk">address.form</td><td class="lk">support</td><td class="mono dim">—</td><td></td></tr>
+               </tbody>
+             </table>
+           </div>
+
+           <div class="xsec">
+             <div class="xsech"><span class="tri">▾</span>Script tasks <span class="cnt">1</span><span class="hint">the code the process runs inline, with what it writes</span></div>
+             <div class="xcard">
+               <div class="xcardh open"><span class="tri">⌄</span>Auto-approve <span class="loc">⌖</span><span class="xid">autoApprove</span><span class="xtag">groovy</span><span class="xdir o">out</span> <span class="mono lk" style="font-weight:400">approved</span></div>
+               <div class="xcodeh"><span class="xtag">groovy</span><span>4 lines</span></div>
+               <div class="xcode"><span class="ln">1</span>if (orderTotal &lt;= 1000) {
+<span class="ln">2</span>    execution.setVariable('approved', true)
+<span class="ln">3</span>    execution.setVariable('approvedBy', 'auto')
+<span class="ln">4</span>}</div>
              </div>
            </div>
 
-           <div class="sec">
-             <div class="sech"><span class="tri">▾</span>Script tasks <span class="cnt">(1)</span></div>
-             <div class="secb">
-               <div class="grow"><span class="loc">⌖</span>Auto-approve <span style="color:#79848f">· groovy</span></div>
-               <div class="code2">if (orderTotal &lt;= 1000) {
-    execution.setVariable('approved', true)
-    execution.setVariable('approvedBy', 'auto')
-}</div>
-             </div>
+           <div class="xsec">
+             <div class="xsech"><span class="tri">▾</span>Sequence flows <span class="cnt">6</span><span class="hint">what runs after what; a condition makes a flow optional</span></div>
+             <table class="xtbl">
+               <thead><tr><th></th><th>From → to</th><th>Name</th><th>Condition</th><th></th></tr></thead>
+               <tbody>
+                 <tr><td></td><td>Check total → Approve order <span class="loc">⌖</span></td><td class="dim">large</td><td class="mono">${orderTotal &gt; 1000}</td><td></td></tr>
+                 <tr><td></td><td>Check total → Auto-approve <span class="loc">⌖</span></td><td class="dim"></td><td class="mono dim"></td><td><span class="xtag">default</span></td></tr>
+                 <tr><td></td><td>Auto-approve → Ship <span class="loc">⌖</span></td><td class="dim"></td><td class="mono dim"></td><td></td></tr>
+               </tbody>
+             </table>
            </div>
 
-           <div class="sec">
-             <div class="sech"><span class="tri">▾</span>Flow conditions <span class="cnt">(2)</span></div>
-             <div class="secb" style="padding:0">
-               <table class="ptbl" style="margin-top:0; border:0; border-radius:0">
-                 <thead><tr><th>From</th><th>To</th><th>Condition</th></tr></thead>
-                 <tbody>
-                   <tr><td><span class="loc">⌖</span> Check total</td><td>Approve order</td><td>${orderTotal &gt; 1000}</td></tr>
-                   <tr><td><span class="loc">⌖</span> Check total</td><td>Auto-approve</td><td style="color:#79848f">else</td></tr>
-                 </tbody>
-               </table>
-             </div>
-           </div>
-
-           <div class="sec"><div class="sech shut"><span class="tri">▸</span>Service tasks <span class="cnt">(2)</span></div></div>
-           <div class="sec"><div class="sech shut"><span class="tri">▸</span>Events &amp; timers <span class="cnt">(3)</span></div></div>
-           <div class="sec"><div class="sech shut"><span class="tri">▸</span>Listeners <span class="cnt">(1)</span></div></div>
+           <div class="xsec"><div class="xsech"><span class="tri">▸</span>Events <span class="cnt">3</span></div></div>
+           <div class="xsec"><div class="xsech"><span class="tri">▸</span>Execution listeners <span class="cnt">1</span></div></div>
          </div>
        </div>
-       <div class="status"><span>⎇ main</span><span>Atlas 0.10.10</span><span class="rt">🔗 copy link</span></div>
+       <div class="status"><span>⎇ main</span><span>Atlas 0.22.0</span><span class="rt">🔗 copy link</span></div>
      </div>
    </div>
 </div>

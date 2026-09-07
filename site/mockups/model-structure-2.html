@@ -1,4 +1,4 @@
-<div class="mockfit ide" data-w="1010" data-h="557" style="width:1010px;height:557px">
+<div class="mockfit ide" data-w="1010" data-h="694" style="width:1010px;height:694px">
    <div class="title">
      <span class="tl"><i class="r"></i><i class="y"></i><i class="g"></i></span>
      <span class="proj">flowable-demo — <b>Atlas Explorer</b></span>
@@ -8,44 +8,58 @@
        <div class="tabs"><div class="tab on"><span style="color:#3574f0">◈</span>Atlas Explorer</div></div>
        <div class="exp">
          <div class="expm">
-           <div style="display:flex; align-items:center; gap:8px">
-             <span style="width:8px;height:8px;border-radius:50%;background:#04478f;display:inline-block"></span>
-             <div class="exph" style="font-size:15px">Customer Onboarding</div>
-             <span class="tag o" style="font-size:10px">case</span>
+           <div class="xhero">
+             <span class="xtile" style="--tc:#04478f">{{icon:case}}</span>
+             <div class="xmain">
+               <div class="xtitle">Customer Onboarding</div>
+               <div class="xident">Cases · <span class="lk mono">customer-onboarding</span> · <span class="mono dim">cmmn-models/customer-onboarding.cmmn.json</span></div>
+             </div>
+             <span class="xall">⇕ collapse all</span>
            </div>
-           <div class="expsub" style="font-family:ui-monospace,monospace">customer-onboarding &nbsp;·&nbsp; cmmn-models/customer-onboarding.cmmn.json</div>
+           <dl class="xfacts"><div><dt>Starter groups</dt><dd class="lk">onboarding</dd></div><div><dt>Initiator var</dt><dd class="lk mono">initiator</dd></div></dl>
+           <div class="xchips"><span class="xchip">Diagram</span><span class="xchip">Neighborhood <b>5</b></span><span class="xchip">Case plan model</span><span class="xchip">Sentries <b>3</b></span><span class="xchip">Parameters <b>2</b></span><span class="xchip">References <b>4</b></span><span class="xchip">Used by <b>2</b></span></div>
 
-           <div class="sec">
-             <div class="sech"><span class="tri">▾</span>Plan model <span class="cnt">(6)</span></div>
-             <div class="secb">
-               <div class="ptree">
-                 <div class="pt">📁 Case plan model</div>
-                 <div class="pt" style="padding-left:16px">▸ Stage <b style="font-weight:400">Verification</b></div>
-                 <div class="pt" style="padding-left:32px">👤 Human task <b style="font-weight:400">Review</b> → <span class="lk">review.form</span></div>
-                 <div class="pt" style="padding-left:44px"><span class="dia">◇</span> <span class="crit">entry &nbsp;${documentsReceived}</span></div>
-                 <div class="pt" style="padding-left:44px"><span class="dia">◆</span> <span class="crit">exit &nbsp;${caseCancelled}</span></div>
-                 <div class="pt" style="padding-left:32px">⚙ Process task <b style="font-weight:400">Fulfil order</b> → <span class="lk">order-fulfilment</span></div>
-                 <div class="pt" style="padding-left:16px">Milestone <b style="font-weight:400">Onboarded</b></div>
-                 <div class="pt" style="padding-left:28px"><span class="dia">◇</span> <span class="crit">entry &nbsp;${approved &amp;&amp; contractSigned}</span></div>
+           <div class="xsec">
+             <div class="xsech"><span class="tri">▾</span>Case plan model <span class="hint">stages and plan items, with their criteria, rules and the models they start</span></div>
+             <div class="xcard">
+               <div class="xcardh open"><span class="tri">⌄</span>Plan model <span class="loc">⌖</span><span class="xtag">case plan model</span><span class="rt">2 items</span></div>
+               <div class="xcardb">
+                 <table class="xtbl">
+                   <thead><tr><th></th><th>Plan item</th><th>Kind</th><th>Refers to</th><th></th><th>Criteria</th></tr></thead>
+                   <tbody>
+                     <tr><td></td><td>◆ Onboarded <span class="loc">⌖</span></td><td><span class="xtag">milestone</span></td><td></td><td></td><td><span class="xtag">entry ◇</span> <span class="mono dim">${approved &amp;&amp; contractSigned}</span></td></tr>
+                   </tbody>
+                 </table>
+                 <div class="xcard">
+                   <div class="xcardh open"><span class="tri">⌄</span>Verification <span class="loc">⌖</span><span class="xtag">stage</span><span class="rt">2 items</span></div>
+                   <div class="xcardb">
+                     <table class="xtbl">
+                       <thead><tr><th></th><th>Plan item</th><th>Kind</th><th>Refers to</th><th></th><th>Criteria</th></tr></thead>
+                       <tbody>
+                         <tr><td></td><td>Review <span class="loc">⌖</span></td><td><span class="xtag">human task</span></td><td><span class="dim">form</span> <span class="lk">review.form</span> · <span class="dim">groups</span> <span class="lk">compliance</span></td><td><span class="xtag">required</span></td><td><span class="xtag">entry ◇</span> <span class="mono dim">${documentsReceived}</span> <span class="xtag">exit ◆</span> <span class="mono dim">${caseCancelled}</span></td></tr>
+                         <tr><td></td><td>Fulfil order <span class="loc">⌖</span></td><td><span class="xtag">process task</span></td><td><span class="dim">process</span> <span class="lk">order-fulfilment</span></td><td></td><td></td></tr>
+                       </tbody>
+                     </table>
+                   </div>
+                 </div>
                </div>
              </div>
            </div>
 
-           <div class="sec">
-             <div class="sech"><span class="tri">▾</span>Sentries — entry/exit conditions <span class="cnt">(3)</span></div>
-             <div class="secb" style="padding:0">
-               <table class="ptbl" style="margin-top:0; border:0; border-radius:0">
-                 <tbody>
-                   <tr><td>entry of Review</td><td>${documentsReceived}</td></tr>
-                   <tr><td>exit of Review</td><td>${caseCancelled}</td></tr>
-                   <tr><td>entry of Onboarded</td><td>${approved &amp;&amp; contractSigned}</td></tr>
-                 </tbody>
-               </table>
-             </div>
+           <div class="xsec">
+             <div class="xsech"><span class="tri">▾</span>Sentries <span class="cnt">3</span><span class="hint">entry and exit criteria — the conditions that make a plan item available or end it</span></div>
+             <table class="xtbl">
+               <thead><tr><th></th><th>Guards</th><th>On parts</th><th>Condition</th></tr></thead>
+               <tbody>
+                 <tr><td></td><td>entry of Review <span class="loc">⌖</span></td><td></td><td class="mono">${documentsReceived}</td></tr>
+                 <tr><td></td><td>exit of Review <span class="loc">⌖</span></td><td></td><td class="mono">${caseCancelled}</td></tr>
+                 <tr><td></td><td>entry of Onboarded <span class="loc">⌖</span></td><td><span class="xtag">Review · complete</span></td><td class="mono">${approved &amp;&amp; contractSigned}</td></tr>
+               </tbody>
+             </table>
            </div>
          </div>
        </div>
-       <div class="status"><span>⎇ main</span><span>Atlas 0.10.10</span><span class="rt">🔗 copy link</span></div>
+       <div class="status"><span>⎇ main</span><span>Atlas 0.22.0</span><span class="rt">🔗 copy link</span></div>
      </div>
    </div>
 </div>

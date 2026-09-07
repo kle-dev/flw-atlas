@@ -1,4 +1,4 @@
-<div class="mockfit ide" data-w="1010" data-h="901" style="width:1010px;height:901px">
+<div class="mockfit ide" data-w="1010" data-h="858" style="width:1010px;height:858px">
    <div class="title">
      <span class="tl"><i class="r"></i><i class="y"></i><i class="g"></i></span>
      <span class="proj">flowable-demo — <b>Atlas Explorer</b></span>
@@ -8,84 +8,66 @@
        <div class="tabs"><div class="tab on"><span style="color:#3574f0">◈</span>Atlas Explorer</div></div>
        <div class="exp">
          <div class="expm">
-           <div style="display:flex; align-items:center; gap:8px">
-             <span style="width:8px;height:8px;border-radius:50%;background:#006276;display:inline-block"></span>
-             <div class="exph" style="font-size:15px">Order Fulfilment</div>
-             <span class="tag o" style="font-size:10px">process</span>
-             <span style="margin-left:auto" class="xall">⇕ collapse all</span>
+           <div class="xhero">
+             <span class="xtile" style="--tc:#006276">{{icon:process}}</span>
+             <div class="xmain">
+               <div class="xtitle">Order Fulfilment</div>
+               <div class="xident">Processes · <span class="lk mono">order-fulfilment</span> · <span class="mono dim">bpmn-models/order-fulfilment.bpmn</span></div>
+             </div>
+             <span class="xall">⇕ collapse all</span>
            </div>
-           <div class="expsub" style="font-family:ui-monospace,monospace">order-fulfilment &nbsp;·&nbsp; bpmn-models/order-fulfilment.bpmn</div>
+           <div class="xchips"><span class="xchip">Diagram</span><span class="xchip">User tasks <b>3</b></span><span class="xchip">Service tasks <b>2</b></span><span class="xchip">Sequence flows <b>6</b></span><span class="xchip">Parameters <b>8</b></span><span class="xchip">Called with <b>4</b></span><span class="xchip">References <b>7</b></span><span class="xchip">Used by <b>3</b></span></div>
 
-           <div class="sec">
-             <div class="sech"><span class="tri">▾</span>Parameters <span class="cnt">(8)</span>
-               <span class="rt">4 in · 3 out · 1 error-out</span></div>
-             <div class="secb">
-               <div class="chips">
-                 <span class="filt">Filter parameters…</span>
-                 <span class="tag i">in 4</span><span class="tag o">out 3</span><span class="tag e">error-out 1</span>
+           <div class="xsec">
+             <div class="xsech"><span class="tri">▾</span>Parameters <span class="cnt">8</span><span class="hint">4 in · 3 out · 1 error-out</span></div>
+             <div class="chips" style="margin-top:7px"><span class="filt">filter parameters…</span><span class="xchip" style="border-color:#0f55d6;color:#1d4ed8;background:#eff6ff">all <b>8</b></span><span class="xchip">in <b>4</b></span><span class="xchip">out <b>3</b></span><span class="xchip">error-out <b>1</b></span></div>
+
+             <div class="xcard">
+               <div class="xcardh open"><span class="tri">⌄</span>Ship order <span class="loc">⌖</span><span class="xid">shipSubprocess</span><span class="lk" style="font-weight:400">→ shipping-process</span><span class="xtag">call activity</span><span class="rt">3 params</span></div>
+               <div class="xpg">
+                 <div class="xpr"><span class="xdir i">in</span><span class="pn"><span class="lk">orderId</span> → subOrderId</span><span class="pk">In parameter</span></div>
+                 <div class="xpr"><span class="xdir i">in</span><span class="pn"><span class="lk">orderTotal</span> → amount</span><span class="pk">In parameter</span></div>
+                 <div class="xpr"><span class="xdir o">out</span><span class="pn">tracking → <span class="lk">trackingCode</span></span><span class="pk">Out parameter</span></div>
                </div>
-
-               <div class="grow"><span class="loc">⌖</span>callActivity <b style="font-weight:400;color:#4c5b6a">shipSubprocess</b> → <span class="lk">shipping-process</span></div>
-               <table class="ptbl pm" style="margin-top:3px">
-                 <tbody>
-                   <tr><td><span class="tag i">in</span></td><td>orderId</td><td style="color:#79848f">→</td><td>subOrderId</td></tr>
-                   <tr><td><span class="tag i">in</span></td><td>orderTotal</td><td style="color:#79848f">→</td><td>amount</td></tr>
-                   <tr><td><span class="tag o">out</span></td><td>trackingCode</td><td style="color:#79848f">←</td><td>tracking</td></tr>
-                 </tbody>
-               </table>
-
-               <div class="grow"><span class="loc">⌖</span>serviceTask <b style="font-weight:400;color:#4c5b6a">lookupCustomer</b> → <span class="lk">custSvc</span> <span style="color:#79848f">· findById</span></div>
-               <table class="ptbl pm" style="margin-top:3px">
-                 <tbody>
-                   <tr><td><span class="tag i">in</span></td><td>customerRef</td><td style="color:#79848f">→</td><td>id</td></tr>
-                   <tr><td><span class="tag o">out</span></td><td>customerName</td><td style="color:#79848f">←</td><td>name</td></tr>
-                   <tr><td><span class="tag e">error-out</span></td><td>lookupError</td><td style="color:#79848f">←</td><td>error</td></tr>
-                 </tbody>
-               </table>
-
-               <div class="grow"><span class="loc">⌖</span>httpTask <b style="font-weight:400;color:#4c5b6a">notifyErp</b> → <span style="color:#4c5b6a">${erpBaseUrl}/orders</span></div>
-               <table class="ptbl pm" style="margin-top:3px">
-                 <tbody>
-                   <tr><td><span class="tag i">in</span></td><td>orderTotal</td><td style="color:#79848f">→</td><td>body.amount</td></tr>
-                   <tr><td><span class="tag o">out</span></td><td>erpAck</td><td style="color:#79848f">←</td><td>responseBody</td></tr>
-                 </tbody>
-               </table>
-               <div style="font-size:10px; color:#79848f; margin-top:6px; font-family:ui-monospace,monospace">
-                 field injections · requestMethod POST · requestUrl ${erpBaseUrl}/orders
+             </div>
+             <div class="xcard">
+               <div class="xcardh open"><span class="tri">⌄</span>Lookup customer <span class="loc">⌖</span><span class="xid">lookupCustomer</span><span class="lk" style="font-weight:400">→ custSvc</span><span class="xtag">service registry task</span><span class="rt">3 params</span></div>
+               <div class="xpg">
+                 <div class="xpr"><span class="xdir i">in</span><span class="pn"><span class="lk">customerRef</span> → id</span><span class="pk">Input parameter</span></div>
+                 <div class="xpr"><span class="xdir o">out</span><span class="pn">name → <span class="lk">customerName</span></span><span class="pk">Output parameter</span></div>
+                 <div class="xpr"><span class="xdir e">error-out</span><span class="pn">error → <span class="lk">lookupError</span></span><span class="pk">Error output parameter</span></div>
+               </div>
+             </div>
+             <div class="xcard">
+               <div class="xcardh open"><span class="tri">⌄</span>Notify ERP <span class="loc">⌖</span><span class="xid">notifyErp</span><span class="xtag">http task</span><span class="rt">2 params</span></div>
+               <div class="xpg">
+                 <div class="xpr"><span class="xdir i">in</span><span class="pn"><span class="lk">orderTotal</span> → body.amount</span><span class="pk">Input parameter</span></div>
+                 <div class="xpr"><span class="xdir o">out</span><span class="pn">responseBody → <span class="lk">erpAck</span></span><span class="pk">Output parameter</span></div>
                </div>
              </div>
            </div>
 
-           <div class="sec">
-             <div class="sech"><span class="tri">▾</span>Called with <span class="cnt">(4)</span>
-               <span class="rt">from 3 callers</span></div>
-             <div class="secb">
-               <div class="grow"><span class="loc">⌖</span>button <b style="font-weight:400;color:#4c5b6a">startOrder</b> on <span class="lk">order-form.form</span> <span style="color:#79848f">· Send payload map</span></div>
-               <table class="ptbl pm" style="margin-top:3px">
-                 <tbody>
-                   <tr><td><span class="tag i">in</span></td><td>{{total}}</td><td style="color:#79848f">→</td><td>orderTotal</td></tr>
-                   <tr><td><span class="tag i">in</span></td><td>{{cust.id}}</td><td style="color:#79848f">→</td><td>customerRef</td></tr>
-                 </tbody>
-               </table>
-               <div class="grow">caseTask <b style="font-weight:400;color:#4c5b6a">handleOrder</b> on <span class="lk">customer-onboarding</span></div>
-               <table class="ptbl pm" style="margin-top:3px">
-                 <tbody>
-                   <tr><td><span class="tag i">in</span></td><td>caseOrderId</td><td style="color:#79848f">→</td><td>orderId</td></tr>
-                 </tbody>
-               </table>
-               <div class="grow"><span class="lk">OrderController</span><span style="color:#79848f">#create</span> · start variable</div>
-               <table class="ptbl pm" style="margin-top:3px">
-                 <tbody>
-                   <tr><td><span class="tag i">in</span></td><td>req.total()</td><td style="color:#79848f">→</td><td>orderTotal</td></tr>
-                 </tbody>
-               </table>
+           <div class="xsec">
+             <div class="xsech"><span class="tri">▾</span>Called with <span class="cnt">4</span><span class="hint">3 in · 1 out from 3 callers</span></div>
+             <div class="xcard">
+               <div class="xcardh open"><span class="tri">⌄</span>Start order <span class="xid">startOrder</span><span class="xtag">action button</span><span class="rt">2 params</span></div>
+               <div class="xcardb" style="padding-bottom:4px"><span class="xchip">{{icon:form}} Order form <b>FORMS</b></span></div>
+               <div class="xpg">
+                 <div class="xpr"><span class="xdir i">in</span><span class="pn">{{total}} → <span class="lk">orderTotal</span></span><span class="pk">Send payload map</span></div>
+                 <div class="xpr"><span class="xdir i">in</span><span class="pn">{{cust.id}} → <span class="lk">customerRef</span></span><span class="pk">Send payload map</span></div>
+               </div>
+             </div>
+             <div class="xcard">
+               <div class="xcardh open"><span class="tri">⌄</span>Handle order <span class="xid">handleOrder</span><span class="xtag">process task</span><span class="rt">1 param</span></div>
+               <div class="xcardb" style="padding-bottom:4px"><span class="xchip">{{icon:case}} Customer Onboarding <b>CASES</b></span></div>
+               <div class="xpg">
+                 <div class="xpr"><span class="xdir i">in</span><span class="pn"><span class="lk">caseOrderId</span> → orderId</span><span class="pk">In parameter</span></div>
+               </div>
              </div>
            </div>
-
-           <div class="sec"><div class="sech shut"><span class="tri">▸</span>User tasks <span class="cnt">(3)</span></div></div>
          </div>
        </div>
-       <div class="status"><span>⎇ main</span><span>Atlas 0.10.10</span><span class="rt">🔗 copy link</span></div>
+       <div class="status"><span>⎇ main</span><span>Atlas 0.22.0</span><span class="rt">🔗 copy link</span></div>
      </div>
    </div>
 </div>
