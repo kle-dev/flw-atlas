@@ -298,6 +298,10 @@ const probe = `<script>
     const sect=document.querySelector('#detail [data-sect="formfields"]');
     ok('the form lists its fields', !!sect);
     if(sect) sect.open=true;
+    // The field count is in the section heading and the navigator; a "Fields 7" fact would say it thrice.
+    const fac=[...document.querySelectorAll('#detail .facts dd')].map(d=>d.textContent.trim());
+    ok('no fact is a bare count that a section already carries', !fac.some(t=>/^\\d+$/.test(t)), fac.join(' | '));
+
     const btn=document.querySelector('#detail details.fldrow[data-el="notifyButton"]');
     ok('an action button is an expandable row', !!btn, 'no expandable row for notifyButton');
     ok('the row names the action in its summary',
@@ -417,12 +421,40 @@ const probe = `<script>
   });
 
   // Design's model Description used to render for apps only, because each type spelled the row itself.
+  // It is the hero's prose now — under the title, not a labelled fact.
   steps.push(()=>{ closeOtherTabs(); location.hash=enc('app:demoApp'); });
   steps.push(()=>{
-    const txt=document.getElementById('detail').textContent;
-    ok('the detail panel shows the model Description', /Description/.test(txt)&&/Miniature fixture app/.test(txt),
-       txt.slice(0,140));
+    const det=document.getElementById('detail');
+    const desc=det.querySelector('.dhero .ddesc');
+    ok('the hero shows the model Description as prose', !!desc && /Miniature fixture app/.test(desc.textContent),
+       desc?desc.textContent.slice(0,140):'(no .ddesc)');
+    ok('and not as a labelled fact', ![...det.querySelectorAll('.facts dt')].some(t=>/^Description$/i.test(t.textContent)));
+    // --- the page header: title in the hero, the same title in the sticky bar, the identity line ---
+    const title=det.querySelector('.dhero .dtitle');
+    ok('the hero carries the title', !!title && /Demo App/.test(title.textContent), title?title.textContent:'(none)');
+    ok('the sticky bar carries a copy for when the hero scrolls away', !!det.querySelector('.dhead .dhead-title'));
+    ok('the identity line names kind, key and path', !!det.querySelector('.dident .dkey') && /demoApp/.test(det.querySelector('.dident').textContent));
+    ok('the actions are one group with labels', det.querySelectorAll('.dhead .dhead-actions button .lbl').length>=2);
   });
+  // --- the section navigator: one chip per rendered section, in order, and a chip opens its section ---
+  steps.push(()=>{ closeOtherTabs(); location.hash=enc('process:orderProcess'); });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    const chips=[...det.querySelectorAll('.secnav .snc')], sects=[...det.querySelectorAll('details.sect')];
+    ok('the navigator lists every rendered section', chips.length>0 && chips.length===sects.length,
+       chips.length+' chips vs '+sects.length+' sections');
+    ok('and in page order', chips.every((c,i)=>sects[i] && sects[i].dataset.sect===c.dataset.jumpSect));
+    const target=chips.find(c=>c.dataset.jumpSect==='usertasks')||chips[chips.length-1];
+    const d=det.querySelector('details.sect[data-sect="'+target.dataset.jumpSect+'"]');
+    if(d) d.open=false;
+    window.__navSect=d;
+    click(target);
+  });
+  steps.push(()=>{
+    const d=window.__navSect;
+    ok('clicking a navigator chip opens its section', !!d && d.open, d?d.dataset.sect+' still closed':'(no section)');
+  });
+
 
   // --- a model lists what it uses: the section is rebuilt from the artifact nodes' usedBy ---
   // The generator strips _uses from the payload, and for a whole run of releases the panel still

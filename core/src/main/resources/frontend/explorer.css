@@ -635,28 +635,67 @@
     transition:opacity .16s,transform .16s}
   .toast.show{opacity:1;transform:none}
 
-  /* The identity bar: what kind of node this is on the left, the page actions on the right. Sticky, so
-     the actions and the kind stay in reach while the body scrolls. The title itself stays in the body —
-     at 26px it is the one thing a reader should not have pinned over what they are reading. */
-  .dhead{position:sticky;top:0;z-index:6;display:flex;align-items:center;gap:var(--space-15);min-height:40px;
+  /* ---- the page header ----
+     A sticky bar keeps the kind, the actions and — once the hero has scrolled out from under it — the
+     title in reach. Below it the hero: the type's icon in a tinted tile, the title, one identity line
+     (kind · key · path), Design's description as prose, and the facts as a definition list. Counts are
+     not facts here: a section carries its own count in its heading and in the navigator. */
+  .detailcol{container-type:inline-size}
+  .dhead{position:sticky;top:0;z-index:6;display:flex;align-items:center;gap:var(--space-2);min-height:44px;
     padding:var(--space-15) var(--space-4);background:var(--panel);border-bottom:1px solid var(--line)}
-  .dkind{display:inline-flex;align-items:center;gap:var(--space-15);min-width:0;font-size:var(--text-xs);font-weight:600;
+  .dkind{display:inline-flex;align-items:center;gap:var(--space-15);flex:none;font-size:var(--text-xs);font-weight:600;
     letter-spacing:.06em;text-transform:uppercase;color:var(--ink-dim);white-space:nowrap}
-  .dhead-sp{flex:1}
+  .dhead-title{flex:1;min-width:0;font-weight:600;font-size:var(--text-md);color:var(--ink);white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;opacity:0;transform:translateY(4px);transition:opacity .15s,transform .15s}
+  .dhead.scrolled .dhead-title{opacity:1;transform:none}
+  .dhead-actions{display:inline-flex;gap:var(--space-1);flex:none;margin-left:auto}
   .dhead button{display:inline-flex;align-items:center;gap:var(--space-1);flex:none;height:26px;
     background:var(--panel);border:1px solid var(--line2);color:var(--ink-dim);
-    border-radius:var(--radius-md);padding:0 var(--space-2);cursor:pointer;font-size:var(--text-xs)}
+    border-radius:var(--radius-md);padding:0 var(--space-2);cursor:pointer;font-family:var(--sans);font-size:var(--text-xs)}
   .dhead button:hover{color:var(--ink);border-color:var(--accent)}
+  .dhead button.ok{color:var(--ok-text);border-color:var(--ok-border)}
+  @container (max-width:480px){ .dhead button .lbl{display:none} .dhead button{padding:0 var(--space-15)} }
   .ui{flex:none;width:12px;height:12px;display:inline-block;vertical-align:-.1em}
-  .dbody{padding:var(--space-4) var(--space-6) var(--space-8);max-width:1000px}
+  .dbody{padding:0 var(--space-6) var(--space-8);max-width:1000px}
   .chip{display:inline-flex;align-items:center;gap:var(--space-15);font-size:var(--text-xs);font-weight:500;
     border:1px solid var(--line2);border-radius:var(--radius-full);padding:var(--space-05) var(--space-2);color:var(--ink-dim)}
-  .dtitle{font-family:var(--sans);font-weight:600;letter-spacing:-.01em;font-size:var(--text-2xl);line-height:1.2;margin:0 0 var(--space-1)}
-  .dkey{font-family:var(--mono);font-size:var(--text-sm);color:var(--accent)}
-  .dfile{font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-faint);margin-top:var(--space-15);cursor:copy}
+  .dhero{padding:var(--space-5) 0 var(--space-2)}
+  .dhero-top{display:flex;gap:var(--space-3);align-items:flex-start}
+  .dtile{flex:none;width:40px;height:40px;border-radius:var(--radius-lg);display:inline-flex;align-items:center;justify-content:center;
+    background:color-mix(in srgb, var(--tc) 14%, transparent);color:var(--tc)}
+  .dtile .ti{width:calc(22px*var(--ui-scale));height:calc(22px*var(--ui-scale))}
+  .dhero-main{min-width:0;flex:1}
+  .dtitle{font-family:var(--sans);font-weight:600;letter-spacing:-.01em;font-size:var(--text-2xl);line-height:1.2;margin:0;
+    overflow-wrap:anywhere}
+  .dident{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-05) var(--space-15);margin-top:var(--space-1);
+    font-size:var(--text-sm);color:var(--ink-dim);min-width:0}
+  .dkindw{font-weight:500}
+  .dsep{color:var(--ink-faint)}
+  .dkey{font-family:var(--mono);color:var(--accent)}
+  .dfile{font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-faint);cursor:copy;min-width:0;
+    display:inline-flex;align-items:center;gap:var(--space-05)}
+  .dfile .fp{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .dfile:hover{color:var(--ink-dim)}
   .dfile.copied .fp{color:var(--cov-good,#2e7d32)}
   .dfile.copied::after{content:"✓ copied";margin-left:var(--space-15);color:var(--cov-good,#2e7d32)}
+  .ddesc{margin:var(--space-2) 0 0;font-size:var(--text-md);line-height:1.5;color:var(--ink-dim);max-width:72ch}
+  /* facts and card details: a label over its value, as many columns as fit, no box */
+  .props{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:var(--space-25) var(--space-4);margin:0}
+  .props.facts{margin-top:var(--space-4);padding-top:var(--space-3);border-top:1px solid var(--line)}
+  .props .fact{min-width:0}
+  .props dt{font-size:var(--text-2xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}
+  .props dd{margin:var(--space-05) 0 0;font-size:var(--text-sm);color:var(--ink);overflow-wrap:anywhere;line-height:1.45}
+  .props dd.mono{font-family:var(--mono)}
+  .props .cpy{opacity:0;transition:opacity .1s ease}
+  .fact:hover .cpy,.fact:focus-within .cpy{opacity:1}
+  /* the section navigator: one chip per rendered section, its count in tabular figures */
+  .secnav{display:flex;flex-wrap:wrap;gap:var(--space-15);margin:var(--space-4) 0 var(--space-1)}
+  .snc{display:inline-flex;align-items:center;gap:var(--space-15);background:var(--panel);border:1px solid var(--line2);color:var(--ink-dim);
+    border-radius:var(--radius-full);padding:var(--space-05) var(--space-25);cursor:pointer;font-family:var(--sans);
+    font-size:var(--text-xs);font-weight:500;line-height:1.6}
+  .snc:hover{color:var(--ink);border-color:var(--accent)}
+  .snc:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .snn{font-variant-numeric:tabular-nums;color:var(--ink-faint);font-weight:400}
   /* ---- copy-to-clipboard icon button (keys, values, "used by" badges) ---- */
   .cpy{display:inline-flex;align-items:center;justify-content:center;flex:none;width:20px;height:20px;padding:0;
     margin-left:var(--space-1);vertical-align:middle;line-height:0;background:transparent;
@@ -671,14 +710,8 @@
   html.ide .opn-line:hover{color:var(--accent)}
   .cpy svg{display:block}
   /* reveal on hover inside dense contexts (chips, grid cells) so they stay uncluttered */
-  .nc .cpy,.cell .cpy{opacity:0;transition:opacity .1s ease}
-  .nc:hover .cpy,.nc:focus-within .cpy,.cell:hover .cpy,.cell:focus-within .cpy,.cpy:focus-visible{opacity:1}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
-    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-md);overflow:hidden;margin:var(--space-4) 0}
-  .cell{background:var(--panel);padding:var(--space-25) var(--space-3);box-shadow:-1px -1px 0 0 var(--line)}
-  .cell .k{font-size:var(--text-2xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}
-  .cell .v{margin-top:var(--space-1);color:var(--ink);word-break:break-word}
-  .cell .v.mono{font-family:var(--mono);font-size:var(--text-sm)}
+  .nc .cpy{opacity:0;transition:opacity .1s ease}
+  .nc:hover .cpy,.nc:focus-within .cpy,.cpy:focus-visible{opacity:1}
   .vlink{color:var(--accent);cursor:pointer;border-bottom:1px dotted var(--accent)}
   .vlink:hover{color:var(--accent-hover);border-bottom-style:solid}
   .vlink:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--radius-xs)}
@@ -695,7 +728,13 @@
   details.sect[open]>summary:before{content:"▾"}
   details.sect>summary:hover{color:var(--ink)}
   details.sect[open]>summary{color:var(--ink)}
-  .sb{padding:var(--space-1) 0 var(--space-3)}
+  /* the summary's parts: title, count, and a one-line hint in plain sentence case */
+  details.sect>summary .st{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  details.sect>summary .scount{flex:none;font-variant-numeric:tabular-nums;font-weight:500;letter-spacing:0;color:var(--ink-faint)}
+  details.sect>summary .shint{flex:1 1 auto;min-width:0;text-transform:none;letter-spacing:0;font-weight:400;font-size:var(--text-xs);
+    color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-left:var(--space-1)}
+  .sb{padding:var(--space-1) 0 var(--space-3);container-type:inline-size}
+  .sbar{margin:0 0 var(--space-2)}
   /* Gesture hint at the top of a relationship section — faint on purpose: it teaches once and then
      has to get out of the way of the chips it describes. */
   .relhint{font-size:var(--text-2xs);color:var(--ink-faint);margin:0 0 var(--space-25)}
@@ -724,31 +763,6 @@
   details.uses .nodechips{padding:var(--space-25) var(--space-3)}
   .oprow{display:flex;gap:var(--space-25);padding:var(--space-15) var(--space-3);border-bottom:1px solid var(--line);font-family:var(--mono);font-size:var(--text-sm)}
   .oprow:last-child{border-bottom:none}
-  /* A form/page component that has more to say (a button: its callee, its settings, its payload) opens
-     inside the Fields list rather than beside it — one list, one rhythm, so a 40-component form does not
-     become 40 cards. The summary is styled as an .oprow, and the ▸ column is reserved on the plain rows
-     too so every id still starts on the same pixel. */
-  .fldlist .oprow:before{content:"";flex:none;width:.7em}
-  details.fldrow{border-bottom:1px solid var(--line)}
-  details.fldrow:last-child{border-bottom:none}
-  details.fldrow>summary{display:flex;align-items:center;gap:var(--space-25);cursor:pointer;list-style:none;
-    padding:var(--space-15) var(--space-3);font-family:var(--mono);font-size:var(--text-sm)}
-  details.fldrow>summary::-webkit-details-marker{display:none}
-  details.fldrow>summary:before{content:"▸";flex:none;width:.7em;color:var(--ink-faint);font-size:var(--text-2xs)}
-  details.fldrow[open]>summary:before{content:"▾"}
-  details.fldrow>summary:hover{background:var(--hover)}
-  details.fldrow[open]>summary{border-bottom:1px solid var(--line)}
-  /* Which column gives way when the panel is narrow — an IDE tool window is narrow. The id keeps its
-     column, the caption may be clipped but never to nothing, and the callee key clips before it does. */
-  .fldlist .fldid{flex:none;min-width:150px;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .fldlist .fldname{flex:1 1 auto;min-width:5em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .fldlist .opref{flex:0 1 auto;min-width:0}
-  /* "2 in · 1 out" and "Action button" are single tokens to a reader; wrapping them mid-phrase reads as
-     two facts instead of one. */
-  details.fldrow>summary .pt,.fldlist .oprow .pt{white-space:nowrap;flex:none}
-  .fldbody{padding:var(--space-1) 0}
-  .fldbody .oprow{padding-top:var(--space-1);padding-bottom:var(--space-1)}
-  .fldbody .parmgrid{margin:var(--space-1) 0}
   .verb{font-weight:600;min-width:48px}
   /* a component's type at the end of its row, and a snippet of the code it runs — quiet, in the token scale */
   .fldtype{margin-left:auto;color:var(--ink-faint);font-size:var(--text-2xs)}
@@ -769,7 +783,7 @@
   .kvk{min-width:150px}
   .kvv{flex:1;word-break:break-word;white-space:pre-wrap}
   .kvsub{padding:2px 0 2px 12px}
-  .tag{font-size:var(--text-2xs);font-weight:500;text-transform:uppercase;letter-spacing:.04em;
+  .tag{font-size:var(--text-2xs);font-weight:500;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;
     border:1px solid var(--line2);border-radius:var(--radius-sm);padding:1px var(--space-15);color:var(--ink-dim)}
 
   /* schema coverage (Liquibase -> service -> data object) */
@@ -889,6 +903,76 @@
     .flash{animation:flashrow .8s ease-out 2}
     @keyframes flashrow{0%{box-shadow:inset 3px 0 0 var(--accent),0 0 0 2px var(--focus)}100%{box-shadow:inset 3px 0 0 var(--accent)}}
   }
+
+  /* ---- detail components ----
+     tbl: a header row and rows laid out on one --cols track list (each its own grid, so an expandable
+     row can stay a <details>); cards: one element with a body; codeblk: a script with its header. */
+  .tbl{border:1px solid var(--line);border-radius:var(--radius-md);overflow:hidden;background:var(--panel);margin:var(--space-2) 0;
+    font-size:var(--text-sm)}
+  .tbl .th,.tbl>div.tr,.tbl .trs{display:grid;grid-template-columns:var(--cols);grid-auto-flow:row dense;gap:0 var(--space-25);
+    align-items:baseline;padding:var(--space-15) var(--space-3)}
+  .tbl .th{background:var(--panel2);border-bottom:1px solid var(--line);padding-top:var(--space-1);padding-bottom:var(--space-1);
+    font-size:var(--text-2xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}
+  .tbl>.tr{border-bottom:1px solid var(--line)}
+  .tbl>.tr:last-child{border-bottom:none}
+  .tbl>div.tr:hover,.tbl details.tr>summary:hover{background:var(--hover)}
+  .tbl .td{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+  .tbl .td.wrap{white-space:normal;overflow:visible;overflow-wrap:anywhere}
+  .tbl .td.dim{color:var(--ink-dim)}
+  .tbl .td.faint{color:var(--ink-faint)}
+  .tbl .td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .tbl .td.tags{white-space:normal;display:flex;flex-wrap:wrap;gap:var(--space-1);align-items:center}
+  .tbl .tdc{color:var(--ink-faint);display:inline-flex;align-items:center;align-self:center}
+  .tbl .tdc .ui{width:12px;height:12px;transform:rotate(-90deg);transition:transform .12s}
+  .tbl details.tr[open]>summary .tdc .ui{transform:none}
+  .tbl details.tr>summary{cursor:pointer;list-style:none}
+  .tbl details.tr>summary::-webkit-details-marker{display:none}
+  .tbl details.tr[open]>summary{background:var(--panel2);border-bottom:1px solid var(--line)}
+  .tbl .tx{padding:var(--space-2) var(--space-3) var(--space-3) calc(var(--space-3) + 1.1em + var(--space-25))}
+  .tbl .tx>.props{margin-bottom:var(--space-2)}
+  .tbl-more,.tbl-empty{font-size:var(--text-xs);padding:var(--space-05) 0 var(--space-1)}
+  /* a narrow panel (an IDE tool window): the first and the last column stay on the row, every column
+     marked optional drops to its own line under them — nothing is clipped, nothing scrolls sideways */
+  @container (max-width:560px){
+    .tbl .th,.tbl>div.tr,.tbl .trs{grid-template-columns:1.1em minmax(0,1fr) auto}
+    .tbl .td.opt{grid-column:2/-1;font-size:var(--text-2xs);color:var(--ink-faint);white-space:normal}
+    .tbl .th .td.opt{display:none}
+  }
+  .cards{display:flex;flex-direction:column;gap:var(--space-15);margin:var(--space-2) 0}
+  .card{border:1px solid var(--line);border-radius:var(--radius-md);background:var(--panel);overflow:hidden}
+  .card-h{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-3);min-width:0;font-size:var(--text-sm)}
+  details.card>summary{cursor:pointer;list-style:none}
+  details.card>summary::-webkit-details-marker{display:none}
+  details.card>summary:hover{background:var(--hover)}
+  details.card[open]>summary{border-bottom:1px solid var(--line)}
+  .card-h .tdc{flex:none;width:12px;color:var(--ink-faint);display:inline-flex;align-items:center}
+  .card-h .tdc .ui{transform:rotate(-90deg);transition:transform .12s}
+  details.card[open]>.card-h .tdc .ui{transform:none}
+  .card-n{font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
+  .card-id{flex:none;font-size:var(--text-2xs);color:var(--ink-faint);max-width:30%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .card-b{display:inline-flex;flex-wrap:wrap;gap:var(--space-1);align-items:center;min-width:0;flex:1 1 auto}
+  .card-r{margin-left:auto;flex:none;display:inline-flex;align-items:center;gap:var(--space-15);color:var(--ink-faint);font-size:var(--text-2xs)}
+  .card-x{padding:var(--space-2) var(--space-3) var(--space-3)}
+  .card-x>.props{margin-bottom:var(--space-2)}
+  .card-x>.tbl,.card-x>.codeblk{margin-top:var(--space-1)}
+  .codeblk{border:1px solid var(--line);border-radius:var(--radius-md);overflow:hidden;background:var(--panel);margin:var(--space-2) 0}
+  .code-h{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-05) var(--space-15) var(--space-05) var(--space-3);
+    font-size:var(--text-2xs);color:var(--ink-faint);background:var(--panel2)}
+  .code-l{color:var(--ink-dim)}
+  .code-sp{flex:1}
+  .codeblk .scriptbox{margin:0;border-top:1px solid var(--line)}
+  .codeblk.wrap .scriptbox{white-space:pre-wrap;overflow-wrap:anywhere}
+  .code-p{display:flex;flex-direction:column;gap:2px;padding:var(--space-1) var(--space-3);border-top:1px solid var(--line);
+    font-size:var(--text-xs);color:var(--ink-dim)}
+  .sev{font-weight:600}
+  .sev-bad{color:var(--bad-text)}
+  .sev-warn{color:var(--warn-text)}
+  /* the direction of a parameter mapping, coloured by tone */
+  .dir{font-family:var(--sans);font-weight:500;font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.04em}
+  .dir[data-dir=in]{color:var(--info-text)}
+  .dir[data-dir=out]{color:var(--ok-text)}
+  .dir[data-dir=error-out]{color:var(--bad-text)}
+
 
   /* ------------------------------------------------------------------ */
   /* Sidebar collapse ("rail"): state-driven via .shell.rail, toggled by  */

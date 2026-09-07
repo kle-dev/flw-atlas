@@ -235,5 +235,20 @@ class RenderersSmokeTest {
         // The IDE palette bridge: the page takes nine LaF colours from the URL and the live push.
         assertTrue("expected the IDE palette applier from explorer.js", html.contains("function applyIdePalette("))
         assertTrue("expected the idePal URL seed in explorer.html", html.contains("idePal"))
+        // The detail page: a hero header with the facts as a definition list and a section navigator, and
+        // the components every section is built from — a column-headed table, cards, a code block.
+        assertTrue("expected the hero builder from explorer.js", html.contains("function heroHtml("))
+        assertTrue("expected the facts table from explorer.js", html.contains("const FACTS="))
+        assertTrue("expected the section navigator from explorer.js", html.contains("function secnavHtml("))
+        assertTrue("expected the table component from explorer.js", html.contains("function tbl("))
+        assertTrue("expected the cards component from explorer.js", html.contains("function cards("))
+        assertTrue("expected the props component from explorer.js", html.contains("function props("))
+        assertTrue("expected the code block component from explorer.js", html.contains("function codeblk("))
+        assertTrue("expected the hero styling from explorer.css", html.contains(".dhero{"))
+        assertTrue("expected the facts styling from explorer.css", html.contains(".props.facts{"))
+        assertTrue("expected the navigator styling from explorer.css", html.contains(".secnav{"))
+        assertTrue("expected the table styling from explorer.css", html.contains(".tbl{"))
+        assertFalse("the stat-cell grid is gone", html.contains(".cell{"))
+
     }
 }
