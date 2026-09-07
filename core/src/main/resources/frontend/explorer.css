@@ -752,7 +752,6 @@
   .nc .ncflag{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint);flex:none;cursor:help}
   .nc.nc-sus .ncflag{color:var(--cov-warn,#c98a1b)}
   #linkfilter.off{opacity:.5;text-decoration:line-through}
-  .oplist{border:1px solid var(--line);border-radius:var(--radius-md);overflow:hidden;margin:var(--space-2) 0}
   details.uses{border:1px solid var(--line);border-radius:var(--radius-md);margin:var(--space-15) 0;background:var(--panel)}
   details.uses>summary{cursor:pointer;padding:var(--space-2) var(--space-3);font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-dim);list-style:none}
   details.uses>summary::-webkit-details-marker{display:none}
@@ -761,12 +760,10 @@
   details.uses>summary:hover{color:var(--ink)}
   details.uses[open]>summary{border-bottom:1px solid var(--line);color:var(--ink)}
   details.uses .nodechips{padding:var(--space-25) var(--space-3)}
-  .oprow{display:flex;gap:var(--space-25);padding:var(--space-15) var(--space-3);border-bottom:1px solid var(--line);font-family:var(--mono);font-size:var(--text-sm)}
-  .oprow:last-child{border-bottom:none}
-  .verb{font-weight:600;min-width:48px}
-  /* a component's type at the end of its row, and a snippet of the code it runs — quiet, in the token scale */
-  .fldtype{margin-left:auto;color:var(--ink-faint);font-size:var(--text-2xs)}
-  .snip{color:var(--ink-faint);font-size:var(--text-2xs)}
+  /* an HTTP verb as a tag, in the endpoint colour */
+  .tag.verb{color:var(--c-endpoint);border-color:var(--c-endpoint);font-weight:600}
+  /* a small label over a group of rows inside a section (a Liquibase table's name) */
+  .sublab{font-size:var(--text-xs);font-weight:500;color:var(--ink-faint);margin:var(--space-25) 0 var(--space-05)}
   /* Neighborhood: what the node uses in a column on the left, what uses it on the right. Font sizes are
      viewBox units on purpose — the drawing scales with the column, and so does its lettering. */
   .nbh{padding:var(--space-1) 0 var(--space-2)}
@@ -779,7 +776,7 @@
   .nb-more{font-family:var(--sans);font-size:10.5px;fill:var(--accent);cursor:pointer}
   .nb-more:hover,.nb-more:focus-visible{text-decoration:underline}
   /* the "Other attributes" key/value tree */
-  .kvrow{border:none}
+  .kvrow{display:flex;gap:var(--space-25);padding:var(--space-1) 0;font-family:var(--mono);font-size:var(--text-sm)}
   .kvk{min-width:150px}
   .kvv{flex:1;word-break:break-word;white-space:pre-wrap}
   .kvsub{padding:2px 0 2px 12px}
@@ -800,23 +797,12 @@
   .authnote-old{color:var(--cov-warn);background:var(--status-warn-bg);border-color:var(--status-warn-border)}
   .authnote-orphan{color:var(--cov-bad);background:var(--status-bad-bg);border-color:var(--status-bad-border)}
   .authnote .nc{margin-top:var(--space-1)}
-  .covwrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius-md);margin:var(--space-2) 0}
-  table.cov{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:var(--text-sm)}
-  table.cov th{text-align:left;font-family:var(--sans);font-weight:600;color:var(--ink-faint);background:var(--panel2);
-    padding:var(--space-15) var(--space-3);border-bottom:1px solid var(--line2);font-size:var(--text-2xs);
-    letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
-  table.cov td{padding:var(--space-15) var(--space-3);border-bottom:1px solid var(--line);vertical-align:top}
-  table.cov tr:last-child td{border-bottom:none}
-  table.cov tr.cov-bad td{background:var(--status-bad-bg)}
-  table.cov tr.cov-warn td{background:var(--status-warn-bg)}
-  table.cov tr.cov-info td{background:var(--status-info-bg)}
-  table.cov .miss{color:var(--cov-miss)}
-  table.cov .arrow{color:var(--ink-faint)}
   .covlegend{display:flex;flex-wrap:wrap;gap:var(--space-35);font-size:var(--text-xs);color:var(--ink-faint);margin:var(--space-1) 0 var(--space-2)}
   .covlegend span{display:inline-flex;align-items:center;gap:var(--space-1)}
   .covdot{display:inline-block;width:7px;height:7px;border-radius:50%;flex:none}
-  .oprow.cov-bad{box-shadow:inset 3px 0 0 var(--cov-bad)}
-  .oprow.cov-warn{box-shadow:inset 3px 0 0 var(--cov-warn)}
+  .tbl>.tr.cov-bad{background:var(--status-bad-bg);box-shadow:inset 3px 0 0 var(--cov-bad)}
+  .tbl>.tr.cov-warn{background:var(--status-warn-bg);box-shadow:inset 3px 0 0 var(--cov-warn)}
+  .tbl>.tr.cov-info{background:var(--status-info-bg)}
 
   /* operations — each collapsible, params reveal as a single-column list */
   details.op,.op.flat{border:1px solid var(--line);border-radius:var(--radius-md);margin:var(--space-15) 0;
@@ -967,6 +953,10 @@
   .sev{font-weight:600}
   .sev-bad{color:var(--bad-text)}
   .sev-warn{color:var(--warn-text)}
+  .sev-ok{color:var(--ok-text)}
+  .sev-faint{color:var(--ink-faint)}
+  .card-short{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:32ch}
+  .card-doc{margin:0 0 var(--space-2)}
   /* the direction of a parameter mapping, coloured by tone */
   .dir{font-family:var(--sans);font-weight:500;font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.04em}
   .dir[data-dir=in]{color:var(--info-text)}

@@ -1036,26 +1036,19 @@ function schemaCoverageHtml(sc, onlyGaps, leadChipId){
   const miss='<span class="miss">✗ not mapped</span>';
   const rows=onlyGaps?(sc.rows||[]).filter(r=>r.status!=='ok'):(sc.rows||[]);
   if(rows.length){
-    b+='<div class="covwrap"><table class="cov"><thead><tr>'+
-       '<th>Liquibase column</th><th>Service mapping</th><th>Data object field</th></tr></thead><tbody>';
-    rows.forEach(r=>{
-      const lbCell = r.inLiquibase
-        ? '<span>'+esc(r.sql)+'</span>'+(r.sqlType?' <span class="muted">'+esc(r.sqlType)+'</span>':'')
-        : '<span class="miss">— not in changelog</span>';
-      const svCell = r.inService
-        ? '<span>'+esc(r.service||r.serviceCol||'')+'</span>'+
-          (r.serviceCol&&looseCol(r.serviceCol)!==looseCol(r.service||'')?' <span class="muted">'+esc(r.serviceCol)+'</span>':'')+
-          (r.serviceType?' <span class="muted">'+esc(r.serviceType)+'</span>':'')
-        : miss;
-      const doCell = (r.dataObjects&&r.dataObjects.length)
-        ? r.dataObjects.map(x=>'<span>'+esc(x.field)+'</span>'+
-            ((sc.dataObjects||[]).length>1?' <span class="muted">'+esc(x.do)+'</span>':'')).join(', ')
-        : (r.inLiquibase||r.inService?miss:'');
-      b+='<tr class="'+(rowCls[r.status]||'')+'"><td>'+lbCell+'</td><td>'+svCell+'</td><td>'+doCell+'</td></tr>';
-    });
-    b+='</tbody></table></div>';
+    b+=tbl([{k:'lb',label:'Liquibase column',w:'minmax(14ch,1.4fr)',mono:true},{k:'sv',label:'Service mapping',w:'minmax(14ch,1.4fr)',mono:true},{k:'do',label:'Data object field',w:'minmax(12ch,1.2fr)',mono:true}],
+      rows.map(r=>{
+        const lb = r.inLiquibase ? esc(r.sql)+(r.sqlType?' <span class="muted">'+esc(r.sqlType)+'</span>':'') : '<span class="miss">— not in changelog</span>';
+        const sv = r.inService ? esc(r.service||r.serviceCol||'')+
+            (r.serviceCol&&looseCol(r.serviceCol)!==looseCol(r.service||'')?' <span class="muted">'+esc(r.serviceCol)+'</span>':'')+
+            (r.serviceType?' <span class="muted">'+esc(r.serviceType)+'</span>':'') : miss;
+        const dob = (r.dataObjects&&r.dataObjects.length)
+          ? r.dataObjects.map(x=>esc(x.field)+((sc.dataObjects||[]).length>1?' <span class="muted">'+esc(x.do)+'</span>':'')).join(', ')
+          : (r.inLiquibase||r.inService?miss:'');
+        return {cls:rowCls[r.status]||'', hay:elHay(r.sql,r.service,r.serviceCol,(r.dataObjects||[]).map(x=>x.field).join(' ')), cells:{lb, sv, do:dob}};
+      }), {placeholder:'filter columns…'});
   }
-  if(onlyGaps&&ct.ok) b+='<div class="muted" style="font-size:var(--text-xs);margin:var(--space-1) 0 0">+ '+ct.ok+' column'+(ct.ok>1?'s':'')+' mapped through cleanly — full table on the service page</div>';
+  if(onlyGaps&&ct.ok) b+='<div class="tbl-more muted">+ '+ct.ok+' column'+(ct.ok>1?'s':'')+' mapped through cleanly — full table on the service page</div>';
   return b;
 }
 
@@ -2035,7 +2028,9 @@ const incFrom= (id,rel)=>{ const e=(incM.get(id)||[]).find(x=>x.rel===rel); retu
 // you walk the graph. Everything defaults to closed except the diagram and the neighborhood — and the
 // one section that IS the model (a form's fields, a service's operations) — see DEFAULT_OPEN_SECTIONS.
 const SECT_STORE='atlas-sect';
-const DEFAULT_OPEN_SECTIONS={diagram:true, neighborhood:true, formfields:true, columns:true, usertasks:true, svctasks:true, scripttasks:true, plan:true};
+const DEFAULT_OPEN_SECTIONS={diagram:true, neighborhood:true, formfields:true, columns:true, usertasks:true, svctasks:true, scripttasks:true,
+  plan:true, ops:true, dmnio:true, dmnrules:true, permissions:true, escalations:true, rw:true, payload:true, dicttypes:true, agentops:true,
+  endpoints:true, script:true, templatebody:true, extractors:true, coverage:true, problems:true, opparams:true, usedby:true};
 function sectAll(){ try{ return JSON.parse(localStorage.getItem(SECT_STORE)||'{}')||{}; }catch(e){ return {}; } }
 function sectRemember(id, open){
   try{ const m=sectAll(); m[id]=open; localStorage.setItem(SECT_STORE, JSON.stringify(m)); }catch(e){}
@@ -2275,26 +2270,22 @@ function calleeNodeId(g){
   const id=g.refKind+':'+g.refKey;
   return byId.get(id) ? id : null;
 }
-// One collapsible group of rows, headed by the declaring element and *what it calls*.
+// One group of mapping rows, headed by the declaring element and *what it calls* — a card item for cards().
 // `hasDg`: the node has a diagram — the group gets a ⌖ locate button targeting its element.
 function paramGroupHtml(g, extraBody, hasDg){
   const label=g.name||g.element||'—';
-  // "serviceTask · service-registry" is exact but internal; Design calls it a "Service registry task"
-  const ty=elementTerm(g.type, g.sub);
   // The element id, when the label isn't already it: that is what you search for in the BPMN/CMMN XML or
-  // pick out on the diagram, and a named task would otherwise never show it. Click to copy.
-  const eid=(g.element!=null&&String(g.element)!==label)
-    ? '<span class="opid">'+esc(String(g.element))+'</span>'+copyBtn(String(g.element),'element id') : '';
+  // pick out on the diagram, and a named task would otherwise never show it.
+  const eid=(g.element!=null&&String(g.element)!==label)?g.element:null;
   const loc=(hasDg&&g.element!=null)?locateBtn(String(g.element), g.name):'';
-  // the callee by name in the summary (visible without expanding) …
-  const callee=g.refKey?'<span class="opref">→ '+esc(String(g.refKey))+'</span>':'';
+  // the callee by name in the head (visible without expanding) … and as a chip in the body, where a
+  // click cannot fight the toggle
   const cid=calleeNodeId(g);
-  // … and as a chip in the body, where a click cannot fight the summary's own toggle
-  const chip=cid?'<div class="opchips">'+nodeChip(cid)+'</div>':'';
-  return '<details class="op" open'+dataEl(g.element)+'><summary><span class="opname">'+esc(label)+'</span>'+eid+loc+callee+
-    '<span class="opcount">'+g.rows.length+' param'+(g.rows.length>1?'s':'')+'</span>'+
-    '<span class="opkey">'+ty+'</span></summary>'+(extraBody||'')+chip+
-    '<div class="parmgrid">'+g.rows.map(paramRow).join('')+'</div></details>';
+  const chip=cid?'<div class="nodechips">'+nodeChip(cid)+'</div>':'';
+  return {el:g.element, name:esc(label)+loc, id:eid, open:true,
+    badges:[g.refKey?'<span class="opref">→ '+esc(String(g.refKey))+'</span>':'', kindTag(g.type, g.sub)],
+    right:g.rows.length+' param'+(g.rows.length>1?'s':''),
+    body:(extraBody||'')+chip+'<div class="parmgrid">'+g.rows.map(paramRow).join('')+'</div>'};
 }
 // data-el attribute for a detail row/group attributed to a model element — the reveal contract with
 // the diagram (revealByEl / dgCardHtml match on it).
@@ -2356,7 +2347,7 @@ function paramSection(list, hasDg){
       chips:[{fk:'dir',fv:'all',label:'all',n:list.length}]
         .concat(['in','out','error-out'].filter(d=>c[d]).map(d=>({fk:'dir',fv:d,label:d,n:c[d]})))});
   }
-  return section('params','Parameters', gs.map(g=>paramGroupHtml(g, null, hasDg)).join(''),
+  return section('params','Parameters', cards(gs.map(g=>paramGroupHtml(g, null, hasDg))),
     {count:list.length, hint:paramSummary(list), tools});
 }
 
@@ -2411,11 +2402,7 @@ const FACTS={
     if(d.decisionService&&(d.decisions||[]).length)
       x.rows.push(['Decisions',{html:d.decisions.map(k=>byId.get('decision:'+k)?vlink('decision:'+k,k):esc(String(k))).join(', ')}]);
     x.add('Hit policy',d.hitPolicy);
-    if((d.inputs||[]).length) x.rows.push(['Inputs',x.varList(d.inputs)]);
-    // the expression behind a labelled input — that is what actually reads a variable
-    if((d.inputExpressions||[]).length && String(d.inputExpressions)!==String(d.inputs))
-      x.rows.push(['Input expressions',x.varList(d.inputExpressions)]);
-    if((d.outputs||[]).length) x.rows.push(['Outputs',x.varList(d.outputs)]); },
+  },
   form(n,d,x){},
   page:'form',
   app(n,d,x){ x.add('Theme',d.theme);
@@ -2436,8 +2423,7 @@ const FACTS={
   serviceOperation(n,d,x){
     if(d.service) x.rows.push(['Service',{html:'<span class="vlink" data-id="'+enc('service:'+d.service)+'" tabindex="0" role="link" title="Defined by service '+esc(d.service)+'">'+esc(d.service)+'</span>'}]);
     x.add('Name',d.name); x.mono('Method',d.method); x.mono('URL',d.fullUrl||d.url);
-    x.mono('Params',(d.params||[]).map(p=>p.name+(p.type?': '+p.type:'')).join(', '));
-    x.add('Used by', (d.usedBy||[]).length+' model(s)'); },
+  },
   agent(n,d,x){
     // compose only what is there — "Vendor / model: /" and "API endpoint: undefined" were rows once
     x.add('Vendor / model',[d.aiVendor,d.modelName].filter(Boolean).join(' / '));
@@ -2448,10 +2434,8 @@ const FACTS={
     if(d.eventKey&&d.eventKey.fixedValue) x.rows.push(['Event',{html:vlink('event:'+d.eventKey.fixedValue, d.eventKey.fixedValue)}]); },
   event(n,d,x){
     // payload entries are `{name, type, …}` records (older payloads were bare names)
-    const pl=(d.payload||[]).map(p=>(p&&typeof p==='object')?p:{name:p});
-    if(pl.length) x.rows.push(['Payload',x.varList(pl.map(p=>p.name))]);
     x.mono('Correlation',(d.correlation||[]).join(', ')); },
-  java(n,d,x){ x.mono('Package',d.package); x.add('Roles',(d.roles||[]).join(', ')); x.add('Bot key',d.botKey); x.mono('Implements',(d.interfaces||[]).join(', ')); x.mono('Called from models',(d.calledMethods||[]).join(', ')); },
+  java(n,d,x){ x.mono('Package',d.package); x.add('Roles',(d.roles||[]).join(', ')); x.add('Bot key',d.botKey); x.mono('Implements',(d.interfaces||[]).join(', ')); },
   endpoint(n,d,x){ x.mono('Method',d.http); x.mono('Path',d.path);
     if(d.controller||d.handler) x.rows.push(['Handler',{html:vlink(incFrom(n.id,'serves'), [d.controller,d.handler].filter(Boolean).join('#')), copy:d.controller||undefined}]); },  // FQN for 'Go to Class'
   method(n,d,x){ if(d.name) x.rows.push(['Method',{html:esc(d.name)+'()', copy:d.name}]);  // copy the bare name for IntelliJ 'Go to Symbol'
@@ -2512,13 +2496,15 @@ const FACTS={
     x.add('Status', a.status==='live'?'live (authoritative)':a.status==='superseded'?'superseded revision':a.status==='orphan'?'orphan — unreferenced':undefined);
     if((a.referencedBy||[]).length) x.rows.push(['Referenced by',{html:a.referencedBy.map(k=>vlink('service:'+k, k)).join(', ')}]);
     if((a.supersededBy||[]).length) x.rows.push(['Live definition',{html:a.supersededBy.map(k=>vlink('liquibase:'+k, k)).join(', ')}]);
-    x.mono('Tables',(d.effectiveTables||d.tables||[]).join(', ')); },
+    const tables=d.tables||[], eff=d.effectiveTables||[];     // both read: the raw list is the same fact as the effective one
+    x.mono('Tables',(eff.length?eff:tables).join(', ')); },
 
-  expression(n,d,x){ x.add('Used by', (d.usedBy||[]).length+' model(s)');
+
+  expression(n,d,x){
     const pr=d.problems||[]; if(pr.length){ const ec=pr.filter(p=>p.severity==='error').length, wc=pr.length-ec;
       x.add('Problems',[ec?ec+' error'+(ec>1?'s':''):'', wc?wc+' warning'+(wc>1?'s':''):''].filter(Boolean).join(', ')); } },
   binding:'expression',
-  variable(n,d,x){ x.mono('Scope',(d.scopes||[]).join(', ')); x.add('Used in', (d.usages||[]).length+' model(s)');
+  variable(n,d,x){ x.mono('Scope',(d.scopes||[]).join(', '));
     // Written vs read, which is the fact a reader acts on — and the verdict, when there is one.
     if(d.writeCount||d.readCount) x.add('Direction', (d.writeCount||0)+' written · '+(d.readCount||0)+' read');
     if(d.unread) x.rows.push(['Verdict',{html:'<span class="pt" data-tip="Something writes this variable '+
@@ -2534,11 +2520,11 @@ const FACTS={
     if(d.heuristic) x.rows.push(['Evidence',{html:'<span class="pt" data-tip="Only a bare identifier in a '+
       'script body names this variable — Flowable puts scope variables into the script binding, so it is '+
       'probably real, but Atlas cannot prove it.">≈ script read only</span>',copy:null}]); },
-  string(n,d,x){ x.add('Used in', (d.usages||[]).length+' model(s)'); },
+  string(n,d,x){},
   customFunction(n,d,x){
     x.add('Kind', d.kind==='namespace'?('namespace '+(d.namespace||'?')+'.*'):d.kind==='flw'?'flw.* member':'top-level');
     x.mono('Signature', (d.member||n.label||'')+'('+(d.signature!=null?d.signature:'…')+')');
-    x.mono('Registered in',(d.sources||[]).join(', ')); x.add('Used by', (d.usedBy||[]).length+' form(s) / model(s)'); },
+    x.mono('Registered in',(d.sources||[]).join(', ')); },
   external(n,d,x){ x.add('Kind',d.flowableApi?'Flowable platform API':d.route?'In-app navigation route':d.platform?'Flowable platform bean':d.missingModel?'Missing model reference ('+(d.kind||'model')+')':d.dynamic?'Dynamic reference (expression) — expected '+(d.kind||'model'):(d.external_url?'External URL':d.kind||'external')); if(d.method&&d.method!=='(button)') x.mono('Method',d.method); },
   _(n,d,x){ Object.keys(d).forEach(k=>{
     // property probes, not reads: reading `d[k]` here would mark every container as consumed for the
@@ -2875,6 +2861,261 @@ S.eventListeners={id:'eventlisteners', title:'Event listeners', hint:'what the c
         l:elCell(c,e), kind:kindTag(e.type),
         trig:[e.timer?esc(e.timer):'', e.eventType?'<span class="muted">event</span> '+vlink('event:'+e.eventType, e.eventType):'',
               e.signalRef?'<span class="muted">signal</span> '+vlink('signal:'+e.signalRef, e.signalRef):''].filter(Boolean).join(' · ')}}))); }};
+// --- decision tables ---
+/** Inputs and outputs with what each one reads or writes — `inputDefs`/`outputDefs` when the parser has
+ *  them, the bare name lists otherwise. Names link to their variable nodes. */
+S.dmnIO={id:'dmnio', title:'Inputs & outputs', hint:'what the table reads, in which order, and what it writes',
+  count:(n,c)=>dmnIORows(c.d).length,
+  build:(n,c)=>{ const rs=dmnIORows(c.d); if(!rs.length) return '';
+    return tbl([{k:'dir',label:'',w:'5ch',cls:'tags'},{k:'label',label:'Label',w:'minmax(10ch,1.2fr)'},{k:'expr',label:'Expression / variable',w:'minmax(12ch,1.6fr)',mono:true},
+                {k:'type',label:'Type',w:'minmax(7ch,.7fr)',cls:'tags',opt:true},{k:'allowed',label:'Allowed values',w:'minmax(10ch,1.4fr)',mono:true,opt:true,cls:'wrap'}],
+      rs.map(r=>({hay:elHay(r.label,r.expr,r.type), cells:{dir:'<span class="dir" data-dir="'+r.dir+'">'+r.dir+'</span>', label:esc(r.label||''),
+        expr:r.expr?vlink('variable:'+String(r.expr).split('.')[0], r.expr):'', type:tag(r.type), allowed:esc(r.allowed||'')}}))); }};
+function dmnIORows(d){
+  const out=[], ie=d.inputExpressions||[];   // the expression behind a labelled input — that is what actually reads a variable
+  const ins=(d.inputDefs||[]).length?d.inputDefs:(d.inputs||[]).map((x,i)=>({label:x, expression:ie[i]}));
+  ins.forEach(x=>{ const o=(x&&typeof x==='object')?x:{label:x}; out.push({dir:'in', label:o.label, expr:o.expression||(o.label&&!(d.inputDefs||[]).length?o.label:''), type:o.type, allowed:Array.isArray(o.allowed)?o.allowed.join(', '):o.allowed}); });
+  const outs=(d.outputDefs||[]).length?d.outputDefs:(d.outputs||[]).map(x=>({label:x, name:x}));
+  outs.forEach(x=>{ const o=(x&&typeof x==='object')?x:{label:x,name:x}; out.push({dir:'out', label:o.label, expr:o.name||o.label, type:o.type, allowed:Array.isArray(o.allowed)?o.allowed.join(', '):o.allowed}); });
+  return out;
+}
+/** The decision table itself — the conditions and values that are the actual business logic. A wide
+ *  table scrolls inside the section, never sideways. */
+S.dmnRules={id:'dmnrules', title:'Rules', hint:'the decision table — inputs left of the divider, outputs right',
+  count:(n,c)=>c.d.ruleCount||(c.d.rules||[]).length,
+  build:(n,c)=>{ const d=c.d; if(!(d.rules||[]).length) return '';
+    const ann=d.rules.some(r=>r.annotation);
+    // `o` marks where the inputs end and the outputs begin
+    const cell=(t,v,i)=>'<'+t+(i===0?' class="o"':'')+'>'+esc(v==null||v===''?'—':String(v))+'</'+t+'>';
+    const row=r=>'<tr>'+(r.inputs||[]).map(x=>cell('td',x,-1)).join('')+(r.outputs||[]).map((x,i)=>cell('td',x,i)).join('')+(ann?'<td>'+esc(r.annotation||'')+'</td>':'')+'</tr>';
+    return '<div class="dmntab"><table><thead><tr>'+(d.inputs||[]).map(x=>cell('th',x,-1)).join('')+(d.outputs||[]).map((x,i)=>cell('th',x,i)).join('')+
+      (ann?'<th>annotation</th>':'')+'</tr></thead><tbody>'+d.rules.map(row).join('')+'</tbody></table>'+
+      (d.rulesTruncated?'<div class="tbl-more muted">showing '+d.rules.length+' of '+d.rulesTruncated+' rules</div>':'')+'</div>'; }};
+// --- access, dictionaries, SLAs, templates, queries, documents, extractors, knowledge bases, events ---
+S.permissions={id:'permissions', title:'Permissions', hint:'who may do what',
+  count:(n,c)=>(c.d.permissions||[]).length,
+  build:(n,c)=>{ const ps=c.d.permissions||[]; if(!ps.length) return '';
+    return tbl([{k:'perm',label:'Permission',w:'minmax(14ch,1.4fr)'},{k:'key',label:'Key',w:'minmax(10ch,1fr)',mono:true,cls:'faint',opt:true},{k:'roles',label:'Roles',w:'minmax(14ch,2fr)',cls:'wrap'}],
+      ps.map(p=>({hay:elHay(p.label,p.key,(p.roles||[]).join(' ')), cells:{perm:esc(p.label||p.key||''), key:p.label&&p.key&&p.label!==p.key?esc(p.key):'',
+        roles:(p.roles||[]).map(r=>vlink('group:'+r,r)).join(', ')}}))); }};
+S.dictTypes={id:'dicttypes', title:'Type definitions', hint:'the reusable structures, each with its properties',
+  count:(n,c)=>(c.d.typeDefs||[]).length,
+  build:(n,c)=>{ const ts=c.d.typeDefs||[]; if(!ts.length) return '';
+    return cards(ts.map(t=>{ const ps=t.properties||[];
+      return {hay:elHay(t.name,t.parent,ps.map(p=>p.name).join(' ')), name:esc(String(t.name||'')), badges:[t.parent?tag('extends '+t.parent):''],
+        right:ps.length?ps.length+' propert'+(ps.length>1?'ies':'y'):'', open:true,
+        body:ps.length?tbl([{k:'p',label:'Property',w:'minmax(12ch,1.4fr)',mono:true},{k:'t',label:'Type',w:'minmax(8ch,1fr)',cls:'tags'}],
+          ps.map(p=>({hay:elHay(p.name,p.type), cells:{p:esc(String(p.name||'')), t:tag(p.type)}})), {filter:false}):''}; })); }};
+S.escalations={id:'escalations', title:'Escalations', hint:'what happens, when, relative to which deadline',
+  count:(n,c)=>(c.d.escalations||[]).length,
+  build:(n,c)=>{ const es=c.d.escalations||[]; if(!es.length) return '';
+    return tbl([{k:'step',label:'Step',w:'minmax(10ch,1fr)'},{k:'when',label:'When',w:'minmax(10ch,1fr)',cls:'tags'},{k:'action',label:'Action',w:'minmax(10ch,1fr)',cls:'dim',opt:true},
+                {k:'starts',label:'Starts',w:'minmax(10ch,1fr)',opt:true},{k:'who',label:'Assignee',w:'minmax(8ch,.8fr)',mono:true,opt:true},{k:'cond',label:'Condition',w:'minmax(12ch,1.6fr)',mono:true,cls:'wrap',opt:true}],
+      es.map(e=>({hay:elHay(e.stepId,e.on,e.action,e.starts,e.assignee,e.condition), cells:{
+        step:esc(String(e.stepId||e.on||'')), when:e.timeValue!=null?tag(String(e.timeValue)+' '+(e.timeUnit||'')+' '+(e.relativeType||'')):'', action:esc(String(e.action||'')),
+        starts:e.starts?vlink(byId.get('process:'+e.starts)?'process:'+e.starts:'case:'+e.starts, e.starts):'', who:esc(String(e.assignee||'')), cond:esc(String(e.condition||''))}}))); }};
+S.thresholds={id:'thresholds', title:'Thresholds', hint:'the targets the SLA is measured against',
+  count:(n,c)=>(c.d.thresholds||[]).length,
+  build:(n,c)=>{ const ts=c.d.thresholds||[]; if(!ts.length) return '';
+    return tbl([{k:'type',label:'Type',w:'minmax(12ch,1fr)'},{k:'dur',label:'Duration',w:'minmax(10ch,1fr)',mono:true}],
+      ts.map(t=>({hay:elHay(t.type,t.duration), cells:{type:esc(String(t.type||'')), dur:esc(String(t.duration||''))}}))); }};
+/** The template's actual text — the thing a reader searches for — and each variation with its parameters. */
+S.templateBody={id:'templatebody', title:'Template body', hint:'the text, and every variation of it',
+  build:(n,c)=>{ const d=c.d; if(!(d.content||(d.variations||[]).length)) return '';
+    let b=codeblk(d.content, 'freemarker', null, {wrap:true});
+    const vs=(d.variations||[]);
+    if(vs.length) b+=cards(vs.map((v,i)=>{ const params=v.parameters?Object.entries(v.parameters):[];
+      return {hay:elHay(...params.flat(), v.text), name:'Variation '+(i+1), badges:params.map(([k,val])=>tag(k+': '+val)), open:true,
+        body:v.text?codeblk(v.text,'freemarker',null,{wrap:true}):(v.resource!=null?props([['resource',{html:esc(String(v.resource)),mono:true,copy:String(v.resource)}]]):'')}; }));
+    return b; }};
+S.queryParams={id:'querydef', title:'Query parameters', hint:'what a caller may filter by',
+  count:(n,c)=>(c.d.parameters||[]).length,
+  build:(n,c)=>{ const ps=c.d.parameters||[]; if(!ps.length) return '';
+    return tbl([{k:'name',label:'Name',w:'minmax(12ch,1.2fr)',mono:true},{k:'type',label:'Type',w:'minmax(7ch,.7fr)',cls:'tags'},{k:'label',label:'Label',w:'minmax(10ch,1.4fr)',cls:'dim',opt:true},{k:'req',label:'',w:'minmax(6ch,.6fr)',cls:'tags'}],
+      ps.map(p=>{ const o=(p&&typeof p==='object')?p:{name:p}; return {hay:elHay(o.name,o.type,o.label), cells:{name:esc(String(o.name||'')), type:tag(o.type), label:esc(String(o.label||'')), req:o.required?tag('required'):''}}; })); }};
+S.queryCols={id:'querycols', title:'Result columns', hint:'the columns a result row carries, and the variable each one reads',
+  count:(n,c)=>(c.d.columns||[]).length,
+  build:(n,c)=>{ const cs=c.d.columns||[]; if(!cs.length) return '';
+    return tbl([{k:'name',label:'Column',w:'minmax(12ch,1.2fr)',mono:true},{k:'label',label:'Label',w:'minmax(10ch,1.4fr)',cls:'dim',opt:true},{k:'v',label:'Variable',w:'minmax(10ch,1.2fr)',mono:true}],
+      cs.map(col=>({hay:elHay(col.name,col.label,col.variableName), cells:{name:esc(String(col.name||'')), label:esc(String(col.label||'')), v:col.variableName?vlink('variable:'+col.variableName, col.variableName):''}}))); }};
+S.queryTpl={id:'querytpl', title:'Search template', hint:'the query body the index runs',
+  build:(n,c)=>codeblk(c.d.templateContent, 'json')};
+S.docConfig={id:'docconfig', title:'Forms & permissions', hint:'the form each action opens, and who may perform it',
+  build:(n,c)=>{ const d=c.d; if(!(d.forms||(d.actionPermissions||[]).length)) return '';
+    let b='';
+    if(d.forms) b+=tbl([{k:'op',label:'Action',w:'minmax(8ch,.8fr)',cls:'tags'},{k:'form',label:'Form',w:'minmax(14ch,2fr)'}],
+      Object.entries(d.forms).map(([op,fk])=>({hay:elHay(op,fk), cells:{op:tag(op), form:byId.get('form:'+fk)?vlink('form:'+fk, fk):esc(String(fk))}})), {filter:false});
+    if((d.actionPermissions||[]).length) b+=tbl([{k:'a',label:'Action',w:'minmax(8ch,.8fr)',cls:'tags'},{k:'g',label:'Groups',w:'minmax(14ch,2fr)',cls:'wrap'}],
+      d.actionPermissions.map(a=>({hay:elHay(a.action,(a.groups||[]).join(' ')), cells:{a:tag(a.action), g:(a.groups||[]).map(g=>vlink('group:'+g,g)).join(', ')}})), {filter:false});
+    return b; }};
+S.docVars={id:'docvars', title:'Variables', hint:'the metadata a document carries',
+  count:(n,c)=>(c.d.variables||[]).length,
+  build:(n,c)=>{ const vs=c.d.variables||[]; if(!vs.length) return '';
+    return tbl([{k:'k',label:'Key',w:'minmax(12ch,1.6fr)',mono:true},{k:'t',label:'Type',w:'minmax(8ch,1fr)',cls:'tags'}],
+      vs.map(v=>({hay:elHay(v.key,v.type), cells:{k:fieldLink(v.key), t:tag(v.type)}}))); }};
+S.extractors={id:'extractors', title:'Extracted variables', hint:'which indexed variable is written, from which scope’s payload',
+  count:(n,c)=>(c.d.extractors||[]).length,
+  build:(n,c)=>{ const xs=c.d.extractors||[]; if(!xs.length) return '';
+    return tbl([{k:'scope',label:'Scope',w:'minmax(10ch,1fr)'},{k:'from',label:'From',w:'minmax(12ch,1.4fr)',mono:true},{k:'to',label:'→ Variable',w:'minmax(10ch,1.2fr)',mono:true},{k:'type',label:'Type',w:'minmax(7ch,.7fr)',cls:'tags',opt:true}],
+      xs.map(x=>{ const sid=x.scope?(byId.get('process:'+x.scope)?'process:'+x.scope:(byId.get('case:'+x.scope)?'case:'+x.scope:null)):null;
+        return {hay:elHay(x.scope,x.from,x.path,x.to,x.type), cells:{scope:sid?vlink(sid,(byId.get(sid)||{}).label||x.scope):esc(String(x.scope||'')),
+          from:esc(String(x.from||x.path||'')), to:vlink('variable:'+x.to, x.to), type:tag(x.type)}}; })); }};
+S.kbSources={id:'kbsources', title:'Sources', hint:'where the knowledge base’s documents come from',
+  count:(n,c)=>(c.d.sources||[]).length,
+  build:(n,c)=>{ const ss=c.d.sources||[]; if(!ss.length) return '';
+    return tbl([{k:'type',label:'Type',w:'minmax(8ch,.8fr)',cls:'tags'},{k:'path',label:'Path',w:'minmax(16ch,3fr)',mono:true,cls:'wrap'}],
+      ss.map(s=>({hay:elHay(s.type,s.path), cells:{type:tag(s.type), path:esc(String(s.path||''))}}))); }};
+S.payload={id:'payload', title:'Payload', hint:'the event’s fields — the contract every publisher and consumer maps onto',
+  count:(n,c)=>(c.d.payload||[]).length,
+  build:(n,c)=>{ const pl=c.d.payload||[]; if(!pl.length) return '';
+    return tbl([{k:'name',label:'Field',w:'minmax(12ch,1.4fr)',mono:true},{k:'type',label:'Type',w:'minmax(7ch,.8fr)',cls:'tags'},{k:'flags',label:'',w:'minmax(10ch,1fr)',cls:'tags'}],
+      pl.map(p=>{ const o=(p&&typeof p==='object')?p:{name:p}; return {hay:elHay(o.name,o.type), cells:{name:vlink('variable:'+String(o.name||'').split('.')[0], o.name||''), type:tag(o.type),
+        flags:(o.required?tag('required'):'')+(o.correlation?'<span class="tag" data-tip="Used to match the event to a waiting instance">correlates</span>':'')}}; })); }};
+// --- agents, apps, actions ---
+S.tools={id:'tools', title:'Tools', hint:'what the agent may call',
+  count:(n,c)=>(c.d.tools||[]).length,
+  build:(n,c)=>{ const ts=c.d.tools||[]; if(!ts.length) return '';
+    return '<div class="nodechips">'+ts.map(t=>{ const id=(t.type||'service')+':'+(t.key||'');
+      return byId.get(id)?nodeChip(id):'<span class="nc"><span class="nm">'+esc(t.key||'')+'</span><span class="ty">'+esc(t.type||'')+'</span></span>'; }).join('')+'</div>'; }};
+S.agentOps={id:'agentops', title:'Operations', hint:'each operation with the prompts it sends the model',
+  count:(n,c)=>(c.d.operations||[]).length,
+  build:(n,c)=>{ const os=c.d.operations||[]; if(!os.length) return '';
+    return cards(os.map(o=>{ const msgs=[['system',o.systemMessage],['user',o.userMessage]].filter(m=>m[1]);
+      return {hay:elHay(o.name,o.key,o.systemMessage,o.userMessage), name:esc(o.name||o.key||''), id:o.key&&o.key!==(o.name||o.key)?o.key:null,
+        right:msgs.length?msgs.length+' prompt'+(msgs.length>1?'s':''):'',
+        body:msgs.map(m=>codeblk(m[1], null, null, {label:m[0]+' prompt', wrap:true})).join('')}; })); }};
+S.appVars={id:'appvars', title:'App variables', hint:'variables every model in the app can read',
+  count:(n,c)=>(c.d.variables||[]).length,
+  build:(n,c)=>{ const vs=c.d.variables||[]; if(!vs.length) return '';
+    return tbl([{k:'k',label:'Key',w:'minmax(12ch,1.6fr)',mono:true},{k:'t',label:'Type',w:'minmax(8ch,1fr)',cls:'tags'}],
+      vs.map(v=>({hay:elHay(v.key,v.type), cells:{k:fieldLink(v.key), t:tag(v.type)}}))); }};
+S.appPages={id:'apppages', title:'Pages', hint:'the pages the app navigates between',
+  count:(n,c)=>(c.d.pages||[]).length,
+  build:(n,c)=>{ const ps=c.d.pages||[]; if(!ps.length) return '';
+    return '<div class="nodechips">'+ps.map(p=>byId.get('page:'+p.key)?nodeChip('page:'+p.key):'<span class="nc"><span class="nm">'+esc(p.key||'')+'</span><span class="ty">page</span></span>').join('')+'</div>'; }};
+S.botScript={id:'script', title:'Bot script', hint:'what the action runs when it is triggered',
+  build:(n,c)=>{ const d=c.d; if(!(d.script||(d.scriptProblems||[]).length)) return '';
+    return d.script?codeblk(d.script, d.scriptLanguage, d.scriptProblems):scriptProblemsHtml(d.scriptProblems); }};
+// --- services and their operations ---
+/** An operation's contract has two halves: what a caller must supply and what it gets back. */
+function opParamRows(o){
+  return (o.params||[]).map(p=>['in',p]).concat((o.outParams||[]).map(p=>['out',p])).map(([dir,p])=>({hay:elHay(dir,p.name,p.type), cells:{
+    dir:'<span class="dir" data-dir="'+dir+'">'+dir+'</span>', name:esc(p.name||''), type:tag(p.type), req:p.required?tag('required'):'', def:p.default!=null?esc(String(p.default)):''}}));
+}
+const OP_PARAM_COLS=[{k:'dir',label:'',w:'5ch',cls:'tags'},{k:'name',label:'Parameter',w:'minmax(12ch,1.6fr)',mono:true},{k:'type',label:'Type',w:'minmax(7ch,.8fr)',cls:'tags'},
+  {k:'req',label:'',w:'minmax(6ch,.6fr)',cls:'tags',opt:true},{k:'def',label:'Default',w:'minmax(8ch,1fr)',mono:true,opt:true}];
+S.ops={id:'ops', title:'Operations', hint:'what the service offers, and what each call takes and returns',
+  count:(n,c)=>(c.d.operations||[]).length,
+  build:(n,c)=>{ const os=c.d.operations||[]; if(!os.length) return '';
+    return cards(os.map(o=>{
+      // link the key to the operation's own node (its "where used" page)
+      const opid='serviceOperation:'+n.key+'#'+(o.key||'');
+      const key=o.key?(byId.get(opid)?'<span class="vlink mono" data-id="'+enc(opid)+'" tabindex="0" role="link" data-tip="Show where '+esc(o.key)+' is used">'+esc(o.key)+'</span>':'<span class="mono">'+esc(o.key)+'</span>'):'';
+      const rows=opParamRows(o);
+      return {hay:elHay(o.key,o.name,o.method,o.url,o.fullUrl), name:(o.method?'<span class="tag verb">'+esc(o.method)+'</span> ':'')+'<span class="mono">'+esc(o.fullUrl||o.url||o.name||'')+'</span>',
+        badges:[o.name&&o.name!==(o.fullUrl||o.url)?'<span class="muted">'+esc(o.name)+'</span>':'', key], right:rows.length?paramSummary(rows.map(r=>({dir:r.cells.dir.indexOf('"in"')>0?'in':'out'}))):'no params',
+        body:rows.length?tbl(OP_PARAM_COLS, rows, {filter:false}):''}; })); }};
+S.coverage={id:'coverage', title:'Schema coverage', hint:'Liquibase → service → data object: every column, and where the chain breaks',
+  build:(n,c)=>{ const sc=c.d.schemaCoverage; return (sc&&(sc.rows||[]).length)?schemaCoverageHtml(sc, false):''; }};
+S.svcColumns={id:'columns', title:'Column mappings', hint:'the service’s fields and the table columns behind them',
+  count:(n,c)=>(c.d.columns||[]).length,
+  build:(n,c)=>{ const d=c.d, cs=d.columns||[];   // read before the early return: the coverage table shows the same columns
+    if(d.schemaCoverage&&(d.schemaCoverage.rows||[]).length) return ''; if(!cs.length) return '';
+    return tbl([{k:'name',label:'Field',w:'minmax(12ch,1.4fr)',mono:true},{k:'col',label:'Column',w:'minmax(10ch,1.2fr)',mono:true,cls:'faint',opt:true},{k:'type',label:'Type',w:'minmax(8ch,.8fr)',cls:'tags'}],
+      cs.map(col=>({hay:elHay(col.name,col.columnName,col.type), cells:{name:esc(col.name||''), col:col.columnName&&col.columnName!==col.name?esc(col.columnName):'', type:tag(col.type)}}))); }};
+S.opParams={id:'opparams', title:'Parameters', hint:'what a caller supplies, and what comes back',
+  count:(n,c)=>(c.d.params||[]).length+(c.d.outParams||[]).length,
+  build:(n,c)=>{ const rows=opParamRows(c.d); return rows.length?tbl(OP_PARAM_COLS, rows, {filter:false}):''; }};
+S.usedBy={id:'usedby', title:'Used by', hint:'the models that use this',
+  count:(n,c)=>(c.d.usedBy||[]).length,
+  build:(n,c)=>{ const ids=c.d.usedBy||[]; return ids.length?'<div class="nodechips">'+ids.map(nodeChip).join('')+'</div>':''; }};
+S.opOrphan={raw:true, build:(n,c)=>(c.d.usedBy||[]).length?'':'<div class="authnote authnote-orphan">No service button, data-object field or CMMN service mapping in the scanned models calls this operation.</div>'};
+// --- code ---
+S.endpoints={id:'endpoints', title:'Endpoints served', hint:'the REST routes this class handles',
+  count:(n,c)=>(c.d.endpoints||[]).length,
+  build:(n,c)=>{ const es=c.d.endpoints||[]; if(!es.length) return '';
+    return tbl([{k:'verb',label:'Verb',w:'7ch',cls:'tags'},{k:'path',label:'Path',w:'minmax(16ch,2.4fr)',mono:true},{k:'h',label:'Handler',w:'minmax(12ch,1.4fr)',mono:true,opt:true}],
+      es.map(e=>({hay:elHay(e.http,e.path,e.handler), cells:{verb:'<span class="tag verb">'+esc(e.http||'')+'</span>', path:esc(e.path||''), h:esc(e.handler||'')+'() '+lineRef(n.file,e.line)}}))); }};
+S.methods={id:'methods', title:'Declared methods', hint:'every method, and which ones a model calls',
+  count:(n,c)=>(c.d.methods||[]).length,
+  build:(n,c)=>{ const ms=c.d.methods||[]; if(!ms.length) return ''; const cm=new Set(c.d.calledMethods||[]);
+    return tbl([{k:'m',label:'Method',w:'minmax(16ch,2.4fr)',mono:true},{k:'line',label:'Line',w:'minmax(6ch,.6fr)',mono:true,cls:'faint'},{k:'tags',label:'',w:'minmax(10ch,1fr)',cls:'tags'}],
+      ms.map(m=>({hay:elHay(m.name,m.params), cells:{m:esc(m.name)+'('+esc(String(m.params==null?'':m.params))+')', line:lineRef(n.file,m.line),
+        tags:cm.has(m.name)?'<span class="tag" data-tip="A model expression or task calls this method">◀ called by models</span>':''}})), {placeholder:'filter methods…'}); }};
+S.lqBanner={raw:true, build:(n,c)=>{ const d=c.d, a=d.authority||{};
+  if(a.status==='superseded'){ const chips=(a.supersededBy||[]).map(k=>nodeChip('liquibase:'+k)).join('');
+    return '<div class="authnote authnote-old">⚠ Superseded revision — the live definition of <b>'+esc((d.effectiveTables||[]).join(', '))+'</b> is referenced elsewhere. These columns reflect an older revision of the same table.'+(chips?'<div class="nodechips">'+chips+'</div>':'')+'</div>'; }
+  if(a.status==='orphan') return '<div class="authnote authnote-orphan">⚠ Orphan changelog — no service or data object references it. It may be dead/legacy or referenced only at runtime.</div>';
+  return ''; }};
+/** Every column the changelog declares, per table, with how far each one is mapped through when a
+ *  service references the changelog. */
+S.lqColumns={id:'columns', title:'Columns', hint:'per table; the dot says how far a column is mapped through',
+  count:(n,c)=>(c.d.columns||[]).length,
+  build:(n,c)=>{ const d=c.d, cs=d.columns||[]; if(!cs.length) return '';
+    const cov=d.coverage;                    // present only when a service references this changelog
+    const inS=cov?new Set(cov.service||[]):null, inD=cov?new Set(cov.dataObject||[]):null;
+    const stOf=k=>!inS.has(k)?'bad':(!inD.has(k)?'warn':'good');
+    const stTitle={bad:'not mapped by any service',warn:'mapped in service, but no data object field',good:'mapped through to a data object'};
+    const byT={}; cs.forEach(x=>{ (byT[x.table||'(table)']=byT[x.table||'(table)']||[]).push(x); });
+    let b='';
+    if(cov) b+='<div class="covlegend"><span><span class="covdot" style="background:'+covColor('bad')+'"></span>not in service</span>'+
+      '<span><span class="covdot" style="background:'+covColor('warn')+'"></span>not in data object</span>'+
+      '<span><span class="covdot" style="background:'+covColor('good')+'"></span>mapped through</span></div>';
+    Object.keys(byT).forEach(t=>{
+      b+='<div class="sublab mono">'+esc(t)+'</div>'+tbl([{k:'dot',label:'',w:'1.2em',cls:'tags'},{k:'name',label:'Column',w:'minmax(12ch,1.6fr)',mono:true},{k:'type',label:'Type',w:'minmax(8ch,1fr)',mono:true,cls:'faint'}],
+        byT[t].map(x=>{ const st=cov?stOf(looseCol(x.name)):null;
+          return {hay:elHay(x.name,x.type), cls:st==='bad'?'cov-bad':st==='warn'?'cov-warn':'', cells:{
+            dot:cov?'<span class="covdot" data-tip="'+stTitle[st]+'" style="background:'+covColor(st)+'"></span>':'', name:esc(x.name), type:esc(x.type||'')}}; }), {filter:false});
+    });
+    return b; }};
+// --- expressions, bindings, functions ---
+S.problems={id:'problems', title:'Problems', hint:'what the validator found in this expression',
+  count:(n,c)=>(c.d.problems||[]).length,
+  build:(n,c)=>{ const ps=c.d.problems||[]; if(!ps.length) return '';
+    return tbl([{k:'sev',label:'',w:'8ch',cls:'tags'},{k:'msg',label:'Finding',w:'minmax(20ch,3fr)',cls:'wrap'},{k:'snip',label:'Snippet',w:'minmax(12ch,1.4fr)',mono:true,cls:'faint',opt:true}],
+      ps.map(p=>{ const bad=p.severity==='error'; return {hay:elHay(p.severity,p.message,p.snippet), cells:{
+        sev:'<span class="sev sev-'+(bad?'bad':'warn')+'">'+(bad?'error':'warning')+'</span>', msg:esc(p.message||''), snip:esc(p.snippet||'')}}; }), {filter:false}); }};
+S.calls={id:'calls', title:'Calls custom functions 🧩', hint:'the project functions this binding invokes',
+  count:(n,c)=>(c.d.calls||[]).length,
+  build:(n,c)=>{ const ids=c.d.calls||[]; return ids.length?'<div class="nodechips">'+ids.map(nodeChip).join('')+'</div>':''; }};
+S.inBindings={id:'inbindings', title:'Called in bindings', hint:'the exact {{…}} bindings that call it',
+  count:(n,c)=>(c.d.bindings||[]).length,
+  build:(n,c)=>{ const ids=c.d.bindings||[]; return ids.length?'<div class="nodechips">'+ids.map(nodeChip).join('')+'</div>':''; }};
+S.fnOrphan={raw:true, build:(n,c)=>(c.d.usedBy||[]).length?'':'<div class="authnote authnote-orphan">Registered via <b>externals.additionalData</b> but no <code>{{…}}</code> binding in the scanned models calls it.</div>'};
+// --- variables and string literals ---
+/** Written where, read where — the two lists the "never read" verdict rests on, so a reader can check the
+ *  reasoning instead of taking the verdict on faith. Each row jumps to its element in the model. */
+S.rw={id:'rw', title:'Written / read', hint:'every write and every read Atlas found, with the construct it came from',
+  count:(n,c)=>(c.d.writes||[]).length+(c.d.reads||[]).length,
+  build:(n,c)=>{ const d=c.d, ws=d.writes||[], rs=d.reads||[]; if(!ws.length&&!rs.length) return '';
+    const row=(s,verb,tone)=>({hay:elHay(verb,(byId.get(s.model)||{}).label,s.elementName,s.element,s.via), cells:{
+      verb:'<span class="sev sev-'+tone+'">'+verb+'</span>', model:vlink(s.model,(byId.get(s.model)||{}).label||s.model),
+      el:elJumpHtml(s.model, s.element, s.elementName||s.element), via:termHtml('via', s.via, 'tag'),
+      scope:(s.scope?'<span class="muted">in</span> '+vlink(s.scope,(byId.get(s.scope)||{}).label||s.scope):'')+
+        (s.scopeUnresolved?'<span class="tag" data-tip="The called model is not part of this project, so Atlas cannot tell whether anything there reads the variable.">callee not in project</span>':'')}});
+    return tbl([{k:'verb',label:'',w:'8ch',cls:'tags'},{k:'model',label:'Model',w:'minmax(12ch,1.4fr)'},{k:'el',label:'Element',w:'minmax(10ch,1.2fr)',opt:true},
+                {k:'via',label:'Via',w:'minmax(10ch,1.2fr)',cls:'tags',opt:true},{k:'scope',label:'Scope',w:'minmax(10ch,1fr)',cls:'tags',opt:true}],
+      ws.map(s=>row(s,'writes','bad')).concat(rs.map(s=>row(s, s.guess?'≈ reads':'reads', s.guess?'faint':'ok'))), {placeholder:'filter sites — model, element, via…'}); }};
+S.passedAs={id:'passedas', title:'Passed as parameter', hint:'every in/out mapping that reads or writes it, and where',
+  count:(n,c)=>(c.d.ioParams||[]).length,
+  build:(n,c)=>{ const ps=c.d.ioParams||[]; if(!ps.length) return '';
+    return tbl([{k:'dir',label:'',w:'8ch',cls:'tags'},{k:'model',label:'Model',w:'minmax(12ch,1.4fr)'},{k:'el',label:'Element',w:'minmax(10ch,1fr)',mono:true,cls:'faint',opt:true},{k:'flow',label:'Mapping',w:'minmax(14ch,2fr)',mono:true}],
+      ps.map(p=>({hay:elHay(p.dir,(byId.get(p.model)||{}).label,p.element,p.source,p.target), cells:{dir:'<span class="dir" data-dir="'+esc(p.dir)+'">'+esc(p.dir)+'</span>',
+        model:vlink(p.model,(byId.get(p.model)||{}).label||p.model), el:esc(p.element||''), flow:paramFlowHtml(p)}}))); }};
+S.inScripts={id:'inscripts', title:'In scripts', hint:'the scripts that touch this variable — each row jumps to the script',
+  count:(n,c)=>(c.d.scriptSites||[]).length,
+  build:(n,c)=>{ const ss=c.d.scriptSites||[]; if(!ss.length) return '';
+    return tbl([{k:'verb',label:'',w:'10ch',cls:'tags'},{k:'model',label:'Model',w:'minmax(12ch,1.4fr)'},{k:'el',label:'Script',w:'minmax(10ch,1.2fr)',opt:true},{k:'kind',label:'Kind',w:'minmax(8ch,.8fr)',cls:'tags',opt:true}],
+      ss.map(s=>({hay:elHay((byId.get(s.model)||{}).label,s.elementName,s.element,s.elementType), cells:{
+        verb:'<span class="sev sev-'+(s.api?'ok':'faint')+'">'+(s.api?'sets / reads':'≈ reads')+'</span>', model:vlink(s.model,(byId.get(s.model)||{}).label||s.model),
+        el:elJumpHtml(s.model, s.element, s.elementName||s.element), kind:tag(s.elementType)}}))); }};
+S.usedIn={id:'usedin', title:'Used in', hint:'every effective occurrence, per model',
+  count:(n,c)=>(c.d.usages||[]).length,
+  build:(n,c)=>{ const us=c.d.usages||[]; if(!us.length) return '';
+    const rows=[]; us.forEach(u=>{ const lbl=(byId.get(u.model)||{}).label||u.model; const sn=(u.snippets||[]);
+      if(!sn.length) rows.push({hay:lbl, cells:{model:vlink(u.model,lbl), snip:''}});
+      sn.forEach((s,i)=>rows.push({hay:elHay(lbl,s), cells:{model:i===0?vlink(u.model,lbl):'', snip:esc(s)}})); });
+    return tbl([{k:'model',label:'Model',w:'minmax(12ch,1fr)'},{k:'snip',label:'Occurrence',w:'minmax(20ch,3fr)',mono:true,cls:'wrap'}], rows, {placeholder:'filter occurrences…'}); }};
 // --- shared tail: what flows through the model, and what it uses ---
 S.params={id:'params', title:'Parameters', build:(n,c)=>(c.d.ioParameters||[]).length?paramSection(c.d.ioParameters, c.hasDg):'', raw:true};
 S.calledWith={id:'called-with', title:'Called with', build:(n,c)=>calledWithSection(n), raw:true};
@@ -2887,12 +3128,34 @@ const PAGES={
   form:[S.fields, S.outcomes, S.dataSources, S.restCalls, S.subforms],
   page:'form',
   dataObject:[S.properties],
+  decision:[S.dmnIO, S.dmnRules],
+  service:[S.ops, S.coverage, S.svcColumns],
+  serviceOperation:[S.opParams, S.usedBy, S.opOrphan],
+  app:[S.appPages, S.appVars],
+  agent:[S.agentOps, S.tools],
+  action:[S.botScript],
+  event:[S.payload],
+  dataDictionary:[S.dictTypes],
+  securityPolicy:[S.permissions],
+  sla:[S.escalations, S.thresholds],
+  template:[S.templateBody],
+  query:[S.queryParams, S.queryCols, S.queryTpl],
+  document:[S.docConfig, S.docVars],
+  variableExtractor:[S.extractors],
+  knowledgeBase:[S.kbSources],
+  java:[S.endpoints, S.methods],
+  liquibase:[S.lqBanner, S.lqColumns],
+  expression:[S.problems, S.usedBy],
+  binding:[S.problems, S.calls, S.usedBy],
+  customFunction:[S.inBindings, S.usedBy, S.fnOrphan],
+  variable:[S.rw, S.passedAs, S.inScripts, S.usedIn],
+  string:[S.usedIn],
+  _:[],
 };
-/** The typed sections of a page plus the shared tail, or null when the type still renders the old way.
- *  A `raw` builder returns a finished section (it owns its heading and count). */
+/** The typed sections of a page plus the shared tail. A `raw` builder returns finished markup (a section
+ *  that owns its heading and count, or a banner). */
 function renderSections(n, c){
-  let list=PAGES[n.type]; if(typeof list==='string') list=PAGES[list];
-  if(!list) return null;
+  let list=PAGES[n.type]||PAGES._; if(typeof list==='string') list=PAGES[list];
   return list.concat(PAGE_TAIL).map(s=>{
     const body=s.build(n,c); if(!body) return '';
     if(s.raw) return body;
@@ -2914,9 +3177,9 @@ function calledWithSection(n){
   if(!total) return '';
   return section('called-with','Called with',
     // here the interesting other side is the *caller*, so its chip replaces the callee's
-    callers.map(c=>paramGroups(c.rows).map(g=>
-      paramGroupHtml({...g, refKey:null, refKind:null}, '<div class="opchips">'+nodeChip(c.id)+'</div>')
-    ).join('')).join(''), {count:total, hint:paramSummary(callers.flatMap(c=>c.rows))+' from '+callers.length+' caller'+(callers.length>1?'s':'')});
+    cards(callers.flatMap(c=>paramGroups(c.rows).map(g=>
+      paramGroupHtml({...g, refKey:null, refKind:null}, '<div class="nodechips">'+nodeChip(c.id)+'</div>')
+    ))), {count:total, hint:paramSummary(callers.flatMap(c=>c.rows))+' from '+callers.length+' caller'+(callers.length>1?'s':'')});
 }
 // Reverse direction: a model lists all the variables/expressions/strings it uses (collapsible).
 // Derived from the artifact nodes' `usedBy` (see usesIndex) — the payload carries no `_uses`.
@@ -3004,319 +3267,6 @@ function fieldRow(f, d){
 // Above this many mapping rows the component's own body stops being a summary; the rest stay one click
 // away in the Parameters section, which lists every mapping of the model with a filter of its own.
 const PARAM_ROWS_INLINE=10;
-
-function detailExtra(n){
-  const d=n.data||{}; let h='';
-  const hasDg=!!d.diagram;                      // rows for diagram elements get a ⌖ locate button
-  const EM=elementNames(n);                     // element id -> name/type, for readable references
-  const loc=(id,name)=>hasDg&&id!=null&&id!==''?locateBtn(String(id), name):'';
-  // element *name* with the raw id as tooltip — shared by the flow-shaped sections
-  const elRef=id=>{ const nm=elName(EM,id);
-    return '<span'+(nm!==String(id)?' data-tip="'+esc(String(id))+'"':'')+'>'+esc(nm)+'</span>'; };
-  // What this model passes into, and takes back out of, everything it calls.
-  if((d.ioParameters||[]).length) h+=paramSection(d.ioParameters, hasDg);
-  h+=calledWithSection(n);
-  // The decision table itself. Only the row *count* used to survive parsing, so the conditions and
-  // values that are the actual business logic were neither visible nor findable.
-  if(n.type==='decision' && (d.rules||[]).length){
-    const ann=d.rules.some(r=>r.annotation);
-    // `o` marks where the inputs end and the outputs begin
-    const cell=(tag,v,i)=>'<'+tag+(i===0?' class="o"':'')+'>'+esc(v==null||v===''?'—':String(v))+'</'+tag+'>';
-    const row=r=>'<tr>'+(r.inputs||[]).map(c=>cell('td',c,-1)).join('')+
-      (r.outputs||[]).map((c,i)=>cell('td',c,i)).join('')+
-      (ann?'<td>'+esc(r.annotation||'')+'</td>':'')+'</tr>';
-    h+=section('dmnrules','Rules ('+(d.ruleCount||d.rules.length)+')',
-      '<div class="dmntab"><table><thead><tr>'+
-      (d.inputs||[]).map(x=>cell('th',x,-1)).join('')+
-      (d.outputs||[]).map((x,i)=>cell('th',x,i)).join('')+
-      (ann?'<th>annotation</th>':'')+'</tr></thead><tbody>'+
-      d.rules.map(row).join('')+'</tbody></table>'+
-      (d.rulesTruncated?'<div class="muted" style="padding:4px 0">showing '+d.rules.length+' of '+
-        d.rulesTruncated+' rules</div>':'')+'</div>');
-  }
-  if(n.type==='securityPolicy' && (d.permissions||[]).length){
-    h+=section('permissions','Permissions ('+d.permissions.length+') — who may do what','<div class="oplist">'+
-      d.permissions.map(p=>'<div class="oprow"><span style="min-width:180px">'+esc(p.label||p.key||'')+'</span>'+
-        (p.label&&p.key&&p.label!==p.key?'<span class="opid">'+esc(p.key)+'</span>':'')+
-        '<span style="flex:1">'+(p.roles||[]).map(r=>vlink('group:'+r,r)).join(', ')+'</span></div>').join('')+'</div>');
-  }
-  // A dictionary's types with their declared properties — the names list alone said nothing.
-  if(n.type==='dataDictionary' && (d.typeDefs||[]).length){
-    h+=section('dicttypes','Type definitions ('+d.typeDefs.length+')',
-      d.typeDefs.map(t=>{ const props=t.properties||[];
-        const head='<span class="opname">'+esc(String(t.name||''))+'</span>'+
-          (t.parent?'<span class="pt">extends '+esc(String(t.parent))+'</span>':'');
-        if(!props.length) return '<div class="op flat">'+head+'</div>';
-        return '<details class="op"><summary>'+head+'<span class="opcount">'+props.length+' propert'+(props.length>1?'ies':'y')+'</span></summary>'+
-          '<div class="parmgrid">'+props.map(p=>'<div class="pc"><span class="pn">'+esc(String(p.name||''))+'</span>'+
-            (p.type?'<span class="pt">'+esc(String(p.type))+'</span>':'')+'</div>').join('')+'</div></details>';
-      }).join(''));
-  }
-  // An SLA's consequences: what happens, when, relative to which deadline.
-  if(n.type==='sla' && (d.escalations||[]).length){
-    h+=section('escalations','Escalations ('+d.escalations.length+')','<div class="oplist">'+
-      d.escalations.map(e=>'<div class="oprow"><span style="min-width:150px">'+esc(String(e.stepId||e.on||''))+'</span>'+
-        (e.timeValue!=null?'<span class="pt">'+esc(String(e.timeValue))+' '+esc(String(e.timeUnit||''))+' '+esc(String(e.relativeType||''))+'</span>':'')+
-        (e.action?'<span class="muted">'+esc(String(e.action))+'</span>':'')+
-        (e.starts?vlink(byId.get('process:'+e.starts)?'process:'+e.starts:'case:'+e.starts, e.starts):'')+
-        (e.assignee?'<span class="mono">'+esc(String(e.assignee))+'</span>':'')+
-        (e.condition?'<span class="mono" style="flex:1">'+esc(String(e.condition))+'</span>':'')+
-        '</div>').join('')+'</div>');
-  }
-  if(n.type==='sla' && (d.thresholds||[]).length){
-    h+=section('thresholds','Thresholds ('+d.thresholds.length+')','<div class="oplist">'+
-      d.thresholds.map(t=>'<div class="oprow"><span style="min-width:150px">'+esc(String(t.type||''))+'</span>'+
-        '<span class="mono">'+esc(String(t.duration||''))+'</span></div>').join('')+'</div>');
-  }
-  // The template's actual text — the thing a reader searches for.
-  if(n.type==='template' && (d.content||(d.variations||[]).length)){
-    let b='';
-    if(d.content) b+=codeBoxHtml(d.content, 'freemarker');
-    (d.variations||[]).forEach(v=>{
-      const params=v.parameters?Object.entries(v.parameters).map(([k,val])=>'<span class="pt">'+esc(k)+': '+esc(String(val))+'</span>').join(''):'';
-      b+='<div style="margin:6px 0">'+(params?'<div class="opchips">'+params+'</div>':'')+
-        (v.text?codeBoxHtml(v.text,'freemarker'):(v.resource!=null?'<div class="muted" style="padding:2px 10px">resource: '+esc(String(v.resource))+'</div>':''))+'</div>';
-    });
-    h+=section('templatebody','Template body', b);
-  }
-  // A query's contract and body: parameters, legacy columns, and the search template it runs.
-  if(n.type==='query' && ((d.parameters||[]).length||(d.columns||[]).length||d.templateContent)){
-    let b='';
-    if((d.parameters||[]).length) b+='<div class="parmgrid">'+d.parameters.map(p=>
-      '<div class="pc"><span class="pn">'+esc(String(p.name||''))+'</span>'+
-      (p.type?'<span class="pt">'+esc(String(p.type))+'</span>':'')+
-      (p.required?'<span class="pd">required</span>':'')+
-      (p.label?'<span class="muted">'+esc(String(p.label))+'</span>':'')+'</div>').join('')+'</div>';
-    if((d.columns||[]).length) b+='<div class="oplist">'+d.columns.map(c=>
-      '<div class="oprow"><span>'+esc(String(c.name||''))+'</span><span class="muted">'+esc(String(c.label||''))+'</span>'+
-      (c.variableName?'<span class="mono" style="margin-left:auto">'+vlink('variable:'+c.variableName, c.variableName)+'</span>':'')+'</div>').join('')+'</div>';
-    if(d.templateContent) b+=codeBoxHtml(d.templateContent, 'json');
-    h+=section('querydef','Query definition', b);
-  }
-  // A document model's per-action forms and who may do what with it.
-  if(n.type==='document' && (d.forms||(d.actionPermissions||[]).length)){
-    let b='';
-    if(d.forms) b+='<div class="oplist">'+Object.entries(d.forms).map(([op,fk])=>
-      '<div class="oprow"><span class="pt">'+esc(op)+'</span><span style="flex:1">'+
-      (byId.get('form:'+fk)?nodeChip('form:'+fk):esc(String(fk)))+'</span></div>').join('')+'</div>';
-    if((d.actionPermissions||[]).length) b+='<div class="oplist">'+d.actionPermissions.map(a=>
-      '<div class="oprow"><span class="pt">'+esc(String(a.action||''))+'</span><span style="flex:1">'+
-      (a.groups||[]).map(g=>vlink('group:'+g,g)).join(', ')+'</span></div>').join('')+'</div>';
-    h+=section('docconfig','Forms & permissions', b);
-  }
-  // Which variable each extractor writes, from which scope's payload.
-  if(n.type==='variableExtractor' && (d.extractors||[]).length){
-    h+=section('extractors','Extracted variables ('+d.extractors.length+')','<div class="oplist">'+
-      d.extractors.map(x=>{ const sid=x.scope?(byId.get('process:'+x.scope)?'process:'+x.scope:(byId.get('case:'+x.scope)?'case:'+x.scope:null)):null;
-        return '<div class="oprow">'+
-          (sid?nodeChip(sid):(x.scope?'<span class="muted">'+esc(String(x.scope))+'</span>':''))+
-          '<span class="mono">'+esc(String(x.from||x.path||''))+'</span><span class="pa">→</span>'+
-          '<span class="mono">'+vlink('variable:'+x.to, x.to)+'</span>'+
-          (x.type?'<span class="pt">'+esc(String(x.type))+'</span>':'')+'</div>'; }).join('')+'</div>');
-  }
-  // Where a knowledge base's documents come from.
-  if(n.type==='knowledgeBase' && (d.sources||[]).length){
-    h+=section('kbsources','Sources ('+d.sources.length+')','<div class="oplist">'+
-      d.sources.map(s=>'<div class="oprow"><span class="pt">'+esc(String(s.type||''))+'</span>'+
-        '<span class="mono" style="flex:1">'+esc(String(s.path||''))+'</span></div>').join('')+'</div>');
-  }
-  // An event payload's full contract, when the model states more than names.
-  if(n.type==='event' && (d.payload||[]).some(p=>p&&typeof p==='object'&&(p.type||p.required))){
-    h+=section('payload','Payload ('+d.payload.length+')','<div class="parmgrid">'+
-      d.payload.map(p=>{ const o=(p&&typeof p==='object')?p:{name:p};
-        return '<div class="pc"><span class="pn">'+esc(String(o.name||''))+'</span>'+
-          (o.type?'<span class="pt">'+esc(String(o.type))+'</span>':'')+
-          (o.required?'<span class="pd">required</span>':'')+
-          (o.correlation?'<span class="pd">correlates</span>':'')+'</div>'; }).join('')+'</div>');
-  }
-  if(n.type==='agent' && (d.tools||[]).length){
-    h+=section('tools','Tools ('+d.tools.length+') — what the agent may call','<div class="nodechips">'+
-      d.tools.map(t=>{const id=(t.type||'service')+':'+(t.key||'');
-        return byId.get(id)?nodeChip(id):'<span class="nc"><span class="nm">'+esc(t.key||'')+'</span><span class="ty">'+esc(t.type||'')+'</span></span>';}).join('')+'</div>');
-  }
-  if(n.type==='agent' && (d.operations||[]).length){
-    h+=section('agentops','Operations ('+d.operations.length+')',
-      d.operations.map(o=>{
-        const msgs=[['system',o.systemMessage],['user',o.userMessage]].filter(m=>m[1]);
-        const key=(o.key&&o.key!==(o.name||o.key))?'<span class="opkey">'+esc(o.key)+'</span>':'';
-        if(!msgs.length) return '<div class="op flat"><span class="opname">'+esc(o.name||o.key||'')+'</span>'+key+'</div>';
-        // prompts are multi-paragraph text now that the parser keeps them whole — a code box, not a one-liner
-        return '<details class="op"><summary><span class="opname">'+esc(o.name||o.key||'')+'</span>'+key+
-          '<span class="opcount">'+msgs.length+' prompt'+(msgs.length>1?'s':'')+'</span></summary>'+
-          '<div class="parmgrid">'+msgs.map(m=>'<div class="pc" style="display:block"><span class="pd">'+m[0]+'</span>'+
-            '<pre class="scriptbox" style="margin:4px 0 2px;white-space:pre-wrap">'+esc(m[1])+'</pre></div>').join('')+'</div></details>';
-      }).join(''));
-  }
-  if(n.type==='app' && (d.variables||[]).length){
-    h+=section('appvars','App variables ('+d.variables.length+')','<div class="oplist">'+
-      d.variables.map(v=>'<div class="oprow"><span class="mono" style="flex:1">'+fieldLink(v.key)+'</span>'+
-        (v.type?'<span class="pt">'+esc(v.type)+'</span>':'')+'</div>').join('')+'</div>');
-  }
-  if(n.type==='app' && (d.pages||[]).length){
-    h+=section('apppages','Pages ('+d.pages.length+')','<div class="nodechips">'+
-      d.pages.map(p=>byId.get('page:'+p.key)?nodeChip('page:'+p.key)
-        :'<span class="nc"><span class="nm">'+esc(p.key||'')+'</span><span class="ty">page</span></span>').join('')+'</div>');
-  }
-  if(n.type==='action' && (d.script||(d.scriptProblems||[]).length)){
-    h+=section('script','Bot script'+(d.scriptLanguage?' ('+esc(d.scriptLanguage)+')':'')+
-      ((d.scriptProblems||[]).length?' '+scriptIssueBadge(d.scriptProblems):''),
-      scriptProblemsHtml(d.scriptProblems)+
-      codeBoxHtml(d.script, d.scriptLanguage, d.scriptProblems));
-  }
-  if(n.type==='service' && (d.operations||[]).length){
-    h+=section('ops','Operations ('+d.operations.length+')',
-      d.operations.map(o=>{
-        const verb=o.method?'<span class="verb" style="color:'+color("endpoint")+'">'+esc(o.method)+'</span>':'';
-        const title='<span class="opname">'+esc(o.fullUrl||o.url||o.name||'')+'</span>';
-        // link the key to the operation's own node (its "where used" page)
-        const opid='serviceOperation:'+n.key+'#'+(o.key||'');
-        const key=((o.key&&byId.get(opid))
-          ? '<span class="opkey vlink" data-id="'+enc(opid)+'" tabindex="0" role="link" title="Show where '+esc(o.key)+' is used">'+esc(o.key)+'</span>'
-          : '<span class="opkey">'+esc(o.key||'')+'</span>')+copyBtn(o.key,'operation key');
-        // An operation's contract has two halves: what a caller must supply and what it gets back.
-        const decl=(o.params||[]).map(p=>['in',p]).concat((o.outParams||[]).map(p=>['out',p]));
-        if(!decl.length) return '<div class="op flat">'+verb+title+'<span class="opcount">no params</span>'+key+'</div>';
-        return '<details class="op"><summary>'+verb+title+
-          '<span class="opcount">'+paramSummary(decl.map(([dir])=>({dir})))+'</span>'+key+'</summary>'+
-          '<div class="parmgrid">'+decl.map(([dir,p])=>
-            '<div class="pc"><span class="pd" style="color:var('+PDIR_COLOR[dir]+')">'+dir+'</span>'+
-            '<span class="pn">'+esc(p.name)+'</span>'+
-            (p.type?'<span class="pt">'+esc(p.type)+'</span>':'')+
-            (p.required?'<span class="pd">required</span>':'')+
-            (p.default!=null?'<span class="muted">default '+esc(String(p.default))+'</span>':'')+'</div>').join('')+'</div></details>';
-      }).join(''));
-  }
-  if(n.type==='service' && d.schemaCoverage && (d.schemaCoverage.rows||[]).length){
-    h+=section('coverage','Schema coverage — Liquibase → Service → Data object',
-      schemaCoverageHtml(d.schemaCoverage, false));
-  }
-  else if(n.type==='service' && (d.columns||[]).length){
-    h+=section('columns','Column mappings ('+d.columns.length+')','<div class="oplist">'+
-      d.columns.map(c=>'<div class="oprow"><span>'+esc(c.name||'')+'</span>'+
-        (c.columnName&&c.columnName!==c.name?'<span class="muted">'+esc(c.columnName)+'</span>':'')+
-        (c.type?'<span class="mono fldtype">'+esc(c.type)+'</span>':'')+
-        '</div>').join('')+'</div>');
-  }
-  if(n.type==='java' && (d.endpoints||[]).length){
-    h+=section('endpoints','Endpoints served','<div class="oplist">'+
-      d.endpoints.map(e=>'<div class="oprow"><span class="verb" style="color:'+color("endpoint")+'">'+esc(e.http)+'</span><span>'+esc(e.path)+'</span><span class="muted">'+esc(e.handler)+'() '+lineRef(n.file,e.line)+'</span></div>').join('')+'</div>');
-  }
-  if(n.type==='java' && (d.methods||[]).length){
-    const cm=new Set(d.calledMethods||[]);
-    h+=section('methods','Declared methods ('+d.methods.length+')','<div class="oplist">'+
-      d.methods.slice(0,80).map(m=>'<div class="oprow"><span>'+esc(m.name)+'('+m.params+')</span><span class="muted">'+lineRef(n.file,m.line)+(cm.has(m.name)?'  ◀ called by models':'')+'</span></div>').join('')+'</div>');
-  }
-  if(n.type==='liquibase'){
-    const a=d.authority||{};
-    if(a.status==='superseded'){ const chips=(a.supersededBy||[]).map(k=>nodeChip('liquibase:'+k)).join('');
-      h+='<div class="authnote authnote-old">⚠ Superseded revision — the live definition of <b>'+esc((d.effectiveTables||[]).join(', '))+'</b> is referenced elsewhere. These columns reflect an older revision of the same table.'+(chips?'<div>'+chips+'</div>':'')+'</div>'; }
-    else if(a.status==='orphan'){
-      h+='<div class="authnote authnote-orphan">⚠ Orphan changelog — no service or data object references it. It may be dead/legacy or referenced only at runtime.</div>'; }
-  }
-  if(n.type==='liquibase' && (d.columns||[]).length){
-    const cov=d.coverage;                    // present only when a service references this changelog
-    const inS=cov?new Set(cov.service||[]):null, inD=cov?new Set(cov.dataObject||[]):null;
-    const stOf=k=>!inS.has(k)?'bad':(!inD.has(k)?'warn':'good');
-    const stTitle={bad:'not mapped by any service',warn:'mapped in service, but no data object field',good:'mapped through to a data object'};
-    const byT={}; d.columns.forEach(c=>{ (byT[c.table||'(table)']=byT[c.table||'(table)']||[]).push(c); });
-    let b='';
-    if(cov) b+='<div class="covlegend">'+
-      '<span><span class="covdot" style="background:'+covColor('bad')+'"></span>not in service</span>'+
-      '<span><span class="covdot" style="background:'+covColor('warn')+'"></span>not in data object</span>'+
-      '<span><span class="covdot" style="background:'+covColor('good')+'"></span>mapped through</span></div>';
-    Object.keys(byT).forEach(t=>{
-      b+='<div style="margin:6px 0 12px"><div class="muted mono" style="margin-bottom:4px">'+esc(t)+'</div><div class="oplist">'+
-        byT[t].map(c=>{ const st=cov?stOf(looseCol(c.name)):null;
-          return '<div class="oprow'+(st==='bad'?' cov-bad':st==='warn'?' cov-warn':'')+'">'+
-          (cov?'<span class="covdot" title="'+stTitle[st]+'" style="background:'+covColor(st)+'"></span>':'')+
-          '<span>'+esc(c.name)+'</span>'+
-          (c.type?'<span class="mono fldtype">'+esc(c.type)+'</span>':'')+
-          '</div>'; }).join('')+'</div></div>';
-    });
-    h+=section('columns','Columns ('+d.columns.length+')'+(cov?' — mapping coverage':''), b);
-  }
-  if((n.type==='expression'||n.type==='binding') && (d.problems||[]).length){
-    h+=section('problems','Problems ('+d.problems.length+')','<div class="oplist">'+
-      d.problems.map(p=>{
-        const isErr=p.severity==='error';
-        const col=isErr?color('invalidExpr'):color('suspectExpr');
-        const snip=p.snippet||'';
-        return '<div class="oprow"><span class="verb" style="color:'+col+'">'+(isErr?'error':'warning')+'</span>'+
-          '<span style="flex:1">'+esc(p.message)+'</span>'+
-          (snip?'<span class="mono snip">'+esc(snip)+'</span>':'')+
-          '</div>';
-      }).join('')+'</div>');
-  }
-  if((n.type==='expression'||n.type==='binding'||n.type==='customFunction'||n.type==='serviceOperation') && (d.usedBy||[]).length){
-    h+=section('usedby','Used by ('+d.usedBy.length+')','<div class="nodechips">'+d.usedBy.map(nodeChip).join('')+'</div>');
-  }
-  if(n.type==='serviceOperation' && !(d.usedBy||[]).length){
-    h+='<div class="authnote authnote-orphan">No service button, data-object field or CMMN service mapping in the scanned models calls this operation.</div>';
-  }
-  // a frontend binding links to the custom function(s) it calls; a custom function links back to the
-  // exact bindings that call it (in addition to the forms/models under "Used by").
-  if(n.type==='binding' && (d.calls||[]).length){
-    h+=section('calls','Calls custom functions 🧩 ('+d.calls.length+')','<div class="nodechips">'+d.calls.map(nodeChip).join('')+'</div>');
-  }
-  if(n.type==='customFunction' && (d.bindings||[]).length){
-    h+=section('inbindings','Called in bindings ('+d.bindings.length+')','<div class="nodechips">'+d.bindings.map(nodeChip).join('')+'</div>');
-  }
-  if(n.type==='customFunction' && !(d.usedBy||[]).length){
-    h+='<div class="authnote authnote-orphan">Registered via <b>externals.additionalData</b> but no <code>{{…}}</code> binding in the scanned models calls it.</div>';
-  }
-  // Written where, read where — the two lists the "never read" verdict rests on, so a reader can check
-  // the reasoning instead of taking the verdict on faith. Each row jumps to its element in the model.
-  if(n.type==='variable' && ((d.writes||[]).length||(d.reads||[]).length)){
-    const siteRow=(s,verb,col)=>'<div class="oprow">'+
-      '<span class="verb" style="color:var('+col+')">'+verb+'</span>'+
-      '<span style="flex:1">'+nodeChip(s.model)+
-        elJumpHtml(s.model, s.element, s.elementName||s.element)+
-        (s.scope?'<span class="pd">in scope</span>'+nodeChip(s.scope):'')+
-        (s.scopeUnresolved?'<span class="pd" data-tip="The called model is not part of this project, so '+
-          'Atlas cannot tell whether anything there reads the variable.">callee not in project</span>':'')+
-      '</span>'+
-      termHtml('via', s.via, 'pt')+'</div>';
-    h+=section('rw','Written / read ('+(d.writeCount||0)+' / '+(d.readCount||0)+')','<div class="oplist">'+
-      (d.writes||[]).map(s=>siteRow(s,'writes','--bad-text')).join('')+
-      (d.reads||[]).map(s=>siteRow(s, s.guess?'≈ reads':'reads', s.guess?'--ink-faint':'--ok-text')).join('')+
-      '</div>');
-  }
-  // The data-flow view of a variable: every in/out mapping that reads or writes it, and where.
-  if(n.type==='variable' && (d.ioParams||[]).length){
-    h+=section('passedas','Passed as parameter ('+paramSummary(d.ioParams)+')','<div class="oplist">'+
-      d.ioParams.map(p=>'<div class="oprow">'+
-        '<span class="verb" style="color:var('+(PDIR_COLOR[p.dir]||'--ink-faint')+')">'+esc(p.dir)+'</span>'+
-        '<span style="flex:1">'+nodeChip(p.model)+
-          (p.element?'<span class="mono" style="color:var(--ink-faint)"> @'+esc(p.element)+'</span>':'')+'</span>'+
-        '<span class="mono" style="font-size:var(--text-2xs)">'+paramFlowHtml(p)+'</span>'+
-      '</div>').join('')+'</div>');
-  }
-  // The scripts that touch this variable. Each row jumps to that script's own row in its model — the
-  // answer to "where is this variable actually set?" used to require reading every script by hand.
-  if(n.type==='variable' && (d.scriptSites||[]).length){
-    h+=section('inscripts','In scripts ('+d.scriptSites.length+')','<div class="oplist">'+
-      d.scriptSites.map(s=>'<div class="oprow">'+
-        '<span class="verb" style="color:var('+(s.api?'--ok-text':'--ink-faint')+')">'+
-          (s.api?'sets / reads':'≈ reads')+'</span>'+
-        '<span style="flex:1">'+nodeChip(s.model)+
-          elJumpHtml(s.model, s.element, s.elementName||s.element)+
-        '</span>'+
-        (s.elementType?'<span class="pt">'+esc(s.elementType)+'</span>':'')+
-      '</div>').join('')+'</div>');
-  }
-  if((n.type==='variable'||n.type==='string') && (d.usages||[]).length){
-    let b='';
-    d.usages.forEach(u=>{
-      b+='<div style="margin:6px 0 12px">'+nodeChip(u.model)+
-         '<div class="oplist" style="margin-top:5px">'+
-         (u.snippets||[]).map(s=>'<div class="oprow"><span class="mono">'+esc(s)+'</span></div>').join('')+
-         '</div></div>';
-    });
-    h+=section('usedin','Used in ('+d.usages.length+' models) — effective occurrences', b);
-  }
-  h+=usesSection(n);
-  return h;
-}
 
 // ---------- rendered model diagram (BPMN/CMMN/DMN), when Atlas embedded one ----------
 function diagramView(n){
@@ -3427,7 +3377,7 @@ function kvValueHtml(v){
 function kvEntry(k,v,depth){
   if(v==null||v==='') return '';
   if(typeof v!=='object')
-    return '<div class="oprow kvrow"><span class="muted kvk">'+
+    return '<div class="kvrow"><span class="muted kvk">'+
       esc(String(k))+'</span>'+kvValueHtml(v)+'</div>';
   const inner=kvTree(v,depth+1);
   if(!inner) return '';
@@ -3440,7 +3390,7 @@ function kvTree(v,depth){
   if(Array.isArray(v)){
     if(!v.length) return '';
     if(v.every(x=>x==null||typeof x!=='object'))
-      return '<div class="oprow kvrow">'+kvValueHtml(v.slice(0,KV_MAX_ROWS).join(', '))+'</div>';
+      return '<div class="kvrow">'+kvValueHtml(v.slice(0,KV_MAX_ROWS).join(', '))+'</div>';
     return v.slice(0,KV_MAX_ROWS).map((x,i)=>kvEntry(
       x&&typeof x==='object'?(x.id||x.name||x.key||('#'+(i+1))):String(x), x, depth)).join('');
   }
@@ -3482,8 +3432,7 @@ function renderDetail(){
   let body='';
   body+=diagramView(rn);
   body+=neighborhoodSvg(n);
-  const typed=renderSections(rn, detailCtx(rn));
-  body+=typed!=null?typed:detailExtra(rn);
+  body+=renderSections(rn, detailCtx(rn));
   // Whatever no renderer above consumed. Identity fields live in the header; HAY_SKIP is the same
   // bookkeeping the search index skips.
   {
@@ -4262,7 +4211,7 @@ function applyFocus(det){
   };
   let rows=pick('.pc, .oprow');
   // script bodies / operation blocks, flow conditions and DMN cells — a free-text hit usually lands here
-  if(!rows.length) rows=pick('details.op, .dgcond, .dmntab td');
+  if(!rows.length) rows=pick('details.card, details.op, .dgcond, .dmntab td');
   if(!rows.length) rows=pick('.fact');
   if(!rows.length) return;
   rows.forEach(el=>{ el.classList.add('hit'); if(el.tagName==='DETAILS') el.open=true; });
