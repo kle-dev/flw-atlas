@@ -12,9 +12,50 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.22.0
+
+- **A detail page has a header.** A node's page used to open with a bare title over a grid of uppercase
+  stat cells — *Fields 7 · Data sources 3* — that repeated the counts of the sections below it. It opens
+  now with the type's icon in a tinted tile, the title, one identity line (kind · key · path, each
+  copyable, the path opening the file inside IntelliJ), Design's description as prose, and the facts as a
+  definition list — the handful of properties that describe the model itself, never a count. The sticky
+  bar keeps the kind and the actions in reach and shows the title once the header has scrolled away.
+- **Sections come in reading order, and the page says which ones it has.** Every node type has an ordered
+  list of sections now: what the model *is* first (a form's fields, a data object's properties, a
+  process's tasks, a decision table's inputs, outputs and rules, a service's operations), then how it
+  behaves, then what flows through it, then what it is connected to. A process page used to list its
+  service tasks last, after the sequence flows; it has twenty sections and had no map. A row of chips
+  under the header lists every section the page rendered, with its count, and opens the one you click.
+  The section that *is* the model starts open; the rest start folded, remembered as before.
+- **Every list on a detail page is a table with column headers.** Names, captions and labels are set in
+  the text face, identifiers, expressions, paths and code in monospace — a data object's properties read
+  *name · label · type · relation* instead of three monospace words whose meaning was their position.
+  A row with more to say expands in place: a form button into the model it invokes, the payload it sends
+  and stores, its settings and its expression; a script task into its code with line numbers and the
+  validator's findings; a service task into its implementation, the operation it calls and its field
+  injections. A long table gets a filter of its own. In a narrow panel — an IntelliJ tool window — the
+  optional columns drop under the row instead of being clipped, and nothing scrolls sideways.
+- **A process page shows what its diagram alone does not.** Call activities and sub-processes with the
+  process each one calls, gateways with their default flow, receive, send and manual tasks, every event
+  (not only the named ones) with what it is attached to, every service task (not only the implemented
+  ones), the `async` and skip flags on the rows that carry them, and a script listener's code — all of it
+  parsed for releases and rendered nowhere. Sequence flows and their conditions are one table. A decision
+  table gets an *Inputs & outputs* table, a service operation its parameter table, a document model its
+  variables. Every section renders every record it summarises, or says *+N more*.
+- **The report pages share the detail page's bones.** Checks, Script tasks, Unused variables and Schema
+  gaps open with the same header — icon, title, one line saying what the page is, the page's own numbers
+  as facts — and their findings are sections: remembered, folded with one click, mapped by the same chips.
+  Each finding that was a pile of monospace rows is a column-headed table; the Scripts page shows every
+  script as the card the process page shows, grouped under one section per model, and its filter folds
+  away the models it empties. The health rows' jump targets open the section they land on.
+- **A checkbox you can see is a checkbox you can click.** The box that appears when you hover a list or
+  palette row toggled nothing on a plain click — only a modifier-click on the row did. It is the toggle
+  now, in the browse list and in the ⌘K palette, and the UI test clicks it.
+
 ## 0.21.1
 
-- **The explorer opens in seconds under Remote Development, not minutes.** On a Remote Dev host the
+- **The explorer opens in seconds under Remote Development, not minutes.**
+ On a Remote Dev host the
   embedded browser is the thin client's, and everything it shows — a local file included — crosses the
   IDE connection in 16 KB packets, one round trip each: a 3.5 MB report was 200+ sequential round trips,
   half a minute on a 150 ms link, for a file the host reads in milliseconds. The editor now loads a small

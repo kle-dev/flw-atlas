@@ -833,6 +833,8 @@
   .card-r .opref,.tbl .opref{max-width:none}
   /* the element an id-shaped label belongs to, beside a term ("In parameter · Manual review") */
   .opid{color:var(--ink-faint);font-size:var(--text-2xs);margin-left:var(--space-1)}
+  .opsub{color:var(--ink-faint)}
+
 
   .parmgrid{display:grid;grid-template-columns:1fr;gap:1px;background:var(--line)}
   .parmgrid .pc{display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-25);
