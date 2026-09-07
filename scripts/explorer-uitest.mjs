@@ -452,7 +452,28 @@ const probe = `<script>
   steps.push(()=>{
     const d=window.__navSect;
     ok('clicking a navigator chip opens its section', !!d && d.open, d?d.dataset.sect+' still closed':'(no section)');
+    // --- "N parameter mappings ↓" on a service task lands on that task's group in the Parameters section,
+    // not on the card it sits in (also a row of the same element, and first in the document)
+    const det=document.getElementById('detail');
+    const card=det.querySelector('details.sect[data-sect="svctasks"] details.card[data-el="calcTask"]');
+    ok('the service task with mappings is a card', !!card);
+    if(card) card.open=true;
+    const params=det.querySelector('details.sect[data-sect="params"]');
+    if(params){ params.open=false; }
+    const btn=card&&card.querySelector('[data-reveal-el="calcTask"]');
+    ok('and offers the jump to its parameter mappings', !!btn);
+    if(btn) click(btn);
   });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    const params=det.querySelector('details.sect[data-sect="params"]');
+    const grp=params&&params.querySelector('details.card[data-el="calcTask"]');
+    ok('the jump opens the Parameters section', !!params && params.open);
+    ok('and lands on the task\\'s mapping group there', !!grp && grp.open && grp.classList.contains('hit'),
+       grp?'group not marked':'(no group)');
+    ok('and not on the service task card', !det.querySelector('details.sect[data-sect="svctasks"] .hit'));
+  });
+
 
 
   // --- a model lists what it uses: the section is rebuilt from the artifact nodes' usedBy ---

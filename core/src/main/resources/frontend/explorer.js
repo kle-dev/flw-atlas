@@ -3416,10 +3416,11 @@ function renderDetail(){
     b.onclick=e=>{ e.preventDefault(); e.stopPropagation(); locateOnDiagram(det, b.dataset.elRef, b.dataset.elName); };
     b.onkeydown=e=>{ if(e.key==='Enter'||e.key===' ') e.stopPropagation(); };
   });
-  // "N parameter mappings ↓" inside a service task — jumps to that element's mapping group
+  // "N parameter mappings ↓" inside a service task — jumps to that element's group in the Parameters section
   det.querySelectorAll('[data-reveal-el]').forEach(b=>{
-    b.onclick=e=>{ e.stopPropagation(); revealByEl(det, b.dataset.revealEl); };
+    b.onclick=e=>{ e.stopPropagation(); revealByEl(det, b.dataset.revealEl, 'details.sect[data-sect="params"]'); };
   });
+
   // The section navigator's chips and the neighborhood's "+N more" — open the section and scroll to it
   det.querySelectorAll('[data-jump-sect]').forEach(b=>{
     const open=()=>{
@@ -3726,14 +3727,20 @@ function locateOnDiagram(det, elId, name){
   sect.scrollIntoView({block:'nearest'});
 }
 // The other direction: open every detail row/group attributed to this element and flash it.
-function revealByEl(det, elId){
-  const rows=[...det.querySelectorAll('[data-el]')]
+// `scope` (a selector) narrows the search to one section: the "N parameter mappings ↓" button on a
+// service task must land on that task's group in the Parameters section, not on the card it sits in —
+// which is also a [data-el] row of the same element, and comes first in the document.
+function revealByEl(det, elId, scope){
+  const root=scope?det.querySelector(scope):det;
+  if(!root) return false;
+  const rows=[...root.querySelectorAll('[data-el]')]
     .filter(x=>x.dataset.el===String(elId) && !x.closest('.dgview'));
   if(!rows.length) return false;
   det.querySelectorAll('.hit').forEach(x=>x.classList.remove('hit'));
   rows.forEach(el=>{
     for(let p=el.parentElement; p&&p!==det; p=p.parentElement){ if(p.tagName==='DETAILS') p.open=true; }
     if(el.tagName==='DETAILS') el.open=true;
+    el.hidden=false;                    // a row a section filter had hidden is shown again
     el.classList.add('hit','flash');
   });
   requestAnimationFrame(()=>rows[0].scrollIntoView({block:'center'}));
