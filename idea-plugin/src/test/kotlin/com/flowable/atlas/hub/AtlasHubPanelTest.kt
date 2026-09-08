@@ -11,7 +11,7 @@ import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 
-/** Hub smoke: the panel builds and refreshes, and the app section stays hidden until Design is set up. */
+/** Hub smoke: the panel builds and refreshes, and every section says the right thing in every state. */
 class AtlasHubPanelTest : BasePlatformTestCase() {
 
     fun testPanelBuildsAndRefreshesWithoutDesignConfigured() {
@@ -111,9 +111,9 @@ class AtlasHubPanelTest : BasePlatformTestCase() {
             AtlasConnectionSelection.select(project, ConnectionKind.WORK, work)
             panel.refreshForTest()
             // A mixed pairing is an ordinary state, not a half-configured one.
-            assertTrue(panel.connectionLineForTest(ConnectionKind.DESIGN).contains("DEV1"))
-            assertTrue(panel.connectionLineForTest(ConnectionKind.WORK).contains("QA"))
-            assertEquals("Pull from DEV1", panel.pullLinkTextForTest())
+            assertTrue(panel.viewForTest().connectionLines.getValue(ConnectionKind.DESIGN).contains("DEV1"))
+            assertTrue(panel.viewForTest().connectionLines.getValue(ConnectionKind.WORK).contains("QA"))
+            assertEquals("Pull from DEV1", panel.viewForTest().pullText)
         } finally {
             AtlasConnectionSelection.clear(project, ConnectionKind.DESIGN)
             AtlasConnectionSelection.clear(project, ConnectionKind.WORK)
@@ -136,8 +136,8 @@ class AtlasHubPanelTest : BasePlatformTestCase() {
             panel.refreshForTest()
             // The nightmare this prevents: deleting DEV silently promotes PROD to "the server this
             // project pulls from", and the next pull runs against it.
-            assertTrue(panel.connectionLineForTest(ConnectionKind.DESIGN).contains("was removed"))
-            assertEquals("Pull from Design", panel.pullLinkTextForTest())
+            assertTrue(panel.viewForTest().connectionLines.getValue(ConnectionKind.DESIGN).contains("was removed"))
+            assertEquals("Pull from Flowable Design", panel.viewForTest().pullText)
         } finally {
             AtlasConnectionSelection.clear(project, ConnectionKind.DESIGN)
             catalog.removeEnvironment(prod)
@@ -170,19 +170,19 @@ class AtlasHubPanelTest : BasePlatformTestCase() {
 
             select(devDesign)
             panel.refreshForTest()
-            assertEquals("dev-ws", panel.workspaceKeyForTest())
-            assertEquals(listOf("alpha", "beta"), panel.appKeysForTest())
+            assertEquals("dev-ws", panel.viewForTest().workspaceKey)
+            assertEquals(listOf("alpha", "beta"), panel.viewForTest().appKeys)
 
             select(qaDesign)
             panel.refreshForTest()
-            assertEquals("qa-ws", panel.workspaceKeyForTest())
-            assertEquals(listOf("gamma"), panel.appKeysForTest())
+            assertEquals("qa-ws", panel.viewForTest().workspaceKey)
+            assertEquals(listOf("gamma"), panel.viewForTest().appKeys)
 
             // …and back, because "remembered per environment" is the whole claim.
             select(devDesign)
             panel.refreshForTest()
-            assertEquals("dev-ws", panel.workspaceKeyForTest())
-            assertEquals(listOf("alpha", "beta"), panel.appKeysForTest())
+            assertEquals("dev-ws", panel.viewForTest().workspaceKey)
+            assertEquals(listOf("alpha", "beta"), panel.viewForTest().appKeys)
         } finally {
             listOf("DEV", "QA").forEach {
                 settings.pullTarget(it).also { target ->
@@ -217,22 +217,22 @@ class AtlasHubPanelTest : BasePlatformTestCase() {
             }
             select(devDesign)
             panel.refreshForTest()
-            assertEquals("dev-ws", panel.workspaceKeyForTest())
-            assertEquals(listOf("alpha"), panel.appKeysForTest())
+            assertEquals("dev-ws", panel.viewForTest().workspaceKey)
+            assertEquals(listOf("alpha"), panel.viewForTest().appKeys)
 
             panel.chooseNoEnvironmentForTest(ConnectionKind.DESIGN)
             panel.refreshForTest()
-            assertNull("no environment, no workspace", panel.workspaceKeyForTest())
-            assertTrue("no environment, no apps", panel.appKeysForTest().isEmpty())
-            assertEquals("not set", panel.connectionLineForTest(ConnectionKind.DESIGN))
+            assertNull("no environment, no workspace", panel.viewForTest().workspaceKey)
+            assertTrue("no environment, no apps", panel.viewForTest().appKeys.isEmpty())
+            assertEquals("not set", panel.viewForTest().connectionLines.getValue(ConnectionKind.DESIGN))
             // The stored selection is untouched — saying "not set" is not deleting the settings, and
             // choosing DEV again has to bring its workspace and apps back.
             assertEquals("dev-ws", settings.pullTargetOrNull("DEV")!!.workspaceKey)
 
             select(devDesign)
             panel.refreshForTest()
-            assertEquals("dev-ws", panel.workspaceKeyForTest())
-            assertEquals(listOf("alpha"), panel.appKeysForTest())
+            assertEquals("dev-ws", panel.viewForTest().workspaceKey)
+            assertEquals(listOf("alpha"), panel.viewForTest().appKeys)
         } finally {
             settings.pullTarget("DEV").also {
                 it.workspaceKey = ""
@@ -240,6 +240,47 @@ class AtlasHubPanelTest : BasePlatformTestCase() {
             }
             AtlasConnectionSelection.clear(project, ConnectionKind.DESIGN)
             catalog.removeEnvironment(dev)
+            panel.dispose()
+        }
+    }
+
+    /**
+     * The Design section is the same four rows whatever its state. It used to grow and shrink by four rows
+     * — no environments, an environment, a workspace, apps — so everything below it moved with its mood.
+     */
+    fun testTheDesignSectionKeepsItsHeightWithoutEnvironments() {
+        val catalog = AtlasEnvironments.getInstance()
+        val panel = AtlasHubPanel(project)
+        try {
+            panel.refreshForTest()
+            val before = panel.viewForTest()
+            assertFalse(before.hasEnvironments)
+            assertEquals("no environments yet", before.connectionLines.getValue(ConnectionKind.DESIGN))
+
+            val dev = catalog.addEnvironment("DEV")
+            try {
+                val design = catalog.addConnection(dev, ConnectionKind.DESIGN, "http://design-dev.example.com")!!
+                AtlasConnectionSelection.select(project, ConnectionKind.DESIGN, design)
+                panel.refreshForTest()
+                val after = panel.viewForTest()
+                assertTrue(after.hasEnvironments)
+                assertEquals("the app list reserves the same one row", before.listRows, after.listRows)
+            } finally {
+                AtlasConnectionSelection.clear(project, ConnectionKind.DESIGN)
+                catalog.removeEnvironment(dev)
+            }
+        } finally {
+            panel.dispose()
+        }
+    }
+
+    /** Nothing to act on, nothing said: the attention line is for the reader's next move, not for status. */
+    fun testTheAttentionLineIsEmptyOnACleanFixture() {
+        val panel = AtlasHubPanel(project)
+        try {
+            panel.refreshForTest()
+            assertNull(panel.viewForTest().attention)
+        } finally {
             panel.dispose()
         }
     }
@@ -269,13 +310,13 @@ class AtlasHubPanelTest : BasePlatformTestCase() {
         try {
             settings.atlasOutputDir = "atlas-output"
             panel.refreshForTest()
-            assertEquals("No explorer in atlas-output/ yet", panel.explorerHintForTest())
+            assertEquals("No explorer in atlas-output/ yet", panel.viewForTest().explorerHint)
 
             // Scoped to a sub-project, the folder it searched is inside that sub-project — which is the
             // whole reason someone's generated page can be missing from the list.
             rootService.setActiveSubProject("orders-app")
             panel.refreshForTest()
-            assertEquals("No explorer in orders-app/atlas-output/ yet", panel.explorerHintForTest())
+            assertEquals("No explorer in orders-app/atlas-output/ yet", panel.viewForTest().explorerHint)
         } finally {
             rootService.setActiveSubProject("")
             settings.atlasOutputDir = previous
@@ -288,14 +329,14 @@ class AtlasHubPanelTest : BasePlatformTestCase() {
         val panel = AtlasHubPanel(project)
         try {
             panel.refreshForTest()
-            assertEquals("whole project is always a choice", listOf(""), panel.projectItemsForTest())
+            assertEquals("whole project is always a choice", listOf(""), panel.viewForTest().projectItems)
 
             panel.chooseProjectForTest("apps/demo")
             panel.refreshForTest()
             assertEquals("apps/demo", rootService.activeSubProject())
             // Detection has nothing to say about this fixture, so without carrying the active one over
             // the row would read "Whole project" while Atlas was scoped to apps/demo.
-            assertTrue(panel.projectItemsForTest().contains("apps/demo"))
+            assertTrue(panel.viewForTest().projectItems.contains("apps/demo"))
 
             panel.chooseProjectForTest("")
             panel.refreshForTest()
@@ -315,7 +356,7 @@ class AtlasHubPanelTest : BasePlatformTestCase() {
         val panel = AtlasHubPanel(project)
         try {
             panel.refreshForTest()
-            assertEquals(1 to 1, panel.listRowsForTest())
+            assertEquals(1 to 1, panel.viewForTest().listRows)
         } finally {
             panel.dispose()
         }
@@ -339,14 +380,14 @@ class AtlasHubPanelTest : BasePlatformTestCase() {
                 ),
             )
             panel.refreshForTest()
-            assertTrue("nothing is defined in this IDE, and yet there is an environment", panel.hasAnyEnvironmentForTest)
+            assertTrue("nothing is defined in this IDE, and yet there is an environment", panel.viewForTest().hasEnvironments)
 
             AtlasConnectionSelection.select(
                 project, ConnectionKind.DESIGN, SharedEnvironments.connectionIdOf("QA", ConnectionKind.DESIGN),
             )
             panel.refreshForTest()
-            assertEquals("QA (project)", panel.connectionLineForTest(ConnectionKind.DESIGN))
-            assertEquals("Pull from QA", panel.pullLinkTextForTest())
+            assertEquals("QA (project)", panel.viewForTest().connectionLines.getValue(ConnectionKind.DESIGN))
+            assertEquals("Pull from QA", panel.viewForTest().pullText)
         } finally {
             AtlasConnectionSelection.clear(project, ConnectionKind.DESIGN)
             shared.unshare("QA")
@@ -358,7 +399,7 @@ class AtlasHubPanelTest : BasePlatformTestCase() {
         val panel = AtlasHubPanel(project)
         try {
             panel.refreshForTest()
-            assertFalse("nothing defined yet is its own state, not an empty row", panel.hasAnyEnvironmentForTest)
+            assertFalse("nothing defined yet is its own state, not an empty row", panel.viewForTest().hasEnvironments)
         } finally {
             panel.dispose()
         }

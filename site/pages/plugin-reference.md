@@ -30,25 +30,25 @@ nothing on any other file.
 | Action | Also in |
 |---|---|
 | Atlas Hub | — |
-| Open Atlas Explorer | Atlas Hub toolbar |
-| Open Expression Playground | Atlas Hub toolbar |
-| Search Models… | Atlas Hub, *Model Index*; Project view context menu; `Ctrl+Alt+Shift+M` |
-| Generate → Generate Atlas Explorer… | Atlas Hub link; Project view context menu |
-| Generate → Regenerate Atlas Explorer | Atlas Hub, when models changed since the last generation; the explorer tab's banner and toolbar; the balloon after a Design pull |
-| Generate → Generate Model Constants… | Atlas Hub link |
+| Open Atlas Explorer | Atlas Hub, *Explorer* block and ⋮ menu |
+| Open Expression Playground | Atlas Hub, *Playground* block and ⋮ menu |
+| Search Models… | Atlas Hub ⋮ menu; Project view context menu; `Ctrl+Alt+Shift+M` |
+| Generate → Generate Atlas Explorer… | Atlas Hub, *Explorer* block; Project view context menu |
+| Generate → Regenerate Atlas Explorer | Atlas Hub attention line, when models changed since the last generation; the explorer tab's banner and toolbar; the balloon after a Design pull |
+| Generate → Generate Model Constants… | Atlas Hub ⋮ menu |
 | Generate → Liquibase → From Data Object… | — |
 | Generate → Liquibase → From App(s)… | — |
 | Generate → Data-Object DTOs → From Data Object… | — |
 | Generate → Data-Object DTOs → From App(s)… | — |
-| Switch Design Environment… | Atlas Hub, *Flowable Design* |
-| Pull from Flowable Design | Atlas Hub link |
-| Switch Work Environment… | Atlas Hub, *Expression Playground*; the playground itself |
-| Manage Environments… | Atlas Hub link |
-| Rebuild Model Index | Atlas Hub link |
+| Switch Design Environment… | Atlas Hub, *Design Pull* block |
+| Pull from Flowable Design | Atlas Hub, *Design Pull* block — the button names the environment |
+| Switch Work Environment… | Atlas Hub, *Playground* block; the playground itself |
+| Manage Environments… | Atlas Hub ⋮ menu, its attention line when an environment was removed, and the *Design Pull* block while none exists |
+| Rebuild Model Index | Atlas Hub ⋮ menu |
 | Dump Key Index (Internal) | Only visible in an internal-mode IDE |
 
 Panel toolbars carry a few more that are not registered actions, so they do not appear in *Find
-Action*: the Hub's *Refresh* and, in its *Flowable Design* section, *Reload from Flowable Design*; the Environments page's *Test Connection*; the explorer tab's *Reload* and *Open in Browser*; the
+Action*: the Hub's *Refresh* (which also re-reads the Flowable Design workspace and app lists) and *Settings*; the Environments page's *Test Connection*; the explorer tab's *Reload* and *Open in Browser*; the
 Expression Playground's dialect toggles, scope selector, *Evaluate Against App*, *Show Sub-Expression
 Values* and settings popup; and the Script Playground's language and context selectors with *Load Script
 from Model…* and *Load Example…*.
@@ -57,7 +57,7 @@ from Model…* and *Load Example…*.
 
 | Tool window | Where | Contents |
 |---|---|---|
-| **Atlas Hub** | Right stripe | Flowable Project · Flowable Design (environment · workspace · apps · pull) · Expression Playground · Model Index · Atlas Explorer · footer. See [the Hub](../#the-atlas-hub) |
+| **Atlas Hub** | Right stripe | A status header — Flowable project · model count · index age · one attention line when something needs a hand — over three blocks: Explorer · Design Pull (environment · workspace · apps · pull) · Playground. See [the Hub](../#the-atlas-hub) |
 | **Flowable Expressions** | Bottom stripe (secondary) | Two tabs: *Expressions* and *Scripts*. See [the playgrounds](../#the-playgrounds) |
 
 The generated explorer also opens as an editor tab with two tabs of its own: **Atlas Explorer** (the

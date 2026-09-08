@@ -106,8 +106,10 @@
         <h3>3 &middot; Atlas explorer &amp; hub</h3>
         <ul>
           <li><b>Atlas Hub</b> — a tool window (right stripe) that is the plugin's control center:
-              model-index status with per-type counts and one-click rebuild, every generated explorer
-              page (double-click to open), and the Flowable Design sync state — kept up to date live.</li>
+              which Flowable project Atlas is about, how many models it knows and how fresh that is, one
+              attention line when something needs a hand, and three task blocks — the generated explorer,
+              the Flowable Design pull, the playground's runtime — each with its actions beside its state,
+              kept up to date live.</li>
           <li><b>Map your whole project</b> — Tools → Flowable Atlas → <i>Generate Atlas Explorer…</i>
               turns your models + Java + Liquibase into a single self-contained, offline, interactive
               HTML page. Save it into the project and open it in your browser or right inside the IDE
@@ -159,6 +161,17 @@
               labels. It is a registered action now — <i>Generate → Regenerate Atlas Explorer</i>, reachable
               from Find Action — and the Hub, the explorer tab's banner and toolbar and the balloon after a
               Design pull all say exactly that.</li>
+          <li><b>The Atlas Hub is a status header over three task blocks.</b> It was five form-like sections
+              whose height swung with their state, links in two casings, the same action under two names and
+              two Refresh buttons sharing one icon. It opens now with which Flowable project Atlas is about,
+              how many models it knows and how long ago it looked, and — only when something needs a hand —
+              one attention line naming the one thing to do: a removed environment, an unchosen project,
+              archives that could not be read, a stale explorer. Below it, three blocks that keep their
+              shape whatever their state: <i>Explorer</i> (the generated pages, name and age, Generate and
+              Open), <i>Design Pull</i> (environment, workspace, apps, <i>Pull from DEV1</i> — always the
+              same four rows), <i>Playground</i> (its runtime environment and Open). Every button takes its
+              text from the action it runs, so the menu and the Hub cannot disagree; the maintenance actions
+              moved to a ⋮ menu; Refresh is one button that also re-reads the Flowable Design lists.</li>
         </ul>
         <h3>0.22.0</h3>
         <ul>

@@ -27,6 +27,16 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
 - **Regenerate has one name.** Regenerating the explorer was offered in four places under two labels. It is
   a registered action now — *Generate → Regenerate Atlas Explorer*, reachable from Find Action — and the Hub,
   the explorer tab's banner and toolbar and the balloon after a Design pull all say exactly that.
+- **The Atlas Hub is a status header over three task blocks.** It was five form-like sections whose height
+  swung with their state, links in two casings, the same action under two names and two Refresh buttons
+  sharing one icon. It opens now with which Flowable project Atlas is about, how many models it knows and how
+  long ago it looked, and — only when something needs a hand — one attention line naming the one thing to
+  do: a removed environment, an unchosen project, archives that could not be read, a stale explorer. Below
+  it, three blocks that keep their shape whatever their state: *Explorer* (the generated pages, name and
+  age, Generate and Open), *Design Pull* (environment, workspace, apps, *Pull from DEV1* — always the same
+  four rows), *Playground* (its runtime environment and Open). Every button takes its text from the action it
+  runs, so the menu and the Hub cannot disagree; the maintenance actions moved to a ⋮ menu; Refresh is one
+  button that also re-reads the Flowable Design lists.
 
 ## 0.22.0
 

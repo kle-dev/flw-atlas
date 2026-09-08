@@ -19,30 +19,63 @@ Design `*-models` workspace, and start typing.
 
 ### The Atlas Hub
 
-A single panel on the right stripe showing what Atlas currently knows about your project — and letting
-you act on it without opening a menu.
+A single panel on the right stripe: what Atlas currently knows about your project, one line saying what
+needs a hand, and the three things you do with models from the IDE — each with its actions beside its
+state, so nothing needs a menu.
 
 <figure class="fig mock">
   <div class="body">{{mockup:atlas-hub}}</div>
-  <figcaption><b>Atlas Hub.</b> Every action sits next to the state it affects, and the panel answers
-  the question that matters day to day: is what I am looking at still up to date?</figcaption>
+  <figcaption><b>Atlas Hub.</b> A status header over three task blocks. The header answers the question
+  that matters day to day — is what I am looking at still up to date? — and says so in one line when it
+  is not.</figcaption>
 </figure>
 
-The Hub reports whether the model index has been built and when it was last scanned, which explorer was
-generated and whether the models have changed since — any model in scope newer than the newest page
-counts, whether it arrived through a Design pull, a `git pull`, an unzipped export or a hand edit — and
-which environments this project is pointed at. The same comparison puts a banner above an open explorer
-tab, with *Regenerate* on it, so a stale page says so where you are reading it.
-**Rebuild**, **Generate Constants…**, **Generate…**, **Open in Browser** and **Pull from …** each sit
-beside the thing they change. In a monorepo the *Flowable Project* section is a switcher: pick the
-sub-project Atlas operates on, and the index, the output folder and the Design target follow. It is a
-drop-down like the environment pickers below it, always offering the whole repository, so "is this mine
-to change?" is answered by the control rather than by trying it.
+**The header** names the Flowable project Atlas is about, how many models it knows and how long ago it
+looked — *142 models · 2 min ago*; the per-type counts, the scope and the running Atlas version are in
+the tooltip. In a monorepo the project is a switcher: pick the sub-project Atlas operates on, and the
+index, the output folder and the Design target follow. It is a drop-down like the environment pickers
+below it, always offering the whole repository, so "is this mine to change?" is answered by the control
+rather than by trying it.
 
-Every list in the panel is sized to what it holds. The Hub shares one narrow stripe between five
-sections, so a box reserving eight rows for the one generated explorer that the ordinary project has is
-that stripe spent on nothing; an empty section is a single grey line instead. A workspace with twenty
-apps scrolls at eight rows rather than pushing the pull button off the panel.
+Under it sits **one attention line**, and only when there is something to do: an environment this
+project points at was removed (*Manage Environments…*), several Flowable projects were found and none
+chosen (*Choose*), archives the index could not read (*Show*), or the explorer is stale (*Regenerate
+Atlas Explorer*). One at a time, in the order of what goes wrong first — the next click hitting the wrong
+server, then the whole panel being about the wrong project, then data Atlas could not see, then artifact
+drift. It is the only row in the panel that comes and goes; everything below keeps its place.
+
+A stale explorer means a model in scope is newer than the newest generated page — whether it arrived
+through a Design pull, a `git pull`, an unzipped export or a hand edit. The same comparison puts a banner
+above an open explorer tab, with *Regenerate Atlas Explorer* on it, so a stale page says so where you are
+reading it. Regenerate is one registered action, and every place that offers it uses its name.
+
+**Explorer** lists the generated pages — name on the left, age on the right, folder and full timestamp
+in the tooltip — with *Generate Atlas Explorer…* and *Open Atlas Explorer* under them. Open takes the
+selected page, or the newest; *Open in Browser* is in the list's context menu, where a browser can be
+launched. With no page yet the list is one grey line naming the folder it searched, so a page saved
+elsewhere is a findable mismatch rather than a wrong claim.
+
+**Design Pull** is the whole pull, top to bottom, in the order the work is done: pick the
+**environment**, pick the **workspace** in it, tick the **apps**, press **Pull from DEV1** — the button
+names its target, so what is about to happen is readable without opening anything, and *last pull: today
+08:52* sits beside it. The block is always the same four rows: with nothing defined yet the environment
+combo says *no environments yet* beside a *Manage Environments…* link, with no environment chosen the
+workspace combo is disabled, and an app list with nothing in it is one grey line — so switching state
+moves nothing below it. Both pickers are ordinary drop-downs, because switching is a choice made while
+working and should look like one; the environment list is held in memory, and the workspace list is
+fetched the first time you open it rather than every time the panel is drawn. An app row shows the app's
+name; its key and version are in the tooltip.
+
+What you pick there **is** the project's setting — there is no second copy of it in a settings page.
+An earlier cut had a shared default in Settings and a personal override in the Hub, and the pair could
+not be told apart on screen: "is this the setting, or my copy of it?" had no answer, and an override
+that had drifted made every edit to the default look as if it had done nothing. The workspace and apps
+are stored per environment, because a workspace key belongs to one server and cannot mean the same
+thing on the next.
+
+**Playground** carries the runtime environment the Expression Playground evaluates against, and the
+button that opens it. The two environments are independent on purpose: a runtime on QA while models
+still come from DEV1 is a normal way to work, not a mistake to warn about.
 
 A repository can define environments of its own. **Share with Project** in *Settings → Environments*
 writes the selected one into `.idea/flowable-environments.xml` — committed, like the Atlas project
@@ -55,29 +88,19 @@ without arguing with the repository. Shared entries are read-only in the editor;
 makes one yours in a click, and a `git pull` that moves a URL reaches the pickers without anyone
 reopening Settings.
 
-Its toolbar also opens the environments themselves: **Open Environment in Browser** lists every address
-in the catalog — Design, the app, Control, Hub — grouped by stage, and hands the one you pick to your
-browser. The Hub knows those URLs already; without this they stayed bookmarks, and *which one was QA's
-Control again?* was a question answered in the browser rather than here. It follows neither of the two
-pointers below it, because a third rule about which environment it means is one more thing that could
-quietly be wrong — it asks, and with speed search the asking is a keystroke. Protected stages carry
-their lock in the list but no prompt: opening a page changes nothing.
-
-Its *Flowable Design* section is the whole pull, top to bottom, in the order the work is done: pick the
-**environment**, pick the **workspace** in it, tick the **apps**, press **Pull from DEV1** — the link
-names its target, so what is about to happen is readable without opening anything. Both pickers are
-ordinary drop-downs, because switching is a choice made while working and should look like one; they
-open instantly, since the environment list is held in memory, and the workspace list is fetched the
-first time you open it rather than every time the panel is drawn. A *Expression Playground* section
-below carries the runtime environment the same way. The two are independent on purpose: a runtime on QA
-while models still come from DEV1 is a normal way to work, not a mistake to warn about.
-
-What you pick there **is** the project's setting — there is no second copy of it in a settings page.
-An earlier cut had a shared default in Settings and a personal override in the Hub, and the pair could
-not be told apart on screen: "is this the setting, or my copy of it?" had no answer, and an override
-that had drifted made every edit to the default look as if it had done nothing. The workspace and apps
-are stored per environment, because a workspace key belongs to one server and cannot mean the same
-thing on the next.
+The toolbar has three buttons. **Refresh** re-reads everything on the panel — the index status, the
+generated pages and the Flowable Design workspace and app lists; there is no second reload button.
+**Settings** opens the Atlas pages. The **⋮** menu holds the registered actions that used to be links
+scattered through the sections — *Open Atlas Explorer*, *Open Expression Playground*, *Search Models…*,
+*Generate Model Constants…*, *Rebuild Model Index*, *Manage Environments…* — and **Open Environment in
+Browser**, which lists every address in the catalog — Design, the app, Control, Hub — grouped by stage,
+and hands the one you pick to your browser. The Hub knows those URLs already; without this they stayed
+bookmarks, and *which one was QA's Control again?* was a question answered in the browser rather than
+here. It follows neither of the two environment pointers, because a third rule about which environment
+it means is one more thing that could quietly be wrong — it asks, and with speed search the asking is a
+keystroke. Protected stages carry their lock in the list but no prompt: opening a page changes nothing.
+Every button and link in the Hub takes its text from the action it runs, so the menu and the panel
+cannot call one thing two names.
 
 The index is built when the project opens, in the background, and the Hub asks for one whenever it
 finds none — one build for any number of askers, and the editor's markers, hints and inspections are
@@ -88,8 +111,8 @@ index-invalidated, generation-finished, design-pull-finished, sub-project-switch
 settings-applied, environments-changed and connection-switched events, so it reflects work started
 anywhere in the IDE without polling. Every Atlas settings page publishes the settings-applied event
 from a `final` method, so a page added later cannot forget to — which is how changing the output folder
-once left the Hub listing artifacts from the old one. Its footer names the running Atlas version, and nothing else: the
-platform range Atlas was verified against is a fact about the release, and it belongs
+once left the Hub listing artifacts from the old one. The header's tooltip names the running Atlas version,
+and nothing else: the platform range Atlas was verified against is a fact about the release, and it belongs
 [in the reference](../plugin/reference/) and in a bug report — not in a panel that stays open all day.
 
 Reach it from the right stripe, or **Tools → Flowable Atlas → Atlas Hub**.

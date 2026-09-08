@@ -1,7 +1,6 @@
 package com.flowable.atlas.design
 
 import com.flowable.atlas.explorer.AtlasExplorerStaleness
-import com.flowable.atlas.hub.AtlasHubPanel
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.intellij.openapi.components.service
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
@@ -13,10 +12,10 @@ import com.intellij.testFramework.fixtures.BasePlatformTestCase
 class PostPullHintTest : BasePlatformTestCase() {
 
     fun testStaleOnlyWhenArtifactOlderThanTheChange() {
-        assertTrue("newest artifact older than the change ⇒ stale", AtlasHubPanel.isExplorerStale(listOf(100L, 200L), 300L))
-        assertFalse("artifact newer than the change ⇒ fresh", AtlasHubPanel.isExplorerStale(listOf(400L), 300L))
-        assertFalse("no artifacts ⇒ not stale", AtlasHubPanel.isExplorerStale(emptyList(), 300L))
-        assertFalse("nothing known to have changed ⇒ not stale", AtlasHubPanel.isExplorerStale(listOf(100L), null))
+        assertTrue("newest artifact older than the change ⇒ stale", AtlasExplorerStaleness.isStale(listOf(100L, 200L), 300L))
+        assertFalse("artifact newer than the change ⇒ fresh", AtlasExplorerStaleness.isStale(listOf(400L), 300L))
+        assertFalse("no artifacts ⇒ not stale", AtlasExplorerStaleness.isStale(emptyList(), 300L))
+        assertFalse("nothing known to have changed ⇒ not stale", AtlasExplorerStaleness.isStale(listOf(100L), null))
     }
 
     fun testAModelNewerThanTheArtifactIsStaleWithoutAnyPull() {
