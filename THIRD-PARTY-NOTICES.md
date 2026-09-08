@@ -10,7 +10,7 @@ Nothing here is a licence to Atlas. It is a licence to the components inside it.
 | Component | Version | Licence | Where it ships |
 |---|---|---|---|
 | [Geist](https://github.com/vercel/geist-font) | subset (Regular / Medium / SemiBold) | SIL Open Font License 1.1 | `core/.../frontend/explorer.css` as `data:` URIs → the plugin JAR **and every generated `*.explorer.html`** |
-| [Lucide](https://lucide.dev) | 1.39.0, 48 icons | ISC (six Feather-derived icons: MIT) | `core/.../frontend/explorer.js` as inline SVG paths (`TYPE_ICONS`) → the plugin JAR **and every generated `*.explorer.html`** |
+| [Lucide](https://lucide.dev) | 1.39.0, 51 icons | ISC (six Feather-derived icons: MIT) | `core/.../frontend/explorer.js` as inline SVG paths (`TYPE_ICONS`) → the plugin JAR **and every generated `*.explorer.html`**; `idea-plugin/src/main/resources/icons/atlas/*.svg` (generated from that table by `scripts/plugin-icons.mjs`, plus compass, shapes and route) → the plugin JAR |
 | [Kotlin standard library](https://github.com/JetBrains/kotlin) | 2.3.21 | Apache License 2.0 | `cli-<version>-all.jar` only — the IntelliJ plugin uses the platform's copy and bundles none |
 
 JUnit 4.13.2 (EPL 1.0) is a test-only dependency and is not redistributed in any artifact.
@@ -25,7 +25,9 @@ constant in `scripts/embed-geist.mjs` that keeps it there when the block is rege
 
 The same reasoning applies to the Lucide icons: their paths are inlined into `explorer.js`, so every
 generated report redistributes them. The ISC permission notice therefore sits in the comment above the
-`TYPE_ICONS` table in `core/src/main/resources/frontend/explorer.js` as well.
+`TYPE_ICONS` table in `core/src/main/resources/frontend/explorer.js` as well, in the header of
+`scripts/plugin-icons.mjs` (which adds the three bodies the explorer does not use), and as a one-line
+pointer in every generated icon file under `idea-plugin/src/main/resources/icons/atlas/`.
 
 ---
 

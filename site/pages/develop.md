@@ -148,12 +148,17 @@ The site sources are in `site/`, and it is built by a dependency-free Node scrip
 node scripts/site-build.mjs --serve     # pages only, prints the file:// URL
 node scripts/site-shots.mjs             # regenerate the screenshots (needs Chrome)
 node scripts/site-shots.mjs --check-site build/site   # no page scrolls sideways, no JS errors
+node scripts/plugin-icons.mjs           # regenerate the plugin's icon set (commit the output)
 ```
 
 > The ⌘K search fetches its index, and a browser refuses that on a `file://` page. Opening
 > `build/site/index.html` from disk works for everything except search; to try search locally, serve
 > the directory over HTTP or start Chrome with `--allow-file-access-from-files`.
 
+- `scripts/plugin-icons.mjs` is not about the site but lives beside these: it writes the IntelliJ
+  plugin's icon set (`idea-plugin/src/main/resources/icons/atlas/*.svg`) from the same `TYPE_ICONS` table
+  and `--c-*` palette the mockups draw from. Run it after changing a glyph or a colour and commit the
+  output; `PluginIconsSyncTest` fails the build when the committed icons drift from their sources.
 - `site/pages/*.md` are the page sources, in a **strict Markdown subset**. The generator fails on
   anything outside it rather than rendering it wrong, and it verifies that every internal link and image
   resolves.

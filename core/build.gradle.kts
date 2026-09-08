@@ -48,6 +48,8 @@ tasks.test {
         rootProject.file("build.gradle.kts"),
         rootProject.fileTree("site/pages"),
         rootProject.fileTree("site/flowable-demo"),
+        // PluginIconsSyncTest: the generated icon set must match TYPE_ICONS / --c-* (scripts/plugin-icons.mjs).
+        rootProject.fileTree("idea-plugin/src/main/resources/icons"),
     ).withPropertyName("syncedRepoFiles").optional()
 }
 
