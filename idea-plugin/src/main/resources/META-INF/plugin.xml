@@ -119,8 +119,8 @@
               Generation runs entirely in-process — no external tools required — and honours the
               project's expression allowlist.</li>
           <li><b>IDE-native viewing</b> — the embedded explorer follows the IDE light/dark theme
-              (switching restyles live) and carries a toolbar with <i>Regenerate</i>, <i>Reload</i>
-              and <i>Open in Browser</i>.</li>
+              (switching restyles live) and carries a toolbar with <i>Regenerate Atlas Explorer</i>,
+              <i>Reload</i>, <i>Open Expression Playground</i> and <i>Open in Browser</i>.</li>
           <li><b>Reopen without regenerating</b> — <i>Open Atlas Explorer</i> (Atlas Hub, or Tools →
               Flowable Atlas) opens an already-generated <code>*.explorer.html</code> — including
               one written by the standalone <code>atlas</code> CLI into the configured output folder — as a
