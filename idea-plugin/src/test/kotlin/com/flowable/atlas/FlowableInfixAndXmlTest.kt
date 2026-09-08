@@ -1,5 +1,8 @@
 package com.flowable.atlas
 
+import com.intellij.codeInsight.lookup.LookupElementPresentation
+import com.flowable.atlas.model.ModelType
+import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.inspection.FlowableXmlBrokenKeyInspection
 import com.intellij.psi.PsiFile
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
@@ -109,6 +112,9 @@ class FlowableInfixAndXmlTest : BasePlatformTestCase() {
         myFixture.completeBasic()
         val strings = myFixture.lookupElementStrings.orEmpty()
         assertTrue("expected process key DEMO-P100 among $strings", strings.contains("DEMO-P100"))
+        // The key wears its type's icon — the same glyph its explorer page shows.
+        val item = myFixture.lookupElements.orEmpty().first { it.lookupString == "DEMO-P100" }
+        assertSame(AtlasIcons.forType(ModelType.PROCESS), LookupElementPresentation().also { item.renderElement(it) }.icon)
     }
 
     fun testXmlBrokenKeyFlagsUnknownCalledElement() {

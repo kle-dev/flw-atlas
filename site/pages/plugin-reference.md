@@ -124,6 +124,10 @@ offering to delete code a process depends on.
 
 ## Code completion
 
+Every item carries an icon: a model key its type's icon (the explorer's glyph in the explorer's colour), an
+operation the method icon, an input value the parameter icon, a variable, message or outcome the platform's
+variable, constant and property icons, a Liquibase column or table the database icons.
+
 | Where | Completes |
 |---|---|
 | Any Flowable API string argument | Model keys of that position's type(s) — searchable by key, name, or any fragment, so `0061` finds `DEMO-DO-0061` |

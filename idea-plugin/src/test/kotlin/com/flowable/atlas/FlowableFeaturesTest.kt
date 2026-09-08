@@ -2,6 +2,8 @@ package com.flowable.atlas
 
 import com.flowable.atlas.inspection.FlowableBrokenKeyInspection
 import com.flowable.atlas.liquibase.LiquibaseCoverageInspection
+import com.intellij.codeInsight.lookup.LookupElementPresentation
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.ui.TestDialogManager
 import com.intellij.openapi.ui.TestInputDialog
 import com.intellij.psi.PsiFile
@@ -59,6 +61,8 @@ class FlowableFeaturesTest : BasePlatformTestCase() {
         )
         myFixture.completeBasic()
         assertTrue(myFixture.lookupElementStrings.orEmpty().contains("orderPlaced"))
+        // A message is a named definition — it wears the constant icon, like every other vocabulary item.
+        assertSame(AllIcons.Nodes.Constant, iconOf("orderPlaced"))
     }
 
     fun testVariableNameCompletionAtArgOne() {
@@ -246,9 +250,15 @@ class FlowableFeaturesTest : BasePlatformTestCase() {
         )
         myFixture.completeBasic()
         val strings = myFixture.lookupElementStrings.orEmpty()
+        assertSame(AllIcons.Nodes.DataColumn, iconOf(strings.first { it.endsWith("_") }))
         assertTrue("expected physical column ID_ among $strings", strings.contains("ID_"))
         assertTrue("expected physical column LABEL_ among $strings", strings.contains("LABEL_"))
     }
+
+    /** The rendered icon of the lookup item [lookupString], or null when it is not offered. */
+    private fun iconOf(lookupString: String): javax.swing.Icon? =
+        myFixture.lookupElements.orEmpty().firstOrNull { it.lookupString == lookupString }
+            ?.let { val p = LookupElementPresentation(); it.renderElement(p); p.icon }
 
     fun testLiquibaseColumnTypeCompletion() {
         addDatabaseService()

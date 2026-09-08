@@ -2,6 +2,7 @@ package com.flowable.atlas.expr
 
 import com.flowable.atlas.expr.catalog.CustomFunctionCatalog
 import com.flowable.atlas.expr.catalog.FlowableCustomFunctions
+import com.intellij.icons.AllIcons
 import com.intellij.codeInsight.lookup.LookupElementPresentation
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 
@@ -88,6 +89,10 @@ class FlowableExpressionCompletionTest : BasePlatformTestCase() {
 
         assertEquals("resolvable project class → bean", "bean", typeOf("orderService"))
         assertEquals("non-class identifier → referenced, not bean", "referenced", typeOf("order"))
+        // …and neither sits iconless beside the iconed variables any more.
+        fun iconOf(s: String) = elements.firstOrNull { it.lookupString == s }?.let { val p = LookupElementPresentation(); it.renderElement(p); p.icon }
+        assertSame(AllIcons.Nodes.Plugin, iconOf("orderService"))
+        assertSame(AllIcons.Nodes.Tag, iconOf("order"))
         // `now` is a catalog function local name and must be excluded from the referenced-identifier dump.
         assertTrue("catalog function must not show as bean", typeOf("now") != "bean")
     }

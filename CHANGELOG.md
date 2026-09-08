@@ -50,6 +50,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   which edits the constants class and says so in its preview. Quick fixes have stable family names, so *Fix
   all* and the Alt+Enter list group them by what they do rather than by the value they insert, and the
   Liquibase finding names the service model whose columns it compared against.
+- **Completion items carry icons all the way down.** Expression and script completion were fully iconed while
+  model keys, operations, value fields, vocabularies and Liquibase columns had none — two aesthetics in one
+  popup, where the eye could not tell a process key from a variable. A key wears its type's icon; an operation
+  the method icon, its input the parameter icon; messages, signals, variables and outcomes the platform's
+  constant, variable and property icons; columns and tables the database icons; and a scraped bean in an
+  expression the same bean icon the script playground uses.
 
 ## 0.22.0
 

@@ -1,6 +1,5 @@
 package com.flowable.atlas.completion
 
-import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
 import com.intellij.codeInsight.completion.CompletionContributor
@@ -46,7 +45,7 @@ class FlowableXmlKeyCompletionContributor : CompletionContributor() {
             if (eventKey != null) {
                 val out = result.withPrefixMatcher(FlowableInfixMatcher(result.prefixMatcher.prefix))
                 for (p in service.payloadOf(eventKey)) {
-                    out.addElement(LookupElementBuilder.create(p).withTypeText("payload · $eventKey", true))
+                    out.addElement(LookupElementBuilder.create(p).withIcon(AtlasLookups.FIELD).withTypeText("payload · $eventKey", true))
                 }
                 return
             }
@@ -72,12 +71,7 @@ class FlowableXmlKeyCompletionContributor : CompletionContributor() {
             for (type in types) {
                 for (entry in service.keysOfType(type)) {
                     if (!seen.add(entry.key)) continue
-                    var b = LookupElementBuilder.create(entry.key)
-                        .withIcon(AtlasIcons.forType(entry.type))
-                        .withTypeText(entry.type.display, true)
-                    if (entry.name != entry.key) b = b.withTailText("  ${entry.name}", true)
-                    for (token in KeyLookup.searchTokens(entry.key, entry.name)) b = b.withLookupString(token)
-                    out.addElement(b)
+                    out.addElement(AtlasLookups.modelKey(entry))
                 }
             }
         }

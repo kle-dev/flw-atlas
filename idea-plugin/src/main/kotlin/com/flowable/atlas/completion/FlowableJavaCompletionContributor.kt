@@ -1,6 +1,5 @@
 package com.flowable.atlas.completion
 
-import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.index.ModelEntry
 import com.flowable.atlas.parsing.OperationInfo
@@ -37,6 +36,7 @@ import com.intellij.psi.PsiReferenceExpression
 import com.intellij.psi.util.InheritanceUtil
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.util.ProcessingContext
+import javax.swing.Icon
 
 /**
  * Autocompletes Flowable model keys, service operations, and operation value-fields at Flowable
@@ -266,7 +266,8 @@ class FlowableJavaCompletionContributor : CompletionContributor() {
                 Vocabulary.OUTCOME -> service.formOutcomes()
             }
             val typeText = scoped?.let { site.vocabulary.display + " · " + it.modelKey } ?: site.vocabulary.display
-            for (v in values) result.addElement(prioritized(memberLookup(v, typeText, quote)))
+            val icon = AtlasLookups.vocabularyIcon(site.vocabulary)
+            for (v in values) result.addElement(prioritized(memberLookup(v, typeText, icon, quote)))
         }
 
         /** One model's members carried alongside the key it was resolved from (for the type text). */
@@ -309,7 +310,8 @@ class FlowableJavaCompletionContributor : CompletionContributor() {
                 MemberKind.EVENT_PAYLOAD -> service.payloadOf(key)
                 MemberKind.MASTER_DATA_FIELD -> service.masterDataInfoOf(key)?.fields.orEmpty()
             }
-            for (m in members) result.addElement(prioritized(memberLookup(m, key, quote)))
+            val icon = AtlasLookups.memberIcon(site.memberKind)
+            for (m in members) result.addElement(prioritized(memberLookup(m, key, icon, quote)))
         }
 
         // ---- lookup element rendering ----
@@ -322,13 +324,8 @@ class FlowableJavaCompletionContributor : CompletionContributor() {
         }
 
         private fun keyLookup(entry: ModelEntry, quote: Boolean): LookupElementBuilder {
-            var b = LookupElementBuilder.create(entry.key)
-                .withIcon(AtlasIcons.forType(entry.type))
-                .withTypeText(entry.type.display, true)
-            if (entry.name != entry.key) b = b.withTailText("  ${entry.name}", true)
-            b = b.withLookupStrings(searchTokens(entry.key, entry.name))
-            if (quote) b = b.withInsertHandler(QuoteInsertHandler)
-            return b
+            val b = AtlasLookups.modelKey(entry)
+            return if (quote) b.withInsertHandler(QuoteInsertHandler) else b
         }
 
         private fun operationLookup(op: OperationInfo, definitionKey: String, quote: Boolean): LookupElementBuilder {
@@ -337,7 +334,7 @@ class FlowableJavaCompletionContributor : CompletionContributor() {
                 if (op.name != null && op.name != op.key) append("  ").append(op.name)
             }
             // Right-aligned type text shows the owning data object so the operation can be verified.
-            var b = LookupElementBuilder.create(op.key).withTypeText(definitionKey, true)
+            var b = LookupElementBuilder.create(op.key).withIcon(AtlasLookups.OPERATION).withTypeText(definitionKey, true)
             if (tail.isNotEmpty()) b = b.withTailText(tail, true)
             b = b.withLookupStrings(searchTokens(op.key, op.name))
             if (quote) b = b.withInsertHandler(QuoteInsertHandler)
@@ -348,6 +345,7 @@ class FlowableJavaCompletionContributor : CompletionContributor() {
         private fun operationWithValuesLookup(op: OperationInfo, definitionKey: String, quote: Boolean): LookupElementBuilder {
             val n = op.inputParameters.size
             return LookupElementBuilder.create(op.key)
+                .withIcon(AtlasLookups.OPERATION)
                 .withTypeText(definitionKey, true)
                 .withTailText("  + insert $n value${if (n == 1) "" else "s"} (placeholders)", true)
                 .withLookupStrings(searchTokens(op.key, op.name))
@@ -357,15 +355,15 @@ class FlowableJavaCompletionContributor : CompletionContributor() {
         private fun paramLookup(param: ParamInfo, quote: Boolean, context: String): LookupElementBuilder {
             // Right-aligned type text shows the owning data object (· operation); the value's own
             // type is a dim tail so the field's affiliation is obvious.
-            var b = LookupElementBuilder.create(param.name).withTypeText(context, true)
+            var b = LookupElementBuilder.create(param.name).withIcon(AtlasLookups.PARAMETER).withTypeText(context, true)
             param.type?.let { b = b.withTailText("  [$it]", true) }
             if (quote) b = b.withInsertHandler(QuoteInsertHandler)
             return b
         }
 
         /** A plain vocabulary/member value (message, signal, variable, decision variable, …). */
-        private fun memberLookup(value: String, typeText: String, quote: Boolean): LookupElementBuilder {
-            var b = LookupElementBuilder.create(value).withTypeText(typeText, true)
+        private fun memberLookup(value: String, typeText: String, icon: Icon, quote: Boolean): LookupElementBuilder {
+            var b = LookupElementBuilder.create(value).withIcon(icon).withTypeText(typeText, true)
             if (quote) b = b.withInsertHandler(QuoteInsertHandler)
             return b
         }
@@ -419,5 +417,3 @@ class FlowableJavaCompletionContributor : CompletionContributor() {
 
 /** Marks a lookup element as a Flowable key so the relevance sorter can rank it first. */
 private val FLOWABLE_KEY_MARKER: Key<Boolean> = Key.create("com.flowable.atlas.completion.flowableKeyItem")
-
-

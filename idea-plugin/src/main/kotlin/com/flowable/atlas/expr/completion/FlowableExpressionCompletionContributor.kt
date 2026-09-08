@@ -1,5 +1,6 @@
 package com.flowable.atlas.expr.completion
 
+import com.flowable.atlas.completion.AtlasLookups
 import com.flowable.atlas.completion.withLookupStrings
 import com.flowable.atlas.completion.FlowableInfixMatcher
 import com.flowable.atlas.completion.KeyLookup
@@ -201,8 +202,12 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
                 .withTailText("  ${prefix}:…", true)
                 .withInsertHandler(ColonInsertHandler)
 
+        // A scraped identifier sat iconless between iconed variables; a bean reads as the script
+        // contributor's bean, anything else as a name the engine resolves at runtime.
         private fun referenceLookup(name: String, typeText: String): LookupElement =
-            LookupElementBuilder.create(name).withTypeText(typeText, true)
+            LookupElementBuilder.create(name)
+                .withIcon(if (typeText == "bean") AtlasLookups.BEAN else AtlasLookups.REFERENCED)
+                .withTypeText(typeText, true)
 
         private fun variableLookup(name: String, label: String): LookupElement =
             LookupElementBuilder.create(name).withIcon(AllIcons.Nodes.Variable).withTypeText(label, true)
