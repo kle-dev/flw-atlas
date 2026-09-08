@@ -274,6 +274,10 @@ choice never lands in version control.
 
 ## File types
 
+Every model extension below shows its type's icon in the Project view, the editor tabs and every file
+list — the same glyph in the same colour as its explorer page, light and dark — and a `.bar` shows an
+archive icon. The icon is decided from the file name alone, so the Project view never waits on it.
+
 | Extension | Treated as | What Atlas adds |
 |---|---|---|
 | `.bpmn`, `.bpmn20.xml` | XML | Keys, members, expression and script injection, XML key completion and validation, diagram from `bpmndi` |

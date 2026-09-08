@@ -20,6 +20,10 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   explorer page shows — in Search Everywhere, Go to Symbol and completion; a Java symbol referenced from
   models, a bot class, a REST handler and a key with a diagram wear four distinct marks at gutter size; the
   explorer, the Hub and the playground have their own tool-window and menu icons, light and dark.
+- **A model file looks like what it is.** `.bpmn`, `.form`, `.app` and every other model extension carried
+  the stock XML or JSON icon, so a folder of models read as a folder of config. Each shows its type's icon
+  now — the explorer's glyph in the explorer's colour — in the Project view, the editor tabs and every
+  file list, and a `.bar` shows an archive. The icon is decided from the name alone, so nothing waits on it.
 
 ## 0.22.0
 

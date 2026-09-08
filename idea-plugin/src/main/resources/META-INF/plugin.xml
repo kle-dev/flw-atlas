@@ -149,6 +149,12 @@
               completion; a Java symbol referenced from models, a bot class, a REST handler and a key with a
               diagram wear four distinct marks at gutter size; the explorer, the Hub and the playground have
               their own tool-window and menu icons, light and dark.</li>
+          <li><b>A model file looks like what it is.</b> <code>.bpmn</code>, <code>.form</code>,
+              <code>.app</code> and every other model extension carried the stock XML or JSON icon, so a
+              folder of models read as a folder of config. Each shows its type's icon now — the explorer's
+              glyph in the explorer's colour — in the Project view, the editor tabs and every file list, and
+              a <code>.bar</code> shows an archive. The icon is decided from the name alone, so nothing
+              waits on it.</li>
         </ul>
         <h3>0.22.0</h3>
         <ul>
@@ -501,55 +507,6 @@
               itself. It is read from the diagram interchange now (<code>isExpanded="false"</code>, or
               Design's collapsed stencil) and drawn only there.</li>
         </ul>
-        <h3>0.19.0</h3>
-        <ul>
-          <li><b>Ten model types stop being name-only stubs</b> — queries, sequences, SLAs, templates,
-              knowledge bases, variable extractors and document (content) models are parsed structurally: a
-              query's parameters, sort keys and search-template body; a sequence's number format and
-              counters; an SLA's due-date targets, escalations and lifecycle actions (a
-              start-process/start-case escalation is a real model reference now); a template's variations
-              and their actual text; a knowledge base's retrieval settings (credentials never leave the
-              model — only their <i>type</i> is kept); a variable extractor's extracted variables (each an
-              honest "write whose readers are out of reach"); a document model's per-action forms,
-              permissions and variables. Palettes keep their <code>Palette-Id</code>/<code>title</code>
-              identity instead of coming out as <code>key: None</code>. Master data and dashboard components
-              stay generic for now — no corpus in reach contains a body to design against.</li>
-          <li><b>What the parser knows, the page shows — structurally guaranteed.</b> Every parsed attribute
-              now either has a renderer or lands in a collapsed <b>Other attributes</b> key/value tree on
-              the detail page, tracked at render time, so a future parser field is visible by default. The
-              Kotlin mirror: <code>PayloadCompletenessTest</code> fails the build when a parser emits a
-              container key the explorer payload would silently drop — each key must be allowlisted (visible
-              + searchable) or consciously stripped with a reason. Six parsed-but-invisible keys render now:
-              a process's full <b>sequence-flow topology</b> (default flows marked), its declared <b>data
-              objects</b>, its model-level <b>references</b> (SLA, security policy, event, channel,
-              dictionary, sequence), an app's <b>pages</b>, a decision service's <b>decisions</b>, a form's
-              <b>subforms</b>.</li>
-          <li><b>BPMN/CMMN extraction closes its attribute gaps</b> — boundary events name the activity they
-              hang on (and whether they interrupt it), conditional events keep their condition, gateways and
-              flows keep the default-flow marker, <code>flowable:async</code>/<code>skipExpression</code>
-              surface when set, lanes are extracted (and searchable via
-              <code>label:</code>/<code>id:</code>), event payloads carry type/required/correlation instead
-              of bare names, DMN columns keep their declared types and allowed values, service-operation
-              parameters keep <code>required</code> and defaults, data-dictionary types keep their
-              properties, form selects keep their options and every localised caption (each searchable as a
-              <code>label:</code>), and agent prompts are no longer cut off at 200 characters.</li>
-          <li><b>Search: a facet hit lights up what it matched</b> — the bound value of <code>label:</code>
-              / <code>desc:</code> / <code>key:</code> / <code>id:</code> highlights in the result rows like
-              any term, and the row's hint leads with the matched text itself (<code>label · Recalculate
-              @orderTotal</code>). The detail page highlights faceted and multi-word queries too — it used
-              to look for the raw query as one substring, so exactly the queries the engine is best at
-              highlighted nothing there. "Did you mean" matches each word on its own and reaches captions,
-              not just names and keys.</li>
-          <li><b>The browse list explains its hits</b> — a row matched through a script body or a mapping
-              says why (<code>script · stampTask</code>), exactly like the palette, and clicking it opens
-              the detail panel with that element revealed and highlighted.</li>
-          <li><b>The search dialog is keyboard-complete</b> — Tab cycles the dialog's own controls (facet
-              chips, their ×, "Show more", "Did you mean") instead of being swallowed, the page behind the
-              open dialog is inert to focus and screen readers, arrows move the selection without rebuilding
-              the whole list (noticeable on 3000-node reports), and the <code>/</code> shortcut is finally
-              written down — on the search button, in the zero-result tip and on the empty detail
-              panel.</li>
-        </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>
 
@@ -877,6 +834,9 @@
                   extensions="form;action;page;data;dictionary;query;sequence;sla;event;channel;agent;service;tpl;policy;extractor;knowledgebase;masterdata;dashboardcomponent;document;palette;app"/>
         <!-- The XML-serialized models. .bpmn20.xml / .cmmn.xml / .dmn.xml already end in .xml. -->
         <fileType name="XML" extensions="bpmn;cmmn;dmn"/>
+        <!-- A model file wears its type's icon — the explorer's glyph and colour — in the Project view
+             and the editor tabs; a .bar the archive icon. Decided from the name alone. -->
+        <fileIconProvider implementation="com.flowable.atlas.icons.ModelFileIconProvider"/>
         <!-- Reader Mode's visual formatting layer crashes on minified single-line JSON, which is what a
              Design model export is; order="last" is load-bearing, because the platform enables the layer
              from this same extension point. See FlowableModelVisualFormattingGuard. -->
