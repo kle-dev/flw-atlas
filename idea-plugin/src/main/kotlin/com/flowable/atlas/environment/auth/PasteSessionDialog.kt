@@ -1,5 +1,6 @@
 package com.flowable.atlas.environment.auth
 
+import com.flowable.atlas.FlowableAtlasBundle
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.ui.components.JBLabel
@@ -33,7 +34,7 @@ class PasteSessionDialog(project: Project) : DialogWrapper(project) {
         private set
 
     init {
-        title = "Paste session from browser"
+        title = FlowableAtlasBundle.message("dialog.pasteSession.title")
         setOKButtonText("Use this session")
         init()
     }

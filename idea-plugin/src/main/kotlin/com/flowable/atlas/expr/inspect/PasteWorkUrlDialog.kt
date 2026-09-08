@@ -1,5 +1,6 @@
 package com.flowable.atlas.expr.inspect
 
+import com.flowable.atlas.FlowableAtlasBundle
 import com.flowable.atlas.environment.AtlasCatalog
 import com.flowable.atlas.environment.AtlasConnection
 import com.flowable.atlas.environment.AtlasEnvironments
@@ -78,7 +79,7 @@ class PasteWorkUrlDialog(private val project: Project) : DialogWrapper(project) 
     private var prefilledFor: String? = null
 
     init {
-        title = "Evaluate Against a Work URL"
+        title = FlowableAtlasBundle.message("dialog.pasteWorkUrl.title")
         setOKButtonText("Use")
         init()
         // Parsed straight from the document listener, with no alarm in between. An alarm created

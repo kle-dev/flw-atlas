@@ -1,5 +1,6 @@
 package com.flowable.atlas.environment.auth
 
+import com.flowable.atlas.FlowableAtlasBundle
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.project.Project
@@ -54,7 +55,7 @@ class BrowserSignInDialog(project: Project, private val baseUrl: String) : Dialo
         private set
 
     init {
-        title = "Sign in to Flowable app"
+        title = FlowableAtlasBundle.message("dialog.browserSignIn.title")
         setOKButtonText("Use this session")
         isModal = true
         init()

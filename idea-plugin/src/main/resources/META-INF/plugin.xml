@@ -211,6 +211,14 @@
               — where Atlas writes into the project is one question — and the three generator pages drop the
               heading that repeated their title. A Liquibase or DTO generation's balloon opens the settings
               page it was about, not the parent.</li>
+          <li><b>The two Generate dialogs share one shape.</b> <i>Generate Liquibase Changelogs</i> and
+              <i>Generate Data-Object DTOs</i> were near-twins that had grown apart in small ways — a
+              hand-laid header, radio labels disagreeing on plurals, unscaled table sizes. Both stand on one
+              base now: source radios with <i>Select All</i> and <i>Clear</i> on the right, the preview
+              table with the include box first and <i>new</i> / <i>overwrite</i> last, the generator's own
+              fields below, <i>Generate (N)</i> counting what it is about to write, and one validation
+              order. Every dialog title is Title Case (<i>Sign In to Flowable App</i>, <i>Paste Session from
+              Browser</i>).</li>
         </ul>
         <h3>0.22.0</h3>
         <ul>

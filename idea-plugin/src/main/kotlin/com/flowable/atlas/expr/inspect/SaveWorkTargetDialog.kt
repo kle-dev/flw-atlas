@@ -1,5 +1,6 @@
 package com.flowable.atlas.expr.inspect
 
+import com.flowable.atlas.FlowableAtlasBundle
 import com.flowable.atlas.environment.AtlasEnvironmentSnapshot
 import com.flowable.atlas.environment.AtlasEnvironments
 import com.flowable.atlas.environment.ConnectionKind
@@ -51,7 +52,7 @@ class SaveWorkTargetDialog(project: Project, private val baseUrl: String) : Dial
     fun existing(): AtlasEnvironmentSnapshot? = existingFor(environmentName)
 
     init {
-        title = "Save as Environment"
+        title = FlowableAtlasBundle.message("dialog.saveWorkTarget.title")
         setOKButtonText("Save")
         init()
         nameField.document.addDocumentListener(object : DocumentListener {

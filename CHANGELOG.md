@@ -70,6 +70,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   Design* page is a group on *Generation* — where Atlas writes into the project is one question — and the three
   generator pages drop the heading that repeated their title. A Liquibase or DTO generation's balloon opens the
   settings page it was about, not the parent.
+- **The two Generate dialogs share one shape.** *Generate Liquibase Changelogs* and *Generate Data-Object DTOs*
+  were near-twins that had grown apart in small ways — a hand-laid header, radio labels disagreeing on plurals,
+  unscaled table sizes. Both stand on one base now: source radios with *Select All* and *Clear* on the right,
+  the preview table with the include box first and *new* / *overwrite* last, the generator's own fields
+  below, *Generate (N)* counting what it is about to write, and one validation order. Every dialog title is
+  Title Case (*Sign In to Flowable App*, *Paste Session from Browser*).
 
 ## 0.22.0
 

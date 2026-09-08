@@ -1,5 +1,6 @@
 package com.flowable.atlas.design
 
+import com.flowable.atlas.FlowableAtlasBundle
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.ValidationInfo
@@ -35,7 +36,7 @@ class DesignCreateTokenDialog(project: Project, private val baseUrl: String) : D
     val validFor: String? get() = daysField.text.trim().toIntOrNull()?.let { "P${it}D" }
 
     init {
-        title = "Create Flowable Design Access Token"
+        title = FlowableAtlasBundle.message("dialog.createDesignToken.title")
         setOKButtonText("Create Token")
         init()
     }
