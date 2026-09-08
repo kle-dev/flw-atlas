@@ -20,7 +20,6 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.psi.codeStyle.NameUtil
 import com.intellij.util.Processor
-import com.intellij.util.text.Matcher
 import com.intellij.util.text.matching.MatchingMode
 import java.util.function.BiConsumer
 import javax.swing.ListCellRenderer
@@ -54,7 +53,7 @@ class FlowableModelSeContributor(private val project: Project) :
      * this one infix too, so what is highlighted is what was matched.
      */
     @Volatile
-    private var highlightMatcher: Matcher? = null
+    private var highlight: SeHighlight? = null
 
     override fun getSearchProviderId(): String = ID
 
@@ -82,8 +81,8 @@ class FlowableModelSeContributor(private val project: Project) :
         progressIndicator: ProgressIndicator,
         consumer: Processor<in FoundItemDescriptor<FlowableSeItem>>,
     ) {
-        highlightMatcher = if (pattern.isEmpty()) null else {
-            NameUtil.buildMatcher("*$pattern", MatchingMode.IGNORE_CASE)
+        highlight = if (pattern.isEmpty()) null else {
+            SeHighlight(pattern, NameUtil.buildMatcher("*$pattern", MatchingMode.IGNORE_CASE))
         }
         if (!fetchModels(FlowableInfixMatcher(pattern), progressIndicator, consumer)) return
         if (pattern.length < MIN_GREP_LENGTH || !isOwnTabSelected()) return
@@ -159,14 +158,14 @@ class FlowableModelSeContributor(private val project: Project) :
     }
 
     override fun getElementsRenderer(): ListCellRenderer<in FlowableSeItem> =
-        FlowableModelSeRenderer { highlightMatcher }
+        FlowableModelSeRenderer { highlight }
 
     /** What the popup's own actions see as the selected item: the model file behind the row. Replaces
      *  the deprecated dataId-based `getDataForItem` — same data, pushed into a typed sink. */
     override fun getDataProviders(): List<BiConsumer<FlowableSeItem, DataSink>> =
         listOf(BiConsumer { item, sink -> sink[CommonDataKeys.VIRTUAL_FILE] = item.file })
 
-    override fun getItemDescription(element: FlowableSeItem): String = element.displayPath
+    override fun getItemDescription(element: FlowableSeItem): String = element.description
 
     /**
      * True while our own tab is the selected one — or while there is no popup to ask (tests, and any

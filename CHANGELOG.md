@@ -56,6 +56,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   the method icon, its input the parameter icon; messages, signals, variables and outcomes the platform's
   constant, variable and property icons; columns and tables the database icons; and a scraped bean in an
   expression the same bean icon the script playground uses.
+- **Search Everywhere highlights what you typed, and the hover is a card.** In the *Flowable Model* tab a
+  mid-key hit — `0061` finding `DEMO-DO-0061` — matched but rendered unhighlighted, so the row you typed for
+  looked like the one that merely happened to be there; it is highlighted now, and the row's tooltip carries
+  the type, the name and the archive path the columns leave out. Ctrl-Q on a key shows the platform's
+  documentation card — key and type, name, backing table, project-relative file — instead of a hand-built
+  stack of line breaks with an absolute path.
 
 ## 0.22.0
 

@@ -110,12 +110,12 @@ typing filters by key or name.
 | Ctrl/⌘-click | `operation("…")` / `value("…", …)` | The backing `.service` model |
 | Ctrl/⌘-click | A cross-reference attribute in model XML | The referenced model |
 | Ctrl/⌘-click | Any literal whose value is a known key | Its model — **only** with *Recognize model keys anywhere in code* enabled |
-| Ctrl-Q / F1 | A key literal | Key, model type, name, backing table for a service or data object, and the file |
+| Ctrl-Q / F1 | A key literal | A documentation card: key and type, the name, the backing table for a service or data object, the project-relative file (archive → entry for a packed model) |
 | Find Usages | A Java method, field or class | Every model that references it by name, inside `${…}` / `#{…}` or a `class` / `delegateExpression` / `expression` attribute |
 | Find Usages | A bot class | The `.action` models whose `botKey` matches |
 | Find Usages | A Spring REST handler | The models whose HTTP task, REST button, service operation or REST data source calls that URL |
 | Search Everywhere / Go to Symbol | — | Every model key, plus bot keys — from actions and from `BotService` implementations. A model row carries its type's icon, a bot row the bot icon |
-| Search Everywhere → **Flowable Model** tab | — | Model keys, archive-qualified paths inside `.bar` / `.zip`, and a live full-text search over model content showing the matched line. A model row carries its type's icon, a text hit a magnifier |
+| Search Everywhere → **Flowable Model** tab | — | Model keys, archive-qualified paths inside `.bar` / `.zip`, and a live full-text search over model content showing the matched line. A model row carries its type's icon, a text hit a magnifier; the typed fragment is highlighted even mid-key, and the row's tooltip holds type, name and archive path |
 
 Two more behaviours belong here even though they are not navigation. Renaming a Java symbol that models
 reference raises a warning with *Show affected models*, because the refactoring engine cannot rewrite an

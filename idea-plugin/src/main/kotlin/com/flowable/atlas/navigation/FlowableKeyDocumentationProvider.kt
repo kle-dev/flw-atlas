@@ -4,6 +4,14 @@ import com.flowable.atlas.completion.SiteMatching
 import com.flowable.atlas.completion.ValueKeyMatching
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
+import com.flowable.atlas.index.ModelEntry
+import com.flowable.atlas.navigation.se.ArchivePaths
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.vfs.VfsUtilCore
+import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.JarFileSystem
+import com.intellij.openapi.project.Project
+import com.intellij.lang.documentation.DocumentationMarkup
 import com.intellij.lang.documentation.AbstractDocumentationProvider
 import com.intellij.openapi.components.service
 import com.intellij.psi.PsiElement
@@ -13,20 +21,60 @@ import com.intellij.psi.PsiReferenceExpression
 import com.intellij.psi.util.PsiTreeUtil
 
 /**
- * Shows the model type, name and file when hovering (or Ctrl-Q) over a Flowable key literal at a
- * public-API call site.
+ * Shows the model type, name, backing table and file when hovering (or Ctrl-Q) over a Flowable key
+ * literal at a public-API call site — as a documentation card, the platform's own shape.
  */
 class FlowableKeyDocumentationProvider : AbstractDocumentationProvider() {
 
+    // The one-line popup (Ctrl+hover): key, type and name — the card is for Ctrl-Q.
     override fun getQuickNavigateInfo(element: PsiElement?, originalElement: PsiElement?): String? =
-        doc(element, originalElement)
+        resolve(element, originalElement)?.let { (entries, key) ->
+            val first = entries.first()
+            buildString {
+                append("<b>").append(escape(key)).append("</b> — ").append(first.type.display)
+                if (first.name != key) append(" · ").append(escape(first.name))
+            }
+        }
 
-    override fun generateDoc(element: PsiElement?, originalElement: PsiElement?): String? =
-        doc(element, originalElement)
+    override fun generateDoc(element: PsiElement?, originalElement: PsiElement?): String? {
+        val (entries, key, service, project) = resolve(element, originalElement) ?: return null
+        val first = entries.first()
+        // The platform's own card shape — definition, content, a table of sections — so the hover reads
+        // like the one over a Java symbol instead of a hand-built stack of <br>s.
+        return buildString {
+            append(DocumentationMarkup.DEFINITION_START)
+            append("<b>").append(escape(key)).append("</b> — ").append(first.type.display)
+            append(DocumentationMarkup.DEFINITION_END)
+            if (first.name != key) {
+                append(DocumentationMarkup.CONTENT_START).append(escape(first.name)).append(DocumentationMarkup.CONTENT_END)
+            }
+            append(DocumentationMarkup.SECTIONS_START)
+            tableLine(service, first.type, key)?.let { section("Table", it) }
+            section("File", escape(presentablePath(project, first.file)))
+            if (entries.size > 1) section("Also in", "${entries.size - 1} more file(s)")
+            append(DocumentationMarkup.SECTIONS_END)
+        }
+    }
 
-    private fun doc(element: PsiElement?, originalElement: PsiElement?): String? {
+    private fun StringBuilder.section(title: String, html: String) {
+        append(DocumentationMarkup.SECTION_HEADER_START).append(title).append(':')
+        append(DocumentationMarkup.SECTION_SEPARATOR).append("<p>").append(html)
+        append(DocumentationMarkup.SECTION_END)
+    }
+
+    /** Project-relative for a loose file, `app.zip → entry` for a packed one; never an absolute path. */
+    private fun presentablePath(project: Project, file: VirtualFile): String {
+        if (file.fileSystem is JarFileSystem) return ArchivePaths.displayPath(file)
+        val base = project.basePath?.let { LocalFileSystem.getInstance().findFileByPath(it) }
+        return base?.let { VfsUtilCore.getRelativePath(file, it) } ?: file.presentableUrl
+    }
+
+    private data class Resolved(val entries: List<ModelEntry>, val key: String, val service: FlowableModelIndexService, val project: Project)
+
+    private fun resolve(element: PsiElement?, originalElement: PsiElement?): Resolved? {
         // literal at a key site, or a constant reference used as the key argument
-        val service = (originalElement ?: element)?.project?.service<FlowableModelIndexService>() ?: return null
+        val project = (originalElement ?: element)?.project ?: return null
+        val service = project.service<FlowableModelIndexService>()
         val (targetTypes, key, _) = run {
             val literal = literalOf(originalElement) ?: literalOf(element)
             if (literal != null) {
@@ -54,15 +102,7 @@ class FlowableKeyDocumentationProvider : AbstractDocumentationProvider() {
 
         val entries = service.find(key).filter { it.type in targetTypes }
         if (entries.isEmpty()) return null
-
-        val first = entries.first()
-        return buildString {
-            append("<b>").append(escape(key)).append("</b> &mdash; ").append(first.type.display)
-            if (first.name != key) append("<br/>").append(escape(first.name))
-            tableLine(service, first.type, key)?.let { append("<br/>").append(it) }
-            append("<br/><small>").append(escape(first.file.presentableUrl)).append("</small>")
-            if (entries.size > 1) append("<br/><small>+ ").append(entries.size - 1).append(" more file(s)</small>")
-        }
+        return Resolved(entries, key, service, project)
     }
 
     /**
@@ -78,8 +118,8 @@ class FlowableKeyDocumentationProvider : AbstractDocumentationProvider() {
         } ?: return null
         val name = table.tableName ?: return null
         return buildString {
-            append("Table: <b>").append(escape(name)).append("</b>")
-            table.type?.let { append(" <small>(").append(escape(it)).append(")</small>") }
+            append("<b>").append(escape(name)).append("</b>")
+            table.type?.let { append(" (").append(escape(it)).append(')') }
         }
     }
 

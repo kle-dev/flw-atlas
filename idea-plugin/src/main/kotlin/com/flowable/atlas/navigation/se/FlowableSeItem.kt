@@ -22,11 +22,16 @@ sealed interface FlowableSeItem {
      */
     val displayPath: String
 
+    /** What the row leaves out, for the status line and the tooltip: type, name, archive-qualified path. */
+    val description: String
+
     data class Model(
         val entry: ModelEntry,
         override val displayPath: String,
     ) : FlowableSeItem {
         override val file: VirtualFile get() = entry.file
+        override val description: String
+            get() = listOf(entry.type.display, entry.name.takeIf { it != entry.key }, displayPath).filterNotNull().joinToString(" · ")
     }
 
     /**
@@ -42,5 +47,7 @@ sealed interface FlowableSeItem {
         val lineText: String,
         val matchStart: Int,
         val matchLength: Int,
-    ) : FlowableSeItem
+    ) : FlowableSeItem {
+        override val description: String get() = displayPath
+    }
 }

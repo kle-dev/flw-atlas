@@ -2,6 +2,7 @@ package com.flowable.atlas
 
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.navigation.FlowableKeyDocumentationProvider
+import com.intellij.lang.documentation.DocumentationMarkup
 import com.intellij.openapi.components.service
 import com.intellij.psi.PsiLiteralExpression
 import com.intellij.psi.util.PsiTreeUtil
@@ -43,5 +44,7 @@ class FlowableDataObjectTableTest : BasePlatformTestCase() {
         val doc = FlowableKeyDocumentationProvider().generateDoc(literal, literal)
         assertNotNull("data-object key constant should get hover docs", doc)
         assertTrue("hover should show the physical table: $doc", doc!!.contains("DEMO_CUSTOMER"))
+        // …as a documentation card, not a hand-built stack of line breaks.
+        assertTrue(doc, doc.contains(DocumentationMarkup.SECTIONS_START) && doc.contains("File:"))
     }
 }
