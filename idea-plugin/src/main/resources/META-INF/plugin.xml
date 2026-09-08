@@ -155,6 +155,10 @@
               glyph in the explorer's colour — in the Project view, the editor tabs and every file list, and
               a <code>.bar</code> shows an archive. The icon is decided from the name alone, so nothing
               waits on it.</li>
+          <li><b>Regenerate has one name.</b> Regenerating the explorer was offered in four places under two
+              labels. It is a registered action now — <i>Generate → Regenerate Atlas Explorer</i>, reachable
+              from Find Action — and the Hub, the explorer tab's banner and toolbar and the balloon after a
+              Design pull all say exactly that.</li>
         </ul>
         <h3>0.22.0</h3>
         <ul>
@@ -904,6 +908,10 @@
                 <action id="Flowable.GenerateAtlasExplorer"
                         class="com.flowable.atlas.action.GenerateAtlasExplorerAction"
                         icon="/icons/atlas/explorer.svg"/>
+                <!-- No ellipsis: it re-runs the existing page(s) with the settings as they are. Its text is
+                     what the Hub, the explorer banner and the post-pull balloon show (FlowableActionIds.text). -->
+                <action id="Flowable.RegenerateAtlasExplorer"
+                        class="com.flowable.atlas.action.RegenerateAtlasExplorerAction"/>
                 <action id="Flowable.GenerateModelConstants"
                         class="com.flowable.atlas.action.GenerateModelConstantsAction"/>
                 <group id="Flowable.GenerateLiquibase" popup="true">

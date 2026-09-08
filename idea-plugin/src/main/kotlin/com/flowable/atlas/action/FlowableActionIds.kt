@@ -1,5 +1,7 @@
 package com.flowable.atlas.action
 
+import com.intellij.openapi.actionSystem.ActionManager
+
 /** Action IDs registered in plugin.xml — referenced from code (hub toolbar, cross-invocation). */
 object FlowableActionIds {
     const val OPEN_ATLAS_HUB = "Flowable.OpenAtlasHub"
@@ -17,4 +19,12 @@ object FlowableActionIds {
     const val SWITCH_DESIGN_ENVIRONMENT = "Flowable.SwitchDesignEnvironment"
     const val SWITCH_WORK_ENVIRONMENT = "Flowable.SwitchWorkEnvironment"
     const val REBUILD_MODEL_INDEX = "Flowable.RebuildModelIndex"
+    const val REGENERATE_ATLAS_EXPLORER = "Flowable.RegenerateAtlasExplorer"
+
+    /**
+     * The registered action's menu text, for a button or link that does the same thing elsewhere. One
+     * verb had three spellings across the menu, the Hub and an editor banner; reading the text from the
+     * action means the bundle is the only place it is written.
+     */
+    fun text(id: String): String = ActionManager.getInstance().getAction(id)?.templateText ?: id
 }

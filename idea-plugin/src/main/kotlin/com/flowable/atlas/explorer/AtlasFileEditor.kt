@@ -1,5 +1,7 @@
 package com.flowable.atlas.explorer
 
+import com.flowable.atlas.AtlasNotifications
+import com.flowable.atlas.action.FlowableActionIds
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.events.AtlasEventsListener
 import com.flowable.atlas.project.AtlasProjectRootService
@@ -217,7 +219,7 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
         if (project.isDisposed) return
         val vf = resolveLabel(label)
         if (vf == null) {
-            NotificationGroupManager.getInstance().getNotificationGroup("Flowable Atlas")
+            NotificationGroupManager.getInstance().getNotificationGroup(AtlasNotifications.GROUP_ID)
                 .createNotification(
                     "File not found",
                     "$label is not under the analysed project folder any more — regenerate the explorer.",
@@ -247,7 +249,10 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
     }
 
     private fun buildToolbarGroup() = DefaultActionGroup(
-        object : AnAction("Regenerate", "Re-run the Atlas generator for this file and reload", AllIcons.Actions.ForceRefresh), DumbAware {
+        object : AnAction(
+            FlowableActionIds.text(FlowableActionIds.REGENERATE_ATLAS_EXPLORER),
+            "Re-run the Atlas generator for this file and reload", AllIcons.Actions.ForceRefresh,
+        ), DumbAware {
             override fun actionPerformed(e: AnActionEvent) {
                 regenerate()
             }

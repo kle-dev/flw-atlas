@@ -1,5 +1,6 @@
 package com.flowable.atlas.explorer
 
+import com.flowable.atlas.action.FlowableActionIds
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
@@ -24,7 +25,7 @@ class AtlasExplorerStaleNotificationProvider : EditorNotificationProvider, DumbA
             val atlasEditor = editor as? AtlasFileEditor ?: return@Function null
             EditorNotificationPanel(editor, EditorNotificationPanel.Status.Warning).apply {
                 text = "Models changed since this explorer was generated."
-                createActionLabel("Regenerate") { atlasEditor.regenerate() }
+                createActionLabel(FlowableActionIds.text(FlowableActionIds.REGENERATE_ATLAS_EXPLORER)) { atlasEditor.regenerate() }
             }
         }
     }

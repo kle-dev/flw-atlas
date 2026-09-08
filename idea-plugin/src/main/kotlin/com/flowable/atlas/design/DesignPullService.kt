@@ -1,5 +1,7 @@
 package com.flowable.atlas.design
 
+import com.flowable.atlas.AtlasNotifications.GROUP_ID
+import com.flowable.atlas.action.FlowableActionIds
 import com.flowable.atlas.environment.AtlasConnectionSelection
 import com.flowable.atlas.environment.auth.AtlasCredentials
 import com.flowable.atlas.environment.AtlasDesignTarget
@@ -376,7 +378,7 @@ class DesignPullService(private val project: Project) {
         // offer a one-click regenerate when such artifacts exist.
         val outputDir = FlowableAtlasProjectSettings.getInstance(project).atlasOutputDir
         if (AtlasExplorerFiles.find(projectDir, outputDir).isNotEmpty()) {
-            notification.addAction(NotificationAction.createSimple("Regenerate Atlas Explorer") {
+            notification.addAction(NotificationAction.createSimple(FlowableActionIds.text(FlowableActionIds.REGENERATE_ATLAS_EXPLORER)) {
                 AtlasGenerationRunner.regenerate(project)
             })
         }
@@ -409,7 +411,6 @@ class DesignPullService(private val project: Project) {
     }
 
     companion object {
-        private const val GROUP_ID = "Flowable Atlas"
 
         /** Epoch millis of the last successful pull, in [PropertiesComponent] (workspace-local). */
         const val LAST_PULL_PROPERTY = "flowable.atlas.lastDesignPull"

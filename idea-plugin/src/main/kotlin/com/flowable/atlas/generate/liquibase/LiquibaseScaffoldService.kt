@@ -1,5 +1,6 @@
 package com.flowable.atlas.generate.liquibase
 
+import com.flowable.atlas.AtlasNotifications.GROUP_ID
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.liquibase.LiquibaseChangelog
 import com.flowable.atlas.model.ModelPaths
@@ -299,7 +300,6 @@ class LiquibaseScaffoldService(private val project: Project) {
         ApplicationManager.getApplication().invokeLater { notify(title, message, type) }
 
     companion object {
-        private const val GROUP_ID = "Flowable Atlas"
 
         fun getInstance(project: Project): LiquibaseScaffoldService = project.service()
     }

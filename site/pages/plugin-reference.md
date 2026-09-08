@@ -34,6 +34,7 @@ nothing on any other file.
 | Open Expression Playground | Atlas Hub toolbar |
 | Search Models… | Atlas Hub, *Model Index*; Project view context menu; `Ctrl+Alt+Shift+M` |
 | Generate → Generate Atlas Explorer… | Atlas Hub link; Project view context menu |
+| Generate → Regenerate Atlas Explorer | Atlas Hub, when models changed since the last generation; the explorer tab's banner and toolbar; the balloon after a Design pull |
 | Generate → Generate Model Constants… | Atlas Hub link |
 | Generate → Liquibase → From Data Object… | — |
 | Generate → Liquibase → From App(s)… | — |
@@ -47,7 +48,7 @@ nothing on any other file.
 | Dump Key Index (Internal) | Only visible in an internal-mode IDE |
 
 Panel toolbars carry a few more that are not registered actions, so they do not appear in *Find
-Action*: the Hub's *Refresh* and, in its *Flowable Design* section, *Reload from Flowable Design*; the Environments page's *Test Connection*; the explorer tab's *Regenerate*, *Reload* and *Open in Browser*; the
+Action*: the Hub's *Refresh* and, in its *Flowable Design* section, *Reload from Flowable Design*; the Environments page's *Test Connection*; the explorer tab's *Reload* and *Open in Browser*; the
 Expression Playground's dialect toggles, scope selector, *Evaluate Against App*, *Show Sub-Expression
 Values* and settings popup; and the Script Playground's language and context selectors with *Load Script
 from Model…* and *Load Example…*.

@@ -1,5 +1,6 @@
 package com.flowable.atlas.explorer
 
+import com.flowable.atlas.AtlasNotifications.GROUP_ID
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
@@ -19,7 +20,6 @@ import java.nio.file.Path
  */
 object AtlasExplorerNotifier {
 
-    private const val GROUP_ID = "Flowable Atlas"
     private const val TITLE_EXPLORER_GENERATED = "Atlas explorer generated"
     private const val TITLE_ARTIFACTS_GENERATED = "Atlas artifacts generated"
     private const val TITLE_GENERATION_FAILED = "Atlas generation failed"

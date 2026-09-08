@@ -1,5 +1,6 @@
 package com.flowable.atlas.usage
 
+import com.flowable.atlas.AtlasNotifications.GROUP_ID
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
@@ -89,6 +90,5 @@ class FlowableRenameWarningProvider : RefactoringElementListenerProvider {
     }
 
     companion object {
-        private const val GROUP_ID = "Flowable Atlas"
     }
 }

@@ -1,5 +1,6 @@
 package com.flowable.atlas.intention
 
+import com.flowable.atlas.AtlasNotifications
 import com.flowable.atlas.generate.dto.DataObjectDtoPlanner
 import com.flowable.atlas.generate.dto.DtoClassNamePattern
 import com.flowable.atlas.index.FlowableModelIndexService
@@ -148,7 +149,7 @@ class GenerateDataObjectBeanIntention : PsiElementBaseIntentionAction() {
 
     private fun notify(project: Project, title: String, message: String) =
         NotificationGroupManager.getInstance()
-            .getNotificationGroup("Flowable Atlas")
+            .getNotificationGroup(AtlasNotifications.GROUP_ID)
             .createNotification(title, message, NotificationType.INFORMATION)
             .notify(project)
 

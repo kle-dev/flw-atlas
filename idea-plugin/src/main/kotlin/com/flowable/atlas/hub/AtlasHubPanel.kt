@@ -1,5 +1,6 @@
 package com.flowable.atlas.hub
 
+import com.flowable.atlas.AtlasNotifications.GROUP_ID
 import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.AtlasBuildInfo
 import com.flowable.atlas.action.FlowableActionIds
@@ -397,7 +398,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
             // follows such changes on its own; the generated HTML does not, so offer the regenerate here.
             staleRow = row {
                 label("Models changed since the last generation.")
-                link("Regenerate Atlas Explorer") { AtlasGenerationRunner.regenerate(project) }
+                link(FlowableActionIds.text(FlowableActionIds.REGENERATE_ATLAS_EXPLORER)) { AtlasGenerationRunner.regenerate(project) }
             }.visible(false)
         }
         // One section, one task, in the order the work is actually done: which environment, which
@@ -492,7 +493,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
         when {
             vf != null && JBCefApp.isSupported() -> AtlasExplorerOpener.openInIde(project, vf)
             AtlasBrowser.canOpenFiles() -> AtlasBrowser.open(artifact.path)   // JCEF unavailable → external browser
-            else -> NotificationGroupManager.getInstance().getNotificationGroup("Flowable Atlas")
+            else -> NotificationGroupManager.getInstance().getNotificationGroup(GROUP_ID)
                 .createNotification(
                     "Cannot open the explorer here",
                     "This IDE has neither an embedded browser nor a way to launch one (a Remote Dev backend, say). " +
@@ -1049,7 +1050,6 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
                 else -> "…/" + parts.takeLast(2).joinToString("/")
             }
         }
-        private const val GROUP_ID = "Flowable Atlas"
 
         /** A generated explorer is stale when something was pulled after its newest artifact was written. */
         /** The predicate lives in [AtlasExplorerStaleness] now (shared with the editor banner). */

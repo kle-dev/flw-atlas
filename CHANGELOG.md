@@ -24,6 +24,9 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   the stock XML or JSON icon, so a folder of models read as a folder of config. Each shows its type's icon
   now — the explorer's glyph in the explorer's colour — in the Project view, the editor tabs and every
   file list, and a `.bar` shows an archive. The icon is decided from the name alone, so nothing waits on it.
+- **Regenerate has one name.** Regenerating the explorer was offered in four places under two labels. It is
+  a registered action now — *Generate → Regenerate Atlas Explorer*, reachable from Find Action — and the Hub,
+  the explorer tab's banner and toolbar and the balloon after a Design pull all say exactly that.
 
 ## 0.22.0
 

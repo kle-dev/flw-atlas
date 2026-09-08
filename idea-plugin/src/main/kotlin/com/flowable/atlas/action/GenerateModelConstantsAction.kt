@@ -1,5 +1,6 @@
 package com.flowable.atlas.action
 
+import com.flowable.atlas.AtlasNotifications.GROUP_ID
 import com.flowable.atlas.generate.JavaSourceRoots
 import com.flowable.atlas.generate.ModelConstantsService
 import com.flowable.atlas.generate.ModelConstantsSettings
@@ -41,7 +42,6 @@ class GenerateModelConstantsAction : AnAction() {
 
     companion object {
         private const val DEFAULT_FQCN = "flowable.FlowableModelKeys"
-        private const val GROUP_ID = "Flowable Atlas"
 
         /** Generate/overwrite the model-constants class; safe from the EDT. Shared by the action and the Hub. */
         fun generate(project: Project) {
