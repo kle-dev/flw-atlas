@@ -48,7 +48,7 @@ class ValueKeyRecognitionTest : BasePlatformTestCase() {
         // A bare local — NOT a recognised Flowable API call site.
         myFixture.configureByText("A.java", "class A { String k = \"DEMO-onboarding\"; }")
         myFixture.doHighlighting()
-        val gutters = myFixture.findAllGutters().filter { it.tooltipText == "Open the Flowable model diagram" }
+        val gutters = myFixture.findAllGutters().filter { it.tooltipText?.startsWith("Process diagram: ") == true }
         assertEquals("value-matched process key should carry the diagram marker", 1, gutters.size)
     }
 
@@ -57,7 +57,7 @@ class ValueKeyRecognitionTest : BasePlatformTestCase() {
         FlowableAtlasSettings.getInstance().recognizeModelKeysAnywhere = false
         myFixture.configureByText("A.java", "class A { String k = \"DEMO-onboarding\"; }")
         myFixture.doHighlighting()
-        val gutters = myFixture.findAllGutters().filter { it.tooltipText == "Open the Flowable model diagram" }
+        val gutters = myFixture.findAllGutters().filter { it.tooltipText?.startsWith("Process diagram: ") == true }
         assertTrue("without the opt-in, a non-call-site literal gets no diagram marker", gutters.isEmpty())
     }
 
