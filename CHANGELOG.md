@@ -43,6 +43,13 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   diagram wear four marks now; the tooltip says how many actions use the bot, which verbs and paths the models
   call, and which model's diagram opens; and when several models are behind a mark, the chooser shows each with
   its type's icon, its key and its file — type to filter by key or name.
+- **Every inspection explains itself, and every finding of a kind has the same fix.** Four of the six Flowable
+  inspections showed an empty description panel in Settings; all six have one now. An unknown key in a model's
+  extension-element text and an unknown key behind a constant were flagged like their attribute and literal
+  siblings but offered no fix — the first gets *Replace with '…'*, the second *Change constant value to '…'*,
+  which edits the constants class and says so in its preview. Quick fixes have stable family names, so *Fix
+  all* and the Alt+Enter list group them by what they do rather than by the value they insert, and the
+  Liquibase finding names the service model whose columns it compared against.
 
 ## 0.22.0
 

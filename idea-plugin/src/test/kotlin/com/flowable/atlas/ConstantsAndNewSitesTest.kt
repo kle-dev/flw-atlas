@@ -52,6 +52,44 @@ class ConstantsAndNewSitesTest : BasePlatformTestCase() {
             infos.any { (it.description ?: "").contains("is not a known") })
     }
 
+    fun testAConstantsBrokenKeyOffersToChangeTheConstant() {
+        addCaseStub()
+        myFixture.enableInspections(FlowableBrokenKeyInspection::class.java)
+        val constants = myFixture.addFileToProject(
+            "demo/ModelConstants.java",
+            "package demo; public final class ModelConstants { public static final String REVIEW = \"DEMO-C999\"; }",
+        )
+        myFixture.configureByText(
+            "T.java",
+            "class T { void m(org.flowable.cmmn.api.runtime.CaseInstanceBuilder b) { b.caseDefinitionKey(demo.ModelConstants.REV<caret>IEW); } }",
+        )
+        myFixture.doHighlighting()
+        val fix = myFixture.availableIntentions.firstOrNull { it.text == "Change constant value to 'DEMO-C001'" }
+        assertNotNull("a constant behind an unknown key gets a fix, like a literal does", fix)
+        myFixture.launchAction(fix!!)
+        // The fix lands where the value lives — the constants class — and the call site stays as it was.
+        assertTrue(constants.text, constants.text.contains("REVIEW = \"DEMO-C001\""))
+        assertTrue(myFixture.file.text.contains("demo.ModelConstants.REVIEW"))
+    }
+
+    fun testEventTypeElementTextOffersTheSameFixAsAnAttribute() {
+        myFixture.addFileToProject("models/orderCreated.event", """{"key":"orderCreated","name":"Order created"}""")
+        myFixture.enableInspections(FlowableXmlBrokenKeyInspection::class.java)
+        myFixture.configureByText(
+            "proc.bpmn20.xml",
+            """<definitions xmlns:flowable="http://flowable.org/bpmn">
+                 <process id="p1">
+                   <startEvent id="s"><extensionElements><flowable:eventType>orderCr<caret>eatd</flowable:eventType></extensionElements></startEvent>
+                 </process>
+               </definitions>""",
+        )
+        myFixture.doHighlighting()
+        val fix = myFixture.availableIntentions.firstOrNull { it.text == "Replace with 'orderCreated'" }
+        assertNotNull("element text used to be flagged without a fix", fix)
+        myFixture.launchAction(fix!!)
+        assertTrue(myFixture.file.text.contains("<flowable:eventType>orderCreated</flowable:eventType>"))
+    }
+
     fun testFormOutcomeCompletion() {
         myFixture.addFileToProject(
             "org/flowable/engine/TaskService.java",

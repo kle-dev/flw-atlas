@@ -1,0 +1,16 @@
+<html>
+<body>
+Reports a cross-reference in BPMN, CMMN or DMN model XML whose key matches no indexed model of the expected
+type: the attributes <code>calledElement</code>, <code>processRef</code>, <code>caseRef</code>,
+<code>decisionRef</code>, <code>decisionTableReferenceKey</code>, <code>decisionServiceReferenceKey</code>,
+<code>caseDefinitionKey</code> and <code>formKey</code>, and the extension elements <code>eventType</code>,
+<code>triggerEventType</code>, <code>channelKey</code>, <code>processSequence</code>, <code>caseSequence</code>,
+<code>sla-definition-key</code> and <code>security-policy-model</code>.
+<p>Example: <code>&lt;callActivity calledElement="shipping-prcoess"/&gt;</code> is reported with the suggestion
+<i>did you mean 'shipping-process'?</i></p>
+<p>Quick fix: <b>Replace with '…'</b> — on the attribute value and on the element text alike.</p>
+<!-- tooltip end -->
+<p>Values containing <code>${</code> or <code>#{</code> are expressions and are skipped. Silent when the project
+has no indexed key of that type or the model index has not been built yet.</p>
+</body>
+</html>

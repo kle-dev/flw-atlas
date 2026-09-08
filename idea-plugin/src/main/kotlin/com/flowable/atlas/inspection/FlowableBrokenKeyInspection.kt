@@ -5,18 +5,16 @@ import com.flowable.atlas.completion.SiteMatching
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.intellij.codeInspection.LocalInspectionTool
 import com.intellij.codeInspection.LocalQuickFix
-import com.intellij.codeInspection.ProblemDescriptor
 import com.intellij.codeInspection.ProblemHighlightType
 import com.intellij.codeInspection.ProblemsHolder
 import com.intellij.openapi.components.service
-import com.intellij.openapi.project.Project
 import com.intellij.psi.JavaElementVisitor
-import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiElementVisitor
 import com.intellij.psi.PsiExpressionList
 import com.intellij.psi.PsiLiteralExpression
 import com.intellij.psi.PsiReferenceExpression
+import com.intellij.psi.PsiVariable
 
 /**
  * Flags a Flowable model-key literal that does not match any indexed key of the expected type, e.g.
@@ -24,7 +22,8 @@ import com.intellij.psi.PsiReferenceExpression
  *     runtimeService.startProcessInstanceByKey("DEMO-P999")   // no such process key in the project
  *
  * Only reports when the project actually contains keys of that type (so a not-yet-indexed / empty
- * project is never falsely flagged). Offers a quick fix to the closest known key when one is near.
+ * project is never falsely flagged). Offers a quick fix to the closest known key when one is near — on a
+ * literal it replaces the literal, on a constant reference it changes the constant's initializer.
  */
 class FlowableBrokenKeyInspection : LocalInspectionTool() {
 
@@ -34,7 +33,7 @@ class FlowableBrokenKeyInspection : LocalInspectionTool() {
                 val value = literal.value as? String ?: return
                 if (value.isBlank()) return
                 val site = SiteMatching.keySiteForLiteral(literal) ?: return
-                check(literal, site, value, offerReplaceFix = true)
+                check(literal, site, value) { ReplaceStringLiteralFix(it, ReplaceStringLiteralFix.KNOWN_MODEL_KEY) }
             }
 
             // Constant references (`startProcessInstanceByKey(ModelConstants.FOO)`) are the
@@ -43,10 +42,15 @@ class FlowableBrokenKeyInspection : LocalInspectionTool() {
                 if (ref.parent !is PsiExpressionList) return
                 val (site, value) = SiteMatching.keySiteForArgument(ref) ?: return
                 if (value.isBlank()) return
-                check(ref, site, value, offerReplaceFix = false)
+                // The fix edits the constant's declaration — offered only when that literal is there to edit.
+                check(ref, site, value) { suggestion ->
+                    val literal = ChangeConstantValueFix.initializerLiteral(ref) ?: return@check null
+                    val constant = (ref.resolve() as? PsiVariable)?.name ?: return@check null
+                    ChangeConstantValueFix(suggestion, constant, literal.containingFile.name)
+                }
             }
 
-            private fun check(element: PsiElement, site: KeySite, value: String, offerReplaceFix: Boolean) {
+            private fun check(element: PsiElement, site: KeySite, value: String, fixFor: (String) -> LocalQuickFix?) {
                 val service = element.project.service<FlowableModelIndexService>()
                 val knownKeys = knownKeys(service, site)
                 if (knownKeys.isEmpty()) return          // nothing indexed for this type — don't guess
@@ -54,9 +58,7 @@ class FlowableBrokenKeyInspection : LocalInspectionTool() {
 
                 val typeLabel = site.targetTypes.joinToString("/") { it.display }
                 val suggestion = Suggestions.closest(value, knownKeys)
-                val fixes = if (offerReplaceFix && suggestion != null) {
-                    arrayOf<LocalQuickFix>(ReplaceKeyFix(suggestion))
-                } else LocalQuickFix.EMPTY_ARRAY
+                val fixes = suggestion?.let(fixFor)?.let { arrayOf(it) } ?: LocalQuickFix.EMPTY_ARRAY
                 val hint = suggestion?.let { " — did you mean '$it'?" } ?: ""
                 holder.registerProblem(
                     element,
@@ -78,14 +80,4 @@ class FlowableBrokenKeyInspection : LocalInspectionTool() {
         return keys
     }
 
-    /** Replaces the flagged key literal with a known key. */
-    private class ReplaceKeyFix(private val replacement: String) : LocalQuickFix {
-        override fun getFamilyName(): String = "Replace with '$replacement'"
-
-        override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
-            val literal = descriptor.psiElement as? PsiLiteralExpression ?: return
-            val factory = JavaPsiFacade.getElementFactory(project)
-            literal.replace(factory.createExpressionFromText("\"$replacement\"", literal))
-        }
-    }
 }

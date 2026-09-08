@@ -44,7 +44,7 @@ class GenerateDataObjectBeanIntention : PsiElementBaseIntentionAction() {
 
     override fun getText(): String = "Generate Java DTO for this Flowable data object"
 
-    override fun getFamilyName(): String = "Flowable Atlas"
+    override fun getFamilyName(): String = "Generate Java DTO for a Flowable data object"
 
     override fun startInWriteAction(): Boolean = false
 

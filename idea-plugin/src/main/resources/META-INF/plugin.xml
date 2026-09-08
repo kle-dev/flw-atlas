@@ -179,6 +179,15 @@
               actions use the bot, which verbs and paths the models call, and which model's diagram opens;
               and when several models are behind a mark, the chooser shows each with its type's icon, its
               key and its file — type to filter by key or name.</li>
+          <li><b>Every inspection explains itself, and every finding of a kind has the same fix.</b> Four of
+              the six Flowable inspections showed an empty description panel in Settings; all six have one
+              now. An unknown key in a model's extension-element text and an unknown key behind a constant
+              were flagged like their attribute and literal siblings but offered no fix — the first gets
+              <i>Replace with '…'</i>, the second <i>Change constant value to '…'</i>, which edits the
+              constants class and says so in its preview. Quick fixes have stable family names, so <i>Fix
+              all</i> and the Alt+Enter list group them by what they do rather than by the value they
+              insert, and the Liquibase finding names the service model whose columns it compared
+              against.</li>
         </ul>
         <h3>0.22.0</h3>
         <ul>

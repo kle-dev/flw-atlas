@@ -1,0 +1,15 @@
+<html>
+<body>
+Reports a <code>value("field", …)</code> or <code>originalValue("field", …)</code> on a data-object query or
+builder whose field is not an input parameter of the operation named by <code>operation("…")</code> in the
+same fluent chain.
+<p>Example: <code>createDataObjectInstanceQuery().definitionKey("DEMO-D010").operation("findAll").value("x", "")</code>
+is reported as <i>'x' is not an input value of operation 'findAll' on data object 'DEMO-D010' (expected one
+of: id, label)</i>.</p>
+<p>Quick fix: <b>Replace with '…'</b>, the closest valid input value.</p>
+<!-- tooltip end -->
+<p>Checked only when the data object, its backing <code>.service</code> model and the operation all resolve
+from the index — an unknown data object or operation is a different finding, and a cold index is no
+verdict.</p>
+</body>
+</html>

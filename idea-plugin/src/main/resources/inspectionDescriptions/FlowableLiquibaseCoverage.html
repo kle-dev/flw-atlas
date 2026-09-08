@@ -1,0 +1,16 @@
+<html>
+<body>
+Reports a <code>&lt;column name="…"&gt;</code> under <code>createTable</code> or <code>addColumn</code>, or a
+<code>renameColumn newColumnName</code>, that no <code>columnMappings</code> entry of the backing
+<code>database</code> <code>.service</code> model covers. Names are compared loosely, so
+<code>CREW_ID_</code> matches <code>crewId</code>.
+<p>Example: <i>Column 'LEGACY_NOTE_' is not mapped in Flowable service model 'DEMO-S010'</i> — the table will
+have a column no model reads or writes.</p>
+<p>No quick fix: the fix is in the model or in the changelog, and Atlas cannot decide which.</p>
+<!-- tooltip end -->
+<p>The changelog is matched to a service through its <code>serviceDefinitionReferences</code> property, the
+service's <code>referencedLiquibaseModelKey</code>, or a <code>tableName</code> match; when nothing matches
+the inspection stays silent. A column renamed or dropped later in the same file is honoured; an
+<code>&lt;include&gt;</code> of another file is not replayed.</p>
+</body>
+</html>

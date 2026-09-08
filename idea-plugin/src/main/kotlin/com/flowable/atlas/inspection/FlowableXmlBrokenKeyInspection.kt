@@ -24,7 +24,7 @@ import com.intellij.psi.xml.XmlText
  *
  * Only reports when the project actually contains keys of that type (so an unindexed / empty project
  * is never falsely flagged) and the value is a plain key (not an `${expression}`). Offers a quick fix
- * to the closest known key. See [FlowableXmlKeyCatalog].
+ * to the closest known key, on attributes and on element text alike. See [FlowableXmlKeyCatalog].
  */
 class FlowableXmlBrokenKeyInspection : LocalInspectionTool() {
 
@@ -67,11 +67,13 @@ class FlowableXmlBrokenKeyInspection : LocalInspectionTool() {
 
                 val typeLabel = site.types.joinToString("/") { it.display }
                 val suggestion = Suggestions.closest(value, knownKeys)
+                val fixes = suggestion?.let { arrayOf<LocalQuickFix>(ReplaceXmlTextFix(it)) } ?: LocalQuickFix.EMPTY_ARRAY
                 val hint = suggestion?.let { " — did you mean '$it'?" } ?: ""
                 holder.registerProblem(
                     text,
                     "'$value' is not a known $typeLabel key$hint",
                     ProblemHighlightType.WARNING,
+                    *fixes,
                 )
             }
         }
@@ -88,11 +90,22 @@ class FlowableXmlBrokenKeyInspection : LocalInspectionTool() {
 
     /** Replaces the flagged attribute value with a known key. */
     private class ReplaceXmlKeyFix(private val replacement: String) : LocalQuickFix {
-        override fun getFamilyName(): String = "Replace with '$replacement'"
+        override fun getName(): String = "Replace with '$replacement'"
+        override fun getFamilyName(): String = ReplaceStringLiteralFix.KNOWN_MODEL_KEY
 
         override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
             val attribute = PsiTreeUtil.getParentOfType(descriptor.psiElement, XmlAttribute::class.java, false) ?: return
             attribute.setValue(replacement)
+        }
+    }
+
+    /** Replaces the flagged element text with a known key — the same fix the attribute site always had. */
+    private class ReplaceXmlTextFix(private val replacement: String) : LocalQuickFix {
+        override fun getName(): String = "Replace with '$replacement'"
+        override fun getFamilyName(): String = ReplaceStringLiteralFix.KNOWN_MODEL_KEY
+
+        override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
+            (descriptor.psiElement as? XmlText)?.value = replacement
         }
     }
 }

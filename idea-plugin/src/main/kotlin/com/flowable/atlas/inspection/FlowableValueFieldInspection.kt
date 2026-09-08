@@ -65,7 +65,7 @@ class FlowableValueFieldInspection : LocalInspectionTool() {
                 if (fieldName !in validFields) {
                     val hint = if (validFields.isEmpty()) "it has no input values" else "expected one of: ${validFields.joinToString(", ")}"
                     val suggestion = Suggestions.closest(fieldName, validFields)
-                    val fixes = suggestion?.let { arrayOf<LocalQuickFix>(ReplaceFieldFix(it)) } ?: LocalQuickFix.EMPTY_ARRAY
+                    val fixes = suggestion?.let { arrayOf<LocalQuickFix>(ReplaceStringLiteralFix(it, ReplaceStringLiteralFix.KNOWN_INPUT_VALUE)) } ?: LocalQuickFix.EMPTY_ARRAY
                     holder.registerProblem(
                         literal,
                         "'$fieldName' is not an input value of operation '$operationKey' on data object '$modelKey' ($hint)",
@@ -77,14 +77,4 @@ class FlowableValueFieldInspection : LocalInspectionTool() {
         }
     }
 
-    /** Replaces the flagged value field with a valid input value of the operation. */
-    private class ReplaceFieldFix(private val replacement: String) : LocalQuickFix {
-        override fun getFamilyName(): String = "Replace with '$replacement'"
-
-        override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
-            val literal = descriptor.psiElement as? PsiLiteralExpression ?: return
-            val factory = JavaPsiFacade.getElementFactory(project)
-            literal.replace(factory.createExpressionFromText("\"$replacement\"", literal))
-        }
-    }
 }

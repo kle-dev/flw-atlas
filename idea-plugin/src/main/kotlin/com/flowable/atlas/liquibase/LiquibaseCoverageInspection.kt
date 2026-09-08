@@ -33,7 +33,9 @@ class LiquibaseCoverageInspection : LocalInspectionTool() {
         // cold index there is no verdict, and the daemon re-runs once the build lands.
         if (file.project.service<FlowableModelIndexService>().cachedOrRequest() == null) return PsiElementVisitor.EMPTY_VISITOR
 
-        val serviceColumns = resolveServiceColumns(holder, file, text) ?: return PsiElementVisitor.EMPTY_VISITOR
+        val services = LiquibaseModelResolver.servicesFor(holder.project, file.name, text)
+        if (services.isEmpty()) return PsiElementVisitor.EMPTY_VISITOR   // no backing service resolves → don't inspect
+        val serviceColumns = LiquibaseModelResolver.looseColumns(services)
         val ops = LiquibaseChangelog.parseOps(text)
         val unmapped = LiquibaseChangelog.unmappedLooseNames(ops, serviceColumns)
         if (unmapped.isEmpty()) return PsiElementVisitor.EMPTY_VISITOR
@@ -53,22 +55,16 @@ class LiquibaseCoverageInspection : LocalInspectionTool() {
                 val value = tag.getAttributeValue(attrName) ?: return
                 if (LiquibaseChangelog.loose(value) !in unmapped) return
                 val valueElement = tag.getAttribute(attrName)?.valueElement ?: return
+                // Names the model it compared against: "the backing model" sent the reader looking for it.
+                val noun = if (services.size == 1) "model" else "models"
+                val owner = services.joinToString(", ") { "'${it.key}'" }
                 holder.registerProblem(
                     valueElement,
-                    "Column '$value' is not mapped to any field of the backing Flowable data-object/service model",
+                    "Column '$value' is not mapped in Flowable service $noun $owner",
                     ProblemHighlightType.WARNING,
                 )
             }
         }
     }
 
-    /**
-     * The loose column names covered by the database service(s) this changelog belongs to, or null
-     * if no such service resolves (→ don't inspect).
-     */
-    private fun resolveServiceColumns(holder: ProblemsHolder, file: XmlFile, text: String): Set<String>? {
-        val services = LiquibaseModelResolver.servicesFor(holder.project, file.name, text)
-        if (services.isEmpty()) return null
-        return LiquibaseModelResolver.looseColumns(services)
-    }
 }

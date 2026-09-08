@@ -22,7 +22,7 @@ import com.intellij.psi.PsiFile
 class OpenInExpressionPlaygroundIntention : IntentionAction, DumbAware {
 
     override fun getText(): String = "Open in Expression Playground"
-    override fun getFamilyName(): String = "Flowable expression"
+    override fun getFamilyName(): String = "Open in Expression Playground"
     override fun startInWriteAction(): Boolean = false
 
     override fun isAvailable(project: Project, editor: Editor?, file: PsiFile?): Boolean =

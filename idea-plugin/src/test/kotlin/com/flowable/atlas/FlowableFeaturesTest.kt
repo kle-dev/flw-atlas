@@ -225,7 +225,10 @@ class FlowableFeaturesTest : BasePlatformTestCase() {
                </databaseChangeLog>""",
         )
         val infos = myFixture.doHighlighting()
-        assertTrue("expected BOGUS_ flagged", infos.any { (it.description ?: "").contains("is not mapped") })
+        val finding = infos.firstOrNull { (it.description ?: "").contains("is not mapped") }
+        assertNotNull("expected BOGUS_ flagged", finding)
+        // The message names the service it compared against, not "the backing model".
+        assertTrue(finding!!.description, finding.description.contains("'DEMO-S010'"))
     }
 
     fun testLiquibaseColumnCompletion() {

@@ -69,12 +69,16 @@ page, in the embedded browser) and **Flowable Expressions**.
 
 | Inspection | Where | Default | Flags |
 |---|---|---|---|
-| Unknown Flowable model key | Java | on, warning | A key literal — or a constant reference — at a Flowable API call site that matches no indexed key of that site's type. Quick fix to the nearest real key (literals only) |
-| Unknown Flowable model key (model XML) | BPMN / CMMN / DMN | on, warning | The same, for cross-reference attributes and extension-element text. Values containing `${` or `#{` are skipped |
+| Unknown Flowable model key | Java | on, warning | A key literal — or a constant reference — at a Flowable API call site that matches no indexed key of that site's type. Quick fixes: replace the literal with the nearest real key, or change the constant's value to it — in the constants class, with a preview saying so |
+| Unknown Flowable model key (model XML) | BPMN / CMMN / DMN | on, warning | The same, for cross-reference attributes and extension-element text, with the quick fix on both. Values containing `${` or `#{` are skipped |
 | Invalid Flowable data-object value field | Java | on, warning | A `value("field", …)` that is not an input parameter of the operation named earlier in the same fluent chain. Quick fix to the closest valid field |
-| Liquibase column not defined in Flowable model | XML | on, warning | A changelog column that maps to no field of the backing `.service` model |
+| Liquibase column not defined in Flowable model | XML | on, warning | A changelog column that maps to no field of the backing `.service` model; the message names that service |
 | Unknown Flowable expression function or namespace | Expressions | on, warning | An unknown namespace, function or `flw.*` member, and dialect misuse. Quick fixes: replace with the nearest name, or add it to the project allowlist |
 | Expression root is not a known variable, bean, or root object | Expressions | **off**, weak warning | A backend root identifier that is not a catalogued engine root, an indexed variable, or a name used elsewhere in the project |
+
+Every inspection carries a description in *Settings → Editor → Inspections → Flowable*, and every fix a
+family name that says what it does (*Replace with a known model key*), so *Fix all* groups fixes by kind, not by
+the value they insert.
 
 Two things are validated outside the inspection system. **Expression syntax** is painted by an
 annotator, because the daemon's inspections do not run inside the playground's editor field. And Atlas
