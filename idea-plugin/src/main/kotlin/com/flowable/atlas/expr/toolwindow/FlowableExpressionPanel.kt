@@ -253,7 +253,7 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
         set(value) { shell.stacked = value }
 
     init {
-        val evaluate = EvaluateAgainstAppAction(this).also { it.registerCustomShortcutSet(CommonShortcuts.CTRL_ENTER, this) }
+        val evaluate = EvaluateAgainstAppAction(this).also { it.registerCustomShortcutSet(CommonShortcuts.getCtrlEnter(), this) }
         shell.toolbar = ActionManager.getInstance()
             .createActionToolbar("FlowableExprPlayground", buildToolbarGroup(evaluate), true)
             .also { it.targetComponent = shell }

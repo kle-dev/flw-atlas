@@ -31,8 +31,7 @@ state, so nothing needs a menu.
 </figure>
 
 **The header** names the Flowable project Atlas is about, how many models it knows and how long ago it
-looked — *142 models · 2 min ago*; the per-type counts, the scope and the running Atlas version are in
-the tooltip. In a monorepo the project is a switcher: pick the sub-project Atlas operates on, and the
+looked — *142 models · 2 min ago*; the per-type counts and the scope are in the tooltip. In a monorepo the project is a switcher: pick the sub-project Atlas operates on, and the
 index, the output folder and the Design target follow. It is a drop-down like the environment pickers
 below it, always offering the whole repository, so "is this mine to change?" is answered by the control
 rather than by trying it.
@@ -111,8 +110,8 @@ index-invalidated, generation-finished, design-pull-finished, sub-project-switch
 settings-applied, environments-changed and connection-switched events, so it reflects work started
 anywhere in the IDE without polling. Every Atlas settings page publishes the settings-applied event
 from a `final` method, so a page added later cannot forget to — which is how changing the output folder
-once left the Hub listing artifacts from the old one. The header's tooltip names the running Atlas version,
-and nothing else: the platform range Atlas was verified against is a fact about the release, and it belongs
+once left the Hub listing artifacts from the old one. Its footer names the running Atlas version, and
+nothing else: the platform range Atlas was verified against is a fact about the release, and it belongs
 [in the reference](../plugin/reference/) and in a bug report — not in a panel that stays open all day.
 
 Reach it from the right stripe, or **Tools → Flowable Atlas → Atlas Hub**.

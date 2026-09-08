@@ -129,10 +129,13 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
         AtlasProjectRootService.getInstance(host.project).setActiveSubProject(relPath.orEmpty())
     }
 
-    /** The running plugin's version; falls back to the baked :core build version, which is the same
-     *  Gradle version, so any mismatch would itself signal drift. */
-    private fun atlasVersion(): String =
-        PluginManagerCore.getPlugin(PluginId.getId("com.flowable.atlas"))?.version ?: AtlasBuildInfo.VERSION
+
+    companion object {
+        /** The running plugin's version; falls back to the baked :core build version, which is the same
+         *  Gradle version, so any mismatch would itself signal drift. */
+        fun atlasVersion(): String =
+            PluginManagerCore.getPlugin(PluginId.getId("com.flowable.atlas"))?.version ?: AtlasBuildInfo.VERSION
+    }
 
     // -- for tests -------------------------------------------------------------------------------
 

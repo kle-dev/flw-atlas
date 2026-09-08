@@ -59,6 +59,9 @@ class AtlasHubPanel(override val project: Project) : SimpleToolWindowPanel(true,
             header.build(this)
             separator()
             sections.forEach { it.build(this) }
+            // The running version, in plain sight: the one line of the old footer that people read.
+            separator()
+            row { comment("Flowable Atlas ${HubHeader.atlasVersion()}") }
         }))
 
         project.messageBus.connect(this).subscribe(AtlasEvents.TOPIC, object : AtlasEventsListener {

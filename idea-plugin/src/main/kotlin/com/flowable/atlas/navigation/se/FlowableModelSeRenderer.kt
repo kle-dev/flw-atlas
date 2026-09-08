@@ -90,7 +90,7 @@ internal class FlowableModelSeRenderer(
         private fun appendKey(key: String, h: SeHighlight?) {
             val base = SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES
             if (h == null) return append(key, base)
-            var ranges: List<TextRange> = h.matcher.matchingFragments(key)?.toList().orEmpty()
+            var ranges: List<TextRange> = h.matcher.match(key)?.map { TextRange(it.startOffset, it.endOffset) }.orEmpty()
             if (ranges.isEmpty()) {
                 val at = key.indexOf(h.pattern, ignoreCase = true)
                 if (at >= 0) ranges = listOf(TextRange(at, at + h.pattern.length))
