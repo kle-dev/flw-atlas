@@ -12,7 +12,8 @@ import com.intellij.testFramework.fixtures.BasePlatformTestCase
  */
 class FlowableDiagramLineMarkerTest : BasePlatformTestCase() {
 
-    private val diagramTooltip = "Open the Flowable model diagram"
+    /** The tooltip names the type and the key: `Process diagram: DEMO-P039`. */
+    private val diagramTooltip = "Process diagram: DEMO-P039"
 
     private fun addBuilderStubAndProcess() {
         myFixture.addFileToProject(

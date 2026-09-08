@@ -37,6 +37,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   four rows), *Playground* (its runtime environment and Open). Every button takes its text from the action it
   runs, so the menu and the Hub cannot disagree; the maintenance actions moved to a ⋮ menu; Refresh is one
   button that also re-reads the Flowable Design lists.
+- **A gutter mark says which relationship it is, and its popup says which model.** Three markers shared one
+  glyph and their popups listed raw file paths, which in a project that keeps its models in archives were
+  identical up to the last segment. A referenced Java symbol, a bot class, a REST handler and a key with a
+  diagram wear four marks now; the tooltip says how many actions use the bot, which verbs and paths the models
+  call, and which model's diagram opens; and when several models are behind a mark, the chooser shows each with
+  its type's icon, its key and its file — type to filter by key or name.
 
 ## 0.22.0
 

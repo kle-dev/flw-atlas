@@ -1,5 +1,6 @@
 package com.flowable.atlas.usage
 
+import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.FlowableModelIndexService
@@ -71,19 +72,22 @@ class FlowableModelReferenceLineMarkerProvider : LineMarkerProvider {
 
     private fun navigate(event: MouseEvent, element: PsiElement, names: Set<String>) {
         val project = element.project
-        object : Task.Backgroundable(project, "Finding Flowable model references", true) {
+        object : Task.Backgroundable(project, message("linemarker.reference.progress"), true) {
             override fun run(indicator: ProgressIndicator) {
                 val files = ModelReferenceScan.affectedModelFiles(project, names)
                 val at = RelativePoint(event)
                 ApplicationManager.getApplication().invokeLater {
-                    ModelReferenceNavigator.show(project, files, "Flowable Models", at)
+                    ModelReferenceNavigator.show(project, files, message("linemarker.reference.popup", symbolName(element)), at)
                 }
             }
         }.queue()
     }
 
+    /** The identifier's text — what the popup title names. */
+    private fun symbolName(element: PsiElement): String = element.text
+
     companion object {
-        private const val TOOLTIP = "Referenced by Flowable models"
+        private val TOOLTIP: String = message("linemarker.reference.tooltip")
         private val ICON: Icon = AtlasIcons.GutterReference
     }
 }

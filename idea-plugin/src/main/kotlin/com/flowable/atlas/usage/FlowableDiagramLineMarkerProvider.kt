@@ -59,7 +59,7 @@ class FlowableDiagramLineMarkerProvider : LineMarkerProvider {
                 else -> continue
             }
             val entry = candidates.firstOrNull { FlowableDiagram.hasOpenableDiagram(it.file, it.type) } ?: continue
-            result.add(buildMarker(element, entry.file, entry.type))
+            result.add(buildMarker(element, entry.file, entry.type, entry.key))
         }
     }
 
@@ -90,16 +90,19 @@ class FlowableDiagramLineMarkerProvider : LineMarkerProvider {
         }
     }
 
-    private fun buildMarker(anchor: PsiElement, modelFile: VirtualFile, type: ModelType): LineMarkerInfo<PsiElement> =
-        LineMarkerInfo(
+    private fun buildMarker(anchor: PsiElement, modelFile: VirtualFile, type: ModelType, key: String): LineMarkerInfo<PsiElement> {
+        // Names the type and the key, so the mark on a constant says which model it is about.
+        val tooltip = FlowableAtlasBundle.message("linemarker.diagram.tooltip", type.display, key)
+        return LineMarkerInfo(
             anchor,
             anchor.textRange,
             ICON,
-            { _ -> TOOLTIP },
+            { _ -> tooltip },
             { _, elt -> openDiagram(elt.project, modelFile, type) },
             GutterIconRenderer.Alignment.RIGHT,
-            Supplier { TOOLTIP },
+            Supplier { tooltip },
         )
+    }
 
     private fun openDiagram(project: Project, modelFile: VirtualFile, type: ModelType) {
         // Resolve the bundled sibling .svg or render one from the model's DI layout; both open in the
@@ -115,7 +118,6 @@ class FlowableDiagramLineMarkerProvider : LineMarkerProvider {
     }
 
     private companion object {
-        val TOOLTIP: String = FlowableAtlasBundle.message("linemarker.diagram.tooltip")
         val NO_LAYOUT_HINT: String = FlowableAtlasBundle.message("linemarker.diagram.nolayout")
         val ICON: Icon = AtlasIcons.GutterDiagram
     }

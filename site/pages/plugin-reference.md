@@ -93,6 +93,11 @@ Four, all on Java code, each with a mark of its own so the gutter says which rel
 | a globe | A Spring REST handler | The models that call that endpoint |
 | a route | A model-key literal or resolvable constant | That model's diagram, in the Images viewer — shown only when a diagram actually exists |
 
+The tooltip says what the mark knows: how many actions use the bot, which verbs and paths the models call,
+which model's diagram opens (*Process diagram: DEMO-P001*). When several models sit behind a mark, a chooser
+lists each with its type's icon, its key and its file — `app.zip → processes/x.bpmn` for a packed model — and
+typing filters by key or name.
+
 ## Navigation
 
 | Gesture | From | To |

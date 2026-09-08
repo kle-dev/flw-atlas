@@ -1,5 +1,6 @@
 package com.flowable.atlas.usage
 
+import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.intellij.codeInsight.daemon.LineMarkerInfo
@@ -39,37 +40,40 @@ class FlowableBotActionLineMarkerProvider : LineMarkerProvider {
             val cls = element.parent as? PsiClass ?: continue
             if (cls.nameIdentifier !== element) continue
             val botKey = BotPsi.botKeyOf(cls) ?: continue
-            if (index.actionsUsingBot(botKey).isEmpty()) continue
-            result.add(buildMarker(element, botKey))
+            val actions = index.actionsUsingBot(botKey).size
+            if (actions == 0) continue
+            result.add(buildMarker(element, botKey, actions))
         }
     }
 
-    private fun buildMarker(identifier: PsiIdentifier, botKey: String): LineMarkerInfo<PsiElement> =
-        LineMarkerInfo(
+    private fun buildMarker(identifier: PsiIdentifier, botKey: String, actions: Int): LineMarkerInfo<PsiElement> {
+        // The count is free here — the highlight pass already looked the actions up.
+        val tooltip = message("linemarker.bot.tooltip", actions)
+        return LineMarkerInfo(
             identifier,
             identifier.textRange,
             ICON,
-            { _ -> TOOLTIP },
+            { _ -> tooltip },
             { event, elt -> navigate(event, elt, botKey) },
             GutterIconRenderer.Alignment.RIGHT,
-            Supplier { TOOLTIP },
+            Supplier { tooltip },
         )
+    }
 
     private fun navigate(event: MouseEvent, element: PsiElement, botKey: String) {
         val project = element.project
-        object : Task.Backgroundable(project, "Finding actions using this bot", true) {
+        object : Task.Backgroundable(project, message("linemarker.bot.progress"), true) {
             override fun run(indicator: ProgressIndicator) {
                 val files = project.service<FlowableModelIndexService>().actionsUsingBot(botKey).map { it.file }
                 val at = RelativePoint(event)
                 ApplicationManager.getApplication().invokeLater {
-                    ModelReferenceNavigator.show(project, files, "Actions using this bot", at)
+                    ModelReferenceNavigator.show(project, files, message("linemarker.bot.popup", botKey), at)
                 }
             }
         }.queue()
     }
 
     private companion object {
-        const val TOOLTIP = "Used by Flowable actions"
         val ICON: Icon = AtlasIcons.GutterBot
     }
 }

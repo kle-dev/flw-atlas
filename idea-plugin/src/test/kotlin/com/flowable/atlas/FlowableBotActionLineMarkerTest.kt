@@ -25,8 +25,10 @@ class FlowableBotActionLineMarkerTest : BasePlatformTestCase() {
         )
         myFixture.doHighlighting()
 
-        val gutters = myFixture.findAllGutters().filter { it.tooltipText == "Used by Flowable actions" }
+        val gutters = myFixture.findAllGutters().filter { it.tooltipText?.startsWith("Used by ") == true }
         assertEquals("the bot class should carry one marker", 1, gutters.size)
+        // The tooltip counts: one action here, so it says so rather than the generic plural.
+        assertEquals("Used by one Flowable action", gutters.single().tooltipText)
     }
 
     fun testNoGutterWhenNoActionUsesBot() {
@@ -37,7 +39,7 @@ class FlowableBotActionLineMarkerTest : BasePlatformTestCase() {
         )
         myFixture.doHighlighting()
 
-        val gutters = myFixture.findAllGutters().filter { it.tooltipText == "Used by Flowable actions" }
+        val gutters = myFixture.findAllGutters().filter { it.tooltipText?.startsWith("Used by ") == true }
         assertEquals("no action uses this bot → no marker", 0, gutters.size)
     }
 }

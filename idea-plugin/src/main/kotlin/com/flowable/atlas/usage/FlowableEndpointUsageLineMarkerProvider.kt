@@ -1,5 +1,6 @@
 package com.flowable.atlas.usage
 
+import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.intellij.codeInsight.daemon.LineMarkerInfo
@@ -50,7 +51,7 @@ class FlowableEndpointUsageLineMarkerProvider : LineMarkerProvider {
     }
 
     private fun buildMarker(identifier: PsiIdentifier, endpoints: List<EndpointPsi.Endpoint>): LineMarkerInfo<PsiElement> {
-        val tooltip = "Called by Flowable models (" + endpoints.joinToString(", ") { "${it.verb} ${it.path}" } + ")"
+        val tooltip = message("linemarker.endpoint.tooltip", endpoints.joinToString(", ") { "${it.verb} ${it.path}" })
         return LineMarkerInfo(
             identifier,
             identifier.textRange,
@@ -64,12 +65,12 @@ class FlowableEndpointUsageLineMarkerProvider : LineMarkerProvider {
 
     private fun navigate(event: MouseEvent, element: PsiElement, endpoints: List<EndpointPsi.Endpoint>) {
         val project = element.project
-        object : Task.Backgroundable(project, "Finding models calling this endpoint", true) {
+        object : Task.Backgroundable(project, message("linemarker.endpoint.progress"), true) {
             override fun run(indicator: ProgressIndicator) {
                 val files = EndpointModelScan.affectedModelFiles(project, endpoints)
                 val at = RelativePoint(event)
                 ApplicationManager.getApplication().invokeLater {
-                    ModelReferenceNavigator.show(project, files, "Models calling this endpoint", at)
+                    ModelReferenceNavigator.show(project, files, message("linemarker.endpoint.popup", endpoints.first().let { "${it.verb} ${it.path}" }), at)
                 }
             }
         }.queue()

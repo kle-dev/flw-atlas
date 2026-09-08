@@ -19,15 +19,15 @@
        <div class="edscroll">
          <div class="gutter">
            <span>10</span><span>11</span>
-           <span class="gi"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5c9eff" stroke-width="1.9"><circle cx="6" cy="6" r="2.3"/><circle cx="6" cy="18" r="2.3"/><circle cx="18" cy="12" r="2.3"/><path d="M8.2 7.1 15.7 11M8.2 16.9 15.7 13" stroke-linecap="round"/></svg>12</span>
+           <span class="gi"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#CED0D6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>12</span>
            <span>13</span><span>14</span><span>15</span><span>16</span>
          </div>
          <div class="code"><span class="ln"><span class="an">@Component</span>(<span class="s">"notifyCustomer"</span>)</span><span class="ln"><span class="kw">public class</span> <span class="ty">NotifyCustomer</span> <span class="kw">implements</span> <span class="ty">JavaDelegate</span> {</span><span class="ln">    <span class="an">@Override</span></span><span class="ln">    <span class="kw">public void</span> <span class="fn">execute</span>(<span class="ty">DelegateExecution</span> execution) {</span><span class="ln">        mailer.<span class="m">send</span>(execution.<span class="m">getVariable</span>(<span class="s">"customerEmail"</span>));</span><span class="ln">    }</span><span class="ln">}</span>
-           <div class="menu" style="top:36px; left:56px; min-width:340px">
-             <div style="padding:6px 13px 4px; font-size:10.5px; text-transform:uppercase; letter-spacing:.07em; color:#7a7e85">Used in 3 Flowable models</div>
-             <div class="mrow sel"><span class="picn p">P</span>order-fulfilment.bpmn<span style="margin-left:auto; color:#9aa4b2; font-size:11.5px">serviceTask · line 58</span></div>
-             <div class="mrow"><span class="picn p">P</span>invoice-approval.bpmn<span style="margin-left:auto; color:#9aa4b2; font-size:11.5px">listener · line 22</span></div>
-             <div class="mrow"><span class="picn c">C</span>customer-onboarding.cmmn.json<span style="margin-left:auto; color:#9aa4b2; font-size:11.5px">task · notifyCustomer</span></div>
+           <div class="menu" style="top:36px; left:56px; min-width:380px">
+             <div style="padding:6px 13px 4px; font-size:11.5px; color:#dfe1e5; font-weight:600">Models Referencing 'notifyCustomer'</div>
+             <div class="mrow sel"><span class="picn" style="background:none">{{icon:process}}</span>DEMO-P001<span style="margin-left:auto; color:#9aa4b2; font-size:11.5px">order-fulfilment.bpmn</span></div>
+             <div class="mrow"><span class="picn" style="background:none">{{icon:process}}</span>DEMO-P004<span style="margin-left:auto; color:#9aa4b2; font-size:11.5px">invoice-approval.bpmn</span></div>
+             <div class="mrow"><span class="picn" style="background:none">{{icon:case}}</span>DEMO-C002<span style="margin-left:auto; color:#9aa4b2; font-size:11.5px">orderApp.zip → cases/customer-onboarding.cmmn</span></div>
            </div>
            <div class="tooltip" style="top:212px; left:470px; width:330px">
              <b>Renaming this class?</b>
