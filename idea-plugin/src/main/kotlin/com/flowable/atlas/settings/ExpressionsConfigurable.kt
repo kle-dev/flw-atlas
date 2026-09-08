@@ -47,7 +47,8 @@ class ExpressionsConfigurable(project: Project) : AtlasProjectConfigurable(
                 }
                 row {
                     comment(
-                        "Unknown-function warnings &amp; codebase grounding are inspections with per-profile " +
+                        "The two boxes above apply to every project in this IDE. " +
+                            "Unknown-function warnings &amp; codebase grounding are inspections with per-profile " +
                             "severity: Settings → Editor → Inspections → Flowable.",
                     )
                 }

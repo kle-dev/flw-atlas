@@ -202,6 +202,15 @@
               and the archive path the columns leave out. Ctrl-Q on a key shows the platform's documentation
               card — key and type, name, backing table, project-relative file — instead of a hand-built
               stack of line breaks with an absolute path.</li>
+          <li><b>Inline hints have one switch — the IDE's.</b> The two Atlas hints could be turned off on
+              the platform's Inlay Hints page and, separately, on the Atlas settings page; turning one off
+              left the other on. Settings → Editor → Inlay Hints → Values is the only switch now.</li>
+          <li><b>The settings tree says what it has.</b> The root page names its children correctly (a
+              <i>Connections</i> page it pointed at had been <i>Environments</i> for a while) and puts what
+              the index reads first. The one-row <i>Flowable Design</i> page is a group on <i>Generation</i>
+              — where Atlas writes into the project is one question — and the three generator pages drop the
+              heading that repeated their title. A Liquibase or DTO generation's balloon opens the settings
+              page it was about, not the parent.</li>
         </ul>
         <h3>0.22.0</h3>
         <ul>
@@ -344,7 +353,7 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- Services (FlowableModelIndexService, ModelConstantsService/Settings) are @Service — no registration needed. -->
-        <!-- Settings tree: an app-level root page (core toggles) with three project-level children.
+        <!-- Settings tree: an app-level root page (core toggles) with project-level children.
              parentId chaining across levels is supported — the settings tree merges them by ID. -->
         <applicationConfigurable
                 parentId="tools"
@@ -382,13 +391,6 @@
                 bundle="messages.FlowableAtlasBundle"
                 key="configurable.atlas.generation.dto"
                 instance="com.flowable.atlas.settings.GenerationDtoConfigurable"/>
-        <projectConfigurable
-                parentId="com.flowable.atlas.settings"
-                id="com.flowable.atlas.settings.design"
-                bundle="messages.FlowableAtlasBundle"
-                key="configurable.atlas.design"
-                instance="com.flowable.atlas.settings.DesignConfigurable"/>
-
         <projectConfigurable
                 parentId="com.flowable.atlas.settings"
                 id="com.flowable.atlas.settings.environments"

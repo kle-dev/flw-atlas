@@ -6,7 +6,7 @@ import com.flowable.atlas.intention.DataObjectBeanGenerator
 import com.flowable.atlas.model.ModelType
 import com.flowable.atlas.parsing.DataField
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
-import com.flowable.atlas.settings.GenerationConfigurable
+import com.flowable.atlas.settings.GenerationDtoConfigurable
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
@@ -202,8 +202,8 @@ class DataObjectDtoService(private val project: Project) {
                 NotificationType.INFORMATION,
             )
         notification.addAction(
-            NotificationAction.createSimple("Open Generation settings") {
-                ShowSettingsUtil.getInstance().showSettingsDialog(project, GenerationConfigurable::class.java)
+            NotificationAction.createSimple("Open DTO Settings") {
+                ShowSettingsUtil.getInstance().showSettingsDialog(project, GenerationDtoConfigurable::class.java)
             },
         )
         notification.notify(project)

@@ -11,12 +11,12 @@ import com.intellij.ui.dsl.builder.bindText
 import com.intellij.ui.dsl.builder.panel
 
 /**
- * Settings → Tools → Flowable Atlas → **Generation**: which Atlas artifacts "Generate Atlas Explorer…"
- * produces, and where.
+ * Settings → Tools → Flowable Atlas → **Generation**: what Atlas writes into the project, and where —
+ * the artifacts "Generate Atlas Explorer…" produces, and the folder a Flowable Design pull lands in.
  *
- * The Design pull's target folder used to sit here too, and it did not belong: a pull generates
- * nothing, it downloads what someone else authored, so one heading had to cover both directions of
- * travel. It has its own page now ([DesignConfigurable]).
+ * The pull folder had a page of its own for a while, on the argument that a pull downloads rather than
+ * generates. True, but a page with one row costs a tree node per field, and the reader's question is the
+ * same for both: where does Atlas write into my project? The heading of its group says which direction.
  *
  * The three generators that have real shapes of their own — Liquibase changelogs, data-object DTOs and
  * the model-constants class — are child pages. On one page they were four screens of fields with no
@@ -71,6 +71,27 @@ class GenerationConfigurable(project: Project) : AtlasProjectConfigurable(
                     )
                 }
             }
-                                            }
+            // Where the pull lands is the one fact about a pull that is a fact about *this project* rather
+            // than about a server or a moment — the rest (environment, workspace, apps) is chosen in the Hub.
+            // A page of its own held this single row; "where does Atlas write into my project" is the
+            // question this page already answers.
+            group("Flowable Design Pull") {
+                row("Pulled models folder:") {
+                    textFieldWithBrowseButton(
+                        FileChooserDescriptorFactory.createSingleFolderDescriptor()
+                            .withTitle("Select Pulled Models Folder")
+                            .withDescription("The pulled app archives are written into this folder inside the project"),
+                        project,
+                        projectRelativeChooser(project),
+                    )
+                        .align(AlignX.FILL)
+                        .comment(
+                            "Where \"Pull from Flowable Design\" writes the app archives, relative to the Flowable " +
+                                "project. Which environment it pulls from, and which of its apps, is chosen in the Atlas Hub.",
+                        )
+                        .bindText(settings::designTargetFolder)
+                }
+            }
+        }
     }
 }

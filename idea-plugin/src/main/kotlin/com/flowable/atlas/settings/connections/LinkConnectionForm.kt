@@ -16,7 +16,7 @@ import javax.swing.JComponent
  *
  * Flowable Control and Flowable Hub are addresses per stage — the pages a developer keeps in bookmarks
  * and hunts for whenever they switch environment. Atlas has the environment list already, so the only
- * thing missing was the address; everything the [WorkConnectionForm] carries beyond it (a username, a
+ * thing missing was the address; everything the [ServerConnectionForm] carries beyond it (a username, a
  * password, a browser session, *Test Connection*) exists because *Atlas* signs in, and nothing here
  * does. A form that showed those fields anyway would be asking for a password nothing would ever read.
  *

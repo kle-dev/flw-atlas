@@ -1,7 +1,6 @@
 package com.flowable.atlas.hint
 
 import com.flowable.atlas.index.FlowableModelIndexService
-import com.flowable.atlas.settings.FlowableAtlasSettings
 import com.intellij.openapi.components.service
 import com.intellij.testFramework.utils.inlays.declarative.DeclarativeInlayHintsProviderTestCase
 
@@ -10,14 +9,6 @@ import com.intellij.testFramework.utils.inlays.declarative.DeclarativeInlayHints
  * action's name, so an opaque `DEMO-Annn` constant reads as what it starts. DEMO-* names — repo public.
  */
 class FlowableActionNameInlayTest : DeclarativeInlayHintsProviderTestCase() {
-
-    override fun tearDown() {
-        try {
-            FlowableAtlasSettings.getInstance().showActionNameInlay = true
-        } finally {
-            super.tearDown()
-        }
-    }
 
     private fun addActions() {
         myFixture.addFileToProject(
@@ -47,21 +38,6 @@ class FlowableActionNameInlayTest : DeclarativeInlayHintsProviderTestCase() {
                 static final String SUPPORT = "DEMO-A033"/*<# Create support request #>*/;
                 static final String PLAIN = "DEMO-A034";
                 static final String NOT_A_KEY = "DEMO-A099";
-            }
-            """.trimIndent(),
-            FlowableActionNameInlayProvider(),
-            testMode = ProviderTestMode.SIMPLE,
-        )
-    }
-
-    fun testNoHintWhenSettingIsOff() {
-        addActions()
-        FlowableAtlasSettings.getInstance().showActionNameInlay = false
-        doTestProvider(
-            "ModelConstants.java",
-            """
-            class ModelConstants {
-                static final String SUPPORT = "DEMO-A033";
             }
             """.trimIndent(),
             FlowableActionNameInlayProvider(),

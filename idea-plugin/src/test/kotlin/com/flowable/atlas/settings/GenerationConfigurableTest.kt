@@ -18,6 +18,7 @@ class GenerationConfigurableTest : BasePlatformTestCase() {
             val settings = FlowableAtlasProjectSettings.getInstance(project)
             settings.atlasArtifacts = mutableSetOf(AtlasArtifact.EXPLORER_HTML)
             settings.atlasOutputDir = FlowableAtlasProjectSettings.DEFAULT_ATLAS_OUTPUT_DIR
+            settings.designTargetFolder = FlowableAtlasProjectSettings.DEFAULT_DESIGN_TARGET_FOLDER
         } finally {
             super.tearDown()
         }
@@ -39,6 +40,22 @@ class GenerationConfigurableTest : BasePlatformTestCase() {
             configurable.apply()
             assertEquals(setOf(AtlasArtifact.GRAPH_JSON), settings.atlasArtifacts)
             assertEquals("reports/atlas", settings.atlasOutputDir)
+        } finally {
+            configurable.disposeUIResources()
+        }
+    }
+
+    /** The pull folder moved here from a page of its own; the page binds it like every other folder. */
+    fun testThePulledModelsFolderRoundTrips() {
+        val settings = FlowableAtlasProjectSettings.getInstance(project)
+        val configurable = GenerationConfigurable(project)
+        try {
+            configurable.createComponent()
+            settings.designTargetFolder = "models/pulled"
+            configurable.reset()
+            assertFalse(configurable.isModified)
+            configurable.apply()
+            assertEquals("models/pulled", settings.designTargetFolder)
         } finally {
             configurable.disposeUIResources()
         }

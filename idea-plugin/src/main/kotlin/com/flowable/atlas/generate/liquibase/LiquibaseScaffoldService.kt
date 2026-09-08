@@ -8,7 +8,7 @@ import com.flowable.atlas.model.ModelType
 import com.flowable.atlas.parsing.ServiceTable
 import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
-import com.flowable.atlas.settings.GenerationConfigurable
+import com.flowable.atlas.settings.GenerationLiquibaseConfigurable
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
@@ -281,8 +281,8 @@ class LiquibaseScaffoldService(private val project: Project) {
                 NotificationType.INFORMATION,
             )
         notification.addAction(
-            NotificationAction.createSimple("Open Generation settings") {
-                ShowSettingsUtil.getInstance().showSettingsDialog(project, GenerationConfigurable::class.java)
+            NotificationAction.createSimple("Open Liquibase Settings") {
+                ShowSettingsUtil.getInstance().showSettingsDialog(project, GenerationLiquibaseConfigurable::class.java)
             },
         )
         notification.notify(project)

@@ -3,7 +3,6 @@ package com.flowable.atlas.hint
 import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
-import com.flowable.atlas.settings.FlowableAtlasSettings
 import com.intellij.codeInsight.hints.declarative.HintFormat
 import com.intellij.codeInsight.hints.declarative.InlayHintsCollector
 import com.intellij.codeInsight.hints.declarative.InlayHintsProvider
@@ -26,13 +25,12 @@ import com.intellij.psi.PsiLiteralExpression
  * Matched by **value** (every literal, not only catalogued API call sites) because that is where these
  * keys actually appear — a generated/hand-written constants class. The name comes straight from the
  * model index ([FlowableIndex.keysOfType]); an action whose name is missing or equal to its key adds
- * nothing and gets no hint. Toggle under Settings → Editor → Inlay Hints → Values → "Action names",
- * or Settings → Tools → Flowable Atlas → Inline Hints ([FlowableAtlasSettings.showActionNameInlay]).
+ * nothing and gets no hint. Toggle under Settings → Editor → Inlay Hints → Values → "Action names" — the IDE's page is the one
+ * switch; a second one in Atlas' own settings meant two boxes the daemon had to honour separately.
  */
 class FlowableActionNameInlayProvider : InlayHintsProvider {
 
     override fun createCollector(file: PsiFile, editor: Editor): InlayHintsCollector? {
-        if (!FlowableAtlasSettings.getInstance().showActionNameInlay) return null
         val service = file.project.service<FlowableModelIndexService>()
         // Never build the (blocking) index from a hint pass. If it isn't ready yet, kick a background
         // build and show nothing this pass; hints appear once the index exists.

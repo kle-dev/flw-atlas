@@ -148,7 +148,7 @@ covers every service that extends it.
 
 ## Inlay hints
 
-*Settings → Editor → Inlay Hints → Values.* Both on by default.
+*Settings → Editor → Inlay Hints → Values.* Both on by default, and that page is the only switch.
 
 - **Data object table names** — the backing table beside an otherwise opaque data-object key.
 - **Action names** — the action's display name beside its key.
@@ -169,11 +169,9 @@ Applies to every project.
 
 | Option | Default |
 |---|---|
-| List extra completion domains at an empty prefix | on |
-| Inline hint: data object table names | on |
-| Inline hint: action names | on |
-| Recognize model keys anywhere in code | **off** |
 | Also index raw Flowable Design workspace sources | **off** |
+| Recognize model keys anywhere in code | **off** |
+| List extra completion domains at an empty prefix | on |
 
 ### → Expressions
 
@@ -190,9 +188,9 @@ The allowlist is the same store the Alt-Enter quick fix writes to. See
 
 ### → Generation
 
-Which artifacts *Generate Atlas Explorer…* produces and where, plus the folder a Design pull writes
-into. The three generators with shapes of their own are child pages — on one page they were four
-screens of fields with no hierarchy. Every folder field on these pages is project-relative, and its
+What Atlas writes into the project, and where: which artifacts *Generate Atlas Explorer…* produces, and
+the folder a Design pull lands in. The three generators with shapes of their own are child pages — on one
+page they were four screens of fields with no hierarchy. Every folder field on these pages is project-relative, and its
 browse button writes the chosen folder relative to the active Flowable project (an absolute path only
 for a folder outside it). Unticking every artifact is not a way to generate nothing: the selection
 falls back to the explorer HTML.
@@ -202,17 +200,7 @@ falls back to the explorer HTML.
 |---|---|
 | Atlas output folder | `atlas-output` |
 | Artifacts: Explorer HTML · Summary · Overview · Graph JSON · CLAUDE.md · Diagrams (SVG) | Explorer HTML only |
-| Liquibase output folder | `src/main/resources/liquibase` |
-
-#### → Flowable Design
-
-| Option | Default |
-|---|---|
-| Pulled models folder | `flowable-models` |
-
-Its own page, not a group under *Generation*: a pull downloads what someone else authored, so it is
-the opposite direction of travel from everything on that page. Which environment it pulls from, and
-which of its apps, is chosen in the Atlas Hub.
+| Pulled models folder — where *Pull from Flowable Design* writes the app archives; which environment and which apps is chosen in the Atlas Hub | `flowable-models` |
 
 #### → Generation → Model Constants
 

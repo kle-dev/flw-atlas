@@ -62,6 +62,14 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   the type, the name and the archive path the columns leave out. Ctrl-Q on a key shows the platform's
   documentation card — key and type, name, backing table, project-relative file — instead of a hand-built
   stack of line breaks with an absolute path.
+- **Inline hints have one switch — the IDE's.** The two Atlas hints could be turned off on the platform's Inlay
+  Hints page and, separately, on the Atlas settings page; turning one off left the other on. Settings → Editor →
+  Inlay Hints → Values is the only switch now.
+- **The settings tree says what it has.** The root page names its children correctly (a *Connections* page it
+  pointed at had been *Environments* for a while) and puts what the index reads first. The one-row *Flowable
+  Design* page is a group on *Generation* — where Atlas writes into the project is one question — and the three
+  generator pages drop the heading that repeated their title. A Liquibase or DTO generation's balloon opens the
+  settings page it was about, not the parent.
 
 ## 0.22.0
 
