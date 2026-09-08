@@ -76,6 +76,21 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   the preview table with the include box first and *new* / *overwrite* last, the generator's own fields
   below, *Generate (N)* counting what it is about to write, and one validation order. Every dialog title is
   Title Case (*Sign In to Flowable App*, *Paste Session from Browser*).
+- **The playground is one shell: the code, what it runs against, what came out.** The Expressions tab used
+  to flip its splitter's orientation on every resize and swap two whole cards on the dialect toggle — the
+  panel rearranged itself under the cursor. It is a fixed two-pane layout now, remembered, with *Stack
+  Panels* overriding what the dock suggested; the dialect changes only the editor's language and the
+  context's controls. The context has one summary line that is always there — *QA (project) · Case instance
+  CAS-4711*, *payload, 14 lines, at orders[1].items[0]* — and folds its controls away once they are set. One
+  result pane serves both dialects and says *Evaluating against QA…* while it waits. *Evaluate Against App*
+  has Ctrl+Enter. Findings are painted with the editor colour scheme's error and warning attributes in the
+  editor's own font — the field used to render in the Swing label font, which is why the squiggles were
+  hand-painted in four hex colours. The Scripts tab stands on the same shell: what the context provides
+  beside what the script touches, in theme-derived chip tints.
+- **The explorer opens the playground instead of embedding a second one.** Every `*.explorer.html` used to
+  carry a *Flowable Expressions* editor tab holding a complete second playground — its own alarms, its own
+  listeners, last writer wins on the saved state. The explorer tab's toolbar opens the tool window instead.
+  Alt-Enter on an expression in a BPMN or CMMN model now also presets the instance kind — process or case.
 
 ## 0.22.0
 

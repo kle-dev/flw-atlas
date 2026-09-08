@@ -49,19 +49,20 @@ nothing on any other file.
 
 Panel toolbars carry a few more that are not registered actions, so they do not appear in *Find
 Action*: the Hub's *Refresh* (which also re-reads the Flowable Design workspace and app lists) and *Settings*; the Environments page's *Test Connection*; the explorer tab's *Reload* and *Open in Browser*; the
-Expression Playground's dialect toggles, scope selector, *Evaluate Against App*, *Show Sub-Expression
-Values* and settings popup; and the Script Playground's language and context selectors with *Load Script
-from Model…* and *Load Example…*.
+Expression Playground's dialect toggles, scope selector, *Evaluate Against App* (Ctrl+Enter), *Show
+Sub-Expression Values* and its gear menu with *Stack Panels*, *Expression Settings…* and *Environment
+Settings…*; and the Script Playground's language and context selectors with *Load Script from Model…*,
+*Load Example…* and the same gear.
 
 ## Tool windows
 
 | Tool window | Where | Contents |
 |---|---|---|
 | **Atlas Hub** | Right stripe | A status header — Flowable project · model count · index age · one attention line when something needs a hand — over three blocks: Explorer · Design Pull (environment · workspace · apps · pull) · Playground. See [the Hub](../#the-atlas-hub) |
-| **Flowable Expressions** | Bottom stripe (secondary) | Two tabs: *Expressions* and *Scripts*. See [the playgrounds](../#the-playgrounds) |
+| **Flowable Expressions** | Bottom stripe (secondary) | Two tabs on one shell — editor and problems · context · result: *Expressions* (Backend / Frontend) and *Scripts*. See [the playgrounds](../#the-playgrounds) |
 
-The generated explorer also opens as an editor tab with two tabs of its own: **Atlas Explorer** (the
-page, in the embedded browser) and **Flowable Expressions**.
+The generated explorer opens as an editor tab, **Atlas Explorer** (the page, in the embedded browser);
+its toolbar opens the Expression Playground.
 
 ## Inspections
 
@@ -158,8 +159,8 @@ covers every service that extends it.
 *Alt-Enter*, category **Flowable**:
 
 - **Generate Java DTO for this Flowable data object** — on a data-object key.
-- **Open in Expression Playground** — on any injected expression, pre-filled with its dialect and its
-  model's scope.
+- **Open in Expression Playground** — on any injected expression, pre-filled with its dialect, its
+  model's scope and the instance kind the model implies (process for BPMN, case for CMMN).
 
 ## Settings
 
@@ -295,7 +296,7 @@ archive icon. The icon is decided from the file name alone, so the Project view 
 | `.bar`, `.zip` | Archive | Entries are indexed, navigable, searchable by path and content, and can render diagrams — without unpacking |
 | Liquibase changelog XML | XML | Column, table and type completion; the coverage inspection |
 | Design workspace `*-models/*.json` | JSON | Indexed **only** with *Also index raw Flowable Design workspace sources* enabled |
-| `*.explorer.html` | — | Opens as the Atlas Explorer tab, plus a Flowable Expressions tab |
+| `*.explorer.html` | — | Opens as the Atlas Explorer tab; its toolbar opens the Expression Playground |
 
 ## Notifications
 

@@ -17,9 +17,9 @@ import javax.swing.JComponent
 
 /**
  * Toolbar actions of the Expression Playground. All read only cheap panel/Swing state, hence
- * [ActionUpdateThread.EDT]. Two [DialectToggleAction]s stand in for a segmented control (no stable
- * public API for one in 2026.1); the scope picker is a [ComboBoxAction] whose items the panel
- * pre-loads off the EDT — [ComboBoxAction.update] must never compute them.
+ * [ActionUpdateThread.EDT]. Two [DialectToggleAction]s are the mode switch — toggle buttons in a tool
+ * window toolbar are the platform's own idiom for it; the scope picker is a [ComboBoxAction] whose items
+ * the panel pre-loads off the EDT — [ComboBoxAction.update] must never compute them.
  */
 
 internal class DialectToggleAction(
@@ -67,7 +67,7 @@ internal class ScopeComboBoxAction(private val panel: FlowableExpressionPanel) :
 
 internal class EvaluateAgainstAppAction(private val panel: FlowableExpressionPanel) : AnAction(
     "Evaluate Against App",
-    "Evaluate the expression against the running app via the Flowable Inspect REST API",
+    "Evaluate the expression against the running app via the Flowable Inspect REST API (Ctrl+Enter)",
     AllIcons.Actions.Execute,
 ), DumbAware {
 
@@ -100,21 +100,42 @@ internal class ShowSubEvaluationsToggle(private val panel: FlowableExpressionPan
     }
 }
 
-internal class PlaygroundSettingsGroup(private val panel: FlowableExpressionPanel) : DefaultActionGroup(), DumbAware {
+/** Editor over context and result, or beside them — remembered per tab (see `PlaygroundShell`). */
+internal class StackPanelsToggle(private val isStacked: () -> Boolean, private val setStacked: (Boolean) -> Unit) : ToggleAction(
+    "Stack Panels",
+    "Put the context and result panels under the editor instead of beside it",
+    AllIcons.Actions.SplitHorizontally,
+), DumbAware {
+
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+    override fun isSelected(e: AnActionEvent): Boolean = isStacked()
+    override fun setSelected(e: AnActionEvent, state: Boolean) = setStacked(state)
+}
+
+/** The gear: layout, then the two settings pages a playground reader reaches for. */
+internal class PlaygroundSettingsGroup(
+    project: com.intellij.openapi.project.Project,
+    stackPanels: AnAction,
+    expressionSettings: Boolean = true,
+) : DefaultActionGroup(), DumbAware {
 
     init {
         templatePresentation.text = "Settings"
         templatePresentation.icon = AllIcons.General.Settings
         isPopup = true
-        add(object : AnAction("Expression Settings…"), DumbAware {
+        add(stackPanels)
+        addSeparator()
+        if (expressionSettings) {
+            add(object : AnAction("Expression Settings…"), DumbAware {
+                override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
+                override fun actionPerformed(e: AnActionEvent) =
+                    ShowSettingsUtil.getInstance().showSettingsDialog(project, ExpressionsConfigurable::class.java)
+            })
+        }
+        add(object : AnAction("Environment Settings…"), DumbAware {
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
             override fun actionPerformed(e: AnActionEvent) =
-                ShowSettingsUtil.getInstance().showSettingsDialog(panel.project, ExpressionsConfigurable::class.java)
-        })
-        add(object : AnAction("Connection Settings…"), DumbAware {
-            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
-            override fun actionPerformed(e: AnActionEvent) =
-                ShowSettingsUtil.getInstance().showSettingsDialog(panel.project, EnvironmentsConfigurable::class.java)
+                ShowSettingsUtil.getInstance().showSettingsDialog(project, EnvironmentsConfigurable::class.java)
         })
     }
 

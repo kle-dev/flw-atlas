@@ -219,6 +219,24 @@
               fields below, <i>Generate (N)</i> counting what it is about to write, and one validation
               order. Every dialog title is Title Case (<i>Sign In to Flowable App</i>, <i>Paste Session from
               Browser</i>).</li>
+          <li><b>The playground is one shell: the code, what it runs against, what came out.</b> The
+              Expressions tab used to flip its splitter's orientation on every resize and swap two whole
+              cards on the dialect toggle — the panel rearranged itself under the cursor. It is a fixed
+              two-pane layout now, remembered, with <i>Stack Panels</i> overriding what the dock suggested;
+              the dialect changes only the editor's language and the context's controls. The context has one
+              summary line that is always there — <i>QA (project) · Case instance CAS-4711</i>, <i>payload,
+              14 lines, at orders[1].items[0]</i> — and folds its controls away once they are set. One
+              result pane serves both dialects and says <i>Evaluating against QA…</i> while it waits.
+              <i>Evaluate Against App</i> has Ctrl+Enter. Findings are painted with the editor colour
+              scheme's error and warning attributes in the editor's own font — the field used to render in
+              the Swing label font, which is why the squiggles were hand-painted in four hex colours. The
+              Scripts tab stands on the same shell: what the context provides beside what the script
+              touches, in theme-derived chip tints.</li>
+          <li><b>The explorer opens the playground instead of embedding a second one.</b> Every
+              <code>*.explorer.html</code> used to carry a <i>Flowable Expressions</i> editor tab holding a
+              complete second playground — its own alarms, its own listeners, last writer wins on the saved
+              state. The explorer tab's toolbar opens the tool window instead. Alt-Enter on an expression in
+              a BPMN or CMMN model now also presets the instance kind — process or case.</li>
         </ul>
         <h3>0.22.0</h3>
         <ul>
@@ -531,9 +549,6 @@
         <fileEditorProvider implementation="com.flowable.atlas.explorer.AtlasFileEditorProvider"/>
         <!-- "Models changed since this explorer was generated" banner above the embedded page. -->
         <editorNotificationProvider implementation="com.flowable.atlas.explorer.AtlasExplorerStaleNotificationProvider"/>
-        <!-- Second tab on the same *.explorer.html: the Flowable Expressions playground, so the map and
-             the playground share one window (no separate tool window needed). Placed after Atlas Explorer. -->
-        <fileEditorProvider implementation="com.flowable.atlas.explorer.AtlasExpressionEditorProvider"/>
 
         <!-- ==================== Flowable Expression support ==================== -->
         <!-- Two dialects of one expression language: backend ${…}/#{…} (JUEL) and frontend {{…}} (flw.*). -->

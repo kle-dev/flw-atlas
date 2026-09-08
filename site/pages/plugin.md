@@ -354,23 +354,43 @@ including what can and cannot be allowlisted — is on the
 
 ### The playgrounds
 
-Type an expression, paste a payload, and watch it evaluate — or run it against the actually-running app.
+Type an expression, see what it runs against, watch it evaluate — or run it against the app that is
+actually running.
 
 <figure class="fig mock">
   <div class="body">{{mockup:playground}}</div>
-  <figcaption><b>Expression Playground.</b> Sub-expression values inline turn “it returns nothing”
-  into “the third argument is null, here”.</figcaption>
+  <figcaption><b>Expression Playground.</b> The code on one side, what it runs against and what came out
+  on the other. Sub-expression values inline turn “it returns nothing” into “the third argument is null,
+  here”.</figcaption>
 </figure>
 
 Until now the only way to test an expression was to deploy and trigger the task that uses it. This
 closes a loop measured in minutes down to one measured in keystrokes.
 
-A second **Scripts** tab does the same for script bodies, with the variables, reads, bindings and beans
-of the selected context as clickable chips, and *Load Script from Model…* to pull a real script out of
-an indexed model. *Load Example…* is the other direction — a library of complete, working scripts, at
-least one per context and per language, from variables and JSON through the engine services to an action
-bot's inputs and outputs, each one commented with the decision it demonstrates and edited like any other
-script in the tab.
+Both tabs stand on one shell: the **editor** with its problems under it, and beside it — or below it,
+when the window is docked at the side — the **context** the code runs against over the **result**. The
+context has one summary line that is always there — *QA (project) · Case instance CAS-4711*, or
+*payload, 14 lines, at orders[1].items[0]* — and the controls behind it fold away once they are set.
+Switching **Backend** and **Frontend** changes the editor's language and the context's controls; the
+layout never moves. The splitter is yours to drag and is remembered; *Stack Panels* in the gear menu
+overrides what the dock suggested. Findings are painted with the editor colour scheme's own error and
+warning attributes, in the editor's own font — the same wave a Java file gets, and the same colours
+you tuned under *Errors and Warnings*.
+
+In the **Frontend** dialect the context is the payload — JSON, optional — and the node the expression is
+evaluated *at*, picked by path or *From Cursor* and tinted in the JSON itself; the result updates as you
+type, and *Show Sub-Expression Values* puts `= 47.7` after every argument. In the **Backend** dialect
+the context is the environment and the live instance, and **Evaluate Against App** (Ctrl+Enter) posts
+the expression to the running app through the Flowable Inspect REST API. One result pane serves both:
+it says *Evaluating against QA…* while it waits, and a value that cannot be previewed statically reads
+as information, never as a failure.
+
+A second **Scripts** tab does the same for script bodies on the same shell: the context is what the
+selected script context *provides* — its bound root objects and the platform beans, as clickable chips
+that insert at the caret — and the result is what the script *does*, the variables it writes through the
+API and the ones it likely reads. *Load Script from Model…* pulls a real script out of an indexed model;
+*Load Example…* is the other direction — a library of complete, working scripts, at least one per
+context and per language, each commented with the decision it demonstrates.
 
 Which app it evaluates against is a choice, not a form: the card names the environment in a drop-down,
 and that is the whole connection UI. Everything else about getting there lives behind one button —
@@ -400,8 +420,9 @@ replacing it, because an SSO-fronted Flowable often wants both and its security 
 honours. Captured headers stay in memory for the IDE session only; passwords and tokens go to the OS
 keychain, keyed by URL — so a Design server and an app are separate logins, as they always were.
 
-Reach it from the bottom stripe, from **Tools → Flowable Atlas → Open Expression Playground**, or with
-Alt-Enter on any expression in a model. It is also a second tab on every generated explorer.
+Reach it from the bottom stripe, from **Tools → Flowable Atlas → Open Expression Playground**, from the
+toolbar of an open explorer tab, or with Alt-Enter on any expression in a model — which also presets the
+instance kind from the model, a process instance for BPMN and a case instance for CMMN.
 
 ---
 

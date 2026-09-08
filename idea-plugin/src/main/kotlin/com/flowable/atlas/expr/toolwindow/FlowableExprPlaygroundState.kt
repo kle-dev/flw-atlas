@@ -13,8 +13,7 @@ import com.intellij.openapi.project.Project
 /**
  * Per-user playground state (last expression, dialect, payload, scope) — deliberately stored in
  * `workspace.xml`, NOT the team-shared `.idea/flowable-atlas.xml`: a scratch expression is personal,
- * and a pasted payload may contain sample data that must not end up in VCS. With two live hosts
- * (tool window + explorer editor tab) the last writer wins; they intentionally do not live-sync.
+ * and a pasted payload may contain sample data that must not end up in VCS.
  */
 @Service(Service.Level.PROJECT)
 @State(name = "FlowableExprPlayground", storages = [Storage(StoragePathMacros.WORKSPACE_FILE)])
@@ -35,7 +34,10 @@ class FlowableExprPlaygroundState : PersistentStateComponent<FlowableExprPlaygro
         var scopeKey: String? = null
         var inspectScopeType: String = InspectClient.ScopeType.BPMN.name
         var inspectScopeId: String = ""
+        var inspectSubScopeId: String = ""
         var showSubEvaluations: Boolean = true
+        /** Whether the context panel's controls are unfolded; the summary line is always there. */
+        var contextExpanded: Boolean = true
     }
 
     private var state = State()
@@ -76,9 +78,17 @@ class FlowableExprPlaygroundState : PersistentStateComponent<FlowableExprPlaygro
         get() = state.inspectScopeId
         set(value) { state.inspectScopeId = value }
 
+    var inspectSubScopeId: String
+        get() = state.inspectSubScopeId
+        set(value) { state.inspectSubScopeId = value }
+
     var showSubEvaluations: Boolean
         get() = state.showSubEvaluations
         set(value) { state.showSubEvaluations = value }
+
+    var contextExpanded: Boolean
+        get() = state.contextExpanded
+        set(value) { state.contextExpanded = value }
 
     companion object {
         fun getInstance(project: Project): FlowableExprPlaygroundState = project.service()

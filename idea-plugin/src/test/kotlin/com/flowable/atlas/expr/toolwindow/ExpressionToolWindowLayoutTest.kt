@@ -10,6 +10,8 @@ import com.flowable.atlas.environment.auth.BrowserSessions
 import com.flowable.atlas.expr.inspect.InspectSessionTargets
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.expr.ExpressionDialect
+import com.flowable.atlas.playground.PlaygroundResultPane
+import com.flowable.atlas.playground.PlaygroundShell
 import com.flowable.atlas.script.toolwindow.FlowableScriptPanel
 import com.intellij.toolWindow.ToolWindowHeadlessManagerImpl
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
@@ -17,9 +19,9 @@ import com.intellij.ui.LanguageTextField
 import com.intellij.util.ui.UIUtil
 
 /**
- * Layout regression gate for the Flowable Expressions tool window: the Scripts tab must never cost
- * the Expression Playground anything — both tabs exist, and the frontend evaluator (payload editor
- * + live result pane) is still wired inside the Expressions tab.
+ * Layout regression gate for the Flowable Expressions tool window: both tabs exist, the frontend
+ * evaluator (payload editor + the one result pane) is wired inside the Expressions tab, and the shared
+ * shell survives a dialect switch.
  */
 class ExpressionToolWindowLayoutTest : BasePlatformTestCase() {
 
@@ -32,12 +34,16 @@ class ExpressionToolWindowLayoutTest : BasePlatformTestCase() {
         val exprPanel = contents[0].component as FlowableExpressionPanel
         assertTrue(contents[1].component is FlowableScriptPanel)
 
-        // the frontend evaluator: the result pane and at least two editors (expression + payload)
+        // One result pane for both dialects, on a shell that does not move when the dialect switches.
+        val shellBefore = UIUtil.findComponentsOfType(exprPanel, PlaygroundShell::class.java).single()
         exprPanel.switchDialect(ExpressionDialect.FRONTEND)
         val resultPanes = UIUtil.findComponentsOfType(exprPanel, PlaygroundResultPane::class.java)
-        assertTrue("expected the frontend/backend result panes", resultPanes.size >= 2)
+        assertEquals("one result pane, whichever dialect", 1, resultPanes.size)
         val editors = UIUtil.findComponentsOfType(exprPanel, LanguageTextField::class.java)
         assertTrue("expected the expression editor and the payload editor", editors.size >= 2)
+        assertSame(shellBefore, UIUtil.findComponentsOfType(exprPanel, PlaygroundShell::class.java).single())
+        // The summary line says what the frontend runs against, even before a payload is typed.
+        assertTrue(exprPanel.contextSummaryForTest, exprPanel.contextSummaryForTest.startsWith("no payload") || exprPanel.contextSummaryForTest.startsWith("payload"))
     }
 
     /**

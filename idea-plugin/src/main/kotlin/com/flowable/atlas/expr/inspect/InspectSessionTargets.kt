@@ -17,7 +17,7 @@ import com.flowable.atlas.environment.ConnectionKind
  *  - not persisted, for the same reason [InspectSession] is not — a target you looked at once should
  *    leave nothing behind, and an environment is something you decide to have, in *Settings →
  *    Environments*;
- *  - application-level, because the playground exists both as a tool window and as a tab on every
+ *  - application-level, because the list is about this IDE session, not about one project — and every
  *    `*.explorer.html` editor, and a target pasted in one of them that the next one cannot see would
  *    read as the paste having been lost.
  *

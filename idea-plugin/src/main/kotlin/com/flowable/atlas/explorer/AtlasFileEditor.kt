@@ -271,6 +271,9 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
             }
         },
         Separator.getInstance(),
+        // The playground used to be a second editor tab on every explorer file — a whole second panel,
+        // with its own alarms and listeners, per open page. One tool window, one click away.
+        ActionManager.getInstance().getAction(FlowableActionIds.OPEN_EXPRESSION_PLAYGROUND),
         object : AnAction("Open in Browser", "Open this explorer in the external browser", AllIcons.General.Web), DumbAware {
             override fun actionPerformed(e: AnActionEvent) {
                 AtlasBrowser.open(file.toNioPath())

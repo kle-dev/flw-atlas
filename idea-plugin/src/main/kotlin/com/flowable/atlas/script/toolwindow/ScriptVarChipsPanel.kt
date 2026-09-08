@@ -1,10 +1,12 @@
 package com.flowable.atlas.script.toolwindow
 
 import com.flowable.atlas.parsing.ScriptVarUse
+import com.intellij.ui.ColorUtil
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.ActionLink
 import com.intellij.ui.components.JBLabel
 import com.intellij.util.ui.JBUI
+import java.awt.Color
 import java.awt.Container
 import java.awt.Cursor
 import java.awt.Dimension
@@ -29,19 +31,26 @@ import javax.swing.SwingConstants
  * as good as a declaration, `≈` marks a heuristic bare-identifier read. Clicking a chip hands its
  * name to [onPick] — the panel inserts it into the script at the caret.
  */
-internal class ScriptVarChipsPanel(private val onPick: ((String) -> Unit)? = null) : JPanel(GridBagLayout()) {
+internal class ScriptVarChipsPanel(
+    private val onPick: ((String) -> Unit)? = null,
+    /** What the script does — the variables it writes and likely reads. */
+    private val showUsage: Boolean = true,
+    /** What the context provides — the bound root objects and the platform beans. */
+    private val showContext: Boolean = true,
+) : JPanel(GridBagLayout()) {
 
     private companion object {
         const val COLLAPSED_CHIP_COUNT = 12
-        // soft theme-aware pill tints (light, dark)
-        val VAR_BG = JBColor(0xDCEBFA, 0x2C3F55)
-        val READ_BG = JBColor(0xEDEDED, 0x3A3D40)
-        val BINDING_BG = JBColor(0xE8E3F7, 0x3B3450)
-        val BEAN_BG = JBColor(0xE3F1E5, 0x2F4436)
+        // Soft pill tints from the theme, not from hex pairs: the banner backgrounds are the theme's own
+        // "tinted surface" colours, the link colour at low alpha reads as "a reference".
+        val VAR_BG: Color get() = JBUI.CurrentTheme.Banner.INFO_BACKGROUND
+        val READ_BG: Color get() = JBUI.CurrentTheme.ActionButton.hoverBackground()
+        val BINDING_BG: Color get() = ColorUtil.withAlpha(JBUI.CurrentTheme.Link.Foreground.ENABLED, 0.14)
+        val BEAN_BG: Color get() = JBUI.CurrentTheme.Banner.SUCCESS_BACKGROUND
     }
 
     private data class Row(
-        val label: String, val names: List<String>, val bg: JBColor,
+        val label: String, val names: List<String>, val bg: Color,
         val prefix: String, val muted: Boolean, val tip: String,
     )
 
@@ -63,14 +72,14 @@ internal class ScriptVarChipsPanel(private val onPick: ((String) -> Unit)? = nul
      *  Work platform beans. */
     fun setVars(vars: ScriptVarUse, bindings: List<String> = emptyList(), beans: List<String> = emptyList()) {
         val next = ArrayList<Row>()
-        if (vars.api.isNotEmpty()) next += Row("Variables", vars.api.sorted(), VAR_BG, "", false,
+        if (showUsage && vars.api.isNotEmpty()) next += Row("Variables", vars.api.sorted(), VAR_BG, "", false,
             "Read/written via the Flowable API (setVariable, flw.getInput, …) — as good as a declaration")
-        if (vars.reads.isNotEmpty()) next += Row("Reads", vars.reads.sorted(), READ_BG, "≈ ", true,
+        if (showUsage && vars.reads.isNotEmpty()) next += Row("Reads", vars.reads.sorted(), READ_BG, "≈ ", true,
             "Heuristic: a bare identifier that likely reads a scope variable")
-        if (bindings.isNotEmpty()) next += Row("Bindings", bindings, BINDING_BG, "", false,
+        if (showContext && bindings.isNotEmpty()) next += Row("Bindings", bindings, BINDING_BG, "", false,
             "Root object Flowable binds into this script context (plus process/case variables " +
                 "and Spring beans by name)")
-        if (beans.isNotEmpty()) next += Row("Beans", beans, BEAN_BG, "", false,
+        if (showContext && beans.isNotEmpty()) next += Row("Beans", beans, BEAN_BG, "", false,
             "Flowable Work platform service — scripts resolve any Spring bean by name " +
                 "(unavailable under sandbox strict-mode)")
         if (next == rows) return
@@ -121,7 +130,7 @@ internal class ScriptVarChipsPanel(private val onPick: ((String) -> Unit)? = nul
 
     /** A soft rounded pill — no hard 1px frame, just a tinted capsule that adapts to the theme. */
     private class Chip(
-        text: String, private val bg: JBColor, muted: Boolean, tip: String, onClick: (() -> Unit)?,
+        text: String, private val bg: Color, muted: Boolean, tip: String, onClick: (() -> Unit)?,
     ) : JBLabel(text) {
         init {
             isOpaque = false
