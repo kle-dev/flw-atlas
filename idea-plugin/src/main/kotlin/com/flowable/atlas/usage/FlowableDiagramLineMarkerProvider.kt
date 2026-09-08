@@ -1,5 +1,6 @@
 package com.flowable.atlas.usage
 
+import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.FlowableAtlasBundle
 import com.flowable.atlas.completion.KeySite
 import com.flowable.atlas.completion.SiteMatching
@@ -9,7 +10,6 @@ import com.flowable.atlas.model.ModelType
 import com.intellij.codeInsight.daemon.LineMarkerInfo
 import com.intellij.codeInsight.daemon.LineMarkerProvider
 import com.intellij.codeInsight.hint.HintManager
-import com.intellij.icons.AllIcons
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.markup.GutterIconRenderer
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -117,6 +117,6 @@ class FlowableDiagramLineMarkerProvider : LineMarkerProvider {
     private companion object {
         val TOOLTIP: String = FlowableAtlasBundle.message("linemarker.diagram.tooltip")
         val NO_LAYOUT_HINT: String = FlowableAtlasBundle.message("linemarker.diagram.nolayout")
-        val ICON: Icon = AllIcons.FileTypes.Image
+        val ICON: Icon = AtlasIcons.GutterDiagram
     }
 }

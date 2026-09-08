@@ -1,16 +1,15 @@
 package com.flowable.atlas.navigation
 
+import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
 import com.flowable.atlas.usage.BotPsi
-import com.intellij.icons.AllIcons
 import com.intellij.navigation.ChooseByNameContributorEx
 import com.intellij.navigation.ItemPresentation
 import com.intellij.navigation.NavigationItem
 import com.intellij.openapi.application.runReadActionBlocking
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.IconLoader
 import com.intellij.pom.Navigatable
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
@@ -64,18 +63,18 @@ class FlowableKeyGotoSymbolContributor : ChooseByNameContributorEx {
             for (entry in index.find(name)) {
                 if (!seenFiles.add(entry.file.url)) continue
                 val file = psiManager.findFile(entry.file) ?: continue
-                processor.process(KeySymbol(name, entry.type.display, KEY_ICON, file))
+                processor.process(KeySymbol(name, entry.type.display, AtlasIcons.forType(entry.type), file))
             }
 
             // A bot key → the Java BotService class(es) that declare it.
             for (cls in botClasses(project, scope)[name].orEmpty()) {
-                processor.process(KeySymbol(name, "Bot · " + (cls.name ?: ""), AllIcons.Nodes.Class, cls))
+                processor.process(KeySymbol(name, "Bot · " + (cls.name ?: ""), AtlasIcons.Bot, cls))
             }
 
             // A bot key → the .action models that invoke it (searching the bot finds its callers).
             for (entry in index.actionsUsingBot(name)) {
                 val file = psiManager.findFile(entry.file) ?: continue
-                processor.process(KeySymbol(name, "Action · uses bot", KEY_ICON, file))
+                processor.process(KeySymbol(name, "Action · uses bot", AtlasIcons.forType(ModelType.ACTION), file))
             }
         }
     }
@@ -111,7 +110,4 @@ class FlowableKeyGotoSymbolContributor : ChooseByNameContributorEx {
         override fun getIcon(unused: Boolean): Icon? = icon
     }
 
-    private companion object {
-        val KEY_ICON: Icon = IconLoader.getIcon("/META-INF/atlas-hub.svg", FlowableKeyGotoSymbolContributor::class.java)
-    }
 }

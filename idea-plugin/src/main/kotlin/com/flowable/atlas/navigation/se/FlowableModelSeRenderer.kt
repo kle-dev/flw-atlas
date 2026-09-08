@@ -1,7 +1,7 @@
 package com.flowable.atlas.navigation.se
 
+import com.flowable.atlas.icons.AtlasIcons
 import com.intellij.icons.AllIcons
-import com.intellij.openapi.util.IconLoader
 import com.intellij.ui.ColoredListCellRenderer
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.speedSearch.SpeedSearchUtil
@@ -67,7 +67,7 @@ internal class FlowableModelSeRenderer(
         ) {
             when (val item = value as? FlowableSeItem) {
                 is FlowableSeItem.Model -> {
-                    icon = MODEL_ICON
+                    icon = AtlasIcons.forType(item.entry.type)
                     val m = matcher()
                     if (m == null) {
                         append(item.entry.key, SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES)
@@ -120,7 +120,6 @@ internal class FlowableModelSeRenderer(
     }
 
     private companion object {
-        val MODEL_ICON: Icon = IconLoader.getIcon("/META-INF/atlas-hub.svg", FlowableModelSeRenderer::class.java)
         val TEXT_ICON: Icon = AllIcons.Actions.Find
 
         /** The platform's search-match styling — the same highlight the other tabs use. */

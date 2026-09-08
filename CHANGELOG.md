@@ -12,6 +12,15 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.23.0
+
+- **Every icon means one thing.** The plugin drew the Hub's glyph for the Hub, for "a model" in Search
+  Everywhere and Go to Symbol, and for three gutter markers that meant three different relationships. Each
+  has an icon of its own now: a model key carries the icon and colour of its type — the same glyph its
+  explorer page shows — in Search Everywhere, Go to Symbol and completion; a Java symbol referenced from
+  models, a bot class, a REST handler and a key with a diagram wear four distinct marks at gutter size; the
+  explorer, the Hub and the playground have their own tool-window and menu icons, light and dark.
+
 ## 0.22.0
 
 - **A detail page has a header.** A node's page used to open with a bare title over a grid of uppercase

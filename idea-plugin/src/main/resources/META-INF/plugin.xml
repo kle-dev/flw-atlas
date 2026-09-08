@@ -140,6 +140,16 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.23.0</h3>
+        <ul>
+          <li><b>Every icon means one thing.</b> The plugin drew the Hub's glyph for the Hub, for "a model"
+              in Search Everywhere and Go to Symbol, and for three gutter markers that meant three different
+              relationships. Each has an icon of its own now: a model key carries the icon and colour of its
+              type — the same glyph its explorer page shows — in Search Everywhere, Go to Symbol and
+              completion; a Java symbol referenced from models, a bot class, a REST handler and a key with a
+              diagram wear four distinct marks at gutter size; the explorer, the Hub and the playground have
+              their own tool-window and menu icons, light and dark.</li>
+        </ul>
         <h3>0.22.0</h3>
         <ul>
           <li><b>A detail page has a header.</b> A node's page used to open with a bare title over a grid of
@@ -876,14 +886,14 @@
         <toolWindow id="Flowable Expressions"
                     anchor="bottom"
                     secondary="true"
-                    icon="/META-INF/expr-toolwindow.svg"
+                    icon="/icons/atlas/playground.svg"
                     factoryClass="com.flowable.atlas.expr.toolwindow.FlowableExpressionToolWindowFactory"/>
         <!-- The Atlas Hub: the plugin's control center (model-index status, generated explorers,
              Flowable Design sync). Right anchor — the home of project control-center panels
              (Gradle, Maven, Database). -->
         <toolWindow id="Atlas Hub"
                     anchor="right"
-                    icon="/META-INF/atlas-hub.svg"
+                    icon="/icons/atlas/hub.svg"
                     factoryClass="com.flowable.atlas.hub.AtlasHubToolWindowFactory"/>
         <!-- "Report Flowable Atlas Problem…" in the IDE's error dialog: builds the report, copies it to
              the clipboard and opens the issue tracker — nothing is transmitted by the plugin itself. -->
@@ -903,21 +913,22 @@
          (action.<id>.text / .description keys). Ellipsis convention: only actions that always need
          further input before they can complete carry one. -->
     <actions resource-bundle="messages.FlowableAtlasBundle">
-        <group id="Flowable.Menu" popup="true">
+        <group id="Flowable.Menu" popup="true" icon="/icons/atlas/model.svg">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
 
             <!-- Open -->
             <action id="Flowable.OpenAtlasHub"
-                    class="com.flowable.atlas.action.OpenAtlasHubAction"/>
-            <!-- Platform icons (AllIcons) on the actions the Atlas Hub toolbar reuses; no entry in
-                 the main toolbar — the hub is the plugin's visible surface, everything else stays
-                 in the menu. -->
+                    class="com.flowable.atlas.action.OpenAtlasHubAction"
+                    icon="/icons/atlas/hub.svg"/>
+            <!-- Icons: AtlasIcons (/icons/atlas) where the thing has a meaning of its own, platform icons
+                 for platform verbs (search, download). No entry in the main toolbar — the hub is the
+                 plugin's visible surface, everything else stays in the menu. -->
             <action id="Flowable.OpenAtlasExplorer"
                     class="com.flowable.atlas.action.OpenAtlasExplorerAction"
-                    icon="AllIcons.Nodes.PpWeb"/>
+                    icon="/icons/atlas/explorer.svg"/>
             <action id="Flowable.OpenExpressionPlayground"
                     class="com.flowable.atlas.action.OpenExpressionPlaygroundAction"
-                    icon="/META-INF/expr-toolwindow.svg"/>
+                    icon="/icons/atlas/playground.svg"/>
             <!-- Opens Search Everywhere on the "Flowable Model" tab — otherwise reachable only by
                  pressing Shift twice and tabbing across to it, which nobody discovers unaided. -->
             <action id="Flowable.SearchModels"
@@ -932,7 +943,7 @@
             <group id="Flowable.Generate" popup="true">
                 <action id="Flowable.GenerateAtlasExplorer"
                         class="com.flowable.atlas.action.GenerateAtlasExplorerAction"
-                        icon="AllIcons.Actions.Compile"/>
+                        icon="/icons/atlas/explorer.svg"/>
                 <action id="Flowable.GenerateModelConstants"
                         class="com.flowable.atlas.action.GenerateModelConstantsAction"/>
                 <group id="Flowable.GenerateLiquibase" popup="true">

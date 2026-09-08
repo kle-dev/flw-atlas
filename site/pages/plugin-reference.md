@@ -83,14 +83,14 @@ engine rather than from the file.
 
 ## Gutter icons
 
-Four, all on Java code:
+Four, all on Java code, each with a mark of its own so the gutter says which relationship it is:
 
-| Icon on | Goes to |
-|---|---|
-| A class or method referenced by a model | The models that reference it ("Flowable Models") |
-| A `BotService` implementation | The `.action` models that use that bot |
-| A Spring REST handler | The models that call that endpoint |
-| A model-key literal or resolvable constant | That model's diagram, in the Images viewer — shown only when a diagram actually exists |
+| Icon | On | Goes to |
+|---|---|---|
+| a link | A class or method referenced by a model | The models that reference it ("Flowable Models") |
+| a bot | A `BotService` implementation | The `.action` models that use that bot |
+| a globe | A Spring REST handler | The models that call that endpoint |
+| a route | A model-key literal or resolvable constant | That model's diagram, in the Images viewer — shown only when a diagram actually exists |
 
 ## Navigation
 
@@ -104,8 +104,8 @@ Four, all on Java code:
 | Find Usages | A Java method, field or class | Every model that references it by name, inside `${…}` / `#{…}` or a `class` / `delegateExpression` / `expression` attribute |
 | Find Usages | A bot class | The `.action` models whose `botKey` matches |
 | Find Usages | A Spring REST handler | The models whose HTTP task, REST button, service operation or REST data source calls that URL |
-| Search Everywhere / Go to Symbol | — | Every model key, plus bot keys — from actions and from `BotService` implementations |
-| Search Everywhere → **Flowable Model** tab | — | Model keys, archive-qualified paths inside `.bar` / `.zip`, and a live full-text search over model content showing the matched line |
+| Search Everywhere / Go to Symbol | — | Every model key, plus bot keys — from actions and from `BotService` implementations. A model row carries its type's icon, a bot row the bot icon |
+| Search Everywhere → **Flowable Model** tab | — | Model keys, archive-qualified paths inside `.bar` / `.zip`, and a live full-text search over model content showing the matched line. A model row carries its type's icon, a text hit a magnifier |
 
 Two more behaviours belong here even though they are not navigation. Renaming a Java symbol that models
 reference raises a warning with *Show affected models*, because the refactoring engine cannot rewrite an

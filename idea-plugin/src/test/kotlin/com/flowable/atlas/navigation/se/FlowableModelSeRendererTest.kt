@@ -1,5 +1,6 @@
 package com.flowable.atlas.navigation.se
 
+import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.index.ModelEntry
 import com.flowable.atlas.model.ModelType
 import com.intellij.ui.SimpleColoredComponent
@@ -22,6 +23,8 @@ class FlowableModelSeRendererTest : BasePlatformTestCase() {
         )
 
         assertEquals("DEMO-P001", render(item, BorderLayout.CENTER))
+        // The type is shown by its icon — the one column rule leaves no room for a "Process" label.
+        assertSame(AtlasIcons.forType(ModelType.PROCESS), iconOf(item))
         // The bare file name — not the archive, not the path, not the folder.
         assertEquals("demo-invoice.bpmn", render(item, BorderLayout.EAST))
     }
@@ -42,6 +45,12 @@ class FlowableModelSeRendererTest : BasePlatformTestCase() {
         // Three fragments (before / highlighted match / after) still read as the one line.
         assertEquals(line, render(item, BorderLayout.CENTER))
         assertEquals("demo-other.bpmn", render(item, BorderLayout.EAST))
+    }
+
+    private fun iconOf(item: FlowableSeItem): javax.swing.Icon? {
+        val renderer = FlowableModelSeRenderer { null }
+        renderer.getListCellRendererComponent(JBList<Any>(), item, 0, false, false)
+        return ((renderer.layout as BorderLayout).getLayoutComponent(BorderLayout.CENTER) as SimpleColoredComponent).icon
     }
 
     /** The text the renderer put into the [side] component of its BorderLayout. */

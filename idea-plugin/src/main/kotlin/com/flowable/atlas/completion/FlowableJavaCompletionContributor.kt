@@ -1,5 +1,6 @@
 package com.flowable.atlas.completion
 
+import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.index.ModelEntry
 import com.flowable.atlas.parsing.OperationInfo
@@ -321,7 +322,9 @@ class FlowableJavaCompletionContributor : CompletionContributor() {
         }
 
         private fun keyLookup(entry: ModelEntry, quote: Boolean): LookupElementBuilder {
-            var b = LookupElementBuilder.create(entry.key).withTypeText(entry.type.display, true)
+            var b = LookupElementBuilder.create(entry.key)
+                .withIcon(AtlasIcons.forType(entry.type))
+                .withTypeText(entry.type.display, true)
             if (entry.name != entry.key) b = b.withTailText("  ${entry.name}", true)
             b = b.withLookupStrings(searchTokens(entry.key, entry.name))
             if (quote) b = b.withInsertHandler(QuoteInsertHandler)

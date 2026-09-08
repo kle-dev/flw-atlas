@@ -29,9 +29,8 @@ internal class DialectToggleAction(
 
     init {
         templatePresentation.text = if (dialect == ExpressionDialect.BACKEND) "Backend" else "Frontend"
-        // Frontend gets the form icon, not a globe: `AllIcons.General.Web` is the same globe as
-        // `Nodes.PpWeb` on "Open Atlas Explorer", and two buttons a few pixels apart that mean entirely
-        // different things must not share a silhouette. A form is also what a frontend expression sits in.
+        // Frontend gets the form icon, not a globe: next to a server glyph a globe reads as "web vs.
+        // server", which is not the distinction — a form is what a frontend expression sits in.
         templatePresentation.icon =
             if (dialect == ExpressionDialect.BACKEND) AllIcons.Webreferences.Server else AllIcons.FileTypes.UiForm
         templatePresentation.description = "Validate and evaluate as ${dialect.display}"

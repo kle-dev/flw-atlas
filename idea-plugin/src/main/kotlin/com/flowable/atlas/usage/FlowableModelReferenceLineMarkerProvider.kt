@@ -1,5 +1,6 @@
 package com.flowable.atlas.usage
 
+import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.intellij.codeInsight.daemon.LineMarkerInfo
@@ -9,7 +10,6 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.markup.GutterIconRenderer
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
-import com.intellij.openapi.util.IconLoader
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiIdentifier
@@ -84,7 +84,6 @@ class FlowableModelReferenceLineMarkerProvider : LineMarkerProvider {
 
     companion object {
         private const val TOOLTIP = "Referenced by Flowable models"
-        private val ICON: Icon =
-            IconLoader.getIcon("/META-INF/atlas-hub.svg", FlowableModelReferenceLineMarkerProvider::class.java)
+        private val ICON: Icon = AtlasIcons.GutterReference
     }
 }

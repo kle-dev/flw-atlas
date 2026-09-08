@@ -1,5 +1,6 @@
 package com.flowable.atlas.hub
 
+import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.AtlasBuildInfo
 import com.flowable.atlas.action.FlowableActionIds
 import com.flowable.atlas.action.GenerateModelConstantsAction
@@ -176,7 +177,7 @@ class AtlasHubPanel(private val project: Project) : SimpleToolWindowPanel(true, 
                 // Name plus the tail of its folder, and nothing else: the row lives in a side panel,
                 // where a full project-relative path and a timestamp behind it ran off the edge. Both
                 // are in the tooltip, which is where a detail nobody scans for belongs.
-                icon = AllIcons.Nodes.PpWeb
+                icon = AtlasIcons.Explorer
                 append(value.path.fileName.toString(), SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES)
                 shortFolder(value.relative).takeIf { it.isNotEmpty() }
                     ?.let { append("  $it", SimpleTextAttributes.GRAYED_ATTRIBUTES) }
