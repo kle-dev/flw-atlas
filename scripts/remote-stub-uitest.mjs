@@ -83,7 +83,7 @@ const harness = mode => `<script>
 (function(){
   var PARTS=${JSON.stringify(parts).replace(/<\//g, '<\\/')};
   var MODE=${JSON.stringify(mode)};
-  window.__atlasTest={calls:0};
+  window.__atlasTest={calls:0,polls:0};
   // The editor installs all three bridges together; the page marks itself as IDE-hosted only when
   // __atlasOpen exists, so the stand-in has to carry it for that check to mean anything.
   window.__atlasOpen=function(){}; window.__atlasCopy=function(){};
@@ -93,6 +93,7 @@ const harness = mode => `<script>
   };
   window.dispatchEvent(new Event('atlas-ide-bridge'));
   (function poll(){
+    window.__atlasTest.polls++;
     var nav=document.querySelector('#nav .side-item'), failCard=document.querySelector('.boot-fail');
     if(!nav && !failCard){ setTimeout(poll, 50); return; }
     var lines=[];
@@ -166,11 +167,22 @@ async function open(label, mode, profile) {
       if (r.result && r.result.value) return r.result.value.split(' ;; ').map(s => s.trim()).filter(Boolean);
       await sleep(100);
     }
+    // What the page ended up as, in the terms this test cares about — a bare DOM dump says very little,
+    // and the interesting failure (the stub's document.open() aborting the parse before this harness ran,
+    // so the window has no bridges and no poll) is invisible in one.
     const said = await send('Runtime.evaluate', {
-      expression: "(function(){ var e=document.getElementById('atlas-boot-msg'); return e ? e.textContent : document.documentElement.outerHTML.slice(0,300); })()",
+      expression: `(function(){
+        var t=window.__atlasTest, b=document.getElementById('atlas-boot-msg');
+        return JSON.stringify({
+          harness: t ? 'ran (' + t.polls + ' polls, ' + t.calls + ' bridge calls)' : 'NEVER RAN — the parser was aborted before it',
+          bridges: typeof window.__atlasFetch, readyState: document.readyState, title: document.title,
+          bootMsg: b && b.textContent, sideItems: document.querySelectorAll('#nav .side-item').length,
+          report: !!document.getElementById('atlas-data'), htmlChars: document.documentElement.outerHTML.length,
+        }, null, 1);
+      })()`,
       returnByValue: true,
     });
-    throw new Error(`${label}: neither the explorer nor the stub's error card appeared within 30s — the page shows: ${said.result && said.result.value}`);
+    throw new Error(`${label}: neither the explorer nor the stub's error card appeared within 30s — the page is ${said.result && said.result.value}`);
   });
 }
 
