@@ -12,6 +12,32 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.23.1
+
+- **A column mapping that pairs the wrong two names is a finding.** A `.service` model says which
+  physical column each logical field maps, and nothing checked the *pairing*: two fields entered with
+  each other's column — `userName` → `FIRST_NAME_`, `firstName` → `USER_NAME_` — left every name
+  spelled correctly and every column mapped, so the schema report called the chain complete while at
+  runtime each field read and wrote the other one's column. The new `crossedColumns` check reads the
+  names as the evidence they are: a closed swap or rotation is an **error** (the field names and the
+  column names are the same set, paired wrongly, which no naming convention explains), and a
+  one-directional cross — the column this field's name points at exists in the same table and the
+  field maps something else — is a **warning**, because that one is occasionally a deliberate mapping
+  onto a legacy column. A field mapped to a column of a genuinely different name stays silent:
+  `approverApproval` ↔ `APPR_APPROVAL_` is not evidence of anything.
+- **The data-object column of the schema table names the field the service actually maps.** It matched
+  data-object fields against the *column* name as well as the mapping's field name, so a crossed
+  mapping's row claimed two fields — `FIRST_NAME_` listed both `userName`, which maps it, and
+  `firstName`, which does not — in exactly the row that has to be exact. A `.data` field binds to the
+  mapping's name, so that is what the row now uses; without a mapping there is no field name and the
+  column name is still all there is to match on. Audited against a real project's 120 mapped columns,
+  the column name never contributed a field the mapping name did not already give.
+- **The crossed row no longer looks like the cleanest one.** A crossed mapping is not a coverage gap,
+  so the service page's *Schema coverage* table, its *Column mappings* table and the `#/schema` report
+  showed it as fully mapped through. All three now mark it `⇄ crossed`, with the reason on hover, count
+  it in the service's badges, and keep it in the schema report's gaps-only view instead of collapsing
+  the service into *Fully mapped*. The *Checks* page spells out both halves of every crossed pairing.
+
 ## 0.23.0
 
 - **Every icon means one thing.** The plugin drew the Hub's glyph for the Hub, for "a model" in Search
