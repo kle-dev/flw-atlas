@@ -22,6 +22,7 @@ object SummaryRenderer {
         "invalidExpr" to "invalid expressions",
         "scriptIssues" to "script syntax",
         "missingRefs" to "missing models",
+        "crossedColumns" to "crossed column mappings",
         "changelogIssues" to "changelog problems",
         "schemaGaps" to "schema gaps",
         "suspectExpr" to "suspect expressions",

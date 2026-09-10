@@ -9,7 +9,9 @@
     {"name": "orderNumber", "columnName": "order_no_", "type": "string"},
     {"name": "companyName", "columnName": "company_", "type": "string"},
     {"name": "totalAmount", "columnName": "total_", "type": "number"},
-    {"name": "internalScore", "columnName": "score_", "type": "number"}
+    {"name": "internalScore", "columnName": "score_", "type": "number"},
+    {"name": "deliveryCity", "columnName": "delivery_zip_", "type": "string"},
+    {"name": "deliveryZip", "columnName": "delivery_city_", "type": "string"}
   ],
   "operations": [
     {"key": "findAll", "name": "Find all", "config": {"method": "GET", "url": "/api/orders"}},

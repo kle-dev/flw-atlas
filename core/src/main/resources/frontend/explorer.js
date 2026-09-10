@@ -612,7 +612,7 @@ function computeInsights(){
   // Denominators for the dashboard ("3 of 16 services have schema gaps"). The numerators are the
   // health counts, which come from :core — see below.
   const isExprN = n => n.type==='expression'||n.type==='binding';
-  let totalExprs=0, totalForms=0, totalChangelogs=0, totalCovServices=0, totalOps=0, totalFns=0;
+  let totalExprs=0, totalForms=0, totalChangelogs=0, totalCovServices=0, totalColServices=0, totalOps=0, totalFns=0;
   // Variables Atlas could prove a direction for, and the ones it declined to judge. The first is the
   // denominator the unused-variable counts are quoted against; the second is the report's own caveat —
   // how many names it stayed quiet about, which is what makes the ones it does name trustworthy.
@@ -622,7 +622,8 @@ function computeInsights(){
     if(isExprN(n)) totalExprs++;
     else if(n.type==='form') totalForms++;
     else if(n.type==='liquibase') totalChangelogs++;
-    else if(n.type==='service'){ if((d.schemaCoverage||{}).counts) totalCovServices++; }
+    else if(n.type==='service'){ if((d.schemaCoverage||{}).counts) totalCovServices++;
+      if((d.columns||[]).length) totalColServices++; }
     else if(n.type==='serviceOperation') totalOps++;
     else if(n.type==='customFunction') totalFns++;
     else if(n.type==='variable'){
@@ -644,11 +645,12 @@ function computeInsights(){
                    suspectExpr: CHK.suspectExpr||0, scriptIssues: CHK.scriptIssues||0,
                    unusedForms: CHK.unusedForms||0, changelogIssues: CHK.changelogIssues||0,
                    schemaGaps: CHK.schemaGaps||0, missingRefs: CHK.missingRefs||0,
+                   crossedColumns: CHK.crossedColumns||0,
                    guessedVars: CHK.guessedVars||0, unusedOps: CHK.unusedOps||0,
                    unusedFns: CHK.unusedFns||0,
                    unusedVars: CHK.unusedVars||0, unreadInputs: CHK.unreadInputs||0 };
   INSIGHTS = { indeg, hotspots, apps, entryPoints,
-    totalExprs, totalForms, totalChangelogs, totalCovServices, totalOps, totalFns,
+    totalExprs, totalForms, totalChangelogs, totalCovServices, totalColServices, totalOps, totalFns,
     totalDirectedVars, silentVars,
     totalScripts: scripts.length,
     health,
@@ -945,7 +947,7 @@ function renderDashboard(){
      '<div class="dash-sub">'+nodes.length+' nodes · '+edges.length+' links'+uncertain+' across the model &amp; code graph</div>';
   h+='<div class="seclabel">Inventory</div>'+inventoryHtml();
   // Two columns from here: health beside hotspots, apps beside entry points — the four things a reader
-  // came for, above the fold on an ordinary screen instead of below thirteen cards.
+  // came for, above the fold on an ordinary screen instead of below a grid of health cards.
   h+='<div class="dash-cols">';
   // health — the same list the Checks tab opens with; the overview stays a summary and links there for the
   // findings themselves (one place to review, instead of two that drift apart)
@@ -1016,8 +1018,30 @@ function inventoryHtml(){
 
 // ---------- schema coverage: one renderer for the service detail AND the schema tab ----------
 // `onlyGaps` filters the table to the problem rows (the schema tab's view of the world);
-// `leadChipId` puts the owning service's chip first on the meta line.
-function schemaCoverageHtml(sc, onlyGaps, leadChipId){
+// `leadChipId` puts the owning service's chip first on the meta line;
+// `crossed` is the owning service's `crossedColumns` (from :core) — a crossed mapping is *not* a
+// coverage gap (every column maps through, just to the wrong field), so without the marker the one
+// row a reader most needs to see is the one that looks cleanest.
+/** loose field name -> why its mapping is suspect, for the marker's tooltip. */
+function crossedIndex(list){
+  const m=new Map();
+  (list||[]).forEach(g=>{
+    const ms=g.mappings||[];
+    ms.forEach((p,i)=>{
+      const other=ms[(i+1)%ms.length]||{};
+      m.set(looseCol(p.field), g.kind==='crossed'
+        ? 'This table also has '+g.expected+', the column this field name points at'+
+          (g.otherField?' — '+g.otherField+' maps that one':', and no field maps it')
+        : g.kind==='swapped'
+          ? 'Looks swapped with '+other.field+', which maps '+other.column
+          : 'Part of a rotation: '+ms.map(x=>x.field+' → '+x.column).join(', '));
+    });
+  });
+  return m;
+}
+function schemaCoverageHtml(sc, onlyGaps, leadChipId, crossed){
+  const crossIdx=crossedIndex(crossed);
+  const crossOf=r=>crossIdx.get(looseCol(r.service||''));
   const ct=sc.counts||{};
   let b='';
   // owning service / source changelog / backing data objects (clickable)
@@ -1031,21 +1055,25 @@ function schemaCoverageHtml(sc, onlyGaps, leadChipId){
   if(ct.noDataObject) badges+='<span class="cov-badge cov-warn">'+ct.noDataObject+' not in data object</span>';
   if(ct.extra) badges+='<span class="cov-badge cov-info">'+ct.extra+' not in Liquibase</span>';
   if(ct.ok) badges+='<span class="cov-badge cov-good">'+ct.ok+' mapped through</span>';
+  const nCross=(sc.rows||[]).filter(crossOf).length;
+  if(nCross) badges+='<span class="cov-badge cov-bad">'+nCross+' look'+(nCross>1?'':'s')+' crossed</span>';
   if(badges) b+='<div class="covbadges">'+badges+'</div>';
   const rowCls={'no-service':'cov-bad','no-dataobject':'cov-warn','extra-service':'cov-info','ok':''};
   const miss='<span class="miss">✗ not mapped</span>';
-  const rows=onlyGaps?(sc.rows||[]).filter(r=>r.status!=='ok'):(sc.rows||[]);
+  const rows=onlyGaps?(sc.rows||[]).filter(r=>r.status!=='ok'||crossOf(r)):(sc.rows||[]);
   if(rows.length){
     b+=tbl([{k:'lb',label:'Liquibase column',w:'minmax(14ch,1.4fr)',mono:true},{k:'sv',label:'Service mapping',w:'minmax(14ch,1.4fr)',mono:true},{k:'do',label:'Data object field',w:'minmax(12ch,1.2fr)',mono:true}],
       rows.map(r=>{
         const lb = r.inLiquibase ? esc(r.sql)+(r.sqlType?' <span class="muted">'+esc(r.sqlType)+'</span>':'') : '<span class="miss">— not in changelog</span>';
+        const cr = crossOf(r);
         const sv = r.inService ? esc(r.service||r.serviceCol||'')+
             (r.serviceCol&&looseCol(r.serviceCol)!==looseCol(r.service||'')?' <span class="muted">'+esc(r.serviceCol)+'</span>':'')+
-            (r.serviceType?' <span class="muted">'+esc(r.serviceType)+'</span>':'') : miss;
+            (r.serviceType?' <span class="muted">'+esc(r.serviceType)+'</span>':'')+
+            (cr?' <span class="tag sev-bad" data-tip="'+esc(cr)+'">⇄ crossed</span>':'') : miss;
         const dob = (r.dataObjects&&r.dataObjects.length)
           ? r.dataObjects.map(x=>esc(x.field)+((sc.dataObjects||[]).length>1?' <span class="muted">'+esc(x.do)+'</span>':'')).join(', ')
           : (r.inLiquibase||r.inService?miss:'');
-        return {cls:rowCls[r.status]||'', hay:elHay(r.sql,r.service,r.serviceCol,(r.dataObjects||[]).map(x=>x.field).join(' ')), cells:{lb, sv, do:dob}};
+        return {cls:cr?'cov-bad':(rowCls[r.status]||''), hay:elHay(r.sql,r.service,r.serviceCol,(r.dataObjects||[]).map(x=>x.field).join(' ')), cells:{lb, sv, do:dob}};
       }), {placeholder:'filter columns…'});
   }
   if(onlyGaps&&ct.ok) b+='<div class="tbl-more muted">+ '+ct.ok+' column'+(ct.ok>1?'s':'')+' mapped through cleanly — full table on the service page</div>';
@@ -1059,15 +1087,20 @@ function renderSchema(){
   const v=document.getElementById('view-schema');
   const svcs=nodes.filter(n=>n.type==='service'&&(n.data||{}).schemaCoverage&&((n.data.schemaCoverage.rows||[]).length))
     .map(n=>{ const c=n.data.schemaCoverage.counts||{};
-      return {n, sc:n.data.schemaCoverage, gaps:(c.noService||0)+(c.noDataObject||0), extra:c.extra||0}; })
-    .sort((a,b)=> (b.gaps+b.extra)-(a.gaps+a.extra) || a.n.label.localeCompare(b.n.label));
-  const dirty=svcs.filter(s=>s.gaps||s.extra), clean=svcs.filter(s=>!s.gaps&&!s.extra);
-  const total=svcs.reduce((a,s)=>a+s.gaps,0);
+      return {n, sc:n.data.schemaCoverage,
+              cross:(n.data.crossedColumns||[]).reduce((a,g)=>a+(g.mappings||[]).length,0),
+              gaps:(c.noService||0)+(c.noDataObject||0), extra:c.extra||0}; })
+    .sort((a,b)=> (b.gaps+b.extra+b.cross)-(a.gaps+a.extra+a.cross) || a.n.label.localeCompare(b.n.label));
+  const dirty=svcs.filter(s=>s.gaps||s.extra||s.cross), clean=svcs.filter(s=>!s.gaps&&!s.extra&&!s.cross);
+  const total=svcs.reduce((a,s)=>a+s.gaps,0), crossTotal=svcs.reduce((a,s)=>a+s.cross,0);
   _sectReg=[];
   let b='';
   dirty.forEach(s=>{
     b+=section('rpt-schema-'+s.n.key, nodeIcon(s.n)+' '+esc(s.n.label)+(s.sc.table?' <span class="mono muted">'+esc(s.sc.table)+'</span>':''),
-      schemaCoverageHtml(s.sc, true, s.n.id), {count:s.gaps+s.extra, nav:s.n.label, hint:'columns that do not map through'});
+      schemaCoverageHtml(s.sc, true, s.n.id, s.n.data.crossedColumns),
+      {count:s.gaps+s.extra+s.cross, nav:s.n.label,
+       hint:s.cross?'columns that do not map through, or pair with the wrong field'
+                   :'columns that do not map through'});
   });
   if(clean.length) b+=section('rpt-schema-clean','Fully mapped','<div class="nodechips">'+clean.map(s=>nodeChip(s.n.id)).join('')+'</div>',
     {count:clean.length, hint:'every column of these services maps through cleanly'});
@@ -1076,7 +1109,8 @@ function renderSchema(){
   h+=pageHeader({icon:'schema', color:color('schema'), title:'Schema gaps', sub:'Liquibase → Service → Data object — '+
     (svcs.length===0?'no service declares schema coverage data'
      :total?total+' column'+(total>1?'s':'')+' not mapped through, in '+dirty.length+' of '+svcs.length+' service'+(svcs.length>1?'s':'')
-     :'every column of all '+svcs.length+' service'+(svcs.length>1?'s':'')+' maps through cleanly')});
+     :'every column of all '+svcs.length+' service'+(svcs.length>1?'s':'')+' maps through cleanly')+
+    (crossTotal?' · '+crossTotal+' mapping'+(crossTotal>1?'s':'')+' look'+(crossTotal>1?'':'s')+' crossed':'')});
   if(!svcs.length){
     h+='<div class="estate"><div class="estate-ic" aria-hidden="true">▦</div>'+
        '<div class="et">Nothing to check</div>'+
@@ -1107,6 +1141,9 @@ const CHECK_CARDS = [
    show:()=>INSIGHTS.totalCovServices>0},
   {k:'missingRefs', label:'Missing model refs', bad:true, cat:'external::missing', jump:'chk-missing',
    sub:c=>c?'a key is referenced but no model defines it':'every referenced key resolves', show:()=>true},
+  {k:'crossedColumns', label:'Crossed column mappings', bad:true, jump:'chk-crossed',
+   sub:c=>c?'a field maps the column another field is named after':'every column mapping matches its field name',
+   show:()=>INSIGHTS.totalColServices>0},
   {k:'unusedForms', label:'Unused forms', cat:'unused-form', jump:'chk-unusedforms',
    sub:c=>c?'no model links to them':'every form is referenced', show:()=>INSIGHTS.totalForms>0},
   {k:'changelogIssues', label:'Changelog issues', cat:'changelog-issue', jump:'chk-changelogs',
@@ -1131,8 +1168,8 @@ const CHECK_CARDS = [
 ];
 /** The health list: one row per check — tone bar, count, name, one-line reason — sorted bad → warn →
  *  clean, and the clean ones folded under a single summary line. [keys] narrows it to a subset, so a page
- *  shows only the checks it has blocks for. Thirteen cards with the same shape said "1" thirteen times
- *  in 28px; a sorted list says what is wrong first and lets the clean rest step back. */
+ *  shows only the checks it has blocks for. A grid of same-shaped cards said "1" a dozen times over in
+ *  28px; a sorted list says what is wrong first and lets the clean rest step back. */
 const TONE_RANK={bad:0,warn:1,ok:2};
 function healthRows(keys){
   const H=INSIGHTS.health;
@@ -1243,6 +1280,31 @@ function renderChecks(){
             f:s.problems.map(p=>'<div><span class="sev sev-'+(p.severity==='error'?'bad':'warn')+'">'+esc(p.severity)+'</span> '+esc(p.message)+
               (p.line?' <span class="muted">· line '+p.line+'</span>':'')+(p.snippet?' <span class="mono muted">'+esc(p.snippet)+'</span>':'')+'</div>').join('')}}; })),
       'script-syntax', routeBtn('/scripts','open the scripts tab'));
+  }
+  // crossed mappings: the pairing itself, both halves side by side — the defect is only visible when
+  // the reader can compare the two names, so this block spells them out rather than linking away.
+  if(H.crossedColumns){
+    const rows=[];
+    nodes.filter(n=>n.type==='service'&&((n.data||{}).crossedColumns||[]).length).forEach(n=>{
+      n.data.crossedColumns.forEach(g=>{
+        const ms=g.mappings||[], bad=g.kind!=='crossed';
+        rows.push({cls:bad?'cov-bad':'cov-warn',
+          hay:elHay(n.label, ms.map(m=>m.field+' '+m.column).join(' '), g.expected, g.otherField),
+          cells:{
+            svc:vlink(n.id, n.label),
+            sev:'<span class="sev sev-'+(bad?'bad':'warn')+'">'+(bad?'error':'warning')+'</span>',
+            map:ms.map(m=>esc(m.field)+' <span class="muted">→</span> '+esc(m.column)).join('<br>'),
+            why:bad
+              ? (g.kind==='swapped'?'the two mappings look swapped'
+                                   :ms.length+' mappings form a rotation')
+              : 'the table\u2019s own <span class="mono">'+esc(g.expected)+'</span> is the column the field name points at'+
+                (g.otherField?' — <span class="mono">'+esc(g.otherField)+'</span> maps that one':', and no field maps it')}});
+      });
+    });
+    b+=findingBlock('chk-crossed','Crossed column mappings', H.crossedColumns,
+      tbl([{k:'svc',label:'Service',w:'minmax(12ch,1.4fr)'},{k:'sev',label:'',w:'minmax(7ch,.6fr)',cls:'tags'},
+           {k:'map',label:'Mapping',w:'minmax(16ch,1.8fr)',mono:true},{k:'why',label:'Why',w:'minmax(20ch,2.4fr)',cls:'wrap dim'}],
+        rows), null, routeBtn('/schema','open the schema report'));
   }
   // schema gaps: the per-service summary; the full column table lives in its own tab
   if(H.schemaGaps){
@@ -2925,13 +2987,18 @@ S.ops={id:'ops', title:'Operations', hint:'what the service offers, and what eac
         badges:[o.name&&o.name!==(o.fullUrl||o.url)?'<span class="muted">'+esc(o.name)+'</span>':'', key], right:rows.length?paramSummary(rows.map(r=>({dir:r.cells.dir.indexOf('"in"')>0?'in':'out'}))):'no params',
         body:rows.length?tbl(OP_PARAM_COLS, rows, {filter:false}):''}; })); }};
 S.coverage={id:'coverage', title:'Schema coverage', hint:'Liquibase → service → data object: every column, and where the chain breaks',
-  build:(n,c)=>{ const sc=c.d.schemaCoverage; return (sc&&(sc.rows||[]).length)?schemaCoverageHtml(sc, false):''; }};
+  build:(n,c)=>{ const sc=c.d.schemaCoverage;
+    return (sc&&(sc.rows||[]).length)?schemaCoverageHtml(sc, false, null, c.d.crossedColumns):''; }};
 S.svcColumns={id:'columns', title:'Column mappings', hint:'the service’s fields and the table columns behind them',
   count:(n,c)=>(c.d.columns||[]).length,
   build:(n,c)=>{ const d=c.d, cs=d.columns||[];   // read before the early return: the coverage table shows the same columns
     if(d.schemaCoverage&&(d.schemaCoverage.rows||[]).length) return ''; if(!cs.length) return '';
+    const crossIdx=crossedIndex(d.crossedColumns);      // no changelog to compare against, same defect
     return tbl([{k:'name',label:'Field',w:'minmax(12ch,1.4fr)',mono:true},{k:'col',label:'Column',w:'minmax(10ch,1.2fr)',mono:true,cls:'faint',opt:true},{k:'type',label:'Type',w:'minmax(8ch,.8fr)',cls:'tags'}],
-      cs.map(col=>({hay:elHay(col.name,col.columnName,col.type), cells:{name:esc(col.name||''), col:col.columnName&&col.columnName!==col.name?esc(col.columnName):'', type:tag(col.type)}}))); }};
+      cs.map(col=>{ const cr=crossIdx.get(looseCol(col.name||''));
+        return {hay:elHay(col.name,col.columnName,col.type), cls:cr?'cov-bad':'', cells:{
+          name:esc(col.name||'')+(cr?' <span class="tag sev-bad" data-tip="'+esc(cr)+'">⇄ crossed</span>':''),
+          col:col.columnName&&col.columnName!==col.name?esc(col.columnName):'', type:tag(col.type)}}; })); }};
 S.opParams={id:'opparams', title:'Parameters', hint:'what a caller supplies, and what comes back',
   count:(n,c)=>(c.d.params||[]).length+(c.d.outParams||[]).length,
   build:(n,c)=>{ const rows=opParamRows(c.d); return rows.length?tbl(OP_PARAM_COLS, rows, {filter:false}):''; }};

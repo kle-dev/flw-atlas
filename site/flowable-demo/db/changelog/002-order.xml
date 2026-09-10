@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Backing table for orderService / orderDO.
      `legacy_note_` is deliberately absent from the service's columnMappings, so the schema-coverage
-     check has one real "in Liquibase but not mapped in the service" row to report. -->
+     check has one real "in Liquibase but not mapped in the service" row to report.
+     `delivery_city_` / `delivery_zip_` are mapped by the service the other way round, on purpose: a
+     `.service` model cannot say it in a comment (it is JSON), so it is recorded here. That swap is
+     what the crossed-column check reports — every column maps through, each to the wrong field. -->
 <databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog">
   <changeSet id="002-order" author="demo">
     <createTable tableName="ord_order">
@@ -11,6 +14,8 @@
       <column name="total_" type="DECIMAL(19,2)"/>
       <column name="score_" type="DECIMAL(19,2)"/>
       <column name="legacy_note_" type="VARCHAR(255)"/>
+      <column name="delivery_city_" type="VARCHAR(255)"/>
+      <column name="delivery_zip_" type="VARCHAR(16)"/>
     </createTable>
   </changeSet>
 </databaseChangeLog>

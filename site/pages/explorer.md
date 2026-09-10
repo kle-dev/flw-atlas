@@ -280,7 +280,10 @@ The explorer never presents a guess as a fact:
 - **`⚠ N parse issues`** in the sidebar footer jumps straight to the parse findings. A file Atlas could
   not read is never silent.
 - Liquibase changelogs carry **live / superseded / orphan**, and services carry per-column schema
-  coverage badges.
+  coverage badges. A column mapping that pairs a field with another field's column is marked
+  **`⇄ crossed`** on the service page and in the schema report — it is not a coverage gap, so the row
+  would otherwise look like the cleanest one in the table (see
+  [`crossedColumns`](../checks/#crossedcolumns-the-column-mapping-pairs-the-wrong-two-names)).
 
 ## Provenance
 

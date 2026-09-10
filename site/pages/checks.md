@@ -1,6 +1,6 @@
 # Health checks
 
-Atlas runs thirteen checks over every project it analyses. They are computed once, in `:core`, and
+Atlas runs fourteen checks over every project it analyses. They are computed once, in `:core`, and
 every surface reads the same result — the CLI status line, the summary's *Health* block, the
 overview's *Findings* section, `graph.json`'s `findings` and `checks` keys, the generated `CLAUDE.md`
 and the explorer's *Checks* page all agree by construction.
@@ -24,7 +24,7 @@ noise.
   <a href="../demo/explorer.html#/checks" target="_blank" rel="noopener">Open it ↗</a></figcaption>
 </figure>
 
-## The thirteen checks
+## The fourteen checks
 
 | Check | Severity | What it means |
 |---|---|---|
@@ -32,6 +32,7 @@ noise.
 | `invalidExpr` | error | An expression has a structural syntax error. |
 | `scriptIssues` | error / warning | A script body has a syntax problem, or calls something its context does not bind. |
 | `missingRefs` | error | A model key is referenced but no model in the project defines it. |
+| `crossedColumns` | error · warning | A service maps a field to the column another field is named after — as an error when the pairing is a closed swap or rotation. |
 | `changelogIssues` | warning | A Liquibase changelog is orphaned or superseded. |
 | `schemaGaps` | warning | A database column and the model that should describe it disagree. |
 | `suspectExpr` | warning | An expression calls a function or namespace Atlas does not know. |
@@ -96,6 +97,36 @@ and `stats.scriptIssues` also mean.
 A model references another model by key, and no model in the project defines that key. Typically a
 typo, a model that was never exported, or a reference to something that lives in a different app.
 
+### `crossedColumns` — the column mapping pairs the wrong two names
+
+A `.service` model pairs a logical field with a physical column. Nothing validates the *pairing*: if
+two fields were entered with each other's column,
+
+```json
+{"name": "userName",  "columnName": "FIRST_NAME_"}
+{"name": "firstName", "columnName": "USER_NAME_"}
+```
+
+then every name exists, every column is mapped, and `schemaGaps` reports the chain as complete — while
+at runtime each field silently reads and writes the other one's column. This check is the one that
+says so. The evidence is that the names already state what the pairing should be, and it comes in two
+strengths:
+
+- **swapped / rotated** (error) — the mappings form a closed cycle: `userName` takes `firstName`'s
+  column and `firstName` takes `userName`'s. Field names and column names are the same set, paired
+  wrongly, which no naming convention explains. A rotation of three or more is reported the same way.
+- **crossed** (warning) — one direction only: the column this field's own name points at exists in the
+  same table, mapped by another field or by none, and the field maps something else. Usually the same
+  mistake; occasionally a deliberate mapping onto a legacy column, which is why it warns.
+
+Names are compared case- and separator-blind, so `userName` and `USER_NAME_` are the same name. A
+field mapped to a column of a *different* name is ordinary and stays silent — `customerName` ↔ `NAME_`
+is only reported if the table also has a `CUSTOMER_NAME_` for the field name to point at. On a real
+project of 120 column mappings, 5 of them deliberately abbreviated, the check reported nothing.
+
+The service page and the schema report mark the row with `⇄ crossed`: a crossed mapping is not a
+coverage gap, so the row that needs the reader's attention is otherwise the one that looks cleanest.
+
 ### `changelogIssues` — Liquibase authority
 
 A changelog is reported when it is:
@@ -110,7 +141,8 @@ Per column, walking Liquibase → service → data object:
 
 - **not mapped in service** — the column exists in the changelog, but the backing `.service` model does
   not map it, so no model can read or write it.
-- **not in data object** — the service maps it, but no data object uses it.
+- **not in data object** — the service maps it, but no data object uses it. The field is matched by the
+  mapping's *field* name, which is what a `.data` field binds to — not by the column name.
 
 <figure class="fig">
   <div class="body"><img class="only-light" src="../assets/img/schema-page.png" alt="The schema gaps page: per service, a three-column table of Liquibase column, service mapping and data object field" width="1400" height="800"><img class="only-dark" src="../assets/img/schema-page-dark.png" alt="The schema gaps page: per service, a three-column table of Liquibase column, service mapping and data object field" width="1400" height="800"></div>

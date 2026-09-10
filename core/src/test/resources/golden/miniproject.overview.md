@@ -86,7 +86,7 @@ _Scanned 25 model files, 1 archives, 2 Java files, 2 REST endpoints. Generated b
 
 ## 5b. Data objects
 
-- `customerDO` (lookup) (table `cust_customer`) [3 fields: id, customerName, priority] — `data/customer.data`
+- `customerDO` (lookup) (table `cust_customer`) [5 fields: id, customerName, deliveryCity, deliveryZip, priority] — `data/customer.data`
 - `priorityMD` (masterData) [2 fields: level, color] — `data/priority.data`
 
 ## 5c. Data dictionaries
@@ -126,7 +126,7 @@ _Scanned 25 model files, 1 archives, 2 Java files, 2 REST endpoints. Generated b
     - `GET` /api/customers (op `findAll`)
 
 ### Data layer — service ↔ Liquibase table ↔ data object
-- **Customer Service** (`customerService`) → table `cust_customer` · changelog `001-customer` · 2/3 columns mapped end-to-end · data objects `customerDO`
+- **Customer Service** (`customerService`) → table `cust_customer` · changelog `001-customer` · 4/5 columns mapped end-to-end · data objects `customerDO`
     - ⚠ `orphan_col_` (varchar(255)) — in Liquibase only — the service does not map it
 
 ### Channels (.channel)
@@ -383,9 +383,9 @@ _component (1):_
 
 **Also in the graph** (queryable in `miniproject.graph.json`, no section here): 1 document · 1 variableExtractor · 1 knowledgeBase · 1 palette · 1 query · 1 sequence · 1 sla · 1 template · 1 serviceOperation · 1 method · 1 bot.
 
-## 14. Findings — 13 open
+## 14. Findings — 14 open
 
-unparseable files: 2 · invalid expressions: 2 · script syntax: 2 · missing models: 1 · schema gaps: 1 · variables never read: 3 · unread call parameters: 1 · script-inferred variables: 1
+unparseable files: 2 · invalid expressions: 2 · script syntax: 2 · missing models: 1 · crossed column mappings: 1 · schema gaps: 1 · variables never read: 3 · unread call parameters: 1 · script-inferred variables: 1
 
 **unparseable files** (2)
 - · skip: JSON carries no model key — not a Design model wrapper — in: `archives/demo-export.zip!manifest.json`
@@ -405,6 +405,9 @@ unparseable files: 2 · invalid expressions: 2 · script syntax: 2 · missing mo
 
 **missing models** (1)
 - ⚠ referenced model does not exist in this project — in: `courierProcess`
+
+**crossed column mappings** (1)
+- ⚠ `deliveryCity` maps to column `delivery_zip_` and `deliveryZip` maps to `delivery_city_` — the two column mappings look swapped — in: `Customer Service` · file: `services/customer.service`
 
 **schema gaps** (1)
 - · column `orphan_col_` of table `cust_customer` is in Liquibase but not mapped by the service — in: `Customer Service` · file: `services/customer.service`

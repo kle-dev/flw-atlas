@@ -343,10 +343,11 @@
     }
   ],
   "checks": {
+    "crossedColumns": 1,
     "guessedVars": 1,
     "invalidExpr": 2,
     "missingRefs": 1,
-    "open": 13,
+    "open": 14,
     "parseIssues": 2,
     "schemaGaps": 1,
     "scriptIssues": 2,
@@ -395,6 +396,16 @@
     {
       "columns": [
         {
+          "label": "Delivery ZIP",
+          "name": "deliveryZip",
+          "type": "string"
+        },
+        {
+          "label": "Delivery city",
+          "name": "deliveryCity",
+          "type": "string"
+        },
+        {
           "label": "Id",
           "name": "id",
           "type": "string"
@@ -416,6 +427,8 @@
       "dictionary": null,
       "fields": [
         "customerName",
+        "deliveryCity",
+        "deliveryZip",
         "id",
         "priority"
       ],
@@ -591,6 +604,14 @@
     "${vars:bogus(}"
   ],
   "findings": [
+    {
+      "check": "crossedColumns",
+      "file": "services/customer.service",
+      "label": "Customer Service",
+      "message": "`deliveryCity` maps to column `delivery_zip_` and `deliveryZip` maps to `delivery_city_` — the two column mappings look swapped",
+      "node": "service:customerService",
+      "severity": "error"
+    },
     {
       "check": "guessedVars",
       "label": "courierCode",
@@ -2694,6 +2715,16 @@
           "baseUrl": null,
           "columns": [
             {
+              "columnName": "delivery_city_",
+              "name": "deliveryZip",
+              "type": "string"
+            },
+            {
+              "columnName": "delivery_zip_",
+              "name": "deliveryCity",
+              "type": "string"
+            },
+            {
               "columnName": "id_",
               "name": "id",
               "type": "string"
@@ -2702,6 +2733,21 @@
               "columnName": "name_",
               "name": "customerName",
               "type": "string"
+            }
+          ],
+          "crossedColumns": [
+            {
+              "kind": "swapped",
+              "mappings": [
+                {
+                  "column": "delivery_city_",
+                  "field": "deliveryZip"
+                },
+                {
+                  "column": "delivery_zip_",
+                  "field": "deliveryCity"
+                }
+              ]
             }
           ],
           "file": "services/customer.service",
@@ -2725,8 +2771,8 @@
               "extra": 0,
               "noDataObject": 0,
               "noService": 1,
-              "ok": 2,
-              "total": 3
+              "ok": 4,
+              "total": 5
             },
             "dataObjects": [
               "customerDO"
@@ -2759,6 +2805,42 @@
                 "serviceCol": "name_",
                 "serviceType": "string",
                 "sql": "name_",
+                "sqlType": "varchar(255)",
+                "status": "ok",
+                "table": "cust_customer"
+              },
+              {
+                "dataObjects": [
+                  {
+                    "do": "customerDO",
+                    "field": "deliveryCity",
+                    "type": "string"
+                  }
+                ],
+                "inLiquibase": true,
+                "inService": true,
+                "service": "deliveryCity",
+                "serviceCol": "delivery_zip_",
+                "serviceType": "string",
+                "sql": "delivery_zip_",
+                "sqlType": "varchar(16)",
+                "status": "ok",
+                "table": "cust_customer"
+              },
+              {
+                "dataObjects": [
+                  {
+                    "do": "customerDO",
+                    "field": "deliveryZip",
+                    "type": "string"
+                  }
+                ],
+                "inLiquibase": true,
+                "inService": true,
+                "service": "deliveryZip",
+                "serviceCol": "delivery_city_",
+                "serviceType": "string",
+                "sql": "delivery_city_",
                 "sqlType": "varchar(255)",
                 "status": "ok",
                 "table": "cust_customer"
@@ -2804,6 +2886,16 @@
           },
           "columns": [
             {
+              "name": "delivery_city_",
+              "table": "cust_customer",
+              "type": "varchar(255)"
+            },
+            {
+              "name": "delivery_zip_",
+              "table": "cust_customer",
+              "type": "varchar(16)"
+            },
+            {
               "name": "id_",
               "table": "cust_customer",
               "type": "varchar(64)"
@@ -2821,10 +2913,14 @@
           ],
           "coverage": {
             "dataObject": [
+              "deliverycity",
+              "deliveryzip",
               "id",
               "name"
             ],
             "service": [
+              "deliverycity",
+              "deliveryzip",
               "id",
               "name"
             ]
@@ -3002,6 +3098,16 @@
         "data": {
           "columns": [
             {
+              "label": "Delivery ZIP",
+              "name": "deliveryZip",
+              "type": "string"
+            },
+            {
+              "label": "Delivery city",
+              "name": "deliveryCity",
+              "type": "string"
+            },
+            {
               "label": "Id",
               "name": "id",
               "type": "string"
@@ -3023,6 +3129,8 @@
           "dictionary": null,
           "fields": [
             "customerName",
+            "deliveryCity",
+            "deliveryZip",
             "id",
             "priority"
           ],
@@ -5325,6 +5433,16 @@
       },
       "columns": [
         {
+          "name": "delivery_city_",
+          "table": "cust_customer",
+          "type": "varchar(255)"
+        },
+        {
+          "name": "delivery_zip_",
+          "table": "cust_customer",
+          "type": "varchar(16)"
+        },
+        {
           "name": "id_",
           "table": "cust_customer",
           "type": "varchar(64)"
@@ -5342,10 +5460,14 @@
       ],
       "coverage": {
         "dataObject": [
+          "deliverycity",
+          "deliveryzip",
           "id",
           "name"
         ],
         "service": [
+          "deliverycity",
+          "deliveryzip",
           "id",
           "name"
         ]
@@ -6531,6 +6653,16 @@
       "baseUrl": null,
       "columns": [
         {
+          "columnName": "delivery_city_",
+          "name": "deliveryZip",
+          "type": "string"
+        },
+        {
+          "columnName": "delivery_zip_",
+          "name": "deliveryCity",
+          "type": "string"
+        },
+        {
           "columnName": "id_",
           "name": "id",
           "type": "string"
@@ -6539,6 +6671,21 @@
           "columnName": "name_",
           "name": "customerName",
           "type": "string"
+        }
+      ],
+      "crossedColumns": [
+        {
+          "kind": "swapped",
+          "mappings": [
+            {
+              "column": "delivery_city_",
+              "field": "deliveryZip"
+            },
+            {
+              "column": "delivery_zip_",
+              "field": "deliveryCity"
+            }
+          ]
         }
       ],
       "file": "services/customer.service",
@@ -6562,8 +6709,8 @@
           "extra": 0,
           "noDataObject": 0,
           "noService": 1,
-          "ok": 2,
-          "total": 3
+          "ok": 4,
+          "total": 5
         },
         "dataObjects": [
           "customerDO"
@@ -6596,6 +6743,42 @@
             "serviceCol": "name_",
             "serviceType": "string",
             "sql": "name_",
+            "sqlType": "varchar(255)",
+            "status": "ok",
+            "table": "cust_customer"
+          },
+          {
+            "dataObjects": [
+              {
+                "do": "customerDO",
+                "field": "deliveryCity",
+                "type": "string"
+              }
+            ],
+            "inLiquibase": true,
+            "inService": true,
+            "service": "deliveryCity",
+            "serviceCol": "delivery_zip_",
+            "serviceType": "string",
+            "sql": "delivery_zip_",
+            "sqlType": "varchar(16)",
+            "status": "ok",
+            "table": "cust_customer"
+          },
+          {
+            "dataObjects": [
+              {
+                "do": "customerDO",
+                "field": "deliveryZip",
+                "type": "string"
+              }
+            ],
+            "inLiquibase": true,
+            "inService": true,
+            "service": "deliveryZip",
+            "serviceCol": "delivery_city_",
+            "serviceType": "string",
+            "sql": "delivery_city_",
             "sqlType": "varchar(255)",
             "status": "ok",
             "table": "cust_customer"

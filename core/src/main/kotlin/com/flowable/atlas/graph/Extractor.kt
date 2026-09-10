@@ -383,6 +383,10 @@ object Atlas {
         // (Python `_enrich_data_objects` / `_schema_coverage` / `_mark_liquibase_authority`).
         LiquibaseCoverage.apply(result, discovered.xmls, root)
 
+        // Column mappings that pair a field with another field's column. Reads the coverage rows above
+        // for the table's unmapped columns, so it has to run after it.
+        CrossedColumns.apply(result)
+
         // Discovery counts feed `result["stats"]` (Python's `len(models)/len(archives)/len(javas)`).
         ctx.modelFileCount = discovered.models.size
         ctx.archiveFileCount = discovered.archives.size

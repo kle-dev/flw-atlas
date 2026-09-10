@@ -68,6 +68,36 @@ class FindingsTest {
     }
 
     @Test
+    fun aCrossedColumnMappingIsReportedNextToItsCoverageRows() {
+        // Two independent things can be wrong with one service, and the crossing half must not depend on
+        // there being a changelog: an early `continue` on `schemaCoverage` would silence it entirely.
+        val r = run(listOf(node("service:personService", "service", data = mapOf(
+            "crossedColumns" to listOf(
+                mapOf("kind" to "swapped", "mappings" to listOf(
+                    mapOf("field" to "userName", "column" to "first_name_"),
+                    mapOf("field" to "firstName", "column" to "user_name_"),
+                )),
+                mapOf("kind" to "crossed", "expected" to "customer_name_", "otherField" to "legacyName",
+                    "mappings" to listOf(mapOf("field" to "customerName", "column" to "name_"))),
+            ),
+        ))))
+        assertEquals(2, checks(r)["crossedColumns"])
+        val f = findings(r).filter { it["check"] == "crossedColumns" }
+        // A closed swap is provably wrong; one direction alone can still be a deliberate legacy mapping.
+        assertEquals(listOf("error", "warning"), f.map { it["severity"] })
+        assertEquals(
+            "`userName` maps to column `first_name_` and `firstName` maps to `user_name_` — " +
+                "the two column mappings look swapped",
+            f[0]["message"],
+        )
+        assertEquals(
+            "`customerName` maps to column `name_`, but the table's own `customer_name_` is the " +
+                "column its name points at — `legacyName` maps that one",
+            f[1]["message"],
+        )
+    }
+
+    @Test
     fun anUnreadVariableNamesTheWriteToDelete() {
         // A finding that only says "never read" leaves the reader hunting for the line to remove, so the
         // message carries the construct and the element in Design's own words.

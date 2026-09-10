@@ -1,10 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- `orphan_col_` is mapped by no service field, and `delivery_city_` / `delivery_zip_` are mapped by
+     customerService the other way round: the fixture's examples of a schema gap and of a crossed column
+     mapping. The `.service` model cannot record the second one in a comment (it is JSON), so it is here. -->
 <databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog">
   <changeSet id="1" author="fixture">
     <createTable tableName="cust_customer">
       <column name="id_" type="varchar(64)"/>
       <column name="name_" type="varchar(255)"/>
       <column name="orphan_col_" type="varchar(255)"/>
+      <column name="delivery_city_" type="varchar(255)"/>
+      <column name="delivery_zip_" type="varchar(16)"/>
     </createTable>
   </changeSet>
 </databaseChangeLog>

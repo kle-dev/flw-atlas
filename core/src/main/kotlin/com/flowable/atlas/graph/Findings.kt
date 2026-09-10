@@ -31,8 +31,8 @@ object Findings {
      * quietly make the published list wrong.
      */
     val CHECK_ORDER = listOf(
-        "parseIssues", "invalidExpr", "scriptIssues", "missingRefs", "changelogIssues",
-        "schemaGaps", "suspectExpr", "unusedForms", "unusedOps", "unusedFns",
+        "parseIssues", "invalidExpr", "scriptIssues", "missingRefs", "crossedColumns",
+        "changelogIssues", "schemaGaps", "suspectExpr", "unusedForms", "unusedOps", "unusedFns",
         "unusedVars", "unreadInputs", "guessedVars",
     )
 
@@ -105,7 +105,24 @@ object Findings {
                                 ?.joinToString(", ") { it.toString() } ?: "another changelog"))
                     }
                 }
+                // Like the variable branch below: two independent things can be wrong with one service,
+                // so a service without coverage data must still be able to report a crossed mapping.
                 "service" -> {
+                    for (g in (data["crossedColumns"] as? List<*> ?: emptyList<Any?>())) {
+                        val group = g as? Map<String, Any?> ?: continue
+                        val pairs = (group["mappings"] as? List<*> ?: emptyList<Any?>())
+                            .mapNotNull { it as? Map<String, Any?> }
+                        if (pairs.isEmpty()) continue
+                        add(
+                            check = "crossedColumns",
+                            // A closed cycle is a permutation of one name set: nothing but a mistake
+                            // pairs them that way. One direction alone can still be a deliberate
+                            // mapping onto a legacy column, so it only warns.
+                            severity = if (group["kind"] == "crossed") WARNING else ERROR,
+                            node = n,
+                            message = crossingMessage(group, pairs),
+                        )
+                    }
                     val coverage = data["schemaCoverage"] as? Map<String, Any?> ?: continue
                     val rows = coverage["rows"] as? List<Map<String, Any?>> ?: emptyList()
                     for (r in rows) {
@@ -186,6 +203,28 @@ object Findings {
         counts["open"] = sorted.size
         result["findings"] = sorted
         result["checks"] = counts
+    }
+
+    /**
+     * One [CrossedColumns] group in words. The message spells out both halves of the pairing, because
+     * the reader has to compare two names to see the defect at all — "the mapping looks crossed" alone
+     * would send them back to the model to find out which one.
+     */
+    private fun crossingMessage(group: Map<String, Any?>, pairs: List<Map<String, Any?>>): String {
+        fun arrow(p: Map<String, Any?>) = "`${p["field"]}` → `${p["column"]}`"
+        val first = pairs.first()
+        val cycle = group["kind"] != "crossed"
+        // Keyed off how many mappings are actually there rather than off the kind alone: the wording
+        // then cannot read the second half of a pair the group does not carry.
+        return when {
+            cycle && pairs.size == 2 -> "`${first["field"]}` maps to column `${first["column"]}` and " +
+                "`${pairs[1]["field"]}` maps to `${pairs[1]["column"]}` — the two column mappings " +
+                "look swapped"
+            cycle -> "${pairs.size} column mappings form a rotation: " + pairs.joinToString(", ") { arrow(it) }
+            else -> "`${first["field"]}` maps to column `${first["column"]}`, but the table's own " +
+                "`${group["expected"]}` is the column its name points at" +
+                (group["otherField"]?.let { " — `$it` maps that one" } ?: ", and no field maps it")
+        }
     }
 
     /**

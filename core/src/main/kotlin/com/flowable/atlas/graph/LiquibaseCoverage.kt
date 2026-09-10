@@ -464,7 +464,15 @@ object LiquibaseCoverage {
                 val key = loose(sql)
                 val svcCol = svcByLoose[key]
                 if (svcCol != null) seenSvc.add(key)
-                val hits = doHitsFor(sql, if (svcCol != null) svcCol["name"] as? String else null)
+                // The service mapping is the authority for which data-object field a column carries: a
+                // `.data` field binds to the mapping's `name`, never to the physical column. Matching the
+                // column name *as well* put a second, wrong field on the row of a crossed mapping —
+                // `FIRST_NAME_` claimed both `userName` (which maps it) and `firstName` (which does not) —
+                // which is the one row where the reader most needs the table to be exact. Audited against a
+                // real project's 120 mapped columns: the column name never contributed a field the mapping
+                // name did not already give. Without a mapping there is no field name, so the column is all
+                // there is to go on.
+                val hits = if (svcCol != null) doHitsFor(svcCol["name"] as? String) else doHitsFor(sql)
                 val status = if (svcCol != null && hits.isNotEmpty()) "ok"
                     else if (svcCol != null) "no-dataobject" else "no-service"
                 rows.add(linkedMapOf(
@@ -483,7 +491,7 @@ object LiquibaseCoverage {
                         "sql" to sql, "table" to null, "sqlType" to null,
                         "inLiquibase" to false, "inService" to true,
                         "service" to c["name"], "serviceCol" to c["columnName"], "serviceType" to c["type"],
-                        "dataObjects" to doHitsFor(c["name"] as? String, c["columnName"] as? String),
+                        "dataObjects" to doHitsFor(c["name"] as? String),
                         "status" to "extra-service",
                     ))
                 }

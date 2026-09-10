@@ -19,7 +19,7 @@ import java.io.File
  * broken product.
  *
  * So two invariants:
- *  - **every** health check produces at least one finding, because the site claims all thirteen are real;
+ *  - **every** health check produces at least one finding, because the site claims all of them are real;
  *  - the parse-issue count is exactly the one deliberately-broken file, so a genuinely broken model in
  *    the sample cannot hide behind it.
  *

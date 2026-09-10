@@ -50,4 +50,24 @@ class LiquibaseCoverageTest {
         assertNotNull("customerService must carry a schemaCoverage map", customerService["schemaCoverage"])
         assertTrue(customerService["schemaCoverage"] is Map<*, *>)
     }
+
+    /**
+     * Which data-object field a column carries is decided by the service mapping, not by the column's
+     * own name. The fixture's `delivery_city_` / `delivery_zip_` are mapped crossed on purpose, so a row
+     * matched on the column name would list both fields — and list the wrong one first.
+     */
+    @Test
+    fun aRowNamesTheDataObjectFieldItsMappingBindsTo() {
+        val fixtureDir = fixtureDir()
+        val result = Atlas.extract(fixtureDir)
+        val xmls = Discovery.discover(fixtureDir).xmls
+        LiquibaseCoverage.apply(result, xmls, fixtureDir)
+
+        val coverage = mapList(result["services"]).first { it["key"] == "customerService" }["schemaCoverage"]
+        val rows = mapList((coverage as Map<*, *>)["rows"])
+        fun fieldsOf(sql: String) = mapList(rows.first { it["sql"] == sql }["dataObjects"]).map { it["field"] }
+
+        assertEquals(listOf("deliveryZip"), fieldsOf("delivery_city_"))
+        assertEquals(listOf("deliveryCity"), fieldsOf("delivery_zip_"))
+    }
 }

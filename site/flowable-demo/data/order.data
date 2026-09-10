@@ -8,7 +8,9 @@
     {"name": "orderNumber", "label": "Order number", "type": "string"},
     {"name": "companyName", "label": "Company", "type": "string"},
     {"name": "totalAmount", "label": "Total", "type": "number"},
-    {"name": "orderType", "label": "Type", "type": "DATA-DICTIONARY", "dataDictionaryModelKey": "orderTypes"}
+    {"name": "orderType", "label": "Type", "type": "DATA-DICTIONARY", "dataDictionaryModelKey": "orderTypes"},
+    {"name": "deliveryCity", "label": "Delivery city", "type": "string"},
+    {"name": "deliveryZip", "label": "Delivery ZIP", "type": "string"}
   ],
   "definitionIdentityLinks": {"query": {"groups": ["sales", "compliance"]}, "update": {"groups": ["compliance"]}}
 }

@@ -705,6 +705,26 @@ const probe = `<script>
     try{ localStorage.removeItem('atlas-list-w'); }catch(e){}
   });
 
+  // --- the schema report (#/schema) and the crossed-mapping marker ---
+  // A crossed mapping is not a coverage gap: its row's status is "ok", so both the gaps-only filter and
+  // the "Fully mapped" collapse would hide the one row the reader most needs — silently, and with
+  // correct-looking counts. The fixture contains one deliberate swap; assert it survives to the page.
+  steps.push(()=>{ closeOtherTabs(); location.hash='/schema'; });
+  steps.push(()=>{
+    const view=document.getElementById('view-schema');
+    ok('the schema view is on screen', view && !view.hidden);
+    const declared=(DATA.checks||{}).crossedColumns||0;
+    ok('the fixture reports the crossed mapping it deliberately contains', declared>0,
+       'no crossedColumns finding in the payload at all');
+    const marks=[...view.querySelectorAll('.tbl>.tr .tag[data-tip]')].filter(t=>/crossed/.test(t.textContent));
+    ok('a crossed mapping is marked in the gaps-only table', marks.length>0,
+       'no ⇄ crossed marker on #/schema');
+    ok('the marker says why on hover', marks.every(m=>(m.dataset.tip||'').length>10));
+    ok('its row is toned like the other defects', marks.every(m=>!!m.closest('.tr.cov-bad')));
+    ok('the service did not collapse into "Fully mapped"',
+       !view.querySelector('#rpt-schema-clean [data-id="service:customerService"]'));
+  });
+
   // --- the unused-variables report (#/variables) ---
   // The verdict is computed in :core and only stamped onto the nodes, so a broken payload allowlist
   // renders an empty page with correct-looking counts and no error anywhere. Assert the rows exist and

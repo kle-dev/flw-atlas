@@ -64,9 +64,10 @@ never quietly presents the third as the first:
 - **dynamic** — the target was an expression, so it is only certain at runtime. Marked `ƒ`.
 
 A file it could not parse becomes a finding rather than a smaller project, and it appears in every
-artifact — including a badge in the explorer header. Thirteen [health checks](checks/) run on every
-project: broken references, invalid expressions, script errors, schema gaps, unused forms and
-operations, and variables that are written and never read.
+artifact — including a badge in the explorer header. Fourteen [health checks](checks/) run on every
+project: broken references, invalid expressions, script errors, schema gaps, column mappings that pair
+a field with another field's column, unused forms and operations, and variables that are written and
+never read.
 
 The [unused-variable check](variables/) is the clearest example of the principle: it counts a
 *suspected* read as a read, and it publishes how many names it declined to judge — which is exactly why
