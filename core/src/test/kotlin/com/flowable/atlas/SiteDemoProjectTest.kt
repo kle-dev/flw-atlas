@@ -1,7 +1,7 @@
 package com.flowable.atlas
 
 import com.flowable.atlas.graph.Atlas
-import com.flowable.atlas.graph.Findings
+import com.flowable.atlas.graph.CheckCatalog
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -41,14 +41,21 @@ class SiteDemoProjectTest {
     @Test
     fun everyCheckHasSomethingToShow() {
         val counts = checks()
-        val silent = Findings.CHECK_ORDER.filter { ((counts[it] as? Number)?.toInt() ?: 0) == 0 }
+        val silent = CheckCatalog.ORDER.filter { ((counts[it] as? Number)?.toInt() ?: 0) == 0 }
         assertTrue(
             "site/flowable-demo produces no finding for: $silent\n" +
                 "The documentation site shows this project's Checks page as evidence that all " +
-                "${Findings.CHECK_ORDER.size} checks are real, so each one needs at least one honest " +
+                "${CheckCatalog.ORDER.size} checks are real, so each one needs at least one honest " +
                 "example. Add a model that triggers it, or explain the gap on site/pages/checks.md.",
             silent.isEmpty(),
         )
+    }
+
+    /** A finding whose check the catalog does not describe would reach every surface unlabelled. */
+    @Test
+    fun everyFindingBelongsToACatalogedCheck() {
+        val unknown = checks().keys.filterNot { it in CheckCatalog.ORDER || it == "open" || it == "waived" }
+        assertTrue("site/flowable-demo emits check id(s) CheckCatalog does not describe: $unknown", unknown.isEmpty())
     }
 
     /**

@@ -29,8 +29,8 @@ noise.
 | Check | Severity | What it means |
 |---|---|---|
 | `parseIssues` | error · warning | A file could not be read or fully parsed; as warnings, what Atlas decided not to read and a key shared by two model types. |
-| `invalidExpr` | error | An expression has a structural syntax error. |
-| `scriptIssues` | error / warning | A script body has a syntax problem, or calls something its context does not bind. |
+| `invalidExpr` | error · warning | An expression has a structural syntax error — every problem on that expression is listed, its warnings included. |
+| `scriptIssues` | error · warning | A script body has a syntax problem, or calls something its context does not bind. |
 | `missingRefs` | error | A model key is referenced but no model in the project defines it. |
 | `crossedColumns` | error · warning | A service maps a field to the column another field is named after — as an error when the pairing is a closed swap or rotation. |
 | `changelogIssues` | warning | A Liquibase changelog is orphaned or superseded. |
@@ -222,10 +222,10 @@ eight cases in which this check deliberately says nothing.
 | The CLI status line | The counts, in one line on stderr. |
 | `<project>.summary.md` | A *Health* block: per-check counts and up to five errors. |
 | `<project>.overview.md` | Section 14, *Findings*, with `file:line` for each. |
-| `<project>.graph.json` | `findings` (itemised) and `checks` (per-check counts plus `open`). |
+| `<project>.graph.json` | `findings` (itemised) and `checks` (per-check counts plus `open` and `waived`). |
 | `<project>.CLAUDE.md` | A findings summary, so an agent starts from what is already known to be wrong. |
 | The explorer | The **Checks** page (`#/checks`): a row per check — worst first, the clean ones folded — then a block per finding kind, each row clicking through to the model it belongs to. |
-| The IDE | The same findings, in the Atlas Hub's *Checks* tab. |
+| The IDE | The same explorer page, opened as an editor tab. |
 
 ## Accepting a finding
 

@@ -1142,6 +1142,9 @@ function renderSchema(){
 // Everything Atlas cannot answer for you, on one page: parse issues, flagged expressions, schema gaps,
 // models nothing references, references to models that do not exist, and the variables only a script
 // guess supports. The sidebar's Checks section holds this tab plus the drill-down list per finding.
+/** The catalog :core ships — what each check is, why it matters, what to do — keyed by id. Titles and
+ *  one-liners come from here; the cards below keep only what wires a check into this page. */
+const CATALOG={}; (DATA.checkCatalog||[]).forEach(c=>{ CATALOG[c.id]=c; });
 const CHECK_CARDS = [
   {k:'parseIssues', label:'Parse issues', bad:true, jump:'chk-parse',
    sub:c=>c?'files the analyzer could not fully read':'all files analyzed cleanly', show:()=>true},
@@ -1202,8 +1205,8 @@ const TONE_RANK={bad:0,warn:1,ok:2};
 function healthRows(keys){
   const H=INSIGHTS.health;
   return CHECK_CARDS.filter(c=>(!keys||keys.indexOf(c.k)>=0)&&c.show()).map(c=>{
-    const n=H[c.k]||0, tone=n===0?'ok':(c.bad?'bad':'warn');
-    return {k:c.k, label:c.label, n, tone, sub:c.sub(n), jump:c.jump};
+    const n=H[c.k]||0, tone=n===0?'ok':(c.bad?'bad':'warn'), cat=CATALOG[c.k];
+    return {k:c.k, label:cat?cat.title:c.label, n, tone, sub:cat?(n?cat.what:cat.clean):c.sub(n), jump:c.jump};
   }).sort((a,b)=>TONE_RANK[a.tone]-TONE_RANK[b.tone] || b.n-a.n || a.label.localeCompare(b.label));
 }
 function healthListHtml(keys){

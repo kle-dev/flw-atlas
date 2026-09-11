@@ -1,5 +1,6 @@
 package com.flowable.atlas.render
 
+import com.flowable.atlas.graph.CheckCatalog
 import com.flowable.atlas.expr.ExpressionDialect
 import com.flowable.atlas.expr.catalog.FlowableExpressionCatalog
 import com.flowable.atlas.model.DesignTerms
@@ -257,7 +258,7 @@ object ClaudeRenderer {
             L.add("\n**Known issues in this project ($open) — do not copy these patterns, and expect " +
                     "them when something behaves oddly:**")
             L.add("- " + checks.entries.filter { it.key != "open" && it.key != "waived" }
-                .joinToString(" · ") { "${SummaryRenderer.CHECK_LABELS[it.key] ?: it.key}: ${it.value}" })
+                .joinToString(" · ") { "${CheckCatalog.label(it.key)}: ${it.value}" })
             for (f in findings.filter { it["severity"] == "error" }.take(3)) {
                 val where = listOfNotNull(f["label"]?.toString(), f["element"]?.toString())
                     .joinToString(" · ")

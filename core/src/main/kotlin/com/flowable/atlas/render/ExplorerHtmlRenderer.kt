@@ -4,6 +4,7 @@ import com.flowable.atlas.model.Dyn
 import com.flowable.atlas.AtlasBuildInfo
 import com.flowable.atlas.diagram.DiagramRenderer
 import com.flowable.atlas.diagram.ModelBytes
+import com.flowable.atlas.graph.CheckCatalog
 import com.flowable.atlas.graph.UnusedVariables
 import com.flowable.atlas.model.MiniJson
 import com.flowable.atlas.model.ModelType
@@ -46,6 +47,9 @@ object ExplorerHtmlRenderer {
         // `findings` list stays out of the payload: the Checks tab renders its items from the live
         // nodes, which it needs anyway for chips and links.
         payload["checks"] = result["checks"] ?: LinkedHashMap<String, Any?>()
+        // What each check is, why it matters and what to do — from the one catalog every surface reads,
+        // so the page can explain a finding without carrying a second copy of the explanation.
+        payload["checkCatalog"] = CheckCatalog.payload()
         // What the unused-variable check refuses to conclude, in its own words. The report states these
         // next to its findings, and they travel from the one place that implements them so the page can
         // never claim more confidence than the check actually has.

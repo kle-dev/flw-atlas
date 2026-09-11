@@ -1,6 +1,6 @@
 package com.flowable.atlas
 
-import com.flowable.atlas.graph.Findings
+import com.flowable.atlas.graph.CheckCatalog
 import com.flowable.atlas.graph.UnusedVariables
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -58,7 +58,21 @@ class SiteDocsCoverageTest {
 
     @Test
     fun everyHealthCheckIsDocumented() {
-        assertDocumented("health check id(s)", "checks", Findings.CHECK_ORDER)
+        assertDocumented("health check id(s)", "checks", CheckCatalog.ORDER)
+    }
+
+    /** The site's own anchor rule (`slugify` in scripts/site-build.mjs), so the slug the catalog names is the one the page has. */
+    private fun slugify(text: String): String = text.lowercase()
+        .replace(Regex("<[^>]+>"), "").replace(Regex("[`*]"), "")
+        .replace(Regex("[^\\w\\- ]+"), "").trim().replace(Regex("\\s+"), "-")
+
+    /** A check's `docs` slug is a link on every surface; a renamed heading must be a red build, not a dead anchor. */
+    @Test
+    fun everyCheckDocsAnchorExists() {
+        val headings = Regex("^#{2,3} (.+)$", RegexOption.MULTILINE).findAll(page("checks"))
+            .map { slugify(it.groupValues[1]) }.toSet()
+        val dead = CheckCatalog.CHECKS.filter { it.docs !in headings }.map { "${it.id} → #${it.docs}" }
+        assertTrue("CheckCatalog names heading anchor(s) site/pages/checks.md does not have: $dead", dead.isEmpty())
     }
 
     @Test
@@ -126,7 +140,7 @@ class SiteDocsCoverageTest {
         val documented = Regex("^\\| `([a-zA-Z]+)` \\|", RegexOption.MULTILINE).findAll(page("checks"))
             .map { it.groupValues[1] }.toSortedSet()
         assertTrue("no check ids found in the checks table — did the table change shape?", documented.isNotEmpty())
-        val gone = documented.filterNot { it in Findings.CHECK_ORDER }
+        val gone = documented.filterNot { it in CheckCatalog.ORDER }
         assertTrue("site/pages/checks.md lists check(s) Findings does not produce: $gone", gone.isEmpty())
     }
 

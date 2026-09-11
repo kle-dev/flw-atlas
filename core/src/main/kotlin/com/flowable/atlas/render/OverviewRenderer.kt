@@ -1,5 +1,6 @@
 package com.flowable.atlas.render
 
+import com.flowable.atlas.graph.CheckCatalog
 import com.flowable.atlas.model.Dyn
 import com.flowable.atlas.model.DesignTerms
 import com.flowable.atlas.parsing.ModelJsonReader
@@ -870,10 +871,10 @@ object OverviewRenderer {
             val open = (checks["open"] as? Number)?.toInt() ?: openFindings.size
             hdr(14, "Findings — $open open" + if (waivedFindings.isNotEmpty()) ", ${waivedFindings.size} waived" else "")
             L.add(checks.entries.filter { it.key != "open" && it.key != "waived" }
-                .joinToString(" · ") { "${SummaryRenderer.CHECK_LABELS[it.key] ?: it.key}: ${it.value}" })
+                .joinToString(" · ") { "${CheckCatalog.label(it.key)}: ${it.value}" })
             L.add("")
             for ((check, group) in openFindings.groupBy { it["check"]?.toString() ?: "?" }) {
-                L.add("**${SummaryRenderer.CHECK_LABELS[check] ?: check}** (${group.size})")
+                L.add("**${CheckCatalog.label(check)}** (${group.size})")
                 for (f in group.take(FINDINGS_PER_CHECK)) {
                     val mark = if (f["severity"] == "error") "⚠" else "·"
                     // A parse finding's label *is* its file — don't print the same path twice.

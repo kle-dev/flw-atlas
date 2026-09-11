@@ -62,6 +62,8 @@ class RenderersSmokeTest {
         // covered by WaiversTest and the CLI round-trip test.
         assertTrue("expected the waived-block renderer from explorer.js", html.contains("function waivedBlockHtml"))
         assertTrue("expected the accepted-findings section id", html.contains("chk-waived"))
+        // The catalog rides along so the page can say why a finding matters without a second copy of the text.
+        assertTrue("expected the check catalog in the payload", html.contains("\"checkCatalog\":["))
         assertTrue("expected the open-in-IDE button builder", html.contains("function openBtn("))
         // The graph payload is inlined — a known model key must appear.
         assertTrue("expected the substituted graph data", html.contains("orderProcess"))

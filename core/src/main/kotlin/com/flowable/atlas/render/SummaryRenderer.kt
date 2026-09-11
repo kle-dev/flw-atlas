@@ -1,5 +1,6 @@
 package com.flowable.atlas.render
 
+import com.flowable.atlas.graph.CheckCatalog
 import com.flowable.atlas.model.DesignTerms
 import java.io.File
 
@@ -12,30 +13,6 @@ import java.io.File
  * by [com.flowable.atlas.graph.Atlas.extract]; integer counts print without a trailing `.0`.
  */
 object SummaryRenderer {
-
-    /**
-     * Human wording for the [com.flowable.atlas.graph.Findings] check ids. Shared with the overview so
-     * one check is called the same thing wherever it appears.
-     */
-    internal val CHECK_LABELS = linkedMapOf(
-        "parseIssues" to "unparseable files",
-        "invalidExpr" to "invalid expressions",
-        "scriptIssues" to "script syntax",
-        "missingRefs" to "missing models",
-        "crossedColumns" to "crossed column mappings",
-        "changelogIssues" to "changelog problems",
-        "schemaGaps" to "schema gaps",
-        "nonExclusiveAsync" to "non-exclusive async",
-        "unguardedTasks" to "calls with no error path",
-        "asyncWithoutRetry" to "async without retry",
-        "suspectExpr" to "suspect expressions",
-        "unusedForms" to "unused forms",
-        "unusedOps" to "unused service operations",
-        "unusedFns" to "unused custom functions",
-        "unusedVars" to "variables never read",
-        "unreadInputs" to "unread call parameters",
-        "guessedVars" to "script-inferred variables",
-    )
 
     /** Well-known Flowable platform service-task beans (engine-provided) — mirrors the Python set. */
     private val FLOWABLE_PLATFORM_BEANS = setOf(
@@ -263,7 +240,7 @@ object SummaryRenderer {
             val findings = all.filter { it["waived"] == null }
             L.add("## Health — $open open finding(s)" + if (waivedN > 0) " ($waivedN waived)" else "")
             L.add(checks.entries.filter { it.key != "open" && it.key != "waived" }
-                .joinToString(" · ") { "${CHECK_LABELS[it.key] ?: it.key}: ${it.value}" })
+                .joinToString(" · ") { "${CheckCatalog.label(it.key)}: ${it.value}" })
             // Name the worst few; the overview lists them all with file/line.
             for (f in findings.filter { it["severity"] == "error" }.take(5)) {
                 val where = listOfNotNull(f["label"]?.toString(), f["element"]?.toString())

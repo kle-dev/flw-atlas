@@ -144,7 +144,7 @@ fun run(args: Array<String>): Int {
     }
     // `--fail-on` names severities and/or check ids; an unknown one is a misuse, not a silent no-match.
     val failOnTerms = failOn?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
-    val knownChecks = com.flowable.atlas.graph.Findings.CHECK_ORDER
+    val knownChecks = com.flowable.atlas.graph.CheckCatalog.ORDER
     failOnTerms.firstOrNull { it != "error" && it != "warning" && it != "any" && it !in knownChecks }?.let { bad ->
         errln("error: argument --fail-on: unknown value '$bad' — expected error, any or one of ${knownChecks.joinToString(", ")}")
         return 2
@@ -379,7 +379,7 @@ options:
   --custom-functions <path>   where to look for frontend customisation sources
   --no-custom-functions       do not discover custom functions
   --fail-on <list>            exit 1 when findings match: error, any, and/or check ids
-                              (${com.flowable.atlas.graph.Findings.CHECK_ORDER.joinToString(", ")})
+                              (${com.flowable.atlas.graph.CheckCatalog.ORDER.joinToString(", ")})
                               (warning is an accepted spelling of any, kept for compatibility)
   --waivers <path>            the accepted-findings file (default: <output dir>/waivers.json)
   --no-waivers                ignore it — report every finding, for an audit

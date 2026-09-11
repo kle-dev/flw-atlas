@@ -29,20 +29,6 @@ import java.time.LocalDate
  */
 object Findings {
 
-    /**
-     * Check ids, in the order they are worth reading: broken first, then unfinished, then noise.
-     *
-     * `internal` rather than private so `SiteDocsCoverageTest` can assert that the documentation site
-     * describes every one of them — a new check that nobody documented should fail the build, not
-     * quietly make the published list wrong.
-     */
-    val CHECK_ORDER = listOf(
-        "parseIssues", "invalidExpr", "scriptIssues", "missingRefs", "crossedColumns",
-        "changelogIssues", "schemaGaps", "nonExclusiveAsync", "unguardedTasks", "asyncWithoutRetry",
-        "suspectExpr", "unusedForms", "unusedOps", "unusedFns",
-        "unusedVars", "unreadInputs", "guessedVars",
-    )
-
     private const val ERROR = "error"
     private const val WARNING = "warning"
 
@@ -216,7 +202,7 @@ object Findings {
             ))
         }
 
-        val order = CHECK_ORDER.withIndex().associate { (i, c) -> c to i }
+        val order = CheckCatalog.ORDER.withIndex().associate { (i, c) -> c to i }
         val sorted = findings.sortedWith(
             compareBy({ order[it["check"]] ?: Int.MAX_VALUE }, { it["label"]?.toString() ?: "" })
         )
@@ -238,7 +224,7 @@ object Findings {
         val open = marked.filter { it["waived"] == null }
 
         val counts = linkedMapOf<String, Any?>()
-        for (c in CHECK_ORDER) {
+        for (c in CheckCatalog.ORDER) {
             val n = open.count { it["check"] == c }
             if (n > 0) counts[c] = n
         }
