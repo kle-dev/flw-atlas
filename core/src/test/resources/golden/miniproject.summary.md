@@ -38,12 +38,12 @@ Agents: orderAssistant
 - java `com.example.DemoBean` — DemoBean (referenced by 3)
 - endpoint `GET /api/customers`  (referenced by 3)
 - case `reviewCase` — Review Case (referenced by 3)
-- securityPolicy `orderPolicy` — Order policy (referenced by 2)
 - process `fulfilmentProcess` — Fulfilment Process (referenced by 2)
 - event `orderShipped` — Order shipped (referenced by 2)
 - endpoint `GET /api/customers/{id}/canEdit`  (referenced by 2)
 - dataObject `customerDO` — Customer (referenced by 2)
 - app `demoApp` — Demo App (referenced by 2)
+- query `openOrdersQuery` — Open orders (referenced by 1)
 
 ## External surface
 - External REST URLs called: 1

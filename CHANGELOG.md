@@ -99,6 +99,9 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   a repository of 27 Design exports holding 610 models — `stats.models` counted loose files. The CLI,
   the summary, the overview and the agent primer now say `610 models (3 files · 27 archives)`, and
   `graph.json` carries the count as `stats.modelCount`.
+- **Hotspots are the project's own artifacts.** The most-referenced list on the overview and in the
+  summary was led by `initVariablesService`, two IDM URLs, `flwTimeUtils` and a security policy — things
+  every model references and nobody navigates to. Externals and security policies are left out now.
 
 ## 0.25.0
 

@@ -251,6 +251,10 @@
               <code>stats.models</code> counted loose files. The CLI, the summary, the overview and the
               agent primer now say <code>610 models (3 files · 27 archives)</code>, and
               <code>graph.json</code> carries the count as <code>stats.modelCount</code>.</li>
+          <li><b>Hotspots are the project's own artifacts.</b> The most-referenced list on the overview and
+              in the summary was led by <code>initVariablesService</code>, two IDM URLs,
+              <code>flwTimeUtils</code> and a security policy — things every model references and nobody
+              navigates to. Externals and security policies are left out now.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

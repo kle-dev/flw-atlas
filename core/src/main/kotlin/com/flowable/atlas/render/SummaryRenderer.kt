@@ -15,6 +15,9 @@ import java.io.File
  */
 object SummaryRenderer {
 
+    /** Node types that gather references without being anyone's artifact — see the hotspot list. */
+    private val HOTSPOT_EXCLUDED = setOf("group", "external", "securityPolicy")
+
     @Suppress("UNCHECKED_CAST")
     fun render(result: Map<String, Any?>, root: File): String {
         val g = result["graph"] as Map<String, Any?>
@@ -185,8 +188,11 @@ object SummaryRenderer {
         // method — the class is the thing a reader navigates to.
         val hotJavaClasses = indeg.keys.filter { it.startsWith("java:") }
             .map { it.removePrefix("java:") }.toSet()
+        // Hotspots are the project's own central artifacts. A platform bean, a URL or a security policy
+        // draws a reference from every model that uses it and would take the whole list — on one real
+        // project the top ten were `initVariablesService`, two IDM URLs and `flwTimeUtils`.
         val hot = indeg.entries
-            .filter { val n = byId[it.key]; n != null && n["type"] != "group" }
+            .filter { val n = byId[it.key]; n != null && n["type"] !in HOTSPOT_EXCLUDED }
             .filterNot { e ->
                 e.key.startsWith("method:") &&
                     hotJavaClasses.any { e.key.removePrefix("method:").startsWith("$it#") }

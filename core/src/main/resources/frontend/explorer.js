@@ -672,7 +672,10 @@ function computeInsights(){
     }
     if(byId.get(e.t)) indeg.set(e.t,(indeg.get(e.t)||0)+1);
   });
-  const hotspots = [...indeg.entries()].filter(x=>x[1]>0 && byId.get(x[0]))
+  // The project's own central artifacts: a platform bean, a URL or a security policy is referenced by
+  // every model that uses it and would take the whole list (the summary excludes the same types).
+  const HOTSPOT_EXCLUDED = new Set(['external','securityPolicy','group']);
+  const hotspots = [...indeg.entries()].filter(x=>x[1]>0 && byId.get(x[0]) && !HOTSPOT_EXCLUDED.has(byId.get(x[0]).type))
     .sort((a,b)=> b[1]-a[1] || byId.get(a[0]).label.localeCompare(byId.get(b[0]).label))
     .slice(0,10).map(x=>({id:x[0], count:x[1]}));
   // Denominators for the dashboard ("3 of 16 services have schema gaps"). The numerators are the
