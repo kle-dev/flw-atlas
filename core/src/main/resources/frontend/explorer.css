@@ -301,7 +301,7 @@
   @media (max-width:1000px){ .dash-cols{grid-template-columns:minmax(0,1fr)} }
   /* Health list: tone bar · count · check · reason, sorted bad → warn; the clean ones fold under one line */
   .hlist{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-md);overflow:hidden}
-  .hrow{display:grid;grid-template-columns:3px 2.5ch minmax(0,auto) minmax(0,1fr);align-items:center;gap:var(--space-25);
+  .hrow{display:grid;grid-template-columns:3px 2.5ch 6ch minmax(0,auto) minmax(0,1fr);align-items:center;gap:var(--space-25);
     padding:var(--space-15) var(--space-3) var(--space-15) 0;border-bottom:1px solid var(--line);font-size:var(--text-md);min-height:32px}
   .hlist>.hrow:last-child,.hclean .hrow:last-child{border-bottom:none}
   .hrow .hbar{align-self:stretch;background:var(--line)}
@@ -314,7 +314,11 @@
   .hrow.tone-ok .hn{color:var(--ok-text)}
   .hrow .hn .ui{width:14px;height:14px}
   .hrow .hl{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .hrow .hs{color:var(--ink-faint);font-size:var(--text-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hrow .hs{color:var(--ink-faint);font-size:var(--text-xs);min-width:0}
+  /* the severity as a word — the tone bar alone is colour, and colour alone is not a signal */
+  .hrow .hsev{font-size:var(--text-2xs);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+  .hrow.tone-bad .hsev{color:var(--bad-text)}
+  .hrow.tone-warn .hsev{color:var(--warn-text)}
   .hrow[data-jump]{cursor:pointer}
   .hrow[data-jump]:hover{background:var(--hover)}
   .hclean>summary{cursor:pointer;list-style:none;padding:var(--space-15) var(--space-3);font-size:var(--text-xs);color:var(--ink-faint)}
@@ -1064,6 +1068,23 @@
   @keyframes tvFlash{from{background:var(--accent-subtle)}to{background:transparent}}
   .tv-bar{margin-bottom:var(--space-3)}
   .tv-key{font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-faint)}
+
+  /* ---------- the Checks page: a block per check ---------- */
+  .chk-head{display:flex;flex-direction:column;gap:var(--space-1);margin:0 0 var(--space-25)}
+  .chk-head .ddesc{margin:0}
+  .chk-sev{display:flex;gap:var(--space-1)}
+  .chk-more{font-size:var(--text-sm);color:var(--ink-dim);max-width:72ch}
+  .chk-more>summary{cursor:pointer;color:var(--accent);font-size:var(--text-xs);list-style:none}
+  .chk-more>summary::-webkit-details-marker{display:none}
+  .chk-more>summary:before{content:"+ ";font-family:var(--mono)}
+  .chk-more[open]>summary:before{content:"− "}
+  .chk-more p{margin:var(--space-1) 0;line-height:1.5}
+  .chk-more .dgbtn{margin-top:var(--space-1)}
+  .chk-acc{margin-top:var(--space-25)}
+  .chk-acc>summary{cursor:pointer;font-size:var(--text-xs);color:var(--ink-faint);padding:var(--space-1) 0}
+  .chk-acc>summary:hover{color:var(--ink-dim)}
+  .tr.wv-done{opacity:.72}
+  .tr.wv-done .wv-why{margin-top:var(--space-05)}
 
   /* ---------- accepting a finding (waivers) ---------- */
   .wv-row{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-15) 0;

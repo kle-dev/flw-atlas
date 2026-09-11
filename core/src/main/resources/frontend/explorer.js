@@ -593,6 +593,63 @@ function categories(){
 }
 const CATS = categories();
 
+// ---------- findings: the itemised list :core ships, and what a local decision does to it ----------
+// Every number on the Checks page — a block's count, a health row, the sidebar badge — is derived from
+// FINDS through waiverFor(), never from the nodes and never from a second counter. So a row and the
+// number above it cannot disagree, including after a reader accepts something here and before the page
+// is regenerated.
+let FINDS=[], FIND_BY_NODE=new Map();
+function indexFindings(){
+  FINDS=(DATA.findings||[]).map((f,i)=>Object.assign({fi:i}, f));
+  FIND_BY_NODE=new Map();
+  FINDS.forEach(f=>{ const k=f.node||f.file; if(!k) return;
+    if(!FIND_BY_NODE.has(k)) FIND_BY_NODE.set(k,[]); FIND_BY_NODE.get(k).push(f); });
+}
+const todayIso=()=>new Date().toISOString().slice(0,10);
+/** Expired the day *after* `until`, as :core reads it: the day itself is still covered. */
+const waiverExpired=r=>!!(r&&r.until&&/^\d{4}-\d{2}-\d{2}$/.test(r.until)&&todayIso()>r.until);
+/** The rule covering a finding, or null. The one place that decides "accepted" — and it reads the
+ *  rules as they stand now, local additions and restores included. Same key as Waivers.covers: check
+ *  and node (a parse finding's file), with element and subject narrowing only when the rule names them. */
+function waiverFor(f){
+  const node=f.node||f.file, rules=waiverRules();
+  for(let i=0;i<rules.length;i++){ const r=rules[i];
+    if(r.check===f.check && r.node===node && (!r.element||r.element===f.element) &&
+       (!r.subject||r.subject===f.subject) && !waiverExpired(r)) return r; }
+  return null;
+}
+let _fcache=null; const _nfc=new Map();
+/** Open and accepted counts per check, the worst open severity per check, and the two totals. */
+function findingCounts(){
+  if(_fcache) return _fcache;
+  const open={}, waived={}, worst={}; let openN=0, waivedN=0;
+  FINDS.forEach(f=>{
+    if(waiverFor(f)){ waived[f.check]=(waived[f.check]||0)+1; waivedN++; return; }
+    open[f.check]=(open[f.check]||0)+1; openN++;
+    if(f.severity==='error'||!worst[f.check]) worst[f.check]=f.severity||'warning';
+  });
+  return _fcache={open, waived, worst, openN, waivedN};
+}
+/** What one node carries: open findings, accepted ones, and the worst open severity — for badges. */
+function nodeFindingCounts(id){
+  if(_nfc.has(id)) return _nfc.get(id);
+  let open=0, waived=0, worst=null;
+  (FIND_BY_NODE.get(id)||[]).forEach(f=>{ if(waiverFor(f)) waived++; else { open++; if(f.severity==='error'||!worst) worst=f.severity||'warning'; } });
+  const r={open, waived, worst}; _nfc.set(id, r); return r;
+}
+/** `check id -> open count`, with a zero for every catalogued check — the sidebar sums two of these. */
+function healthMap(){
+  const C=findingCounts(), h={};
+  (DATA.checkCatalog||[]).forEach(c=>{ h[c.id]=C.open[c.id]||0; });
+  Object.keys(C.open).forEach(k=>{ h[k]=C.open[k]; });
+  return h;
+}
+/** After a rule is added or dropped: every derived count is stale, and so is the sidebar's badge. */
+function findingsChanged(){
+  _fcache=null; _nfc.clear(); _wvCache=null;
+  if(INSIGHTS){ INSIGHTS.health=healthMap(); INSIGHTS.checksOpen=findingCounts().openN; }
+}
+
 // ---------- insights (dashboard fuel) — one edge pass + one node pass at boot ----------
 let INSIGHTS = null;
 function computeInsights(){
@@ -636,22 +693,11 @@ function computeInsights(){
     .map(a=>({id:a.id, models:containsByApp.get(a.id)||0, groups:openAppByApp.get(a.id)||0}))
     .sort((a,b)=>b.models-a.models);
   const scripts = allScripts();
-  // The health counts come precomputed from :core (Findings.kt), which now derives them for every
-  // artifact — the Markdown reports, graph.json, the CLI status line and this page. They used to be
-  // computed here only, which is why no text artifact could state a single one of them, and why
-  // "script issues" meant "scripts carrying a finding" here but "findings" everywhere else.
-  // The node passes above still feed the facets and the dashboard totals.
-  const CHK = DATA.checks || {};
-  const health = { parseIssues: CHK.parseIssues||0, invalidExpr: CHK.invalidExpr||0,
-                   suspectExpr: CHK.suspectExpr||0, scriptIssues: CHK.scriptIssues||0,
-                   unusedForms: CHK.unusedForms||0, changelogIssues: CHK.changelogIssues||0,
-                   schemaGaps: CHK.schemaGaps||0, missingRefs: CHK.missingRefs||0,
-                   crossedColumns: CHK.crossedColumns||0,
-                   nonExclusiveAsync: CHK.nonExclusiveAsync||0, unguardedTasks: CHK.unguardedTasks||0,
-                   asyncWithoutRetry: CHK.asyncWithoutRetry||0,
-                   guessedVars: CHK.guessedVars||0, unusedOps: CHK.unusedOps||0,
-                   unusedFns: CHK.unusedFns||0,
-                   unusedVars: CHK.unusedVars||0, unreadInputs: CHK.unreadInputs||0 };
+  // The health counts are read off the findings :core ships (Findings.kt computes them once for every
+  // artifact — the Markdown reports, graph.json, the CLI status line and this page). Derived here from
+  // the same list rather than copied from `checks`, so a decision taken on this page moves them too.
+  const FC = findingCounts();
+  const health = healthMap();
   INSIGHTS = { indeg, hotspots, apps, entryPoints,
     totalExprs, totalForms, totalChangelogs, totalCovServices, totalColServices, totalOps, totalFns,
     totalDirectedVars, silentVars,
@@ -661,7 +707,7 @@ function computeInsights(){
     totalProcesses: nodes.filter(n=>n.type==='process').length,
     health,
     // what the Checks tab counts in its badge: every open finding, in one number
-    checksOpen: CHK.open || 0 };
+    checksOpen: FC.openN };
 }
 
 // ---------- router — the hash is the single source of truth and the history ----------
@@ -881,18 +927,21 @@ function renderSidebar(){
     opt.value=target; opt.textContent=c.label+(c.count?' · '+c.count:''); og.appendChild(opt);
   });
   pick.onchange=()=>{ if(pick.value) location.hash=pick.value; };
-  // footer warning chip — routes to the dashboard and reveals the diagnostics list
-  if(diags.length+cfnDiags.length){
+  // footer warning chip — routes to the Checks page and lands on the parse block. Counted from the
+  // findings, like everything else: a parse issue the team accepted is not a warning any more.
+  {
     const chip=document.getElementById('diagchip');
-    const n=diags.length+cfnDiags.length;
-    chip.hidden=false;
-    chip.innerHTML='⚠<span class="wtxt">&nbsp;'+n+' parse issue'+(n>1?'s':'')+'</span>';
-    chip.setAttribute('aria-label',
-      n+' parse issue'+(n>1?'s':'')+' — files the generator could not fully analyze');
-    chip.onclick=()=>{
-      _checkJump='chk-parse';
-      if(state.view==='checks') renderChecks(); else location.hash='/checks';
-    };
+    const n=findingCounts().open.parseIssues||0;
+    chip.hidden=!n;
+    if(n){
+      chip.innerHTML='⚠<span class="wtxt">&nbsp;'+n+' parse issue'+(n>1?'s':'')+'</span>';
+      chip.setAttribute('aria-label',
+        n+' parse issue'+(n>1?'s':'')+' — files the generator could not fully analyze');
+      chip.onclick=()=>{
+        _checkJump='chk-parseIssues';
+        if(state.view==='checks') renderChecks(); else location.hash='/checks';
+      };
+    }
   }
 }
 function renderSidebarActive(){
@@ -1139,89 +1188,71 @@ function renderSchema(){
 }
 
 // ---------- checks view (#/checks) ----------
-// Everything Atlas cannot answer for you, on one page: parse issues, flagged expressions, schema gaps,
-// models nothing references, references to models that do not exist, and the variables only a script
-// guess supports. The sidebar's Checks section holds this tab plus the drill-down list per finding.
-/** The catalog :core ships — what each check is, why it matters, what to do — keyed by id. Titles and
- *  one-liners come from here; the cards below keep only what wires a check into this page. */
-const CATALOG={}; (DATA.checkCatalog||[]).forEach(c=>{ CATALOG[c.id]=c; });
-const CHECK_CARDS = [
-  {k:'parseIssues', label:'Parse issues', bad:true, jump:'chk-parse',
-   sub:c=>c?'files the analyzer could not fully read':'all files analyzed cleanly', show:()=>true},
-  {k:'invalidExpr', label:'Invalid expressions', bad:true, cat:'invalid-expr', jump:'chk-invalid',
-   sub:c=>c?'syntax errors in ${ } / {{ }}':'no syntax errors', show:()=>INSIGHTS.totalExprs>0},
-  {k:'suspectExpr', label:'Suspect expressions', cat:'suspect-expr', jump:'chk-suspect',
-   sub:c=>c?'flagged for review by the catalog':'nothing flagged', show:()=>INSIGHTS.totalExprs>0},
-  {k:'scriptIssues', label:'Script syntax', bad:true, cat:'script-syntax', jump:'chk-scripts',
-   sub:c=>c?'syntax & binding findings in script bodies':'all scripts scan clean', show:()=>INSIGHTS.totalScripts>0},
-  // No `jump` on these three, deliberately: each is a judgement :core makes over a process's element
-  // lists, and a block here would have to repeat that judgement in JavaScript — the one thing the
-  // Checks page exists to avoid. The count is what this surface can say honestly; overview.md and
-  // graph.json name the elements.
-  {k:'nonExclusiveAsync', label:'Non-exclusive async',
-   sub:c=>c?'async elements that opted out of exclusive jobs':'no async element opts out of exclusive',
-   show:()=>INSIGHTS.totalProcesses>0},
-  {k:'unguardedTasks', label:'Calls with no error path',
-   sub:c=>c?'service tasks leaving the engine with nothing catching a failure':'every outbound call is guarded',
-   show:()=>INSIGHTS.totalProcesses>0},
-  {k:'asyncWithoutRetry', label:'Async without retry',
-   sub:c=>c?'async work with no failedJobRetryTimeCycle of its own':'async work states its retry policy',
-   show:()=>INSIGHTS.totalProcesses>0},
-  {k:'schemaGaps', label:'Schema gaps', bad:true, route:'/schema', jump:'chk-schema',
-   sub:c=>c?'columns not mapped through Liquibase → service → data object':'all columns mapped through',
-   show:()=>INSIGHTS.totalCovServices>0},
-  {k:'missingRefs', label:'Missing model refs', bad:true, cat:'external::missing', jump:'chk-missing',
-   sub:c=>c?'a key is referenced but no model defines it':'every referenced key resolves', show:()=>true},
-  {k:'crossedColumns', label:'Crossed column mappings', bad:true, jump:'chk-crossed',
-   sub:c=>c?'a field maps the column another field is named after':'every column mapping matches its field name',
-   show:()=>INSIGHTS.totalColServices>0},
-  {k:'unusedForms', label:'Unused forms', cat:'unused-form', jump:'chk-unusedforms',
-   sub:c=>c?'no model links to them':'every form is referenced', show:()=>INSIGHTS.totalForms>0},
-  {k:'changelogIssues', label:'Changelog issues', cat:'changelog-issue', jump:'chk-changelogs',
-   sub:c=>c?'orphan or superseded changelogs':'all changelogs are authoritative',
-   show:()=>INSIGHTS.totalChangelogs>0},
-  {k:'guessedVars', label:'Variables · script guess', cat:'guessed-var', jump:'chk-guessed',
-   sub:c=>c?'only a bare identifier in a script names them':'every variable is declared somewhere',
-   show:()=>true},
-  {k:'unusedOps', label:'Unused operations', cat:'unused-op', jump:'chk-unusedops',
-   sub:c=>c?c+' of '+INSIGHTS.totalOps+' operations are never called from a model':'every operation is used',
-   show:()=>INSIGHTS.totalOps>0},
-  {k:'unusedFns', label:'Unused custom functions', cat:'unused-fn', jump:'chk-unusedfns',
-   sub:c=>c?c+' of '+INSIGHTS.totalFns+' functions are never called':'every function is used',
-   show:()=>INSIGHTS.totalFns>0},
-  {k:'unusedVars', label:'Variables · never read', route:'/variables', jump:'chk-unusedvars',
-   sub:c=>c?c+' of '+INSIGHTS.totalDirectedVars+' variables are written but nothing reads them'
-          :'every variable that is written is read somewhere',
-   show:()=>INSIGHTS.totalDirectedVars>0},
-  {k:'unreadInputs', label:'Variables · unread call input', route:'/variables', jump:'chk-unreadinputs',
-   sub:c=>c?'mapped into a called model that never reads them':'every mapped input is read by its callee',
-   show:()=>INSIGHTS.totalDirectedVars>0},
-];
-/** The health list: one row per check — tone bar, count, name, one-line reason — sorted bad → warn →
- *  clean, and the clean ones folded under a single summary line. [keys] narrows it to a subset, so a page
- *  shows only the checks it has blocks for. A grid of same-shaped cards said "1" a dozen times over in
- *  28px; a sorted list says what is wrong first and lets the clean rest step back. */
+// One block per catalogued check, its rows the findings :core shipped. What each check *is* — title,
+// severity, the one-liner for both states, why it matters, what to do, where the docs are — comes from
+// DATA.checkCatalog. This table holds only what wires a check into this page: the browse list and the
+// report tab a block links to, when the row is worth showing at all, and what a clean row can say it
+// examined. A check the catalog names but this table does not renders with the defaults.
+const CHECK_META={
+  invalidExpr:{cat:'invalid-expr', show:()=>INSIGHTS.totalExprs>0, examined:()=>[INSIGHTS.totalExprs,'expression']},
+  suspectExpr:{cat:'suspect-expr', show:()=>INSIGHTS.totalExprs>0, examined:()=>[INSIGHTS.totalExprs,'expression']},
+  scriptIssues:{cat:'script-syntax', route:'/scripts', show:()=>INSIGHTS.totalScripts>0, examined:()=>[INSIGHTS.totalScripts,'script']},
+  nonExclusiveAsync:{show:()=>INSIGHTS.totalProcesses>0, examined:()=>[INSIGHTS.totalProcesses,'process']},
+  unguardedTasks:{show:()=>INSIGHTS.totalProcesses>0, examined:()=>[INSIGHTS.totalProcesses,'process']},
+  asyncWithoutRetry:{show:()=>INSIGHTS.totalProcesses>0, examined:()=>[INSIGHTS.totalProcesses,'process']},
+  schemaGaps:{route:'/schema', show:()=>INSIGHTS.totalCovServices>0, examined:()=>[INSIGHTS.totalCovServices,'service']},
+  missingRefs:{cat:'external::missing'},
+  crossedColumns:{route:'/schema', show:()=>INSIGHTS.totalColServices>0, examined:()=>[INSIGHTS.totalColServices,'service']},
+  unusedForms:{cat:'unused-form', show:()=>INSIGHTS.totalForms>0, examined:()=>[INSIGHTS.totalForms,'form']},
+  changelogIssues:{cat:'changelog-issue', show:()=>INSIGHTS.totalChangelogs>0, examined:()=>[INSIGHTS.totalChangelogs,'changelog']},
+  guessedVars:{cat:'guessed-var'},
+  unusedOps:{cat:'unused-op', show:()=>INSIGHTS.totalOps>0, examined:()=>[INSIGHTS.totalOps,'operation']},
+  unusedFns:{cat:'unused-fn', show:()=>INSIGHTS.totalFns>0, examined:()=>[INSIGHTS.totalFns,'function']},
+  unusedVars:{cat:'unused-var', route:'/variables', show:()=>INSIGHTS.totalDirectedVars>0, examined:()=>[INSIGHTS.totalDirectedVars,'variable']},
+  unreadInputs:{cat:'unread-input', route:'/variables', show:()=>INSIGHTS.totalDirectedVars>0, examined:()=>[INSIGHTS.totalDirectedVars,'variable']},
+};
+const metaOf=id=>CHECK_META[id]||{};
+const ROUTE_LABEL={'/schema':'open the schema report','/scripts':'open the scripts tab','/variables':'open the full report'};
+const routeBtn=(route,label)=>'<button type="button" class="dgbtn" data-route="'+esc(route)+'">'+esc(label||ROUTE_LABEL[route]||route)+' ↗</button>';
+/** The catalog in reading order — plus, so nothing is ever dropped on the floor, any check :core
+ *  emitted that this page's catalog does not name. */
+function checksInOrder(){
+  const cat=(DATA.checkCatalog||[]).slice(), seen=new Set(cat.map(c=>c.id));
+  FINDS.forEach(f=>{ if(!seen.has(f.check)){ seen.add(f.check);
+    cat.push({id:f.check, title:f.check, severity:'', what:'', clean:'', why:'', fix:'', docs:''}); } });
+  return cat;
+}
+/** The health list: one row per check — tone bar, count, severity, name, one-line reason — sorted bad →
+ *  warn → clean, the clean ones folded under a single summary line. [keys] narrows it to a subset, so a
+ *  page shows only the checks it has blocks for. The severity is the worst *open* finding's, not a flag
+ *  on the check: a check that can emit both reads as an error only where it actually did. */
 const TONE_RANK={bad:0,warn:1,ok:2};
 function healthRows(keys){
-  const H=INSIGHTS.health;
-  return CHECK_CARDS.filter(c=>(!keys||keys.indexOf(c.k)>=0)&&c.show()).map(c=>{
-    const n=H[c.k]||0, tone=n===0?'ok':(c.bad?'bad':'warn'), cat=CATALOG[c.k];
-    return {k:c.k, label:cat?cat.title:c.label, n, tone, sub:cat?(n?cat.what:cat.clean):c.sub(n), jump:c.jump};
+  const C=findingCounts();
+  return checksInOrder().filter(c=>(!keys||keys.indexOf(c.id)>=0)&&(metaOf(c.id).show||(()=>true))()).map(c=>{
+    const m=metaOf(c.id), n=C.open[c.id]||0, w=C.waived[c.id]||0;
+    const sev=n?(C.worst[c.id]||'warning'):'', tone=n?(sev==='error'?'bad':'warn'):'ok';
+    const ex=(!n&&m.examined)?m.examined():null;
+    let sub=n?c.what:c.clean;
+    if(!n&&ex&&ex[0]) sub+=(sub?' — ':'')+ex[0]+' '+ex[1]+(ex[0]>1?'s':'')+' checked';
+    if(w) sub+=(sub?' · ':'')+w+' accepted';
+    return {k:c.id, label:c.title, n, w, sev, tone, sub, jump:'chk-'+c.id};
   }).sort((a,b)=>TONE_RANK[a.tone]-TONE_RANK[b.tone] || b.n-a.n || a.label.localeCompare(b.label));
 }
 function healthListHtml(keys){
   const rows=healthRows(keys);
   if(!rows.length) return '';
   // `data-jump` is what reportNav() already understands: a block on this page scrolls into view, a block
-  // on the Checks page is opened there. Clean rows have nowhere to go, so they are not links.
-  const row=r=>'<div class="hrow tone-'+r.tone+'"'+(r.n>0?' data-jump="'+r.jump+'" role="button" tabindex="0"':'')+'>'+
-    '<span class="hbar"></span><span class="hn">'+r.n+'</span><span class="hl">'+esc(r.label)+'</span>'+
-    '<span class="hs" title="'+esc(r.sub)+'">'+esc(r.sub)+'</span></div>';
+  // on the Checks page is opened there. A row with nothing open and nothing accepted has nowhere to go.
+  const row=r=>'<div class="hrow tone-'+r.tone+'"'+((r.n>0||r.w>0)?' data-jump="'+esc(r.jump)+'" role="button" tabindex="0"':'')+'>'+
+    '<span class="hbar"></span><span class="hn">'+r.n+'</span>'+
+    '<span class="hsev">'+esc(r.sev)+'</span>'+
+    '<span class="hl">'+esc(r.label)+'</span><span class="hs">'+esc(r.sub)+'</span></div>';
   const open=rows.filter(r=>r.n>0), clean=rows.filter(r=>!r.n);
   let h='<div class="hlist">'+open.map(row).join('');
-  if(!open.length) h+='<div class="hrow tone-ok hall"><span class="hbar"></span><span class="hn">'+uiIcon('check')+'</span>'+
-    '<span class="hl">All '+clean.length+' checks clean</span><span class="hs">nothing flagged in this report</span></div>';
-  if(clean.length) h+='<details class="hclean"><summary>'+clean.length+' check'+(clean.length>1?'s':'')+' clean</summary>'+
+  if(!open.length) h+='<div class="hrow tone-ok hall"><span class="hbar"></span><span class="hn">'+uiIcon('check')+'</span><span class="hsev"></span>'+
+    '<span class="hl">All '+clean.length+' checks clean</span><span class="hs">'+(clean.some(r=>r.w)?'nothing open — what was accepted is listed below':'nothing flagged in this report')+'</span></div>';
+  if(clean.length) h+='<details class="hclean"><summary>'+clean.length+' check'+(clean.length>1?'s':'')+' with nothing open</summary>'+
     clean.map(row).join('')+'</details>';
   return h+'</div>';
 }
@@ -1265,7 +1296,10 @@ function reportNav(e){
   if(jump){
     // A block rendered earlier on a page that is now hidden still has its id; scrolling to it would do
     // nothing visible. Only a target on the page you are looking at counts as "here".
-    const t=document.getElementById(jump.dataset.jump);
+    // The page the row is on is asked first: two pages may carry a block of the same id (the variables
+    // report and the Checks page both have chk-unusedVars), and the one on screen is the one meant.
+    const view=jump.closest('.view'), id=jump.dataset.jump;
+    const t=(view&&view.querySelector('[id="'+cssEsc(id)+'"]'))||document.getElementById(id);
     if(t && !t.closest('.view[hidden]')){ if(t.tagName==='DETAILS'){ t.open=true; sectRemember(jump.dataset.jump, true); } t.scrollIntoView({block:'start'}); }
     else { _checkJump=jump.dataset.jump; location.hash='/checks'; }   // every finding block lives on Checks
     return true;
@@ -1507,21 +1541,24 @@ const WAIVER_KEY='atlas-waivers-'+(DATA.project||'_');
 const waiverId=r=>[r.check, r.node, r.element||'', r.subject||''].join(' ');
 function waiverLocal(){ try{ return JSON.parse(localStorage.getItem(WAIVER_KEY)||'{}'); }catch(e){ return {}; } }
 function waiverSetLocal(s){ try{ localStorage.setItem(WAIVER_KEY, JSON.stringify(s)); }catch(e){} }
-/** The rules as they stand now: what the file carried, minus removals, plus additions. */
+/** The rules as they stand now: what the file carried, minus removals, plus additions. Cached until a
+ *  rule changes — waiverFor() asks for every finding on a page. */
+let _wvCache=null;
 function waiverRules(){
+  if(_wvCache) return _wvCache;
   const loc=waiverLocal(), gone=new Set(loc.remove||[]);
   const out=(((DATA.waivers||{}).rules)||[])
     .filter(r=>!gone.has(waiverId(r)))
-    .map(r=>({check:r.check, node:r.node, element:r.element, subject:r.subject, reason:r.reason, saved:true}));
+    .map(r=>({check:r.check, node:r.node, element:r.element, subject:r.subject, reason:r.reason, by:r.by, at:r.at, until:r.until, saved:true}));
   (loc.add||[]).forEach(r=>{ if(!out.some(x=>waiverId(x)===waiverId(r))) out.push(Object.assign({saved:false}, r)); });
-  return out;
+  return _wvCache=out;
 }
 const waiverPending=()=>{ const l=waiverLocal(); return (l.add||[]).length+(l.remove||[]).length; };
 function waiverAdd(rule){
   const loc=waiverLocal();
   loc.add=(loc.add||[]).filter(r=>waiverId(r)!==waiverId(rule)); loc.add.push(rule);
   loc.remove=(loc.remove||[]).filter(k=>k!==waiverId(rule));
-  waiverSetLocal(loc); route();
+  waiverSetLocal(loc); waiverChanged();
 }
 function waiverDrop(rule){
   const loc=waiverLocal(), id=waiverId(rule);
@@ -1530,8 +1567,10 @@ function waiverDrop(rule){
   // Only a rule that came from the file needs a tombstone; dropping one that was never saved is just
   // forgetting it.
   if(!wasLocal){ loc.remove=(loc.remove||[]); if(loc.remove.indexOf(id)<0) loc.remove.push(id); }
-  waiverSetLocal(loc); route();
+  waiverSetLocal(loc); waiverChanged();
 }
+/** A decision changed: the counts follow, the sidebar badge follows, the page re-renders. */
+function waiverChanged(){ findingsChanged(); renderSidebar(); route(); }
 /** The file, in the shape :core writes it — same keys, same order, so the two writers cannot drift. */
 function waiverFileText(){
   const rules=waiverRules().slice().sort((a,b)=>
@@ -1642,89 +1681,77 @@ function waivedBlockHtml(){
   }
   return out;
 }
+// ---------- the findings themselves ----------
+const FIND_CAP=200;
+const sevPill=s=>'<span class="pill '+(s==='error'?'pill-bad':'pill-warn')+'">'+esc(s||'warning')+'</span>';
+const fileBase=p=>String(p||'').split('/').pop();
+const SHOWACC_KEY='atlas-chk-showacc';
+function showAccepted(){ try{ return localStorage.getItem(SHOWACC_KEY)==='1'; }catch(e){ return false; } }
+/** What a rule says about the finding it covers: the reason, who, until when — and whether it is saved. */
+function acceptedNoteHtml(rule){
+  return '<div class="wv-why"><span class="pill pill-ok">accepted</span> '+
+    (rule.reason?esc(rule.reason):'<i>no reason given</i>')+
+    (rule.by?' <span class="muted">· '+esc(rule.by)+'</span>':'')+
+    (rule.until?' <span class="muted">· until '+esc(rule.until)+'</span>':'')+
+    (rule.saved===false?' <span class="pill pill-info">unsaved</span>':'')+'</div>';
+}
+const FIND_COLS=[
+  {k:'sev',label:'',w:'minmax(7ch,.55fr)',cls:'tags'},
+  {k:'model',label:'Model',w:'minmax(12ch,1.3fr)'},
+  {k:'el',label:'Element',w:'minmax(10ch,1fr)',opt:true},
+  {k:'msg',label:'Finding',w:'minmax(24ch,3fr)',cls:'wrap'},
+  {k:'where',label:'File',w:'minmax(10ch,1fr)',mono:true,opt:true},
+];
+/** One finding as a table row: severity as a word, the model as a chip, the element as a jump into the
+ *  model, the message, and the file with the open-in-IDE button — the same row on every page. */
+function findingRow(f){
+  const n=byId.get(f.node), rule=waiverFor(f);
+  const names=n?elementNames(n):null, el=(f.element&&names)?names.get(String(f.element)):null;
+  const elLabel=(el&&el.name)||f.element||'';
+  return {hay:elHay(f.label, f.message, f.element, elLabel, f.subject, f.check, f.severity, n?nodeKind(n):'', f.file),
+    attrs:' data-sev="'+esc(f.severity||'warning')+'" data-fi="'+f.fi+'"', cls:rule?'wv-done':'',
+    cells:{
+      sev:sevPill(f.severity),
+      model:n?nodeChip(f.node):'<span class="mono">'+esc(f.node||f.label||'')+'</span>',
+      // An expression's subject is a problem key (`unknown-function:…`, `@12`) — the page's own bookkeeping,
+      // not something a reader acts on; every other subject (a column, a scope) is worth the cell.
+      el:f.element?(n?elJumpHtml(f.node, f.element, elLabel, 'Open this element in its model'):'<span class="mono">'+esc(f.element)+'</span>')
+                  :((f.subject&&f.check!=='invalidExpr'&&f.check!=='suspectExpr')?'<span class="mono muted">'+esc(f.subject)+'</span>':''),
+      msg:esc(f.message)+(f.snippet?' <span class="mono muted">'+esc(f.snippet)+'</span>':'')+(rule?acceptedNoteHtml(rule):''),
+      where:f.file?'<span class="fp">'+esc(fileBase(f.file))+'</span>'+lineRef(f.file,f.line)+openBtn(f.file,f.line):'',
+    }};
+}
+function findingTable(rows, o){ o=o||{}; return tbl(FIND_COLS, rows.map(findingRow), {filter:false, more:o.more}); }
+/** One check's block: the catalog's explanation, the open findings, and the accepted ones folded under
+ *  them. Rendered whenever there is anything at all — a check whose every finding was accepted keeps its
+ *  block, because "what did we agree to carry" is a question the page has to keep answering. */
+function checkBlockHtml(c, all){
+  const open=all.filter(f=>!waiverFor(f)), acc=all.filter(f=>waiverFor(f));
+  if(!open.length && !acc.length) return '';
+  const m=metaOf(c.id);
+  const sevs=[...new Set(open.map(f=>f.severity||'warning'))].sort();
+  const head='<div class="chk-head">'+
+    (sevs.length?'<span class="chk-sev">'+sevs.map(sevPill).join(' ')+'</span>':'')+
+    (c.what?'<p class="ddesc">'+esc(c.what)+'</p>':'')+
+    ((c.why||c.fix||c.docs)?'<details class="chk-more"><summary>why it matters · what to do</summary>'+
+      (c.why?'<p>'+esc(c.why)+'</p>':'')+(c.fix?'<p>'+esc(c.fix)+'</p>':'')+
+      (c.docs?'<a class="dgbtn" href="'+esc(c.docs)+'" target="_blank" rel="noopener">read the docs ↗</a>':'')+'</details>':'')+
+    '</div>';
+  const tools=[m.cat&&CATS.some(x=>x.id===m.cat)?'<button type="button" class="dgbtn" data-cat="'+esc(m.cat)+'">open the list ↗</button>':'',
+               m.route?routeBtn(m.route):''].filter(Boolean).join(' ');
+  let body=head+findingTable(open.slice(0,FIND_CAP), {more:open.length>FIND_CAP?'showing '+FIND_CAP+' of '+open.length+' — narrow the filter, or open the list':''});
+  if(acc.length) body+='<details class="chk-acc"'+(showAccepted()?' open':'')+'><summary>'+acc.length+' accepted — kept in the report, out of the counts and the gate</summary>'+
+    findingTable(acc)+'</details>';
+  return section('chk-'+c.id, esc(c.title), body, {count:open.length, hint:acc.length?acc.length+' accepted':'',
+    attrs:' id="chk-'+esc(c.id)+'"', tools:tools?'<div class="toolrow">'+tools+'</div>':''});
+}
 function renderChecks(){
   const v=document.getElementById('view-checks');
-  const H=INSIGHTS.health, st=DATA.stats||{};
-  const open=INSIGHTS.checksOpen;
-  const chips=list=>'<div class="nodechips">'+list.map(n=>nodeChip(n.id)).join('')+'</div>';
-  const byCat=id=>{ const c=CATS.find(x=>x.id===id); return c?nodes.filter(c.match):[]; };
-  const routeBtn=(route,label)=>'<button type="button" class="dgbtn" data-route="'+esc(route)+'">'+esc(label)+' ↗</button>';
+  const st=DATA.stats||{}, C=findingCounts();
   _sectReg=[];
   let b='';
-  // parse issues — the analyzer's own honesty about what it could not read
-  if(diags.length+cfnDiags.length){
-    b+=findingBlock('chk-parse','Parse issues', diags.length+cfnDiags.length,
-      tbl([{k:'kind',label:'Kind',w:'minmax(8ch,.7fr)',cls:'tags'},{k:'path',label:'File',w:'minmax(14ch,1.4fr)',mono:true},{k:'msg',label:'Message',w:'minmax(20ch,3fr)',cls:'wrap dim'}],
-        diags.map(d=>({hay:elHay(d.kind,d.path,d.message), cells:{kind:'<span class="tag sev-warn">'+esc(d.kind)+'</span>', path:esc(d.path), msg:esc(d.message)}}))
-        .concat(cfnDiags.map(m=>({hay:m, cells:{kind:'<span class="tag sev-warn">custom-fn</span>', path:'', msg:esc(m)}})))));
-  }
-  // flagged expressions: the message and who uses them, so the fix is one click away
-  const exprTable=list=>tbl([{k:'x',label:'Expression',w:'minmax(16ch,2fr)',mono:true},{k:'p',label:'Finding',w:'minmax(16ch,2fr)',cls:'wrap dim',opt:true},{k:'u',label:'Used by',w:'minmax(14ch,1.6fr)',cls:'tags',opt:true}],
-    list.map(n=>{ const pr=(n.data||{}).problems||[];
-      return {hay:elHay(n.label,pr.map(p=>p.message).join(' ')), cells:{x:vlink(n.id, n.label), p:esc(pr.map(p=>p.message).join(' · ')),
-        u:((n.data||{}).usedBy||[]).slice(0,4).map(id=>byId.get(id)?nodeChip(id):'').join('')}}; }),
-    {placeholder:'filter expressions…', more:list.length>200?'showing 200 of '+list.length+' — open the list for all':''});
-  const inv=byCat('invalid-expr'), sus=byCat('suspect-expr');
-  b+=findingBlock('chk-invalid','Invalid expressions — syntax', H.invalidExpr, exprTable(inv.slice(0,200)), 'invalid-expr');
-  b+=findingBlock('chk-suspect','Suspect expressions — review', H.suspectExpr, exprTable(sus.slice(0,200)), 'suspect-expr');
-  // script syntax findings: model, element, language, then each finding with its line and code
-  if(H.scriptIssues){
-    const rows=allScripts().filter(s=>(s.problems||[]).length);
-    b+=findingBlock('chk-scripts','Script syntax findings', H.scriptIssues,
-      tbl([{k:'model',label:'Model',w:'minmax(12ch,1.2fr)'},{k:'el',label:'Script',w:'minmax(12ch,1.2fr)'},{k:'kind',label:'Kind',w:'minmax(10ch,1fr)',cls:'tags',opt:true},{k:'f',label:'Findings',w:'minmax(20ch,3fr)',cls:'wrap'}],
-        rows.map(s=>{ const kind=scriptKindLabel(s), title=s.elName||s.el||(s.group==='bot'?s.modelLabel:kind);
-          return {hay:elHay(s.modelLabel,title,kind,s.lang,s.problems.map(p=>p.message).join(' ')), cells:{
-            model:vlink(s.model, s.modelLabel), el:s.el?elJumpHtml(s.model, s.el, title, 'Open this script in its model'):esc(title), kind:tag(kind)+tag(s.lang),
-            f:s.problems.map(p=>'<div><span class="sev sev-'+(p.severity==='error'?'bad':'warn')+'">'+esc(p.severity)+'</span> '+esc(p.message)+
-              (p.line?' <span class="muted">· line '+p.line+'</span>':'')+(p.snippet?' <span class="mono muted">'+esc(p.snippet)+'</span>':'')+'</div>').join('')}}; })),
-      'script-syntax', routeBtn('/scripts','open the scripts tab'));
-  }
-  // crossed mappings: the pairing itself, both halves side by side — the defect is only visible when
-  // the reader can compare the two names, so this block spells them out rather than linking away.
-  if(H.crossedColumns){
-    const rows=[];
-    nodes.filter(n=>n.type==='service'&&((n.data||{}).crossedColumns||[]).length).forEach(n=>{
-      n.data.crossedColumns.forEach(g=>{
-        const ms=g.mappings||[], bad=g.kind!=='crossed';
-        rows.push({cls:bad?'cov-bad':'cov-warn',
-          hay:elHay(n.label, ms.map(m=>m.field+' '+m.column).join(' '), g.expected, g.otherField),
-          cells:{
-            svc:vlink(n.id, n.label),
-            sev:'<span class="sev sev-'+(bad?'bad':'warn')+'">'+(bad?'error':'warning')+'</span>',
-            map:ms.map(m=>esc(m.field)+' <span class="muted">→</span> '+esc(m.column)).join('<br>'),
-            why:bad
-              ? (g.kind==='swapped'?'the two mappings look swapped'
-                                   :ms.length+' mappings form a rotation')
-              : 'the table\u2019s own <span class="mono">'+esc(g.expected)+'</span> is the column the field name points at'+
-                (g.otherField?' — <span class="mono">'+esc(g.otherField)+'</span> maps that one':', and no field maps it')}});
-      });
-    });
-    b+=findingBlock('chk-crossed','Crossed column mappings', H.crossedColumns,
-      tbl([{k:'svc',label:'Service',w:'minmax(12ch,1.4fr)'},{k:'sev',label:'',w:'minmax(7ch,.6fr)',cls:'tags'},
-           {k:'map',label:'Mapping',w:'minmax(16ch,1.8fr)',mono:true},{k:'why',label:'Why',w:'minmax(20ch,2.4fr)',cls:'wrap dim'}],
-        rows), null, routeBtn('/schema','open the schema report'));
-  }
-  // schema gaps: the per-service summary; the full column table lives in its own tab
-  if(H.schemaGaps){
-    const svcs=nodes.filter(n=>n.type==='service'&&((n.data||{}).schemaCoverage||{}).counts)
-      .map(n=>{ const c=n.data.schemaCoverage.counts; return {n, gaps:(c.noService||0)+(c.noDataObject||0)}; })
-      .filter(x=>x.gaps).sort((a,b)=>b.gaps-a.gaps);
-    b+=findingBlock('chk-schema','Schema gaps', H.schemaGaps,
-      tbl([{k:'svc',label:'Service',w:'minmax(14ch,2fr)'},{k:'gaps',label:'Not mapped through',w:'minmax(10ch,1fr)',cls:'num'}],
-        svcs.map(x=>({hay:x.n.label, cells:{svc:vlink(x.n.id, x.n.label), gaps:x.gaps+' column'+(x.gaps>1?'s':'')}}))),
-      null, routeBtn('/schema','open the full report'));
-  }
-  b+=findingBlock('chk-missing','Missing model references', H.missingRefs, chips(byCat('external::missing')), 'external::missing');
-  b+=findingBlock('chk-unusedforms','Unused forms', H.unusedForms, chips(byCat('unused-form')), 'unused-form');
-  b+=findingBlock('chk-changelogs','Changelogs · orphan / superseded', H.changelogIssues, chips(byCat('changelog-issue')), 'changelog-issue');
-  b+=findingBlock('chk-guessed','Variables · only a script guess ≈', H.guessedVars, chips(byCat('guessed-var')), 'guessed-var');
-  // The two unused-variable checks summarise as chips here; the full report names the write to delete.
-  b+=findingBlock('chk-unusedvars','Variables · written, never read', H.unusedVars, chips(byCat('unused-var')), 'unused-var', routeBtn('/variables','open the full report'));
-  b+=findingBlock('chk-unreadinputs','Variables · mapped into a model that never reads them', H.unreadInputs, chips(byCat('unread-input')), 'unread-input', routeBtn('/variables','open the full report'));
-  b+=findingBlock('chk-unusedops','Unused service operations', H.unusedOps,
-    chips(nodes.filter(n=>n.type==='serviceOperation'&&!((n.data||{}).usedBy||[]).length)), 'unused-op');
-  b+=findingBlock('chk-unusedfns','Unused custom functions', H.unusedFns,
-    chips(nodes.filter(n=>n.type==='customFunction'&&!((n.data||{}).usedBy||[]).length)), 'unused-fn');
+  const byCheck={}; FINDS.forEach(f=>{ (byCheck[f.check]=byCheck[f.check]||[]).push(f); });
+  checksInOrder().forEach(c=>{ b+=checkBlockHtml(c, byCheck[c.id]||[]); });
   // uncertain edges are a property of the graph, not of one node — say so once
   const suN=st.suspectEdges||0, dyN=st.dynamicEdges||0;
   if(suN+dyN){
@@ -1733,25 +1760,39 @@ function renderChecks(){
        (dyN?dyN+' dynamic (ƒ expression-valued reference)':'')+' — the ≈ button in the toolbar hides them everywhere.</p>',
        {count:suN+dyN, attrs:' id="chk-uncertain"'});
   }
-  // What this project decided to live with. Its own section, not a strike-through in the lists above:
-  // "what is wrong" and "what did we agree to carry, and why" are two different questions, and the
-  // second one is worth nothing without its reasons.
+  // What this project decided to live with, rule by rule. Its own section, not a strike-through in the
+  // blocks above: "what is wrong" and "what did we agree to carry, and why" are two different questions,
+  // and the second one is worth nothing without its reasons.
   b+=waivedBlockHtml();
-  const reg=_sectReg; _sectReg=null;
+  _sectReg=null;
   let h='<div class="dash" data-fscope>';
-  h+=pageHeader({icon:'checks', color:color('checks'), title:'Checks', sub:open
-       ? open+' finding'+(open>1?'s':'')+' worth a look — none of them is automatically a bug, each one is a question Atlas cannot answer on its own'
+  h+=pageHeader({icon:'checks', color:color('checks'), title:'Checks', sub:C.openN
+       ? C.openN+' finding'+(C.openN>1?'s':'')+' worth a look — none of them is automatically a bug, each one is a question Atlas cannot answer on its own'+
+         (C.waivedN?' · '+C.waivedN+' already accepted':'')
+       : C.waivedN ? 'nothing open — '+C.waivedN+' finding'+(C.waivedN>1?'s':'')+' deliberately accepted, listed below with the reasons'
        : 'nothing flagged — no parse issues, no broken expressions, nothing unused or unproven'});
   h+=healthListHtml();
-  h+=secnavHtml(reg)+b;
-  if(!open) h+='<div class="estate"><div class="estate-ic" aria-hidden="true">✓</div>'+
+  if(C.openN||C.waivedN){
+    const errN=FINDS.filter(f=>f.severity==='error'&&!waiverFor(f)).length;
+    h+=filterBar({placeholder:'filter findings — a model, an element, a word of the message…', label:'Filter findings',
+      chips:[{fk:'sev',fv:'all',label:'all',n:C.openN},{fk:'sev',fv:'error',label:'error',n:errN},{fk:'sev',fv:'warning',label:'warning',n:C.openN-errN}],
+      extra:C.waivedN?'<button type="button" class="pchip'+(showAccepted()?' on':'')+'" id="chk-showacc" aria-pressed="'+(showAccepted()?'true':'false')+
+        '">show accepted<span class="pchipn">'+C.waivedN+'</span></button>':''});
+  }
+  h+=b;
+  if(!C.openN && !C.waivedN) h+='<div class="estate"><div class="estate-ic" aria-hidden="true">✓</div>'+
     '<div class="et">Nothing to check</div>'+
     '<div class="eh">No parse issue, no flagged expression, no unused or unresolved model.</div></div>';
   h+='</div>';
   v.innerHTML=h;
   wireReport(v);
+  const sa=v.querySelector('#chk-showacc');
+  if(sa) sa.onclick=()=>{ const on=sa.getAttribute('aria-pressed')!=='true';
+    sa.setAttribute('aria-pressed', on?'true':'false'); sa.classList.toggle('on', on);
+    try{ localStorage.setItem(SHOWACC_KEY, on?'1':'0'); }catch(e){}
+    v.querySelectorAll('details.chk-acc').forEach(d=>{ d.open=on; }); };
   wireNodeLinks(v, '[data-goto],[data-id]', {first:reportNav});
-  // arrived from a health card or the parse-issue chip: land on the block it asked for
+  // arrived from a health row or the parse-issue chip: land on the block it asked for
   if(_checkJump){
     const target=document.getElementById(_checkJump);
     _checkJump=null;
@@ -1812,8 +1853,8 @@ function renderVariables(){
   const total=INSIGHTS.totalDirectedVars, silent=INSIGHTS.silentVars;
   _sectReg=[];
   let b='';
-  b+=findingBlock('chk-unusedvars','Written, never read', unread.length, tbl(VAR_COLS, unread.map(n=>varRow(n)), {filter:false}));
-  b+=findingBlock('chk-unreadinputs','Mapped into a model that never reads it', unreadIn.length, tbl(VAR_COLS_CALLEE, unreadIn.map(n=>varRow(n,{callee:true})), {filter:false}));
+  b+=findingBlock('chk-unusedVars','Written, never read', unread.length, tbl(VAR_COLS, unread.map(n=>varRow(n)), {filter:false}));
+  b+=findingBlock('chk-unreadInputs','Mapped into a model that never reads it', unreadIn.length, tbl(VAR_COLS_CALLEE, unreadIn.map(n=>varRow(n,{callee:true})), {filter:false}));
   b+=findingBlock('chk-declaredvars','Declared — readers live outside the models', declared.length,
     tbl([{k:'name',label:'Variable',w:'minmax(12ch,1fr)',mono:true},{k:'u',label:'Declared by',w:'minmax(16ch,3fr)',cls:'tags'}],
       declared.map(n=>({hay:n.label, cells:{name:vlink(n.id, n.label), u:((n.data||{}).usedBy||[]).map(m=>nodeChip(m)).join('')}})), {filter:false})+
@@ -2563,7 +2604,7 @@ function wireSectionFilter(root){
     const input=bar.querySelector('.pf'), chips=[...bar.querySelectorAll('.pchip[data-fv]')], count=bar.querySelector('.pcount');
     const all=[...scope.querySelectorAll('[data-hay]')].filter(el=>!el.closest('.fbar'));
     const leaves=all.filter(el=>!el.querySelector('[data-hay]'));
-    const containers=[...scope.querySelectorAll('details.card, details.tr, details.sect, .fgroup')].filter(c=>c.querySelector('[data-hay]'));
+    const containers=[...scope.querySelectorAll('details.card, details.tr, details.sect, details.chk-acc, .fgroup')].filter(c=>c.querySelector('[data-hay]'));
     const apply=()=>{
       const q=(input.value||'').trim().toLowerCase();
       const on=chips.find(c=>c.classList.contains('on'));
@@ -6482,6 +6523,7 @@ function wireRailAutoCollapse(){
 
 // ---------- boot ----------
 document.getElementById('proj').textContent=DATA.project;
+indexFindings();
 computeInsights();
 renderSidebar();
 applySidebar();

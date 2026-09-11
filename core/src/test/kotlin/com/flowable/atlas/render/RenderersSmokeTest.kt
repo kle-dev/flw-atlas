@@ -104,7 +104,9 @@ class RenderersSmokeTest {
         // the health object + Checks tab; the fixture's broken script task pins the whole path.
         assertTrue("expected the scriptIssues health key in explorer.js", html.contains("scriptIssues"))
         assertTrue("expected the fixture's script finding in the payload", html.contains("'(' is never closed"))
-        assertTrue("expected the script-syntax checks block from explorer.js", html.contains("Script syntax findings"))
+        // One block builder for every check; the block's title is the catalog's, shipped in the payload.
+        assertTrue("expected the per-check block builder from explorer.js", html.contains("function checkBlockHtml"))
+        assertTrue("expected the catalog title of the script check in the payload", html.contains("\"title\":\"Script syntax\""))
         // The script code viewer: syntax highlighting + line numbers + problem-line marking.
         assertTrue("expected the script highlighter from explorer.js", html.contains("function hlScript"))
         assertTrue("expected the code viewer from explorer.js", html.contains("function codeBoxHtml"))

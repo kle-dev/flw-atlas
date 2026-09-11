@@ -629,7 +629,17 @@ const probe = `<script>
     const secs=[...cv.querySelectorAll('details.sect[data-sect^="chk-"]')];
     ok('each finding is a section that starts open', secs.length>0 && secs.every(s=>s.open), secs.length+' sections');
     ok('a finding section carries the id the health rows jump to', secs.every(s=>s.id===decodeURIComponent(s.dataset.sect)));
-    ok('the navigator lists the findings', cv.querySelectorAll('.secnav .snc').length===secs.length);
+    // The health list is this page's navigator: every row with something to show jumps to a block that
+    // exists, and there is no second strip of chips saying the same thing.
+    const jumps=[...cv.querySelectorAll('.hrow[data-jump]')].map(r=>r.dataset.jump);
+    ok('every health row jumps to a block that exists', jumps.length>0 && jumps.every(j=>j!=='undefined' && !!document.getElementById(j)), jumps.join(' '));
+    ok('the runtime-risk checks have blocks of their own', ['nonExclusiveAsync','unguardedTasks','asyncWithoutRetry']
+       .every(k=>!(DATA.checks||{})[k] || !!document.getElementById('chk-'+k)));
+    ok('no navigator strip duplicates the health list', !cv.querySelector('.secnav'));
+    ok('every health row names its severity in words', [...cv.querySelectorAll('.hrow[data-jump]')].every(r=>/^(error|warning)$/.test((r.querySelector('.hsev')||{}).textContent||'')));
+    const row=cv.querySelector('details.sect[data-sect^="chk-"] .tbl .tr');
+    ok('a finding row names its severity, model and message', !!row && !!row.querySelector('.pill') && !!row.querySelector('.nc, .mono') && (row.textContent||'').length>20);
+    ok('the page has one filter over every block', cv.querySelectorAll('.fbar').length===1);
   });
   // --- the Scripts page: every script body, as the same card the process page shows ---
   steps.push(()=>{ location.hash='/scripts'; });
