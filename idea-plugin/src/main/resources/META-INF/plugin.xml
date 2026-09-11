@@ -233,6 +233,11 @@
               service task and a rule task, produced every topology finding twice. And
               <code>gatewayNoDefault</code> skipped a gateway with a single conditional flow, which throws
               the same "no outgoing sequence flow" as one with two.</li>
+          <li><b>A variable with many write sites is judged on all of them.</b> The write list on a variable
+              node is capped at 25 for the page, and the unused-variable decision read the capped list — so
+              a variable whose 26th write was the one that silences the check (a mapping into a model
+              outside the project, a scope that reads everything) was reported as never read. The decision
+              runs on the full list now; the cap is applied afterwards, for display.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

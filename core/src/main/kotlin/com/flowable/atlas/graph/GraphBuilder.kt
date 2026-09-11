@@ -448,13 +448,13 @@ object GraphBuilder {
             val scripts = (varScripts[v] ?: emptyList()).filter { kn(it["model"]) != null }
                 .map { it + mapOf("model" to kn(it["model"])) }
             if (scripts.isNotEmpty()) data["scriptSites"] = scripts
-            // Where the name is written and where it is read. The counts are the uncapped truth while the
-            // lists are capped: a variable in a real project can have hundreds of sites, and the whole
-            // list ships inside the HTML payload.
+            // Where the name is written and where it is read — complete here, because UnusedVariables
+            // decides on these lists (a silencing site must not fall off the end); capped for display only
+            // after that decision, below.
             val writes = sites(varWrites[v])
             val reads = sites(varReads[v])
-            if (writes.isNotEmpty()) data["writes"] = writes.take(VAR_SITES_LISTED)
-            if (reads.isNotEmpty()) data["reads"] = reads.take(VAR_SITES_LISTED)
+            if (writes.isNotEmpty()) data["writes"] = writes
+            if (reads.isNotEmpty()) data["reads"] = reads
             data["writeCount"] = writes.size
             data["readCount"] = reads.size
             // Nothing but a bare identifier in a script backs this name: real often enough to be worth
@@ -936,6 +936,16 @@ object GraphBuilder {
         for (k in ctx.varScopeReadsAll) kn(k)?.let { readsEverything.add(it) }
         for ((fqn, jc) in allJava) if (jc["readsAllVariables"] == true) readsEverything.add("java:$fqn")
         UnusedVariables.decide(nodes, edges, ctx.varReadsUnknown, readsEverything, MUSTACHE_IGNORE)
+        // Decided; now the lists are display. A variable in a real project can have hundreds of sites and
+        // the whole list ships inside the HTML payload, so the counts stay the truth and the lists are capped.
+        for (n in nodes.values) {
+            if (n["type"] != "variable") continue
+            val d = n["data"] as MutableMap<String, Any?>
+            for (k in listOf("writes", "reads")) {
+                val l = d[k] as? List<*> ?: continue
+                if (l.size > VAR_SITES_LISTED) d[k] = l.take(VAR_SITES_LISTED)
+            }
+        }
 
         // dedupe edges — when the same (s,t,rel) exists both flagged and unflagged, the strongest
         // signal wins: a clean occurrence clears `suspect`/`dynamic` from the kept edge.

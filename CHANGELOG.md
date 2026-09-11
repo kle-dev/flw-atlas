@@ -84,6 +84,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   holds. A DMN service task, listed by the parser as both a service task and a rule task, produced every
   topology finding twice. And `gatewayNoDefault` skipped a gateway with a single conditional flow, which
   throws the same "no outgoing sequence flow" as one with two.
+- **A variable with many write sites is judged on all of them.** The write list on a variable node is
+  capped at 25 for the page, and the unused-variable decision read the capped list — so a variable
+  whose 26th write was the one that silences the check (a mapping into a model outside the project, a
+  scope that reads everything) was reported as never read. The decision runs on the full list now; the
+  cap is applied afterwards, for display.
 
 ## 0.25.0
 
