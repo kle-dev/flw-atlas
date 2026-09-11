@@ -498,6 +498,8 @@ const isUnusedForm = n => n.type==='form' && !(incM.get(n.id)||[]).some(e=>e.rel
 // shows a node, `sel === tabs[tab]` — that is what keeps every existing `state.sel` reader correct.
 let state = {view:'overview', cat:null, sel:null, filter:'', sort:'name', focus:'', focusEl:'',
              tabs:[], tab:-1};
+// the tree's lens was written to localStorage on every switch and never read back — a reload reset it
+try{ state.treeLens=localStorage.getItem('atlas-tree-lens')||undefined; }catch(e){}
 
 // ---------- categories ----------
 function categories(){
@@ -1033,6 +1035,9 @@ function renderCrumbs(){
   } else if(state.view==='variables'){
     h=link(DATA.project,'#/overview')+sep+cur('Unused variables');
     title='Unused variables — Flowable Atlas';
+  } else if(state.view==='tree'){
+    h=link(DATA.project,'#/overview')+sep+cur('Reference tree');
+    title='Reference tree — Flowable Atlas';
   } else {
     const cat=CATS.find(x=>x.id===state.cat);
     const n=state.sel&&byId.get(state.sel);
@@ -1459,7 +1464,7 @@ function treeRowHtml(r, idx, openDepth){
   if(r.ref) badge.push('<span class="tv-b tv-ref" data-jumpto="'+esc(r.id)+'" role="button" tabindex="0">shown above</span>');
   if((n.data||{}).missingModel) badge.push('<span class="tv-b tv-miss">missing model</span>');
   if(r.parents>1 && !r.ref) badge.push('<span class="tv-b tv-par">+'+(r.parents-1)+' more parents</span>');
-  return '<li role="treeitem" class="tv-row'+(hasKids?' tv-has':'')+'" data-id="'+esc(r.id)+'" data-idx="'+idx+'"'+
+  return '<li role="treeitem" class="tv-row'+(hasKids?' tv-has':'')+'" data-id="'+esc(r.id)+'" data-idx="'+idx+'"'+(r.ref?' data-ref="1"':'')+
     ' aria-level="'+r.depth+'"'+(hasKids?' aria-expanded="'+(open?'true':'false')+'"':'')+' tabindex="-1">'+
     '<span class="tv-line" style="--lvl:'+r.depth+'">'+
       (hasKids?'<button type="button" class="tv-tw" aria-hidden="true" tabindex="-1"></button>':'<span class="tv-tw tv-leaf" aria-hidden="true"></span>')+
@@ -1514,8 +1519,12 @@ function renderTree(){
   if(T.truncated) h+='<p class="ddesc">Stopped at '+TREE_MAX_ROWS+' rows — this graph is larger than the tree renders.</p>';
   h+=body||'<div class="estate"><div class="et">Nothing to show</div><div class="eh">No model in this project is a root.</div></div>';
   h+='</div>';
+  // A lens switch rebuilds the whole view; the filter you typed and "expand all" must survive it.
+  const keepF=(v.querySelector('#tvf')||{}).value||'';
   v.innerHTML=h;
   wireTree(v);
+  if(state.treeExpanded) v.querySelectorAll('.tv-row[aria-expanded]').forEach(li=>treeToggle(li, true));
+  if(keepF){ const f=v.querySelector('#tvf'); if(f){ f.value=keepF; f.dispatchEvent(new Event('input')); } }
   wireNodeLinks(v, '.tv-label', {first:treeChrome});
 }
 /** Clicks that belong to the tree itself rather than to the node a row names. */
@@ -1570,7 +1579,7 @@ function wireTree(v){
   });
   // The button's state is state, not its label: a fresh render starts folded to the default depth.
   const allBtn=v.querySelector('#tvall');
-  state.treeExpanded=false;
+  state.treeExpanded=!!state.treeExpanded;   // kept across a re-render; the button below toggles it
   if(allBtn){
     const sync=()=>{ allBtn.setAttribute('aria-pressed', state.treeExpanded?'true':'false'); allBtn.textContent=state.treeExpanded?'collapse all':'expand all'; };
     sync();

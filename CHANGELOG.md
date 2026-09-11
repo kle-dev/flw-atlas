@@ -121,6 +121,9 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   and half did not. Unused decision tables get a review list of their own beside the unused forms and
   operations, and a review list is named exactly like its check: *Unused forms* on the Checks page was
   *Forms · unused* in the sidebar, one click away.
+- **The reference tree keeps its chrome.** Its breadcrumb showed the last category you browsed and the
+  window title said "Processes"; the lens you picked was stored and never read back, so a reload reset
+  it; and switching the lens wiped the filter you had just typed and collapsed the tree. All three hold now.
 
 ## 0.25.0
 

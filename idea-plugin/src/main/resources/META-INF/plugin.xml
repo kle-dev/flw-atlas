@@ -277,6 +277,10 @@
               beside the unused forms and operations, and a review list is named exactly like its check:
               <i>Unused forms</i> on the Checks page was <i>Forms · unused</i> in the sidebar, one click
               away.</li>
+          <li><b>The reference tree keeps its chrome.</b> Its breadcrumb showed the last category you
+              browsed and the window title said "Processes"; the lens you picked was stored and never read
+              back, so a reload reset it; and switching the lens wiped the filter you had just typed and
+              collapsed the tree. All three hold now.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>
