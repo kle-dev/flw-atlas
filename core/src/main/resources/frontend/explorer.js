@@ -1770,7 +1770,11 @@ function waiverFileText(){
  *  a download cannot report back, so it is taken as done. */
 function waiverExport(){
   const text=waiverFileText();
-  if(window.__atlasSaveWaivers){ window.__atlasSaveWaivers(text); return; }
+  if(window.__atlasSaveWaivers){
+    // …with what this page started from, so the IDE can keep a rule the file gained since generation
+    const base=(((DATA.waivers||{}).rules)||[]).map(waiverId).concat((((DATA.waivers||{}).notes)||[]).map(n=>[n.node,n.check||'',n.element||'',n.subject||'',n.text].join(' ')));
+    window.__atlasSaveWaivers(JSON.stringify({text, base})); return;
+  }
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([text], {type:'application/json'}));
   a.download='waivers.json'; document.body.appendChild(a); a.click();

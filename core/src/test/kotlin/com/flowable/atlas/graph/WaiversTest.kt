@@ -227,4 +227,17 @@ class WaiversTest {
         assertTrue("the day itself is still covered", !w.expiredOn(LocalDate.parse("2026-06-01")))
         assertTrue(!Waivers.Waiver(check = "c", node = "n").expiredOn(LocalDate.parse("2999-01-01")))
     }
+
+    @Test
+    fun aSaveKeepsWhatTheFileGainedWhileThePageWasOpen() {
+        fun w(node: String, reason: String) = Waivers.Waiver(check = "unusedForms", node = node, reason = reason)
+        val atGeneration = listOf(w("form:a", "old a"), w("form:b", "old b"))
+        // the page: dropped b, edited a's reason, added c
+        val page = Waivers.Set(listOf(w("form:a", "new a"), w("form:c", "c")))
+        // the file meanwhile: a colleague added d, and still has b
+        val disk = Waivers.Set(atGeneration + w("form:d", "d"))
+        val merged = Waivers.merge(page, disk, atGeneration.map { it.sortKey })
+        assertEquals(listOf("form:a", "form:c", "form:d"), merged.waivers.map { it.node })
+        assertEquals("the page's edit wins", "new a", merged.waivers.single { it.node == "form:a" }.reason)
+    }
 }

@@ -168,6 +168,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   it — an absolute path or a `..` made a pull write outside the repository. And an `*.explorer.html`
   inside an archive opens as a plain file rather than in a viewer whose Regenerate and Open-in-browser
   throw.
+- **Saving waivers from the explorer merges.** The page rebuilt the whole file from the rules it was
+  generated with plus the decisions taken since, and the IDE wrote that over `waivers.json` — a rule a
+  colleague had committed, or the CLI had added, after the page was generated was silently deleted by the
+  next Save. The page now sends what it started from, and the IDE keeps every rule and note the file
+  gained meanwhile. The file is written as UTF-8 (it was written in the project's encoding and read as
+  UTF-8), and an open, edited `waivers.json` is saved first instead of fighting the write.
 
 ## 0.25.0
 

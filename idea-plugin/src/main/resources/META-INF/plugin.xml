@@ -316,6 +316,32 @@
               result set. The tab strip appeared only from the second tab, which is how the tabs and their
               Alt shortcuts stayed undiscovered; it shows from the first. And on a selected node,
               <code>c</code> copies its key and, inside the IDE, <code>o</code> opens its file.</li>
+          <li><b>Regenerating keeps your place.</b> After <i>Save to waivers.json</i> the explorer tab
+              regenerated and came back on the dashboard: the reload dropped the page's fragment. The Checks
+              block or node you were on is where the new page opens, and the reload bypasses the browser
+              cache so it is the new page.</li>
+          <li><b>The index is never built under the read lock.</b> Ctrl+click on a model key resolved
+              through a call that builds a cold index inline, freezing the IDE for the length of a model
+              scan the first time; the constants auto-refresher did the same after every pull. Both ask for
+              the index and resolve to nothing until it is there, like every other reference already
+              did.</li>
+          <li><b>No file-system refresh while holding the read lock, and a cancellation is not a
+              failure.</b> Find Usages and the index build opened archives with a synchronous jar refresh
+              under the read lock — the deadlock the scanner's own documentation warns about. And a
+              cancelled scan was reported as an unreadable archive (the Hub's <i>archives could not be
+              read</i> line), an empty script picker, or a Design pull bounced to Settings as "not
+              configured".</li>
+          <li><b>Two guards.</b> The output and pull folders in Settings must be relative to the project and
+              stay inside it — an absolute path or a <code>..</code> made a pull write outside the
+              repository. And an <code>*.explorer.html</code> inside an archive opens as a plain file rather
+              than in a viewer whose Regenerate and Open-in-browser throw.</li>
+          <li><b>Saving waivers from the explorer merges.</b> The page rebuilt the whole file from the rules
+              it was generated with plus the decisions taken since, and the IDE wrote that over
+              <code>waivers.json</code> — a rule a colleague had committed, or the CLI had added, after the
+              page was generated was silently deleted by the next Save. The page now sends what it started
+              from, and the IDE keeps every rule and note the file gained meanwhile. The file is written as
+              UTF-8 (it was written in the project's encoding and read as UTF-8), and an open, edited
+              <code>waivers.json</code> is saved first instead of fighting the write.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

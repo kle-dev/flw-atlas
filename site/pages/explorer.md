@@ -368,6 +368,10 @@ sidebar's *Checks* badge and the review lists' own counts (an *Unused forms* ent
 not the forms), and a model whose every finding was accepted wears a small ✓ in lists and in the tree where an
 open finding would show its count.
 
+Inside the IDE, *Save to waivers.json* merges rather than overwrites: a rule or note the file gained after
+this page was generated — from a colleague, the CLI, a text editor — is kept, while a rule the page saw and
+restored is gone. The file is written as UTF-8, and an open, edited `waivers.json` is saved first.
+
 Until the page is regenerated the decisions stay applied here — the counts, the health rows and the
 sidebar badge move with them — while `summary.md`, `graph.json` and the gate still show the last run.
 After a regeneration the diff finds itself in the file and empties.

@@ -5,6 +5,9 @@ import com.flowable.atlas.action.FlowableActionIds
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.events.AtlasEventsListener
 import com.flowable.atlas.project.AtlasProjectRootService
+import com.flowable.atlas.hub.HubHeader
+import com.flowable.atlas.model.MiniJson
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.icons.AllIcons
 import com.intellij.ide.ui.LafManagerListener
 import com.intellij.openapi.actionSystem.ActionManager
@@ -249,7 +252,12 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
      * *is* automatic, because the only bad state after a save is a page whose accepted rows sit beside
      * counts and a gate that still contradict them — and the page batches every decision into one save.
      */
-    private fun saveWaivers(text: String) {
+    private fun saveWaivers(payload: String) {
+        // `{"text": …, "base": [ids]}` — the file as the page sees it, and the rule ids it started from.
+        val envelope = MiniJson.parseOrNull(payload) as? Map<*, *>
+        val text = envelope?.get("text") as? String ?: payload
+        @Suppress("UNCHECKED_CAST")
+        val base = (envelope?.get("base") as? List<Any?>).orEmpty().map { it.toString() }
         fun say(title: String, body: String, type: NotificationType) =
             NotificationGroupManager.getInstance().getNotificationGroup(AtlasNotifications.GROUP_ID)
                 .createNotification(title, body, type)
@@ -264,16 +272,26 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
             return
         }
         try {
+            var kept = 0
             val target = WriteAction.compute<VirtualFile, Exception> {
                 val t = dir.findChild(Waivers.FILE_NAME) ?: dir.createChildData(this, Waivers.FILE_NAME)
-                VfsUtil.saveText(t, text)
+                // An open, edited waivers.json is flushed first, or the document and the file would fight.
+                FileDocumentManager.getInstance().getDocument(t)?.let { FileDocumentManager.getInstance().saveDocument(it) }
+                // Last-write-wins against a generation-time snapshot deleted whatever the file gained
+                // while the page was open; the merge keeps a rule the page never saw.
+                val disk = Waivers.load(t.toNioPath().toFile())
+                val merged = Waivers.merge(Waivers.parse(text), disk, base)
+                kept = merged.waivers.size + merged.notes.size - Waivers.parse(text).let { it.waivers.size + it.notes.size }
+                // UTF-8 explicitly: every other Atlas writer pins it, and :core reads the file as UTF-8.
+                t.setBinaryContent(Waivers.serialize(merged, HubHeader.atlasVersion()).toByteArray(Charsets.UTF_8))
                 t
             }
             tellPage(true)
-            val rules = Regex("\"check\"\\s*:").findAll(text).count()
+            val rules = Regex("\"check\"\\s*:").findAll(text).count() + kept
             say("Waivers saved",
-                "$rules rule(s) written to ${dir.name}/${Waivers.FILE_NAME} — regenerating the explorer so the " +
-                    "counts and the CI gate follow.", NotificationType.INFORMATION)
+                "$rules rule(s) written to ${dir.name}/${Waivers.FILE_NAME}" +
+                    (if (kept > 0) " ($kept the file gained since this page was generated, kept)" else "") +
+                    " — regenerating the explorer so the counts and the CI gate follow.", NotificationType.INFORMATION)
                 .addAction(NotificationAction.createSimple("Open ${Waivers.FILE_NAME}") {
                     if (!project.isDisposed) FileEditorManager.getInstance(project).openFile(target, true)
                 })

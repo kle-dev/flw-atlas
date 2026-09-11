@@ -148,6 +148,22 @@ object Waivers {
 
     // ---- reading ---------------------------------------------------------------------------------
 
+    /**
+     * The page's version of the file, plus what the file gained while the page was open.
+     *
+     * The explorer rebuilds `waivers.json` from the rules baked in at generation time and the decisions
+     * taken since; saving that wholesale deleted every rule a colleague, the CLI or a text editor had
+     * added to the file in the meantime. [seen] is what the page started from (rule ids as [Waiver.sortKey]
+     * / [Note.sortKey]); a rule on disk that the page never saw is kept, one it saw and dropped is gone.
+     */
+    fun merge(page: Set, disk: Set, seen: Collection<String>): Set {
+        val pageW = page.waivers.map { it.sortKey }.toHashSet()
+        val pageN = page.notes.map { it.sortKey }.toHashSet()
+        val keptW = disk.waivers.filter { it.sortKey !in seen && it.sortKey !in pageW }
+        val keptN = disk.notes.filter { it.sortKey !in seen && it.sortKey !in pageN }
+        return Set(page.waivers + keptW, page.notes + keptN, createdWith = page.createdWith ?: disk.createdWith)
+    }
+
     fun load(file: File): Set =
         if (!file.isFile) EMPTY
         else runCatching { parse(file.readText()) }
