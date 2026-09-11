@@ -115,6 +115,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   went to zero while the sidebar still said *Unused forms 3*, and the list it opened showed the three
   accepted forms exactly like clean ones. A review list that mirrors a check now carries the check's open
   count, and a model whose every finding was accepted wears a small ✓ in lists and in the tree.
+- **Every check has a face on the page.** Six of the 23 — hardcoded secrets, unsafe queries, unused
+  decisions, leftover markers, gateways without default, implicit splits — had no *open the list*
+  button and no "N checked" denominator when clean, so half the health list said what it had examined
+  and half did not. Unused decision tables get a review list of their own beside the unused forms and
+  operations, and a review list is named exactly like its check: *Unused forms* on the Checks page was
+  *Forms · unused* in the sidebar, one click away.
 
 ## 0.25.0
 

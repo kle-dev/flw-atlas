@@ -528,7 +528,7 @@ function categories(){
       // (endpoints.*) and in-app navigation routes (#/...) from real third-party deps.
       [{id:'external::api',  label:'Flowable API',        sec:'Integration', color:color('endpoint'), icon:'endpoint', match:n=>n.type==='external'&&n.data.flowableApi},
        {id:'external::route',label:'Navigation · routes', sec:'Other',       color:color('page'),     icon:'page',     match:n=>n.type==='external'&&n.data.route},
-       {id:'external::missing',label:'Missing model refs',sec:'Checks',      color:color('external'), icon:'invalidExpr', match:n=>n.type==='external'&&n.data.missingModel},
+       {id:'external::missing',label:checkTitle('missingRefs'),sec:'Checks',      color:color('external'), icon:'invalidExpr', match:n=>n.type==='external'&&n.data.missingModel},
        {id:'external::lib',  label:'External / library',  sec:'Other',       color:color('external'), icon:'external', match:n=>n.type==='external'&&!n.data.flowableApi&&!n.data.route&&!n.data.missingModel}
       ].forEach(c=>{ const count=byType.external.filter(c.match).length; if(count) cats.push(Object.assign({count}, c)); });
     } else {
@@ -538,17 +538,17 @@ function categories(){
   });
   // a review list: forms that nothing links to (orphaned UI models worth pruning)
   const unusedForms = nodes.filter(isUnusedForm);
-  if(unusedForms.length) cats.push({id:'unused-form', label:'Forms · unused', sec:'Checks',
+  if(unusedForms.length) cats.push({id:'unused-form', label:checkTitle('unusedForms'), sec:'Checks',
     color:color('form'), icon:'form', count:unusedForms.length, match:isUnusedForm});
   // The two other "registered but never called" findings get review lists of their own, so the Checks
   // page's "open the list" lands on the 3 unused operations and not on all 40 (same rule as Findings.kt).
   const isUnusedOp = n => n.type==='serviceOperation' && !((n.data||{}).usedBy||[]).length;
   const unusedOps = nodes.filter(isUnusedOp);
-  if(unusedOps.length) cats.push({id:'unused-op', label:'Service operations · unused', sec:'Checks',
+  if(unusedOps.length) cats.push({id:'unused-op', label:checkTitle('unusedOps'), sec:'Checks',
     color:color('serviceOperation'), icon:'serviceOperation', count:unusedOps.length, match:isUnusedOp});
   const isUnusedFn = n => n.type==='customFunction' && !((n.data||{}).usedBy||[]).length;
   const unusedFns = nodes.filter(isUnusedFn);
-  if(unusedFns.length) cats.push({id:'unused-fn', label:'Custom functions · unused', sec:'Checks',
+  if(unusedFns.length) cats.push({id:'unused-fn', label:checkTitle('unusedFns'), sec:'Checks',
     color:color('customFunction'), icon:'customFunction', count:unusedFns.length, match:isUnusedFn});
   // Review lists for flagged expressions/bindings. Structural syntax errors make an
   // expression *invalid*; catalog findings (unknown function/namespace — the catalog may
@@ -557,35 +557,42 @@ function categories(){
   const hasErr = n => isExprN(n) && (n.data.problems||[]).some(p=>p.severity==='error');
   const hasWarnOnly = n => isExprN(n) && (n.data.problems||[]).length && !(n.data.problems||[]).some(p=>p.severity==='error');
   const invalidExprs = nodes.filter(hasErr);
-  if(invalidExprs.length) cats.push({id:'invalid-expr', label:'Invalid — syntax ⚠', sec:'Checks',
+  if(invalidExprs.length) cats.push({id:'invalid-expr', label:checkTitle('invalidExpr'), sec:'Checks',
     color:color('invalidExpr'), icon:'invalidExpr', count:invalidExprs.length, match:hasErr});
   const suspectExprs = nodes.filter(hasWarnOnly);
-  if(suspectExprs.length) cats.push({id:'suspect-expr', label:'Suspect — review', sec:'Checks',
+  if(suspectExprs.length) cats.push({id:'suspect-expr', label:checkTitle('suspectExpr'), sec:'Checks',
     color:color('suspectExpr'), icon:'suspectExpr', count:suspectExprs.length, match:hasWarnOnly});
   // A changelog nobody references, or one superseded by a later revision, is a schema surprise waiting.
   const isChangelogIssue = n => n.type==='liquibase' &&
     ['orphan','superseded'].indexOf(((n.data||{}).authority||{}).status)>=0;
   const clIssues = nodes.filter(isChangelogIssue);
-  if(clIssues.length) cats.push({id:'changelog-issue', label:'Changelogs · orphan / superseded', sec:'Checks',
+  if(clIssues.length) cats.push({id:'changelog-issue', label:checkTitle('changelogIssues'), sec:'Checks',
     color:color('liquibase'), icon:'liquibase', count:clIssues.length, match:isChangelogIssue});
   // Variables whose only evidence is a bare identifier in a script — probably real, not provable.
   const isGuessedVar = n => n.type==='variable' && (n.data||{}).heuristic===true;
   const guessed = nodes.filter(isGuessedVar);
-  if(guessed.length) cats.push({id:'guessed-var', label:'Variables · script guess ≈', sec:'Checks',
+  if(guessed.length) cats.push({id:'guessed-var', label:checkTitle('guessedVars'), sec:'Checks',
     color:color('variable'), icon:'variable', count:guessed.length, match:isGuessedVar});
   // Something writes them and nothing reads them. Kept beside the script-guess list so all three
   // variable reviews read as one family; the full report with the definition sites is #/variables.
   const isUnusedVar = n => n.type==='variable' && (n.data||{}).unread===true;
   const unusedVars = nodes.filter(isUnusedVar);
-  if(unusedVars.length) cats.push({id:'unused-var', label:'Variables · never read', sec:'Checks',
+  if(unusedVars.length) cats.push({id:'unused-var', label:checkTitle('unusedVars'), sec:'Checks',
     color:color('variable'), icon:'variable', count:unusedVars.length, match:isUnusedVar});
   const isUnreadInput = n => n.type==='variable' && ((n.data||{}).unreadIn||[]).length>0;
   const unreadInputs = nodes.filter(isUnreadInput);
-  if(unreadInputs.length) cats.push({id:'unread-input', label:'Variables · unread call input', sec:'Checks',
+  if(unreadInputs.length) cats.push({id:'unread-input', label:checkTitle('unreadInputs'), sec:'Checks',
     color:color('variable'), icon:'variable', count:unreadInputs.length, match:isUnreadInput});
+  // The DMN twin of the unused form. A decision service is the caller of its tables, never one itself,
+  // and a group's access is not a use (same rule as Findings.kt).
+  const isUnusedDecision = n => n.type==='decision' && !(n.data||{}).decisionService &&
+    !(incM.get(n.id)||[]).some(e=>e.rel!=='contains' && (byId.get(e.id)||{}).type!=='group');
+  const unusedDecisions = nodes.filter(isUnusedDecision);
+  if(unusedDecisions.length) cats.push({id:'unused-decision', label:checkTitle('unusedDecisions'), sec:'Checks',
+    color:color('decision'), icon:'decision', count:unusedDecisions.length, match:isUnusedDecision});
   // Models with a script whose body (or scriptFormat) fails the structural syntax check.
   const scriptIssueModels = new Set(allScripts().filter(s=>(s.problems||[]).length).map(s=>s.model));
-  if(scriptIssueModels.size) cats.push({id:'script-syntax', label:'Scripts · syntax ⚠', sec:'Checks',
+  if(scriptIssueModels.size) cats.push({id:'script-syntax', label:checkTitle('scriptIssues'), sec:'Checks',
     color:color('invalidExpr'), icon:'scripts', count:scriptIssueModels.size, match:n=>scriptIssueModels.has(n.id)});
   cats.sort((a,b)=> (SECTIONS.indexOf(a.sec)-SECTIONS.indexOf(b.sec)) || a.label.localeCompare(b.label));
   return cats;
@@ -698,8 +705,14 @@ function computeInsights(){
   // denominator the unused-variable counts are quoted against; the second is the report's own caveat —
   // how many names it stayed quiet about, which is what makes the ones it does name trustworthy.
   let totalDirectedVars=0, silentVars=0;
+  // denominators for the checks that had none: what carries a literal secret, what is a query, what is a table
+  let totalQueries=0, totalDecisionTables=0, totalSecretBearers=0;
+  const SECRET_BEARERS=new Set(['service','channel','agent','knowledgeBase','process','case']);
   nodes.forEach(n=>{
     const d=n.data||{};
+    if(SECRET_BEARERS.has(n.type)) totalSecretBearers++;
+    if(n.type==='query') totalQueries++;
+    else if(n.type==='decision' && !d.decisionService) totalDecisionTables++;
     if(isExprN(n)) totalExprs++;
     else if(n.type==='form') totalForms++;
     else if(n.type==='liquibase') totalChangelogs++;
@@ -723,7 +736,8 @@ function computeInsights(){
   const health = healthMap();
   INSIGHTS = { indeg, hotspots, apps, entryPoints,
     totalExprs, totalForms, totalChangelogs, totalCovServices, totalColServices, totalOps, totalFns,
-    totalDirectedVars, silentVars,
+    totalDirectedVars, silentVars, totalQueries, totalDecisionTables, totalSecretBearers,
+    totalModels: (DATA.stats||{}).modelCount||0,
     totalScripts: scripts.length,
     // the denominator for the runtime-risk cards: without a process there is nothing to say about
     // async jobs or error paths, and a card reading "0" would look like a verdict rather than a gap
@@ -1246,6 +1260,14 @@ const CHECK_META={
   unusedFns:{cat:'unused-fn', show:()=>INSIGHTS.totalFns>0, examined:()=>[INSIGHTS.totalFns,'function']},
   unusedVars:{cat:'unused-var', route:'/variables', show:()=>INSIGHTS.totalDirectedVars>0, examined:()=>[INSIGHTS.totalDirectedVars,'variable']},
   unreadInputs:{cat:'unread-input', route:'/variables', show:()=>INSIGHTS.totalDirectedVars>0, examined:()=>[INSIGHTS.totalDirectedVars,'variable']},
+  // The six that had no face: no "open the list", no denominator when clean — so half the health list said
+  // what it had checked and half did not.
+  hardcodedSecrets:{show:()=>INSIGHTS.totalSecretBearers>0, examined:()=>[INSIGHTS.totalSecretBearers,'model']},
+  unsafeQueries:{show:()=>INSIGHTS.totalQueries>0, examined:()=>[INSIGHTS.totalQueries,'query']},
+  unusedDecisions:{cat:'unused-decision', show:()=>INSIGHTS.totalDecisionTables>0, examined:()=>[INSIGHTS.totalDecisionTables,'decision table']},
+  leftoverMarkers:{examined:()=>[INSIGHTS.totalModels,'model']},
+  gatewayNoDefault:{show:()=>INSIGHTS.totalProcesses>0, examined:()=>[INSIGHTS.totalProcesses,'process']},
+  implicitSplit:{show:()=>INSIGHTS.totalProcesses>0, examined:()=>[INSIGHTS.totalProcesses,'process']},
 };
 const metaOf=id=>CHECK_META[id]||{};
 const ROUTE_LABEL={'/schema':'open the schema report','/scripts':'open the scripts tab','/variables':'open the full report'};

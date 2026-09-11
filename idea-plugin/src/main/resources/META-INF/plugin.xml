@@ -270,6 +270,13 @@
               opened showed the three accepted forms exactly like clean ones. A review list that mirrors a
               check now carries the check's open count, and a model whose every finding was accepted wears a
               small ✓ in lists and in the tree.</li>
+          <li><b>Every check has a face on the page.</b> Six of the 23 — hardcoded secrets, unsafe queries,
+              unused decisions, leftover markers, gateways without default, implicit splits — had no <i>open
+              the list</i> button and no "N checked" denominator when clean, so half the health list said
+              what it had examined and half did not. Unused decision tables get a review list of their own
+              beside the unused forms and operations, and a review list is named exactly like its check:
+              <i>Unused forms</i> on the Checks page was <i>Forms · unused</i> in the sidebar, one click
+              away.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>
