@@ -93,7 +93,7 @@ object ClaudeRenderer {
 
         // §4 — discovered facts
         L.add("## 4. This project (auto-discovered by Atlas)\n")
-        L.add("- **Scale:** ${s["models"]} model files · ${s["java"]} Java files · " +
+        L.add("- **Scale:** ${Fmt.modelScale(s)} · ${s["java"]} Java files · " +
                 "${s["nodes"] ?: 0} graph nodes · ${s["edges"] ?: 0} relationships · ${s["groups"] ?: 0} user groups.")
         if (bt("app").isNotEmpty()) {
             L.add("- **Apps:** " + bt("app").joinToString(", ") { "${it["label"]} (`${it["key"]}`)" })

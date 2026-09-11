@@ -70,6 +70,8 @@ It is designed to make that easy:
   check plus `open` and `waived`, and **`waivers`** — present when the project carries a
   `waivers.json` — its rules with how many findings each matched, its notes, and what is wrong with
   the file. See [Health checks](../checks/).
+- **`stats`** has the scale: `modelCount` is how many models were read, `models` how many loose model
+  *files* and `archives` how many `.zip`/`.bar` archives held the rest.
 - **`diagnostics`** lists what Atlas could not read (`parse`), what it skipped on purpose (`skip`) and
   which keys two model types share (`conflict` — information, not a finding), and **`markers`** every
   `TODO`, `FIXME` or `HACK` it found in a model file, with file, line and the model it belongs to — the raw

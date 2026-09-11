@@ -1,6 +1,6 @@
 # Flowable project — `miniproject` (quick overview)
 
-_25 model files · 2 Java files · 99 nodes · 52 relationships · 3 user groups. Compact summary — full report in `miniproject.overview.md`, full graph in `miniproject.graph.json`._
+_25 models (25 files · 1 archives) · 2 Java files · 99 nodes · 52 relationships · 3 user groups. Compact summary — full report in `miniproject.overview.md`, full graph in `miniproject.graph.json`._
 
 ⚠ **2 file(s) could not be fully analyzed** (parse/read failures) — the map below may be incomplete. Details: the Findings section of `miniproject.overview.md`, or `diagnostics` in `miniproject.graph.json`.
 

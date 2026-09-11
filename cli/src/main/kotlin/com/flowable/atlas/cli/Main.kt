@@ -205,7 +205,7 @@ fun run(args: Array<String>): Int {
     val unresolvedN = (result["unresolvedRefs"] as? List<*>)?.size ?: 0
     val cf = result["customFunctions"] as? Map<*, *>
     val status = buildString {
-        append("${stat("models")} models $MIDDLE_DOT ${stat("java")} java $MIDDLE_DOT ${stat("nodes")} nodes $MIDDLE_DOT ")
+        append("${com.flowable.atlas.render.Fmt.modelScale(stats)} $MIDDLE_DOT ${stat("java")} java $MIDDLE_DOT ${stat("nodes")} nodes $MIDDLE_DOT ")
         append("${stat("edges")} links $MIDDLE_DOT $resolvedN resolved / $unresolvedN unresolved refs")
         val suspectN = stat("suspectEdges")
         val dynN = stat("dynamicEdges")

@@ -66,6 +66,13 @@ object GraphBuilder {
      *  message/error/escalation — and external-worker topics — meet in one shared node. */
     private val NAMED_REF_KINDS = setOf("signal", "message", "error", "escalation", "topic")
 
+    /** Node types that are not models: code, correlation names, harvested text, and the derived nodes.
+     *  What is left is what `stats.modelCount` counts — including apps, which a reader calls models too. */
+    private val NON_MODEL_NODE_TYPES = setOf(
+        "java", "endpoint", "group", "external", "bot", "liquibase", "expression", "binding", "variable",
+        "string", "method", "customFunction", "serviceOperation",
+    ) + NAMED_REF_KINDS
+
     /** How many write/read sites a variable node lists before the count alone has to speak. A busy name
      *  like `total` can have hundreds, and every one of them ships inside the explorer's HTML payload. */
     private const val VAR_SITES_LISTED = 25
@@ -966,6 +973,8 @@ object GraphBuilder {
         result["graph"] = linkedMapOf("nodes" to nodeList, "edges" to uniq)
         result["stats"] = linkedMapOf(
             "models" to ctx.modelFileCount,
+            // files vs models: 27 archives can hold 610 models, and "3 models" for that is not a count
+            "modelCount" to nodes.values.count { it["type"] !in NON_MODEL_NODE_TYPES },
             "archives" to ctx.archiveFileCount,
             "java" to ctx.javaFileCount,
             "endpoints" to bucketList("endpoints").size,

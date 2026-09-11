@@ -21,6 +21,19 @@ internal object Fmt {
      * an agent reading `<name>.summary.md` inside a repo has the files, not the command line.
      * Mirrors `os.path.splitext(os.path.basename(...))[0] or "project"`.
      */
+    /**
+     * `610 models (3 files · 27 archives)` — how much of a project Atlas read. `stats.models` counts
+     * *files* and used to be printed as "3 models" for a repository whose 27 Design exports held 610.
+     */
+    fun modelScale(st: Map<*, *>): String {
+        val n = (st["modelCount"] as? Number)?.toInt()
+        val files = (st["models"] as? Number)?.toInt() ?: 0
+        val archives = (st["archives"] as? Number)?.toInt() ?: 0
+        if (n == null) return "$files model files"
+        val where = if (archives > 0) "$files files · $archives archives" else "$files files"
+        return "$n models ($where)"
+    }
+
     fun artifactName(root: java.io.File): String {
         val base = java.io.File(root.path.trimEnd('/')).absoluteFile.name
         val dot = base.lastIndexOf('.')

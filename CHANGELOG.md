@@ -95,6 +95,10 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
 - **A byte-order mark is not a parse failure.** A JSON model beginning with a UTF-8 BOM — an export
   touched by a Windows editor — failed with "Expecting value at char 0", an error-level parse issue, and
   vanished from the report with every reference into and out of it. It is read like any other file now.
+- **The status line counts models, not files.** `3 models · 4 java` was the first thing Atlas said about
+  a repository of 27 Design exports holding 610 models — `stats.models` counted loose files. The CLI,
+  the summary, the overview and the agent primer now say `610 models (3 files · 27 archives)`, and
+  `graph.json` carries the count as `stats.modelCount`.
 
 ## 0.25.0
 

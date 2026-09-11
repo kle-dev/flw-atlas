@@ -43,7 +43,7 @@ object SummaryRenderer {
 
         val L = ArrayList<String>()
         L.add("# Flowable project — `${root.absoluteFile.name}` (quick overview)\n")
-        L.add("_${st["models"]} model files · ${st["java"]} Java files · ${st["nodes"] ?: 0} nodes · " +
+        L.add("_${Fmt.modelScale(st)} · ${st["java"]} Java files · ${st["nodes"] ?: 0} nodes · " +
                 "${st["edges"] ?: 0} relationships · ${st["groups"] ?: 0} user groups. " +
                 "Compact summary — full report in `$an.overview.md`, full graph in `$an.graph.json`._\n")
         // A shared key (`conflict`) is information about a lookup, not a file Atlas failed to read.

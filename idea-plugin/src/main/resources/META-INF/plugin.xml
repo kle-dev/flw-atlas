@@ -246,6 +246,11 @@
               export touched by a Windows editor — failed with "Expecting value at char 0", an error-level
               parse issue, and vanished from the report with every reference into and out of it. It is read
               like any other file now.</li>
+          <li><b>The status line counts models, not files.</b> <code>3 models · 4 java</code> was the first
+              thing Atlas said about a repository of 27 Design exports holding 610 models —
+              <code>stats.models</code> counted loose files. The CLI, the summary, the overview and the
+              agent primer now say <code>610 models (3 files · 27 archives)</code>, and
+              <code>graph.json</code> carries the count as <code>stats.modelCount</code>.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

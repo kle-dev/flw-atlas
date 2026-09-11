@@ -82,7 +82,7 @@ order-management.CLAUDE.md
 The last line on stderr is the health check, and it is the first thing worth reading:
 
 ```
-412 models · 88 java · 3104 nodes · 5192 links · 412 resolved / 23 unresolved refs · ⚠ 3 parse issue(s)
+412 models (9 files · 3 archives) · 88 java · 3104 nodes · 5192 links · 412 resolved / 23 unresolved refs · ⚠ 3 parse issue(s)
 ```
 
 If it says *parse issues*, start there — a file Atlas could not read costs you every reference into and

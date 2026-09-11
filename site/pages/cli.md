@@ -134,7 +134,7 @@ Every run ends with one line on stderr — the health check. This is the fastest
 Atlas understood your project:
 
 ```
-412 models · 88 java · 3104 nodes · 5192 links · 412 resolved / 23 unresolved refs · 17 suspect / 4 dynamic links · ⚠ 3 parse issue(s)
+412 models (9 files · 3 archives) · 88 java · 3104 nodes · 5192 links · 412 resolved / 23 unresolved refs · 17 suspect / 4 dynamic links · ⚠ 3 parse issue(s)
 ```
 
 - **java** — the Java *and Kotlin* sources read (one parser handles both); test source sets are not
