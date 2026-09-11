@@ -79,7 +79,7 @@ A **key shared by two model types** is not one of them. A case and its start for
 `DRA-C001`, a data object and the service Design generated for it — this is common and legal. Both
 models are read completely; a reference that states its type (a `formKey`, a `calledElement`) reaches
 the right one; and the expressions, bindings and variables harvested from each file are credited to the
-model of that file's type. (Until 0.26.0 they went to whichever model was registered first, so a form
+model of that file's type. (Until {{VERSION}} they went to whichever model was registered first, so a form
 that shared its case's key showed none of its own bindings and the case showed all of them.) What stays
 ambiguous is a reference that names the key alone — a Java string literal — which reaches one of the two
 and is marked *suspect*. The shared key is recorded in `graph.json`'s `diagnostics` as a `conflict`
@@ -116,7 +116,7 @@ A model references another model by key, and no model in the project defines tha
 typo, a model that was never exported, or a reference to something that lives in a different app.
 
 An action's `channels` — `menu`, `quick-menu`, `slash-menu`, the mobile menus — say where in the UI the
-action is offered; they are not channel models and are not looked up (until 0.26.0 every action with a
+action is offered; they are not channel models and are not looked up (until {{VERSION}} every action with a
 placement reported two missing models). Likewise the event models the platform ships itself —
 `_flowableMailEvent` and the `_flowableEngage…Received…` family — resolve to a platform-provided
 external node rather than to a missing model.
@@ -186,7 +186,7 @@ A changelog is reported when it is:
 
 Changelogs are read wherever they are: loose under `src/main/resources`, and **inside an archive** — a
 Design export packs `liquibase-<key>.data.changelog.xml` next to the models it belongs to, and until
-0.26.0 those were invisible, so an app's reference to its own changelog was reported as a missing model
+{{VERSION}} those were invisible, so an app's reference to its own changelog was reported as a missing model
 and the service it describes had no schema coverage.
 
 - **orphan** — no service and no data object references it, so nothing in the models explains why that
@@ -324,7 +324,7 @@ count.
 
 A service operation a **data object** binds to is used by that data object when it is one the engine
 invokes itself — `lookup`, `create`, `update`, `delete`. Nothing in a model names those (a data-object
-task, a page's data table and the REST API all go through the data object), so until 0.26.0 every
+task, a page's data table and the REST API all go through the data object), so until {{VERSION}} every
 generated CRUD operation was "unused": 74 of 74 on one real project. A `search` operation is different —
 something has to name it, a data table's operation key for instance — and it is credited only when
 something does.

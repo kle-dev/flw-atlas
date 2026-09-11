@@ -13,7 +13,7 @@ package com.flowable.atlas.render
  * [cap] is the token-budget primitive the summary was already built on (it lived there privately);
  * it is shared now so every artifact elides long lists the same recognisable way.
  */
-internal object Fmt {
+object Fmt {
 
     /**
      * The basename the CLI/plugin give this project's artifacts (`<name>.summary.md`, …), so a
