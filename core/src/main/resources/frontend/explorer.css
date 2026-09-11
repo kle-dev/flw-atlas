@@ -172,6 +172,7 @@
   .pill-warn{background:var(--warn-bg);border-color:var(--warn-border);color:var(--warn-text)}
   .pill-bad{background:var(--bad-bg);border-color:var(--bad-border);color:var(--bad-text)}
   .pill-info{background:var(--info-bg);border-color:var(--info-border);color:var(--info-text)}
+  .pill-ok{background:var(--ok-bg);border-color:var(--ok-border);color:var(--ok-text)}
   .dtitle .pill,.item .nm .pill{margin-left:var(--space-15)}
 
   /* empty state (Hub EmptyState recipe) */

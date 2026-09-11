@@ -591,6 +591,11 @@ function categories(){
   return cats;
 }
 const CATS = categories();
+/** A review list that mirrors a check. Its sidebar count is the check's *open* count, so a decision taken
+ *  on the page moves it: the node count alone still said "Unused forms 3" after all three were accepted. */
+const CAT_CHECK={'unused-form':'unusedForms','unused-op':'unusedOps','unused-fn':'unusedFns','unused-decision':'unusedDecisions',
+  'invalid-expr':'invalidExpr','suspect-expr':'suspectExpr','script-syntax':'scriptIssues','changelog-issue':'changelogIssues',
+  'guessed-var':'guessedVars','unused-var':'unusedVars','unread-input':'unreadInputs','external::missing':'missingRefs'};
 
 // ---------- findings: the itemised list :core ships, and what a local decision does to it ----------
 // Every number on the Checks page — a block's count, a health row, the sidebar badge — is derived from
@@ -639,7 +644,14 @@ function nodeFindingCounts(id){
 /** A small count of a node's open findings, coloured by the worst one — nothing when there are none.
  *  Worn by tree rows and list items, so a model with five findings no longer looks like a clean one. */
 function findPillHtml(id){
-  const c=nodeFindingCounts(id); if(!c.open) return '';
+  const c=nodeFindingCounts(id);
+  if(!c.open){
+    // Every finding on it accepted: still worth a mark, or an accepted form in a list called "unused"
+    // looks exactly like a clean one.
+    if(!c.waived) return '';
+    const l=c.waived+' accepted finding'+(c.waived>1?'s':'');
+    return '<span class="pill fpill pill-ok" aria-label="'+l+'" data-tip="'+l+' — see Findings on this model">✓</span>';
+  }
   const lbl=c.open+' open finding'+(c.open>1?'s':'');
   return '<span class="pill fpill '+(c.worst==='error'?'pill-bad':'pill-warn')+'" aria-label="'+lbl+'" data-tip="'+lbl+' — see Findings on this model">'+c.open+'</span>';
 }
@@ -888,7 +900,8 @@ function renderSidebar(){
   nav.appendChild(ov);
   // A tab belongs to a section like any other list — "Script tasks" is an Integration thing, the
   // review reports belong under Checks. `pri` keeps a section's tabs above its drill-down lists.
-  const items=[...CATS];
+  const C0=findingCounts();
+  const items=CATS.map(c=>CAT_CHECK[c.id]?Object.assign({}, c, {count:C0.open[CAT_CHECK[c.id]]||0}):c);
   const scriptCount=allScripts().length;
   if(scriptCount) items.push({route:'/scripts', label:'Script tasks', sec:'Integration', pri:0, icon:'scripts',
     color:color('process'), count:scriptCount,

@@ -265,6 +265,11 @@
               <code>@1:5087</code> — a column that moves on every export — and is named by the path of the
               element holding it (<code>rows[2].cols[0].label</code>) instead; a waiver written against the
               old <code>@line:column</code> subject will show as stale, and wants re-accepting.</li>
+          <li><b>The sidebar's review lists count what is open.</b> Accept the three unused forms and the
+              Checks page went to zero while the sidebar still said <i>Unused forms 3</i>, and the list it
+              opened showed the three accepted forms exactly like clean ones. A review list that mirrors a
+              check now carries the check's open count, and a model whose every finding was accepted wears a
+              small ✓ in lists and in the tree.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>
@@ -512,52 +517,6 @@
               complete second playground — its own alarms, its own listeners, last writer wins on the saved
               state. The explorer tab's toolbar opens the tool window instead. Alt-Enter on an expression in
               a BPMN or CMMN model now also presets the instance kind — process or case.</li>
-        </ul>
-        <h3>0.22.0</h3>
-        <ul>
-          <li><b>A detail page has a header.</b> A node's page used to open with a bare title over a grid of
-              uppercase stat cells — <i>Fields 7 · Data sources 3</i> — that repeated the counts of the
-              sections below it. It opens now with the type's icon in a tinted tile, the title, one identity
-              line (kind · key · path, each copyable, the path opening the file inside IntelliJ), Design's
-              description as prose, and the facts as a definition list — the handful of properties that
-              describe the model itself, never a count. The sticky bar keeps the kind and the actions in
-              reach.</li>
-          <li><b>Sections come in reading order, and the page says which ones it has.</b> Every node type
-              has an ordered list of sections now: what the model <i>is</i> first (a form's fields, a data
-              object's properties, a process's tasks, a decision table's inputs, outputs and rules, a
-              service's operations), then how it behaves, then what flows through it, then what it is
-              connected to. A process page used to list its service tasks last, after the sequence flows; it
-              has twenty sections and had no map. A row of chips under the header lists every section the
-              page rendered, with its count, and opens the one you click. The section that <i>is</i> the
-              model starts open; the rest start folded, remembered as before.</li>
-          <li><b>Every list on a detail page is a table with column headers.</b> Names, captions and labels
-              are set in the text face, identifiers, expressions, paths and code in monospace — a data
-              object's properties read <i>name · label · type · relation</i> instead of three monospace
-              words whose meaning was their position. A row with more to say expands in place: a form button
-              into the model it invokes, the payload it sends and stores, its settings and its expression; a
-              script task into its code with line numbers and the validator's findings; a service task into
-              its implementation, the operation it calls and its field injections. A long table gets a
-              filter of its own. In a narrow panel — an IntelliJ tool window — the optional columns drop
-              under the row instead of being clipped, and nothing scrolls sideways.</li>
-          <li><b>A process page shows what its diagram alone does not.</b> Call activities and sub-processes
-              with the process each one calls, gateways with their default flow, receive, send and manual
-              tasks, every event (not only the named ones) with what it is attached to, every service task
-              (not only the implemented ones), the <code>async</code> and skip flags on the rows that carry
-              them, and a script listener's code — all of it parsed for releases and rendered nowhere.
-              Sequence flows and their conditions are one table. A decision table gets an <i>Inputs &amp;
-              outputs</i> table, a service operation its parameter table, a document model its variables.
-              Every section renders every record it summarises, or says <i>+N more</i>.</li>
-          <li><b>The report pages share the detail page's bones.</b> Checks, Script tasks, Unused variables
-              and Schema gaps open with the same header — icon, title, one line saying what the page is, the
-              page's own numbers as facts — and their findings are sections: remembered, folded with one
-              click, mapped by the same chips. Each finding that was a pile of monospace rows is a
-              column-headed table; the Scripts page shows every script as the card the process page shows,
-              grouped under one section per model, and its filter folds away the models it empties. The
-              health rows' jump targets open the section they land on.</li>
-          <li><b>A checkbox you can see is a checkbox you can click.</b> The box that appears when you hover
-              a list or palette row toggled nothing on a plain click — only a modifier-click on the row did.
-              It is the toggle now, in the browse list and in the ⌘K palette, and the UI test clicks
-              it.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

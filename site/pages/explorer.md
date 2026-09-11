@@ -359,6 +359,11 @@ downloads it anywhere else; **discard** (twice) throws the unsaved decisions awa
 it was made, so re-saving an unchanged file produces no diff, and the notes and hand-written fields the
 file already had travel through untouched.
 
+A decision taken on the page moves every count that depends on it: the Checks page, the health list, the
+sidebar's *Checks* badge and the review lists' own counts (an *Unused forms* entry counts the open findings,
+not the forms), and a model whose every finding was accepted wears a small ✓ in lists and in the tree where an
+open finding would show its count.
+
 Until the page is regenerated the decisions stay applied here — the counts, the health rows and the
 sidebar badge move with them — while `summary.md`, `graph.json` and the gate still show the last run.
 After a regeneration the diff finds itself in the file and empties.

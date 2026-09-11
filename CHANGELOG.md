@@ -111,6 +111,10 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   marker in a minified JSON model was named `@1:5087` — a column that moves on every export — and is
   named by the path of the element holding it (`rows[2].cols[0].label`) instead; a waiver written
   against the old `@line:column` subject will show as stale, and wants re-accepting.
+- **The sidebar's review lists count what is open.** Accept the three unused forms and the Checks page
+  went to zero while the sidebar still said *Unused forms 3*, and the list it opened showed the three
+  accepted forms exactly like clean ones. A review list that mirrors a check now carries the check's open
+  count, and a model whose every finding was accepted wears a small ✓ in lists and in the tree.
 
 ## 0.25.0
 
