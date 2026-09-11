@@ -54,6 +54,11 @@ object ExplorerHtmlRenderer {
         // (see the comment above), so it has to be able to decide for itself whether a row it rendered
         // is one a team already accepted. Absent when no waiver file was read.
         result["waivers"]?.let { payload["waivers"] = it }
+        // `node -> [check ids]`, and nothing else. The itemised findings stay out (see above), but
+        // without *some* index the page cannot offer "accept this" on the node a finding is about — it
+        // would have to re-derive the judgement in JavaScript, which is the drift this avoids. Check ids
+        // alone are a few KB even on a large project.
+        payload["findingsByNode"] = findingsByNode(result)
         payload["nodes"] = attachDiagrams(slimNodes(graph["nodes"]), root)
         payload["edges"] = graph["edges"]
         // json.dumps(payload, ensure_ascii=False, default=list).replace("</", "<\/")
@@ -194,6 +199,19 @@ object ExplorerHtmlRenderer {
     )
 
     /** The full explorer HTML page (CSS/JS inlined; `__ATLAS_DATA__` still unresolved). */
+    /** Which checks fired on which node, open ones only — a waived finding is already accepted. */
+    @Suppress("UNCHECKED_CAST")
+    private fun findingsByNode(result: Map<String, Any?>): Map<String, Any?> {
+        val out = LinkedHashMap<String, MutableSet<String>>()
+        for (f in (result["findings"] as? List<Map<String, Any?>> ?: emptyList())) {
+            if (f["waived"] != null) continue
+            val node = (f["node"] as? String) ?: (f["file"] as? String) ?: continue
+            val check = f["check"] as? String ?: continue
+            out.getOrPut(node) { LinkedHashSet() }.add(check)
+        }
+        return out.mapValues { it.value.toList() }
+    }
+
     private fun composeTemplate(): String {
         var t = asset("explorer.html")
         t = t.replace("/*__ATLAS_CSS__*/", asset("explorer.css"))

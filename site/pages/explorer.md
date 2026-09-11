@@ -335,6 +335,21 @@ Beside it, `A−` / `A+` step the text size (85 % to 150 %) and remember the cho
 the page is a token that this one knob multiplies; the IDE's embedded browser applies none of the IDE's
 own font scaling, so without it the element ids and hints stayed at 10–11 px on a dense monitor.
 
+### Accepting a finding
+
+A node that still carries findings offers **Findings on this node**: one row per check that fired on
+it, a box for the reason, and **accept**. A reason is required — it is the only part of a waiver a
+reviewer can review. Accepting is undoable with **restore**.
+
+Nothing is written to disk by itself. The page keeps your changes as a diff over the
+[`waivers.json`](../checks/#accepting-a-finding) it was generated from and says how many are unsaved;
+**Export waivers.json** downloads the whole file, and inside the IDE the same button saves it into the
+project. An explorer opened from the filesystem cannot read or write a neighbouring file, and a report
+that silently edited a file in your repository would be a surprise even where it can.
+
+Counts, badges and the CI gate come from the last generated run, so a freshly accepted finding shows as
+accepted here and still counts everywhere else until you export and regenerate.
+
 ### Deliberately accepted
 
 When the project carries a [`waivers.json`](../checks/#accepting-a-finding), the Checks page ends with

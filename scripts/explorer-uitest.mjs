@@ -775,6 +775,41 @@ const probe = `<script>
     ok('a filter matching nothing hides every row', shown.length===0, shown.length+' rows still shown');
   });
 
+  // --- accepting a finding: the round trip that makes waivers worth having. Marking has to survive a
+  //     re-render, refuse a reason-less rule, and be undoable.
+  steps.push(()=>{
+    const withFindings=Object.keys(DATA.findingsByNode||{}).find(id=>byId.get(id));
+    if(!withFindings){ say('note','no node carries a finding in this fixture'); return; }
+    location.hash=enc(withFindings);
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    const btn=det.querySelector('[data-waive]');
+    ok('a node with findings offers to accept them', !!btn, 'no accept button');
+    if(!btn) return;
+    // A reason is the only thing a reviewer can review, so a rule without one must not be accepted.
+    btn.click();
+    ok('accepting without a reason is refused', !det.querySelector('[data-unwaive]'));
+    ok('and the field says so', !!det.querySelector('.wv-in.wv-need'));
+    const input=det.querySelector('[data-reason]');
+    if(input){ input.value='known, accepted by the team'; }
+    det.querySelector('[data-waive]').click();
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    ok('the finding is now accepted', !!det.querySelector('[data-unwaive]'));
+    ok('the page says the change is unsaved', /unsaved change/.test(det.textContent||''));
+    ok('and offers to write the file', !!det.querySelector('#wv-export'));
+    ok('the exported file carries the rule and its reason',
+       /known, accepted by the team/.test(waiverFileText()) && /"version": 1/.test(waiverFileText()));
+    det.querySelector('[data-unwaive]').click();
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    ok('restoring puts the finding back', !det.querySelector('[data-unwaive]'));
+    try{ localStorage.removeItem(WAIVER_KEY); }catch(e){}
+  });
+
   // --- the reference tree: it is the one view that walks the graph more than one hop, so the things
   //     worth asserting are the ones that make an unbounded walk safe: dedup, cycles, and the filter
   //     keeping the path to a hit.

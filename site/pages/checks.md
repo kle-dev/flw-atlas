@@ -283,5 +283,9 @@ so on every surface, because a suppression that quietly stops applying is the on
 not have. `--fail-on-stale-waivers` turns that into a red build; `--no-waivers` reports everything, for
 when the question is what the file is hiding.
 
+You do not have to write the file by hand: in the explorer, a node that carries findings offers to
+accept them with a reason, and **Export waivers.json** hands you the file — see
+[Accepting a finding](../explorer/#accepting-a-finding).
+
 `notes` are the other half of a review: a remark that changes no count, carries an `importance`, and
 travels with the project so the next person reads it instead of rediscovering it.

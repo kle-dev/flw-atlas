@@ -1494,6 +1494,111 @@ function wireTree(v){
     if(count) count.textContent=hit.size+' of '+all.length;
   }, 120));
 }
+// ---------- waivers: accepting a finding, and getting that decision into the file ----------
+// The page can mark and un-mark; only an explicit Export (or Save, inside the IDE) writes waivers.json.
+// It has to work that way: an explorer opened from the filesystem cannot read or write a neighbouring
+// file, and a report silently editing a file in someone's repository would be a surprise even where it
+// can. So the page holds a *diff* over what the file said when it was generated, and says how many
+// changes are waiting.
+const WAIVER_KEY='atlas-waivers-'+(DATA.project||'_');
+const waiverId=r=>[r.check, r.node, r.element||'', r.subject||''].join(' ');
+function waiverLocal(){ try{ return JSON.parse(localStorage.getItem(WAIVER_KEY)||'{}'); }catch(e){ return {}; } }
+function waiverSetLocal(s){ try{ localStorage.setItem(WAIVER_KEY, JSON.stringify(s)); }catch(e){} }
+/** The rules as they stand now: what the file carried, minus removals, plus additions. */
+function waiverRules(){
+  const loc=waiverLocal(), gone=new Set(loc.remove||[]);
+  const out=(((DATA.waivers||{}).rules)||[])
+    .filter(r=>!gone.has(waiverId(r)))
+    .map(r=>({check:r.check, node:r.node, element:r.element, subject:r.subject, reason:r.reason, saved:true}));
+  (loc.add||[]).forEach(r=>{ if(!out.some(x=>waiverId(x)===waiverId(r))) out.push(Object.assign({saved:false}, r)); });
+  return out;
+}
+const waiverPending=()=>{ const l=waiverLocal(); return (l.add||[]).length+(l.remove||[]).length; };
+function waiverAdd(rule){
+  const loc=waiverLocal();
+  loc.add=(loc.add||[]).filter(r=>waiverId(r)!==waiverId(rule)); loc.add.push(rule);
+  loc.remove=(loc.remove||[]).filter(k=>k!==waiverId(rule));
+  waiverSetLocal(loc); route();
+}
+function waiverDrop(rule){
+  const loc=waiverLocal(), id=waiverId(rule);
+  const wasLocal=(loc.add||[]).some(r=>waiverId(r)===id);
+  loc.add=(loc.add||[]).filter(r=>waiverId(r)!==id);
+  // Only a rule that came from the file needs a tombstone; dropping one that was never saved is just
+  // forgetting it.
+  if(!wasLocal){ loc.remove=(loc.remove||[]); if(loc.remove.indexOf(id)<0) loc.remove.push(id); }
+  waiverSetLocal(loc); route();
+}
+/** The file, in the shape :core writes it — same keys, same order, so the two writers cannot drift. */
+function waiverFileText(){
+  const rules=waiverRules().slice().sort((a,b)=>
+    (a.check+a.node+(a.element||'')+(a.subject||'')).localeCompare(b.check+b.node+(b.element||'')+(b.subject||'')));
+  const today=new Date().toISOString().slice(0,10);
+  return JSON.stringify({
+    version:1,
+    createdWith:(DATA.atlasVersion||''),
+    updatedWith:(DATA.atlasVersion||''),
+    waivers:rules.map(r=>{
+      const o={check:r.check, node:r.node};
+      if(r.element) o.element=r.element;
+      if(r.subject) o.subject=r.subject;
+      o.reason=r.reason||'';
+      o.at=r.at||today;
+      return o;
+    }),
+    notes:[],
+  }, null, 2)+String.fromCharCode(10);
+}
+function waiverExport(){
+  const text=waiverFileText();
+  if(window.__atlasSaveWaivers){ window.__atlasSaveWaivers(text); return; }
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([text], {type:'application/json'}));
+  a.download='waivers.json'; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 0);
+}
+/** The findings this node still has, as check ids — the index :core ships so the page never has to
+ *  re-derive a judgement it did not make. */
+function nodeChecks(id){ return ((DATA.findingsByNode||{})[id])||[]; }
+/** "Accept this finding" for one node: one row per check that fired on it, plus the reason a reviewer
+ *  will read. Waiving is a sentence about an element, so the reason is not optional here either. */
+function acceptBlockHtml(n){
+  const checks=nodeChecks(n.id);
+  const rules=waiverRules().filter(r=>r.node===n.id);
+  if(!checks.length && !rules.length) return '';
+  const row=check=>{
+    const have=rules.find(r=>r.check===check && !r.element && !r.subject);
+    if(have) return '<div class="wv-row"><span class="tag">'+esc(check)+'</span>'+
+      '<span class="wv-why">'+(have.reason?esc(have.reason):'<i>no reason given</i>')+'</span>'+
+      '<button type="button" class="dgbtn" data-unwaive="'+esc(check)+'">restore</button></div>';
+    return '<div class="wv-row"><span class="tag">'+esc(check)+'</span>'+
+      '<input class="wv-in" data-reason="'+esc(check)+'" placeholder="why is this acceptable? (required)">'+
+      '<button type="button" class="dgbtn" data-waive="'+esc(check)+'">accept</button></div>';
+  };
+  const seen=new Set();
+  const body=checks.concat(rules.map(r=>r.check)).filter(c=>{ if(seen.has(c)) return false; seen.add(c); return true; })
+    .map(row).join('');
+  const pending=waiverPending();
+  return section('accept','Findings on this node',
+    '<p class="ddesc">Accepting one keeps it in the report, in its own section, and out of the counts and '+
+    'the CI gate. It reaches <span class="mono">waivers.json</span> when you export.</p>'+body+
+    (pending?'<div class="wv-bar">'+pending+' unsaved change'+(pending>1?'s':'')+
+      ' <button type="button" class="dgbtn" id="wv-export">'+
+      (window.__atlasSaveWaivers?'Save to waivers.json':'Export waivers.json')+'</button></div>':''),
+    {count:checks.length});
+}
+function wireAccept(v, n){
+  v.querySelectorAll('[data-waive]').forEach(b=>b.onclick=()=>{
+    const check=b.dataset.waive;
+    const input=v.querySelector('[data-reason="'+cssEsc(check)+'"]');
+    const reason=((input&&input.value)||'').trim();
+    if(!reason){ if(input){ input.focus(); input.classList.add('wv-need'); } return; }
+    waiverAdd({check, node:n.id, reason});
+  });
+  v.querySelectorAll('[data-unwaive]').forEach(b=>b.onclick=()=>
+    waiverDrop({check:b.dataset.unwaive, node:n.id}));
+  const ex=v.querySelector('#wv-export'); if(ex) ex.onclick=waiverExport;
+}
 /** The waiver file's rules, its notes, and everything wrong with it — the Checks page's last section.
  *  Rendered from `DATA.waivers`, which :core fills in only when a waivers.json was actually read, so a
  *  project without one shows nothing here rather than an empty promise. */
@@ -3713,6 +3818,9 @@ function renderDetail(){
   const relBody=g=>relHint+Object.keys(g).sort().map(rel=>
     '<div class="relgrp"><div class="lab">'+termHtml('rel', rel)+'</div><div class="nodechips">'+
     [...g[rel].values()].map(e=>nodeChip(e.id,e)).join('')+'</div></div>').join('');
+  // Accepting a finding belongs on the node it is about, not in a list of findings: this is where a
+  // reader has the context to judge it, and the one place that needs the control at all.
+  body+=acceptBlockHtml(n);
   const ok=Object.keys(out).sort(), ik=Object.keys(inc).sort();
   if(ok.length) body+=section('rels-out','Uses / references', relBody(out), {count:ok.reduce((a,k)=>a+out[k].size,0), nav:'References'});
 
@@ -3766,6 +3874,7 @@ function renderDetail(){
   const fp=det.querySelector('.dfile');
   if(fp) fp.onclick=e=>{ if(e.target.closest('.cpy')) return;
     atlasCopy(dec(fp.dataset.copy), ()=>{ fp.classList.add('copied'); setTimeout(()=>fp.classList.remove('copied'),1200); }); };
+  wireAccept(det, n);
   wireCopyButtons(det);
   wireOpenButtons(det);                 // ↗ open the file / file:line in the IDE (no-ops in a browser)
   // ⌖ locate-on-diagram buttons; preventDefault keeps a click inside a <summary> from toggling it

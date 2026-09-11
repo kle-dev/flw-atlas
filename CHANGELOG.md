@@ -12,6 +12,42 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.24.0
+
+- **A reference tree.** The explorer could not answer "what does this app actually start, and what does
+  that reach?" — relationships were single-hop everywhere, so following a chain meant clicking through
+  it and losing your place at every step. `#/tree` walks the graph instead: the app as a grouping
+  header (plus *Outside any app*, which is a finding in itself), its functional roots — a model nothing
+  points at except its app — and everything those reach. App membership is deliberately not the spine:
+  `contains` is app → model and one level deep, so nesting by it buries the edge that explains why a
+  form exists. A node is expanded once, at the shallowest place it is reached; later arrivals are
+  leaves marked *shown above* that jump to it, which keeps the tree bounded where rebuilding a shared
+  subtree per path is exponential. Cycles terminate and say so. The filter takes the palette's search
+  grammar, and a row survives it if it matches **or** a descendant does.
+- **Findings can be accepted, in a file you commit.** Some findings are correct and still not worth
+  acting on, and until now the only answer was to drop the check for everyone or stop running
+  `--fail-on` at all. A project can now carry `waivers.json` next to its artifacts, beside a generated
+  `.gitignore` that ignores everything in the folder *except* that file — the analysis is regenerated
+  and may hold client data, the decisions are yours and belong in review. A waiver names check + node,
+  narrowed by element and subject, so it survives the message rewording; a waived finding stays in the
+  report, in a section of its own, and leaves the counts and the gate. A rule that matched nothing,
+  expired, or gives no reason is reported on every surface. In the explorer, a node with findings
+  offers to accept them with a reason and hands you the file to save. New flags: `--waivers`,
+  `--no-waivers`, `--fail-on-stale-waivers`, and `any` as the honest spelling of what `--fail-on
+  warning` has always meant.
+- **Three checks about how a process behaves, not whether it resolves.** `nonExclusiveAsync` — an async
+  element that explicitly set `exclusive="false"`, so the jobs of one process instance may run
+  concurrently; it fires on the opt-out only, never on the absence, because `exclusive` defaults to
+  true. `unguardedTasks` — a service task that leaves the engine with nothing catching its failure,
+  quiet wherever containment cannot be established. `asyncWithoutRetry` — async work with no
+  `failedJobRetryTimeCycle` of its own.
+- **Findings carry a `subject`.** Several checks fire more than once on one node, and the only thing
+  telling those apart was the message — generated prose that rewords when something unrelated changes.
+  A finding now names which one it is: the scope, the column, the name an expression could not resolve.
+- **The CLI status line no longer contradicts the report.** It counted script issues from
+  `stats.scriptIssues`, a second counter that knows nothing about waivers; it reads the same numbers
+  the report does now.
+
 ## 0.23.1
 
 - **A column mapping that pairs the wrong two names is a finding.** A `.service` model says which

@@ -142,6 +142,48 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.24.0</h3>
+        <ul>
+          <li><b>A reference tree.</b> The explorer could not answer "what does this app actually start, and
+              what does that reach?" — relationships were single-hop everywhere, so following a chain meant
+              clicking through it and losing your place at every step. <code>#/tree</code> walks the graph
+              instead: the app as a grouping header (plus <i>Outside any app</i>, which is a finding in
+              itself), its functional roots — a model nothing points at except its app — and everything
+              those reach. App membership is deliberately not the spine: <code>contains</code> is app →
+              model and one level deep, so nesting by it buries the edge that explains why a form exists. A
+              node is expanded once, at the shallowest place it is reached; later arrivals are leaves marked
+              <i>shown above</i> that jump to it, which keeps the tree bounded where rebuilding a shared
+              subtree per path is exponential. Cycles terminate and say so. The filter takes the palette's
+              search grammar, and a row survives it if it matches <b>or</b> a descendant does.</li>
+          <li><b>Findings can be accepted, in a file you commit.</b> Some findings are correct and still not
+              worth acting on, and until now the only answer was to drop the check for everyone or stop
+              running <code>--fail-on</code> at all. A project can now carry <code>waivers.json</code> next
+              to its artifacts, beside a generated <code>.gitignore</code> that ignores everything in the
+              folder <i>except</i> that file — the analysis is regenerated and may hold client data, the
+              decisions are yours and belong in review. A waiver names check + node, narrowed by element and
+              subject, so it survives the message rewording; a waived finding stays in the report, in a
+              section of its own, and leaves the counts and the gate. A rule that matched nothing, expired,
+              or gives no reason is reported on every surface. In the explorer, a node with findings offers
+              to accept them with a reason and hands you the file to save. New flags:
+              <code>--waivers</code>, <code>--no-waivers</code>, <code>--fail-on-stale-waivers</code>, and
+              <code>any</code> as the honest spelling of what <code>--fail-on warning</code> has always
+              meant.</li>
+          <li><b>Three checks about how a process behaves, not whether it resolves.</b>
+              <code>nonExclusiveAsync</code> — an async element that explicitly set
+              <code>exclusive="false"</code>, so the jobs of one process instance may run concurrently; it
+              fires on the opt-out only, never on the absence, because <code>exclusive</code> defaults to
+              true. <code>unguardedTasks</code> — a service task that leaves the engine with nothing
+              catching its failure, quiet wherever containment cannot be established.
+              <code>asyncWithoutRetry</code> — async work with no <code>failedJobRetryTimeCycle</code> of
+              its own.</li>
+          <li><b>Findings carry a <code>subject</code>.</b> Several checks fire more than once on one node,
+              and the only thing telling those apart was the message — generated prose that rewords when
+              something unrelated changes. A finding now names which one it is: the scope, the column, the
+              name an expression could not resolve.</li>
+          <li><b>The CLI status line no longer contradicts the report.</b> It counted script issues from
+              <code>stats.scriptIssues</code>, a second counter that knows nothing about waivers; it reads
+              the same numbers the report does now.</li>
+        </ul>
         <h3>0.23.1</h3>
         <ul>
           <li><b>A column mapping that pairs the wrong two names is a finding.</b> A <code>.service</code>
