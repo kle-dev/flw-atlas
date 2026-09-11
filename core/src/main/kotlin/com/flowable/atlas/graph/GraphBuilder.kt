@@ -40,6 +40,25 @@ object GraphBuilder {
     /** Model types rendered as Freemarker (not JUEL) — their `${…}` must not be validated. */
     private val FREEMARKER_MODEL_TYPES = setOf("query", "template", "document")
 
+    /**
+     * `${email.inbound.channel.imap-url:imap://localhost/inbox}` — a Spring property placeholder, the
+     * shape a channel's URL or an agent's model name takes when the environment fills it in. It is not
+     * JUEL (the `:default` is a syntax error there, and JUEL never wrote `-` into a name) and its
+     * segments are not variables: reading `imap`, `localhost` and `inbox` as process variables is how
+     * one channel URL produced four phantom variables. Elsewhere a dotted name with no default is a
+     * property path and stays an expression — `${order.total}` is one; in a channel model every `${…}`
+     * is a placeholder, because the environment configures adapters and nothing in a channel is JUEL.
+     */
+    // The default may hold anything but a `(`: `${vars:bogus(}` and `${ns:fn(x)}` are calls, not defaults.
+    private val CONFIG_PLACEHOLDER_RE = Regex("^[#$]\\{\\s*([A-Za-z][\\w.-]*)\\s*(:[^}(]*)?}$")
+    private val PLACEHOLDER_MODEL_TYPES = setOf("channel")
+    private fun isConfigPlaceholder(text: String, usedTypes: Set<String>): Boolean {
+        val m = CONFIG_PLACEHOLDER_RE.find(text) ?: return false
+        if (usedTypes.isNotEmpty() && PLACEHOLDER_MODEL_TYPES.containsAll(usedTypes)) return true
+        val key = m.groupValues[1]
+        return m.groupValues[2].isNotEmpty() || (key.contains('.') && key.contains('-'))
+    }
+
     /** Ref kinds correlated by NAME (not by model key): throw side and catch side of a signal/
      *  message/error/escalation — and external-worker topics — meet in one shared node. */
     private val NAMED_REF_KINDS = setOf("signal", "message", "error", "escalation", "topic")
@@ -228,6 +247,7 @@ object GraphBuilder {
         // counted, so "n expressions were not judged" is a number the report can state instead of a
         // silence nobody can tell from "all fine".
         var exprSkippedNested = 0
+        val placeholders = HashSet<String>()
         fun usageNodes(ntype: String, usage: Map<String, MutableSet<String>>) {
             val dialect = if (ntype == "expression") ExpressionDialect.BACKEND else ExpressionDialect.FRONTEND
             for ((text, keys) in usage) {
@@ -235,7 +255,10 @@ object GraphBuilder {
                 if (used.isEmpty()) continue
                 val data = linkedMapOf<String, Any?>("usedBy" to used)
                 val usedTypes = used.mapNotNull { nodes[it]?.get("type") as? String }.toSet()
-                if (!FREEMARKER_MODEL_TYPES.containsAll(usedTypes)) {
+                if (ntype == "expression" && isConfigPlaceholder(text, usedTypes)) {
+                    data["placeholder"] = true
+                    placeholders.add(text)
+                } else if (!FREEMARKER_MODEL_TYPES.containsAll(usedTypes)) {
                     var problems = validateHarvestedExpr(text, dialect, custom)
                     if (problems == null) { exprSkippedNested++; data["notValidated"] = "nested braces — harvested text may be truncated" }
                     if (problems != null && problems.isNotEmpty() && exprAllowlist != null) {
@@ -318,6 +341,7 @@ object GraphBuilder {
                 .sortedBy { "${it["model"]}|${it["via"]}|${it["element"]}" }
 
         for ((expr, keys) in ctx.exprUse) {
+            if (expr in placeholders) continue
             for (v in varsInExpr(expr)) for (k in keys) {
                 addUsage(v, k, expr)
                 addSite(v, k, Ctx.READ, "expression")

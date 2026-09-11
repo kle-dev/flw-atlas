@@ -96,6 +96,12 @@ interpolation; read as JUEL it is a syntax error, its helpers (`flw`, `flwTimeUt
 model calls, and its locals look like variables. Scripts are read by the script checker below instead. A
 `{{…}}` in a form script button's script stays a binding: the form engine evaluates it before the script runs.
 
+A **Spring property placeholder** is not an expression either: `${email.inbound.channel.imap-url:imap://…}`
+in a channel's URL, or any `${dotted.key:default}`, is filled in by the environment before the engine
+sees it. Atlas marks the node `placeholder` and neither validates it as JUEL (the `:default` would be
+a syntax error) nor reads `imap` and `localhost` as variables. A dotted name with no default,
+`${order.total}`, is a property path and is validated as usual.
+
 ## Scripts
 
 Script bodies get the same treatment, per script language and per context. Atlas checks:

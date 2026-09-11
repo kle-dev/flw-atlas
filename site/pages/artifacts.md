@@ -63,6 +63,9 @@ It is designed to make that easy:
 - A **`_generated`** key beside it says when the file was written and by which Atlas version, so a
   graph pasted into a ticket or kept as a pipeline artifact carries its own age.
 - Every node carries **`usedBy`**, so relationships resolve in both directions without a second pass.
+- An `expression` node that is a Spring property placeholder — `${mail.imap-url:imap://localhost/inbox}`,
+  the shape a channel URL takes when the environment fills it in — carries **`placeholder: true`**
+  instead of a JUEL verdict, and its segments are not harvested as variables.
 - **`findings`** is the itemised list every other surface summarises, **`checks`** the open count per
   check plus `open` and `waived`, and **`waivers`** — present when the project carries a
   `waivers.json` — its rules with how many findings each matched, its notes, and what is wrong with

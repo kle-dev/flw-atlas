@@ -38,6 +38,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   a script operation's `config.script`, a form script button's `script` — have their `${…}` blanked out
   of the harvest now; the script checker still reads every one of them, and a `{{…}}` in a form script
   stays the binding it is.
+- **A Spring placeholder is configuration, not an expression.** A channel's
+  `${email.inbound.channel.imap-url:imap://localhost:3143/inbox}` was validated as JUEL (an error at the
+  colon) and harvested as four variables — `email`, `imap`, `localhost`, `inbox`. A `${dotted.key:default}`
+  is now marked `placeholder` in the graph, gets no verdict, and yields no variables; `${order.total}`
+  is still the property path it always was.
 
 ## 0.25.0
 
