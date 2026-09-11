@@ -2606,6 +2606,14 @@ function renderItems(cat, wrap){
     items.sort((a,b)=>a.label.localeCompare(b.label));
   // else: an explicit sort wins, but plain "Name" yields to the relevance order above.
   renderListBridge(cat, parsed, items.length);
+  if(!items.length){
+    // "nothing found" is the one answer a find-it-fast tool must state; a blank column stated nothing
+    wrap.innerHTML='<div class="estate list-empty"><div class="et">'+(parsed.empty?'Nothing in ':'No match in ')+esc(cat.label)+'</div>'+
+      '<div class="eh">'+(parsed.empty?'':'Nothing here matches “'+esc(state.filter)+'” — ')+
+      '<button type="button" class="dgbtn" id="lemptypal">search everything ('+(IS_MAC?'⌘':'Ctrl+')+'K)</button></div></div>';
+    const b=wrap.querySelector('#lemptypal'); if(b) b.onclick=()=>openPalette(state.filter);
+    return;
+  }
   const sentinel=document.createElement('div'); sentinel.className='sentinel';
   wrap.appendChild(sentinel);
   let idx=0;
@@ -4947,8 +4955,11 @@ function dgCardHtml(n, elId, g){
 // place, not a text guess.
 function applyFocus(det){
   if(state.focusEl && revealByEl(det, state.focusEl)){
-    // …and the other half of a `&e=` link: the element on the canvas, not only its rows.
-    locateOnDiagram(det, state.focusEl);
+    // …and the other half of a `&e=` link: the element on the canvas, not only its rows. With the name,
+    // because CMMN's DI references plan items while the parsed tree keys definitions — the ⌖ button
+    // always passed it, a deep link never did, and the same element lit up from one and not the other.
+    const nn=byId.get(state.sel);
+    locateOnDiagram(det, state.focusEl, nn?((elementNames(nn).get(state.focusEl)||{}).name):undefined);
     return;
   }
   const raw=(state.focus||'').trim();

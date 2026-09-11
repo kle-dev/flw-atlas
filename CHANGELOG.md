@@ -132,6 +132,10 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   draft or restoring a rule scrolled to the top. The health list — here and on the overview — is grouped by the catalog's tiers
   (*Broken*, *Runtime behaviour*, *Unfinished*, *Unused & unproven*) in the order the blocks appear,
   so its first row jumps to the first block rather than the last.
+- **A list that matches nothing says so.** Typing a filter no row matched left a blank column; it now
+  says *No match in Forms* and offers to search everything. And a deep link into a CMMN diagram
+  (`&e=`) lights up the plan item like the ⌖ button does — the link never passed the element's name,
+  and CMMN's diagram references plan items by a different id than the parsed tree.
 
 ## 0.25.0
 

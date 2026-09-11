@@ -291,6 +291,11 @@
               and on the overview — is grouped by the catalog's tiers (<i>Broken</i>, <i>Runtime
               behaviour</i>, <i>Unfinished</i>, <i>Unused &amp; unproven</i>) in the order the blocks
               appear, so its first row jumps to the first block rather than the last.</li>
+          <li><b>A list that matches nothing says so.</b> Typing a filter no row matched left a blank
+              column; it now says <i>No match in Forms</i> and offers to search everything. And a deep link
+              into a CMMN diagram (<code>&amp;e=</code>) lights up the plan item like the ⌖ button does —
+              the link never passed the element's name, and CMMN's diagram references plan items by a
+              different id than the parsed tree.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>
