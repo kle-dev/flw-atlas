@@ -228,17 +228,20 @@ class FindingsTest {
                 flow("b1", "g2", "a", "\${x}"), flow("b2", "g2", "b"),            // has a default
                 flow("c1", "g3", "a", "\${x}"), flow("c2", "g3", "b"),            // an unconditional flow is the way out
                 flow("d1", "g4", "a", "\${x}"), flow("d2", "g4", "b", "\${y}"),    // a parallel gateway takes every flow
-                flow("e1", "g5", "a", "\${x}"),                                 // one flow is no choice
+                flow("e1", "g5", "a", "\${x}"),                                 // one conditional flow throws just the same
             ),
         ))))
-        assertEquals(listOf("g1"), elements(r, "gatewayNoDefault"))
-        assertTrue(findings(r).single { it["check"] == "gatewayNoDefault" }["message"].toString().contains("no outgoing sequence flow"))
+        assertEquals(listOf("g1", "g5"), elements(r, "gatewayNoDefault"))
+        assertTrue(findings(r).all { it["check"] != "gatewayNoDefault" || it["message"].toString().contains("no outgoing sequence flow") })
+        assertTrue(findings(r).single { it["element"] == "g5" }["message"].toString().contains("1 conditional outgoing flow and"))
     }
 
     @Test
     fun anActivityWithTwoUnconditionalFlowsIsAnImplicitSplit() {
         val r = run(listOf(process("p", mapOf(
-            "userTasks" to listOf(task("fork"), task("choice"), task("mixed"), task("straight")),
+            "userTasks" to listOf(task("fork"), task("choice"), task("mixed"), task("straight"), task("guided")),
+            // a DMN service task is listed twice by the parser — one element, one finding
+            "serviceTasks" to listOf(task("dmn", "type" to "dmn")), "ruleTasks" to listOf(task("dmn")),
             "gateways" to listOf(gw("g", type = "parallelGateway")),
             "flows" to listOf(
                 flow("f1", "fork", "x"), flow("f2", "fork", "y"),                  // both run in parallel
@@ -246,9 +249,12 @@ class FindingsTest {
                 flow("m1", "mixed", "x"), flow("m2", "mixed", "y", "\${a}"),        // the unconditional one always runs
                 flow("s1", "straight", "x"),
                 flow("g1", "g", "x"), flow("g2", "g", "y"),                        // a gateway is what a fork should be
+                // BPMN lets an activity carry a default flow: taken only when no condition holds — quiet
+                flow("u1", "guided", "x", "\${a}"), linkedMapOf<String, Any?>("id" to "u2", "from" to "guided", "to" to "y", "default" to true),
+                flow("r1", "dmn", "x"), flow("r2", "dmn", "y"),
             ),
         ))))
-        assertEquals(listOf("fork", "mixed"), elements(r, "implicitSplit").sortedBy { it.toString() })
+        assertEquals(listOf("dmn", "fork", "mixed"), elements(r, "implicitSplit").sortedBy { it.toString() })
         assertTrue(findings(r).first { it["element"] == "fork" }["message"].toString().contains("all of them run in parallel"))
     }
 

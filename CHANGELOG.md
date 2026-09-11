@@ -79,6 +79,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   to write. And a key that talks *about* a secret (`tokenizerModel`, `maxTokens`, `useTokenAuth`,
   `passwordPolicyDescription`, `privateKeyAlias`) is not one; an error-level finding that is wrong costs
   more than one that is missed.
+- **Three BPMN topology refinements.** `implicitSplit` fired on a task that carries a *default* flow
+  beside its conditions — BPMN allows that, and the engine takes the default only when no condition
+  holds. A DMN service task, listed by the parser as both a service task and a rule task, produced every
+  topology finding twice. And `gatewayNoDefault` skipped a gateway with a single conditional flow, which
+  throws the same "no outgoing sequence flow" as one with two.
 
 ## 0.25.0
 

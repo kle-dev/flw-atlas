@@ -493,25 +493,31 @@ object Findings {
             // Only the gateways that choose: a parallel gateway takes every flow, an event gateway waits.
             if (g["type"] != "exclusiveGateway" && g["type"] != "inclusiveGateway") continue
             val outs = outgoing[id] ?: continue
-            if (outs.size < 2 || g["default"] != null) continue
-            // An unconditional flow is the way out when nothing else matches; with one there is no risk.
+            if (g["default"] != null) continue
+            // An unconditional flow is the way out when nothing else matches; with one there is no risk. A
+            // single conditional flow is no choice, but it throws the very same exception when it is false.
             if (outs.any { it["condition"] == null }) continue
             val what = (g["name"] as? String)?.ifEmpty { null } ?: id
+            val n = outs.size
             report("gatewayNoDefault",
-                "`$what` has ${outs.size} conditional outgoing flows and no default — when none of them is true " +
-                    "the engine throws \"no outgoing sequence flow\"", id)
+                "`$what` has $n conditional outgoing flow${if (n == 1) "" else "s"} and no default — when " +
+                    "${if (n == 1) "it is" else "none of them is"} true the engine throws \"no outgoing sequence flow\"", id)
         }
 
+        // A DMN service task sits in `serviceTasks` and in `ruleTasks`: one element, judged once.
+        val seen = HashSet<String>()
         for (list in ELEMENT_LISTS) {
             if (list == "gateways") continue
             for (el in (data[list] as? List<Map<String, Any?>> ?: emptyList())) {
                 val id = el["id"] as? String ?: continue
+                if (!seen.add(id)) continue
                 val outs = outgoing[id] ?: continue
                 if (outs.size < 2) continue
                 // The engine takes every unconditional flow, so two of them are a fork with no gateway
                 // saying so. A set of flows that are all conditional is a choice someone drew on purpose,
-                // and stays quiet.
-                val plain = outs.count { it["condition"] == null }
+                // and stays quiet — and so does an activity's own default flow, which BPMN allows and the
+                // engine takes only when no condition holds.
+                val plain = outs.count { it["condition"] == null && it["default"] != true }
                 if (plain == 0) continue
                 val what = (el["name"] as? String)?.ifEmpty { null } ?: id
                 val how = if (plain == outs.size) "all of them run in parallel"

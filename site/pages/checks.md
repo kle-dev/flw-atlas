@@ -227,6 +227,9 @@ sequence flow* — the instance fails right there, on the data that reached it, 
 nobody thought of. A gateway with a default flow, or with any unconditional flow, has a way out and is
 not reported; a parallel gateway takes every flow and an event gateway waits, so neither is asked.
 
+A gateway with a *single* conditional flow and no default is reported too: it is no choice, but when
+that one condition is false the engine throws the very same exception.
+
 Mark one flow as the gateway's default, or add an unconditional flow. Accept the finding when the
 conditions are provably exhaustive — `${approved}` and `${!approved}` on a boolean that is always set.
 
@@ -237,6 +240,10 @@ between. The engine takes every flow whose condition holds *and* every flow with
 unconditional flows out of one task run in parallel: a fork that is invisible on the diagram and easy to
 read as a choice. When every outgoing flow is conditional the check stays quiet — that is a choice someone
 drew as conditions, and whether it needs a default is a question for the gateway they should have used.
+
+An activity's own **default flow** — BPMN allows one on a task, and the engine takes it only when no
+condition holds — is not an unconditional flow, so a task with conditions plus a default stays quiet. A
+DMN service task, which the parser lists both as a service task and as a rule task, is judged once.
 
 Put a parallel gateway there if the fork is meant, or an exclusive gateway with conditions if it is a
 choice.

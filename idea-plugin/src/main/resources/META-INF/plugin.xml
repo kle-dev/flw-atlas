@@ -227,6 +227,12 @@
               <code>maxTokens</code>, <code>useTokenAuth</code>, <code>passwordPolicyDescription</code>,
               <code>privateKeyAlias</code>) is not one; an error-level finding that is wrong costs more than
               one that is missed.</li>
+          <li><b>Three BPMN topology refinements.</b> <code>implicitSplit</code> fired on a task that
+              carries a <i>default</i> flow beside its conditions — BPMN allows that, and the engine takes
+              the default only when no condition holds. A DMN service task, listed by the parser as both a
+              service task and a rule task, produced every topology finding twice. And
+              <code>gatewayNoDefault</code> skipped a gateway with a single conditional flow, which throws
+              the same "no outgoing sequence flow" as one with two.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>
