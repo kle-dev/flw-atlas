@@ -33,6 +33,7 @@ view you are looking at can be copied as a link.
 | `#<nodeId>&q=<term>` | …with the search term that led there highlighted |
 | `#<nodeId>&e=<elementId>` | …with a specific model element opened — and selected on the diagram |
 | `…&f=<filter>&s=<sort>` | On a node or a category route: the list's filter text and sort order. Written by the page as you type or pick (no history entry), so a reload or a copied link brings the list back as you left it |
+| `#/checks&f=…&c=error&a=1`, `#/tree&l=all&f=…`, `#/scripts&f=…&c=…`, `#/variables&f=…&c=…` | On a report route: the filter text (`f`), the active chip (`c` — a severity, a script group, a write construct), *show accepted* (`a`) and, on the tree, the lens (`l`). Written the same way, so a report can be reloaded or sent to a colleague exactly as it was left |
 
 An unknown route or an unresolvable node id falls back to the overview rather than showing an error.
 

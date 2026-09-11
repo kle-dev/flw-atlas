@@ -120,11 +120,14 @@ class SiteDocsCoverageTest {
         assertDocumented("explorer route(s)", "explorer", explorerRoutes())
     }
 
-    private fun explorerRoutes(): Set<String> =
-        // explorer.js writes `raw==='/schema'` — three equals signs, no spaces.
-        Regex("raw\\s*={2,3}\\s*'(/[a-z]+)'")
-            .findAll(source("core/src/main/resources/frontend/explorer.js"))
-            .map { "#" + it.groupValues[1] }.toSortedSet()
+    private fun explorerRoutes(): Set<String> {
+        val js = source("core/src/main/resources/frontend/explorer.js")
+        // explorer.js writes `raw==='/overview'` for the dashboard and lists the report routes as the
+        // keys of `REPORT_VIEWS={'/schema':'schema', …}`.
+        val direct = Regex("raw\\s*={2,3}\\s*'(/[a-z]+)'").findAll(js).map { it.groupValues[1] }
+        val reports = Regex("'(/[a-z]+)'\\s*:\\s*'[a-z]+'").findAll(js).map { it.groupValues[1] }
+        return (direct + reports).map { "#$it" }.toSortedSet()
+    }
 
     /** A route the page lists that the router no longer answers sends the reader to the overview. */
     @Test

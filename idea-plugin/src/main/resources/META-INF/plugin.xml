@@ -298,6 +298,13 @@
               into a CMMN diagram (<code>&amp;e=</code>) lights up the plan item like the ⌖ button does —
               the link never passed the element's name, and CMMN's diagram references plan items by a
               different id than the parsed tree.</li>
+          <li><b>A report page can be reloaded, and sent.</b> The browse list round-tripped its filter and
+              sort through the URL; the report pages did not, so a reload of <code>#/checks</code> dropped
+              the severity chip and the filter, and "the four crossed mappings I found" could only be shared
+              as a screenshot. <code>#/checks</code>, <code>#/tree</code>, <code>#/scripts</code>,
+              <code>#/variables</code> and <code>#/schema</code> now carry their filter text, their chip,
+              <i>show accepted</i> and the tree's lens in the URL, written as you type or pick and read back
+              on arrival.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

@@ -760,14 +760,18 @@ function computeInsights(){
 // #<nodeId>       -> legacy permalink format: browse with that node selected (kept so
 //                    every previously copied link keeps working). enc() escapes '/', so
 //                    dispatching on the RAW leading '/' before decoding is unambiguous.
+// #/checks&f=…&c=error&a=1 / #/tree&l=all&f=… -> a report with its own context: `f` filter text,
+//                    `c` the chip, `a` show-accepted, `l` the tree's lens — so a reload or a copied link
+//                    brings the report back as it was left, the way `&f=`/`&s=` already did for a list.
+const REPORT_VIEWS={'/schema':'schema','/scripts':'scripts','/checks':'checks','/variables':'variables','/tree':'tree'};
 function parseHash(){
   const raw = location.hash.slice(1);
   if(!raw || raw==='/overview') return {view:'overview'};
-  if(raw==='/schema') return {view:'schema'};
-  if(raw==='/scripts') return {view:'scripts'};
-  if(raw==='/checks') return {view:'checks'};
-  if(raw==='/variables') return {view:'variables'};
-  if(raw==='/tree') return {view:'tree'};
+  const first=raw.split('&')[0];
+  if(REPORT_VIEWS[first]){
+    const ctx=hashContext(raw.split('&').slice(1));
+    return {view:REPORT_VIEWS[first], rf:ctx.f, rc:ctx.c, acc:ctx.a, lens:ctx.l};
+  }
   if(raw.indexOf('/browse/')===0){
     const parts = raw.slice(8).split('&');
     const cat = dec(parts[0]), ctx = hashContext(parts.slice(1));
@@ -783,7 +787,7 @@ function parseHash(){
 }
 /** The `k=v` pairs behind a route's first part; unknown keys are ignored, absent ones stay undefined. */
 function hashContext(pairs){
-  const out={q:'', e:'', f:undefined, s:undefined};
+  const out={q:'', e:'', f:undefined, s:undefined, c:undefined, a:undefined, l:undefined};
   pairs.forEach(p=>{ const i=p.indexOf('='); if(i<0) return; const k=p.slice(0,i); if(k in out) out[k]=dec(p.slice(i+1)); });
   return out;
 }
@@ -791,7 +795,17 @@ function hashContext(pairs){
 // so a reload or a copied link brings the filter and the sort back — the panel's context, not only its
 // node. `&q=`/`&e=` travel the same way once a selection carries them.
 function syncHashContext(){
-  if(state.view!=='browse') return;
+  if(state.view!=='browse'){
+    const base=Object.keys(REPORT_VIEWS).find(k=>REPORT_VIEWS[k]===state.view);
+    if(!base) return;
+    let h=base;
+    if(state.rf) h+='&f='+enc(state.rf);
+    if(state.rc) h+='&c='+enc(state.rc);
+    if(state.acc) h+='&a='+enc(state.acc);
+    if(state.view==='tree' && state.treeLens && state.treeLens!=='models') h+='&l='+enc(state.treeLens);
+    if(location.hash.slice(1)!==h){ try{ history.replaceState(null, '', '#'+h); }catch(e){} }
+    return;
+  }
   const base=state.sel?enc(state.sel):(state.cat?'/browse/'+enc(state.cat):'');
   if(!base) return;
   let h=base;
@@ -842,6 +856,8 @@ function route(){
   const r = parseHash();
   state.focus = r.q || '';
   state.focusEl = r.e || '';
+  state.rf = r.rf || ''; state.rc = r.rc || ''; state.acc = r.acc || '';   // a report route's own context
+  if(r.lens) state.treeLens = r.lens;
   if(r.view==='overview'){
     state.view='overview'; state.sel=null;
     showView('overview'); renderDashboard();
@@ -1539,11 +1555,15 @@ function renderTree(){
   h+=body||'<div class="estate"><div class="et">Nothing to show</div><div class="eh">No model in this project is a root.</div></div>';
   h+='</div>';
   // A lens switch rebuilds the whole view; the filter you typed and "expand all" must survive it.
-  const keepF=(v.querySelector('#tvf')||{}).value||'';
+  const keepF=(v.querySelector('#tvf')||{}).value||state.rf||'';
   v.innerHTML=h;
   wireTree(v);
   if(state.treeExpanded) v.querySelectorAll('.tv-row[aria-expanded]').forEach(li=>treeToggle(li, true));
-  if(keepF){ const f=v.querySelector('#tvf'); if(f){ f.value=keepF; f.dispatchEvent(new Event('input')); } }
+  const tf=v.querySelector('#tvf');
+  if(tf){
+    if(keepF){ tf.value=keepF; tf.dispatchEvent(new Event('input')); }
+    tf.addEventListener('input', ()=>{ state.rf=(tf.value||'').trim(); syncHashContext(); });
+  }
   wireNodeLinks(v, '.tv-label', {first:treeChrome});
 }
 /** Clicks that belong to the tree itself rather than to the node a row names. */
@@ -1606,7 +1626,7 @@ function wireTree(v){
       v.querySelectorAll('.tv-row[aria-expanded]').forEach(li=>treeToggle(li, state.treeExpanded)); sync(); };
   }
   v.querySelectorAll('.pchip[data-lens]').forEach(c=>{
-    const go=()=>{ state.treeLens=c.dataset.lens; try{ localStorage.setItem('atlas-tree-lens', c.dataset.lens); }catch(e){} renderTree(); };
+    const go=()=>{ state.treeLens=c.dataset.lens; try{ localStorage.setItem('atlas-tree-lens', c.dataset.lens); }catch(e){} syncHashContext(); renderTree(); };
     c.onclick=go; c.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); } };
   });
   const f=v.querySelector('#tvf'), count=v.querySelector('#tvcount');
@@ -2049,11 +2069,13 @@ function renderChecks(){
        : C.waivedN ? 'nothing open — '+C.waivedN+' finding'+(C.waivedN>1?'s':'')+' deliberately accepted, listed below with the reasons'
        : 'nothing flagged — no parse issues, no broken expressions, nothing unused or unproven'});
   h+=healthListHtml();
+  // the URL's `&a=` wins over the remembered preference, so a copied link shows what its author saw
+  const accShown=()=>state.acc==='1'?true:state.acc==='0'?false:showAccepted();
   if(C.openN||C.waivedN){
     const errN=FINDS.filter(f=>f.severity==='error'&&!waiverFor(f)).length;
     h+=filterBar({placeholder:'filter findings — a model, an element, a word of the message…', label:'Filter findings',
       chips:[{fk:'sev',fv:'all',label:'all',n:C.openN},{fk:'sev',fv:'error',label:'error',n:errN},{fk:'sev',fv:'warning',label:'warning',n:C.openN-errN}],
-      extra:C.waivedN?'<button type="button" class="pchip'+(showAccepted()?' on':'')+'" id="chk-showacc" aria-pressed="'+(showAccepted()?'true':'false')+
+      extra:C.waivedN?'<button type="button" class="pchip'+(accShown()?' on':'')+'" id="chk-showacc" aria-pressed="'+(accShown()?'true':'false')+
         '">show accepted<span class="pchipn">'+C.waivedN+'</span></button>':''});
   }
   h+=b;
@@ -2070,7 +2092,9 @@ function renderChecks(){
   if(sa) sa.onclick=()=>{ const on=sa.getAttribute('aria-pressed')!=='true';
     sa.setAttribute('aria-pressed', on?'true':'false'); sa.classList.toggle('on', on);
     try{ localStorage.setItem(SHOWACC_KEY, on?'1':'0'); }catch(e){}
+    state.acc=on?'1':'0'; syncHashContext();
     v.querySelectorAll('details.chk-acc').forEach(d=>{ d.open=on; }); };
+  if(accShown()) v.querySelectorAll('details.chk-acc').forEach(d=>{ d.open=true; });
   wireNodeLinks(v, '[data-goto],[data-id]', {first:reportNav});
   // arrived from a health row or the parse-issue chip: land on the block it asked for
   if(_checkJump){
@@ -2896,6 +2920,13 @@ function wireSectionFilter(root){
     // 340" against a chip saying 42 open contradicted itself.
     const counted=leaves.filter(el=>!el.closest('details.chk-acc, #chk-waived, #chk-notes'));
     const containers=[...scope.querySelectorAll('details.card, details.tr, details.sect, details.chk-acc, .fgroup')].filter(c=>c.querySelector('[data-hay]'));
+    // A report page's own bar keeps its text and chip in the URL (see syncHashContext) and starts from it.
+    const pageBar=state.view!=='browse' && scope.classList.contains('dash');
+    if(pageBar){
+      if(state.rf) input.value=state.rf;
+      const pre=state.rc && chips.find(x=>x.dataset.fv===state.rc);
+      if(pre) chips.forEach(x=>x.classList.toggle('on', x===pre));
+    }
     const apply=()=>{
       const q=(input.value||'').trim().toLowerCase();
       const on=chips.find(c=>c.classList.contains('on'));
@@ -2911,9 +2942,11 @@ function wireSectionFilter(root){
         c.hidden=!any; if(any&&(q||fv!=='all')) c.open=true;
       });
       if(count) count.textContent=(q||fv!=='all')?shown+' of '+counted.length:'';
+      if(pageBar){ state.rf=(input.value||'').trim(); state.rc=(fk&&fv&&fv!=='all')?fv:''; syncHashContext(); }
     };
     input.addEventListener('input', debounce(apply,120));
     chips.forEach(c=>c.onclick=()=>{ chips.forEach(x=>x.classList.toggle('on', x===c)); apply(); });
+    if(pageBar && (state.rf||state.rc)) apply();
   });
 }
 

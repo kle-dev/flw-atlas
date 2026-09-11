@@ -978,6 +978,17 @@ const probe = `<script>
        v.querySelectorAll('.tv-row[tabindex="0"]').length===1 && document.activeElement!==rows[0]);
   });
 
+  // --- a report route carries its context ---
+  steps.push(()=>{ location.hash='#/checks&c=error&f=customer'; });
+  steps.push(()=>{
+    ok('a report route brings its chip back', state.view==='checks' && !!document.querySelector('#view-checks .fbar .pchip.on[data-fv="error"]'), location.hash);
+    ok('a report route brings its filter back', (document.querySelector('#view-checks .fbar .pf')||{}).value==='customer');
+    location.hash='#/tree&l=all';
+  });
+  steps.push(()=>{
+    ok('the tree route brings its lens back', state.view==='tree' && !!document.querySelector('#view-tree .pchip.on[data-lens="all"]'), location.hash);
+    ok('the crumb names the tree', (document.getElementById('crumbs').textContent||'').indexOf('Reference tree')>=0);
+  });
   let i=0;(function run(){
     if(i>=steps.length){
       log.push('uncaught errors: '+(errs.length?('FAIL '+errs.join(' | ')):'none'));

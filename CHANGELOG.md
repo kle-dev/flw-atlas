@@ -138,6 +138,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   says *No match in Forms* and offers to search everything. And a deep link into a CMMN diagram
   (`&e=`) lights up the plan item like the ⌖ button does — the link never passed the element's name,
   and CMMN's diagram references plan items by a different id than the parsed tree.
+- **A report page can be reloaded, and sent.** The browse list round-tripped its filter and sort through
+  the URL; the report pages did not, so a reload of `#/checks` dropped the severity chip and the filter,
+  and "the four crossed mappings I found" could only be shared as a screenshot. `#/checks`, `#/tree`,
+  `#/scripts`, `#/variables` and `#/schema` now carry their filter text, their chip, *show accepted* and
+  the tree's lens in the URL, written as you type or pick and read back on arrival.
 
 ## 0.25.0
 
