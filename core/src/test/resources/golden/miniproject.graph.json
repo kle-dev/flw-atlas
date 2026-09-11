@@ -610,7 +610,8 @@
       "label": "Customer Service",
       "message": "`deliveryCity` maps to column `delivery_zip_` and `deliveryZip` maps to `delivery_city_` — the two column mappings look swapped",
       "node": "service:customerService",
-      "severity": "error"
+      "severity": "error",
+      "subject": "deliveryCity"
     },
     {
       "check": "guessedVars",
@@ -625,7 +626,8 @@
       "message": "Unclosed '('",
       "node": "expression:${vars:bogus(}",
       "severity": "error",
-      "snippet": "("
+      "snippet": "(",
+      "subject": "@12"
     },
     {
       "check": "invalidExpr",
@@ -633,7 +635,8 @@
       "message": "Unknown function 'vars:bogus'",
       "node": "expression:${vars:bogus(}",
       "severity": "warning",
-      "snippet": "bogus"
+      "snippet": "bogus",
+      "subject": "unknown-function:vars:bogus"
     },
     {
       "check": "missingRefs",
@@ -664,7 +667,8 @@
       "label": "Customer Service",
       "message": "column `orphan_col_` of table `cust_customer` is in Liquibase but not mapped by the service",
       "node": "service:customerService",
-      "severity": "warning"
+      "severity": "warning",
+      "subject": "cust_customer.orphan_col_"
     },
     {
       "check": "scriptIssues",
@@ -693,7 +697,8 @@
       "label": "orderId",
       "message": "mapped into `process:fulfilmentProcess`, which never reads it — written by an in parameter on `Fulfil`",
       "node": "variable:orderId",
-      "severity": "warning"
+      "severity": "warning",
+      "subject": "process:fulfilmentProcess"
     },
     {
       "check": "unusedVars",

@@ -44,7 +44,10 @@ noise.
 | `guessedVars` | warning | A variable only a script mentions, by bare name. |
 
 Each finding carries the node it belongs to, a message, and — where Atlas knows it — the file, the
-element, the line and a snippet, so it is actionable rather than merely true.
+element, the line and a snippet, so it is actionable rather than merely true. Where one check fires
+more than once on the same node it also carries a `subject` naming which one it is: the scope a
+variable was mapped into, the column a schema gap is about, the name an expression could not resolve.
+The message is prose and rewords as a model changes; the subject is meant to stay put.
 
 ## What each one detects
 

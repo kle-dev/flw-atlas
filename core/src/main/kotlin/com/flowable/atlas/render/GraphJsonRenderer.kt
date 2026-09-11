@@ -113,8 +113,10 @@ object GraphJsonRenderer {
             "type+key there (e.g. data.dataIn='processes' -> .processes[] | select(.key==\"<key>\")).",
         "usedBy" to "Node ids that reference this node (app 'contains' membership excluded). The " +
             "relation itself is in `edges`.",
-        "findings" to "{check, severity, node, label, message, file?, element?, line?, snippet?} — what " +
-            "Atlas thinks is wrong; `checks` counts them per kind.",
+        "findings" to "{check, severity, node, label, message, file?, element?, subject?, line?, " +
+            "snippet?} — what Atlas thinks is wrong; `checks` counts them per kind. `subject` tells " +
+            "apart several findings of one check on one node (the scope, the column), where `message` " +
+            "is prose that rewords.",
         "recipes" to listOf(
             "who references X:            jq '.graph.nodes[] | select(.id==\"process:X\") | .usedBy'",
             "what X references:           jq '.graph.edges[] | select(.s==\"process:X\")'",

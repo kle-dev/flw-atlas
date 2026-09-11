@@ -54,9 +54,16 @@ object Findings {
             (e["t"] as? String)?.let { referenced.add(it) }
         }
 
+        /**
+         * [subject] names *which* of several findings this is, when one check fires more than once on
+         * one node — the scope a variable was mapped into, the column a gap is about. Without it the
+         * only thing separating those findings is [message], which is generated prose carrying counts
+         * and "(+N more)": it rewords when something unrelated on the same node changes, so nothing
+         * downstream can name one finding and still mean the same one after the next run.
+         */
         fun add(
             check: String, severity: String, node: Map<String, Any?>, message: String,
-            element: String? = null, line: Any? = null, snippet: String? = null,
+            element: String? = null, subject: String? = null, line: Any? = null, snippet: String? = null,
         ) {
             val f = linkedMapOf<String, Any?>(
                 "check" to check,
@@ -67,6 +74,7 @@ object Findings {
             )
             if (node["file"] != null) f["file"] = node["file"]
             if (element != null) f["element"] = element
+            if (subject != null) f["subject"] = subject
             if (line != null) f["line"] = line
             if (snippet != null) f["snippet"] = snippet
             findings.add(f)
@@ -88,6 +96,11 @@ object Findings {
                             severity = if (p["severity"] == ERROR) ERROR else WARNING,
                             node = n,
                             message = p["message"]?.toString() ?: "expression problem",
+                            // An unknown name identifies itself; a syntax problem has only its position
+                            // in the expression, which is stable because the expression text is part of
+                            // the node id — edit the expression and this is a different node anyway.
+                            subject = p["kind"]?.let { "$it:${p["subject"]}" }
+                                ?: p["start"]?.let { "@$it" },
                             snippet = p["snippet"]?.toString(),
                         )
                     }
@@ -121,6 +134,7 @@ object Findings {
                             severity = if (group["kind"] == "crossed") WARNING else ERROR,
                             node = n,
                             message = crossingMessage(group, pairs),
+                            subject = pairs.first()["field"]?.toString(),
                         )
                     }
                     val coverage = data["schemaCoverage"] as? Map<String, Any?> ?: continue
@@ -133,7 +147,7 @@ object Findings {
                                 "the service but used by no data object"
                             else -> null
                         } ?: continue
-                        add("schemaGaps", WARNING, n, what)
+                        add("schemaGaps", WARNING, n, what, subject = "${r["table"]}.${r["sql"]}")
                     }
                 }
                 "serviceOperation" -> if ((data["usedBy"] as? List<*>).isNullOrEmpty()) {
@@ -157,7 +171,8 @@ object Findings {
                     }
                     for (scope in (data["unreadIn"] as? List<*> ?: emptyList<Any?>())) {
                         add("unreadInputs", WARNING, n,
-                            "mapped into `$scope`, which never reads it — " + writeSites(data))
+                            "mapped into `$scope`, which never reads it — " + writeSites(data),
+                            subject = scope?.toString())
                     }
                 }
             }
@@ -277,6 +292,10 @@ object Findings {
         result: Map<String, Any?>,
         findings: MutableList<Map<String, Any?>>,
     ) {
+        // No `subject` here, deliberately. One script element can carry several problems, but the only
+        // things that would tell them apart are the line and the message, and both move when the script
+        // is edited above them. The element is the honest grain: a reader judges a script body, not a
+        // line of it.
         fun emit(modelType: String, model: Map<String, Any?>, element: Any?, problems: Any?) {
             val list = problems as? List<Map<String, Any?>> ?: return
             for (p in list) {
