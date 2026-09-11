@@ -13,10 +13,12 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.Separator
+import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.editor.colors.EditorColorsListener
 import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.fileEditor.FileEditor
@@ -230,33 +232,49 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
         )
     }
 
-    /** Resolve a report file label to a VirtualFile and open it — at [line] (1-based) when given. */
-    /** Write `waivers.json` next to the open report, and say so — a silent write into someone's
-     *  repository is a write nobody can review. */
+    /**
+     * Write `waivers.json` next to the open report, tell the page, and regenerate. Explicit, never
+     * automatic: a silent write into someone's repository is a write nobody can review. Regenerating
+     * *is* automatic, because the only bad state after a save is a page whose accepted rows sit beside
+     * counts and a gate that still contradict them — and the page batches every decision into one save.
+     */
     private fun saveWaivers(text: String) {
         fun say(title: String, body: String, type: NotificationType) =
             NotificationGroupManager.getInstance().getNotificationGroup(AtlasNotifications.GROUP_ID)
-                .createNotification(title, body, type).notify(project)
+                .createNotification(title, body, type)
+        fun tellPage(ok: Boolean) = browser.cefBrowser.executeJavaScript(
+            "window.__atlasWaiversSaved && window.__atlasWaiversSaved($ok);", browser.cefBrowser.url, 0)
         // Beside the report it came from: that folder is the analysis output, and waivers.json is the
         // one file in it meant to be kept — Atlas writes a .gitignore there saying exactly that.
         val dir = file.parent
         if (dir == null) {
-            say("Could not save waivers", "The report has no folder to write to.", NotificationType.ERROR)
+            tellPage(false)
+            say("Could not save waivers", "The report has no folder to write to.", NotificationType.ERROR).notify(project)
             return
         }
         try {
-            WriteAction.run<Exception> {
-                val target = dir.findChild(Waivers.FILE_NAME) ?: dir.createChildData(this, Waivers.FILE_NAME)
-                VfsUtil.saveText(target, text)
+            val target = WriteAction.compute<VirtualFile, Exception> {
+                val t = dir.findChild(Waivers.FILE_NAME) ?: dir.createChildData(this, Waivers.FILE_NAME)
+                VfsUtil.saveText(t, text)
+                t
             }
+            tellPage(true)
+            val rules = Regex("\"check\"\\s*:").findAll(text).count()
             say("Waivers saved",
-                "Accepted findings written to ${dir.name}/${Waivers.FILE_NAME}. Regenerate the explorer " +
-                    "to see the counts and the CI gate follow.", NotificationType.INFORMATION)
+                "$rules rule(s) written to ${dir.name}/${Waivers.FILE_NAME} — regenerating the explorer so the " +
+                    "counts and the CI gate follow.", NotificationType.INFORMATION)
+                .addAction(NotificationAction.createSimple("Open ${Waivers.FILE_NAME}") {
+                    if (!project.isDisposed) FileEditorManager.getInstance(project).openFile(target, true)
+                })
+                .notify(project)
+            regenerate()
         } catch (e: Exception) {
-            say("Could not save waivers", e.message ?: e.toString(), NotificationType.ERROR)
+            tellPage(false)
+            say("Could not save waivers", e.message ?: e.toString(), NotificationType.ERROR).notify(project)
         }
     }
 
+    /** Resolve a report file label to a VirtualFile and open it — at [line] (1-based) when given. */
     private fun openInIde(label: String, line: Int?) {
         if (project.isDisposed) return
         val vf = resolveLabel(label)

@@ -2,6 +2,7 @@ package com.flowable.atlas.explorer
 
 import com.flowable.atlas.diagram.DiagramArtifacts
 import com.flowable.atlas.graph.Atlas
+import com.flowable.atlas.graph.Waivers
 import com.flowable.atlas.render.ClaudeRenderer
 import com.flowable.atlas.render.ExplorerHtmlRenderer
 import com.flowable.atlas.render.GraphJsonRenderer
@@ -41,10 +42,11 @@ class AtlasGeneratorService(private val project: Project) {
     fun generateExplorer(projectDir: Path, outputHtml: Path, indicator: ProgressIndicator): Outcome =
         try {
             val root = projectDir.toFile()
-            val result = extract(root, indicator)
+            // The report's own folder is where its Save writes waivers.json, so that is the file to read.
+            val result = extract(root, indicator, waiverFile(outputHtml.parent))
 
             indicator.text = "Rendering Atlas explorer…"
-            val html = ExplorerHtmlRenderer.render(result, root)
+            val html = ExplorerHtmlRenderer.render(result, root, waiverAuthor = Waivers.defaultAuthor(root))
             outputHtml.toFile().writeText(html, Charsets.UTF_8)
 
             Outcome.Success(outputHtml, listOf(outputHtml), summaryLog(result))
@@ -64,11 +66,14 @@ class AtlasGeneratorService(private val project: Project) {
     ): Outcome =
         try {
             val root = projectDir.toFile()
-            val result = extract(root, indicator)
+            val result = extract(root, indicator, waiverFile(outputDir))
 
             indicator.text = "Rendering Atlas artifacts…"
             val name = atlasProjectName(projectDir)
             outputDir.toFile().mkdirs()
+            // The folder is regenerated and may carry client data; waivers.json is the one file in it
+            // meant to be kept. The same .gitignore the CLI writes says so.
+            Waivers.ensureOutputGitignore(outputDir.toFile())
             val renderers = mapOf<AtlasArtifact, () -> String>(
                 AtlasArtifact.SUMMARY_MD to { SummaryRenderer.render(result, root) },
                 AtlasArtifact.OVERVIEW_MD to { OverviewRenderer.render(result, root) },
@@ -76,7 +81,7 @@ class AtlasGeneratorService(private val project: Project) {
                 // and pretty-printed it, which on a large project meant a multi-megabyte file in the
                 // user's repo.
                 AtlasArtifact.GRAPH_JSON to { GraphJsonRenderer.render(result) },
-                AtlasArtifact.EXPLORER_HTML to { ExplorerHtmlRenderer.render(result, root) },
+                AtlasArtifact.EXPLORER_HTML to { ExplorerHtmlRenderer.render(result, root, waiverAuthor = Waivers.defaultAuthor(root)) },
                 AtlasArtifact.CLAUDE_MD to { ClaudeRenderer.render(result, root) },
             )
             val written = ArrayList<Path>()
@@ -110,8 +115,15 @@ class AtlasGeneratorService(private val project: Project) {
             Outcome.Failure("Failed to generate the Atlas artifacts: ${e.message}", e.stackTraceToString())
         }
 
-    /** [Atlas.extract] with the project's allowlist and custom-function settings applied. */
-    private fun extract(root: File, indicator: ProgressIndicator): LinkedHashMap<String, Any?> {
+    /** `waivers.json` beside the artifacts in [outputDir] — the file the explorer's Save writes. */
+    private fun waiverFile(outputDir: Path?): File? = outputDir?.resolve(Waivers.FILE_NAME)?.toFile()
+
+    /**
+     * [Atlas.extract] with the project's allowlist and custom-function settings applied, and the
+     * accepted findings in [waiverFile] honoured — the CLI reads that file, and a page generated
+     * here that ignored it would show a team the findings it had already decided about.
+     */
+    private fun extract(root: File, indicator: ProgressIndicator, waiverFile: File?): LinkedHashMap<String, Any?> {
         indicator.isIndeterminate = true
         indicator.text = "Analyzing Flowable project…"
         val settings = FlowableAtlasProjectSettings.getInstance(project)
@@ -124,6 +136,7 @@ class AtlasGeneratorService(private val project: Project) {
             exprAllowlist = allowlist,
             discoverCustom = settings.customFunctionsEnabled,
             customPath = customPath,
+            waivers = waiverFile?.let { Waivers.load(it) } ?: Waivers.EMPTY,
         )
     }
 

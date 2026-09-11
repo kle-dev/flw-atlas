@@ -64,8 +64,11 @@ Settings…*; and the Script Playground's language and context selectors with *L
 The generated explorer opens as an editor tab, **Atlas Explorer** (the page, in the embedded browser);
 its toolbar opens the Expression Playground. Inside the IDE the page can also write back: when
 you [accept a finding](../../explorer/#accepting-a-finding), **Save to waivers.json** writes it beside the
-report through the IDE's own file system, so it shows up in the Git tool window like any other edit. In
-a plain browser the same button offers the file as a download instead.
+report through the IDE's own file system, so it shows up in the Git tool window like any other edit, and
+then regenerates the explorer so the counts, badges and the CI gate follow the decision. A balloon names
+the file and opens it. Every generation from the IDE reads that `waivers.json` back, exactly as the CLI
+does, and prefills the `by` of a new rule with the project's git identity (`git config user.name`). In a
+plain browser the same button offers the file as a download instead.
 
 ## Inspections
 
@@ -197,7 +200,8 @@ the folder a Design pull lands in. The three generators with shapes of their own
 page they were four screens of fields with no hierarchy. Every folder field on these pages is project-relative, and its
 browse button writes the chosen folder relative to the active Flowable project (an absolute path only
 for a folder outside it). Unticking every artifact is not a way to generate nothing: the selection
-falls back to the explorer HTML.
+falls back to the explorer HTML. Generating into the output folder also drops a `.gitignore` there that keeps
+everything except `waivers.json` out of the repository — the same file the CLI writes.
 
 
 | Option | Default |
