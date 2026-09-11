@@ -72,12 +72,15 @@ file above the 32 MB limit — because a file that was skipped on purpose is no 
 report than one that failed. An archive *inside* an archive (a Design export packing one `.bar` per
 app) is opened one level down and its models are read like any other.
 
-One entry is a warning rather than an error: a **key shared by two model types** — a form and a page
-both called `customer`, say. Both models are read completely and a reference that states its type
-(a `formKey`, a `calledElement`) reaches the right one; what stays ambiguous is anything that names the
-key alone, and the variables and expressions Atlas harvests from a file, which are credited to whichever
-of the two it registered first. The warning names both files so you know which pages to read with that
-in mind.
+A **key shared by two model types** is not one of them. A case and its start form both called
+`DRA-C001`, a data object and the service Design generated for it — this is common and legal. Both
+models are read completely; a reference that states its type (a `formKey`, a `calledElement`) reaches
+the right one; and the expressions, bindings and variables harvested from each file are credited to the
+model of that file's type. (Until 0.26.0 they went to whichever model was registered first, so a form
+that shared its case's key showed none of its own bindings and the case showed all of them.) What stays
+ambiguous is a reference that names the key alone — a Java string literal — which reaches one of the two
+and is marked *suspect*. The shared key is recorded in `graph.json`'s `diagnostics` as a `conflict`
+entry so a reader knows, but it is not a finding: nothing failed.
 
 This is the one check you should never carry. A parse failure does not just cost you that file — every
 reference into and out of it disappears too, which makes the rest of the report quietly less complete.

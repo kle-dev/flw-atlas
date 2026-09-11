@@ -56,7 +56,7 @@ object CheckCatalog {
             why = "A file Atlas could not read is missing from the report, and so is every reference " +
                 "into and out of it — the rest of the report quietly gets less complete.",
             fix = "Open the file at the line named and fix the XML or JSON. A file Atlas skipped on " +
-                "purpose says why in its message; a key two model types share names both files.",
+                "purpose says why in its message.",
             docs = "parseissues-files-atlas-could-not-read",
         ),
         Check(

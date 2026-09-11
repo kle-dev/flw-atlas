@@ -103,17 +103,18 @@ object Atlas {
             val norm = ModelKinds.NORMALIZE_TYPE[mtype] ?: mtype
             modelIndex[norm to key] = label
             val known = byKey.getOrPut(key) { ArrayList() }
-            // Two models of different types sharing one key is legal in Flowable and rare in practice,
-            // and it is the one thing a key alone cannot settle: a reference that names only the key,
-            // and the variables and expressions harvested under it, go to whichever type Atlas lists
-            // first. Said once per (key, type), as a warning, so the reader knows which pages to doubt.
-            // The same model loose and inside a .bar is the same type twice — not a conflict.
+            // Two models of different types sharing one key is legal in Flowable and common in practice
+            // — a case and its start form, a data object and its generated service. Everything a parser
+            // records about a model carries the type now, so only a reference that names the key alone
+            // (a Java string literal) is ambiguous; it goes to whichever type Atlas lists first and is
+            // marked suspect. Recorded once per (key, type) as information, not as a finding: nothing
+            // failed. The same model loose and inside a .bar is the same type twice — not a conflict.
             if (known.none { it.first == norm }) {
                 known.firstOrNull { it.first != norm }?.let { (otherType, otherLabel) ->
                     diag(
                         "conflict", label,
-                        "key '$key' is shared with the $otherType model $otherLabel — references that " +
-                            "name only the key, and the harvested variables and expressions, go to one of them",
+                        "key '$key' is shared with the $otherType model $otherLabel — a reference that " +
+                            "names only the key (a Java string literal) reaches one of them, marked suspect",
                     )
                 }
             }
@@ -141,6 +142,10 @@ object Atlas {
 
             val parser = ModelParsers.PARSERS[mtype]
             val mkeys = ArrayList<Any?>()
+            // Everything the parser and the harvest below record about this file's models carries this
+            // type (Ctx.modelId), so a key two types share cannot be mis-credited.
+            val nodeType = ModelKinds.NORMALIZE_TYPE[mtype] ?: mtype
+            ctx.currentModel = nodeType
             try {
                 if (parser == null) {
                     val obj = ModelParsers.parseGeneric(data, ctx, label, mtype)
@@ -167,7 +172,6 @@ object Atlas {
             // A TODO, FIXME, HACK or XXX in a model file is a promise someone made to come back. Kept
             // with its line and the model(s) the file defines, so the report can list the ones nobody
             // has kept — the text after the marker is the subject, which survives a line moving.
-            val nodeType = ModelKinds.NORMALIZE_TYPE[mtype] ?: mtype
             val markerNodes = mkeys.filterNotNull().map { "$nodeType:$it" }
             for (m in MARKER_RE.findAll(raw)) {
                 val before = raw.substring(0, m.range.first)
@@ -187,10 +191,10 @@ object Atlas {
                 val ks = keys.filterNotNull()
                 if (ks.isEmpty()) continue
                 for (e in Constants.EXPR_RE.findAll(text).map { Constants.htmlUnescape(it.value) }) {
-                    for (k in ks) ctx.exprUse.getOrPut(e) { LinkedHashSet() }.add(k.toString())
+                    for (k in ks) ctx.exprUse.getOrPut(e) { LinkedHashSet() }.add("$nodeType:$k")
                 }
                 for (m in Constants.MUSTACHE_RE.findAll(text).map { Constants.htmlUnescape(it.value) }) {
-                    for (k in ks) ctx.mustacheUse.getOrPut(m) { LinkedHashSet() }.add(k.toString())
+                    for (k in ks) ctx.mustacheUse.getOrPut(m) { LinkedHashSet() }.add("$nodeType:$k")
                 }
                 if (parser != null) {
                     // Make ${bean.method()} references in this model visible (model → bean, labelled).
@@ -223,6 +227,7 @@ object Atlas {
                     if (si != null && meta["sourceIndex"] == null) meta["sourceIndex"] = si.groupValues[1]
                 }
             }
+            ctx.currentModel = null
         }
 
         // Older Design exports store each model as `<type>-models/<name>.json`

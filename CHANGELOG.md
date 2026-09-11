@@ -43,6 +43,16 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   colon) and harvested as four variables — `email`, `imap`, `localhost`, `inbox`. A `${dotted.key:default}`
   is now marked `placeholder` in the graph, gets no verdict, and yields no variables; `${order.total}`
   is still the property path it always was.
+- **A key names a model only together with its type.** A case and its start form both called
+  `DRA-C001`, a data object and the service Design generated for it: two models of different types
+  sharing one key is common — 23 times across three real projects — and everything Atlas harvested from
+  a file (its `${…}` and `{{…}}`, its variables, the operations it calls, the scripts that touch a name)
+  was credited to whichever model of that key it had registered first. Measured: 34 bindings and 69
+  expressions of a start form on the case's page, none on the form's. Every such record now carries the
+  model's type, so the form's bindings are the form's. The shared key is still recorded in
+  `diagnostics`, but it stopped being a *parse issue*: nothing failed to parse, and the summary no longer
+  says "17 files could not be fully analyzed" about 16 shared keys. Only a Java string literal that names
+  the bare key stays ambiguous, and that edge was already marked suspect.
 
 ## 0.25.0
 

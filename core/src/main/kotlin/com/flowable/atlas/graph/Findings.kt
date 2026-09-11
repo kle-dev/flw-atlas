@@ -219,12 +219,15 @@ object Findings {
 
         // Parse/read failures. Custom-function extraction keeps its own diagnostics list.
         for (d in (result["diagnostics"] as? List<Map<String, Any?>> ?: emptyList())) {
+            // A key two model types share is information, not a finding: both files were read completely
+            // and everything harvested from them carries its type. Only a bare Java literal is ambiguous,
+            // and that edge is already marked suspect.
+            if (d["kind"] == "conflict") continue
             findings.add(linkedMapOf(
                 "check" to "parseIssues",
-                // A file that would not parse is an error: a model is missing from the report. A key two
-                // types share was read completely (only a key-only lookup is ambiguous), and a file Atlas
-                // decided not to read was never a model that failed — both are warnings.
-                "severity" to (if (d["kind"] == "conflict" || d["kind"] == "skip") WARNING else ERROR),
+                // A file that would not parse is an error: a model is missing from the report. A file
+                // Atlas decided not to read was never a model that failed — a warning.
+                "severity" to (if (d["kind"] == "skip") WARNING else ERROR),
                 "node" to null,
                 "label" to (d["path"] ?: "?"),
                 "message" to "${d["kind"]}: ${d["message"]}",

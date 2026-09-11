@@ -250,7 +250,8 @@ class IoParametersTest {
         )
     }
 
-    /** `"variable|dir|via"`, plus `@scope` when the site belongs to another model's variable space. */
+    /** `"variable|dir|via"`, plus `@scope` — the callee's node id — when the site belongs to another
+     *  model's variable space. */
     private fun siteSig(s: Map<String, Any?>): String =
         "${s["variable"]}|${s["dir"]}|${s["via"]}" + (s["scope"]?.let { "@$it" } ?: "")
 
@@ -277,8 +278,8 @@ class IoParametersTest {
                 "orderId|read|inParameterSource",
                 // …and the value lands in a variable of the *callee*, which is where a reader must be
                 // looked for. Attributing it to this process would check the wrong model.
-                "subOrderId|write|inParameter@fulfilmentProcess",
-                "subTotal|read|outParameterSource@fulfilmentProcess",
+                "subOrderId|write|inParameter@process:fulfilmentProcess",
+                "subTotal|read|outParameterSource@process:fulfilmentProcess",
                 "total|write|outParameter",
                 // an `inputParameter` name is the service's contract, not a variable — nothing recorded
                 "newCustomerId|write|outputParameter",

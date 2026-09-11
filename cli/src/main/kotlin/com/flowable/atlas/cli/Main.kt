@@ -228,7 +228,8 @@ fun run(args: Array<String>): Int {
     // -v: the parse issues the status line counts, one per line — the flag was accepted and never read.
     val diagnosticLines: List<String> = if (verbose > 0) {
         (result["diagnostics"] as? List<*>).orEmpty().mapNotNull { d ->
-            (d as? Map<*, *>)?.let { "  ${it["kind"]} ${it["path"]}: ${it["message"]}" }
+            // a shared key is not counted, so it is not listed either
+            (d as? Map<*, *>)?.takeIf { it["kind"] != "conflict" }?.let { "  ${it["kind"]} ${it["path"]}: ${it["message"]}" }
         }
     } else emptyList()
 

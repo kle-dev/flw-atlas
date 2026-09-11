@@ -1,6 +1,7 @@
 package com.flowable.atlas.graph
 
 import com.flowable.atlas.parsing.Constants
+import com.flowable.atlas.parsing.ModelKinds
 
 /**
  * The mutable extraction context threaded through every parser — a port of the `ctx` dict in
@@ -65,6 +66,32 @@ class Ctx {
     var archiveFileCount = 0
     var javaFileCount = 0
 
+    /**
+     * The node type of the model being parsed right now (`process`, `form`, …), set by the extractor
+     * around each parser call. Every record a parser writes about *its own* model — a variable it
+     * declares, an operation it calls, a script that touches a name — used to carry the bare key, and
+     * the graph resolved that key through a first-wins map. Two models of different types with one key
+     * (a case and its start form, a data object and its generated service) then shared one attribution:
+     * the form's 34 bindings landed on the case, and the form's page was empty. With the type known here,
+     * the record can say `form:DRA-C001` and no map has to guess.
+     */
+    var currentModel: String? = null
+
+    /** [key] as a node id — `type:key` while a model is being parsed, the key itself otherwise (a Java
+     *  class, or a caller that already spelled the type). */
+    fun modelId(key: Any?): String? {
+        val k = key?.toString() ?: return null
+        val t = currentModel ?: return k
+        return if (':' in k) k else "$t:$k"
+    }
+
+    /** A model of a known kind as a node id, or the bare key when the kind is not a model type (a URL). */
+    private fun typed(kind: String?, key: String?): String? {
+        if (key == null) return null
+        val t = kind?.let { ModelKinds.NORMALIZE_TYPE[it] ?: it } ?: return key
+        return "$t:$key"
+    }
+
     /** Record a static model→X reference; dynamic (`${…}`/`{{…}}`) values go to [dynamicRefs] instead.
      *  [suspect] marks a reference the producer already knows is uncertain (e.g. a ref-by-id where a
      *  key is expected) — it survives resolution and flags the resulting edge. */
@@ -92,7 +119,7 @@ class Ctx {
         val ok = opKey.toString().trim()
         if (c.isEmpty() || tk.isEmpty() || ok.isEmpty()) return
         if (listOf(tk, ok).any { it.contains("\${") || it.contains("{{") }) return
-        opUse.add(linkedMapOf("consumer" to c, "targetKind" to targetKind, "targetKey" to tk, "op" to ok))
+        opUse.add(linkedMapOf("consumer" to modelId(c), "targetKind" to targetKind, "targetKey" to tk, "op" to ok))
     }
 
     /** Record a "who can do what" entry; literal group names feed the index. */
@@ -184,7 +211,7 @@ class Ctx {
         if (model == null) return
         val v = varName(variable) ?: return
         val flow = linkedMapOf<String, Any?>(
-            "model" to model.toString(), "variable" to v, "dir" to dir,
+            "model" to modelId(model), "variable" to v, "dir" to dir,
             "element" to element, "source" to source, "target" to target,
         )
         if (kind != null) flow["kind"] = kind
@@ -203,7 +230,7 @@ class Ctx {
         addVarSite(
             model = model, name = v, dir = role.dir, via = viaOf(kind, side),
             element = element, elementName = elementName, elementType = elementType,
-            scope = if (role.inCallee) calleeKey else null,
+            scope = if (role.inCallee) typed(calleeKind, calleeKey) else null,
         )
     }
 
@@ -218,7 +245,7 @@ class Ctx {
         if (model == null) return
         val n = varName(name) ?: return
         scriptVarSites.add(linkedMapOf(
-            "model" to model.toString(), "variable" to n, "api" to api,
+            "model" to modelId(model), "variable" to n, "api" to api,
             "element" to elementId, "elementName" to elementName, "elementType" to elementType,
         ))
     }
@@ -241,7 +268,7 @@ class Ctx {
         if (model == null) return
         val n = varName(name) ?: return
         val rec = linkedMapOf<String, Any?>(
-            "model" to model.toString(), "variable" to n, "dir" to dir, "via" to via,
+            "model" to modelId(model), "variable" to n, "dir" to dir, "via" to via,
             "element" to element, "elementName" to elementName, "elementType" to elementType,
         )
         scope?.toString()?.trim()?.ifEmpty { null }?.let { rec["scope"] = it }
@@ -265,7 +292,7 @@ class Ctx {
             "mustache_use" -> mustacheUse
             else -> varUse
         }
-        target.getOrPut(n) { LinkedHashSet() }.add(modelKey.toString())
+        target.getOrPut(n) { LinkedHashSet() }.add(modelId(modelKey)!!)
     }
 
     companion object {

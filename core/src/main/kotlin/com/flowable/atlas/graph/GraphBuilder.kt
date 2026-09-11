@@ -114,7 +114,14 @@ object GraphBuilder {
             return nid
         }
 
-        fun kn(key: Any?): String? = (key as? String)?.let { keyToNode[it] }
+        /** The node a parser's record points at: a typed id (`form:x`, as [Ctx.modelId] writes them) when
+         *  such a node exists, else the bare key through the first-wins map — which also serves an id whose
+         *  type the node table spells differently (a `.form` whose metadata says `page`), and a Java class. */
+        fun kn(key: Any?): String? {
+            val k = key as? String ?: return null
+            if (k in nodes) return k
+            return keyToNode[if (':' in k) k.substringAfter(':') else k]
+        }
 
         /** The node of a model whose type is known — `(type, key)` first, the key-only map as fallback.
          *  Two models of different types may share a key, and the type-blind map hands the first
@@ -251,7 +258,7 @@ object GraphBuilder {
         fun usageNodes(ntype: String, usage: Map<String, MutableSet<String>>) {
             val dialect = if (ntype == "expression") ExpressionDialect.BACKEND else ExpressionDialect.FRONTEND
             for ((text, keys) in usage) {
-                val used = keys.filter { it in keyToNode }.map { keyToNode.getValue(it) }.toSortedSet().toList()
+                val used = keys.mapNotNull { kn(it) }.toSortedSet().toList()
                 if (used.isEmpty()) continue
                 val data = linkedMapOf<String, Any?>("usedBy" to used)
                 val usedTypes = used.mapNotNull { nodes[it]?.get("type") as? String }.toSet()
@@ -325,15 +332,15 @@ object GraphBuilder {
         /** One variable's write or read sites, with the model keys resolved to node ids so the frontend
          *  can link every row, and a site in an unknown model dropped. */
         fun sites(recs: Set<Map<String, Any?>>?): List<Map<String, Any?>> =
-            (recs ?: emptySet()).filter { it["model"] in keyToNode }
+            (recs ?: emptySet()).filter { kn(it["model"]) != null }
                 .map { rec ->
                     val out = LinkedHashMap(rec)
-                    out["model"] = keyToNode.getValue(rec["model"].toString())
+                    out["model"] = kn(rec["model"])!!
                     // A callee that is not in this project cannot be searched for readers, so the
                     // dangling key is replaced by a flag saying exactly that. Dropping it silently would
                     // turn "we cannot see the model this goes to" into "nobody reads it".
                     (rec["scope"] as? String)?.let { s ->
-                        val node = keyToNode[s]
+                        val node = kn(s)
                         if (node != null) out["scope"] = node else { out.remove("scope"); out["scopeUnresolved"] = true }
                     }
                     out
@@ -423,20 +430,20 @@ object GraphBuilder {
         }
 
         for ((v, perModel) in varUsages) {
-            val usedBy = perModel.keys.filter { it in keyToNode }.map { keyToNode.getValue(it) }.toSortedSet().toList()
+            val usedBy = perModel.keys.mapNotNull { kn(it) }.toSortedSet().toList()
             if (usedBy.isEmpty()) continue
             val scopes = usedBy.mapNotNull { nodes[it]?.get("type") as? String }.toSortedSet().toList()
-            val usages = perModel.entries.filter { it.key in keyToNode }.map { (k, snips) ->
-                linkedMapOf<String, Any?>("model" to keyToNode.getValue(k), "snippets" to snips.sorted().take(10))
+            val usages = perModel.entries.filter { kn(it.key) != null }.map { (k, snips) ->
+                linkedMapOf<String, Any?>("model" to kn(k), "snippets" to snips.sorted().take(10))
             }
             val data = linkedMapOf<String, Any?>("usedBy" to usedBy, "scopes" to scopes, "usages" to usages)
-            val flows = (varParams[v] ?: emptyList()).filter { it["model"] in keyToNode }
-                .map { it + mapOf("model" to keyToNode.getValue(it["model"].toString())) }
+            val flows = (varParams[v] ?: emptyList()).filter { kn(it["model"]) != null }
+                .map { it + mapOf("model" to kn(it["model"])) }
             if (flows.isNotEmpty()) data["ioParams"] = flows
             // Which scripts touch this variable, and on which element — the detail view lists them and
             // the explorer's search jumps straight to that script.
-            val scripts = (varScripts[v] ?: emptyList()).filter { it["model"] in keyToNode }
-                .map { it + mapOf("model" to keyToNode.getValue(it["model"].toString())) }
+            val scripts = (varScripts[v] ?: emptyList()).filter { kn(it["model"]) != null }
+                .map { it + mapOf("model" to kn(it["model"])) }
             if (scripts.isNotEmpty()) data["scriptSites"] = scripts
             // Where the name is written and where it is read. The counts are the uncapped truth while the
             // lists are capped: a variable in a real project can have hundreds of sites, and the whole
@@ -465,10 +472,10 @@ object GraphBuilder {
             }
         }
         for ((lit, perModel) in strUsages) {
-            val usedBy = perModel.keys.filter { it in keyToNode }.map { keyToNode.getValue(it) }.toSortedSet().toList()
+            val usedBy = perModel.keys.mapNotNull { kn(it) }.toSortedSet().toList()
             if (usedBy.isEmpty()) continue
-            val usages = perModel.entries.filter { it.key in keyToNode }.map { (k, snips) ->
-                linkedMapOf<String, Any?>("model" to keyToNode.getValue(k), "snippets" to snips.sorted().take(10))
+            val usages = perModel.entries.filter { kn(it.key) != null }.map { (k, snips) ->
+                linkedMapOf<String, Any?>("model" to kn(k), "snippets" to snips.sorted().take(10))
             }
             addNode("string", lit, lit, null, linkedMapOf("usedBy" to usedBy, "usages" to usages))
         }
@@ -733,7 +740,7 @@ object GraphBuilder {
 
         // group -> model (access)
         for (a in ctx.access) {
-            val t = kn(a["model"])
+            val t = knt(a["modelType"], a["model"])
             for (g in (a["groups"] as List<String>)) {
                 if (g.contains("\${") || g.contains("{{")) continue
                 addEdge("group:$g", t, a["action"] as String)
@@ -900,7 +907,7 @@ object GraphBuilder {
         // the cross-model half has to follow the resolved edges, which did not exist yet at that point.
         // The nodes are the same instances that go into `result`, so stamping them in place is enough.
         val readsEverything = LinkedHashSet<String>()
-        for (k in ctx.varScopeReadsAll) keyToNode[k]?.let { readsEverything.add(it) }
+        for (k in ctx.varScopeReadsAll) kn(k)?.let { readsEverything.add(it) }
         for ((fqn, jc) in allJava) if (jc["readsAllVariables"] == true) readsEverything.add("java:$fqn")
         UnusedVariables.decide(nodes, edges, ctx.varReadsUnknown, readsEverything, MUSTACHE_IGNORE)
 

@@ -181,6 +181,18 @@
               <code>${dotted.key:default}</code> is now marked <code>placeholder</code> in the graph, gets
               no verdict, and yields no variables; <code>${order.total}</code> is still the property path it
               always was.</li>
+          <li><b>A key names a model only together with its type.</b> A case and its start form both called
+              <code>DRA-C001</code>, a data object and the service Design generated for it: two models of
+              different types sharing one key is common — 23 times across three real projects — and
+              everything Atlas harvested from a file (its <code>${…}</code> and <code>{{…}}</code>, its
+              variables, the operations it calls, the scripts that touch a name) was credited to whichever
+              model of that key it had registered first. Measured: 34 bindings and 69 expressions of a start
+              form on the case's page, none on the form's. Every such record now carries the model's type,
+              so the form's bindings are the form's. The shared key is still recorded in
+              <code>diagnostics</code>, but it stopped being a <i>parse issue</i>: nothing failed to parse,
+              and the summary no longer says "17 files could not be fully analyzed" about 16 shared keys.
+              Only a Java string literal that names the bare key stays ambiguous, and that edge was already
+              marked suspect.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

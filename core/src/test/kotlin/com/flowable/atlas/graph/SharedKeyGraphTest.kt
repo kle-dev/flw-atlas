@@ -27,9 +27,11 @@ class SharedKeyGraphTest {
             // Discovery is name-sorted, so the page is registered before the form: the key-only map
             // points at the page, and only a type-aware lookup reaches the form.
             File(dir, "a-shared.page").writeText(
-                """{"metadata":{"key":"shared","name":"Shared page","modelType":"page"},"rows":[]}""")
+                """{"metadata":{"key":"shared","name":"Shared page","modelType":"page"},
+                    "rows":[{"cols":[{"id":"pageField","type":"text","value":"{{pageOnly}}"}]}]}""")
             File(dir, "z-shared.form").writeText(
-                """{"metadata":{"key":"shared","name":"Shared form","modelType":"form"},"rows":[]}""")
+                """{"metadata":{"key":"shared","name":"Shared form","modelType":"form"},
+                    "rows":[{"cols":[{"id":"formField","type":"text","value":"{{formOnly}}"}]}]}""")
             File(dir, "p.bpmn").writeText(
                 """<definitions xmlns:flowable="http://flowable.org/bpmn">
                      <process id="p"><userTask id="t" flowable:formKey="shared"/></process>
@@ -64,11 +66,24 @@ class SharedKeyGraphTest {
 
     @Test
     @Suppress("UNCHECKED_CAST")
-    fun theSharedKeyIsSaidOnceAsAWarning() {
+    fun theSharedKeyIsSaidOnceAndIsNotAFinding() {
         val conflicts = (result["diagnostics"] as List<Map<String, Any?>>).filter { it["kind"] == "conflict" }
         assertEquals("one shared key, one diagnostic", 1, conflicts.size)
         assertTrue(conflicts.single()["message"].toString().contains("'shared'"))
+        // Nothing failed to parse, and nothing harvested is mis-credited any more: not a parse issue.
         val parse = (result["findings"] as List<Map<String, Any?>>).filter { it["check"] == "parseIssues" }
-        assertEquals("warning", parse.single()["severity"])
+        assertTrue("a shared key is information, not a finding: $parse", parse.isEmpty())
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun whatEachFileCarriesIsCreditedToTheModelOfItsOwnType() {
+        // The key-only map points at the page (registered first); before, both bindings landed there and
+        // the form's page showed none of its own.
+        fun usedBy(id: String) = (graph("nodes").single { it["id"] == id }["data"] as Map<String, Any?>)["usedBy"]
+        assertEquals(listOf("form:shared"), usedBy("binding:{{formOnly}}"))
+        assertEquals(listOf("page:shared"), usedBy("binding:{{pageOnly}}"))
+        val formOnly = graph("nodes").single { it["id"] == "variable:formOnly" }["data"] as Map<String, Any?>
+        assertEquals(listOf("form:shared"), formOnly["usedBy"])
     }
 }
