@@ -26,13 +26,13 @@ object Waivers {
 
     /**
      * One accepted finding. [check] and [node] are the identity; [element] and [subject] narrow it, and
-     * when absent the rule covers every finding of that check on that node — which is the grain the
-     * explorer can offer honestly, since it re-derives its rows from nodes rather than receiving them.
+     * when absent the rule covers every finding of that check on that node. A parse finding has no
+     * node, so [node] is the path of the file that would not read. There is no separate `file` key:
+     * a node id already names its file, and a second identity can only disagree with the first.
      */
     data class Waiver(
         val check: String,
         val node: String,
-        val file: String? = null,
         val element: String? = null,
         val subject: String? = null,
         val reason: String = "",
@@ -41,7 +41,7 @@ object Waivers {
         val until: String? = null,
     ) {
         /** Sort key — the file is ordered by it so re-saving an unchanged set is byte-identical. */
-        val sortKey: String get() = listOf(check, node, file ?: "", element ?: "", subject ?: "").joinToString(" ")
+        val sortKey: String get() = listOf(check, node, element ?: "", subject ?: "").joinToString(" ")
 
         fun expiredOn(today: LocalDate): Boolean {
             val u = until?.trim()?.takeIf { it.isNotEmpty() } ?: return false
@@ -90,45 +90,58 @@ object Waivers {
         val problems: List<String> = emptyList(),
         val createdWith: String? = null,
     ) {
-        private val hits = HashMap<String, Int>()
-
         val isEmpty: Boolean get() = waivers.isEmpty() && notes.isEmpty() && problems.isEmpty()
+
+        /** Rules a reviewer cannot review, because they do not say why. */
+        fun unexplained(): List<String> =
+            waivers.filter { it.reason.isBlank() }.map { "no reason given: ${it.check} on ${it.node}" }
+    }
+
+    /**
+     * One run's matching of a [Set] against findings. The counts live here rather than on the set
+     * because a set is data that outlives a run — the plugin keeps one and analyses again — and a
+     * counter on it would add every run to the last.
+     */
+    class Matching(val set: Set, val today: LocalDate = LocalDate.now()) {
+        // By position, not by key: two rules that say the same thing share a sort key and are still
+        // two rules, each with its own count.
+        private val hits = IntArray(set.waivers.size)
 
         /**
          * The waiver covering [finding], or null. Expired rules deliberately do not match: the author
          * asked for the check to come back on that date, and honouring that is the whole point of
          * writing one.
+         *
+         * Every covering rule is counted, not only the one returned: two rules that both cover a
+         * finding are both true, and reporting the second as "matched nothing" would tell a team to
+         * delete a rule that is doing exactly what it says.
          */
-        fun match(finding: Map<String, Any?>, today: LocalDate = LocalDate.now()): Waiver? {
-            for (w in waivers) {
-                if (w.expiredOn(today)) continue
-                if (w.covers(finding)) {
-                    hits[w.sortKey] = (hits[w.sortKey] ?: 0) + 1
-                    return w
-                }
+        fun match(finding: Map<String, Any?>): Waiver? {
+            var first: Waiver? = null
+            for ((i, w) in set.waivers.withIndex()) {
+                if (w.expiredOn(today) || !w.covers(finding)) continue
+                hits[i]++
+                if (first == null) first = w
             }
-            return null
+            return first
         }
 
-        fun matchCount(w: Waiver): Int = hits[w.sortKey] ?: 0
+        /** How many findings the rule at [index] in [Set.waivers] covered in this run. */
+        fun matchCount(index: Int): Int = hits[index]
 
         /**
          * Rules that matched nothing in this run, in the user's words. A waiver goes stale when the model
          * it pointed at was renamed or fixed, and saying so is what keeps the file from silently rotting
          * into a list of claims about code that no longer exists.
          */
-        fun stale(today: LocalDate = LocalDate.now()): List<String> = buildList {
-            for (w in waivers) {
+        fun stale(): List<String> = buildList {
+            for ((i, w) in set.waivers.withIndex()) {
                 when {
                     w.expiredOn(today) -> add("expired on ${w.until}: ${w.check} on ${w.node}")
-                    matchCount(w) == 0 -> add("matched nothing: ${w.check} on ${w.node}")
+                    hits[i] == 0 -> add("matched nothing: ${w.check} on ${w.node}")
                 }
             }
         }
-
-        /** Rules a reviewer cannot review, because they do not say why. */
-        fun unexplained(): List<String> =
-            waivers.filter { it.reason.isBlank() }.map { "no reason given: ${it.check} on ${it.node}" }
     }
 
     val EMPTY = Set()
@@ -162,7 +175,7 @@ object Waivers {
             val node = str(m, "node") ?: run { problems += "waivers[$i] has no node"; continue }
             waivers += Waiver(
                 check = check, node = node,
-                file = str(m, "file"), element = str(m, "element"), subject = str(m, "subject"),
+                element = str(m, "element"), subject = str(m, "subject"),
                 reason = str(m, "reason") ?: "",
                 by = str(m, "by"), at = str(m, "at"), until = str(m, "until"),
             )
@@ -193,7 +206,6 @@ object Waivers {
      */
     fun serialize(set: Set, version: String, today: LocalDate = LocalDate.now()): String {
         fun waiverMap(w: Waiver) = linkedMapOf<String, Any?>("check" to w.check, "node" to w.node).apply {
-            w.file?.let { put("file", it) }
             w.element?.let { put("element", it) }
             w.subject?.let { put("subject", it) }
             put("reason", w.reason)

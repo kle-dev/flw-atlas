@@ -117,6 +117,47 @@ class WaiversTest {
         assertNull(checks(r)["waived"])
     }
 
+    /** Two rules that both cover a finding are both true; the second one is not "matched nothing". */
+    @Test
+    fun aDuplicateRuleIsNotReportedAsStale() {
+        val r = run(forms("form:a"), waive(
+            Waivers.Waiver(check = "unusedForms", node = "form:a", reason = "kept"),
+            Waivers.Waiver(check = "unusedForms", node = "form:a", reason = "kept, said twice")))
+        assertEquals(1, checks(r)["waived"])
+        assertNull("both rules matched, nothing is stale", report(r)!!["stale"])
+        assertEquals(listOf(1, 1), rules(r).map { it["matched"] })
+    }
+
+    /** The plugin keeps one Set and analyses again; the counts belong to the run, not to the set. */
+    @Test
+    fun matchCountsDoNotLeakBetweenRuns() {
+        val set = waive(Waivers.Waiver(check = "unusedForms", node = "form:a", reason = "kept"))
+        run(forms("form:a"), set)
+        val r = run(forms("form:a"), set)
+        assertEquals(1, rules(r).single()["matched"])
+    }
+
+    /** The explorer writes this block back as the file, so a field left out here is a field it would drop. */
+    @Test
+    fun theReportCarriesEveryFieldOfARuleAndTheNotes() {
+        val r = run(forms("form:a"), Waivers.Set(
+            waivers = listOf(Waivers.Waiver(check = "unusedForms", node = "form:a", reason = "pilot",
+                by = "team-orders", at = "2026-09-01", until = "2999-01-01")),
+            notes = listOf(Waivers.Note(node = "form:a", text = "replace in Q3", importance = "high")),
+            createdWith = "0.24.0"))
+        assertEquals(
+            mapOf("check" to "unusedForms", "node" to "form:a", "reason" to "pilot", "by" to "team-orders",
+                "at" to "2026-09-01", "until" to "2999-01-01", "matched" to 1),
+            rules(r).single())
+        assertEquals("0.24.0", report(r)!!["createdWith"])
+        @Suppress("UNCHECKED_CAST")
+        val notes = report(r)!!["notes"] as List<Map<String, Any?>>
+        assertEquals(mapOf("node" to "form:a", "text" to "replace in Q3", "importance" to "high"), notes.single())
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun rules(r: Map<String, Any?>) = report(r)!!["rules"] as List<Map<String, Any?>>
+
     // ---- the file itself -------------------------------------------------------------------------
 
     @Test
@@ -135,6 +176,16 @@ class WaiversTest {
         assertEquals(1, set.notes.size)
         assertEquals("revisit in Q3", set.notes[0].text)
         assertEquals(2, set.problems.size)
+    }
+
+    /** A hand-written file may carry a `file` key; it was never matched, and is now simply not a field. */
+    @Test
+    fun aFileKeyIsIgnoredWhenParsing() {
+        val set = Waivers.parse("""{"version": 1, "waivers": [
+            {"check": "unusedForms", "node": "form:a", "file": "forms/a.form", "reason": "pilot"}]}""")
+        assertEquals(1, set.waivers.size)
+        assertTrue(set.problems.isEmpty())
+        assertTrue(!Waivers.serialize(set, "0.0.0").contains("\"file\""))
     }
 
     @Test

@@ -1,6 +1,5 @@
 package com.flowable.atlas.graph
 
-import java.time.LocalDate
 
 /**
  * The project's health findings — everything Atlas noticed that is probably wrong, as data.
@@ -210,9 +209,9 @@ object Findings {
         // A waived finding is kept, marked, and left out of the counts. It is not dropped: "nothing is
         // silent" is the promise the whole report is built on, and a suppression that also hides the
         // thing it suppressed leaves a reader unable to see what a team decided to live with.
-        val today = LocalDate.now()
+        val matching = Waivers.Matching(waivers)
         val marked = sorted.map { f ->
-            val w = waivers.match(f, today) ?: return@map f
+            val w = matching.match(f) ?: return@map f
             LinkedHashMap(f).apply {
                 put("waived", linkedMapOf<String, Any?>("reason" to w.reason).also { m ->
                     w.by?.let { m["by"] = it }
@@ -233,7 +232,7 @@ object Findings {
         if (waivedCount > 0) counts["waived"] = waivedCount
         result["findings"] = marked
         result["checks"] = counts
-        waiverReport(waivers, today)?.let { result["waivers"] = it }
+        waiverReport(matching)?.let { result["waivers"] = it }
     }
 
     /**
@@ -241,11 +240,12 @@ object Findings {
      * empty block in every report would read as a feature nobody is using rather than as one nobody
      * needed here.
      */
-    private fun waiverReport(waivers: Waivers.Set, today: LocalDate): Map<String, Any?>? {
+    private fun waiverReport(matching: Waivers.Matching): Map<String, Any?>? {
+        val waivers = matching.set
         if (waivers.isEmpty) return null
         // The rules travel whole — author, date and expiry included — because the explorer edits this
         // block and writes it back as waivers.json; a field it never received is a field it would drop.
-        val rules = waivers.waivers.map { w ->
+        val rules = waivers.waivers.mapIndexed { i, w ->
             linkedMapOf<String, Any?>("check" to w.check, "node" to w.node).also { m ->
                 w.element?.let { m["element"] = it }
                 w.subject?.let { m["subject"] = it }
@@ -253,7 +253,7 @@ object Findings {
                 w.by?.let { m["by"] = it }
                 w.at?.let { m["at"] = it }
                 w.until?.let { m["until"] = it }
-                m["matched"] = waivers.matchCount(w)
+                m["matched"] = matching.matchCount(i)
             }
         }
         val out = linkedMapOf<String, Any?>("rules" to rules)
@@ -274,7 +274,7 @@ object Findings {
         // Three ways a waiver file goes wrong, each reported rather than fixed silently: it points at
         // something that is gone, it ran out, or it never said why — and the last one is the only thing
         // a reviewer could actually have reviewed.
-        val stale = waivers.stale(today)
+        val stale = matching.stale()
         if (stale.isNotEmpty()) out["stale"] = stale
         val unexplained = waivers.unexplained()
         if (unexplained.isNotEmpty()) out["unexplained"] = unexplained
