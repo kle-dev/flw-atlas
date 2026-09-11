@@ -281,6 +281,10 @@
               browsed and the window title said "Processes"; the lens you picked was stored and never read
               back, so a reload reset it; and switching the lens wiped the filter you had just typed and
               collapsed the tree. All three hold now.</li>
+          <li><b>Hiding uncertain links hides them everywhere.</b> The ≈ toggle repainted the detail panel
+              and nothing else: the reference tree kept its shape and the overview kept counting suspect
+              edges in its hotspots and reference counts until the next navigation. Every view follows the
+              toggle now.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

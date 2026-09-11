@@ -124,6 +124,9 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
 - **The reference tree keeps its chrome.** Its breadcrumb showed the last category you browsed and the
   window title said "Processes"; the lens you picked was stored and never read back, so a reload reset
   it; and switching the lens wiped the filter you had just typed and collapsed the tree. All three hold now.
+- **Hiding uncertain links hides them everywhere.** The ≈ toggle repainted the detail panel and nothing
+  else: the reference tree kept its shape and the overview kept counting suspect edges in its hotspots
+  and reference counts until the next navigation. Every view follows the toggle now.
 
 ## 0.25.0
 

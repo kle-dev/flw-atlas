@@ -684,6 +684,7 @@ let INSIGHTS = null;
 function computeInsights(){
   const indeg = new Map(), containsByApp = new Map(), openAppByApp = new Map(), entryPoints = [];
   edges.forEach(e=>{
+    if(hideUncertain && (e.suspect||e.dynamic)) return;   // hidden everywhere means here too
     if(e.rel==='contains'){ containsByApp.set(e.s,(containsByApp.get(e.s)||0)+1); return; }
     const src = byId.get(e.s);
     if(src && src.type==='group'){
@@ -819,6 +820,19 @@ function focusViewHeading(){
   const h=v.querySelector('.dtitle, .dash-title'); if(!h) return;
   if(!h.hasAttribute('tabindex')) h.setAttribute('tabindex','-1');
   try{ h.focus({preventScroll:true}); }catch(e){}
+}
+/** Redraw the current view in place — for a setting that changes what every view shows, without the
+ *  focus move and history a real navigation carries. */
+function rerenderView(){
+  switch(state.view){
+    case 'overview': renderDashboard(); break;
+    case 'schema': renderSchema(); break;
+    case 'scripts': renderScripts(); break;
+    case 'tree': renderTree(); break;
+    case 'checks': renderChecks(); break;
+    case 'variables': renderVariables(); break;
+    default: renderDetail();
+  }
 }
 function route(){
   closePalette();
@@ -6451,8 +6465,8 @@ function wireLinkFilter(){
   b.onclick=()=>{
     hideUncertain=!hideUncertain;
     try{ localStorage.setItem('atlas-uncertain', hideUncertain?'hide':'show'); }catch(e){}
-    rebuildAdj(); paint();
-    if(state.view==='browse') renderDetail();
+    rebuildAdj(); computeInsights(); paint();
+    renderSidebar(); rerenderView();                        // the tree and the overview count edges too
   };
 }
 

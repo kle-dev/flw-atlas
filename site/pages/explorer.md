@@ -303,7 +303,8 @@ The explorer never presents a guess as a fact:
 
 - **`≈` suspect** — the link was resolved through a loose or cross-type match. The chip is dashed.
 - **`ƒ` dynamic** — the reference was an expression, so its target is only certain at runtime.
-- The toolbar's **`≈` button** hides every uncertain link at once, so you can see what is left when only
+- The toolbar's **`≈` button** hides every uncertain link at once — in the detail panel, the reference tree, the
+  overview's hotspots and reference counts alike — so you can see what is left when only
   the certain relationships count. It appears only when there are any.
 - **`⚠ N parse issues`** in the sidebar footer jumps straight to the parse findings. A file Atlas could
   not read is never silent.
