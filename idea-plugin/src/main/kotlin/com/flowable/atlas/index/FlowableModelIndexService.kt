@@ -432,14 +432,22 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
                     runCatching { file.contentsToByteArray() }.getOrNull()
                         ?.let { processModel(file.name, it, type, file) }
                 // Look inside .bar/.zip archives (real-world deployment; unpacked folder optional).
-                ArchiveModelScanner.isArchive(file) ->
-                    runCatching {
-                        ArchiveModelScanner.scan(file) { name, bytes, entryType, entryFile ->
-                            processModel(name, bytes, entryType, entryFile)
-                        }
-                    }.onFailure { LOG.debug("skipping unreadable archive ${file.name}", it) }
-                        .getOrDefault(false)
-                        .let { opened -> if (!opened) skippedArchives.add(file.name) }
+                ArchiveModelScanner.isArchive(file) -> {
+                    // The build may run inline under a read lock (completion on a cold index): no
+                    // synchronous jar-FS refresh there. And a cancelled scan is not an unreadable
+                    // archive — `runCatching` used to swallow the cancellation and light the Hub's
+                    // "archives could not be read" line for it.
+                    val opened = try {
+                        ArchiveModelScanner.scan(
+                            file, allowRefresh = !ApplicationManager.getApplication().isReadAccessAllowed,
+                        ) { name, bytes, entryType, entryFile -> processModel(name, bytes, entryType, entryFile) }
+                    } catch (e: ProcessCanceledException) {
+                        throw e
+                    } catch (e: Exception) {
+                        LOG.debug("skipping unreadable archive ${file.name}", e); false
+                    }
+                    if (!opened) skippedArchives.add(file.name)
+                }
             }
         }
         return FlowableIndex(

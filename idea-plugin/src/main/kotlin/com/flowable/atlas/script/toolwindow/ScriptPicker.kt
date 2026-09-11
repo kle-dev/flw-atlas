@@ -10,6 +10,7 @@ import com.flowable.atlas.script.ScriptContext
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.components.service
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
@@ -53,8 +54,15 @@ internal object ScriptPicker {
             project, "Scanning Flowable models for scripts…", true,
         ) {
             override fun run(indicator: ProgressIndicator) {
-                val rows = runCatching { collectRows(project) { indicator.checkCanceled() } }
-                    .getOrDefault(emptyList())
+                // Cancel means no popup — not an empty one. `runCatching` swallowed the cancellation
+                // the scan asks for and showed "nothing found".
+                val rows = try {
+                    collectRows(project) { indicator.checkCanceled() }
+                } catch (e: ProcessCanceledException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyList()
+                }
                 ApplicationManager.getApplication().invokeLater({
                     if (!project.isDisposed) showPopup(panel, rows)
                 }, ModalityState.any())

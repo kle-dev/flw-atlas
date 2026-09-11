@@ -68,7 +68,9 @@ object ModelReferenceScan {
                         runCatching { String(file.contentsToByteArray(), Charsets.UTF_8) }.getOrNull()
                             ?.let { consumer(file, it) }
                     ArchiveModelScanner.isArchive(file) ->
-                        ArchiveModelScanner.scan(file) { _, bytes, _, entryFile ->
+                        // every caller holds the read lock (see above): a synchronous jar-FS refresh
+                        // under it is the deadlock the scanner's own doc warns about
+                        ArchiveModelScanner.scan(file, allowRefresh = false) { _, bytes, _, entryFile ->
                             consumer(entryFile, String(bytes, Charsets.UTF_8))
                         }
                 }

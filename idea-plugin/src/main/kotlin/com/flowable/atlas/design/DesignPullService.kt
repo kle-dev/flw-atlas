@@ -24,6 +24,7 @@ import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.options.ShowSettingsUtil
@@ -170,11 +171,13 @@ class DesignPullService(private val project: Project) {
         val connection = target.connection
         // Log the failure path: a broken or locked keychain looks exactly like "not configured yet"
         // from here, so without this the user is bounced to Settings again and again with nothing to go on.
-        val auth = runCatching {
+        val auth = try {
             AtlasCredentials.contextFor(connection.baseUrl, connection.authMode, connection.username)
+        } catch (e: ProcessCanceledException) {
+            throw e   // a cancelled keychain read is not "not configured"
+        } catch (e: Exception) {
+            LOG.warn("Could not read Design credentials from the PasswordSafe", e); null
         }
-            .onFailure { LOG.warn("Could not read Design credentials from the PasswordSafe", it) }
-            .getOrNull()
         // Empty, not null: a captured browser session authenticates on its own, so "no stored secret"
         // is only a dead end when there is no session either.
         if (auth == null || auth.isEmpty) {
