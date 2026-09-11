@@ -51,7 +51,9 @@ class ModelConstantsService(private val project: Project) {
         val existing = resolveTargetFile(state.fqcn, root) ?: return
         val fqcn = state.fqcn
 
-        val source = buildSource(fqcn)
+        // A cold index is asked for, not built here under the read lock; the rebuild it triggers ends in
+        // another modelIndexUpdated, which brings this refresher round again.
+        val source = buildSource(fqcn) ?: return
         val current = ReadAction.computeBlocking<String?, RuntimeException> {
             if (existing.isValid) VfsUtilCore.loadText(existing) else null
         }
@@ -81,11 +83,9 @@ class ModelConstantsService(private val project: Project) {
             .notify(project)
     }
 
-    private fun buildSource(fqcn: String): String {
-        val models = ReadAction.computeBlocking<List<ModelInfo>, RuntimeException> {
-            project.service<FlowableModelIndexService>().index().allDistinct()
-                .map { ModelInfo(it.type, it.key, it.name) }
-        }
+    private fun buildSource(fqcn: String): String? {
+        val index = project.service<FlowableModelIndexService>().cachedOrRequest() ?: return null
+        val models = index.allDistinct().map { ModelInfo(it.type, it.key, it.name) }
         val settings = FlowableAtlasProjectSettings.getInstance(project)
         return ModelConstantsGenerator.generate(models, fqcn, settings.constantNaming, settings.constantFormat)
     }

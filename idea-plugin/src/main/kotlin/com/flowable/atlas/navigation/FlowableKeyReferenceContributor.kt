@@ -179,7 +179,11 @@ private fun valueKeyReference(literal: PsiLiteralExpression): PsiReference? {
 private fun resolveKeyToModelFiles(project: Project, key: String, types: Collection<ModelType>): Array<ResolveResult> {
     val service = project.service<FlowableModelIndexService>()
     val psiManager = PsiManager.getInstance(project)
-    return service.find(key)
+    // Resolve runs under the read lock; `find()` would build a cold index right there and freeze the
+    // IDE for the length of a model scan on the first Ctrl+click. Ask, and resolve to nothing until it is
+    // built — the other references in this file do the same.
+    val index = service.cachedOrRequest() ?: return ResolveResult.EMPTY_ARRAY
+    return index.find(key)
         .filter { it.type in types }
         .mapNotNull { psiManager.findFile(it.file) }
         .map { PsiElementResolveResult(it) }
