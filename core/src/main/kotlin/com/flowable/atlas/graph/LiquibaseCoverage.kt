@@ -448,12 +448,14 @@ object LiquibaseCoverage {
             val svcTable = ((s["tableName"] as? String) ?: "").uppercase().ifEmpty { null }
             val lbCols = ArrayList<Map<String, Any?>>()
             if (lb != null) {
+                // Only the service's own table. The changelog may create several; falling back to all of
+                // its columns when none matched made every column of every *other* table a "not mapped by
+                // the service" gap on this service (CrossedColumns already guards the same way).
                 for (c in mapListRO(lb["columns"])) {
                     val ct = c["table"] as? String
                     if (svcTable != null && ct != null && ct.uppercase() != svcTable) continue
                     lbCols.add(c)
                 }
-                if (svcTable != null && lbCols.isEmpty()) lbCols.addAll(mapListRO(lb["columns"]))
             }
 
             val svcByLoose = LinkedHashMap<String, Map<String, Any?>>()

@@ -41,6 +41,10 @@ class ArchiveChangelogTest {
                     "referencedLiquibaseModelKey":"DEMO-L1","lookupId":"id",
                     "columnMappings":[{"name":"id","type":"STRING","columnName":"ID_"},{"name":"total","type":"DOUBLE","columnName":"TOTAL_"}],
                     "operations":[{"key":"findById","type":"lookup","name":"Lookup"}]}""",
+                // names the same changelog but a table it does not create: no gap of DEMO_ORDER_ is this service's
+                "service-DEMO-S2.service" to """{"key":"DEMO-S2","name":"Other","type":"database","tableName":"DEMO_OTHER_",
+                    "referencedLiquibaseModelKey":"DEMO-L1","lookupId":"id",
+                    "columnMappings":[{"name":"id","type":"STRING","columnName":"ID_"}],"operations":[]}""",
                 "liquibase-DEMO-L1.data.changelog.xml" to """<databaseChangeLog>
                     <changeSet id="1" author="demo">
                       <createTable tableName="DEMO_ORDER_">
@@ -75,6 +79,13 @@ class ArchiveChangelogTest {
         val gaps = (result["findings"] as List<Map<String, Any?>>).filter { it["check"] == "schemaGaps" }
         val unmapped = gaps.filter { it["message"].toString().contains("not mapped by the service") }.map { it["subject"] }
         assertEquals("NOTE_ is in Liquibase and mapped by nothing", listOf("DEMO_ORDER_.NOTE_"), unmapped)
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun anotherTablesColumnsAreNotThisServicesGaps() {
+        val gaps = (result["findings"] as List<Map<String, Any?>>).filter { it["check"] == "schemaGaps" && it["node"] == "service:DEMO-S2" }
+        assertTrue("DEMO_ORDER_'s columns are not DEMO-S2's gaps: $gaps", gaps.none { it["subject"].toString().startsWith("DEMO_ORDER_") })
     }
 
     @Test

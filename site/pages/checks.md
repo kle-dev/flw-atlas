@@ -194,6 +194,10 @@ and the service it describes had no schema coverage.
 
 Per column, walking Liquibase → service → data object:
 
+Only the service's own table is compared. A changelog that creates several tables used to hand every
+column of the *other* tables to a service whose own table it did not describe, as "not mapped by the
+service" — those rows are gone.
+
 - **not mapped in service** — the column exists in the changelog, but the backing `.service` model does
   not map it, so no model can read or write it.
 - **not in data object** — the service maps it, but no data object uses it. The field is matched by the

@@ -89,6 +89,9 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   whose 26th write was the one that silences the check (a mapping into a model outside the project, a
   scope that reads everything) was reported as never read. The decision runs on the full list now; the
   cap is applied afterwards, for display.
+- **`schemaGaps` compares a service against its own table only.** When a changelog creating several tables
+  matched none of a service's columns, the coverage pass fell back to *every* column of the changelog, so
+  another table's columns were reported as this service's unmapped ones.
 
 ## 0.25.0
 
