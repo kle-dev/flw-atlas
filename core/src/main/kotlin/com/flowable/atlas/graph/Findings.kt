@@ -142,8 +142,13 @@ object Findings {
                         add("schemaGaps", WARNING, n, what, subject = "${r["table"]}.${r["sql"]}")
                     }
                 }
-                "process" -> runtimeRiskChecks(data) { check, message, element ->
-                    add(check, WARNING, n, message, element)
+                "process" -> {
+                    runtimeRiskChecks(data) { check, message, element -> add(check, WARNING, n, message, element) }
+                    topologyChecks(data) { check, message, element -> add(check, WARNING, n, message, element) }
+                }
+                // A decision nothing consults is the DMN twin of the unused form: app membership is not use.
+                "decision" -> if (n["id"] !in referenced) {
+                    add("unusedDecisions", WARNING, n, "no process, case or decision service calls this decision")
                 }
                 "serviceOperation" -> if ((data["usedBy"] as? List<*>).isNullOrEmpty()) {
                     add("unusedOps", WARNING, n, "no model or code calls this operation")
@@ -349,6 +354,50 @@ object Findings {
             report("unguardedTasks",
                 "`$what` calls out of the engine with no error boundary event — a failure propagates to " +
                     "the caller", id)
+        }
+    }
+
+    /**
+     * How the sequence flows are wired, as opposed to how the elements are configured. Both questions
+     * here have a definite consequence at runtime — an exception, or a fork nobody drew — and both stay
+     * quiet wherever the model gives the engine a way out.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun topologyChecks(data: Map<String, Any?>, report: (String, String, String) -> Unit) {
+        val flows = data["flows"] as? List<Map<String, Any?>> ?: return
+        val outgoing = HashMap<String, MutableList<Map<String, Any?>>>()
+        for (f in flows) (f["from"] as? String)?.let { outgoing.getOrPut(it) { ArrayList() }.add(f) }
+
+        for (g in (data["gateways"] as? List<Map<String, Any?>> ?: emptyList())) {
+            val id = g["id"] as? String ?: continue
+            // Only the gateways that choose: a parallel gateway takes every flow, an event gateway waits.
+            if (g["type"] != "exclusiveGateway" && g["type"] != "inclusiveGateway") continue
+            val outs = outgoing[id] ?: continue
+            if (outs.size < 2 || g["default"] != null) continue
+            // An unconditional flow is the way out when nothing else matches; with one there is no risk.
+            if (outs.any { it["condition"] == null }) continue
+            val what = (g["name"] as? String)?.ifEmpty { null } ?: id
+            report("gatewayNoDefault",
+                "`$what` has ${outs.size} conditional outgoing flows and no default — when none of them is true " +
+                    "the engine throws \"no outgoing sequence flow\"", id)
+        }
+
+        for (list in ELEMENT_LISTS) {
+            if (list == "gateways") continue
+            for (el in (data[list] as? List<Map<String, Any?>> ?: emptyList())) {
+                val id = el["id"] as? String ?: continue
+                val outs = outgoing[id] ?: continue
+                if (outs.size < 2) continue
+                // The engine takes every unconditional flow, so two of them are a fork with no gateway
+                // saying so. A set of flows that are all conditional is a choice someone drew on purpose,
+                // and stays quiet.
+                val plain = outs.count { it["condition"] == null }
+                if (plain == 0) continue
+                val what = (el["name"] as? String)?.ifEmpty { null } ?: id
+                val how = if (plain == outs.size) "all of them run in parallel"
+                    else "the unconditional one${if (plain > 1) "s" else ""} run${if (plain > 1) "" else "s"} in parallel with whichever condition holds"
+                report("implicitSplit", "`$what` has ${outs.size} outgoing flows and no gateway — $how", id)
+            }
         }
     }
 

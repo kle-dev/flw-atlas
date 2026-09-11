@@ -126,6 +126,28 @@ object CheckCatalog {
             docs = "schemagaps-the-database-and-the-models-disagree",
         ),
         Check(
+            id = "gatewayNoDefault", tier = "runtime", severity = "warning",
+            label = "gateways with no way out", title = "Gateway without default",
+            what = "an exclusive or inclusive gateway whose every outgoing flow is conditional, with no default",
+            clean = "every choosing gateway has a way out",
+            why = "When none of the conditions holds the engine has nowhere to go and throws \"no outgoing " +
+                "sequence flow\" — the instance fails right there, on the data that reached it.",
+            fix = "Mark one flow as the gateway's default, or add an unconditional flow. Accept it when the " +
+                "conditions are provably exhaustive.",
+            docs = "gatewaynodefault-a-choice-with-no-way-out",
+        ),
+        Check(
+            id = "implicitSplit", tier = "runtime", severity = "warning",
+            label = "implicit splits", title = "Implicit split",
+            what = "an activity with several outgoing flows and no gateway",
+            clean = "every fork is drawn as a gateway",
+            why = "The engine takes every unconditional flow, so two of them out of one task run in parallel " +
+                "— a fork nobody drew, invisible on the diagram and easy to read as a choice.",
+            fix = "Put a parallel gateway there if the fork is meant, or an exclusive gateway with conditions " +
+                "if it is a choice.",
+            docs = "implicitsplit-a-fork-nobody-drew",
+        ),
+        Check(
             id = "nonExclusiveAsync", tier = "runtime", severity = "warning",
             label = "non-exclusive async", title = "Non-exclusive async",
             what = "async elements that opted out of exclusive jobs",
@@ -179,6 +201,17 @@ object CheckCatalog {
             fix = "Delete it, or accept the finding when it is kept on purpose — a pilot, or a form a " +
                 "plugin opens by key.",
             docs = UNUSED_DOCS,
+        ),
+        Check(
+            id = "unusedDecisions", tier = "noise", severity = "warning",
+            label = "unused decisions", title = "Unused decisions",
+            what = "decision tables no process, case or decision service calls",
+            clean = "every decision is called",
+            why = "A decision table nothing calls is a rule set the project maintains and never runs — or " +
+                "the trace of a call that was renamed away from it.",
+            fix = "Delete it, or point the task that should call it at this key. Accept it when a decision " +
+                "service outside this repository consults it.",
+            docs = "unuseddecisions-a-table-nothing-consults",
         ),
         Check(
             id = "unusedOps", tier = "noise", severity = "warning",

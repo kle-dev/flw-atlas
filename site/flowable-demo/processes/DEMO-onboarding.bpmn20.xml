@@ -8,10 +8,20 @@
     <startEvent id="start" name="Start"/>
     <userTask id="review" name="Review application"/>
     <exclusiveGateway id="gw" name="Approved?"/>
+    <userTask id="rework" name="Rework application"/>
     <endEvent id="end" name="Done"/>
     <sequenceFlow id="f1" sourceRef="start" targetRef="review"/>
     <sequenceFlow id="f2" sourceRef="review" targetRef="gw"/>
-    <sequenceFlow id="f3" sourceRef="gw" targetRef="end"/>
+    <!-- Both ways out of the gateway are conditional and neither is the default: when approved is
+         neither true nor false — unset, say — the engine has nowhere to go. The gatewayNoDefault
+         check exists for exactly this shape. -->
+    <sequenceFlow id="f3" name="yes" sourceRef="gw" targetRef="end">
+      <conditionExpression xsi:type="tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${approved == true}</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f4" name="no" sourceRef="gw" targetRef="rework">
+      <conditionExpression xsi:type="tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${approved == false}</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f5" sourceRef="rework" targetRef="review"/>
   </process>
   <bpmndi:BPMNDiagram id="D">
     <bpmndi:BPMNPlane bpmnElement="DEMO-onboarding">
@@ -38,6 +48,18 @@
       <bpmndi:BPMNEdge id="e_f3" bpmnElement="f3">
         <omgdi:waypoint x="370" y="115"/>
         <omgdi:waypoint x="420" y="115"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="s_rework" bpmnElement="rework">
+        <omgdc:Bounds x="300" y="190" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="e_f4" bpmnElement="f4">
+        <omgdi:waypoint x="350" y="135"/>
+        <omgdi:waypoint x="350" y="190"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f5" bpmnElement="f5">
+        <omgdi:waypoint x="300" y="220"/>
+        <omgdi:waypoint x="230" y="220"/>
+        <omgdi:waypoint x="230" y="145"/>
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

@@ -36,6 +36,12 @@
     </boundaryEvent>
     <exclusiveGateway id="g1" name="OK?"/>
     <endEvent id="e1" name="Failed"><errorEventDefinition errorRef="boom"/></endEvent>
+    <!-- Two unconditional flows out of one task: the engine takes both, so "Approve order" forks into
+         Calculate and Compute in parallel with no gateway saying so — the implicitSplit check's
+         honest example. -->
+    <sequenceFlow id="fl1" sourceRef="s1" targetRef="t1"/>
+    <sequenceFlow id="fl2" sourceRef="t1" targetRef="t2"/>
+    <sequenceFlow id="fl3" sourceRef="t1" targetRef="t7"/>
   </process>
   <bpmndi:BPMNDiagram id="d"><bpmndi:BPMNPlane bpmnElement="typeDemo" id="p">
     <bpmndi:BPMNShape bpmnElement="s1" id="sh0"><omgdc:Bounds x="30" y="30" width="30" height="30"/></bpmndi:BPMNShape>

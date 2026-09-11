@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A decision table nothing calls any more: the scoring the onboarding review used before dec_risk
+     replaced it. Kept so the unusedDecisions check has an honest example — and because this is exactly
+     how such tables survive in real projects, referenced by nothing and maintained by habit. -->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+             xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/"
+             namespace="http://flowable.org/demo">
+  <inputData id="in_score" name="Score"/>
+  <decision id="legacyScoring" name="Legacy scoring">
+    <informationRequirement id="ir_ls1">
+      <requiredInput href="#in_score"/>
+    </informationRequirement>
+  </decision>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram>
+      <dmndi:DMNShape dmnElementRef="in_score">
+        <dc:Bounds x="60" y="200" width="120" height="50"/>
+      </dmndi:DMNShape>
+      <dmndi:DMNShape dmnElementRef="legacyScoring">
+        <dc:Bounds x="80" y="60" width="120" height="60"/>
+      </dmndi:DMNShape>
+      <dmndi:DMNEdge dmnElementRef="ir_ls1">
+        <di:waypoint x="120" y="200"/>
+        <di:waypoint x="140" y="120"/>
+      </dmndi:DMNEdge>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>

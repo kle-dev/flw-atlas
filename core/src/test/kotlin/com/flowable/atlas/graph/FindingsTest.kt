@@ -204,6 +204,92 @@ class FindingsTest {
         )
     }
 
+    // ---- how a process is wired and configured ----------------------------------------------------
+
+    private fun process(id: String, data: Map<String, Any?>) = node("process:$id", "process", data = data)
+    private fun flow(id: String, from: String, to: String, cond: String? = null): Map<String, Any?> =
+        linkedMapOf<String, Any?>("id" to id, "from" to from, "to" to to).also { if (cond != null) it["condition"] = cond }
+    private fun gw(id: String, type: String = "exclusiveGateway", default: String? = null): Map<String, Any?> =
+        linkedMapOf<String, Any?>("id" to id, "name" to id, "type" to type).also { if (default != null) it["default"] = default }
+    private fun task(id: String, vararg extra: Pair<String, Any?>): Map<String, Any?> =
+        linkedMapOf<String, Any?>("id" to id, "name" to id, *extra)
+    private fun elements(r: Map<String, Any?>, check: String) =
+        findings(r).filter { it["check"] == check }.map { it["element"] }
+
+    @Test
+    fun aGatewayWhoseEveryFlowIsConditionalAndHasNoDefaultIsReported() {
+        val r = run(listOf(process("p", mapOf(
+            "gateways" to listOf(gw("g1"), gw("g2", default = "b2"), gw("g3"), gw("g4", type = "parallelGateway"), gw("g5")),
+            "userTasks" to listOf(task("a"), task("b")),
+            "flows" to listOf(
+                flow("a1", "g1", "a", "\${x}"), flow("a2", "g1", "b", "\${!x}"),   // the finding
+                flow("b1", "g2", "a", "\${x}"), flow("b2", "g2", "b"),            // has a default
+                flow("c1", "g3", "a", "\${x}"), flow("c2", "g3", "b"),            // an unconditional flow is the way out
+                flow("d1", "g4", "a", "\${x}"), flow("d2", "g4", "b", "\${y}"),    // a parallel gateway takes every flow
+                flow("e1", "g5", "a", "\${x}"),                                 // one flow is no choice
+            ),
+        ))))
+        assertEquals(listOf("g1"), elements(r, "gatewayNoDefault"))
+        assertTrue(findings(r).single { it["check"] == "gatewayNoDefault" }["message"].toString().contains("no outgoing sequence flow"))
+    }
+
+    @Test
+    fun anActivityWithTwoUnconditionalFlowsIsAnImplicitSplit() {
+        val r = run(listOf(process("p", mapOf(
+            "userTasks" to listOf(task("fork"), task("choice"), task("mixed"), task("straight")),
+            "gateways" to listOf(gw("g", type = "parallelGateway")),
+            "flows" to listOf(
+                flow("f1", "fork", "x"), flow("f2", "fork", "y"),                  // both run in parallel
+                flow("c1", "choice", "x", "\${a}"), flow("c2", "choice", "y", "\${!a}"), // a choice drawn as conditions: quiet
+                flow("m1", "mixed", "x"), flow("m2", "mixed", "y", "\${a}"),        // the unconditional one always runs
+                flow("s1", "straight", "x"),
+                flow("g1", "g", "x"), flow("g2", "g", "y"),                        // a gateway is what a fork should be
+            ),
+        ))))
+        assertEquals(listOf("fork", "mixed"), elements(r, "implicitSplit").sortedBy { it.toString() })
+        assertTrue(findings(r).first { it["element"] == "fork" }["message"].toString().contains("all of them run in parallel"))
+    }
+
+    @Test
+    fun aDecisionNothingCallsIsReported() {
+        val r = run(
+            nodes = listOf(node("decision:orphan", "decision"), node("decision:used", "decision")),
+            edges = listOf(
+                mapOf("s" to "app:a", "t" to "decision:orphan", "rel" to "contains"),
+                mapOf("s" to "process:p", "t" to "decision:used", "rel" to "ruleTask-decision"),
+            ),
+        )
+        assertEquals(1, checks(r)["unusedDecisions"])
+        assertEquals("decision:orphan", findings(r).single { it["check"] == "unusedDecisions" }["node"])
+    }
+
+    @Test
+    fun theRuntimeRiskChecksStayQuietWhereTheModelGivesNoReasonToSpeak() {
+        // Only the opt-out is reported; a plain async element and one with its own retry policy are not.
+        val r1 = run(listOf(process("p", mapOf("serviceTasks" to listOf(
+            task("optOut", "async" to "true", "exclusive" to "false"),
+            task("plain", "async" to "true", "retryTimeCycle" to "R3/PT10M"),
+            task("sync"))))))
+        assertEquals(listOf("optOut"), elements(r1, "nonExclusiveAsync"))
+        assertEquals(listOf("optOut"), elements(r1, "asyncWithoutRetry"))
+
+        // Unguarded: a leaving task without a boundary is reported; a guarded one, a task that stays in
+        // the engine, and every task in a process that catches centrally are not.
+        val leaving = task("http", "type" to "http")
+        val r2 = run(listOf(process("p", mapOf(
+            "serviceTasks" to listOf(leaving, task("guarded", "class" to "com.example.X"), task("inEngine", "type" to "dmn")),
+            "events" to listOf(mapOf("id" to "err", "type" to "boundaryEvent", "def" to "error", "attachedTo" to "guarded"))))))
+        assertEquals(listOf("http"), elements(r2, "unguardedTasks"))
+        val r3 = run(listOf(process("p", mapOf(
+            "serviceTasks" to listOf(leaving),
+            "events" to listOf(mapOf("id" to "catchAll", "type" to "startEvent", "def" to "error"))))))
+        assertTrue("an error event subprocess catches for the whole process", elements(r3, "unguardedTasks").isEmpty())
+        val r4 = run(listOf(process("p", mapOf(
+            "serviceTasks" to listOf(leaving), "subProcesses" to listOf(task("sub")),
+            "events" to listOf(mapOf("id" to "e", "type" to "boundaryEvent", "def" to "error", "attachedTo" to "sub"))))))
+        assertTrue("a subprocess with an error boundary may contain the task", elements(r4, "unguardedTasks").isEmpty())
+    }
+
     @Test
     fun aCleanProjectReportsNoFindingsAtAll() {
         val r = run(listOf(node("process:p", "process")))

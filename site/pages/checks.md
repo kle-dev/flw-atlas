@@ -1,6 +1,6 @@
 # Health checks
 
-Atlas runs seventeen checks over every project it analyses. They are computed once, in `:core`, and
+Atlas runs twenty checks over every project it analyses. They are computed once, in `:core`, and
 every surface reads the same result — the CLI status line, the summary's *Health* block, the
 overview's *Findings* section, `graph.json`'s `findings` and `checks` keys, the generated `CLAUDE.md`
 and the explorer's *Checks* page all agree by construction.
@@ -24,7 +24,7 @@ noise.
   <a href="../demo/explorer.html#/checks" target="_blank" rel="noopener">Open it ↗</a></figcaption>
 </figure>
 
-## The seventeen checks
+## The twenty checks
 
 | Check | Severity | What it means |
 |---|---|---|
@@ -35,11 +35,14 @@ noise.
 | `crossedColumns` | error · warning | A service maps a field to the column another field is named after — as an error when the pairing is a closed swap or rotation. |
 | `changelogIssues` | warning | A Liquibase changelog is orphaned or superseded. |
 | `schemaGaps` | warning | A database column and the model that should describe it disagree. |
+| `gatewayNoDefault` | warning | An exclusive or inclusive gateway whose every outgoing flow is conditional, with no default. |
+| `implicitSplit` | warning | An activity with several outgoing flows and no gateway — a fork nobody drew. |
 | `nonExclusiveAsync` | warning | An async element explicitly set `exclusive="false"`. |
 | `unguardedTasks` | warning | A service task leaves the engine and nothing catches its failure. |
 | `asyncWithoutRetry` | warning | Async work with no `failedJobRetryTimeCycle` of its own. |
 | `suspectExpr` | warning | An expression calls a function or namespace Atlas does not know. |
 | `unusedForms` | warning | A form nothing references. |
+| `unusedDecisions` | warning | A decision table no process, case or decision service calls. |
 | `unusedOps` | warning | A service operation nothing calls. |
 | `unusedFns` | warning | A custom expression function nothing uses. |
 | `unusedVars` | warning | A variable is written and nothing reads it. |
@@ -159,6 +162,28 @@ Per column, walking Liquibase → service → data object:
 The explorer renders this as a three-column table per service, with cleanly-mapped services collapsed
 to chips so the gaps are what you see.
 
+### `gatewayNoDefault` — a choice with no way out
+
+An exclusive or inclusive gateway with two or more outgoing flows, every one of them conditional, and no
+`default`. When none of the conditions holds the engine has nowhere to go and throws *no outgoing
+sequence flow* — the instance fails right there, on the data that reached it, which is usually the data
+nobody thought of. A gateway with a default flow, or with any unconditional flow, has a way out and is
+not reported; a parallel gateway takes every flow and an event gateway waits, so neither is asked.
+
+Mark one flow as the gateway's default, or add an unconditional flow. Accept the finding when the
+conditions are provably exhaustive — `${approved}` and `${!approved}` on a boolean that is always set.
+
+### `implicitSplit` — a fork nobody drew
+
+An activity — a task, an event, a subprocess — with two or more outgoing sequence flows and no gateway
+between. The engine takes every flow whose condition holds *and* every flow without one, so two
+unconditional flows out of one task run in parallel: a fork that is invisible on the diagram and easy to
+read as a choice. When every outgoing flow is conditional the check stays quiet — that is a choice someone
+drew as conditions, and whether it needs a default is a question for the gateway they should have used.
+
+Put a parallel gateway there if the fork is meant, or an exclusive gateway with conditions if it is a
+choice.
+
 ### `nonExclusiveAsync` — async jobs that may run at the same time
 
 `flowable:exclusive` defaults to **true**, and the exporter writes the attribute only to say `false`, so
@@ -193,6 +218,13 @@ namespace, an unknown function inside a known namespace, or backend function syn
 expression. If your project registers its own functions, tell Atlas with `--expr-allowlist` (or the
 plugin's allowlist setting) and these stop being reported — see
 [Expressions](../expressions/#the-allowlist).
+
+### `unusedDecisions` — a table nothing consults
+
+A DMN decision no process, case or decision service references. Belonging to an app is not use. A
+decision table nothing calls is a rule set the project maintains and never runs — or the trace of a call
+that was renamed away from it, which is the case worth a look. Accept it when a decision service outside
+this repository consults it.
 
 ### `unusedForms`, `unusedOps`, `unusedFns` — defined, never used
 
