@@ -293,6 +293,13 @@ this repository consults it.
 - A **service operation** nothing calls.
 - A **custom expression function** nothing calls.
 
+A service operation a **data object** binds to is used by that data object when it is one the engine
+invokes itself — `lookup`, `create`, `update`, `delete`. Nothing in a model names those (a data-object
+task, a page's data table and the REST API all go through the data object), so until 0.26.0 every
+generated CRUD operation was "unused": 74 of 74 on one real project. A `search` operation is different —
+something has to name it, a data table's operation key for instance — and it is credited only when
+something does.
+
 These are the cheapest findings to act on and the easiest to ignore safely — they cost nothing at
 runtime, they just make the project bigger than it needs to be.
 

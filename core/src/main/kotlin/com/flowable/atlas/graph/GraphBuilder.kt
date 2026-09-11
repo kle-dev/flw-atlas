@@ -37,6 +37,9 @@ object GraphBuilder {
     private val DATAOBJ_QUERY_RE = Regex("dataObjectDefinitionKey=|/query/")
     private val ENDPOINTS_PLATFORM_RE = Regex("(?:^|[/{\$\\s])endpoints\\.")
 
+    /** The service operations the data-object runtime invokes itself for a bound data object. */
+    private val DATA_OBJECT_ENGINE_OPS = setOf("lookup", "create", "update", "delete")
+
     /** Model types rendered as Freemarker (not JUEL) — their `${…}` must not be validated. */
     private val FREEMARKER_MODEL_TYPES = setOf("query", "template", "document")
 
@@ -532,6 +535,26 @@ object GraphBuilder {
                 if (svcKey == null) continue
                 val consumerNode = kn(u["consumer"]) ?: continue
                 opUsedBy.getOrPut("$svcKey#$op") { LinkedHashSet() }.add(consumerNode)
+            }
+            // A data object bound to a service is served by that service's lookup/create/update/delete:
+            // the engine calls them whenever an instance is read or written, from a data-object task, a
+            // page's data table, the REST API. Nothing in a model names those operations, so without this
+            // every generated CRUD operation was "unused" — 74 of 74 on one real project. A `search`
+            // operation is different: something has to name it (a data table's operation key), so it is
+            // credited only when something does.
+            val svcOps = HashMap<String, Map<String, Any?>>()
+            for (o in bucketList("services")) {
+                val svc = o as Map<String, Any?>
+                (svc["key"] as? String)?.let { svcOps[it] = svc }
+            }
+            for ((doKey, svcKey) in doToService) {
+                val svc = svcOps[svcKey] ?: continue
+                for (opAny in (svc["operations"] as? List<*> ?: emptyList<Any?>())) {
+                    val op = opAny as? Map<String, Any?> ?: continue
+                    if (op["type"] !in DATA_OBJECT_ENGINE_OPS) continue
+                    val opKey = op["key"] ?: continue
+                    opUsedBy.getOrPut("$svcKey#$opKey") { LinkedHashSet() }.add("dataObject:$doKey")
+                }
             }
             for (o in bucketList("services")) {
                 val svc = o as Map<String, Any?>

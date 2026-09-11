@@ -309,7 +309,10 @@ object ModelParsers {
                 full = base.trimEnd('/') + "/" + full.trimStart('/')
             }
             operations.add(linkedMapOf(
-                "key" to op["key"], "name" to op["name"], "method" to oc["method"],
+                // `lookup`/`create`/`update`/`delete`/`search`: the engine invokes the first four itself for
+                // every data object bound to the service, which is what tells a generated CRUD operation
+                // that nothing *names* from one that nothing *uses*.
+                "key" to op["key"], "name" to op["name"], "type" to op["type"], "method" to oc["method"],
                 "url" to oc["url"], "fullUrl" to full,
                 "params" to operationParams(op["inputParameters"]),
                 // An operation's declared outputs are the other half of its contract — what the caller

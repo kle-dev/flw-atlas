@@ -2805,6 +2805,7 @@
               "name": "Find all",
               "outParams": [],
               "params": [],
+              "type": null,
               "url": "/api/customers"
             }
           ],
@@ -6751,6 +6752,7 @@
           "name": "Find all",
           "outParams": [],
           "params": [],
+          "type": null,
           "url": "/api/customers"
         }
       ],

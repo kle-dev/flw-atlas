@@ -64,6 +64,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   so every app that listed its own changelog reported a *missing model* (six on one project), and the
   services those changelogs describe had no schema coverage. Archive entries are read like loose files
   now, and a changelog's key is in the index before references resolve.
+- **A data object uses its service's operations.** The engine calls a bound service's `lookup`, `create`,
+  `update` and `delete` for every data-object instance; nothing in a model names them, so `unusedOps`
+  listed every generated CRUD operation — 74 of 74 on one real project, 41 of 64 on another. They are
+  credited to the data object now (the operation's `type` travels with it in `graph.json`); a `search`
+  operation is still only used when something names it.
 
 ## 0.25.0
 
