@@ -1560,9 +1560,13 @@ function waiverExport(){
   a.download='waivers.json'; document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 0);
 }
-/** The findings this node still has, as check ids — the index :core ships so the page never has to
- *  re-derive a judgement it did not make. */
-function nodeChecks(id){ return ((DATA.findingsByNode||{})[id])||[]; }
+/** The findings this node still has, as check ids — read off the findings :core ships, so the page
+ *  never re-derives a judgement it did not make. A parse finding has no node and is keyed by its file. */
+function nodeChecks(id){
+  const out=[];
+  (DATA.findings||[]).forEach(f=>{ if(f.waived||(f.node||f.file)!==id||out.indexOf(f.check)>=0) return; out.push(f.check); });
+  return out;
+}
 /** "Accept this finding" for one node: one row per check that fired on it, plus the reason a reviewer
  *  will read. Waiving is a sentence about an element, so the reason is not optional here either. */
 function acceptBlockHtml(n){
@@ -1607,7 +1611,7 @@ function wireAccept(v, n){
  *  project without one shows nothing here rather than an empty promise. */
 function waivedBlockHtml(){
   const W=DATA.waivers; if(!W) return '';
-  const rules=W.rules||[], notes=W.notes||0;
+  const rules=W.rules||[], notes=(W.notes||[]).length;
   let out='';
   if(rules.length){
     out+=findingBlock('chk-waived','Deliberately accepted', rules.length,

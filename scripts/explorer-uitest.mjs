@@ -778,7 +778,7 @@ const probe = `<script>
   // --- accepting a finding: the round trip that makes waivers worth having. Marking has to survive a
   //     re-render, refuse a reason-less rule, and be undoable.
   steps.push(()=>{
-    const withFindings=Object.keys(DATA.findingsByNode||{}).find(id=>byId.get(id));
+    const withFindings=(DATA.findings||[]).filter(f=>!f.waived).map(f=>f.node||f.file).find(id=>byId.get(id));
     if(!withFindings){ say('note','no node carries a finding in this fixture'); return; }
     location.hash=enc(withFindings);
   });

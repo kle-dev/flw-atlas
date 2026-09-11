@@ -243,19 +243,34 @@ object Findings {
      */
     private fun waiverReport(waivers: Waivers.Set, today: LocalDate): Map<String, Any?>? {
         if (waivers.isEmpty) return null
-        // The rules travel whole, because the explorer re-derives its rows from nodes and has to decide
-        // for itself whether a row it just rendered is one a rule covers.
+        // The rules travel whole — author, date and expiry included — because the explorer edits this
+        // block and writes it back as waivers.json; a field it never received is a field it would drop.
         val rules = waivers.waivers.map { w ->
             linkedMapOf<String, Any?>("check" to w.check, "node" to w.node).also { m ->
                 w.element?.let { m["element"] = it }
                 w.subject?.let { m["subject"] = it }
                 m["reason"] = w.reason
+                w.by?.let { m["by"] = it }
+                w.at?.let { m["at"] = it }
                 w.until?.let { m["until"] = it }
                 m["matched"] = waivers.matchCount(w)
             }
         }
         val out = linkedMapOf<String, Any?>("rules" to rules)
-        if (waivers.notes.isNotEmpty()) out["notes"] = waivers.notes.size
+        waivers.createdWith?.let { out["createdWith"] = it }
+        if (waivers.notes.isNotEmpty()) {
+            out["notes"] = waivers.notes.map { n ->
+                linkedMapOf<String, Any?>("node" to n.node).also { m ->
+                    n.check?.let { m["check"] = it }
+                    n.element?.let { m["element"] = it }
+                    n.subject?.let { m["subject"] = it }
+                    m["text"] = n.text
+                    m["importance"] = n.importance
+                    n.by?.let { m["by"] = it }
+                    n.at?.let { m["at"] = it }
+                }
+            }
+        }
         // Three ways a waiver file goes wrong, each reported rather than fixed silently: it points at
         // something that is gone, it ran out, or it never said why — and the last one is the only thing
         // a reviewer could actually have reviewed.

@@ -65,6 +65,10 @@ class RenderersSmokeTest {
         // The catalog rides along so the page can say why a finding matters without a second copy of the text.
         assertTrue("expected the check catalog in the payload", html.contains("\"checkCatalog\":["))
         assertTrue("expected the open-in-IDE button builder", html.contains("function openBtn("))
+        // The findings ride along itemised; the page renders them rather than re-deriving them from nodes.
+        assertTrue("expected the itemised findings in the payload", html.contains("\"findings\":[{"))
+        assertFalse("the node -> check index is gone, the findings replace it", html.contains("findingsByNode"))
+        assertTrue("expected the waiver author slot in the payload", html.contains("\"waiverAuthor\":"))
         // The graph payload is inlined — a known model key must appear.
         assertTrue("expected the substituted graph data", html.contains("orderProcess"))
         // In/out parameters survive `slimData`'s allowlist (they are nested lists, not scalars) and the

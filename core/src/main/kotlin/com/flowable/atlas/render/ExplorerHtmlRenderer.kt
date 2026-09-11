@@ -27,6 +27,8 @@ object ExplorerHtmlRenderer {
         root: File,
         version: String = AtlasBuildInfo.VERSION,
         generatedAt: java.time.Instant = java.time.Instant.now(),
+        /** Who is accepting findings from this page — the default `by` of a rule written here. */
+        waiverAuthor: String? = null,
     ): String {
         // error() rather than an empty map: every caller passes an Atlas.extract result, which always
         // carries "graph". The previous `as Map` threw here too — an explorer page silently rendered
@@ -43,9 +45,7 @@ object ExplorerHtmlRenderer {
         payload["diagnostics"] = result["diagnostics"] ?: ArrayList<Any?>()
         payload["customFunctions"] = result["customFunctions"]
         // Health counts come from :core (Findings.kt) so the explorer, the Markdown artifacts and the
-        // CLI status line cannot disagree about how many findings a project has. The itemized
-        // `findings` list stays out of the payload: the Checks tab renders its items from the live
-        // nodes, which it needs anyway for chips and links.
+        // CLI status line cannot disagree about how many findings a project has.
         payload["checks"] = result["checks"] ?: LinkedHashMap<String, Any?>()
         // What each check is, why it matters and what to do — from the one catalog every surface reads,
         // so the page can explain a finding without carrying a second copy of the explanation.
@@ -54,15 +54,18 @@ object ExplorerHtmlRenderer {
         // next to its findings, and they travel from the one place that implements them so the page can
         // never claim more confidence than the check actually has.
         payload["silenceRules"] = UnusedVariables.SILENCE_RULES
-        // The waiver rules, not the waived findings: the Checks page builds its rows from the live nodes
-        // (see the comment above), so it has to be able to decide for itself whether a row it rendered
-        // is one a team already accepted. Absent when no waiver file was read.
+        // The waiver file as :core read it — every rule with its author, date, expiry and how many
+        // findings it matched, the notes, and what is wrong with the file. The page edits this and
+        // writes it back, so it must receive all of it or it would drop what it did not see.
+        // Absent when no waiver file was read.
         result["waivers"]?.let { payload["waivers"] = it }
-        // `node -> [check ids]`, and nothing else. The itemised findings stay out (see above), but
-        // without *some* index the page cannot offer "accept this" on the node a finding is about — it
-        // would have to re-derive the judgement in JavaScript, which is the drift this avoids. Check ids
-        // alone are a few KB even on a large project.
-        payload["findingsByNode"] = findingsByNode(result)
+        // The findings themselves, open and accepted alike. The page used to rebuild its rows from
+        // the live nodes and receive only a node -> check-id index, which left it re-deriving a
+        // judgement :core had already made — and disagreeing with it the moment anything was
+        // waived. A finding is a few hundred bytes; a thousand of them are a fraction of the page.
+        payload["findings"] = findingsForPage(result)
+        // Who is accepting, so a rule written from this page can say so.
+        payload["waiverAuthor"] = waiverAuthor ?: ""
         payload["nodes"] = attachDiagrams(slimNodes(graph["nodes"]), root)
         payload["edges"] = graph["edges"]
         // json.dumps(payload, ensure_ascii=False, default=list).replace("</", "<\/")
@@ -202,20 +205,24 @@ object ExplorerHtmlRenderer {
         "writeCount", "writes",
     )
 
-    /** The full explorer HTML page (CSS/JS inlined; `__ATLAS_DATA__` still unresolved). */
-    /** Which checks fired on which node, open ones only — a waived finding is already accepted. */
+    /**
+     * The findings as the page needs them: the identity (`check`, `node`, `element`, `subject`), what
+     * to show (`severity`, `label`, `message`, `snippet`), where to go (`file`, `line`) and whether a
+     * rule already covers it (`waived`). Same keys as graph.json, so nothing is renamed on the way.
+     */
     @Suppress("UNCHECKED_CAST")
-    private fun findingsByNode(result: Map<String, Any?>): Map<String, Any?> {
-        val out = LinkedHashMap<String, MutableSet<String>>()
-        for (f in (result["findings"] as? List<Map<String, Any?>> ?: emptyList())) {
-            if (f["waived"] != null) continue
-            val node = (f["node"] as? String) ?: (f["file"] as? String) ?: continue
-            val check = f["check"] as? String ?: continue
-            out.getOrPut(node) { LinkedHashSet() }.add(check)
+    private fun findingsForPage(result: Map<String, Any?>): List<Map<String, Any?>> =
+        (result["findings"] as? List<Map<String, Any?>> ?: emptyList()).map { f ->
+            LinkedHashMap<String, Any?>().also { out ->
+                for (k in PAGE_FINDING_KEYS) f[k]?.let { out[k] = it }
+            }
         }
-        return out.mapValues { it.value.toList() }
-    }
 
+    private val PAGE_FINDING_KEYS = listOf(
+        "check", "severity", "node", "label", "element", "subject", "file", "line", "snippet", "message", "waived",
+    )
+
+    /** The full explorer HTML page (CSS/JS inlined; `__ATLAS_DATA__` still unresolved). */
     private fun composeTemplate(): String {
         var t = asset("explorer.html")
         t = t.replace("/*__ATLAS_CSS__*/", asset("explorer.css"))

@@ -63,6 +63,10 @@ It is designed to make that easy:
 - A **`_generated`** key beside it says when the file was written and by which Atlas version, so a
   graph pasted into a ticket or kept as a pipeline artifact carries its own age.
 - Every node carries **`usedBy`**, so relationships resolve in both directions without a second pass.
+- **`findings`** is the itemised list every other surface summarises, **`checks`** the open count per
+  check plus `open` and `waived`, and **`waivers`** — present when the project carries a
+  `waivers.json` — its rules with how many findings each matched, its notes, and what is wrong with
+  the file. See [Health checks](../checks/).
 - It is **minified** by default, and a model's body is stored once in a top-level bucket with its graph
   node pointing there via `data.dataIn`. Together that roughly halves the file — 4.8 MB → 2.5 MB on a
   large real project. `--pretty` indents it when a human has to look.

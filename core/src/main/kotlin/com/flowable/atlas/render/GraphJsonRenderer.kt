@@ -118,6 +118,10 @@ object GraphJsonRenderer {
             "plus a `waived` total. `subject` tells apart several findings of one check on one node " +
             "(the scope, the column), where `message` is prose that rewords. `waived` carries the " +
             "reason a team accepted it; see `waivers` and waivers.json.",
+        "waivers" to "{rules: [{check, node, element?, subject?, reason, by?, at?, until?, matched}], " +
+            "createdWith?, notes?: [{node, check?, element?, subject?, text, importance, by?, at?}], " +
+            "stale?, unexplained?, problems?} — present when a waivers.json was read: what it covered, " +
+            "and what is wrong with the file.",
         "recipes" to listOf(
             "who references X:            jq '.graph.nodes[] | select(.id==\"process:X\") | .usedBy'",
             "what X references:           jq '.graph.edges[] | select(.s==\"process:X\")'",
