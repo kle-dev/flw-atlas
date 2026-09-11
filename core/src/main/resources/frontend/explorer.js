@@ -637,6 +637,15 @@ function nodeFindingCounts(id){
   (FIND_BY_NODE.get(id)||[]).forEach(f=>{ if(waiverFor(f)) waived++; else { open++; if(f.severity==='error'||!worst) worst=f.severity||'warning'; } });
   const r={open, waived, worst}; _nfc.set(id, r); return r;
 }
+/** A small count of a node's open findings, coloured by the worst one — nothing when there are none.
+ *  Worn by tree rows and list items, so a model with five findings no longer looks like a clean one. */
+function findPillHtml(id){
+  const c=nodeFindingCounts(id); if(!c.open) return '';
+  const lbl=c.open+' open finding'+(c.open>1?'s':'');
+  return '<span class="pill fpill '+(c.worst==='error'?'pill-bad':'pill-warn')+'" aria-label="'+lbl+'" data-tip="'+lbl+' — see Findings on this model">'+c.open+'</span>';
+}
+/** The catalog's title for a check id, or the id itself for one the catalog does not name. */
+function checkTitle(id){ const c=(DATA.checkCatalog||[]).find(x=>x.id===id); return c?c.title:id; }
 /** `check id -> open count`, with a zero for every catalogued check — the sidebar sums two of these. */
 function healthMap(){
   const C=findingCounts(), h={};
@@ -771,10 +780,21 @@ function showView(v){
   document.getElementById('view-browse').hidden = v!=='browse';
 }
 let _navCount = 0;
+/** After a route swapped the view, the element that was clicked is usually gone with the old markup and
+ *  focus has fallen to <body>; a screen reader is then nowhere. Put it on the new view's heading — but
+ *  only then: a reader walking the list with the arrow keys keeps the list. */
+function focusViewHeading(){
+  const a=document.activeElement; if(a && a!==document.body) return;
+  const v=document.querySelector('.view:not([hidden])'); if(!v) return;
+  const h=v.querySelector('.dtitle, .dash-title'); if(!h) return;
+  if(!h.hasAttribute('tabindex')) h.setAttribute('tabindex','-1');
+  try{ h.focus({preventScroll:true}); }catch(e){}
+}
 function route(){
   closePalette();
   _navCount++;
   renderWaiverBar();
+  if(_navCount>1) setTimeout(focusViewHeading, 0);
   const r = parseHash();
   state.focus = r.q || '';
   state.focusEl = r.e || '';
@@ -1399,7 +1419,7 @@ function treeRowHtml(r, idx, openDepth){
   const open=hasKids && r.depth<openDepth;
   const badge=[];
   if(r.cycle) badge.push('<span class="tv-b tv-cyc">cycle</span>');
-  if(r.ref) badge.push('<span class="tv-b tv-ref" data-jumpto="'+esc(r.id)+'" role="button" tabindex="-1">shown above</span>');
+  if(r.ref) badge.push('<span class="tv-b tv-ref" data-jumpto="'+esc(r.id)+'" role="button" tabindex="0">shown above</span>');
   if((n.data||{}).missingModel) badge.push('<span class="tv-b tv-miss">missing model</span>');
   if(r.parents>1 && !r.ref) badge.push('<span class="tv-b tv-par">+'+(r.parents-1)+' more parents</span>');
   return '<li role="treeitem" class="tv-row'+(hasKids?' tv-has':'')+'" data-id="'+esc(r.id)+'" data-idx="'+idx+'"'+
@@ -1412,6 +1432,7 @@ function treeRowHtml(r, idx, openDepth){
       // shown whenever it is not already the label. Without it the tree is ambiguous exactly where it
       // matters most, on the row a reader is trying to tell apart from another one.
       (n.key && n.key!==n.label?'<span class="tv-key">'+esc(n.key)+'</span>':'')+
+      findPillHtml(r.id)+
       (r.rel?'<span class="tv-rel">'+termHtml('rel', r.rel)+'</span>':'')+
       badge.join('')+
     '</span>';
@@ -1451,8 +1472,8 @@ function renderTree(){
      '<input class="pf" id="tvf" type="search" placeholder="filter the tree — t:form, key:…, or any word" aria-label="Filter the tree">'+
      '<span class="pchip'+(lens==='models'?' on':'')+'" data-lens="models" role="button" tabindex="0">models</span>'+
      '<span class="pchip'+(lens==='all'?' on':'')+'" data-lens="all" role="button" tabindex="0">everything</span>'+
-     '<button type="button" class="dgbtn" id="tvall">expand all</button>'+
-     '<span class="pcount" id="tvcount"></span></div>';
+     '<button type="button" class="dgbtn" id="tvall" aria-pressed="false">expand all</button>'+
+     '<span class="pcount" id="tvcount" role="status"></span></div>';
   if(T.truncated) h+='<p class="ddesc">Stopped at '+TREE_MAX_ROWS+' rows — this graph is larger than the tree renders.</p>';
   h+=body||'<div class="estate"><div class="et">Nothing to show</div><div class="eh">No model in this project is a root.</div></div>';
   h+='</div>';
@@ -1492,6 +1513,9 @@ function wireTree(v){
   const visible=()=>rows.filter(r=>r.offsetParent!==null);
   const focus=li=>{ rows.forEach(r=>r.tabIndex=-1); li.tabIndex=0; li.focus(); };
   v.addEventListener('keydown', e=>{
+    // A "shown above" badge is a stop of its own: Enter or Space follows it, and nothing else here applies.
+    const jt=e.target.closest&&e.target.closest('[data-jumpto]');
+    if(jt){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); jt.click(); } return; }
     const li=e.target.closest('.tv-row'); if(!li) return;
     const vis=visible(), i=vis.indexOf(li);
     const k=e.key;
@@ -1507,12 +1531,15 @@ function wireTree(v){
     else return;
     e.preventDefault();
   });
+  // The button's state is state, not its label: a fresh render starts folded to the default depth.
   const allBtn=v.querySelector('#tvall');
-  if(allBtn) allBtn.onclick=()=>{
-    const opening=allBtn.textContent.indexOf('expand')===0;
-    v.querySelectorAll('.tv-row[aria-expanded]').forEach(li=>treeToggle(li, opening));
-    allBtn.textContent=opening?'collapse all':'expand all';
-  };
+  state.treeExpanded=false;
+  if(allBtn){
+    const sync=()=>{ allBtn.setAttribute('aria-pressed', state.treeExpanded?'true':'false'); allBtn.textContent=state.treeExpanded?'collapse all':'expand all'; };
+    sync();
+    allBtn.onclick=()=>{ state.treeExpanded=!state.treeExpanded;
+      v.querySelectorAll('.tv-row[aria-expanded]').forEach(li=>treeToggle(li, state.treeExpanded)); sync(); };
+  }
   v.querySelectorAll('.pchip[data-lens]').forEach(c=>{
     const go=()=>{ state.treeLens=c.dataset.lens; try{ localStorage.setItem('atlas-tree-lens', c.dataset.lens); }catch(e){} renderTree(); };
     c.onclick=go; c.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); } };
@@ -2529,7 +2556,7 @@ function renderItems(cat, wrap){
     const w=parsed.empty?null:matchWhere(n, parsed);
     const sub=(w&&w.hint)||n.key;
     el.innerHTML=nodeIcon(n)+
-      '<div class="meta"><div class="nm">'+hlHtml(n.label, parsed)+authBadge(n)+
+      '<div class="meta"><div class="nm">'+hlHtml(n.label, parsed)+authBadge(n)+findPillHtml(n.id)+
       '</div><div class="sub" title="'+esc(sub)+'">'+hlHtml(sub, parsed)+'</div></div>'+
       (rn?'<span class="refn" title="referenced by '+rn+' node'+(rn>1?'s':'')+'">'+rn+'</span>':'')+
       '<span class="ck" aria-hidden="true">✓</span>';
@@ -2773,7 +2800,7 @@ function filterBar(o){
     '" data-fk="'+esc(c.fk||'')+'" data-fv="'+esc(c.fv)+'">'+esc(c.label)+
     (c.n!=null?'<span class="pchipn">'+esc(String(c.n))+'</span>':'')+'</button>').join('');
   return '<div class="pbar fbar"><input class="pf" type="search" placeholder="'+esc(o.placeholder||'filter…')+
-    '" aria-label="'+esc(o.label||o.placeholder||'Filter')+'">'+chips+(o.extra||'')+'<span class="pcount"></span></div>';
+    '" aria-label="'+esc(o.label||o.placeholder||'Filter')+'">'+chips+(o.extra||'')+'<span class="pcount" role="status"></span></div>';
 }
 /**
  * Live filter behind every filter bar under `root`: text over each row's `data-hay` (or its text), one
@@ -4232,7 +4259,7 @@ function wireDiagram(det){
   const z=zoomable(view, {modWheel:true});
   if(!z) return;
   // A collapsed section has no layout (clientWidth 0) — fit on the first real layout instead.
-  const tryFit=()=>{ if(!z._fitted && view.clientWidth>0){ z.fit(); z._fitted=true; } };
+  const tryFit=()=>{ if(!z._fitted && view.clientWidth>0){ z.fit(); z._fitted=true; dgMarkFindings(view, state.sel&&byId.get(state.sel)); } };
   tryFit();
   const sect=view.closest('details');
   if(sect) sect.addEventListener('toggle',()=>{ if(sect.open) tryFit(); });
@@ -4396,6 +4423,33 @@ function dgCenter(z, g){
     z.ty=z.view.clientHeight/2-(bb.y+bb.height/2-vb.y)*z.scale;
     z.apply();
   }catch(e){}
+}
+/** A badge on every diagram element that carries an open finding — the count, coloured by the worst
+ *  one. Drawn into the SVG so it pans and zooms with the shape; a click on it is a click on the shape,
+ *  and the card that opens lists the findings with their accept controls. Needs layout for getBBox, so
+ *  it runs when the diagram is fitted, i.e. when its section is actually shown. */
+function dgMarkFindings(view, n){
+  const svg=view&&view.querySelector('svg'); if(!svg||!n) return;
+  svg.querySelectorAll('.dgmark').forEach(x=>x.remove());
+  const byEl=new Map();
+  (FIND_BY_NODE.get(n.id)||[]).forEach(f=>{ if(f.element==null||waiverFor(f)) return;
+    const k=String(f.element), m=byEl.get(k)||{n:0, worst:'warning'}; m.n++; if(f.severity==='error') m.worst='error'; byEl.set(k, m); });
+  if(!byEl.size) return;
+  const names=elementNames(n), NS='http://www.w3.org/2000/svg';
+  byEl.forEach((m, el)=>{
+    const g=dgFind(view, el, (names.get(el)||{}).name); if(!g) return;
+    let bb; try{ bb=g.getBBox(); }catch(e){ return; }
+    if(!bb||!(bb.width>0)) return;
+    const label=(names.get(el)||{}).name||el, lbl=m.n+' finding'+(m.n>1?'s':'')+' on '+label;
+    const mk=document.createElementNS(NS,'g');
+    mk.setAttribute('class','dgmark dgmark-'+(m.worst==='error'?'bad':'warn'));
+    mk.setAttribute('data-mark-el', String(g.dataset.el));
+    mk.setAttribute('role','button'); mk.setAttribute('tabindex','0'); mk.setAttribute('aria-label', lbl);
+    const c=document.createElementNS(NS,'circle'); c.setAttribute('cx', bb.x+bb.width); c.setAttribute('cy', bb.y); c.setAttribute('r','7.5');
+    const t=document.createElementNS(NS,'text'); t.setAttribute('x', bb.x+bb.width); t.setAttribute('y', bb.y); t.textContent=String(m.n);
+    const title=document.createElementNS(NS,'title'); title.textContent=lbl;
+    mk.appendChild(title); mk.appendChild(c); mk.appendChild(t); svg.appendChild(mk);
+  });
 }
 // A diagram group for the element: by id, falling back to the tooltip name (CMMN DI references plan
 // item ids while the parsed tree keys definitions by their own id — the name bridges the two).
@@ -4600,7 +4654,7 @@ function wireDgClicks(view, inModal){
     const pressed=z&&z.downTarget; if(z) z.downTarget=null;
     if(z&&z.moved){ z.moved=false; return; }          // that was a pan, not a click
     const t=(pressed&&pressed.isConnected)?pressed:e.target;
-    const g=t&&t.closest?t.closest('[data-el]'):null;
+    const g=dgTargetOf(view, t);
     if(!g||!view.contains(g)){ hideDgCard(); dgSelect(view, null); return; }
     dgSelect(view, g);
     showDgCard(view, g, e, inModal);
@@ -4608,11 +4662,18 @@ function wireDgClicks(view, inModal){
   // Shapes are focusable (the renderer stamps tabindex/role): Enter or Space on one is a click.
   view.addEventListener('keydown', e=>{
     if(e.key!=='Enter' && e.key!==' ') return;
-    const g=e.target&&e.target.closest?e.target.closest('[data-el]'):null;
+    const g=dgTargetOf(view, e.target);
     if(!g||!view.contains(g)) return;
     e.preventDefault();
     g.dispatchEvent(new MouseEvent('click',{bubbles:true}));
   });
+}
+/** The shape a click or a key landed on — through a finding marker to the shape it marks. */
+function dgTargetOf(view, t){
+  if(!t||!t.closest) return null;
+  const mk=t.closest('[data-mark-el]');
+  if(mk) return view.querySelector('[data-el="'+cssEsc(mk.getAttribute('data-mark-el'))+'"]');
+  return t.closest('[data-el]');
 }
 // The id the parsed data knows this diagram element by. Usually data-el itself; CMMN DI references
 // plan item ids while the parsed plan tree keys the *definitions* — there the element name bridges.
@@ -4663,6 +4724,18 @@ function showDgCard(view, g, e, inModal){
   card.querySelectorAll('.cpy').forEach(b=>{
     b.onclick=ev=>{ ev.stopPropagation();
       atlasCopy(dec(b.dataset.copy), ()=>{ b.classList.add('ok'); setTimeout(()=>b.classList.remove('ok'),1200); }); };
+  });
+  // The findings on the element: restore here; accepting lands on the finding's own row under the
+  // diagram, where the form has room — the card is a window, not a place to type a paragraph.
+  wireAccept(card);
+  card.querySelectorAll('[data-dgaccept]').forEach(b=>b.onclick=ev=>{ ev.preventDefault(); ev.stopPropagation();
+    const fi=b.getAttribute('data-dgaccept');
+    hideDgCard(); if(inModal) closeDiagramModal();
+    const det=document.getElementById('detail'), row=det&&det.querySelector('.tr[data-fi="'+cssEsc(fi)+'"]');
+    if(!row) return;
+    for(let q=row.parentElement; q&&q!==det; q=q.parentElement){ if(q.tagName==='DETAILS') q.open=true; }
+    row.open=true; row.scrollIntoView({block:'center'});
+    const inp=row.querySelector('.wv-form input.wv-in[required]'); if(inp) inp.focus();
   });
 }
 // Callee chips for a service-task record — which model the task actually talks to.
@@ -4774,6 +4847,13 @@ function dgCardHtml(n, elId, g){
     recLs.map(l=>'<div class="dgcond"><span class="cflow">'+
       esc([term('el', l.kind).label, l.event].filter(Boolean).join(' · '))+'</span>'+
       '<code>'+esc(l.class||l.expression||l.delegateExpression||'(script)')+'</code></div>').join('');
+  // -- the findings on this element: what the marker on the shape was counting --
+  const fs=(FIND_BY_NODE.get(n.id)||[]).filter(f=>f.element!=null&&sameId(f.element));
+  if(fs.length) body+='<div class="dgsec">Findings ('+fs.length+')</div>'+fs.map(f=>{ const rule=waiverFor(f);
+    return '<div class="dgfind" data-fi="'+f.fi+'">'+sevPill(f.severity)+' <span class="tag">'+esc(checkTitle(f.check))+'</span> '+esc(f.message)+
+      (rule?acceptedNoteHtml(rule):'')+'<div class="dgfind-act">'+
+      (rule?'<button type="button" class="dgbtn wv-restore" data-fi="'+f.fi+'">restore</button>'
+           :'<button type="button" class="dgbtn" data-dgaccept="'+f.fi+'">accept…</button>')+'</div></div>'; }).join('');
   const det=document.getElementById('detail');
   // a criterion has no detail row of its own — its "details" are the guarded plan item's row
   const revealId=crit&&crit.planItemDef!=null?String(crit.planItemDef):String(elId);

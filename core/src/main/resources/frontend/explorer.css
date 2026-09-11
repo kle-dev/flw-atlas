@@ -463,6 +463,13 @@
   /* ---- diagram interactivity: clickable elements, selection halo, info card ---- */
   /* The diagram canvas is always white (renderer-fixed), so the halo blue is a constant, not a token. */
   .dgview svg [data-el]{cursor:pointer}
+  /* a finding marker on a shape: count in a disc at the top-right corner, coloured by the worst finding */
+  .dgview svg .dgmark{cursor:pointer}
+  .dgview svg .dgmark circle{fill:var(--bad-bar);stroke:#fff;stroke-width:1.5}
+  .dgview svg .dgmark-warn circle{fill:var(--warn-bar)}
+  .dgview svg .dgmark text{fill:#fff;font:600 9px var(--sans);text-anchor:middle;dominant-baseline:central;pointer-events:none}
+  .dgview svg .dgmark:focus{outline:none}
+  .dgview svg .dgmark:focus-visible circle{stroke:var(--accent);stroke-width:2.5}
   .dgview svg [data-el]:hover{filter:drop-shadow(0 0 2.5px rgba(15,85,214,.7))}
   .dgview svg [data-el].dgsel{filter:drop-shadow(0 0 2px rgba(15,85,214,.9)) drop-shadow(0 0 7px rgba(15,85,214,.45))}
   /* shapes are keyboard stops (tabindex from the renderer): the focused one shows like a selection */
@@ -1105,6 +1112,13 @@
   .wv-act{display:flex;gap:var(--space-1)}
   .wv-why{color:var(--ink-dim);font-size:var(--text-sm)}
   .chk-title{font-weight:600;font-size:var(--text-md);display:flex;align-items:center;gap:var(--space-15)}
+  .fpill{margin-left:var(--space-1)}
+  .tv-line .fpill{margin-left:0}
+  .dgfind{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1);font-size:var(--text-xs);padding:var(--space-1) 0;border-top:1px solid var(--line2)}
+  .dgfind:first-of-type{border-top:0}
+  .dgfind .wv-why{width:100%;font-size:var(--text-xs)}
+  .dgfind-act{margin-left:auto;display:flex;gap:var(--space-1)}
+  .dgfind-act .dgbtn{padding:1px var(--space-15);font-size:var(--text-2xs)}
   /* the bar under the top bar: what this page decided and no file has yet */
   .wvbar{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);padding:var(--space-15) var(--space-4);
     background:var(--warn-bg);border-bottom:1px solid var(--warn-border);color:var(--warn-text);font-size:var(--text-sm)}

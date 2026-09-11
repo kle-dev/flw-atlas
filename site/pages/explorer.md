@@ -307,6 +307,10 @@ The explorer never presents a guess as a fact:
   the certain relationships count. It appears only when there are any.
 - **`⚠ N parse issues`** in the sidebar footer jumps straight to the parse findings. A file Atlas could
   not read is never silent.
+- A **count pill** on a tree row or a list item says how many open findings that model carries, coloured
+  by the worst of them; a clean model wears none. On the model's diagram the same count sits as a
+  **marker** on each element with a finding — click it and the element's card lists them, with
+  *restore* for an accepted one and *accept…* landing on the finding's row under the diagram.
 - Liquibase changelogs carry **live / superseded / orphan**, and services carry per-column schema
   coverage badges. A column mapping that pairs a field with another field's column is marked
   **`⇄ crossed`** on the service page and in the schema report — it is not a coverage gap, so the row

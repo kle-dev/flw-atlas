@@ -853,6 +853,32 @@ const probe = `<script>
     location.hash=enc(f.node);
   });
   steps.push(()=>{
+    // A model that carries findings says so wherever it is listed: the reference tree and the browse list.
+    location.hash='/tree';
+  });
+  steps.push(()=>{
+    const tv=document.getElementById('view-tree');
+    const rows=[...tv.querySelectorAll('.tv-row[data-id]')];
+    // a row contains its children, so look at the row's own line, not at everything under it
+    const own=r=>r.querySelector(':scope > .tv-line .fpill');
+    const withF=rows.filter(r=>nodeFindingCounts(r.dataset.id).open>0), without=rows.filter(r=>!nodeFindingCounts(r.dataset.id).open);
+    ok('tree rows of models with open findings carry a count pill', withF.length>0 && withF.every(r=>!!own(r)), withF.length+' rows');
+    ok('and clean rows carry none', without.every(r=>!own(r)));
+    const all=tv.querySelector('#tvall');
+    ok('expand all states itself for assistive tech', !!all && all.getAttribute('aria-pressed')==='false');
+    if(all){ click(all); ok('and flips when pressed', all.getAttribute('aria-pressed')==='true' && /collapse/.test(all.textContent)); click(all); }
+    ok('the filter count is a live region', (tv.querySelector('#tvcount')||{}).getAttribute&&tv.querySelector('#tvcount').getAttribute('role')==='status');
+    ok('a "shown above" badge is a keyboard stop', [...tv.querySelectorAll('[data-jumpto]')].every(b=>b.getAttribute('tabindex')==='0'));
+    const f=DATA.findings[wvFi];
+    if(f&&byId.get(f.node)) location.hash='/browse/'+encodeURIComponent(byId.get(f.node).type);
+  });
+  steps.push(()=>{
+    const f=DATA.findings[wvFi];
+    const it=f&&document.querySelector('#list .item[data-id="'+cssEsc(f.node)+'"]');
+    ok('a list item of a model with findings carries the pill', !f || !!(it&&it.querySelector('.fpill')));
+    if(f) location.hash=enc(f.node);
+  });
+  steps.push(()=>{
     const det=document.getElementById('detail');
     const sect=det.querySelector('details.sect[data-sect="findings"]');
     ok('a model page lists its findings, open', !!sect && sect.open);

@@ -177,6 +177,35 @@ const probe = `<script>
     const mr=mc.getBoundingClientRect();
     ok('the overlay centers on the window, not inside the modal panel',
        Math.abs((mr.left+mr.right)/2-window.innerWidth/2)<3);
+    // --- findings on the canvas: a marker per element with an open finding, and the card lists them ---
+    closeDiagramModal(); hideDgCard(); await tick(100);
+    const withEl=(DATA.findings||[]).filter(f=>f.element!=null && !f.waived && byId.get(f.node));
+    const target=withEl.length?byId.get(withEl[0].node):null;
+    if(!target){ say('note','no element-level finding in this fixture'); }
+    else {
+      location.hash='#/overview'; await tick(200);
+      location.hash='#'+encodeURIComponent(target.id); await tick(400);
+      const det=document.getElementById('detail');
+      const ds=det&&det.querySelector('details.sect[data-sect="diagram"]');
+      if(ds){ ds.open=true; await tick(300); }
+      const dv=ds&&ds.querySelector('.dgview');
+      const expected=new Set(withEl.filter(f=>f.node===target.id).map(f=>String(f.element))).size;
+      const marks=dv?[...dv.querySelectorAll('.dgmark')]:[];
+      ok('every element with an open finding wears a marker', !!dv && marks.length===expected, marks.length+' of '+expected);
+      ok('a marker says what it counts', marks.every(m=>/finding/.test(m.getAttribute('aria-label')||'')));
+      ok('a marker is a keyboard stop', marks.every(m=>m.getAttribute('tabindex')==='0'&&m.getAttribute('role')==='button'));
+      if(marks.length){
+        click(marks[0]); await tick(200);
+        const card=document.querySelector('.dgcard');
+        ok('clicking a marker opens the card of its shape', !!card && dv.querySelector('[data-el="'+marks[0].getAttribute('data-mark-el')+'"].dgsel')!=null);
+        ok('the card lists the findings', !!card && /Findings [(][0-9]+[)]/.test(card.textContent||'') && !!card.querySelector('[data-dgaccept], .wv-restore'));
+        const acc=card&&card.querySelector('[data-dgaccept]');
+        if(acc){ click(acc); await tick(200);
+          const row=det.querySelector('.tr[data-fi="'+acc.getAttribute('data-dgaccept')+'"]');
+          ok('accept… lands on the finding row with its form open', !!row && row.open && document.activeElement===row.querySelector('.wv-form input.wv-in[required]'));
+        }
+      }
+    }
   }catch(e){ log.push('FAIL threw: '+e.message); }
   finish();
 })();
