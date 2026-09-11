@@ -337,18 +337,27 @@ own font scaling, so without it the element ids and hints stayed at 10–11 px o
 
 ### Accepting a finding
 
-A node that still carries findings offers **Findings on this node**: one row per check that fired on
-it, a box for the reason, and **accept**. A reason is required — it is the only part of a waiver a
-reviewer can review. Accepting is undoable with **restore**.
+Every finding row — on the Checks page, and under **Findings on this model** on the model's own page,
+where the ⌖ button puts the element on the diagram — carries **accept…**. It opens a form on the row:
+the reason (required — it is the only part of a waiver a reviewer can review, and an empty one is
+refused with a sentence, not a red border), an optional **until** date after which the finding comes
+back, and **by**, prefilled with the project's git identity inside the IDE. A finding that names an
+element or a subject is accepted for **this finding only** by default; the alternative covers every
+finding of that check on the model. An accepted row stays where it was, muted, with the reason, author
+and expiry beside the message and **edit** / **restore** in place of the button; the block folds its
+accepted rows under *N accepted* and keeps counting only the open ones.
 
-Nothing is written to disk by itself. The page keeps your changes as a diff over the
-[`waivers.json`](../checks/#accepting-a-finding) it was generated from and says how many are unsaved;
-**Export waivers.json** downloads the whole file, and inside the IDE the same button saves it into the
-project. An explorer opened from the filesystem cannot read or write a neighbouring file, and a report
-that silently edited a file in your repository would be a surprise even where it can.
+Nothing is written to disk by itself. The page keeps your decisions as a diff over the
+[`waivers.json`](../checks/#accepting-a-finding) it was generated from, and a bar under the top bar
+says on every view how many are unsaved. **Save to waivers.json** writes the file inside the IDE — which
+then regenerates the explorer so the counts and the CI gate follow — and **Export waivers.json**
+downloads it anywhere else; **discard** (twice) throws the unsaved decisions away. A rule keeps the day
+it was made, so re-saving an unchanged file produces no diff, and the notes and hand-written fields the
+file already had travel through untouched.
 
-Counts, badges and the CI gate come from the last generated run, so a freshly accepted finding shows as
-accepted here and still counts everywhere else until you export and regenerate.
+Until the page is regenerated the decisions stay applied here — the counts, the health rows and the
+sidebar badge move with them — while `summary.md`, `graph.json` and the gate still show the last run.
+After a regeneration the diff finds itself in the file and empties.
 
 ### Deliberately accepted
 

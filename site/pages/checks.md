@@ -224,7 +224,7 @@ eight cases in which this check deliberately says nothing.
 | `<project>.overview.md` | Section 14, *Findings*, with `file:line` for each. |
 | `<project>.graph.json` | `findings` (itemised) and `checks` (per-check counts plus `open` and `waived`). |
 | `<project>.CLAUDE.md` | A findings summary, so an agent starts from what is already known to be wrong. |
-| The explorer | The **Checks** page (`#/checks`): a row per check — worst first, the clean ones folded — then a block per finding kind, each row clicking through to the model it belongs to. |
+| The explorer | The **Checks** page (`#/checks`): a row per check — worst first, its severity in words, the clean ones folded with what they examined — then a block per check with the finding's severity, model, element (a jump into the model), message and `file:line`, what the check means and what to do, and an **accept…** control on every row. A model's own page lists its findings under the diagram, with a ⌖ button that puts the element in view. |
 | The IDE | The same explorer page, opened as an editor tab. |
 
 ## Accepting a finding
@@ -283,9 +283,12 @@ so on every surface, because a suppression that quietly stops applying is the on
 not have. `--fail-on-stale-waivers` turns that into a red build; `--no-waivers` reports everything, for
 when the question is what the file is hiding.
 
-You do not have to write the file by hand: in the explorer, a node that carries findings offers to
-accept them with a reason, and **Export waivers.json** hands you the file — see
-[Accepting a finding](../explorer/#accepting-a-finding).
+You do not have to write the file by hand: in the explorer every finding row — on the Checks page and
+on the model's own page — offers **accept…**, with the reason, an optional `until` and the author, and
+narrowed to the element by default. A bar on every view counts the unsaved decisions; **Save to
+waivers.json** writes the file inside the IDE and regenerates the explorer, **Export waivers.json**
+downloads it anywhere else — see [Accepting a finding](../explorer/#accepting-a-finding). A parse
+finding has no model: its `node` is the path of the file that would not read.
 
 `notes` are the other half of a review: a remark that changes no count, carries an `importance`, and
 travels with the project so the next person reads it instead of rediscovering it.

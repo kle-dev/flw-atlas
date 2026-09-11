@@ -774,6 +774,7 @@ let _navCount = 0;
 function route(){
   closePalette();
   _navCount++;
+  renderWaiverBar();
   const r = parseHash();
   state.focus = r.q || '';
   state.focusEl = r.e || '';
@@ -1539,58 +1540,120 @@ function wireTree(v){
 // changes are waiting.
 const WAIVER_KEY='atlas-waivers-'+(DATA.project||'_');
 const waiverId=r=>[r.check, r.node, r.element||'', r.subject||''].join(' ');
-function waiverLocal(){ try{ return JSON.parse(localStorage.getItem(WAIVER_KEY)||'{}'); }catch(e){ return {}; } }
-function waiverSetLocal(s){ try{ localStorage.setItem(WAIVER_KEY, JSON.stringify(s)); }catch(e){} }
-/** The rules as they stand now: what the file carried, minus removals, plus additions. Cached until a
- *  rule changes — waiverFor() asks for every finding on a page. */
+/** The local diff: rules added here, ids of file rules dropped here — each marked `saved` once a Save
+ *  or Export wrote it, so the bar can count what is still only in this browser. */
+function waiverLocal(){
+  let l; try{ l=JSON.parse(localStorage.getItem(WAIVER_KEY)||'{}')||{}; }catch(e){ l={}; }
+  l.add=Array.isArray(l.add)?l.add:[];
+  l.remove=(Array.isArray(l.remove)?l.remove:[]).map(x=>typeof x==='string'?{id:x}:x);
+  return l;
+}
+function waiverSetLocal(l){ try{ localStorage.setItem(WAIVER_KEY, JSON.stringify(l)); }catch(e){} }
+/** The rules as they stand now: what the file carried, minus removals, with local additions on top —
+ *  a local rule with a file rule's identity is an edit and wins. Cached until a rule changes, because
+ *  waiverFor() asks for every finding on a page. */
 let _wvCache=null;
 function waiverRules(){
   if(_wvCache) return _wvCache;
-  const loc=waiverLocal(), gone=new Set(loc.remove||[]);
-  const out=(((DATA.waivers||{}).rules)||[])
-    .filter(r=>!gone.has(waiverId(r)))
-    .map(r=>({check:r.check, node:r.node, element:r.element, subject:r.subject, reason:r.reason, by:r.by, at:r.at, until:r.until, saved:true}));
-  (loc.add||[]).forEach(r=>{ if(!out.some(x=>waiverId(x)===waiverId(r))) out.push(Object.assign({saved:false}, r)); });
-  return _wvCache=out;
+  const loc=waiverLocal(), gone=new Set(loc.remove.map(x=>x.id)), m=new Map();
+  (((DATA.waivers||{}).rules)||[]).forEach(r=>{ if(gone.has(waiverId(r))) return;
+    m.set(waiverId(r), {check:r.check, node:r.node, element:r.element, subject:r.subject, reason:r.reason, by:r.by, at:r.at, until:r.until, saved:true}); });
+  loc.add.forEach(r=>m.set(waiverId(r), Object.assign({}, r, {saved:!!r.saved})));
+  return _wvCache=[...m.values()];
 }
-const waiverPending=()=>{ const l=waiverLocal(); return (l.add||[]).length+(l.remove||[]).length; };
+/** Decisions taken here that no file has yet. */
+function waiverPending(){ const l=waiverLocal(); return l.add.filter(r=>!r.saved).length+l.remove.filter(x=>!x.saved).length; }
 function waiverAdd(rule){
-  const loc=waiverLocal();
-  loc.add=(loc.add||[]).filter(r=>waiverId(r)!==waiverId(rule)); loc.add.push(rule);
-  loc.remove=(loc.remove||[]).filter(k=>k!==waiverId(rule));
+  const loc=waiverLocal(), id=waiverId(rule);
+  loc.add=loc.add.filter(r=>waiverId(r)!==id); loc.add.push(Object.assign({}, rule, {saved:false}));
+  loc.remove=loc.remove.filter(x=>x.id!==id);
   waiverSetLocal(loc); waiverChanged();
 }
 function waiverDrop(rule){
   const loc=waiverLocal(), id=waiverId(rule);
-  const wasLocal=(loc.add||[]).some(r=>waiverId(r)===id);
-  loc.add=(loc.add||[]).filter(r=>waiverId(r)!==id);
-  // Only a rule that came from the file needs a tombstone; dropping one that was never saved is just
-  // forgetting it.
-  if(!wasLocal){ loc.remove=(loc.remove||[]); if(loc.remove.indexOf(id)<0) loc.remove.push(id); }
+  const local=loc.add.find(r=>waiverId(r)===id);
+  loc.add=loc.add.filter(r=>waiverId(r)!==id);
+  // A rule the file carries — or one already saved from here — needs a tombstone so the next save drops
+  // it; forgetting one that was never saved is just forgetting it.
+  if(!local||local.saved){ if(!loc.remove.some(x=>x.id===id)) loc.remove.push({id, saved:false}); }
   waiverSetLocal(loc); waiverChanged();
 }
-/** A decision changed: the counts follow, the sidebar badge follows, the page re-renders. */
-function waiverChanged(){ findingsChanged(); renderSidebar(); route(); }
-/** The file, in the shape :core writes it — same keys, same order, so the two writers cannot drift. */
-function waiverFileText(){
-  const rules=waiverRules().slice().sort((a,b)=>
-    (a.check+a.node+(a.element||'')+(a.subject||'')).localeCompare(b.check+b.node+(b.element||'')+(b.subject||'')));
-  const today=new Date().toISOString().slice(0,10);
-  return JSON.stringify({
-    version:1,
-    createdWith:(DATA.atlasVersion||''),
-    updatedWith:(DATA.atlasVersion||''),
-    waivers:rules.map(r=>{
-      const o={check:r.check, node:r.node};
-      if(r.element) o.element=r.element;
-      if(r.subject) o.subject=r.subject;
-      o.reason=r.reason||'';
-      o.at=r.at||today;
-      return o;
-    }),
-    notes:[],
-  }, null, 2)+String.fromCharCode(10);
+/** Everything in the diff is in the file now. The decisions stay applied on the page until it is
+ *  regenerated, which is when reconcile() finds them in DATA.waivers and lets the diff go. */
+function waiverMarkSaved(){
+  const loc=waiverLocal();
+  loc.add.forEach(r=>{ r.saved=true; }); loc.remove.forEach(x=>{ x.saved=true; });
+  waiverSetLocal(loc); _wvCache=null; findingsChanged();
 }
+/** Throw the unsaved decisions away — the second click of a two-step button. */
+function waiverDiscard(){
+  const loc=waiverLocal();
+  loc.add=loc.add.filter(r=>r.saved); loc.remove=loc.remove.filter(x=>x.saved);
+  waiverSetLocal(loc); waiverChanged();
+}
+/** At boot: a local addition the file now carries, or a local removal of a rule the file no longer has,
+ *  is a diff that has landed — after a regeneration the bar empties itself. A saved entry the file
+ *  contradicts was reverted by hand, and the file wins. */
+function waiverReconcile(){
+  const loc=waiverLocal(), file=new Map();
+  (((DATA.waivers||{}).rules)||[]).forEach(r=>file.set(waiverId(r), r));
+  const same=(a,b)=>!!b && (a.reason||'')===(b.reason||'') && (a.by||'')===(b.by||'') && (a.until||'')===(b.until||'');
+  const add=loc.add.filter(r=>{ const f=file.get(waiverId(r)); return r.saved ? false : !same(r,f); });
+  const remove=loc.remove.filter(x=>x.saved ? false : file.has(x.id));
+  if(add.length!==loc.add.length||remove.length!==loc.remove.length){ loc.add=add; loc.remove=remove; waiverSetLocal(loc); _wvCache=null; }
+}
+/** A decision changed: the counts follow, the sidebar badge follows, the page re-renders, and the
+ *  control the reader was on gets the focus back. */
+let _wvFocus=null;
+function waiverChanged(){
+  findingsChanged(); renderSidebar(); route(); renderWaiverBar();
+  if(_wvFocus!=null){
+    const el=document.querySelector('.view:not([hidden]) [data-fi="'+_wvFocus+'"] .wv-restore, .view:not([hidden]) [data-fi="'+_wvFocus+'"] .wv-acc');
+    if(el) el.focus();
+    _wvFocus=null;
+  }
+}
+/*__WAIVER_CORE_START__*/
+// The file, byte for byte as :core's Waivers.serialize writes it — two writers exist for this format,
+// and the moment they disagree on a key or the sort order the file churns in every diff. Pure: no DOM,
+// no DATA; scripts/waiver-selftest.mjs slices this block out and runs it against the Kotlin writer.
+// Sort keys compare by UTF-16 code unit, as Kotlin's String.compareTo does — not by locale.
+function waiverSerialize(rules, notes, atlasVersion, createdWith){
+  const cmp=(a,b)=>a<b?-1:a>b?1:0;
+  const wkey=r=>[r.check, r.node, r.element||'', r.subject||''].join(' ');
+  const nkey=n=>[n.node, n.check||'', n.element||'', n.subject||'', n.text].join(' ');
+  const waivers=(rules||[]).slice().sort((a,b)=>cmp(wkey(a),wkey(b))).map(r=>{
+    const o={check:r.check, node:r.node};
+    if(r.element) o.element=r.element;
+    if(r.subject) o.subject=r.subject;
+    o.reason=r.reason||'';
+    if(r.by) o.by=r.by;
+    if(r.at) o.at=r.at;
+    if(r.until) o.until=r.until;
+    return o;
+  });
+  const ns=(notes||[]).slice().sort((a,b)=>cmp(nkey(a),nkey(b))).map(n=>{
+    const o={node:n.node};
+    if(n.check) o.check=n.check;
+    if(n.element) o.element=n.element;
+    if(n.subject) o.subject=n.subject;
+    o.text=n.text;
+    o.importance=n.importance||'normal';
+    if(n.by) o.by=n.by;
+    if(n.at) o.at=n.at;
+    return o;
+  });
+  return JSON.stringify({version:1, createdWith:createdWith||atlasVersion||'', updatedWith:atlasVersion||'',
+    waivers, notes:ns}, null, 2)+'\n';
+}
+/*__WAIVER_CORE_END__*/
+function waiverFileText(){
+  const W=DATA.waivers||{};
+  return waiverSerialize(waiverRules(), W.notes||[], DATA.atlasVersion||'', W.createdWith);
+}
+/** Save inside the IDE, download everywhere else. The IDE answers through __atlasWaiversSaved, because a
+ *  write can fail and a bar that says "saved" over a file that is not is the one lie this must not tell;
+ *  a download cannot report back, so it is taken as done. */
 function waiverExport(){
   const text=waiverFileText();
   if(window.__atlasSaveWaivers){ window.__atlasSaveWaivers(text); return; }
@@ -1598,52 +1661,129 @@ function waiverExport(){
   a.href=URL.createObjectURL(new Blob([text], {type:'application/json'}));
   a.download='waivers.json'; document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 0);
+  waiverMarkSaved(); renderWaiverBar();
+  toast('waivers.json exported — put it beside the report and regenerate');
 }
-/** The findings this node still has, as check ids — read off the findings :core ships, so the page
- *  never re-derives a judgement it did not make. A parse finding has no node and is keyed by its file. */
-function nodeChecks(id){
-  const out=[];
-  (DATA.findings||[]).forEach(f=>{ if(f.waived||(f.node||f.file)!==id||out.indexOf(f.check)>=0) return; out.push(f.check); });
-  return out;
+window.__atlasWaiversSaved=function(ok){
+  if(ok){ waiverMarkSaved(); toast('Saved to waivers.json'); }
+  else toast('Could not save waivers.json — see the IDE notification');
+  renderWaiverBar();
+};
+/** The bar under the top bar, on every view: what is unsaved and the one button that writes it, or
+ *  what was saved and is waiting for a regeneration. Hidden when there is nothing to say. */
+function renderWaiverBar(){
+  const bar=document.getElementById('wvbar'); if(!bar) return;
+  const loc=waiverLocal(), pend=waiverPending();
+  const savedN=loc.add.filter(r=>r.saved).length+loc.remove.filter(x=>x.saved).length;
+  if(!pend && !savedN){ bar.hidden=true; bar.innerHTML=''; bar.classList.remove('saved'); return; }
+  bar.hidden=false;
+  const ide=!!window.__atlasSaveWaivers;
+  if(pend){
+    const adds=loc.add.filter(r=>!r.saved).length, rems=loc.remove.filter(x=>!x.saved).length;
+    bar.classList.remove('saved');
+    bar.innerHTML='<b>'+pend+' unsaved decision'+(pend>1?'s':'')+'</b>'+
+      '<span class="wvb-d">'+[adds?adds+' accepted':'', rems?rems+' restored':''].filter(Boolean).join(' · ')+
+      ' — applied on this page, not yet in waivers.json</span><span class="wvb-sp"></span>'+
+      '<button type="button" class="dgbtn" id="wv-save">'+(ide?'Save to waivers.json':'Export waivers.json')+'</button>'+
+      '<button type="button" class="dgbtn wvb-discard" id="wv-discard">discard</button>';
+    bar.querySelector('#wv-save').onclick=waiverExport;
+    const d=bar.querySelector('#wv-discard');
+    d.onclick=()=>{ if(d.dataset.arm){ waiverDiscard(); return; }
+      d.dataset.arm='1'; d.textContent='discard '+pend+'? click again';
+      setTimeout(()=>{ if(d.isConnected){ delete d.dataset.arm; d.textContent='discard'; } }, 4000); };
+  } else {
+    bar.classList.add('saved');
+    bar.innerHTML='<b>'+savedN+' decision'+(savedN>1?'s':'')+' saved</b><span class="wvb-d">'+
+      (ide?'regenerating the explorer — the counts, badges and the CI gate follow'
+          :'put waivers.json beside the report and regenerate — the counts, badges and the CI gate follow')+'</span>';
+  }
 }
-/** "Accept this finding" for one node: one row per check that fired on it, plus the reason a reviewer
- *  will read. Waiving is a sentence about an element, so the reason is not optional here either. */
-function acceptBlockHtml(n){
-  const checks=nodeChecks(n.id);
-  const rules=waiverRules().filter(r=>r.node===n.id);
-  if(!checks.length && !rules.length) return '';
-  const row=check=>{
-    const have=rules.find(r=>r.check===check && !r.element && !r.subject);
-    if(have) return '<div class="wv-row"><span class="tag">'+esc(check)+'</span>'+
-      '<span class="wv-why">'+(have.reason?esc(have.reason):'<i>no reason given</i>')+'</span>'+
-      '<button type="button" class="dgbtn" data-unwaive="'+esc(check)+'">restore</button></div>';
-    return '<div class="wv-row"><span class="tag">'+esc(check)+'</span>'+
-      '<input class="wv-in" data-reason="'+esc(check)+'" placeholder="why is this acceptable? (required)">'+
-      '<button type="button" class="dgbtn" data-waive="'+esc(check)+'">accept</button></div>';
-  };
-  const seen=new Set();
-  const body=checks.concat(rules.map(r=>r.check)).filter(c=>{ if(seen.has(c)) return false; seen.add(c); return true; })
-    .map(row).join('');
-  const pending=waiverPending();
-  return section('accept','Findings on this node',
-    '<p class="ddesc">Accepting one keeps it in the report, in its own section, and out of the counts and '+
-    'the CI gate. It reaches <span class="mono">waivers.json</span> when you export.</p>'+body+
-    (pending?'<div class="wv-bar">'+pending+' unsaved change'+(pending>1?'s':'')+
-      ' <button type="button" class="dgbtn" id="wv-export">'+
-      (window.__atlasSaveWaivers?'Save to waivers.json':'Export waivers.json')+'</button></div>':''),
-    {count:checks.length});
+window.addEventListener('atlas-ide-bridge', renderWaiverBar);
+// ---------- accepting a finding: the form, and the findings a model carries ----------
+/** The form under a finding's row: a reason (required — the only part a reviewer can review), an
+ *  optional expiry, the author, and — when the finding names an element or a subject — whether the rule
+ *  covers this finding alone or every finding of the check on the model. Prefilled from [rule] to edit. */
+function acceptFormHtml(f, rule){
+  const id='wv'+f.fi, r=rule||{}, scoped=!!(f.element||f.subject);
+  const same=scoped?FINDS.filter(x=>x.check===f.check&&(x.node||x.file)===(f.node||f.file)).length:0;
+  const cat=(DATA.checkCatalog||[]).find(c=>c.id===f.check)||{title:f.check};
+  const narrow=rule?!!(r.element||r.subject):true;
+  return '<form class="wv-form" data-fi="'+f.fi+'" novalidate>'+
+    '<div class="wv-fld wv-grow"><label for="'+id+'-r">Why is this acceptable?</label>'+
+      '<input id="'+id+'-r" class="wv-in" required aria-required="true" aria-describedby="'+id+'-e" value="'+esc(r.reason||'')+
+      '" placeholder="e.g. resolved at deploy time from the shared repository">'+
+      '<span id="'+id+'-e" class="wv-err" role="alert" hidden></span></div>'+
+    '<div class="wv-fld"><label for="'+id+'-u">until <span class="muted">optional</span></label>'+
+      '<input id="'+id+'-u" class="wv-in wv-until" type="date" value="'+esc(r.until||'')+'"></div>'+
+    '<div class="wv-fld"><label for="'+id+'-b">by</label><input id="'+id+'-b" class="wv-in wv-by" value="'+esc(r.by||DATA.waiverAuthor||'')+'"></div>'+
+    (scoped?'<fieldset class="wv-scope"><legend>Covers</legend>'+
+      '<label><input type="radio" name="'+id+'-s" value="one"'+(narrow?' checked':'')+'> this finding only</label>'+
+      '<label><input type="radio" name="'+id+'-s" value="all"'+(narrow?'':' checked')+'> every '+esc(cat.title)+' finding on this model'+
+      (same>1?' <span class="muted">('+same+')</span>':'')+'</label></fieldset>':'')+
+    '<div class="wv-act"><button type="submit" class="dgbtn">'+(rule?'save the change':'accept')+'</button>'+
+    '<button type="button" class="dgbtn wv-cancel">cancel</button></div></form>';
 }
-function wireAccept(v, n){
-  v.querySelectorAll('[data-waive]').forEach(b=>b.onclick=()=>{
-    const check=b.dataset.waive;
-    const input=v.querySelector('[data-reason="'+cssEsc(check)+'"]');
-    const reason=((input&&input.value)||'').trim();
-    if(!reason){ if(input){ input.focus(); input.classList.add('wv-need'); } return; }
-    waiverAdd({check, node:n.id, reason});
+/** Wire every accept control under [root]: the buttons that open a row's form, the forms themselves,
+ *  and the edit/restore controls on an accepted row. Validation speaks: an empty reason or a past
+ *  expiry gets a sentence in a live region, not a red border. */
+function wireAccept(root){
+  const openRow=b=>{ const row=b.closest('details.tr'); if(!row) return; row.open=true;
+    const inp=row.querySelector('.wv-form input.wv-in[required]'); if(inp){ inp.focus(); inp.select(); } };
+  root.querySelectorAll('.wv-acc, .wv-edit').forEach(b=>b.onclick=e=>{ e.preventDefault(); e.stopPropagation(); openRow(b); });
+  root.querySelectorAll('.wv-restore').forEach(b=>b.onclick=e=>{ e.preventDefault(); e.stopPropagation();
+    const f=FINDS[+b.dataset.fi], rule=f&&waiverFor(f); if(rule){ _wvFocus=f.fi; waiverDrop(rule); } });
+  root.querySelectorAll('.wv-form').forEach(form=>{
+    const f=FINDS[+form.dataset.fi]; if(!f) return;
+    const reason=form.querySelector('input.wv-in[required]'), err=form.querySelector('.wv-err');
+    const until=form.querySelector('.wv-until'), by=form.querySelector('.wv-by');
+    const fail=(el,msg)=>{ el.setAttribute('aria-invalid','true'); err.textContent=msg; err.hidden=false; el.focus(); };
+    const clear=()=>{ reason.removeAttribute('aria-invalid'); until.removeAttribute('aria-invalid'); err.hidden=true; err.textContent=''; };
+    reason.addEventListener('input', clear); until.addEventListener('input', clear);
+    const submit=()=>{
+      const why=(reason.value||'').trim();
+      if(!why){ fail(reason, 'A reason is required — it is the only part of a waiver a reviewer can review.'); return; }
+      const u=(until.value||'').trim();
+      if(u && (!/^\d{4}-\d{2}-\d{2}$/.test(u) || u<=todayIso())){ fail(until, 'until must be a day after today, as YYYY-MM-DD.'); return; }
+      const scope=form.querySelector('input[type=radio]:checked'), one=!scope||scope.value==='one';
+      const rule={check:f.check, node:f.node||f.file, reason:why};
+      if(one&&f.element) rule.element=f.element;
+      if(one&&f.subject) rule.subject=f.subject;
+      const who=(by.value||'').trim(); if(who) rule.by=who;
+      rule.at=todayIso();
+      if(u) rule.until=u;
+      // An edit that widens a narrowed rule leaves the narrow one behind; drop it first so the file
+      // does not carry both.
+      const before=waiverFor(f); if(before && waiverId(before)!==waiverId(rule)) waiverDrop(before);
+      _wvFocus=f.fi; waiverAdd(rule);
+    };
+    form.onsubmit=e=>{ e.preventDefault(); e.stopPropagation(); submit(); };
+    form.querySelector('.wv-cancel').onclick=e=>{ e.preventDefault(); e.stopPropagation(); clear();
+      const row=form.closest('details.tr'); if(row) row.open=false; };
+    // Keys inside the form are the form's: Enter submits, nothing bubbles to a row, a list or the tree.
+    form.onkeydown=e=>{ e.stopPropagation();
+      if(e.key==='Enter'&&e.target.tagName==='INPUT'&&e.target.type!=='radio'){ e.preventDefault(); submit(); } };
+    form.onclick=e=>e.stopPropagation();
   });
-  v.querySelectorAll('[data-unwaive]').forEach(b=>b.onclick=()=>
-    waiverDrop({check:b.dataset.unwaive, node:n.id}));
-  const ex=v.querySelector('#wv-export'); if(ex) ex.onclick=waiverExport;
+}
+/** The findings a model carries, grouped by check with the catalog's explanation, each row with its
+ *  accept control — the one place a reader has the context to judge one, and now also the diagram
+ *  beside it. Nothing at all for a model with nothing to say. */
+function nodeFindingsHtml(n){
+  const all=FIND_BY_NODE.get(n.id)||[]; if(!all.length) return '';
+  const open=all.filter(f=>!waiverFor(f)), acc=all.length-open.length;
+  const byCheck={}; all.forEach(f=>{ (byCheck[f.check]=byCheck[f.check]||[]).push(f); });
+  let body='<p class="ddesc">Accepting one keeps it in the report, in its own section, and out of the counts and '+
+    'the CI gate. Nothing is written until you save — the bar at the top says what is still unsaved.</p>';
+  checksInOrder().forEach(c=>{ const rows=byCheck[c.id]; if(!rows) return;
+    const sevs=[...new Set(rows.filter(f=>!waiverFor(f)).map(f=>f.severity||'warning'))].sort();
+    body+='<div class="chk-head"><div class="chk-title">'+esc(c.title)+' '+sevs.map(sevPill).join(' ')+'</div>'+
+      (c.what?'<p class="ddesc">'+esc(c.what)+'</p>':'')+
+      ((c.why||c.fix||c.docs)?'<details class="chk-more"><summary>why it matters · what to do</summary>'+
+        (c.why?'<p>'+esc(c.why)+'</p>':'')+(c.fix?'<p>'+esc(c.fix)+'</p>':'')+
+        (c.docs?'<a class="dgbtn" href="'+esc(c.docs)+'" target="_blank" rel="noopener">read the docs ↗</a>':'')+'</details>':'')+
+      '</div>'+findingTable(rows, {onNode:true});
+  });
+  return section('findings','Findings on this model', body, {count:open.length, hint:acc?acc+' accepted':'', attrs:' id="findings"'});
 }
 /** The waiver file's rules, its notes, and everything wrong with it — the Checks page's last section.
  *  Rendered from `DATA.waivers`, which :core fills in only when a waivers.json was actually read, so a
@@ -1701,27 +1841,39 @@ const FIND_COLS=[
   {k:'el',label:'Element',w:'minmax(10ch,1fr)',opt:true},
   {k:'msg',label:'Finding',w:'minmax(24ch,3fr)',cls:'wrap'},
   {k:'where',label:'File',w:'minmax(10ch,1fr)',mono:true,opt:true},
+  {k:'act',label:'',w:'minmax(9ch,.8fr)',cls:'tags wv-cell'},
 ];
 /** One finding as a table row: severity as a word, the model as a chip, the element as a jump into the
- *  model, the message, and the file with the open-in-IDE button — the same row on every page. */
-function findingRow(f){
+ *  model (or, on the model's own page, a locate-on-diagram button), the message, the file with the
+ *  open-in-IDE button, and the accept control. The row's body is the accept form, so the decision is
+ *  taken where the finding is read. */
+function findingRow(f, o){
+  o=o||{};
   const n=byId.get(f.node), rule=waiverFor(f);
   const names=n?elementNames(n):null, el=(f.element&&names)?names.get(String(f.element)):null;
   const elLabel=(el&&el.name)||f.element||'';
+  const elCell=!f.element ? ((f.subject&&f.check!=='invalidExpr'&&f.check!=='suspectExpr')?'<span class="mono muted">'+esc(f.subject)+'</span>':'')
+    : !n ? '<span class="mono">'+esc(f.element)+'</span>'
+    : o.onNode ? locateBtn(f.element, elLabel)+' '+esc(elLabel)
+    : elJumpHtml(f.node, f.element, elLabel, 'Open this element in its model');
   return {hay:elHay(f.label, f.message, f.element, elLabel, f.subject, f.check, f.severity, n?nodeKind(n):'', f.file),
     attrs:' data-sev="'+esc(f.severity||'warning')+'" data-fi="'+f.fi+'"', cls:rule?'wv-done':'',
+    body:acceptFormHtml(f, rule), bodyCls:'wv-body',
     cells:{
       sev:sevPill(f.severity),
       model:n?nodeChip(f.node):'<span class="mono">'+esc(f.node||f.label||'')+'</span>',
-      // An expression's subject is a problem key (`unknown-function:…`, `@12`) — the page's own bookkeeping,
-      // not something a reader acts on; every other subject (a column, a scope) is worth the cell.
-      el:f.element?(n?elJumpHtml(f.node, f.element, elLabel, 'Open this element in its model'):'<span class="mono">'+esc(f.element)+'</span>')
-                  :((f.subject&&f.check!=='invalidExpr'&&f.check!=='suspectExpr')?'<span class="mono muted">'+esc(f.subject)+'</span>':''),
+      el:elCell,
       msg:esc(f.message)+(f.snippet?' <span class="mono muted">'+esc(f.snippet)+'</span>':'')+(rule?acceptedNoteHtml(rule):''),
       where:f.file?'<span class="fp">'+esc(fileBase(f.file))+'</span>'+lineRef(f.file,f.line)+openBtn(f.file,f.line):'',
+      act:rule?'<button type="button" class="dgbtn wv-edit" data-fi="'+f.fi+'">edit</button><button type="button" class="dgbtn wv-restore" data-fi="'+f.fi+'">restore</button>'
+              :'<button type="button" class="dgbtn wv-acc" data-fi="'+f.fi+'">accept…</button>',
     }};
 }
-function findingTable(rows, o){ o=o||{}; return tbl(FIND_COLS, rows.map(findingRow), {filter:false, more:o.more}); }
+function findingTable(rows, o){
+  o=o||{};
+  const cols=o.onNode?FIND_COLS.filter(c=>c.k!=='model'):FIND_COLS;
+  return tbl(cols, rows.map(f=>findingRow(f,o)), {filter:false, more:o.more});
+}
 /** One check's block: the catalog's explanation, the open findings, and the accepted ones folded under
  *  them. Rendered whenever there is anything at all — a check whose every finding was accepted keeps its
  *  block, because "what did we agree to carry" is a question the page has to keep answering. */
@@ -1786,6 +1938,7 @@ function renderChecks(){
   h+='</div>';
   v.innerHTML=h;
   wireReport(v);
+  wireAccept(v);
   const sa=v.querySelector('#chk-showacc');
   if(sa) sa.onclick=()=>{ const on=sa.getAttribute('aria-pressed')!=='true';
     sa.setAttribute('aria-pressed', on?'true':'false'); sa.classList.toggle('on', on);
@@ -2454,7 +2607,7 @@ const incFrom= (id,rel)=>{ const e=(incM.get(id)||[]).find(x=>x.rel===rel); retu
 // you walk the graph. Everything defaults to closed except the diagram and the neighborhood — and the
 // one section that IS the model (a form's fields, a service's operations) — see DEFAULT_OPEN_SECTIONS.
 const SECT_STORE='atlas-sect';
-const DEFAULT_OPEN_SECTIONS={diagram:true, neighborhood:true, formfields:true, columns:true, usertasks:true, svctasks:true, scripttasks:true,
+const DEFAULT_OPEN_SECTIONS={diagram:true, neighborhood:true, findings:true, formfields:true, columns:true, usertasks:true, svctasks:true, scripttasks:true,
   plan:true, ops:true, dmnio:true, dmnrules:true, permissions:true, escalations:true, rw:true, payload:true, dicttypes:true, agentops:true,
   endpoints:true, script:true, templatebody:true, extractors:true, coverage:true, problems:true, opparams:true, usedby:true};
 function sectAll(){ try{ return JSON.parse(localStorage.getItem(SECT_STORE)||'{}')||{}; }catch(e){ return {}; } }
@@ -3850,6 +4003,9 @@ function renderDetail(){
   let body='';
   body+=diagramView(rn);
   body+=neighborhoodSvg(n);
+  // The findings sit right under the diagram they are about — this is where a reader has the context
+  // to judge one, and the locate button puts the element in view.
+  body+=nodeFindingsHtml(n);
   body+=renderSections(rn, detailCtx(rn));
   // Whatever no renderer above consumed. Identity fields live in the header; HAY_SKIP is the same
   // bookkeeping the search index skips.
@@ -3866,9 +4022,6 @@ function renderDetail(){
   const relBody=g=>relHint+Object.keys(g).sort().map(rel=>
     '<div class="relgrp"><div class="lab">'+termHtml('rel', rel)+'</div><div class="nodechips">'+
     [...g[rel].values()].map(e=>nodeChip(e.id,e)).join('')+'</div></div>').join('');
-  // Accepting a finding belongs on the node it is about, not in a list of findings: this is where a
-  // reader has the context to judge it, and the one place that needs the control at all.
-  body+=acceptBlockHtml(n);
   const ok=Object.keys(out).sort(), ik=Object.keys(inc).sort();
   if(ok.length) body+=section('rels-out','Uses / references', relBody(out), {count:ok.reduce((a,k)=>a+out[k].size,0), nav:'References'});
 
@@ -3922,7 +4075,7 @@ function renderDetail(){
   const fp=det.querySelector('.dfile');
   if(fp) fp.onclick=e=>{ if(e.target.closest('.cpy')) return;
     atlasCopy(dec(fp.dataset.copy), ()=>{ fp.classList.add('copied'); setTimeout(()=>fp.classList.remove('copied'),1200); }); };
-  wireAccept(det, n);
+  wireAccept(det);
   wireCopyButtons(det);
   wireOpenButtons(det);                 // ↗ open the file / file:line in the IDE (no-ops in a browser)
   // ⌖ locate-on-diagram buttons; preventDefault keeps a click inside a <summary> from toggling it
@@ -6524,6 +6677,7 @@ function wireRailAutoCollapse(){
 // ---------- boot ----------
 document.getElementById('proj').textContent=DATA.project;
 indexFindings();
+waiverReconcile();
 computeInsights();
 renderSidebar();
 applySidebar();

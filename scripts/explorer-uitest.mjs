@@ -785,38 +785,76 @@ const probe = `<script>
     ok('a filter matching nothing hides every row', shown.length===0, shown.length+' rows still shown');
   });
 
-  // --- accepting a finding: the round trip that makes waivers worth having. Marking has to survive a
-  //     re-render, refuse a reason-less rule, and be undoable.
+  // --- accepting a finding: the round trip that makes waivers worth having. A decision is taken on the
+  //     row it is about, refuses to exist without a reason, narrows to the element by default, shows up
+  //     as unsaved on every view, and can be taken back.
+  let wvFi=null, wvSiblings=0;
+  steps.push(()=>{ location.hash='/checks'; });
   steps.push(()=>{
-    const withFindings=(DATA.findings||[]).filter(f=>!f.waived).map(f=>f.node||f.file).find(id=>byId.get(id));
-    if(!withFindings){ say('note','no node carries a finding in this fixture'); return; }
-    location.hash=enc(withFindings);
-  });
-  steps.push(()=>{
-    const det=document.getElementById('detail');
-    const btn=det.querySelector('[data-waive]');
-    ok('a node with findings offers to accept them', !!btn, 'no accept button');
-    if(!btn) return;
+    const cv=document.getElementById('view-checks');
+    const open=(DATA.findings||[]).map((f,i)=>Object.assign({fi:i},f)).filter(f=>!f.waived&&byId.get(f.node));
+    const pick=open.find(f=>f.element)||open[0];
+    if(!pick){ say('note','no finding to accept in this fixture'); return; }
+    wvFi=pick.fi;
+    wvSiblings=open.filter(f=>f.check===pick.check&&f.node===pick.node).length;
+    const row=cv.querySelector('.tr[data-fi="'+wvFi+'"]');
+    ok('a finding row offers to accept it', !!row && !!row.querySelector('.wv-acc'), 'no accept button on row '+wvFi);
+    if(!row) return;
+    click(row.querySelector('.wv-acc'));
+    const form=row.querySelector('.wv-form');
+    ok('the accept form opens on the row', row.open && !!form);
+    ok('the reason field has a real label', !!form && !!form.querySelector('label[for="'+form.querySelector('input.wv-in[required]').id+'"]'));
+    ok('a finding with an element offers to narrow to it', !pick.element || !!form.querySelector('.wv-scope input[value="one"]:checked'));
     // A reason is the only thing a reviewer can review, so a rule without one must not be accepted.
-    btn.click();
-    ok('accepting without a reason is refused', !det.querySelector('[data-unwaive]'));
-    ok('and the field says so', !!det.querySelector('.wv-in.wv-need'));
-    const input=det.querySelector('[data-reason]');
-    if(input){ input.value='known, accepted by the team'; }
-    det.querySelector('[data-waive]').click();
+    form.querySelector('button[type=submit]').click();
+    ok('accepting without a reason is refused', !row.querySelector('.wv-restore'));
+    ok('and the field says so, in words', form.querySelector('input.wv-in[required]').getAttribute('aria-invalid')==='true' &&
+       !!form.querySelector('.wv-err:not([hidden])') && /reason/.test(form.querySelector('.wv-err').textContent));
+    form.querySelector('input.wv-in[required]').value='known, accepted by the team';
+    form.querySelector('button[type=submit]').click();
+  });
+  steps.push(()=>{
+    const cv=document.getElementById('view-checks');
+    const row=cv.querySelector('.tr[data-fi="'+wvFi+'"]');
+    ok('the finding is now accepted, with its reason on the row', !!row && !!row.querySelector('.wv-restore') && /known, accepted by the team/.test(row.textContent||''));
+    const rule=waiverRules().find(r=>r.saved===false);
+    const f=DATA.findings[wvFi];
+    ok('the rule names the check and the model', !!rule && rule.check===f.check && rule.node===(f.node||f.file));
+    ok('and narrows to the element the finding named', !f.element || (!!rule && rule.element===f.element));
+    ok('a sibling finding of the same check on the same model stays open', wvSiblings<2 ||
+       [...cv.querySelectorAll('.tr[data-fi]')].some(r=>r!==row && DATA.findings[+r.dataset.fi].check===f.check && DATA.findings[+r.dataset.fi].node===f.node && !!r.querySelector('.wv-acc')));
+    const bar=document.getElementById('wvbar');
+    ok('the bar says one decision is unsaved', !!bar && !bar.hidden && /1 unsaved decision/.test(bar.textContent||''));
+    ok('and offers to write the file', !!bar.querySelector('#wv-save'));
+    const text=waiverFileText();
+    ok('the file carries the rule, its reason and the day', /known, accepted by the team/.test(text) && /"version": 1/.test(text) && /"at": "[0-9]{4}-[0-9]{2}-[0-9]{2}"/.test(text));
+    ok('the header count moved with the decision', parseInt((cv.querySelector('details.sect[data-sect="chk-'+f.check+'"] .scount')||{}).textContent||'0',10)===Math.max(0,(DATA.checks[f.check]||0)-1));
+    location.hash='/tree';
+  });
+  steps.push(()=>{
+    const bar=document.getElementById('wvbar');
+    ok('the unsaved decision follows to another view', !!bar && !bar.hidden && /unsaved decision/.test(bar.textContent||''));
+    location.hash='/checks';
+  });
+  steps.push(()=>{
+    const cv=document.getElementById('view-checks');
+    const row=cv.querySelector('.tr[data-fi="'+wvFi+'"]');
+    if(row&&row.querySelector('.wv-restore')) click(row.querySelector('.wv-restore'));
+  });
+  steps.push(()=>{
+    const cv=document.getElementById('view-checks');
+    const row=cv.querySelector('.tr[data-fi="'+wvFi+'"]');
+    ok('restoring puts the finding back', !!row && !!row.querySelector('.wv-acc') && !row.querySelector('.wv-restore'));
+    ok('and the bar goes away with the last decision', document.getElementById('wvbar').hidden);
+    const f=DATA.findings[wvFi];
+    location.hash=enc(f.node);
   });
   steps.push(()=>{
     const det=document.getElementById('detail');
-    ok('the finding is now accepted', !!det.querySelector('[data-unwaive]'));
-    ok('the page says the change is unsaved', /unsaved change/.test(det.textContent||''));
-    ok('and offers to write the file', !!det.querySelector('#wv-export'));
-    ok('the exported file carries the rule and its reason',
-       /known, accepted by the team/.test(waiverFileText()) && /"version": 1/.test(waiverFileText()));
-    det.querySelector('[data-unwaive]').click();
-  });
-  steps.push(()=>{
-    const det=document.getElementById('detail');
-    ok('restoring puts the finding back', !det.querySelector('[data-unwaive]'));
+    const sect=det.querySelector('details.sect[data-sect="findings"]');
+    ok('a model page lists its findings, open', !!sect && sect.open);
+    ok('with the check named and an accept control on each row', !!sect && !!sect.querySelector('.chk-title') && !!sect.querySelector('.wv-acc'));
+    ok('and the element as a locate-on-diagram button where there is one', !sect || !DATA.findings[wvFi].element || !!sect.querySelector('.dgloc'));
     try{ localStorage.removeItem(WAIVER_KEY); }catch(e){}
   });
 
