@@ -3,6 +3,7 @@ package com.flowable.atlas.render
 import com.flowable.atlas.graph.CheckCatalog
 import com.flowable.atlas.model.Dyn
 import com.flowable.atlas.model.DesignTerms
+import com.flowable.atlas.parsing.Constants
 import com.flowable.atlas.parsing.ModelJsonReader
 import java.io.File
 
@@ -19,14 +20,6 @@ import java.io.File
  * `MarkdownHygieneTest` fails if any of those reach the page.
  */
 object OverviewRenderer {
-
-    /** Well-known Flowable platform service-task beans (engine-provided, not project source). */
-    private val FLOWABLE_PLATFORM_BEANS = setOf(
-        "initVariablesService", "dataObjectServiceTask", "generateDocumentService",
-        "createDocumentService", "serviceRegistryService", "agentService",
-        "sendEventServiceTask", "auditLogService", "decisionServiceTask",
-        "caseServiceTask", "httpServiceTask", "scriptServiceTask", "mailServiceTask",
-    )
 
     /** Interfaces that mark a class as Flowable "glue" code. */
     private val GLUE_INTERFACES = setOf(
@@ -628,7 +621,7 @@ object OverviewRenderer {
         for (r in unresolvedRefs) {
             groups.getOrPut(Pair(pyStr(r["kind"]), pyStr(r["value"]))) { mutableListOf() }.add(r)
         }
-        val platform = groups.filterKeys { it.first == "bean" && it.second in FLOWABLE_PLATFORM_BEANS }
+        val platform = groups.filterKeys { it.first == "bean" && it.second in Constants.FLOWABLE_PLATFORM_BEANS }
         val othersG = groups.filterKeys { it !in platform.keys }
         val tupleCmp = compareBy<Map.Entry<Pair<String, String>, *>>({ it.key.first }, { it.key.second })
         if (platform.isNotEmpty()) {

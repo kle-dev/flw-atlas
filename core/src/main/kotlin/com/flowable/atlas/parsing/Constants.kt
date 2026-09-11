@@ -22,6 +22,24 @@ object Constants {
         "instanceof", "gt", "lt", "ge", "le", "eq", "ne", "new",
     )
 
+    /**
+     * Beans the Flowable platform provides (engine-provided, not project source): the delegate Design
+     * writes into every task type's `delegateExpression`, and the `flw*Utils` expression helpers the
+     * platform registers (`PlatformExpressionsAutoConfiguration`). One set for every surface: the graph
+     * marks these `platform`, the reports list them apart from the project's own beans, and the runtime
+     * checks know that a call into one of them stays inside the engine. It used to be declared three
+     * times, once per renderer, which is how a bean could be "platform" on one page and "review" on the next.
+     */
+    val FLOWABLE_PLATFORM_BEANS = setOf(
+        "initVariablesService", "dataObjectServiceTask", "generateDocumentService",
+        "createDocumentService", "serviceRegistryService", "agentService",
+        "sendEventServiceTask", "auditLogService", "decisionServiceTask",
+        "caseServiceTask", "httpServiceTask", "scriptServiceTask", "mailServiceTask",
+        "flwCollectionUtils", "flwJsonUtils", "flwFormatUtils", "flwLocaleUtils", "flwMathUtils",
+        "flwStringUtils", "flwTimeUtils", "flwDateFunctionUtils", "flwIOUtils", "flwAuthTokenUtils",
+        "flwBase64Utils", "flwContentItem", "propertyConfigurationService",
+    )
+
     // Harvesting regexes — ported from flowable_atlas.py (~lines 69-72, 1296).
     // A backslash before the `$`/`#` is the author saying "literal, do not evaluate" — in a Groovy
     // GString, in a Java string, in a JSON body — so `\${x}` is not an expression and is not harvested;

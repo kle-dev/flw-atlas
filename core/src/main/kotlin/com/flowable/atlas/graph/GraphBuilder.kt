@@ -40,14 +40,6 @@ object GraphBuilder {
     /** Model types rendered as Freemarker (not JUEL) — their `${…}` must not be validated. */
     private val FREEMARKER_MODEL_TYPES = setOf("query", "template", "document")
 
-    /** Well-known Flowable platform service-task beans (engine-provided, not project source). */
-    private val FLOWABLE_PLATFORM_BEANS = setOf(
-        "initVariablesService", "dataObjectServiceTask", "generateDocumentService",
-        "createDocumentService", "serviceRegistryService", "agentService",
-        "sendEventServiceTask", "auditLogService", "decisionServiceTask",
-        "caseServiceTask", "httpServiceTask", "scriptServiceTask", "mailServiceTask",
-    )
-
     /** Ref kinds correlated by NAME (not by model key): throw side and catch side of a signal/
      *  message/error/escalation — and external-worker topics — meet in one shared node. */
     private val NAMED_REF_KINDS = setOf("signal", "message", "error", "escalation", "topic")
@@ -259,7 +251,7 @@ object GraphBuilder {
 
         // --- variable nodes ---
         val beans = LinkedHashSet<String>()
-        beans.addAll(FLOWABLE_PLATFORM_BEANS)
+        beans.addAll(Constants.FLOWABLE_PLATFORM_BEANS)
         beans.addAll(beanMethods.keys)
         for (r in ctx.refs) if (r["kind"] == "bean") beans.add(r["value"].toString())
         for (jc in allJava.values) {
@@ -634,7 +626,7 @@ object GraphBuilder {
             }
             val data: LinkedHashMap<String, Any?> = when {
                 kind == "bean" || kind == "class" -> {
-                    val platform = kind == "bean" && r["value"] in FLOWABLE_PLATFORM_BEANS
+                    val platform = kind == "bean" && r["value"] in Constants.FLOWABLE_PLATFORM_BEANS
                     linkedMapOf("platform" to platform, "kind" to kind)
                 }
                 r["targetType"] == "model" -> linkedMapOf("kind" to kind, "missingModel" to true)

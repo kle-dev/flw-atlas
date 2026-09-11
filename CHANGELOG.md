@@ -12,6 +12,20 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.26.0
+
+- **`unguardedTasks` names the calls that actually leave the engine.** Design writes a platform bean into
+  every service task's delegate expression, and the check read every delegate as "code of your own" — so
+  `${initVariablesService}`, `${auditLogService}` and `${dataObjectServiceTask}` were "calls out of the
+  engine with no error path". Measured on five real projects, 94 % of its findings sat on such beans:
+  275 on one project of 81 processes. It now fires on the task types that call out (HTTP, external
+  worker, agent, mail), on a class or a bean of the project's own, on an `expression` whose root is
+  neither an engine context nor a platform bean, and on a service-registry task whose service is REST;
+  an HTTP task that carries `ignoreException` or `handleStatusCodes` has its error path and is quiet. The
+  platform-bean set is declared once now (it lived in three renderers) and includes the `flw*Utils`
+  expression helpers and `propertyConfigurationService`, so those stop appearing under *Review —
+  unresolved in project*.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its

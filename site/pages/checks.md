@@ -232,9 +232,18 @@ every project and be worth nothing.
 
 ### `unguardedTasks` — a call out of the engine with nothing catching it
 
-A service task that leaves the engine — an HTTP call, an external worker, or a class or delegate
-expression of your own — with no error boundary event attached to it. A failure then propagates to
-whatever called the process.
+A service task whose work happens outside the engine — an HTTP call, an external worker, an AI agent, a
+mail task, a service-registry task whose service is REST, or code of your own (a `class`, a delegate
+expression that is not a platform bean, an `expression` whose root is neither an engine context nor a
+platform bean) — with no error boundary event attached to it. A failure then propagates to whatever
+called the process.
+
+The bean alone does not decide it. Flowable Design writes a platform bean into every task type's
+delegate expression — `${initVariablesService}` sets variables, `${auditLogService}` writes a row,
+`${dataObjectServiceTask}` reads the platform's own tables — and none of those depends on anyone else's
+uptime, so they stay quiet. Measured on real projects before this distinction, 94 % of the findings sat
+on such beans. An HTTP task that carries `ignoreException` or `handleStatusCodes` has said what happens
+on failure and stays quiet too.
 
 Letting an error bubble up is a legitimate design, so this one is deliberately quiet wherever it cannot
 be sure: it says nothing about a process that catches errors centrally in an error event subprocess, and

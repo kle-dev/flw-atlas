@@ -280,6 +280,23 @@ class FindingsTest {
             "serviceTasks" to listOf(leaving, task("guarded", "class" to "com.example.X"), task("inEngine", "type" to "dmn")),
             "events" to listOf(mapOf("id" to "err", "type" to "boundaryEvent", "def" to "error", "attachedTo" to "guarded"))))))
         assertEquals(listOf("http"), elements(r2, "unguardedTasks"))
+        // Design writes a platform bean into every task type's delegate, so the bean alone is not a call
+        // out: only the task types that leave, the project's own code, and a REST service are.
+        val r2b = run(listOf(
+            node("service:crm", "service", data = mapOf("type" to "REST")),
+            node("service:orders", "service", data = mapOf("type" to "database")),
+            process("p", mapOf("serviceTasks" to listOf(
+                task("initVars", "type" to "init-variables", "delegateExpression" to "\${initVariablesService}"),
+                task("audit", "type" to "audit", "delegateExpression" to "\${auditLogService}"),
+                task("ownBean", "delegateExpression" to "\${orderService}"),
+                task("ownExpr", "expression" to "\${orderService.place(order)}"),
+                task("ctxExpr", "expression" to "\${execution.setVariable('x', 1)}"),
+                task("restSvc", "type" to "service-registry", "delegateExpression" to "\${serviceRegistryService}", "serviceModelKey" to "crm"),
+                task("dbSvc", "type" to "service-registry", "delegateExpression" to "\${serviceRegistryService}", "serviceModelKey" to "orders"),
+                task("tolerant", "type" to "http", "fields" to mapOf("requestUrl" to "https://x", "ignoreException" to "true")),
+                task("agent", "type" to "agent", "delegateExpression" to "\${agentService}"),
+                task("mail", "type" to "mail", "delegateExpression" to "\${mailServiceTask}"))))))
+        assertEquals(listOf("ownBean", "ownExpr", "restSvc", "agent", "mail"), elements(r2b, "unguardedTasks"))
         val r3 = run(listOf(process("p", mapOf(
             "serviceTasks" to listOf(leaving),
             "events" to listOf(mapOf("id" to "catchAll", "type" to "startEvent", "def" to "error"))))))

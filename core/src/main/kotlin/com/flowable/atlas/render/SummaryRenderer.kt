@@ -2,6 +2,7 @@ package com.flowable.atlas.render
 
 import com.flowable.atlas.graph.CheckCatalog
 import com.flowable.atlas.model.DesignTerms
+import com.flowable.atlas.parsing.Constants
 import java.io.File
 
 /**
@@ -13,14 +14,6 @@ import java.io.File
  * by [com.flowable.atlas.graph.Atlas.extract]; integer counts print without a trailing `.0`.
  */
 object SummaryRenderer {
-
-    /** Well-known Flowable platform service-task beans (engine-provided) — mirrors the Python set. */
-    private val FLOWABLE_PLATFORM_BEANS = setOf(
-        "initVariablesService", "dataObjectServiceTask", "generateDocumentService",
-        "createDocumentService", "serviceRegistryService", "agentService",
-        "sendEventServiceTask", "auditLogService", "decisionServiceTask",
-        "caseServiceTask", "httpServiceTask", "scriptServiceTask", "mailServiceTask",
-    )
 
     @Suppress("UNCHECKED_CAST")
     fun render(result: Map<String, Any?>, root: File): String {
@@ -213,9 +206,9 @@ object SummaryRenderer {
         val unresolved = result["unresolvedRefs"] as? List<Map<String, Any?>> ?: emptyList()
         val groupPairs = LinkedHashSet<Pair<String, String>>()
         for (r in unresolved) groupPairs.add((r["kind"] as String) to (r["value"] as String))
-        val platform = groupPairs.filter { it.first == "bean" && it.second in FLOWABLE_PLATFORM_BEANS }
+        val platform = groupPairs.filter { it.first == "bean" && it.second in Constants.FLOWABLE_PLATFORM_BEANS }
             .map { it.second }.distinct().sorted()
-        val review = groupPairs.filter { !(it.first == "bean" && it.second in FLOWABLE_PLATFORM_BEANS) }
+        val review = groupPairs.filter { !(it.first == "bean" && it.second in Constants.FLOWABLE_PLATFORM_BEANS) }
             .map { "${it.first}:${it.second}" }.distinct().sorted()
         val extUrls = bt("external").count { truthy((it["data"] as Map<String, Any?>)["external_url"]) }
         L.add("## External surface")

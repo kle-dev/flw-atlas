@@ -349,11 +349,11 @@
     "hardcodedSecrets": 1,
     "invalidExpr": 2,
     "missingRefs": 1,
-    "open": 17,
+    "open": 18,
     "parseIssues": 2,
     "schemaGaps": 1,
     "scriptIssues": 2,
-    "unguardedTasks": 1,
+    "unguardedTasks": 2,
     "unreadInputs": 1,
     "unusedVars": 3
   },
@@ -712,6 +712,15 @@
       "node": "process:orderProcess",
       "severity": "error",
       "snippet": "execution.setVariable('shippingStamp', \"x-\" + orderId"
+    },
+    {
+      "check": "unguardedTasks",
+      "element": "calcTask",
+      "file": "processes/order.bpmn",
+      "label": "Order Process",
+      "message": "`Calculate total` calls out of the engine with no error boundary event — a failure propagates to the caller",
+      "node": "process:orderProcess",
+      "severity": "warning"
     },
     {
       "check": "unguardedTasks",

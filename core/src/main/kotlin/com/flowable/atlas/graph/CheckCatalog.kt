@@ -195,8 +195,10 @@ object CheckCatalog {
             label = "calls with no error path", title = "Calls with no error path",
             what = "service tasks leaving the engine with nothing catching a failure",
             clean = "every outbound call is guarded",
-            why = "A failure in an HTTP call, an external worker or a delegate propagates to whatever " +
-                "called the process, with nothing in the model saying what happens then.",
+            why = "A failure in an HTTP call, an external worker, an agent, a mail task, a REST service or " +
+                "a delegate of your own propagates to whatever called the process, with nothing in the " +
+                "model saying what happens then. A platform bean that stays inside the engine — init " +
+                "variables, audit log, data object — is not one of them.",
             fix = "Attach an error boundary event or catch centrally in an error event subprocess. Accept " +
                 "the finding when letting the error reach the caller is the design.",
             docs = "unguardedtasks-a-call-out-of-the-engine-with-nothing-catching-it",

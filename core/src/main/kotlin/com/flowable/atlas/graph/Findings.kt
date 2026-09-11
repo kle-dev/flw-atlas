@@ -1,5 +1,6 @@
 package com.flowable.atlas.graph
 
+import com.flowable.atlas.parsing.Constants
 
 /**
  * The project's health findings — everything Atlas noticed that is probably wrong, as data.
@@ -44,6 +45,13 @@ object Findings {
         for (e in edges) {
             if (e["rel"] == "contains") continue
             (e["t"] as? String)?.let { referenced.add(it) }
+        }
+        // What kind of service a service-registry task calls: only a REST service leaves the engine.
+        val serviceTypes = HashMap<String, String>()
+        for (n in nodes) {
+            if (n["type"] != "service") continue
+            val t = (n["data"] as? Map<String, Any?>)?.get("type") as? String ?: continue
+            (n["key"] as? String)?.let { serviceTypes[it] = t }
         }
 
         /**
@@ -147,7 +155,7 @@ object Findings {
                     }
                 }
                 "process" -> {
-                    runtimeRiskChecks(data) { check, message, element -> add(check, WARNING, n, message, element) }
+                    runtimeRiskChecks(data, serviceTypes) { check, message, element -> add(check, WARNING, n, message, element) }
                     topologyChecks(data) { check, message, element -> add(check, WARNING, n, message, element) }
                     secretFields(data) { element, what, field ->
                         add("hardcodedSecrets", ERROR, n, "`$what` sets `$field` to a literal value — move it to " +
@@ -346,7 +354,9 @@ object Findings {
      * and why each one stays quiet wherever the model does not give enough to be sure.
      */
     @Suppress("UNCHECKED_CAST")
-    private fun runtimeRiskChecks(data: Map<String, Any?>, report: (String, String, String) -> Unit) {
+    private fun runtimeRiskChecks(
+        data: Map<String, Any?>, serviceTypes: Map<String, String>, report: (String, String, String) -> Unit,
+    ) {
         val events = data["events"] as? List<Map<String, Any?>> ?: emptyList()
         // Errors caught anywhere in the process: a boundary event on a task, and an error event
         // subprocess, which catches for the whole process.
@@ -390,17 +400,46 @@ object Findings {
         if (catchesEverywhere || subprocessGuarded) return
         for (el in (data["serviceTasks"] as? List<Map<String, Any?>> ?: emptyList())) {
             val id = el["id"] as? String ?: continue
-            // Only the tasks that leave the engine: an HTTP call, an external worker, or code of the
-            // project's own. Those are the ones whose failure is a question of someone else's uptime.
-            val leaves = el["type"] == "http" || el["type"] == "external-worker" ||
-                (el["class"] as? String)?.isNotEmpty() == true ||
-                (el["delegateExpression"] as? String)?.isNotEmpty() == true
-            if (!leaves || guarded.contains(id)) continue
+            if (!leavesTheEngine(el, serviceTypes) || guarded.contains(id)) continue
+            // An HTTP task told to swallow failures, or to map status codes itself, has its error path.
+            val fields = el["fields"] as? Map<*, *>
+            if (fields != null && (fields.containsKey("ignoreException") || fields.containsKey("handleStatusCodes"))) continue
             val what = (el["name"] as? String)?.ifEmpty { null } ?: id
             report("unguardedTasks",
                 "`$what` calls out of the engine with no error boundary event — a failure propagates to " +
                     "the caller", id)
         }
+    }
+
+    /** Task types whose work happens outside the engine, whatever bean Design wrote for them. */
+    private val LEAVING_TASK_TYPES = setOf("http", "external-worker", "agent", "mail")
+
+    /** The root name of `${bean}` / `${bean.method(x)}` / `#{bean}`. */
+    private val EXPR_ROOT_RE = Regex("^\\s*[#$]\\{\\s*([A-Za-z_]\\w*)")
+
+    /**
+     * Whether a service task's work happens outside the engine — the one thing that makes a missing
+     * error path a risk. Design writes a platform bean into every task type's `delegateExpression`, so
+     * a delegate alone says nothing: `${initVariablesService}` sets variables and `${auditLogService}`
+     * writes a row, and neither depends on anyone else's uptime. Before this distinction the check fired
+     * on 94 % platform beans across real projects. What leaves: the task types that call out (HTTP,
+     * external worker, agent, mail), code of the project's own (`class`, a bean that is not the
+     * platform's, an `expression` whose root is neither an engine context nor a platform bean), and a
+     * service-registry task whose service is REST.
+     */
+    private fun leavesTheEngine(el: Map<String, Any?>, serviceTypes: Map<String, String>): Boolean {
+        if (el["type"] in LEAVING_TASK_TYPES) return true
+        if (!(el["class"] as? String).isNullOrEmpty()) return true
+        fun root(attr: String) = (el[attr] as? String)?.let { EXPR_ROOT_RE.find(it)?.groupValues?.get(1) }
+        root("expression")?.let { r ->
+            if (r !in Constants.FLOWABLE_CONTEXT && r !in Constants.FLOWABLE_PLATFORM_BEANS) return true
+        }
+        val bean = root("delegateExpression") ?: return false
+        if (bean == "serviceRegistryService" || el["type"] == "service-registry") {
+            val svc = el["serviceModelKey"] as? String ?: return false
+            return serviceTypes[svc].equals("REST", ignoreCase = true)
+        }
+        return bean !in Constants.FLOWABLE_PLATFORM_BEANS
     }
 
     /** `${name}` in a query template with no FreeMarker built-in behind the name — nothing escapes it. */
