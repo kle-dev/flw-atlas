@@ -5,6 +5,7 @@ import com.flowable.atlas.expr.catalog.CustomFunctionCatalog
 import com.flowable.atlas.expr.catalog.CustomFunctionExtractor
 import com.flowable.atlas.parsing.Constants
 import com.flowable.atlas.parsing.Discovery
+import com.flowable.atlas.parsing.JsonPath
 import com.flowable.atlas.parsing.ModelKinds
 import com.flowable.atlas.parsing.ModelParsers
 import com.flowable.atlas.parsing.ModelSpans
@@ -34,10 +35,11 @@ object Atlas {
     private val MARKER_RE = Regex("(?<![A-Za-z0-9_])(TODO|FIXME|HACK)(?![A-Za-z0-9_])")
 
     /** The marker's own text: what follows it up to the end of the line, the string or the element it sits
-     *  in — a minified form is one line, and the rest of *that* line is the rest of the file. */
+     *  in — a minified form is one line, and the rest of *that* line is the rest of the file. A `}` or `]`
+     *  inside the text is text (`TODO: handle the {order} case`); the string's own quote ends it. */
     private fun markerText(raw: String, from: Int): String {
         var end = raw.length
-        for (i in from until raw.length) { val c = raw[i]; if (c == '\n' || c == '"' || c == '<' || c == '\\' || c == '}' || c == ']') { end = i; break } }
+        for (i in from until raw.length) { val c = raw[i]; if (c == '\n' || c == '"' || c == '<' || c == '\\') { end = i; break } }
         return raw.substring(from, end).trim().removeSuffix("-->").removeSuffix("*/")
             .trimEnd('"', ',', ' ', ':', ')', '.').trimStart(':', '-', ' ', '(').trim().take(120)
     }
@@ -169,17 +171,23 @@ object Atlas {
                 diag("parse", label, "($mtype) ${e.message}")
             }
 
-            // A TODO, FIXME, HACK or XXX in a model file is a promise someone made to come back. Kept
-            // with its line and the model(s) the file defines, so the report can list the ones nobody
-            // has kept — the text after the marker is the subject, which survives a line moving.
+            // A TODO, FIXME or HACK in a model file is a promise someone made to come back. Kept with its
+            // line and the model it sits in — the process whose element holds it when the file defines
+            // several, else every model of the file — so the report can list the ones nobody has kept. The
+            // text after the marker is the subject, which survives a line moving; a marker with no text in
+            // a minified JSON model gets the path of the element carrying it, which survives a re-export.
             val markerNodes = mkeys.filterNotNull().map { "$nodeType:$it" }
+            val spans = ModelSpans.ranges(raw, mtype, mkeys)
             for (m in MARKER_RE.findAll(raw)) {
                 val before = raw.substring(0, m.range.first)
-                bucketList("markers").add(linkedMapOf(
+                val owner = spans?.firstOrNull { m.range.first in it.second }?.first
+                val rec = linkedMapOf<String, Any?>(
                     "file" to label, "line" to before.count { it == '\n' } + 1,
-                    "column" to before.length - before.lastIndexOf('\n'),
-                    "marker" to m.groupValues[1], "text" to markerText(raw, m.range.last + 1), "models" to markerNodes,
-                ))
+                    "marker" to m.groupValues[1], "text" to markerText(raw, m.range.last + 1),
+                    "models" to (if (owner != null) listOf("$nodeType:$owner") else markerNodes),
+                )
+                if (mtype !in XML_MODEL_TYPES) JsonPath.at(raw, m.range.first)?.let { rec["path"] = it }
+                bucketList("markers").add(rec)
             }
 
             // Attribute what the raw text carries — every ${…} / {{…}}, every ${bean.method()} call,

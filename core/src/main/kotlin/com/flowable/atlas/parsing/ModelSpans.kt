@@ -23,29 +23,12 @@ internal object ModelSpans {
      */
     fun split(raw: String, mtype: String, mkeys: List<Any?>): List<Pair<List<Any?>, String>> {
         val whole = listOf(mkeys to raw)
-        val keys = mkeys.filterNotNull()
-        val element = ELEMENT_FOR_TYPE[mtype] ?: return whole
-        if (keys.size < 2) return whole
-
-        val spans = ArrayList<Pair<Any?, IntRange>>()
-        for (k in keys) {
-            val open = Regex("<(?:\\w+:)?$element\\b[^>]*\\bid=\"${Regex.escape(k.toString())}\"[^>]*>")
-                .find(raw) ?: return whole
-            val range = if (open.value.endsWith("/>")) {
-                open.range
-            } else {
-                val close = Regex("</(?:\\w+:)?$element\\s*>").find(raw, open.range.last) ?: return whole
-                open.range.first..close.range.last
-            }
-            spans.add(k to range)
-        }
-        spans.sortBy { it.second.first }
+        val spans = ranges(raw, mtype, mkeys) ?: return whole
 
         val parts = ArrayList<Pair<List<Any?>, String>>()
         val rest = StringBuilder()
         var cursor = 0
         for ((k, r) in spans) {
-            if (r.first < cursor) return whole            // overlapping elements: not a shape we can split
             rest.append(raw, cursor, r.first)
             parts.add(listOf(k) to raw.substring(r))
             cursor = r.last + 1
@@ -53,5 +36,36 @@ internal object ModelSpans {
         rest.append(raw, cursor, raw.length)
         parts.add(mkeys to rest.toString())
         return parts
+    }
+
+    /**
+     * Each model key with the byte range of its element, in file order — or null when the file is not
+     * one Atlas can split (one model, a JSON model, an element it cannot locate, overlapping elements).
+     * The marker scan uses the ranges to say which of several processes a TODO sits in.
+     */
+    fun ranges(raw: String, mtype: String, mkeys: List<Any?>): List<Pair<Any?, IntRange>>? {
+        val keys = mkeys.filterNotNull()
+        val element = ELEMENT_FOR_TYPE[mtype] ?: return null
+        if (keys.size < 2) return null
+
+        val spans = ArrayList<Pair<Any?, IntRange>>()
+        for (k in keys) {
+            val open = Regex("<(?:\\w+:)?$element\\b[^>]*\\bid=\"${Regex.escape(k.toString())}\"[^>]*>")
+                .find(raw) ?: return null
+            val range = if (open.value.endsWith("/>")) {
+                open.range
+            } else {
+                val close = Regex("</(?:\\w+:)?$element\\s*>").find(raw, open.range.last) ?: return null
+                open.range.first..close.range.last
+            }
+            spans.add(k to range)
+        }
+        spans.sortBy { it.second.first }
+        var cursor = 0
+        for ((_, r) in spans) {
+            if (r.first < cursor) return null            // overlapping elements: not a shape we can split
+            cursor = r.last + 1
+        }
+        return spans
     }
 }

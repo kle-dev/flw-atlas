@@ -219,12 +219,15 @@ to chips so the gaps are what you see.
 
 A `TODO`, `FIXME` or `HACK` as a whole word anywhere in a model file — a documentation element, a
 name, a script body, a template, a form's text. (`XXX` is left out on purpose: it is the placeholder of
-every format hint far more often than a mark.) Each one is reported with its file and line, attributed
-to the model the file defines, and the text after the marker — up to the end of its line, string or
-element — is its subject, so a waiver survives the line moving. A
-marker is a promise someone made to come back; in a model that is deployed it is a promise the process
-keeps running without. Do the thing, or record why it can wait — as a note in `waivers.json`, where the
-next reader finds it.
+every format hint far more often than a mark.) Each one is reported with its file and line and attributed
+to the model it sits in — the process whose element holds it when a deployment file defines several,
+else the model the file defines. The text after the marker — up to the end of its line, string or
+element — is its subject, so a waiver survives the line moving; a marker with no text of its own in a
+minified JSON model is named by the path of the element holding it (`rows[2].cols[0].label`), which
+survives a re-export where a column would not. The same model loose and inside an archive is one marker,
+not two. A marker is a promise someone made to come back; in a model that is deployed it is a promise
+the process keeps running without. Do the thing, or record why it can wait — as a note in
+`waivers.json`, where the next reader finds it.
 
 ### `gatewayNoDefault` — a choice with no way out
 

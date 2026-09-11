@@ -356,15 +356,23 @@ class FindingsTest {
             nodes = listOf(process("p", emptyMap())),
             extra = mapOf("markers" to listOf(
                 mapOf("file" to "processes/p.bpmn", "line" to 12, "marker" to "TODO", "text" to "confirm the SLA", "models" to listOf("process:p")),
+                // the same model inside an archive: the same marker, not a second finding
+                mapOf("file" to "app.bar!processes/p.bpmn", "line" to 12, "marker" to "TODO", "text" to "confirm the SLA", "models" to listOf("process:p")),
                 mapOf("file" to "forms/loose.form", "line" to 3, "marker" to "FIXME", "text" to "", "models" to emptyList<String>()),
+                // a text-less marker in a minified model is named by the path of the element holding it
+                mapOf("file" to "processes/p.bpmn", "line" to 1, "marker" to "HACK", "text" to "", "path" to "rows[2].cols[0].label", "models" to listOf("process:p")),
             )),
         )
         val f = findings(r).filter { it["check"] == "leftoverMarkers" }
-        assertEquals(2, f.size)
+        assertEquals(3, f.size)
         val todo = f.single { it["line"] == 12 }
         val fixme = f.single { it["line"] == 3 }
+        val hack = f.single { it["line"] == 1 }
         assertEquals("process:p", todo["node"]); assertEquals("TODO: confirm the SLA", todo["message"]); assertEquals("confirm the SLA", todo["subject"])
+        assertEquals("processes/p.bpmn", todo["file"])
         assertEquals(null, fixme["node"]); assertEquals("forms/loose.form", fixme["label"]); assertEquals("FIXME left in the model", fixme["message"])
+        assertEquals("@3", fixme["subject"])
+        assertEquals("rows[2].cols[0].label", hack["subject"])
     }
 
     @Test

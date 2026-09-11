@@ -102,6 +102,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
 - **Hotspots are the project's own artifacts.** The most-referenced list on the overview and in the
   summary was led by `initVariablesService`, two IDM URLs, `flwTimeUtils` and a security policy — things
   every model references and nobody navigates to. Externals and security policies are left out now.
+- **A leftover marker knows which model it is in, and is one finding.** In a deployment file holding
+  several processes every `TODO` was pinned on the first; it is attributed to the process whose element
+  holds it now. The same model loose and inside a `.bar` reported its markers twice; once. A text-less
+  marker in a minified JSON model was named `@1:5087` — a column that moves on every export — and is
+  named by the path of the element holding it (`rows[2].cols[0].label`) instead; a waiver written
+  against the old `@line:column` subject will show as stale, and wants re-accepting.
 
 ## 0.25.0
 

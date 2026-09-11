@@ -74,8 +74,8 @@ It is designed to make that easy:
   *files* and `archives` how many `.zip`/`.bar` archives held the rest.
 - **`diagnostics`** lists what Atlas could not read (`parse`), what it skipped on purpose (`skip`) and
   which keys two model types share (`conflict` — information, not a finding), and **`markers`** every
-  `TODO`, `FIXME` or `HACK` it found in a model file, with file, line and the model it belongs to — the raw
-  material of two of the checks.
+  `TODO`, `FIXME` or `HACK` it found in a model file, with file, line, the model it belongs to and — in a
+  JSON model — the `path` of the element holding it; the raw material of two of the checks.
 - It is **minified** by default, and a model's body is stored once in a top-level bucket with its graph
   node pointing there via `data.dataIn`. Together that roughly halves the file — 4.8 MB → 2.5 MB on a
   large real project. `--pretty` indents it when a human has to look.

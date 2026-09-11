@@ -255,6 +255,13 @@
               in the summary was led by <code>initVariablesService</code>, two IDM URLs,
               <code>flwTimeUtils</code> and a security policy — things every model references and nobody
               navigates to. Externals and security policies are left out now.</li>
+          <li><b>A leftover marker knows which model it is in, and is one finding.</b> In a deployment file
+              holding several processes every <code>TODO</code> was pinned on the first; it is attributed to
+              the process whose element holds it now. The same model loose and inside a <code>.bar</code>
+              reported its markers twice; once. A text-less marker in a minified JSON model was named
+              <code>@1:5087</code> — a column that moves on every export — and is named by the path of the
+              element holding it (<code>rows[2].cols[0].label</code>) instead; a waiver written against the
+              old <code>@line:column</code> subject will show as stale, and wants re-accepting.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>
@@ -548,20 +555,6 @@
               a list or palette row toggled nothing on a plain click — only a modifier-click on the row did.
               It is the toggle now, in the browse list and in the ⌘K palette, and the UI test clicks
               it.</li>
-        </ul>
-        <h3>0.21.1</h3>
-        <ul>
-          <li><b>The explorer opens in seconds under Remote Development, not minutes.</b> embedded browser
-              is the thin client's, and everything it shows — a local file included — crosses the IDE
-              connection in 16 KB packets, one round trip each: a 3.5 MB report was 200+ sequential round
-              trips, half a minute on a 150 ms link, for a file the host reads in milliseconds. The editor
-              now loads a small stand-in page at the report's URL, which pulls the report through the IDE
-              bridge in a few large parts fired together — one round trip however large the report — and
-              keeps it in the client's browser storage under its content hash, so reopening the tab (or the
-              IDE) transfers nothing and a regenerated report is fetched once. <i>Reload</i> re-reads the
-              file there, so a page rewritten by the CLI shows up too. A local IDE is untouched: there the
-              file is a disk read, and the generated page stays one self-contained file for browsers and the
-              CLI.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

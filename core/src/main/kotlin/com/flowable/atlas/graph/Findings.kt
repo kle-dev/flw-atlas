@@ -241,9 +241,16 @@ object Findings {
         // Leftover markers — a TODO is a promise; the report lists the ones nobody kept. Keyed by the
         // first model the file defines, or by the file when it defines none.
         val nodeById = nodes.associateBy { it["id"] as? String }
+        // The same model loose and inside a `.bar` is one model with one marker: the model buckets are
+        // deduped that way, and so is this — the first file wins, the finding is one.
+        val seenMarkers = HashSet<List<Any?>>()
         for (m in (result["markers"] as? List<Map<String, Any?>> ?: emptyList())) {
             val owner = (m["models"] as? List<*>)?.firstOrNull()?.toString()?.let { nodeById[it] }
             val text = m["text"]?.toString().orEmpty()
+            // A marker with no text of its own is told apart by where it sits: the path of the JSON element
+            // holding it (a minified model is one line, and a column moves on every export), else its line.
+            val subject = text.ifEmpty { m["path"]?.toString() ?: "@${m["line"]}" }
+            if (!seenMarkers.add(listOf(owner?.get("id") ?: m["file"], m["marker"], subject, m["line"]))) continue
             findings.add(linkedMapOf(
                 "check" to "leftoverMarkers",
                 "severity" to WARNING,
@@ -252,8 +259,7 @@ object Findings {
                 "message" to "${m["marker"]}" + (if (text.isEmpty()) " left in the model" else ": $text"),
                 "file" to m["file"],
                 "line" to m["line"],
-                // A marker with no text of its own is told apart by where it sits — a minified form is one line.
-                "subject" to text.ifEmpty { "@${m["line"]}:${m["column"] ?: 0}" },
+                "subject" to subject,
             ))
         }
         val customFns = result["customFunctions"] as? Map<String, Any?>
