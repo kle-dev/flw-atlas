@@ -417,6 +417,10 @@ object Findings {
         if (catchesEverywhere || subprocessGuarded) return
         for (el in (data["serviceTasks"] as? List<Map<String, Any?>> ?: emptyList())) {
             val id = el["id"] as? String ?: continue
+            // An async task's failure is a failed job — retried, then an incident for an administrator —
+            // and never an exception to whoever completed the previous step. That *is* its error path;
+            // `asyncWithoutRetry` judges the rest. (83 async mail tasks on one project said otherwise.)
+            if (el["async"] != null) continue
             if (!leavesTheEngine(el, serviceTypes) || guarded.contains(id)) continue
             // An HTTP task told to swallow failures, or to map status codes itself, has its error path.
             val fields = el["fields"] as? Map<*, *>
@@ -434,6 +438,9 @@ object Findings {
     /** The root name of `${bean}` / `${bean.method(x)}` / `#{bean}`. */
     private val EXPR_ROOT_RE = Regex("^\\s*[#$]\\{\\s*([A-Za-z_]\\w*)")
 
+    /** `${bpmn:removeAssignee()}` — a platform function namespace, not a bean: the call stays in the engine. */
+    private val EXPR_NAMESPACE_RE = Regex("^\\s*[#$]\\{\\s*[A-Za-z_]\\w*\\s*:")
+
     /**
      * Whether a service task's work happens outside the engine — the one thing that makes a missing
      * error path a risk. Design writes a platform bean into every task type's `delegateExpression`, so
@@ -449,7 +456,8 @@ object Findings {
         if (!(el["class"] as? String).isNullOrEmpty()) return true
         fun root(attr: String) = (el[attr] as? String)?.let { EXPR_ROOT_RE.find(it)?.groupValues?.get(1) }
         root("expression")?.let { r ->
-            if (r !in Constants.FLOWABLE_CONTEXT && r !in Constants.FLOWABLE_PLATFORM_BEANS) return true
+            val namespaced = (el["expression"] as? String)?.let { EXPR_NAMESPACE_RE.containsMatchIn(it) } == true
+            if (!namespaced && r !in Constants.FLOWABLE_CONTEXT && r !in Constants.FLOWABLE_PLATFORM_BEANS) return true
         }
         val bean = root("delegateExpression") ?: return false
         if (bean == "serviceRegistryService" || el["type"] == "service-registry") {

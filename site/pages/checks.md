@@ -284,9 +284,13 @@ called the process.
 The bean alone does not decide it. Flowable Design writes a platform bean into every task type's
 delegate expression — `${initVariablesService}` sets variables, `${auditLogService}` writes a row,
 `${dataObjectServiceTask}` reads the platform's own tables — and none of those depends on anyone else's
-uptime, so they stay quiet. Measured on real projects before this distinction, 94 % of the findings sat
+uptime, so they stay quiet; the engine's own services (`dataObjectRuntimeService`,
+`platformIdentityService`, …) and a platform function namespace (`${bpmn:removeAssignee()}`) are engine
+API, not code of your own. Measured on real projects before this distinction, 94 % of the findings sat
 on such beans. An HTTP task that carries `ignoreException` or `handleStatusCodes` has said what happens
-on failure and stays quiet too.
+on failure and stays quiet too — and so does any **async** task: its failure is a failed job, retried
+and then an incident for an administrator, never an exception to whoever completed the previous step.
+That is its error path; `asyncWithoutRetry` judges how good a one it is.
 
 Letting an error bubble up is a legitimate design, so this one is deliberately quiet wherever it cannot
 be sure: it says nothing about a process that catches errors centrally in an error event subprocess, and

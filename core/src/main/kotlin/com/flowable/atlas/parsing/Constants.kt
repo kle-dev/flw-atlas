@@ -38,6 +38,13 @@ object Constants {
         "flwCollectionUtils", "flwJsonUtils", "flwFormatUtils", "flwLocaleUtils", "flwMathUtils",
         "flwStringUtils", "flwTimeUtils", "flwDateFunctionUtils", "flwIOUtils", "flwAuthTokenUtils",
         "flwBase64Utils", "flwContentItem", "propertyConfigurationService",
+        // the engine's own services, exposed as beans and called from expressions
+        // (`${dataObjectRuntimeService.addUserIdentityLink(…)}`): engine API, not code of the project's
+        "dataObjectRuntimeService", "dataObjectRepositoryService", "platformIdentityService", "idmIdentityService",
+        "formService", "contentService", "templateService", "flowablePlatformTemplateService", "sequenceService",
+        "historyService", "managementService", "repositoryService", "cmmnRepositoryService", "cmmnTaskService",
+        "cmmnHistoryService", "eventRegistry", "eventRepositoryService", "actionRuntimeService",
+        "actionRepositoryService", "dashboardService",
     )
 
     /**

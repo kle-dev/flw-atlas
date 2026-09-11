@@ -198,7 +198,8 @@ object CheckCatalog {
             why = "A failure in an HTTP call, an external worker, an agent, a mail task, a REST service or " +
                 "a delegate of your own propagates to whatever called the process, with nothing in the " +
                 "model saying what happens then. A platform bean that stays inside the engine — init " +
-                "variables, audit log, data object — is not one of them.",
+                "variables, audit log, data object — is not one of them, and neither is an async task: its " +
+                "failure is a failed job, retried and then reported, not an exception to the caller.",
             fix = "Attach an error boundary event or catch centrally in an error event subprocess. Accept " +
                 "the finding when letting the error reach the caller is the design.",
             docs = "unguardedtasks-a-call-out-of-the-engine-with-nothing-catching-it",

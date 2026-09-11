@@ -306,7 +306,12 @@ class FindingsTest {
                 task("dbSvc", "type" to "service-registry", "delegateExpression" to "\${serviceRegistryService}", "serviceModelKey" to "orders"),
                 task("tolerant", "type" to "http", "fields" to mapOf("requestUrl" to "https://x", "ignoreException" to "true")),
                 task("agent", "type" to "agent", "delegateExpression" to "\${agentService}"),
-                task("mail", "type" to "mail", "delegateExpression" to "\${mailServiceTask}"))))))
+                task("mail", "type" to "mail", "delegateExpression" to "\${mailServiceTask}"),
+                // an async task's failure is a failed job, not an exception to the caller
+                task("asyncMail", "type" to "mail", "async" to "true"),
+                // a platform function namespace and an engine service are not code of the project's
+                task("fn", "expression" to "\${bpmn:removeAssignee()}"),
+                task("engineApi", "expression" to "\${dataObjectRuntimeService.addUserIdentityLink(x, y)}"))))))
         assertEquals(listOf("ownBean", "ownExpr", "restSvc", "agent", "mail"), elements(r2b, "unguardedTasks"))
         val r3 = run(listOf(process("p", mapOf(
             "serviceTasks" to listOf(leaving),

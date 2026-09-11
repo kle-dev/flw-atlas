@@ -154,9 +154,11 @@
               <code>expression</code> whose root is neither an engine context nor a platform bean, and on a
               service-registry task whose service is REST; an HTTP task that carries
               <code>ignoreException</code> or <code>handleStatusCodes</code> has its error path and is
-              quiet. The platform-bean set is declared once now (it lived in three renderers) and includes
-              the <code>flw*Utils</code> expression helpers and <code>propertyConfigurationService</code>,
-              so those stop appearing under <i>Review — unresolved in project</i>.</li>
+              quiet, and so is any async task — its failure is a failed job, retried and then reported,
+              never an exception to the caller. The platform-bean set is declared once now (it lived in
+              three renderers) and includes the <code>flw*Utils</code> expression helpers and
+              <code>propertyConfigurationService</code>, so those stop appearing under <i>Review —
+              unresolved in project</i>.</li>
           <li><b>A property before a ternary's colon is not a function namespace.</b> <code>… ?
               findUser(x).displayName : findUser(y).displayName</code> reads, around the colon, exactly like
               <code>date:now()</code> — <code>name : name (</code> — and the catalog walk reported "Unknown

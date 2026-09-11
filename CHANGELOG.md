@@ -21,7 +21,9 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   275 on one project of 81 processes. It now fires on the task types that call out (HTTP, external
   worker, agent, mail), on a class or a bean of the project's own, on an `expression` whose root is
   neither an engine context nor a platform bean, and on a service-registry task whose service is REST;
-  an HTTP task that carries `ignoreException` or `handleStatusCodes` has its error path and is quiet. The
+  an HTTP task that carries `ignoreException` or `handleStatusCodes` has its error path and is quiet, and
+  so is any async task — its failure is a failed job, retried and then reported, never an exception to
+  the caller. The
   platform-bean set is declared once now (it lived in three renderers) and includes the `flw*Utils`
   expression helpers and `propertyConfigurationService`, so those stop appearing under *Review —
   unresolved in project*.
