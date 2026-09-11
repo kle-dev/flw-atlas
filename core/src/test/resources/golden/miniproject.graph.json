@@ -343,14 +343,16 @@
     }
   ],
   "checks": {
+    "asyncWithoutRetry": 1,
     "crossedColumns": 1,
     "guessedVars": 1,
     "invalidExpr": 2,
     "missingRefs": 1,
-    "open": 14,
+    "open": 16,
     "parseIssues": 2,
     "schemaGaps": 1,
     "scriptIssues": 2,
+    "unguardedTasks": 1,
     "unreadInputs": 1,
     "unusedVars": 3
   },
@@ -605,6 +607,15 @@
   ],
   "findings": [
     {
+      "check": "asyncWithoutRetry",
+      "element": "packTask",
+      "file": "processes/fulfilment.bpmn",
+      "label": "Fulfilment Process",
+      "message": "`Pack shipment` is async with no failedJobRetryTimeCycle — the engine default applies",
+      "node": "process:fulfilmentProcess",
+      "severity": "warning"
+    },
+    {
       "check": "crossedColumns",
       "file": "services/customer.service",
       "label": "Customer Service",
@@ -691,6 +702,15 @@
       "node": "process:orderProcess",
       "severity": "error",
       "snippet": "execution.setVariable('shippingStamp', \"x-\" + orderId"
+    },
+    {
+      "check": "unguardedTasks",
+      "element": "notifyTask",
+      "file": "processes/order.bpmn",
+      "label": "Order Process",
+      "message": "`Notify` calls out of the engine with no error boundary event — a failure propagates to the caller",
+      "node": "process:orderProcess",
+      "severity": "warning"
     },
     {
       "check": "unreadInputs",

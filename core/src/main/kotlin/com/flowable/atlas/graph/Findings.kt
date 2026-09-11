@@ -38,7 +38,8 @@ object Findings {
      */
     val CHECK_ORDER = listOf(
         "parseIssues", "invalidExpr", "scriptIssues", "missingRefs", "crossedColumns",
-        "changelogIssues", "schemaGaps", "suspectExpr", "unusedForms", "unusedOps", "unusedFns",
+        "changelogIssues", "schemaGaps", "nonExclusiveAsync", "unguardedTasks", "asyncWithoutRetry",
+        "suspectExpr", "unusedForms", "unusedOps", "unusedFns",
         "unusedVars", "unreadInputs", "guessedVars",
     )
 
@@ -155,6 +156,9 @@ object Findings {
                         } ?: continue
                         add("schemaGaps", WARNING, n, what, subject = "${r["table"]}.${r["sql"]}")
                     }
+                }
+                "process" -> runtimeRiskChecks(data) { check, message, element ->
+                    add(check, WARNING, n, message, element)
                 }
                 "serviceOperation" -> if ((data["usedBy"] as? List<*>).isNullOrEmpty()) {
                     add("unusedOps", WARNING, n, "no model or code calls this operation")
@@ -275,6 +279,76 @@ object Findings {
         if (unexplained.isNotEmpty()) out["unexplained"] = unexplained
         if (waivers.problems.isNotEmpty()) out["problems"] = waivers.problems
         return out
+    }
+
+    /** Every BPMN element list that carries the shared engine-behaviour extras. */
+    private val ELEMENT_LISTS = listOf(
+        "userTasks", "serviceTasks", "scriptTasks", "ruleTasks", "callActivities", "subProcesses",
+        "events", "gateways", "otherTasks",
+    )
+
+    /**
+     * How a process is configured to behave at runtime, as opposed to whether its references resolve.
+     *
+     * Each of these is a question rather than a verdict — "is that deliberate?" — which is why they warn
+     * and why each one stays quiet wherever the model does not give enough to be sure.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun runtimeRiskChecks(data: Map<String, Any?>, report: (String, String, String) -> Unit) {
+        val events = data["events"] as? List<Map<String, Any?>> ?: emptyList()
+        // Errors caught anywhere in the process: a boundary event on a task, and an error event
+        // subprocess, which catches for the whole process.
+        val guarded = HashSet<String>()
+        for (e in events) {
+            if (e["def"] == "error") (e["attachedTo"] as? String)?.let { guarded.add(it) }
+        }
+        // An error *start* event catches — in an event subprocess it catches for the whole process. An
+        // error *end* event throws, and counting it as a catch would silence the check on exactly the
+        // processes that raise errors.
+        val catchesEverywhere = events.any { it["def"] == "error" && it["type"] == "startEvent" }
+        // A task inside a subprocess is guarded by a boundary event on that subprocess, and the element
+        // lists are flat, so containment cannot be recovered here. Rather than report a task that is
+        // already handled one level up, the check stands down for the whole process when a subprocess
+        // carries an error boundary.
+        val subprocessGuarded = (data["subProcesses"] as? List<Map<String, Any?>> ?: emptyList())
+            .any { guarded.contains(it["id"]) }
+
+        for (list in ELEMENT_LISTS) {
+            for (el in (data[list] as? List<Map<String, Any?>> ?: emptyList())) {
+                val id = el["id"] as? String ?: continue
+                val what = (el["name"] as? String)?.ifEmpty { null } ?: id
+                if (el["async"] != null) {
+                    // `exclusive` defaults to true in the engine and is only ever written to say false,
+                    // so its presence here is an explicit opt-out: jobs of this process instance may then
+                    // run at the same time, which is an optimistic-locking risk unless it was intended.
+                    if (el["exclusive"] == "false") {
+                        report("nonExclusiveAsync",
+                            "`$what` is async with exclusive=false — its jobs can run concurrently with " +
+                                "other jobs of the same process instance", id)
+                    }
+                    if (el["retryTimeCycle"] == null) {
+                        report("asyncWithoutRetry",
+                            "`$what` is async with no failedJobRetryTimeCycle — the engine default applies",
+                            id)
+                    }
+                }
+            }
+        }
+
+        if (catchesEverywhere || subprocessGuarded) return
+        for (el in (data["serviceTasks"] as? List<Map<String, Any?>> ?: emptyList())) {
+            val id = el["id"] as? String ?: continue
+            // Only the tasks that leave the engine: an HTTP call, an external worker, or code of the
+            // project's own. Those are the ones whose failure is a question of someone else's uptime.
+            val leaves = el["type"] == "http" || el["type"] == "external-worker" ||
+                (el["class"] as? String)?.isNotEmpty() == true ||
+                (el["delegateExpression"] as? String)?.isNotEmpty() == true
+            if (!leaves || guarded.contains(id)) continue
+            val what = (el["name"] as? String)?.ifEmpty { null } ?: id
+            report("unguardedTasks",
+                "`$what` calls out of the engine with no error boundary event — a failure propagates to " +
+                    "the caller", id)
+        }
     }
 
     /**

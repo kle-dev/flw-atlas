@@ -18,6 +18,16 @@
     <scriptTask id="t7" name="Compute" scriptFormat="groovy"><script>x=1</script></scriptTask>
     <callActivity id="t8" name="Fulfil" calledElement="sub"/>
     <serviceTask id="t9" name="Send mail" flowable:type="mail"/>
+    <!-- Async work, two ways round. t11 opts out of exclusive jobs and states no retry policy, so both
+         runtime-risk checks have an honest example; t12 is the same call done deliberately, and is what
+         those checks must stay quiet about. -->
+    <serviceTask id="t11" name="Sync inventory" flowable:type="http" flowable:async="true" flowable:exclusive="false"/>
+    <serviceTask id="t12" name="Push to warehouse" flowable:type="http" flowable:async="true">
+      <extensionElements><flowable:failedJobRetryTimeCycle>R3/PT10M</flowable:failedJobRetryTimeCycle></extensionElements>
+    </serviceTask>
+    <boundaryEvent id="b2" name="Warehouse down" attachedToRef="t12">
+      <errorEventDefinition errorRef="boom"/>
+    </boundaryEvent>
     <userTask id="t10" name="Review each">
       <multiInstanceLoopCharacteristics isSequential="false"/>
     </userTask>

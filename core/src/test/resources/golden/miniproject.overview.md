@@ -383,9 +383,9 @@ _component (1):_
 
 **Also in the graph** (queryable in `miniproject.graph.json`, no section here): 1 document · 1 variableExtractor · 1 knowledgeBase · 1 palette · 1 query · 1 sequence · 1 sla · 1 template · 1 serviceOperation · 1 method · 1 bot.
 
-## 14. Findings — 14 open
+## 14. Findings — 16 open
 
-unparseable files: 2 · invalid expressions: 2 · script syntax: 2 · missing models: 1 · crossed column mappings: 1 · schema gaps: 1 · variables never read: 3 · unread call parameters: 1 · script-inferred variables: 1
+unparseable files: 2 · invalid expressions: 2 · script syntax: 2 · missing models: 1 · crossed column mappings: 1 · schema gaps: 1 · calls with no error path: 1 · async without retry: 1 · variables never read: 3 · unread call parameters: 1 · script-inferred variables: 1
 
 **unparseable files** (2)
 - · skip: JSON carries no model key — not a Design model wrapper — in: `archives/demo-export.zip!manifest.json`
@@ -411,6 +411,12 @@ unparseable files: 2 · invalid expressions: 2 · script syntax: 2 · missing mo
 
 **schema gaps** (1)
 - · column `orphan_col_` of table `cust_customer` is in Liquibase but not mapped by the service — in: `Customer Service` · file: `services/customer.service`
+
+**calls with no error path** (1)
+- · `Notify` calls out of the engine with no error boundary event — a failure propagates to the caller — in: `Order Process` · at: `notifyTask` · file: `processes/order.bpmn`
+
+**async without retry** (1)
+- · `Pack shipment` is async with no failedJobRetryTimeCycle — the engine default applies — in: `Fulfilment Process` · at: `packTask` · file: `processes/fulfilment.bpmn`
 
 **variables never read** (3)
 - · written but never read — written by a decision output of `approved` — in: `approved`

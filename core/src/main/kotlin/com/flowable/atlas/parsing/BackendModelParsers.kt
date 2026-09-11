@@ -752,6 +752,11 @@ object BackendModelParsers {
         for (a in listOf("async", "asyncLeave", "skipExpression")) {
             el.attr(a)?.ifEmpty { null }?.takeIf { it != "false" }?.let { rec[a] = it }
         }
+        // `exclusive` is the mirror image: the engine defaults it to true and the exporter writes it
+        // only to say false, so the value worth carrying is the opt-out, not the presence.
+        el.attr("exclusive")?.ifEmpty { null }?.takeIf { it == "false" }?.let { rec["exclusive"] = it }
+        // The retry policy is a child element under extensionElements, not an attribute.
+        XmlHelpers.extEl(el)?.childText("failedJobRetryTimeCycle")?.let { rec["retryTimeCycle"] = it }
         if (listeners.isNotEmpty()) rec["listeners"] = listeners
         return rec
     }

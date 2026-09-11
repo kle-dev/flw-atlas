@@ -647,6 +647,8 @@ function computeInsights(){
                    unusedForms: CHK.unusedForms||0, changelogIssues: CHK.changelogIssues||0,
                    schemaGaps: CHK.schemaGaps||0, missingRefs: CHK.missingRefs||0,
                    crossedColumns: CHK.crossedColumns||0,
+                   nonExclusiveAsync: CHK.nonExclusiveAsync||0, unguardedTasks: CHK.unguardedTasks||0,
+                   asyncWithoutRetry: CHK.asyncWithoutRetry||0,
                    guessedVars: CHK.guessedVars||0, unusedOps: CHK.unusedOps||0,
                    unusedFns: CHK.unusedFns||0,
                    unusedVars: CHK.unusedVars||0, unreadInputs: CHK.unreadInputs||0 };
@@ -654,6 +656,9 @@ function computeInsights(){
     totalExprs, totalForms, totalChangelogs, totalCovServices, totalColServices, totalOps, totalFns,
     totalDirectedVars, silentVars,
     totalScripts: scripts.length,
+    // the denominator for the runtime-risk cards: without a process there is nothing to say about
+    // async jobs or error paths, and a card reading "0" would look like a verdict rather than a gap
+    totalProcesses: nodes.filter(n=>n.type==='process').length,
     health,
     // what the Checks tab counts in its badge: every open finding, in one number
     checksOpen: CHK.open || 0 };
@@ -1146,6 +1151,19 @@ const CHECK_CARDS = [
    sub:c=>c?'flagged for review by the catalog':'nothing flagged', show:()=>INSIGHTS.totalExprs>0},
   {k:'scriptIssues', label:'Script syntax', bad:true, cat:'script-syntax', jump:'chk-scripts',
    sub:c=>c?'syntax & binding findings in script bodies':'all scripts scan clean', show:()=>INSIGHTS.totalScripts>0},
+  // No `jump` on these three, deliberately: each is a judgement :core makes over a process's element
+  // lists, and a block here would have to repeat that judgement in JavaScript — the one thing the
+  // Checks page exists to avoid. The count is what this surface can say honestly; overview.md and
+  // graph.json name the elements.
+  {k:'nonExclusiveAsync', label:'Non-exclusive async',
+   sub:c=>c?'async elements that opted out of exclusive jobs':'no async element opts out of exclusive',
+   show:()=>INSIGHTS.totalProcesses>0},
+  {k:'unguardedTasks', label:'Calls with no error path',
+   sub:c=>c?'service tasks leaving the engine with nothing catching a failure':'every outbound call is guarded',
+   show:()=>INSIGHTS.totalProcesses>0},
+  {k:'asyncWithoutRetry', label:'Async without retry',
+   sub:c=>c?'async work with no failedJobRetryTimeCycle of its own':'async work states its retry policy',
+   show:()=>INSIGHTS.totalProcesses>0},
   {k:'schemaGaps', label:'Schema gaps', bad:true, route:'/schema', jump:'chk-schema',
    sub:c=>c?'columns not mapped through Liquibase → service → data object':'all columns mapped through',
    show:()=>INSIGHTS.totalCovServices>0},

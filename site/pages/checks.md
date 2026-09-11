@@ -1,6 +1,6 @@
 # Health checks
 
-Atlas runs fourteen checks over every project it analyses. They are computed once, in `:core`, and
+Atlas runs seventeen checks over every project it analyses. They are computed once, in `:core`, and
 every surface reads the same result — the CLI status line, the summary's *Health* block, the
 overview's *Findings* section, `graph.json`'s `findings` and `checks` keys, the generated `CLAUDE.md`
 and the explorer's *Checks* page all agree by construction.
@@ -24,7 +24,7 @@ noise.
   <a href="../demo/explorer.html#/checks" target="_blank" rel="noopener">Open it ↗</a></figcaption>
 </figure>
 
-## The fourteen checks
+## The seventeen checks
 
 | Check | Severity | What it means |
 |---|---|---|
@@ -35,6 +35,9 @@ noise.
 | `crossedColumns` | error · warning | A service maps a field to the column another field is named after — as an error when the pairing is a closed swap or rotation. |
 | `changelogIssues` | warning | A Liquibase changelog is orphaned or superseded. |
 | `schemaGaps` | warning | A database column and the model that should describe it disagree. |
+| `nonExclusiveAsync` | warning | An async element explicitly set `exclusive="false"`. |
+| `unguardedTasks` | warning | A service task leaves the engine and nothing catches its failure. |
+| `asyncWithoutRetry` | warning | Async work with no `failedJobRetryTimeCycle` of its own. |
 | `suspectExpr` | warning | An expression calls a function or namespace Atlas does not know. |
 | `unusedForms` | warning | A form nothing references. |
 | `unusedOps` | warning | A service operation nothing calls. |
@@ -155,6 +158,33 @@ Per column, walking Liquibase → service → data object:
 
 The explorer renders this as a three-column table per service, with cleanly-mapped services collapsed
 to chips so the gaps are what you see.
+
+### `nonExclusiveAsync` — async jobs that may run at the same time
+
+`flowable:exclusive` defaults to **true**, and the exporter writes the attribute only to say `false`, so
+its presence is an explicit opt-out: the jobs of one process instance may then execute concurrently.
+That is occasionally what you want and usually an optimistic-locking problem waiting for load. The check
+fires only on the opt-out, never on its absence — a check that flagged every async element would fire on
+every project and be worth nothing.
+
+### `unguardedTasks` — a call out of the engine with nothing catching it
+
+A service task that leaves the engine — an HTTP call, an external worker, or a class or delegate
+expression of your own — with no error boundary event attached to it. A failure then propagates to
+whatever called the process.
+
+Letting an error bubble up is a legitimate design, so this one is deliberately quiet wherever it cannot
+be sure: it says nothing about a process that catches errors centrally in an error event subprocess, and
+nothing at all about a process whose subprocess carries an error boundary — the element lists are flat,
+so a task inside that subprocess cannot be told from one beside it, and reporting a task that is already
+handled one level up is worse than missing one.
+
+### `asyncWithoutRetry` — async work that does not say how often to try
+
+An element marked `flowable:async` with no `failedJobRetryTimeCycle`. The engine default then applies,
+which is a decision made elsewhere and easy to be unaware of. Many projects set retries globally, so
+this is the most likely of the three to be a deliberate omission — waive it once for the project rather
+than carrying the noise.
 
 ### `suspectExpr` — an expression Atlas cannot vouch for
 
