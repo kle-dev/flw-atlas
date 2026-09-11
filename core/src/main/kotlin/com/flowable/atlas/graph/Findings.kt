@@ -237,7 +237,8 @@ object Findings {
                 "message" to "${m["marker"]}" + (if (text.isEmpty()) " left in the model" else ": $text"),
                 "file" to m["file"],
                 "line" to m["line"],
-                "subject" to text.ifEmpty { "@${m["line"]}" },
+                // A marker with no text of its own is told apart by where it sits — a minified form is one line.
+                "subject" to text.ifEmpty { "@${m["line"]}:${m["column"] ?: 0}" },
             ))
         }
         val customFns = result["customFunctions"] as? Map<String, Any?>

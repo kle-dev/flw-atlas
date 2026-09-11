@@ -37,7 +37,7 @@ noise.
 | `unsafeQueries` | warning | A query template interpolates a value without escaping it. |
 | `changelogIssues` | warning | A Liquibase changelog is orphaned or superseded. |
 | `schemaGaps` | warning | A database column and the model that should describe it disagree. |
-| `leftoverMarkers` | warning | A TODO, FIXME, HACK or XXX left in a model file. |
+| `leftoverMarkers` | warning | A TODO, FIXME or HACK left in a model file. |
 | `gatewayNoDefault` | warning | An exclusive or inclusive gateway whose every outgoing flow is conditional, with no default. |
 | `implicitSplit` | warning | An activity with several outgoing flows and no gateway — a fork nobody drew. |
 | `nonExclusiveAsync` | warning | An async element explicitly set `exclusive="false"`. |
@@ -191,9 +191,11 @@ to chips so the gaps are what you see.
 
 ### `leftoverMarkers` — a promise nobody kept
 
-A `TODO`, `FIXME`, `HACK` or `XXX` as a whole word anywhere in a model file — a documentation element, a
-name, a script body, a template. Each one is reported with its file and line, attributed to the model the
-file defines, and the text after the marker is its subject, so a waiver survives the line moving. A
+A `TODO`, `FIXME` or `HACK` as a whole word anywhere in a model file — a documentation element, a
+name, a script body, a template, a form's text. (`XXX` is left out on purpose: it is the placeholder of
+every format hint far more often than a mark.) Each one is reported with its file and line, attributed
+to the model the file defines, and the text after the marker — up to the end of its line, string or
+element — is its subject, so a waiver survives the line moving. A
 marker is a promise someone made to come back; in a model that is deployed it is a promise the process
 keeps running without. Do the thing, or record why it can wait — as a note in `waivers.json`, where the
 next reader finds it.

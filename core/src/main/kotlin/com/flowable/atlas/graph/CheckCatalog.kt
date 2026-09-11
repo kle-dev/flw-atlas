@@ -150,7 +150,7 @@ object CheckCatalog {
         Check(
             id = "leftoverMarkers", tier = "unfinished", severity = "warning",
             label = "leftover markers", title = "Leftover markers",
-            what = "a TODO, FIXME, HACK or XXX left in a model file",
+            what = "a TODO, FIXME or HACK left in a model file",
             clean = "no marker left behind",
             why = "A marker is a promise someone made to come back; in a model that is deployed it is a " +
                 "promise the process keeps running without.",

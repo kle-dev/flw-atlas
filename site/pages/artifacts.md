@@ -67,6 +67,8 @@ It is designed to make that easy:
   check plus `open` and `waived`, and **`waivers`** — present when the project carries a
   `waivers.json` — its rules with how many findings each matched, its notes, and what is wrong with
   the file. See [Health checks](../checks/).
+- **`diagnostics`** lists what Atlas could not read and **`markers`** every `TODO`, `FIXME` or `HACK` it
+  found in a model file, with file, line and the model it belongs to — the raw material of two of the checks.
 - It is **minified** by default, and a model's body is stored once in a top-level bucket with its graph
   node pointing there via `data.dataIn`. Together that roughly halves the file — 4.8 MB → 2.5 MB on a
   large real project. `--pretty` indents it when a human has to look.

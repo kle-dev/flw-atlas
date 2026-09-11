@@ -12,6 +12,72 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.25.0
+
+- **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its
+  severity, why a finding matters, what to do about it — accepting included — and where the docs are.
+  The summary, the overview, the agent primer, the CLI's `--fail-on` vocabulary and the explorer all read
+  it, where until now a check was a string id in one place, a label in a second, a second label in a
+  third and a severity stated only on the documentation page. A renamed docs heading is now a red build
+  rather than a dead link.
+- **The explorer shows the findings :core computed.** The Checks page rebuilt its blocks from the live
+  nodes and took the counts from :core — two computations of one thing, which disagreed the moment
+  anything was accepted, and left the three runtime checks with rows that went nowhere. The page now
+  receives the itemised findings and renders one block per check: severity in words, model, element (a
+  jump into the model), message, `file:line` with the open-in-IDE button, the catalog's explanation and
+  docs link. Accepted findings fold under their block with the reason, out of the counts; a check whose
+  every finding was accepted keeps its block; every count on the page — blocks, health rows, the sidebar
+  badge, the parse chip — moves with a decision taken on the page. One filter over the whole page, and
+  no more strip of chips repeating the health list.
+- **Accept a finding where you read it.** Every finding row — on the Checks page, under *Findings on this
+  model* (now right under the diagram), on a diagram element's card — carries **accept…**: a labelled
+  reason that is refused in words when empty, an optional *until*, *by* prefilled with the project's git
+  identity in the IDE, and, for a finding that names an element or a subject, a choice between this
+  finding only (the default) and every finding of the check on the model. A rule narrowed by hand no
+  longer renders as un-accepted with one click to broaden it. Accepted rows stay in place with *edit*
+  and *restore*; a bar under the top bar says on every view how many decisions are unsaved, with *Save
+  to waivers.json* in the IDE or *Export* elsewhere and a two-step *discard*. After a save the IDE
+  confirms, the page regenerates, and the diff reconciles itself against the file — no more "1 unsaved
+  change" forever.
+- **One writer for waivers.json, and every rule counted.** Saving from the explorer dropped `by`,
+  `until` and every note, and stamped today's date on every rule. The browser writer is now a marked,
+  DOM-free block that mirrors `Waivers.serialize` key for key, and `WaiverWriterParityTest` runs the same
+  set through both and compares the bytes. A second rule covering the same finding was reported as
+  "matched nothing" — with `--fail-on-stale-waivers`, a red build for a correct file — and the counter
+  added every run to the last; matching is per run now and counts every covering rule. The inert `file`
+  key is gone. The *Deliberately accepted* table shows every decision as it stands — scope, reason,
+  author, expiry, how many findings it covers — with its troubles as marks on the row and *restore*
+  beside it; notes get a table of their own.
+- **The IDE honours waivers.json, and regenerates after you save.** The plugin wrote the file and never
+  read it, so a page generated from the IDE showed every accepted finding as open and the balloon's
+  advice to regenerate regenerated the contradiction. Both generate paths now load `waivers.json` from
+  the folder the artifacts land in, generate-all drops the CLI's `.gitignore` there, and a save tells the
+  page, regenerates the explorer and opens the file from its balloon.
+- **A model with findings looks like one.** A count pill on tree rows and list items, coloured by the
+  worst open finding; a marker on every diagram element with a finding, whose card lists them and hands
+  *accept…* to the finding's row. Focus follows a navigation to the new view's heading when the clicked
+  control went away; filter counts are live regions; the tree's *expand all* states itself; *shown above*
+  is a keyboard stop.
+- **Six new checks — questions, not verdicts, each quiet where it cannot be sure.** `hardcodedSecrets`
+  (error): a password, token or API key written as plain text into a `.service`, `.channel`, agent or
+  knowledge-base model or a task's field injections, or credentials inside a URL — paths only, never
+  values; quiet for expressions and for keys that merely talk about a secret. `gatewayNoDefault`: an
+  exclusive or inclusive gateway whose every outgoing flow is conditional and that names no default —
+  "no outgoing sequence flow" waiting for the data nobody thought of. `implicitSplit`: two unconditional
+  flows out of one activity, a fork nobody drew; quiet when every flow is conditional. `unsafeQueries`:
+  `${name}` in a query template with no escaping behind it; any built-in silences it. `leftoverMarkers`:
+  a `TODO`, `FIXME` or `HACK` in a model file, with its line. `unusedDecisions`: a decision table nothing
+  calls, app membership not counting as use. FindingsTest pins each one's quiet path — and, for the
+  first time, the quiet paths of the three runtime checks from 0.24.0.
+- **CLI.** `--waivers` defaulted to `<output>/waivers.json`, which in every single-artifact mode named a
+  file rather than a folder, found nothing and silently reported every finding; it is now the folder the
+  artifact lands in. The status line counted parse issues from the raw diagnostics and contradicted the
+  report once one was accepted; it reads `checks` now. New `--waiver-author` prefills the `by` of a rule
+  accepted from a CLI-generated page — without it such a page carries no name, on purpose.
+- **Docs.** The checks table said `invalidExpr` is error-only (the golden carries a warning), named an
+  *Atlas Hub Checks tab* that never existed, and left `waived` out of the `checks` key; the README still
+  counted fourteen checks.
+
 ## 0.24.0
 
 - **A reference tree.** The explorer could not answer "what does this app actually start, and what does

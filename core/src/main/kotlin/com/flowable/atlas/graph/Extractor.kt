@@ -28,8 +28,18 @@ import java.io.File
  */
 object Atlas {
 
-    /** A leftover marker as a whole word — `TODO` in `TODOS` or `xTODO` is not one. */
-    private val MARKER_RE = Regex("(?<![A-Za-z0-9_])(TODO|FIXME|HACK|XXX)(?![A-Za-z0-9_])")
+    /** A leftover marker as a whole word — `TODO` in `TODOS` or `xTODO` is not one. `XXX` is deliberately
+     *  not one either: it is the placeholder of every format hint (`XXX-9999`) far more often than a mark. */
+    private val MARKER_RE = Regex("(?<![A-Za-z0-9_])(TODO|FIXME|HACK)(?![A-Za-z0-9_])")
+
+    /** The marker's own text: what follows it up to the end of the line, the string or the element it sits
+     *  in — a minified form is one line, and the rest of *that* line is the rest of the file. */
+    private fun markerText(raw: String, from: Int): String {
+        var end = raw.length
+        for (i in from until raw.length) { val c = raw[i]; if (c == '\n' || c == '"' || c == '<' || c == '\\' || c == '}' || c == ']') { end = i; break } }
+        return raw.substring(from, end).trim().removeSuffix("-->").removeSuffix("*/")
+            .trimEnd('"', ',', ' ', ':', ')', '.').trimStart(':', '-', ' ', '(').trim().take(120)
+    }
 
     /** A model file or archive entry above this is not read; a `.form` with embedded images stays far below. */
     internal const val MAX_MODEL_BYTES: Long = 32L shl 20
@@ -156,12 +166,11 @@ object Atlas {
             val nodeType = ModelKinds.NORMALIZE_TYPE[mtype] ?: mtype
             val markerNodes = mkeys.filterNotNull().map { "$nodeType:$it" }
             for (m in MARKER_RE.findAll(raw)) {
-                val lineEnd = raw.indexOf('\n', m.range.last).let { if (it < 0) raw.length else it }
-                val text = raw.substring(m.range.last + 1, lineEnd).trim()
-                    .removeSuffix("-->").removeSuffix("*/").trimEnd('"', ',', ' ', ':').trimStart(':', '-', ' ').take(120)
+                val before = raw.substring(0, m.range.first)
                 bucketList("markers").add(linkedMapOf(
-                    "file" to label, "line" to raw.substring(0, m.range.first).count { it == '\n' } + 1,
-                    "marker" to m.groupValues[1], "text" to text, "models" to markerNodes,
+                    "file" to label, "line" to before.count { it == '\n' } + 1,
+                    "column" to before.length - before.lastIndexOf('\n'),
+                    "marker" to m.groupValues[1], "text" to markerText(raw, m.range.last + 1), "models" to markerNodes,
                 ))
             }
 
