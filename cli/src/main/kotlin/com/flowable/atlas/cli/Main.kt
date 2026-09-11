@@ -55,6 +55,7 @@ fun run(args: Array<String>): Int {
     var customFunctions: String? = null
     var failOn: String? = null
     var waiversPath: String? = null; var noWaivers = false; var failOnStaleWaivers = false
+    var waiverAuthor: String? = null
 
     var i = 0
     var endOpts = false
@@ -101,6 +102,7 @@ fun run(args: Array<String>): Int {
                     "--waivers" -> waiversPath = value(name, inline) ?: return 2
                     "--no-waivers" -> noWaivers = true
                     "--fail-on-stale-waivers" -> failOnStaleWaivers = true
+                    "--waiver-author" -> waiverAuthor = value(name, inline) ?: return 2
                     "--verbose" -> verbose++
                     "--quiet" -> quiet = true
                     "--help" -> { System.out.write(usage().toByteArray(Charsets.UTF_8)); System.out.flush(); return 0 }
@@ -178,7 +180,14 @@ fun run(args: Array<String>): Int {
     // ---- extract ----
     // The waiver file lives with the artifacts, because that is the folder a reviewer is handed. It is
     // read before the run so the counts, the report and the exit code all see the same decisions.
-    val waiverFile = waiversPath?.let { File(it) } ?: File(output ?: ".", Waivers.FILE_NAME)
+    // --all names a folder; a single artifact names a file, and the folder that counts is the one that
+    // file is in; stdout writes nowhere, so the working directory is the only place left to look.
+    val outputDir = when {
+        all -> File(output ?: ".")
+        output != null -> File(output).absoluteFile.parentFile ?: File(".")
+        else -> File(".")
+    }
+    val waiverFile = waiversPath?.let { File(it) } ?: File(outputDir, Waivers.FILE_NAME)
     val waivers = if (noWaivers) Waivers.EMPTY else Waivers.load(waiverFile)
     val allow = exprAllowlist.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
     val result = Atlas.extract(
@@ -194,7 +203,6 @@ fun run(args: Array<String>): Int {
     fun stat(key: String): Int = (stats[key] as? Number)?.toInt() ?: 0
     val resolvedN = (result["resolvedRefs"] as? List<*>)?.size ?: 0
     val unresolvedN = (result["unresolvedRefs"] as? List<*>)?.size ?: 0
-    val nDiag = (result["diagnostics"] as? List<*>)?.size ?: 0
     val cf = result["customFunctions"] as? Map<*, *>
     val status = buildString {
         append("${stat("models")} models $MIDDLE_DOT ${stat("java")} java $MIDDLE_DOT ${stat("nodes")} nodes $MIDDLE_DOT ")
@@ -207,7 +215,10 @@ fun run(args: Array<String>): Int {
         // nothing about waivers, so reading it here would let the status line contradict the report.
         val scriptIssuesN = (checksOf(result)["scriptIssues"] as? Number)?.toInt() ?: 0
         if (scriptIssuesN > 0) append(" $MIDDLE_DOT $WARN_SIGN $scriptIssuesN script issue(s)")
-        if (nDiag > 0) append(" $MIDDLE_DOT $WARN_SIGN $nDiag parse issue(s), see -v")
+        // Same source, same reason: the raw diagnostics list would count a parse issue the team has
+        // already accepted, and the line would contradict the report it summarises.
+        val parseIssuesN = (checksOf(result)["parseIssues"] as? Number)?.toInt() ?: 0
+        if (parseIssuesN > 0) append(" $MIDDLE_DOT $WARN_SIGN $parseIssuesN parse issue(s), see -v")
         val waivedN = (checksOf(result)["waived"] as? Number)?.toInt() ?: 0
         if (waivedN > 0) append(" $MIDDLE_DOT $waivedN waived")
         if (staleWaivers(result).isNotEmpty()) {
@@ -262,18 +273,16 @@ fun run(args: Array<String>): Int {
 
     // ---- --all: write all five artifacts into the -o directory (default ".") ----
     if (all) {
-        val outdir = File(output ?: ".")
+        val outdir = outputDir
         outdir.mkdirs()
         // The analysis here is regenerated and may carry client data; waivers.json is a decision a team
-        // made and belongs in review. Ignoring everything but that one file lets the folder be
-        // committed without ever carrying an analysis into a repository. Written once, never rewritten:
-        // a project that tuned it keeps its version.
-        File(outdir, ".gitignore").let { if (!it.exists()) it.writeText(Waivers.OUTPUT_GITIGNORE, Charsets.UTF_8) }
+        // made and belongs in review. The .gitignore says so; see Waivers.OUTPUT_GITIGNORE.
+        Waivers.ensureOutputGitignore(outdir)
         val artifacts = listOf(
             "$name.summary.md" to SummaryRenderer.render(result, root),
             "$name.overview.md" to OverviewRenderer.render(result, root),
             "$name.graph.json" to GraphJsonRenderer.render(result, pretty = pretty),
-            "$name.explorer.html" to ExplorerHtmlRenderer.render(result, root),
+            "$name.explorer.html" to ExplorerHtmlRenderer.render(result, root, waiverAuthor = waiverAuthor),
             "$name.CLAUDE.md" to ClaudeRenderer.render(result, root),
         )
         val written = ArrayList<File>()
@@ -328,7 +337,7 @@ fun run(args: Array<String>): Int {
     val (out, ext) = when {
         claude -> ClaudeRenderer.render(result, root) to "CLAUDE.md"
         summary -> SummaryRenderer.render(result, root) to "summary.md"
-        html -> ExplorerHtmlRenderer.render(result, root) to "html"
+        html -> ExplorerHtmlRenderer.render(result, root, waiverAuthor = waiverAuthor) to "html"
         json -> GraphJsonRenderer.render(result, pretty = pretty) to "json"
         else -> OverviewRenderer.render(result, root) to "md"
     }
@@ -381,7 +390,8 @@ options:
   --fail-on <list>            exit 1 when findings match: error, any, and/or check ids
                               (${com.flowable.atlas.graph.CheckCatalog.ORDER.joinToString(", ")})
                               (warning is an accepted spelling of any, kept for compatibility)
-  --waivers <path>            the accepted-findings file (default: <output dir>/waivers.json)
+  --waivers <path>            the accepted-findings file (default: waivers.json beside the artifacts)
+  --waiver-author <name>      the `by` of a rule accepted from the explorer page
   --no-waivers                ignore it — report every finding, for an audit
   --fail-on-stale-waivers     exit 1 when a waiver matched nothing or has expired
   -v, --verbose               list every parse issue the status line counts
@@ -392,10 +402,6 @@ options:
 exit codes: 0 success · 1 a --fail-on finding matched (artifacts are still written) · 2 argument misuse
 """.trimStart()
 
-/**
- * Faithful port of `os.path.splitext(basename)[0]`: split off the last extension, but treat leading
- * dots as part of the name (a leading-dot file has no extension), matching CPython's `genericpath`.
- */
 /** Rules a reviewer could not have reviewed, and anything wrong with the file itself. */
 @Suppress("UNCHECKED_CAST")
 private fun waiverNotices(result: Map<String, Any?>): List<String> {
@@ -412,6 +418,10 @@ private fun checksOf(result: Map<String, Any?>): Map<String, Any?> =
 private fun staleWaivers(result: Map<String, Any?>): List<String> =
     ((result["waivers"] as? Map<String, Any?>)?.get("stale") as? List<String>).orEmpty()
 
+/**
+ * Faithful port of `os.path.splitext(basename)[0]`: split off the last extension, but treat leading
+ * dots as part of the name (a leading-dot file has no extension), matching CPython's `genericpath`.
+ */
 private fun splitextName(base: String): String {
     val dot = base.lastIndexOf('.')
     if (dot > -1) {

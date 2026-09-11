@@ -210,6 +210,56 @@ class CliTest {
             run(arrayOf(fixtureDir().path, "--all", "-o", out.path, "-q", "--fail-on", "error", "--no-waivers")))
     }
 
+    /**
+     * `-o report.md` names a file, and the waiver file that counts is the one beside it — not one that
+     * would have to live *inside* `report.md`. The default used to be the output path itself, which in
+     * every single-artifact mode found nothing and silently reported every finding.
+     */
+    @Test
+    fun waiversDefaultToTheOutputFilesFolder() {
+        val out = tempDir()
+        assertEquals(1, run(arrayOf(fixtureDir().path, "--all", "-o", out.path, "-q", "--fail-on", "error")))
+        waiveEvery(out) { it["severity"] == "error" }
+        assertEquals("the summary written into that folder reads the folder's waivers", 0,
+            run(arrayOf(fixtureDir().path, "--summary", "-o", File(out, "report.md").path, "-q", "--fail-on", "error")))
+        assertEquals("--waivers still wins over the default", 1,
+            run(arrayOf(fixtureDir().path, "--summary", "-o", File(out, "report.md").path, "-q", "--fail-on", "error",
+                "--waivers", File(out, "nowhere.json").path)))
+    }
+
+    /** The status line counted parse issues from the raw diagnostics, which know nothing about waivers. */
+    @Test
+    fun aWaivedParseIssueLeavesTheStatusLine() {
+        val out = tempDir()
+        assertEquals(0, run(arrayOf(fixtureDir().path, "--all", "-o", out.path, "-q")))
+        assertTrue("the fixture must carry a parse issue", stderrOf { run(arrayOf(fixtureDir().path, "--all", "-o", out.path)) }
+            .contains("parse issue(s)"))
+        waiveEvery(out) { it["check"] == "parseIssues" }
+        val line = stderrOf { run(arrayOf(fixtureDir().path, "--all", "-o", out.path)) }
+        assertTrue("the line no longer counts what the file accepted: $line", !line.contains("parse issue(s)"))
+        assertTrue("and says how many are waived", line.contains("waived"))
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun waiveEvery(out: File, which: (Map<String, Any?>) -> Boolean) {
+        val graph = MiniJson.parse(File(out, "miniproject.graph.json").readText()) as Map<String, Any?>
+        val picked = (graph["findings"] as List<Map<String, Any?>>).filter(which)
+        assertTrue("the fixture must produce a finding to waive", picked.isNotEmpty())
+        val rules = picked.joinToString(",\n") { f ->
+            val node = (f["node"] ?: f["file"]).toString()
+            """{"check": ${'"'}${f["check"]}${'"'}, "node": ${MiniJson.stringify(node)}, "reason": "known, accepted"}"""
+        }
+        File(out, "waivers.json").writeText("""{"version": 1, "waivers": [$rules]}""")
+    }
+
+    private fun stderrOf(block: () -> Unit): String {
+        val buf = java.io.ByteArrayOutputStream()
+        val prev = System.err
+        System.setErr(java.io.PrintStream(buf, true, "UTF-8"))
+        try { block() } finally { System.setErr(prev) }
+        return buf.toString("UTF-8")
+    }
+
     // ---- helpers ----
 
     private fun tempDir(): File = Files.createTempDirectory("atlas-cli-test").toFile()

@@ -241,6 +241,33 @@ object Waivers {
      * Ignoring everything except that one file lets the folder be committed without ever carrying an
      * analysis into a repository.
      */
+    /**
+     * Drop [OUTPUT_GITIGNORE] into [dir] unless the folder already has one. Written once, never
+     * rewritten: a project that tuned its version keeps it. Every writer of an output folder — the CLI's
+     * `--all` and the plugin's generate-all — calls this, so the folder is safe to commit whichever
+     * tool produced it.
+     */
+    fun ensureOutputGitignore(dir: File) {
+        val f = File(dir, ".gitignore")
+        if (!f.exists()) f.writeText(OUTPUT_GITIGNORE, Charsets.UTF_8)
+    }
+
+    /**
+     * Who is accepting findings, for the `by` of a rule written from the explorer: the project's git
+     * identity when there is one, else the OS user. Never throws and never blocks for long — a name is
+     * a convenience, not a gate — and returns null rather than guessing when neither answers.
+     */
+    fun defaultAuthor(root: File): String? {
+        val git = runCatching {
+            val p = ProcessBuilder("git", "-C", root.absolutePath, "config", "user.name")
+                .redirectErrorStream(true).start()
+            if (!p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) { p.destroyForcibly(); return@runCatching null }
+            if (p.exitValue() != 0) return@runCatching null
+            p.inputStream.bufferedReader().readText().trim().ifEmpty { null }
+        }.getOrNull()
+        return git ?: System.getProperty("user.name")?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
     val OUTPUT_GITIGNORE = """
         # Written by Flowable Atlas. The analysis here is regenerated and may contain client data;
         # waivers.json is the one file that is yours — decisions about findings, meant to be reviewed.

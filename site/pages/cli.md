@@ -87,7 +87,8 @@ single-artifact run writes `APP_OVERVIEW.*` unless you name the file with `-o`. 
 | `--custom-functions <path>` | Where to look for frontend customisation sources, instead of the project root. |
 | `--no-custom-functions` | Do not discover custom functions at all. |
 | `--fail-on <list>` | Make the run **exit 1** when findings match — a comma-separated list of `error`, `any` and/or [check ids](../checks/) (`--fail-on error`, `--fail-on missingRefs,invalidExpr`). Every artifact is still written first: a pipeline wants the report as well as the red build. An unknown value is a misuse (exit 2). `warning` is accepted and means the same as `any`: it has always matched every finding regardless of severity, and pipelines were told to tighten to it, so narrowing it now would make them quietly stop failing on errors. Waived findings never match. |
-| `--waivers <path>` | The [accepted-findings file](../checks/#accepting-a-finding). Defaults to `waivers.json` in the output directory, which is where `--all` writes it. |
+| `--waivers <path>` | The [accepted-findings file](../checks/#accepting-a-finding). Defaults to `waivers.json` beside the artifacts: the `--all` directory, or the folder of the file `-o` names — the same folder the explorer's *Save* writes it to. |
+| `--waiver-author <name>` | Prefills the `by` of a rule accepted from the generated explorer page. Left out, a rule written from a CLI-generated page carries no author; inside the IDE the plugin supplies the project's git identity. |
 | `--no-waivers` | Ignore that file and report every finding — the audit run, for answering "what are we hiding?". |
 | `--fail-on-stale-waivers` | Make the run **exit 1** when a waiver matched nothing or has expired. Separate from `--fail-on` on purpose: a stale waiver is a problem with your file, not a finding about your project. |
 | `-q`, `--quiet` | Silence the status lines on stderr. |
