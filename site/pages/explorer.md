@@ -23,6 +23,7 @@ view you are looking at can be copied as a link.
 | Hash | View |
 |---|---|
 | *(empty)* or `#/overview` | The dashboard: the inventory by type, the health list, hotspots, apps and entry points |
+| `#/tree` | The reference tree: what each app starts, and what those models reach |
 | `#/checks` | Every [finding](../checks/) in one place |
 | `#/variables` | The [unused-variable](../variables/) report and what Atlas could not judge |
 | `#/scripts` | Every script body in the project |
@@ -34,6 +35,28 @@ view you are looking at can be copied as a link.
 | `…&f=<filter>&s=<sort>` | On a node or a category route: the list's filter text and sort order. Written by the page as you type or pick (no history entry), so a reload or a copied link brings the list back as you left it |
 
 An unknown route or an unresolvable node id falls back to the overview rather than showing an error.
+
+## The reference tree
+
+`#/tree` answers the question the single-hop views cannot: *what does this app actually start, and what
+does that reach?* It has three levels of meaning:
+
+1. **the app**, as a grouping header — plus **Outside any app**, which is a finding in itself
+2. **its functional roots** — a model nothing points at except its app
+3. **everything those reach**, recursively, over every relation except app membership
+
+App membership deliberately is not the spine. `contains` is app → model and exactly one level deep, so
+using it to nest would put every form of an app at depth 1 and make the `process → form` edge that
+explains why the form exists arrive later, as a back-reference.
+
+A node is expanded **once**, at the shallowest place it is reached; every later arrival is a leaf marked
+*shown above* that jumps to it. That keeps the tree bounded — rows are roots plus traversed edges — where
+rebuilding a shared subtree per path is exponential. An edge back into the path you are on is marked
+*cycle* and not followed.
+
+The filter takes the same [search grammar](#search) as ⌘K, and a row survives it if it matches **or** a
+descendant does, so the path to a hit is never hidden. The **models** lens shows Design models only;
+**everything** adds the expressions, variables and Java the graph also holds.
 
 ## Browse categories
 
@@ -258,6 +281,11 @@ the category you are in, with a button to widen the search.
 | `↑` `↓` / `Home` `End` | sidebar | Move between group headers and entries (folded entries are skipped) |
 | `Enter` / `Space` | sidebar group header | Fold or unfold the group |
 | `←` / `→` | sidebar | Fold the group you are in and land on its header / unfold a folded header |
+| `↑` `↓` | tree | Move between visible rows |
+| `→` / `←` | tree | Expand, then move to the first child / collapse, then move to the parent |
+| `Space` | tree | Expand or collapse the row |
+| `Enter` | tree | Open the node the row names |
+| `Home` / `End` | tree | First / last visible row |
 | `Alt+1`…`Alt+9` | browse | Activate that detail tab |
 | `Alt+[` / `Alt+]` | browse | Previous / next tab |
 | `Alt+W` | browse | Close the active tab |

@@ -107,6 +107,7 @@ const TYPE_ICONS={
   scripts:'<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 12.5 8 15l2 2.5"/><path d="m14 12.5 2 2.5-2 2.5"/>',
   checks:'<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
   schema:'<path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/>',
+  tree:'<path d="M3 5h6v4H3z"/><path d="M15 3h6v4h-6z"/><path d="M15 15h6v4h-6z"/><path d="M6 9v8h9"/><path d="M15 5H9"/>',
   _:'<circle cx="12" cy="12" r="10"/>',
 };
 // The icon carries no width/height: CSS sizes .ti in --ui-scale units, so A−/A+ scales icons with
@@ -675,6 +676,7 @@ function parseHash(){
   if(raw==='/scripts') return {view:'scripts'};
   if(raw==='/checks') return {view:'checks'};
   if(raw==='/variables') return {view:'variables'};
+  if(raw==='/tree') return {view:'tree'};
   if(raw.indexOf('/browse/')===0){
     const parts = raw.slice(8).split('&');
     const cat = dec(parts[0]), ctx = hashContext(parts.slice(1));
@@ -714,6 +716,7 @@ function showView(v){
   document.getElementById('view-scripts').hidden = v!=='scripts';
   document.getElementById('view-checks').hidden = v!=='checks';
   document.getElementById('view-variables').hidden = v!=='variables';
+  document.getElementById('view-tree').hidden = v!=='tree';
   document.getElementById('view-browse').hidden = v!=='browse';
 }
 let _navCount = 0;
@@ -734,6 +737,10 @@ function route(){
   } else if(r.view==='scripts'){
     state.view='scripts'; state.sel=null;
     showView('scripts'); renderScripts();
+    renderSidebarActive(); renderCrumbs();
+  } else if(r.view==='tree'){
+    state.view='tree'; state.sel=null;
+    showView('tree'); renderTree();
     renderSidebarActive(); renderCrumbs();
   } else if(r.view==='checks'){
     state.view='checks'; state.sel=null;
@@ -812,6 +819,9 @@ function renderSidebar(){
   if(scriptCount) items.push({route:'/scripts', label:'Script tasks', sec:'Integration', pri:0, icon:'scripts',
     color:color('process'), count:scriptCount,
     tip:'Script tasks ('+scriptCount+') — every script task, listener script and bot script'});
+  items.push({route:'/tree', label:'Reference tree', sec:'Models', pri:0, icon:'tree',
+    color:color('process'),
+    tip:'What each app starts, and what those models reach — every relation except app membership'});
   const openChecks=INSIGHTS.checksOpen;
   items.push({route:'/checks', label:'Checks', sec:'Checks', pri:0, icon:'checks',
     color:covColor(openChecks?'bad':'good'), count:openChecks,
@@ -1243,6 +1253,228 @@ function reportNav(e){
   if(cat){ location.hash='/browse/'+enc(cat.dataset.cat); return true; }
   const route=e.target.closest('[data-route]');
   if(route){ location.hash=route.dataset.route; return true; }
+}
+// ---------- reference tree (#/tree) ----------
+// What the explorer could not answer before: "what does this app actually start, and what does that
+// reach?" Relationships were single-hop everywhere — two chip lists and a one-level neighbourhood SVG
+// — so following a chain meant clicking through it and losing your place each time.
+//
+// Three levels of meaning, and `contains` is used only for the first:
+//   1. the app, as a grouping header (plus "Outside any app", which is a finding in itself)
+//   2. its functional roots — a model nothing points at except its app
+//   3. everything those reach, recursively, over every other relation
+//
+// `contains` cannot be the spine: it is app -> model, exactly one level, so every form in an app sits
+// at depth 1 and the `process -> form` edge that explains why the form exists arrives later and renders
+// as a back-reference. Measured on a large real project that shape made 787 of 1319 rows back-refs.
+/*__TREE_CORE_START__*/
+const TREE_MAX_ROWS=20000;   // a hard stop with a banner, not a freeze: rows are bounded by roots+edges
+const TREE_MAX_DEPTH=40;     // belt and braces; the deepest real chain seen is 6
+const TREE_DEFAULT_DEPTH=2;  // open on first paint
+// Node types that are not Design models. The `models` lens hides them, which is what "model tree"
+// means; `all` shows the expressions, variables and Java the graph also holds.
+const TREE_NON_MODEL=['java','method','endpoint','expression','binding','variable','string','group','serviceOperation'];
+/**
+ * Build the forest. Pure: it reads the adjacency maps and returns rows, so it can be tested without a
+ * DOM. One row per visit — `{id, depth, rel, app, ref, cycle, kids, parents}` — where `ref:true` marks
+ * a node already expanded elsewhere and `cycle:true` an edge back into the current path.
+ *
+ * Deduplicating on first visit (breadth-first) is what keeps this bounded: rows == roots + traversed
+ * edges, exactly. Rebuilding a shared subtree per path instead is exponential — the same graph that
+ * produces ~1000 rows here ran past 200000 before being stopped.
+ */
+function treeBuild(o){
+  o=o||{};
+  const lens=o.lens||'models';
+  const nonModel=new Set(TREE_NON_MODEL);
+  const keep=id=>{ const n=byId.get(id); if(!n) return false; return lens==='all' || !nonModel.has(n.type); };
+  const out=id=>(outM.get(id)||[]).filter(e=>e.rel!=='contains' && keep(e.id));
+
+  // App membership, and the models that belong to no app.
+  const appOf=new Map(), appIds=[];
+  edges.forEach(e=>{ if(e.rel==='contains' && !appOf.has(e.t)) appOf.set(e.t, e.s); });
+  nodes.forEach(n=>{ if(n.type==='app') appIds.push(n.id); });
+
+  // A functional root is a model nothing points at — app membership does not count as use, the same
+  // distinction the unused-form check makes.
+  const pointedAt=new Set();
+  edges.forEach(e=>{ if(e.rel!=='contains' && keep(e.s) && keep(e.t)) pointedAt.add(e.t); });
+  const isRoot=id=>keep(id) && !pointedAt.has(id) && (byId.get(id)||{}).type!=='app';
+
+  const rows=[]; const owner=new Map(); let truncated=false;
+  function walk(id, depth, rel, appId, path){
+    if(rows.length>=TREE_MAX_ROWS){ truncated=true; return; }
+    const parents=(incM.get(id)||[]).filter(e=>e.rel!=='contains').length;
+    if(path.has(id)){ rows.push({id, depth, rel, app:appId, cycle:true, kids:0, parents}); return; }
+    if(owner.has(id)){ rows.push({id, depth, rel, app:appId, ref:true, kids:0, parents}); return; }
+    owner.set(id, rows.length);
+    const kids=depth>=TREE_MAX_DEPTH?[]:out(id);
+    rows.push({id, depth, rel, app:appId, kids:kids.length, parents});
+    const next=new Set(path); next.add(id);
+    kids.forEach(e=>walk(e.id, depth+1, e.rel, appId, next));
+  }
+
+  const groups=[];
+  appIds.forEach(a=>{
+    const roots=nodes.filter(n=>appOf.get(n.id)===a && isRoot(n.id)).map(n=>n.id);
+    if(roots.length) groups.push({app:a, roots});
+  });
+  const loose=nodes.filter(n=>!appOf.has(n.id) && isRoot(n.id)).map(n=>n.id);
+  if(loose.length) groups.push({app:null, roots:loose});
+
+  groups.forEach(g=>{
+    g.start=rows.length;
+    g.roots.forEach(r=>walk(r, 1, null, g.app, new Set()));
+    g.rowCount=rows.length-g.start;
+  });
+  // Anything the walk never reached — a model in a cycle no root leads into, say. Saying "0 unreachable"
+  // is a claim worth being able to make, so it is counted rather than assumed.
+  let unreachable=0;
+  nodes.forEach(n=>{ if(keep(n.id) && n.type!=='app' && !owner.has(n.id)) unreachable++; });
+  return {groups, rows, truncated, unreachable, depth:rows.reduce((m,r)=>Math.max(m,r.depth),0)};
+}
+/*__TREE_CORE_END__*/
+
+/** One row. The twisty is a button so it is not read as a node link; the label is the node link, and
+ *  `wireNodeLinks` gives it the same click/⌘-click behaviour every chip in the app has. */
+function treeRowHtml(r, idx, openDepth){
+  const n=byId.get(r.id)||{}; const t=n.type||'?';
+  const hasKids=r.kids>0 && !r.ref && !r.cycle;
+  const open=hasKids && r.depth<openDepth;
+  const badge=[];
+  if(r.cycle) badge.push('<span class="tv-b tv-cyc">cycle</span>');
+  if(r.ref) badge.push('<span class="tv-b tv-ref" data-jumpto="'+esc(r.id)+'" role="button" tabindex="-1">shown above</span>');
+  if((n.data||{}).missingModel) badge.push('<span class="tv-b tv-miss">missing model</span>');
+  if(r.parents>1 && !r.ref) badge.push('<span class="tv-b tv-par">+'+(r.parents-1)+' more parents</span>');
+  return '<li role="treeitem" class="tv-row'+(hasKids?' tv-has':'')+'" data-id="'+esc(r.id)+'" data-idx="'+idx+'"'+
+    ' aria-level="'+r.depth+'"'+(hasKids?' aria-expanded="'+(open?'true':'false')+'"':'')+' tabindex="-1">'+
+    '<span class="tv-line" style="--lvl:'+r.depth+'">'+
+      (hasKids?'<button type="button" class="tv-tw" aria-hidden="true" tabindex="-1"></button>':'<span class="tv-tw tv-leaf" aria-hidden="true"></span>')+
+      typeIcon(t,{color:color(t)})+
+      '<span class="tv-label" data-id="'+esc(r.id)+'">'+esc(n.label||r.id)+'</span>'+
+      // Two models can carry the same label — a demo project has two "Review Case" — so the key is
+      // shown whenever it is not already the label. Without it the tree is ambiguous exactly where it
+      // matters most, on the row a reader is trying to tell apart from another one.
+      (n.key && n.key!==n.label?'<span class="tv-key">'+esc(n.key)+'</span>':'')+
+      (r.rel?'<span class="tv-rel">'+termHtml('rel', r.rel)+'</span>':'')+
+      badge.join('')+
+    '</span>';
+}
+function renderTree(){
+  const v=document.getElementById('view-tree');
+  const lens=state.treeLens||'models';
+  const openDepth=state.treeDepth||TREE_DEFAULT_DEPTH;
+  const T=treeBuild({lens});
+  let body='';
+  T.groups.forEach(g=>{
+    const app=g.app?byId.get(g.app):null;
+    const title=app?esc(app.label||app.id):'Outside any app';
+    body+='<div class="tv-group"><div class="tv-gh">'+typeIcon('app',{color:color('app')})+'<b>'+title+'</b>'+
+      '<span class="muted">'+g.roots.length+' root'+(g.roots.length>1?'s':'')+'</span></div>';
+    body+='<ul role="tree" aria-label="'+title+'">';
+    const rows=T.rows.slice(g.start, g.start+g.rowCount);
+    let stack=[];
+    rows.forEach((r,i)=>{
+      while(stack.length && stack[stack.length-1]>=r.depth){ body+='</ul></li>'; stack.pop(); }
+      body+=treeRowHtml(r, g.start+i, openDepth);
+      if(r.kids>0 && !r.ref && !r.cycle){
+        body+='<ul role="group"'+(r.depth<openDepth?'':' hidden')+'>';
+        stack.push(r.depth);
+      } else body+='</li>';
+    });
+    while(stack.length){ body+='</ul></li>'; stack.pop(); }
+    body+='</ul></div>';
+  });
+  const facts=[['Roots', String(T.groups.reduce((a,g)=>a+g.roots.length,0))], ['Rows', String(T.rows.length)],
+               ['Depth', String(T.depth)], ['Unreachable', String(T.unreachable)]];
+  let h='<div class="dash" data-fscope>';
+  h+=pageHeader({icon:'tree', color:color('process'), title:'Reference tree',
+      sub:'What each app starts, and what those models reach — every relation except app membership, '+
+          'followed as far as it goes', facts});
+  h+='<div class="pbar fbar tv-bar">'+
+     '<input class="pf" id="tvf" type="search" placeholder="filter the tree — t:form, key:…, or any word" aria-label="Filter the tree">'+
+     '<span class="pchip'+(lens==='models'?' on':'')+'" data-lens="models" role="button" tabindex="0">models</span>'+
+     '<span class="pchip'+(lens==='all'?' on':'')+'" data-lens="all" role="button" tabindex="0">everything</span>'+
+     '<button type="button" class="dgbtn" id="tvall">expand all</button>'+
+     '<span class="pcount" id="tvcount"></span></div>';
+  if(T.truncated) h+='<p class="ddesc">Stopped at '+TREE_MAX_ROWS+' rows — this graph is larger than the tree renders.</p>';
+  h+=body||'<div class="estate"><div class="et">Nothing to show</div><div class="eh">No model in this project is a root.</div></div>';
+  h+='</div>';
+  v.innerHTML=h;
+  wireTree(v);
+  wireNodeLinks(v, '.tv-label', {first:treeChrome});
+}
+/** Clicks that belong to the tree itself rather than to the node a row names. */
+function treeChrome(e){
+  const tw=e.target.closest('.tv-tw:not(.tv-leaf)');
+  if(tw){ treeToggle(tw.closest('.tv-row')); return true; }
+  const jump=e.target.closest('[data-jumpto]');
+  if(jump){
+    const t=document.querySelector('.tv-row[data-id="'+cssEsc(jump.dataset.jumpto)+'"]:not([data-ref])');
+    if(t){ treeReveal(t); t.scrollIntoView({block:'center'}); t.classList.add('tv-flash');
+           setTimeout(()=>t.classList.remove('tv-flash'), 1200); }
+    return true;
+  }
+}
+function treeToggle(li, force){
+  if(!li || li.getAttribute('aria-expanded')==null) return;
+  const open = force!=null ? force : li.getAttribute('aria-expanded')!=='true';
+  li.setAttribute('aria-expanded', open?'true':'false');
+  const g=li.querySelector(':scope > ul[role=group]');
+  if(g) g.hidden=!open;
+}
+/** Open every ancestor of a row, so a filter hit or a "shown above" jump lands somewhere visible. */
+function treeReveal(li){
+  let p=li.parentElement;
+  while(p){ if(p.tagName==='UL' && p.getAttribute('role')==='group'){ p.hidden=false;
+      const owner=p.closest('li.tv-row'); if(owner) owner.setAttribute('aria-expanded','true'); p=owner; }
+    p=p?p.parentElement:null; }
+}
+function wireTree(v){
+  const rows=[...v.querySelectorAll('.tv-row')];
+  if(rows.length) rows[0].tabIndex=0;
+  const visible=()=>rows.filter(r=>r.offsetParent!==null);
+  const focus=li=>{ rows.forEach(r=>r.tabIndex=-1); li.tabIndex=0; li.focus(); };
+  v.addEventListener('keydown', e=>{
+    const li=e.target.closest('.tv-row'); if(!li) return;
+    const vis=visible(), i=vis.indexOf(li);
+    const k=e.key;
+    if(k==='ArrowDown'){ if(vis[i+1]) focus(vis[i+1]); }
+    else if(k==='ArrowUp'){ if(vis[i-1]) focus(vis[i-1]); }
+    else if(k==='ArrowRight'){ if(li.getAttribute('aria-expanded')==='false') treeToggle(li,true); else if(vis[i+1]&&+vis[i+1].getAttribute('aria-level')>+li.getAttribute('aria-level')) focus(vis[i+1]); }
+    else if(k==='ArrowLeft'){ if(li.getAttribute('aria-expanded')==='true') treeToggle(li,false);
+      else { const lvl=+li.getAttribute('aria-level'); for(let j=i-1;j>=0;j--) if(+vis[j].getAttribute('aria-level')<lvl){ focus(vis[j]); break; } } }
+    else if(k==='Home'){ if(vis[0]) focus(vis[0]); }
+    else if(k==='End'){ if(vis[vis.length-1]) focus(vis[vis.length-1]); }
+    else if(k===' '){ treeToggle(li); }
+    else if(k==='Enter'){ const lab=li.querySelector('.tv-label'); if(lab) lab.click(); return; }
+    else return;
+    e.preventDefault();
+  });
+  const allBtn=v.querySelector('#tvall');
+  if(allBtn) allBtn.onclick=()=>{
+    const opening=allBtn.textContent.indexOf('expand')===0;
+    v.querySelectorAll('.tv-row[aria-expanded]').forEach(li=>treeToggle(li, opening));
+    allBtn.textContent=opening?'collapse all':'expand all';
+  };
+  v.querySelectorAll('.pchip[data-lens]').forEach(c=>{
+    const go=()=>{ state.treeLens=c.dataset.lens; try{ localStorage.setItem('atlas-tree-lens', c.dataset.lens); }catch(e){} renderTree(); };
+    c.onclick=go; c.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); } };
+  });
+  const f=v.querySelector('#tvf'), count=v.querySelector('#tvcount');
+  if(f) f.addEventListener('input', debounce(()=>{
+    const q=qParse(f.value.trim());
+    const all=[...v.querySelectorAll('.tv-row')];
+    if(!f.value.trim()){ all.forEach(r=>r.hidden=false); if(count) count.textContent=''; return; }
+    // A row survives if it matches or an ancestor of a match: a tree that hides the path to a hit has
+    // hidden the hit.
+    const hit=new Set();
+    all.forEach(r=>{ const n=byId.get(r.dataset.id); if(n && scoreNode(n,q)) hit.add(r); });
+    all.forEach(r=>r.hidden=true);
+    hit.forEach(r=>{ r.hidden=false; treeReveal(r);
+      let p=r.parentElement; while(p){ const o=p.closest?p.closest('li.tv-row'):null; if(!o) break; o.hidden=false; p=o.parentElement; } });
+    if(count) count.textContent=hit.size+' of '+all.length;
+  }, 120));
 }
 /** The waiver file's rules, its notes, and everything wrong with it — the Checks page's last section.
  *  Rendered from `DATA.waivers`, which :core fills in only when a waivers.json was actually read, so a

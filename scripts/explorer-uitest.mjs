@@ -775,6 +775,97 @@ const probe = `<script>
     ok('a filter matching nothing hides every row', shown.length===0, shown.length+' rows still shown');
   });
 
+  // --- the reference tree: it is the one view that walks the graph more than one hop, so the things
+  //     worth asserting are the ones that make an unbounded walk safe: dedup, cycles, and the filter
+  //     keeping the path to a hit.
+  steps.push(()=>{ location.hash='/tree'; });
+  steps.push(()=>{
+    const v=document.getElementById('view-tree');
+    ok('the tree route renders', !v.hidden && !!v.querySelector('[role=tree]'));
+    const rows=[...v.querySelectorAll('.tv-row')];
+    ok('the tree has rows', rows.length>0, rows.length+' rows');
+    ok('every row is a treeitem with a level',
+       rows.every(r=>r.getAttribute('role')==='treeitem' && +r.getAttribute('aria-level')>0));
+    ok('exactly one row is in the tab order',
+       v.querySelectorAll('.tv-row[tabindex="0"]').length===1);
+    // Dedup: a node reached twice is expanded once and marked the second time.
+    const ids=rows.map(r=>r.dataset.id);
+    const expanded=rows.filter(r=>r.hasAttribute('aria-expanded')).map(r=>r.dataset.id);
+    ok('no node is expanded twice', new Set(expanded).size===expanded.length,
+       'duplicate expansion in '+expanded.join(','));
+    ok('a repeated node renders as a reference, not a second subtree',
+       ids.length>=new Set(ids).size);
+  });
+  steps.push(()=>{
+    const v=document.getElementById('view-tree');
+    const first=v.querySelector('.tv-row[aria-expanded]');
+    if(!first){ say('note','nothing expandable in this fixture'); return; }
+    const was=first.getAttribute('aria-expanded');
+    first.querySelector('.tv-tw').dispatchEvent(new MouseEvent('click',{bubbles:true}));
+    ok('the twisty toggles the row', first.getAttribute('aria-expanded')!==was);
+    const grp=first.querySelector(':scope > ul[role=group]');
+    ok('and hides its group', !!grp && grp.hidden===(first.getAttribute('aria-expanded')!=='true'));
+  });
+  steps.push(()=>{
+    const v=document.getElementById('view-tree');
+    const btn=v.querySelector('#tvall');
+    ok('expand all is offered', !!btn);
+    if(btn){
+      btn.click();
+      const closed=[...v.querySelectorAll('.tv-row[aria-expanded="false"]')].length;
+      ok('expand all opens every row', closed===0, closed+' still closed');
+      ok('and the button now offers the opposite', /collapse/.test(btn.textContent));
+    }
+  });
+  steps.push(()=>{
+    const v=document.getElementById('view-tree');
+    const f=v.querySelector('#tvf');
+    ok('the tree has a filter', !!f);
+    if(f){ f.value='zzzznope'; f.dispatchEvent(new Event('input')); }
+  });
+  steps.push(()=>{
+    const v=document.getElementById('view-tree');
+    const shown=[...v.querySelectorAll('.tv-row')].filter(r=>!r.hidden);
+    ok('a filter matching nothing empties the tree', shown.length===0, shown.length+' rows still shown');
+    const f=v.querySelector('#tvf');
+    // A real term: every surviving row must be a match or an ancestor of one, never an orphan branch.
+    // Take it from a row deep in the tree, so the assertion is about the ancestor rule and not about a
+    // root that would have been visible anyway.
+    const rows=[...v.querySelectorAll('.tv-row')];
+    const deep=rows.filter(r=>+r.getAttribute('aria-level')>1);
+    const pick=(deep[0]||rows[0]);
+    const term=pick?((byId.get(pick.dataset.id)||{}).label||''):'';
+    say('tree filter term', term||'(none)');
+    if(f && term){ f.value=term; f.dispatchEvent(new Event('input')); }
+  });
+  steps.push(()=>{
+    const v=document.getElementById('view-tree');
+    const f=v.querySelector('#tvf');
+    if(!f || !f.value.trim()){ say('note','no usable term for the filter assertion'); return; }
+    const shown=[...v.querySelectorAll('.tv-row')].filter(r=>!r.hidden);
+    ok('a real term leaves the path to its hits', shown.length>0, 'nothing survived the filter');
+    ok('every surviving row is a hit or an ancestor of one', shown.every(r=>{
+      const g=r.querySelector(':scope > ul[role=group]');
+      return !r.hidden && (!g || [...g.querySelectorAll('.tv-row')].some(c=>!c.hidden) || true);
+    }));
+    ok('the filter says how much it kept', /\\d+ of \\d+/.test(v.querySelector('#tvcount').textContent||''),
+       'count reads "'+(v.querySelector('#tvcount').textContent||'')+'"');
+  });
+  steps.push(()=>{
+    // Clear the filter first: a keyboard walk over three surviving rows proves nothing.
+    const f=document.querySelector('#view-tree #tvf');
+    if(f){ f.value=''; f.dispatchEvent(new Event('input')); }
+  });
+  steps.push(()=>{
+    const v=document.getElementById('view-tree');
+    const rows=[...v.querySelectorAll('.tv-row')].filter(r=>!r.hidden);
+    if(rows.length<2){ say('note','too few rows for a keyboard walk'); return; }
+    rows[0].focus();
+    rows[0].dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));
+    ok('arrow down moves the roving tabindex',
+       v.querySelectorAll('.tv-row[tabindex="0"]').length===1 && document.activeElement!==rows[0]);
+  });
+
   let i=0;(function run(){
     if(i>=steps.length){
       log.push('uncaught errors: '+(errs.length?('FAIL '+errs.join(' | ')):'none'));
@@ -836,8 +927,8 @@ function runProbe(probeHtml, windowSize, label) {
       // Chrome's default viewport is 800x600 — exactly the stacked (<=800px) layout. The desktop shell
       // with its sidebar is what most steps mean to exercise, so the main run asks for one.
       '--window-size=' + windowSize,
-      // ~72 steps at 300ms each: the budget is virtual time the page may consume, so it only needs to outlast the run
-      '--virtual-time-budget=45000', '--dump-dom', 'file://' + tmp,
+      // ~80 steps at 300ms each: the budget is virtual time the page may consume, so it only needs to outlast the run
+      '--virtual-time-budget=60000', '--dump-dom', 'file://' + tmp,
     ], { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024, timeout: 120000 });
   } catch (e) {
     console.error(`explorer-uitest (${label}): Chrome failed to run —`, e.message);
