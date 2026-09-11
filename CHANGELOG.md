@@ -63,7 +63,8 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   `liquibase-<key>.data.changelog.xml` next to the models, and Atlas only ever read changelogs on disk —
   so every app that listed its own changelog reported a *missing model* (six on one project), and the
   services those changelogs describe had no schema coverage. Archive entries are read like loose files
-  now, and a changelog's key is in the index before references resolve.
+  now, and a changelog's key is in the index before references resolve — and the same changelog loose and
+  archived is one changelog, not two that supersede each other.
 - **A data object uses its service's operations.** The engine calls a bound service's `lookup`, `create`,
   `update` and `delete` for every data-object instance; nothing in a model names them, so `unusedOps`
   listed every generated CRUD operation — 74 of 74 on one real project, 41 of 64 on another. They are
@@ -91,7 +92,9 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   cap is applied afterwards, for display.
 - **`schemaGaps` compares a service against its own table only.** When a changelog creating several tables
   matched none of a service's columns, the coverage pass fell back to *every* column of the changelog, so
-  another table's columns were reported as this service's unmapped ones.
+  another table's columns were reported as this service's unmapped ones. And a service no data object
+  binds at all no longer reports every mapped column as "used by no data object": the service is used
+  directly, and the row said nothing about the column.
 - **A byte-order mark is not a parse failure.** A JSON model beginning with a UTF-8 BOM — an export
   touched by a Windows editor — failed with "Expecting value at char 0", an error-level parse issue, and
   vanished from the report with every reference into and out of it. It is read like any other file now.

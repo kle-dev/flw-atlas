@@ -145,12 +145,16 @@ object Findings {
                     }
                     val coverage = data["schemaCoverage"] as? Map<String, Any?> ?: continue
                     val rows = coverage["rows"] as? List<Map<String, Any?>> ?: emptyList()
+                    // No data object binds this service at all: it is used directly, and "used by no data
+                    // object" would be true of every mapped column and say nothing about any one of them.
+                    val hasDataObject = !(coverage["dataObjects"] as? List<*>).isNullOrEmpty()
                     for (r in rows) {
                         val what = when (r["status"]) {
                             "no-service" -> "column `${r["sql"]}` of table `${r["table"]}` is in Liquibase " +
                                 "but not mapped by the service"
-                            "no-dataobject" -> "column `${r["sql"]}` of table `${r["table"]}` is mapped by " +
-                                "the service but used by no data object"
+                            "no-dataobject" -> if (!hasDataObject) null else
+                                "column `${r["sql"]}` of table `${r["table"]}` is mapped by " +
+                                    "the service but used by no data object"
                             else -> null
                         } ?: continue
                         add("schemaGaps", WARNING, n, what, subject = "${r["table"]}.${r["sql"]}")

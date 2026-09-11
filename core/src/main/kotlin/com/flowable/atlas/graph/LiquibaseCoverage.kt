@@ -355,8 +355,13 @@ object LiquibaseCoverage {
     // ---------------------------------------------------------------------------
     private fun buildLiquibase(result: MutableMap<String, Any?>, sources: List<Pair<String, String>>) {
         val lbFiles = ArrayList<LbFile>()
+        // The same changelog loose in `src/main/resources` and inside the app's `.bar` is one changelog
+        // — the model buckets are deduped by key the same way. Loose files come first in [sources], so
+        // the project's own copy is the one kept; without this each copy "superseded" the other.
+        val seenKeys = HashSet<String>()
         for ((rel, txt) in sources) {
             if (!isChangelog(txt)) continue
+            if (!seenKeys.add(liquibaseKey(rel))) continue
             lbFiles.add(LbFile(rel, txt))
         }
         if (lbFiles.isEmpty()) return

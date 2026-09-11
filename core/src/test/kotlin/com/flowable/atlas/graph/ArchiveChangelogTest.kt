@@ -53,6 +53,11 @@ class ArchiveChangelogTest {
                     </changeSet>
                   </databaseChangeLog>""",
             ))
+            // the project also keeps the extracted changelog loose: the same key twice is one changelog
+            File(dir, "liquibase-DEMO-L1.data.changelog.xml").writeText(
+                """<databaseChangeLog><changeSet id="1" author="demo"><createTable tableName="DEMO_ORDER_">
+                   <column name="ID_" type="VARCHAR(64)"/><column name="TOTAL_" type="NUMERIC"/><column name="NOTE_" type="VARCHAR(255)"/>
+                   </createTable></changeSet></databaseChangeLog>""")
             result = Atlas.extract(dir)
         }
 
@@ -71,14 +76,19 @@ class ArchiveChangelogTest {
     @Suppress("UNCHECKED_CAST")
     fun aChangelogInsideTheAppZipIsRead() {
         val lb = nodes().single { it["id"] == "liquibase:DEMO-L1" }
-        assertEquals("DemoApp.zip!liquibase-DEMO-L1.data.changelog.xml", lb["file"])
+        // loose and archived: one changelog, the loose copy kept — and no "superseded by itself"
+        assertEquals("liquibase-DEMO-L1.data.changelog.xml", lb["file"])
         assertEquals("liquibase-DEMO-L1.data.changelog.xml", lb["label"])
+        assertTrue((result["findings"] as List<Map<String, Any?>>).none { it["check"] == "changelogIssues" })
         val svc = nodes().single { it["id"] == "service:DEMO-S1" }["data"] as Map<String, Any?>
         val coverage = svc["schemaCoverage"] as? Map<String, Any?>
         assertTrue("the service gets its schema coverage from the archived changelog", coverage != null)
         val gaps = (result["findings"] as List<Map<String, Any?>>).filter { it["check"] == "schemaGaps" }
         val unmapped = gaps.filter { it["message"].toString().contains("not mapped by the service") }.map { it["subject"] }
         assertEquals("NOTE_ is in Liquibase and mapped by nothing", listOf("DEMO_ORDER_.NOTE_"), unmapped)
+        // no data object binds DEMO-S1 at all, so "mapped by the service but used by no data object" says
+        // nothing about any column — the service is used directly
+        assertTrue(gaps.none { it["message"].toString().contains("used by no data object") })
     }
 
     @Test

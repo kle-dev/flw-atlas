@@ -184,6 +184,10 @@ parameter used twice is reported twice.
 
 A changelog is reported when it is:
 
+The same changelog loose under `src/main/resources` and inside the app's `.bar` is one changelog — the
+loose copy is the one read — so a project that keeps its extracted changelogs beside the export does not
+see each copy "superseded" by the other.
+
 Changelogs are read wherever they are: loose under `src/main/resources`, and **inside an archive** — a
 Design export packs `liquibase-<key>.data.changelog.xml` next to the models it belongs to, and until
 {{VERSION}} those were invisible, so an app's reference to its own changelog was reported as a missing model
@@ -196,6 +200,9 @@ and the service it describes had no schema coverage.
 ### `schemaGaps` — the database and the models disagree
 
 Per column, walking Liquibase → service → data object:
+
+A service that no data object binds reports no "used by no data object" rows: it is used directly, and
+the row would be true of every mapped column and say nothing about any one of them.
 
 Only the service's own table is compared. A changelog that creates several tables used to hand every
 column of the *other* tables to a service whose own table it did not describe, as "not mapped by the
