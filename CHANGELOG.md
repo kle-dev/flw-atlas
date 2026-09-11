@@ -74,6 +74,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   to press a button on a form counted as a use of the form, so a form nothing opens but a group may use
   was never reported. And a decision *service* — the DRD Design generates around a set of tables — was
   judged as if it were a table nobody consults, when it is the caller.
+- **`hardcodedSecrets` no longer flags the fix.** A URL carrying credentials was reported even when the
+  credentials were expressions — `https://${user}:${password}@host` is exactly what the finding asks you
+  to write. And a key that talks *about* a secret (`tokenizerModel`, `maxTokens`, `useTokenAuth`,
+  `passwordPolicyDescription`, `privateKeyAlias`) is not one; an error-level finding that is wrong costs
+  more than one that is missed.
 
 ## 0.25.0
 

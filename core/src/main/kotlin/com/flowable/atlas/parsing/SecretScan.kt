@@ -18,13 +18,19 @@ object SecretScan {
     /** Suffixes that make a secret-ish key a description of the secret rather than the secret itself. */
     private val ABOUT = Regex(
         "(?i)(ref|name|field|type|header|location|url|uri|expiry|expires|ttl|length|policy|prefix|source|" +
-            "scheme|mode|provider|id|kind|format|encoding|algorithm|version|enabled|required|flag|path|param|parameter)$",
+            "scheme|mode|provider|id|kind|format|encoding|algorithm|version|enabled|required|flag|path|param|parameter|" +
+            "alias|description|label|title|text|hint|help|question|validity|count|limit|model|izer|izers|rule|rules|" +
+            "pattern|regex|mask|masked|strength|placeholder|hidden|visible)$",
     )
+
+    /** Prefixes that make it a question or a quantity about the secret — `maxTokens`, `useTokenAuth`. */
+    private val ABOUT_PREFIX = Regex("(?i)^(max|min|num|count|total|is|has|show|use|enable|allow|require|with)[A-Z_-]")
 
     /** `scheme://user:password@host` — credentials carried inside a URL. */
     private val URL_CREDENTIAL = Regex("[a-zA-Z][a-zA-Z0-9+.-]*://[^/\\s:@]+:[^/\\s@]+@")
 
-    fun isSecretKey(name: String): Boolean = KEY.containsMatchIn(name) && !ABOUT.containsMatchIn(name)
+    fun isSecretKey(name: String): Boolean =
+        KEY.containsMatchIn(name) && !ABOUT.containsMatchIn(name) && !ABOUT_PREFIX.containsMatchIn(name)
 
     fun isLiteral(value: String): Boolean =
         value.isNotBlank() && !value.contains("\${") && !value.contains("#{") && !value.contains("{{")
@@ -43,8 +49,10 @@ object SecretScan {
                     val key = k.toString()
                     val p = if (path.isEmpty()) key else "$path.$key"
                     if (v is String) {
+                        // both arms need a literal: `https://${user}:${pass}@host` is exactly the shape the
+                        // finding asks for, and used to be reported as the leak it avoids
                         if (isSecretKey(key) && isLiteral(v)) out.add(p)
-                        else if (hasUrlCredential(v)) out.add("$p (credentials in URL)")
+                        else if (isLiteral(v) && hasUrlCredential(v)) out.add("$p (credentials in URL)")
                     } else walk(v, p)
                 }
                 is List<*> -> node.forEachIndexed { i, v -> walk(v, "$path[$i]") }
@@ -57,6 +65,6 @@ object SecretScan {
     /** The field-injection names on an element whose literal value is a secret, or carries one in a URL. */
     fun secretFields(literalFields: Map<String, String>): List<String> =
         literalFields.entries.filter { (name, value) ->
-            (isSecretKey(name) && isLiteral(value)) || hasUrlCredential(value)
+            isLiteral(value) && (isSecretKey(name) || hasUrlCredential(value))
         }.map { it.key }
 }

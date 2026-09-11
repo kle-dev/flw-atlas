@@ -220,6 +220,13 @@
               nothing opens but a group may use was never reported. And a decision <i>service</i> — the DRD
               Design generates around a set of tables — was judged as if it were a table nobody consults,
               when it is the caller.</li>
+          <li><b><code>hardcodedSecrets</code> no longer flags the fix.</b> A URL carrying credentials was
+              reported even when the credentials were expressions —
+              <code>https://${user}:${password}@host</code> is exactly what the finding asks you to write.
+              And a key that talks <i>about</i> a secret (<code>tokenizerModel</code>,
+              <code>maxTokens</code>, <code>useTokenAuth</code>, <code>passwordPolicyDescription</code>,
+              <code>privateKeyAlias</code>) is not one; an error-level finding that is wrong costs more than
+              one that is missed.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

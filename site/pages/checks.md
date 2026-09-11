@@ -157,6 +157,11 @@ injections of a BPMN or CMMN service task. Credentials inside a URL (`https://us
 too, whatever the key is called. A secret in a model file is a secret in the repository, in every export
 and in every report, and the same one on every environment the model is deployed to.
 
+Only a *literal* is a finding, on both arms: `https://${user}:${password}@host` is the shape the fix
+asks for, not a leak. A key that talks *about* a secret is not one either — `tokenizerModel`,
+`maxTokens`, `useTokenAuth`, `passwordPolicyDescription`, `privateKeyAlias` — because a
+`hardcodedSecrets` error that is wrong costs more trust than one that is missed.
+
 The finding names the **path** and never the value. It stays quiet for a value that is an expression
 (`${…}`, `#{…}`, `{{…}}` — resolved elsewhere, which is exactly the fix), for a key that merely talks
 about a secret (`tokenUrl`, `passwordField`, `credentialsType`), and for anything that is not a string.

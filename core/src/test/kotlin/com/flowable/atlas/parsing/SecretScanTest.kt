@@ -49,4 +49,22 @@ class SecretScanTest {
         assertTrue(SecretScan.isSecretKey("clientSecret"))
         assertTrue(SecretScan.isSecretKey("api-key"))
     }
+
+    @Test
+    fun aUrlWhoseCredentialsAreExpressionsIsWhatTheFindingAsksFor() {
+        val doc = mapOf("config" to mapOf("baseUrl" to "https://\${svcUser}:\${svcPassword}@host/api"))
+        assertTrue("an expression-valued URL is the fix, not the finding", SecretScan.scan(doc).isEmpty())
+        assertTrue(SecretScan.secretFields(mapOf("requestUrl" to "https://\${u}:\${p}@host")).isEmpty())
+    }
+
+    @Test
+    fun keysThatTalkAboutASecretAreNotSecrets() {
+        for (k in listOf("tokenizerModel", "maxTokens", "useTokenAuth", "passwordPolicyDescription",
+                         "privateKeyAlias", "secretQuestion", "tokenValidity", "apiKeyLabel", "hasCredentials")) {
+            assertFalse(k, SecretScan.isSecretKey(k))
+        }
+        for (k in listOf("password", "apiKey", "clientSecret", "privateKey", "authToken", "credentials", "accessToken")) {
+            assertTrue(k, SecretScan.isSecretKey(k))
+        }
+    }
 }
