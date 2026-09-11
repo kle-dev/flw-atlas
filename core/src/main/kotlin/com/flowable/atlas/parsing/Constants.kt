@@ -40,6 +40,20 @@ object Constants {
         "flwBase64Utils", "flwContentItem", "propertyConfigurationService",
     )
 
+    /**
+     * Model keys the platform ships itself (the `.event` files under `com/flowable/design/system/` in the platform
+     * and engage palettes — `*` in a KDoc path would open a nested comment). A project consumes them without defining them, so a reference to one is a
+     * platform-provided external, not a missing model.
+     */
+    val FLOWABLE_PLATFORM_MODEL_KEYS = setOf(
+        "_flowableMailEvent",
+        "_flowableEngageExternalMessageReceived",
+        "_flowableEngageMessageReceivedNoAccount", "_flowableEngageMessageReceivedNoAccountAndTenant",
+        "_flowableEngageMessageReceivedInactiveAccount",
+        "_flowableEngageReactionReceivedNoAccount", "_flowableEngageReactionReceivedNoAccountAndTenant",
+        "_flowableEngageReactionReceivedInactiveAccount",
+    )
+
     // Harvesting regexes — ported from flowable_atlas.py (~lines 69-72, 1296).
     // A backslash before the `$`/`#` is the author saying "literal, do not evaluate" — in a Groovy
     // GString, in a Java string, in a JSON body — so `\${x}` is not an expression and is not harvested;

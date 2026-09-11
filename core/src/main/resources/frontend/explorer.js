@@ -309,7 +309,6 @@ const DESIGN_TERMS = {
   'rel:rest-call': ['Calls endpoint', 'A component or task calls that REST endpoint.'],
   'rel:bot': ['Dispatched to bot', 'The action is executed by that bot.'],
   'rel:action-form': ['Action → form', 'That form collects the action’s payload before it runs.'],
-  'rel:action-channel': ['Offered on channel', 'Where the action appears in the UI.'],
   'rel:assign': ['Assigned to', 'Who may work on it.'],
   'rel:start': ['May start', 'Who may start an instance.'],
   'rel:owner': ['Owner', 'Who owns the instance or task.'],

@@ -193,6 +193,14 @@
               and the summary no longer says "17 files could not be fully analyzed" about 16 shared keys.
               Only a Java string literal that names the bare key stays ambiguous, and that edge was already
               marked suspect.</li>
+          <li><b>An action's <code>channels</code> are UI placements, not channel models.</b>
+              <code>menu</code>, <code>quick-menu</code>, <code>slash-menu</code> and the mobile menus say
+              where an action is offered; Atlas looked each one up as a channel model and reported two
+              <i>missing models</i> per action. They are a fact on the action now, and nothing else.</li>
+          <li><b>The platform's own event models are not missing.</b> <code>_flowableMailEvent</code> and
+              the <code>_flowableEngage…Received…</code> events ship with the platform palette; a channel or
+              process that consumes one resolves to a platform-provided external node instead of a
+              <i>missing model</i> error.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>
@@ -500,66 +508,6 @@
               file there, so a page rewritten by the CLI shows up too. A local IDE is untouched: there the
               file is a disk read, and the generated page stays one self-contained file for browsers and the
               CLI.</li>
-        </ul>
-        <h3>0.21.0</h3>
-        <ul>
-          <li><b>Every node type has a face.</b> A process, a form, a service and forty other kinds of node
-              were told apart by a coloured dot, and forty hues nobody can tell apart is no distinction at
-              all. Every place a node appears — the sidebar, the browse list, the chips, the detail tabs,
-              the breadcrumb, the search results — now carries a small stroke icon for its type
-              ([Lucide](https://lucide.dev), ISC) in the type's colour, and in the collapsed sidebar rail
-              the icons are the navigation. They scale with <code>A−</code> / <code>A+</code> like the text
-              beside them. In the same pass every label that names a section or a column speaks in one voice
-              — Geist, small, semibold, tracked capitals — and monospace is reserved for what a machine
-              reads: keys, paths, code, expressions. Section headings, list heads, table headers, pills and
-              filter chips used to pick their own face and tracking, and the sidebar footer read like a
-              terminal.</li>
-          <li><b>The chrome gets out of the way.</b> The top bar and the logo row are 48px instead of 64,
-              the search field and the buttons sized to match, and there is one theme toggle — in the top
-              bar — instead of one there and another in the sidebar footer. That footer is two rows on a
-              grid now (project · parse-issue chip / <i>Atlas 0.21.0 · 3 days ago</i> · <code>A−</code>
-              <code>A+</code>): the old single row overflowed the 240px sidebar as soon as the version stamp
-              grew a date, squeezing the project name to one letter and pushing the buttons out over the
-              page. A node's detail page opens with one sticky bar — its kind on the left, <i>back</i> /
-              <i>expand all</i> / <i>copy link</i> on the right — instead of a row of buttons above a kind
-              chip above the title. Smaller things: the attribute grid no longer shows a grey box where its
-              last row runs out of cells, list rows no longer animate in on every re-render, and the last
-              five hard-coded font sizes now follow <code>A−</code> / <code>A+</code> like everything
-              else.</li>
-          <li><b>The sidebar folds, and fits a narrow window.</b> Every group header — Models, Integration,
-              Code, Expressions, Checks, Variables, Access, Other — is a button that folds its entries, and
-              the fold is remembered, so a project with forty variable scopes need not show them on every
-              visit. A folded group whose entry is the active one marks that on its header and stays folded;
-              the sidebar never reopens itself behind your back. The keyboard walks it too: <code>↑</code>
-              <code>↓</code> skip folded entries, <code>←</code> folds the group you are in, <code>→</code>
-              unfolds a header. Below 800px — a split editor, a narrow tool window — the category list used
-              to wrap into fourteen rows of chips above the content; it is a picker beside the search button
-              now, one row. The UI test covers both: the desktop run folds and re-renders, a second run at
-              800×600 picks a category.</li>
-          <li><b>The overview reads top to bottom.</b> The thirteen health cards — the same shape thirteen
-              times, a 28px number for a count of one — are a list: one row per check with its tone bar,
-              count, name and one-line reason, worst first, the clean ones folded under a single line. The
-              four inventory cards are one strip with a chip per node type the report found, each opening
-              that type's list. Health sits beside the hotspots and the apps beside the entry points, so the
-              four things a reader came for are above the fold on an ordinary screen. The Checks page and
-              the unused-variables report open with the same list.</li>
-          <li><b>A node's neighbourhood reads left to right.</b> What the node uses stands in a column on
-              the left, what uses it on the right, the node in the middle, and the arrows point the way each
-              reference goes. The radial star it replaces put every neighbour on a circle and told direction
-              apart by dashing, which nobody read; it also took 340px whatever it showed and was the one
-              collapsible block the page did not remember. The drawing is a section now like every other —
-              remembered, part of <i>expand all</i> — the most-referenced neighbours come first, each side
-              stops at twelve with a <i>+N more</i> that opens the full list below, and every neighbour
-              carries its type icon and is a link.</li>
-          <li><b>Inside the IDE, the page wears the IDE's colours.</b> The embedded explorer took the IDE's
-              light or dark mode and then painted Hub navy next to Darcula grey. The plugin now hands the
-              page nine colours of the current look-and-feel — panel, editor and tool-window background,
-              border, text, secondary text, link accent, selection — on the URL (so nothing flashes before
-              the first frame) and on every theme or editor-scheme change, and the page maps them onto its
-              tokens and derives hover, selection and focus from them. The type colours, the tone colours
-              and the search highlight stay. This holds while the page shows the IDE's mode — following it,
-              or set to the same mode by hand; force the other mode and you get the page's own palette for
-              it. A browser sees none of this.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

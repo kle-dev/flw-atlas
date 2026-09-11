@@ -112,6 +112,12 @@ and `stats.scriptIssues` also mean.
 A model references another model by key, and no model in the project defines that key. Typically a
 typo, a model that was never exported, or a reference to something that lives in a different app.
 
+An action's `channels` — `menu`, `quick-menu`, `slash-menu`, the mobile menus — say where in the UI the
+action is offered; they are not channel models and are not looked up (until 0.26.0 every action with a
+placement reported two missing models). Likewise the event models the platform ships itself —
+`_flowableMailEvent` and the `_flowableEngage…Received…` family — resolve to a platform-provided
+external node rather than to a missing model.
+
 ### `crossedColumns` — the column mapping pairs the wrong two names
 
 A `.service` model pairs a logical field with a physical column. Nothing validates the *pairing*: if

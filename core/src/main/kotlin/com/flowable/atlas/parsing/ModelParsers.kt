@@ -904,9 +904,9 @@ object ModelParsers {
         val doc = json(data)
         val key = doc["key"]
         ctx.addRef(key, "action", ffile, "action-form", "form", doc["formKey"])
-        for (ch in (doc["channels"] as? List<*> ?: emptyList<Any?>())) {
-            ctx.addRef(key, "action", ffile, "action-channel", "channel", if (ch is String) ch else objOf(ch)?.get("key"))
-        }
+        // `channels` — `menu`, `quick-menu`, `slash-menu`, `mobile-*` (the platform's ActionChannelTypes) —
+        // says where in the UI the action is offered. It is not a reference to a channel *model*, and reading
+        // it as one made every action report two missing models. Kept on the record as a fact.
         // `signalName` is a model key only for the start-instance bots (the platform's reference
         // extractor discriminates on botKey the same way); for any other bot it is a real BPMN
         // signal name and resolves against the signal index, not the process index.

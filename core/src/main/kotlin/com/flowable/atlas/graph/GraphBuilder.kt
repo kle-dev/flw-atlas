@@ -660,6 +660,9 @@ object GraphBuilder {
                     val platform = kind == "bean" && r["value"] in Constants.FLOWABLE_PLATFORM_BEANS
                     linkedMapOf("platform" to platform, "kind" to kind)
                 }
+                // an event the platform palette ships is consumed, never defined, by a project
+                r["targetType"] == "model" && r["value"] in Constants.FLOWABLE_PLATFORM_MODEL_KEYS ->
+                    linkedMapOf("kind" to kind, "platform" to true)
                 r["targetType"] == "model" -> linkedMapOf("kind" to kind, "missingModel" to true)
                 else -> {
                     // No node type exists for this ref kind — surface it instead of silently

@@ -53,6 +53,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   `diagnostics`, but it stopped being a *parse issue*: nothing failed to parse, and the summary no longer
   says "17 files could not be fully analyzed" about 16 shared keys. Only a Java string literal that names
   the bare key stays ambiguous, and that edge was already marked suspect.
+- **An action's `channels` are UI placements, not channel models.** `menu`, `quick-menu`, `slash-menu` and
+  the mobile menus say where an action is offered; Atlas looked each one up as a channel model and
+  reported two *missing models* per action. They are a fact on the action now, and nothing else.
+- **The platform's own event models are not missing.** `_flowableMailEvent` and the
+  `_flowableEngage…Received…` events ship with the platform palette; a channel or process that consumes
+  one resolves to a platform-provided external node instead of a *missing model* error.
 
 ## 0.25.0
 
