@@ -16,8 +16,12 @@ object MiniJson {
 
     class JsonException(message: String) : RuntimeException(message)
 
+    // A UTF-8 byte-order mark is not whitespace to `isWhitespace()`, so a BOM'd model — an export edited
+    // on Windows, say — parsed as "Expecting value at char 0" and vanished from the report.
+    private fun P(text: String, dropBom: Boolean) = P(if (dropBom) text.removePrefix("\uFEFF") else text)
+
     fun parse(text: String): Any? {
-        val p = P(text)
+        val p = P(text, dropBom = true)
         p.skipWs()
         val v = p.readValue()
         p.skipWs()
@@ -27,7 +31,7 @@ object MiniJson {
 
     fun parseOrNull(text: String): Any? =
         try {
-            val p = P(text)
+            val p = P(text, dropBom = true)
             p.skipWs()
             p.readValue()
         } catch (e: Exception) {

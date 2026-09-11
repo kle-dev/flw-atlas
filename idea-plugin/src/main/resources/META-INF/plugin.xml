@@ -242,6 +242,10 @@
               creating several tables matched none of a service's columns, the coverage pass fell back to
               <i>every</i> column of the changelog, so another table's columns were reported as this
               service's unmapped ones.</li>
+          <li><b>A byte-order mark is not a parse failure.</b> A JSON model beginning with a UTF-8 BOM — an
+              export touched by a Windows editor — failed with "Expecting value at char 0", an error-level
+              parse issue, and vanished from the report with every reference into and out of it. It is read
+              like any other file now.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

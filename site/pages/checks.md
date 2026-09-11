@@ -72,6 +72,9 @@ file above the 32 MB limit — because a file that was skipped on purpose is no 
 report than one that failed. An archive *inside* an archive (a Design export packing one `.bar` per
 app) is opened one level down and its models are read like any other.
 
+A UTF-8 byte-order mark at the start of a JSON model is not a parse failure; the model is read like any
+other.
+
 A **key shared by two model types** is not one of them. A case and its start form both called
 `DRA-C001`, a data object and the service Design generated for it — this is common and legal. Both
 models are read completely; a reference that states its type (a `formKey`, a `calledElement`) reaches

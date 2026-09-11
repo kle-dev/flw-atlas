@@ -92,6 +92,9 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
 - **`schemaGaps` compares a service against its own table only.** When a changelog creating several tables
   matched none of a service's columns, the coverage pass fell back to *every* column of the changelog, so
   another table's columns were reported as this service's unmapped ones.
+- **A byte-order mark is not a parse failure.** A JSON model beginning with a UTF-8 BOM — an export
+  touched by a Windows editor — failed with "Expecting value at char 0", an error-level parse issue, and
+  vanished from the report with every reference into and out of it. It is read like any other file now.
 
 ## 0.25.0
 
