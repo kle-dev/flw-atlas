@@ -214,6 +214,12 @@
               credited to the data object now (the operation's <code>type</code> travels with it in
               <code>graph.json</code>); a <code>search</code> operation is still only used when something
               names it.</li>
+          <li><b>Three corrections to "defined, never used".</b> A data table's <i>delete</i> form was the
+              one of its four form keys Atlas did not follow, so a form used only to confirm a deletion was
+              "unused". A group allowed to press a button on a form counted as a use of the form, so a form
+              nothing opens but a group may use was never reported. And a decision <i>service</i> — the DRD
+              Design generates around a set of tables — was judged as if it were a table nobody consults,
+              when it is the caller.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

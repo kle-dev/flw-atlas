@@ -42,16 +42,18 @@ class FindingsTest {
     @Test
     fun aFormOnlyAnAppContainsCountsAsUnused() {
         val r = run(
-            nodes = listOf(node("form:lonely", "form"), node("form:used", "form")),
-            // app membership is not use; a humanTask pointing at it is
+            nodes = listOf(node("form:lonely", "form"), node("form:used", "form"), node("form:gated", "form")),
+            // app membership is not use, and neither is a group allowed to use a button on it; a
+            // humanTask pointing at it is
             edges = listOf(
                 mapOf("s" to "app:a", "t" to "form:lonely", "rel" to "contains"),
                 mapOf("s" to "app:a", "t" to "form:used", "rel" to "contains"),
                 mapOf("s" to "process:p", "t" to "form:used", "rel" to "humanTask-form"),
+                mapOf("s" to "group:clerks", "t" to "form:gated", "rel" to "use"),
             ),
         )
-        assertEquals(1, checks(r)["unusedForms"])
-        assertEquals("form:lonely", findings(r).single { it["check"] == "unusedForms" }["node"])
+        assertEquals(2, checks(r)["unusedForms"])
+        assertEquals(setOf("form:lonely", "form:gated"), findings(r).filter { it["check"] == "unusedForms" }.map { it["node"] }.toSet())
     }
 
     @Test
@@ -253,10 +255,13 @@ class FindingsTest {
     @Test
     fun aDecisionNothingCallsIsReported() {
         val r = run(
-            nodes = listOf(node("decision:orphan", "decision"), node("decision:used", "decision")),
+            nodes = listOf(node("decision:orphan", "decision"), node("decision:used", "decision"),
+                // a decision service is the caller of its tables, never an unused table
+                node("decision:drd", "decision", data = mapOf("decisionService" to true))),
             edges = listOf(
                 mapOf("s" to "app:a", "t" to "decision:orphan", "rel" to "contains"),
                 mapOf("s" to "process:p", "t" to "decision:used", "rel" to "ruleTask-decision"),
+                mapOf("s" to "app:a", "t" to "decision:drd", "rel" to "contains"),
             ),
         )
         assertEquals(1, checks(r)["unusedDecisions"])

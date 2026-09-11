@@ -544,7 +544,9 @@ object ModelParsers {
                     ctx.addRef(key, mtype, ffile, "field-service", "service", sm["serviceModelKey"])
                     ctx.addOpUse(key, "service", sm["serviceModelKey"], sm["operationKey"])
                 }
-                for (fk in listOf("dataObjectDataTableCreateFormKey", "dataObjectDataTableEditFormKey", "dataObjectDataTableViewFormKey")) {
+                // the four form keys a data-object data table carries (the platform's useDataObjectDT)
+                for (fk in listOf("dataObjectDataTableCreateFormKey", "dataObjectDataTableEditFormKey",
+                                  "dataObjectDataTableViewFormKey", "dataObjectDataTableDeleteFormKey")) {
                     if (truthy(es[fk])) ctx.addRef(key, mtype, ffile, fk, "form", es[fk])
                 }
                 if (truthy(es["expandablePanel"])) ctx.addRef(key, mtype, ffile, "datatable-detail-form", "form", es["expandablePanel"])

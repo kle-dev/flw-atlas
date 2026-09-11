@@ -40,10 +40,12 @@ object Findings {
         val findings = ArrayList<Map<String, Any?>>()
 
         // A form is unused when nothing functionally references it. Every form sits in an app, so the
-        // app's `contains` edge alone does not count as use.
+        // app's `contains` edge alone does not count as use — and neither does an access edge: a group
+        // allowed to press a button on a form says who may use it, not that anything opens it.
         val referenced = HashSet<String>()
         for (e in edges) {
             if (e["rel"] == "contains") continue
+            if ((e["s"] as? String)?.startsWith("group:") == true) continue
             (e["t"] as? String)?.let { referenced.add(it) }
         }
         // What kind of service a service-registry task calls: only a REST service leaves the engine.
@@ -179,7 +181,9 @@ object Findings {
                     }
                 }
                 // A decision nothing consults is the DMN twin of the unused form: app membership is not use.
-                "decision" -> if (n["id"] !in referenced) {
+                // A decision *service* is the caller, not a table: Design generates one per DRD, and the rule
+                // tasks point at the tables it contains.
+                "decision" -> if (data["decisionService"] != true && n["id"] !in referenced) {
                     add("unusedDecisions", WARNING, n, "no process, case or decision service calls this decision")
                 }
                 "channel", "agent", "knowledgeBase" -> literalSecrets(data) { path ->

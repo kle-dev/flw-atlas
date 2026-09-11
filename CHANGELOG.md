@@ -69,6 +69,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   listed every generated CRUD operation — 74 of 74 on one real project, 41 of 64 on another. They are
   credited to the data object now (the operation's `type` travels with it in `graph.json`); a `search`
   operation is still only used when something names it.
+- **Three corrections to "defined, never used".** A data table's *delete* form was the one of its four
+  form keys Atlas did not follow, so a form used only to confirm a deletion was "unused". A group allowed
+  to press a button on a form counted as a use of the form, so a form nothing opens but a group may use
+  was never reported. And a decision *service* — the DRD Design generates around a set of tables — was
+  judged as if it were a table nobody consults, when it is the caller.
 
 ## 0.25.0
 

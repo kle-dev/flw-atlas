@@ -287,11 +287,18 @@ decision table nothing calls is a rule set the project maintains and never runs 
 that was renamed away from it, which is the case worth a look. Accept it when a decision service outside
 this repository consults it.
 
+A decision *service* — the DRD Design generates around a set of tables — is the caller of its tables, so
+it is never reported as an unused table itself.
+
 ### `unusedForms`, `unusedOps`, `unusedFns` — defined, never used
 
 - A **form** with no incoming reference other than its app membership. Belonging to an app is not use.
 - A **service operation** nothing calls.
 - A **custom expression function** nothing calls.
+
+A group allowed to press a button on a form is not a use of the form either: access says who may, not
+that anything opens it. A data-object data table's four form keys — view, create, edit and delete — all
+count.
 
 A service operation a **data object** binds to is used by that data object when it is one the engine
 invokes itself — `lookup`, `create`, `update`, `delete`. Nothing in a model names those (a data-object
