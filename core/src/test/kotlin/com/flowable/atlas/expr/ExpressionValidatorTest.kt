@@ -19,6 +19,26 @@ class ExpressionValidatorTest {
     }
 
     @Test
+    fun aPropertyBeforeATernaryColonIsNotANamespace() {
+        // `IDENT : IDENT (` is also what `… ? user.displayName : findUser(x)` looks like around the colon;
+        // real models were flagged "Unknown function namespace 'displayName'" for it.
+        for (e in listOf(
+            "x != null ? findUser(x).displayName : findUser(y).displayName",
+            "vars:exists(a) ? a : vars:get('b')",
+            "f(a ? b.x : g(c))",
+        )) assertEquals(e, emptyList<ExprProblem>(), backend(e))
+        // …and a real namespace call right after a ternary is still checked.
+        val p = backend("flag ? 1 : daate:now()")
+        assertTrue(p.single().message.contains("Unknown function namespace"))
+        // A bare name before the colon is different: JUEL's own parser reads `name : fmt(` as the
+        // function `name:fmt`, so the ternary loses its colon — one syntax error, and no second finding
+        // about a namespace on top of it.
+        val bare = backend("flag ? name : fmt(y)")
+        assertEquals(bare.toString(), 1, bare.size)
+        assertEquals(ExprSeverity.ERROR, bare.single().severity)
+    }
+
+    @Test
     fun validFrontendExpressionsHaveNoProblems() {
         assertTrue(frontend("flw.sum(items)").isEmpty())
         assertTrue(frontend("total |> flw.round(2)").isEmpty())

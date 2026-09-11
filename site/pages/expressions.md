@@ -30,7 +30,9 @@ a runtime no-op and is not reported.
 
 **3 · The function catalog** — every function call is checked against what exists:
 
-- an unknown backend namespace (`Unknown function namespace 'p'`);
+- an unknown backend namespace (`Unknown function namespace 'p'`) — a namespace is a bare name before
+  the colon, never a property reached through a dot, and never the name before the colon that closes a
+  ternary's `?`;
 - a known namespace with an unknown function (`Unknown function 'p:n'`);
 - backend syntax in a frontend expression, with the `flw.` form suggested;
 - an unknown `flw.` member, or an unknown member of one of your own namespaces — but **only when there

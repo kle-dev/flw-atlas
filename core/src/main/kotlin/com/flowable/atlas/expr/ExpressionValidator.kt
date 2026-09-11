@@ -105,10 +105,33 @@ object ExpressionValidator {
         }
     }
 
+    /**
+     * Which colons close a ternary. `a ? b.name : fn(x)` tokenizes to `IDENT ':' IDENT '('` around the
+     * colon exactly like `date:now()` does, and the catalog walk used to read `name` as a function
+     * namespace — every conditional whose true branch ends in a property and whose false branch starts
+     * with a call came back as "Unknown function namespace". A `?` opens a ternary at its own
+     * bracket depth; the next unmatched `:` at that depth closes it.
+     */
+    private fun ternaryColons(toks: List<Tok>): BooleanArray {
+        val closes = BooleanArray(toks.size)
+        val pending = ArrayDeque<Int>().apply { addLast(0) }
+        for ((i, t) in toks.withIndex()) {
+            when (t.type) {
+                TokType.LPAREN, TokType.LBRACKET -> pending.addLast(0)
+                TokType.RPAREN, TokType.RBRACKET -> if (pending.size > 1) pending.removeLast()
+                TokType.OP -> if (t.text == "?") pending[pending.lastIndex]++
+                TokType.COLON -> if (pending.last() > 0) { pending[pending.lastIndex]--; closes[i] = true }
+                else -> {}
+            }
+        }
+        return closes
+    }
+
     private fun checkFunctions(toks: List<Tok>, dialect: ExpressionDialect, out: MutableList<ExprProblem>,
                                custom: CustomFunctionCatalog? = null) {
         val customFlw = custom?.flw ?: emptySet()
         val customNs = custom?.namespaces ?: emptyMap()
+        val ternary = ternaryColons(toks)
         for (i in toks.indices) {
             // Custom namespace call: <ns> '.' IDENT '(' where <ns> was registered via
             // externals.additionalData (e.g. `flowdemo.findCommonAttribute(x)`). We know the exact
@@ -131,9 +154,12 @@ object ExpressionValidator {
                 }
                 continue
             }
-            // Backend namespaced call: IDENT ':' IDENT '('
+            // Backend namespaced call: IDENT ':' IDENT '(' — where the colon is not a ternary's and the
+            // name is not a property reached through a dot (`user.name : fn()` is a value, not a namespace).
             if (toks[i].type == TokType.IDENT &&
                 toks.getOrNull(i + 1)?.type == TokType.COLON &&
+                !ternary[i + 1] &&
+                toks.getOrNull(i - 1)?.type != TokType.DOT &&
                 toks.getOrNull(i + 2)?.type == TokType.IDENT &&
                 toks.getOrNull(i + 3)?.type == TokType.LPAREN
             ) {

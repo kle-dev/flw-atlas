@@ -25,6 +25,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   platform-bean set is declared once now (it lived in three renderers) and includes the `flw*Utils`
   expression helpers and `propertyConfigurationService`, so those stop appearing under *Review —
   unresolved in project*.
+- **A property before a ternary's colon is not a function namespace.** `… ? findUser(x).displayName :
+  findUser(y).displayName` reads, around the colon, exactly like `date:now()` — `name : name (` — and the
+  catalog walk reported "Unknown function namespace 'displayName'" on every conditional shaped that way.
+  A name reached through a dot is a property, and a colon that closes a `?` is the ternary's; neither is
+  looked up in the catalog now. (A *bare* name before the colon is different: JUEL's own parser reads
+  `flag ? name : fmt(y)` as the function `name:fmt`, so that stays the one syntax error it always was.)
 
 ## 0.25.0
 
