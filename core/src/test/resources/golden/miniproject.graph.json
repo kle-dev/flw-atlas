@@ -5545,6 +5545,7 @@
     "event:orderShipped": "events/order-shipped.event",
     "form:orderForm": "forms/order-form.form",
     "knowledgeBase:courierManuals": "knowledgebase/courier-manuals.knowledgebase",
+    "liquibase:001-customer": "db/changelog/001-customer.xml",
     "page:orderPage": "pages/order-page.page",
     "palette:demoPalette": "palettes/demo.palette",
     "process:archivedProcess": "archives/demo-export.zip!apps/demo.bar!processes/archived.bpmn",

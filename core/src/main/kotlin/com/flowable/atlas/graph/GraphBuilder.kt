@@ -980,9 +980,10 @@ object GraphBuilder {
     }
 
     /** `os.path.basename` for the '/'-separated rel paths Atlas uses. */
+    /** The file name of a path, or of an archive entry (`app.zip!liquibase-x.data.changelog.xml`). */
     private fun basename(path: String?): String? {
         if (path == null) return null
-        return if ("/" in path) path.substringAfterLast("/") else path
+        return path.substringAfterLast('!').substringAfterLast('/')
     }
 
     /** The 'app container' of a file: its archive (before '!') or its parent dir. */

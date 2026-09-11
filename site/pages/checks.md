@@ -176,6 +176,11 @@ parameter used twice is reported twice.
 
 A changelog is reported when it is:
 
+Changelogs are read wherever they are: loose under `src/main/resources`, and **inside an archive** — a
+Design export packs `liquibase-<key>.data.changelog.xml` next to the models it belongs to, and until
+0.26.0 those were invisible, so an app's reference to its own changelog was reported as a missing model
+and the service it describes had no schema coverage.
+
 - **orphan** — no service and no data object references it, so nothing in the models explains why that
   table exists;
 - **superseded** — a later changelog provides the same table, and the finding names the successors.

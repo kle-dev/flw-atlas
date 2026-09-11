@@ -59,6 +59,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
 - **The platform's own event models are not missing.** `_flowableMailEvent` and the
   `_flowableEngage…Received…` events ship with the platform palette; a channel or process that consumes
   one resolves to a platform-provided external node instead of a *missing model* error.
+- **Liquibase changelogs inside an archive are read.** A Design export packs
+  `liquibase-<key>.data.changelog.xml` next to the models, and Atlas only ever read changelogs on disk —
+  so every app that listed its own changelog reported a *missing model* (six on one project), and the
+  services those changelogs describe had no schema coverage. Archive entries are read like loose files
+  now, and a changelog's key is in the index before references resolve.
 
 ## 0.25.0
 

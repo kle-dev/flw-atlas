@@ -201,6 +201,12 @@
               the <code>_flowableEngage…Received…</code> events ship with the platform palette; a channel or
               process that consumes one resolves to a platform-provided external node instead of a
               <i>missing model</i> error.</li>
+          <li><b>Liquibase changelogs inside an archive are read.</b> A Design export packs
+              <code>liquibase-&lt;key&gt;.data.changelog.xml</code> next to the models, and Atlas only ever
+              read changelogs on disk — so every app that listed its own changelog reported a <i>missing
+              model</i> (six on one project), and the services those changelogs describe had no schema
+              coverage. Archive entries are read like loose files now, and a changelog's key is in the index
+              before references resolve.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

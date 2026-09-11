@@ -341,11 +341,25 @@ object Atlas {
          * `.bar` per app is an ordinary shape — is opened one level down. [size] is -1 when the container
          * does not know it up front (a nested stream); then the cap is checked after reading.
          */
+        // Liquibase changelogs found inside archives: a Design export packs `liquibase-<key>.data.changelog.xml`
+        // next to the models it belongs to. Handed to LiquibaseCoverage together with the loose ones.
+        val archiveChangelogs = ArrayList<Pair<String, String>>()
+
         fun scanEntry(entryName: String, size: Long, label: String, depth: Int, read: () -> ByteArray) {
             val base = entryName.substringAfterLast('/')
             val mt = ModelKinds.modelTypeFor(base)
             val isArchive = com.flowable.atlas.model.ModelPaths.isArchive(base)
             val isJson = base.lowercase().endsWith(".json")
+            val low = base.lowercase()
+            if (mt == null && !isArchive && (low.endsWith(".xml") || low.endsWith(".sql"))) {
+                // a changelog candidate; LiquibaseCoverage keeps only what is one. An oversized resource
+                // is not a model that failed, so it is left alone without a word.
+                if (size in 0..MAX_MODEL_BYTES || size < 0) {
+                    val bytes = read()
+                    if (bytes.size <= MAX_MODEL_BYTES) archiveChangelogs.add(label to String(bytes, Charsets.UTF_8))
+                }
+                return
+            }
             if (mt == null && !isArchive && !isJson) return    // an image, a class file — never read, nothing to say
             // The cap applies to what would be read; a 1 GB test image inside a zip is nobody's business.
             if (size >= 0 && tooLarge(label, size)) return
@@ -413,6 +427,19 @@ object Atlas {
         // Java parsing, reference resolution and REST matching. The returned holder carries the internal
         // structures the graph builder consumes — the full resolved-refs list (with `targetFqn`),
         // `all_java` (fqn → parsed java) and the `bean.method()` map — plus `byKey` above.
+        // Changelogs are models an app lists among its children (`model:liquibase`), so they must be in
+        // the index before references resolve — or every app pointing at its own changelog reports a
+        // missing model. Indexed by the key their file name carries, never in `byKey`: a changelog named
+        // after its service is the expected shape, not a clash.
+        val looseChangelogs = discovered.xmls.mapNotNull { f ->
+            val txt = try { f.readText(Charsets.UTF_8) } catch (e: Exception) { return@mapNotNull null }
+            relOf(f) to txt
+        }
+        val changelogs = looseChangelogs + archiveChangelogs
+        for ((rel, txt) in changelogs) {
+            if (LiquibaseCoverage.isChangelog(txt)) modelIndex.putIfAbsent("liquibase" to LiquibaseCoverage.keyOf(rel), rel)
+        }
+
         val resolvedData = ReferenceResolver.resolve(
             result, ctx, modelIndex, byKey, discovered.javas,
             { f -> relOf(f) }, { kind, path, msg -> diag(kind, path, msg) },
@@ -420,7 +447,7 @@ object Atlas {
 
         // Liquibase schema coverage: enrich data objects + services and build the changelog entries
         // (Python `_enrich_data_objects` / `_schema_coverage` / `_mark_liquibase_authority`).
-        LiquibaseCoverage.apply(result, discovered.xmls, root)
+        LiquibaseCoverage.apply(result, changelogs)
 
         // Column mappings that pair a field with another field's column. Reads the coverage rows above
         // for the table's unmapped columns, so it has to run after it.

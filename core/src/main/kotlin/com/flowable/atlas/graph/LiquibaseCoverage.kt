@@ -19,13 +19,27 @@ import java.io.File
  */
 object LiquibaseCoverage {
 
-    /** Run the whole Liquibase flow, mutating [result] in place. Mirrors the four `extract` calls. */
-    fun apply(result: MutableMap<String, Any?>, xmlFiles: List<File>, root: File) {
-        buildLiquibase(result, xmlFiles, root)
+    /**
+     * Run the whole Liquibase flow, mutating [result] in place. [sources] are `(path, text)` pairs — a
+     * loose file's project-relative path, or an archive entry's `archive.zip!entry` label. A Design export
+     * ships its changelogs inside the app zip, and reading only files on disk left every one of them
+     * invisible: the app's reference to its own changelog came back as a *missing model*.
+     */
+    fun apply(result: MutableMap<String, Any?>, sources: List<Pair<String, String>>) {
+        buildLiquibase(result, sources)
         enrichDataObjects(result)
         schemaCoverage(result)
         markLiquibaseAuthority(result)
     }
+
+    /** The files-on-disk form of [apply]: [xmlFiles] relative to [root]. */
+    fun apply(result: MutableMap<String, Any?>, xmlFiles: List<File>, root: File) = apply(
+        result,
+        xmlFiles.mapNotNull { f ->
+            val txt = try { f.readText(Charsets.UTF_8) } catch (e: Exception) { return@mapNotNull null }
+            (if (root.isDirectory) relpath(root, f) else f.name) to txt
+        },
+    )
 
     // ---------------------------------------------------------------------------
     // Regexes (mirror _LB_* in flowable_atlas.py)
@@ -47,11 +61,14 @@ object LiquibaseCoverage {
     // ---------------------------------------------------------------------------
     // A discovered changelog file (uses reference identity, like Python's id(f)).
     // ---------------------------------------------------------------------------
-    private class LbFile(val file: File, val rel: String, val txt: String) {
+    private class LbFile(val rel: String, val txt: String) {
         val ops: List<Map<String, Any?>> = liquibaseOps(txt)
         val tables: List<String> = TABLE_NAME_RE.findAll(txt).map { it.groupValues[1] }.toSortedSet().toList()
-        val pathStr: String = file.path
-        val baseName: String = file.name
+        /** The path `<include>`/`<includeAll>` references are matched against — inside an archive, the
+         *  entry's path after the `!`. */
+        val pathStr: String = rel.substringAfterLast('!')
+        val baseName: String = pathStr.substringAfterLast('/')
+        val parent: String = pathStr.substringBeforeLast('/', "")
     }
 
     // ---------------------------------------------------------------------------
@@ -159,6 +176,15 @@ object LiquibaseCoverage {
     // _liquibase_key
     // ---------------------------------------------------------------------------
     private val KEY_SUFFIX_RE = Regex("\\.data\\.changelog\\.xml$|\\.changelog\\.xml$|\\.xml$|\\.sql$", RegexOption.IGNORE_CASE)
+
+    /** Whether a `.xml`/`.sql` text is a changelog at all — the same test [buildLiquibase] applies. */
+    fun isChangelog(txt: String): Boolean =
+        txt.contains("databaseChangeLog") || txt.contains("<changeSet") || txt.lowercase().contains("createtable")
+
+    /** The model key a changelog file carries: `liquibase-<key>.data.changelog.xml` → `<key>`. Public so the
+     *  extractor can index changelogs before references resolve — an app lists its changelogs by this key. */
+    fun keyOf(path: String): String = liquibaseKey(path)
+
     private fun liquibaseKey(path: String): String {
         var base = path.substringAfterLast('!').substringAfterLast('/')
         base = base.replaceFirst(Regex("^liquibase-"), "")
@@ -189,7 +215,7 @@ object LiquibaseCoverage {
                         val pdir = clean(lbAttr(a, "path") ?: lbAttr(a, "dir") ?: "")
                         if (pdir.isEmpty()) continue
                         val kids = files.filter { g ->
-                            g !== f && (g.file.parent ?: "").replace('\\', '/').lowercase().endsWith(pdir)
+                            g !== f && g.parent.replace('\\', '/').lowercase().endsWith(pdir)
                         }
                         for (g in nat(kids)) walk(g)
                     } else {                                                 // <include file="x.xml">
@@ -327,13 +353,11 @@ object LiquibaseCoverage {
     // ---------------------------------------------------------------------------
     // extract() changelog-building block -> result["liquibase"]
     // ---------------------------------------------------------------------------
-    private fun buildLiquibase(result: MutableMap<String, Any?>, xmlFiles: List<File>, root: File) {
+    private fun buildLiquibase(result: MutableMap<String, Any?>, sources: List<Pair<String, String>>) {
         val lbFiles = ArrayList<LbFile>()
-        for (path in xmlFiles) {
-            val rel = if (root.isDirectory) relpath(root, path) else path.name
-            val txt = try { path.readText(Charsets.UTF_8) } catch (e: Exception) { continue }
-            if (!txt.contains("databaseChangeLog") && !txt.contains("<changeSet") && !txt.lowercase().contains("createtable")) continue
-            lbFiles.add(LbFile(path, rel, txt))
+        for ((rel, txt) in sources) {
+            if (!isChangelog(txt)) continue
+            lbFiles.add(LbFile(rel, txt))
         }
         if (lbFiles.isEmpty()) return
 
