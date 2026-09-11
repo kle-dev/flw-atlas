@@ -62,7 +62,10 @@ Settings…*; and the Script Playground's language and context selectors with *L
 | **Flowable Expressions** | Bottom stripe (secondary) | Two tabs on one shell — editor and problems · context · result: *Expressions* (Backend / Frontend) and *Scripts*. See [the playgrounds](../#the-playgrounds) |
 
 The generated explorer opens as an editor tab, **Atlas Explorer** (the page, in the embedded browser);
-its toolbar opens the Expression Playground.
+its toolbar opens the Expression Playground. Inside the IDE the page can also write back: when
+you [accept a finding](../../explorer/#accepting-a-finding), **Save to waivers.json** writes it beside the
+report through the IDE's own file system, so it shows up in the Git tool window like any other edit. In
+a plain browser the same button offers the file as a download instead.
 
 ## Inspections
 

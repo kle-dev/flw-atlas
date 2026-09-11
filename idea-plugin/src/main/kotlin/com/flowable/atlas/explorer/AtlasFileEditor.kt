@@ -34,6 +34,9 @@ import com.intellij.ui.EditorNotifications
 import com.intellij.ui.JBColor
 import com.intellij.ui.jcef.JBCefBrowser
 import com.intellij.ui.jcef.JBCefBrowserBase
+import com.flowable.atlas.graph.Waivers
+import com.intellij.openapi.application.WriteAction
+import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.ui.jcef.JBCefJSQuery
 import com.intellij.util.ui.update.UiNotifyConnector
 import org.cef.browser.CefBrowser
@@ -82,6 +85,11 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
     // answers with part i of the prepared report. One query, one response, any size: the channel the
     // 16 KB resource packets never get (see RemoteExplorerPage).
     private val fetchQuery = JBCefJSQuery.create(browser as JBCefBrowserBase)
+
+    // JS→Kotlin channel for "write these accepted findings into the project" — window.__atlasSaveWaivers.
+    // The page can only ever hand a browser a download; here the decision can land where the analysis
+    // already is, in the file the next run reads and the next pull request reviews.
+    private val waiverQuery = JBCefJSQuery.create(browser as JBCefBrowserBase)
     private val remote = RemoteExplorerPage.isRemoteDevHost()
     @Volatile private var remotePage: RemoteExplorerPage.Transfer? = null
 
@@ -104,6 +112,13 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
         Disposer.register(this, copyQuery)
         Disposer.register(this, openQuery)
         Disposer.register(this, fetchQuery)
+        Disposer.register(this, waiverQuery)
+        waiverQuery.addHandler { text ->
+            // Beside the report it came from: that folder is the analysis output, and waivers.json is
+            // the one file in it that is meant to be kept (Atlas writes a .gitignore there saying so).
+            ApplicationManager.getApplication().invokeLater({ saveWaivers(text) }, project.disposed)
+            null
+        }
         fetchQuery.addHandler { index ->
             val page = remotePage
             val i = index.toIntOrNull()
@@ -208,6 +223,7 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
             "window.__atlasCopy = function(text){ ${copyQuery.inject("text")} };" +
                 "window.__atlasOpen = function(file, line){ ${openQuery.inject("file + '|' + (line || '')")} };" +
                 "window.__atlasFetch = function(i, ok, fail){ ${fetchQuery.inject("String(i)", "ok", "fail")} };" +
+                "window.__atlasSaveWaivers = function(text){ ${waiverQuery.inject("text")} };" +
                 "window.dispatchEvent(new Event('atlas-ide-bridge'));",
             browser.cefBrowser.url,
             0,
@@ -215,6 +231,32 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
     }
 
     /** Resolve a report file label to a VirtualFile and open it — at [line] (1-based) when given. */
+    /** Write `waivers.json` next to the open report, and say so — a silent write into someone's
+     *  repository is a write nobody can review. */
+    private fun saveWaivers(text: String) {
+        fun say(title: String, body: String, type: NotificationType) =
+            NotificationGroupManager.getInstance().getNotificationGroup(AtlasNotifications.GROUP_ID)
+                .createNotification(title, body, type).notify(project)
+        // Beside the report it came from: that folder is the analysis output, and waivers.json is the
+        // one file in it meant to be kept — Atlas writes a .gitignore there saying exactly that.
+        val dir = file.parent
+        if (dir == null) {
+            say("Could not save waivers", "The report has no folder to write to.", NotificationType.ERROR)
+            return
+        }
+        try {
+            WriteAction.run<Exception> {
+                val target = dir.findChild(Waivers.FILE_NAME) ?: dir.createChildData(this, Waivers.FILE_NAME)
+                VfsUtil.saveText(target, text)
+            }
+            say("Waivers saved",
+                "Accepted findings written to ${dir.name}/${Waivers.FILE_NAME}. Regenerate the explorer " +
+                    "to see the counts and the CI gate follow.", NotificationType.INFORMATION)
+        } catch (e: Exception) {
+            say("Could not save waivers", e.message ?: e.toString(), NotificationType.ERROR)
+        }
+    }
+
     private fun openInIde(label: String, line: Int?) {
         if (project.isDisposed) return
         val vf = resolveLabel(label)

@@ -32,7 +32,9 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   narrowed by element and subject, so it survives the message rewording; a waived finding stays in the
   report, in a section of its own, and leaves the counts and the gate. A rule that matched nothing,
   expired, or gives no reason is reported on every surface. In the explorer, a node with findings
-  offers to accept them with a reason and hands you the file to save. New flags: `--waivers`,
+  offers to accept them with a reason; **Export** hands you the file, and inside the IDE
+  **Save to waivers.json** writes it beside the report through the IDE's own file system,
+  so it appears in the Git tool window like any other edit. New flags: `--waivers`,
   `--no-waivers`, `--fail-on-stale-waivers`, and `any` as the honest spelling of what `--fail-on
   warning` has always meant.
 - **Three checks about how a process behaves, not whether it resolves.** `nonExclusiveAsync` — an async
