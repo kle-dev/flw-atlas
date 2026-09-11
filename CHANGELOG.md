@@ -31,6 +31,13 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   A name reached through a dot is a property, and a colon that closes a `?` is the ternary's; neither is
   looked up in the catalog now. (A *bare* name before the colon is different: JUEL's own parser reads
   `flag ? name : fmt(y)` as the function `name:fmt`, so that stays the one syntax error it always was.)
+- **A script's `${…}` is not an expression.** The text harvest read every `${…}` in a model file, script
+  bodies included, so a Groovy `"${user?.firstName ?: ''}"` in an action's script came back as an invalid
+  backend expression (`?.` is not JUEL), `flw` and `flwTimeUtils` were listed as beans the action calls,
+  and the script's locals became variables. Script bodies — `<script>`, an action's `scriptInfo.script`,
+  a script operation's `config.script`, a form script button's `script` — have their `${…}` blanked out
+  of the harvest now; the script checker still reads every one of them, and a `{{…}}` in a form script
+  stays the binding it is.
 
 ## 0.25.0
 

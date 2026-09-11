@@ -8,6 +8,7 @@ import com.flowable.atlas.parsing.Discovery
 import com.flowable.atlas.parsing.ModelKinds
 import com.flowable.atlas.parsing.ModelParsers
 import com.flowable.atlas.parsing.ModelSpans
+import com.flowable.atlas.parsing.ScriptMask
 import com.flowable.atlas.parsing.VarHarvest
 import java.io.File
 
@@ -129,8 +130,11 @@ object Atlas {
                 diag("skip", label, "not a JSON document — a .${label.substringAfterLast('.')} file that is no Flowable $mtype model")
                 return
             }
-            val exprs = Constants.EXPR_RE.findAll(raw).map { Constants.htmlUnescape(it.value) }.toCollection(LinkedHashSet())
-            val musts = Constants.MUSTACHE_RE.findAll(raw).map { Constants.htmlUnescape(it.value) }.toCollection(LinkedHashSet())
+            // Script bodies are read by their own parsers; to the text harvest their `${…}` is string
+            // interpolation, not an expression (see ScriptMask). Markers and delegate classes still read `raw`.
+            val harvest = ScriptMask.mask(raw, xml = mtype in XML_MODEL_TYPES)
+            val exprs = Constants.EXPR_RE.findAll(harvest).map { Constants.htmlUnescape(it.value) }.toCollection(LinkedHashSet())
+            val musts = Constants.MUSTACHE_RE.findAll(harvest).map { Constants.htmlUnescape(it.value) }.toCollection(LinkedHashSet())
             ctx.expr.addAll(exprs)
             ctx.mustache.addAll(musts)
             Constants.DELEGATE_CLASS_RE.findAll(raw).forEach { ctx.delegateClasses.add(it.groupValues[1]) }
@@ -179,7 +183,7 @@ object Atlas {
             // several processes (or cases, or decisions): each gets only the text inside its own element,
             // and what sits outside all of them (the definitions header, messages, signals) goes to every
             // one. See ModelSpans for why crediting the whole file to each model was wrong.
-            for ((keys, text) in ModelSpans.split(raw, mtype, mkeys)) {
+            for ((keys, text) in ModelSpans.split(harvest, mtype, mkeys)) {
                 val ks = keys.filterNotNull()
                 if (ks.isEmpty()) continue
                 for (e in Constants.EXPR_RE.findAll(text).map { Constants.htmlUnescape(it.value) }) {

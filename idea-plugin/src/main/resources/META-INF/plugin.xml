@@ -165,6 +165,15 @@
               looked up in the catalog now. (A <i>bare</i> name before the colon is different: JUEL's own
               parser reads <code>flag ? name : fmt(y)</code> as the function <code>name:fmt</code>, so that
               stays the one syntax error it always was.)</li>
+          <li><b>A script's <code>${…}</code> is not an expression.</b> The text harvest read every
+              <code>${…}</code> in a model file, script bodies included, so a Groovy
+              <code>"${user?.firstName ?: ''}"</code> in an action's script came back as an invalid backend
+              expression (<code>?.</code> is not JUEL), <code>flw</code> and <code>flwTimeUtils</code> were
+              listed as beans the action calls, and the script's locals became variables. Script bodies —
+              <code>&lt;script&gt;</code>, an action's <code>scriptInfo.script</code>, a script operation's
+              <code>config.script</code>, a form script button's <code>script</code> — have their
+              <code>${…}</code> blanked out of the harvest now; the script checker still reads every one of
+              them, and a <code>{{…}}</code> in a form script stays the binding it is.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

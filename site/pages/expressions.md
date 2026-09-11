@@ -89,6 +89,13 @@ validated* and why — so "no problems" and "not judged" cannot be confused.
 A backslash in front of the dollar sign, `\${…}`, is the author saying *literal, do not evaluate* — in a
 Groovy string, a Java string, a JSON body. It is not an expression and is not harvested at all.
 
+Neither is a `${…}` inside a **script body** — a script task's `<script>`, a listener's script, an
+action's `scriptInfo.script`, a script operation's `config.script`, a form script button's `script`. A
+Groovy `"${user?.firstName}"` or a JavaScript `` `${total}` `` is the script language's own string
+interpolation; read as JUEL it is a syntax error, its helpers (`flw`, `flwTimeUtils`) look like beans the
+model calls, and its locals look like variables. Scripts are read by the script checker below instead. A
+`{{…}}` in a form script button's script stays a binding: the form engine evaluates it before the script runs.
+
 ## Scripts
 
 Script bodies get the same treatment, per script language and per context. Atlas checks:
