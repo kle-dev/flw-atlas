@@ -1785,39 +1785,67 @@ function nodeFindingsHtml(n){
   });
   return section('findings','Findings on this model', body, {count:open.length, hint:acc?acc+' accepted':'', attrs:' id="findings"'});
 }
-/** The waiver file's rules, its notes, and everything wrong with it — the Checks page's last section.
- *  Rendered from `DATA.waivers`, which :core fills in only when a waivers.json was actually read, so a
- *  project without one shows nothing here rather than an empty promise. */
+/** What the project decided to live with, rule by rule — the Checks page's last section. Rendered from
+ *  the rules as they stand now (the file's, minus what was restored here, plus what was accepted here),
+ *  so a decision taken a moment ago is already in the table and one taken back is already gone. A
+ *  rule's troubles — matched nothing, expired, no reason, a model that is gone — sit on its own row:
+ *  the file's health is its rows' health, not a list beside them. */
+const ruleCovers=(r,f)=>r.check===f.check && r.node===(f.node||f.file) &&
+  (!r.element||r.element===f.element) && (!r.subject||r.subject===f.subject);
 function waivedBlockHtml(){
-  const W=DATA.waivers; if(!W) return '';
-  const rules=W.rules||[], notes=(W.notes||[]).length;
+  const W=DATA.waivers||{}, rules=waiverRules();
   let out='';
   if(rules.length){
-    out+=findingBlock('chk-waived','Deliberately accepted', rules.length,
-      tbl([{k:'check',label:'Check',w:'minmax(10ch,1fr)',cls:'tags'},
-           {k:'what',label:'On',w:'minmax(14ch,1.6fr)',mono:true},
-           {k:'why',label:'Accepted because',w:'minmax(20ch,3fr)',cls:'wrap'},
-           {k:'n',label:'Matched',w:'minmax(6ch,.5fr)',opt:true}],
-        rules.map(r=>{
-          const where=[r.node, r.element, r.subject].filter(Boolean).join(' \u00b7 ');
-          const until=r.until?' <span class="muted">\u00b7 until '+esc(r.until)+'</span>':'';
-          return {hay:elHay(r.check, where, r.reason),
-            cells:{check:tag(r.check),
-                   what:byId.get(r.node)?nodeChip(r.node):esc(where),
-                   why:(r.reason?esc(r.reason):'<span class="sev sev-warn">no reason given</span>')+until,
-                   n:String(r.matched==null?'':r.matched)}}; })),
-      null);
+    const rows=rules.map((r,i)=>{
+      const hits=FINDS.filter(f=>ruleCovers(r,f)).length, expired=waiverExpired(r);
+      const known=byId.has(r.node)||FIND_BY_NODE.has(r.node);
+      const states=[];
+      if(!r.saved) states.push('<span class="pill pill-info">unsaved</span>');
+      if(expired) states.push('<span class="pill pill-bad">expired</span>');
+      else if(!hits) states.push('<span class="pill pill-warn">matched nothing</span>');
+      if(!r.reason) states.push('<span class="pill pill-warn">no reason</span>');
+      return {hay:elHay(r.check, r.node, r.element, r.subject, r.reason, r.by), attrs:' data-wi="'+i+'"',
+        cls:(expired||!hits||!r.reason)?'cov-warn':'',
+        cells:{check:tag(r.check),
+          model:(byId.get(r.node)?nodeChip(r.node):'<span class="mono">'+esc(r.node)+'</span>')+
+                (known?'':' <span class="pill pill-bad">missing</span>'),
+          scope:[r.element, r.subject].filter(Boolean).map(esc).join(' · ')||'<span class="muted">whole model</span>',
+          why:r.reason?esc(r.reason):'<i class="muted">no reason given</i>',
+          who:[r.by?esc(r.by):'', r.at?esc(r.at):'', r.until?'until '+esc(r.until):''].filter(Boolean).join(' · '),
+          state:states.join(' ')+(hits?'<span class="muted"> '+hits+' finding'+(hits>1?'s':'')+'</span>':''),
+          act:'<button type="button" class="dgbtn wv-rule-restore" data-wi="'+i+'">restore</button>'}};
+    });
+    out+=section('chk-waived','Deliberately accepted',
+      '<p class="ddesc">One row per rule in waivers.json — what it covers, why, who decided, and how many findings it matched '+
+      'this run. A rule that matches nothing, has run out, or never said why is marked on its row.</p>'+
+      tbl([{k:'check',label:'Check',w:'minmax(10ch,.9fr)',cls:'tags'},
+           {k:'model',label:'Model',w:'minmax(12ch,1.4fr)'},
+           {k:'scope',label:'Element · subject',w:'minmax(10ch,1fr)',mono:true,opt:true},
+           {k:'why',label:'Accepted because',w:'minmax(20ch,2.6fr)',cls:'wrap'},
+           {k:'who',label:'By · when',w:'minmax(10ch,1fr)',opt:true},
+           {k:'state',label:'',w:'minmax(9ch,.9fr)',cls:'tags'},
+           {k:'act',label:'',w:'minmax(7ch,.5fr)',cls:'tags wv-cell'}], rows, {filter:false}),
+      {count:rules.length, attrs:' id="chk-waived"'});
   }
-  const notices=(W.stale||[]).concat(W.unexplained||[]).concat(W.problems||[]);
-  if(notices.length){
-    out+=findingBlock('chk-waiver-health','Waiver file needs attention', notices.length,
-      '<ul class="varwhy">'+notices.map(n=>'<li>'+esc(n)+'</li>').join('')+'</ul>', null);
+  // The one thing left that is about the file rather than a rule: it could not be fully read.
+  const problems=W.problems||[];
+  if(problems.length){
+    out+=section('chk-waiver-health','Waiver file could not be fully read',
+      '<ul class="varwhy">'+problems.map(n=>'<li>'+esc(n)+'</li>').join('')+'</ul>', {count:problems.length, attrs:' id="chk-waiver-health"'});
   }
-  if(notes){
+  const notes=W.notes||[];
+  if(notes.length){
+    const imp=n=>'<span class="pill '+(n.importance==='high'?'pill-bad':n.importance==='low'?'':'pill-info')+'">'+esc(n.importance||'normal')+'</span>';
     out+=section('chk-waiver-notes','Review notes',
-      '<p class="ddesc">'+notes+' note'+(notes>1?'s':'')+' in waivers.json \u2014 remarks that change no '+
-      'count, kept with the project so the next reader finds them.</p>',
-      {count:notes, attrs:' id="chk-waiver-notes"'});
+      tbl([{k:'model',label:'Model',w:'minmax(12ch,1.4fr)'},{k:'imp',label:'',w:'minmax(7ch,.6fr)',cls:'tags'},
+           {k:'text',label:'Note',w:'minmax(24ch,3fr)',cls:'wrap'},
+           {k:'scope',label:'Check · element · subject',w:'minmax(10ch,1fr)',mono:true,opt:true},
+           {k:'who',label:'By · when',w:'minmax(10ch,1fr)',opt:true}],
+        notes.map(n=>({hay:elHay(n.node, n.text, n.check, n.by), cells:{
+          model:byId.get(n.node)?nodeChip(n.node):'<span class="mono">'+esc(n.node)+'</span>', imp:imp(n), text:esc(n.text),
+          scope:[n.check, n.element, n.subject].filter(Boolean).map(esc).join(' · '),
+          who:[n.by, n.at].filter(Boolean).map(esc).join(' · ')}})), {filter:false}),
+      {count:notes.length, attrs:' id="chk-waiver-notes"', hint:'remarks that change no count, kept with the project so the next reader finds them'});
   }
   return out;
 }
@@ -1939,6 +1967,8 @@ function renderChecks(){
   v.innerHTML=h;
   wireReport(v);
   wireAccept(v);
+  v.querySelectorAll('.wv-rule-restore').forEach(b=>b.onclick=e=>{ e.preventDefault(); e.stopPropagation();
+    const r=waiverRules()[+b.dataset.wi]; if(r) waiverDrop(r); });
   const sa=v.querySelector('#chk-showacc');
   if(sa) sa.onclick=()=>{ const on=sa.getAttribute('aria-pressed')!=='true';
     sa.setAttribute('aria-pressed', on?'true':'false'); sa.classList.toggle('on', on);

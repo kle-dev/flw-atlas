@@ -361,9 +361,15 @@ After a regeneration the diff finds itself in the file and empties.
 
 ### Deliberately accepted
 
-When the project carries a [`waivers.json`](../checks/#accepting-a-finding), the Checks page ends with
-what that file says: **Deliberately accepted** — one row per rule, with the reason, what it covers and
-how many findings it matched this run — and, when there is something to fix about the file itself,
-**Waiver file needs attention**: a rule that matched nothing, one that has expired, one that never said
-why. The accepted findings get their own section rather than a strike-through in the lists above,
+The Checks page ends with what the project decided to live with, one row per rule — the file's rules
+minus what you restored on this page, plus what you accepted here, so a decision taken a moment ago is
+already in the table and one taken back is already gone. Each row names the check, the model, the
+element or subject the rule is narrowed to (or *whole model*), the reason, who decided and when, how
+long it holds, and how many findings it matched this run, with **restore** to take it back. A rule's
+troubles sit on its row: **matched nothing** (the model was renamed, or the problem was fixed),
+**expired**, **no reason**, **missing** (the model is gone), and **unsaved** for a decision no file has
+yet. The accepted findings get this table of their own rather than a strike-through in the blocks above,
 because "what is wrong" and "what did we agree to carry, and why" are two different questions.
+
+A **Review notes** table follows when the file carries notes — remarks that change no count, with their
+importance, scope and author — and a file Atlas could not fully read says so above both.

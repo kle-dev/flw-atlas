@@ -828,6 +828,9 @@ const probe = `<script>
     ok('and offers to write the file', !!bar.querySelector('#wv-save'));
     const text=waiverFileText();
     ok('the file carries the rule, its reason and the day', /known, accepted by the team/.test(text) && /"version": 1/.test(text) && /"at": "[0-9]{4}-[0-9]{2}-[0-9]{2}"/.test(text));
+    const wrow=cv.querySelector('#chk-waived .tr[data-wi]');
+    ok('the decision is already in the Deliberately accepted table, marked unsaved', !!wrow && /unsaved/.test(wrow.textContent||'') && !!wrow.querySelector('.wv-rule-restore'));
+    ok('the table names what the rule covers', !!wrow && (/whole model/.test(wrow.textContent||'') || !!f.element || !!f.subject));
     ok('the header count moved with the decision', parseInt((cv.querySelector('details.sect[data-sect="chk-'+f.check+'"] .scount')||{}).textContent||'0',10)===Math.max(0,(DATA.checks[f.check]||0)-1));
     location.hash='/tree';
   });
