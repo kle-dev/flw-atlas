@@ -290,6 +290,8 @@ the category you are in, with a button to widen the search.
 | `Alt+1`…`Alt+9` | browse | Activate that detail tab |
 | `Alt+[` / `Alt+]` | browse | Previous / next tab |
 | `Alt+W` | browse | Close the active tab |
+| `c` | browse, a node selected | Copy the node's key |
+| `o` | browse, a node selected, inside the IDE | Open the node's file in the IDE |
 | `+` `-` `0` | diagram (full screen) | Zoom in, out, fit |
 | `←` `→` / `Home` | list splitter (focused) | Nudge the list width / reset it |
 | `Tab` / `⇧Tab` | diagram | Move between elements |

@@ -4152,7 +4152,8 @@ function renderDetail(){
       '<div class="eh">Pick an item from the list — click any relationship to travel the graph.<br>'+
       'Search everything with <b>/</b> or <b>'+MODK+'K</b> · '+
       'mark several with <b>⇧↑↓</b> or <b>'+MODK+'-click</b> and press <b>Enter</b> to open them as tabs · '+
-      'switch with <b>'+alt+'1…9</b> or <b>'+alt+'←→</b> · close with <b>'+alt+'W</b>.</div></div>';
+      'switch with <b>'+alt+'1…9</b> or <b>'+alt+'←→</b> · close with <b>'+alt+'W</b> · '+
+      'on a node, <b>c</b> copies its key'+(window.__atlasOpen?' and <b>o</b> opens its file in the IDE':'')+'.</div></div>';
     return;
   }
   const n=byId.get(state.sel);
@@ -5169,8 +5170,9 @@ function restoreTabScroll(){
 function renderTabs(){
   const bar=document.getElementById('dtabs');
   if(!bar) return;
-  // One tab is no choice — showing a strip for it would be chrome that never earns its space.
-  if(state.tabs.length<2){ bar.hidden=true; bar.innerHTML=''; return; }
+  // From the first tab, not the second: a strip that only appeared once two tabs existed was how a
+  // reader who opened one node after another never learned that tabs — and Alt+1…9 — existed.
+  if(!state.tabs.length){ bar.hidden=true; bar.innerHTML=''; return; }
   bar.hidden=false;
   // "close others" is a plain button, so it lives OUTSIDE the tablist: a role=tablist must contain
   // nothing but tabs, and the scroll container is the tablist itself.
@@ -6122,15 +6124,14 @@ const PAL_FACET_HELP=[
   {k:'file',   t:'file:',  re:'file',                 gloss:'path',        hint:'Source file path'},
   {k:'section',t:'in:',    re:'in',                   gloss:'section',     hint:'Result section — in:Models, in:Code'},
 ];
+let palSynOpen=false;   // the grammar row under a result set, opened by its chip
 function palRenderFacets(counts, total, typeCounts, parsed){
   const bar=document.getElementById('palfacets');
   if(!bar) return;
   const pending=parsed&&parsed.pending?PAL_FACET_HELP.find(f=>f.k===parsed.pending):null;
-  if(!counts){
-    // No result set means no count row — but an empty palette is exactly when the typed filters are
-    // worth teaching, and this bar is where their live chips will appear once one is used. A chip
-    // inserts its prefix; a facet typed through the colon (`label:`) highlights its chip and says
-    // what it is waiting for, instead of degrading into a search for the word "label".
+  // The typed filters — `label:`, `key:`, `type:`, `in:` — as chips that insert their prefix; a facet
+  // typed through the colon highlights its chip and says what it is waiting for.
+  const synRow=()=>{
     let s='<div class="pal-frow pal-syn">'+
       (pending?'<span class="pal-pend">'+esc(pending.t)+' now type its value — quote a multi-word one</span>'
               :'<span class="pal-in">narrow</span>');
@@ -6139,7 +6140,12 @@ function palRenderFacets(counts, total, typeCounts, parsed){
          esc(f.t)+'<span class="pchipn">'+esc(f.gloss)+'</span></button>';
     });
     if(!pending) s+='<span class="pal-synq" title="Quotes match contiguously — alone as a phrase, after a facet as its value">"…" exact</span>';
-    bar.hidden=false; bar.innerHTML=s+'</div>';
+    return s+'</div>';
+  };
+  if(!counts){
+    // No result set means no count row — but an empty palette is exactly when the typed filters are
+    // worth teaching, and this bar is where their live chips will appear once one is used.
+    bar.hidden=false; bar.innerHTML=synRow();
     palWireSyntax(bar);
     return;
   }
@@ -6159,6 +6165,10 @@ function palRenderFacets(counts, total, typeCounts, parsed){
              ' title="Remove this filter from the query">'+esc(f.t)+' '+esc(v)+'<span class="pchipn">×</span></button>';
   });
   if(pending) h+='<span class="pal-pend">'+esc(pending.t)+' now type its value</span>';
+  // The grammar used to vanish the moment a query matched anything — a reader who always gets some
+  // result never learned it existed. One chip keeps it a click away; the row it opens is the same one.
+  h+='<button class="pchip pal-more" type="button" data-syn-toggle aria-expanded="'+(palSynOpen?'true':'false')+
+     '" title="The typed filters: label:, key:, type:, in:…">narrow '+(palSynOpen?'▴':'▾')+'</button>';
   if(secs.length>1){
     h+='<button class="pchip'+(palFacet?'':' on')+'" type="button" data-facet=""'+
        ' aria-pressed="'+(!palFacet)+'">All</button>';
@@ -6182,7 +6192,11 @@ function palRenderFacets(counts, total, typeCounts, parsed){
     });
     h+='</div>';
   }
+  if(palSynOpen) h+=synRow();
   bar.innerHTML=h;
+  const tog=bar.querySelector('[data-syn-toggle]');
+  if(tog) tog.onclick=()=>{ palSynOpen=!palSynOpen; palRender(); palq.focus(); };
+  if(palSynOpen) palWireSyntax(bar);
   const reset=()=>{ palShown=PAL_PAGE; palAuto=true; palMarksClear(); _palNote=''; palRender(); palq.focus(); };
   bar.querySelectorAll('[data-facet]').forEach(b=>b.onclick=()=>{
     palFacet=b.dataset.facet||''; palType='';        // a new section invalidates the category below it
@@ -6458,6 +6472,13 @@ document.addEventListener('keydown',e=>{
     e.preventDefault(); openPalette();                     // guarded: '/' typed in a filter stays there
   } else if(e.key==='Escape' && !pal.hidden){
     closePalette();
+  } else if((e.key==='c'||e.key==='o') && !e.metaKey && !e.ctrlKey && !e.altKey && pal.hidden && state.view==='browse' && state.sel
+            && (!dgmodal || dgmodal.hidden) && !e.target.closest('input,textarea,select,[contenteditable]')){
+    // The two things a reader does after finding a node — copy its key, open its file — had no key of
+    // their own while everything around them (⌘K, /, Alt+n) taught that this page is keyboard-driven.
+    const n=byId.get(state.sel); if(!n) return;
+    if(e.key==='c'){ e.preventDefault(); atlasCopy(n.key, ()=>{}); }
+    else if(n.file && window.__atlasOpen){ e.preventDefault(); atlasOpen(n.file); }
   } else if(e.altKey && !e.metaKey && pal.hidden && state.view==='browse'
             && (!dgmodal || dgmodal.hidden)
             && !e.target.closest('input,textarea,select,[contenteditable]')){

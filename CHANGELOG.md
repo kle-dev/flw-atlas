@@ -146,6 +146,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
 - **A smaller page.** Every explorer shipped the run's `diagnostics` and the custom-function catalog in
   its data island, and nothing on the page read either (the checks come as findings, the functions as
   nodes) — on a project with parse problems that was kilobytes of dead weight per page.
+- **The search grammar stays a click away, tabs show from the first, and two keys for the two things
+  you do next.** The `label:` / `key:` / `type:` / `in:` chips appeared only while the query matched
+  nothing, so a reader who always got some result never saw them — a *narrow ▾* chip keeps the row
+  reachable under any result set. The tab strip appeared only from the second tab, which is how the
+  tabs and their Alt shortcuts stayed undiscovered; it shows from the first. And on a selected node,
+  `c` copies its key and, inside the IDE, `o` opens its file.
 
 ## 0.25.0
 

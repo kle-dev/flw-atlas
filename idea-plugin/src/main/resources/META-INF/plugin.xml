@@ -309,6 +309,13 @@
               custom-function catalog in its data island, and nothing on the page read either (the checks
               come as findings, the functions as nodes) — on a project with parse problems that was
               kilobytes of dead weight per page.</li>
+          <li><b>The search grammar stays a click away, tabs show from the first, and two keys for the two
+              things you do next.</b> The <code>label:</code> / <code>key:</code> / <code>type:</code> /
+              <code>in:</code> chips appeared only while the query matched nothing, so a reader who always
+              got some result never saw them — a <i>narrow ▾</i> chip keeps the row reachable under any
+              result set. The tab strip appeared only from the second tab, which is how the tabs and their
+              Alt shortcuts stayed undiscovered; it shows from the first. And on a selected node,
+              <code>c</code> copies its key and, inside the IDE, <code>o</code> opens its file.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>
@@ -460,102 +467,6 @@
               and keep it in the schema report's gaps-only view instead of collapsing the service into
               <i>Fully mapped</i>. The <i>Checks</i> page spells out both halves of every crossed
               pairing.</li>
-        </ul>
-        <h3>0.23.0</h3>
-        <ul>
-          <li><b>Every icon means one thing.</b> The plugin drew the Hub's glyph for the Hub, for "a model"
-              in Search Everywhere and Go to Symbol, and for three gutter markers that meant three different
-              relationships. Each has an icon of its own now: a model key carries the icon and colour of its
-              type — the same glyph its explorer page shows — in Search Everywhere, Go to Symbol and
-              completion; a Java symbol referenced from models, a bot class, a REST handler and a key with a
-              diagram wear four distinct marks at gutter size; the explorer, the Hub and the playground have
-              their own tool-window and menu icons, light and dark.</li>
-          <li><b>A model file looks like what it is.</b> <code>.bpmn</code>, <code>.form</code>,
-              <code>.app</code> and every other model extension carried the stock XML or JSON icon, so a
-              folder of models read as a folder of config. Each shows its type's icon now — the explorer's
-              glyph in the explorer's colour — in the Project view, the editor tabs and every file list, and
-              a <code>.bar</code> shows an archive. The icon is decided from the name alone, so nothing
-              waits on it.</li>
-          <li><b>Regenerate has one name.</b> Regenerating the explorer was offered in four places under two
-              labels. It is a registered action now — <i>Generate → Regenerate Atlas Explorer</i>, reachable
-              from Find Action — and the Hub, the explorer tab's banner and toolbar and the balloon after a
-              Design pull all say exactly that.</li>
-          <li><b>The Atlas Hub is a status header over three task blocks.</b> It was five form-like sections
-              whose height swung with their state, links in two casings, the same action under two names and
-              two Refresh buttons sharing one icon. It opens now with which Flowable project Atlas is about,
-              how many models it knows and how long ago it looked, and — only when something needs a hand —
-              one attention line naming the one thing to do: a removed environment, an unchosen project,
-              archives that could not be read, a stale explorer. Below it, three blocks that keep their
-              shape whatever their state: <i>Explorer</i> (the generated pages, name and age, Generate and
-              Open), <i>Design Pull</i> (environment, workspace, apps, <i>Pull from DEV1</i> — always the
-              same four rows), <i>Playground</i> (its runtime environment and Open). Every button takes its
-              text from the action it runs, so the menu and the Hub cannot disagree; the maintenance actions
-              moved to a ⋮ menu; Refresh is one button that also re-reads the Flowable Design lists.</li>
-          <li><b>A gutter mark says which relationship it is, and its popup says which model.</b> Three
-              markers shared one glyph and their popups listed raw file paths, which in a project that keeps
-              its models in archives were identical up to the last segment. A referenced Java symbol, a bot
-              class, a REST handler and a key with a diagram wear four marks now; the tooltip says how many
-              actions use the bot, which verbs and paths the models call, and which model's diagram opens;
-              and when several models are behind a mark, the chooser shows each with its type's icon, its
-              key and its file — type to filter by key or name.</li>
-          <li><b>Every inspection explains itself, and every finding of a kind has the same fix.</b> Four of
-              the six Flowable inspections showed an empty description panel in Settings; all six have one
-              now. An unknown key in a model's extension-element text and an unknown key behind a constant
-              were flagged like their attribute and literal siblings but offered no fix — the first gets
-              <i>Replace with '…'</i>, the second <i>Change constant value to '…'</i>, which edits the
-              constants class and says so in its preview. Quick fixes have stable family names, so <i>Fix
-              all</i> and the Alt+Enter list group them by what they do rather than by the value they
-              insert, and the Liquibase finding names the service model whose columns it compared
-              against.</li>
-          <li><b>Completion items carry icons all the way down.</b> Expression and script completion were
-              fully iconed while model keys, operations, value fields, vocabularies and Liquibase columns
-              had none — two aesthetics in one popup, where the eye could not tell a process key from a
-              variable. A key wears its type's icon; an operation the method icon, its input the parameter
-              icon; messages, signals, variables and outcomes the platform's constant, variable and property
-              icons; columns and tables the database icons; and a scraped bean in an expression the same
-              bean icon the script playground uses.</li>
-          <li><b>Search Everywhere highlights what you typed, and the hover is a card.</b> In the
-              <i>Flowable Model</i> tab a mid-key hit — <code>0061</code> finding <code>DEMO-DO-0061</code>
-              — matched but rendered unhighlighted, so the row you typed for looked like the one that merely
-              happened to be there; it is highlighted now, and the row's tooltip carries the type, the name
-              and the archive path the columns leave out. Ctrl-Q on a key shows the platform's documentation
-              card — key and type, name, backing table, project-relative file — instead of a hand-built
-              stack of line breaks with an absolute path.</li>
-          <li><b>Inline hints have one switch — the IDE's.</b> The two Atlas hints could be turned off on
-              the platform's Inlay Hints page and, separately, on the Atlas settings page; turning one off
-              left the other on. Settings → Editor → Inlay Hints → Values is the only switch now.</li>
-          <li><b>The settings tree says what it has.</b> The root page names its children correctly (a
-              <i>Connections</i> page it pointed at had been <i>Environments</i> for a while) and puts what
-              the index reads first. The one-row <i>Flowable Design</i> page is a group on <i>Generation</i>
-              — where Atlas writes into the project is one question — and the three generator pages drop the
-              heading that repeated their title. A Liquibase or DTO generation's balloon opens the settings
-              page it was about, not the parent.</li>
-          <li><b>The two Generate dialogs share one shape.</b> <i>Generate Liquibase Changelogs</i> and
-              <i>Generate Data-Object DTOs</i> were near-twins that had grown apart in small ways — a
-              hand-laid header, radio labels disagreeing on plurals, unscaled table sizes. Both stand on one
-              base now: source radios with <i>Select All</i> and <i>Clear</i> on the right, the preview
-              table with the include box first and <i>new</i> / <i>overwrite</i> last, the generator's own
-              fields below, <i>Generate (N)</i> counting what it is about to write, and one validation
-              order. Every dialog title is Title Case (<i>Sign In to Flowable App</i>, <i>Paste Session from
-              Browser</i>).</li>
-          <li><b>The playground is one shell: the code, what it runs against, what came out.</b> The
-              Expressions tab used to flip its splitter's orientation on every resize and swap two whole
-              cards on the dialect toggle — the panel rearranged itself under the cursor. It is a fixed
-              two-pane layout now, remembered, with <i>Stack Panels</i> overriding what the dock suggested;
-              the dialect changes only the editor's language and the context's controls. The context has one
-              summary line that is always there — <i>QA (project) · Case instance CAS-4711</i>, <i>payload,
-              14 lines, at orders[1].items[0]</i> — and folds its controls away once they are set. One
-              result pane serves both dialects and says <i>Evaluating against QA…</i> while it waits.
-              <i>Evaluate Against App</i> has Ctrl+Enter. Findings are painted with the editor colour
-              scheme's error and warning attributes in the editor's own font — the field used to render in
-              the Swing label font, which is why the squiggles were hand-painted in four hex colours. The
-              Scripts tab stands on the same shell: what the context provides beside what the script
-              touches, in theme-derived chip tints.</li>
-          <li><b>The explorer opens the playground instead of embedding a second one.</b> Every
-              <code>*.explorer.html</code> used to carry a <i>Flowable Expressions</i> editor tab holding a
-              complete second playground — its own alarms, its own listeners, last writer wins on the saved
-              state. The explorer tab's toolbar opens the tool window instead. Alt-Enter on an expression in
-              a BPMN or CMMN model now also presets the instance kind — process or case.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>
