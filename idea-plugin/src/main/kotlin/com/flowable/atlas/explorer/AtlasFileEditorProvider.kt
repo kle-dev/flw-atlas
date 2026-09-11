@@ -19,6 +19,8 @@ class AtlasFileEditorProvider : FileEditorProvider, DumbAware {
 
     override fun accept(project: Project, file: VirtualFile): Boolean =
         !file.isDirectory &&
+            // a report inside a .zip has no path to regenerate into or open in a browser (`toNioPath()` throws)
+            file.isInLocalFileSystem &&
             file.name.endsWith(".explorer.html", ignoreCase = true) &&
             JBCefApp.isSupported()
 
