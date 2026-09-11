@@ -127,6 +127,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
 - **Hiding uncertain links hides them everywhere.** The ≈ toggle repainted the detail panel and nothing
   else: the reference tree kept its shape and the overview kept counting suspect edges in its hotspots
   and reference counts until the next navigation. Every view follows the toggle now.
+- **The Checks page keeps its place and its numbers straight.** Its filter counted accepted rows and the
+  rule table against a chip that counted open findings ("12 of 340" beside "42 open"), and discarding a
+  draft or restoring a rule scrolled to the top. The health list — here and on the overview — is grouped by the catalog's tiers
+  (*Broken*, *Runtime behaviour*, *Unfinished*, *Unused & unproven*) in the order the blocks appear,
+  so its first row jumps to the first block rather than the last.
 
 ## 0.25.0
 

@@ -305,6 +305,7 @@
   .hrow{display:grid;grid-template-columns:3px 2.5ch 6ch minmax(0,auto) minmax(0,1fr);align-items:center;gap:var(--space-25);
     padding:var(--space-15) var(--space-3) var(--space-15) 0;border-bottom:1px solid var(--line);font-size:var(--text-md);min-height:32px}
   .hlist>.hrow:last-child,.hclean .hrow:last-child{border-bottom:none}
+  .htier{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.04em;color:var(--ink-faint);padding:var(--space-2) var(--space-3) var(--space-1);border-bottom:1px solid var(--line)}
   .hrow .hbar{align-self:stretch;background:var(--line)}
   .hrow.tone-bad .hbar{background:var(--bad-bar)}
   .hrow.tone-warn .hbar{background:var(--warn-bar)}

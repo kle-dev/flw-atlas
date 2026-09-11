@@ -1313,9 +1313,13 @@ function healthRows(keys){
     let sub=n?c.what:c.clean;
     if(!n&&ex&&ex[0]) sub+=(sub?' — ':'')+ex[0]+' '+ex[1]+(ex[0]>1?'s':'')+' checked';
     if(w) sub+=(sub?' · ':'')+w+' accepted';
-    return {k:c.id, label:c.title, n, w, sev, tone, sub, jump:'chk-'+c.id};
-  }).sort((a,b)=>TONE_RANK[a.tone]-TONE_RANK[b.tone] || b.n-a.n || a.label.localeCompare(b.label));
+    return {k:c.id, label:c.title, n, w, sev, tone, sub, tier:c.tier||'', jump:'chk-'+c.id};
+  // The catalog's tiers are the reading order every surface uses; sorting by tone alone put the first
+  // health row on the last block of the Checks page.
+  }).sort((a,b)=>(TIER_RANK[a.tier]??9)-(TIER_RANK[b.tier]??9) || TONE_RANK[a.tone]-TONE_RANK[b.tone] || b.n-a.n || a.label.localeCompare(b.label));
 }
+const TIER_RANK={broken:0, runtime:1, unfinished:2, noise:3};
+const TIER_LABEL={broken:'Broken', runtime:'Runtime behaviour', unfinished:'Unfinished', noise:'Unused & unproven'};
 function healthListHtml(keys){
   const rows=healthRows(keys);
   if(!rows.length) return '';
@@ -1326,7 +1330,8 @@ function healthListHtml(keys){
     '<span class="hsev">'+esc(r.sev)+'</span>'+
     '<span class="hl">'+esc(r.label)+'</span><span class="hs">'+esc(r.sub)+'</span></div>';
   const open=rows.filter(r=>r.n>0), clean=rows.filter(r=>!r.n);
-  let h='<div class="hlist">'+open.map(row).join('');
+  let h='<div class="hlist">', lastTier=null;
+  open.forEach(r=>{ if(r.tier!==lastTier && TIER_LABEL[r.tier]){ h+='<div class="htier">'+esc(TIER_LABEL[r.tier])+'</div>'; lastTier=r.tier; } h+=row(r); });
   if(!open.length) h+='<div class="hrow tone-ok hall"><span class="hbar"></span><span class="hn">'+uiIcon('check')+'</span><span class="hsev"></span>'+
     '<span class="hl">All '+clean.length+' checks clean</span><span class="hs">'+(clean.some(r=>r.w)?'nothing open — what was accepted is listed below':'nothing flagged in this report')+'</span></div>';
   if(clean.length) h+='<details class="hclean"><summary>'+clean.length+' check'+(clean.length>1?'s':'')+' with nothing open</summary>'+
@@ -1693,7 +1698,12 @@ function waiverReconcile(){
  *  control the reader was on gets the focus back. */
 let _wvFocus=null;
 function waiverChanged(){
+  // A decision re-renders the page; without a row to return to, come back to where the reader was —
+  // discarding a draft or restoring a rule used to land at the top of a 300-row page.
+  const view=document.querySelector('.view:not([hidden])');
+  const top=view?view.scrollTop:0, winTop=window.scrollY;
   findingsChanged(); renderSidebar(); route(); renderWaiverBar();
+  if(_wvFocus==null){ if(view) view.scrollTop=top; window.scrollTo(0, winTop); }
   if(_wvFocus!=null){
     const el=document.querySelector('.view:not([hidden]) [data-fi="'+_wvFocus+'"] .wv-restore, .view:not([hidden]) [data-fi="'+_wvFocus+'"] .wv-acc');
     if(el) el.focus();
@@ -2031,7 +2041,7 @@ function renderChecks(){
   // blocks above: "what is wrong" and "what did we agree to carry, and why" are two different questions,
   // and the second one is worth nothing without its reasons.
   b+=waivedBlockHtml();
-  _sectReg=null;
+  _sectReg=null;   // the health list above is this page's navigator; a second strip repeated it (0.25.0)
   let h='<div class="dash" data-fscope>';
   h+=pageHeader({icon:'checks', color:color('checks'), title:'Checks', sub:C.openN
        ? C.openN+' finding'+(C.openN>1?'s':'')+' worth a look — none of them is automatically a bug, each one is a question Atlas cannot answer on its own'+
@@ -2874,6 +2884,9 @@ function wireSectionFilter(root){
     const input=bar.querySelector('.pf'), chips=[...bar.querySelectorAll('.pchip[data-fv]')], count=bar.querySelector('.pcount');
     const all=[...scope.querySelectorAll('[data-hay]')].filter(el=>!el.closest('.fbar'));
     const leaves=all.filter(el=>!el.querySelector('[data-hay]'));
+    // The count answers the chips: accepted rows and the rule/notes tables are filtered too, but "12 of
+    // 340" against a chip saying 42 open contradicted itself.
+    const counted=leaves.filter(el=>!el.closest('details.chk-acc, #chk-waived, #chk-notes'));
     const containers=[...scope.querySelectorAll('details.card, details.tr, details.sect, details.chk-acc, .fgroup')].filter(c=>c.querySelector('[data-hay]'));
     const apply=()=>{
       const q=(input.value||'').trim().toLowerCase();
@@ -2883,13 +2896,13 @@ function wireSectionFilter(root){
       leaves.forEach(row=>{
         const okC=(!fk||fv==='all'||row.dataset[fk]===fv);
         const okQ=!q||(row.dataset.hay||row.textContent||'').toLowerCase().indexOf(q)>=0;
-        const ok=okC&&okQ; row.hidden=!ok; if(ok) shown++;
+        const ok=okC&&okQ; row.hidden=!ok; if(ok && counted.indexOf(row)>=0) shown++;
       });
       containers.forEach(c=>{
         const any=[...c.querySelectorAll('[data-hay]')].some(r=>!r.hidden&&!r.querySelector('[data-hay]'));
         c.hidden=!any; if(any&&(q||fv!=='all')) c.open=true;
       });
-      if(count) count.textContent=(q||fv!=='all')?shown+' of '+leaves.length:'';
+      if(count) count.textContent=(q||fv!=='all')?shown+' of '+counted.length:'';
     };
     input.addEventListener('input', debounce(apply,120));
     chips.forEach(c=>c.onclick=()=>{ chips.forEach(x=>x.classList.toggle('on', x===c)); apply(); });
