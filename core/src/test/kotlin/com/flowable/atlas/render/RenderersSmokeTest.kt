@@ -57,6 +57,11 @@ class RenderersSmokeTest {
         assertTrue("expected the __atlasCopy IDE bridge hook from explorer.js", html.contains("__atlasCopy"))
         // The other half of the IDE bridge: a file path / file:line in the page opens the source.
         assertTrue("expected the __atlasOpen IDE bridge hook from explorer.js", html.contains("__atlasOpen"))
+        // The accepted-findings section. It renders from DATA.waivers, which is absent here (the fixture
+        // has no waivers.json), so the assertion is that the code shipped — the block's own behaviour is
+        // covered by WaiversTest and the CLI round-trip test.
+        assertTrue("expected the waived-block renderer from explorer.js", html.contains("function waivedBlockHtml"))
+        assertTrue("expected the accepted-findings section id", html.contains("chk-waived"))
         assertTrue("expected the open-in-IDE button builder", html.contains("function openBtn("))
         // The graph payload is inlined — a known model key must appear.
         assertTrue("expected the substituted graph data", html.contains("orderProcess"))

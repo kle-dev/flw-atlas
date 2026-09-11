@@ -306,3 +306,12 @@ the other mode and the page falls back to its own palette for that mode; in a br
 Beside it, `A−` / `A+` step the text size (85 % to 150 %) and remember the choice. Every font size on
 the page is a token that this one knob multiplies; the IDE's embedded browser applies none of the IDE's
 own font scaling, so without it the element ids and hints stayed at 10–11 px on a dense monitor.
+
+### Deliberately accepted
+
+When the project carries a [`waivers.json`](../checks/#accepting-a-finding), the Checks page ends with
+what that file says: **Deliberately accepted** — one row per rule, with the reason, what it covers and
+how many findings it matched this run — and, when there is something to fix about the file itself,
+**Waiver file needs attention**: a rule that matched nothing, one that has expired, one that never said
+why. The accepted findings get their own section rather than a strike-through in the lists above,
+because "what is wrong" and "what did we agree to carry, and why" are two different questions.

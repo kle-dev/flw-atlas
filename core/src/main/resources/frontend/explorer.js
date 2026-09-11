@@ -1244,6 +1244,42 @@ function reportNav(e){
   const route=e.target.closest('[data-route]');
   if(route){ location.hash=route.dataset.route; return true; }
 }
+/** The waiver file's rules, its notes, and everything wrong with it — the Checks page's last section.
+ *  Rendered from `DATA.waivers`, which :core fills in only when a waivers.json was actually read, so a
+ *  project without one shows nothing here rather than an empty promise. */
+function waivedBlockHtml(){
+  const W=DATA.waivers; if(!W) return '';
+  const rules=W.rules||[], notes=W.notes||0;
+  let out='';
+  if(rules.length){
+    out+=findingBlock('chk-waived','Deliberately accepted', rules.length,
+      tbl([{k:'check',label:'Check',w:'minmax(10ch,1fr)',cls:'tags'},
+           {k:'what',label:'On',w:'minmax(14ch,1.6fr)',mono:true},
+           {k:'why',label:'Accepted because',w:'minmax(20ch,3fr)',cls:'wrap'},
+           {k:'n',label:'Matched',w:'minmax(6ch,.5fr)',opt:true}],
+        rules.map(r=>{
+          const where=[r.node, r.element, r.subject].filter(Boolean).join(' \u00b7 ');
+          const until=r.until?' <span class="muted">\u00b7 until '+esc(r.until)+'</span>':'';
+          return {hay:elHay(r.check, where, r.reason),
+            cells:{check:tag(r.check),
+                   what:byId.get(r.node)?nodeChip(r.node):esc(where),
+                   why:(r.reason?esc(r.reason):'<span class="sev sev-warn">no reason given</span>')+until,
+                   n:String(r.matched==null?'':r.matched)}}; })),
+      null);
+  }
+  const notices=(W.stale||[]).concat(W.unexplained||[]).concat(W.problems||[]);
+  if(notices.length){
+    out+=findingBlock('chk-waiver-health','Waiver file needs attention', notices.length,
+      '<ul class="varwhy">'+notices.map(n=>'<li>'+esc(n)+'</li>').join('')+'</ul>', null);
+  }
+  if(notes){
+    out+=section('chk-waiver-notes','Review notes',
+      '<p class="ddesc">'+notes+' note'+(notes>1?'s':'')+' in waivers.json \u2014 remarks that change no '+
+      'count, kept with the project so the next reader finds them.</p>',
+      {count:notes, attrs:' id="chk-waiver-notes"'});
+  }
+  return out;
+}
 function renderChecks(){
   const v=document.getElementById('view-checks');
   const H=INSIGHTS.health, st=DATA.stats||{};
@@ -1335,6 +1371,10 @@ function renderChecks(){
        (dyN?dyN+' dynamic (ƒ expression-valued reference)':'')+' — the ≈ button in the toolbar hides them everywhere.</p>',
        {count:suN+dyN, attrs:' id="chk-uncertain"'});
   }
+  // What this project decided to live with. Its own section, not a strike-through in the lists above:
+  // "what is wrong" and "what did we agree to carry, and why" are two different questions, and the
+  // second one is worth nothing without its reasons.
+  b+=waivedBlockHtml();
   const reg=_sectReg; _sectReg=null;
   let h='<div class="dash" data-fscope>';
   h+=pageHeader({icon:'checks', color:color('checks'), title:'Checks', sub:open
