@@ -143,6 +143,9 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   and "the four crossed mappings I found" could only be shared as a screenshot. `#/checks`, `#/tree`,
   `#/scripts`, `#/variables` and `#/schema` now carry their filter text, their chip, *show accepted* and
   the tree's lens in the URL, written as you type or pick and read back on arrival.
+- **A smaller page.** Every explorer shipped the run's `diagnostics` and the custom-function catalog in
+  its data island, and nothing on the page read either (the checks come as findings, the functions as
+  nodes) — on a project with parse problems that was kilobytes of dead weight per page.
 
 ## 0.25.0
 

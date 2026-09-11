@@ -15,9 +15,6 @@ function bootFailed(err){
 const DATA = JSON.parse(document.getElementById('atlas-data').textContent);
 const nodes = DATA.nodes, edges = DATA.edges;
 const byId = new Map(nodes.map(n => [n.id, n]));
-const diags = DATA.diagnostics || [];
-const cfns = DATA.customFunctions;
-const cfnDiags = (cfns && cfns.diagnostics) || [];
 // Node-type labels. Wording follows Flowable Design's own `modelType.*` strings so a term you read here
 // is the term you look for in Design — "Decision tables", not "Decisions"; "AI agents", not "Agents".
 const TM = {

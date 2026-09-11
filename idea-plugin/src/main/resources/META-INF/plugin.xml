@@ -305,6 +305,10 @@
               <code>#/variables</code> and <code>#/schema</code> now carry their filter text, their chip,
               <i>show accepted</i> and the tree's lens in the URL, written as you type or pick and read back
               on arrival.</li>
+          <li><b>A smaller page.</b> Every explorer shipped the run's <code>diagnostics</code> and the
+              custom-function catalog in its data island, and nothing on the page read either (the checks
+              come as findings, the functions as nodes) — on a project with parse problems that was
+              kilobytes of dead weight per page.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

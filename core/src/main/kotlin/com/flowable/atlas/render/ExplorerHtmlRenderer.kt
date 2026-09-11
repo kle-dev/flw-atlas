@@ -42,8 +42,6 @@ object ExplorerHtmlRenderer {
         payload["generatedAt"] = generatedAt.toString()
         payload["atlasVersion"] = version
         payload["stats"] = result["stats"]
-        payload["diagnostics"] = result["diagnostics"] ?: ArrayList<Any?>()
-        payload["customFunctions"] = result["customFunctions"]
         // Health counts come from :core (Findings.kt) so the explorer, the Markdown artifacts and the
         // CLI status line cannot disagree about how many findings a project has.
         payload["checks"] = result["checks"] ?: LinkedHashMap<String, Any?>()
