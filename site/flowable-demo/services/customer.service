@@ -3,6 +3,7 @@
   "name": "Customer Service",
   "type": "db",
   "tableName": "cust_customer",
+  "config": {"authentication": {"type": "basic", "username": "demo", "password": "changeme"}},
   "columnMappings": [
     {"name": "id", "columnName": "id_", "type": "string"},
     {"name": "customerName", "columnName": "name_", "type": "string"}

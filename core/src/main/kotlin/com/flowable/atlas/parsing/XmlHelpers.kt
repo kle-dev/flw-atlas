@@ -195,6 +195,22 @@ object XmlHelpers {
     private fun looksLikeExpression(v: String?): Boolean =
         v != null && (v.contains("\${") || v.contains("#{") || v.contains("{{"))
 
+    /**
+     * Only the field injections written as a literal — `<string>` or `stringValue` — and never the ones
+     * given as an expression. [readFields] merges the two, which is right for reading configuration and
+     * wrong for judging it: a `${secret}` is exactly what a literal password should have been.
+     */
+    fun readLiteralFields(el: El): LinkedHashMap<String, String> {
+        val fields = LinkedHashMap<String, String>()
+        val ext = extEl(el) ?: return fields
+        for (fld in ext.findChildren("field")) {
+            val name = fld.attr("name") ?: continue
+            val s = fld.findChild("string")?.text?.trim()?.takeIf { it.isNotEmpty() } ?: fld.attr("stringValue")
+            if (s != null) fields[name] = s
+        }
+        return fields
+    }
+
     /** Field-injection values on a delegate/listener element (`<flowable:field>`). */
     fun readFields(el: El): LinkedHashMap<String, Any?> {
         val fields = LinkedHashMap<String, Any?>()

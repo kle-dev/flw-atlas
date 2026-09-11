@@ -1,6 +1,6 @@
 # Health checks
 
-Atlas runs twenty checks over every project it analyses. They are computed once, in `:core`, and
+Atlas runs twenty-three checks over every project it analyses. They are computed once, in `:core`, and
 every surface reads the same result — the CLI status line, the summary's *Health* block, the
 overview's *Findings* section, `graph.json`'s `findings` and `checks` keys, the generated `CLAUDE.md`
 and the explorer's *Checks* page all agree by construction.
@@ -24,7 +24,7 @@ noise.
   <a href="../demo/explorer.html#/checks" target="_blank" rel="noopener">Open it ↗</a></figcaption>
 </figure>
 
-## The twenty checks
+## The twenty-three checks
 
 | Check | Severity | What it means |
 |---|---|---|
@@ -33,8 +33,11 @@ noise.
 | `scriptIssues` | error · warning | A script body has a syntax problem, or calls something its context does not bind. |
 | `missingRefs` | error | A model key is referenced but no model in the project defines it. |
 | `crossedColumns` | error · warning | A service maps a field to the column another field is named after — as an error when the pairing is a closed swap or rotation. |
+| `hardcodedSecrets` | error | A password, token or API key written into a model as plain text. |
+| `unsafeQueries` | warning | A query template interpolates a value without escaping it. |
 | `changelogIssues` | warning | A Liquibase changelog is orphaned or superseded. |
 | `schemaGaps` | warning | A database column and the model that should describe it disagree. |
+| `leftoverMarkers` | warning | A TODO, FIXME, HACK or XXX left in a model file. |
 | `gatewayNoDefault` | warning | An exclusive or inclusive gateway whose every outgoing flow is conditional, with no default. |
 | `implicitSplit` | warning | An activity with several outgoing flows and no gateway — a fork nobody drew. |
 | `nonExclusiveAsync` | warning | An async element explicitly set `exclusive="false"`. |
@@ -136,6 +139,30 @@ project of 120 column mappings, 5 of them deliberately abbreviated, the check re
 The service page and the schema report mark the row with `⇄ crossed`: a crossed mapping is not a
 coverage gap, so the row that needs the reader's attention is otherwise the one that looks cleanest.
 
+### `hardcodedSecrets` — a secret written into a model
+
+A value under a key that names a secret — `password`, `token`, `apiKey`, `clientSecret`, `credential`
+and their spellings — written as plain text: in a `.service` model's configuration or an operation's,
+in a `.channel`, in an agent's model settings, in a knowledge base's vector store, and in the field
+injections of a BPMN or CMMN service task. Credentials inside a URL (`https://user:secret@host/`) count
+too, whatever the key is called. A secret in a model file is a secret in the repository, in every export
+and in every report, and the same one on every environment the model is deployed to.
+
+The finding names the **path** and never the value. It stays quiet for a value that is an expression
+(`${…}`, `#{…}`, `{{…}}` — resolved elsewhere, which is exactly the fix), for a key that merely talks
+about a secret (`tokenUrl`, `passwordField`, `credentialsType`), and for anything that is not a string.
+A placeholder such as `changeme` *is* reported: a committed literal is a literal. Move the value to an
+expression or to the environment's configuration — and rotate what was committed.
+
+### `unsafeQueries` — a value that can change the query
+
+A `.query` model's `templateContent` or `templateFilter` interpolating a parameter as `${name}` with no
+FreeMarker built-in behind it. A value dropped raw into search JSON can close the string it sits in and
+change the query — the injection shape, in the one place a project writes raw query text. Write
+`${name?json_string}` for a string and `${name?c}` for a number; any built-in silences the check, since
+which one is right depends on the type only the author knows. One finding per interpolation, so a
+parameter used twice is reported twice.
+
 ### `changelogIssues` — Liquibase authority
 
 A changelog is reported when it is:
@@ -161,6 +188,15 @@ Per column, walking Liquibase → service → data object:
 
 The explorer renders this as a three-column table per service, with cleanly-mapped services collapsed
 to chips so the gaps are what you see.
+
+### `leftoverMarkers` — a promise nobody kept
+
+A `TODO`, `FIXME`, `HACK` or `XXX` as a whole word anywhere in a model file — a documentation element, a
+name, a script body, a template. Each one is reported with its file and line, attributed to the model the
+file defines, and the text after the marker is its subject, so a waiver survives the line moving. A
+marker is a promise someone made to come back; in a model that is deployed it is a promise the process
+keeps running without. Do the thing, or record why it can wait — as a note in `waivers.json`, where the
+next reader finds it.
 
 ### `gatewayNoDefault` — a choice with no way out
 

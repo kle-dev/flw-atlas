@@ -3,6 +3,7 @@
   "name": "Open orders",
   "scopeType": "bpmn",
   "processDefinitionKey": "orderProcess",
+  "templateContent": "{\"bool\": {\"must\": [{\"term\": {\"variables.customerName\": \"${customerName}\"}}, {\"range\": {\"variables.total\": {\"gte\": ${minTotal?c}}}}]}}",
   "columns": [
     {"name": "orderId", "label": "Order", "variableName": "orderId"},
     {"name": "total", "label": "Total", "variableName": "total"},

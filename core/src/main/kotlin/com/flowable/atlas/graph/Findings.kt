@@ -113,6 +113,10 @@ object Findings {
                 // Like the variable branch below: two independent things can be wrong with one service,
                 // so a service without coverage data must still be able to report a crossed mapping.
                 "service" -> {
+                    literalSecrets(data) { path ->
+                        add("hardcodedSecrets", ERROR, n, "`$path` holds a literal value — move it to an expression " +
+                            "or an environment setting", subject = path)
+                    }
                     for (g in (data["crossedColumns"] as? List<*> ?: emptyList<Any?>())) {
                         val group = g as? Map<String, Any?> ?: continue
                         val pairs = (group["mappings"] as? List<*> ?: emptyList<Any?>())
@@ -145,10 +149,34 @@ object Findings {
                 "process" -> {
                     runtimeRiskChecks(data) { check, message, element -> add(check, WARNING, n, message, element) }
                     topologyChecks(data) { check, message, element -> add(check, WARNING, n, message, element) }
+                    secretFields(data) { element, what, field ->
+                        add("hardcodedSecrets", ERROR, n, "`$what` sets `$field` to a literal value — move it to " +
+                            "an expression or an environment setting", element, subject = field)
+                    }
+                }
+                "case" -> secretFields(data) { element, what, field ->
+                    add("hardcodedSecrets", ERROR, n, "`$what` sets `$field` to a literal value — move it to " +
+                        "an expression or an environment setting", element, subject = field)
+                }
+                // A query template that interpolates a value without escaping it lets the value change the
+                // query — the injection shape, in the one place a project writes raw search JSON.
+                "query" -> for (k in listOf("templateContent", "templateFilter")) {
+                    val tpl = data[k] as? String ?: continue
+                    for (m in UNESCAPED_TEMPLATE_PARAM.findAll(tpl)) {
+                        val inner = m.groupValues[1].trim()
+                        val name = inner.takeWhile { it != '.' && it != '[' && it != ' ' && it != '(' }
+                        add("unsafeQueries", WARNING, n,
+                            "`\${$inner}` in $k is interpolated without escaping — `?json_string` (or `?c` for a " +
+                                "number) keeps a value from changing the query", subject = name)
+                    }
                 }
                 // A decision nothing consults is the DMN twin of the unused form: app membership is not use.
                 "decision" -> if (n["id"] !in referenced) {
                     add("unusedDecisions", WARNING, n, "no process, case or decision service calls this decision")
+                }
+                "channel", "agent", "knowledgeBase" -> literalSecrets(data) { path ->
+                    add("hardcodedSecrets", ERROR, n, "`$path` holds a literal value — move it to an expression " +
+                        "or an environment setting", subject = path)
                 }
                 "serviceOperation" -> if ((data["usedBy"] as? List<*>).isNullOrEmpty()) {
                     add("unusedOps", WARNING, n, "no model or code calls this operation")
@@ -193,6 +221,23 @@ object Findings {
                 "label" to (d["path"] ?: "?"),
                 "message" to "${d["kind"]}: ${d["message"]}",
                 "file" to d["path"],
+            ))
+        }
+        // Leftover markers — a TODO is a promise; the report lists the ones nobody kept. Keyed by the
+        // first model the file defines, or by the file when it defines none.
+        val nodeById = nodes.associateBy { it["id"] as? String }
+        for (m in (result["markers"] as? List<Map<String, Any?>> ?: emptyList())) {
+            val owner = (m["models"] as? List<*>)?.firstOrNull()?.toString()?.let { nodeById[it] }
+            val text = m["text"]?.toString().orEmpty()
+            findings.add(linkedMapOf(
+                "check" to "leftoverMarkers",
+                "severity" to WARNING,
+                "node" to owner?.get("id"),
+                "label" to (owner?.get("label") ?: owner?.get("key") ?: m["file"]),
+                "message" to "${m["marker"]}" + (if (text.isEmpty()) " left in the model" else ": $text"),
+                "file" to m["file"],
+                "line" to m["line"],
+                "subject" to text.ifEmpty { "@${m["line"]}" },
             ))
         }
         val customFns = result["customFunctions"] as? Map<String, Any?>
@@ -355,6 +400,34 @@ object Findings {
                 "`$what` calls out of the engine with no error boundary event — a failure propagates to " +
                     "the caller", id)
         }
+    }
+
+    /** `${name}` in a query template with no FreeMarker built-in behind the name — nothing escapes it. */
+    private val UNESCAPED_TEMPLATE_PARAM = Regex("\\$\\{([^}?]*)\\}")
+
+    /** Every path the parser recorded a literal secret under, for a JSON model. */
+    @Suppress("UNCHECKED_CAST")
+    private fun literalSecrets(data: Map<String, Any?>, report: (String) -> Unit) {
+        for (p in (data["literalSecrets"] as? List<*> ?: emptyList<Any?>())) report(p.toString())
+    }
+
+    /**
+     * Every element of a process or case whose field injections carry a literal secret. A process keeps
+     * its elements in flat lists; a case keeps a plan tree, walked through `children`.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun secretFields(data: Map<String, Any?>, report: (String, String, String) -> Unit) {
+        fun visit(el: Map<String, Any?>) {
+            val id = el["id"] as? String ?: return
+            val what = (el["name"] as? String)?.ifEmpty { null } ?: id
+            for (f in (el["secretFields"] as? List<*> ?: emptyList<Any?>())) report(id, what, f.toString())
+        }
+        for (list in ELEMENT_LISTS) for (el in (data[list] as? List<Map<String, Any?>> ?: emptyList())) visit(el)
+        fun walk(node: Map<String, Any?>) {
+            visit(node)
+            for (c in (node["children"] as? List<Map<String, Any?>> ?: emptyList())) walk(c)
+        }
+        (data["planModel"] as? Map<String, Any?>)?.let { walk(it) }
     }
 
     /**

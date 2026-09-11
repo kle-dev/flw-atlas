@@ -6,7 +6,9 @@
              targetNamespace="http://flowable.org/demo">
   <process id="DEMO-onboarding" name="DEMO Onboarding">
     <startEvent id="start" name="Start"/>
-    <userTask id="review" name="Review application"/>
+    <userTask id="review" name="Review application">
+      <documentation>TODO confirm the SLA with sales before go-live</documentation>
+    </userTask>
     <exclusiveGateway id="gw" name="Approved?"/>
     <userTask id="rework" name="Rework application"/>
     <endEvent id="end" name="Done"/>

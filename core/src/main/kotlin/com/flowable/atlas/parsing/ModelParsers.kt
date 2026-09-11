@@ -283,6 +283,8 @@ object ModelParsers {
             "referenceKey" to doc["referenceKey"], "columns" to columns, "operations" to operations,
         )
         withDesc(info, doc)
+        // Where a password or a key is written down rather than resolved — paths, never values.
+        SecretScan.scan(doc).takeIf { it.isNotEmpty() }?.let { info["literalSecrets"] = it }
         // Cross-model references (parity with the platform's ServiceModelReferenceExtractor):
         // referenceKey → data object; typeReference.modelKey → data dictionary (output and
         // per-operation input/output parameters); operation body templates → template model;
@@ -814,6 +816,7 @@ object ModelParsers {
             "operations" to operations, "tools" to tools, "knowledgeBase" to null, "enableApiEndpoint" to doc["enableApiEndpoint"],
         )
         withDesc(info, doc)
+        SecretScan.scan(doc).takeIf { it.isNotEmpty() }?.let { info["literalSecrets"] = it }
         fun toolRef(t: Any?) {
             val tm = objOf(t) ?: return
             if (!truthy(tm["key"])) return
@@ -887,11 +890,13 @@ object ModelParsers {
         val doc = json(data)
         val ek = objOf(doc["channelEventKeyDetection"]) ?: emptyMap()
         ctx.addRef(doc["key"], "channel", ffile, "channel-event", "event", ek["fixedValue"])
-        return withDesc(linkedMapOf(
+        val info = withDesc(linkedMapOf(
             "key" to doc["key"], "name" to doc["name"], "file" to ffile,
             "channelType" to doc["channelType"], "type" to doc["type"],
             "topics" to doc["topics"], "destination" to doc["destination"], "eventKey" to ek,
         ), doc)
+        SecretScan.scan(doc).takeIf { it.isNotEmpty() }?.let { info["literalSecrets"] = it }
+        return info
     }
 
     /** `.action` — a bot/action model; records form/channel/signal refs + script vars. */
@@ -1220,6 +1225,8 @@ object ModelParsers {
                 "credentials" to objOf(vs["credentials"])?.get("type"),
             )
         }
+        // …and where a credential is written down anyway, the path to it — still not the value.
+        SecretScan.scan(doc).takeIf { it.isNotEmpty() }?.let { info["literalSecrets"] = it }
         return info
     }
 

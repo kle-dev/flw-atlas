@@ -290,6 +290,55 @@ class FindingsTest {
         assertTrue("a subprocess with an error boundary may contain the task", elements(r4, "unguardedTasks").isEmpty())
     }
 
+    // ---- what a model writes down that it should not ------------------------------------------------
+
+    @Test
+    fun aLiteralSecretIsAnErrorWhereverTheParserRecordedOne() {
+        val r = run(listOf(
+            node("service:s", "service", data = mapOf("literalSecrets" to listOf("config.authentication.password"))),
+            node("knowledgeBase:kb", "knowledgeBase", data = mapOf("literalSecrets" to listOf("vectorStore.credentials.apiKey"))),
+            process("p", mapOf("serviceTasks" to listOf(task("http", "type" to "http", "secretFields" to listOf("password"))))),
+            node("case:c", "case", data = mapOf("planModel" to mapOf("id" to "plan", "children" to listOf(
+                mapOf("id" to "st", "name" to "Call it", "secretFields" to listOf("apiKey")))))),
+            node("service:clean", "service"),
+        ))
+        val f = findings(r).filter { it["check"] == "hardcodedSecrets" }
+        assertEquals(4, f.size)
+        assertTrue(f.all { it["severity"] == "error" })
+        assertEquals(setOf("config.authentication.password", "vectorStore.credentials.apiKey", "password", "apiKey"),
+            f.map { it["subject"] }.toSet())
+        assertEquals("st", f.single { it["node"] == "case:c" }["element"])
+        assertTrue("never the value", f.none { it["message"].toString().contains("hunter") })
+    }
+
+    @Test
+    fun aQueryTemplateThatInterpolatesWithoutEscapingIsReportedPerParameter() {
+        val r = run(listOf(node("query:q", "query", data = mapOf(
+            "templateContent" to """{"term": {"name": "${'$'}{customerName}"}, "range": {"gte": ${'$'}{minTotal?c}}, "x": "${'$'}{customerName}"}""",
+            "templateFilter" to """{"term": {"owner": "${'$'}{owner.id}"}}""",
+        ))))
+        val f = findings(r).filter { it["check"] == "unsafeQueries" }
+        assertEquals(listOf("customerName", "customerName", "owner"), f.map { it["subject"] })
+        assertTrue(f.first()["message"].toString().contains("?json_string"))
+    }
+
+    @Test
+    fun aLeftoverMarkerIsAWarningOnTheModelItsFileDefines() {
+        val r = run(
+            nodes = listOf(process("p", emptyMap())),
+            extra = mapOf("markers" to listOf(
+                mapOf("file" to "processes/p.bpmn", "line" to 12, "marker" to "TODO", "text" to "confirm the SLA", "models" to listOf("process:p")),
+                mapOf("file" to "forms/loose.form", "line" to 3, "marker" to "FIXME", "text" to "", "models" to emptyList<String>()),
+            )),
+        )
+        val f = findings(r).filter { it["check"] == "leftoverMarkers" }
+        assertEquals(2, f.size)
+        val todo = f.single { it["line"] == 12 }
+        val fixme = f.single { it["line"] == 3 }
+        assertEquals("process:p", todo["node"]); assertEquals("TODO: confirm the SLA", todo["message"]); assertEquals("confirm the SLA", todo["subject"])
+        assertEquals(null, fixme["node"]); assertEquals("forms/loose.form", fixme["label"]); assertEquals("FIXME left in the model", fixme["message"])
+    }
+
     @Test
     fun aCleanProjectReportsNoFindingsAtAll() {
         val r = run(listOf(node("process:p", "process")))

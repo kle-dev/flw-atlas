@@ -28,6 +28,9 @@ import java.io.File
  */
 object Atlas {
 
+    /** A leftover marker as a whole word — `TODO` in `TODOS` or `xTODO` is not one. */
+    private val MARKER_RE = Regex("(?<![A-Za-z0-9_])(TODO|FIXME|HACK|XXX)(?![A-Za-z0-9_])")
+
     /** A model file or archive entry above this is not read; a `.form` with embedded images stays far below. */
     internal const val MAX_MODEL_BYTES: Long = 32L shl 20
 
@@ -70,7 +73,7 @@ object Atlas {
         for (bucket in ModelKinds.MODEL_BUCKETS) result[bucket] = ArrayList<Any?>()
         // (`javaBeans` used to be declared here and never written to — an always-empty key in every
         // graph.json, which a consumer can only read as "this project has no beans".)
-        for (extra in listOf("javaControllers", "javaGlue", "endpoints", "warnings", "diagnostics")) {
+        for (extra in listOf("javaControllers", "javaGlue", "endpoints", "warnings", "diagnostics", "markers")) {
             result[extra] = ArrayList<Any?>()
         }
         val modelIndex = LinkedHashMap<Pair<String, String>, String>()
@@ -145,6 +148,21 @@ object Atlas {
                 }
             } catch (e: Exception) {
                 diag("parse", label, "($mtype) ${e.message}")
+            }
+
+            // A TODO, FIXME, HACK or XXX in a model file is a promise someone made to come back. Kept
+            // with its line and the model(s) the file defines, so the report can list the ones nobody
+            // has kept — the text after the marker is the subject, which survives a line moving.
+            val nodeType = ModelKinds.NORMALIZE_TYPE[mtype] ?: mtype
+            val markerNodes = mkeys.filterNotNull().map { "$nodeType:$it" }
+            for (m in MARKER_RE.findAll(raw)) {
+                val lineEnd = raw.indexOf('\n', m.range.last).let { if (it < 0) raw.length else it }
+                val text = raw.substring(m.range.last + 1, lineEnd).trim()
+                    .removeSuffix("-->").removeSuffix("*/").trimEnd('"', ',', ' ', ':').trimStart(':', '-', ' ').take(120)
+                bucketList("markers").add(linkedMapOf(
+                    "file" to label, "line" to raw.substring(0, m.range.first).count { it == '\n' } + 1,
+                    "marker" to m.groupValues[1], "text" to text, "models" to markerNodes,
+                ))
             }
 
             // Attribute what the raw text carries — every ${…} / {{…}}, every ${bean.method()} call,

@@ -104,6 +104,28 @@ object CheckCatalog {
             docs = "crossedcolumns-the-column-mapping-pairs-the-wrong-two-names",
         ),
         Check(
+            id = "hardcodedSecrets", tier = "broken", severity = "error",
+            label = "literal secrets", title = "Hardcoded secrets",
+            what = "a password, token or API key written into a model as plain text",
+            clean = "no secret is written into a model",
+            why = "A secret in a model file is a secret in the repository, in every export and in every " +
+                "report — and the same one on every environment the model is deployed to.",
+            fix = "Move the value to an expression that resolves it at runtime, or to the environment's " +
+                "configuration, and rotate what was committed.",
+            docs = "hardcodedsecrets-a-secret-written-into-a-model",
+        ),
+        Check(
+            id = "unsafeQueries", tier = "broken", severity = "warning",
+            label = "unescaped query parameters", title = "Unescaped query parameters",
+            what = "a query template interpolating a value without escaping it",
+            clean = "every query template escapes what it interpolates",
+            why = "A value dropped raw into search JSON can close the string it sits in and change the " +
+                "query — the injection shape, in the one place a project writes raw query text.",
+            fix = "Write `\${name?json_string}` for a string and `\${name?c}` for a number, so the value " +
+                "stays a value.",
+            docs = "unsafequeries-a-value-that-can-change-the-query",
+        ),
+        Check(
             id = "changelogIssues", tier = "unfinished", severity = "warning",
             label = "changelog problems", title = "Changelog issues",
             what = "orphan or superseded changelogs",
@@ -124,6 +146,16 @@ object CheckCatalog {
             fix = "Add the mapping to the .service model or the field to the data object — or drop the " +
                 "column if nothing needs it.",
             docs = "schemagaps-the-database-and-the-models-disagree",
+        ),
+        Check(
+            id = "leftoverMarkers", tier = "unfinished", severity = "warning",
+            label = "leftover markers", title = "Leftover markers",
+            what = "a TODO, FIXME, HACK or XXX left in a model file",
+            clean = "no marker left behind",
+            why = "A marker is a promise someone made to come back; in a model that is deployed it is a " +
+                "promise the process keeps running without.",
+            fix = "Do the thing, or turn the marker into a note in waivers.json with the reason it can wait.",
+            docs = "leftovermarkers-a-promise-nobody-kept",
         ),
         Check(
             id = "gatewayNoDefault", tier = "runtime", severity = "warning",

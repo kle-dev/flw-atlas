@@ -293,6 +293,9 @@ object BackendModelParsers {
                         // hard-coded names and then discarded.
                         val fields = XmlHelpers.readFields(el)
                         if (fields.isNotEmpty()) st["fields"] = fields
+                        // Names only: a password written as a literal field is a finding, its value is not data.
+                        SecretScan.secretFields(XmlHelpers.readLiteralFields(el)).takeIf { it.isNotEmpty() }
+                            ?.let { st["secretFields"] = it }
                         XmlHelpers.resultVariableParam("resultVariable", st["resultVariable"] as? String)
                             ?.let { ctx.addParams(ioParameters, pkey, eid, ename, tag, listOf(it), type,
                                 XmlHelpers.calleeOf(el)) }
@@ -479,6 +482,8 @@ object BackendModelParsers {
             }
             tag in listOf("task", "serviceTask", "humanTaskWithService") -> {
                 d.putAll(cmmnServiceRefs(ctx, caseKey, ffile, el))
+                SecretScan.secretFields(XmlHelpers.readLiteralFields(el)).takeIf { it.isNotEmpty() }
+                    ?.let { d["secretFields"] = it }
                 d["formKey"] = el.attr("formKey")
                 if (truthy(el.attr("formKey"))) {
                     ctx.addRef(caseKey, "cmmn", ffile, "task-form", "form", el.attr("formKey"))
