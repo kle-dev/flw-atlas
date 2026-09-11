@@ -185,13 +185,24 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
     }
 
     /** Re-run the generator for this page and reload it — the toolbar's Regenerate, and the banner's. */
+    /**
+     * Regenerate the report and show the new page **where the reader was**: the fragment (a Checks block,
+     * a node) travels along, and the reload bypasses the CEF cache — `loadURL` on an unchanged URL could
+     * hand back the page as it was before the file was rewritten. Accepting three findings from the middle
+     * of `#/checks` and pressing Save used to land on the dashboard. (JCEF has no headless test seam; the
+     * Remote-Dev half is covered by [RemoteExplorerPageTest], this half by the sandbox.)
+     */
     internal fun regenerate() {
-        AtlasGenerationRunner.generateExplorer(project, file.toNioPath(), quiet = true) { load() }
+        val hash = browser.cefBrowser.url?.substringAfter('#', "")?.takeIf { it.isNotEmpty() }
+        AtlasGenerationRunner.generateExplorer(project, file.toNioPath(), quiet = true) {
+            if (remote) load(hash) else browser.cefBrowser.reloadIgnoreCache()
+        }
     }
 
-    private fun load() {
+    private fun load(hash: String? = null) {
+        val frag = hash?.let { "#$it" } ?: ""
         val url = file.url + "?ideTheme=" + ideTheme() + "&idePal=" + paletteParam
-        if (!remote) { browser.loadURL(url); return }
+        if (!remote) { browser.loadURL(url + frag); return }
         // Off the EDT: a report can be several MB. The stub is loaded *at the page's URL* (plus its hash,
         // so a regeneration is a fresh navigation), which is what keeps ?ideTheme/?idePal reaching the
         // page and its localStorage preferences on the same file:// origin. If the file cannot be read
@@ -204,7 +215,7 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
                 if (Disposer.isDisposed(this)) return@invokeLater
                 if (page == null) { browser.loadURL(url); return@invokeLater }
                 remotePage = page
-                browser.loadHTML(page.stub, "$url&page=${page.hash.take(12)}")
+                browser.loadHTML(page.stub, "$url&page=${page.hash.take(12)}$frag")
             }, project.disposed)
         }
     }
@@ -329,6 +340,8 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
                 // page rewritten by the CLI would otherwise come back from the cache as it was.
                 if (remote) load() else browser.cefBrowser.reloadIgnoreCache()
             }
+
+            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
         },
         Separator.getInstance(),
         // The playground used to be a second editor tab on every explorer file — a whole second panel,

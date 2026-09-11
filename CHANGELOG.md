@@ -152,6 +152,22 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   reachable under any result set. The tab strip appeared only from the second tab, which is how the
   tabs and their Alt shortcuts stayed undiscovered; it shows from the first. And on a selected node,
   `c` copies its key and, inside the IDE, `o` opens its file.
+- **Regenerating keeps your place.** After *Save to waivers.json* the explorer tab regenerated and came
+  back on the dashboard: the reload dropped the page's fragment. The Checks block or node you were on
+  is where the new page opens, and the reload bypasses the browser cache so it is the new page.
+- **The index is never built under the read lock.** Ctrl+click on a model key resolved through a call that
+  builds a cold index inline, freezing the IDE for the length of a model scan the first time; the
+  constants auto-refresher did the same after every pull. Both ask for the index and resolve to nothing
+  until it is there, like every other reference already did.
+- **No file-system refresh while holding the read lock, and a cancellation is not a failure.** Find Usages
+  and the index build opened archives with a synchronous jar refresh under the read lock — the deadlock
+  the scanner's own documentation warns about. And a cancelled scan was reported as an unreadable archive
+  (the Hub's *archives could not be read* line), an empty script picker, or a Design pull bounced to
+  Settings as "not configured".
+- **Two guards.** The output and pull folders in Settings must be relative to the project and stay inside
+  it — an absolute path or a `..` made a pull write outside the repository. And an `*.explorer.html`
+  inside an archive opens as a plain file rather than in a viewer whose Regenerate and Open-in-browser
+  throw.
 
 ## 0.25.0
 
