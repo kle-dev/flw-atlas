@@ -864,13 +864,15 @@ object OverviewRenderer {
         // checks lived only in the explorer's JavaScript, so no text artifact could state any of them.
         val findings = asList(result["findings"]).map { asMap(it) }
         val checks = asMap(result["checks"])
+        val waivedFindings = findings.filter { it["waived"] != null }
+        val openFindings = findings.filter { it["waived"] == null }
         if (findings.isNotEmpty()) {
-            val open = (checks["open"] as? Number)?.toInt() ?: findings.size
-            hdr(14, "Findings — $open open")
-            L.add(checks.entries.filter { it.key != "open" }
+            val open = (checks["open"] as? Number)?.toInt() ?: openFindings.size
+            hdr(14, "Findings — $open open" + if (waivedFindings.isNotEmpty()) ", ${waivedFindings.size} waived" else "")
+            L.add(checks.entries.filter { it.key != "open" && it.key != "waived" }
                 .joinToString(" · ") { "${SummaryRenderer.CHECK_LABELS[it.key] ?: it.key}: ${it.value}" })
             L.add("")
-            for ((check, group) in findings.groupBy { it["check"]?.toString() ?: "?" }) {
+            for ((check, group) in openFindings.groupBy { it["check"]?.toString() ?: "?" }) {
                 L.add("**${SummaryRenderer.CHECK_LABELS[check] ?: check}** (${group.size})")
                 for (f in group.take(FINDINGS_PER_CHECK)) {
                     val mark = if (f["severity"] == "error") "⚠" else "·"
@@ -889,6 +891,35 @@ object OverviewRenderer {
                     L.add("- … (+${group.size - FINDINGS_PER_CHECK} more — see `findings` in " +
                         "`$an.graph.json`)")
                 }
+                L.add("")
+            }
+        }
+
+        // Accepted findings get their own block rather than a strike-through in the list above: the
+        // reader of §14 is asking "what is wrong", and the answer to "what did we decide to live with,
+        // and why" is a different question that deserves its own heading — and its reasons.
+        if (waivedFindings.isNotEmpty()) {
+            L.add("**Waived — deliberately accepted (${waivedFindings.size})**")
+            L.add("")
+            for (f in waivedFindings.take(FINDINGS_PER_CHECK * 2)) {
+                val reason = (f["waived"] as? Map<*, *>)?.get("reason")?.toString().orEmpty()
+                val where = Fmt.fields("in" to Fmt.codeList(f["label"]), "at" to Fmt.codeList(f["element"]))
+                L.add("- ${pyStr(f["message"])}" + (if (where.isEmpty()) "" else " — $where") +
+                    (if (reason.isBlank()) " — *no reason given*" else " — accepted: $reason"))
+            }
+            if (waivedFindings.size > FINDINGS_PER_CHECK * 2) {
+                L.add("- … (+${waivedFindings.size - FINDINGS_PER_CHECK * 2} more — see `findings` in `$an.graph.json`)")
+            }
+            L.add("")
+        }
+        // What the waiver file itself got wrong, where the people who maintain it will read it.
+        asMap(result["waivers"]).let { w ->
+            val notices = asList(w["stale"]).map { pyStr(it) } + asList(w["unexplained"]).map { pyStr(it) } +
+                asList(w["problems"]).map { pyStr(it) }
+            if (notices.isNotEmpty()) {
+                L.add("**Waiver file needs attention (${notices.size})**")
+                L.add("")
+                for (n in notices) L.add("- $n")
                 L.add("")
             }
         }

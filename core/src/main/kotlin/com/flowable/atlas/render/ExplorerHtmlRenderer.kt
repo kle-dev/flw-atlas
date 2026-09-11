@@ -50,6 +50,10 @@ object ExplorerHtmlRenderer {
         // next to its findings, and they travel from the one place that implements them so the page can
         // never claim more confidence than the check actually has.
         payload["silenceRules"] = UnusedVariables.SILENCE_RULES
+        // The waiver rules, not the waived findings: the Checks page builds its rows from the live nodes
+        // (see the comment above), so it has to be able to decide for itself whether a row it rendered
+        // is one a team already accepted. Absent when no waiver file was read.
+        result["waivers"]?.let { payload["waivers"] = it }
         payload["nodes"] = attachDiagrams(slimNodes(graph["nodes"]), root)
         payload["edges"] = graph["edges"]
         // json.dumps(payload, ensure_ascii=False, default=list).replace("</", "<\/")

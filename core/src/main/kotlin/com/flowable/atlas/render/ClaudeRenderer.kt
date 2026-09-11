@@ -252,10 +252,11 @@ object ClaudeRenderer {
         val checks = result["checks"] as? Map<String, Any?> ?: emptyMap()
         val open = (checks["open"] as? Number)?.toInt() ?: 0
         if (open > 0) {
-            val findings = result["findings"] as? List<Map<String, Any?>> ?: emptyList()
+            val findings = (result["findings"] as? List<Map<String, Any?>> ?: emptyList())
+                .filter { it["waived"] == null }
             L.add("\n**Known issues in this project ($open) — do not copy these patterns, and expect " +
                     "them when something behaves oddly:**")
-            L.add("- " + checks.entries.filter { it.key != "open" }
+            L.add("- " + checks.entries.filter { it.key != "open" && it.key != "waived" }
                 .joinToString(" · ") { "${SummaryRenderer.CHECK_LABELS[it.key] ?: it.key}: ${it.value}" })
             for (f in findings.filter { it["severity"] == "error" }.take(3)) {
                 val where = listOfNotNull(f["label"]?.toString(), f["element"]?.toString())
@@ -263,6 +264,12 @@ object ClaudeRenderer {
                 L.add("- ⚠ ${f["message"]}" + (if (where.isEmpty()) "" else " — `$where`"))
             }
             L.add("- Full list: `$name.overview.md` §Findings, or `findings` in `$name.graph.json`.")
+        }
+        // An agent that re-reports an accepted finding wastes the reader's attention on a decision that
+        // was already made, so the context says the decision exists and where it is written down.
+        (checks["waived"] as? Number)?.toInt()?.takeIf { it > 0 }?.let { n ->
+            L.add("- $n finding(s) are waived in `${com.flowable.atlas.graph.Waivers.FILE_NAME}` — " +
+                "accepted deliberately, with a reason each. Do not re-report them.")
         }
 
         L.add("")

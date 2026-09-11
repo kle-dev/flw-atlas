@@ -254,10 +254,12 @@ object SummaryRenderer {
         // summary could only say "see the explorer's Checks tab" — useless to an agent holding the file.
         val checks = result["checks"] as? Map<String, Any?> ?: emptyMap()
         val open = (checks["open"] as? Number)?.toInt() ?: 0
+        val waivedN = (checks["waived"] as? Number)?.toInt() ?: 0
         if (open > 0) {
-            val findings = result["findings"] as? List<Map<String, Any?>> ?: emptyList()
-            L.add("## Health — $open open finding(s)")
-            L.add(checks.entries.filter { it.key != "open" }
+            val all = result["findings"] as? List<Map<String, Any?>> ?: emptyList()
+            val findings = all.filter { it["waived"] == null }
+            L.add("## Health — $open open finding(s)" + if (waivedN > 0) " ($waivedN waived)" else "")
+            L.add(checks.entries.filter { it.key != "open" && it.key != "waived" }
                 .joinToString(" · ") { "${CHECK_LABELS[it.key] ?: it.key}: ${it.value}" })
             // Name the worst few; the overview lists them all with file/line.
             for (f in findings.filter { it["severity"] == "error" }.take(5)) {
@@ -267,6 +269,16 @@ object SummaryRenderer {
             }
             val errors = findings.count { it["severity"] == "error" }
             if (errors > 5) L.add("- … (+${errors - 5} more errors — see `$an.overview.md`)")
+            L.add("")
+        }
+        // A waived error is still an error somebody decided to carry. The summary is the surface a
+        // reader skims, so it says so even when nothing is open — otherwise "0 findings" reads as
+        // "nothing wrong" when it means "nothing we have not already agreed to live with".
+        if (waivedN > 0) {
+            val waivedErrors = (result["findings"] as? List<Map<String, Any?>> ?: emptyList())
+                .count { it["waived"] != null && it["severity"] == "error" }
+            L.add("$waivedN finding(s) waived in `${com.flowable.atlas.graph.Waivers.FILE_NAME}`" +
+                (if (waivedErrors > 0) ", $waivedErrors of them error-level" else "") + ".")
             L.add("")
         }
         // Expressions that got no verdict are not "fine": say how many, so the health block above is

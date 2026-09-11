@@ -1,5 +1,7 @@
 package com.flowable.atlas.graph
 
+import java.time.LocalDate
+
 /**
  * The project's health findings — everything Atlas noticed that is probably wrong, as data.
  *
@@ -12,10 +14,14 @@ package com.flowable.atlas.graph
  * Computing them here instead makes them ordinary result data, available to every renderer, and leaves
  * one definition of each check rather than one per surface.
  *
- * Two result keys are produced:
+ * Three result keys are produced:
  *  - **`findings`** — the itemized list, most severe first: `{check, severity, node, label, message}`
- *    plus `file`/`element`/`line`/`snippet` when known. This is what a report can name.
- *  - **`checks`** — `check → count`, plus `open` (the total). This is what a badge or a headline shows.
+ *    plus `file`/`element`/`subject`/`line`/`snippet` when known, and `waived` on the ones a waiver
+ *    covers. This is what a report can name.
+ *  - **`checks`** — `check → count` of the **open** ones, plus `open` (the total) and `waived`.
+ *    This is what a badge or a headline shows.
+ *  - **`waivers`** — present only when a waiver file was read: what it covered, and what went wrong
+ *    with it. See [Waivers].
  *
  * `checks.scriptIssues` counts **findings**, not scripts carrying them, matching `stats.scriptIssues`
  * and the CLI status line. The explorer used to count scripts here, so the same word meant two numbers
@@ -40,7 +46,7 @@ object Findings {
     private const val WARNING = "warning"
 
     @Suppress("UNCHECKED_CAST")
-    fun apply(result: MutableMap<String, Any?>) {
+    fun apply(result: MutableMap<String, Any?>, waivers: Waivers.Set = Waivers.EMPTY) {
         val graph = result["graph"] as? Map<String, Any?> ?: return
         val nodes = graph["nodes"] as? List<Map<String, Any?>> ?: return
         val edges = graph["edges"] as? List<Map<String, Any?>> ?: emptyList()
@@ -210,14 +216,65 @@ object Findings {
         val sorted = findings.sortedWith(
             compareBy({ order[it["check"]] ?: Int.MAX_VALUE }, { it["label"]?.toString() ?: "" })
         )
+
+        // A waived finding is kept, marked, and left out of the counts. It is not dropped: "nothing is
+        // silent" is the promise the whole report is built on, and a suppression that also hides the
+        // thing it suppressed leaves a reader unable to see what a team decided to live with.
+        val today = LocalDate.now()
+        val marked = sorted.map { f ->
+            val w = waivers.match(f, today) ?: return@map f
+            LinkedHashMap(f).apply {
+                put("waived", linkedMapOf<String, Any?>("reason" to w.reason).also { m ->
+                    w.by?.let { m["by"] = it }
+                    w.at?.let { m["at"] = it }
+                    w.until?.let { m["until"] = it }
+                })
+            }
+        }
+        val open = marked.filter { it["waived"] == null }
+
         val counts = linkedMapOf<String, Any?>()
         for (c in CHECK_ORDER) {
-            val n = sorted.count { it["check"] == c }
+            val n = open.count { it["check"] == c }
             if (n > 0) counts[c] = n
         }
-        counts["open"] = sorted.size
-        result["findings"] = sorted
+        counts["open"] = open.size
+        val waivedCount = marked.size - open.size
+        if (waivedCount > 0) counts["waived"] = waivedCount
+        result["findings"] = marked
         result["checks"] = counts
+        waiverReport(waivers, today)?.let { result["waivers"] = it }
+    }
+
+    /**
+     * What the waiver file did, for every surface that has to say so. Absent when there is no file: an
+     * empty block in every report would read as a feature nobody is using rather than as one nobody
+     * needed here.
+     */
+    private fun waiverReport(waivers: Waivers.Set, today: LocalDate): Map<String, Any?>? {
+        if (waivers.isEmpty) return null
+        // The rules travel whole, because the explorer re-derives its rows from nodes and has to decide
+        // for itself whether a row it just rendered is one a rule covers.
+        val rules = waivers.waivers.map { w ->
+            linkedMapOf<String, Any?>("check" to w.check, "node" to w.node).also { m ->
+                w.element?.let { m["element"] = it }
+                w.subject?.let { m["subject"] = it }
+                m["reason"] = w.reason
+                w.until?.let { m["until"] = it }
+                m["matched"] = waivers.matchCount(w)
+            }
+        }
+        val out = linkedMapOf<String, Any?>("rules" to rules)
+        if (waivers.notes.isNotEmpty()) out["notes"] = waivers.notes.size
+        // Three ways a waiver file goes wrong, each reported rather than fixed silently: it points at
+        // something that is gone, it ran out, or it never said why — and the last one is the only thing
+        // a reviewer could actually have reviewed.
+        val stale = waivers.stale(today)
+        if (stale.isNotEmpty()) out["stale"] = stale
+        val unexplained = waivers.unexplained()
+        if (unexplained.isNotEmpty()) out["unexplained"] = unexplained
+        if (waivers.problems.isNotEmpty()) out["problems"] = waivers.problems
+        return out
     }
 
     /**

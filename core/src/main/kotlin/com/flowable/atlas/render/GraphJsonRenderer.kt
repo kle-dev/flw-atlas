@@ -114,16 +114,18 @@ object GraphJsonRenderer {
         "usedBy" to "Node ids that reference this node (app 'contains' membership excluded). The " +
             "relation itself is in `edges`.",
         "findings" to "{check, severity, node, label, message, file?, element?, subject?, line?, " +
-            "snippet?} — what Atlas thinks is wrong; `checks` counts them per kind. `subject` tells " +
-            "apart several findings of one check on one node (the scope, the column), where `message` " +
-            "is prose that rewords.",
+            "snippet?, waived?} — what Atlas thinks is wrong; `checks` counts the open ones per kind " +
+            "plus a `waived` total. `subject` tells apart several findings of one check on one node " +
+            "(the scope, the column), where `message` is prose that rewords. `waived` carries the " +
+            "reason a team accepted it; see `waivers` and waivers.json.",
         "recipes" to listOf(
             "who references X:            jq '.graph.nodes[] | select(.id==\"process:X\") | .usedBy'",
             "what X references:           jq '.graph.edges[] | select(.s==\"process:X\")'",
             "a model's body:              jq '.processes[] | select(.key==\"X\")'",
             "models using variable V:     jq '.graph.nodes[] | select(.id==\"variable:V\") | .data.usedBy'",
             "controller serving a form:   jq '.restCalls[] | select(.source|test(\"X\")) | .matches'",
-            "everything broken:           jq '.findings[] | select(.severity==\"error\")'",
+            "everything broken:           jq '.findings[] | select(.severity==\"error\" and (.waived|not))'",
+            "what we accepted, and why:   jq '.findings[] | select(.waived) | {check, label, reason: .waived.reason}'",
         ),
     )
 }

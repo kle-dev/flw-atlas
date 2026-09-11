@@ -90,7 +90,10 @@ object SliceRenderer {
             for (f in findings.take(20)) {
                 val mark = if (f["severity"] == "error") "⚠" else "·"
                 val at = f["element"]?.toString()?.let { " at `$it`" } ?: ""
-                L.add("- $mark ${f["message"]}$at")
+                // Marked, not filtered: a slice is what an agent reads before changing this node, and
+                // "already accepted" is exactly the context that stops it from re-reporting the finding.
+                val waived = (f["waived"] as? Map<*, *>)?.let { w -> " — waived: ${w["reason"]}" } ?: ""
+                L.add("- $mark ${f["message"]}$at$waived")
             }
             if (findings.size > 20) L.add("- … (+${findings.size - 20} more)")
             L.add("")

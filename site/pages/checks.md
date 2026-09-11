@@ -196,3 +196,62 @@ eight cases in which this check deliberately says nothing.
 | `<project>.CLAUDE.md` | A findings summary, so an agent starts from what is already known to be wrong. |
 | The explorer | The **Checks** page (`#/checks`): a row per check — worst first, the clean ones folded — then a block per finding kind, each row clicking through to the model it belongs to. |
 | The IDE | The same findings, in the Atlas Hub's *Checks* tab. |
+
+## Accepting a finding
+
+Some findings are correct and still not worth acting on: a reference into a repository Atlas cannot
+see, a form kept for a pilot, a task whose errors are meant to reach the caller. Deleting the check
+for everyone is the wrong answer to one of those, so a project can accept individual findings in
+`waivers.json`.
+
+Atlas writes that file's folder for you. With `--all` it sits beside the artifacts, next to a
+`.gitignore` that ignores everything in the folder **except** `waivers.json` — the analysis is
+regenerated and may carry client data, the decisions are yours and belong in review.
+
+```json
+{
+  "version": 1,
+  "waivers": [
+    {
+      "check": "missingRefs",
+      "node": "external:DEMO-Shared-P001",
+      "reason": "lives in the shared-processes repository, resolved at deploy time",
+      "by": "team-orders",
+      "at": "2026-09-11"
+    }
+  ],
+  "notes": [
+    { "node": "form:DEMO-F014", "text": "replace with the new intake form in Q3", "importance": "high" }
+  ]
+}
+```
+
+A waiver names **which** finding it accepts, not where that finding happened to appear: `check` plus
+`node`, narrowed by `element` and [`subject`](#what-each-one-detects) when you want one of several
+rather than all of them. Leave those out and the rule covers every finding of that check on that node.
+The message is not part of the key — it is prose that rewords as a model changes, and a waiver keyed
+on it would lapse for reasons that have nothing to do with the decision it records.
+
+What a waiver does:
+
+- The finding **stays in the report**, marked, in its own *Waived* section. Nothing is silent here
+  either: a suppression that also hides what it suppressed leaves the next reader unable to see what
+  the team decided to live with.
+- It leaves the counts. `checks` reports the open findings plus a `waived` total, and `--fail-on` does
+  not match it.
+- `reason` is the only part a reviewer can actually review, so a rule without one is reported every
+  run. It is not refused — a tool that will not run because its suppression list has a gap is a tool
+  people stop running.
+- `until: "2026-12-01"` makes it temporary. After that date it stops suppressing and starts being
+  reported, which is what the author asked for by writing it.
+
+Any severity can be waived, `error` included. The alternative is worse: a team that cannot silence one
+un-actionable error drops `--fail-on error` altogether and loses the gate for everything.
+
+A rule that matches nothing is **stale** — the model was renamed, or the problem was fixed — and says
+so on every surface, because a suppression that quietly stops applying is the one failure this must
+not have. `--fail-on-stale-waivers` turns that into a red build; `--no-waivers` reports everything, for
+when the question is what the file is hiding.
+
+`notes` are the other half of a review: a remark that changes no count, carries an `importance`, and
+travels with the project so the next person reads it instead of rediscovering it.

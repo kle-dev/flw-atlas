@@ -17,7 +17,7 @@ import java.nio.file.Files
 class CliTest {
 
     @Test
-    fun allWritesExactlyFiveArtifacts() {
+    fun allWritesExactlyFiveArtifactsAndAGitignore() {
         val out = tempDir()
         val code = run(arrayOf(fixtureDir().path, "--all", "-o", out.path, "-q"))
         assertEquals("run(--all) exit code", 0, code)
@@ -25,9 +25,16 @@ class CliTest {
         val expected = setOf(
             "miniproject.summary.md", "miniproject.overview.md", "miniproject.graph.json",
             "miniproject.explorer.html", "miniproject.CLAUDE.md",
+            // Not an artifact: it is what lets the folder be committed for the sake of waivers.json
+            // without ever carrying an analysis into a repository.
+            ".gitignore",
         )
-        assertEquals("exactly the five artifacts", expected, out.listFiles()!!.map { it.name }.toSet())
+        assertEquals("exactly the five artifacts and the gitignore", expected,
+            out.listFiles()!!.map { it.name }.toSet())
         for (f in out.listFiles()!!) assertTrue("${f.name} is empty", f.length() > 0)
+        val ignore = File(out, ".gitignore").readText()
+        assertTrue("everything is ignored", ignore.lineSequence().any { it.trim() == "*" })
+        assertTrue("except the waivers", ignore.contains("!waivers.json"))
     }
 
     @Test
@@ -142,7 +149,7 @@ class CliTest {
     fun failOnTurnsFindingsIntoExitOneButStillWrites() {
         val out = tempDir()
         assertEquals(1, run(arrayOf(fixtureDir().path, "--all", "-o", out.path, "-q", "--fail-on", "error")))
-        assertEquals("the artifacts are written before the verdict", 5, out.listFiles()!!.count { it.isFile })
+        assertEquals("the artifacts are written before the verdict", 6, out.listFiles()!!.count { it.isFile })
         assertEquals(1, run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--fail-on", "parseIssues")))
         assertEquals(1, run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--fail-on=warning,missingRefs")))
         assertEquals(2, run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--fail-on", "nosuchcheck")))
@@ -156,6 +163,51 @@ class CliTest {
         assertEquals(2, run(arrayOf(fixtureDir().path, "--all", "--slice", "orderProcess", "-q")))
         // -v is read now (it lists the parse issues); it must not change the exit code
         assertEquals(0, run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-v")))
+    }
+
+    /**
+     * The round trip the feature exists for: a decision written into the output folder is read back on
+     * the next run, keeps the artifacts honest, and takes the finding out of the gate — while
+     * `--no-waivers` still shows it. If any one of those three drifts the feature is worse than absent,
+     * because a team would believe a gate that is not there.
+     */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aWaiverInTheOutputFolderSurvivesToTheNextRunAndTheGate() {
+        val out = tempDir()
+        assertEquals(1, run(arrayOf(fixtureDir().path, "--all", "-o", out.path, "-q", "--fail-on", "error")))
+
+        val graph = MiniJson.parse(File(out, "miniproject.graph.json").readText()) as Map<String, Any?>
+        val errors = (graph["findings"] as List<Map<String, Any?>>).filter { it["severity"] == "error" }
+        assertTrue("the fixture must produce an error to waive", errors.isNotEmpty())
+        val waivers = errors.joinToString(",\n") { f ->
+            val node = (f["node"] ?: f["file"]).toString()
+            """{"check": ${'"'}${f["check"]}${'"'}, "node": ${MiniJson.stringify(node)}, "reason": "known, accepted"}"""
+        }
+        File(out, "waivers.json").writeText("""{"version": 1, "waivers": [$waivers]}""")
+
+        assertEquals("every error is accepted, so the gate passes", 0,
+            run(arrayOf(fixtureDir().path, "--all", "-o", out.path, "-q", "--fail-on", "error")))
+
+        val after = MiniJson.parse(File(out, "miniproject.graph.json").readText()) as Map<String, Any?>
+        val checks = after["checks"] as Map<String, Any?>
+        val all = after["findings"] as List<Map<String, Any?>>
+        val waived = all.filter { it["waived"] != null }
+
+        // The invariant that matters: the count and the list say the same thing. A badge that disagrees
+        // with the page under it is how a team stops trusting either.
+        assertEquals("the waived count matches the marked findings",
+            waived.size, (checks["waived"] as Number).toInt())
+        assertEquals("and the open count matches the rest", all.size - waived.size, (checks["open"] as Number).toInt())
+        assertTrue("nothing was dropped", waived.size >= errors.size)
+        assertTrue("no error is left open", all.none { it["severity"] == "error" && it["waived"] == null })
+        // A rule without `element`/`subject` covers every finding of that check on that node, so it can
+        // legitimately cover more than the errors that prompted it. That is documented, and visible here.
+        assertTrue("every waived finding carries its reason",
+            waived.all { (it["waived"] as Map<String, Any?>)["reason"] == "known, accepted" })
+
+        assertEquals("--no-waivers shows what the file is hiding", 1,
+            run(arrayOf(fixtureDir().path, "--all", "-o", out.path, "-q", "--fail-on", "error", "--no-waivers")))
     }
 
     // ---- helpers ----

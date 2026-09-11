@@ -55,12 +55,15 @@ object Atlas {
      *    to the graph builder so matching "unknown function" findings are suppressed, not flagged.
      *  - [discoverCustom] — when true (default), scan for `externals.additionalData` custom functions.
      *  - [customPath] — explicit frontend-customization source (dir or index file); defaults to [root].
+     *  - [waivers] — findings the project has decided to accept; they stay in the report, marked, and
+     *    out of the counts.
      */
     fun extract(
         root: File,
         exprAllowlist: Set<String>? = null,
         discoverCustom: Boolean = true,
         customPath: File? = null,
+        waivers: Waivers.Set = Waivers.EMPTY,
     ): LinkedHashMap<String, Any?> {
         val ctx = Ctx()
         val result = LinkedHashMap<String, Any?>()
@@ -429,7 +432,7 @@ object Atlas {
 
         // Health findings, derived from everything above (graph + buckets + diagnostics + custom fns),
         // so every renderer can state what is wrong instead of pointing at the explorer's Checks tab.
-        Findings.apply(result)
+        Findings.apply(result, waivers)
         return result
     }
 

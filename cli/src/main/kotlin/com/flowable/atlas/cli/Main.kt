@@ -2,6 +2,7 @@ package com.flowable.atlas.cli
 
 import com.flowable.atlas.diagram.DiagramArtifacts
 import com.flowable.atlas.graph.Atlas
+import com.flowable.atlas.graph.Waivers
 import com.flowable.atlas.render.ClaudeRenderer
 import com.flowable.atlas.render.ExplorerHtmlRenderer
 import com.flowable.atlas.render.GraphJsonRenderer
@@ -53,6 +54,7 @@ fun run(args: Array<String>): Int {
     var exprAllowlist = ""
     var customFunctions: String? = null
     var failOn: String? = null
+    var waiversPath: String? = null; var noWaivers = false; var failOnStaleWaivers = false
 
     var i = 0
     var endOpts = false
@@ -96,6 +98,9 @@ fun run(args: Array<String>): Int {
                     "--custom-functions" -> customFunctions = value(name, inline) ?: return 2
                     "--no-custom-functions" -> noCustom = true
                     "--fail-on" -> failOn = value(name, inline) ?: return 2
+                    "--waivers" -> waiversPath = value(name, inline) ?: return 2
+                    "--no-waivers" -> noWaivers = true
+                    "--fail-on-stale-waivers" -> failOnStaleWaivers = true
                     "--verbose" -> verbose++
                     "--quiet" -> quiet = true
                     "--help" -> { System.out.write(usage().toByteArray(Charsets.UTF_8)); System.out.flush(); return 0 }
@@ -140,8 +145,8 @@ fun run(args: Array<String>): Int {
     // `--fail-on` names severities and/or check ids; an unknown one is a misuse, not a silent no-match.
     val failOnTerms = failOn?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
     val knownChecks = com.flowable.atlas.graph.Findings.CHECK_ORDER
-    failOnTerms.firstOrNull { it != "error" && it != "warning" && it !in knownChecks }?.let { bad ->
-        errln("error: argument --fail-on: unknown value '$bad' — expected error, warning or one of ${knownChecks.joinToString(", ")}")
+    failOnTerms.firstOrNull { it != "error" && it != "warning" && it != "any" && it !in knownChecks }?.let { bad ->
+        errln("error: argument --fail-on: unknown value '$bad' — expected error, any or one of ${knownChecks.joinToString(", ")}")
         return 2
     }
 
@@ -171,12 +176,17 @@ fun run(args: Array<String>): Int {
     }
 
     // ---- extract ----
+    // The waiver file lives with the artifacts, because that is the folder a reviewer is handed. It is
+    // read before the run so the counts, the report and the exit code all see the same decisions.
+    val waiverFile = waiversPath?.let { File(it) } ?: File(output ?: ".", Waivers.FILE_NAME)
+    val waivers = if (noWaivers) Waivers.EMPTY else Waivers.load(waiverFile)
     val allow = exprAllowlist.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
     val result = Atlas.extract(
         File(projectPath),
         exprAllowlist = allow.ifEmpty { null },
         discoverCustom = !noCustom,
         customPath = customFunctions?.let { File(it) },
+        waivers = waivers,
     )
 
     // ---- status line (verbatim format) ----
@@ -193,9 +203,16 @@ fun run(args: Array<String>): Int {
         val dynN = stat("dynamicEdges")
         if (suspectN + dynN > 0) append(" $MIDDLE_DOT $suspectN suspect / $dynN dynamic links")
         if (cf != null) append(" $MIDDLE_DOT custom fns: ${cf["summary"]}")
-        val scriptIssuesN = stat("scriptIssues")
+        // From `checks`, not `stats`: `stats.scriptIssues` is the raw parse-level count and knows
+        // nothing about waivers, so reading it here would let the status line contradict the report.
+        val scriptIssuesN = (checksOf(result)["scriptIssues"] as? Number)?.toInt() ?: 0
         if (scriptIssuesN > 0) append(" $MIDDLE_DOT $WARN_SIGN $scriptIssuesN script issue(s)")
         if (nDiag > 0) append(" $MIDDLE_DOT $WARN_SIGN $nDiag parse issue(s), see -v")
+        val waivedN = (checksOf(result)["waived"] as? Number)?.toInt() ?: 0
+        if (waivedN > 0) append(" $MIDDLE_DOT $waivedN waived")
+        if (staleWaivers(result).isNotEmpty()) {
+            append(" $MIDDLE_DOT $WARN_SIGN ${staleWaivers(result).size} stale waiver(s)")
+        }
     }
     // -v: the parse issues the status line counts, one per line — the flag was accepted and never read.
     val diagnosticLines: List<String> = if (verbose > 0) {
@@ -209,11 +226,26 @@ fun run(args: Array<String>): Int {
     @Suppress("UNCHECKED_CAST")
     val findings = (result["findings"] as? List<Map<String, Any?>>).orEmpty()
     val failing = findings.filter { f ->
+        if (f["waived"] != null) return@filter false
         val sev = f["severity"] as? String
-        failOnTerms.any { t -> (t == "error" && sev == "error") || (t == "warning") || t == f["check"] }
+        // `warning` has always meant "any finding at all", and pipelines were told to tighten to it —
+        // narrowing it now would make those stop failing on errors. `any` is the honest spelling.
+        failOnTerms.any { t ->
+            (t == "error" && sev == "error") || t == "warning" || t == "any" || t == f["check"]
+        }
     }
     fun exitAfterOutput(): Int {
-        if (!quiet) diagnosticLines.forEach(::errln)
+        if (!quiet) {
+            diagnosticLines.forEach(::errln)
+            // A waiver file that no longer says anything true is worth a line whether or not it is
+            // fatal: silence here is exactly how a suppression list rots.
+            staleWaivers(result).forEach { errln("  $WARN_SIGN waiver $it") }
+            waiverNotices(result).forEach { errln("  $WARN_SIGN waiver $it") }
+        }
+        if (failOnStaleWaivers && staleWaivers(result).isNotEmpty()) {
+            if (!quiet) errln("$WARN_SIGN --fail-on-stale-waivers: ${staleWaivers(result).size} stale waiver(s)")
+            return 1
+        }
         if (failing.isEmpty()) return 0
         if (!quiet) {
             val byCheck = failing.groupingBy { it["check"].toString() }.eachCount()
@@ -232,6 +264,11 @@ fun run(args: Array<String>): Int {
     if (all) {
         val outdir = File(output ?: ".")
         outdir.mkdirs()
+        // The analysis here is regenerated and may carry client data; waivers.json is a decision a team
+        // made and belongs in review. Ignoring everything but that one file lets the folder be
+        // committed without ever carrying an analysis into a repository. Written once, never rewritten:
+        // a project that tuned it keeps its version.
+        File(outdir, ".gitignore").let { if (!it.exists()) it.writeText(Waivers.OUTPUT_GITIGNORE, Charsets.UTF_8) }
         val artifacts = listOf(
             "$name.summary.md" to SummaryRenderer.render(result, root),
             "$name.overview.md" to OverviewRenderer.render(result, root),
@@ -341,8 +378,12 @@ options:
   --expr-allowlist <list>     comma-separated expression namespaces/functions the project registers itself
   --custom-functions <path>   where to look for frontend customisation sources
   --no-custom-functions       do not discover custom functions
-  --fail-on <list>            exit 1 when findings match: error, warning, and/or check ids
+  --fail-on <list>            exit 1 when findings match: error, any, and/or check ids
                               (${com.flowable.atlas.graph.Findings.CHECK_ORDER.joinToString(", ")})
+                              (warning is an accepted spelling of any, kept for compatibility)
+  --waivers <path>            the accepted-findings file (default: <output dir>/waivers.json)
+  --no-waivers                ignore it — report every finding, for an audit
+  --fail-on-stale-waivers     exit 1 when a waiver matched nothing or has expired
   -v, --verbose               list every parse issue the status line counts
   -q, --quiet                 silence the status lines on stderr
   -h, --help                  this text
@@ -355,6 +396,22 @@ exit codes: 0 success · 1 a --fail-on finding matched (artifacts are still writ
  * Faithful port of `os.path.splitext(basename)[0]`: split off the last extension, but treat leading
  * dots as part of the name (a leading-dot file has no extension), matching CPython's `genericpath`.
  */
+/** Rules a reviewer could not have reviewed, and anything wrong with the file itself. */
+@Suppress("UNCHECKED_CAST")
+private fun waiverNotices(result: Map<String, Any?>): List<String> {
+    val w = result["waivers"] as? Map<String, Any?> ?: return emptyList()
+    return ((w["unexplained"] as? List<String>).orEmpty() + (w["problems"] as? List<String>).orEmpty())
+}
+
+@Suppress("UNCHECKED_CAST")
+private fun checksOf(result: Map<String, Any?>): Map<String, Any?> =
+    result["checks"] as? Map<String, Any?> ?: emptyMap()
+
+/** What the waiver file no longer covers — an expired rule, or one whose model is gone. */
+@Suppress("UNCHECKED_CAST")
+private fun staleWaivers(result: Map<String, Any?>): List<String> =
+    ((result["waivers"] as? Map<String, Any?>)?.get("stale") as? List<String>).orEmpty()
+
 private fun splitextName(base: String): String {
     val dot = base.lastIndexOf('.')
     if (dot > -1) {
