@@ -358,6 +358,11 @@
               code; <code>src/test/**</code> is skipped now (test <i>models</i> are still judged, as the CLI
               always did). And in a monorepo the message reads <i>not a known Process key in apps/orders</i>
               — a key from another module is unknown here, not nonexistent.</li>
+          <li><b>Find Usages on a model's own key.</b> Selected in its file — the <code>id</code> of a
+              process, case or decision, the <code>"key"</code> of a JSON model — a key answered "no
+              usages". It lists every model that references it (a call activity, a form key, a service
+              mapping, an extension element's text) and every Java call site that names it at a Flowable API
+              position.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>
@@ -656,6 +661,8 @@
             <className>com.flowable.atlas.intention.OpenInAtlasExplorerIntention</className>
             <category>Flowable</category>
         </intentionAction>
+        <!-- Find Usages on a model's key, in its own file → every model and every Java call site that names it. -->
+        <findUsagesHandlerFactory implementation="com.flowable.atlas.usage.ModelKeyFindUsagesHandlerFactory"/>
         <!-- Don't report Java referenced from models (delegates, ${bean.method()}, listeners) as unused. -->
         <implicitUsageProvider implementation="com.flowable.atlas.usage.FlowableImplicitUsageProvider"/>
         <!-- Find Usages / Ctrl-B on a delegate class or ${bean.method()} shows the model files that use it. -->

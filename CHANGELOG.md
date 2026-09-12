@@ -188,6 +188,10 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   `no-such-process` to assert the failure was flagged like production code; `src/test/**` is skipped now
   (test *models* are still judged, as the CLI always did). And in a monorepo the message reads *not a
   known Process key in apps/orders* — a key from another module is unknown here, not nonexistent.
+- **Find Usages on a model's own key.** Selected in its file — the `id` of a process, case or decision,
+  the `"key"` of a JSON model — a key answered "no usages". It lists every model that references it (a
+  call activity, a form key, a service mapping, an extension element's text) and every Java call site
+  that names it at a Flowable API position.
 
 ## 0.25.0
 

@@ -118,6 +118,7 @@ typing filters by key or name.
 | Ctrl/⌘-click | A cross-reference attribute in model XML | The referenced model, at its key |
 | Ctrl/⌘-click | Any literal whose value is a known key | Its model, at its key — **only** with *Recognize model keys anywhere in code* enabled |
 | Ctrl-Q / F1 | A key literal | A documentation card: key and type, the name, the backing table for a service or data object, the project-relative file (archive → entry for a packed model) |
+| Find Usages | A model's own key, in its file — the `id` of a process, case or decision, the `"key"` of a JSON model | Every model that references it (a call activity's `calledElement`, a `formKey`, a service mapping, an extension element's text) and every Java call site that names it at a Flowable API position |
 | Find Usages | A Java method, field or class | Every model that references it by name, inside `${…}` / `#{…}` or a `class` / `delegateExpression` / `expression` attribute |
 | Find Usages | A bot class | The `.action` models whose `botKey` matches |
 | Find Usages | A Spring REST handler | The models whose HTTP task, REST button, service operation or REST data source calls that URL |

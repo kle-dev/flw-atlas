@@ -324,6 +324,12 @@ implements it) and for **REST handlers**: a Spring `@GetMapping` method is linke
 HTTP task, REST button or service operation calls that URL — matched by written short name, so Spring
 does not even need to be on the classpath.
 
+The model side answers too: Find Usages on a model's own key — the `id` of a process, the `"key"` of a
+form — lists every model that references it (the call activity, the task's form key, the service
+mapping) and every Java call site that names it. And Alt+Enter on a key in Java offers **Open in Atlas
+Explorer**, which opens that model's page in the generated explorer inside the IDE — the relationship
+view, where Ctrl+click opens the file.
+
 The IDE and the generated explorer share one matching implementation, so Find Usages in the editor and
 the reference list in the report can never disagree.
 
