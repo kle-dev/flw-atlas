@@ -1417,8 +1417,13 @@ function healthListHtml(keys){
     if(r.kind!==lastKind){ const n=open.filter(x=>x.kind===r.kind).reduce((a,x)=>a+x.n,0);
       h+='<div class="htier hkind-'+r.kind+'" data-tip="'+esc(KIND_HINT[r.kind]||'')+'">'+esc(KIND_LABEL[r.kind]||r.kind)+'<span class="hkn">'+n+'</span></div>'; lastKind=r.kind; }
     h+=row(r); });
+  // "All 7 checks clean" on a project the other 16 checks could not judge (no process, no form, no
+  // changelog) is not the same statement as "all 23 clean" — say which.
+  const total=(DATA.checkCatalog||[]).length, na=total>rows.length?total-rows.length:0;
   if(!open.length) h+='<div class="hrow tone-ok hall"><span class="hbar"></span><span class="hn">'+uiIcon('check')+'</span><span class="hsev"></span>'+
-    '<span class="hl">All '+clean.length+' checks clean</span><span class="hs">'+(clean.some(r=>r.w)?'nothing open — what was accepted is listed below':'nothing flagged in this report')+'</span></div>';
+    '<span class="hl">All '+clean.length+(na?' applicable':'')+' checks clean</span><span class="hs">'+
+    (clean.some(r=>r.w)?'nothing open — what was accepted is listed below':'nothing flagged in this report')+
+    (na?' · '+na+' of '+total+' need a process, a form or a changelog to judge':'')+'</span></div>';
   if(clean.length) h+='<details class="hclean"><summary>'+clean.length+' check'+(clean.length>1?'s':'')+' with nothing open</summary>'+
     clean.map(row).join('')+'</details>';
   return h+'</div>';
@@ -1586,7 +1591,7 @@ function treeRowHtml(r, idx, openDepth){
 function renderTree(){
   const v=document.getElementById('view-tree');
   const lens=state.treeLens||'models';
-  const openDepth=state.treeDepth||TREE_DEFAULT_DEPTH;
+  const openDepth=TREE_DEFAULT_DEPTH;
   const T=treeBuild({lens});
   let body='';
   T.groups.forEach(g=>{
@@ -2282,10 +2287,12 @@ function renderVariables(){
     h+='<div class="pagebar">'+filterBar({placeholder:'filter variables — name, model…', label:'Filter unused variables', total:open,
       chips:[{fk:'via',fv:'all',label:'All',n:open}].concat(vias.map(x=>({fk:'via',fv:x,label:term('via',x).label,n:perVia.get(x)})))})+'</div>';
   }
-  h+=secnavHtml(reg)+b;
+  // The reassurance first, then the declared-only table and the caveat: a page that opens on a 35-row
+  // table of what is *not* wrong and says "nothing flagged" at the bottom reads as 35 findings.
   if(!open) h+='<div class="estate"><div class="estate-ic" aria-hidden="true">✓</div>'+
        '<div class="et">Nothing written and forgotten</div>'+
        '<div class="eh">Every variable a model writes is read somewhere — by an expression, a script, a form field, a decision or a called model.</div></div>';
+  h+=secnavHtml(reg)+b;
   h+='</div>';
   v.innerHTML=h;
   wireReport(v);
@@ -2927,6 +2934,8 @@ const hayAttr=h=>(h==null||h==='')?'':' data-hay="'+esc(String(h).toLowerCase())
 function tbl(cols, rows, o){
   o=o||{};
   if(!rows||!rows.length) return o.empty?'<div class="muted tbl-empty">'+esc(o.empty)+'</div>':'';
+  // A column empty in every row is a header over nothing — dropped, unless it holds the row's controls.
+  cols=cols.filter(c=>c.k==='act'||rows.some(r=>{ const v=r.cells[c.k]; return v!=null&&v!==''; }));
   const tracks='1.1em '+cols.map(c=>c.w||'minmax(0,1fr)').join(' ');
   const tdCls=c=>'td'+(c.cls?' '+c.cls:'')+(c.mono?' mono':'')+(c.opt?' opt':'');
   const head='<div class="th" aria-hidden="true"><span class="td tdc"></span>'+
@@ -3016,7 +3025,7 @@ function wireSectionFilter(root){
     const leaves=all.filter(el=>!el.querySelector('[data-hay]'));
     // The count answers the chips: accepted rows and the rule/notes tables are filtered too, but "12 of
     // 340" against a chip saying 42 open contradicted itself.
-    const counted=leaves.filter(el=>!el.closest('details.chk-acc, #chk-waived, #chk-notes'));
+    const counted=leaves.filter(el=>!el.closest('details.chk-acc, #chk-waived, #chk-waiver-notes, #chk-waiver-health'));
     const containers=[...scope.querySelectorAll('details.card, details.tr, details.sect, details.chk-acc, .fgroup')].filter(c=>c.querySelector('[data-hay]'));
     // A report page's own bar keeps its text and chip in the URL (see syncHashContext) and starts from it.
     const pageBar=state.view!=='browse' && scope.classList.contains('dash');
@@ -4291,7 +4300,7 @@ function renderDetail(){
     const rest=Object.keys(n.data||{}).filter(k=>!consumed.has(k)&&!skip.has(k)&&kvTruthy((n.data||{})[k]));
     if(rest.length) body+=section('otherattrs','Other attributes',
       rest.map(k=>kvEntry(k,(n.data||{})[k],0)).join(''), {count:rest.length,
-        hint:'parsed data no section above shows — a dedicated section is an upgrade, not a precondition'});
+        hint:'everything else the parser read for this model'});
   }
   // The gesture is stated where the reference chips actually are. Walking a fan of references is the
   // case it exists for: without it, every chip you follow costs you the node you started from.
@@ -5305,8 +5314,9 @@ function renderTabs(){
       '<span class="nm">'+esc(n.label)+'</span>'+
       '<button class="x" tabindex="-1" aria-label="'+esc('Close '+n.label)+'" data-close-i="'+i+'">×</button></div>';
   }).join('');
+  // "close others" only when there are others: a visible control that does nothing teaches distrust
   bar.innerHTML='<div class="dtablist" id="dtablist" role="tablist" aria-label="Open nodes">'+rows+'</div>'+
-    '<button class="dtclose" id="dtcloseall" data-tip="Close every tab but the active one">close others</button>';
+    (state.tabs.length>1?'<button class="dtclose" id="dtcloseall" data-tip="Close every tab but the active one">close others</button>':'');
   const list=bar.querySelector('#dtablist');
   list.querySelectorAll('.dtab').forEach(t=>{
     t.onclick=e=>{
@@ -5330,7 +5340,7 @@ function renderTabs(){
       else if(e.key==='Delete'||e.key==='Backspace'){ e.preventDefault(); closeTab(+t.dataset.i); }
     };
   });
-  bar.querySelector('#dtcloseall').onclick=()=>closeOtherTabs();
+  const ca=bar.querySelector('#dtcloseall'); if(ca) ca.onclick=()=>closeOtherTabs();
   const act=list.querySelector('.dtab.on');
   if(act) act.scrollIntoView({block:'nearest', inline:'nearest'});
 }

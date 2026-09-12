@@ -535,6 +535,14 @@
               list heads "12 of 332" like every other filter. And a link to a model this report does not
               contain — renamed, or a report from a smaller scope — landed on the overview without a word
               and kept the dead hash; it says so now and cleans the address bar.</li>
+          <li><b>Small explorer corrections.</b> The Checks filter's "N of M" counted the review-notes rows
+              (a selector named a section that does not exist); a <i>not mapped</i> cell in a coverage table
+              looked like an ordinary value and a tree's <i>+N more parents</i> badge like plain text;
+              <i>close others</i> was offered with one tab open; the Unused-variables page opened on a
+              35-row table of what is not wrong and said "nothing flagged" underneath; a column empty in
+              every row kept its header; "All 7 checks clean" did not say that 16 more had nothing to judge;
+              a note meant for Atlas's developers was shown as help; and the heading focus after a
+              navigation was drawn as a text field.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

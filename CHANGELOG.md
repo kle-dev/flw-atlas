@@ -353,6 +353,14 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   And a link to a model this report does not contain — renamed, or a report from a smaller scope —
   landed on the overview without a word and kept the dead hash; it says so now and cleans the address bar.
 
+- **Small explorer corrections.** The Checks filter's "N of M" counted the review-notes rows (a selector
+  named a section that does not exist); a *not mapped* cell in a coverage table looked like an ordinary
+  value and a tree's *+N more parents* badge like plain text; *close others* was offered with one tab
+  open; the Unused-variables page opened on a 35-row table of what is not wrong and said "nothing
+  flagged" underneath; a column empty in every row kept its header; "All 7 checks clean" did not say that
+  16 more had nothing to judge; a note meant for Atlas's developers was shown as help; and the heading
+  focus after a navigation was drawn as a text field.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its

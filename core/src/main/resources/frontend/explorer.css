@@ -137,6 +137,8 @@
   .muted{color:var(--ink-faint)}
   a{color:inherit}
   :focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-radius:var(--radius-sm)}
+  /* the heading focus after a navigation is for screen readers; drawn as a full-width box it read as a text field */
+  .dtitle:focus-visible,.dash-title:focus-visible{outline-offset:4px;width:fit-content;max-width:100%}
   .dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--ink-faint)}
   /* Node-type icon (typeIcon() in explorer.js). Sized in --ui-scale units like every text token, so
      A−/A+ scales an icon with the label beside it; coloured through the same --c-* variable the dot
@@ -545,8 +547,6 @@
   .dgloc svg{display:block}
   .cflow .pa{color:var(--ink-faint)}
   /* schema-gaps tab: one coverage block per service */
-  .schemasvc{margin:0 0 var(--space-5)}
-  .schemasvc .covwrap{margin-top:var(--space-2)}
   @media (prefers-reduced-motion: no-preference){
     .pal-panel{animation:palin .12s ease}
   }
@@ -969,8 +969,9 @@
   .sev{font-weight:600}
   .sev-bad{color:var(--bad-text)}
   .sev-warn{color:var(--warn-text)}
-  .sev-ok{color:var(--ok-text)}
-  .sev-faint{color:var(--ink-faint)}
+  /* "✗ not mapped" / "— not in changelog": the one cell in a coverage table a reader must notice */
+  .miss{color:var(--warn-text);font-size:var(--text-xs);white-space:nowrap}
+  .code-pr{padding:var(--space-05) 0}
   .card-short{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:32ch}
   .card-doc{margin:0 0 var(--space-2)}
   /* the direction of a parameter mapping, coloured by tone */
@@ -1099,6 +1100,7 @@
   .tv-b{font-size:var(--text-xs);padding:0 var(--space-15);border-radius:var(--radius-sm);
     border:1px solid var(--line);color:var(--ink-dim);white-space:nowrap}
   .tv-cyc{border-color:var(--warn-text);color:var(--warn-text)}
+  .tv-par{color:var(--ink-faint);border-style:dashed}
   .tv-miss{border-color:var(--bad-text);color:var(--bad-text)}
   .tv-ref{cursor:pointer}
   .tv-ref:hover{border-color:var(--accent);color:var(--accent)}
