@@ -406,6 +406,14 @@
               error findings on one real project, and the real form lost two inbound edges. Every reference
               now passes through one door that unwraps the shape, so no parser can make that mistake
               again.</li>
+          <li><b>A data table names its operations.</b> A form select carries
+              <code>searchOperationKey</code> (its options) and <code>lookupOperationKey</code> (the stored
+              id back to a row), a data-object table its
+              <code>dataObjectDataTable{Create,Edit,Delete}OperationKey</code>; Atlas recorded only the
+              table's main operation and the four form keys, so the search operation a select runs was
+              "called by no model or code" — the one operation kind the previous release said would be
+              credited <i>only when something names it</i>, and nothing ever could. 75 such keys across the
+              real projects are followed now.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>
@@ -526,37 +534,6 @@
           <li><b>The CLI status line no longer contradicts the report.</b> It counted script issues from
               <code>stats.scriptIssues</code>, a second counter that knows nothing about waivers; it reads
               the same numbers the report does now.</li>
-        </ul>
-        <h3>0.23.1</h3>
-        <ul>
-          <li><b>A column mapping that pairs the wrong two names is a finding.</b> A <code>.service</code>
-              model says which physical column each logical field maps, and nothing checked the
-              <i>pairing</i>: two fields entered with each other's column — <code>userName</code> →
-              <code>FIRST_NAME_</code>, <code>firstName</code> → <code>USER_NAME_</code> — left every name
-              spelled correctly and every column mapped, so the schema report called the chain complete
-              while at runtime each field read and wrote the other one's column. The new
-              <code>crossedColumns</code> check reads the names as the evidence they are: a closed swap or
-              rotation is an <b>error</b> (the field names and the column names are the same set, paired
-              wrongly, which no naming convention explains), and a one-directional cross — the column this
-              field's name points at exists in the same table and the field maps something else — is a
-              <b>warning</b>, because that one is occasionally a deliberate mapping onto a legacy column. A
-              field mapped to a column of a genuinely different name stays silent:
-              <code>approverApproval</code> ↔ <code>APPR_APPROVAL_</code> is not evidence of anything.</li>
-          <li><b>The data-object column of the schema table names the field the service actually maps.</b>
-              It matched data-object fields against the <i>column</i> name as well as the mapping's field
-              name, so a crossed mapping's row claimed two fields — <code>FIRST_NAME_</code> listed both
-              <code>userName</code>, which maps it, and <code>firstName</code>, which does not — in exactly
-              the row that has to be exact. A <code>.data</code> field binds to the mapping's name, so that
-              is what the row now uses; without a mapping there is no field name and the column name is
-              still all there is to match on. Audited against a real project's 120 mapped columns, the
-              column name never contributed a field the mapping name did not already give.</li>
-          <li><b>The crossed row no longer looks like the cleanest one.</b> A crossed mapping is not a
-              coverage gap, so the service page's <i>Schema coverage</i> table, its <i>Column mappings</i>
-              table and the <code>#/schema</code> report showed it as fully mapped through. All three now
-              mark it <code>⇄ crossed</code>, with the reason on hover, count it in the service's badges,
-              and keep it in the schema report's gaps-only view instead of collapsing the service into
-              <i>Fully mapped</i>. The <i>Checks</i> page spells out both halves of every crossed
-              pairing.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

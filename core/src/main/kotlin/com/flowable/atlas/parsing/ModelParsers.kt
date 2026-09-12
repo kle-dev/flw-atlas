@@ -530,6 +530,12 @@ object ModelParsers {
                     dataSources.add(linkedMapOf("kind" to "dataObject", "key" to es["dataObjectDefinitionKey"], "op" to es["dataObjectOperationKey"]))
                     ctx.addRef(key, mtype, ffile, "field-dataObject", "dataObject", es["dataObjectDefinitionKey"])
                     ctx.addOpUse(key, "dataObject", es["dataObjectDefinitionKey"], es["dataObjectOperationKey"])
+                    // The data table's own create/edit/delete operations name what its row actions call
+                    // (75 such keys across the real projects, none of them recorded before).
+                    for (ok in listOf("dataObjectDataTableCreateOperationKey", "dataObjectDataTableEditOperationKey",
+                                      "dataObjectDataTableDeleteOperationKey")) {
+                        ctx.addOpUse(key, "dataObject", es["dataObjectDefinitionKey"], es[ok])
+                    }
                 }
                 // A select/table reads its options over REST: `queryUrl` for the list, `lookupUrl` to
                 // resolve a stored id back to a label. Both are plain GETs.
@@ -543,6 +549,9 @@ object ModelParsers {
                     dataSources.add(linkedMapOf("kind" to "service", "key" to sm["serviceModelKey"], "op" to sm["operationKey"]))
                     ctx.addRef(key, mtype, ffile, "field-service", "service", sm["serviceModelKey"])
                     ctx.addOpUse(key, "service", sm["serviceModelKey"], sm["operationKey"])
+                    // a select's list and its stored-id lookup are two more operations the component names
+                    ctx.addOpUse(key, "service", sm["serviceModelKey"], sm["searchOperationKey"])
+                    ctx.addOpUse(key, "service", sm["serviceModelKey"], sm["lookupOperationKey"])
                 }
                 // the four form keys a data-object data table carries (the platform's useDataObjectDT)
                 for (fk in listOf("dataObjectDataTableCreateFormKey", "dataObjectDataTableEditFormKey",

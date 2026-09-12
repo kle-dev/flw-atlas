@@ -30,14 +30,21 @@ class DataObjectOperationsTest {
                       {"key":"update","type":"update","name":"Update"},
                       {"key":"delete","type":"delete","name":"Delete"},
                       {"key":"searchAll","type":"search","name":"Search all"},
-                      {"key":"searchOpen","type":"search","name":"Search open"}]}""")
+                      {"key":"searchOpen","type":"search","name":"Search open"},
+                      {"key":"searchArchived","type":"search","name":"Search archived"}]}""")
             File(dir, "order.data").writeText(
                 """{"key":"orderDO","name":"Order","dataObjectType":"serviceRegistryDataObject",
                     "referencedServiceDefinitionModelKey":"orders"}""")
             File(dir, "orders.page").writeText(
                 """{"metadata":{"key":"ordersPage","name":"Orders","modelType":"page"},
                     "rows":[{"cols":[{"id":"tbl","type":"dataTable","extraSettings":{"dataSource":"DataObject",
-                      "dataObjectDefinitionKey":"orderDO","dataObjectOperationKey":"searchAll"}}]}]}""")
+                      "dataObjectDefinitionKey":"orderDO","dataObjectOperationKey":"searchAll",
+                      "dataObjectDataTableEditOperationKey":"update"}}]}]}""")
+            // a select whose options come from a search operation and whose stored id resolves through a lookup
+            File(dir, "pick.form").writeText(
+                """{"metadata":{"key":"pickForm","name":"Pick","modelType":"form"},
+                    "rows":[{"cols":[{"id":"sel","type":"selectSingle","extraSettings":{"serviceModel":{
+                      "serviceModelKey":"orders","searchOperationKey":"searchOpen","lookupOperationKey":"findById"}}}]}]}""")
             result = Atlas.extract(dir)
         }
 
@@ -55,15 +62,19 @@ class DataObjectOperationsTest {
 
     @Test
     fun theEngineOperationsAreUsedByTheBoundDataObject() {
-        for (op in listOf("findById", "create", "update", "delete")) assertEquals(op, listOf("dataObject:orderDO"), usedBy(op))
+        for (op in listOf("create", "delete")) assertEquals(op, listOf("dataObject:orderDO"), usedBy(op))
+        // …and by whatever names them as well: the select's lookup, the table's edit action
+        assertEquals(listOf("dataObject:orderDO", "form:pickForm"), usedBy("findById").sortedBy { it.toString() })
+        assertEquals(listOf("dataObject:orderDO", "page:ordersPage"), usedBy("update").sortedBy { it.toString() })
     }
 
     @Test
     @Suppress("UNCHECKED_CAST")
     fun aSearchOperationIsUsedOnlyWhenSomethingNamesIt() {
         assertEquals(listOf("page:ordersPage"), usedBy("searchAll"))
-        assertEquals(emptyList<String>(), usedBy("searchOpen"))
+        assertEquals(listOf("form:pickForm"), usedBy("searchOpen"))
+        assertEquals(emptyList<String>(), usedBy("searchArchived"))
         val unused = (result["findings"] as List<Map<String, Any?>>).filter { it["check"] == "unusedOps" }.map { it["node"] }
-        assertEquals(listOf("serviceOperation:orders#searchOpen"), unused)
+        assertEquals(listOf("serviceOperation:orders#searchArchived"), unused)
     }
 }

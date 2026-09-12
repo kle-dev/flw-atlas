@@ -231,6 +231,13 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   — two error findings on one real project, and the real form lost two inbound edges. Every reference
   now passes through one door that unwraps the shape, so no parser can make that mistake again.
 
+- **A data table names its operations.** A form select carries `searchOperationKey` (its options) and
+  `lookupOperationKey` (the stored id back to a row), a data-object table its
+  `dataObjectDataTable{Create,Edit,Delete}OperationKey`; Atlas recorded only the table's main operation
+  and the four form keys, so the search operation a select runs was "called by no model or code" — the
+  one operation kind the previous release said would be credited *only when something names it*, and
+  nothing ever could. 75 such keys across the real projects are followed now.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its
