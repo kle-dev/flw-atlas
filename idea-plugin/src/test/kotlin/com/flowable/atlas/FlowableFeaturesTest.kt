@@ -235,6 +235,9 @@ class FlowableFeaturesTest : BasePlatformTestCase() {
         assertNotNull("expected BOGUS_ flagged", finding)
         // The message names the service it compared against, not "the backing model".
         assertTrue(finding!!.description, finding.description.contains("'DEMO-S010'"))
+        // …and offers the way out: the service model whose mappings decide.
+        val fixes = myFixture.getAllQuickFixes().map { it.text }
+        assertTrue("expected the open-service fix among $fixes", "Open the Flowable service model 'DEMO-S010'" in fixes)
     }
 
     fun testLiquibaseColumnCompletion() {

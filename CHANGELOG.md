@@ -448,6 +448,10 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   time now, so the banner above an explorer tab says *3 models changed since this page was generated:
   DEMO-F002, DEMO-P001, DEMO-P007* (the first five, then a count) and the Hub's attention line names the
   first three; a packed model is named by its key, an unreadable file by its name.
+- **The Liquibase inspection has a way out.** *Column 'BOGUS_' is not mapped in Flowable service model
+  'DEMO-S010'* was a verdict with no door: no quick fix, and in a monorepo no word on which sub-project's
+  index had judged. The warning offers *Open the Flowable service model 'DEMO-S010'* — the model whose
+  mappings decide, at its key — and names the sub-project like the key inspections do.
 
 ## 0.25.0
 
