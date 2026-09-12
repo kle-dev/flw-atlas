@@ -100,9 +100,9 @@ fourth on Java code and inside model files:
 
 | Icon | On | Goes to |
 |---|---|---|
-| a link | A class or method referenced by a model | The models that reference it ("Flowable Models") |
-| a bot | A `BotService` implementation | The `.action` models that use that bot |
-| a globe | A Spring REST handler | The models that call that endpoint |
+| a link | A class or method referenced by a model | The models that reference it ("Flowable Models"), each opened at the reference itself — the `${bean…}` in a deployment XML, not its first line |
+| a bot | A `BotService` implementation | The `.action` models that use that bot, each opened at its `botKey` |
+| a globe | A Spring REST handler | The models that call that endpoint, each opened at the calling URL |
 | a route | A model-key literal or resolvable constant in Java; inside a model file, the file's own key and every reference to a process, case or decision (`calledElement`, `caseRef`, `processRef`, a form's `processReference`, …) | That model's diagram, in the Images viewer — shown only when a diagram actually exists |
 
 The tooltip says what the mark knows: how many actions use the bot, which verbs and paths the models call,

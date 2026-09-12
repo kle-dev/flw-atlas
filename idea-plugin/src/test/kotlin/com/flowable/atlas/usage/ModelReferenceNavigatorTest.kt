@@ -45,6 +45,21 @@ class ModelReferenceNavigatorTest : BasePlatformTestCase() {
         assertFalse(text, text.contains("Ship"))
     }
 
+    fun testARowCarriesTheUsageOffsetTheScanFound() {
+        val process = myFixture.addFileToProject(
+            "models/DEMO-P003.bpmn20.xml",
+            """<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn">
+                 <process id="DEMO-P003" name="Bill"><serviceTask id="t" flowable:expression="${'$'}{billingService.charge(x)}"/></process>
+               </definitions>""",
+        ).virtualFile
+        project.service<FlowableModelIndexService>().index()
+        val usages = ModelReferenceScan.affectedModelUsages(project, setOf("billingService"))
+        val expected = String(process.contentsToByteArray()).indexOf("billingService")
+        assertEquals("the first usage's offset, not line 1", mapOf(process to expected), usages)
+        assertEquals(expected, ModelReferenceNavigator.rows(project, usages).single().offset)
+        assertNull("a plain file list still opens at the top", ModelReferenceNavigator.rows(project, listOf(process)).single().offset)
+    }
+
     fun testAFileTheIndexDoesNotKnowStillGetsARow() {
         val stray = myFixture.addFileToProject("models/stray.bpmn", "<definitions/>").virtualFile
         project.service<FlowableModelIndexService>().index()

@@ -74,10 +74,10 @@ class FlowableModelReferenceLineMarkerProvider : LineMarkerProvider {
         val project = element.project
         object : Task.Backgroundable(project, message("linemarker.reference.progress"), true) {
             override fun run(indicator: ProgressIndicator) {
-                val files = ModelReferenceScan.affectedModelFiles(project, names)
+                val usages = ModelReferenceScan.affectedModelUsages(project, names)
                 val at = RelativePoint(event)
                 ApplicationManager.getApplication().invokeLater {
-                    ModelReferenceNavigator.show(project, files, message("linemarker.reference.popup", symbolName(element)), at)
+                    ModelReferenceNavigator.show(project, usages, message("linemarker.reference.popup", symbolName(element)), at)
                 }
             }
         }.queue()

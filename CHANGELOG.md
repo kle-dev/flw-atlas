@@ -423,6 +423,10 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   reference to the bean's class now — resolved the way completion resolves it, in the project only —
   inside an injected model expression and in the playground alike; a root that is a variable resolves
   to nothing and is not painted, that stays the grounding inspection's call.
+- **The gutter opens at the usage.** The scan behind the reference, bot and endpoint gutter marks
+  computed where in each model the Java symbol, bot or URL is used — and then opened the file at line
+  1, while Find Usages on the same data landed on the offset. Each model now opens at its first usage:
+  the `${bean…}` in a deployment XML holding three processes, the action's `botKey`, the calling URL.
 
 ## 0.25.0
 

@@ -67,10 +67,10 @@ class FlowableEndpointUsageLineMarkerProvider : LineMarkerProvider {
         val project = element.project
         object : Task.Backgroundable(project, message("linemarker.endpoint.progress"), true) {
             override fun run(indicator: ProgressIndicator) {
-                val files = EndpointModelScan.affectedModelFiles(project, endpoints)
+                val usages = EndpointModelScan.affectedModelUsages(project, endpoints)
                 val at = RelativePoint(event)
                 ApplicationManager.getApplication().invokeLater {
-                    ModelReferenceNavigator.show(project, files, message("linemarker.endpoint.popup", endpoints.first().let { "${it.verb} ${it.path}" }), at)
+                    ModelReferenceNavigator.show(project, usages, message("linemarker.endpoint.popup", endpoints.first().let { "${it.verb} ${it.path}" }), at)
                 }
             }
         }.queue()

@@ -7,6 +7,7 @@ import com.intellij.codeInsight.daemon.LineMarkerInfo
 import com.intellij.codeInsight.daemon.LineMarkerProvider
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.editor.markup.GutterIconRenderer
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
@@ -64,16 +65,26 @@ class FlowableBotActionLineMarkerProvider : LineMarkerProvider {
         val project = element.project
         object : Task.Backgroundable(project, message("linemarker.bot.progress"), true) {
             override fun run(indicator: ProgressIndicator) {
-                val files = project.service<FlowableModelIndexService>().actionsUsingBot(botKey).map { it.file }
+                // each action opens at its `botKey` — the line that names this bot, not the top of the file
+                val usages = project.service<FlowableModelIndexService>().actionsUsingBot(botKey)
+                    .map { it.file }.distinct()
+                    .associateWith { file -> botKeyOffset(file) }
                 val at = RelativePoint(event)
                 ApplicationManager.getApplication().invokeLater {
-                    ModelReferenceNavigator.show(project, files, message("linemarker.bot.popup", botKey), at)
+                    ModelReferenceNavigator.show(project, usages, message("linemarker.bot.popup", botKey), at)
                 }
             }
         }.queue()
     }
 
+    /** Offset of the `botKey` value in an action file, or null when the text does not spell it that way. */
+    private fun botKeyOffset(file: VirtualFile): Int? {
+        val text = runCatching { String(file.contentsToByteArray(), Charsets.UTF_8) }.getOrNull() ?: return null
+        return BOT_KEY_VALUE.find(text)?.groups?.get(1)?.range?.first
+    }
+
     private companion object {
+        val BOT_KEY_VALUE = Regex("\"botKey\"\\s*:\\s*\"([^\"]*)\"")
         val ICON: Icon = AtlasIcons.GutterBot
     }
 }

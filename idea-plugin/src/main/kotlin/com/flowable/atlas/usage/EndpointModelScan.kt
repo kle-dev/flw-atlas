@@ -51,15 +51,20 @@ object EndpointModelScan {
      * Model files (and archive entries) calling one of [endpoints]. Runs its own read action, so it must
      * be called off the EDT. Returns empty for an empty endpoint list.
      */
-    fun affectedModelFiles(project: Project, endpoints: List<EndpointPsi.Endpoint>): List<VirtualFile> {
-        if (endpoints.none { meaningful(it) }) return emptyList()
-        return ReadAction.computeBlocking<List<VirtualFile>, RuntimeException> {
-            if (project.isDisposed) return@computeBlocking emptyList()
-            val found = LinkedHashSet<VirtualFile>()
+    fun affectedModelFiles(project: Project, endpoints: List<EndpointPsi.Endpoint>): List<VirtualFile> =
+        affectedModelUsages(project, endpoints).keys.toList()
+
+    /** The same files, each with the offset of its first calling URL — what the gutter click opens at. */
+    fun affectedModelUsages(project: Project, endpoints: List<EndpointPsi.Endpoint>): Map<VirtualFile, Int> {
+        if (endpoints.none { meaningful(it) }) return emptyMap()
+        return ReadAction.computeBlocking<Map<VirtualFile, Int>, RuntimeException> {
+            if (project.isDisposed) return@computeBlocking emptyMap()
+            val found = LinkedHashMap<VirtualFile, Int>()
             ModelReferenceScan.forEachModelText(project) { vf, text ->
-                if (usageRanges(text, endpoints).isNotEmpty()) found.add(vf)
+                val first = usageRanges(text, endpoints).minOfOrNull { it.first } ?: return@forEachModelText
+                found.putIfAbsent(vf, first)
             }
-            found.toList()
+            found
         }
     }
 }

@@ -321,7 +321,7 @@ stops lying to you about what is used.
 <figure class="fig mock">
   <div class="body">{{mockup:java-linking}}</div>
   <figcaption><b>Find Usages from Java into models</b>, plus a gutter icon on every
-  model-referenced class and method.</figcaption>
+  model-referenced class and method — opening the model at the reference itself.</figcaption>
 </figure>
 
 Two real failure modes disappear. "Unused" code that a process depends on gets deleted in a cleanup

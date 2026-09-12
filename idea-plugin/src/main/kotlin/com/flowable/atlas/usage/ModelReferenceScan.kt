@@ -39,17 +39,24 @@ object ModelReferenceScan {
      * Model files (and archive entries) whose text references any of [names]. Runs its own read action,
      * so it must be called off the EDT / off the refactoring thread. Returns empty for empty [names].
      */
-    fun affectedModelFiles(project: Project, names: Set<String>): List<VirtualFile> {
-        if (names.isEmpty()) return emptyList()
-        return ReadAction.computeBlocking<List<VirtualFile>, RuntimeException> {
-            if (project.isDisposed) return@computeBlocking emptyList()
-            val found = LinkedHashSet<VirtualFile>()
+    fun affectedModelFiles(project: Project, names: Set<String>): List<VirtualFile> =
+        affectedModelUsages(project, names).keys.toList()
+
+    /**
+     * The same files, each with the offset of its **first** usage — what a gutter click opens at, so a
+     * deployment XML holding three processes lands on the `${bean…}` and not on line 1. Same threading rule.
+     */
+    fun affectedModelUsages(project: Project, names: Set<String>): Map<VirtualFile, Int> {
+        if (names.isEmpty()) return emptyMap()
+        return ReadAction.computeBlocking<Map<VirtualFile, Int>, RuntimeException> {
+            if (project.isDisposed) return@computeBlocking emptyMap()
+            val found = LinkedHashMap<VirtualFile, Int>()
             forEachModelText(project) { vf, text ->
-                if (names.any { text.contains(it) } && ModelUsageLocator.findUsages(text, names).isNotEmpty()) {
-                    found.add(vf)
-                }
+                if (names.none { text.contains(it) }) return@forEachModelText
+                val first = ModelUsageLocator.findUsages(text, names).firstOrNull() ?: return@forEachModelText
+                found.putIfAbsent(vf, first.first)
             }
-            found.toList()
+            found
         }
     }
 
