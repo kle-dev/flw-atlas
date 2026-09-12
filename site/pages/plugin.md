@@ -207,7 +207,9 @@ section shows an element, the graph already has an edge for it.
 
 ### Diagrams in the gutter
 
-A gutter icon next to any model key opens that model's diagram.
+A gutter icon next to any model key opens that model's diagram — next to a key literal or constant in
+Java, and inside a model file next to the file's own key and every call activity, case task or
+decision reference, so a minified export opens its own diagram from its first line.
 
 <figure class="fig mock">
   <div class="body">{{mockup:diagrams}}</div>

@@ -21,8 +21,9 @@ import com.intellij.psi.PsiReferenceExpression
 import com.intellij.psi.util.PsiTreeUtil
 
 /**
- * Shows the model type, name, backing table and file when hovering (or Ctrl-Q) over a Flowable key
- * literal at a public-API call site — as a documentation card, the platform's own shape.
+ * Shows the model type, name, backing table and file when hovering (or Ctrl-Q) over a Flowable key —
+ * a literal at a public-API call site in Java, a cross-reference or the file's own key inside a model
+ * file (BPMN/CMMN XML, or the JSON models) — as a documentation card, the platform's own shape.
  */
 class FlowableKeyDocumentationProvider : AbstractDocumentationProvider() {
 
@@ -76,6 +77,14 @@ class FlowableKeyDocumentationProvider : AbstractDocumentationProvider() {
         val project = (originalElement ?: element)?.project ?: return null
         val service = project.service<FlowableModelIndexService>()
         val (targetTypes, key, _) = run {
+            // Inside a model file: a cross-reference (calledElement, an eventType's text, a data object's
+            // backing service, …) or the file's own key. The leaf under the caret first — the element the
+            // platform passes is the reference's *target*, a token in another file.
+            val fileSite = ModelFileKeySites.at(originalElement) ?: ModelFileKeySites.at(element)
+            if (fileSite != null) {
+                if (service.cachedOrNull() == null) service.ensureBuilding()   // hover again once it exists
+                return@run Triple(fileSite.types.toSet(), fileSite.key, (originalElement ?: element) as PsiElement)
+            }
             val literal = literalOf(originalElement) ?: literalOf(element)
             if (literal != null) {
                 val k = literal.value as? String ?: return null

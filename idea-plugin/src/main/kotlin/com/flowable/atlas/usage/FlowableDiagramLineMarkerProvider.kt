@@ -5,11 +5,17 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.FlowableAtlasBundle
-import com.flowable.atlas.completion.KeySite
 import com.flowable.atlas.completion.SiteMatching
 import com.flowable.atlas.completion.ValueKeyMatching
 import com.flowable.atlas.index.FlowableModelIndexService
+import com.flowable.atlas.model.ModelFiles
 import com.flowable.atlas.model.ModelType
+import com.flowable.atlas.navigation.ModelFileKeySites
+import com.intellij.json.psi.JsonStringLiteral
+import com.intellij.psi.xml.XmlAttributeValue
+import com.intellij.psi.xml.XmlText
+import com.intellij.psi.xml.XmlToken
+import com.intellij.psi.xml.XmlTokenType
 import com.intellij.codeInsight.daemon.LineMarkerInfo
 import com.intellij.codeInsight.daemon.LineMarkerProvider
 import com.intellij.codeInsight.hint.HintManager
@@ -29,6 +35,9 @@ import javax.swing.Icon
  * [SiteMatching.keySiteForLiteral] site such as `startProcessInstanceByKey("onboarding")`, or — the
  * generated model-constants / local-variable pattern — a constant reference at a key site such as
  * `processDefinitionKey(ModelConstants.ONBOARDING)`, whose compile-time value [SiteMatching] resolves.
+ * Inside a model file the same mark sits on the file's own key and on every cross-reference to a
+ * process, case or decision ([ModelFileKeySites]) — the diagram of the process you are reading, one
+ * click away, and the callee's from its call activity.
  * The icon appears when the resolved model has an openable diagram (a bundled `.svg` from Flowable
  * Design's export layout, or a DI layout Atlas can render — see [FlowableDiagram]); clicking it opens
  * that diagram in IntelliJ's built-in image/SVG viewer, so the process/case/decision can be seen
@@ -49,15 +58,17 @@ class FlowableDiagramLineMarkerProvider : LineMarkerProvider {
         if (elements.isEmpty()) return
         // cachedOrNull() only — never build the index from a highlighting pass. If it isn't ready yet,
         // kick a background build and show nothing this pass; markers appear once the index exists.
-        val service = elements.first().project.service<FlowableModelIndexService>()
+        val first = elements.first()
+        val service = first.project.service<FlowableModelIndexService>()
         val index = service.cachedOrRequest() ?: return
         val valueBased = ValueKeyMatching.enabled()
+        val inModelFile = first.containingFile?.virtualFile?.let { ModelFiles.typeOf(it) } != null
         for (element in elements) {
-            val (key, site) = keyAnchor(element) ?: continue
+            val (key, types) = (if (inModelFile) fileAnchor(element) else keyAnchor(element)) ?: continue
             // Call-site match narrows by the site's target types; otherwise (opt-in) match by value
             // against every model type — the key must still equal a real indexed key.
             val candidates = when {
-                site != null -> index.find(key).filter { it.type in site.targetTypes }
+                types != null -> index.find(key).filter { it.type in types }
                 valueBased && ValueKeyMatching.plausible(key) -> index.find(key)
                 else -> continue
             }
@@ -75,22 +86,41 @@ class FlowableDiagramLineMarkerProvider : LineMarkerProvider {
      * (`ModelConstants.ONBOARDING`) therefore yields exactly one marker — the qualifier's own
      * reference expression is not an argument, so it resolves to no site.
      */
-    private fun keyAnchor(element: PsiElement): Pair<String, KeySite?>? {
+    private fun keyAnchor(element: PsiElement): Pair<String, Collection<ModelType>?>? {
         when (val parent = element.parent) {
             is PsiLiteralExpression -> {
                 if (parent.firstChild !== element) return null
                 val key = parent.value as? String ?: return null
-                return key to SiteMatching.keySiteForLiteral(parent)
+                return key to SiteMatching.keySiteForLiteral(parent)?.targetTypes
             }
             // A constant / local-variable reference at a key site: `processDefinitionKey(PROCESS_KEY)`.
             // Site-gated only — matching a bare identifier by value would light up every mention of it.
             is PsiReferenceExpression -> {
                 if (parent.referenceNameElement !== element) return null
                 val (site, value) = SiteMatching.keySiteForArgument(parent) ?: return null
-                return value to site
+                return value to site.targetTypes
             }
             else -> return null
         }
+    }
+
+    /**
+     * Inside a model file: the key token of a cross-reference — `calledElement="…"`, a `caseRef`, an
+     * `<eventType>`'s text, a form's `processReference` — or of the file's own declaration, so a minified
+     * BPMN opens its own diagram from its `<process id>` and every call activity opens the callee's.
+     * The leaf is the value token itself (never a quote), so one marker per key.
+     */
+    private fun fileAnchor(element: PsiElement): Pair<String, Collection<ModelType>?>? {
+        val parent = element.parent
+        val site = when {
+            element is XmlToken && element.tokenType == XmlTokenType.XML_ATTRIBUTE_VALUE_TOKEN && parent is XmlAttributeValue ->
+                ModelFileKeySites.siteOf(parent)
+            element is XmlToken && element.tokenType == XmlTokenType.XML_DATA_CHARACTERS && parent is XmlText ->
+                parent.parentTag?.let(ModelFileKeySites::siteOf)
+            parent is JsonStringLiteral && parent.firstChild === element -> ModelFileKeySites.siteOf(parent)
+            else -> null
+        } ?: return null
+        return site.key to site.types
     }
 
     private fun buildMarker(anchor: PsiElement, modelFile: VirtualFile, type: ModelType, key: String): LineMarkerInfo<PsiElement> {

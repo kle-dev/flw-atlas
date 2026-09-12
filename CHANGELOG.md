@@ -410,6 +410,13 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   `sla-definition-key` — is a link too, CDATA-wrapped as Design writes it; the broken-key inspection
   reads that text the same way (a CDATA-wrapped key was flagged as unknown, markers and all) and, in a
   monorepo, says which sub-project's index the key is unknown in.
+- **Model files get the hover, the inlay and the gutter.** The documentation card, the inline name and
+  the diagram mark were Java-only: a `calledElement="DEMO-P002"` in a BPMN said nothing about which
+  process that is, and the diagram of the process you were reading was a Java literal away. Inside a
+  model file — XML or JSON — a cross-reference and the file's own key now carry the same card on hover
+  (type, name, backing table, file), the referenced model's name as an inline hint (*Model names* under
+  Inlay Hints → Values, off in one click), and the diagram mark on the file's own key and on every
+  process, case or decision reference.
 
 ## 0.25.0
 

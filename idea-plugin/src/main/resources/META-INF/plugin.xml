@@ -262,6 +262,13 @@
         <lang.documentationProvider
                 language="JAVA"
                 implementationClass="com.flowable.atlas.navigation.FlowableKeyDocumentationProvider"/>
+        <!-- …and on a key inside a model file: a cross-reference or the file's own key. -->
+        <lang.documentationProvider
+                language="XML"
+                implementationClass="com.flowable.atlas.navigation.FlowableKeyDocumentationProvider"/>
+        <lang.documentationProvider
+                language="JSON"
+                implementationClass="com.flowable.atlas.navigation.FlowableKeyDocumentationProvider"/>
         <!-- Search Everywhere / Go to Symbol: every model key (→ model file) and every bot key
              (→ the BotService class and the actions that invoke it). -->
         <gotoSymbolContributor
@@ -318,6 +325,13 @@
         <codeInsight.lineMarkerProvider
                 language="JAVA"
                 implementationClass="com.flowable.atlas.usage.FlowableDiagramLineMarkerProvider"/>
+        <!-- …and inside a model file: on the file's own key and on every process/case/decision reference. -->
+        <codeInsight.lineMarkerProvider
+                language="XML"
+                implementationClass="com.flowable.atlas.usage.FlowableDiagramLineMarkerProvider"/>
+        <codeInsight.lineMarkerProvider
+                language="JSON"
+                implementationClass="com.flowable.atlas.usage.FlowableDiagramLineMarkerProvider"/>
         <!-- Inline hint: the physical table name after a string literal that is a data-object key. -->
         <codeInsight.declarativeInlayProvider
                 language="JAVA"
@@ -338,6 +352,25 @@
                 bundle="messages.FlowableAtlasBundle"
                 nameKey="inlay.actionName.name"
                 descriptionKey="inlay.actionName.description"/>
+        <!-- Inline hint inside a model file: the referenced model's name after the key that names it. -->
+        <codeInsight.declarativeInlayProvider
+                language="XML"
+                implementationClass="com.flowable.atlas.hint.FlowableModelNameInlayProvider"
+                isEnabledByDefault="true"
+                group="VALUES_GROUP"
+                providerId="com.flowable.atlas.modelName.xml"
+                bundle="messages.FlowableAtlasBundle"
+                nameKey="inlay.modelName.name"
+                descriptionKey="inlay.modelName.description"/>
+        <codeInsight.declarativeInlayProvider
+                language="JSON"
+                implementationClass="com.flowable.atlas.hint.FlowableModelNameInlayProvider"
+                isEnabledByDefault="true"
+                group="VALUES_GROUP"
+                providerId="com.flowable.atlas.modelName.json"
+                bundle="messages.FlowableAtlasBundle"
+                nameKey="inlay.modelName.name"
+                descriptionKey="inlay.modelName.description"/>
         <!-- Warn when renaming a Java symbol referenced by Flowable model expressions (text, not auto-updated). -->
         <refactoring.elementListenerProvider
                 implementation="com.flowable.atlas.usage.FlowableRenameWarningProvider"/>

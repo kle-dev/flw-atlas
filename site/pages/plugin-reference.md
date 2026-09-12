@@ -95,14 +95,15 @@ engine rather than from the file.
 
 ## Gutter icons
 
-Four, all on Java code, each with a mark of its own so the gutter says which relationship it is:
+Four, each with a mark of its own so the gutter says which relationship it is — three on Java code, the
+fourth on Java code and inside model files:
 
 | Icon | On | Goes to |
 |---|---|---|
 | a link | A class or method referenced by a model | The models that reference it ("Flowable Models") |
 | a bot | A `BotService` implementation | The `.action` models that use that bot |
 | a globe | A Spring REST handler | The models that call that endpoint |
-| a route | A model-key literal or resolvable constant | That model's diagram, in the Images viewer — shown only when a diagram actually exists |
+| a route | A model-key literal or resolvable constant in Java; inside a model file, the file's own key and every reference to a process, case or decision (`calledElement`, `caseRef`, `processRef`, a form's `processReference`, …) | That model's diagram, in the Images viewer — shown only when a diagram actually exists |
 
 The tooltip says what the mark knows: how many actions use the bot, which verbs and paths the models call,
 which model's diagram opens (*Process diagram: DEMO-P001*). When several models sit behind a mark, a chooser
@@ -118,7 +119,7 @@ typing filters by key or name.
 | Ctrl/⌘-click | A cross-reference in model XML — an attribute (`calledElement`, `formKey`, `caseRef`, …) or an extension element's text (`eventType`, `channelKey`, `sla-definition-key`, …), CDATA-wrapped or not | The referenced model, at its key |
 | Ctrl/⌘-click | A model key in a JSON model — a data object's backing service or dictionary, a form component's subform, data object, service, action, process or case, a document's forms, an action's form, an app's models, an agent's tools, a channel's event | The referenced model, at its key. The sites are the ones the report draws edges for, from one shared catalog |
 | Ctrl/⌘-click | Any literal whose value is a known key | Its model, at its key — **only** with *Recognize model keys anywhere in code* enabled |
-| Ctrl-Q / F1 | A key literal | A documentation card: key and type, the name, the backing table for a service or data object, the project-relative file (archive → entry for a packed model) |
+| Ctrl-Q / F1 | A key literal in Java; a cross-reference or the file's own key inside a model file | A documentation card: key and type, the name, the backing table for a service or data object, the project-relative file (archive → entry for a packed model) |
 | Find Usages | A model's own key, in its file — the `id` of a process, case or decision, the `"key"` of a JSON model | Every model that references it (a call activity's `calledElement`, a `formKey`, a service mapping, an extension element's text) and every Java call site that names it at a Flowable API position |
 | Find Usages | A Java method, field or class | Every model that references it by name, inside `${…}` / `#{…}` or a `class` / `delegateExpression` / `expression` attribute |
 | Find Usages | A bot class | The `.action` models whose `botKey` matches |
@@ -157,10 +158,13 @@ covers every service that extends it.
 
 ## Inlay hints
 
-*Settings → Editor → Inlay Hints → Values.* Both on by default, and that page is the only switch.
+*Settings → Editor → Inlay Hints → Values.* All on by default, and that page is the only switch.
 
-- **Data object table names** — the backing table beside an otherwise opaque data-object key.
-- **Action names** — the action's display name beside its key.
+- **Data object table names** — the backing table beside an otherwise opaque data-object key, in Java.
+- **Action names** — the action's display name beside its key, in Java.
+- **Model names** — inside a BPMN, CMMN or JSON model, the referenced model's name beside the key that
+  names it: after `calledElement`, `formKey`, an `eventType`'s text, a data object's backing service, a
+  form component's subform. Listed once per language (XML, JSON).
 
 ## Intentions
 
@@ -278,7 +282,7 @@ environment is selected lives in your workspace file, since connection ids are p
 
 - *Settings → Editor → Color Scheme → **Flowable Expression*** — parentheses levels 1–5, brackets,
   strings, numbers, operators, dot, comma, identifiers.
-- *Settings → Editor → Inlay Hints → Values* — the two hints above.
+- *Settings → Editor → Inlay Hints → Values* — the hints above.
 - *Settings → Editor → Inspections → Flowable* — the six inspections above.
 
 ### Scopes and monorepos
