@@ -12,6 +12,12 @@ class RestCallScannerTest {
     private fun RestCallScanner.RestCall.slice(text: String) = text.substring(range.first, range.last + 1)
 
     @Test
+    fun aButtonsInvokeUrlsAreCalls() {
+        val text = """{"extraSettings":{"invokeServiceUrl":"/platform-api/services/DEMO-S001/lookup","invokeActionUrl":"/action-api/run/DEMO-A001"}}"""
+        assertEquals(listOf("/platform-api/services/DEMO-S001/lookup", "/action-api/run/DEMO-A001"), RestCallScanner.scan(text).map { it.url })
+    }
+
+    @Test
     fun nestedStringWithCdata() {
         val text = """
             <serviceTask id="t" flowable:type="http">

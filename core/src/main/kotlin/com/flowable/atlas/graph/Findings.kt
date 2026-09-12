@@ -235,6 +235,10 @@ object Findings {
             // and everything harvested from them carries its type. Only a bare Java literal is ambiguous,
             // and that edge is already marked suspect.
             if (d["kind"] == "conflict") continue
+            // A file that is not a Flowable model at all — a Helm chart's `.tpl`, a palette JSON, a manifest —
+            // is recorded in `diagnostics` (and printed by `-v`) but is no finding: nothing about the project
+            // is wrong, and a warning about somebody else's file taught readers to skim the list.
+            if (d["kind"] == "skip" && NOT_A_MODEL_SKIPS.any { (d["message"] as? String)?.startsWith(it) == true }) continue
             findings.add(linkedMapOf(
                 "check" to "parseIssues",
                 // A file that would not parse is an error: a model is missing from the report. A file
@@ -278,6 +282,9 @@ object Findings {
                 "node" to null,
                 "label" to "custom functions",
                 "message" to d.toString(),
+                // the one finding kind that had no file — and so could never be accepted: a waiver
+                // covers a finding by its node or its file
+                "file" to ((customFns?.get("source") ?: customFns?.get("path") ?: "custom-functions").toString()),
             ))
         }
 
@@ -437,11 +444,22 @@ object Findings {
             val fields = el["fields"] as? Map<*, *>
             if (fields != null && (fields.containsKey("ignoreException") || fields.containsKey("handleStatusCodes"))) continue
             val what = (el["name"] as? String)?.ifEmpty { null } ?: id
-            report("unguardedTasks",
-                "`$what` calls out of the engine with no error boundary event — a failure propagates to " +
-                    "the caller", id)
+            // The message names the fix for the kind of call: a synchronous mail task is made async far
+            // more often than it is given a boundary event, and the reader should be told both.
+            val message = when (el["type"]) {
+                "mail" -> "`$what` sends mail synchronously with no error path — a failure fails the caller's " +
+                    "transaction; mark the task async (a failed job is retried and reported) or add a boundary error event"
+                in LEAVING_TASK_TYPES, "service-registry" -> "`$what` calls out of the engine with no error boundary event — " +
+                    "a failure propagates to the caller"
+                else -> "`$what` calls code of the project's own with no error boundary event — an exception " +
+                    "propagates to the caller"
+            }
+            report("unguardedTasks", message, id)
         }
     }
+
+    /** Skip diagnostics about files that are not Flowable models — recorded, not reported (see the diagnostics loop). */
+    private val NOT_A_MODEL_SKIPS = listOf("not a JSON document", "JSON is not an object", "JSON carries no model key")
 
     /** Task types whose work happens outside the engine, whatever bean Design wrote for them. */
     private val LEAVING_TASK_TYPES = setOf("http", "external-worker", "agent", "mail")
@@ -589,13 +607,28 @@ object Findings {
     @Suppress("UNCHECKED_CAST")
     private fun writeSites(data: Map<String, Any?>): String {
         val writes = data["writes"] as? List<Map<String, Any?>> ?: return "written somewhere"
-        val named = writes.take(3).map { w ->
-            val what = VIA_TERMS[w["via"]] ?: w["via"]?.toString() ?: "a mapping"
-            val where = (w["elementName"] as? String)?.ifEmpty { null } ?: w["element"] as? String
-            if (where != null) "$what `$where`" else what
+        // Three "Initialize variables" tasks writing the same name are one kind of site, three times —
+        // said once with a count, not three times word for word.
+        val grouped = writes.groupBy { w ->
+            (w["via"]?.toString() ?: "") to ((w["elementName"] as? String)?.ifEmpty { null } ?: w["element"] as? String)
+        }
+        val named = grouped.entries.take(3).map { (k, ws) ->
+            val (via, where) = k
+            val what = VIA_TERMS[via] ?: via.ifEmpty { "a mapping" }
+            val phrase = if (ws.size > 1) "${ws.size} ${plural(what)}" else what
+            if (where != null) "$phrase `$where`" else phrase
         }
         val total = (data["writeCount"] as? Number)?.toInt() ?: writes.size
-        return "written by " + named.joinToString(", ") + (if (total > named.size) " (+${total - named.size} more)" else "")
+        val shown = grouped.entries.take(3).sumOf { it.value.size }
+        return "written by " + named.joinToString(", ") + (if (total > shown) " (+${total - shown} more)" else "")
+    }
+
+    /** `an in parameter on` → `in parameters on`: the article goes, the noun before the preposition pluralises. */
+    private fun plural(term: String): String {
+        val words = term.removePrefix("a ").removePrefix("an ").removePrefix("the ").split(' ').toMutableList()
+        val at = words.indexOfFirst { it in setOf("on", "of", "in") }.let { if (it < 0) words.size else it }
+        if (at > 0) words[at - 1] = com.flowable.atlas.model.DesignTerms.pluralize(words[at - 1])
+        return words.joinToString(" ")
     }
 
     /** Design's wording for each way a variable can be written. */

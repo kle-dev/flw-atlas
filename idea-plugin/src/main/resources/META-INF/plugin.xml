@@ -484,6 +484,17 @@
               edge at all. A constant is resolved to its <code>static final String</code> value once every
               source is read and recorded as the literal would be; a name two classes define differently is
               left alone rather than guessed.</li>
+          <li><b>Small corrections.</b> A file that is not a Flowable model at all — a Helm chart's
+              <code>.tpl</code>, a palette or manifest JSON — is recorded in <code>diagnostics</code> and
+              printed by <code>-v</code>, no longer a warning finding about somebody else's file. A variable
+              written by three tasks of the same name reads "3 init-variables mappings on <code>Initialize
+              variables</code>", not the same phrase three times. The <code>unguardedTasks</code> message
+              names the fix for its kind of call — a synchronous mail task is told to go async or get a
+              boundary event. A custom-function diagnostic carries a file, so it can be accepted like any
+              other finding. A Java <code>@Value("${mail.from}")</code> placeholder no longer makes
+              <code>mail</code> a project variable. And a form button's <code>invokeServiceUrl</code> /
+              <code>invokeActionUrl</code> are REST calls to the IDE's scanner, as they were to the
+              report.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

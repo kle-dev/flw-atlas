@@ -115,6 +115,20 @@ class FindingsTest {
             "written but never read — written by a script on `Stamp order`, the result variable of `Calculate`",
             findings(r).single()["message"],
         )
+        // the same kind of site three times — three "Initialize variables" tasks — is said once, with a count
+        val r2 = run(listOf(node("variable:flag", "variable", data = mapOf(
+            "unread" to true, "writeCount" to 4,
+            "writes" to listOf(
+                mapOf("model" to "case:c", "via" to "variableMapping", "element" to "va1", "elementName" to "Initialize variables"),
+                mapOf("model" to "case:c", "via" to "variableMapping", "element" to "va2", "elementName" to "Initialize variables"),
+                mapOf("model" to "case:c", "via" to "variableMapping", "element" to "va3", "elementName" to "Initialize variables"),
+                mapOf("model" to "case:c", "via" to "inParameter", "elementName" to "Fulfil"),
+            ),
+        ))))
+        assertEquals(
+            "written but never read — written by 3 init-variables mappings on `Initialize variables`, an in parameter on `Fulfil`",
+            findings(r2).single()["message"],
+        )
     }
 
     @Test
@@ -320,6 +334,12 @@ class FindingsTest {
                 task("varExpr", "expression" to "\${requesterData.getName()}"),
                 task("projBean", "expression" to "\${userProfileDataService.load(x)}"))))))
         assertEquals(listOf("ownBean", "ownExpr", "restSvc", "agent", "mail", "projBean"), elements(r2b, "unguardedTasks"))
+        // the message names the fix for the kind of call
+        val msgs = findings(r2b).filter { it["check"] == "unguardedTasks" }.associate { it["element"] to it["message"].toString() }
+        assertTrue(msgs["mail"]!!, msgs["mail"]!!.contains("mark the task async"))
+        assertTrue(msgs["ownBean"]!!, msgs["ownBean"]!!.contains("code of the project's own"))
+        assertTrue(msgs["restSvc"]!!, msgs["restSvc"]!!.contains("calls out of the engine"))
+        assertTrue(msgs["agent"]!!, msgs["agent"]!!.contains("calls out of the engine"))
         val r3 = run(listOf(process("p", mapOf(
             "serviceTasks" to listOf(leaving),
             "events" to listOf(mapOf("id" to "catchAll", "type" to "startEvent", "def" to "error"))))))

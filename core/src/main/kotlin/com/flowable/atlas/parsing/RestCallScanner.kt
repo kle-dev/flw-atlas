@@ -39,7 +39,7 @@ object RestCallScanner {
      * [JavaParser.matchRest] reports a *clean* segment-suffix match against a real controller path, so a
      * stray URL cannot produce a wrong navigation target.
      */
-    val URL_FIELDS = listOf("requestUrl", "url", "queryUrl", "lookupUrl")
+    val URL_FIELDS = listOf("requestUrl", "url", "queryUrl", "lookupUrl", "invokeServiceUrl", "invokeActionUrl")
 
     /** The fields that hold the HTTP verb, paired with a URL by proximity. */
     private val METHOD_FIELDS = listOf("requestMethod", "method")

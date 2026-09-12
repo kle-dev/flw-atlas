@@ -52,6 +52,15 @@ object Constants {
         "path", "column", "rowIndex",
     )
 
+    /**
+     * A Spring property placeholder written into a Java string — `@Value("${mail.from}")`,
+     * `${server.port:8080}` — is configuration, not an expression the engine evaluates, and its dotted
+     * key is no variable. Applied to Java sources: on a model the same shape may be a property path
+     * (`${order.total}`), which is why the graph builder keeps its own, narrower rule there.
+     */
+    private val JAVA_CONFIG_PLACEHOLDER_RE = Regex("^[A-Za-z][\\w.-]*(:[^}(]*)?$")
+    fun isJavaConfigPlaceholder(body: String): Boolean = body.contains('.') && JAVA_CONFIG_PLACEHOLDER_RE.matches(body.trim())
+
     /** EL keywords / literals that are never variable names. */
     val JAVA_LITERALS = setOf(
         "true", "false", "null", "empty", "and", "or", "not", "div", "mod",

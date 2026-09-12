@@ -349,8 +349,8 @@
     "hardcodedSecrets": 1,
     "invalidExpr": 2,
     "missingRefs": 1,
-    "open": 18,
-    "parseIssues": 2,
+    "open": 17,
+    "parseIssues": 1,
     "schemaGaps": 1,
     "scriptIssues": 2,
     "unguardedTasks": 2,
@@ -633,14 +633,6 @@
     },
     {
       "check": "parseIssues",
-      "file": "archives/demo-export.zip!manifest.json",
-      "label": "archives/demo-export.zip!manifest.json",
-      "message": "skip: JSON carries no model key — not a Design model wrapper",
-      "node": null,
-      "severity": "warning"
-    },
-    {
-      "check": "parseIssues",
       "file": "broken.form",
       "label": "broken.form",
       "message": "parse: (form) Expecting property name enclosed in double quotes: line 2 column 1 (char 37)",
@@ -683,7 +675,7 @@
       "element": "calcTask",
       "file": "processes/order.bpmn",
       "label": "Order Process",
-      "message": "`Calculate total` calls out of the engine with no error boundary event — a failure propagates to the caller",
+      "message": "`Calculate total` calls code of the project's own with no error boundary event — an exception propagates to the caller",
       "node": "process:orderProcess",
       "severity": "warning"
     },
@@ -692,7 +684,7 @@
       "element": "notifyTask",
       "file": "processes/order.bpmn",
       "label": "Order Process",
-      "message": "`Notify` calls out of the engine with no error boundary event — a failure propagates to the caller",
+      "message": "`Notify` calls code of the project's own with no error boundary event — an exception propagates to the caller",
       "node": "process:orderProcess",
       "severity": "warning"
     },
@@ -7840,7 +7832,7 @@
   "stats": {
     "advice": 8,
     "archives": 1,
-    "defects": 10,
+    "defects": 9,
     "dynamicEdges": 0,
     "edges": 62,
     "endpoints": 2,

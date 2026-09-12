@@ -104,18 +104,22 @@ class JavaParserTest {
     fun variableAccessesAreSplitByVerb() {
         val src = """package com.x;
             public class MyBean {
+                @Value("${'$'}{mail.from:noreply@example.com}") String from;
+                @Value("${'$'}{flamingo.mail.enabled}") boolean enabled;
                 public void go(DelegateExecution execution) {
                     execution.setVariable("written", 1);
                     Object r = execution.getVariableLocal("read");
                     if (execution.hasVariable("maybe")) execution.removeVariable("gone");
+                    String el = "${'$'}{vars:get(flagReturn)}";
                 }
             }"""
         val jc = JavaParser.parseJava(src, "MyBean.java")
         assertEquals(listOf("written"), jc["varWrites"])
-        assertEquals(listOf("read"), jc["varReads"])
+        // a Spring placeholder is configuration — `mail` and `flamingo` are no variables; an EL string is
+        assertEquals(listOf("flagReturn", "read"), jc["varReads"])
         assertEquals(listOf("gone", "maybe"), jc["varsUndecided"])
         // `vars` stays the union of all three, so nothing that already read it changes behaviour.
-        assertEquals(listOf("gone", "maybe", "read", "written"), jc["vars"])
+        assertEquals(listOf("flagReturn", "gone", "maybe", "read", "written"), jc["vars"])
         assertEquals(false, jc["readsAllVariables"])
     }
 

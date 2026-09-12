@@ -443,13 +443,12 @@ _component (1):_
 
 **Also in the graph** (queryable in `miniproject.graph.json`, no section here): 1 masterData · 1 document · 1 variableExtractor · 1 knowledgeBase · 1 palette · 1 query · 1 sequence · 1 sla · 1 template · 1 string · 1 serviceOperation · 1 method · 1 bot.
 
-## 14. Findings — 10 defects · 8 advice
+## 14. Findings — 9 defects · 8 advice
 
-Defects — unparseable files: 2 · invalid expressions: 2 · script syntax: 2 · missing models: 1 · crossed column mappings: 1 · literal secrets: 1 · schema gaps: 1
+Defects — unparseable files: 1 · invalid expressions: 2 · script syntax: 2 · missing models: 1 · crossed column mappings: 1 · literal secrets: 1 · schema gaps: 1
 Advice — calls with no error path: 2 · async without retry: 1 · variables never read: 3 · unread call parameters: 1 · script-inferred variables: 1
 
-**unparseable files** (2)
-- · skip: JSON carries no model key — not a Design model wrapper — in: `archives/demo-export.zip!manifest.json`
+**unparseable files** (1)
 - ⚠ parse: (form) Expecting property name enclosed in double quotes: line 2 column 1 (char 37) — in: `broken.form`
 
 **invalid expressions** (2)
@@ -479,8 +478,8 @@ Advice — calls with no error path: 2 · async without retry: 1 · variables ne
 *Advice — nothing below is broken; each is a pattern worth a look.*
 
 **calls with no error path** (2)
-- · `Calculate total` calls out of the engine with no error boundary event — a failure propagates to the caller — in: `Order Process` · at: `calcTask` · file: `processes/order.bpmn`
-- · `Notify` calls out of the engine with no error boundary event — a failure propagates to the caller — in: `Order Process` · at: `notifyTask` · file: `processes/order.bpmn`
+- · `Calculate total` calls code of the project's own with no error boundary event — an exception propagates to the caller — in: `Order Process` · at: `calcTask` · file: `processes/order.bpmn`
+- · `Notify` calls code of the project's own with no error boundary event — an exception propagates to the caller — in: `Order Process` · at: `notifyTask` · file: `processes/order.bpmn`
 
 **async without retry** (1)
 - · `Pack shipment` is async with no failedJobRetryTimeCycle — the engine default applies — in: `Fulfilment Process` · at: `packTask` · file: `processes/fulfilment.bpmn`

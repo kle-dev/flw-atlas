@@ -99,10 +99,17 @@ class NothingDroppedSilentlyTest {
     }
 
     @Test
-    fun theSkipsAreParseIssueWarnings() {
+    fun theSkipsAreParseIssueWarningsExceptForFilesThatAreNoModelAtAll() {
         @Suppress("UNCHECKED_CAST")
         val parse = (result["findings"] as List<Map<String, Any?>>).filter { it["check"] == "parseIssues" }
-        assertEquals(diagnostics().size, parse.size)
+        val labels = parse.map { it["label"].toString() }.toSet()
+        // recorded and reported: a model Atlas decided not to read
+        assertTrue(labels.toString(), "export.zip!apps/inner.bar!deeper.zip" in labels)
+        assertTrue(labels.toString(), "export.zip!form-models/orphan.json" in labels)
+        // recorded, not reported: somebody else's file with a model extension, a JSON that is no wrapper
+        assertTrue(labels.toString(), "chart/templates/_helpers.tpl" !in labels)
+        assertTrue(labels.toString(), "export.zip!manifest.json" !in labels)
+        assertEquals(diagnostics().size - 2, parse.size)
         assertTrue(parse.all { it["severity"] == "warning" })
     }
 }

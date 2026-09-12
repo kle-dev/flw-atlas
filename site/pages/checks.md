@@ -75,12 +75,14 @@ The message is prose and rewords as a model changes; the subject is meant to sta
 Every entry in the run's diagnostics: a model whose XML or JSON would not parse, a file that could not
 be read, an archive entry that could not be opened, a Java source that could not be read, and any
 failure while extracting custom functions. It also lists what Atlas decided **not** to read, as `skip`
-entries at warning level — a file with a model extension that is not JSON at all (a Helm chart's
-`_helpers.tpl`), a JSON in a Design export that is no model wrapper, a legacy wrapper without a body, a
+entries at warning level — a legacy wrapper without a body, a
 wrapper in a folder Design does not use, a template variation whose template is not in the project, a
 process in the old editor's JSON format with no XML twin, an archive nested two levels deep, a model
 file above the 32 MB limit — because a file that was skipped on purpose is no less absent from the
-report than one that failed. An archive *inside* an archive (a Design export packing one `.bar` per
+report than one that failed. A file that is not a Flowable model at all — a Helm chart's `_helpers.tpl`
+with a model extension, a palette or manifest JSON in an export that is no model wrapper — is recorded
+in `diagnostics` (the CLI prints it with `-v`) but is no finding: nothing about the project is wrong.
+An archive *inside* an archive (a Design export packing one `.bar` per
 app) is opened one level down and its models are read like any other. A Design-workspace export — the
 legacy editor's `form-models` and `page-models` JSON, whose bodies are a tree of `childShapes` — is read
 in full since {{VERSION}}: its components are rewritten into the shape the current Design writes and
@@ -309,7 +311,10 @@ API, not code of your own. The set of platform beans is read off the platform's 
 the task delegates Design writes, the Engage conversation tasks, the platform services an expression may
 call — and includes `flw`, the platform's scripting-API root, so `${flw.setOutput(…)}` in a task listener
 is platform API as well. Measured on real projects before this distinction, 94 % of the findings sat
-on such beans. An HTTP task that carries `ignoreException` or `handleStatusCodes` has said what happens
+on such beans. The message names the fix for the kind of call: a synchronous mail task is told to go
+async (a failed job is retried and reported) or get a boundary event, an HTTP, worker, agent or REST
+service task to get a boundary event, and a call into the project's own code says so. An HTTP task that
+carries `ignoreException` or `handleStatusCodes` has said what happens
 on failure and stays quiet too — and so does any **async** task: its failure is a failed job, retried
 and then an incident for an administrator, never an exception to whoever completed the previous step.
 That is its error path; `asyncWithoutRetry` judges how good a one it is.

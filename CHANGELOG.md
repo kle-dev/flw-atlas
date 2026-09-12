@@ -302,6 +302,15 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   `static final String` value once every source is read and recorded as the literal would be; a name two
   classes define differently is left alone rather than guessed.
 
+- **Small corrections.** A file that is not a Flowable model at all — a Helm chart's `.tpl`, a palette
+  or manifest JSON — is recorded in `diagnostics` and printed by `-v`, no longer a warning finding about
+  somebody else's file. A variable written by three tasks of the same name reads "3 init-variables
+  mappings on `Initialize variables`", not the same phrase three times. The `unguardedTasks` message names
+  the fix for its kind of call — a synchronous mail task is told to go async or get a boundary event. A
+  custom-function diagnostic carries a file, so it can be accepted like any other finding. A Java
+  `@Value("${mail.from}")` placeholder no longer makes `mail` a project variable. And a form button's
+  `invokeServiceUrl` / `invokeActionUrl` are REST calls to the IDE's scanner, as they were to the report.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its

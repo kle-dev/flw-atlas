@@ -240,6 +240,8 @@ object JavaParser {
         // Names an embedded EL expression reads. `${vars:get(flagReturn)}` names its variable as a bare
         // identifier, not as a quoted argument, so nothing else picks it up.
         for (m in JAVA_EL_RE.findAll(text)) {
+            // `@Value("${flamingo.mail.from}")` is a property placeholder: `flamingo` is no variable
+            if (Constants.isJavaConfigPlaceholder(m.groupValues[1])) continue
             for (r in EL_ROOT_RE.findAll(m.groupValues[1])) {
                 val name = r.groupValues[1]
                 if (name !in Constants.FLOWABLE_CONTEXT && name !in Constants.JAVA_LITERALS) varReads.add(name)
