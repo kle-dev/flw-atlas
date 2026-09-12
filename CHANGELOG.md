@@ -327,6 +327,13 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   ‹ › on every view, `Alt+←` / `Alt+→` drive them (the brackets stay the tab keys), the explorer tab's
   toolbar in the IDE has Back and Forward, and the page's place in the history survives a reload.
 
+- **Long text never clips a control.** A table cell ellipsises text but slices an inline box, so a long
+  key cut its model chip mid-chip in the checks table, a type tag mid-word in a fields table, and a
+  chip's type wrapped onto a second line; a 2 900-character binding label overprinted the project crumb
+  and filled a page as a 26px headline. A chip now shrinks by its name only and never past its cell, a
+  tag ellipsises, the current crumb has a width, and an expression's or binding's label is shown as code
+  — three lines, with *show all* for the rest.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its

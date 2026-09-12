@@ -250,11 +250,12 @@
   /* topbar: breadcrumbs / ⌘K trigger / theme */
   .topbar{flex:none;display:flex;align-items:center;gap:var(--space-2);height:var(--topbar-h);padding:0 var(--space-4);
     background:var(--panel);border-bottom:1px solid var(--line)}
-  .crumbs{display:flex;align-items:center;gap:var(--space-25);font-size:var(--text-md);min-width:0;flex:1;white-space:nowrap}
+  .crumbs{display:flex;align-items:center;gap:var(--space-25);font-size:var(--text-md);min-width:0;flex:1;white-space:nowrap;overflow:hidden}
   .crumbs .crumb{display:inline-flex;align-items:center;gap:var(--space-1);min-width:0}
   .crumbs a.crumb{color:var(--ink-dim);font-weight:500;text-decoration:none}
   .crumbs a.crumb:hover{color:var(--ink);text-decoration:underline}
-  .crumbs .crumb.cur{color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis}
+  .crumbs .crumb.cur{color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;max-width:48ch;flex:0 1 auto}
+  .crumbs .crumb.cur>span:last-child{overflow:hidden;text-overflow:ellipsis;min-width:0}
   .crumb-sep{color:var(--line2);flex:none}
   .searchbtn{display:flex;align-items:center;gap:var(--space-2);width:min(320px,40vw);height:30px;padding:0 var(--space-25);
     margin-right:var(--space-15);
@@ -671,6 +672,12 @@
   .dhero-main{min-width:0;flex:1}
   .dtitle{font-family:var(--sans);font-weight:600;letter-spacing:-.01em;font-size:var(--text-2xl);line-height:1.2;margin:0;
     overflow-wrap:anywhere}
+  /* An expression's or binding's label is its source text — 3 000 characters on real forms. Code style,
+     three lines, and a button for the rest; the h1 treatment is for names. */
+  .dtitle.dtitle-code{font-family:var(--mono);font-weight:500;font-size:var(--text-md);letter-spacing:0;line-height:1.45;
+    white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .dtitle.dtitle-code.open{display:block;-webkit-line-clamp:unset;max-height:40vh;overflow:auto}
+  .dtitle-more{margin:var(--space-1) 0 0}
   .dident{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-05) var(--space-15);margin-top:var(--space-1);
     font-size:var(--text-sm);color:var(--ink-dim);min-width:0}
   .dkindw{font-weight:500}
@@ -756,8 +763,13 @@
   .nc{display:inline-flex;align-items:center;gap:var(--space-15);background:var(--panel);border:1px solid var(--line2);
     border-radius:var(--radius-md);padding:var(--space-1) var(--space-25);cursor:pointer;max-width:380px}
   .nc:hover{border-color:var(--accent);background:var(--hover)}
-  .nc .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .nc .ty{font-size:var(--text-2xs);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em}
+  /* A chip shrinks by its name, never by its type or icon, and never past its cell: a table cell clips
+     an inline-flex child instead of ellipsising it, so a long key was sliced mid-chip in the checks table. */
+  .nc .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
+  .nc .ty{font-size:var(--text-2xs);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;flex:none}
+  .nc .ti{flex:none}
+  .tbl .td>.nc{max-width:100%}
+  .tbl .td.tags .tag{max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
   /* uncertain links: suspect (loose/cross-type match) and dynamic (expression-valued) */
   .nc.nc-sus,.nc.nc-dyn{border-style:dashed;opacity:.85}
   .nc .ncflag{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint);flex:none;cursor:help}

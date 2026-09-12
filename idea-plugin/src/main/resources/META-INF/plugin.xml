@@ -511,6 +511,13 @@
               end. The top bar carries ‹ › on every view, <code>Alt+←</code> / <code>Alt+→</code> drive them
               (the brackets stay the tab keys), the explorer tab's toolbar in the IDE has Back and Forward,
               and the page's place in the history survives a reload.</li>
+          <li><b>Long text never clips a control.</b> A table cell ellipsises text but slices an inline box,
+              so a long key cut its model chip mid-chip in the checks table, a type tag mid-word in a fields
+              table, and a chip's type wrapped onto a second line; a 2 900-character binding label
+              overprinted the project crumb and filled a page as a 26px headline. A chip now shrinks by its
+              name only and never past its cell, a tag ellipsises, the current crumb has a width, and an
+              expression's or binding's label is shown as code — three lines, with <i>show all</i> for the
+              rest.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

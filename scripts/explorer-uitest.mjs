@@ -132,6 +132,11 @@ const probe = `<script>
     ok('the document itself does not scroll on the checks page',
        document.documentElement.scrollHeight<=window.innerHeight+1, 'document scrollHeight '+document.documentElement.scrollHeight);
     ok('the checks page is taller than the window, so scrolling is real', v.scrollHeight>v.clientHeight, v.scrollHeight+' vs '+v.clientHeight);
+    // a model chip in the findings table ends inside its cell — ellipsised by its name, never sliced
+    const chips=[...v.querySelectorAll('.tbl .td>.nc')];
+    ok('the findings table shows model chips', chips.length>0);
+    const sliced=chips.filter(c=>{ const td=c.parentElement; return c.getBoundingClientRect().right>td.getBoundingClientRect().right+1; });
+    ok('no model chip runs past its cell', sliced.length===0, sliced.length+' of '+chips.length+' clipped');
     window.__beforeBack=location.hash;
     document.getElementById('navback').click();
   });

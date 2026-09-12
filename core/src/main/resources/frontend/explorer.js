@@ -2009,7 +2009,7 @@ function acceptedNoteHtml(rule){
 }
 const FIND_COLS=[
   {k:'sev',label:'',w:'minmax(7ch,.55fr)',cls:'tags'},
-  {k:'model',label:'Model',w:'minmax(12ch,1.3fr)'},
+  {k:'model',label:'Model',w:'minmax(14ch,1.6fr)'},
   {k:'el',label:'Element',w:'minmax(10ch,1fr)',opt:true},
   {k:'msg',label:'Finding',w:'minmax(24ch,3fr)',cls:'wrap'},
   {k:'where',label:'File',w:'minmax(10ch,1fr)',mono:true,opt:true},
@@ -2991,11 +2991,18 @@ function identLine(n){
 /** Icon tile, title, identity line, Design's description as prose, and the facts strip. The tile's
  *  tint derives from the same --c-<type> token the icon uses, so it survives the IDE palette as the
  *  icons do. */
+/** Node types whose label is source text, not a name: shown as code, clamped, with the rest on request. */
+const CODE_LABEL_TYPES=new Set(['expression','binding','string']);
 function heroHtml(n, facts){
   const d=n.data||{};
+  const code=CODE_LABEL_TYPES.has(n.type);
+  const title=code
+    ? '<div class="dtitle dtitle-code" data-tip="'+esc(n.label.length>160?n.label.slice(0,160)+'…':n.label)+'">'+esc(n.label)+'</div>'+
+      (n.label.length>200?'<button type="button" class="dgbtn dtitle-more" aria-expanded="false">show all</button>':'')
+    : '<div class="dtitle">'+esc(n.label)+authBadge(n)+'</div>';
   return '<div class="dhero">'+
     '<div class="dhero-top"><span class="dtile" style="--tc:'+nodeColor(n)+'">'+nodeIcon(n)+'</span>'+
-    '<div class="dhero-main"><div class="dtitle">'+esc(n.label)+authBadge(n)+'</div>'+identLine(n)+
+    '<div class="dhero-main">'+title+identLine(n)+
     (d.description?'<p class="ddesc">'+esc(String(d.description))+'</p>':'')+'</div></div>'+
     props(facts,{cls:'facts'})+'</div>';
 }
@@ -4241,6 +4248,9 @@ function renderDetail(){
   det.innerHTML=h;
   det.scrollTop=0;
   const b=document.getElementById('back'); if(b) b.onclick=()=>history.back();
+  det.querySelectorAll('.dtitle-more').forEach(m=>{ m.onclick=()=>{
+    const t=m.previousElementSibling; const open=t.classList.toggle('open');
+    m.textContent=open?'show less':'show all'; m.setAttribute('aria-expanded', String(open)); }; });
   // Remember every section's open state, and offer one control to flip them all at once.
   const sects=[...det.querySelectorAll('details.sect')];
   sects.forEach(s=>s.addEventListener('toggle',()=>sectRemember(dec(s.dataset.sect), s.open)));
