@@ -254,6 +254,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   binding is a property of that value now — form-local under `$temp`, a field of the bound variable
   otherwise — and the payload table shows the full path it lands on.
 
+- **A property table is not a component.** The legacy Design editor keeps a `pathProperties` map on
+  every form body — `{"id": "id", "url": "extraSettings.url", …}`, property name to JSON path. Walked as
+  content, that map has an `id` and a `url`, so every such form called `GET extraSettings.url`: 59 REST
+  calls to a path that is not a URL, each with its own external node, across five real projects. The
+  editor's bookkeeping maps are skipped now, and a REST call needs a component with a type behind it.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its

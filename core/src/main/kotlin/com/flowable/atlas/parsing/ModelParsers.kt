@@ -89,12 +89,19 @@ object ModelParsers {
         }
     }
 
+    /**
+     * The Oryx editor's bookkeeping maps: `{"id": "id", "url": "extraSettings.url", …}`, a property name
+     * → JSON path table on every legacy form body. Walked as content, the map *is* a component — it has an
+     * `id` and a `url` — and produced 59 REST calls to `GET extraSettings.url` across five real projects.
+     */
+    private val ORYX_METADATA_KEYS = setOf("pathProperties", "pathMappingProperties", "outputmappingproperties", "xmlProperties")
+
     /** Recursively visit every JSON object in a tree (ElementTree-free `_walk_json`). */
     private fun walkJson(node: Any?, fn: (Map<String, Any?>) -> Unit) {
         when (node) {
             is Map<*, *> -> {
                 @Suppress("UNCHECKED_CAST") fn(node as Map<String, Any?>)
-                node.values.forEach { walkJson(it, fn) }
+                for ((k, v) in node) if (k !in ORYX_METADATA_KEYS) walkJson(v, fn)
             }
             is List<*> -> node.forEach { walkJson(it, fn) }
         }
@@ -632,7 +639,8 @@ object ModelParsers {
             // gives the call a `where`: on the bare `extraSettings` map there is no id to attribute it to.
             // `extraSettings.method` is omitted whenever it is the palette default, hence the fallback.
             val url = (pyOr(es?.get("url"), n["url"]) as? String)?.trim()
-            if (truthy(n["id"]) && !url.isNullOrEmpty()) {
+            // a component has a type; a map that merely has an `id` and a `url` key is not one
+            if (truthy(n["id"]) && n["type"] is String && !url.isNullOrEmpty()) {
                 val method = ((es?.get("method") as? String)?.takeIf { it.isNotBlank() } ?: "get").uppercase()
                 restCalls.add(linkedMapOf(
                     "where" to n["id"], "method" to method, "url" to url, "path" to es?.get("path"),

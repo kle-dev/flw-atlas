@@ -431,6 +431,13 @@
               eleven "written but never read" on two real projects. A mapping stored under a binding is a
               property of that value now — form-local under <code>$temp</code>, a field of the bound
               variable otherwise — and the payload table shows the full path it lands on.</li>
+          <li><b>A property table is not a component.</b> The legacy Design editor keeps a
+              <code>pathProperties</code> map on every form body — <code>{"id": "id", "url":
+              "extraSettings.url", …}</code>, property name to JSON path. Walked as content, that map has an
+              <code>id</code> and a <code>url</code>, so every such form called <code>GET
+              extraSettings.url</code>: 59 REST calls to a path that is not a URL, each with its own
+              external node, across five real projects. The editor's bookkeeping maps are skipped now, and a
+              REST call needs a component with a type behind it.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>
