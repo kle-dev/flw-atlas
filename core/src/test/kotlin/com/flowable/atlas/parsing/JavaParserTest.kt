@@ -67,6 +67,8 @@ class JavaParserTest {
                 override fun execute(execution: DelegateExecution) {
                     execution.setVariable("score", repo.compute())
                     runtimeService.startProcessInstanceByKey("scoreProcess")
+                    cmmnRuntimeService.createCaseInstanceBuilder().caseDefinitionKey(ModelConstants.SCORE_CASE).start()
+                    dmnDecisionService.createExecuteDecisionBuilder().decisionKey(SCORE_RULES).execute()
                 }
                 fun helper(a: Int, b: String) = a
             }"""
@@ -81,6 +83,8 @@ class JavaParserTest {
         assertTrue("ScoreRepo" in (jc["deps"] as Set<String>))
         assertTrue("score" in (jc["varWrites"] as List<String>))
         assertTrue("scoreProcess" in (jc["keyedStrings"] as Set<String>))
+        // constants at the same positions are kept by simple name for the resolver
+        assertEquals(setOf("SCORE_CASE", "SCORE_RULES"), jc["keyedIdents"] as Set<String>)
         assertEquals(mapOf("SCORE_PROCESS" to "scoreProcess"), JavaParser.stringConstants(src))
     }
 

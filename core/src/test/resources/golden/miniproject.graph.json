@@ -6127,6 +6127,7 @@
         "interfaces": [],
         "isController": false,
         "isGlue": false,
+        "keyedIdents": [],
         "keyedStrings": [],
         "line": 6,
         "methods": [
@@ -6189,6 +6190,7 @@
         "interfaces": [],
         "isController": true,
         "isGlue": false,
+        "keyedIdents": [],
         "keyedStrings": [],
         "line": 8,
         "methods": [
@@ -6250,6 +6252,7 @@
       "interfaces": [],
       "isController": true,
       "isGlue": false,
+      "keyedIdents": [],
       "keyedStrings": [],
       "line": 8,
       "methods": [

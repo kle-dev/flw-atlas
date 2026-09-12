@@ -139,7 +139,9 @@ Atlas distinguishes three states, in every artifact, rather than presenting a gu
 - **resolved** — the reference ties to a real node.
 - **suspect** (`≈`) — resolved through a loose or cross-type match: an ambiguous Java simple name, a
   loose REST path match, a cross-type fallback, or a Java string literal that merely equals a model key
-  without being passed to a key-taking API.
+  without being passed to a key-taking API. A constant passed to such an API — `.caseDefinitionKey(
+  ModelConstants.MAIN_CASE)` — is resolved to its `static final String` value and counts as the literal
+  would, unless two classes give that name different values.
 - **dynamic** (`ƒ`) — the reference was an expression, so its target is only known at runtime. Atlas
   resolves it when a constant backs it and otherwise records the placeholder.
 

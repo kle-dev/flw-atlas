@@ -295,6 +295,13 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   is said instead of vanishing, and the folders Design added since — SLA, knowledge base, master data,
   dashboard component, palette — are typed.
 
+- **A constant at a key position names the model.** `startProcessInstanceByKey(ModelConstants.MAIN_CASE)`,
+  `.caseDefinitionKey(MAIN_CASE)`, `.decisionKey(Keys.GROUP_MAPPING)`: Atlas followed only a *literal* in
+  those positions, so a project whose Java layer is written against a generated constants class — one
+  real one, wholesale — had no code → model edge at all. A constant is resolved to its
+  `static final String` value once every source is read and recorded as the literal would be; a name two
+  classes define differently is left alone rather than guessed.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its

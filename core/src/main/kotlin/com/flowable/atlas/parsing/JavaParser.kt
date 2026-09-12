@@ -63,6 +63,12 @@ object JavaParser {
     // literal's call context is known. Literals passed to a known key-taking Flowable API produce a
     // confident CODE→MODEL edge; any other literal that happens to equal a model key only a suspect one.
     private val STR_CTX_RE = Regex("""\b(\w+)\s*\(\s*"([^"\\\n]{2,80})"""")
+    // The same position holding a constant instead of a literal — `startProcessInstanceByKey(MAIN_CASE)`,
+    // `.caseDefinitionKey(ModelConstants.MAIN_CASE)`: an UPPER_SNAKE name, optionally qualified. Resolved
+    // against the project's `static final String` constants once every source is read (a generated
+    // model-keys class is the usual home); one real project's whole Java layer is written this way and
+    // had no code → model edge at all.
+    private val IDENT_CTX_RE = Regex("""\b(\w+)\s*\(\s*((?:\w+\.)*[A-Z][A-Z0-9_]{2,})\s*[,)]""")
     private val KEY_API_METHODS = setOf(
         // engine + platform methods whose (first) String argument is a model key
         "startProcessInstanceByKey", "startProcessInstanceByKeyAndTenantId", "startProcessInstanceByMessage",
@@ -212,6 +218,11 @@ object JavaParser {
         for (m in STR_CTX_RE.findAll(text)) {
             if (m.groupValues[1] in KEY_API_METHODS) keyedStrings.add(m.groupValues[2])
         }
+        // constants at the same positions, by simple name — the resolver has the values
+        val keyedIdents = LinkedHashSet<String>()
+        for (m in IDENT_CTX_RE.findAll(text)) {
+            if (m.groupValues[1] in KEY_API_METHODS) keyedIdents.add(m.groupValues[2].substringAfterLast('.'))
+        }
 
         // Variable accesses, split by verb. `vars` stays the union so every existing consumer is
         // unaffected; the three buckets are what the unused-variable check reads.
@@ -247,6 +258,7 @@ object JavaParser {
             "readsAllVariables" to JAVA_VARS_ALL_RE.containsMatchIn(text),
             "strings" to JAVA_STR_RE.findAll(text).map { it.groupValues[1] }.toCollection(LinkedHashSet()),
             "keyedStrings" to keyedStrings,
+            "keyedIdents" to keyedIdents,
             "topics" to TOPIC_CALL_RE.findAll(text).map { it.groupValues[1] }.toSortedSet().toList(),
             "line" to (if (classDeclIdx != -1) lineOf(classDeclIdx) else 1),
         )

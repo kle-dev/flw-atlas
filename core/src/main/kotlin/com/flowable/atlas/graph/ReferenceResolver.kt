@@ -109,6 +109,8 @@ object ReferenceResolver {
         // Global `static final String` constants (simple name → value) and per-class data-object
         // operation calls, collected during the java pass and resolved into op-uses just below.
         val javaConstants = LinkedHashMap<String, String>()
+        // A simple name two classes give different values: resolving through it would be a guess.
+        val ambiguousConstants = HashSet<String>()
         val javaOpCalls = LinkedHashMap<String, List<Map<String, String>>>()
         // Simple class names shared by more than one class — resolving through them is a guess
         // (first-wins), so any ref that falls back to such a name is flagged `suspect`. The same for a
@@ -144,9 +146,28 @@ object ReferenceResolver {
             for (role in jc["roles"] as Collection<String>) {
                 javaByRole.getOrPut(role) { ArrayList() }.add(jc)
             }
-            for ((n, v) in JavaParser.stringConstants(srcText)) javaConstants.putIfAbsent(n, v)
+            for ((n, v) in JavaParser.stringConstants(srcText)) {
+                val prev = javaConstants.putIfAbsent(n, v)
+                if (prev != null && prev != v) ambiguousConstants.add(n)
+            }
             val ops = JavaParser.dataObjectOpCalls(srcText)
             if (ops.isNotEmpty()) javaOpCalls[fqn] = ops
+        }
+
+        // ---- Constants at key positions: `.caseDefinitionKey(ModelConstants.MAIN_CASE)` names the model the
+        // constant's value names. Resolved now that every source is read, and recorded exactly like a
+        // literal at the same position, so the graph builder draws the same confident edge. A name two
+        // classes define differently stays unresolved rather than guessed.
+        for (jc in fqnIndex.values) {
+            val idents = jc["keyedIdents"] as? Collection<*> ?: continue
+            val keyed = jc["keyedStrings"] as? MutableSet<String> ?: continue
+            val strings = jc["strings"] as? MutableSet<String> ?: continue
+            for (id in idents) {
+                val n = id as? String ?: continue
+                if (n in ambiguousConstants) continue
+                val v = javaConstants[n] ?: continue
+                keyed.add(v); strings.add(v)
+            }
         }
 
         // ---- Java data-object operation calls (dataObjectRuntimeService…definitionKey(key).operation("op")) ----
