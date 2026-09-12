@@ -55,6 +55,8 @@ internal data class HubSnapshot(
     /** The models opened most recently, newest first. */
     val recentModels: List<RecentModel>,
     val explorerStale: Boolean,
+    /** The keys of the models newer than the newest explorer page, when it is stale. */
+    val changedModels: List<String>,
     val browserAvailable: Boolean,
     val designResolution: Resolution,
     val workResolution: Resolution,
@@ -129,6 +131,7 @@ internal data class HubSnapshot(
                 explorerStale = AtlasExplorerStaleness.isStale(
                     artifacts.map { it.modified }, AtlasExplorerStaleness.latestModelChange(project),
                 ),
+                changedModels = artifacts.maxOfOrNull { it.modified }?.let { newest -> index?.let { AtlasExplorerStaleness.changedSince(it, newest) } }.orEmpty(),
                 browserAvailable = AtlasBrowser.canOpenFiles(),
                 designResolution = designResolution,
                 workResolution = workResolution,

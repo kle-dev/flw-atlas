@@ -31,4 +31,26 @@ class PostPullHintTest : BasePlatformTestCase() {
         assertTrue(AtlasExplorerStaleness.isStale(listOf(index.newestModelMtime - 1), AtlasExplorerStaleness.latestModelChange(project)))
         assertFalse(AtlasExplorerStaleness.isStale(listOf(index.newestModelMtime + 1), AtlasExplorerStaleness.latestModelChange(project)))
     }
+
+    fun testTheChangedModelsAreNamedByKey() {
+        myFixture.addFileToProject(
+            "models/DEMO-P007.bpmn20.xml",
+            """<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="DEMO-P007" name="Seven"/></definitions>""",
+        )
+        myFixture.addFileToProject("models/DEMO-F002.form", """{"key":"DEMO-F002","name":"Two"}""")
+        val index = project.service<FlowableModelIndexService>().index()
+        assertEquals("every scanned file has its time", 2, index.fileMtimes.size)
+        val oldest = index.fileMtimes.values.min()
+        assertEquals(listOf("DEMO-F002", "DEMO-P007"), AtlasExplorerStaleness.changedSince(index, oldest - 1))
+        assertTrue("a page newer than every model has nothing to name", AtlasExplorerStaleness.changedSince(index, index.newestModelMtime + 1).isEmpty())
+        assertEquals(
+            "2 models changed since this page was generated: DEMO-F002, DEMO-P007",
+            AtlasExplorerStaleness.changedSummary(listOf("DEMO-F002", "DEMO-P007")),
+        )
+        assertEquals(
+            "7 models changed since this page was generated: A, B, C, D, E +2 more",
+            AtlasExplorerStaleness.changedSummary(listOf("A", "B", "C", "D", "E", "F", "G")),
+        )
+        assertEquals("Models changed since this explorer was generated.", AtlasExplorerStaleness.changedSummary(emptyList()))
+    }
 }

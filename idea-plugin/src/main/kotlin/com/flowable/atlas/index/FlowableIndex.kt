@@ -1,5 +1,7 @@
 package com.flowable.atlas.index
 
+import com.intellij.openapi.vfs.VirtualFile
+
 import com.flowable.atlas.model.ModelType
 import com.flowable.atlas.parsing.ModelMembers
 import com.flowable.atlas.parsing.RestCallScanner
@@ -43,6 +45,9 @@ class FlowableIndex(
     /** Names of the `.bar`/`.zip` archives in scope that could not be opened or read — what the Hub has
      *  to say, because an unindexed archive is otherwise indistinguishable from an empty project. */
     val skippedArchives: List<String> = emptyList(),
+    /** Every model file and archive scanned, with its modification time — what "which models changed
+     *  since this page was generated?" is answered from; [newestModelMtime] is this map's maximum. */
+    val fileMtimes: Map<VirtualFile, Long> = emptyMap(),
 ) {
 
     private val distinctByType: Map<ModelType, List<ModelEntry>> by lazy {

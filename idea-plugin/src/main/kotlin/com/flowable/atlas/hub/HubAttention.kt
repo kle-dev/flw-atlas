@@ -28,8 +28,8 @@ internal sealed interface HubAttention {
     /** Archives the index could not open — an unreadable .bar used to look like an empty project. */
     data class UnreadableArchives(val names: List<String>) : HubAttention
 
-    /** A model in scope is newer than the newest generated explorer page. */
-    data object StaleExplorer : HubAttention
+    /** A model in scope is newer than the newest generated explorer page — [changed] names them, by key. */
+    data class StaleExplorer(val changed: List<String>) : HubAttention
 
     companion object {
         fun of(s: HubSnapshot): HubAttention? = when {
@@ -38,7 +38,7 @@ internal sealed interface HubAttention {
             s.projectsAwaitingChoice >= 2 -> ChooseProject(s.projectsAwaitingChoice)
             s.indexFailure != null -> IndexFailed(s.indexFailure)
             s.skippedArchives.isNotEmpty() -> UnreadableArchives(s.skippedArchives)
-            s.explorerStale -> StaleExplorer
+            s.explorerStale -> StaleExplorer(s.changedModels)
             else -> null
         }
     }

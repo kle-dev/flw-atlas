@@ -443,6 +443,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   context menu to copy it or open its explorer page. And the header's *142 models* is no longer dead
   text: it links into the index — Search Everywhere's *Flowable Model* tab — with *Rebuild Model Index*
   beside it instead of two levels down in the ⋮ menu.
+- **What changed since the last generation.** The stale check compared the newest model time with the
+  newest page time and said *stale* — a verdict with no subject. The index keeps every scanned file's
+  time now, so the banner above an explorer tab says *3 models changed since this page was generated:
+  DEMO-F002, DEMO-P001, DEMO-P007* (the first five, then a count) and the Hub's attention line names the
+  first three; a packed model is named by its key, an unreadable file by its name.
 
 ## 0.25.0
 

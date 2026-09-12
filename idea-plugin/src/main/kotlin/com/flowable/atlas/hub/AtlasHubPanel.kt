@@ -123,7 +123,7 @@ class AtlasHubPanel(override val project: Project) : SimpleToolWindowPanel(true,
                 .setTitle(message("hub.attention.archives.title"))
                 .createPopup()
                 .showUnderneathOf(header.projectCombo)
-            HubAttention.StaleExplorer -> AtlasGenerationRunner.regenerate(project)
+            is HubAttention.StaleExplorer -> AtlasGenerationRunner.regenerate(project)
         }
     }
 

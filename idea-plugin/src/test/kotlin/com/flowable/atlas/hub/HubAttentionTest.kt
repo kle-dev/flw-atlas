@@ -20,7 +20,7 @@ class HubAttentionTest {
     ) = HubSnapshot(
         subProjects = emptyList(), activeSubProject = "", projectsAwaitingChoice = awaiting,
         modelCount = if (failed == null) 3 else null, indexFailure = failed, typeCounts = emptyList(), scopeLabel = null, builtAtMillis = 1L,
-        skippedArchives = skipped, artifacts = emptyList(), recentModels = emptyList(), explorerStale = stale, browserAvailable = false,
+        skippedArchives = skipped, artifacts = emptyList(), recentModels = emptyList(), explorerStale = stale, changedModels = if (stale) listOf("DEMO-P001") else emptyList(), browserAvailable = false,
         designResolution = design, workResolution = work, hasAnyEnvironment = false,
         pullSelection = DesignPullSelection.EMPTY, lastPullMillis = null, searchedIn = "atlas-output/",
     )
@@ -57,6 +57,6 @@ class HubAttentionTest {
     fun unreadableArchivesBeatAStaleExplorer() {
         // Data Atlas could not see comes before artifact drift: the explorer is stale *because* of what it saw.
         assertEquals(HubAttention.UnreadableArchives(listOf("a.bar")), HubAttention.of(snapshot(skipped = listOf("a.bar"), stale = true)))
-        assertEquals(HubAttention.StaleExplorer, HubAttention.of(snapshot(stale = true)))
+        assertEquals(HubAttention.StaleExplorer(listOf("DEMO-P001")), HubAttention.of(snapshot(stale = true)))
     }
 }

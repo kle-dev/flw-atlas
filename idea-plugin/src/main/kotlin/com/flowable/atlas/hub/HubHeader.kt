@@ -79,14 +79,16 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
             is HubAttention.ChooseProject -> message("hub.attention.chooseProject", attention.count)
             is HubAttention.IndexFailed -> message("hub.attention.indexFailed", attention.reason)
             is HubAttention.UnreadableArchives -> message("hub.attention.archives", attention.names.size)
-            HubAttention.StaleExplorer -> message("hub.attention.stale")
+            is HubAttention.StaleExplorer ->
+                if (attention.changed.isEmpty()) message("hub.attention.stale")
+                else message("hub.attention.staleChanged", attention.changed.size, attention.changed.take(3).joinToString(", "), (attention.changed.size - 3).coerceAtLeast(0))
         }
         attentionLink.text = when (attention) {
             is HubAttention.RemovedEnvironment -> FlowableActionIds.text(FlowableActionIds.MANAGE_ENVIRONMENTS)
             is HubAttention.ChooseProject -> message("hub.attention.chooseProject.action")
             is HubAttention.IndexFailed -> FlowableActionIds.text(FlowableActionIds.REBUILD_MODEL_INDEX)
             is HubAttention.UnreadableArchives -> message("hub.attention.archives.action")
-            HubAttention.StaleExplorer -> FlowableActionIds.text(FlowableActionIds.REGENERATE_ATLAS_EXPLORER)
+            is HubAttention.StaleExplorer -> FlowableActionIds.text(FlowableActionIds.REGENERATE_ATLAS_EXPLORER)
         }
     }
 

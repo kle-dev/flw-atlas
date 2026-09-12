@@ -548,6 +548,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
             // `timeStamp` is a cached VFS attribute — no I/O — and the candidates were visited anyway.
             newestModelMtime = candidates.maxOfOrNull { it.timeStamp } ?: 0L,
             skippedArchives = skippedArchives.sorted(),
+            fileMtimes = candidates.associateWith { it.timeStamp },
         )
     }
 

@@ -11,8 +11,8 @@ import java.util.function.Function
 import javax.swing.JComponent
 
 /**
- * A banner above an open Atlas explorer whose models have changed since it was generated, with the
- * one action that fixes it. The tab used to render a snapshot that could be weeks old and say nothing;
+ * A banner above an open Atlas explorer whose models have changed since it was generated — naming
+ * them — with the one action that fixes it. The tab used to render a snapshot that could be weeks old and say nothing;
  * the Hub's hint was the only sign, and only after a Design pull.
  */
 class AtlasExplorerStaleNotificationProvider : EditorNotificationProvider, DumbAware {
@@ -24,7 +24,8 @@ class AtlasExplorerStaleNotificationProvider : EditorNotificationProvider, DumbA
         return Function { editor ->
             val atlasEditor = editor as? AtlasFileEditor ?: return@Function null
             EditorNotificationPanel(editor, EditorNotificationPanel.Status.Warning).apply {
-                text = "Models changed since this explorer was generated."
+                // which models, not only that some did — the first five by key, then a count
+                text = AtlasExplorerStaleness.changedSummary(AtlasExplorerStaleness.changedSince(project, file.timeStamp))
                 createActionLabel(FlowableActionIds.text(FlowableActionIds.REGENERATE_ATLAS_EXPLORER)) { atlasEditor.regenerate() }
             }
         }
