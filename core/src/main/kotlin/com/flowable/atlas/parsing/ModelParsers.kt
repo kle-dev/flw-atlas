@@ -586,7 +586,21 @@ object ModelParsers {
                 // carries the callee, which is what lets the invoked action/agent/service turn around and
                 // show the values its callers actually pass.
                 val (refKind, refKey) = calleeOf(es, n)
-                val payload = payloadParams(es, refKind, refKey)
+                // A REST button's response lands under its own `value` binding: the platform's RestButton
+                // calls `onChange({$path: name})` on the component, so `{name: "deploymentId"}` on a button
+                // bound to `{{$temp.info}}` writes `$temp.info.deploymentId` — a form-local value, read in
+                // the same form as `{{$temp.info.deploymentId}}` — and on a button bound to `{{customer}}`
+                // a field of `customer`, whose write the binding pass already records. Neither is a
+                // variable called `deploymentId`; eleven "written but never read" on two real projects were.
+                val stores = if ((n["type"] as? String) in RESULT_BINDING_TYPES) (n["value"] as? String)?.takeIf { it.contains("{{") } else null
+                val payload = payloadParams(es, refKind, refKey).map { p ->
+                    if (stores == null || p["kind"] !in RESPONSE_MAPPINGS) p
+                    else LinkedHashMap(p).apply {
+                        val inner = stores.removeSurrounding("{{", "}}").trim()
+                        put("target", "$inner.${p["target"]}")
+                        put("storedUnder", inner)
+                    }
+                }
                 if (payload.isNotEmpty()) {
                     ctx.addParams(
                         ioParameters, key, n["id"], pyOr(n["label"], es["text"]),
@@ -643,6 +657,9 @@ object ModelParsers {
      * `extraSettings` path is used by every button flavour — Action, REST, Service, Agent, Create-Instance,
      * Data-Object table — so one reader covers them all.
      */
+    /** The mapping kinds that write a call's response back into the form. */
+    private val RESPONSE_MAPPINGS = setOf("responsePayloadMapping", "errorResponsePayloadMapping")
+
     private val PAYLOAD_MAPPINGS: Map<String, String> = linkedMapOf(
         "sendPayloadMapping" to "in",
         "dataObjectDataTableCreatePayloadMapping" to "in",

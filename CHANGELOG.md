@@ -246,6 +246,14 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   real projects. The type's properties are the object's fields now, labels and lookup flags merged
   from the mappings, and `dictionaryType` sits on the data object in `graph.json`.
 
+- **A REST button's response lands where the button stores it.** A button bound to
+  `{{$temp.info}}` with *Store response attributes* `deploymentId` writes `$temp.info.deploymentId` —
+  the platform's button calls back onto its own binding — and the same form reads it as
+  `{{$temp.info.deploymentId}}`. Atlas recorded a variable `deploymentId` written by the mapping and
+  read by nothing: eleven "written but never read" on two real projects. A mapping stored under a
+  binding is a property of that value now — form-local under `$temp`, a field of the bound variable
+  otherwise — and the payload table shows the full path it lands on.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its

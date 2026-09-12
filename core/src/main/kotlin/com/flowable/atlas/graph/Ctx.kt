@@ -178,6 +178,10 @@ class Ctx {
             }
             rec.putAll(p)
             rollup.add(rec)
+            // A response mapping stored under the button's own binding writes a property of that
+            // binding's value, not a variable of the scope — the binding's root is the write (recorded
+            // by the form parser), and a `$temp` root is form-local and no variable at all.
+            if (p["storedUnder"] != null) continue
             val dir = p["dir"] as? String ?: continue
             val kind = p["kind"] as? String
             // The callee this mapping feeds: `p` may carry its own (a form button resolves it from

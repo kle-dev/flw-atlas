@@ -32,7 +32,7 @@ The sites come from everywhere a name can appear:
 | In / out parameters, on both sides of the mapping, with the scope each belongs to | write and read |
 | `resultVariable`, `outputVariableName`, output and error-output parameters | write |
 | Event in / out parameters, variable mappings, signal variables | write |
-| Response and error-response payload mappings | write |
+| Response and error-response payload mappings — unless the button stores its response under its own `{{…}}` binding, in which case the mapping names are properties of that value: the binding's root is the write, and a `$temp` root is form-local | write |
 | Script API calls, with the verb that decides direction | write or read |
 | DMN inputs and outputs | read and write |
 | Form fields, form properties, form outcomes | write |
