@@ -29,7 +29,7 @@ import com.intellij.ui.dsl.builder.RowsRange
 import com.intellij.ui.dsl.builder.columns
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.ui.dsl.listCellRenderer.textListCellRenderer
-import com.intellij.ui.jcef.JBCefApp
+import com.flowable.atlas.explorer.JcefSupport
 import javax.swing.JButton
 import javax.swing.JComboBox
 import javax.swing.JComponent
@@ -385,7 +385,7 @@ class ServerConnectionForm(private val project: Project, private val kind: Conne
             showError("Enter the server URL first, then sign in.")
             return
         }
-        if (!JBCefApp.isSupported()) {
+        if (!JcefSupport.isAvailable()) {
             showError("The embedded browser (JCEF) isn't available in this IDE, so browser sign-in can't run.")
             return
         }

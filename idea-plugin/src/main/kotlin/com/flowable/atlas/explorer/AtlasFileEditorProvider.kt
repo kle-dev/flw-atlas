@@ -6,7 +6,6 @@ import com.intellij.openapi.fileEditor.FileEditorProvider
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.ui.jcef.JBCefApp
 
 /**
  * Contributes the "Atlas Explorer" tab (rendered by JCEF) for any `*.explorer.html` file and hides the
@@ -22,7 +21,7 @@ class AtlasFileEditorProvider : FileEditorProvider, DumbAware {
             // a report inside a .zip has no path to regenerate into or open in a browser (`toNioPath()` throws)
             file.isInLocalFileSystem &&
             file.name.endsWith(".explorer.html", ignoreCase = true) &&
-            JBCefApp.isSupported()
+            JcefSupport.isAvailable()
 
     override fun createEditor(project: Project, file: VirtualFile): FileEditor = AtlasFileEditor(project, file)
 

@@ -48,4 +48,7 @@ instead of running an unverified one.
 platform core up to 2026.1 and lives in the bundled *Web Browser (JCEF)* plugin from 2026.2 on. That
 plugin is therefore on the **compile** classpath (`bundledPlugin("com.intellij.modules.jcef")`), while
 the descriptor keeps it as an **optional** runtime dependency: disabling it should cost the browser
-panels, not the plugin. Every call site is additionally guarded by `JBCefApp.isSupported()`.
+panels, not the plugin. The explorer editor tab is registered from the optional descriptor
+(`flowable-atlas-jcef.xml`), so the platform never asks it about a file when the browser plugin is off,
+and every other call site goes through `JcefSupport.isAvailable()`, which catches the missing class link
+— a direct `JBCefApp.isSupported()` in a class the main descriptor names fails to *link*, not to answer.

@@ -20,7 +20,7 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPasswordField
 import com.intellij.ui.components.JBTextField
-import com.intellij.ui.jcef.JBCefApp
+import com.flowable.atlas.explorer.JcefSupport
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.Row
 import com.intellij.ui.dsl.builder.panel
@@ -206,7 +206,7 @@ class PasteWorkUrlDialog(private val project: Project) : DialogWrapper(project) 
     /** For an app behind an identity provider: log in through the embedded browser and keep the cookie. */
     private fun signIn() {
         val baseUrl = parsed.baseUrl ?: return
-        if (!JBCefApp.isSupported()) {
+        if (!JcefSupport.isAvailable()) {
             testStatus.foreground = JBColor.RED
             testStatus.text = "The embedded browser (JCEF) isn't available in this IDE."
             return

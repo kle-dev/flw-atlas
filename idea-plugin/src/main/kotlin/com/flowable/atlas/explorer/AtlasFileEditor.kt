@@ -147,6 +147,9 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
             null
         }
         browser.jbCefClient.addLoadHandler(loadHandler, browser.cefBrowser)
+        // Disposer runs children last-registered-first, so this remover — registered after the browser —
+        // runs while the client is still alive. dispose() used to do it after the browser was gone.
+        Disposer.register(this) { runCatching { browser.jbCefClient.removeLoadHandler(loadHandler, browser.cefBrowser) } }
         refreshPalette()
         val appBus = ApplicationManager.getApplication().messageBus.connect(this)
         appBus.subscribe(LafManagerListener.TOPIC, LafManagerListener { refreshPalette(); pushIdeTheme() })
@@ -420,9 +423,7 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
     override fun addPropertyChangeListener(listener: PropertyChangeListener) {}
     override fun removePropertyChangeListener(listener: PropertyChangeListener) {}
 
-    override fun dispose() {
-        browser.jbCefClient.removeLoadHandler(loadHandler, browser.cefBrowser)
-    }
+    override fun dispose() {}
 
     private companion object {
         val LOG = logger<AtlasFileEditor>()

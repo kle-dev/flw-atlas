@@ -373,6 +373,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   members and their accept controls a chevron away, so the page has as many rows as it has causes. A
   model's own page keeps every row.
 
+- **JCEF is optional for real.** The plugin declares the bundled *Web Browser (JCEF)* plugin optional,
+  yet named its classes in the editor provider the IDE asks on every file open — with that plugin
+  disabled, the class failed to link (`NoClassDefFoundError`) instead of bowing out. The explorer editor
+  is registered from the optional descriptor now, every other check goes through one probe that catches
+  the missing link, and the explorer tab no longer touches its browser client after it was disposed.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its

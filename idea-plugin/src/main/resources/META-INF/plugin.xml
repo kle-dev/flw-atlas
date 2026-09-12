@@ -337,10 +337,10 @@
                 implementation="com.flowable.atlas.usage.FlowableRenameWarningProvider"/>
         <!-- Balloon shown after generating the Atlas explorer (open in browser / open in IDE). -->
         <notificationGroup id="Flowable Atlas" displayType="BALLOON"/>
-        <!-- Render a *.explorer.html as an embedded (JCEF) "Atlas Explorer" tab in the center editor
-             area (like a DB table); hides the raw-HTML "Text" tab for it. -->
-        <fileEditorProvider implementation="com.flowable.atlas.explorer.AtlasFileEditorProvider"/>
-        <!-- "Models changed since this explorer was generated" banner above the embedded page. -->
+        <!-- The embedded "Atlas Explorer" editor tab is registered in flowable-atlas-jcef.xml: it needs
+             the bundled JCEF plugin, and a provider named here would be asked on every file open
+             whether or not that plugin is loaded. -->
+        <!-- "Models changed since this explorer was generated" banner above the page. -->
         <editorNotificationProvider implementation="com.flowable.atlas.explorer.AtlasExplorerStaleNotificationProvider"/>
 
         <!-- ==================== Flowable Expression support ==================== -->

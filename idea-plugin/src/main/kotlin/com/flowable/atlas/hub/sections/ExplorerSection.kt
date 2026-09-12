@@ -27,7 +27,7 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.Panel
 import com.intellij.ui.dsl.builder.Row
-import com.intellij.ui.jcef.JBCefApp
+import com.flowable.atlas.explorer.JcefSupport
 import com.intellij.util.text.DateFormatUtil
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
@@ -106,7 +106,7 @@ internal class ExplorerSection(private val host: HubHost) : HubSection {
     private fun open(artifact: ExplorerArtifact) {
         val vf = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(artifact.path)
         when {
-            vf != null && JBCefApp.isSupported() -> AtlasExplorerOpener.openInIde(host.project, vf)
+            vf != null && JcefSupport.isAvailable() -> AtlasExplorerOpener.openInIde(host.project, vf)
             AtlasBrowser.canOpenFiles() -> AtlasBrowser.open(artifact.path)   // JCEF unavailable → external browser
             else -> AtlasNotifications.group()
                 .createNotification(

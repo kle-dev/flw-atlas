@@ -3,7 +3,6 @@ package com.flowable.atlas.explorer
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.ui.jcef.JBCefApp
 
 /**
  * Opens a generated `*.explorer.html` inside the IDE and, when JCEF is available, brings its embedded
@@ -20,7 +19,7 @@ object AtlasExplorerOpener {
         // The explorer viewer is placed after the default HTML editor; select it so the rendered page
         // is shown first. Only when JCEF is available — otherwise no such tab exists and the default
         // editor stays selected (the page can still be opened in an external browser).
-        if (JBCefApp.isSupported()) {
+        if (JcefSupport.isAvailable()) {
             manager.setSelectedEditor(file, AtlasFileEditorProvider.EDITOR_TYPE_ID)
             // …and, asked for a route (a node, a report), show that rather than the dashboard
             if (hash != null) editors.filterIsInstance<AtlasFileEditor>().firstOrNull()?.navigate(hash)
