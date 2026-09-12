@@ -179,6 +179,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   key reference — a Java literal, a constant, a cross-reference attribute in model XML, an operation or
   value field — and the Search Everywhere row now land on the key's declaration: the `id` of the
   process, case or decision, the `"key"` of a JSON model.
+- **Open in Atlas Explorer, from Java.** Alt+Enter on a model key — a literal or a constant at a Flowable
+  API site, or any literal equal to a known key when that recognition is on — opens the newest generated
+  explorer inside the IDE on that model's page: who references it, what it uses, its findings, its
+  diagram. The reverse of the page's own "open in IDE" button; it offers to generate an explorer when
+  there is none.
 
 ## 0.25.0
 

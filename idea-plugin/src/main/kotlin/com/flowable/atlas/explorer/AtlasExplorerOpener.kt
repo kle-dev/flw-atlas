@@ -14,14 +14,16 @@ import com.intellij.ui.jcef.JBCefApp
  */
 object AtlasExplorerOpener {
 
-    fun openInIde(project: Project, file: VirtualFile) {
+    fun openInIde(project: Project, file: VirtualFile, hash: String? = null) {
         val manager = FileEditorManager.getInstance(project)
-        manager.openFile(file, true)
+        val editors = manager.openFile(file, true)
         // The explorer viewer is placed after the default HTML editor; select it so the rendered page
         // is shown first. Only when JCEF is available — otherwise no such tab exists and the default
         // editor stays selected (the page can still be opened in an external browser).
         if (JBCefApp.isSupported()) {
             manager.setSelectedEditor(file, AtlasFileEditorProvider.EDITOR_TYPE_ID)
+            // …and, asked for a route (a node, a report), show that rather than the dashboard
+            if (hash != null) editors.filterIsInstance<AtlasFileEditor>().firstOrNull()?.navigate(hash)
         }
     }
 }

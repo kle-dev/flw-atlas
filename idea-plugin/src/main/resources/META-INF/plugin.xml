@@ -348,6 +348,11 @@
               attribute in model XML, an operation or value field — and the Search Everywhere row now land
               on the key's declaration: the <code>id</code> of the process, case or decision, the
               <code>"key"</code> of a JSON model.</li>
+          <li><b>Open in Atlas Explorer, from Java.</b> Alt+Enter on a model key — a literal or a constant
+              at a Flowable API site, or any literal equal to a known key when that recognition is on —
+              opens the newest generated explorer inside the IDE on that model's page: who references it,
+              what it uses, its findings, its diagram. The reverse of the page's own "open in IDE" button;
+              it offers to generate an explorer when there is none.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

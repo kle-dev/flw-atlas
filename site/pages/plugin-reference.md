@@ -167,6 +167,10 @@ covers every service that extends it.
 - **Generate Java DTO for this Flowable data object** — on a data-object key.
 - **Open in Expression Playground** — on any injected expression, pre-filled with its dialect, its
   model's scope and the instance kind the model implies (process for BPMN, case for CMMN).
+- **Open in Atlas Explorer** — on a model key in Java (a literal or a constant at a Flowable API site;
+  any literal equal to a known key with *Recognize model keys anywhere in code*): opens the newest
+  generated explorer inside the IDE on that model's page — who references it, what it uses, its findings,
+  its diagram. Offers to generate an explorer when there is none.
 
 ## Settings
 

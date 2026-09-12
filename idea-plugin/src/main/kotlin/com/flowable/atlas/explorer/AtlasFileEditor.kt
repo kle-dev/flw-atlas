@@ -102,13 +102,16 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
     // there) whenever the LaF or the editor scheme changes; read from the CEF thread in onLoadEnd.
     @Volatile private var paletteJs = "null"
     @Volatile private var paletteParam = ""
+    /** A route asked for before the page was shown — consumed by the first [load]. */
+    @Volatile private var pendingHash: String? = null
+    @Volatile private var pageLoaded = false
 
     private val loadHandler = object : CefLoadHandlerAdapter() {
         override fun onLoadEnd(cefBrowser: CefBrowser, frame: CefFrame, httpStatusCode: Int) {
             // Re-push after any (re)load: the query param goes stale when the IDE theme switched
             // between load and reload. The page-side `window.__atlasSetIdeTheme &&` guard makes an
             // early or racing push a harmless no-op. The bridges are (re)installed the same way.
-            if (frame.isMain) { installBridges(); pushIdeTheme() }
+            if (frame.isMain) { installBridges(); pushIdeTheme(); pageLoaded = true }
         }
     }
 
@@ -171,7 +174,7 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
         // left the page blank: the initial navigation is issued into a browser whose native surface
         // isn't created/sized yet, so it's lost, which is why closing and reopening the tab "fixed" it.
         // Deferring to first-shown makes the page load reliably whether the tab opens focused or not.
-        UiNotifyConnector.doWhenFirstShown(browser.component, { load() }, this)
+        UiNotifyConnector.doWhenFirstShown(browser.component, { load(pendingHash.also { pendingHash = null }) }, this)
     }
 
     private fun ideTheme(): String = if (JBColor.isBright()) "light" else "dark"
@@ -200,6 +203,19 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
         AtlasGenerationRunner.generateExplorer(project, file.toNioPath(), quiet = true) {
             if (remote) load(hash) else browser.cefBrowser.reloadIgnoreCache()
         }
+    }
+
+    /**
+     * Show a route of the page — `process%3ADEMO-P001` for a node, `/checks` for a report. The page routes
+     * on its hash, so a loaded page just gets the hash set; a page not yet shown gets it with its first load.
+     * This is what "Open in Atlas Explorer" on a Java key literal rides on.
+     */
+    fun navigate(hash: String) {
+        // Only what [ExplorerRoutes] produces: percent-encoded plus `/`, `&`, `=` — nothing that could
+        // close the JS string. Anything else is refused rather than escaped.
+        if (!Regex("[A-Za-z0-9._~%/&=:-]*").matches(hash)) return
+        if (!pageLoaded) { pendingHash = hash; return }
+        browser.cefBrowser.executeJavaScript("location.hash = '#$hash';", browser.cefBrowser.url, 0)
     }
 
     private fun load(hash: String? = null) {
