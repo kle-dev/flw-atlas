@@ -283,7 +283,10 @@ subinterfaces, so one entry covers every service that extends it. Both `org.flow
 ### Key validation
 
 A key that matches no model in the project is flagged in the editor, with a quick fix to the closest
-real key — in Java **and** inside model XML.
+real key — in Java **and** inside model XML. Not in test sources: a test that starts `no-such-process`
+to assert the failure is doing its job, so `src/test/**` is left alone (test *models* are still judged).
+In a monorepo the message names the scope it judged against — *not a known Process key in
+apps/orders* — because a key from another module is unknown *here*, not nonexistent.
 
 <figure class="fig mock">
   <div class="body">{{mockup:key-validation}}</div>

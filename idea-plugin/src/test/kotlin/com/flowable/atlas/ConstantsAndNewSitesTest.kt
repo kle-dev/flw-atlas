@@ -36,6 +36,25 @@ class ConstantsAndNewSitesTest : BasePlatformTestCase() {
             infos.any { (it.description ?: "").contains("is not a known") })
     }
 
+    fun testAKeyInTestSourcesIsNotFlagged() {
+        addCaseStub()
+        myFixture.enableInspections(FlowableBrokenKeyInspection::class.java)
+        // a test that starts "no-such-case" to assert the failure is not a broken reference
+        val test = myFixture.addFileToProject(
+            "src/test/java/demo/CaseTest.java",
+            "package demo; class CaseTest { void m(org.flowable.cmmn.api.runtime.CaseInstanceBuilder b) { b.caseDefinitionKey(\"DEMO-C999\"); } }",
+        )
+        myFixture.configureFromExistingVirtualFile(test.virtualFile)
+        val infos = myFixture.doHighlighting()
+        assertFalse("a key in test sources must not be flagged", infos.any { (it.description ?: "").contains("is not a known") })
+        // …while the same key in production code still is
+        myFixture.configureByText(
+            "T.java",
+            "class T { void m(org.flowable.cmmn.api.runtime.CaseInstanceBuilder b) { b.caseDefinitionKey(\"DEMO-C999\"); } }",
+        )
+        assertTrue(myFixture.doHighlighting().any { (it.description ?: "").contains("is not a known") })
+    }
+
     fun testConstantKnownKeyIsAccepted() {
         addCaseStub()
         myFixture.enableInspections(FlowableBrokenKeyInspection::class.java)

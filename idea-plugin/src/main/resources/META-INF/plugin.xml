@@ -353,6 +353,11 @@
               opens the newest generated explorer inside the IDE on that model's page: who references it,
               what it uses, its findings, its diagram. The reverse of the page's own "open in IDE" button;
               it offers to generate an explorer when there is none.</li>
+          <li><b>Inspections leave test sources alone, and say which scope they judged against.</b> A test
+              that starts <code>no-such-process</code> to assert the failure was flagged like production
+              code; <code>src/test/**</code> is skipped now (test <i>models</i> are still judged, as the CLI
+              always did). And in a monorepo the message reads <i>not a known Process key in apps/orders</i>
+              — a key from another module is unknown here, not nonexistent.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

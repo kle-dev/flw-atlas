@@ -5,6 +5,7 @@ import com.flowable.atlas.completion.FluentChain
 import com.flowable.atlas.completion.FlowableApiCatalog
 import com.flowable.atlas.completion.ValueSite
 import com.flowable.atlas.index.FlowableModelIndexService
+import com.flowable.atlas.model.ModelPaths
 import com.intellij.codeInspection.LocalInspectionTool
 import com.intellij.codeInspection.LocalQuickFix
 import com.intellij.codeInspection.ProblemDescriptor
@@ -40,6 +41,8 @@ class FlowableValueFieldInspection : LocalInspectionTool() {
                 val argList = literal.parent as? PsiExpressionList ?: return
                 if (argList.expressions.indexOf(literal) != 0) return
                 val call = argList.parent as? PsiMethodCallExpression ?: return
+                // a test's deliberately wrong field name is not a finding (same line as the key inspection)
+                if (literal.containingFile?.virtualFile?.path?.let(ModelPaths::isTestSource) == true) return
 
                 val method = call.resolveMethod() ?: return
                 val declaring = method.containingClass ?: return

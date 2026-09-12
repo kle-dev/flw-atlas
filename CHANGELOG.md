@@ -184,6 +184,10 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   explorer inside the IDE on that model's page: who references it, what it uses, its findings, its
   diagram. The reverse of the page's own "open in IDE" button; it offers to generate an explorer when
   there is none.
+- **Inspections leave test sources alone, and say which scope they judged against.** A test that starts
+  `no-such-process` to assert the failure was flagged like production code; `src/test/**` is skipped now
+  (test *models* are still judged, as the CLI always did). And in a monorepo the message reads *not a
+  known Process key in apps/orders* — a key from another module is unknown here, not nonexistent.
 
 ## 0.25.0
 

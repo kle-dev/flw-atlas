@@ -3,6 +3,8 @@ package com.flowable.atlas.inspection
 import com.flowable.atlas.completion.KeySite
 import com.flowable.atlas.completion.SiteMatching
 import com.flowable.atlas.index.FlowableModelIndexService
+import com.flowable.atlas.index.ProjectModelScope
+import com.flowable.atlas.model.ModelPaths
 import com.intellij.codeInspection.LocalInspectionTool
 import com.intellij.codeInspection.LocalQuickFix
 import com.intellij.codeInspection.ProblemHighlightType
@@ -51,6 +53,9 @@ class FlowableBrokenKeyInspection : LocalInspectionTool() {
             }
 
             private fun check(element: PsiElement, site: KeySite, value: String, fixFor: (String) -> LocalQuickFix?) {
+                // A test deliberately starts "no-such-process" to assert the failure; flagging it is noise.
+                // (Test *models* are still judged — the CLI's discovery draws the same line, ModelPaths.)
+                if (element.containingFile?.virtualFile?.path?.let(ModelPaths::isTestSource) == true) return
                 val service = element.project.service<FlowableModelIndexService>()
                 val knownKeys = knownKeys(service, site)
                 if (knownKeys.isEmpty()) return          // nothing indexed for this type — don't guess
@@ -60,9 +65,12 @@ class FlowableBrokenKeyInspection : LocalInspectionTool() {
                 val suggestion = Suggestions.closest(value, knownKeys)
                 val fixes = suggestion?.let(fixFor)?.let { arrayOf(it) } ?: LocalQuickFix.EMPTY_ARRAY
                 val hint = suggestion?.let { " — did you mean '$it'?" } ?: ""
+                // In a monorepo the index is one sub-project's; a key from another module is unknown *here*,
+                // and the message has to say so or it reads as "this key does not exist".
+                val scope = ProjectModelScope.label(element.project)?.let { " in $it" } ?: ""
                 holder.registerProblem(
                     element,
-                    "'$value' is not a known $typeLabel key$hint",
+                    "'$value' is not a known $typeLabel key$scope$hint",
                     ProblemHighlightType.WARNING,
                     *fixes,
                 )
