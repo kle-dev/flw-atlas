@@ -279,6 +279,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   writes. And an in/out parameter tag is matched by its lower-cased name, the way form keys already were,
   so an export that lower-cases `<flowable:inputparameter>` loses nothing.
 
+- **Master data is master data.** A `.data` whose `dataObjectType` is `masterData` — a managed
+  reference list — was a data object like any other: one real project read "143 data objects" for 143
+  lists, and each list's `variables` map (`lang`, `color`) became project variables, 35 of them. It is its
+  own kind now, `masterData`, counted apart ("143 master data"), and a select over such a table
+  (`tableKey`) links to it.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its

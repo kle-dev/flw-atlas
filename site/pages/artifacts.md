@@ -41,7 +41,8 @@ conversation.
 ## `<project>.overview.md` — the full report
 
 Fourteen numbered sections, every model in **execution order** rather than alphabetical: apps,
-processes, cases, decisions, forms and pages, data objects, dictionaries, AI agents and bots, the
+processes, cases, decisions, forms and pages, data objects (master-data lists are their own kind,
+`masterData`), dictionaries, AI agents and bots, the
 integration surface (services, channels, events, REST), the Java glue, resolved references, unresolved
 references (with the suspect and dynamic subsections separated out), the access map, the code map, the
 variable and expression inventory, and every finding with its `file:line`.

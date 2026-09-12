@@ -49,6 +49,9 @@ object Atlas {
 
     private val XML_MODEL_TYPES = setOf("bpmn", "cmmn", "dmn")
 
+    /** A `.data` model that is a master-data list, by the one attribute that says so. */
+    private val MASTER_DATA_RE = Regex("\"dataObjectType\"\\s*:\\s*\"masterData\"")
+
     private fun looksLikeJson(raw: String): Boolean {
         val i = raw.indexOfFirst { !it.isWhitespace() && it != '﻿' }
         if (i < 0) return false
@@ -123,16 +126,19 @@ object Atlas {
             known.add(norm to label)
         }
 
-        fun dispatch(mtype: String?, data: ByteArray, label: String) {
-            if (mtype == null) return
+        fun dispatch(mtypeByFile: String?, data: ByteArray, label: String) {
+            if (mtypeByFile == null) return
             val raw = String(data, Charsets.UTF_8)
             // A JSON model type whose file is not JSON is not a Flowable model that failed to parse — it
             // is somebody else's file with the same extension (a Helm chart's `_helpers.tpl`, say). Said
             // as a skip, and before the harvest: a Go template is full of `{{ }}` that are not bindings.
-            if (mtype !in XML_MODEL_TYPES && !looksLikeJson(raw)) {
-                diag("skip", label, "not a JSON document — a .${label.substringAfterLast('.')} file that is no Flowable $mtype model")
+            if (mtypeByFile !in XML_MODEL_TYPES && !looksLikeJson(raw)) {
+                diag("skip", label, "not a JSON document — a .${label.substringAfterLast('.')} file that is no Flowable $mtypeByFile model")
                 return
             }
+            // The extension says `.data`; only the body says whether it is a data object or a master-data
+            // list. The type decides the node, the bucket and the index entry, so it is settled here.
+            val mtype = if (mtypeByFile == "dataObject" && MASTER_DATA_RE.containsMatchIn(raw)) "masterData" else mtypeByFile
             // Script bodies are read by their own parsers; to the text harvest their `${…}` is string
             // interpolation, not an expression (see ScriptMask). Markers and delegate classes still read `raw`.
             val harvest = ScriptMask.mask(raw, xml = mtype in XML_MODEL_TYPES)

@@ -31,6 +31,7 @@ object ModelParsers {
         "event" to ::parseEvent,
         "dataDictionary" to ::parseDictionary,
         "dataObject" to ::parseDataObject,
+        "masterData" to ::parseDataObject,
         "securityPolicy" to ::parsePolicy,
         "action" to ::parseAction,
         "query" to ::parseQuery,
@@ -1090,8 +1091,12 @@ object ModelParsers {
             }
             columns.add(col)
         }
+        val masterData = doc["dataObjectType"] == "masterData"
         objOf(doc["variables"])?.forEach { (n, lbl) ->
             columns.add(linkedMapOf("name" to n, "label" to (lbl as? String), "type" to null))
+            // A master-data list's `variables` are the columns of its reference table (`lang`, `color`),
+            // never variables of a process or case — 143 lists made 35 phantom variables on one project.
+            if (masterData) return@forEach
             ctx.addVar(key, n)
             // A data object's own variable is a column of a table the Work UI, a query or a REST client
             // reads. Nothing in the models has to mention it for it to be in use, so the direction is
@@ -1100,6 +1105,8 @@ object ModelParsers {
         }
         val out = linkedMapOf<String, Any?>(
             "key" to key, "name" to doc["name"], "file" to ffile,
+            // the `others` bucket node-ifies by `modelType`; a data object's is redundant but harmless
+            "modelType" to (if (masterData) "masterData" else "dataObject"),
             "dataObjectType" to doc["dataObjectType"], "sourceId" to doc["sourceId"],
             "service" to doc["referencedServiceDefinitionModelKey"], "dictionary" to doc["referencedDataDictionaryModelKey"],
             "dictionaryType" to doc["dataDictionaryTypeName"],

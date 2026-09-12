@@ -459,6 +459,12 @@
               variable and a task's <code>additionalvariables</code> are variable writes. And an in/out
               parameter tag is matched by its lower-cased name, the way form keys already were, so an export
               that lower-cases <code>&lt;flowable:inputparameter&gt;</code> loses nothing.</li>
+          <li><b>Master data is master data.</b> A <code>.data</code> whose <code>dataObjectType</code> is
+              <code>masterData</code> — a managed reference list — was a data object like any other: one
+              real project read "143 data objects" for 143 lists, and each list's <code>variables</code> map
+              (<code>lang</code>, <code>color</code>) became project variables, 35 of them. It is its own
+              kind now, <code>masterData</code>, counted apart ("143 master data"), and a select over such a
+              table (<code>tableKey</code>) links to it.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

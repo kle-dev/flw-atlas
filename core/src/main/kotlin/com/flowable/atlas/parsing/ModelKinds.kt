@@ -40,6 +40,10 @@ object ModelKinds {
         Kind("event", "events", "event"),
         Kind("dataDictionary", "dictionaries", "dataDictionary"),
         Kind("dataObject", "dataObjects", "dataObject"),
+        // A `.data` whose `dataObjectType` is `masterData` — a managed reference list, not a table-backed
+        // object; read by the data-object parser, but its own kind (143 of them on one real project
+        // were "data objects", and each one's `variables` map a set of project variables).
+        Kind("masterData", "others", "masterData"),
         Kind("securityPolicy", "policies", "securityPolicy"),
         Kind("action", "actions", "action"),
         // Structured parsers whose records keep living in the `others` bucket (the result shape and

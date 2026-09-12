@@ -75,7 +75,7 @@ object SummaryRenderer {
         }
 
         // Inventory
-        val order = listOf("process", "case", "decision", "form", "page", "dataObject", "dataDictionary",
+        val order = listOf("process", "case", "decision", "form", "page", "dataObject", "masterData", "dataDictionary",
             "service", "agent", "channel", "event", "action", "query", "template", "sequence",
             "securityPolicy", "variableExtractor", "liquibase")
         // Design's word for each type, counted — "2 data objects", not "2 dataObject".

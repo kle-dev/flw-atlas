@@ -103,7 +103,6 @@ _Scanned 26 models (26 files · 1 archives), 2 Java files, 2 REST endpoints. Gen
 ## 5b. Data objects
 
 - `customerDO` (lookup) (table `cust_customer`) [5 fields: id, customerName, deliveryCity, deliveryZip, priority] — `data/customer.data`
-- `priorityMD` (masterData) [2 fields: level, color] — `data/priority.data`
 
 ## 5c. Data dictionaries
 
@@ -115,6 +114,8 @@ _Scanned 26 models (26 files · 1 archives), 2 Java files, 2 REST endpoints. Gen
 - `contractDocument` Contract — `documents/contract.document`
 **knowledgeBase** (1):
 - `courierManuals` Courier manuals — `knowledgebase/courier-manuals.knowledgebase`
+**masterData** (1):
+- `priorityMD` Priority — `data/priority.data`
 **palette** (1):
 - `demoPalette` Demo palette — `palettes/demo.palette`
 **query** (1):
@@ -260,7 +261,7 @@ _Scanned 26 models (26 files · 1 archives), 2 Java files, 2 REST endpoints. Gen
 - `archives/` — 1 bpmn
 - `cases/` — 1 cmmn
 - `channels/` — 1 channel
-- `data/` — 2 data
+- `data/` — 1 data, 1 other
 - `db/changelog/` — 1 liquibase
 - `decisions/` — 1 dmn
 - `dictionaries/` — 1 dict
@@ -290,7 +291,7 @@ _component (1):_
 
 ## 13. Variables, beans & expressions
 
-**Variables (40)** — where each one lives, is set and is read:
+**Variables (38)** — where each one lives, is set and is read:
 
 - `amount` [form]
     - used in: orderForm (form field), orderForm {{amount * 1.081}}, orderForm {{amount > 0}}, orderForm {{amount}}
@@ -298,8 +299,6 @@ _component (1):_
     - used in: demoApp (app variable)
 - `approved` [decision]
     - used in: orderDecision (declared / mapped)
-- `color` [dataObject]
-    - used in: priorityMD (declared / mapped)
 - `contactEmail` [form]
     - used in: DEMO-LF001 {{contactEmail}}
 - `contractType` [document]
@@ -330,8 +329,6 @@ _component (1):_
     - used in: DEMO-LF001 {{legacyMode == 'strict'}}
 - `legacyOrderId` [form]
     - used in: DEMO-LF001 {{legacyOrderId}}
-- `level` [dataObject]
-    - used in: priorityMD (declared / mapped)
 - `manager` [sla]
     - used in: approvalSla ${manager}
 - `managerApproved` [sla]
@@ -444,7 +441,7 @@ _component (1):_
 - `vars:bogus` (1) — invalid: 1 ⚠
     - ⚠ `${vars:bogus(}` — in `orderProcess`
 
-**Also in the graph** (queryable in `miniproject.graph.json`, no section here): 1 document · 1 variableExtractor · 1 knowledgeBase · 1 palette · 1 query · 1 sequence · 1 sla · 1 template · 1 string · 1 serviceOperation · 1 method · 1 bot.
+**Also in the graph** (queryable in `miniproject.graph.json`, no section here): 1 masterData · 1 document · 1 variableExtractor · 1 knowledgeBase · 1 palette · 1 query · 1 sequence · 1 sla · 1 template · 1 string · 1 serviceOperation · 1 method · 1 bot.
 
 ## 14. Findings — 10 defects · 8 advice
 

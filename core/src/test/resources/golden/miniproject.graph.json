@@ -360,44 +360,6 @@
   "customFunctions": null,
   "dataObjects": [
     {
-      "_uses": {
-        "variable": [
-          "variable:color",
-          "variable:level"
-        ]
-      },
-      "columns": [
-        {
-          "label": "Color",
-          "name": "color",
-          "type": null
-        },
-        {
-          "label": "Level",
-          "name": "level",
-          "type": null
-        }
-      ],
-      "dataObjectType": "masterData",
-      "dictionary": null,
-      "dictionaryType": null,
-      "fields": [
-        "color",
-        "level"
-      ],
-      "file": "data/priority.data",
-      "idField": "key",
-      "key": "priorityMD",
-      "keyField": "key",
-      "name": "Priority",
-      "nameField": "name",
-      "service": null,
-      "sourceId": "JSON",
-      "subType": "priority",
-      "supportsNameFiltering": true,
-      "type": "internal"
-    },
-    {
       "columns": [
         {
           "label": "Delivery ZIP",
@@ -439,6 +401,7 @@
       ],
       "file": "data/customer.data",
       "key": "customerDO",
+      "modelType": "dataObject",
       "name": "Customer",
       "service": "customerService",
       "serviceTableName": "cust_customer",
@@ -1405,7 +1368,7 @@
       {
         "rel": "field-masterData",
         "s": "page:orderPage",
-        "t": "dataObject:priorityMD"
+        "t": "masterData:priorityMD"
       },
       {
         "rel": "field-service",
@@ -1470,7 +1433,7 @@
       {
         "rel": "relates-to",
         "s": "dataObject:customerDO",
-        "t": "dataObject:priorityMD"
+        "t": "masterData:priorityMD"
       },
       {
         "rel": "rest-call",
@@ -2923,51 +2886,6 @@
         "data": {
           "_uses": {
             "variable": [
-              "variable:color",
-              "variable:level"
-            ]
-          },
-          "columns": [
-            {
-              "label": "Color",
-              "name": "color",
-              "type": null
-            },
-            {
-              "label": "Level",
-              "name": "level",
-              "type": null
-            }
-          ],
-          "dataObjectType": "masterData",
-          "dictionary": null,
-          "dictionaryType": null,
-          "fields": [
-            "color",
-            "level"
-          ],
-          "file": "data/priority.data",
-          "idField": "key",
-          "key": "priorityMD",
-          "keyField": "key",
-          "name": "Priority",
-          "nameField": "name",
-          "service": null,
-          "sourceId": "JSON",
-          "subType": "priority",
-          "supportsNameFiltering": true,
-          "type": "internal"
-        },
-        "file": "data/priority.data",
-        "id": "dataObject:priorityMD",
-        "key": "priorityMD",
-        "label": "Priority",
-        "type": "dataObject"
-      },
-      {
-        "data": {
-          "_uses": {
-            "variable": [
               "variable:contractType"
             ]
           },
@@ -3565,6 +3483,46 @@
         "data": {
           "columns": [
             {
+              "label": "Color",
+              "name": "color",
+              "type": null
+            },
+            {
+              "label": "Level",
+              "name": "level",
+              "type": null
+            }
+          ],
+          "dataObjectType": "masterData",
+          "dictionary": null,
+          "dictionaryType": null,
+          "fields": [
+            "color",
+            "level"
+          ],
+          "file": "data/priority.data",
+          "idField": "key",
+          "key": "priorityMD",
+          "keyField": "key",
+          "modelType": "masterData",
+          "name": "Priority",
+          "nameField": "name",
+          "service": null,
+          "sourceId": "JSON",
+          "subType": "priority",
+          "supportsNameFiltering": true,
+          "type": "internal"
+        },
+        "file": "data/priority.data",
+        "id": "masterData:priorityMD",
+        "key": "priorityMD",
+        "label": "Priority",
+        "type": "masterData"
+      },
+      {
+        "data": {
+          "columns": [
+            {
               "label": "Delivery ZIP",
               "name": "deliveryZip",
               "type": "string"
@@ -3604,6 +3562,7 @@
           ],
           "file": "data/customer.data",
           "key": "customerDO",
+          "modelType": "dataObject",
           "name": "Customer",
           "service": "customerService",
           "serviceTableName": "cust_customer",
@@ -4706,56 +4665,6 @@
         "id": "variable:appVar",
         "key": "appVar",
         "label": "appVar",
-        "type": "variable"
-      },
-      {
-        "data": {
-          "readCount": 0,
-          "scopes": [
-            "dataObject"
-          ],
-          "usages": [
-            {
-              "model": "dataObject:priorityMD",
-              "snippets": [
-                "(declared / mapped)"
-              ]
-            }
-          ],
-          "usedBy": [
-            "dataObject:priorityMD"
-          ],
-          "writeCount": 0
-        },
-        "file": null,
-        "id": "variable:color",
-        "key": "color",
-        "label": "color",
-        "type": "variable"
-      },
-      {
-        "data": {
-          "readCount": 0,
-          "scopes": [
-            "dataObject"
-          ],
-          "usages": [
-            {
-              "model": "dataObject:priorityMD",
-              "snippets": [
-                "(declared / mapped)"
-              ]
-            }
-          ],
-          "usedBy": [
-            "dataObject:priorityMD"
-          ],
-          "writeCount": 0
-        },
-        "file": null,
-        "id": "variable:level",
-        "key": "level",
-        "label": "level",
         "type": "variable"
       },
       {
@@ -6448,7 +6357,6 @@
     "channel:orderEvents": "channels/order-events.channel",
     "dataDictionary:orderTypes": "dictionaries/order-types.dictionary",
     "dataObject:customerDO": "data/customer.data",
-    "dataObject:priorityMD": "data/priority.data",
     "decision:orderDecision": "decisions/order-decision.dmn",
     "document:contractDocument": "documents/contract.document",
     "event:orderShipped": "events/order-shipped.event",
@@ -6456,6 +6364,7 @@
     "form:orderForm": "forms/order-form.form",
     "knowledgeBase:courierManuals": "knowledgebase/courier-manuals.knowledgebase",
     "liquibase:001-customer": "db/changelog/001-customer.xml",
+    "masterData:priorityMD": "data/priority.data",
     "page:orderPage": "pages/order-page.page",
     "palette:demoPalette": "palettes/demo.palette",
     "process:archivedProcess": "archives/demo-export.zip!apps/demo.bar!processes/archived.bpmn",
@@ -6675,6 +6584,39 @@
       "name": "Demo palette",
       "paletteItemsCount": 2,
       "propertyPackagesCount": 1
+    },
+    {
+      "columns": [
+        {
+          "label": "Color",
+          "name": "color",
+          "type": null
+        },
+        {
+          "label": "Level",
+          "name": "level",
+          "type": null
+        }
+      ],
+      "dataObjectType": "masterData",
+      "dictionary": null,
+      "dictionaryType": null,
+      "fields": [
+        "color",
+        "level"
+      ],
+      "file": "data/priority.data",
+      "idField": "key",
+      "key": "priorityMD",
+      "keyField": "key",
+      "modelType": "masterData",
+      "name": "Priority",
+      "nameField": "name",
+      "service": null,
+      "sourceId": "JSON",
+      "subType": "priority",
+      "supportsNameFiltering": true,
+      "type": "internal"
     },
     {
       "contentItemsPath": "docs/couriers",
@@ -7261,6 +7203,30 @@
       "value": "reviewCase"
     },
     {
+      "fallbackType": "masterData",
+      "from": "customerDO",
+      "fromFile": "data/customer.data",
+      "fromType": "dataObject",
+      "kind": "dataObject",
+      "rel": "relates-to",
+      "target": "data/priority.data",
+      "targetNodeType": "masterData",
+      "targetType": "model",
+      "value": "priorityMD"
+    },
+    {
+      "fallbackType": "masterData",
+      "from": "orderPage",
+      "fromFile": "pages/order-page.page",
+      "fromType": "page",
+      "kind": "dataObject",
+      "rel": "field-masterData",
+      "target": "data/priority.data",
+      "targetNodeType": "masterData",
+      "targetType": "model",
+      "value": "priorityMD"
+    },
+    {
       "from": "DEMO-LF001",
       "fromFile": "form-models/DEMO-LF001.json",
       "fromType": "form",
@@ -7358,17 +7324,6 @@
       "targetNodeType": "form",
       "targetType": "model",
       "value": "orderForm"
-    },
-    {
-      "from": "customerDO",
-      "fromFile": "data/customer.data",
-      "fromType": "dataObject",
-      "kind": "dataObject",
-      "rel": "relates-to",
-      "target": "data/priority.data",
-      "targetNodeType": "dataObject",
-      "targetType": "model",
-      "value": "priorityMD"
     },
     {
       "from": "customerDO",
@@ -7501,17 +7456,6 @@
       "targetNodeType": "service",
       "targetType": "model",
       "value": "customerService"
-    },
-    {
-      "from": "orderPage",
-      "fromFile": "pages/order-page.page",
-      "fromType": "page",
-      "kind": "dataObject",
-      "rel": "field-masterData",
-      "target": "data/priority.data",
-      "targetNodeType": "dataObject",
-      "targetType": "model",
-      "value": "priorityMD"
     },
     {
       "from": "orderPage",
@@ -7902,7 +7846,7 @@
     "java": 2,
     "modelCount": 26,
     "models": 26,
-    "nodes": 121,
+    "nodes": 119,
     "scriptIssues": 2,
     "suspectEdges": 0
   },
