@@ -31,13 +31,19 @@ object ReferenceResolver {
      * from the cleaned-up sections written into `result` (Python passes these directly as arguments):
      *  - [resolved]: the FULL resolved-refs list (each entry carries `targetFqn` for bean/class refs);
      *  - [allJava]: fqn → parsed-java object for every `.java` (Python's `all_java`);
-     *  - [beanMethods]: bean name → set of method names called on it in expressions (Python's `bean_methods`).
+     *  - [beanMethods]: bean name → set of method names called on it in expressions (Python's `bean_methods`);
+     *  - [knownBeans]: every name the project may treat as a bean — the platform's, Java's, the ones a
+     *    delegate names bare, and the expression roots [isBean] accepted. A root outside it is a variable.
      */
     data class Resolved(
         val resolved: List<Map<String, Any?>>,
         val allJava: Map<String, Map<String, Any?>>,
         val beanMethods: Map<String, Set<String>>,
+        val knownBeans: Set<String>,
     )
+
+    /** A bean ref whose root may as well be a variable: a `${x.method()}` harvest, or an `expression` attribute. */
+    private fun isCallRel(rel: String) = rel.startsWith("calls ") || rel.endsWith("-expression")
 
     /** Ref kinds that name a Flowable model (mirrors the tuple in the Python `resolve references` step). */
     internal val MODEL_KIND_NAMES = setOf(
@@ -214,12 +220,33 @@ object ReferenceResolver {
         }
         replaceInPlace(ctx.refs, dedupe(ctx.refs, ::refKey))
 
+        // ---- Beans vs variables ----
+        // `${x.method()}` reads like a bean call and like a method on a variable's value — `${issue.asText()}`,
+        // `${attachments.size()}` — and the harvest cannot tell them apart. Every such root used to be a
+        // bean: on four real projects 25 variables vanished from the variable graph and stood in the
+        // "review — unresolved" list as beans nobody could find, and 15 service tasks reading a variable
+        // were calls out of the engine. A root is a bean when something says so: the platform declares
+        // it, Java declares it, a delegate expression names it bare, or its name is shaped like a bean's
+        // ([Constants.looksLikeBeanName] — the one signal a Java-less Design export leaves). Everything
+        // else is a variable, and the variable pass records the read.
+        val declaredBeans = ctx.refs.asSequence()
+            .filter { it["kind"] == "bean" && !isCallRel(it["rel"] as String) }
+            .map { it["value"] as String }.toSet()
+        fun isBean(name: String): Boolean {
+            if (name in Constants.FLOWABLE_PLATFORM_BEANS || name in beanIndex || name in declaredBeans) return true
+            val cap = if (name.isNotEmpty()) name[0].uppercaseChar() + name.substring(1) else name
+            return cap in classIndex || Constants.looksLikeBeanName(name)
+        }
+
         // ---- Resolve references ----
         val resolved = ArrayList<Map<String, Any?>>()
         val unresolved = ArrayList<Map<String, Any?>>()
         for (ref in ctx.refs) {
             val kind = ref["kind"] as String
             val value = ref["value"] as String
+            // A method call on something that is not a bean is a variable read: nothing to resolve, and
+            // no bean to report as unresolved.
+            if (kind == "bean" && isCallRel(ref["rel"] as String) && !isBean(value)) continue
             var target: String? = null
             val ref2 = LinkedHashMap(ref)
             when {
@@ -332,7 +359,9 @@ object ReferenceResolver {
             body = STR_LIT_IN_EXPR_RE.replace(body, " ")   // drop string literals
             for (bm in Constants.METHOD_CALL_FULL_RE.findAll(body)) {
                 val b = bm.groupValues[1]
-                if (b !in Constants.FLOWABLE_CONTEXT && b !in Constants.JAVA_LITERALS) {
+                // a call on a variable's value (`${order.getTotal()}`) leaves `order` to the identifier
+                // scan below, where it is the variable it always was
+                if (b !in Constants.FLOWABLE_CONTEXT && b !in Constants.JAVA_LITERALS && isBean(b)) {
                     beans.add(b)
                     beanMethods.getOrPut(b) { LinkedHashSet() }.add(bm.groupValues[2])
                 }
@@ -367,8 +396,11 @@ object ReferenceResolver {
         result["javaByRole"] = javaByRole
         result["customFunctions"] = null
 
+        val knownBeans = LinkedHashSet<String>().apply {
+            addAll(Constants.FLOWABLE_PLATFORM_BEANS); addAll(beanIndex.keys); addAll(declaredBeans); addAll(beans)
+        }
         // `fqnIndex` is Python's `all_java` (both are `map[jc.fqn] = jc`, same loop, last wins).
-        return Resolved(resolved, fqnIndex, beanMethods)
+        return Resolved(resolved, fqnIndex, beanMethods, knownBeans)
     }
 
     /** Replace the contents of [dst] with [src] in place (the Python `ctx[..] = _dedupe(..)` idiom). */

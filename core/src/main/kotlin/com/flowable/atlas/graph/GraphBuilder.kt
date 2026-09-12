@@ -102,6 +102,7 @@ object GraphBuilder {
         resolved: List<Map<String, Any?>>,
         allJava: Map<String, Map<String, Any?>>,
         beanMethods: Map<String, Set<String>>,
+        knownBeans: Set<String>,
         byKey: LinkedHashMap<String, MutableList<Pair<String, String>>>,
         exprAllowlist: Set<String>? = null,
         custom: CustomFunctionCatalog? = null,
@@ -190,7 +191,8 @@ object GraphBuilder {
             if (fqn.isEmpty()) continue
             referencedJava.add(fqn)
             val rel = r["rel"] as String
-            if (rel == "serviceTask-delegate" || rel == "task-delegate") delegateFqns.add(fqn)
+            if (rel == "serviceTask-delegate" || rel == "task-delegate" ||
+                rel == "serviceTask-expression" || rel == "task-expression") delegateFqns.add(fqn)
             else if (rel.startsWith("executionListener") || rel.startsWith("taskListener") ||
                 rel.startsWith("planItemLifecycleListener")
             ) listenerFqns.add(fqn)
@@ -290,10 +292,10 @@ object GraphBuilder {
         usageNodes("binding", ctx.mustacheUse)
 
         // --- variable nodes ---
-        val beans = LinkedHashSet<String>()
-        beans.addAll(Constants.FLOWABLE_PLATFORM_BEANS)
+        // What the resolver decided is a bean (platform, Java, declared bare, or named like one) — every
+        // other `${x.method()}` root is a variable and gets its node and its read below.
+        val beans = LinkedHashSet<String>(knownBeans)
         beans.addAll(beanMethods.keys)
-        for (r in ctx.refs) if (r["kind"] == "bean") beans.add(r["value"].toString())
         for (jc in allJava.values) {
             beans.addAll((jc["beanNames"] as? Collection<String>) ?: emptyList())
             val primary = jc["primary"] as? String
@@ -359,7 +361,7 @@ object GraphBuilder {
 
         for ((expr, keys) in ctx.exprUse) {
             if (expr in placeholders) continue
-            for (v in varsInExpr(expr)) for (k in keys) {
+            for (v in varsInExpr(expr, beans)) for (k in keys) {
                 addUsage(v, k, expr)
                 addSite(v, k, Ctx.READ, "expression")
             }
@@ -1036,10 +1038,12 @@ object GraphBuilder {
     }
 
     /** Variable identifiers used in a `${…}`/`#{…}` expression (not beans/functions/context). */
-    private fun varsInExpr(expr: String): Set<String> {
+    /** The variable roots an expression reads. A root followed by `.method(` used to be a bean by that
+     *  fact alone; now only a root in [beans] — the resolver's known beans — is, so `${order.getTotal()}`
+     *  reads `order` while `${orderService.getTotal()}` still calls a bean. */
+    private fun varsInExpr(expr: String, beans: Set<String>): Set<String> {
         var body = EXPR_STRIP_RE.replace(expr, "")
         body = STR_IN_EXPR_RE.replace(body, " ")
-        val beans = Constants.METHOD_CALL_FULL_RE.findAll(body).map { it.groupValues[1] }.toSet()
         val out = LinkedHashSet<String>()
         for (m in ROOT_IDENT_RE.findAll(body)) {
             val n = m.groupValues[1]

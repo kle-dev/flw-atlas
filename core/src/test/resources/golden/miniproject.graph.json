@@ -1311,7 +1311,7 @@
         "t": "external:notifierBean"
       },
       {
-        "rel": "serviceTask-delegate",
+        "rel": "serviceTask-expression",
         "s": "process:orderProcess",
         "t": "java:com.example.DemoBean"
       },
@@ -6532,7 +6532,7 @@
       "fromFile": "processes/order.bpmn",
       "fromType": "bpmn",
       "kind": "bean",
-      "rel": "serviceTask-delegate",
+      "rel": "serviceTask-expression",
       "target": "src/main/java/com/example/DemoBean.java:6 (com.example.DemoBean)",
       "targetFqn": "com.example.DemoBean",
       "targetType": "bean",

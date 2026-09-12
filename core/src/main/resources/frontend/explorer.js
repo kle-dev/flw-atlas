@@ -271,6 +271,8 @@ const DESIGN_TERMS = {
   'rel:serviceTask-class': ['Service task → Java class', 'The task runs that class as a JavaDelegate.'],
   'rel:serviceTask-delegate': ['Service task → bean', 'The task runs that Spring bean via a delegate expression.'],
   'rel:task-delegate': ['Task → bean', 'The case task runs that Spring bean via a delegate expression.'],
+  'rel:serviceTask-expression': ['Service task → bean', 'The task calls a method on that Spring bean via an expression.'],
+  'rel:task-expression': ['Task → bean', 'The case task calls a method on that Spring bean via an expression.'],
   'rel:serviceMapping': ['Service registry task → service', 'The task calls an operation of that service.'],
   'rel:dataObjectMapping': ['Data object task → data object', 'The task creates, reads, updates, deletes or searches that data object.'],
   'rel:agentMapping': ['AI Agent → agent model', 'The task hands its input to that agent model.'],

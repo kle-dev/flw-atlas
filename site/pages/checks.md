@@ -287,8 +287,10 @@ every project and be worth nothing.
 
 A service task whose work happens outside the engine — an HTTP call, an external worker, an AI agent, a
 mail task, a service-registry task whose service is REST, or code of your own (a `class`, a delegate
-expression that is not a platform bean, an `expression` whose root is neither an engine context nor a
-platform bean) — with no error boundary event attached to it. A failure then propagates to whatever
+expression that is not a platform bean, an `expression` whose root is a bean of your own — one Java
+declares, or one named the way beans are named, `…Service`, `…Task`) — with no error boundary event
+attached to it. An `expression` whose root is a variable — `${requesterData.getName()}` — reads it and
+stays in the engine. A failure then propagates to whatever
 called the process.
 
 The bean alone does not decide it. Flowable Design writes a platform bean into every task type's

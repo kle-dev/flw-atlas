@@ -482,7 +482,7 @@ object Atlas {
         // Navigable graph (nodes + edges) + `_uses` enrichment + stats — Python `_build_graph`.
         // The graph builder receives the raw catalog + allowlist (Python `_build_graph(..., expr_allowlist, custom)`).
         GraphBuilder.build(
-            result, ctx, resolvedData.resolved, resolvedData.allJava, resolvedData.beanMethods, byKey,
+            result, ctx, resolvedData.resolved, resolvedData.allJava, resolvedData.beanMethods, resolvedData.knownBeans, byKey,
             exprAllowlist = exprAllowlist, custom = custom,
         )
 

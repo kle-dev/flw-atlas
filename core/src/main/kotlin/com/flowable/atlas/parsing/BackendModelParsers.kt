@@ -243,16 +243,20 @@ object BackendModelParsers {
                         )
                         serviceTasks.add(withElementExtras(st, el, elListeners))
                         ctx.addRef(pkey, "bpmn", ffile, "serviceTask-class", "class", st["class"])
-                        // Both `delegateExpression` and `expression` reference a bean — a bean-only
+                        // Both `delegateExpression` and `expression` may reference a bean — a bean-only
                         // `flowable:expression="${myBean}"` has no method call, so the whole-file
-                        // METHOD_CALL harvest never sees it either.
+                        // METHOD_CALL harvest never sees it either. Which attribute it was travels in the
+                        // rel: a delegate expression can only name a bean, an expression may as well start
+                        // with a variable (`${requesterData.getName()}`), and the resolver decides which.
                         for (exAttr in listOf("delegateExpression", "expression")) {
                             val exv = st[exAttr] as? String
                             if (exv.isNullOrEmpty()) continue
+                            val rel = if (exAttr == "expression") "serviceTask-expression" else "serviceTask-delegate"
                             for (m in BEAN_RE.findAll(exv)) {
                                 val b = m.groupValues[1]
-                                if (b !in Constants.FLOWABLE_CONTEXT)
-                                    ctx.addRef(pkey, "bpmn", ffile, "serviceTask-delegate", "bean", b)
+                                // `${true}` is a literal, not a bean called true
+                                if (b !in Constants.FLOWABLE_CONTEXT && b !in Constants.JAVA_LITERALS)
+                                    ctx.addRef(pkey, "bpmn", ffile, rel, "bean", b)
                             }
                         }
                         val type = el.attr("type")
@@ -438,11 +442,12 @@ object BackendModelParsers {
             val v = ext.childText(tk)
             if (truthy(v)) ctx.addRef(caseKey, "cmmn", ffile, tk, "template", v)
         }
-        for (exv in listOf(el.attr("delegateExpression"), el.attr("expression"))) {
+        for ((exAttr, exv) in listOf("delegateExpression" to el.attr("delegateExpression"), "expression" to el.attr("expression"))) {
             if (exv.isNullOrEmpty()) continue
+            val rel = if (exAttr == "expression") "task-expression" else "task-delegate"
             for (m in BEAN_RE.findAll(exv)) {
                 val b = m.groupValues[1]
-                if (b !in Constants.FLOWABLE_CONTEXT) ctx.addRef(caseKey, "cmmn", ffile, "task-delegate", "bean", b)
+                if (b !in Constants.FLOWABLE_CONTEXT && b !in Constants.JAVA_LITERALS) ctx.addRef(caseKey, "cmmn", ffile, rel, "bean", b)
             }
         }
         return info

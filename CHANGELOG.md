@@ -214,6 +214,17 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   and the actuator's `environmentEndpoint`; the KDoc names the source files so the list can be
   regenerated instead of grown by complaint.
 
+- **A method call on a variable is a read of the variable, not a bean.** `${issue.asText()}`,
+  `${attachments.size()}`, `${requesterData.getName()}` read like bean calls to the harvest, and every
+  such root became a bean: on four real projects 25 variables vanished from the variable graph, stood
+  under *Review — unresolved in project* as beans nobody could find, and 15 service tasks that read a
+  variable were "calls out of the engine with no error path". A root is a bean only when something says
+  so — the platform declares it, Java declares it, a delegate expression names it bare, or it is named
+  the way Spring beans are named (`orderService`, `pdfGeneratorTask`); everything else is the variable
+  it always was, with the call recorded as its read. A service task's `expression` and its
+  `delegateExpression` now carry different relations (`serviceTask-expression`, `serviceTask-delegate`),
+  and `${true}` on a service task is a literal, not a bean called `true`.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its

@@ -386,6 +386,19 @@
               <code>platformFormService</code>, <code>coreContentService</code>…), Spring Boot's
               <code>jacksonObjectMapper</code> and the actuator's <code>environmentEndpoint</code>; the KDoc
               names the source files so the list can be regenerated instead of grown by complaint.</li>
+          <li><b>A method call on a variable is a read of the variable, not a bean.</b>
+              <code>${issue.asText()}</code>, <code>${attachments.size()}</code>,
+              <code>${requesterData.getName()}</code> read like bean calls to the harvest, and every such
+              root became a bean: on four real projects 25 variables vanished from the variable graph, stood
+              under <i>Review — unresolved in project</i> as beans nobody could find, and 15 service tasks
+              that read a variable were "calls out of the engine with no error path". A root is a bean only
+              when something says so — the platform declares it, Java declares it, a delegate expression
+              names it bare, or it is named the way Spring beans are named (<code>orderService</code>,
+              <code>pdfGeneratorTask</code>); everything else is the variable it always was, with the call
+              recorded as its read. A service task's <code>expression</code> and its
+              <code>delegateExpression</code> now carry different relations
+              (<code>serviceTask-expression</code>, <code>serviceTask-delegate</code>), and
+              <code>${true}</code> on a service task is a literal, not a bean called <code>true</code>.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

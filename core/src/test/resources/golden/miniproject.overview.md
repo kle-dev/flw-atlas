@@ -159,7 +159,7 @@ _Scanned 25 models (25 files · 1 archives), 2 Java files, 2 REST endpoints. Gen
 ## 9. Resolved references (model → code / model)
 
 ### Model → Java code
-- `orderProcess` [serviceTask-delegate] `demoBean` → src/main/java/com/example/DemoBean.java:6 (com.example.DemoBean)
+- `orderProcess` [serviceTask-expression] `demoBean` → src/main/java/com/example/DemoBean.java:6 (com.example.DemoBean)
 - `orderProcess` [calls run()] `demoBean` → src/main/java/com/example/DemoBean.java:6 (com.example.DemoBean)
 
 ### Model → Model

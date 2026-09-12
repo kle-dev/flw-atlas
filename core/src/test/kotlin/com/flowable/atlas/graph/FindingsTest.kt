@@ -315,8 +315,11 @@ class FindingsTest {
                 // the platform's scripting API root, an Engage task delegate and the CMMN query root
                 task("flwApi", "expression" to "\${flw.setOutput('x', 1)}"),
                 task("engage", "delegateExpression" to "\${processSendMessageTask}"),
-                task("cmmnCtx", "expression" to "\${planItemInstances.definitionId('a').count()}"))))))
-        assertEquals(listOf("ownBean", "ownExpr", "restSvc", "agent", "mail"), elements(r2b, "unguardedTasks"))
+                task("cmmnCtx", "expression" to "\${planItemInstances.definitionId('a').count()}"),
+                // an expression whose root is a variable reads it; one whose root is named like a bean calls out
+                task("varExpr", "expression" to "\${requesterData.getName()}"),
+                task("projBean", "expression" to "\${userProfileDataService.load(x)}"))))))
+        assertEquals(listOf("ownBean", "ownExpr", "restSvc", "agent", "mail", "projBean"), elements(r2b, "unguardedTasks"))
         val r3 = run(listOf(process("p", mapOf(
             "serviceTasks" to listOf(leaving),
             "events" to listOf(mapOf("id" to "catchAll", "type" to "startEvent", "def" to "error"))))))

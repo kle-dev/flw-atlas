@@ -351,7 +351,7 @@ object XmlHelpers {
                 val exStr = ex as? String ?: continue
                 for (mm in LISTENER_BEAN_RE.findAll(exStr)) {
                     val b = mm.groupValues[1]
-                    if (b !in Constants.FLOWABLE_CONTEXT) ctx.addRef(frm, ftype, ffile, rel, "bean", b)
+                    if (b !in Constants.FLOWABLE_CONTEXT && b !in Constants.JAVA_LITERALS) ctx.addRef(frm, ftype, ffile, rel, "bean", b)
                 }
             }
             // throw-event listeners publish by name/code — same shared node as event throws

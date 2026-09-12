@@ -108,7 +108,7 @@ class ReferenceFixesTest {
                </definitions>""".toByteArray(), ctx, "p1.bpmn",
         )
         assertTrue(refTriples(ctx).toString(),
-            Triple("serviceTask-delegate", "bean", "myBean") in refTriples(ctx))
+            Triple("serviceTask-expression", "bean", "myBean") in refTriples(ctx))
     }
 
     @Test

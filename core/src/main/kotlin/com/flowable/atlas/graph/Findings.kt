@@ -49,6 +49,10 @@ object Findings {
             (e["t"] as? String)?.let { referenced.add(it) }
         }
         // What kind of service a service-registry task calls: only a REST service leaves the engine.
+        // The beans the resolver accepted as beans — Java's and the expression roots it kept — so a
+        // service task's `expression` can be told from a variable read.
+        val projectBeans: Set<String> =
+            ((result["beans"] as? List<*>).orEmpty() + (result["beanIndex"] as? List<*>).orEmpty()).map { it.toString() }.toSet()
         val serviceTypes = HashMap<String, String>()
         for (n in nodes) {
             if (n["type"] != "service") continue
@@ -161,7 +165,7 @@ object Findings {
                     }
                 }
                 "process" -> {
-                    runtimeRiskChecks(data, serviceTypes) { check, message, element -> add(check, WARNING, n, message, element) }
+                    runtimeRiskChecks(data, serviceTypes, projectBeans) { check, message, element -> add(check, WARNING, n, message, element) }
                     topologyChecks(data) { check, message, element -> add(check, WARNING, n, message, element) }
                     secretFields(data) { element, what, field ->
                         add("hardcodedSecrets", ERROR, n, "`$what` sets `$field` to a literal value — move it to " +
@@ -378,7 +382,8 @@ object Findings {
      */
     @Suppress("UNCHECKED_CAST")
     private fun runtimeRiskChecks(
-        data: Map<String, Any?>, serviceTypes: Map<String, String>, report: (String, String, String) -> Unit,
+        data: Map<String, Any?>, serviceTypes: Map<String, String>, projectBeans: Set<String>,
+        report: (String, String, String) -> Unit,
     ) {
         val events = data["events"] as? List<Map<String, Any?>> ?: emptyList()
         // Errors caught anywhere in the process: a boundary event on a task, and an error event
@@ -427,7 +432,7 @@ object Findings {
             // and never an exception to whoever completed the previous step. That *is* its error path;
             // `asyncWithoutRetry` judges the rest. (83 async mail tasks on one project said otherwise.)
             if (el["async"] != null) continue
-            if (!leavesTheEngine(el, serviceTypes) || guarded.contains(id)) continue
+            if (!leavesTheEngine(el, serviceTypes, projectBeans) || guarded.contains(id)) continue
             // An HTTP task told to swallow failures, or to map status codes itself, has its error path.
             val fields = el["fields"] as? Map<*, *>
             if (fields != null && (fields.containsKey("ignoreException") || fields.containsKey("handleStatusCodes"))) continue
@@ -457,13 +462,17 @@ object Findings {
      * platform's, an `expression` whose root is neither an engine context nor a platform bean), and a
      * service-registry task whose service is REST.
      */
-    private fun leavesTheEngine(el: Map<String, Any?>, serviceTypes: Map<String, String>): Boolean {
+    private fun leavesTheEngine(el: Map<String, Any?>, serviceTypes: Map<String, String>, projectBeans: Set<String>): Boolean {
         if (el["type"] in LEAVING_TASK_TYPES) return true
         if (!(el["class"] as? String).isNullOrEmpty()) return true
         fun root(attr: String) = (el[attr] as? String)?.let { EXPR_ROOT_RE.find(it)?.groupValues?.get(1) }
         root("expression")?.let { r ->
             val namespaced = (el["expression"] as? String)?.let { EXPR_NAMESPACE_RE.containsMatchIn(it) } == true
-            if (!namespaced && r !in Constants.FLOWABLE_CONTEXT && r !in Constants.FLOWABLE_PLATFORM_BEANS) return true
+            // `${requesterData.getName()}` reads a variable and stays in the engine; only a bean of the
+            // project's own — one Java declares, one an expression elsewhere resolved, or one named the
+            // way beans are named — is a call out. 15 findings on one project sat on variables.
+            if (!namespaced && r !in Constants.FLOWABLE_CONTEXT && r !in Constants.FLOWABLE_PLATFORM_BEANS &&
+                (r in projectBeans || Constants.looksLikeBeanName(r))) return true
         }
         val bean = root("delegateExpression") ?: return false
         if (bean == "serviceRegistryService" || el["type"] == "service-registry") {
