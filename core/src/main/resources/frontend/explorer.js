@@ -804,7 +804,8 @@ function syncHashContext(){
     if(state.rc) h+='&c='+enc(state.rc);
     if(state.acc) h+='&a='+enc(state.acc);
     if(state.view==='tree' && state.treeLens && state.treeLens!=='models') h+='&l='+enc(state.treeLens);
-    if(location.hash.slice(1)!==h){ try{ history.replaceState(null, '', '#'+h); }catch(e){} }
+    // keep the entry's state: it carries the page's place in the history (navStamp)
+    if(location.hash.slice(1)!==h){ try{ history.replaceState(history.state, '', '#'+h); }catch(e){} }
     return;
   }
   const base=state.sel?enc(state.sel):(state.cat?'/browse/'+enc(state.cat):'');
@@ -813,7 +814,7 @@ function syncHashContext(){
   if(state.sel){ if(state.focus) h+='&q='+enc(state.focus); if(state.focusEl) h+='&e='+enc(state.focusEl); }
   if(state.filter) h+='&f='+enc(state.filter);
   if(state.sort && state.sort!=='name') h+='&s='+enc(state.sort);
-  if(location.hash.slice(1)!==h){ try{ history.replaceState(null, '', '#'+h); }catch(e){} }
+  if(location.hash.slice(1)!==h){ try{ history.replaceState(history.state, '', '#'+h); }catch(e){} }
 }
 function showView(v){
   if(v!=='browse') listMarksClear();          // a multi-selection cannot outlive the list it was made in
@@ -826,6 +827,26 @@ function showView(v){
   document.getElementById('view-browse').hidden = v!=='browse';
 }
 let _navCount = 0;
+/** Where this page stands in the browser's history, stamped onto each entry's `history.state` so the
+ *  count survives a back, a forward and a reload. The first entry is the page as it was opened. */
+let _navPos = 0, _navMax = 0, _navSeq = 0;
+const navCanBack = () => _navPos > 1;
+const navCanForward = () => _navPos < _navMax;
+function navStamp(){
+  const st = history.state;
+  if (st && typeof st.atlasNav === 'number') { _navPos = st.atlasNav; }
+  else {
+    // a new entry: whatever was forward of the old position is gone from the browser's history too
+    _navPos = ++_navSeq;
+    try { history.replaceState({atlasNav: _navPos}, '', location.href); } catch (e) {}
+    _navMax = _navPos;
+  }
+  if (_navPos > _navMax) _navMax = _navPos;
+  if (_navSeq < _navPos) _navSeq = _navPos;
+  const b = document.getElementById('navback'), f = document.getElementById('navfwd');
+  if (b) b.disabled = !navCanBack();
+  if (f) f.disabled = !navCanForward();
+}
 /** After a route swapped the view, the element that was clicked is usually gone with the old markup and
  *  focus has fallen to <body>; a screen reader is then nowhere. Put it on the new view's heading — but
  *  only then: a reader walking the list with the arrow keys keeps the list. */
@@ -852,6 +873,7 @@ function rerenderView(){
 function route(){
   closePalette();
   _navCount++;
+  navStamp();
   renderWaiverBar();
   if(_navCount>1) setTimeout(focusViewHeading, 0);
   const r = parseHash();
@@ -4211,7 +4233,7 @@ function renderDetail(){
   let h='<div class="dhead">'+
      '<span class="dkind"'+(kindHint?' data-tip="'+esc(kindHint)+'"':'')+'>'+nodeIcon(n)+esc(nodeKind(n))+'</span>'+
      '<span class="dhead-actions">'+
-     (_navCount>1?'<button id="back" data-tip="Back to the previous node">'+uiIcon('back')+'<span class="lbl">back</span></button>':'')+
+     (navCanBack()?'<button id="back" data-tip="Back to the previous page (Alt+←)">'+uiIcon('back')+'<span class="lbl">back</span></button>':'')+
      '<button id="sectall" data-tip="Expand or collapse every section on this page">'+uiIcon('expand')+'<span class="lbl">expand all</span></button>'+
      '<button id="permalink" data-tip="Copy a shareable link to this node">'+uiIcon('link')+'<span class="lbl">copy link</span></button>'+
      '</span></div>';
@@ -6487,6 +6509,13 @@ document.addEventListener('keydown',e=>{
     const n=byId.get(state.sel); if(!n) return;
     if(e.key==='c'){ e.preventDefault(); atlasCopy(n.key, ()=>{}); }
     else if(n.file && window.__atlasOpen){ e.preventDefault(); atlasOpen(n.file); }
+  } else if(e.altKey && !e.metaKey && !e.ctrlKey && pal.hidden && (e.key==='ArrowLeft'||e.key==='ArrowRight')
+            && (!dgmodal || dgmodal.hidden)
+            && !e.target.closest('input,textarea,select,[contenteditable]')){
+    // Alt+←/→ is the browser's own Back/Forward on Windows and Linux; inside the IDE nobody else
+    // answers it, so the page does — on every view, the way the top-bar buttons do.
+    e.preventDefault();
+    if(e.key==='ArrowLeft'){ if(navCanBack()) history.back(); } else if(navCanForward()) history.forward();
   } else if(e.altKey && !e.metaKey && pal.hidden && state.view==='browse'
             && (!dgmodal || dgmodal.hidden)
             && !e.target.closest('input,textarea,select,[contenteditable]')){
@@ -6497,10 +6526,9 @@ document.addEventListener('keydown',e=>{
     // on a Mac layout.
     const d=/^Digit([1-9])$/.exec(e.code||'');
     if(d){ e.preventDefault(); activateTab(+d[1]-1); }
-    // Brackets are the portable pair: on Windows/Linux Alt+←/→ is the browser's Back/Forward and
-    // is not reliably preventable, so both are bound and either one works everywhere.
-    else if(e.code==='BracketRight' || e.key==='ArrowRight'){ e.preventDefault(); cycleTab(1); }
-    else if(e.code==='BracketLeft'  || e.key==='ArrowLeft'){ e.preventDefault(); cycleTab(-1); }
+    // The brackets are the tab pair; Alt+←/→ went to history above, as it does in every browser.
+    else if(e.code==='BracketRight'){ e.preventDefault(); cycleTab(1); }
+    else if(e.code==='BracketLeft'){ e.preventDefault(); cycleTab(-1); }
     else if(e.code==='KeyW'){
       e.preventDefault();
       const i=state.sel!=null?state.tabs.indexOf(state.sel):state.tab;
@@ -6529,6 +6557,12 @@ function wireSearchTrigger(){
   // file:// URL both in a browser and in the JCEF IDE tab, so a plain reload re-reads it cleanly.
   const rb=document.getElementById('reloadbtn');
   if(rb) rb.onclick=()=>location.reload();
+  // Back/forward through the browser's history, which the hash router already drives. The buttons
+  // live in the top bar so they exist on every view — a report page had no way back at all, and the
+  // header button of a node's page hides its label in a narrow IDE tab.
+  const nb=document.getElementById('navback'), nf=document.getElementById('navfwd');
+  if(nb) nb.onclick=()=>history.back();
+  if(nf) nf.onclick=()=>history.forward();
 }
 
 // ---------- uncertain-links toggle (suspect ≈ / dynamic ƒ edges) ----------

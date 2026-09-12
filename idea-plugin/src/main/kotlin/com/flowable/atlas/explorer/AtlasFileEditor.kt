@@ -354,6 +354,19 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
     }
 
     private fun buildToolbarGroup() = DefaultActionGroup(
+        // The browser's back/forward, which a JCEF tab has no chrome for: from a finding on the Checks
+        // page to the model and back again was a dead end without them.
+        object : AnAction("Back", "Back to the previous page of this explorer", AllIcons.Actions.Back), DumbAware {
+            override fun actionPerformed(e: AnActionEvent) { browser.cefBrowser.goBack() }
+            override fun update(e: AnActionEvent) { e.presentation.isEnabled = browser.cefBrowser.canGoBack() }
+            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+        },
+        object : AnAction("Forward", "Forward to the next page of this explorer", AllIcons.Actions.Forward), DumbAware {
+            override fun actionPerformed(e: AnActionEvent) { browser.cefBrowser.goForward() }
+            override fun update(e: AnActionEvent) { e.presentation.isEnabled = browser.cefBrowser.canGoForward() }
+            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+        },
+        Separator.getInstance(),
         object : AnAction(
             FlowableActionIds.text(FlowableActionIds.REGENERATE_ATLAS_EXPLORER),
             "Re-run the Atlas generator for this file and reload", AllIcons.Actions.ForceRefresh,

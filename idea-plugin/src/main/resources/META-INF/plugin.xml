@@ -500,6 +500,17 @@
               has no script branch, so it is a silent no-op — but the note sat on the plan item, and the
               check read only a process's task buckets. It reaches the case's page now, on the plan item
               that holds the listener.</li>
+          <li><b>A report page scrolls inside the page.</b> The Checks, Tree, Variables, Scripts and Schema
+              pages had no scroll container of their own, so a page taller than the window scrolled the
+              whole document — and took the sidebar, the breadcrumb, ⌘K and the <i>Save to waivers.json</i>
+              bar along, while a model's page kept its menu in place. Every view scrolls inside the shell
+              now.</li>
+          <li><b>Back and forward, on every page.</b> Inside the IDE the explorer has no browser chrome, and
+              the only way back was a small button in a model page's header that hides its label in a narrow
+              tab — a report page had none at all, so a jump from the Checks table to a model was a dead
+              end. The top bar carries ‹ › on every view, <code>Alt+←</code> / <code>Alt+→</code> drive them
+              (the brackets stay the tab keys), the explorer tab's toolbar in the IDE has Back and Forward,
+              and the page's place in the history survives a reload.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

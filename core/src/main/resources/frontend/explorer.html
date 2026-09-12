@@ -84,6 +84,16 @@ try{
        tabindex="0" aria-label="Resize sidebar"></div>
   <div class="main">
     <header class="topbar">
+      <!-- The page's own back/forward: inside the IDE there is no browser chrome, and the header
+           button on a node's page was the only way back — none at all from a report page. -->
+      <span class="navbtns">
+        <button class="tbtn navbtn" id="navback" disabled data-tip="Back (Alt+←)" aria-label="Back">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+        </button>
+        <button class="tbtn navbtn" id="navfwd" disabled data-tip="Forward (Alt+→)" aria-label="Forward">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 5 7 7-7 7"/><path d="M5 12h14"/></svg>
+        </button>
+      </span>
       <nav class="crumbs" id="crumbs" aria-label="Breadcrumb"></nav>
       <!-- aria-label carries the name even below 1100px, where the placeholder span is display:none
            and the accessible name would otherwise collapse to "⌘K" -->

@@ -48,7 +48,7 @@ nothing on any other file.
 | Dump Key Index (Internal) | Only visible in an internal-mode IDE |
 
 Panel toolbars carry a few more that are not registered actions, so they do not appear in *Find
-Action*: the Hub's *Refresh* (which also re-reads the Flowable Design workspace and app lists) and *Settings*; the Environments page's *Test Connection*; the explorer tab's *Reload* and *Open in Browser*; the
+Action*: the Hub's *Refresh* (which also re-reads the Flowable Design workspace and app lists) and *Settings*; the Environments page's *Test Connection*; the explorer tab's *Back*, *Forward*, *Reload* and *Open in Browser*; the
 Expression Playground's dialect toggles, scope selector, *Evaluate Against App* (Ctrl+Enter), *Show
 Sub-Expression Values* and its gear menu with *Stack Panels*, *Expression Settings…* and *Environment
 Settings…*; and the Script Playground's language and context selectors with *Load Script from Model…*,

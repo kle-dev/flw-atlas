@@ -17,7 +17,9 @@ editor tab, following the IDE theme.
 
 ## Views
 
-The URL hash is the single source of truth for navigation, so browser back and forward work, and any
+The URL hash is the single source of truth for navigation, so browser back and forward work — and so do
+the page's own ‹ › buttons in the top bar and `Alt+←` / `Alt+→`, which is what a JCEF tab inside the IDE
+needs, having no browser chrome — and any
 view you are looking at can be copied as a link.
 
 | Hash | View |
@@ -287,6 +289,7 @@ the category you are in, with a button to widen the search.
 | `Space` | tree | Expand or collapse the row |
 | `Enter` | tree | Open the node the row names |
 | `Home` / `End` | tree | First / last visible row |
+| `Alt+←` / `Alt+→` | any view | Back / forward in the page's history — the ‹ › buttons in the top bar do the same |
 | `Alt+1`…`Alt+9` | browse | Activate that detail tab |
 | `Alt+[` / `Alt+]` | browse | Previous / next tab |
 | `Alt+W` | browse | Close the active tab |

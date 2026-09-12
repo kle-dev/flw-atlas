@@ -124,12 +124,26 @@ const probe = `<script>
   });
   // --- a report page scrolls inside its view, so the sidebar and the top bar stay put ---
   steps.push(()=>{
+    ok('back is offered once there is somewhere to go', !document.getElementById('navback').disabled);
+    ok('nothing is forward of the newest page', document.getElementById('navfwd').disabled);
     const v=document.getElementById('view-checks');
     ok('checks page is the visible view', !v.hidden);
     ok('the checks view is the scroll container', getComputedStyle(v).overflowY==='auto', getComputedStyle(v).overflowY);
     ok('the document itself does not scroll on the checks page',
        document.documentElement.scrollHeight<=window.innerHeight+1, 'document scrollHeight '+document.documentElement.scrollHeight);
     ok('the checks page is taller than the window, so scrolling is real', v.scrollHeight>v.clientHeight, v.scrollHeight+' vs '+v.clientHeight);
+    window.__beforeBack=location.hash;
+    document.getElementById('navback').click();
+  });
+  // --- the top-bar back button returns to the previous page and forward becomes available ---
+  steps.push(()=>{
+    ok('back left the checks page', location.hash!==window.__beforeBack, 'hash='+location.hash);
+    ok('back landed on the node page', state.view==='browse', 'view='+state.view);
+    ok('forward is offered after a back', !document.getElementById('navfwd').disabled);
+    document.getElementById('navfwd').click();
+  });
+  steps.push(()=>{
+    ok('forward returned to the checks page', location.hash===window.__beforeBack, 'hash='+location.hash);
   });
   // --- facets narrow, in two tiers ---
   steps.push(()=>{ openPalette(); type('customer'); });

@@ -152,6 +152,8 @@
     background:var(--panel);border:1px solid var(--line2);color:var(--ink-dim);cursor:pointer;
     border-radius:var(--radius-md);padding:0 var(--space-15);font-size:var(--text-sm);line-height:1;flex:none}
   .tbtn:hover{color:var(--ink);border-color:var(--accent)}
+  .tbtn:disabled{opacity:.35;cursor:default;pointer-events:none}
+  .navbtns{display:inline-flex;gap:var(--space-05);flex:none}
   .tbtn svg{display:block}  /* align the reload icon within the button padding */
 
   /* Custom hover tooltip for icon-only controls (the ≈ link filter, the theme toggle). Native

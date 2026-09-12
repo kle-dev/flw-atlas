@@ -321,6 +321,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   the sidebar, the breadcrumb, ⌘K and the *Save to waivers.json* bar along, while a model's page kept
   its menu in place. Every view scrolls inside the shell now.
 
+- **Back and forward, on every page.** Inside the IDE the explorer has no browser chrome, and the only
+  way back was a small button in a model page's header that hides its label in a narrow tab — a report
+  page had none at all, so a jump from the Checks table to a model was a dead end. The top bar carries
+  ‹ › on every view, `Alt+←` / `Alt+→` drive them (the brackets stay the tab keys), the explorer tab's
+  toolbar in the IDE has Back and Forward, and the page's place in the history survives a reload.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its
