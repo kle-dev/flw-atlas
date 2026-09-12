@@ -361,6 +361,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   16 more had nothing to judge; a note meant for Atlas's developers was shown as help; and the heading
   focus after a navigation was drawn as a text field.
 
+- **A diagram stays legible, and the search says what matched.** *Fit* fitted the width alone, so a
+  process 6 700px wide landed at 12 % in an ordinary panel — a grey strip of boxes; inline it now stops
+  at 40 %, wider than the panel, with a line saying to drag or open full screen. And the search palette's
+  "why it matched" hint for a plain word named the field's *id* (`label · date1`, twelve times in a row)
+  where the facet path already named the caption; both paths lead with the matched text now.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its

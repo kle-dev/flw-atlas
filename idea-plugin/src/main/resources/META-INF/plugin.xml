@@ -543,6 +543,12 @@
               every row kept its header; "All 7 checks clean" did not say that 16 more had nothing to judge;
               a note meant for Atlas's developers was shown as help; and the heading focus after a
               navigation was drawn as a text field.</li>
+          <li><b>A diagram stays legible, and the search says what matched.</b> <i>Fit</i> fitted the width
+              alone, so a process 6 700px wide landed at 12 % in an ordinary panel — a grey strip of boxes;
+              inline it now stops at 40 %, wider than the panel, with a line saying to drag or open full
+              screen. And the search palette's "why it matched" hint for a plain word named the field's
+              <i>id</i> (<code>label · date1</code>, twelve times in a row) where the facet path already
+              named the caption; both paths lead with the matched text now.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

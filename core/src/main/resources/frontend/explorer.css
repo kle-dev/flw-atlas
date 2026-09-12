@@ -467,6 +467,7 @@
   .dgbar button:hover{color:var(--ink);border-color:var(--accent)}
   .dgpct{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint);min-width:3.5em}
   .dghint{margin-left:auto;font-size:var(--text-2xs);color:var(--ink-faint)}
+  .dgwidehint{font-size:var(--text-2xs);color:var(--ink-faint);margin:var(--space-1) 0 0}
   .dgtitle{font-weight:600;font-size:var(--text-md);color:var(--ink);margin-right:var(--space-2)}
   .dgview{position:relative;overflow:hidden;max-height:60vh;background:#fff;cursor:grab;
     border:1px solid var(--line);border-radius:var(--radius-md);touch-action:none}

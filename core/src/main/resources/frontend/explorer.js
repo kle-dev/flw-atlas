@@ -4397,6 +4397,8 @@ function renderDetail(){
 // `opts.modWheel` (the inline diagram): a plain wheel scrolls the PAGE as everywhere else — zooming
 // needs ⌘/Ctrl held (a trackpad pinch reports ctrlKey, so pinch-zoom keeps working). Without it the
 // diagram swallows every scroll that happens to pass over it. The fullscreen modal zooms freely.
+/** The smallest scale "fit" will go to inline: below it the boxes are unreadable and the panel is a strip. */
+const DG_MIN_FIT=0.4;
 function zoomable(view, opts){
   opts=opts||{};
   const pan=view.querySelector('.dgpan'), svg=pan&&pan.querySelector('svg');
@@ -4425,8 +4427,19 @@ function zoomable(view, opts){
     // Inline only: a transform doesn't shrink layout height, so a wide diagram scaled down would
     // leave a tall white gap under itself — size the viewport to the scaled drawing instead.
     if(opts.modWheel){
+      // A 6 700px-wide process fitted to an 800px panel is a 12 % grey strip of boxes nobody can read.
+      // Below the floor the drawing keeps a legible size and is wider than the panel: drag to pan, or
+      // open it full screen — and a line under it says so.
+      const wide=z.scale<DG_MIN_FIT;
+      if(wide) z.scale=DG_MIN_FIT;
       const hAttr=parseFloat(svg.getAttribute('height'))||0;
       if(hAttr>0) view.style.height=Math.round(Math.max(120, Math.min(hAttr*z.scale+2, window.innerHeight*0.6)))+'px';
+      let hint=view.parentElement&&view.parentElement.querySelector('.dgwidehint');
+      if(wide){
+        if(!hint){ hint=document.createElement('div'); hint.className='dgwidehint'; view.insertAdjacentElement('afterend', hint); }
+        hint.textContent='Wider than the panel — shown at '+Math.round(z.scale*100)+'% so it stays legible; drag to pan, or open it full screen.';
+      } else if(hint) hint.remove();
+      z.apply();
     }
   };
   z.zoom=(factor, ox, oy)=>{
@@ -6018,7 +6031,11 @@ function matchWhere(n,parsed,fields){
   }
   const e=ent.find(x=>anyIn(x.v));
   if(!e) return null;
-  return {hint:(HAY_LABEL[e.k]||e.k)+(e.id?' · '+e.id:''), el:e.id||''};
+  // The same shape as the facet paths above: the matched text leads, the owner follows after @. The
+  // plain path used to name the field's id instead — twelve rows in a row reading "label · date1" for
+  // a query the captions matched.
+  const v=String(e.v), short=v.length>48?v.slice(0,47)+'…':v;
+  return {hint:(HAY_LABEL[e.k]||e.k)+' · '+short+(e.id?' @'+e.id:''), el:e.id||''};
 }
 /*__SEARCH_CORE_END__*/
 SX_ENV.TM=TM;

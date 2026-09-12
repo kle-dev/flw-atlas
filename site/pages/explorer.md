@@ -195,6 +195,9 @@ Tab through them, Enter or Space opens the card. The selection joins the link (`
 so a copied link or a reload lands on the element, on the canvas as well as in its rows; and the
 drawing re-fits itself when the panel changes width — a splitter, a narrower IDE tool window — unless
 you zoomed by hand. Full screen fits the height too, so a tall case diagram is not cut off at the bottom.
+Inline, *fit* never goes below 40 %: a process six thousand pixels wide is shown legible and wider than
+the panel — drag to pan, or open it full screen — with a line under it saying so, instead of as a strip
+of boxes nobody can read.
 
 A decision table has no canvas, so there is nothing to lay out: its rules render as a real table
 instead.
@@ -242,8 +245,9 @@ instead.
 - **It searches inside models**, not just their names: element ids, in/out parameters, form fields,
   columns, permissions, bot keys, agent tools, REST endpoints, labels, descriptions, and a deep walk
   over each node's data.
-- **It tells you why a row matched** — and for a facet, with a field of that kind: `label:` is answered
-  by the caption that matched, never by the id beside it. On zero results it suggests the nearest real
+- **It tells you why a row matched** — with the text that matched, and the element it belongs to after
+  `@`: `label · Departure date @date1`. For a facet, with a field of that kind: `label:` is answered by
+  the caption that matched, never by the id beside it. On zero results it suggests the nearest real
   names.
 
 Every one of these works in the live demo linked above. `desc:approval` lands on the process documented
