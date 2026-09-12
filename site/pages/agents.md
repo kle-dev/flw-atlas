@@ -14,8 +14,9 @@ findings, and a cheatsheet of the expression namespaces, script bindings and pla
 actually exist. That last part is the one that earns its keep: it stops an agent inventing APIs.
 
 **2 · `--summary`** — a few KB of orientation: apps, inventory, entry points, integrations, hotspots,
-health. This is the right thing to paste into a conversation when the question is "what is this
-project".
+health. The health line reads *3 defects · 41 advice* — what is wrong now, and what is only worth a
+look — so an agent knows which number to act on. This is the right thing to paste into a conversation
+when the question is "what is this project".
 
 **3 · `--slice <type:key>`** — one model with its full context, both directions, plus the findings that
 touch it. The right size when the task is about one model, which it usually is.
