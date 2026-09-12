@@ -285,6 +285,16 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   own kind now, `masterData`, counted apart ("143 master data"), and a select over such a table
   (`tableKey`) links to it.
 
+- **Templates have their bodies.** A deployment archive keeps a template's text outside the `.tpl` —
+  in `template-<key>.tplvariation` — and an attached document's name in `.tplfile-metadata`; Atlas
+  dropped both without a word, so 23 of 23 template nodes on the real projects had no body: nothing to
+  search, and the `${root.travelerFirstName}` a mail template reads never reached the variable graph. The
+  parts are read wherever the `.tpl` is, loose or archived; the variations, their parameters and the
+  attachments sit on the template, its `${…}` are the template's expressions, and `${root.x}` is a read
+  of `x`. A legacy wrapper in a folder Design does not use (`decision-service-models`, on one real export)
+  is said instead of vanishing, and the folders Design added since — SLA, knowledge base, master data,
+  dashboard component, palette — are typed.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its

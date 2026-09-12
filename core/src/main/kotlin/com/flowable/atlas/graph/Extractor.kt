@@ -364,6 +364,9 @@ object Atlas {
         // Liquibase changelogs found inside archives: a Design export packs `liquibase-<key>.data.changelog.xml`
         // next to the models it belongs to. Handed to LiquibaseCoverage together with the loose ones.
         val archiveChangelogs = ArrayList<Pair<String, String>>()
+        // A template's body lives beside its `.tpl` in a BAR — `template-<key>.tplvariation` — and an attached
+        // file's name in `.tplfile-metadata`. Parts, not models: attached to the template after the walk.
+        val templateParts = ArrayList<Pair<String, String>>()
 
         fun scanEntry(entryName: String, size: Long, label: String, depth: Int, read: () -> ByteArray) {
             val base = entryName.substringAfterLast('/')
@@ -371,6 +374,13 @@ object Atlas {
             val isArchive = com.flowable.atlas.model.ModelPaths.isArchive(base)
             val isJson = base.lowercase().endsWith(".json")
             val low = base.lowercase()
+            if (Discovery.isTemplatePart(low)) {
+                if (size in 0..MAX_MODEL_BYTES || size < 0) {
+                    val bytes = read()
+                    if (bytes.size <= MAX_MODEL_BYTES) templateParts.add(label to String(bytes, Charsets.UTF_8))
+                }
+                return
+            }
             if (mt == null && !isArchive && (low.endsWith(".xml") || low.endsWith(".sql"))) {
                 // a changelog candidate; LiquibaseCoverage keeps only what is one. An oversized resource
                 // is not a model that failed, so it is left alone without a word.
@@ -410,10 +420,14 @@ object Atlas {
                 dispatch(mt, bytes, label)
                 return
             }
-            // legacy-export JSON: `<type>-models/x.json` anywhere, or an app wrapper at the root
+            // legacy-export JSON: `<type>-models/x.json` anywhere, or an app wrapper at the root. A wrapper
+            // in a folder Design does not use is a model Atlas cannot type — said, not dropped (one real
+            // export lost a decision service that way); any other JSON in a subfolder is nobody's model.
             val folder = entryName.split('/').dropLast(1).lastOrNull()
-            if (com.flowable.atlas.model.ModelType.byDesignFolder(folder) == null && entryName.contains('/')) return
-            dispatchDesignJson(folder, read(), label)
+            val bytes = read()
+            if (com.flowable.atlas.model.ModelType.byDesignFolder(folder) == null && entryName.contains('/') &&
+                !String(bytes, Charsets.UTF_8).contains("\"editorJson\"")) return
+            dispatchDesignJson(folder, bytes, label)
         }
 
         for (arc in discovered.archives) {
@@ -436,6 +450,11 @@ object Atlas {
                 diag("archive", rel, e.message ?: e.toString())
             }
         }
+
+        for (f in discovered.templateParts) {
+            try { templateParts.add(relOf(f) to f.readText(Charsets.UTF_8)) } catch (e: Exception) { diag("parse", relOf(f), e.message ?: e.toString()) }
+        }
+        TemplateParts.attach(result, ctx, templateParts) { kind, path, msg -> diag(kind, path, msg) }
 
         // A skipped Oryx twin whose XML sibling never turned up was the only copy of that model.
         for ((nodeType, key, label) in skippedOryxTwins) {

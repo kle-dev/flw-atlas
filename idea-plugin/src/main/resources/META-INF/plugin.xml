@@ -465,6 +465,17 @@
               (<code>lang</code>, <code>color</code>) became project variables, 35 of them. It is its own
               kind now, <code>masterData</code>, counted apart ("143 master data"), and a select over such a
               table (<code>tableKey</code>) links to it.</li>
+          <li><b>Templates have their bodies.</b> A deployment archive keeps a template's text outside the
+              <code>.tpl</code> — in <code>template-&lt;key&gt;.tplvariation</code> — and an attached
+              document's name in <code>.tplfile-metadata</code>; Atlas dropped both without a word, so 23 of
+              23 template nodes on the real projects had no body: nothing to search, and the
+              <code>${root.travelerFirstName}</code> a mail template reads never reached the variable graph.
+              The parts are read wherever the <code>.tpl</code> is, loose or archived; the variations, their
+              parameters and the attachments sit on the template, its <code>${…}</code> are the template's
+              expressions, and <code>${root.x}</code> is a read of <code>x</code>. A legacy wrapper in a
+              folder Design does not use (<code>decision-service-models</code>, on one real export) is said
+              instead of vanishing, and the folders Design added since — SLA, knowledge base, master data,
+              dashboard component, palette — are typed.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

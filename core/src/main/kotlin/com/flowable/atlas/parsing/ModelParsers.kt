@@ -1121,7 +1121,7 @@ object ModelParsers {
     /** Long free-text bodies (template variations, query DSL, prompts) are capped at this many chars. */
     private const val TEXT_CAP = 4000
 
-    private fun capText(v: Any?): Any? = if (v is String && v.length > TEXT_CAP) v.take(TEXT_CAP) else v
+    internal fun capText(v: Any?): Any? = if (v is String && v.length > TEXT_CAP) v.take(TEXT_CAP) else v
 
     /** The identity + description head every `others`-bucket record starts with. */
     private fun othersHead(doc: Map<String, Any?>, ffile: String, mtype: String): MutableMap<String, Any?> =

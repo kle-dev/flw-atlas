@@ -77,6 +77,7 @@ be read, an archive entry that could not be opened, a Java source that could not
 failure while extracting custom functions. It also lists what Atlas decided **not** to read, as `skip`
 entries at warning level — a file with a model extension that is not JSON at all (a Helm chart's
 `_helpers.tpl`), a JSON in a Design export that is no model wrapper, a legacy wrapper without a body, a
+wrapper in a folder Design does not use, a template variation whose template is not in the project, a
 process in the old editor's JSON format with no XML twin, an archive nested two levels deep, a model
 file above the 32 MB limit — because a file that was skipped on purpose is no less absent from the
 report than one that failed. An archive *inside* an archive (a Design export packing one `.bar` per

@@ -16,13 +16,22 @@ object Discovery {
         val archives: List<File>,
         val javas: List<File>,
         val xmls: List<File>,
+        /** A template's body and attachment metadata: `.tplvariation`, `.tplfile-metadata` — parts of a
+         *  `.tpl` model, not models of their own (see [isTemplatePart]). */
+        val templateParts: List<File> = emptyList(),
     )
+
+    /** A file that belongs to a template model without being one: the variation that holds the body a
+     *  BAR keeps outside the `.tpl`, and the metadata naming an attached file. */
+    fun isTemplatePart(lowerName: String): Boolean =
+        lowerName.endsWith(".tplvariation") || lowerName.endsWith(".tplfile-metadata") || lowerName.endsWith(".templatefilemetadata")
 
     fun discover(root: File): Discovered {
         val models = ArrayList<File>()
         val archives = ArrayList<File>()
         val javas = ArrayList<File>()
         val xmls = ArrayList<File>()
+        val templateParts = ArrayList<File>()
 
         if (root.isFile) {
             if (ModelPaths.isArchive(root.name)) archives.add(root)
@@ -40,6 +49,7 @@ object Discovery {
                     low.endsWith(".java") || low.endsWith(".kt") ->
                         if (!ModelPaths.isTestSource(f.relativeTo(root).invariantSeparatorsPath)) javas.add(f)
                     ModelPaths.isArchive(low) -> archives.add(f)
+                    isTemplatePart(low) -> templateParts.add(f)
                     ModelKinds.modelTypeFor(f.name) != null -> models.add(f)
                     // legacy Design-workspace layout: per-model JSON wrappers inside `<type>-models/`
                     low.endsWith(".json") &&
@@ -48,6 +58,6 @@ object Discovery {
                     low.endsWith(".xml") || low.endsWith(".sql") -> xmls.add(f)  // liquibase candidates
                 }
             }
-        return Discovered(models, archives, javas, xmls)
+        return Discovered(models, archives, javas, xmls, templateParts)
     }
 }
