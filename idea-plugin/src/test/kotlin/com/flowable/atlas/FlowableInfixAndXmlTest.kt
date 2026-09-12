@@ -177,4 +177,59 @@ class FlowableInfixAndXmlTest : BasePlatformTestCase() {
         assertEquals("reference must resolve into the model file", "TARGET.bpmn20.xml", target?.containingFile?.name)
         assertTrue("…onto the process's id, not the top of the file", target!!.textRange.startOffset > 0 && target.text.contains("DEMO-P100"))
     }
+
+    private fun addTargetEvent() {
+        myFixture.addFileToProject("models/DEMO-E1.event", """{"key":"DEMO-E1","name":"Order placed","payload":[]}""")
+    }
+
+    fun testEventTypeTextReferenceResolvesToTheEventModel() {
+        addTargetEvent()
+        myFixture.configureByText(
+            "caller.bpmn20.xml",
+            """<definitions xmlns:flowable="http://flowable.org/bpmn">
+                 <process id="CALLER" name="Caller">
+                   <startEvent id="s"><extensionElements><flowable:eventType>DEMO-<caret>E1</flowable:eventType></extensionElements></startEvent>
+                 </process>
+               </definitions>""",
+        )
+        val ref = myFixture.getReferenceAtCaretPosition()
+        assertNotNull("expected a Flowable XML text key reference", ref)
+        val target = ref!!.resolve()
+        assertEquals("the text resolves into the event model", "DEMO-E1.event", target?.containingFile?.name)
+    }
+
+    fun testACdataWrappedTextResolvesAndIsNotFlagged() {
+        addTargetEvent()
+        myFixture.enableInspections(FlowableXmlBrokenKeyInspection::class.java)
+        myFixture.configureByText(
+            "caller.bpmn20.xml",
+            """<definitions xmlns:flowable="http://flowable.org/bpmn">
+                 <process id="CALLER" name="Caller">
+                   <startEvent id="s"><extensionElements><flowable:eventType><![CDATA[DEMO-<caret>E1]]></flowable:eventType></extensionElements></startEvent>
+                 </process>
+               </definitions>""",
+        )
+        val ref = myFixture.getReferenceAtCaretPosition()
+        assertNotNull("Design writes the key as CDATA — still a reference", ref)
+        assertEquals("DEMO-E1.event", ref!!.resolve()?.containingFile?.name)
+        val infos = myFixture.doHighlighting()
+        assertFalse("a known key inside CDATA must not be flagged", infos.any { (it.description ?: "").contains("is not a known") })
+    }
+
+    fun testACdataWrappedUnknownTextIsFlaggedOnTheKeyOnly() {
+        addTargetEvent()
+        myFixture.enableInspections(FlowableXmlBrokenKeyInspection::class.java)
+        myFixture.configureByText(
+            "caller.bpmn20.xml",
+            """<definitions xmlns:flowable="http://flowable.org/bpmn">
+                 <process id="CALLER" name="Caller">
+                   <startEvent id="s"><extensionElements><flowable:eventType><![CDATA[DEMO-E9]]></flowable:eventType></extensionElements></startEvent>
+                 </process>
+               </definitions>""",
+        )
+        val info = myFixture.doHighlighting().firstOrNull { (it.description ?: "").contains("is not a known") }
+        assertNotNull("an unknown key inside CDATA is flagged", info)
+        assertEquals("…with the key, not the CDATA markers, in the message", "'DEMO-E9' is not a known Event key — did you mean 'DEMO-E1'?", info!!.description)
+        assertEquals("…and the highlight on the key alone", "DEMO-E9", myFixture.editor.document.getText(com.intellij.openapi.util.TextRange(info.startOffset, info.endOffset)))
+    }
 }

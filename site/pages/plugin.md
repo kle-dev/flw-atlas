@@ -302,7 +302,14 @@ deployment to the editor removes an entire class of incident.
 
 Nearest-candidate suggestions compare only against the indexed keys of the *expected type*, so the
 proposal is always a key that would be valid there. Inside model XML the same check covers
-`calledElement`, `formKey`, `decisionRef`, `caseDefinitionKey` and the rest.
+`calledElement`, `formKey`, `decisionRef`, `caseDefinitionKey` and the rest — in attributes and in the
+text of extension elements such as `eventType` alike.
+
+Navigation reaches further than the check. A key inside a **JSON** model — a data object's backing
+service, a form component's subform, data object, service or action, a document's forms, an app's
+models — is a link: Ctrl+click opens the referenced model at its key, and Find Usages on a model's key
+lists these sites. What counts as a reference is one catalog shared with the report, so the graph the
+CLI draws and the links the editor offers can never disagree.
 
 ### Java ↔ model linking
 

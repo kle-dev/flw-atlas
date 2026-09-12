@@ -401,6 +401,15 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
 - **Small guards.** The Liquibase output folder is validated like the two folders on the parent page
   (project-relative, no `..`), and the two value-matching inlays leave test sources alone, as the
   inspections do.
+- **A key in a JSON model is a link.** Ctrl+click worked on a model key in Java and on the attributes
+  of model XML — not on the JSON models that carry most of a project's references: a data object's
+  backing service, a form component's subform, data object, service or action, a document's forms, an
+  app's models. Every one of those is a reference now, at the sites the CLI's parsers record (one shared
+  catalog in `:core`, so the graph and the editor cannot disagree), and Find Usages on a model's key
+  lists them. In model XML the key in an extension element's text — `eventType`, `channelKey`,
+  `sla-definition-key` — is a link too, CDATA-wrapped as Design writes it; the broken-key inspection
+  reads that text the same way (a CDATA-wrapped key was flagged as unknown, markers and all) and, in a
+  monorepo, says which sub-project's index the key is unknown in.
 
 ## 0.25.0
 

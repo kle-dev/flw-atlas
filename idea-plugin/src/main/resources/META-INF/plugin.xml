@@ -252,6 +252,12 @@
         <psi.referenceContributor
                 language="XML"
                 implementation="com.flowable.atlas.navigation.FlowableXmlKeyReferenceContributor"/>
+        <!-- Ctrl-click a model key in a JSON model (a data object's backing service, a form component's subform,
+             data object, service or action, a document's forms, an app's models, …) → the model file. The sites are
+             :core's JsonKeySites, shared with the parsers. -->
+        <psi.referenceContributor
+                language="JSON"
+                implementation="com.flowable.atlas.navigation.FlowableJsonKeyReferenceContributor"/>
         <!-- Hover / Ctrl-Q on a key literal → model type, name and file. -->
         <lang.documentationProvider
                 language="JAVA"
