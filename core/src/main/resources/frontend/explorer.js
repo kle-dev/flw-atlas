@@ -688,6 +688,12 @@ function kindHeadline(k){
   if(k.advice) parts.push(k.advice+' advice');
   return parts.join(' · ');
 }
+/** How many distinct nodes carry an open finding of [check] — the unit a review list counts in. A check
+ *  may fire several times on one node (`unreadInputs`: one finding per callee), so its finding count and
+ *  its list length are two numbers; a badge on the list has to say the list's. */
+function openNodeCount(check){
+  const s=new Set(); FINDS.forEach(f=>{ if(f.check===check && f.node && !waiverFor(f)) s.add(f.node); }); return s.size;
+}
 /** `check id -> open count`, with a zero for every catalogued check — the sidebar sums two of these. */
 function healthMap(){
   const C=findingCounts(), h={};
@@ -799,13 +805,13 @@ function parseHash(){
     const cat = dec(parts[0]), ctx = hashContext(parts.slice(1));
     return CATS.some(c=>c.id===cat) ? {view:'browse', cat, f:ctx.f, s:ctx.s} : {view:'overview'};
   }
-  if(raw.charAt(0)==='/') return {view:'overview'};      // unknown route
+  if(raw.charAt(0)==='/') return {view:'overview', stale:raw};      // unknown route
   // A node route may carry the search term that led here (&q=), the element the hit came from (&e=)
   // and the list context the panel had (&f= filter, &s= sort): `#<encId>&q=…&e=…&f=…&s=…`. Every part
   // is URI-encoded, so a literal '&' cannot occur inside one and the split is unambiguous.
   const parts = raw.split('&');
   const id = dec(parts[0]), ctx = hashContext(parts.slice(1));
-  return byId.get(id) ? {view:'browse', sel:id, q:ctx.q, e:ctx.e, f:ctx.f, s:ctx.s} : {view:'overview'};
+  return byId.get(id) ? {view:'browse', sel:id, q:ctx.q, e:ctx.e, f:ctx.f, s:ctx.s} : {view:'overview', stale:raw};
 }
 /** The `k=v` pairs behind a route's first part; unknown keys are ignored, absent ones stay undefined. */
 function hashContext(pairs){
@@ -898,6 +904,14 @@ function route(){
   renderWaiverBar();
   if(_navCount>1) setTimeout(focusViewHeading, 0);
   const r = parseHash();
+  // A link to a model this report does not contain — renamed, or a report generated from a smaller
+  // scope — used to land on the overview without a word and leave the dead hash in the address bar.
+  if(r.stale){
+    const id=dec(String(r.stale).split('&')[0]);
+    toast(id.charAt(0)==='/'?'That link names a page this explorer does not have — showing the overview'
+                            :'That link points at a model this report does not contain — showing the overview');
+    try{ history.replaceState(history.state, '', '#/overview'); }catch(e){}
+  }
   state.focus = r.q || '';
   state.focusEl = r.e || '';
   state.rf = r.rf || ''; state.rc = r.rc || ''; state.acc = r.acc || '';   // a report route's own context
@@ -991,7 +1005,9 @@ function renderSidebar(){
   // A tab belongs to a section like any other list — "Script tasks" is an Integration thing, the
   // review reports belong under Checks. `pri` keeps a section's tabs above its drill-down lists.
   const C0=findingCounts();
-  const items=CATS.map(c=>CAT_CHECK[c.id]?Object.assign({}, c, {count:C0.open[CAT_CHECK[c.id]]||0}):c);
+  // A review list is a list of nodes, so its badge counts the nodes with something open — not the
+  // findings, which can outnumber them (16 unread-input findings on 10 variables read "16" on a list of 10).
+  const items=CATS.map(c=>CAT_CHECK[c.id]?Object.assign({}, c, {count:openNodeCount(CAT_CHECK[c.id])}):c);
   const scriptCount=allScripts().length;
   if(scriptCount) items.push({route:'/scripts', label:'Script tasks', sec:'Integration', pri:0, icon:'scripts',
     color:color('process'), count:scriptCount,
@@ -1371,6 +1387,9 @@ function healthRows(keys){
     const sev=n?(C.worst[c.id]||'warning'):'', tone=n?(sev==='error'?'bad':'warn'):'ok';
     const ex=(!n&&m.examined)?m.examined():null;
     let sub=n?c.what:c.clean;
+    // several findings on one node: say so, or the row's number contradicts the list it opens
+    const nn=n?openNodeCount(c.id):0;
+    if(n&&nn&&nn<n) sub+=(sub?' — ':'')+'on '+nn+' '+(m.cat&&/var/.test(m.cat)?'variable':'model')+(nn>1?'s':'');
     if(!n&&ex&&ex[0]) sub+=(sub?' — ':'')+ex[0]+' '+ex[1]+(ex[0]>1?'s':'')+' checked';
     if(w) sub+=(sub?' · ':'')+w+' accepted';
     return {k:c.id, label:c.title, n, w, sev, tone, sub, tier:c.tier||'', kind:checkKind(c.id), jump:'chk-'+c.id};
@@ -2243,8 +2262,11 @@ function renderVariables(){
      {attrs:' id="chk-varcaveat"', hint:'the limits of the verdict above'});
   const reg=_sectReg; _sectReg=null;
   let h='<div class="dash" data-fscope>';
+  // Findings and variables are two numbers when a variable is mapped into several callees; the header
+  // says both so the sidebar's badge (findings) and the blocks below (variables) can both be right.
+  const findingsN=(findingCounts().open.unusedVars||0)+(findingCounts().open.unreadInputs||0);
   h+=pageHeader({icon:'variable', color:color('variable'), title:'Unused variables', sub:open
-       ? open+' of '+total+' variable'+(total>1?'s':'')+' worth a look — something writes them and nothing Atlas can see reads them back'
+       ? (findingsN>open?findingsN+' findings on ':'')+open+' of '+total+' variable'+(total>1?'s':'')+' worth a look — something writes them and nothing Atlas can see reads them back'
        : 'nothing flagged — every variable that is written is read somewhere in these models'});
   // Only the two checks this page has blocks for. The script-guess card belongs to the Checks tab: its
   // `jump` names a block that does not exist here, so showing it would be a card that does nothing.
@@ -2563,7 +2585,7 @@ function renderList(){
   const list = document.getElementById('list'); list.innerHTML='';
   if(!cat) return;
   const head=document.createElement('div'); head.className='listhead';
-  head.innerHTML='<div class="t"><span>'+esc(cat.label)+'</span><span class="muted">'+cat.count+'</span></div>'+
+  head.innerHTML='<div class="t"><span>'+esc(cat.label)+'</span><span class="muted" id="lcount">'+cat.count+'</span></div>'+
     '<div class="lh-controls"><input id="lf" placeholder="filter '+esc(cat.label.toLowerCase())+'…" aria-label="Filter list">'+
     '<select id="lsort" aria-label="Sort list"><option value="name">Name</option>'+
     '<option value="refs">Most referenced</option><option value="file">File</option></select></div>'+
@@ -2698,6 +2720,14 @@ function renderItems(cat, wrap){
     items.sort((a,b)=>a.label.localeCompare(b.label));
   // else: an explicit sort wins, but plain "Name" yields to the relevance order above.
   renderListBridge(cat, parsed, items.length);
+  // The head counts what the list shows: "N of M" under a filter (every other filter on the page says
+  // so), and for a review list the number of rows with something open beside the row count.
+  const lc=document.getElementById('lcount');
+  if(lc){
+    const openN=CAT_CHECK[cat.id]?openNodeCount(CAT_CHECK[cat.id]):null;
+    lc.textContent=(parsed.empty?String(cat.count):items.length+' of '+cat.count)+
+      (openN!=null&&openN!==cat.count&&parsed.empty?' · '+openN+' open':'');
+  }
   if(!items.length){
     // "nothing found" is the one answer a find-it-fast tool must state; a blank column stated nothing
     wrap.innerHTML='<div class="estate list-empty"><div class="et">'+(parsed.empty?'Nothing in ':'No match in ')+esc(cat.label)+'</div>'+

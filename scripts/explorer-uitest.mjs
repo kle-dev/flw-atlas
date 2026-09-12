@@ -157,6 +157,13 @@ const probe = `<script>
   steps.push(()=>{
     ok('forward returned to the checks page', location.hash===window.__beforeBack, 'hash='+location.hash);
   });
+  // --- a link to a model this report does not contain says so and cleans the address bar ---
+  steps.push(()=>{ location.hash='#process%3AthisModelWasDeleted'; });
+  steps.push(()=>{
+    ok('a stale link lands on the overview', state.view==='overview', 'view='+state.view);
+    ok('a stale link is said', /does not contain/.test(document.getElementById('toast').textContent), document.getElementById('toast').textContent);
+    ok('the dead hash is replaced', location.hash==='#/overview', 'hash='+location.hash);
+  });
   // --- the tree's key handler is wired once per view, however often the view is rendered ---
   steps.push(()=>{ location.hash='/tree'; });
   steps.push(()=>{ location.hash='/overview'; });

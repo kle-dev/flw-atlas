@@ -345,6 +345,14 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   every render and never unwired it, so after `#/tree → overview → #/tree` Space toggled a row twice —
   a no-op — and Enter opened the node twice. Wired once now.
 
+- **One unit per number, and a stale link says so.** `unreadInputs` fires once per callee, so a
+  variable mapped into seven processes was seven findings on one row: the sidebar said 72, the page 66,
+  the health row 16 and the list it opened 10. A review list's badge now counts the rows it has, a
+  health row whose findings outnumber their models says "on 10 variables", the Unused-variables page
+  says "16 findings on 10 of 95 variables", and a filtered list heads "12 of 332" like every other filter.
+  And a link to a model this report does not contain — renamed, or a report from a smaller scope —
+  landed on the overview without a word and kept the dead hash; it says so now and cleans the address bar.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its
