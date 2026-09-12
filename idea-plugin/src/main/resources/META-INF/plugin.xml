@@ -294,10 +294,10 @@
             <className>com.flowable.atlas.intention.GenerateDataObjectBeanIntention</className>
             <category>Flowable</category>
         </intentionAction>
-        <!-- Alt-Enter on a model key in Java → the model's page in the Atlas Explorer (the reverse of the
-             page's "open in IDE" button). -->
+        <!-- Alt-Enter on a model key — in Java, or inside a model file — → the model's page in the Atlas
+             Explorer (the reverse of the page's "open in IDE" button). No language filter: the intention
+             itself answers only in Java and model files. -->
         <intentionAction>
-            <language>JAVA</language>
             <className>com.flowable.atlas.intention.OpenInAtlasExplorerIntention</className>
             <category>Flowable</category>
         </intentionAction>

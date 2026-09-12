@@ -427,6 +427,9 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   computed where in each model the Java symbol, bot or URL is used — and then opened the file at line
   1, while Find Usages on the same data landed on the offset. Each model now opens at its first usage:
   the `${bean…}` in a deployment XML holding three processes, the action's `botKey`, the calling URL.
+- **Open in Atlas Explorer, from a model file.** The Alt+Enter action that opens a model's explorer page
+  was offered in Java only; inside a BPMN or a form there was no way to the page of the process you were
+  reading. It is offered on a cross-reference and on the file's own key in every model file now.
 
 ## 0.25.0
 

@@ -337,7 +337,8 @@ does not even need to be on the classpath.
 
 The model side answers too: Find Usages on a model's own key — the `id` of a process, the `"key"` of a
 form — lists every model that references it (the call activity, the task's form key, the service
-mapping) and every Java call site that names it. And Alt+Enter on a key in Java offers **Open in Atlas
+mapping) and every Java call site that names it. And Alt+Enter on a key — in Java, or in a model file on
+a cross-reference or the file's own key — offers **Open in Atlas
 Explorer**, which opens that model's page in the generated explorer inside the IDE — the relationship
 view, where Ctrl+click opens the file.
 
