@@ -276,6 +276,10 @@ completes the operations of the data object or service resolved from the sibling
 message and signal names, process variables, task-definition keys, activity ids and form outcomes, each
 scoped to the model the call site names.
 
+Search Everywhere finds the elements inside the models too — a user task id, a variable, a message, a
+form field — each row saying which model it belongs to and landing on its declaration, so the
+`approveTask` from a log line is one shortcut away from the task it names.
+
 There is also a dedicated **Flowable Model** tab in Search Everywhere that searches model keys, paths
 *inside* `.bar` / `.zip` archives, and — while that tab is open — the full text of every model, showing
 the matched line.

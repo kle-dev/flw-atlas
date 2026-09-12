@@ -19,8 +19,9 @@ import javax.swing.ListCellRenderer
  * left, the **file name** right-aligned at the far edge — two [ColoredListCellRenderer]s in a
  * [BorderLayout], the same shape as the platform's text-search and run-configuration renderers.
  *
- * Left is the model **key** (bold, typed fragment highlighted) or, for a full-text hit, the matched
- * line with the found fragment highlighted. Right is the bare file name and nothing else; the
+ * Left is the model **key** (bold, typed fragment highlighted), an element's **id** with its model in
+ * grey (`approveTask  in DEMO-P001`) or, for a full-text hit, the matched line with the found fragment
+ * highlighted. Right is the bare file name and nothing else; the
  * archive-qualified path lives in the item's description rather than in the row.
  *
  * Search Everywhere has no grouped list model (results are one flat, weight-sorted list), so the two
@@ -71,6 +72,11 @@ internal class FlowableModelSeRenderer(
                 is FlowableSeItem.Model -> {
                     icon = AtlasIcons.forType(item.entry.type)
                     appendKey(item.entry.key, highlight())
+                }
+                is FlowableSeItem.Element -> {
+                    icon = item.element.kind.icon
+                    appendKey(item.element.id, highlight())
+                    append("  in ${item.element.owner.key}", SimpleTextAttributes.GRAYED_ATTRIBUTES)
                 }
                 is FlowableSeItem.TextHit -> {
                     icon = TEXT_ICON

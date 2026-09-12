@@ -430,6 +430,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
 - **Open in Atlas Explorer, from a model file.** The Alt+Enter action that opens a model's explorer page
   was offered in Java only; inside a BPMN or a form there was no way to the page of the process you were
   reading. It is offered on a cross-reference and on the file's own key in every model file now.
+- **Search Everywhere finds elements, not only models.** The index has carried every model's user task
+  ids, activity ids, variables, messages, signals, payload fields, form fields and outcomes since the
+  completion work — and Search Everywhere and Go to Symbol listed model keys alone, so the `approveTask`
+  from a log line or a test led nowhere. Every one of those is a symbol now, labelled with its kind and
+  its model (*User task · in DEMO-P001*), ranked under the models and over the text hits in the
+  *Flowable Model* tab, and opening the model at the element's declaration.
 
 ## 0.25.0
 

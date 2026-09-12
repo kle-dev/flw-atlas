@@ -2,6 +2,7 @@ package com.flowable.atlas.navigation.se
 
 import com.flowable.atlas.completion.FlowableInfixMatcher
 import com.flowable.atlas.index.FlowableModelIndexService
+import com.flowable.atlas.navigation.ModelElements
 import com.flowable.atlas.navigation.ModelKeyTargets
 import com.intellij.ide.actions.searcheverywhere.FoundItemDescriptor
 import com.intellij.ide.actions.searcheverywhere.PossibleSlowContributor
@@ -31,9 +32,11 @@ import javax.swing.ListCellRenderer
  * platform's Files tab and to Find in Files (they live in no content or library root), which is
  * exactly the gap this closes.
  *
- * Two kinds of result, in one flat weight-sorted list (Search Everywhere has no section headers):
+ * Three kinds of result, in one flat weight-sorted list (Search Everywhere has no section headers):
  *  * **models** — matched on the model key *and* on the archive-qualified file path, from the
  *    already-built index, so this half is instant;
+ *  * **elements** — a user task, an activity, a variable, a message, a form field… matched on its id,
+ *    from the same index, shown with the model it belongs to;
  *  * **full-text hits** — a live grep over model content, every occurrence its own row.
  *
  * The grep only runs while this tab is the selected one. The contributor is also part of the "All"
@@ -85,7 +88,9 @@ class FlowableModelSeContributor(private val project: Project) :
         highlight = if (pattern.isEmpty()) null else {
             SeHighlight(pattern, NameUtil.buildMatcher("*$pattern", MatchingMode.IGNORE_CASE))
         }
-        if (!fetchModels(FlowableInfixMatcher(pattern), progressIndicator, consumer)) return
+        val matcher = FlowableInfixMatcher(pattern)
+        if (!fetchModels(matcher, progressIndicator, consumer)) return
+        if (pattern.length >= MIN_ELEMENT_LENGTH && !fetchElements(matcher, progressIndicator, consumer)) return
         if (pattern.length < MIN_GREP_LENGTH || !isOwnTabSelected()) return
         fetchTextHits(pattern, progressIndicator, consumer)
     }
@@ -114,6 +119,33 @@ class FlowableModelSeContributor(private val project: Project) :
             val weight = MODEL_WEIGHT_BASE + matcher.matchingDegree(entry.key).coerceIn(0, 9_999)
             if (!consumer.process(FoundItemDescriptor(item, weight))) return false
             if (++emitted >= MODEL_LIMIT) break
+        }
+        return true
+    }
+
+    /**
+     * The named elements inside the indexed models — user tasks, activities, variables, messages, signals,
+     * payload fields, form fields and outcomes — matched on their id. From the index, so instant; ranked
+     * under every model and over every text hit.
+     */
+    private fun fetchElements(
+        matcher: FlowableInfixMatcher,
+        indicator: ProgressIndicator,
+        consumer: Processor<in FoundItemDescriptor<FlowableSeItem>>,
+    ): Boolean {
+        val index = project.service<FlowableModelIndexService>().cachedOrNull() ?: return true
+        var emitted = 0
+        for (entry in index.allDistinct()) {
+            indicator.checkCanceled()
+            if (!entry.file.isValid) continue
+            var path: String? = null
+            for (element in ModelElements.of(entry)) {
+                if (!matcher.prefixMatches(element.id)) continue
+                val item = FlowableSeItem.Element(element, path ?: ArchivePaths.displayPath(entry.file).also { path = it })
+                val weight = ELEMENT_WEIGHT_BASE + matcher.matchingDegree(element.id).coerceIn(0, 8_999)
+                if (!consumer.process(FoundItemDescriptor(item, weight))) return false
+                if (++emitted >= ELEMENT_LIMIT) return true
+            }
         }
         return true
     }
@@ -153,6 +185,13 @@ class FlowableModelSeContributor(private val project: Project) :
             is FlowableSeItem.Model -> {
                 val at = ModelKeyTargets.lineColumn(selected.entry)
                 if (at != null) OpenFileDescriptor(project, selected.file, at.first, at.second).navigate(true)
+                else FileEditorManager.getInstance(project).openFile(selected.file, true)
+            }
+            // On the element's declaration — its quoted id — when the text spells it that way.
+            is FlowableSeItem.Element -> {
+                val text = runCatching { String(selected.file.contentsToByteArray(), Charsets.UTF_8) }.getOrNull()
+                val offset = text?.let { ModelElements.declarationOffset(it, selected.element.id) }
+                if (offset != null) OpenFileDescriptor(project, selected.file, offset).navigate(true)
                 else FileEditorManager.getInstance(project).openFile(selected.file, true)
             }
             // Line/column rather than a raw offset: we decode as UTF-8 while the Document uses the
@@ -232,8 +271,14 @@ class FlowableModelSeContributor(private val project: Project) :
         private const val CONTEXT_BEFORE = 24
         private const val ELLIPSIS = "…"
 
-        /** Weight bands: every model outranks every text hit, so the two kinds stay contiguous. */
+        /** A one-letter pattern matches an element in every model; elements start at two, like the grep. */
+        private const val MIN_ELEMENT_LENGTH = 2
+        private const val ELEMENT_LIMIT = 200
+
+        /** Weight bands: every model outranks every element, every element every text hit — three
+         *  contiguous kinds. */
         private const val MODEL_WEIGHT_BASE = 100_000
+        private const val ELEMENT_WEIGHT_BASE = 10_000
         private const val TEXT_WEIGHT_BASE = 1_000
     }
 }

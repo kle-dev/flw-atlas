@@ -46,4 +46,26 @@ class FlowableKeyGotoSymbolContributorTest : BasePlatformTestCase() {
         assertTrue("resolves to the bot class: $locations", locations.any { it.startsWith("Bot") })
         assertTrue("resolves to the using action: $locations", locations.any { it.startsWith("Action") })
     }
+
+    fun testAnElementInsideAModelIsASymbolLandingOnItsDeclaration() {
+        myFixture.addFileToProject(
+            "models/DEMO-P001.bpmn20.xml",
+            """<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="DEMO-P001" name="Order">
+                 <userTask id="approveTask" name="Approve"/><serviceTask id="chargeTask"/>
+               </process></definitions>""",
+        )
+        project.service<FlowableModelIndexService>().index()
+        val contributor = FlowableKeyGotoSymbolContributor()
+
+        val names = mutableListOf<String>()
+        contributor.processNames(Processor { names.add(it); true }, GlobalSearchScope.allScope(project), null)
+        assertTrue("a user task id is a symbol: $names", "approveTask" in names)
+        assertTrue("a service task id too: $names", "chargeTask" in names)
+
+        val items = mutableListOf<NavigationItem>()
+        contributor.processElementsWithName("approveTask", Processor { items.add(it); true }, FindSymbolParameters.simple(project, true))
+        val item = items.single()
+        assertEquals("User task · in DEMO-P001", item.presentation?.locationString)
+        assertTrue("it can navigate to the declaration", item.canNavigate())
+    }
 }

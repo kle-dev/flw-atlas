@@ -49,6 +49,20 @@ class FlowableModelSeContributorTest : BasePlatformTestCase() {
         assertEquals("demo-invoice.bpmn", hits[0].displayPath)
     }
 
+    fun testAUserTaskIsFoundAsAnElementOfItsModel() {
+        val elements = search("approve").mapNotNull { it.item as? FlowableSeItem.Element }
+        assertEquals("the task id, once: ${elements.map { it.element.id }}", listOf("approve"), elements.map { it.element.id })
+        val e = elements.single()
+        assertEquals("DEMO-P001", e.element.owner.key)
+        assertEquals("User task · in DEMO-P001", e.element.location)
+        assertEquals("User task · in DEMO-P001 · demo-invoice.bpmn", e.description)
+        // ranked under the model and over the text hit for the same word
+        val found = search("approve")
+        val element = found.single { it.item is FlowableSeItem.Element }.weight
+        assertTrue(found.filter { it.item is FlowableSeItem.TextHit }.all { it.weight < element })
+        assertTrue(found.filter { it.item is FlowableSeItem.Model }.all { it.weight > element })
+    }
+
     fun testModelsOutrankTextHits() {
         // "invoice" matches the file name (a model hit) and the content (text hits).
         val found = search("invoice")

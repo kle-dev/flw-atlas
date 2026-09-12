@@ -9,6 +9,7 @@ import com.intellij.navigation.ItemPresentation
 import com.intellij.navigation.NavigationItem
 import com.intellij.openapi.application.runReadActionBlocking
 import com.intellij.openapi.components.service
+import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.Project
 import com.intellij.pom.Navigatable
 import com.intellij.psi.PsiClass
@@ -23,9 +24,10 @@ import com.intellij.util.indexing.IdFilter
 import javax.swing.Icon
 
 /**
- * Makes every Flowable model key — and every **bot key** — findable in Search Everywhere / Go to
- * Symbol. Model keys navigate to their model file; a bot key navigates to the Java `BotService`
- * class(es) that declare it **and** to the `.action` models that invoke it (both, by design).
+ * Makes every Flowable model key — every **bot key**, and every named **element** inside a model (a
+ * user task, a variable, a message) — findable in Search Everywhere / Go to Symbol. Model keys navigate
+ * to their model file, an element to its declaration in the model; a bot key navigates to the Java
+ * `BotService` class(es) that declare it **and** to the `.action` models that invoke it (both, by design).
  *
  * The bulk (model keys) comes from the already-built model index; bot keys additionally come from the
  * project's `BotService` implementors (found via PSI). The index is only read via `cachedOrNull()` —
@@ -39,6 +41,8 @@ class FlowableKeyGotoSymbolContributor : ChooseByNameContributorEx {
         val index = service.cachedOrRequest() ?: return
         // Model keys (actions, processes, cases, forms, agents, services, data objects, …).
         for (entry in index.allDistinct()) if (entry.key.isNotBlank()) processor.process(entry.key)
+        // The elements inside them — a user task id, a variable, a message — searchable like the model.
+        for (entry in index.allDistinct()) for (element in ModelElements.of(entry)) processor.process(element.id)
         // Bot keys referenced by actions (covers platform bots with no project class too).
         for (entry in index.keysOfType(ModelType.ACTION)) entry.members.botKey
             ?.takeIf { it.isNotBlank() }?.let { processor.process(it) }
@@ -64,6 +68,18 @@ class FlowableKeyGotoSymbolContributor : ChooseByNameContributorEx {
                 if (!seenFiles.add(entry.file.url)) continue
                 val file = psiManager.findFile(entry.file) ?: continue
                 processor.process(KeySymbol(name, entry.type.display, AtlasIcons.forType(entry.type), file))
+            }
+
+            // An element id → its model, at the element's declaration.
+            for (entry in index.allDistinct()) {
+                for (element in ModelElements.of(entry)) {
+                    if (element.id != name) continue
+                    val psiFile = psiManager.findFile(entry.file) ?: continue
+                    // a leaf token is not navigable by itself; a descriptor at the declaration's offset is
+                    val target: Navigatable = ModelElements.declarationOffset(psiFile.text, name)
+                        ?.let { OpenFileDescriptor(project, entry.file, it) } ?: psiFile
+                    processor.process(KeySymbol(name, element.location, element.kind.icon, target))
+                }
             }
 
             // A bot key → the Java BotService class(es) that declare it.
@@ -98,13 +114,13 @@ class FlowableKeyGotoSymbolContributor : ChooseByNameContributorEx {
         private val symbolName: String,
         private val location: String,
         private val icon: Icon?,
-        private val target: PsiElement,
+        private val target: Navigatable,
     ) : NavigationItem, ItemPresentation {
         override fun getName(): String = symbolName
         override fun getPresentation(): ItemPresentation = this
-        override fun navigate(requestFocus: Boolean) { (target as? Navigatable)?.navigate(requestFocus) }
-        override fun canNavigate(): Boolean = (target as? Navigatable)?.canNavigate() ?: false
-        override fun canNavigateToSource(): Boolean = (target as? Navigatable)?.canNavigateToSource() ?: false
+        override fun navigate(requestFocus: Boolean) { target.navigate(requestFocus) }
+        override fun canNavigate(): Boolean = target.canNavigate()
+        override fun canNavigateToSource(): Boolean = target.canNavigateToSource()
         override fun getPresentableText(): String = symbolName
         override fun getLocationString(): String = location
         override fun getIcon(unused: Boolean): Icon? = icon
