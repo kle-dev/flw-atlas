@@ -1,5 +1,11 @@
 package com.flowable.atlas.explorer
 
+import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.notification.NotificationType
+import com.intellij.notification.NotificationAction
+import com.flowable.atlas.action.FlowableActionIds
+import com.flowable.atlas.AtlasNotifications
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
@@ -58,12 +64,37 @@ object AtlasGenerationRunner {
     fun regenerate(project: Project) {
         val projectDir = projectDir(project) ?: return
         val settings = FlowableAtlasProjectSettings.getInstance(project)
-        val existing = AtlasExplorerFiles.find(projectDir, settings.atlasOutputDir)
-        if (settings.atlasArtifacts == setOf(AtlasArtifact.EXPLORER_HTML) && existing.isNotEmpty()) {
-            existing.forEach { generateExplorer(project, it) }
-        } else {
-            generateAll(project, projectDir.resolve(settings.atlasOutputDir))
-        }
+        // The search walks the project six levels deep when the output folder is empty: a visible freeze
+        // from a menu click or the Hub's link (OpenAtlasExplorerAction moved the same walk off the EDT).
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Looking for Atlas explorer files", true) {
+            private var existing: List<Path> = emptyList()
+
+            override fun run(indicator: ProgressIndicator) {
+                existing = AtlasExplorerFiles.find(projectDir, settings.atlasOutputDir)
+            }
+
+            override fun onSuccess() {
+                if (project.isDisposed) return
+                when {
+                    settings.atlasArtifacts == setOf(AtlasArtifact.EXPLORER_HTML) && existing.isNotEmpty() ->
+                        existing.forEach { generateExplorer(project, it) }
+                    // "Regenerate" promises to refresh what exists; with no page on disk the honest answer
+                    // is to say so and offer the generator's dialog, not to write the whole artifact set.
+                    existing.isEmpty() -> AtlasNotifications.group()
+                        .createNotification(
+                            "Nothing to regenerate",
+                            "No generated Atlas explorer (a *.explorer.html) was found under ${settings.atlasOutputDir}/ or in the project.",
+                            NotificationType.INFORMATION,
+                        )
+                        .addAction(NotificationAction.createSimpleExpiring("Generate Atlas Explorer…") {
+                            ActionManager.getInstance().getAction(FlowableActionIds.GENERATE_ATLAS_EXPLORER)
+                                ?.let { ActionManager.getInstance().tryToExecute(it, null, null, "AtlasRegenerate", true) }
+                        })
+                        .notify(project)
+                    else -> generateAll(project, projectDir.resolve(settings.atlasOutputDir))
+                }
+            }
+        })
     }
 
     /** The directory to analyse — the active Flowable sub-project, or the whole project when none. */

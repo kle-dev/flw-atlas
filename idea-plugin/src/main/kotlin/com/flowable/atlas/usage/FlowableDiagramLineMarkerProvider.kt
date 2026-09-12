@@ -1,5 +1,8 @@
 package com.flowable.atlas.usage
 
+import com.intellij.openapi.progress.Task
+import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.progress.ProgressIndicator
 import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.FlowableAtlasBundle
 import com.flowable.atlas.completion.KeySite
@@ -106,15 +109,27 @@ class FlowableDiagramLineMarkerProvider : LineMarkerProvider {
 
     private fun openDiagram(project: Project, modelFile: VirtualFile, type: ModelType) {
         // Resolve the bundled sibling .svg or render one from the model's DI layout; both open in the
-        // bundled Images viewer. Opening runs on the EDT (the click thread). A diagram-bearing model
-        // that carries no layout at all resolves to null — show a hint instead of an empty tab.
-        val svg = DiagramSvgCache.getInstance(project).resolveDiagram(modelFile, type)
-        if (svg != null) {
-            FileEditorManager.getInstance(project).openFile(svg, true)
-        } else {
-            FileEditorManager.getInstance(project).selectedTextEditor
-                ?.let { HintManager.getInstance().showInformationHint(it, NO_LAYOUT_HINT) }
-        }
+        // bundled Images viewer. The render — bytes plus a full DI layout pass on a large process — runs
+        // in the background; only the opening is the click thread's. A diagram-bearing model that
+        // carries no layout at all resolves to null — show a hint instead of an empty tab.
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Rendering Flowable diagram", true) {
+            private var svg: VirtualFile? = null
+
+            override fun run(indicator: ProgressIndicator) {
+                svg = DiagramSvgCache.getInstance(project).resolveDiagram(modelFile, type)
+            }
+
+            override fun onSuccess() {
+                if (project.isDisposed) return
+                val file = svg
+                if (file != null) {
+                    FileEditorManager.getInstance(project).openFile(file, true)
+                } else {
+                    FileEditorManager.getInstance(project).selectedTextEditor
+                        ?.let { HintManager.getInstance().showInformationHint(it, NO_LAYOUT_HINT) }
+                }
+            }
+        })
     }
 
     private companion object {

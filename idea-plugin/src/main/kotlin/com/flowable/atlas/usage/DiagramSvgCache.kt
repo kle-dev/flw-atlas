@@ -9,7 +9,6 @@ import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.LightVirtualFile
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Resolves the diagram [VirtualFile] to open for a Flowable model, and caches any SVG it has to render
@@ -32,7 +31,13 @@ class DiagramSvgCache {
 
     private data class Rendered(val stamp: Long, val file: VirtualFile)
 
-    private val cache = ConcurrentHashMap<String, Rendered>()
+    // A bounded, most-recently-used cache: every rendered SVG is a string the size of the drawing, and
+    // an unbounded map kept each one for the life of the session.
+    private val cache = object : LinkedHashMap<String, Rendered>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Rendered>): Boolean = size > MAX_ENTRIES
+    }
+    private fun cached(url: String): Rendered? = synchronized(cache) { cache[url] }
+    private fun remember(url: String, r: Rendered) { synchronized(cache) { cache[url] = r } }
 
     fun resolveDiagram(modelFile: VirtualFile, type: ModelType): VirtualFile? {
         FlowableDiagram.siblingSvg(modelFile)?.let { return it }
@@ -42,7 +47,7 @@ class DiagramSvgCache {
 
     private fun rendered(modelFile: VirtualFile, type: ModelType): VirtualFile? {
         val stamp = modelFile.modificationStamp
-        cache[modelFile.url]?.let { if (it.stamp == stamp) return it.file }
+        cached(modelFile.url)?.let { if (it.stamp == stamp) return it.file }
         // Read failure is environmental (file deleted between index and paint) — debug. A *render*
         // failure is an Atlas defect on real customer DI and the only symptom is a missing gutter icon,
         // so it warns. Both are per-file-per-modification, not per-paint: the cache above bounds them.
@@ -54,7 +59,7 @@ class DiagramSvgCache {
             .getOrNull() ?: return null
         val name = modelFile.name.substringBeforeLast('.') + ".svg"
         val file = LightVirtualFile(name, svg)
-        cache[modelFile.url] = Rendered(stamp, file)
+        remember(modelFile.url, Rendered(stamp, file))
         return file
     }
 
@@ -72,5 +77,8 @@ class DiagramSvgCache {
 
     companion object {
         fun getInstance(project: Project): DiagramSvgCache = project.service()
+
+        /** How many rendered drawings are kept — the most recently used ones. */
+        private const val MAX_ENTRIES = 32
     }
 }
