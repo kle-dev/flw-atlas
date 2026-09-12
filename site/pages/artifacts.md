@@ -69,9 +69,10 @@ It is designed to make that easy:
 - **`findings`** is the itemised list every other surface summarises, **`checks`** the open count per
   check plus `open` and `waived`, and **`waivers`** — present when the project carries a
   `waivers.json` — its rules with how many findings each matched, its notes, and what is wrong with
-  the file. See [Health checks](../checks/).
+  the file. See [Health checks](../checks/) for the two kinds of check, `defect` and `advice`.
 - **`stats`** has the scale: `modelCount` is how many models were read, `models` how many loose model
-  *files* and `archives` how many `.zip`/`.bar` archives held the rest.
+  *files* and `archives` how many `.zip`/`.bar` archives held the rest — and the health headline,
+  `defects` and `advice`, the open findings of each kind.
 - **`diagnostics`** lists what Atlas could not read (`parse`), what it skipped on purpose (`skip`) and
   which keys two model types share (`conflict` — information, not a finding), and **`markers`** every
   `TODO`, `FIXME` or `HACK` it found in a model file, with file, line, the model it belongs to and — in a

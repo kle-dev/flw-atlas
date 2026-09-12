@@ -862,11 +862,19 @@ object OverviewRenderer {
         val openFindings = findings.filter { it["waived"] == null }
         if (findings.isNotEmpty()) {
             val open = (checks["open"] as? Number)?.toInt() ?: openFindings.size
-            hdr(14, "Findings — $open open" + if (waivedFindings.isNotEmpty()) ", ${waivedFindings.size} waived" else "")
-            L.add(checks.entries.filter { it.key != "open" && it.key != "waived" }
-                .joinToString(" · ") { "${CheckCatalog.label(it.key)}: ${it.value}" })
+            val headline = Fmt.healthHeadline(asMap(result["stats"])).ifEmpty { "$open open" }
+            hdr(14, "Findings — $headline" + if (waivedFindings.isNotEmpty()) ", ${waivedFindings.size} waived" else "")
+            L.addAll(Fmt.healthLines(checks))
             L.add("")
+            // Defects first, then advice under a line that says what changes at the border: the reader
+            // of §14 is asking "what is wrong", and everything below that line is not wrong.
+            var adviceStarted = false
             for ((check, group) in openFindings.groupBy { it["check"]?.toString() ?: "?" }) {
+                if (!adviceStarted && CheckCatalog.kind(check) == CheckCatalog.ADVICE) {
+                    adviceStarted = true
+                    L.add("*Advice — nothing below is broken; each is a pattern worth a look.*")
+                    L.add("")
+                }
                 L.add("**${CheckCatalog.label(check)}** (${group.size})")
                 for (f in group.take(FINDINGS_PER_CHECK)) {
                     val mark = if (f["severity"] == "error") "⚠" else "·"

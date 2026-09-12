@@ -363,6 +363,17 @@
               usages". It lists every model that references it (a call activity, a form key, a service
               mapping, an extension element's text) and every Java call site that names it at a Flowable API
               position.</li>
+          <li><b>Every check is a defect or an advice, and every surface leads with the split.</b> A list
+              that put "task without a boundary event" beside "expression does not parse" taught a reader to
+              skim both. Each of the 23 checks now has a <i>kind</i>: a <b>defect</b> is wrong now — a file
+              that does not parse, a key nothing answers, a gateway the engine cannot leave, a column two
+              names disagree about — and an <b>advice</b> is a pattern worth a look while nothing is broken
+              — a call with no error path, a form nothing references. The Checks page, the summary, the
+              overview, the generated <code>CLAUDE.md</code> and the CLI status line say <code>3 defects ·
+              41 advice</code> instead of <code>44 findings</code>; <code>graph.json</code> carries
+              <code>stats.defects</code> and <code>stats.advice</code>; the catalog reads defects first,
+              then advice; and <code>--fail-on defects</code> makes a pipeline red on what is wrong and
+              green on what could be better.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

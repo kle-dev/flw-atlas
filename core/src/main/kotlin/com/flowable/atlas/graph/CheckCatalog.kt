@@ -9,9 +9,15 @@ package com.flowable.atlas.graph
  * *why* a finding matters or *what to do about it*, which is the part a reader who did not write the
  * check actually needs.
  *
- * This is the one place. The order of [CHECKS] is the reading order every surface uses: broken first,
- * then how a process is configured to behave, then unfinished, then noise. `graph.json`'s `checks` map
- * iterates in it, the overview groups findings by it, and the explorer's Checks page lists blocks in it.
+ * This is the one place. Every check is one of two [Check.kind]s, and the split is the first thing a
+ * reader sees on every surface: a **defect** is something wrong *now* — a file that will not parse, a
+ * key nothing answers, a gateway the engine cannot leave — and an **advice** is a pattern worth a look
+ * while nothing is broken — a call with no error path, a form nothing references. The distinction was
+ * asked for by name: a list that presents "task without a boundary event" beside "expression does not
+ * parse" teaches a reader to skim both. The order of [CHECKS] is the reading order every surface uses:
+ * defects first (broken, then unfinished, then how a process is configured to behave), then advice.
+ * `graph.json`'s `checks` map iterates in it, the overview groups findings by it, and the explorer's
+ * Checks page lists blocks in it.
  *
  * [Check.docs] is the heading slug on `site/pages/checks.md`, computed the way the site builder computes
  * anchors — `SiteDocsCoverageTest` asserts every slug exists, so a renamed heading is a red build rather
@@ -22,8 +28,15 @@ object CheckCatalog {
     /** Where the documentation site lives; [docsUrl] appends the checks page and the heading anchor. */
     const val DOCS_BASE = "https://kle-dev.github.io/flw-atlas/"
 
+    /** [Check.kind]: something is wrong now — it fails, or two things disagree. */
+    const val DEFECT = "defect"
+    /** [Check.kind]: nothing is broken; a pattern worth a look, optional to act on. */
+    const val ADVICE = "advice"
+
     data class Check(
         val id: String,
+        /** [DEFECT] or [ADVICE] — the split every surface leads with. */
+        val kind: String,
         /** `broken` — something will fail; `runtime` — configured to behave riskily; `unfinished`; `noise`. */
         val tier: String,
         /** `error`, `warning`, or `error · warning` when the check emits both. */
@@ -49,7 +62,7 @@ object CheckCatalog {
 
     val CHECKS: List<Check> = listOf(
         Check(
-            id = "parseIssues", tier = "broken", severity = "error · warning",
+            id = "parseIssues", kind = DEFECT, tier = "broken", severity = "error · warning",
             label = "unparseable files", title = "Parse issues",
             what = "files the analyzer could not fully read",
             clean = "all files analyzed cleanly",
@@ -60,7 +73,7 @@ object CheckCatalog {
             docs = "parseissues-files-atlas-could-not-read",
         ),
         Check(
-            id = "invalidExpr", tier = "broken", severity = "error · warning",
+            id = "invalidExpr", kind = DEFECT, tier = "broken", severity = "error · warning",
             label = "invalid expressions", title = "Invalid expressions",
             what = "syntax errors in \${ } / {{ }}",
             clean = "no syntax errors",
@@ -71,7 +84,7 @@ object CheckCatalog {
             docs = "invalidexpr-the-expression-does-not-parse",
         ),
         Check(
-            id = "scriptIssues", tier = "broken", severity = "error · warning",
+            id = "scriptIssues", kind = DEFECT, tier = "broken", severity = "error · warning",
             label = "script syntax", title = "Script syntax",
             what = "syntax & binding findings in script bodies",
             clean = "all scripts scan clean",
@@ -82,7 +95,7 @@ object CheckCatalog {
             docs = "scriptissues-script-bodies",
         ),
         Check(
-            id = "missingRefs", tier = "broken", severity = "error",
+            id = "missingRefs", kind = DEFECT, tier = "broken", severity = "error",
             label = "missing models", title = "Missing model refs",
             what = "a key is referenced but no model defines it",
             clean = "every referenced key resolves",
@@ -93,7 +106,7 @@ object CheckCatalog {
             docs = "missingrefs-a-key-with-nothing-behind-it",
         ),
         Check(
-            id = "crossedColumns", tier = "broken", severity = "error · warning",
+            id = "crossedColumns", kind = DEFECT, tier = "broken", severity = "error · warning",
             label = "crossed column mappings", title = "Crossed column mappings",
             what = "a field maps the column another field is named after",
             clean = "every column mapping matches its field name",
@@ -104,7 +117,7 @@ object CheckCatalog {
             docs = "crossedcolumns-the-column-mapping-pairs-the-wrong-two-names",
         ),
         Check(
-            id = "hardcodedSecrets", tier = "broken", severity = "error",
+            id = "hardcodedSecrets", kind = DEFECT, tier = "broken", severity = "error",
             label = "literal secrets", title = "Hardcoded secrets",
             what = "a password, token or API key written into a model as plain text",
             clean = "no secret is written into a model",
@@ -115,7 +128,7 @@ object CheckCatalog {
             docs = "hardcodedsecrets-a-secret-written-into-a-model",
         ),
         Check(
-            id = "unsafeQueries", tier = "broken", severity = "warning",
+            id = "unsafeQueries", kind = DEFECT, tier = "broken", severity = "warning",
             label = "unescaped query parameters", title = "Unescaped query parameters",
             what = "a query template interpolating a value without escaping it",
             clean = "every query template escapes what it interpolates",
@@ -126,7 +139,7 @@ object CheckCatalog {
             docs = "unsafequeries-a-value-that-can-change-the-query",
         ),
         Check(
-            id = "changelogIssues", tier = "unfinished", severity = "warning",
+            id = "changelogIssues", kind = DEFECT, tier = "unfinished", severity = "warning",
             label = "changelog problems", title = "Changelog issues",
             what = "orphan or superseded changelogs",
             clean = "all changelogs are authoritative",
@@ -137,7 +150,7 @@ object CheckCatalog {
             docs = "changelogissues-liquibase-authority",
         ),
         Check(
-            id = "schemaGaps", tier = "unfinished", severity = "warning",
+            id = "schemaGaps", kind = DEFECT, tier = "unfinished", severity = "warning",
             label = "schema gaps", title = "Schema gaps",
             what = "columns not mapped through Liquibase → service → data object",
             clean = "all columns mapped through",
@@ -148,17 +161,7 @@ object CheckCatalog {
             docs = "schemagaps-the-database-and-the-models-disagree",
         ),
         Check(
-            id = "leftoverMarkers", tier = "unfinished", severity = "warning",
-            label = "leftover markers", title = "Leftover markers",
-            what = "a TODO, FIXME or HACK left in a model file",
-            clean = "no marker left behind",
-            why = "A marker is a promise someone made to come back; in a model that is deployed it is a " +
-                "promise the process keeps running without.",
-            fix = "Do the thing, or turn the marker into a note in waivers.json with the reason it can wait.",
-            docs = "leftovermarkers-a-promise-nobody-kept",
-        ),
-        Check(
-            id = "gatewayNoDefault", tier = "runtime", severity = "warning",
+            id = "gatewayNoDefault", kind = DEFECT, tier = "runtime", severity = "warning",
             label = "gateways with no way out", title = "Gateway without default",
             what = "an exclusive or inclusive gateway whose every outgoing flow is conditional, with no default",
             clean = "every choosing gateway has a way out",
@@ -169,7 +172,7 @@ object CheckCatalog {
             docs = "gatewaynodefault-a-choice-with-no-way-out",
         ),
         Check(
-            id = "implicitSplit", tier = "runtime", severity = "warning",
+            id = "implicitSplit", kind = DEFECT, tier = "runtime", severity = "warning",
             label = "implicit splits", title = "Implicit split",
             what = "an activity with several outgoing flows and no gateway",
             clean = "every fork is drawn as a gateway",
@@ -180,7 +183,28 @@ object CheckCatalog {
             docs = "implicitsplit-a-fork-nobody-drew",
         ),
         Check(
-            id = "nonExclusiveAsync", tier = "runtime", severity = "warning",
+            id = "suspectExpr", kind = DEFECT, tier = "noise", severity = "warning",
+            label = "suspect expressions", title = "Suspect expressions",
+            what = "flagged for review by the catalog",
+            clean = "nothing flagged",
+            why = "The expression parses but calls a function or namespace Atlas does not know — either " +
+                "a typo, or a function the project registers itself.",
+            fix = "Fix the name, or tell Atlas about your functions with --expr-allowlist or the plugin's " +
+                "allowlist setting; the findings then stop.",
+            docs = "suspectexpr-an-expression-atlas-cannot-vouch-for",
+        ),
+        Check(
+            id = "leftoverMarkers", kind = ADVICE, tier = "unfinished", severity = "warning",
+            label = "leftover markers", title = "Leftover markers",
+            what = "a TODO, FIXME or HACK left in a model file",
+            clean = "no marker left behind",
+            why = "A marker is a promise someone made to come back; in a model that is deployed it is a " +
+                "promise the process keeps running without.",
+            fix = "Do the thing, or turn the marker into a note in waivers.json with the reason it can wait.",
+            docs = "leftovermarkers-a-promise-nobody-kept",
+        ),
+        Check(
+            id = "nonExclusiveAsync", kind = ADVICE, tier = "runtime", severity = "warning",
             label = "non-exclusive async", title = "Non-exclusive async",
             what = "async elements that opted out of exclusive jobs",
             clean = "no async element opts out of exclusive",
@@ -191,7 +215,7 @@ object CheckCatalog {
             docs = "nonexclusiveasync-async-jobs-that-may-run-at-the-same-time",
         ),
         Check(
-            id = "unguardedTasks", tier = "runtime", severity = "warning",
+            id = "unguardedTasks", kind = ADVICE, tier = "runtime", severity = "warning",
             label = "calls with no error path", title = "Calls with no error path",
             what = "service tasks leaving the engine with nothing catching a failure",
             clean = "every outbound call is guarded",
@@ -205,7 +229,7 @@ object CheckCatalog {
             docs = "unguardedtasks-a-call-out-of-the-engine-with-nothing-catching-it",
         ),
         Check(
-            id = "asyncWithoutRetry", tier = "runtime", severity = "warning",
+            id = "asyncWithoutRetry", kind = ADVICE, tier = "runtime", severity = "warning",
             label = "async without retry", title = "Async without retry",
             what = "async work with no failedJobRetryTimeCycle of its own",
             clean = "async work states its retry policy",
@@ -216,18 +240,7 @@ object CheckCatalog {
             docs = "asyncwithoutretry-async-work-that-does-not-say-how-often-to-try",
         ),
         Check(
-            id = "suspectExpr", tier = "noise", severity = "warning",
-            label = "suspect expressions", title = "Suspect expressions",
-            what = "flagged for review by the catalog",
-            clean = "nothing flagged",
-            why = "The expression parses but calls a function or namespace Atlas does not know — either " +
-                "a typo, or a function the project registers itself.",
-            fix = "Fix the name, or tell Atlas about your functions with --expr-allowlist or the plugin's " +
-                "allowlist setting; the findings then stop.",
-            docs = "suspectexpr-an-expression-atlas-cannot-vouch-for",
-        ),
-        Check(
-            id = "unusedForms", tier = "noise", severity = "warning",
+            id = "unusedForms", kind = ADVICE, tier = "noise", severity = "warning",
             label = "unused forms", title = "Unused forms",
             what = "no model links to them",
             clean = "every form is referenced",
@@ -238,7 +251,7 @@ object CheckCatalog {
             docs = UNUSED_DOCS,
         ),
         Check(
-            id = "unusedDecisions", tier = "noise", severity = "warning",
+            id = "unusedDecisions", kind = ADVICE, tier = "noise", severity = "warning",
             label = "unused decisions", title = "Unused decisions",
             what = "decision tables no process, case or decision service calls",
             clean = "every decision is called",
@@ -249,7 +262,7 @@ object CheckCatalog {
             docs = "unuseddecisions-a-table-nothing-consults",
         ),
         Check(
-            id = "unusedOps", tier = "noise", severity = "warning",
+            id = "unusedOps", kind = ADVICE, tier = "noise", severity = "warning",
             label = "unused service operations", title = "Unused operations",
             what = "operations never called from a model",
             clean = "every operation is used",
@@ -260,7 +273,7 @@ object CheckCatalog {
             docs = UNUSED_DOCS,
         ),
         Check(
-            id = "unusedFns", tier = "noise", severity = "warning",
+            id = "unusedFns", kind = ADVICE, tier = "noise", severity = "warning",
             label = "unused custom functions", title = "Unused custom functions",
             what = "functions never called",
             clean = "every function is used",
@@ -271,7 +284,7 @@ object CheckCatalog {
             docs = UNUSED_DOCS,
         ),
         Check(
-            id = "unusedVars", tier = "noise", severity = "warning",
+            id = "unusedVars", kind = ADVICE, tier = "noise", severity = "warning",
             label = "variables never read", title = "Variables · never read",
             what = "variables written but nothing reads them",
             clean = "every variable that is written is read somewhere",
@@ -282,7 +295,7 @@ object CheckCatalog {
             docs = VARS_DOCS,
         ),
         Check(
-            id = "unreadInputs", tier = "noise", severity = "warning",
+            id = "unreadInputs", kind = ADVICE, tier = "noise", severity = "warning",
             label = "unread call parameters", title = "Variables · unread call input",
             what = "mapped into a called model that never reads them",
             clean = "every mapped input is read by its callee",
@@ -292,7 +305,7 @@ object CheckCatalog {
             docs = VARS_DOCS,
         ),
         Check(
-            id = "guessedVars", tier = "noise", severity = "warning",
+            id = "guessedVars", kind = ADVICE, tier = "noise", severity = "warning",
             label = "script-inferred variables", title = "Variables · script guess",
             what = "only a bare identifier in a script names them",
             clean = "every variable is declared somewhere",
@@ -311,6 +324,13 @@ object CheckCatalog {
 
     operator fun get(id: String): Check? = byId[id]
 
+    /** The kind of a check — [DEFECT], [ADVICE] — or null for an id the catalog does not know. */
+    fun kind(id: String): String? = byId[id]?.kind
+
+    /** Open findings of [kind] in a findings list, ignoring waived ones. */
+    fun countOpen(findings: List<Map<String, Any?>>, kind: String): Int =
+        findings.count { it["waived"] == null && kind(it["check"]?.toString().orEmpty()) == kind }
+
     /** The summary/overview wording for a check, or the id itself for one the catalog does not know. */
     fun label(id: String): String = byId[id]?.label ?: id
 
@@ -320,6 +340,7 @@ object CheckCatalog {
     fun payload(): List<Map<String, Any?>> = CHECKS.map { c ->
         linkedMapOf<String, Any?>(
             "id" to c.id,
+            "kind" to c.kind,
             "tier" to c.tier,
             "severity" to c.severity,
             "label" to c.label,

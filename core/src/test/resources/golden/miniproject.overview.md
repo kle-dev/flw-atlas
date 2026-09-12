@@ -383,9 +383,10 @@ _component (1):_
 
 **Also in the graph** (queryable in `miniproject.graph.json`, no section here): 1 document · 1 variableExtractor · 1 knowledgeBase · 1 palette · 1 query · 1 sequence · 1 sla · 1 template · 1 serviceOperation · 1 method · 1 bot.
 
-## 14. Findings — 18 open
+## 14. Findings — 10 defects · 8 advice
 
-unparseable files: 2 · invalid expressions: 2 · script syntax: 2 · missing models: 1 · crossed column mappings: 1 · literal secrets: 1 · schema gaps: 1 · calls with no error path: 2 · async without retry: 1 · variables never read: 3 · unread call parameters: 1 · script-inferred variables: 1
+Defects — unparseable files: 2 · invalid expressions: 2 · script syntax: 2 · missing models: 1 · crossed column mappings: 1 · literal secrets: 1 · schema gaps: 1
+Advice — calls with no error path: 2 · async without retry: 1 · variables never read: 3 · unread call parameters: 1 · script-inferred variables: 1
 
 **unparseable files** (2)
 - · skip: JSON carries no model key — not a Design model wrapper — in: `archives/demo-export.zip!manifest.json`
@@ -414,6 +415,8 @@ unparseable files: 2 · invalid expressions: 2 · script syntax: 2 · missing mo
 
 **schema gaps** (1)
 - · column `orphan_col_` of table `cust_customer` is in Liquibase but not mapped by the service — in: `Customer Service` · file: `services/customer.service`
+
+*Advice — nothing below is broken; each is a pattern worth a look.*
 
 **calls with no error path** (2)
 - · `Calculate total` calls out of the engine with no error boundary event — a failure propagates to the caller — in: `Order Process` · at: `calcTask` · file: `processes/order.bpmn`

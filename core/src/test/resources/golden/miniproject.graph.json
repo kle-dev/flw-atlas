@@ -6863,7 +6863,9 @@
     }
   ],
   "stats": {
+    "advice": 8,
     "archives": 1,
+    "defects": 10,
     "dynamicEdges": 0,
     "edges": 52,
     "endpoints": 2,

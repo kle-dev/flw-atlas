@@ -308,6 +308,12 @@ object Findings {
         if (waivedCount > 0) counts["waived"] = waivedCount
         result["findings"] = marked
         result["checks"] = counts
+        // The two numbers every headline leads with. In `stats`, not `checks`: every consumer of `checks`
+        // treats each key but `open`/`waived` as a check id, and two more pseudo-ids would break them.
+        (result["stats"] as? MutableMap<String, Any?>)?.let { st ->
+            st["defects"] = CheckCatalog.countOpen(open, CheckCatalog.DEFECT)
+            st["advice"] = CheckCatalog.countOpen(open, CheckCatalog.ADVICE)
+        }
         waiverReport(matching)?.let { result["waivers"] = it }
     }
 

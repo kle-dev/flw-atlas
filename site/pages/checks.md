@@ -14,8 +14,18 @@ reading at all:
   *suspected* read as a read, and reports how many names it declined to judge — see
   [Variable analysis](../variables/).
 
-The findings are ordered by how much they deserve your attention: broken first, then unfinished, then
-noise.
+Every check is one of two **kinds**, and the split is the first thing every surface shows:
+
+- **Defects** — something is wrong *now*: a file that does not parse, a key nothing answers, a gateway
+  the engine cannot leave, a column two names disagree about. Fix or accept, but do not ignore.
+- **Advice** — nothing is broken. The check names a pattern worth a look — a call with no error path, a
+  form nothing references, an async job without its own retry policy — and acting on it is optional.
+
+The Checks page, the summary, the overview, the generated `CLAUDE.md` and the CLI status line all lead
+with the two numbers (`3 defects · 41 advice`), `graph.json` carries them as `stats.defects` and
+`stats.advice`, and `--fail-on defects` makes a pipeline red on the first kind only. Within each kind the
+checks are ordered by how much they deserve attention: broken first, then unfinished, then how a process
+is configured to behave.
 
 <figure class="fig">
   <div class="body"><img class="only-light" src="../assets/img/checks-page.png" alt="The explorer's Checks page: a row per check, then a block per finding kind" width="1400" height="900"><img class="only-dark" src="../assets/img/checks-page-dark.png" alt="The explorer's Checks page: a row per check, then a block per finding kind" width="1400" height="900"></div>
@@ -26,31 +36,31 @@ noise.
 
 ## The twenty-three checks
 
-| Check | Severity | What it means |
-|---|---|---|
-| `parseIssues` | error · warning | A file could not be read or fully parsed; as warnings, what Atlas decided not to read and a key shared by two model types. |
-| `invalidExpr` | error · warning | An expression has a structural syntax error — every problem on that expression is listed, its warnings included. |
-| `scriptIssues` | error · warning | A script body has a syntax problem, or calls something its context does not bind. |
-| `missingRefs` | error | A model key is referenced but no model in the project defines it. |
-| `crossedColumns` | error · warning | A service maps a field to the column another field is named after — as an error when the pairing is a closed swap or rotation. |
-| `hardcodedSecrets` | error | A password, token or API key written into a model as plain text. |
-| `unsafeQueries` | warning | A query template interpolates a value without escaping it. |
-| `changelogIssues` | warning | A Liquibase changelog is orphaned or superseded. |
-| `schemaGaps` | warning | A database column and the model that should describe it disagree. |
-| `leftoverMarkers` | warning | A TODO, FIXME or HACK left in a model file. |
-| `gatewayNoDefault` | warning | An exclusive or inclusive gateway whose every outgoing flow is conditional, with no default. |
-| `implicitSplit` | warning | An activity with several outgoing flows and no gateway — a fork nobody drew. |
-| `nonExclusiveAsync` | warning | An async element explicitly set `exclusive="false"`. |
-| `unguardedTasks` | warning | A service task leaves the engine and nothing catches its failure. |
-| `asyncWithoutRetry` | warning | Async work with no `failedJobRetryTimeCycle` of its own. |
-| `suspectExpr` | warning | An expression calls a function or namespace Atlas does not know. |
-| `unusedForms` | warning | A form nothing references. |
-| `unusedDecisions` | warning | A decision table no process, case or decision service calls. |
-| `unusedOps` | warning | A service operation nothing calls. |
-| `unusedFns` | warning | A custom expression function nothing uses. |
-| `unusedVars` | warning | A variable is written and nothing reads it. |
-| `unreadInputs` | warning | A variable is mapped into a called model that never reads it. |
-| `guessedVars` | warning | A variable only a script mentions, by bare name. |
+| Check | Kind | Severity | What it means |
+|---|---|---|---|
+| `parseIssues` | defect | error · warning | A file could not be read or fully parsed; as warnings, what Atlas decided not to read. (A key shared by two model types is recorded in `diagnostics`, not reported.) |
+| `invalidExpr` | defect | error · warning | An expression has a structural syntax error — every problem on that expression is listed, its warnings included. |
+| `scriptIssues` | defect | error · warning | A script body has a syntax problem, or calls something its context does not bind. |
+| `missingRefs` | defect | error | A model key is referenced but no model in the project defines it. |
+| `crossedColumns` | defect | error · warning | A service maps a field to the column another field is named after — as an error when the pairing is a closed swap or rotation. |
+| `hardcodedSecrets` | defect | error | A password, token or API key written into a model as plain text. |
+| `unsafeQueries` | defect | warning | A query template interpolates a value without escaping it. |
+| `changelogIssues` | defect | warning | A Liquibase changelog is orphaned or superseded. |
+| `schemaGaps` | defect | warning | A database column and the model that should describe it disagree. |
+| `gatewayNoDefault` | defect | warning | An exclusive or inclusive gateway whose every outgoing flow is conditional, with no default. |
+| `implicitSplit` | defect | warning | An activity with several outgoing flows and no gateway — a fork nobody drew. |
+| `suspectExpr` | defect | warning | An expression calls a function or namespace Atlas does not know. |
+| `leftoverMarkers` | advice | warning | A TODO, FIXME or HACK left in a model file. |
+| `nonExclusiveAsync` | advice | warning | An async element explicitly set `exclusive="false"`. |
+| `unguardedTasks` | advice | warning | A service task leaves the engine and nothing catches its failure. |
+| `asyncWithoutRetry` | advice | warning | Async work with no `failedJobRetryTimeCycle` of its own. |
+| `unusedForms` | advice | warning | A form nothing references. |
+| `unusedDecisions` | advice | warning | A decision table no process, case or decision service calls. |
+| `unusedOps` | advice | warning | A service operation nothing calls. |
+| `unusedFns` | advice | warning | A custom expression function nothing uses. |
+| `unusedVars` | advice | warning | A variable is written and nothing reads it. |
+| `unreadInputs` | advice | warning | A variable is mapped into a called model that never reads it. |
+| `guessedVars` | advice | warning | A variable only a script mentions, by bare name. |
 
 Each finding carries the node it belongs to, a message, and — where Atlas knows it — the file, the
 element, the line and a snippet, so it is actionable rather than merely true. Where one check fires
@@ -362,7 +372,7 @@ eight cases in which this check deliberately says nothing.
 | The CLI status line | The counts, in one line on stderr. |
 | `<project>.summary.md` | A *Health* block: per-check counts and up to five errors. |
 | `<project>.overview.md` | Section 14, *Findings*, with `file:line` for each. |
-| `<project>.graph.json` | `findings` (itemised) and `checks` (per-check counts plus `open` and `waived`). |
+| `<project>.graph.json` | `findings` (itemised), `checks` (per-check counts plus `open` and `waived`) and `stats.defects` / `stats.advice`. |
 | `<project>.CLAUDE.md` | A findings summary, so an agent starts from what is already known to be wrong. |
 | The explorer | The **Checks** page (`#/checks`): a row per check — worst first, its severity in words, the clean ones folded with what they examined — then a block per check with the finding's severity, model, element (a jump into the model), message and `file:line`, what the check means and what to do, and an **accept…** control on every row. A model's own page lists its findings under the diagram, with a ⌖ button that puts the element in view. |
 | The IDE | The same explorer page, opened as an editor tab. |

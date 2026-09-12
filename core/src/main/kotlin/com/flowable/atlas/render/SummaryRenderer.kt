@@ -239,9 +239,11 @@ object SummaryRenderer {
         if (open > 0) {
             val all = result["findings"] as? List<Map<String, Any?>> ?: emptyList()
             val findings = all.filter { it["waived"] == null }
-            L.add("## Health — $open open finding(s)" + if (waivedN > 0) " ($waivedN waived)" else "")
-            L.add(checks.entries.filter { it.key != "open" && it.key != "waived" }
-                .joinToString(" · ") { "${CheckCatalog.label(it.key)}: ${it.value}" })
+            // Defects and advice are two different questions — "what is wrong" and "what could be
+            // better" — so the headline and the count lines keep them apart.
+            L.add("## Health — ${Fmt.healthHeadline(result["stats"] as? Map<*, *>)}" +
+                if (waivedN > 0) " ($waivedN waived)" else "")
+            L.addAll(Fmt.healthLines(checks))
             // Name the worst few; the overview lists them all with file/line.
             for (f in findings.filter { it["severity"] == "error" }.take(5)) {
                 val where = listOfNotNull(f["label"]?.toString(), f["element"]?.toString())

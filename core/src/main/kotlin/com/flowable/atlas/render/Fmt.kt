@@ -1,5 +1,7 @@
 package com.flowable.atlas.render
 
+import com.flowable.atlas.graph.CheckCatalog
+
 /**
  * Shared formatting helpers for the Markdown artifacts — the ones an LLM reads.
  *
@@ -25,6 +27,31 @@ object Fmt {
      * `610 models (3 files · 27 archives)` — how much of a project Atlas read. `stats.models` counts
      * *files* and used to be printed as "3 models" for a repository whose 27 Design exports held 610.
      */
+    /**
+     * The health headline every text surface leads with: `3 defects · 41 advice`. Reads the two counts
+     * `Findings.apply` writes into `stats`, and says nothing for a class that is at zero — "0 defects" is
+     * worth a line only when it is the whole story, and the caller decides that.
+     */
+    fun healthHeadline(st: Map<*, *>?): String {
+        val d = (st?.get("defects") as? Number)?.toInt() ?: 0
+        val a = (st?.get("advice") as? Number)?.toInt() ?: 0
+        val parts = ArrayList<String>()
+        if (d > 0) parts.add("$d defect" + if (d == 1) "" else "s")
+        if (a > 0) parts.add("$a advice")
+        return parts.joinToString(" · ")
+    }
+
+    /** The per-check count lines of a health block, defects and advice on separate lines. */
+    fun healthLines(checks: Map<String, Any?>): List<String> {
+        val perCheck = checks.entries.filter { it.key != "open" && it.key != "waived" }
+        return listOf(CheckCatalog.DEFECT, CheckCatalog.ADVICE).mapNotNull { kind ->
+            val own = perCheck.filter { CheckCatalog.kind(it.key) == kind }
+            if (own.isEmpty()) null
+            else (if (kind == CheckCatalog.DEFECT) "Defects — " else "Advice — ") +
+                own.joinToString(" · ") { "${CheckCatalog.label(it.key)}: ${it.value}" }
+        }
+    }
+
     fun modelScale(st: Map<*, *>): String {
         val n = (st["modelCount"] as? Number)?.toInt()
         val files = (st["models"] as? Number)?.toInt() ?: 0

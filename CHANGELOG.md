@@ -193,6 +193,16 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   call activity, a form key, a service mapping, an extension element's text) and every Java call site
   that names it at a Flowable API position.
 
+- **Every check is a defect or an advice, and every surface leads with the split.** A list that put
+  "task without a boundary event" beside "expression does not parse" taught a reader to skim both. Each
+  of the 23 checks now has a *kind*: a **defect** is wrong now — a file that does not parse, a key
+  nothing answers, a gateway the engine cannot leave, a column two names disagree about — and an
+  **advice** is a pattern worth a look while nothing is broken — a call with no error path, a form
+  nothing references. The Checks page, the summary, the overview, the generated `CLAUDE.md` and the CLI
+  status line say `3 defects · 41 advice` instead of `44 findings`; `graph.json` carries
+  `stats.defects` and `stats.advice`; the catalog reads defects first, then advice; and
+  `--fail-on defects` makes a pipeline red on what is wrong and green on what could be better.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its

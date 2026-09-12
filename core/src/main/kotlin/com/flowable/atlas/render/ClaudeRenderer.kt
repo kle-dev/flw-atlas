@@ -255,10 +255,10 @@ object ClaudeRenderer {
         if (open > 0) {
             val findings = (result["findings"] as? List<Map<String, Any?>> ?: emptyList())
                 .filter { it["waived"] == null }
-            L.add("\n**Known issues in this project ($open) — do not copy these patterns, and expect " +
+            val headline = Fmt.healthHeadline(result["stats"] as? Map<*, *>).ifEmpty { "$open" }
+            L.add("\n**Known issues in this project ($headline) — do not copy these patterns, and expect " +
                     "them when something behaves oddly:**")
-            L.add("- " + checks.entries.filter { it.key != "open" && it.key != "waived" }
-                .joinToString(" · ") { "${CheckCatalog.label(it.key)}: ${it.value}" })
+            Fmt.healthLines(checks).forEach { L.add("- $it") }
             for (f in findings.filter { it["severity"] == "error" }.take(3)) {
                 val where = listOfNotNull(f["label"]?.toString(), f["element"]?.toString())
                     .joinToString(" · ")
