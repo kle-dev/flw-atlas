@@ -37,7 +37,16 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
         renderer = textListCellRenderer { if (it.isNullOrBlank()) message("hub.project.whole") else it }
         addActionListener { if (!populating) chooseSubProject(selectedItem as? String) }
     }
-    private val status = JBLabel().apply { foreground = UIUtil.getContextHelpForeground() }
+    // The count is the way into the index — Search Everywhere's Flowable Model tab — and Rebuild sits
+    // beside it instead of two levels down in ⋮; the age stays plain text.
+    private val status = ActionLink("") { host.invokeAction(FlowableActionIds.SEARCH_MODELS) }.apply {
+        toolTipText = FlowableActionIds.text(FlowableActionIds.SEARCH_MODELS)
+    }
+    private val age = JBLabel().apply { foreground = UIUtil.getContextHelpForeground() }
+    private val rebuild = ActionLink("") { host.invokeAction(FlowableActionIds.REBUILD_MODEL_INDEX) }.apply {
+        icon = AllIcons.Actions.ForceRefresh
+        toolTipText = FlowableActionIds.text(FlowableActionIds.REBUILD_MODEL_INDEX)
+    }
     private val attentionLabel = JBLabel()
     private var current: HubAttention? = null
     private val attentionLink = ActionLink("") { current?.let(onAttention) }
@@ -47,7 +56,9 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
         panel.row {
             icon(AtlasIcons.Hub).gap(RightGap.SMALL)
             cell(projectCombo).align(AlignX.FILL).resizableColumn()
-            cell(status)
+            cell(status).gap(RightGap.SMALL)
+            cell(age).gap(RightGap.SMALL)
+            cell(rebuild)
         }
         // The only row in the panel whose presence changes: everything below keeps its place.
         attentionRow = panel.row {
@@ -99,16 +110,20 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
         }
     }
 
-    /** `142 models · 2 min ago` — the per-type breakdown, the scope and the version live in the tooltip. */
+    /** `142 models · 2 min ago` — the count a link into the index, the per-type breakdown, the scope and
+     *  the version in its tooltip, Rebuild beside it. */
     private fun applyStatus(s: HubSnapshot) {
         val count = s.modelCount
         if (count == null) {
             status.text = message(if (s.indexFailure != null) "hub.status.failed" else "hub.status.scanning")
+            status.isEnabled = false
             status.toolTipText = s.indexFailure
+            age.text = ""
             return
         }
-        val age = s.builtAtMillis.takeIf { it > 0 }?.let { " · " + HubAge.relative(it) } ?: ""
-        status.text = message("hub.status.models", count) + age
+        status.isEnabled = true
+        age.text = s.builtAtMillis.takeIf { it > 0 }?.let { "· " + HubAge.relative(it) } ?: ""
+        status.text = message("hub.status.models", count)
         status.toolTipText = buildString {
             append("<html>Flowable Atlas ").append(atlasVersion())
             s.builtAtMillis.takeIf { it > 0 }?.let {
@@ -121,6 +136,9 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
             append("</html>")
         }
     }
+
+    /** For tests: the count link's text. */
+    val statusText: String get() = status.text
 
     /**
      * Switches the active Flowable sub-project. Storing it also records that a choice was *made*, which

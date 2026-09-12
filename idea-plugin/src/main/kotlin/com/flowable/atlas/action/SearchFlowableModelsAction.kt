@@ -14,8 +14,8 @@ import com.intellij.openapi.ui.Messages
  * already selected.
  *
  * The tab is otherwise only reachable by pressing Shift twice and tabbing across to it, which is not
- * something anyone discovers on their own — so the plugin's own surfaces (this menu entry and the
- * Atlas Hub's *Model Index* row) point at it.
+ * something anyone discovers on their own — so the plugin's own surfaces (this menu entry, the Project
+ * view's context menu, and the model count in the Atlas Hub's header, which is a link here) point at it.
  */
 class SearchFlowableModelsAction : AnAction(), DumbAware {
 

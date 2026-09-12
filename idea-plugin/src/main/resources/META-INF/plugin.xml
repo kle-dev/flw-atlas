@@ -545,6 +545,9 @@
              change that had just dropped the index and found nothing to generate from). -->
         <listener class="com.flowable.atlas.generate.ModelConstantsAutoRefresher"
                   topic="com.flowable.atlas.events.AtlasEventsListener"/>
+        <!-- Every way to a model ends in an editor tab; the Hub's Recent Models list listens there. -->
+        <listener class="com.flowable.atlas.hub.RecentModelsService$Listener"
+                  topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
     </projectListeners>
 
     <!-- Action/group texts and descriptions come from messages/FlowableAtlasBundle.properties
@@ -574,6 +577,13 @@
                     icon="AllIcons.Actions.Search">
                 <!-- The one action that competes with Shift-Shift for the hand: worth a chord. -->
                 <keyboard-shortcut keymap="$default" first-keystroke="control alt shift M"/>
+            </action>
+            <!-- The key under the caret — a literal or constant at a Flowable API site in Java, a reference or
+                 the file's own key in a model file — onto the clipboard. Also in the editor's context menu. -->
+            <action id="Flowable.CopyModelKey"
+                    class="com.flowable.atlas.action.CopyModelKeyAction"
+                    icon="AllIcons.Actions.Copy">
+                <add-to-group group-id="EditorPopupMenu" anchor="last"/>
             </action>
             <separator/>
 

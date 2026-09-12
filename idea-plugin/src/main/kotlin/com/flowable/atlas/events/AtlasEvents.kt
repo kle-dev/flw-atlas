@@ -26,6 +26,9 @@ interface AtlasEventsListener {
     /** The active Flowable sub-project changed — consumers re-resolve their root / re-read settings. */
     fun activeSubProjectChanged() {}
 
+    /** A model file was opened or brought to the front — the Hub's *Recent Models* list re-reads. */
+    fun recentModelsChanged() {}
+
     /**
      * *Some* Atlas settings page was applied. Coarse on purpose: four pages feed the Hub, the
      * playground and generation, and a per-field event surface only moves "who forgot to publish" one
@@ -62,6 +65,8 @@ object AtlasEvents {
      * invalidate every project's index.
      */
     fun settingsApplied(project: Project) = publish(project) { it.settingsApplied() }
+
+    fun recentModelsChanged(project: Project) = publish(project) { it.recentModelsChanged() }
 
     fun connectionSelectionChanged(project: Project, kind: ConnectionKind) =
         publish(project) { it.connectionSelectionChanged(kind) }

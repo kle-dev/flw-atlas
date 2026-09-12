@@ -20,7 +20,7 @@ class HubAttentionTest {
     ) = HubSnapshot(
         subProjects = emptyList(), activeSubProject = "", projectsAwaitingChoice = awaiting,
         modelCount = if (failed == null) 3 else null, indexFailure = failed, typeCounts = emptyList(), scopeLabel = null, builtAtMillis = 1L,
-        skippedArchives = skipped, artifacts = emptyList(), explorerStale = stale, browserAvailable = false,
+        skippedArchives = skipped, artifacts = emptyList(), recentModels = emptyList(), explorerStale = stale, browserAvailable = false,
         designResolution = design, workResolution = work, hasAnyEnvironment = false,
         pullSelection = DesignPullSelection.EMPTY, lastPullMillis = null, searchedIn = "atlas-output/",
     )

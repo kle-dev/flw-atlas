@@ -44,8 +44,8 @@ import java.nio.file.Path
  */
 class OpenInAtlasExplorerIntention : IntentionAction, DumbAware {
 
-    override fun getText(): String = "Open in Atlas Explorer"
-    override fun getFamilyName(): String = "Open in Atlas Explorer"
+    override fun getText(): String = TEXT
+    override fun getFamilyName(): String = TEXT
     override fun startInWriteAction(): Boolean = false
 
     override fun isAvailable(project: Project, editor: Editor?, file: PsiFile?): Boolean =
@@ -55,20 +55,7 @@ class OpenInAtlasExplorerIntention : IntentionAction, DumbAware {
     override fun invoke(project: Project, editor: Editor?, file: PsiFile?) {
         if (file == null || editor == null) return
         val entry = entryAt(project, file, editor.caretModel.offset) ?: return
-        val base = AtlasProjectRootService.getInstance(project).activeProjectDir() ?: return
-        val outputDir = FlowableAtlasProjectSettings.getInstance(project).atlasOutputDir
-        val hash = ExplorerRoutes.node(entry.type, entry.key)
-        // The search walks the project when the output folder is empty — off the EDT, like the Open action.
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Looking for Atlas explorer files", true) {
-            private var files: List<Path> = emptyList()
-            override fun run(indicator: ProgressIndicator) { files = AtlasExplorerFiles.find(base, outputDir) }
-            override fun onSuccess() {
-                if (project.isDisposed) return
-                val newest = files.firstOrNull() ?: return offerToGenerate(project, outputDir)
-                val vf = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(newest) ?: return
-                AtlasExplorerOpener.openInIde(project, vf, hash)
-            }
-        })
+        openPage(project, entry)
     }
 
     private fun offerToGenerate(project: Project, outputDir: String) {
@@ -89,6 +76,26 @@ class OpenInAtlasExplorerIntention : IntentionAction, DumbAware {
         IntentionPreviewInfo.Html("Opens this model's page in the Atlas Explorer: who references it, what it uses, its findings and its diagram.")
 
     companion object {
+        const val TEXT = "Open in Atlas Explorer"
+
+        /** The model's page in the newest generated explorer, inside the IDE — the Hub's *Recent Models* list uses it too. */
+        fun openPage(project: Project, entry: ModelEntry) {
+            val base = AtlasProjectRootService.getInstance(project).activeProjectDir() ?: return
+            val outputDir = FlowableAtlasProjectSettings.getInstance(project).atlasOutputDir
+            val hash = ExplorerRoutes.node(entry.type, entry.key)
+            // The search walks the project when the output folder is empty — off the EDT, like the Open action.
+            ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Looking for Atlas explorer files", true) {
+                private var files: List<Path> = emptyList()
+                override fun run(indicator: ProgressIndicator) { files = AtlasExplorerFiles.find(base, outputDir) }
+                override fun onSuccess() {
+                    if (project.isDisposed) return
+                    val newest = files.firstOrNull() ?: return OpenInAtlasExplorerIntention().offerToGenerate(project, outputDir)
+                    val vf = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(newest) ?: return
+                    AtlasExplorerOpener.openInIde(project, vf, hash)
+                }
+            })
+        }
+
         /**
          * The model a key at [offset] names, or null — a literal or constant at a Flowable API site (narrowed to
          * the site's types), or any literal whose value is a known key when that recognition is switched on.

@@ -52,6 +52,8 @@ internal data class HubSnapshot(
     val builtAtMillis: Long,
     val skippedArchives: List<String>,
     val artifacts: List<ExplorerArtifact>,
+    /** The models opened most recently, newest first. */
+    val recentModels: List<RecentModel>,
     val explorerStale: Boolean,
     val browserAvailable: Boolean,
     val designResolution: Resolution,
@@ -122,6 +124,7 @@ internal data class HubSnapshot(
                 builtAtMillis = index?.builtAtMillis ?: 0L,
                 skippedArchives = index?.skippedArchives?.toList().orEmpty(),
                 artifacts = artifacts,
+                recentModels = RecentModelsService.getInstance(project).recent(index),
                 // Stale when a model in scope is newer than the newest generated page.
                 explorerStale = AtlasExplorerStaleness.isStale(
                     artifacts.map { it.modified }, AtlasExplorerStaleness.latestModelChange(project),

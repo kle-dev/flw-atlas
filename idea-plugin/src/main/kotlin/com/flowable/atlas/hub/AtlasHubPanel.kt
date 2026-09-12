@@ -10,6 +10,7 @@ import com.flowable.atlas.hub.sections.DesignPullSection
 import com.flowable.atlas.hub.sections.ExplorerSection
 import com.flowable.atlas.hub.sections.HubHost
 import com.flowable.atlas.hub.sections.PlaygroundSection
+import com.flowable.atlas.hub.sections.RecentModelsSection
 import com.intellij.ide.DataManager
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
@@ -40,9 +41,10 @@ class AtlasHubPanel(override val project: Project) : SimpleToolWindowPanel(true,
 
     private val header = HubHeader(this, ::runAttention)
     private val explorer = ExplorerSection(this)
+    private val recent = RecentModelsSection(this)
     private val design = DesignPullSection(this)
     private val playground = PlaygroundSection(this)
-    private val sections = listOf(explorer, design, playground)
+    private val sections = listOf(explorer, recent, design, playground)
 
     private val refreshAlarm = SingleAlarm(::refreshNow, 300, this)
     private var last: HubSnapshot? = null
@@ -69,6 +71,7 @@ class AtlasHubPanel(override val project: Project) : SimpleToolWindowPanel(true,
             override fun artifactsGenerated(explorerHtml: Path?, written: List<Path>) = refreshAlarm.cancelAndRequest()
             override fun designPullFinished(succeeded: Boolean) = refreshAlarm.cancelAndRequest()
             override fun activeSubProjectChanged() = refreshAlarm.cancelAndRequest()
+            override fun recentModelsChanged() = refreshAlarm.cancelAndRequest()
             override fun settingsApplied() = refreshAlarm.cancelAndRequest()
             override fun environmentsChanged() = refreshEverything()
             override fun connectionSelectionChanged(kind: ConnectionKind) = refreshEverything()
@@ -156,6 +159,8 @@ class AtlasHubPanel(override val project: Project) : SimpleToolWindowPanel(true,
         workspaceKey = design.workspaceKey,
         appKeys = design.appKeys,
         explorerHint = explorer.hintText,
+        statusText = header.statusText,
+        recentKeys = recent.keys,
         listRows = explorer.rows to design.appRows,
         attention = header.attentionText,
         hasEnvironments = last?.hasAnyEnvironment ?: false,
@@ -170,6 +175,9 @@ internal data class HubView(
     val workspaceKey: String?,
     val appKeys: List<String>,
     val explorerHint: String,
+    /** `142 models` — the link's text; `scanning…` / `index failed` before an index exists. */
+    val statusText: String,
+    val recentKeys: List<String>,
     /** Rows the explorer list and the app list reserve — the panel's height budget in two numbers. */
     val listRows: Pair<Int, Int>,
     val attention: String?,

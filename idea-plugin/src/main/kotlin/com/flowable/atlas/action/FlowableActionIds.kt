@@ -20,6 +20,7 @@ object FlowableActionIds {
     const val SWITCH_WORK_ENVIRONMENT = "Flowable.SwitchWorkEnvironment"
     const val REBUILD_MODEL_INDEX = "Flowable.RebuildModelIndex"
     const val REGENERATE_ATLAS_EXPLORER = "Flowable.RegenerateAtlasExplorer"
+    const val COPY_MODEL_KEY = "Flowable.CopyModelKey"
 
     /**
      * The registered action's menu text, for a button or link that does the same thing elsewhere. One

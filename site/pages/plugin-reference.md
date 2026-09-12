@@ -32,7 +32,8 @@ nothing on any other file.
 | Atlas Hub | — |
 | Open Atlas Explorer | Atlas Hub, *Explorer* block and ⋮ menu |
 | Open Expression Playground | Atlas Hub, *Playground* block and ⋮ menu |
-| Search Models… | Atlas Hub ⋮ menu; Project view context menu; `Ctrl+Alt+Shift+M` |
+| Search Models… | Atlas Hub ⋮ menu and the model count in its header; Project view context menu; `Ctrl+Alt+Shift+M` |
+| Copy Model Key | Editor context menu, on a key — a literal or constant at a Flowable API site in Java, a cross-reference or the file's own key in a model file; the Atlas Hub's *Recent Models* context menu |
 | Generate → Generate Atlas Explorer… | Atlas Hub, *Explorer* block; Project view context menu |
 | Generate → Regenerate Atlas Explorer | Atlas Hub attention line, when models changed since the last generation; the explorer tab's banner and toolbar; the balloon after a Design pull |
 | Generate → Generate Model Constants… | Atlas Hub ⋮ menu |
@@ -44,7 +45,7 @@ nothing on any other file.
 | Pull from Flowable Design | Atlas Hub, *Design Pull* block — the button names the environment |
 | Switch Work Environment… | Atlas Hub, *Playground* block; the playground itself |
 | Manage Environments… | Atlas Hub ⋮ menu, its attention line when an environment was removed, and the *Design Pull* block while none exists |
-| Rebuild Model Index | Atlas Hub ⋮ menu |
+| Rebuild Model Index | Atlas Hub ⋮ menu, and beside the model count in its header |
 | Dump Key Index (Internal) | Only visible in an internal-mode IDE |
 
 Panel toolbars carry a few more that are not registered actions, so they do not appear in *Find
@@ -58,7 +59,7 @@ Settings…*; and the Script Playground's language and context selectors with *L
 
 | Tool window | Where | Contents |
 |---|---|---|
-| **Atlas Hub** | Right stripe | A status header — Flowable project · model count · index age · one attention line when something needs a hand — over three blocks: Explorer · Design Pull (environment · workspace · apps · pull) · Playground. See [the Hub](../#the-atlas-hub) |
+| **Atlas Hub** | Right stripe | A status header — Flowable project · model count (a link to *Search Models…*, *Rebuild* beside it) · index age · one attention line when something needs a hand — over four blocks: Explorer · Recent Models (the models opened last, newest first; double-click opens at the key, the context menu copies the key or opens the explorer page) · Design Pull (environment · workspace · apps · pull) · Playground. See [the Hub](../#the-atlas-hub) |
 | **Flowable Expressions** | Bottom stripe (secondary) | Two tabs on one shell — editor and problems · context · result: *Expressions* (Backend / Frontend) and *Scripts*. See [the playgrounds](../#the-playgrounds) |
 
 The generated explorer opens as an editor tab, **Atlas Explorer** (the page, in the embedded browser);

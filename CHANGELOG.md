@@ -436,6 +436,13 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   from a log line or a test led nowhere. Every one of those is a symbol now, labelled with its kind and
   its model (*User task · in DEMO-P001*), ranked under the models and over the text hits in the
   *Flowable Model* tab, and opening the model at the element's declaration.
+- **Copy a key, find your way back, click the count.** *Copy Model Key* — in the editor's context menu
+  on a key in Java or in a model file — puts the bare key on the clipboard, the way the explorer page's
+  copy button has since the IDE bridge. The Hub gains a *Recent Models* block: the models opened last,
+  newest first, fed by the editor (every route to a model ends in a tab), double-click to the key, the
+  context menu to copy it or open its explorer page. And the header's *142 models* is no longer dead
+  text: it links into the index — Search Everywhere's *Flowable Model* tab — with *Rebuild Model Index*
+  beside it instead of two levels down in the ⋮ menu.
 
 ## 0.25.0
 

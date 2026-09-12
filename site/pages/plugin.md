@@ -20,18 +20,20 @@ Design `*-models` workspace, and start typing.
 ### The Atlas Hub
 
 A single panel on the right stripe: what Atlas currently knows about your project, one line saying what
-needs a hand, and the three things you do with models from the IDE — each with its actions beside its
-state, so nothing needs a menu.
+needs a hand, the models you opened last, and the three things you do with models from the IDE — each
+with its actions beside its state, so nothing needs a menu.
 
 <figure class="fig mock">
   <div class="body">{{mockup:atlas-hub}}</div>
-  <figcaption><b>Atlas Hub.</b> A status header over three task blocks. The header answers the question
+  <figcaption><b>Atlas Hub.</b> A status header over four task blocks. The header answers the question
   that matters day to day — is what I am looking at still up to date? — and says so in one line when it
   is not.</figcaption>
 </figure>
 
 **The header** names the Flowable project Atlas is about, how many models it knows and how long ago it
-looked — *142 models · 2 min ago*; the per-type counts and the scope are in the tooltip. In a monorepo the project is a switcher: pick the sub-project Atlas operates on, and the
+looked — *142 models · 2 min ago*; the per-type counts and the scope are in the tooltip. The count is a
+link into the index (Search Everywhere's *Flowable Model* tab), and *Rebuild Model Index* sits beside
+it — the two things one does with the index, where the index is described. In a monorepo the project is a switcher: pick the sub-project Atlas operates on, and the
 index, the output folder and the Design target follow. It is a drop-down like the environment pickers
 below it, always offering the whole repository, so "is this mine to change?" is answered by the control
 rather than by trying it.
@@ -55,6 +57,12 @@ in the tooltip — with *Generate Atlas Explorer…* and *Open Atlas Explorer* u
 selected page, or the newest; *Open in Browser* is in the list's context menu, where a browser can be
 launched. With no page yet the list is one grey line naming the folder it searched, so a page saved
 elsewhere is a findable mismatch rather than a wrong claim.
+
+**Recent Models** lists the models opened last, newest first — the way back to the process you were
+reading before a Ctrl+click took you three files away. Every route to a model ends in an editor tab, so
+the list follows the editor; double-click opens the model at its key, and the context menu copies the
+key or opens the model's explorer page. *Copy Model Key* is also in the editor's context menu, on a
+key in Java or in a model file: the bare key, without quotes or the constant's name.
 
 **Design Pull** is the whole pull, top to bottom, in the order the work is done: pick the
 **environment**, pick the **workspace** in it, tick the **apps**, press **Pull from DEV1** — the button
