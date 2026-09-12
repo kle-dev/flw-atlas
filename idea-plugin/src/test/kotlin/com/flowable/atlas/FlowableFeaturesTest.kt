@@ -6,7 +6,6 @@ import com.intellij.codeInsight.lookup.LookupElementPresentation
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.ui.TestDialogManager
 import com.intellij.openapi.ui.TestInputDialog
-import com.intellij.psi.PsiFile
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 
 /**
@@ -154,7 +153,10 @@ class FlowableFeaturesTest : BasePlatformTestCase() {
         val ref = myFixture.getReferenceAtCaretPosition()
         assertNotNull("expected a Flowable key reference", ref)
         val target = ref!!.resolve()
-        assertTrue("reference must resolve to the model file", target is PsiFile && target.name == "DEMO-C001.cmmn")
+        assertEquals("reference must resolve into the model file", "DEMO-C001.cmmn", target?.containingFile?.name)
+        // …and onto the key's declaration, not line 1: the `id` of the case element
+        val text = target!!.containingFile.text
+        assertEquals(text.indexOf("DEMO-C001"), target.textRange.startOffset + (target.text.indexOf("DEMO-C001").coerceAtLeast(0)))
     }
 
     /** A data object + its backing service, declaring the operation `create` with input `label`. */
@@ -186,7 +188,7 @@ class FlowableFeaturesTest : BasePlatformTestCase() {
         val ref = myFixture.getReferenceAtCaretPosition()
         assertNotNull("expected a Flowable operation reference", ref)
         val target = ref!!.resolve()
-        assertTrue("operation must resolve to the backing service model", target is PsiFile && target.name == "DEMO-S010.service")
+        assertEquals("operation must resolve into the backing service model", "DEMO-S010.service", target?.containingFile?.name)
     }
 
     fun testValueFieldReferenceResolvesToBackingServiceModel() {
@@ -199,7 +201,7 @@ class FlowableFeaturesTest : BasePlatformTestCase() {
         val ref = myFixture.getReferenceAtCaretPosition()
         assertNotNull("expected a Flowable value-field reference", ref)
         val target = ref!!.resolve()
-        assertTrue("value field must resolve to the backing service model", target is PsiFile && target.name == "DEMO-S010.service")
+        assertEquals("value field must resolve into the backing service model", "DEMO-S010.service", target?.containingFile?.name)
     }
 
     private fun addDatabaseService() {

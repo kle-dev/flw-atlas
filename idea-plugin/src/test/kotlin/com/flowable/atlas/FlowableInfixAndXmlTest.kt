@@ -4,7 +4,6 @@ import com.intellij.codeInsight.lookup.LookupElementPresentation
 import com.flowable.atlas.model.ModelType
 import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.inspection.FlowableXmlBrokenKeyInspection
-import com.intellij.psi.PsiFile
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 
 /**
@@ -175,6 +174,7 @@ class FlowableInfixAndXmlTest : BasePlatformTestCase() {
         val ref = myFixture.getReferenceAtCaretPosition()
         assertNotNull("expected a Flowable XML key reference", ref)
         val target = ref!!.resolve()
-        assertTrue("reference must resolve to the model file", target is PsiFile && target.name == "TARGET.bpmn20.xml")
+        assertEquals("reference must resolve into the model file", "TARGET.bpmn20.xml", target?.containingFile?.name)
+        assertTrue("…onto the process's id, not the top of the file", target!!.textRange.startOffset > 0 && target.text.contains("DEMO-P100"))
     }
 }

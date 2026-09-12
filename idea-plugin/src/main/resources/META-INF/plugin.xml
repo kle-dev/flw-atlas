@@ -342,6 +342,12 @@
               from, and the IDE keeps every rule and note the file gained meanwhile. The file is written as
               UTF-8 (it was written in the project's encoding and read as UTF-8), and an open, edited
               <code>waivers.json</code> is saved first instead of fighting the write.</li>
+          <li><b>Ctrl+click lands on the key.</b> A model key resolved to its <i>file</i>: line 1 of a
+              minified Design JSON, or the top of a deployment XML holding three processes, with nothing
+              saying where the key is. Every key reference — a Java literal, a constant, a cross-reference
+              attribute in model XML, an operation or value field — and the Search Everywhere row now land
+              on the key's declaration: the <code>id</code> of the process, case or decision, the
+              <code>"key"</code> of a JSON model.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>
@@ -631,6 +637,13 @@
         <intentionAction>
             <language>JAVA</language>
             <className>com.flowable.atlas.intention.GenerateDataObjectBeanIntention</className>
+            <category>Flowable</category>
+        </intentionAction>
+        <!-- Alt-Enter on a model key in Java → the model's page in the Atlas Explorer (the reverse of the
+             page's "open in IDE" button). -->
+        <intentionAction>
+            <language>JAVA</language>
+            <className>com.flowable.atlas.intention.OpenInAtlasExplorerIntention</className>
             <category>Flowable</category>
         </intentionAction>
         <!-- Don't report Java referenced from models (delegates, ${bean.method()}, listeners) as unused. -->

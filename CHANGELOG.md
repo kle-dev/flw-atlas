@@ -174,6 +174,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   next Save. The page now sends what it started from, and the IDE keeps every rule and note the file
   gained meanwhile. The file is written as UTF-8 (it was written in the project's encoding and read as
   UTF-8), and an open, edited `waivers.json` is saved first instead of fighting the write.
+- **Ctrl+click lands on the key.** A model key resolved to its *file*: line 1 of a minified Design JSON,
+  or the top of a deployment XML holding three processes, with nothing saying where the key is. Every
+  key reference — a Java literal, a constant, a cross-reference attribute in model XML, an operation or
+  value field — and the Search Everywhere row now land on the key's declaration: the `id` of the
+  process, case or decision, the `"key"` of a JSON model.
 
 ## 0.25.0
 

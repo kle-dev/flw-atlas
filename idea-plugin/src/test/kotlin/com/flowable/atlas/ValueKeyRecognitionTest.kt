@@ -5,7 +5,6 @@ import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.navigation.FlowableKeyDocumentationProvider
 import com.flowable.atlas.settings.FlowableAtlasSettings
 import com.intellij.openapi.components.service
-import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiLiteralExpression
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
@@ -70,7 +69,7 @@ class ValueKeyRecognitionTest : BasePlatformTestCase() {
         assertEquals(
             "the reference should resolve to the model file",
             "DEMO-onboarding.bpmn20.xml",
-            (ref!!.resolve() as? PsiFile)?.name,
+            ref!!.resolve()?.containingFile?.name,
         )
     }
 

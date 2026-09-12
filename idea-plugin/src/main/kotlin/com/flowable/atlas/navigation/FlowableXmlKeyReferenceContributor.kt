@@ -7,8 +7,6 @@ import com.intellij.openapi.components.service
 import com.intellij.patterns.XmlPatterns
 import com.intellij.psi.ElementManipulators
 import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiElementResolveResult
-import com.intellij.psi.PsiManager
 import com.intellij.psi.PsiReference
 import com.intellij.psi.PsiReferenceBase
 import com.intellij.psi.PsiReferenceContributor
@@ -49,15 +47,10 @@ private class FlowableXmlKeyReference(
     override fun multiResolve(incompleteCode: Boolean): Array<ResolveResult> {
         val key = element.value
         if (!FlowableXmlKeyCatalog.isResolvableKey(key)) return ResolveResult.EMPTY_ARRAY
-        val psiManager = PsiManager.getInstance(element.project)
         // A reference resolves under the read lock — the cached index only, never a build here.
         val service = element.project.service<FlowableModelIndexService>()
         val index = service.cachedOrRequest() ?: return ResolveResult.EMPTY_ARRAY
-        return index.find(key)
-            .filter { it.type in site.types }
-            .mapNotNull { psiManager.findFile(it.file) }
-            .map { PsiElementResolveResult(it) }
-            .toTypedArray()
+        return ModelKeyTargets.resolve(element.project, index.find(key).filter { it.type in site.types })
     }
 
     // Completion is handled by the dedicated XML contributor; don't duplicate variants here.

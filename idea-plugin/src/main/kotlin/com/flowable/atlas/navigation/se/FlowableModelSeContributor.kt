@@ -2,6 +2,7 @@ package com.flowable.atlas.navigation.se
 
 import com.flowable.atlas.completion.FlowableInfixMatcher
 import com.flowable.atlas.index.FlowableModelIndexService
+import com.flowable.atlas.navigation.ModelKeyTargets
 import com.intellij.ide.actions.searcheverywhere.FoundItemDescriptor
 import com.intellij.ide.actions.searcheverywhere.PossibleSlowContributor
 import com.intellij.ide.actions.searcheverywhere.SearchEverywhereContributor
@@ -148,7 +149,12 @@ class FlowableModelSeContributor(private val project: Project) :
     override fun processSelectedItem(selected: FlowableSeItem, modifiers: Int, searchText: String): Boolean {
         if (!selected.file.isValid) return true
         when (selected) {
-            is FlowableSeItem.Model -> FileEditorManager.getInstance(project).openFile(selected.file, true)
+            // On the key's declaration, like a Ctrl+click — not line 1 of a minified model.
+            is FlowableSeItem.Model -> {
+                val at = ModelKeyTargets.lineColumn(selected.entry)
+                if (at != null) OpenFileDescriptor(project, selected.file, at.first, at.second).navigate(true)
+                else FileEditorManager.getInstance(project).openFile(selected.file, true)
+            }
             // Line/column rather than a raw offset: we decode as UTF-8 while the Document uses the
             // file's detected charset, so offsets can drift on a non-UTF-8 model.
             is FlowableSeItem.TextHit ->

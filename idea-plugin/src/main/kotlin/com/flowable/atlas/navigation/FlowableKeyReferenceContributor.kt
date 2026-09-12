@@ -13,10 +13,8 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.intellij.patterns.PlatformPatterns
 import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiElementResolveResult
 import com.intellij.psi.PsiExpressionList
 import com.intellij.psi.PsiLiteralExpression
-import com.intellij.psi.PsiManager
 import com.intellij.psi.PsiMethodCallExpression
 import com.intellij.psi.PsiReferenceExpression
 import com.intellij.psi.PsiReference
@@ -175,19 +173,14 @@ private fun valueKeyReference(literal: PsiLiteralExpression): PsiReference? {
     return FlowableValueKeyReference(literal)
 }
 
-/** The shared model-key → PsiFile mapping: the file(s) declaring [key] as one of [types]. */
+/** The shared model-key → declaration mapping: where the file(s) declaring [key] as one of [types] declare it. */
 private fun resolveKeyToModelFiles(project: Project, key: String, types: Collection<ModelType>): Array<ResolveResult> {
     val service = project.service<FlowableModelIndexService>()
-    val psiManager = PsiManager.getInstance(project)
     // Resolve runs under the read lock; `find()` would build a cold index right there and freeze the
     // IDE for the length of a model scan on the first Ctrl+click. Ask, and resolve to nothing until it is
     // built — the other references in this file do the same.
     val index = service.cachedOrRequest() ?: return ResolveResult.EMPTY_ARRAY
-    return index.find(key)
-        .filter { it.type in types }
-        .mapNotNull { psiManager.findFile(it.file) }
-        .map { PsiElementResolveResult(it) }
-        .toTypedArray()
+    return ModelKeyTargets.resolve(project, index.find(key).filter { it.type in types })
 }
 
 /** The range covering the string content (excluding the surrounding quotes). */

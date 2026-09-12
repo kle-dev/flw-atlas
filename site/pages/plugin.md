@@ -252,7 +252,9 @@ elements.
 ### Model-key intelligence
 
 Every model key becomes a first-class reference: completed as you type, clickable, documented on hover,
-findable in Search Everywhere.
+findable in Search Everywhere. A click lands on the key's *declaration* — the `id` of the process, the
+`"key"` of the form — not on line 1 of a minified export or at the top of a deployment file holding three
+processes.
 
 <figure class="fig mock">
   <div class="body">{{mockup:key-intelligence}}</div>
