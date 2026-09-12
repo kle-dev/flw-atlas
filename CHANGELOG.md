@@ -316,6 +316,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   so it is a silent no-op — but the note sat on the plan item, and the check read only a process's task
   buckets. It reaches the case's page now, on the plan item that holds the listener.
 
+- **A report page scrolls inside the page.** The Checks, Tree, Variables, Scripts and Schema pages had no
+  scroll container of their own, so a page taller than the window scrolled the whole document — and took
+  the sidebar, the breadcrumb, ⌘K and the *Save to waivers.json* bar along, while a model's page kept
+  its menu in place. Every view scrolls inside the shell now.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its

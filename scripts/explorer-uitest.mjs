@@ -118,6 +118,18 @@ const probe = `<script>
   steps.push(()=>{
     ok('Enter navigated', decodeURIComponent(location.hash).indexOf('priority')>=0,
        'hash='+location.hash);
+    ok('a node page scrolls inside the shell, not the document',
+       document.documentElement.scrollHeight<=window.innerHeight+1, 'document scrollHeight '+document.documentElement.scrollHeight);
+    location.hash='/checks';
+  });
+  // --- a report page scrolls inside its view, so the sidebar and the top bar stay put ---
+  steps.push(()=>{
+    const v=document.getElementById('view-checks');
+    ok('checks page is the visible view', !v.hidden);
+    ok('the checks view is the scroll container', getComputedStyle(v).overflowY==='auto', getComputedStyle(v).overflowY);
+    ok('the document itself does not scroll on the checks page',
+       document.documentElement.scrollHeight<=window.innerHeight+1, 'document scrollHeight '+document.documentElement.scrollHeight);
+    ok('the checks page is taller than the window, so scrolling is real', v.scrollHeight>v.clientHeight, v.scrollHeight+' vs '+v.clientHeight);
   });
   // --- facets narrow, in two tiers ---
   steps.push(()=>{ openPalette(); type('customer'); });

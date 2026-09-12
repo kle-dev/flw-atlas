@@ -263,8 +263,10 @@
   .searchbtn .ph{flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
   .content{flex:1;min-height:0;position:relative}
-  .view{height:100%}
-  #view-overview{overflow-y:auto;background:var(--bg)}
+  /* Every view scrolls inside the shell. Only the overview did; a report page taller than the window
+     scrolled the document instead — and took the sidebar, the crumbs, ⌘K and the waiver bar with it. */
+  .view{height:100%;overflow-y:auto}
+  #view-overview{background:var(--bg)}
   .view-browse{position:relative;display:grid;grid-template-columns:var(--list-w) 1fr;grid-template-rows:100%;height:100%}
   /* the list/detail drag handle sits on the column boundary, like the sidebar's */
   .listresize{position:absolute;top:0;bottom:0;left:calc(var(--list-w) - 3px);width:6px;z-index:20;cursor:col-resize;touch-action:none}
