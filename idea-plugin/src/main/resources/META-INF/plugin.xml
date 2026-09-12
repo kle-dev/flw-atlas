@@ -447,6 +447,10 @@
             <category>Flowable</category>
         </intentionAction>
         <!-- Ctrl-Q / hover on a catalog function or root inside an expression → call head + doc line. -->
+        <!-- Ctrl-click on a backend expression's root (`${orderService.…}`) → the Spring bean's class, by its
+             default bean name; Ctrl-Q then shows that class's documentation. -->
+        <psi.referenceContributor language="FlowableBackendExpr"
+                  implementation="com.flowable.atlas.expr.navigation.FlowableExprBeanReferenceContributor"/>
         <lang.documentationProvider language="FlowableBackendExpr"
                   implementationClass="com.flowable.atlas.expr.documentation.FlowableExprDocumentationProvider"/>
         <lang.documentationProvider language="FlowableFrontendExpr"

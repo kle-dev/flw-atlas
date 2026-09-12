@@ -417,6 +417,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   (type, name, backing table, file), the referenced model's name as an inline hint (*Model names* under
   Inlay Hints → Values, off in one click), and the diagram mark on the file's own key and on every
   process, case or decision reference.
+- **`${bean}` goes to the bean.** Completion after `orderService.` has offered the class's methods since
+  the expression language arrived, but the name itself was inert: no Ctrl+click, and Ctrl+Q showed
+  catalog documentation or nothing. The root of a backend expression that names a Spring bean is a
+  reference to the bean's class now — resolved the way completion resolves it, in the project only —
+  inside an injected model expression and in the playground alike; a root that is a variable resolves
+  to nothing and is not painted, that stays the grounding inspection's call.
 
 ## 0.25.0
 

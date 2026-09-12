@@ -364,6 +364,10 @@ colour, no completion, no validation, no way to tell a typo from a variable set 
 function or root now underlines as you type instead of failing on a task nobody exercises until
 month-end.
 
+The root of a backend expression that names a Spring bean is a link: Ctrl+click on `orderService`
+in `${orderService.process(order)}` opens the class, Ctrl+Q shows its documentation, and completion
+after the dot already offered its methods.
+
 Real Groovy and JavaScript are injected into script bodies too, so a script task inside a BPMN file gets
 that language's own highlighting and inspections, plus completion for the root objects Flowable actually
 binds in *that* context.
