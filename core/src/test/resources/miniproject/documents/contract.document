@@ -5,7 +5,7 @@
   "versioning": true,
   "initialState": "draft",
   "initialType": "upload",
-  "forms": {"view": "orderForm", "edit": {"id": "FORM_MODEL-4f1b9c2e", "key": "orderForm"}},
+  "forms": {"view": "orderForm", "edit": {"id": "FORM_MODEL-4f1b9c2e", "key": "orderForm"}, "create": "DEMO-LF001"},
   "actionPermissions": {"download": ["sales"]},
   "variables": {"contractType": {"type": "string"}},
   "aiInstructions": "Classify the contract type from the first page."

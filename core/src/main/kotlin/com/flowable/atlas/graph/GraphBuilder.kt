@@ -82,12 +82,7 @@ object GraphBuilder {
         "\\b(?:variables|vars|var)\\s*:\\s*([A-Za-z]\\w*)\\s*\\(\\s*['\"]([A-Za-z_]\\w*)['\"]")
 
     /** Root identifiers a `{{…}}` placeholder may carry that are never project variables. */
-    private val MUSTACHE_IGNORE = setOf(
-        "endpoints", "item", "index", "ctx", "root", "parent", "event", "self",
-        "first", "last", "start", "pageSize", "flw", "payload", "temp", "filter",
-        "sortColumn", "sortDirection", "orderBy", "sortBy", "total", "response",
-        "page", "size", "data", "value", "params",
-    )
+    private val MUSTACHE_IGNORE = Constants.FRONTEND_SCRATCH_ROOTS
 
     /**
      * Build the graph, enrich models with `_uses`, pop `_matchEps` and set `result["graph"]` /

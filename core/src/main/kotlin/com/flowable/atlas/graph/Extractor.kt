@@ -297,6 +297,12 @@ object Atlas {
                 if (body != null && !oryx) {
                     doc.putAll(body)
                     doc.remove("editorJson")
+                } else if (body != null && mtype != "app") {
+                    // The legacy editor's shape, rewritten into the one parseForm reads: every
+                    // Design-workspace export is this shape, and it used to register by key with no
+                    // fields — see OryxFormReader.
+                    doc.putAll(com.flowable.atlas.parsing.OryxFormReader.toModern(body))
+                    doc.remove("editorJson")
                 }
                 // A modern body brings its own metadata header — including the model's description — so
                 // build on it rather than replacing it; only the identity is the wrapper's to state.

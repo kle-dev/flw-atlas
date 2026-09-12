@@ -1061,6 +1061,164 @@
     {
       "_uses": {
         "binding": [
+          "binding:{{$response.total}}",
+          "binding:{{$route.currentAppId}}",
+          "binding:{{$row.id}}",
+          "binding:{{$temp.loaded}}",
+          "binding:{{contactEmail}}",
+          "binding:{{customerPick}}",
+          "binding:{{legacyMode == 'strict'}}",
+          "binding:{{legacyOrderId}}"
+        ],
+        "serviceOperation": [
+          "serviceOperation:customerService#findAll"
+        ],
+        "string": [
+          "string:strict"
+        ],
+        "variable": [
+          "variable:contactEmail",
+          "variable:customerPick",
+          "variable:legacyAction",
+          "variable:legacyMode",
+          "variable:legacyOrderId",
+          "variable:orderRows",
+          "variable:orderSub"
+        ]
+      },
+      "dataSources": [
+        {
+          "key": "customerDO",
+          "kind": "dataObject",
+          "op": "findAll"
+        },
+        {
+          "kind": "rest",
+          "url": "/api/orders?customer={{customerPick}}"
+        }
+      ],
+      "description": "A Design-workspace export in the legacy editor's shape.",
+      "fields": [
+        {
+          "callee": {
+            "key": "/api/orders/{{legacyOrderId}}",
+            "kind": "rest"
+          },
+          "id": "loadOrder",
+          "label": "Load",
+          "required": false,
+          "settings": {
+            "method": "get"
+          },
+          "stores": "{{$temp.loaded}}",
+          "type": "restButton",
+          "value": "{{$temp.loaded}}"
+        },
+        {
+          "callee": {
+            "key": "customerDO",
+            "kind": "dataObject"
+          },
+          "id": "customerPick",
+          "label": "Customer",
+          "required": false,
+          "type": "dataObjectSelect",
+          "value": null
+        },
+        {
+          "callee": {
+            "key": "notifyCustomerAction",
+            "kind": "action"
+          },
+          "id": "runCheck",
+          "label": "Run the check",
+          "required": false,
+          "type": "workAction",
+          "value": null
+        },
+        {
+          "id": "legacyOrderId",
+          "label": "Order id",
+          "required": "{{legacyMode == 'strict'}}",
+          "type": "text",
+          "value": "{{legacyOrderId}}"
+        },
+        {
+          "id": "orderRows",
+          "label": "Rows",
+          "required": false,
+          "type": "dataTable",
+          "value": null
+        },
+        {
+          "id": "orderSub",
+          "label": "Order details",
+          "required": false,
+          "type": "subform",
+          "value": null
+        },
+        {
+          "id": "panel1",
+          "label": "Order",
+          "required": false,
+          "type": "panel",
+          "value": null
+        }
+      ],
+      "file": "form-models/DEMO-LF001.json",
+      "ioParameters": [
+        {
+          "dir": "in",
+          "element": "runCheck",
+          "elementName": "Run the check",
+          "elementSubType": "action",
+          "elementType": "workAction",
+          "expression": true,
+          "kind": "sendPayloadMapping",
+          "refKey": "notifyCustomerAction",
+          "refKind": "action",
+          "source": "{{contactEmail}}",
+          "target": "email"
+        },
+        {
+          "dir": "out",
+          "element": "loadOrder",
+          "elementName": "Load",
+          "elementSubType": "rest",
+          "elementType": "restButton",
+          "expression": true,
+          "kind": "responsePayloadMapping",
+          "refKey": "/api/orders/{{legacyOrderId}}",
+          "refKind": "rest",
+          "source": "{{$response.total}}",
+          "storedUnder": "$temp.loaded",
+          "target": "$temp.loaded.total"
+        }
+      ],
+      "key": "DEMO-LF001",
+      "modelType": "form",
+      "name": "Legacy order lookup",
+      "outcomes": [
+        {
+          "label": "Save",
+          "value": "save"
+        }
+      ],
+      "restCalls": [
+        {
+          "method": "GET",
+          "path": null,
+          "url": "/api/orders/{{legacyOrderId}}",
+          "where": "loadOrder"
+        }
+      ],
+      "subforms": [
+        "orderForm"
+      ]
+    },
+    {
+      "_uses": {
+        "binding": [
           "binding:{{openOrderCount}}"
         ],
         "variable": [
@@ -1178,6 +1336,11 @@
         "t": "java:com.example.DemoBean"
       },
       {
+        "rel": "document-create-form",
+        "s": "document:contractDocument",
+        "t": "form:DEMO-LF001"
+      },
+      {
         "rel": "document-edit-form",
         "s": "document:contractDocument",
         "t": "form:orderForm"
@@ -1206,6 +1369,11 @@
         "rel": "extracts-from",
         "s": "variableExtractor:orderVarExtractor",
         "t": "process:orderProcess"
+      },
+      {
+        "rel": "field-dataObject",
+        "s": "form:DEMO-LF001",
+        "t": "dataObject:customerDO"
       },
       {
         "rel": "field-dataObject",
@@ -1238,6 +1406,11 @@
         "t": "app:demoApp"
       },
       {
+        "rel": "outcome-form",
+        "s": "form:DEMO-LF001",
+        "t": "form:orderForm"
+      },
+      {
         "rel": "processTask",
         "s": "case:reviewCase",
         "t": "process:orderProcess"
@@ -1266,6 +1439,16 @@
         "rel": "relates-to",
         "s": "dataObject:customerDO",
         "t": "dataObject:priorityMD"
+      },
+      {
+        "rel": "rest-call",
+        "s": "form:DEMO-LF001",
+        "t": "external:/api/orders/{{legacyOrderId}}"
+      },
+      {
+        "rel": "rest-call",
+        "s": "form:DEMO-LF001",
+        "t": "external:/api/orders?customer={{customerPick}}"
       },
       {
         "rel": "rest-call",
@@ -1338,9 +1521,19 @@
         "t": "form:orderForm"
       },
       {
+        "rel": "subform",
+        "s": "form:DEMO-LF001",
+        "t": "form:orderForm"
+      },
+      {
         "rel": "tool",
         "s": "agent:orderAssistant",
         "t": "service:customerService"
+      },
+      {
+        "rel": "triggers-action",
+        "s": "form:DEMO-LF001",
+        "t": "action:notifyCustomerAction"
       },
       {
         "rel": "triggers-action",
@@ -1663,6 +1856,171 @@
         "id": "form:orderForm",
         "key": "orderForm",
         "label": "Order Form",
+        "type": "form"
+      },
+      {
+        "data": {
+          "_uses": {
+            "binding": [
+              "binding:{{$response.total}}",
+              "binding:{{$route.currentAppId}}",
+              "binding:{{$row.id}}",
+              "binding:{{$temp.loaded}}",
+              "binding:{{contactEmail}}",
+              "binding:{{customerPick}}",
+              "binding:{{legacyMode == 'strict'}}",
+              "binding:{{legacyOrderId}}"
+            ],
+            "serviceOperation": [
+              "serviceOperation:customerService#findAll"
+            ],
+            "string": [
+              "string:strict"
+            ],
+            "variable": [
+              "variable:contactEmail",
+              "variable:customerPick",
+              "variable:legacyAction",
+              "variable:legacyMode",
+              "variable:legacyOrderId",
+              "variable:orderRows",
+              "variable:orderSub"
+            ]
+          },
+          "dataSources": [
+            {
+              "key": "customerDO",
+              "kind": "dataObject",
+              "op": "findAll"
+            },
+            {
+              "kind": "rest",
+              "url": "/api/orders?customer={{customerPick}}"
+            }
+          ],
+          "description": "A Design-workspace export in the legacy editor's shape.",
+          "fields": [
+            {
+              "callee": {
+                "key": "/api/orders/{{legacyOrderId}}",
+                "kind": "rest"
+              },
+              "id": "loadOrder",
+              "label": "Load",
+              "required": false,
+              "settings": {
+                "method": "get"
+              },
+              "stores": "{{$temp.loaded}}",
+              "type": "restButton",
+              "value": "{{$temp.loaded}}"
+            },
+            {
+              "callee": {
+                "key": "customerDO",
+                "kind": "dataObject"
+              },
+              "id": "customerPick",
+              "label": "Customer",
+              "required": false,
+              "type": "dataObjectSelect",
+              "value": null
+            },
+            {
+              "callee": {
+                "key": "notifyCustomerAction",
+                "kind": "action"
+              },
+              "id": "runCheck",
+              "label": "Run the check",
+              "required": false,
+              "type": "workAction",
+              "value": null
+            },
+            {
+              "id": "legacyOrderId",
+              "label": "Order id",
+              "required": "{{legacyMode == 'strict'}}",
+              "type": "text",
+              "value": "{{legacyOrderId}}"
+            },
+            {
+              "id": "orderRows",
+              "label": "Rows",
+              "required": false,
+              "type": "dataTable",
+              "value": null
+            },
+            {
+              "id": "orderSub",
+              "label": "Order details",
+              "required": false,
+              "type": "subform",
+              "value": null
+            },
+            {
+              "id": "panel1",
+              "label": "Order",
+              "required": false,
+              "type": "panel",
+              "value": null
+            }
+          ],
+          "file": "form-models/DEMO-LF001.json",
+          "ioParameters": [
+            {
+              "dir": "in",
+              "element": "runCheck",
+              "elementName": "Run the check",
+              "elementSubType": "action",
+              "elementType": "workAction",
+              "expression": true,
+              "kind": "sendPayloadMapping",
+              "refKey": "notifyCustomerAction",
+              "refKind": "action",
+              "source": "{{contactEmail}}",
+              "target": "email"
+            },
+            {
+              "dir": "out",
+              "element": "loadOrder",
+              "elementName": "Load",
+              "elementSubType": "rest",
+              "elementType": "restButton",
+              "expression": true,
+              "kind": "responsePayloadMapping",
+              "refKey": "/api/orders/{{legacyOrderId}}",
+              "refKind": "rest",
+              "source": "{{$response.total}}",
+              "storedUnder": "$temp.loaded",
+              "target": "$temp.loaded.total"
+            }
+          ],
+          "key": "DEMO-LF001",
+          "modelType": "form",
+          "name": "Legacy order lookup",
+          "outcomes": [
+            {
+              "label": "Save",
+              "value": "save"
+            }
+          ],
+          "restCalls": [
+            {
+              "method": "GET",
+              "path": null,
+              "url": "/api/orders/{{legacyOrderId}}",
+              "where": "loadOrder"
+            }
+          ],
+          "subforms": [
+            "orderForm"
+          ]
+        },
+        "file": "form-models/DEMO-LF001.json",
+        "id": "form:DEMO-LF001",
+        "key": "DEMO-LF001",
+        "label": "Legacy order lookup",
         "type": "form"
       },
       {
@@ -2571,6 +2929,7 @@
           "description": "The customer contract uploaded with an order.",
           "file": "documents/contract.document",
           "forms": {
+            "create": "DEMO-LF001",
             "edit": "orderForm",
             "view": "orderForm"
           },
@@ -3359,6 +3718,28 @@
           "method": "GET"
         },
         "file": null,
+        "id": "external:/api/orders/{{legacyOrderId}}",
+        "key": "/api/orders/{{legacyOrderId}}",
+        "label": "/api/orders/{{legacyOrderId}}",
+        "type": "external"
+      },
+      {
+        "data": {
+          "external_url": true,
+          "method": "GET"
+        },
+        "file": null,
+        "id": "external:/api/orders?customer={{customerPick}}",
+        "key": "/api/orders?customer={{customerPick}}",
+        "label": "/api/orders?customer={{customerPick}}",
+        "type": "external"
+      },
+      {
+        "data": {
+          "external_url": true,
+          "method": "GET"
+        },
+        "file": null,
         "id": "external:https://portal.example.com/{{customer}}",
         "key": "https://portal.example.com/{{customer}}",
         "label": "https://portal.example.com/{{customer}}",
@@ -3406,6 +3787,7 @@
           "usedBy": [
             "agent:orderAssistant",
             "case:reviewCase",
+            "form:DEMO-LF001",
             "form:orderForm"
           ]
         },
@@ -4153,6 +4535,39 @@
           "readCount": 0,
           "readsUnknown": true,
           "scopes": [
+            "form"
+          ],
+          "usages": [
+            {
+              "model": "form:DEMO-LF001",
+              "snippets": [
+                "(declared / mapped)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "form:DEMO-LF001"
+          ],
+          "writeCount": 1,
+          "writes": [
+            {
+              "elementType": "form",
+              "model": "form:DEMO-LF001",
+              "via": "formOutcome"
+            }
+          ]
+        },
+        "file": null,
+        "id": "variable:legacyAction",
+        "key": "legacyAction",
+        "label": "legacyAction",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 0,
+          "readsUnknown": true,
+          "scopes": [
             "variableExtractor"
           ],
           "usages": [
@@ -4499,6 +4914,92 @@
           "readCount": 1,
           "reads": [
             {
+              "element": "orderRows",
+              "elementName": "Rows",
+              "elementType": "dataTable",
+              "model": "form:DEMO-LF001",
+              "via": "formField"
+            }
+          ],
+          "scopes": [
+            "form"
+          ],
+          "usages": [
+            {
+              "model": "form:DEMO-LF001",
+              "snippets": [
+                "(form field)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "form:DEMO-LF001"
+          ],
+          "writeCount": 1,
+          "writes": [
+            {
+              "element": "orderRows",
+              "elementName": "Rows",
+              "elementType": "dataTable",
+              "model": "form:DEMO-LF001",
+              "via": "formField"
+            }
+          ]
+        },
+        "file": null,
+        "id": "variable:orderRows",
+        "key": "orderRows",
+        "label": "orderRows",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 1,
+          "reads": [
+            {
+              "element": "orderSub",
+              "elementName": "Order details",
+              "elementType": "subform",
+              "model": "form:DEMO-LF001",
+              "via": "formField"
+            }
+          ],
+          "scopes": [
+            "form"
+          ],
+          "usages": [
+            {
+              "model": "form:DEMO-LF001",
+              "snippets": [
+                "(form field)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "form:DEMO-LF001"
+          ],
+          "writeCount": 1,
+          "writes": [
+            {
+              "element": "orderSub",
+              "elementName": "Order details",
+              "elementType": "subform",
+              "model": "form:DEMO-LF001",
+              "via": "formField"
+            }
+          ]
+        },
+        "file": null,
+        "id": "variable:orderSub",
+        "key": "orderSub",
+        "label": "orderSub",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 1,
+          "reads": [
+            {
               "element": "packTask",
               "elementName": "Pack shipment",
               "elementType": "scriptTask",
@@ -4546,6 +5047,99 @@
         "id": "variable:orderNotes",
         "key": "orderNotes",
         "label": "orderNotes",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 1,
+          "reads": [
+            {
+              "model": "form:DEMO-LF001",
+              "via": "binding"
+            }
+          ],
+          "scopes": [
+            "form"
+          ],
+          "usages": [
+            {
+              "model": "form:DEMO-LF001",
+              "snippets": [
+                "{{contactEmail}}"
+              ]
+            }
+          ],
+          "usedBy": [
+            "form:DEMO-LF001"
+          ],
+          "writeCount": 0
+        },
+        "file": null,
+        "id": "variable:contactEmail",
+        "key": "contactEmail",
+        "label": "contactEmail",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 1,
+          "reads": [
+            {
+              "model": "form:DEMO-LF001",
+              "via": "binding"
+            }
+          ],
+          "scopes": [
+            "form"
+          ],
+          "usages": [
+            {
+              "model": "form:DEMO-LF001",
+              "snippets": [
+                "{{legacyMode == 'strict'}}"
+              ]
+            }
+          ],
+          "usedBy": [
+            "form:DEMO-LF001"
+          ],
+          "writeCount": 0
+        },
+        "file": null,
+        "id": "variable:legacyMode",
+        "key": "legacyMode",
+        "label": "legacyMode",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 1,
+          "reads": [
+            {
+              "model": "form:DEMO-LF001",
+              "via": "binding"
+            }
+          ],
+          "scopes": [
+            "form"
+          ],
+          "usages": [
+            {
+              "model": "form:DEMO-LF001",
+              "snippets": [
+                "{{legacyOrderId}}"
+              ]
+            }
+          ],
+          "usedBy": [
+            "form:DEMO-LF001"
+          ],
+          "writeCount": 0
+        },
+        "file": null,
+        "id": "variable:legacyOrderId",
+        "key": "legacyOrderId",
+        "label": "legacyOrderId",
         "type": "variable"
       },
       {
@@ -4900,6 +5494,54 @@
           "readCount": 2,
           "reads": [
             {
+              "element": "customerPick",
+              "elementName": "Customer",
+              "elementType": "dataObjectSelect",
+              "model": "form:DEMO-LF001",
+              "via": "formField"
+            },
+            {
+              "model": "form:DEMO-LF001",
+              "via": "binding"
+            }
+          ],
+          "scopes": [
+            "form"
+          ],
+          "usages": [
+            {
+              "model": "form:DEMO-LF001",
+              "snippets": [
+                "(form field)",
+                "{{customerPick}}"
+              ]
+            }
+          ],
+          "usedBy": [
+            "form:DEMO-LF001"
+          ],
+          "writeCount": 1,
+          "writes": [
+            {
+              "element": "customerPick",
+              "elementName": "Customer",
+              "elementType": "dataObjectSelect",
+              "model": "form:DEMO-LF001",
+              "via": "formField"
+            }
+          ]
+        },
+        "file": null,
+        "id": "variable:customerPick",
+        "key": "customerPick",
+        "label": "customerPick",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 2,
+          "reads": [
+            {
               "model": "agent:orderAssistant",
               "via": "binding"
             },
@@ -4940,6 +5582,26 @@
       },
       {
         "data": {
+          "usages": [
+            {
+              "model": "form:DEMO-LF001",
+              "snippets": [
+                "{{legacyMode == 'strict'}}"
+              ]
+            }
+          ],
+          "usedBy": [
+            "form:DEMO-LF001"
+          ]
+        },
+        "file": null,
+        "id": "string:strict",
+        "key": "strict",
+        "label": "strict",
+        "type": "string"
+      },
+      {
+        "data": {
           "usedBy": [
             "agent:orderAssistant",
             "query:openOrdersQuery"
@@ -4961,6 +5623,102 @@
         "id": "binding:{{customerName}}",
         "key": "{{customerName}}",
         "label": "{{customerName}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:DEMO-LF001"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{$response.total}}",
+        "key": "{{$response.total}}",
+        "label": "{{$response.total}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:DEMO-LF001"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{$route.currentAppId}}",
+        "key": "{{$route.currentAppId}}",
+        "label": "{{$route.currentAppId}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:DEMO-LF001"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{$row.id}}",
+        "key": "{{$row.id}}",
+        "label": "{{$row.id}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:DEMO-LF001"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{$temp.loaded}}",
+        "key": "{{$temp.loaded}}",
+        "label": "{{$temp.loaded}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:DEMO-LF001"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{contactEmail}}",
+        "key": "{{contactEmail}}",
+        "label": "{{contactEmail}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:DEMO-LF001"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{customerPick}}",
+        "key": "{{customerPick}}",
+        "label": "{{customerPick}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:DEMO-LF001"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{legacyMode == 'strict'}}",
+        "key": "{{legacyMode == 'strict'}}",
+        "label": "{{legacyMode == 'strict'}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
+            "form:DEMO-LF001"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{legacyOrderId}}",
+        "key": "{{legacyOrderId}}",
+        "label": "{{legacyOrderId}}",
         "type": "binding"
       },
       {
@@ -5554,6 +6312,7 @@
     "decision:orderDecision": "decisions/order-decision.dmn",
     "document:contractDocument": "documents/contract.document",
     "event:orderShipped": "events/order-shipped.event",
+    "form:DEMO-LF001": "form-models/DEMO-LF001.json",
     "form:orderForm": "forms/order-form.form",
     "knowledgeBase:courierManuals": "knowledgebase/courier-manuals.knowledgebase",
     "liquibase:001-customer": "db/changelog/001-customer.xml",
@@ -5718,6 +6477,7 @@
       "description": "The customer contract uploaded with an order.",
       "file": "documents/contract.document",
       "forms": {
+        "create": "DEMO-LF001",
         "edit": "orderForm",
         "view": "orderForm"
       },
@@ -5816,15 +6576,23 @@
     "{{$response.executionPayload.sent}}",
     "{{$response.scopeId}}",
     "{{$response.score}}",
+    "{{$response.total}}",
+    "{{$route.currentAppId}}",
+    "{{$row.id}}",
+    "{{$temp.loaded}}",
     "{{$temp.score}}",
     "{{amount * 1.081}}",
     "{{amount > 0}}",
     "{{amount}}",
+    "{{contactEmail}}",
     "{{customer.email}}",
     "{{customerName}}",
+    "{{customerPick}}",
     "{{customer}}",
     "{{endpoints.baseUrl}}",
     "{{isSupervisor}}",
+    "{{legacyMode == 'strict'}}",
+    "{{legacyOrderId}}",
     "{{minTotal}}",
     "{{openOrderCount}}",
     "{{orderId}}",
@@ -6352,6 +7120,50 @@
       "value": "reviewCase"
     },
     {
+      "from": "DEMO-LF001",
+      "fromFile": "form-models/DEMO-LF001.json",
+      "fromType": "form",
+      "kind": "action",
+      "rel": "triggers-action",
+      "target": "actions/notify-customer.action",
+      "targetNodeType": "action",
+      "targetType": "model",
+      "value": "notifyCustomerAction"
+    },
+    {
+      "from": "DEMO-LF001",
+      "fromFile": "form-models/DEMO-LF001.json",
+      "fromType": "form",
+      "kind": "dataObject",
+      "rel": "field-dataObject",
+      "target": "data/customer.data",
+      "targetNodeType": "dataObject",
+      "targetType": "model",
+      "value": "customerDO"
+    },
+    {
+      "from": "DEMO-LF001",
+      "fromFile": "form-models/DEMO-LF001.json",
+      "fromType": "form",
+      "kind": "form",
+      "rel": "outcome-form",
+      "target": "forms/order-form.form",
+      "targetNodeType": "form",
+      "targetType": "model",
+      "value": "orderForm"
+    },
+    {
+      "from": "DEMO-LF001",
+      "fromFile": "form-models/DEMO-LF001.json",
+      "fromType": "form",
+      "kind": "form",
+      "rel": "subform",
+      "target": "forms/order-form.form",
+      "targetNodeType": "form",
+      "targetType": "model",
+      "value": "orderForm"
+    },
+    {
       "from": "approvalSla",
       "fromFile": "slas/approval-sla.sla",
       "fromType": "sla",
@@ -6372,6 +7184,17 @@
       "targetNodeType": "form",
       "targetType": "model",
       "value": "orderForm"
+    },
+    {
+      "from": "contractDocument",
+      "fromFile": "documents/contract.document",
+      "fromType": "document",
+      "kind": "form",
+      "rel": "document-create-form",
+      "target": "form-models/DEMO-LF001.json",
+      "targetNodeType": "form",
+      "targetType": "model",
+      "value": "DEMO-LF001"
     },
     {
       "from": "contractDocument",
@@ -6692,6 +7515,16 @@
       "looseMatches": [],
       "matches": [],
       "method": "GET",
+      "source": "DEMO-LF001",
+      "sourceFile": "form-models/DEMO-LF001.json",
+      "url": "/api/orders/{{legacyOrderId}}",
+      "where": "loadOrder"
+    },
+    {
+      "kind": "form-button",
+      "looseMatches": [],
+      "matches": [],
+      "method": "GET",
       "source": "orderForm",
       "sourceFile": "forms/order-form.form",
       "url": "https://portal.example.com/{{customer}}",
@@ -6708,6 +7541,16 @@
       "sourceFile": "forms/order-form.form",
       "url": "/api/customers",
       "where": "customer"
+    },
+    {
+      "kind": "form-query",
+      "looseMatches": [],
+      "matches": [],
+      "method": "GET",
+      "source": "DEMO-LF001",
+      "sourceFile": "form-models/DEMO-LF001.json",
+      "url": "/api/orders?customer={{customerPick}}",
+      "where": "orderRows"
     },
     {
       "kind": "service-op",
@@ -6889,14 +7732,14 @@
     "archives": 1,
     "defects": 10,
     "dynamicEdges": 0,
-    "edges": 53,
+    "edges": 60,
     "endpoints": 2,
     "exprSkippedNested": 0,
     "groups": 3,
     "java": 2,
-    "modelCount": 25,
-    "models": 25,
-    "nodes": 99,
+    "modelCount": 26,
+    "models": 26,
+    "nodes": 118,
     "scriptIssues": 2,
     "suspectEdges": 0
   },
@@ -6925,10 +7768,14 @@
   ],
   "variables": [
     "amount",
+    "contactEmail",
     "customer",
     "customerName",
+    "customerPick",
     "grandTotal",
     "isSupervisor",
+    "legacyMode",
+    "legacyOrderId",
     "manager",
     "managerApproved",
     "minTotal",

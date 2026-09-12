@@ -81,12 +81,7 @@ object ReferenceResolver {
     private val IDENT_RE = Regex("[A-Za-z_]\\w*")
 
     /** Root identifiers a `{{…}}` placeholder may carry that are never project variables. */
-    private val MUSTACHE_IGNORE = setOf(
-        "endpoints", "item", "index", "ctx", "root", "parent", "event", "self",
-        "first", "last", "start", "pageSize", "flw", "payload", "temp", "filter",
-        "sortColumn", "sortDirection", "orderBy", "sortBy", "total", "response",
-        "page", "size", "data", "value", "params",
-    )
+    private val MUSTACHE_IGNORE = Constants.FRONTEND_SCRATCH_ROOTS
 
     /**
      * Run the full tail. Mutates [result] and [ctx] in place. [relOf] turns a discovered file into the

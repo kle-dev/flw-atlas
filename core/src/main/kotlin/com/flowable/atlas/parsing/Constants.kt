@@ -37,6 +37,21 @@ object Constants {
     )
     fun looksLikeBeanName(name: String): Boolean = name.length > 4 && BEAN_NAME_SUFFIX.containsMatchIn(name)
 
+    /**
+     * The roots of a `{{…}}` binding that are the form runtime's own scratch space, never a process or
+     * case variable: `$temp`, `$response`, a table's `$row`, the router's `$route`, a list's `$item` and
+     * `$index`… Written with or without the `$`, since both spellings occur. One set for the two places
+     * that decide what a binding reads (it used to be declared twice, and a root added to one copy was
+     * missing from the other).
+     */
+    val FRONTEND_SCRATCH_ROOTS = setOf(
+        "endpoints", "item", "index", "itemParent", "ctx", "root", "parent", "event", "self",
+        "first", "last", "start", "pageSize", "flw", "payload", "temp", "filter",
+        "sortColumn", "sortDirection", "orderBy", "sortBy", "total", "response",
+        "page", "size", "data", "value", "params", "row", "route", "formValid", "lang", "scope", "original",
+        "path", "column", "rowIndex",
+    )
+
     /** EL keywords / literals that are never variable names. */
     val JAVA_LITERALS = setOf(
         "true", "false", "null", "empty", "and", "or", "not", "div", "mod",

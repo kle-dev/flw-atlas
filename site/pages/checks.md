@@ -80,7 +80,11 @@ entries at warning level — a file with a model extension that is not JSON at a
 process in the old editor's JSON format with no XML twin, an archive nested two levels deep, a model
 file above the 32 MB limit — because a file that was skipped on purpose is no less absent from the
 report than one that failed. An archive *inside* an archive (a Design export packing one `.bar` per
-app) is opened one level down and its models are read like any other.
+app) is opened one level down and its models are read like any other. A Design-workspace export — the
+legacy editor's `form-models` and `page-models` JSON, whose bodies are a tree of `childShapes` — is read
+in full since {{VERSION}}: its components are rewritten into the shape the current Design writes and
+parsed by the same reader, so such a form has its fields, subforms, references and REST calls instead of
+being an empty shell registered by key.
 
 A UTF-8 byte-order mark at the start of a JSON model is not a parse failure; the model is read like any
 other.

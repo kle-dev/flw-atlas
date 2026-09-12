@@ -531,7 +531,8 @@ object ModelParsers {
             val es = objOf(n["extraSettings"])
             if (es != null) {
                 if (truthy(es["formRef"])) {
-                    subforms.add(es["formRef"]); ctx.addRef(key, mtype, ffile, "subform", "form", es["formRef"])
+                    // a bare key or, from a newer export, a `{id, key}` reference — the list shows the key
+                    subforms.add(modelRefKey(es["formRef"])); ctx.addRef(key, mtype, ffile, "subform", "form", es["formRef"])
                 }
                 if (truthy(es["dataObjectDefinitionKey"])) {
                     dataSources.add(linkedMapOf("kind" to "dataObject", "key" to es["dataObjectDefinitionKey"], "op" to es["dataObjectOperationKey"]))

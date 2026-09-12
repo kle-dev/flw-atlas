@@ -260,6 +260,15 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   calls to a path that is not a URL, each with its own external node, across five real projects. The
   editor's bookkeeping maps are skipped now, and a REST call needs a component with a type behind it.
 
+- **A Design-workspace export is read in full.** The legacy editor stores a form or page body as a
+  tree of `childShapes` with hyphenated properties (`form-ref`, `rest-button-url`, `actiondefinitionkey`),
+  and Atlas registered such a model by key with no fields: 47 forms across the measured projects were
+  empty shells — blank pages in the explorer, at least 25 false "unused form" findings because the
+  subform that embedded them was never read, and ~1 000 references that never reached the graph. The old
+  shape is rewritten into the one the current Design writes — stencil to type as real exports pair them,
+  property to setting by spelling — and parsed by the same reader, so fields, subforms, data-object and
+  service references, action buttons, REST calls and payload mappings come out as from a current export.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its
