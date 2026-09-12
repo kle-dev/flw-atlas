@@ -311,6 +311,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   `@Value("${mail.from}")` placeholder no longer makes `mail` a project variable. And a form button's
   `invokeServiceUrl` / `invokeActionUrl` are REST calls to the IDE's scanner, as they were to the report.
 
+- **A CMMN lifecycle listener's script problem is a finding.** The parser has always flagged a
+  `planItemLifecycleListener` that carries a script — the engine's listener factory has no script branch,
+  so it is a silent no-op — but the note sat on the plan item, and the check read only a process's task
+  buckets. It reaches the case's page now, on the plan item that holds the listener.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its

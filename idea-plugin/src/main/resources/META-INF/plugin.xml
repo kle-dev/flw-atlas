@@ -495,6 +495,11 @@
               <code>mail</code> a project variable. And a form button's <code>invokeServiceUrl</code> /
               <code>invokeActionUrl</code> are REST calls to the IDE's scanner, as they were to the
               report.</li>
+          <li><b>A CMMN lifecycle listener's script problem is a finding.</b> The parser has always flagged
+              a <code>planItemLifecycleListener</code> that carries a script — the engine's listener factory
+              has no script branch, so it is a silent no-op — but the note sat on the plan item, and the
+              check read only a process's task buckets. It reaches the case's page now, on the plan item
+              that holds the listener.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

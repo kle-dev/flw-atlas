@@ -350,6 +350,25 @@ class FindingsTest {
         assertTrue("a subprocess with an error boundary may contain the task", elements(r4, "unguardedTasks").isEmpty())
     }
 
+    @Test
+    fun aPlanItemListenerScriptProblemIsAFinding() {
+        // the parser flags a lifecycle listener that carries a script (the engine's factory has no script
+        // branch — a silent no-op); the finding has to reach the case's page
+        val case = mapOf("key" to "c", "name" to "Case", "file" to "c.cmmn", "planModel" to mapOf(
+            "id" to "plan", "children" to listOf(mapOf(
+                "id" to "t1", "name" to "Review",
+                "listeners" to listOf(mapOf("kind" to "planItemLifecycleListener", "problems" to listOf(
+                    mapOf("severity" to "warning", "message" to "a script on a lifecycle listener is never run")))),
+            )),
+        ))
+        // script findings hang off the parsed model buckets, not off the graph nodes
+        val r = run(listOf(node("case:c", "case")), extra = mapOf("cases" to listOf(case)))
+        val f = findings(r).single { it["check"] == "scriptIssues" }
+        assertEquals("case:c", f["node"])
+        assertEquals("t1", f["element"])
+        assertTrue(f["message"].toString().contains("never run"))
+    }
+
     // ---- what a model writes down that it should not ------------------------------------------------
 
     @Test

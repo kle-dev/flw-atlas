@@ -694,9 +694,13 @@ object Findings {
             emitListeners("process", pAny, findings, ::emit)
         }
         for (cAny in (result["cases"] as? List<Map<String, Any?>> ?: emptyList())) {
-            // CMMN keeps scripts in the plan tree (`<task flowable:type="script">`).
+            // CMMN keeps scripts in the plan tree (`<task flowable:type="script">`), and a plan item's
+            // listeners hang off the plan item — not off the buckets emitListeners reads for a process. A
+            // `planItemLifecycleListener` with a script is a no-op at runtime and is flagged by the parser;
+            // until now that problem was recorded on the item and read by nothing.
             fun walk(node: Map<String, Any?>) {
                 emit("case", cAny, node["id"], node["problems"])
+                for (l in (node["listeners"] as? List<Map<String, Any?>> ?: emptyList())) emit("case", cAny, node["id"], l["problems"])
                 for (ch in (node["children"] as? List<Map<String, Any?>> ?: emptyList())) walk(ch)
             }
             (cAny["planModel"] as? Map<String, Any?>)?.let { walk(it) }

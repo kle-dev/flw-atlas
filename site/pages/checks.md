@@ -127,6 +127,10 @@ lifecycle listeners, and an action's bot script. Two families:
 The count is a count of **findings**, not of scripts carrying them, which is what the CLI status line
 and `stats.scriptIssues` also mean.
 
+A CMMN plan item's lifecycle listener that carries a script is reported here too: the engine's listener
+factory has no script branch, so such a listener is a silent no-op — and until {{VERSION}} the parser's
+note about it was recorded on the plan item and read by nothing.
+
 ### `missingRefs` — a key with nothing behind it
 
 A model references another model by key, and no model in the project defines that key. Typically a
