@@ -498,9 +498,10 @@
     </extensions>
 
     <projectListeners>
-        <!-- Regenerates the model-constants class when models are added/removed/edited. -->
+        <!-- Regenerates the model-constants class when the model index lands (a VFS listener fired on the
+             change that had just dropped the index and found nothing to generate from). -->
         <listener class="com.flowable.atlas.generate.ModelConstantsAutoRefresher"
-                  topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
+                  topic="com.flowable.atlas.events.AtlasEventsListener"/>
     </projectListeners>
 
     <!-- Action/group texts and descriptions come from messages/FlowableAtlasBundle.properties

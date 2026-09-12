@@ -52,7 +52,7 @@ class ModelConstantsService(private val project: Project) {
         val fqcn = state.fqcn
 
         // A cold index is asked for, not built here under the read lock; the rebuild it triggers ends in
-        // another modelIndexUpdated, which brings this refresher round again.
+        // another modelIndexUpdated, which brings the refresher (ModelConstantsAutoRefresher) round again.
         val source = buildSource(fqcn) ?: return
         val current = ReadAction.computeBlocking<String?, RuntimeException> {
             if (existing.isValid) VfsUtilCore.loadText(existing) else null
