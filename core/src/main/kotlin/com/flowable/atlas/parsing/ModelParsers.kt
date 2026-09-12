@@ -1271,7 +1271,8 @@ object ModelParsers {
         }
         (doc["aiInstructions"] as? String)?.takeIf { it.isNotBlank() }?.let { info["aiInstructions"] = capText(it) }
         objOf(doc["forms"])?.let { forms ->
-            info["forms"] = forms
+            // `{op: key}` on the page whether Design wrote the key bare or as a `{id, key}` reference
+            info["forms"] = forms.mapValues { modelRefKey(it.value) }
             forms.forEach { (op, fk) -> ctx.addRef(key, "document", ffile, "document-$op-form", "form", fk) }
         }
         objOf(doc["actionPermissions"])?.let { perms ->

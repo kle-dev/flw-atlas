@@ -399,6 +399,13 @@
               <code>delegateExpression</code> now carry different relations
               (<code>serviceTask-expression</code>, <code>serviceTask-delegate</code>), and
               <code>${true}</code> on a service task is a literal, not a bean called <code>true</code>.</li>
+          <li><b>A reference written as <code>{id, key}</code> is a reference to <code>key</code>.</b> Newer
+              Design writes a document model's forms as <code>"edit": {"id": "FORM_MODEL-…", "key":
+              "X"}</code> where older exports wrote <code>"X"</code>; Atlas turned the map into the text
+              <code>{id=FORM_MODEL-…, key=X}</code> and reported a <i>missing model</i> of that name — two
+              error findings on one real project, and the real form lost two inbound edges. Every reference
+              now passes through one door that unwraps the shape, so no parser can make that mistake
+              again.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

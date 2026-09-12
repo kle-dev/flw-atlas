@@ -225,6 +225,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   `delegateExpression` now carry different relations (`serviceTask-expression`, `serviceTask-delegate`),
   and `${true}` on a service task is a literal, not a bean called `true`.
 
+- **A reference written as `{id, key}` is a reference to `key`.** Newer Design writes a document
+  model's forms as `"edit": {"id": "FORM_MODEL-…", "key": "X"}` where older exports wrote `"X"`; Atlas
+  turned the map into the text `{id=FORM_MODEL-…, key=X}` and reported a *missing model* of that name
+  — two error findings on one real project, and the real form lost two inbound edges. Every reference
+  now passes through one door that unwraps the shape, so no parser can make that mistake again.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its

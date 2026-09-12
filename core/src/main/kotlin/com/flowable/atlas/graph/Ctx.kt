@@ -98,6 +98,16 @@ class Ctx {
     fun addRef(frm: Any?, ftype: String, ffile: String, rel: String, kind: String, value: Any?,
                suspect: Boolean = false) {
         if (value == null) return
+        // Newer Design writes a reference as `{"id": "FORM_MODEL-…", "key": "X"}` where older exports
+        // wrote `"X"`. Unwrapped here, at the one door every reference comes through, so a parser that
+        // passes the raw JSON value cannot turn the map's toString into a *missing model* — which is
+        // exactly what a `.document`'s `forms` map did (two error findings on one real project). A map
+        // with no `key` is not a reference and is dropped.
+        if (value is Map<*, *>) {
+            val k = value["key"] ?: return
+            addRef(frm, ftype, ffile, rel, kind, k, suspect)
+            return
+        }
         val v = value.toString().trim()
         if (v.isEmpty()) return
         val target = if (v.contains("\${") || v.contains("{{")) dynamicRefs else refs

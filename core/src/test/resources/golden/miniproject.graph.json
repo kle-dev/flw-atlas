@@ -1176,6 +1176,11 @@
         "t": "java:com.example.DemoBean"
       },
       {
+        "rel": "document-edit-form",
+        "s": "document:contractDocument",
+        "t": "form:orderForm"
+      },
+      {
         "rel": "document-view-form",
         "s": "document:contractDocument",
         "t": "form:orderForm"
@@ -2563,6 +2568,7 @@
           "description": "The customer contract uploaded with an order.",
           "file": "documents/contract.document",
           "forms": {
+            "edit": "orderForm",
             "view": "orderForm"
           },
           "initialState": "draft",
@@ -5708,6 +5714,7 @@
       "description": "The customer contract uploaded with an order.",
       "file": "documents/contract.document",
       "forms": {
+        "edit": "orderForm",
         "view": "orderForm"
       },
       "initialState": "draft",
@@ -6367,6 +6374,17 @@
       "fromFile": "documents/contract.document",
       "fromType": "document",
       "kind": "form",
+      "rel": "document-edit-form",
+      "target": "forms/order-form.form",
+      "targetNodeType": "form",
+      "targetType": "model",
+      "value": "orderForm"
+    },
+    {
+      "from": "contractDocument",
+      "fromFile": "documents/contract.document",
+      "fromType": "document",
+      "kind": "form",
       "rel": "document-view-form",
       "target": "forms/order-form.form",
       "targetNodeType": "form",
@@ -6867,7 +6885,7 @@
     "archives": 1,
     "defects": 10,
     "dynamicEdges": 0,
-    "edges": 52,
+    "edges": 53,
     "endpoints": 2,
     "exprSkippedNested": 0,
     "groups": 3,
