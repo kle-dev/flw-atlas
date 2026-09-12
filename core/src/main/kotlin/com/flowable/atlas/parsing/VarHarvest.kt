@@ -11,12 +11,18 @@ object VarHarvest {
 
     private val DECL_VAR_RE = Regex(
         "\\b(?:resultVariableName|elementVariable|counterVariable|collectionVariable|" +
-            "initiatorVariableName|variableName)=\"([A-Za-z_]\\w*)\"")
+            "initiatorVariableName|variableName|additionalVariableName)=\"([A-Za-z_]\\w*)\"")
     private val COLL_RE = Regex("(?:flowable:|activiti:)?collection=\"([A-Za-z_]\\w*)\"")
     private val INOUT_RE = Regex("<(?:flowable:|activiti:)?(?:in|out)\\b([^>]*?)/?>")
     private val VARMAP_RE = Regex("<(?:flowable:|activiti:)?variableMapping\\b([^>]*?)/?>")
     private val PARAM_RE = Regex("<(?:flowable:|activiti:)?(?:input|output)Parameter\\b([^>]*?)/?>")
     private val OUTVAR_RE = Regex("<(?:flowable:|activiti:)?outputVariableName>\\s*(?:<!\\[CDATA\\[)?([A-Za-z_]\\w*)")
+    // Design's own namespace: the variable a data-import or report task writes its result to, the
+    // variable a column of an import lands in, and the extra variables a task sets — `design:` elements
+    // no structured parser reads, so the raw text is the one place they can be seen.
+    private val DESIGN_OUT_RE = Regex("<design:(?:outputvariablename|importreportvariablename)>\\s*(?:<!\\[CDATA\\[)?([A-Za-z_]\\w*)")
+    private val DESIGN_VARMAP_RE = Regex("<design:variablemapping\\b[^>]*\\bvariableName=\"([A-Za-z_]\\w*)\"")
+    private val ADDITIONAL_VAR_RE = Regex("\\badditionalVariableName=\"([A-Za-z_]\\w*)\"")
     private val NAME_TARGET_RE = Regex("\\b(?:name|target)=\"([A-Za-z_]\\w*)\"")
     private val SRC_TARGET_RE = Regex("\\b(?:source|target)=\"([A-Za-z_]\\w*)\"")
     private val NAME_ATTR_RE = Regex("\\bname=\"([A-Za-z_]\\w*)\"")
@@ -67,6 +73,7 @@ object VarHarvest {
         DECL_VAR_RE.findAll(raw).forEach { names.add(it.groupValues[1]) }
         COLL_RE.findAll(raw).forEach { names.add(it.groupValues[1]) }
         OUTVAR_RE.findAll(raw).forEach { names.add(it.groupValues[1]) }
+        DESIGN_OUT_RE.findAll(raw).forEach { names.add(it.groupValues[1]) }
         INOUT_RE.findAll(raw).forEach { m -> SRC_TARGET_RE.findAll(m.groupValues[1]).forEach { names.add(it.groupValues[1]) } }
         VARMAP_RE.findAll(raw).forEach { m -> NAME_TARGET_RE.findAll(m.groupValues[1]).forEach { names.add(it.groupValues[1]) } }
         PARAM_RE.findAll(raw).forEach { m -> NAME_ATTR_RE.findAll(m.groupValues[1]).forEach { names.add(it.groupValues[1]) } }
@@ -102,6 +109,11 @@ object VarHarvest {
             for (k in mkeys) ctx.addVarSite(k, m.groupValues[1], Ctx.WRITE, "multiInstanceCounter")
             ctx.markReadsUnknown(m.groupValues[1])
         }
+        // Design's data-import and report tasks write where their `design:` elements say; an import's
+        // column mapping writes the variable named per column, and `additionalvariables` sets one more.
+        emit(DESIGN_OUT_RE, Ctx.WRITE, "designOutput")
+        emit(DESIGN_VARMAP_RE, Ctx.WRITE, "importColumn")
+        emit(ADDITIONAL_VAR_RE, Ctx.WRITE, "additionalVariable")
         // A multi-instance collection is read to be iterated over.
         emit(MI_COLLECTION_RE, Ctx.READ, "multiInstanceCollection")
         emit(COLL_RE, Ctx.READ, "multiInstanceCollection")

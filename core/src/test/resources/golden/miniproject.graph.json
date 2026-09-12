@@ -1219,15 +1219,37 @@
     {
       "_uses": {
         "binding": [
-          "binding:{{openOrderCount}}"
+          "binding:{{openOrderCount}}",
+          "binding:{{priority}}"
         ],
         "variable": [
-          "variable:openOrderCount"
+          "variable:openOrderCount",
+          "variable:openOrders",
+          "variable:priority"
         ]
       },
-      "dataSources": [],
+      "dataSources": [
+        {
+          "key": "priorityMD",
+          "kind": "masterData"
+        }
+      ],
       "description": "Landing page for the order team",
       "fields": [
+        {
+          "id": "openOrders",
+          "label": "Open orders",
+          "required": false,
+          "type": "workProcessList",
+          "value": null
+        },
+        {
+          "id": "priorityPick",
+          "label": "Priority",
+          "required": false,
+          "type": "select",
+          "value": "{{priority}}"
+        },
         {
           "id": "startOrder",
           "label": "Start an order",
@@ -1381,6 +1403,11 @@
         "t": "dataObject:customerDO"
       },
       {
+        "rel": "field-masterData",
+        "s": "page:orderPage",
+        "t": "dataObject:priorityMD"
+      },
+      {
         "rel": "field-service",
         "s": "form:orderForm",
         "t": "service:customerService"
@@ -1394,6 +1421,11 @@
         "rel": "knowledgeBase",
         "s": "agent:orderAssistant",
         "t": "knowledgeBase:courierManuals"
+      },
+      {
+        "rel": "lists-instances",
+        "s": "page:orderPage",
+        "t": "process:orderProcess"
       },
       {
         "rel": "open-app",
@@ -2112,15 +2144,37 @@
         "data": {
           "_uses": {
             "binding": [
-              "binding:{{openOrderCount}}"
+              "binding:{{openOrderCount}}",
+              "binding:{{priority}}"
             ],
             "variable": [
-              "variable:openOrderCount"
+              "variable:openOrderCount",
+              "variable:openOrders",
+              "variable:priority"
             ]
           },
-          "dataSources": [],
+          "dataSources": [
+            {
+              "key": "priorityMD",
+              "kind": "masterData"
+            }
+          ],
           "description": "Landing page for the order team",
           "fields": [
+            {
+              "id": "openOrders",
+              "label": "Open orders",
+              "required": false,
+              "type": "workProcessList",
+              "value": null
+            },
+            {
+              "id": "priorityPick",
+              "label": "Priority",
+              "required": false,
+              "type": "select",
+              "value": "{{priority}}"
+            },
             {
               "id": "startOrder",
               "label": "Start an order",
@@ -4914,6 +4968,49 @@
           "readCount": 1,
           "reads": [
             {
+              "element": "openOrders",
+              "elementName": "Open orders",
+              "elementType": "workProcessList",
+              "model": "page:orderPage",
+              "via": "formField"
+            }
+          ],
+          "scopes": [
+            "page"
+          ],
+          "usages": [
+            {
+              "model": "page:orderPage",
+              "snippets": [
+                "(form field)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "page:orderPage"
+          ],
+          "writeCount": 1,
+          "writes": [
+            {
+              "element": "openOrders",
+              "elementName": "Open orders",
+              "elementType": "workProcessList",
+              "model": "page:orderPage",
+              "via": "formField"
+            }
+          ]
+        },
+        "file": null,
+        "id": "variable:openOrders",
+        "key": "openOrders",
+        "label": "openOrders",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 1,
+          "reads": [
+            {
               "element": "orderRows",
               "elementName": "Rows",
               "elementType": "dataTable",
@@ -5202,6 +5299,37 @@
         "id": "variable:openOrderCount",
         "key": "openOrderCount",
         "label": "openOrderCount",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 1,
+          "reads": [
+            {
+              "model": "page:orderPage",
+              "via": "binding"
+            }
+          ],
+          "scopes": [
+            "page"
+          ],
+          "usages": [
+            {
+              "model": "page:orderPage",
+              "snippets": [
+                "{{priority}}"
+              ]
+            }
+          ],
+          "usedBy": [
+            "page:orderPage"
+          ],
+          "writeCount": 0
+        },
+        "file": null,
+        "id": "variable:priority",
+        "key": "priority",
+        "label": "priority",
         "type": "variable"
       },
       {
@@ -5904,6 +6032,18 @@
       {
         "data": {
           "usedBy": [
+            "page:orderPage"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{priority}}",
+        "key": "{{priority}}",
+        "label": "{{priority}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
             "process:fulfilmentProcess"
           ]
         },
@@ -6596,7 +6736,8 @@
     "{{minTotal}}",
     "{{openOrderCount}}",
     "{{orderId}}",
-    "{{orderTotal}}"
+    "{{orderTotal}}",
+    "{{priority}}"
   ],
   "policies": [
     {
@@ -7362,6 +7503,28 @@
       "value": "customerService"
     },
     {
+      "from": "orderPage",
+      "fromFile": "pages/order-page.page",
+      "fromType": "page",
+      "kind": "dataObject",
+      "rel": "field-masterData",
+      "target": "data/priority.data",
+      "targetNodeType": "dataObject",
+      "targetType": "model",
+      "value": "priorityMD"
+    },
+    {
+      "from": "orderPage",
+      "fromFile": "pages/order-page.page",
+      "fromType": "page",
+      "kind": "process",
+      "rel": "lists-instances",
+      "target": "processes/order.bpmn",
+      "targetNodeType": "process",
+      "targetType": "model",
+      "value": "orderProcess"
+    },
+    {
       "from": "orderProcess",
       "fromFile": "processes/order.bpmn",
       "fromType": "bpmn",
@@ -7732,14 +7895,14 @@
     "archives": 1,
     "defects": 10,
     "dynamicEdges": 0,
-    "edges": 60,
+    "edges": 62,
     "endpoints": 2,
     "exprSkippedNested": 0,
     "groups": 3,
     "java": 2,
     "modelCount": 26,
     "models": 26,
-    "nodes": 118,
+    "nodes": 121,
     "scriptIssues": 2,
     "suspectEdges": 0
   },
@@ -7784,6 +7947,7 @@
     "orderId",
     "orderNumber",
     "orderTotal",
+    "priority",
     "stockLevel",
     "subTotal",
     "total"

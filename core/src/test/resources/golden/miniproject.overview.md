@@ -96,6 +96,9 @@ _Scanned 26 models (26 files · 1 archives), 2 Java files, 2 REST endpoints. Gen
 ### Order Page (`orderPage`) — `pages/order-page.page`
 - `welcome` [text] Open orders ← `{{openOrderCount}} orders waiting`
 - `startOrder` [button] Start an order
+- `openOrders` [workProcessList] Open orders
+- `priorityPick` [select] Priority ← `{{priority}}`
+- 🔌 data source: masterData `priorityMD`
 
 ## 5b. Data objects
 
@@ -205,6 +208,8 @@ _Scanned 26 models (26 files · 1 archives), 2 Java files, 2 REST endpoints. Gen
 - `orderForm` —field-service→ service `customerService` (`services/customer.service`)
 - `orderForm` —field-dataObject→ dataObject `customerDO` (`data/customer.data`)
 - `orderForm` —triggers-action→ action `notifyCustomerAction` (`actions/notify-customer.action`)
+- `orderPage` —lists-instances→ process `orderProcess` (`processes/order.bpmn`)
+- `orderPage` —field-masterData→ dataObject `priorityMD` (`data/priority.data`)
 - `orderProcess` —start-form→ form `orderForm` (`forms/order-form.form`)
 - `orderProcess` —userTask-form→ form `orderForm` (`forms/order-form.form`)
 - `orderProcess` —callActivity→ process `fulfilmentProcess` (`processes/fulfilment.bpmn`)
@@ -285,7 +290,7 @@ _component (1):_
 
 ## 13. Variables, beans & expressions
 
-**Variables (38)** — where each one lives, is set and is read:
+**Variables (40)** — where each one lives, is set and is read:
 
 - `amount` [form]
     - used in: orderForm (form field), orderForm {{amount * 1.081}}, orderForm {{amount > 0}}, orderForm {{amount}}
@@ -337,6 +342,8 @@ _component (1):_
     - passed as: in on `script-evaluation-bot`: notified · touched by scripts: `Notify`
 - `openOrderCount` [page]
     - used in: orderPage {{openOrderCount}}
+- `openOrders` [page]
+    - used in: orderPage (form field)
 - `orderId` [agent, process, query]
     - used in: orderAssistant {{orderId}}, openOrdersQuery {{orderId}}, orderProcess (declared / mapped) · passed as: in on `callSub`: orderId→subOrderId, in on `callSub`: orderId · touched by scripts: `Stamp order`, `Broken stamp`, `Broken API call`
 - `orderNotes` [process]
@@ -351,6 +358,8 @@ _component (1):_
     - used in: orderForm (form field), orderForm {{orderTotal}}, notifyCustomerAction (script) · passed as: in on `script-evaluation-bot`: orderTotal
 - `orderTotalIndexed` [variableExtractor]
     - used in: orderVarExtractor (declared / mapped)
+- `priority` [page]
+    - used in: orderPage {{priority}}
 - `sent` [action]
     - used in: notifyCustomerAction (script) · passed as: out on `script-evaluation-bot`: sent
 - `shippingStamp` [process]
@@ -366,7 +375,7 @@ _component (1):_
 
 **Beans/objects with method calls:** `demoBean`
 
-**Expressions (37)** — grouped by what they call:
+**Expressions (38)** — grouped by what they call:
 
 - `$response` (5)
     - `{{$response.total}}` — in `DEMO-LF001`
@@ -424,6 +433,8 @@ _component (1):_
     - `${orderNumber}` — in `orderConfirmationTemplate`
 - `orderTotal` (1)
     - `{{orderTotal}}` — in `orderForm`
+- `priority` (1)
+    - `{{priority}}` — in `orderPage`
 - `stockLevel` (1)
     - `${stockLevel > 0}` — in `fulfilmentProcess`
 - `subTotal` (1)

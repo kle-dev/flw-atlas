@@ -420,8 +420,7 @@ class Ctx {
          */
         private val TARGET_IS_CONTRACT = setOf(
             "inputParameter", "eventInParameter", "config",
-            "sendPayloadMapping", "dataObjectDataTableCreatePayloadMapping", "header",
-        )
+            "sendPayloadMapping", "dataObjectDataTableCreatePayloadMapping", "header", "eventCorrelationParameter")
 
         /** Split a comma/semicolon-separated group/user string into individual ids. */
         fun splitIds(s: Any?): List<String> {

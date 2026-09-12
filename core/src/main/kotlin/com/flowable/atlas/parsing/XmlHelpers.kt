@@ -69,9 +69,16 @@ object XmlHelpers {
         "errorOutputParameter" to "error-out",
         "eventInParameter" to "in",
         "eventOutParameter" to "out",
+        // `<flowable:eventCorrelationParameter name="caseId" value="${root.id}"/>`: the value is read to
+        // correlate, the name is the event's own parameter — half the correlation contract, and the
+        // other half of what a send/receive-event task sends (19 on the real projects, none recorded).
+        "eventCorrelationParameter" to "in",
         "variableMapping" to "in",
         "outputVariableName" to "out",
     )
+
+    /** The same tags by lower-cased name: Design has emitted both spellings (see [designFormKeys]). */
+    private val IO_PARAM_CANON: Map<String, String> = IO_PARAM_TAGS.keys.associateBy { it.lowercase() }
 
     /**
      * Every in/out parameter mapping declared on `el`, normalised to `{dir, kind, source, target}`.
@@ -95,13 +102,14 @@ object XmlHelpers {
         val ext = extEl(el) ?: return emptyList()
         val out = ArrayList<Map<String, Any?>>()
         for (c in ext.children) {
-            val dir = IO_PARAM_TAGS[c.tag] ?: continue
+            val tag = IO_PARAM_CANON[c.tag.lowercase()] ?: continue
+            val dir = IO_PARAM_TAGS[tag] ?: continue
             var source: String? = null
             var target: String? = null
             var type: String? = null
             var container: String? = null
             var expression = false
-            when (c.tag) {
+            when (tag) {
                 "in", "out" -> {
                     val srcExpr = c.attr("sourceExpression")
                     source = c.attr("source") ?: srcExpr
@@ -122,6 +130,10 @@ object XmlHelpers {
                     source = c.attr("source") ?: c.attr("sourceExpression")
                     target = c.attr("target")
                 }
+                "eventCorrelationParameter" -> {
+                    source = c.attr("value")
+                    target = c.attr("name")
+                }
                 "variableMapping" -> {
                     val valExpr = c.attr("valueExpression")
                     source = c.attr("value") ?: valExpr
@@ -137,7 +149,7 @@ object XmlHelpers {
                 "outputVariableName" -> target = c.text?.trim()?.ifEmpty { null }
             }
             if (source == null && target == null) continue
-            val rec = linkedMapOf<String, Any?>("dir" to dir, "kind" to c.tag, "source" to source, "target" to target)
+            val rec = linkedMapOf<String, Any?>("dir" to dir, "kind" to tag, "source" to source, "target" to target)
             if (!type.isNullOrEmpty()) rec["type"] = type
             if (!container.isNullOrEmpty()) rec["container"] = container
             if (c.attr("transient") == "true") rec["transient"] = true
@@ -266,6 +278,13 @@ object XmlHelpers {
         "static-form-key" to ("form" to "static-form"),
         "static-manual-start-form-key" to ("form" to "manual-start-form"),
         "static-decision-table-key" to ("decision" to "static-decision"),
+        // Design's own namespace, lower-cased the way it writes them: the security policy an element is
+        // governed by, the process or case a task starts, the channel a start event listens on. 34 such
+        // references on the real projects were read by nothing.
+        "securitypolicy" to ("securityPolicy" to "security-policy-model"),
+        "processdefinitionkey" to ("process" to "starts-process"),
+        "casedefinitionkey" to ("case" to "starts-case"),
+        "inboundchannelreference" to ("channel" to "via-channel"),
     )
 
     /** Group-permission extension elements → the access action they grant. */

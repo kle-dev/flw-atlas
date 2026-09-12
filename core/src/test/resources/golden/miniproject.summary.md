@@ -1,6 +1,6 @@
 # Flowable project — `miniproject` (quick overview)
 
-_26 models (26 files · 1 archives) · 2 Java files · 118 nodes · 60 relationships · 3 user groups. Compact summary — full report in `miniproject.overview.md`, full graph in `miniproject.graph.json`._
+_26 models (26 files · 1 archives) · 2 Java files · 121 nodes · 62 relationships · 3 user groups. Compact summary — full report in `miniproject.overview.md`, full graph in `miniproject.graph.json`._
 
 ⚠ **2 file(s) could not be fully analyzed** (parse/read failures) — the map below may be incomplete. Details: the Findings section of `miniproject.overview.md`, or `diagnostics` in `miniproject.graph.json`.
 
@@ -10,8 +10,8 @@ _26 models (26 files · 1 archives) · 2 Java files · 118 nodes · 60 relations
 ## Inventory
 Models: 3 processes · 1 case · 1 decision table · 2 forms · 1 page · 2 data objects · 1 data dictionary · 1 service · 1 AI agent · 1 channel · 1 event · 1 action · 1 query · 1 template · 1 sequence · 1 security policy · 1 variable extractor · 1 Liquibase changelog
 Java: 1 controller · 1 component · 1 delegate
-Variables: 38 — scopes: form 13 · process 9 · action 4 · template 3 · decision 2 · sla 2 · agent 2 · query 2 · dataObject 2 · variableExtractor 2 · java 1 · page 1 · document 1 · app 1 · 1 inferred from scripts
-Expressions: 11 backend ${ } · 26 frontend {{ }} · 1 string literals
+Variables: 40 — scopes: form 13 · process 9 · action 4 · template 3 · page 3 · decision 2 · sla 2 · agent 2 · query 2 · dataObject 2 · variableExtractor 2 · java 1 · document 1 · app 1 · 1 inferred from scripts
+Expressions: 11 backend ${ } · 27 frontend {{ }} · 1 string literals
 
 ## Entry points — who can start what
 - **sales** ← process `orderProcess`
@@ -33,8 +33,8 @@ Agents: orderAssistant
 
 ## Hotspots — most-referenced (central) artifacts
 - form `orderForm` — Order Form (referenced by 8)
+- process `orderProcess` — Order Process (referenced by 5)
 - service `customerService` — Customer Service (referenced by 4)
-- process `orderProcess` — Order Process (referenced by 4)
 - java `com.example.DemoBean` — DemoBean (referenced by 3)
 - endpoint `GET /api/customers`  (referenced by 3)
 - dataObject `customerDO` — Customer (referenced by 3)
@@ -42,8 +42,8 @@ Agents: orderAssistant
 - process `fulfilmentProcess` — Fulfilment Process (referenced by 2)
 - event `orderShipped` — Order shipped (referenced by 2)
 - endpoint `GET /api/customers/{id}/canEdit`  (referenced by 2)
+- dataObject `priorityMD` — Priority (referenced by 2)
 - app `demoApp` — Demo App (referenced by 2)
-- action `notifyCustomerAction` — Notify customer (referenced by 2)
 
 ## External surface
 - External REST URLs called: 3

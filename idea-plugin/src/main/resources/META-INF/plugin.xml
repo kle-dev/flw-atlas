@@ -448,6 +448,17 @@
               pair them, property to setting by spelling — and parsed by the same reader, so fields,
               subforms, data-object and service references, action buttons, REST calls and payload mappings
               come out as from a current export.</li>
+          <li><b>References Atlas did not read yet.</b> A select over a master-data table
+              (<code>tableKey</code>), a page's work list (<code>scopeDefinitionKey</code> — six processes
+              on one page that looked less used than they are), Design's own namespace on a process or case
+              element — <code>design:securitypolicy</code>, <code>design:processdefinitionkey</code>,
+              <code>design:casedefinitionkey</code>, <code>design:inboundchannelreference</code>, 34
+              references on the real projects — and <code>&lt;flowable:eventCorrelationParameter&gt;</code>,
+              the other half of what a send- or receive-event task correlates on, are references and payload
+              now. A data import's column mappings (<code>design:variablemapping</code>), its report
+              variable and a task's <code>additionalvariables</code> are variable writes. And an in/out
+              parameter tag is matched by its lower-cased name, the way form keys already were, so an export
+              that lower-cases <code>&lt;flowable:inputparameter&gt;</code> loses nothing.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

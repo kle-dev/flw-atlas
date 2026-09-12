@@ -545,6 +545,18 @@ object ModelParsers {
                         ctx.addOpUse(key, "dataObject", es["dataObjectDefinitionKey"], es[ok])
                     }
                 }
+                // A select over a master-data table names the table, which is a data object of the
+                // master-data kind (9 on the real projects, only one of them reached the graph — and that
+                // one by accident, through a URL scan).
+                if (truthy(es["tableKey"])) {
+                    dataSources.add(linkedMapOf("kind" to "masterData", "key" to es["tableKey"]))
+                    ctx.addRef(key, mtype, ffile, "field-masterData", "dataObject", es["tableKey"])
+                }
+                // A work list on a page shows the instances of one process or case definition.
+                if (truthy(es["scopeDefinitionKey"])) {
+                    val scopeKind = if ((es["scopeType"] as? String)?.lowercase() == "case") "case" else "process"
+                    ctx.addRef(key, mtype, ffile, "lists-instances", scopeKind, es["scopeDefinitionKey"])
+                }
                 // A select/table reads its options over REST: `queryUrl` for the list, `lookupUrl` to
                 // resolve a stored id back to a label. Both are plain GETs.
                 for (uk in listOf("queryUrl", "lookupUrl")) {

@@ -288,6 +288,8 @@ const DESIGN_TERMS = {
   'rel:field-dataObject': ['Field → data object', 'A component reads its options or rows from that data object.'],
   'rel:field-service': ['Field → service', 'A component reads its options or rows from that service operation.'],
   'rel:field-agent': ['Field → agent model', 'An agent button on this form asks that agent.'],
+  'rel:field-masterData': ['Field → master data', 'A select on this form reads its options from that master-data table.'],
+  'rel:lists-instances': ['Page lists instances', 'A work list on this page shows the instances of that process or case.'],
   'rel:triggers-action': ['Action button → action', 'A button on this form or page invokes that action.'],
   'rel:starts-process': ['Bot starts process', 'The action’s bot starts an instance of that process.'],
   'rel:starts-case': ['Bot starts case', 'The action’s bot starts an instance of that case.'],

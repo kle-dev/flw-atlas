@@ -269,6 +269,16 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   property to setting by spelling — and parsed by the same reader, so fields, subforms, data-object and
   service references, action buttons, REST calls and payload mappings come out as from a current export.
 
+- **References Atlas did not read yet.** A select over a master-data table (`tableKey`), a page's work
+  list (`scopeDefinitionKey` — six processes on one page that looked less used than they are), Design's
+  own namespace on a process or case element — `design:securitypolicy`, `design:processdefinitionkey`,
+  `design:casedefinitionkey`, `design:inboundchannelreference`, 34 references on the real projects — and
+  `<flowable:eventCorrelationParameter>`, the other half of what a send- or receive-event task
+  correlates on, are references and payload now. A data import's column mappings
+  (`design:variablemapping`), its report variable and a task's `additionalvariables` are variable
+  writes. And an in/out parameter tag is matched by its lower-cased name, the way form keys already were,
+  so an export that lower-cases `<flowable:inputparameter>` loses nothing.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its
