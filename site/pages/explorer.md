@@ -360,6 +360,11 @@ own font scaling, so without it the element ids and hints stayed at 10–11 px o
 
 ### Accepting a finding
 
+On the Checks page, findings that share one cause fold into one row: the same missing comma in a
+binding copied across 22 forms, the same missing error path on 66 mail tasks, read *22 ×* and *66 ×*
+with the members a chevron away — the list has as many rows as it has causes. (A model's own page keeps
+every row: the reader is there for the elements.)
+
 Every finding row — on the Checks page, and under **Findings on this model** on the model's own page,
 where the ⌖ button puts the element on the diagram — carries **accept…**. It opens a form on the row:
 the reason (required — it is the only part of a waiver a reviewer can review, and an empty one is

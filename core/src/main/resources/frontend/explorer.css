@@ -1125,6 +1125,10 @@
   .chk-acc>summary{cursor:pointer;font-size:var(--text-xs);color:var(--ink-faint);padding:var(--space-1) 0}
   .chk-acc>summary:hover{color:var(--ink-dim)}
   .tr.wv-done{opacity:.72}
+  /* a folded group of identical findings: the count leads, the members' table sits in the body */
+  .tbl details.fgrp>summary .fgn{font-weight:600;color:var(--ink-dim)}
+  .tbl .fgrp-body{padding-left:var(--space-3)}
+  .tbl .fgrp-body>.tbl{margin:var(--space-1) 0 var(--space-2)}
   .tr.wv-done .wv-why{margin-top:var(--space-05)}
 
   /* ---------- accepting a finding (waivers) ---------- */

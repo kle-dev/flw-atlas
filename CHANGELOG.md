@@ -367,6 +367,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   "why it matched" hint for a plain word named the field's *id* (`label · date1`, twelve times in a row)
   where the facet path already named the caption; both paths lead with the matched text now.
 
+- **Identical findings fold into one row.** The same `22 "hours"` missing its comma, copied across 22
+  forms, was 22 rows of the Checks page; 66 mail tasks with the same missing error path were 66. Three
+  or more findings with one message shape — names and numbers aside — read *22 ×* on one row now, the
+  members and their accept controls a chevron away, so the page has as many rows as it has causes. A
+  model's own page keeps every row.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its

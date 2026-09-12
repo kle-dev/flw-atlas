@@ -2096,10 +2096,33 @@ function findingRow(f, o){
               :'<button type="button" class="dgbtn wv-acc" data-fi="'+f.fi+'">accept…</button>',
     }};
 }
+/** One cause, many rows: the message with its names and numbers blanked, so twenty-two copies of the
+ *  same missing comma across twenty-two forms are one shape. */
+function findingShape(f){ return f.check+'|'+String(f.message||'').replace(/`[^`]*`/g,'`…`').replace(/\d+/g,'N'); }
+const FIND_GROUP_FROM=3;
 function findingTable(rows, o){
   o=o||{};
   const cols=o.onNode?FIND_COLS.filter(c=>c.k!=='model'):FIND_COLS;
-  return tbl(cols, rows.map(f=>findingRow(f,o)), {filter:false, more:o.more});
+  // Identical findings fold into one row. A binding copied across 22 forms with the same missing comma,
+  // 66 mail tasks with the same missing error path: one row each, with the members a chevron away, so
+  // the list has as many rows as it has causes. Not on a model's own page — its findings are few, and
+  // the reader is there for the elements.
+  if(o.onNode || rows.length<FIND_GROUP_FROM) return tbl(cols, rows.map(f=>findingRow(f,o)), {filter:false, more:o.more});
+  const groups=new Map();
+  rows.forEach(f=>{ const k=findingShape(f); if(!groups.has(k)) groups.set(k, []); groups.get(k).push(f); });
+  const out=[];
+  groups.forEach((fs, k)=>{
+    if(fs.length<FIND_GROUP_FROM){ fs.forEach(f=>out.push(findingRow(f,o))); return; }
+    const worst=fs.some(f=>f.severity==='error')?'error':'warning';
+    const models=new Set(fs.map(f=>f.node).filter(Boolean));
+    const shape=k.slice(k.indexOf('|')+1).replace(/`…`/g,'…');
+    const members=fs.map(f=>findingRow(f,o));
+    out.push({hay:members.map(m=>m.hay).join(' '), cls:'fgrp', attrs:' data-sev="'+esc(worst)+'"',
+      body:tbl(cols, members, {filter:false}), bodyCls:'fgrp-body',
+      cells:{sev:sevPill(worst), model:'<span class="muted">'+models.size+' model'+(models.size>1?'s':'')+'</span>', el:'',
+             msg:'<span class="fgn">'+fs.length+' ×</span> '+esc(shape), where:'', act:''}});
+  });
+  return tbl(cols, out, {filter:false, more:o.more});
 }
 /** One check's block: the catalog's explanation, the open findings, and the accepted ones folded under
  *  them. Rendered whenever there is anything at all — a check whose every finding was accepted keeps its
