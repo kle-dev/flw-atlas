@@ -203,6 +203,17 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   `stats.defects` and `stats.advice`; the catalog reads defects first, then advice; and
   `--fail-on defects` makes a pipeline red on what is wrong and green on what could be better.
 
+- **The platform-bean set is read off the platform's own configuration.** `${flw.setOutput(…)}` in a
+  task listener is the platform's scripting API root, and `planItemInstances` the CMMN query root; both
+  were listed as beans of the project's own — 36 times on one real project — and each was a call out of
+  the engine with no error path. The set now carries every task delegate the platform and Engage
+  auto-configurations declare (`mergeDocumentService`, `housekeepingServiceTask`,
+  `generateSequenceServiceTask`, `triggerIntentEvaluationServiceTask`, `processSendMessageTask` and the
+  other conversation tasks…), the platform services an expression calls (`commentService`,
+  `queryService`, `platformFormService`, `coreContentService`…), Spring Boot's `jacksonObjectMapper`
+  and the actuator's `environmentEndpoint`; the KDoc names the source files so the list can be
+  regenerated instead of grown by complaint.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its

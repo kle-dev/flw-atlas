@@ -296,7 +296,10 @@ delegate expression — `${initVariablesService}` sets variables, `${auditLogSer
 `${dataObjectServiceTask}` reads the platform's own tables — and none of those depends on anyone else's
 uptime, so they stay quiet; the engine's own services (`dataObjectRuntimeService`,
 `platformIdentityService`, …) and a platform function namespace (`${bpmn:removeAssignee()}`) are engine
-API, not code of your own. Measured on real projects before this distinction, 94 % of the findings sat
+API, not code of your own. The set of platform beans is read off the platform's own auto-configuration —
+the task delegates Design writes, the Engage conversation tasks, the platform services an expression may
+call — and includes `flw`, the platform's scripting-API root, so `${flw.setOutput(…)}` in a task listener
+is platform API as well. Measured on real projects before this distinction, 94 % of the findings sat
 on such beans. An HTTP task that carries `ignoreException` or `handleStatusCodes` has said what happens
 on failure and stays quiet too — and so does any **async** task: its failure is a failed job, retried
 and then an incident for an administrator, never an exception to whoever completed the previous step.

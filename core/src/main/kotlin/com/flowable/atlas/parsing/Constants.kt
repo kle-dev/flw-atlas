@@ -6,10 +6,15 @@ package com.flowable.atlas.parsing
  */
 object Constants {
 
-    /** Implicit roots the engine provides — never treated as a project variable/bean. */
+    /**
+     * Implicit roots the engine provides — never treated as a project variable/bean. `planItemInstances`
+     * is the CMMN query root (`CmmnVariableScopeELResolver.PLAN_ITEM_INSTANCES_KEY`,
+     * `${planItemInstances.definitionId('x').active().count()}`), `currentTenantId` comes from
+     * `VariableContainerELResolver`; both were read as beans of the project's own before.
+     */
     val FLOWABLE_CONTEXT = setOf(
-        "execution", "task", "caseInstance", "planItemInstance", "processInstance",
-        "variableContainer", "authenticatedUserId", "authenticatedUser", "currentUserId",
+        "execution", "task", "caseInstance", "planItemInstance", "planItemInstances", "processInstance",
+        "variableContainer", "authenticatedUserId", "authenticatedUser", "currentUserId", "currentTenantId",
         "loggedInUser", "dateUtil", "date", "currentTime", "now", "initiator",
         "loopCounter", "variables", "vars", "var", "entityManagerFactory", "environment",
         "cmmnRuntimeService", "runtimeService", "taskService", "repetitionCounter",
@@ -29,15 +34,34 @@ object Constants {
      * marks these `platform`, the reports list them apart from the project's own beans, and the runtime
      * checks know that a call into one of them stays inside the engine. It used to be declared three
      * times, once per renderer, which is how a bean could be "platform" on one page and "review" on the next.
+     *
+     * The names are read off the platform's own auto-configuration, not guessed — regenerate from
+     * the platform's `starters` module: `TasksAutoConfiguration` (the task delegates Design writes),
+     * `EngageTaskAutoConfiguration` (the Engage task delegates), `PlatformEngineServicesAutoConfiguration`
+     * and `PlatformServiceAutoConfiguration` (the platform services an expression may call),
+     * `PlatformExpressionsAutoConfiguration` (the `flw*Utils` helpers). `flw` itself is the platform's EL
+     * root for its scripting API (`FlwApiELResolver`): `${flw.setOutput(…)}` in a task listener is
+     * platform API, not a bean of the project's — 36 "unresolved beans" on one real project said otherwise.
+     * `jacksonObjectMapper` is Spring Boot's `ObjectMapper` bean and `environmentEndpoint` the actuator's;
+     * the platform starter brings both.
      */
     val FLOWABLE_PLATFORM_BEANS = setOf(
         "initVariablesService", "dataObjectServiceTask", "generateDocumentService",
         "createDocumentService", "serviceRegistryService", "agentService",
         "sendEventServiceTask", "auditLogService", "decisionServiceTask",
         "caseServiceTask", "httpServiceTask", "scriptServiceTask", "mailServiceTask",
+        "mergeDocumentService", "convertDocumentToPDFService", "housekeepingServiceTask",
+        "generateSequenceServiceTask", "triggerIntentEvaluationServiceTask", "flowablePlatformAbbyyService",
+        "processCreateConversationTask", "caseCreateConversationTask", "processModifyConversationTask",
+        "caseModifyConversationTask", "processSendMessageTask", "caseSendMessageTask",
+        "whatsAppInteractiveMessageTask", "engageConversationService", "engageMessageService",
         "flwCollectionUtils", "flwJsonUtils", "flwFormatUtils", "flwLocaleUtils", "flwMathUtils",
         "flwStringUtils", "flwTimeUtils", "flwDateFunctionUtils", "flwIOUtils", "flwAuthTokenUtils",
-        "flwBase64Utils", "flwContentItem", "propertyConfigurationService",
+        "flwBase64Utils", "flwContentItem", "propertyConfigurationService", "flw",
+        "commentService", "translationService", "encryptionService", "platformCommentService",
+        "platformTaskService", "platformCaseInstanceService", "platformProcessInstanceService",
+        "platformContentItemService", "coreContentService", "platformFormService", "queryService",
+        "jacksonObjectMapper", "environmentEndpoint",
         // the engine's own services, exposed as beans and called from expressions
         // (`${dataObjectRuntimeService.addUserIdentityLink(…)}`): engine API, not code of the project's
         "dataObjectRuntimeService", "dataObjectRepositoryService", "platformIdentityService", "idmIdentityService",

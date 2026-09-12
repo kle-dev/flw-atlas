@@ -374,6 +374,18 @@
               <code>stats.defects</code> and <code>stats.advice</code>; the catalog reads defects first,
               then advice; and <code>--fail-on defects</code> makes a pipeline red on what is wrong and
               green on what could be better.</li>
+          <li><b>The platform-bean set is read off the platform's own configuration.</b>
+              <code>${flw.setOutput(…)}</code> in a task listener is the platform's scripting API root, and
+              <code>planItemInstances</code> the CMMN query root; both were listed as beans of the project's
+              own — 36 times on one real project — and each was a call out of the engine with no error path.
+              The set now carries every task delegate the platform and Engage auto-configurations declare
+              (<code>mergeDocumentService</code>, <code>housekeepingServiceTask</code>,
+              <code>generateSequenceServiceTask</code>, <code>triggerIntentEvaluationServiceTask</code>,
+              <code>processSendMessageTask</code> and the other conversation tasks…), the platform services
+              an expression calls (<code>commentService</code>, <code>queryService</code>,
+              <code>platformFormService</code>, <code>coreContentService</code>…), Spring Boot's
+              <code>jacksonObjectMapper</code> and the actuator's <code>environmentEndpoint</code>; the KDoc
+              names the source files so the list can be regenerated instead of grown by complaint.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

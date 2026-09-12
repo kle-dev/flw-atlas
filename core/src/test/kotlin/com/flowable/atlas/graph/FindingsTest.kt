@@ -311,7 +311,11 @@ class FindingsTest {
                 task("asyncMail", "type" to "mail", "async" to "true"),
                 // a platform function namespace and an engine service are not code of the project's
                 task("fn", "expression" to "\${bpmn:removeAssignee()}"),
-                task("engineApi", "expression" to "\${dataObjectRuntimeService.addUserIdentityLink(x, y)}"))))))
+                task("engineApi", "expression" to "\${dataObjectRuntimeService.addUserIdentityLink(x, y)}"),
+                // the platform's scripting API root, an Engage task delegate and the CMMN query root
+                task("flwApi", "expression" to "\${flw.setOutput('x', 1)}"),
+                task("engage", "delegateExpression" to "\${processSendMessageTask}"),
+                task("cmmnCtx", "expression" to "\${planItemInstances.definitionId('a').count()}"))))))
         assertEquals(listOf("ownBean", "ownExpr", "restSvc", "agent", "mail"), elements(r2b, "unguardedTasks"))
         val r3 = run(listOf(process("p", mapOf(
             "serviceTasks" to listOf(leaving),
