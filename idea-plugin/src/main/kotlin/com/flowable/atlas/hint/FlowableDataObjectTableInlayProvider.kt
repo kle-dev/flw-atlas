@@ -1,6 +1,7 @@
 package com.flowable.atlas.hint
 
 import com.flowable.atlas.index.FlowableModelIndexService
+import com.flowable.atlas.model.ModelPaths
 import com.intellij.codeInsight.hints.declarative.HintFormat
 import com.intellij.codeInsight.hints.declarative.InlayHintsCollector
 import com.intellij.codeInsight.hints.declarative.InlayHintsProvider
@@ -35,6 +36,8 @@ class FlowableDataObjectTableInlayProvider : InlayHintsProvider {
     private class Collector(private val tables: Map<String, String>) : SharedBypassCollector {
         override fun collectFromElement(element: PsiElement, sink: InlayTreeSink) {
             if (element !is PsiLiteralExpression) return
+            // a test fixture's literal is not a key the inspections judge — and not one to label either
+            if (element.containingFile?.virtualFile?.path?.let(ModelPaths::isTestSource) == true) return
             val table = (element.value as? String)?.let { tables[it] } ?: return
             sink.addPresentation(
                 InlineInlayPosition(element.textRange.endOffset, relatedToPrevious = true),

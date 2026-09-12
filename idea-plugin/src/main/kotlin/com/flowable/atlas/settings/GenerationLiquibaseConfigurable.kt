@@ -31,6 +31,9 @@ class GenerationLiquibaseConfigurable(project: Project) : AtlasProjectConfigurab
                     .align(AlignX.FILL)
                     .comment("Where \"Generate → Liquibase\" writes changelogs and the master flowable-project-db-changelog.xml (project-relative).")
                     .bindText(settings::liquibaseOutputDir)
+                    // the same rule as the two folders on the parent page: an absolute path or a `..`
+                    // segment resolved to nothing and the generator quietly behaved as if the folder did not exist
+                    .validationOnInput { projectRelativeFolder(it.text) }
             }
             row("File name pattern:") {
                 textField()

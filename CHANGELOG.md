@@ -389,6 +389,19 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   any more: hovering a key with a cold index, the value-field inspection and the Liquibase coverage
   inspection all read the cached index or wait for the next pass.
 
+- **The model-constants class follows the index.** Its refresher listened to the file system and ran
+  1.5 s after a model changed — on the very change that had just dropped the index, so it found none,
+  gave up, and nothing brought it round again unless the rebuild finished inside the window: kept in
+  sync on small repositories only. It listens to the index now and regenerates when a rebuild lands.
+- **Nothing slow on the EDT.** *Regenerate Atlas Explorer* — the menu item, the Hub's line, the tab's
+  banner — walked the project six levels deep on the UI thread looking for pages; the first click on a
+  diagram gutter icon rendered the SVG there; and every rendered diagram was kept for the session. Both
+  run in the background now, the cache holds the 32 most recent drawings, and *Regenerate* with no page
+  on disk says so and offers the generator instead of writing the whole artifact set.
+- **Small guards.** The Liquibase output folder is validated like the two folders on the parent page
+  (project-relative, no `..`), and the two value-matching inlays leave test sources alone, as the
+  inspections do.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its

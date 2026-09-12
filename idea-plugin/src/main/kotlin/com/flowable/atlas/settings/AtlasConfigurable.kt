@@ -6,7 +6,10 @@ import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.openapi.options.BoundSearchableConfigurable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
+import com.intellij.openapi.ui.ValidationInfo
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.ui.layout.ValidationInfoBuilder
+import java.io.File
 import java.nio.file.Path
 import kotlin.io.path.invariantSeparatorsPathString
 
@@ -94,4 +97,19 @@ abstract class AtlasApplicationConfigurable(
 
     /** Page-specific work, run after the DSL bindings and before the notification. */
     protected open fun doApply() {}
+}
+
+/**
+ * Every folder a settings page takes is resolved against the project directory, so an absolute path or
+ * a `..` segment would make a pull or a generation write outside the repository — and a blank one
+ * nowhere at all. Shared by the three folder fields; the Liquibase page used to skip the check.
+ */
+internal fun ValidationInfoBuilder.projectRelativeFolder(text: String): ValidationInfo? {
+    val t = text.trim()
+    return when {
+        t.isEmpty() -> error("A folder is required")
+        File(t).isAbsolute || t.startsWith("~") -> error("Must be relative to the project directory")
+        t.split('/', '\\').any { it == ".." } -> error("Must stay inside the project directory (no ..)")
+        else -> null
+    }
 }
