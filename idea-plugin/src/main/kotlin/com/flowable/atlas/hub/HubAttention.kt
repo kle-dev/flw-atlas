@@ -22,6 +22,9 @@ internal sealed interface HubAttention {
     /** Several Flowable projects, and nobody has said which one Atlas is about. */
     data class ChooseProject(val count: Int) : HubAttention
 
+    /** The index could not be built, so the whole panel is about nothing — said, with a Rebuild. */
+    data class IndexFailed(val reason: String) : HubAttention
+
     /** Archives the index could not open — an unreadable .bar used to look like an empty project. */
     data class UnreadableArchives(val names: List<String>) : HubAttention
 
@@ -33,6 +36,7 @@ internal sealed interface HubAttention {
             s.designResolution is Resolution.Dangling -> RemovedEnvironment(ConnectionKind.DESIGN)
             s.workResolution is Resolution.Dangling -> RemovedEnvironment(ConnectionKind.WORK)
             s.projectsAwaitingChoice >= 2 -> ChooseProject(s.projectsAwaitingChoice)
+            s.indexFailure != null -> IndexFailed(s.indexFailure)
             s.skippedArchives.isNotEmpty() -> UnreadableArchives(s.skippedArchives)
             s.explorerStale -> StaleExplorer
             else -> null

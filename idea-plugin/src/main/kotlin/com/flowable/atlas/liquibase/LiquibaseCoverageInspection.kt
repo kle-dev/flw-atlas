@@ -33,7 +33,7 @@ class LiquibaseCoverageInspection : LocalInspectionTool() {
         // cold index there is no verdict, and the daemon re-runs once the build lands.
         if (file.project.service<FlowableModelIndexService>().cachedOrRequest() == null) return PsiElementVisitor.EMPTY_VISITOR
 
-        val services = LiquibaseModelResolver.servicesFor(holder.project, file.name, text)
+        val services = LiquibaseModelResolver.servicesFor(holder.project, file.name, text, cachedOnly = true)
         if (services.isEmpty()) return PsiElementVisitor.EMPTY_VISITOR   // no backing service resolves → don't inspect
         val serviceColumns = LiquibaseModelResolver.looseColumns(services)
         val ops = LiquibaseChangelog.parseOps(text)

@@ -38,10 +38,12 @@ rather than by trying it.
 
 Under it sits **one attention line**, and only when there is something to do: an environment this
 project points at was removed (*Manage Environments…*), several Flowable projects were found and none
-chosen (*Choose*), archives the index could not read (*Show*), or the explorer is stale (*Regenerate
-Atlas Explorer*). One at a time, in the order of what goes wrong first — the next click hitting the wrong
-server, then the whole panel being about the wrong project, then data Atlas could not see, then artifact
-drift. It is the only row in the panel that comes and goes; everything below keeps its place.
+chosen (*Choose*), the model index could not be built (*Rebuild Model Index*, with the reason — the
+status reads *index failed* instead of *scanning…*, and the scan is not retried until you ask or a model
+changes), archives the index could not read (*Show*), or the explorer is stale (*Regenerate Atlas
+Explorer*). One at a time, in the order of what goes wrong first — the next click hitting the wrong
+server, then the whole panel being about the wrong project, then an index that is not there, then data
+Atlas could not see, then artifact drift. It is the only row in the panel that comes and goes; everything below keeps its place.
 
 A stale explorer means a model in scope is newer than the newest generated page — whether it arrived
 through a Design pull, a `git pull`, an unzipped export or a hand edit. The same comparison puts a banner

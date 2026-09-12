@@ -13,16 +13,20 @@ import com.intellij.openapi.project.Project
  */
 object LiquibaseModelResolver {
 
-    fun servicesFor(project: Project, fileName: String, text: String): List<ServiceTable> {
+    /**
+     * [cachedOnly] is what a highlighting pass passes: it reads the cached index or nothing, and never
+     * builds under the daemon's read lock. Completion, which is cancellable, may wait for a build.
+     */
+    fun servicesFor(project: Project, fileName: String, text: String, cachedOnly: Boolean = false): List<ServiceTable> {
         val service = project.service<FlowableModelIndexService>()
         val refs = LiquibaseChangelog.serviceReferences(text)
         val changelogKey = LiquibaseChangelog.changelogKey(fileName)
         val tables = LiquibaseChangelog.tableNames(text).map { it.uppercase() }.toSet()
 
         val resolved = LinkedHashSet<ServiceTable>()
-        refs.forEach { key -> service.serviceTableOf(key)?.let { resolved.add(it) } }
+        refs.forEach { key -> (if (cachedOnly) service.cachedServiceTableOf(key) else service.serviceTableOf(key))?.let { resolved.add(it) } }
         if (resolved.isEmpty()) {
-            for (st in service.allServiceTables()) {
+            for (st in service.allServiceTables(cachedOnly)) {
                 if (st.referencedLiquibaseModelKey == changelogKey || st.tableName?.uppercase() in tables) {
                     resolved.add(st)
                 }

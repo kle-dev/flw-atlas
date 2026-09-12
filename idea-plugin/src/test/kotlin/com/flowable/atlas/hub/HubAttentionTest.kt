@@ -16,9 +16,10 @@ class HubAttentionTest {
         awaiting: Int = 0,
         skipped: List<String> = emptyList(),
         stale: Boolean = false,
+        failed: String? = null,
     ) = HubSnapshot(
         subProjects = emptyList(), activeSubProject = "", projectsAwaitingChoice = awaiting,
-        modelCount = 3, typeCounts = emptyList(), scopeLabel = null, builtAtMillis = 1L,
+        modelCount = if (failed == null) 3 else null, indexFailure = failed, typeCounts = emptyList(), scopeLabel = null, builtAtMillis = 1L,
         skippedArchives = skipped, artifacts = emptyList(), explorerStale = stale, browserAvailable = false,
         designResolution = design, workResolution = work, hasAnyEnvironment = false,
         pullSelection = DesignPullSelection.EMPTY, lastPullMillis = null, searchedIn = "atlas-output/",
@@ -27,6 +28,13 @@ class HubAttentionTest {
     @Test
     fun aCleanPanelHasNothingToSay() {
         assertNull(HubAttention.of(snapshot()))
+    }
+
+    @Test
+    fun aFailedIndexIsSaidBeforeWhatTheIndexWouldHaveShown() {
+        // nothing below the index can be judged without it — but a wrong server and an unchosen project still come first
+        assertEquals(HubAttention.IndexFailed("boom"), HubAttention.of(snapshot(failed = "boom", skipped = listOf("a.bar"), stale = true)))
+        assertEquals(HubAttention.ChooseProject(2), HubAttention.of(snapshot(failed = "boom", awaiting = 2)))
     }
 
     @Test

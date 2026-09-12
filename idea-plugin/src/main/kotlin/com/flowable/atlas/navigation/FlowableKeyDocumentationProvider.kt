@@ -100,7 +100,8 @@ class FlowableKeyDocumentationProvider : AbstractDocumentationProvider() {
             }
         }
 
-        val entries = service.find(key).filter { it.type in targetTypes }
+        // the cached index or nothing: a hover must never build the index under the read lock
+        val entries = (service.cachedOrNull() ?: return null).find(key).filter { it.type in targetTypes }
         if (entries.isEmpty()) return null
         return Resolved(entries, key, service, project)
     }
@@ -111,9 +112,9 @@ class FlowableKeyDocumentationProvider : AbstractDocumentationProvider() {
      */
     private fun tableLine(service: FlowableModelIndexService, type: ModelType, key: String): String? {
         val table = when (type) {
-            ModelType.SERVICE -> service.serviceTableOf(key)
-            ModelType.DATA_OBJECT -> service.dataObjectInfoOf(key)
-                ?.referencedServiceDefinitionModelKey?.let { service.serviceTableOf(it) }
+            ModelType.SERVICE -> service.cachedServiceTableOf(key)
+            ModelType.DATA_OBJECT -> service.cachedDataObjectInfoOf(key)
+                ?.referencedServiceDefinitionModelKey?.let { service.cachedServiceTableOf(it) }
             else -> null
         } ?: return null
         val name = table.tableName ?: return null

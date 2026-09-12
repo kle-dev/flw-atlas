@@ -66,12 +66,14 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
         attentionLabel.text = when (attention) {
             is HubAttention.RemovedEnvironment -> message("hub.attention.removed", attention.kind.display)
             is HubAttention.ChooseProject -> message("hub.attention.chooseProject", attention.count)
+            is HubAttention.IndexFailed -> message("hub.attention.indexFailed", attention.reason)
             is HubAttention.UnreadableArchives -> message("hub.attention.archives", attention.names.size)
             HubAttention.StaleExplorer -> message("hub.attention.stale")
         }
         attentionLink.text = when (attention) {
             is HubAttention.RemovedEnvironment -> FlowableActionIds.text(FlowableActionIds.MANAGE_ENVIRONMENTS)
             is HubAttention.ChooseProject -> message("hub.attention.chooseProject.action")
+            is HubAttention.IndexFailed -> FlowableActionIds.text(FlowableActionIds.REBUILD_MODEL_INDEX)
             is HubAttention.UnreadableArchives -> message("hub.attention.archives.action")
             HubAttention.StaleExplorer -> FlowableActionIds.text(FlowableActionIds.REGENERATE_ATLAS_EXPLORER)
         }
@@ -101,8 +103,8 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
     private fun applyStatus(s: HubSnapshot) {
         val count = s.modelCount
         if (count == null) {
-            status.text = message("hub.status.scanning")
-            status.toolTipText = null
+            status.text = message(if (s.indexFailure != null) "hub.status.failed" else "hub.status.scanning")
+            status.toolTipText = s.indexFailure
             return
         }
         val age = s.builtAtMillis.takeIf { it > 0 }?.let { " · " + HubAge.relative(it) } ?: ""

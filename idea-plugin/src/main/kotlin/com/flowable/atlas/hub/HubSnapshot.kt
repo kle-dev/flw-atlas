@@ -42,8 +42,10 @@ internal data class HubSnapshot(
     val activeSubProject: String,
     /** How many projects were detected while nobody has said which — 0 whenever the question does not arise. */
     val projectsAwaitingChoice: Int,
-    /** Null while the index is being built. */
+    /** Null while the index is being built — or while it cannot be built, see [indexFailure]. */
     val modelCount: Int?,
+    /** Why the last index build failed, or null. */
+    val indexFailure: String?,
     val typeCounts: List<Pair<ModelType, Int>>,
     /** Where the index looked when that is narrower than the repository. */
     val scopeLabel: String?,
@@ -87,7 +89,9 @@ internal data class HubSnapshot(
 
             val indexService = project.service<FlowableModelIndexService>()
             val index = indexService.cachedOrNull()
-            if (index == null) indexService.ensureBuilding()
+            val failure = indexService.lastFailureOrNull()
+            // a failed build is shown, not retried on every refresh — Rebuild or a model change retries
+            if (index == null && failure == null) indexService.ensureBuilding()
             val typeCounts = index?.let { idx ->
                 val byType = idx.allDistinct().groupBy { it.type }
                 ModelType.entries.mapNotNull { t -> byType[t]?.let { t to it.size } }
@@ -112,6 +116,7 @@ internal data class HubSnapshot(
                 activeSubProject = active,
                 projectsAwaitingChoice = awaiting,
                 modelCount = index?.distinctCount(),
+                indexFailure = failure?.let { it.message?.takeIf { m -> m.isNotBlank() } ?: it.javaClass.simpleName },
                 typeCounts = typeCounts,
                 scopeLabel = ProjectModelScope.label(project),
                 builtAtMillis = index?.builtAtMillis ?: 0L,

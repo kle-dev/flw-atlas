@@ -26,7 +26,12 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
+import com.intellij.openapi.vfs.newvfs.events.VFileMoveEvent
+import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
@@ -44,6 +49,12 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
 
     @Volatile
     private var cached: FlowableIndex? = null
+
+    /** Why the last build failed, until a model changes or a rebuild is asked for. A failed build used to
+     *  leave nothing behind: the Hub read "no index" as "not built yet", asked again on every refresh and
+     *  started a fresh doomed scan each time, saying *scanning…* forever and logging nothing. */
+    @Volatile
+    private var lastFailure: Throwable? = null
 
     /** data-object key → physical table name; derived from [cached] and dropped with it. */
     @Volatile
@@ -71,7 +82,9 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
             VirtualFileManager.VFS_CHANGES,
             object : BulkFileListener {
                 override fun after(events: MutableList<out VFileEvent>) {
-                    if (events.any { ModelFiles.isModelPath(it.path) }) {
+                    // `path` is the new one: a rename away from a model extension (`x.bpmn` → `x.bpmn.bak`)
+                    // or a move out of scope matched nothing, and the key stayed indexed until a Rebuild.
+                    if (events.any { touchesModel(it) }) {
                         drop()
                         publishUpdated()
                     }
@@ -80,11 +93,19 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
         )
     }
 
+    private fun touchesModel(e: VFileEvent): Boolean =
+        ModelFiles.isModelPath(e.path) ||
+            (e as? VFilePropertyChangeEvent)?.takeIf { it.propertyName == VirtualFile.PROP_NAME }?.oldPath?.let(ModelFiles::isModelPath) == true ||
+            (e as? VFileMoveEvent)?.oldPath?.let(ModelFiles::isModelPath) == true
+
     private fun drop() {
         generation.incrementAndGet()
-        cached = null; dataObjectTablesCache = null
+        cached = null; lastFailure = null; dataObjectTablesCache = null
         serviceTablesCache = null; backingServiceKeyCache.clear(); operationsCache.clear()
     }
+
+    /** The reason the last build failed, or null — a failed index is a state the Hub has to show. */
+    fun lastFailureOrNull(): Throwable? = lastFailure
 
     /**
      * The current index, building it on first use / after invalidation.
@@ -104,7 +125,27 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
         // A torn scan during shutdown is worthless — and iterating a disposing VFS spams the log.
         if (project.isDisposed) return build(emptyList())
         if (ApplicationManager.getApplication().isReadAccessAllowed) return buildAndCache()
-        return startOrJoin().get()
+        return join(startOrJoin())
+    }
+
+    /**
+     * Wait for a build on another thread, honouring the caller's own cancellation: Find Usages' Cancel
+     * used to have no effect on the scan, and a cancelled build came back as an `ExecutionException` —
+     * PCE identity lost, reported to the user as an error.
+     */
+    private fun join(future: CompletableFuture<FlowableIndex>): FlowableIndex {
+        while (true) {
+            ProgressManager.checkCanceled()
+            try {
+                return future.get(50, TimeUnit.MILLISECONDS)
+            } catch (e: TimeoutException) {
+                continue
+            } catch (e: ExecutionException) {
+                val cause = e.cause ?: e
+                if (cause is ProcessCanceledException) throw cause
+                throw cause
+            }
+        }
     }
 
     /**
@@ -123,7 +164,9 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
 
     /** The background half of [ensureBuilding]: one pooled build, joined by every caller until it lands. */
     internal fun ensureBuildingAsync() {
-        if (cached != null || project.isDisposed) return
+        // A build that failed is not retried on every ask — a model change or an explicit Rebuild clears
+        // the failure (drop) and the next ask builds again.
+        if (cached != null || project.isDisposed || lastFailure != null) return
         startOrJoin()
     }
 
@@ -145,8 +188,13 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
                 ApplicationManager.getApplication().executeOnPooledThread {
                     try {
                         future.complete(buildAndCache())
+                    } catch (pce: ProcessCanceledException) {
+                        future.completeExceptionally(pce)          // a cancel, not a failure: nothing to record
                     } catch (t: Throwable) {
+                        LOG.warn("The Flowable model index could not be built", t)
+                        lastFailure = t
                         future.completeExceptionally(t)
+                        publishUpdated()                           // the Hub shows the failure instead of scanning forever
                     } finally {
                         inFlight.compareAndSet(future, null)
                     }
@@ -223,13 +271,21 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
      * or null when the data object / that field is absent. The operation + value-field catalog is
      * declared on this service model — see [operationsOf].
      */
-    fun backingServiceKey(dataObjectKey: String): String? {
+    fun backingServiceKey(dataObjectKey: String): String? = backingServiceKey(dataObjectKey, index())
+
+    /** [backingServiceKey] against the cached index only — for a highlighting pass, which must never build. */
+    fun cachedBackingServiceKey(dataObjectKey: String): String? = cachedOrNull()?.let { backingServiceKey(dataObjectKey, it) }
+
+    private fun backingServiceKey(dataObjectKey: String, idx: FlowableIndex): String? {
         backingServiceKeyCache[dataObjectKey]?.let { return it.orElse(null) }
-        val dataFile = index().find(dataObjectKey, ModelType.DATA_OBJECT)?.file ?: return null
+        // The generation is read before the computation and checked after it: a memo written after a
+        // drop() would otherwise carry a pre-pull answer past the invalidation until the next change.
+        val gen = generation.get()
+        val dataFile = idx.find(dataObjectKey, ModelType.DATA_OBJECT)?.file ?: return null
         val key = ReadAction.computeBlocking<String?, RuntimeException> {
             JsonUtil.topLevelString(dataFile, "referencedServiceDefinitionModelKey")
         }
-        backingServiceKeyCache[dataObjectKey] = java.util.Optional.ofNullable(key)
+        if (generation.get() == gen) backingServiceKeyCache[dataObjectKey] = java.util.Optional.ofNullable(key)
         return key
     }
 
@@ -239,14 +295,28 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
         return operationsOfService(serviceKey)
     }
 
+    /** [operationsOf] against the cached index only; empty when there is none. */
+    fun cachedOperationsOf(dataObjectKey: String): List<OperationInfo> {
+        val idx = cachedOrNull() ?: return emptyList()
+        val serviceKey = backingServiceKey(dataObjectKey, idx) ?: return emptyList()
+        return operationsOfService(serviceKey, idx)
+    }
+
     /** Operations declared directly on a service model. */
-    fun operationsOfService(serviceKey: String): List<OperationInfo> {
+    fun operationsOfService(serviceKey: String): List<OperationInfo> = operationsOfService(serviceKey, index())
+
+    /** [operationsOfService] against the cached index only; empty when there is none. */
+    fun cachedOperationsOfService(serviceKey: String): List<OperationInfo> =
+        cachedOrNull()?.let { operationsOfService(serviceKey, it) } ?: emptyList()
+
+    private fun operationsOfService(serviceKey: String, idx: FlowableIndex): List<OperationInfo> {
         operationsCache[serviceKey]?.let { return it }
-        val serviceFile = index().find(serviceKey, ModelType.SERVICE)?.file ?: return emptyList()
+        val gen = generation.get()
+        val serviceFile = idx.find(serviceKey, ModelType.SERVICE)?.file ?: return emptyList()
         val ops = ReadAction.computeBlocking<List<OperationInfo>, RuntimeException> {
             JsonUtil.readOperations(serviceFile)
         }
-        operationsCache[serviceKey] = ops
+        if (generation.get() == gen) operationsCache[serviceKey] = ops
         return ops
     }
 
@@ -295,14 +365,24 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
     // ---- Liquibase-coverage support (read on demand) -----------------------------------
 
     /** The physical-table mapping of a `.service` model, or null if not a database service / not found. */
-    fun serviceTableOf(serviceKey: String): ServiceTable? {
-        val file = index().find(serviceKey, ModelType.SERVICE)?.file ?: return null
+    fun serviceTableOf(serviceKey: String): ServiceTable? = serviceTableOf(serviceKey, index())
+
+    /** [serviceTableOf] against the cached index only — hover and highlighting must never build. */
+    fun cachedServiceTableOf(serviceKey: String): ServiceTable? = cachedOrNull()?.let { serviceTableOf(serviceKey, it) }
+
+    private fun serviceTableOf(serviceKey: String, idx: FlowableIndex): ServiceTable? {
+        val file = idx.find(serviceKey, ModelType.SERVICE)?.file ?: return null
         return ReadAction.computeBlocking<ServiceTable?, RuntimeException> { JsonUtil.readServiceTable(file) }
     }
 
     /** The logical field mapping of a `.data` model, or null if not found. */
-    fun dataObjectInfoOf(dataObjectKey: String): DataObjectInfo? {
-        val file = index().find(dataObjectKey, ModelType.DATA_OBJECT)?.file ?: return null
+    fun dataObjectInfoOf(dataObjectKey: String): DataObjectInfo? = dataObjectInfoOf(dataObjectKey, index())
+
+    /** [dataObjectInfoOf] against the cached index only. */
+    fun cachedDataObjectInfoOf(dataObjectKey: String): DataObjectInfo? = cachedOrNull()?.let { dataObjectInfoOf(dataObjectKey, it) }
+
+    private fun dataObjectInfoOf(dataObjectKey: String, idx: FlowableIndex): DataObjectInfo? {
+        val file = idx.find(dataObjectKey, ModelType.DATA_OBJECT)?.file ?: return null
         return ReadAction.computeBlocking<DataObjectInfo?, RuntimeException> { JsonUtil.readDataObject(file) }
     }
 
@@ -328,6 +408,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
      */
     fun dataObjectTables(): Map<String, String> {
         dataObjectTablesCache?.let { return it }
+        val gen = generation.get()
         val idx = cachedOrNull() ?: return emptyMap()
         val services = idx.keysOfType(ModelType.SERVICE).mapNotNull { JsonUtil.readServiceTable(it.file) }
         val byKey = services.associateBy { it.key }
@@ -338,18 +419,26 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
             val table = (info.referencedServiceDefinitionModelKey?.let { byKey[it] } ?: byRef[entry.key])?.tableName
             if (!table.isNullOrBlank()) map[entry.key] = table
         }
-        dataObjectTablesCache = map
+        if (generation.get() == gen) dataObjectTablesCache = map
         return map
     }
 
-    /** All indexed database `.service` models (for the Liquibase-coverage inspection). Memoised per
-     *  index snapshot: the inspection asks for every changelog it highlights. */
-    fun allServiceTables(): List<ServiceTable> {
+    /**
+     * All indexed database `.service` models (for the Liquibase-coverage inspection and the column
+     * completion). Against the cached index only — the callers run under the daemon's read lock, and
+     * `index()` inside a read action builds *inline*, which put the whole lock-free phase-2 scan under
+     * the lock the split exists to keep it out of. Empty until an index exists; one is asked for.
+     * Memoised per index snapshot: the inspection asks for every changelog it highlights.
+     */
+    fun allServiceTables(cachedOnly: Boolean = false): List<ServiceTable> {
         serviceTablesCache?.let { return it }
+        val gen = generation.get()
+        // completion may wait for a build (it is cancellable); a highlighting pass may not
+        val idx = if (cachedOnly) cachedOrNull() ?: run { ensureBuilding(); return emptyList() } else index()
         val tables = ReadAction.computeBlocking<List<ServiceTable>, RuntimeException> {
-            index().keysOfType(ModelType.SERVICE).mapNotNull { JsonUtil.readServiceTable(it.file) }
+            idx.keysOfType(ModelType.SERVICE).mapNotNull { JsonUtil.readServiceTable(it.file) }
         }
-        serviceTablesCache = tables
+        if (generation.get() == gen) serviceTablesCache = tables
         return tables
     }
 

@@ -379,6 +379,16 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   is registered from the optional descriptor now, every other check goes through one probe that catches
   the missing link, and the explorer tab no longer touches its browser client after it was disposed.
 
+- **The model index's lifecycle is honest.** A cancelled build came back as an error (the cancellation
+  wrapped in an `ExecutionException`), and Cancel in Find Usages did not stop the scan; a build that
+  failed left the Hub at *scanning…* forever, retrying a doomed scan on every refresh with nothing in
+  the log — it says *index failed*, names the reason and offers Rebuild now; a lookup memo written after
+  a Design pull's invalidation could carry the pre-pull answer until the next change; a model renamed
+  away from its extension (`x.bpmn` → `x.bpmn.bak`) stayed indexed; and a folder added to a monorepo
+  appeared in the project picker after a restart only. And nothing builds the index under a read lock
+  any more: hovering a key with a cold index, the value-field inspection and the Liquibase coverage
+  inspection all read the cached index or wait for the next pass.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its

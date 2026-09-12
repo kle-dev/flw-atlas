@@ -61,7 +61,9 @@ class FlowableValueFieldInspection : LocalInspectionTool() {
                 val service = project.service<FlowableModelIndexService>()
                 // no index, no verdict — and no build under the daemon's read lock
                 if (service.cachedOrRequest() == null) return
-                val operations = if (site.keyIsService) service.operationsOfService(modelKey) else service.operationsOf(modelKey)
+                // the cached variants: the cache can be dropped between the gate above and this call, and
+                // the plain ones would then build the whole index inline, under the daemon's read lock
+                val operations = if (site.keyIsService) service.cachedOperationsOfService(modelKey) else service.cachedOperationsOf(modelKey)
                 val operation = operations.firstOrNull { it.key == operationKey } ?: return
 
                 val validFields = operation.inputParameters.map { it.name }

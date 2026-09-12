@@ -114,6 +114,7 @@ class AtlasHubPanel(override val project: Project) : SimpleToolWindowPanel(true,
         when (attention) {
             is HubAttention.RemovedEnvironment -> invokeAction(FlowableActionIds.MANAGE_ENVIRONMENTS)
             is HubAttention.ChooseProject -> header.projectCombo.showPopup()
+            is HubAttention.IndexFailed -> invokeAction(FlowableActionIds.REBUILD_MODEL_INDEX)
             is HubAttention.UnreadableArchives -> JBPopupFactory.getInstance()
                 .createPopupChooserBuilder(attention.names)
                 .setTitle(message("hub.attention.archives.title"))
