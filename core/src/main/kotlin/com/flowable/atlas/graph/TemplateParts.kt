@@ -24,10 +24,14 @@ object TemplateParts {
         diag: (String, String, String) -> Unit,
     ) {
         if (parts.isEmpty()) return
-        val templates = HashMap<String, MutableMap<String, Any?>>()
+        // Every record of the key, not the last one: the same template loose and inside a BAR is two
+        // records until the resolver dedupes them, and it keeps the first — which had to be the one
+        // carrying the body (on one real project the loose legacy copy won and the BAR's variations went
+        // with the copy that was dropped).
+        val templates = HashMap<String, MutableList<MutableMap<String, Any?>>>()
         for (o in (result["others"] as? List<*>).orEmpty()) {
             val m = o as? MutableMap<String, Any?> ?: continue
-            if (m["modelType"] == "template") (m["key"] as? String)?.let { templates[it] = m }
+            if (m["modelType"] == "template") (m["key"] as? String)?.let { templates.getOrPut(it) { ArrayList() }.add(m) }
         }
         for ((label, text) in parts) {
             val low = label.lowercase()
@@ -35,17 +39,20 @@ object TemplateParts {
             if (low.endsWith(".tplvariation")) {
                 for (v in (parsed as? List<*>).orEmpty().mapNotNull { it as? Map<String, Any?> }) {
                     val key = v["templateDefinitionKey"] as? String ?: continue
-                    val tpl = templates[key]
-                    if (tpl == null) { diag("skip", label, "a variation of template '$key', which is not in this project"); continue }
+                    val tpls = templates[key]
+                    if (tpls == null) { diag("skip", label, "a variation of template '$key', which is not in this project"); continue }
                     val rec = linkedMapOf<String, Any?>()
+                    (v["variationKey"] as? String)?.takeIf { it.isNotBlank() }?.let { rec["name"] = it }
                     (v["parameterValues"] as? Map<*, *>)?.takeIf { it.isNotEmpty() }?.let { rec["parameters"] = it }
                     val content = v["variationContent"] as? String
                     content?.takeIf { it.isNotBlank() }?.let { rec["text"] = ModelParsers.capText(it) }
                     v["variationContentResource"]?.let { rec["resource"] = it }
                     if (rec.isEmpty()) continue
-                    val list = (tpl["variations"] as? MutableList<Any?>) ?: ArrayList<Any?>().also { tpl["variations"] = it }
-                    list.add(rec)
-                    if (tpl["content"] == null && content != null) tpl["content"] = ModelParsers.capText(content)
+                    for (tpl in tpls) {
+                        val list = (tpl["variations"] as? MutableList<Any?>) ?: ArrayList<Any?>().also { tpl["variations"] = it }
+                        list.add(LinkedHashMap(rec))
+                        if (tpl["content"] == null && content != null) tpl["content"] = ModelParsers.capText(content)
+                    }
                     if (content != null) harvest(ctx, key, content)
                 }
             } else {
@@ -54,9 +61,10 @@ object TemplateParts {
                 val name = m["name"] as? String ?: continue
                 // `template-<key>` names the template; an older export uses the content item's uuid, which
                 // nothing here can tie to a model — left alone rather than guessed.
-                val tpl = templates[id.removePrefix("template-")] ?: continue
-                val list = (tpl["attachments"] as? MutableList<Any?>) ?: ArrayList<Any?>().also { tpl["attachments"] = it }
-                list.add(linkedMapOf("name" to name, "type" to m["resourceType"]))
+                for (tpl in templates[id.removePrefix("template-")] ?: continue) {
+                    val list = (tpl["attachments"] as? MutableList<Any?>) ?: ArrayList<Any?>().also { tpl["attachments"] = it }
+                    list.add(linkedMapOf("name" to name, "type" to m["resourceType"]))
+                }
             }
         }
     }

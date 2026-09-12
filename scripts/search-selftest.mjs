@@ -88,7 +88,7 @@ const rankOf = (hits, id) => hits.findIndex(h => h.n.id === id);
 // with a customerName column, and "Priority"/priorityMD). The fixture feeds the three goldens, so it
 // must not be edited to make a case pass — pick a different case instead.
 const DO_CUSTOMER = 'dataObject:customerDO';
-const DO_PRIORITY = 'dataObject:priorityMD';
+const DO_PRIORITY = 'masterData:priorityMD';   // a master-data list is its own kind since 0.26.0
 // The fixture form, whose buttons carry the ids / callees / expressions the `id:` cases look up.
 const FORM_ORDER = 'form:orderForm';
 // The label / description cases below read fixture content that is there for its own sake:
