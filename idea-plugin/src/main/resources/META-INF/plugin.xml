@@ -290,9 +290,8 @@
           <li><b>The Checks page keeps its place and its numbers straight.</b> Its filter counted accepted
               rows and the rule table against a chip that counted open findings ("12 of 340" beside "42
               open"), and discarding a draft or restoring a rule scrolled to the top. The health list — here
-              and on the overview — is grouped by the catalog's tiers (<i>Broken</i>, <i>Runtime
-              behaviour</i>, <i>Unfinished</i>, <i>Unused &amp; unproven</i>) in the order the blocks
-              appear, so its first row jumps to the first block rather than the last.</li>
+              and on the overview — follows the order the blocks appear in, so its first row jumps to the
+              first block rather than the last.</li>
           <li><b>A list that matches nothing says so.</b> Typing a filter no row matched left a blank
               column; it now says <i>No match in Forms</i> and offers to search everything. And a deep link
               into a CMMN diagram (<code>&amp;e=</code>) lights up the plan item like the ⌖ button does —
@@ -518,6 +517,13 @@
               name only and never past its cell, a tag ellipsises, the current crumb has a width, and an
               expression's or binding's label is shown as code — three lines, with <i>show all</i> for the
               rest.</li>
+          <li><b>Defects and advice on the page, and a badge toggle on the diagram.</b> The Checks page and
+              the health list lead with <code>3 defects · 41 advice</code> and group their rows under those
+              two headings — the four tier labels are gone; the sidebar's <i>Checks</i> badge turns red only
+              while a defect is open. On a diagram an element's badge takes the tone of its worst finding —
+              red for an error, amber for a defect, grey for advice alone — so a process whose every task
+              lacks a boundary event no longer wears an orange badge on every task; and a ⚑ button in the
+              top bar hides the badges on every diagram, remembered like the ≈ toggle beside it.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

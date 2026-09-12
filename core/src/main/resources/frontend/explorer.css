@@ -310,7 +310,17 @@
   .hrow{display:grid;grid-template-columns:3px 2.5ch 6ch minmax(0,auto) minmax(0,1fr);align-items:center;gap:var(--space-25);
     padding:var(--space-15) var(--space-3) var(--space-15) 0;border-bottom:1px solid var(--line);font-size:var(--text-md);min-height:32px}
   .hlist>.hrow:last-child,.hclean .hrow:last-child{border-bottom:none}
-  .htier{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.04em;color:var(--ink-faint);padding:var(--space-2) var(--space-3) var(--space-1);border-bottom:1px solid var(--line)}
+  .htier{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.04em;color:var(--ink-faint);padding:var(--space-2) var(--space-3) var(--space-1);border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:var(--space-15)}
+  .htier .hkn{font-variant-numeric:tabular-nums;font-weight:600;color:var(--ink-dim)}
+  .htier.hkind-defect{color:var(--bad-text)}
+  .htier.hkind-advice{color:var(--ink-dim)}
+  /* the two groups of the Checks page: a heading a reader can act on, not a fourth tier label */
+  .kindhead{display:flex;align-items:center;gap:var(--space-25);margin:var(--space-6) 0 var(--space-2);padding-bottom:var(--space-15);
+    border-bottom:2px solid var(--line)}
+  .kindhead .kindlbl{font-size:var(--text-lg);font-weight:600;letter-spacing:-.01em}
+  .kindhead.kind-defect .kindlbl{color:var(--bad-text)}
+  .kindhead .kindhint{color:var(--ink-faint);font-size:var(--text-xs);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .hrow .hbar{align-self:stretch;background:var(--line)}
   .hrow.tone-bad .hbar{background:var(--bad-bar)}
   .hrow.tone-warn .hbar{background:var(--warn-bar)}
@@ -474,6 +484,7 @@
   .dgview svg .dgmark{cursor:pointer}
   .dgview svg .dgmark circle{fill:var(--bad-bar);stroke:#fff;stroke-width:1.5}
   .dgview svg .dgmark-warn circle{fill:var(--warn-bar)}
+  .dgview svg .dgmark-advice circle{fill:var(--ink-faint)}
   .dgview svg .dgmark text{fill:#fff;font:600 9px var(--sans);text-anchor:middle;dominant-baseline:central;pointer-events:none}
   .dgview svg .dgmark:focus{outline:none}
   .dgview svg .dgmark:focus-visible circle{stroke:var(--accent);stroke-width:2.5}
@@ -775,6 +786,8 @@
   .nc .ncflag{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint);flex:none;cursor:help}
   .nc.nc-sus .ncflag{color:var(--cov-warn,#c98a1b)}
   #linkfilter.off{opacity:.5;text-decoration:line-through}
+  #markfilter.off{opacity:.5}
+  #markfilter.off svg{stroke-dasharray:2 2}
   details.uses{border:1px solid var(--line);border-radius:var(--radius-md);margin:var(--space-15) 0;background:var(--panel)}
   details.uses>summary{cursor:pointer;padding:var(--space-2) var(--space-3);font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-dim);list-style:none}
   details.uses>summary::-webkit-details-marker{display:none}

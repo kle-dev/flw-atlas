@@ -467,6 +467,9 @@ const nodeKind = n => (n.type!=='external')
 const outM = new Map(), incM = new Map();
 let hideUncertain = false;
 try{ hideUncertain = localStorage.getItem('atlas-uncertain')==='hide'; }catch(e){}
+// The finding badges on diagram elements, off when the reader wants the diagram alone. Remembered.
+let hideMarkers = false;
+try{ hideMarkers = localStorage.getItem('atlas-dgmarks')==='hide'; }catch(e){}
 const push = (m,k,v)=>{ if(!m.has(k)) m.set(k,[]); m.get(k).push(v); };
 function rebuildAdj(){
   outM.clear(); incM.clear();
@@ -667,6 +670,24 @@ function findPillHtml(id){
 }
 /** The catalog's title for a check id, or the id itself for one the catalog does not name. */
 function checkTitle(id){ const c=(DATA.checkCatalog||[]).find(x=>x.id===id); return c?c.title:id; }
+/** `defect` or `advice` — the split every surface leads with (CheckCatalog.kind). A check the catalog
+ *  does not name is treated as a defect: something the page cannot explain is not advice. */
+function checkKind(id){ const c=(DATA.checkCatalog||[]).find(x=>x.id===id); return (c&&c.kind)||'defect'; }
+const KIND_LABEL={defect:'Defects', advice:'Advice'};
+const KIND_HINT={defect:'something is wrong now — it fails, or two things disagree',
+                 advice:'nothing is broken — a pattern worth a look, optional to act on'};
+/** Open findings per kind, and the headline that says both — `3 defects · 41 advice`. */
+function kindCounts(){
+  const C=findingCounts(); let defects=0, advice=0;
+  Object.keys(C.open).forEach(k=>{ if(checkKind(k)==='advice') advice+=C.open[k]; else defects+=C.open[k]; });
+  return {defects, advice};
+}
+function kindHeadline(k){
+  const parts=[];
+  if(k.defects) parts.push(k.defects+' defect'+(k.defects>1?'s':''));
+  if(k.advice) parts.push(k.advice+' advice');
+  return parts.join(' · ');
+}
 /** `check id -> open count`, with a zero for every catalogued check — the sidebar sums two of these. */
 function healthMap(){
   const C=findingCounts(), h={};
@@ -978,10 +999,10 @@ function renderSidebar(){
   items.push({route:'/tree', label:'Reference tree', sec:'Models', pri:0, icon:'tree',
     color:color('process'),
     tip:'What each app starts, and what those models reach — every relation except app membership'});
-  const openChecks=INSIGHTS.checksOpen;
+  const openChecks=INSIGHTS.checksOpen, K0=kindCounts();
   items.push({route:'/checks', label:'Checks', sec:'Checks', pri:0, icon:'checks',
-    color:covColor(openChecks?'bad':'good'), count:openChecks,
-    tip:'Everything worth a look — parse issues, flagged expressions, schema gaps, unused and unproven models'});
+    color:covColor(K0.defects?'bad':openChecks?'warn':'good'), count:openChecks,
+    tip:(openChecks?kindHeadline(K0)+' — ':'')+'a defect is wrong now, an advice is a pattern worth a look'});
   if(INSIGHTS.totalCovServices>0){
     const gaps=INSIGHTS.health.schemaGaps;
     items.push({route:'/schema', label:'Schema gaps', sec:'Checks', pri:1, icon:'schema',
@@ -1125,10 +1146,10 @@ function renderDashboard(){
   // findings themselves (one place to review, instead of two that drift apart)
   const list=healthListHtml();
   if(list){
-    const open=INSIGHTS.checksOpen;
+    const open=INSIGHTS.checksOpen, K=kindCounts();
     h+='<div class="dash-col"><div class="seclabel row">Health'+
        '<button class="dgbtn" data-route="/checks">'+
-       (open?open+' finding'+(open>1?'s':'')+' to review ↗':'open Checks ↗')+'</button></div>'+list+'</div>';
+       (open?esc(kindHeadline(K))+' ↗':'open Checks ↗')+'</button></div>'+list+'</div>';
   }
   // hotspots
   if(INSIGHTS.hotspots.length){
@@ -1352,13 +1373,14 @@ function healthRows(keys){
     let sub=n?c.what:c.clean;
     if(!n&&ex&&ex[0]) sub+=(sub?' — ':'')+ex[0]+' '+ex[1]+(ex[0]>1?'s':'')+' checked';
     if(w) sub+=(sub?' · ':'')+w+' accepted';
-    return {k:c.id, label:c.title, n, w, sev, tone, sub, tier:c.tier||'', jump:'chk-'+c.id};
-  // The catalog's tiers are the reading order every surface uses; sorting by tone alone put the first
-  // health row on the last block of the Checks page.
-  }).sort((a,b)=>(TIER_RANK[a.tier]??9)-(TIER_RANK[b.tier]??9) || TONE_RANK[a.tone]-TONE_RANK[b.tone] || b.n-a.n || a.label.localeCompare(b.label));
+    return {k:c.id, label:c.title, n, w, sev, tone, sub, tier:c.tier||'', kind:checkKind(c.id), jump:'chk-'+c.id};
+  // Defects before advice — the split the reader asked for by name — then the catalog's tiers, which are
+  // the reading order every surface uses; sorting by tone alone put the first health row on the last
+  // block of the Checks page.
+  }).sort((a,b)=>KIND_RANK[a.kind]-KIND_RANK[b.kind] || (TIER_RANK[a.tier]??9)-(TIER_RANK[b.tier]??9) || TONE_RANK[a.tone]-TONE_RANK[b.tone] || b.n-a.n || a.label.localeCompare(b.label));
 }
+const KIND_RANK={defect:0, advice:1};
 const TIER_RANK={broken:0, runtime:1, unfinished:2, noise:3};
-const TIER_LABEL={broken:'Broken', runtime:'Runtime behaviour', unfinished:'Unfinished', noise:'Unused & unproven'};
 function healthListHtml(keys){
   const rows=healthRows(keys);
   if(!rows.length) return '';
@@ -1369,8 +1391,13 @@ function healthListHtml(keys){
     '<span class="hsev">'+esc(r.sev)+'</span>'+
     '<span class="hl">'+esc(r.label)+'</span><span class="hs">'+esc(r.sub)+'</span></div>';
   const open=rows.filter(r=>r.n>0), clean=rows.filter(r=>!r.n);
-  let h='<div class="hlist">', lastTier=null;
-  open.forEach(r=>{ if(r.tier!==lastTier && TIER_LABEL[r.tier]){ h+='<div class="htier">'+esc(TIER_LABEL[r.tier])+'</div>'; lastTier=r.tier; } h+=row(r); });
+  // Two headings, not four: "Defects" and "Advice" is the distinction a reader acts on — a task without a
+  // boundary event beside an expression that does not parse taught readers to skim both.
+  let h='<div class="hlist">', lastKind=null;
+  open.forEach(r=>{
+    if(r.kind!==lastKind){ const n=open.filter(x=>x.kind===r.kind).reduce((a,x)=>a+x.n,0);
+      h+='<div class="htier hkind-'+r.kind+'" data-tip="'+esc(KIND_HINT[r.kind]||'')+'">'+esc(KIND_LABEL[r.kind]||r.kind)+'<span class="hkn">'+n+'</span></div>'; lastKind=r.kind; }
+    h+=row(r); });
   if(!open.length) h+='<div class="hrow tone-ok hall"><span class="hbar"></span><span class="hn">'+uiIcon('check')+'</span><span class="hsev"></span>'+
     '<span class="hl">All '+clean.length+' checks clean</span><span class="hs">'+(clean.some(r=>r.w)?'nothing open — what was accepted is listed below':'nothing flagged in this report')+'</span></div>';
   if(clean.length) h+='<details class="hclean"><summary>'+clean.length+' check'+(clean.length>1?'s':'')+' with nothing open</summary>'+
@@ -2075,7 +2102,17 @@ function renderChecks(){
   _sectReg=[];
   let b='';
   const byCheck={}; FINDS.forEach(f=>{ (byCheck[f.check]=byCheck[f.check]||[]).push(f); });
-  checksInOrder().forEach(c=>{ b+=checkBlockHtml(c, byCheck[c.id]||[]); });
+  // The blocks in two groups, each under a heading that says what the group means: everything under
+  // "Advice" is a pattern worth a look, nothing there is broken.
+  const K=kindCounts();
+  ['defect','advice'].forEach(kind=>{
+    const blocks=checksInOrder().filter(c=>checkKind(c.id)===kind).map(c=>checkBlockHtml(c, byCheck[c.id]||[])).join('');
+    if(!blocks) return;
+    const n=kind==='advice'?K.advice:K.defects;
+    b+='<div class="kindhead kind-'+kind+'" id="chk-kind-'+kind+'"><span class="kindlbl">'+esc(KIND_LABEL[kind])+'</span>'+
+       '<span class="pill '+(kind==='advice'?'pill-info':(n?'pill-bad':'pill-ok'))+'">'+n+' open</span>'+
+       '<span class="kindhint">'+esc(KIND_HINT[kind])+'</span></div>'+blocks;
+  });
   // uncertain edges are a property of the graph, not of one node — say so once
   const suN=st.suspectEdges||0, dyN=st.dynamicEdges||0;
   if(suN+dyN){
@@ -2091,7 +2128,7 @@ function renderChecks(){
   _sectReg=null;   // the health list above is this page's navigator; a second strip repeated it (0.25.0)
   let h='<div class="dash" data-fscope>';
   h+=pageHeader({icon:'checks', color:color('checks'), title:'Checks', sub:C.openN
-       ? C.openN+' finding'+(C.openN>1?'s':'')+' worth a look — none of them is automatically a bug, each one is a question Atlas cannot answer on its own'+
+       ? '<b>'+esc(kindHeadline(K))+'</b> — a defect is wrong now, an advice is a pattern worth a look and optional to act on'+
          (C.waivedN?' · '+C.waivedN+' already accepted':'')
        : C.waivedN ? 'nothing open — '+C.waivedN+' finding'+(C.waivedN>1?'s':'')+' deliberately accepted, listed below with the reasons'
        : 'nothing flagged — no parse issues, no broken expressions, nothing unused or unproven'});
@@ -4583,9 +4620,16 @@ function dgCenter(z, g){
 function dgMarkFindings(view, n){
   const svg=view&&view.querySelector('svg'); if(!svg||!n) return;
   svg.querySelectorAll('.dgmark').forEach(x=>x.remove());
+  if(hideMarkers) return;                       // the ⚑ toggle in the top bar: a diagram without badges
   const byEl=new Map();
+  // An element's badge takes the tone of its worst finding: red for an error, amber for a defect, grey
+  // for advice alone — a diagram with an orange badge on every task said "everything is wrong" when it
+  // meant "every task is a call with no boundary event".
   (FIND_BY_NODE.get(n.id)||[]).forEach(f=>{ if(f.element==null||waiverFor(f)) return;
-    const k=String(f.element), m=byEl.get(k)||{n:0, worst:'warning'}; m.n++; if(f.severity==='error') m.worst='error'; byEl.set(k, m); });
+    const k=String(f.element), m=byEl.get(k)||{n:0, worst:'advice'}; m.n++;
+    const kind=checkKind(f.check);
+    if(f.severity==='error') m.worst='error'; else if(kind==='defect'&&m.worst!=='error') m.worst='warning';
+    byEl.set(k, m); });
   if(!byEl.size) return;
   const names=elementNames(n), NS='http://www.w3.org/2000/svg';
   byEl.forEach((m, el)=>{
@@ -4594,7 +4638,7 @@ function dgMarkFindings(view, n){
     if(!bb||!(bb.width>0)) return;
     const label=(names.get(el)||{}).name||el, lbl=m.n+' finding'+(m.n>1?'s':'')+' on '+label;
     const mk=document.createElementNS(NS,'g');
-    mk.setAttribute('class','dgmark dgmark-'+(m.worst==='error'?'bad':'warn'));
+    mk.setAttribute('class','dgmark dgmark-'+(m.worst==='error'?'bad':m.worst==='warning'?'warn':'advice'));
     mk.setAttribute('data-mark-el', String(g.dataset.el));
     mk.setAttribute('role','button'); mk.setAttribute('tabindex','0'); mk.setAttribute('aria-label', lbl);
     const c=document.createElementNS(NS,'circle'); c.setAttribute('cx', bb.x+bb.width); c.setAttribute('cy', bb.y); c.setAttribute('r','7.5');
@@ -6575,6 +6619,28 @@ function wireSearchTrigger(){
   if(nf) nf.onclick=()=>history.forward();
 }
 
+// ---------- diagram finding badges toggle ----------
+function wireMarkToggle(){
+  const b=document.getElementById('markfilter');
+  if(!b || !FINDS.length) return;              // nothing to badge — keep the button hidden
+  b.hidden=false;
+  const paint=()=>{
+    b.classList.toggle('off', hideMarkers);
+    b.setAttribute('aria-pressed', hideMarkers?'true':'false');
+    const tip=(hideMarkers?'Finding badges hidden on diagrams':'Finding badges shown on diagrams')+
+      ' — red for an error, amber for a defect, grey for advice. Click to toggle.';
+    b.setAttribute('data-tip', tip); b.setAttribute('aria-label', tip);
+  };
+  paint();
+  b.onclick=()=>{
+    hideMarkers=!hideMarkers;
+    try{ localStorage.setItem('atlas-dgmarks', hideMarkers?'hide':'show'); }catch(e){}
+    paint();
+    // repaint every visible diagram in place — no re-render, the reader keeps the place
+    document.querySelectorAll('.dgview').forEach(v=>{ const n=state.sel&&byId.get(state.sel); if(v._z) dgMarkFindings(v, n); });
+  };
+}
+
 // ---------- uncertain-links toggle (suspect ≈ / dynamic ƒ edges) ----------
 function wireLinkFilter(){
   const b=document.getElementById('linkfilter');
@@ -6985,6 +7051,7 @@ wireSearchTrigger();
 stampProvenance();
 wirePaletteResize();
 wireLinkFilter();
+  wireMarkToggle();
 tabsRestore();                  // before route(): a permalink then ADDS to the restored set
 window.addEventListener('hashchange',route);
 route();

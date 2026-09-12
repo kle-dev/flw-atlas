@@ -26,7 +26,7 @@ view you are looking at can be copied as a link.
 |---|---|
 | *(empty)* or `#/overview` | The dashboard: the inventory by type, the health list, hotspots (the project's own most-referenced models and code — platform beans, URLs and security policies aside), apps and entry points |
 | `#/tree` | The reference tree: what each app starts, and what those models reach |
-| `#/checks` | Every [finding](../checks/) in one place: a block per check with its rows, what it means and what to do, the accept controls, and what the project already accepted — with its reasons |
+| `#/checks` | Every [finding](../checks/) in one place, in two groups — **Defects** (wrong now) and **Advice** (a pattern worth a look): a block per check with its rows, what it means and what to do, the accept controls, and what the project already accepted — with its reasons |
 | `#/variables` | The [unused-variable](../variables/) report and what Atlas could not judge |
 | `#/scripts` | Every script body in the project |
 | `#/schema` | Schema gaps: Liquibase → service → data object, per column |
@@ -316,8 +316,14 @@ The explorer never presents a guess as a fact:
   not read is never silent.
 - A **count pill** on a tree row or a list item says how many open findings that model carries, coloured
   by the worst of them; a clean model wears none. On the model's diagram the same count sits as a
-  **marker** on each element with a finding — click it and the element's card lists them, with
-  *restore* for an accepted one and *accept…* landing on the finding's row under the diagram.
+  **badge** on each element with a finding — red for an error, amber for a [defect](../checks/), grey
+  when the element carries advice alone — click it and the element's card lists them, with *restore*
+  for an accepted one and *accept…* landing on the finding's row under the diagram. The toolbar's
+  **⚑ button** hides the badges on every diagram and is remembered, for a reader who wants the diagram
+  as Design draws it.
+- The health list — on the overview and at the top of the Checks page — leads with the two numbers,
+  *N defects · M advice*, and groups its rows under those two headings; the sidebar's *Checks* badge is
+  red only while a defect is open.
 - Liquibase changelogs carry **live / superseded / orphan**, and services carry per-column schema
   coverage badges. A column mapping that pairs a field with another field's column is marked
   **`⇄ crossed`** on the service page and in the schema report — it is not a coverage gap, so the row

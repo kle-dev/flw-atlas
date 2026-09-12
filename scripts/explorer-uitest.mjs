@@ -132,6 +132,13 @@ const probe = `<script>
     ok('the document itself does not scroll on the checks page',
        document.documentElement.scrollHeight<=window.innerHeight+1, 'document scrollHeight '+document.documentElement.scrollHeight);
     ok('the checks page is taller than the window, so scrolling is real', v.scrollHeight>v.clientHeight, v.scrollHeight+' vs '+v.clientHeight);
+    // the page leads with the split: a Defects group and an Advice group, the health list under two headings
+    ok('the checks page has a Defects group', !!v.querySelector('#chk-kind-defect'));
+    ok('the checks page has an Advice group', !!v.querySelector('#chk-kind-advice'));
+    ok('the health list is headed by kind, not tier', v.querySelectorAll('.htier.hkind-defect, .htier.hkind-advice').length===2,
+       v.querySelectorAll('.htier').length+' headings');
+    ok('the header says both numbers', /\\d+ defects? · \\d+ advice/.test(v.querySelector('.ddesc').textContent), v.querySelector('.ddesc').textContent.slice(0,80));
+    ok('the badge toggle is offered', !document.getElementById('markfilter').hidden);
     // a model chip in the findings table ends inside its cell — ellipsised by its name, never sliced
     const chips=[...v.querySelectorAll('.tbl .td>.nc')];
     ok('the findings table shows model chips', chips.length>0);

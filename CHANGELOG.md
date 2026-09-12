@@ -131,9 +131,8 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   and reference counts until the next navigation. Every view follows the toggle now.
 - **The Checks page keeps its place and its numbers straight.** Its filter counted accepted rows and the
   rule table against a chip that counted open findings ("12 of 340" beside "42 open"), and discarding a
-  draft or restoring a rule scrolled to the top. The health list — here and on the overview — is grouped by the catalog's tiers
-  (*Broken*, *Runtime behaviour*, *Unfinished*, *Unused & unproven*) in the order the blocks appear,
-  so its first row jumps to the first block rather than the last.
+  draft or restoring a rule scrolled to the top. The health list — here and on the overview — follows
+  the order the blocks appear in, so its first row jumps to the first block rather than the last.
 - **A list that matches nothing says so.** Typing a filter no row matched left a blank column; it now
   says *No match in Forms* and offers to search everything. And a deep link into a CMMN diagram
   (`&e=`) lights up the plan item like the ⌖ button does — the link never passed the element's name,
@@ -333,6 +332,14 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   and filled a page as a 26px headline. A chip now shrinks by its name only and never past its cell, a
   tag ellipsises, the current crumb has a width, and an expression's or binding's label is shown as code
   — three lines, with *show all* for the rest.
+
+- **Defects and advice on the page, and a badge toggle on the diagram.** The Checks page and the
+  health list lead with `3 defects · 41 advice` and group their rows under those two headings — the
+  four tier labels are gone; the sidebar's *Checks* badge turns red only while a defect is open. On a
+  diagram an element's badge takes the tone of its worst finding — red for an error, amber for a
+  defect, grey for advice alone — so a process whose every task lacks a boundary event no longer wears
+  an orange badge on every task; and a ⚑ button in the top bar hides the badges on every diagram,
+  remembered like the ≈ toggle beside it.
 
 ## 0.25.0
 
