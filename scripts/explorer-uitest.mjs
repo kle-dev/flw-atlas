@@ -157,6 +157,18 @@ const probe = `<script>
   steps.push(()=>{
     ok('forward returned to the checks page', location.hash===window.__beforeBack, 'hash='+location.hash);
   });
+  // --- the tree's key handler is wired once per view, however often the view is rendered ---
+  steps.push(()=>{ location.hash='/tree'; });
+  steps.push(()=>{ location.hash='/overview'; });
+  steps.push(()=>{ location.hash='/tree'; });
+  steps.push(()=>{
+    const row=document.querySelector('#view-tree .tv-row[aria-expanded]');
+    if(!row){ say('note','no expandable tree row — Space toggle not exercised'); return; }
+    const before=row.getAttribute('aria-expanded');
+    row.focus(); row.dispatchEvent(new KeyboardEvent('keydown', {key:' ', bubbles:true}));
+    ok('Space toggles a tree row once after a re-visit', row.getAttribute('aria-expanded')!==before, before+' -> '+row.getAttribute('aria-expanded'));
+    location.hash='/checks';
+  });
   // --- facets narrow, in two tiers ---
   steps.push(()=>{ openPalette(); type('customer'); });
   steps.push(()=>{

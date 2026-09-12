@@ -524,6 +524,9 @@
               red for an error, amber for a defect, grey for advice alone — so a process whose every task
               lacks a boundary event no longer wears an orange badge on every task; and a ⚑ button in the
               top bar hides the badges on every diagram, remembered like the ≈ toggle beside it.</li>
+          <li><b>The tree's keys work on the second visit too.</b> The reference tree wired its keyboard
+              handler on every render and never unwired it, so after <code>#/tree → overview → #/tree</code>
+              Space toggled a row twice — a no-op — and Enter opened the node twice. Wired once now.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

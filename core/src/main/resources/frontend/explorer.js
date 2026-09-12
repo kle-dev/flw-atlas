@@ -1647,7 +1647,11 @@ function wireTree(v){
   if(rows.length) rows[0].tabIndex=0;
   const visible=()=>rows.filter(r=>r.offsetParent!==null);
   const focus=li=>{ rows.forEach(r=>r.tabIndex=-1); li.tabIndex=0; li.focus(); };
-  v.addEventListener('keydown', e=>{
+  // One listener for the life of the view, pointing at this render's handler: the view element outlives
+  // its renders, and a listener added on every render stacked — after a second visit Space toggled a row
+  // twice (a no-op) and Enter pushed two history entries. Not `v.onkeydown`: wireNodeLinks owns that slot.
+  if(!v._treeKeysWired){ v.addEventListener('keydown', e=>{ if(v._treeKeys) v._treeKeys(e); }); v._treeKeysWired=true; }
+  v._treeKeys=e=>{
     // A "shown above" badge is a stop of its own: Enter or Space follows it, and nothing else here applies.
     const jt=e.target.closest&&e.target.closest('[data-jumpto]');
     if(jt){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); jt.click(); } return; }
@@ -1665,7 +1669,7 @@ function wireTree(v){
     else if(k==='Enter'){ const lab=li.querySelector('.tv-label'); if(lab) lab.click(); return; }
     else return;
     e.preventDefault();
-  });
+  };
   // The button's state is state, not its label: a fresh render starts folded to the default depth.
   const allBtn=v.querySelector('#tvall');
   state.treeExpanded=!!state.treeExpanded;   // kept across a re-render; the button below toggles it

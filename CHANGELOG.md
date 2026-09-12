@@ -341,6 +341,10 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   an orange badge on every task; and a ⚑ button in the top bar hides the badges on every diagram,
   remembered like the ≈ toggle beside it.
 
+- **The tree's keys work on the second visit too.** The reference tree wired its keyboard handler on
+  every render and never unwired it, so after `#/tree → overview → #/tree` Space toggled a row twice —
+  a no-op — and Enter opened the node twice. Wired once now.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its
