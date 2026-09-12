@@ -1064,6 +1064,7 @@ object ModelParsers {
             "key" to key, "name" to doc["name"], "file" to ffile,
             "dataObjectType" to doc["dataObjectType"], "sourceId" to doc["sourceId"],
             "service" to doc["referencedServiceDefinitionModelKey"], "dictionary" to doc["referencedDataDictionaryModelKey"],
+            "dictionaryType" to doc["dataDictionaryTypeName"],
             "columns" to columns, "fields" to columns.map { it["name"] },
         )
         for (k in listOf("type", "subType", "keyField", "idField", "nameField", "supportsNameFiltering")) {

@@ -414,6 +414,37 @@ object LiquibaseCoverage {
             if (truthy(s["tableName"])) d["serviceTableName"] = s["tableName"]
             if (truthy(s["type"])) d["serviceType"] = s["type"]
         }
+        // A data object typed by a dictionary type has that type's properties as its fields; its own
+        // `fieldMappings` say only what needs saying about one of them — the lookup id, a label. Read
+        // from the mappings alone, a service-registry data object with a twelve-property type had one
+        // field, and eleven mapped columns were "used by no data object" — 15 of the 16 such findings on
+        // two real projects. The type's properties come first, in the type's order; a mapping the type
+        // does not know (a relation to another object) keeps its row.
+        val typeProps = HashMap<Pair<String, String>, List<Map<String, Any?>>>()
+        for (dd in mapList(result["dictionaries"])) {
+            val dk = dd["key"] as? String ?: continue
+            for (t in mapList(dd["typeDefs"])) {
+                val tn = t["name"]?.toString() ?: continue
+                typeProps[dk to tn] = mapList(t["properties"])
+            }
+        }
+        for (d in dataObjects) {
+            val dk = d["dictionary"] as? String ?: continue
+            val tn = d["dictionaryType"] as? String ?: continue
+            val props = typeProps[dk to tn]?.takeIf { it.isNotEmpty() } ?: continue
+            val own = mapList(d["columns"]).associateBy { it["name"]?.toString() }
+            val merged = ArrayList<MutableMap<String, Any?>>()
+            for (p in props) {
+                val name = p["name"]?.toString() ?: continue
+                val col = LinkedHashMap<String, Any?>(own[name] ?: linkedMapOf("name" to name, "label" to null, "type" to null))
+                if (col["type"] == null) col["type"] = p["type"]
+                merged.add(col)
+            }
+            for ((n, c) in own) if (n != null && merged.none { it["name"] == n }) merged.add(c)
+            d["columns"] = merged
+            d["fields"] = merged.map { it["name"] }
+            d["fieldsFromDictionary"] = true
+        }
     }
 
     // ---------------------------------------------------------------------------

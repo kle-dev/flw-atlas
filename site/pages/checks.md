@@ -221,7 +221,9 @@ service" — those rows are gone.
 - **not mapped in service** — the column exists in the changelog, but the backing `.service` model does
   not map it, so no model can read or write it.
 - **not in data object** — the service maps it, but no data object uses it. The field is matched by the
-  mapping's *field* name, which is what a `.data` field binds to — not by the column name.
+  mapping's *field* name, which is what a `.data` field binds to — not by the column name. A data object
+  typed by a data-dictionary type has that type's properties as its fields; its own field mappings only
+  add the lookup id and labels, so they are not what the column is matched against.
 
 <figure class="fig">
   <div class="body"><img class="only-light" src="../assets/img/schema-page.png" alt="The schema gaps page: per service, a three-column table of Liquibase column, service mapping and data object field" width="1400" height="800"><img class="only-dark" src="../assets/img/schema-page-dark.png" alt="The schema gaps page: per service, a three-column table of Liquibase column, service mapping and data object field" width="1400" height="800"></div>

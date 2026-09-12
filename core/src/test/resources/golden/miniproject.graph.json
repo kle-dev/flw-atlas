@@ -380,6 +380,7 @@
       ],
       "dataObjectType": "masterData",
       "dictionary": null,
+      "dictionaryType": null,
       "fields": [
         "color",
         "level"
@@ -428,6 +429,7 @@
       ],
       "dataObjectType": "lookup",
       "dictionary": null,
+      "dictionaryType": null,
       "fields": [
         "customerName",
         "deliveryCity",
@@ -2527,6 +2529,7 @@
           ],
           "dataObjectType": "masterData",
           "dictionary": null,
+          "dictionaryType": null,
           "fields": [
             "color",
             "level"
@@ -3178,6 +3181,7 @@
           ],
           "dataObjectType": "lookup",
           "dictionary": null,
+          "dictionaryType": null,
           "fields": [
             "customerName",
             "deliveryCity",

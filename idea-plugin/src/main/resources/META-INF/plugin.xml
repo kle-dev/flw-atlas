@@ -414,6 +414,15 @@
               "called by no model or code" — the one operation kind the previous release said would be
               credited <i>only when something names it</i>, and nothing ever could. 75 such keys across the
               real projects are followed now.</li>
+          <li><b>A data object typed by a dictionary type has the type's properties.</b> A service-registry
+              data object names its type — <code>referencedDataDictionaryModelKey</code> plus
+              <code>dataDictionaryTypeName</code> — and its own <code>fieldMappings</code> say only what
+              needs saying about a field: the lookup id, a label. Atlas read the mappings alone, so a
+              twelve-property object had one field, its page listed one property, and eleven columns the
+              service maps were "used by no data object" — 15 of the 16 <code>schemaGaps</code> findings on
+              two real projects. The type's properties are the object's fields now, labels and lookup flags
+              merged from the mappings, and <code>dictionaryType</code> sits on the data object in
+              <code>graph.json</code>.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>

@@ -238,6 +238,14 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   one operation kind the previous release said would be credited *only when something names it*, and
   nothing ever could. 75 such keys across the real projects are followed now.
 
+- **A data object typed by a dictionary type has the type's properties.** A service-registry data
+  object names its type — `referencedDataDictionaryModelKey` plus `dataDictionaryTypeName` — and its
+  own `fieldMappings` say only what needs saying about a field: the lookup id, a label. Atlas read the
+  mappings alone, so a twelve-property object had one field, its page listed one property, and eleven
+  columns the service maps were "used by no data object" — 15 of the 16 `schemaGaps` findings on two
+  real projects. The type's properties are the object's fields now, labels and lookup flags merged
+  from the mappings, and `dictionaryType` sits on the data object in `graph.json`.
+
 ## 0.25.0
 
 - **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its
