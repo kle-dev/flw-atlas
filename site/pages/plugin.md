@@ -297,6 +297,13 @@ There is also a dedicated **Flowable Model** tab in Search Everywhere that searc
 *inside* `.bar` / `.zip` archives, and — while that tab is open — the full text of every model, showing
 the matched line.
 
+That popup is for reaching **one** place, and it closes when you do. For the other question — *where is
+this string, everywhere?* — press **⇧⏎** on any row, or run **Find in Models…**: the same three kinds of
+hit land in the Find tool window as a list that stays open, grouped by file, archive entries included,
+so thirty places can be worked through instead of searched for thirty times. *Find in Models…* is
+prefilled from the editor — the selection, else the model key under the caret — and the window says
+which scope it searched, so a sub-project chosen in the Hub is stated rather than implied.
+
 The catalog of API positions is transcribed from the public Flowable interfaces and matched through
 subinterfaces, so one entry covers every service that extends it. Both `org.flowable.*` and
 `com.flowable.*`.

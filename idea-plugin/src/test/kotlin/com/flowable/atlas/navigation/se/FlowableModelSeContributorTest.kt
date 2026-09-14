@@ -3,9 +3,11 @@ package com.flowable.atlas.navigation.se
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.intellij.ide.actions.searcheverywhere.FoundItemDescriptor
 import com.intellij.openapi.components.service
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.progress.EmptyProgressIndicator
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.intellij.util.Processor
+import java.awt.event.InputEvent
 
 /**
  * The "Flowable Model" Search Everywhere tab finds a model by its key and by its file name, finds a
@@ -87,6 +89,20 @@ class FlowableModelSeContributorTest : BasePlatformTestCase() {
             "needleWord",
             hit.lineText.substring(hit.matchStart, hit.matchStart + hit.matchLength),
         )
+    }
+
+    fun testShiftEnterRoutesToTheListWhilePlainEnterOpensTheResult() {
+        // The popup closes on the first result you open, which is why a search that matched thirty
+        // places needed a list of its own. Only the routing is asserted here — the list itself is
+        // ModelSearchUsagesTest's subject.
+        val contributor = FlowableModelSeContributor(project)
+        assertTrue(contributor.handsOverToList(InputEvent.SHIFT_DOWN_MASK, "DEMO-P001"))
+        assertFalse("plain Enter still goes to the result", contributor.handsOverToList(0, "DEMO-P001"))
+        assertFalse("one character is not a search", contributor.handsOverToList(InputEvent.SHIFT_DOWN_MASK, "D"))
+
+        val item = search("DEMO-P001").models().first()
+        assertTrue(contributor.processSelectedItem(item, 0, "DEMO-P001"))
+        assertEquals("plain Enter opens the model", 1, FileEditorManager.getInstance(project).openFiles.size)
     }
 
     fun testShortPatternDoesNotTriggerTheGrep() {

@@ -4,6 +4,7 @@ import com.flowable.atlas.completion.FlowableInfixMatcher
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.navigation.ModelElements
 import com.flowable.atlas.navigation.ModelKeyTargets
+import com.flowable.atlas.usage.ModelSearchUsages
 import com.intellij.ide.actions.searcheverywhere.FoundItemDescriptor
 import com.intellij.ide.actions.searcheverywhere.PossibleSlowContributor
 import com.intellij.ide.actions.searcheverywhere.SearchEverywhereContributor
@@ -23,6 +24,7 @@ import com.intellij.openapi.util.text.StringUtil
 import com.intellij.psi.codeStyle.NameUtil
 import com.intellij.util.Processor
 import com.intellij.util.text.matching.MatchingMode
+import java.awt.event.InputEvent
 import java.util.function.BiConsumer
 import javax.swing.ListCellRenderer
 
@@ -68,7 +70,14 @@ class FlowableModelSeContributor(private val project: Project) :
     /** Without this the contributor would only ever feed the "All" tab — no tab of its own. */
     override fun isShownInSeparateTab(): Boolean = true
 
-    /** Results are files and offsets, not usages; "Open in Find Tool Window" would show nothing useful. */
+    /**
+     * Stays false, and the alternative is worth recording. The flag only *enables* the platform's
+     * "Open in Find Tool Window" button; the action behind it fills the window from three item shapes
+     * only — `UsageInfo2UsageAdapter`, its own `SearchEverywhereItem`, and whatever it can convert to
+     * PSI — and [FlowableSeItem] is none of them, so turning this on would light a button that opens an
+     * empty window. ⇧⏎ hands over to [com.flowable.atlas.usage.ModelSearchUsages] instead, which builds
+     * the same list on the public usage-view API.
+     */
     override fun showInFindResults(): Boolean = false
 
     /** Defaults to false, which would leave the tab blank until the first character is typed. */
@@ -78,7 +87,8 @@ class FlowableModelSeContributor(private val project: Project) :
     override fun isSlow(): Boolean = true
 
     /** Rendered as the search field's hint, so it has to stay short. */
-    override fun getAdvertisement(): String = "Model keys, paths inside .bar/.zip, and model content"
+    override fun getAdvertisement(): String =
+        "Model keys, paths inside .bar/.zip, and model content · ⇧⏎ lists every hit"
 
     override fun fetchWeightedElements(
         pattern: String,
@@ -179,6 +189,10 @@ class FlowableModelSeContributor(private val project: Project) :
     }
 
     override fun processSelectedItem(selected: FlowableSeItem, modifiers: Int, searchText: String): Boolean {
+        if (handsOverToList(modifiers, searchText)) {
+            ModelSearchUsages.show(project, searchText)
+            return true
+        }
         if (!selected.file.isValid) return true
         when (selected) {
             // On the key's declaration, like a Ctrl+click — not line 1 of a minified model.
@@ -201,6 +215,17 @@ class FlowableModelSeContributor(private val project: Project) :
         }
         return true
     }
+
+    /**
+     * ⇧⏎ — the popup closes into a list that stays open, because opening one result is what closes this
+     * popup, and a search that matched thirty places cannot be walked one query at a time.
+     *
+     * Split out so the routing can be asserted on its own: building the real usage view in a light test
+     * trips an assertion inside the platform's own tree renderer, which says nothing about this branch.
+     */
+    internal fun handsOverToList(modifiers: Int, searchText: String): Boolean =
+        modifiers and InputEvent.SHIFT_DOWN_MASK != 0 &&
+            searchText.length >= ModelSearchUsages.MIN_PATTERN_LENGTH
 
     override fun getElementsRenderer(): ListCellRenderer<in FlowableSeItem> =
         FlowableModelSeRenderer { highlight }

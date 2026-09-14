@@ -984,6 +984,12 @@
                 <!-- The one action that competes with Shift-Shift for the hand: worth a chord. -->
                 <keyboard-shortcut keymap="$default" first-keystroke="control alt shift M"/>
             </action>
+            <!-- The same hits as the tab above, in a list that stays open: the popup is for reaching one
+                 place, this is for working through all of them. No second chord — it is reached from the
+                 popup with Shift+Enter, and from here. -->
+            <action id="Flowable.FindInModels"
+                    class="com.flowable.atlas.action.FindInModelsAction"
+                    icon="AllIcons.Actions.Find"/>
             <!-- The key under the caret — a literal or constant at a Flowable API site in Java, a reference or
                  the file's own key in a model file — onto the clipboard. Also in the editor's context menu. -->
             <action id="Flowable.CopyModelKey"

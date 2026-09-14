@@ -33,6 +33,7 @@ nothing on any other file.
 | Open Atlas Explorer | Atlas Hub toolbar and its *Explorer* block |
 | Open Expression Playground | Atlas Hub toolbar and its *Playground* block |
 | Search Models… | Atlas Hub toolbar and the model count in its header; Project view context menu; `Ctrl+Alt+Shift+M` |
+| Find in Models… | Atlas Hub toolbar's *Search Models…* popup, with `⇧⏎` on any row |
 | Copy Model Key | Editor context menu, on a key — a literal or constant at a Flowable API site in Java, a cross-reference or the file's own key in a model file; the Atlas Hub's *Recent Models* context menu |
 | Generate → Generate Atlas Explorer… | Atlas Hub, *Explorer* block; Project view context menu |
 | Generate → Regenerate Atlas Explorer | Atlas Hub attention line, when models changed since the last generation; the explorer tab's banner and toolbar; the balloon after a Design pull |
@@ -127,7 +128,7 @@ typing filters by key or name.
 | Find Usages | A bot class | The `.action` models whose `botKey` matches |
 | Find Usages | A Spring REST handler | The models whose HTTP task, REST button, service operation or REST data source calls that URL |
 | Search Everywhere / Go to Symbol | — | Every model key, plus bot keys — from actions and from `BotService` implementations — plus every named element inside a model: user tasks, activities, variables, messages, signals, an event's payload fields, a form's fields and outcomes, each opening its model at the declaration and labelled *User task · in DEMO-P001*. A model row carries its type's icon, a bot row the bot icon, and opens the file at the key's declaration |
-| Search Everywhere → **Flowable Model** tab | — | Model keys, archive-qualified paths inside `.bar` / `.zip`, the elements inside the models (ranked under the models, shown with their model in grey), and a live full-text search over model content showing the matched line. A model row carries its type's icon, a text hit a magnifier; the typed fragment is highlighted even mid-key, and the row's tooltip holds type, name and archive path |
+| Search Everywhere → **Flowable Model** tab | — | Model keys, archive-qualified paths inside `.bar` / `.zip`, the elements inside the models (ranked under the models, shown with their model in grey), and a live full-text search over model content showing the matched line. A model row carries its type's icon, a text hit a magnifier; the typed fragment is highlighted even mid-key, and the row's tooltip holds type, name and archive path. `⇧⏎` hands the whole result set to the Find tool window as a list that stays open |
 
 Two more behaviours belong here even though they are not navigation. Renaming a Java symbol that models
 reference raises a warning with *Show affected models*, because the refactoring engine cannot rewrite an

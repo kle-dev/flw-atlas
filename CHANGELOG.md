@@ -352,6 +352,18 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   Atlas's developers was shown as help; and the heading focus after a navigation was drawn as a text
   field.
 
+- **A search result list that stays open.** The *Flowable Model* tab finds a string in every model —
+  keys, element ids, and the full text, archive entries included — and then closes on the first result
+  you open, so a string that sits in thirty places could only be walked one query at a time. **⇧⏎** on
+  any row, or the new **Find in Models…**, puts the whole result set into the Find tool window instead:
+  every occurrence its own row, grouped by file, `.bar`/`.zip` entries among them, and the window names
+  the scope it searched. *Find in Models…* is prefilled from the editor — the selection, else the model
+  key under the caret. The platform's own *Open in Find Tool Window* button would have been the obvious
+  route and is a trap: its flag only lights the button, while the action behind it can only render three
+  item shapes, none of which this tab produces — it would have opened an empty window. The list is built
+  on the usage-view API that Find Usages on a model key already uses, so an offset is found again in the
+  file's own text rather than carried over from the scanner, which decodes UTF-8 where the editor uses
+  the file's charset.
 - **The Hub's three exits are on its toolbar.** *Open Atlas Explorer*, *Open Expression Playground* and
   *Search Models…* sat two clicks down in the ⋮ menu, which is where a reader who has not memorised the
   menu stops looking. They are buttons now, past a separator from Refresh and Settings — what acts on
