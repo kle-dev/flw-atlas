@@ -41,12 +41,20 @@ class ModelIndexEnsureBuildingTest : BasePlatformTestCase() {
         }
         assertTrue(started.await(5, TimeUnit.SECONDS))
         // ensureBuilding() returns at once; the build lands on a pooled thread, the publish may
-        // need the EDT's queue pumped
+        // need the EDT's queue pumped.
+        //
+        // Wait for the *publish*, not just for the cache. The build sets the cache on its pooled thread
+        // and publishes on the EDT, so waiting on the cache alone can fall through while the event is
+        // still queued — on a loaded CI runner that is the difference between "one update" and "none",
+        // and it failed exactly that way once.
         val deadline = System.currentTimeMillis() + 10_000
-        while (service.cachedOrNull() == null && System.currentTimeMillis() < deadline) {
+        while ((service.cachedOrNull() == null || updates.get() == 0) && System.currentTimeMillis() < deadline) {
             PlatformTestUtil.dispatchAllEventsInIdeEventQueue()
             Thread.sleep(20)
         }
+        // And drain once more, so a second publish — the thing "exactly one" is here to catch — has
+        // arrived by the time it is counted.
+        PlatformTestUtil.dispatchAllEventsInIdeEventQueue()
         val index = service.cachedOrNull()
         assertNotNull("the background build never landed", index)
         assertNotNull("the build indexed the model", index!!.find("P").firstOrNull())
