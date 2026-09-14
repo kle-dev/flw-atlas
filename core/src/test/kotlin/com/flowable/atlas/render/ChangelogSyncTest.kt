@@ -46,6 +46,22 @@ class ChangelogSyncTest {
         )
     }
 
+    /**
+     * The window carries actual notes. It held nothing but the pointer for a whole release, because the
+     * newest entry alone was longer than [ChangeNotes.BUDGET] and blocks went in whole or not at all —
+     * the one failure of this file's golden that the golden could not see.
+     */
+    @Test
+    fun changeNotesCarryTheNewestRelease() {
+        val releases = ChangeNotes.parseMarkdown(changelog().readText())
+        val rendered = ChangeNotes.renderHtml(releases)
+        assertTrue(
+            "generated <change-notes> does not carry the newest release (${releases.first().version})",
+            rendered.contains("<h3>${releases.first().version}</h3>"),
+        )
+        assertTrue("generated <change-notes> carries a heading but no bullet", rendered.contains("<li>"))
+    }
+
     /** Every released version appears once — a copy-pasted heading would otherwise pass unnoticed. */
     @Test
     fun everyVersionHeadingIsUnique() {
@@ -119,14 +135,23 @@ internal object ChangeNotes {
 
     // ---- html out -----------------------------------------------------------------------------
 
-    /** [releases] as descriptor HTML, newest first, truncated at [BUDGET] with a pointer appended. */
+    /**
+     * [releases] as descriptor HTML, newest first, truncated at [BUDGET] with a pointer appended.
+     *
+     * A release that does not fit whole is cut after its last fitting bullet rather than dropped. Whole
+     * blocks only was the obvious rule and it had one degenerate case: a single release longer than the
+     * budget left the field holding nothing but the pointer — an empty *What's New* in the plugin
+     * manager, certified green by the golden. The newest release is the one a reader came for.
+     */
     fun renderHtml(releases: List<Release>): String {
         val sb = StringBuilder()
         var truncated = false
         for (r in releases) {
             val block = renderRelease(r)
-            if (sb.length + block.length > BUDGET) { truncated = true; break }
-            sb.append(block)
+            if (sb.length + block.length <= BUDGET) { sb.append(block); continue }
+            sb.append(renderRelease(r, BUDGET - sb.length))
+            truncated = true
+            break
         }
         if (truncated) sb.append("        ").append(CHANGELOG_POINTER).append('\n')
         return sb.toString().trimEnd('\n')
@@ -139,11 +164,17 @@ internal object ChangeNotes {
         return re.replace(pluginXml) { m -> m.groupValues[1] + renderHtml(releases) + m.groupValues[3] }
     }
 
-    private fun renderRelease(r: Release): String = buildString {
-        append("        <h3>").append(escape(r.version)).append("</h3>\n")
-        append("        <ul>\n")
-        for (b in r.bullets) append(wrap("<li>" + inline(b) + "</li>")).append('\n')
-        append("        </ul>\n")
+    /** One release's HTML, cut after the last bullet that fits [budget]; empty when not even one does. */
+    private fun renderRelease(r: Release, budget: Int = Int.MAX_VALUE): String {
+        val open = "        <h3>" + escape(r.version) + "</h3>\n        <ul>\n"
+        val close = "        </ul>\n"
+        val bullets = StringBuilder()
+        for (b in r.bullets) {
+            val li = wrap("<li>" + inline(b) + "</li>") + "\n"
+            if (open.length + bullets.length + li.length + close.length > budget) break
+            bullets.append(li)
+        }
+        return if (bullets.isEmpty()) "" else open + bullets + close
     }
 
     /**

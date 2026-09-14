@@ -12,21 +12,242 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
-## 0.26.0
+## 0.24.0
 
-- **`unguardedTasks` names the calls that actually leave the engine.** Design writes a platform bean into
-  every service task's delegate expression, and the check read every delegate as "code of your own" — so
-  `${initVariablesService}`, `${auditLogService}` and `${dataObjectServiceTask}` were "calls out of the
-  engine with no error path". Measured on five real projects, 94 % of its findings sat on such beans:
-  275 on one project of 81 processes. It now fires on the task types that call out (HTTP, external
-  worker, agent, mail), on a class or a bean of the project's own, on an `expression` whose root is
-  neither an engine context nor a platform bean, and on a service-registry task whose service is REST;
-  an HTTP task that carries `ignoreException` or `handleStatusCodes` has its error path and is quiet, and
-  so is any async task — its failure is a failed job, retried and then reported, never an exception to
-  the caller. The
-  platform-bean set is declared once now (it lived in three renderers) and includes the `flw*Utils`
-  expression helpers and `propertyConfigurationService`, so those stop appearing under *Review —
-  unresolved in project*.
+- **Findings can be accepted, in a file you commit.** Some findings are correct and still not worth
+  acting on, and until now the only answer was to drop the check for everyone or stop running
+  `--fail-on` at all. A project can now carry `waivers.json` next to its artifacts, beside a generated
+  `.gitignore` that ignores everything in the folder *except* that file — the analysis is regenerated
+  and may hold client data, the decisions are yours and belong in review. A waiver names check + node,
+  narrowed by element and subject, so it survives the message rewording; an accepted finding stays in
+  the report, in a section of its own, and leaves the counts and the gate. A rule that matched nothing,
+  expired, or gives no reason is reported on every surface, and matching is counted per run, so a second
+  rule covering the same finding is not "matched nothing". The explorer and `Waivers.serialize` write
+  the same bytes — `WaiverWriterParityTest` runs one set through both — and a save from the IDE merges
+  into the file rather than over it: a rule a colleague committed, or the CLI added, after the page was
+  generated survives. New flags: `--waivers` (the folder the artifact lands in), `--no-waivers`,
+  `--fail-on-stale-waivers`, `--waiver-author` to prefill the `by` of a rule accepted from a
+  CLI-generated page, and `any` as the honest spelling of what `--fail-on warning` has always meant.
+- **Accept a finding where you read it.** Every finding row — on the Checks page, under *Findings on this
+  model* (right under the diagram), on a diagram element's card — carries **accept…**: a labelled reason
+  that is refused in words when empty, an optional *until*, *by* prefilled with the project's git
+  identity in the IDE, and, for a finding that names an element or a subject, a choice between this
+  finding only (the default) and every finding of the check on the model. Accepted rows stay in place
+  with *edit* and *restore*; a bar under the top bar says on every view how many decisions are unsaved,
+  with *Save to waivers.json* in the IDE or *Export* elsewhere and a two-step *discard*. After a save the
+  IDE confirms, regenerates the page — on the block or node you were reading, not back on the dashboard
+  — and the diff reconciles itself against the file. The IDE reads `waivers.json` on both generate paths,
+  so a page generated from the IDE no longer shows every accepted finding as open. The *Deliberately
+  accepted* table shows every decision as it stands — scope, reason, author, expiry, how many findings it
+  covers — with its troubles as marks on the row and *restore* beside it; notes get a table of their own.
+- **A model with findings looks like one.** A count pill on tree rows and list items, coloured by the
+  worst open finding; a marker on every diagram element with a finding, whose card lists them and hands
+  *accept…* to the finding's row. A review list that mirrors a check carries the check's open count — so
+  accepting the three unused forms empties the list instead of leaving *Unused forms 3* in the sidebar —
+  and a model whose every finding was accepted wears a small ✓ in lists and in the tree.
+- **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its
+  severity, why a finding matters, what to do about it — accepting included — and where the docs are.
+  The summary, the overview, the agent primer, the CLI's `--fail-on` vocabulary and the explorer all read
+  it, where until now a check was a string id in one place, a label in a second, a second label in a
+  third and a severity stated only on the documentation page. A renamed docs heading is now a red build
+  rather than a dead link.
+- **Every check is a defect or an advice, and every surface leads with the split.** A list that put
+  "task without a boundary event" beside "expression does not parse" taught a reader to skim both. Each
+  of the 23 checks now has a *kind*: a **defect** is wrong now — a file that does not parse, a key
+  nothing answers, a gateway the engine cannot leave, a column two names disagree about — and an
+  **advice** is a pattern worth a look while nothing is broken — a call with no error path, a form
+  nothing references. The Checks page, the summary, the overview, the generated `CLAUDE.md` and the CLI
+  status line say `3 defects · 41 advice` instead of `44 findings`; `graph.json` carries
+  `stats.defects` and `stats.advice`; the catalog reads defects first, then advice; and
+  `--fail-on defects` makes a pipeline red on what is wrong and green on what could be better.
+- **The explorer shows the findings :core computed.** The Checks page rebuilt its blocks from the live
+  nodes and took the counts from :core — two computations of one thing, which disagreed the moment
+  anything was accepted, and left the runtime checks with rows that went nowhere. The page now receives
+  the itemised findings and renders one block per check: severity in words, model, element (a jump into
+  the model), message, `file:line` with the open-in-IDE button, the catalog's explanation and docs link.
+  It leads with `3 defects · 41 advice` and groups its rows under those two headings — the four tier
+  labels are gone — and the sidebar's *Checks* badge turns red only while a defect is open. Every count
+  on the page moves with a decision taken on it, one filter covers the whole page, and every check has a
+  face — an *open the list* button, and an "N checked" denominator when it is clean, where half the
+  health list used to say what it had examined and half did not. Unused decision tables get a review
+  list of their own beside the unused forms and operations, and a review list is named exactly like its
+  check.
+- **Identical findings fold into one row.** The same `22 "hours"` missing its comma, copied across 22
+  forms, was 22 rows of the Checks page; 66 mail tasks with the same missing error path were 66. Three
+  or more findings with one message shape — names and numbers aside — read *22 ×* on one row now, the
+  members and their accept controls a chevron away, so the page has as many rows as it has causes. A
+  model's own page keeps every row.
+- **Findings carry a `subject`.** Several checks fire more than once on one node, and the only thing
+  telling those apart was the message — generated prose that rewords when something unrelated changes.
+  A finding now names which one it is: the scope, the column, the name an expression could not resolve.
+- **A badge toggle on the diagram.** An element's badge takes the tone of its worst finding — red for an
+  error, amber for a defect, grey for advice alone — so a process whose every task lacks a boundary event
+  no longer wears an orange badge on every task; a ⚑ button in the top bar hides the badges on every
+  diagram, remembered like the ≈ toggle beside it.
+
+- **Three checks about how a process behaves, not whether it resolves.** `nonExclusiveAsync` — an async
+  element that explicitly set `exclusive="false"`, so the jobs of one process instance may run
+  concurrently; it fires on the opt-out only, never on the absence, because `exclusive` defaults to
+  true. `asyncWithoutRetry` — async work with no `failedJobRetryTimeCycle` of its own. And
+  `unguardedTasks` — a call that leaves the engine with nothing catching its failure. Design writes a
+  platform bean into every service task's delegate expression, so "a service task with a class or a
+  delegate" would have been 94 % noise (275 findings on one project of 81 processes): it fires on the
+  task types that call out (HTTP, external worker, agent, mail), on a class or a bean of the project's
+  own, on an `expression` whose root is neither an engine context nor a platform bean, and on a
+  service-registry task whose service is REST. An HTTP task carrying `ignoreException` or
+  `handleStatusCodes` has its error path and is quiet, and so is any async task — its failure is a failed
+  job, retried and then reported, never an exception to the caller. The message names the fix for the
+  kind of call it found: a synchronous mail task is told to go async or get a boundary event.
+- **Six more checks — questions, not verdicts, each quiet where it cannot be sure.** `hardcodedSecrets`
+  (error): a password, token or API key written as plain text into a `.service`, `.channel`, agent or
+  knowledge-base model or a task's field injections, or credentials inside a URL — paths only, never
+  values; quiet for expression-valued credentials (`https://${user}:${password}@host` is what the finding
+  asks you to write) and for a key that merely talks *about* a secret (`tokenizerModel`, `maxTokens`,
+  `passwordPolicyDescription`). `gatewayNoDefault`: an exclusive or inclusive gateway whose every
+  outgoing flow is conditional and that names no default — "no outgoing sequence flow" waiting for the
+  data nobody thought of; a single conditional flow throws the same error and counts. `implicitSplit`:
+  two unconditional flows out of one activity, a fork nobody drew; quiet when every flow is conditional
+  and when the activity carries a *default* flow beside its conditions, which BPMN allows. `unsafeQueries`:
+  `${name}` in a query template with no escaping behind it; any built-in silences it. `leftoverMarkers`:
+  a `TODO`, `FIXME` or `HACK` in a model file, attributed to the model whose element holds it — in a
+  deployment file holding several processes, not to the first — with its line, or, where the text is
+  minified away, the path of the element (`rows[2].cols[0].label`) rather than a column that moves on
+  every export. `unusedDecisions`: a decision table nothing calls, app membership not counting as use and
+  the decision *service* Design generates around a set of tables counting as the caller it is.
+  FindingsTest pins each one's quiet path, and the three runtime checks' too.
+- **Two corrections to "defined, never used", and a rule task counted once.** A data table's *delete*
+  form was the one of its four form keys Atlas did not follow, so a form used only to confirm a
+  deletion was "unused". A group allowed to press a button on a form counted as a use of the form, so a
+  form nothing opens but a group may use was never reported. And a DMN service task, listed by the
+  parser as both a service task and a rule task, produced every topology finding twice.
+- **`schemaGaps` compares a service against its own table only.** When a changelog creating several tables
+  matched none of a service's columns, the coverage pass fell back to *every* column of the changelog, so
+  another table's columns were reported as this service's unmapped ones. And a service no data object
+  binds at all no longer reports every mapped column as "used by no data object": the service is used
+  directly, and the row said nothing about the column.
+- **A variable with many write sites is judged on all of them.** The write list on a variable node is
+  capped at 25 for the page, and the unused-variable decision read the capped list — so a variable
+  whose 26th write was the one that silences the check (a mapping into a model outside the project, a
+  scope that reads everything) was reported as never read. The decision runs on the full list now; the
+  cap is applied afterwards, for display.
+- **A CMMN lifecycle listener's script problem is a finding.** The parser has always flagged a
+  `planItemLifecycleListener` that carries a script — the engine's listener factory has no script branch,
+  so it is a silent no-op — but the note sat on the plan item, and the check read only a process's task
+  buckets. It reaches the case's page now, on the plan item that holds the listener.
+
+- **The platform-bean set is read off the platform's own configuration.** `${flw.setOutput(…)}` in a
+  task listener is the platform's scripting API root, and `planItemInstances` the CMMN query root; both
+  were listed as beans of the project's own — 36 times on one real project — and each was a call out of
+  the engine with no error path. The set is declared once now (it lived in three renderers) and carries
+  every task delegate the platform and Engage auto-configurations declare (`mergeDocumentService`,
+  `housekeepingServiceTask`, `generateSequenceServiceTask`, `processSendMessageTask` and the other
+  conversation tasks…), the platform services an expression calls (`commentService`, `queryService`,
+  `platformFormService`, `coreContentService`…), the `flw*Utils` expression helpers,
+  `propertyConfigurationService`, Spring Boot's `jacksonObjectMapper` and the actuator's
+  `environmentEndpoint`. None of them appear under *Review — unresolved in project* any more, and the
+  KDoc names the source files so the list can be regenerated instead of grown by complaint.
+- **A method call on a variable is a read of the variable, not a bean.** `${issue.asText()}`,
+  `${attachments.size()}`, `${requesterData.getName()}` read like bean calls to the harvest, and every
+  such root became a bean: on four real projects 25 variables vanished from the variable graph, stood
+  under *Review — unresolved in project* as beans nobody could find, and 15 service tasks that read a
+  variable were "calls out of the engine with no error path". A root is a bean only when something says
+  so — the platform declares it, Java declares it, a delegate expression names it bare, or it is named
+  the way Spring beans are named (`orderService`, `pdfGeneratorTask`); everything else is the variable
+  it always was, with the call recorded as its read. A service task's `expression` and its
+  `delegateExpression` now carry different relations (`serviceTask-expression`, `serviceTask-delegate`),
+  and `${true}` on a service task is a literal, not a bean called `true`.
+- **A key names a model only together with its type.** A case and its start form both called
+  `DRA-C001`, a data object and the service Design generated for it: two models of different types
+  sharing one key is common — 23 times across three real projects — and everything Atlas harvested from
+  a file (its `${…}` and `{{…}}`, its variables, the operations it calls, the scripts that touch a name)
+  was credited to whichever model of that key it had registered first. Measured: 34 bindings and 69
+  expressions of a start form on the case's page, none on the form's. Every such record now carries the
+  model's type, so the form's bindings are the form's. The shared key is still recorded in
+  `diagnostics`, but it stopped being a *parse issue*: nothing failed to parse, and the summary no longer
+  says "17 files could not be fully analyzed" about 16 shared keys. Only a Java string literal that names
+  the bare key stays ambiguous, and that edge was already marked suspect.
+- **A Design-workspace export is read in full.** The legacy editor stores a form or page body as a
+  tree of `childShapes` with hyphenated properties (`form-ref`, `rest-button-url`, `actiondefinitionkey`),
+  and Atlas registered such a model by key with no fields: 47 forms across the measured projects were
+  empty shells — blank pages in the explorer, at least 25 false "unused form" findings because the
+  subform that embedded them was never read, and ~1 000 references that never reached the graph. The old
+  shape is rewritten into the one the current Design writes — stencil to type as real exports pair them,
+  property to setting by spelling — and parsed by the same reader, so fields, subforms, data-object and
+  service references, action buttons, REST calls and payload mappings come out as from a current export.
+- **A data object typed by a dictionary type has the type's properties.** A service-registry data
+  object names its type — `referencedDataDictionaryModelKey` plus `dataDictionaryTypeName` — and its
+  own `fieldMappings` say only what needs saying about a field: the lookup id, a label. Atlas read the
+  mappings alone, so a twelve-property object had one field, its page listed one property, and eleven
+  columns the service maps were "used by no data object" — 15 of the 16 `schemaGaps` findings on two
+  real projects. The type's properties are the object's fields now, labels and lookup flags merged
+  from the mappings, and `dictionaryType` sits on the data object in `graph.json`.
+- **A data table names its operations, and a data object uses its service's.** A form select carries
+  `searchOperationKey` (its options) and `lookupOperationKey` (the stored id back to a row), a
+  data-object table its `dataObjectDataTable{Create,Edit,Delete}OperationKey`; Atlas recorded only the
+  table's main operation and the four form keys, so 75 such keys across the real projects were "called by
+  no model or code". And the engine calls a bound service's `lookup`, `create`, `update` and `delete` for
+  every data-object instance, which nothing in a model names: `unusedOps` listed every generated CRUD
+  operation — 74 of 74 on one real project, 41 of 64 on another. Both are followed now (the operation's
+  `type` travels with it in `graph.json`); a `search` operation is still only used when something names
+  it, which now something can.
+- **A reference written as `{id, key}` is a reference to `key`.** Newer Design writes a document
+  model's forms as `"edit": {"id": "FORM_MODEL-…", "key": "X"}` where older exports wrote `"X"`; Atlas
+  turned the map into the text `{id=FORM_MODEL-…, key=X}` and reported a *missing model* of that name
+  — two error findings on one real project, and the real form lost two inbound edges. Every reference
+  now passes through one door that unwraps the shape, so no parser can make that mistake again.
+- **A REST button's response lands where the button stores it.** A button bound to `{{$temp.info}}` with
+  *Store response attributes* `deploymentId` writes `$temp.info.deploymentId` — the platform's button
+  calls back onto its own binding — and the same form reads it as `{{$temp.info.deploymentId}}`. Atlas
+  recorded a variable `deploymentId` written by the mapping and read by nothing: eleven "written but
+  never read" on two real projects. A mapping stored under a binding is a property of that value now —
+  form-local under `$temp`, a field of the bound variable otherwise — and the payload table shows the
+  full path it lands on.
+- **A property table is not a component.** The legacy Design editor keeps a `pathProperties` map on
+  every form body — `{"id": "id", "url": "extraSettings.url", …}`, property name to JSON path. Walked as
+  content, that map has an `id` and a `url`, so every such form called `GET extraSettings.url`: 59 REST
+  calls to a path that is not a URL, each with its own external node, across five real projects. The
+  editor's bookkeeping maps are skipped now, and a REST call needs a component with a type behind it.
+- **References Atlas did not read yet.** A select over a master-data table (`tableKey`), a page's work
+  list (`scopeDefinitionKey` — six processes on one page that looked less used than they are), Design's
+  own namespace on a process or case element — `design:securitypolicy`, `design:processdefinitionkey`,
+  `design:casedefinitionkey`, `design:inboundchannelreference`, 34 references on the real projects — and
+  `<flowable:eventCorrelationParameter>`, the other half of what a send- or receive-event task
+  correlates on, are references and payload now. A data import's column mappings
+  (`design:variablemapping`), its report variable and a task's `additionalvariables` are variable
+  writes. And an in/out parameter tag is matched by its lower-cased name, the way form keys already were,
+  so an export that lower-cases `<flowable:inputparameter>` loses nothing.
+- **Master data is master data.** A `.data` whose `dataObjectType` is `masterData` — a managed
+  reference list — was a data object like any other: one real project read "143 data objects" for 143
+  lists, and each list's `variables` map (`lang`, `color`) became project variables, 35 of them. It is its
+  own kind now, `masterData`, counted apart ("143 master data"), and a select over such a table
+  (`tableKey`) links to it.
+- **Templates have their bodies.** A deployment archive keeps a template's text outside the `.tpl` —
+  in `template-<key>.tplvariation` — and an attached document's name in `.tplfile-metadata`; Atlas
+  dropped both without a word, so 23 of 23 template nodes on the real projects had no body: nothing to
+  search, and the `${root.travelerFirstName}` a mail template reads never reached the variable graph. The
+  parts are read wherever the `.tpl` is, loose or archived; the variations, their parameters and the
+  attachments sit on the template, its `${…}` are the template's expressions, and `${root.x}` is a read
+  of `x`. A legacy wrapper in a folder Design does not use (`decision-service-models`, on one real export)
+  is said instead of vanishing, and the folders Design added since — SLA, knowledge base, master data,
+  dashboard component, palette — are typed.
+- **Liquibase changelogs inside an archive are read.** A Design export packs
+  `liquibase-<key>.data.changelog.xml` next to the models, and Atlas only ever read changelogs on disk —
+  so every app that listed its own changelog reported a *missing model* (six on one project), and the
+  services those changelogs describe had no schema coverage. Archive entries are read like loose files
+  now, and a changelog's key is in the index before references resolve — and the same changelog loose and
+  archived is one changelog, not two that supersede each other.
+- **A constant at a key position names the model.** `startProcessInstanceByKey(ModelConstants.MAIN_CASE)`,
+  `.caseDefinitionKey(MAIN_CASE)`, `.decisionKey(Keys.GROUP_MAPPING)`: Atlas followed only a *literal* in
+  those positions, so a project whose Java layer is written against a generated constants class — one
+  real one, wholesale — had no code → model edge at all. A constant is resolved to its
+  `static final String` value once every source is read and recorded as the literal would be; a name two
+  classes define differently is left alone rather than guessed.
+- **An action's `channels` are UI placements, not channel models.** `menu`, `quick-menu`, `slash-menu` and
+  the mobile menus say where an action is offered; Atlas looked each one up as a channel model and
+  reported two *missing models* per action. They are a fact on the action now, and nothing else. In the
+  same pass, the platform's own event models — `_flowableMailEvent` and the `_flowableEngage…Received…`
+  events, which ship with the palette — resolve to a platform-provided external node instead of a
+  *missing model* error.
 - **A property before a ternary's colon is not a function namespace.** `… ? findUser(x).displayName :
   findUser(y).displayName` reads, around the colon, exactly like `date:now()` — `name : name (` — and the
   catalog walk reported "Unknown function namespace 'displayName'" on every conditional shaped that way.
@@ -44,307 +265,57 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   `${email.inbound.channel.imap-url:imap://localhost:3143/inbox}` was validated as JUEL (an error at the
   colon) and harvested as four variables — `email`, `imap`, `localhost`, `inbox`. A `${dotted.key:default}`
   is now marked `placeholder` in the graph, gets no verdict, and yields no variables; `${order.total}`
-  is still the property path it always was.
-- **A key names a model only together with its type.** A case and its start form both called
-  `DRA-C001`, a data object and the service Design generated for it: two models of different types
-  sharing one key is common — 23 times across three real projects — and everything Atlas harvested from
-  a file (its `${…}` and `{{…}}`, its variables, the operations it calls, the scripts that touch a name)
-  was credited to whichever model of that key it had registered first. Measured: 34 bindings and 69
-  expressions of a start form on the case's page, none on the form's. Every such record now carries the
-  model's type, so the form's bindings are the form's. The shared key is still recorded in
-  `diagnostics`, but it stopped being a *parse issue*: nothing failed to parse, and the summary no longer
-  says "17 files could not be fully analyzed" about 16 shared keys. Only a Java string literal that names
-  the bare key stays ambiguous, and that edge was already marked suspect.
-- **An action's `channels` are UI placements, not channel models.** `menu`, `quick-menu`, `slash-menu` and
-  the mobile menus say where an action is offered; Atlas looked each one up as a channel model and
-  reported two *missing models* per action. They are a fact on the action now, and nothing else.
-- **The platform's own event models are not missing.** `_flowableMailEvent` and the
-  `_flowableEngage…Received…` events ship with the platform palette; a channel or process that consumes
-  one resolves to a platform-provided external node instead of a *missing model* error.
-- **Liquibase changelogs inside an archive are read.** A Design export packs
-  `liquibase-<key>.data.changelog.xml` next to the models, and Atlas only ever read changelogs on disk —
-  so every app that listed its own changelog reported a *missing model* (six on one project), and the
-  services those changelogs describe had no schema coverage. Archive entries are read like loose files
-  now, and a changelog's key is in the index before references resolve — and the same changelog loose and
-  archived is one changelog, not two that supersede each other.
-- **A data object uses its service's operations.** The engine calls a bound service's `lookup`, `create`,
-  `update` and `delete` for every data-object instance; nothing in a model names them, so `unusedOps`
-  listed every generated CRUD operation — 74 of 74 on one real project, 41 of 64 on another. They are
-  credited to the data object now (the operation's `type` travels with it in `graph.json`); a `search`
-  operation is still only used when something names it.
-- **Three corrections to "defined, never used".** A data table's *delete* form was the one of its four
-  form keys Atlas did not follow, so a form used only to confirm a deletion was "unused". A group allowed
-  to press a button on a form counted as a use of the form, so a form nothing opens but a group may use
-  was never reported. And a decision *service* — the DRD Design generates around a set of tables — was
-  judged as if it were a table nobody consults, when it is the caller.
-- **`hardcodedSecrets` no longer flags the fix.** A URL carrying credentials was reported even when the
-  credentials were expressions — `https://${user}:${password}@host` is exactly what the finding asks you
-  to write. And a key that talks *about* a secret (`tokenizerModel`, `maxTokens`, `useTokenAuth`,
-  `passwordPolicyDescription`, `privateKeyAlias`) is not one; an error-level finding that is wrong costs
-  more than one that is missed.
-- **Three BPMN topology refinements.** `implicitSplit` fired on a task that carries a *default* flow
-  beside its conditions — BPMN allows that, and the engine takes the default only when no condition
-  holds. A DMN service task, listed by the parser as both a service task and a rule task, produced every
-  topology finding twice. And `gatewayNoDefault` skipped a gateway with a single conditional flow, which
-  throws the same "no outgoing sequence flow" as one with two.
-- **A variable with many write sites is judged on all of them.** The write list on a variable node is
-  capped at 25 for the page, and the unused-variable decision read the capped list — so a variable
-  whose 26th write was the one that silences the check (a mapping into a model outside the project, a
-  scope that reads everything) was reported as never read. The decision runs on the full list now; the
-  cap is applied afterwards, for display.
-- **`schemaGaps` compares a service against its own table only.** When a changelog creating several tables
-  matched none of a service's columns, the coverage pass fell back to *every* column of the changelog, so
-  another table's columns were reported as this service's unmapped ones. And a service no data object
-  binds at all no longer reports every mapped column as "used by no data object": the service is used
-  directly, and the row said nothing about the column.
+  is still the property path it always was. A Java `@Value("${mail.from}")` no longer makes `mail` a
+  project variable either.
 - **A byte-order mark is not a parse failure.** A JSON model beginning with a UTF-8 BOM — an export
   touched by a Windows editor — failed with "Expecting value at char 0", an error-level parse issue, and
   vanished from the report with every reference into and out of it. It is read like any other file now.
-- **The status line counts models, not files.** `3 models · 4 java` was the first thing Atlas said about
-  a repository of 27 Design exports holding 610 models — `stats.models` counted loose files. The CLI,
-  the summary, the overview and the agent primer now say `610 models (3 files · 27 archives)`, and
-  `graph.json` carries the count as `stats.modelCount`.
+- **The status line counts models, not files, and agrees with the report.** `3 models · 4 java` was the
+  first thing Atlas said about a repository of 27 Design exports holding 610 models — `stats.models`
+  counted loose files. The CLI, the summary, the overview and the agent primer now say
+  `610 models (3 files · 27 archives)`, and `graph.json` carries the count as `stats.modelCount`. The
+  line's finding counts come from the same numbers the report does, rather than from second counters
+  (`stats.scriptIssues`, the raw diagnostics) that know nothing about what was accepted.
 - **Hotspots are the project's own artifacts.** The most-referenced list on the overview and in the
   summary was led by `initVariablesService`, two IDM URLs, `flwTimeUtils` and a security policy — things
   every model references and nobody navigates to. Externals and security policies are left out now.
-- **A leftover marker knows which model it is in, and is one finding.** In a deployment file holding
-  several processes every `TODO` was pinned on the first; it is attributed to the process whose element
-  holds it now. The same model loose and inside a `.bar` reported its markers twice; once. A text-less
-  marker in a minified JSON model was named `@1:5087` — a column that moves on every export — and is
-  named by the path of the element holding it (`rows[2].cols[0].label`) instead; a waiver written
-  against the old `@line:column` subject will show as stale, and wants re-accepting.
-- **The sidebar's review lists count what is open.** Accept the three unused forms and the Checks page
-  went to zero while the sidebar still said *Unused forms 3*, and the list it opened showed the three
-  accepted forms exactly like clean ones. A review list that mirrors a check now carries the check's open
-  count, and a model whose every finding was accepted wears a small ✓ in lists and in the tree.
-- **Every check has a face on the page.** Six of the 23 — hardcoded secrets, unsafe queries, unused
-  decisions, leftover markers, gateways without default, implicit splits — had no *open the list*
-  button and no "N checked" denominator when clean, so half the health list said what it had examined
-  and half did not. Unused decision tables get a review list of their own beside the unused forms and
-  operations, and a review list is named exactly like its check: *Unused forms* on the Checks page was
-  *Forms · unused* in the sidebar, one click away.
-- **The reference tree keeps its chrome.** Its breadcrumb showed the last category you browsed and the
-  window title said "Processes"; the lens you picked was stored and never read back, so a reload reset
-  it; and switching the lens wiped the filter you had just typed and collapsed the tree. All three hold now.
-- **Hiding uncertain links hides them everywhere.** The ≈ toggle repainted the detail panel and nothing
-  else: the reference tree kept its shape and the overview kept counting suspect edges in its hotspots
-  and reference counts until the next navigation. Every view follows the toggle now.
-- **The Checks page keeps its place and its numbers straight.** Its filter counted accepted rows and the
-  rule table against a chip that counted open findings ("12 of 340" beside "42 open"), and discarding a
-  draft or restoring a rule scrolled to the top. The health list — here and on the overview — follows
-  the order the blocks appear in, so its first row jumps to the first block rather than the last.
-- **A list that matches nothing says so.** Typing a filter no row matched left a blank column; it now
-  says *No match in Forms* and offers to search everything. And a deep link into a CMMN diagram
-  (`&e=`) lights up the plan item like the ⌖ button does — the link never passed the element's name,
-  and CMMN's diagram references plan items by a different id than the parsed tree.
+- **Small corrections.** A file that is not a Flowable model at all — a Helm chart's `.tpl`, a palette
+  or manifest JSON — is recorded in `diagnostics` and printed by `-v`, no longer a warning finding about
+  somebody else's file. A variable written by three tasks of the same name reads "3 init-variables
+  mappings on `Initialize variables`", not the same phrase three times. A custom-function diagnostic
+  carries a file, so it can be accepted like any other finding. And a form button's `invokeServiceUrl` /
+  `invokeActionUrl` are REST calls to the IDE's scanner, as they were to the report.
+
+- **A reference tree.** The explorer could not answer "what does this app actually start, and what does
+  that reach?" — relationships were single-hop everywhere, so following a chain meant clicking through
+  it and losing your place at every step. `#/tree` walks the graph instead: the app as a grouping
+  header (plus *Outside any app*, which is a finding in itself), its functional roots — a model nothing
+  points at except its app — and everything those reach. App membership is deliberately not the spine:
+  `contains` is app → model and one level deep, so nesting by it buries the edge that explains why a
+  form exists. A node is expanded once, at the shallowest place it is reached; later arrivals are
+  leaves marked *shown above* that jump to it, which keeps the tree bounded where rebuilding a shared
+  subtree per path is exponential. Cycles terminate and say so. The filter takes the palette's search
+  grammar, and a row survives it if it matches **or** a descendant does.
 - **A report page can be reloaded, and sent.** The browse list round-tripped its filter and sort through
   the URL; the report pages did not, so a reload of `#/checks` dropped the severity chip and the filter,
   and "the four crossed mappings I found" could only be shared as a screenshot. `#/checks`, `#/tree`,
   `#/scripts`, `#/variables` and `#/schema` now carry their filter text, their chip, *show accepted* and
   the tree's lens in the URL, written as you type or pick and read back on arrival.
-- **A smaller page.** Every explorer shipped the run's `diagnostics` and the custom-function catalog in
-  its data island, and nothing on the page read either (the checks come as findings, the functions as
-  nodes) — on a project with parse problems that was kilobytes of dead weight per page.
-- **The search grammar stays a click away, tabs show from the first, and two keys for the two things
-  you do next.** The `label:` / `key:` / `type:` / `in:` chips appeared only while the query matched
-  nothing, so a reader who always got some result never saw them — a *narrow ▾* chip keeps the row
-  reachable under any result set. The tab strip appeared only from the second tab, which is how the
-  tabs and their Alt shortcuts stayed undiscovered; it shows from the first. And on a selected node,
-  `c` copies its key and, inside the IDE, `o` opens its file.
-- **Regenerating keeps your place.** After *Save to waivers.json* the explorer tab regenerated and came
-  back on the dashboard: the reload dropped the page's fragment. The Checks block or node you were on
-  is where the new page opens, and the reload bypasses the browser cache so it is the new page.
-- **The index is never built under the read lock.** Ctrl+click on a model key resolved through a call that
-  builds a cold index inline, freezing the IDE for the length of a model scan the first time; the
-  constants auto-refresher did the same after every pull. Both ask for the index and resolve to nothing
-  until it is there, like every other reference already did.
-- **No file-system refresh while holding the read lock, and a cancellation is not a failure.** Find Usages
-  and the index build opened archives with a synchronous jar refresh under the read lock — the deadlock
-  the scanner's own documentation warns about. And a cancelled scan was reported as an unreadable archive
-  (the Hub's *archives could not be read* line), an empty script picker, or a Design pull bounced to
-  Settings as "not configured".
-- **Two guards.** The output and pull folders in Settings must be relative to the project and stay inside
-  it — an absolute path or a `..` made a pull write outside the repository. And an `*.explorer.html`
-  inside an archive opens as a plain file rather than in a viewer whose Regenerate and Open-in-browser
-  throw.
-- **Saving waivers from the explorer merges.** The page rebuilt the whole file from the rules it was
-  generated with plus the decisions taken since, and the IDE wrote that over `waivers.json` — a rule a
-  colleague had committed, or the CLI had added, after the page was generated was silently deleted by the
-  next Save. The page now sends what it started from, and the IDE keeps every rule and note the file
-  gained meanwhile. The file is written as UTF-8 (it was written in the project's encoding and read as
-  UTF-8), and an open, edited `waivers.json` is saved first instead of fighting the write.
-- **Ctrl+click lands on the key.** A model key resolved to its *file*: line 1 of a minified Design JSON,
-  or the top of a deployment XML holding three processes, with nothing saying where the key is. Every
-  key reference — a Java literal, a constant, a cross-reference attribute in model XML, an operation or
-  value field — and the Search Everywhere row now land on the key's declaration: the `id` of the
-  process, case or decision, the `"key"` of a JSON model.
-- **Open in Atlas Explorer, from Java.** Alt+Enter on a model key — a literal or a constant at a Flowable
-  API site, or any literal equal to a known key when that recognition is on — opens the newest generated
-  explorer inside the IDE on that model's page: who references it, what it uses, its findings, its
-  diagram. The reverse of the page's own "open in IDE" button; it offers to generate an explorer when
-  there is none.
-- **Inspections leave test sources alone, and say which scope they judged against.** A test that starts
-  `no-such-process` to assert the failure was flagged like production code; `src/test/**` is skipped now
-  (test *models* are still judged, as the CLI always did). And in a monorepo the message reads *not a
-  known Process key in apps/orders* — a key from another module is unknown here, not nonexistent.
-- **Find Usages on a model's own key.** Selected in its file — the `id` of a process, case or decision,
-  the `"key"` of a JSON model — a key answered "no usages". It lists every model that references it (a
-  call activity, a form key, a service mapping, an extension element's text) and every Java call site
-  that names it at a Flowable API position.
-
-- **Every check is a defect or an advice, and every surface leads with the split.** A list that put
-  "task without a boundary event" beside "expression does not parse" taught a reader to skim both. Each
-  of the 23 checks now has a *kind*: a **defect** is wrong now — a file that does not parse, a key
-  nothing answers, a gateway the engine cannot leave, a column two names disagree about — and an
-  **advice** is a pattern worth a look while nothing is broken — a call with no error path, a form
-  nothing references. The Checks page, the summary, the overview, the generated `CLAUDE.md` and the CLI
-  status line say `3 defects · 41 advice` instead of `44 findings`; `graph.json` carries
-  `stats.defects` and `stats.advice`; the catalog reads defects first, then advice; and
-  `--fail-on defects` makes a pipeline red on what is wrong and green on what could be better.
-
-- **The platform-bean set is read off the platform's own configuration.** `${flw.setOutput(…)}` in a
-  task listener is the platform's scripting API root, and `planItemInstances` the CMMN query root; both
-  were listed as beans of the project's own — 36 times on one real project — and each was a call out of
-  the engine with no error path. The set now carries every task delegate the platform and Engage
-  auto-configurations declare (`mergeDocumentService`, `housekeepingServiceTask`,
-  `generateSequenceServiceTask`, `triggerIntentEvaluationServiceTask`, `processSendMessageTask` and the
-  other conversation tasks…), the platform services an expression calls (`commentService`,
-  `queryService`, `platformFormService`, `coreContentService`…), Spring Boot's `jacksonObjectMapper`
-  and the actuator's `environmentEndpoint`; the KDoc names the source files so the list can be
-  regenerated instead of grown by complaint.
-
-- **A method call on a variable is a read of the variable, not a bean.** `${issue.asText()}`,
-  `${attachments.size()}`, `${requesterData.getName()}` read like bean calls to the harvest, and every
-  such root became a bean: on four real projects 25 variables vanished from the variable graph, stood
-  under *Review — unresolved in project* as beans nobody could find, and 15 service tasks that read a
-  variable were "calls out of the engine with no error path". A root is a bean only when something says
-  so — the platform declares it, Java declares it, a delegate expression names it bare, or it is named
-  the way Spring beans are named (`orderService`, `pdfGeneratorTask`); everything else is the variable
-  it always was, with the call recorded as its read. A service task's `expression` and its
-  `delegateExpression` now carry different relations (`serviceTask-expression`, `serviceTask-delegate`),
-  and `${true}` on a service task is a literal, not a bean called `true`.
-
-- **A reference written as `{id, key}` is a reference to `key`.** Newer Design writes a document
-  model's forms as `"edit": {"id": "FORM_MODEL-…", "key": "X"}` where older exports wrote `"X"`; Atlas
-  turned the map into the text `{id=FORM_MODEL-…, key=X}` and reported a *missing model* of that name
-  — two error findings on one real project, and the real form lost two inbound edges. Every reference
-  now passes through one door that unwraps the shape, so no parser can make that mistake again.
-
-- **A data table names its operations.** A form select carries `searchOperationKey` (its options) and
-  `lookupOperationKey` (the stored id back to a row), a data-object table its
-  `dataObjectDataTable{Create,Edit,Delete}OperationKey`; Atlas recorded only the table's main operation
-  and the four form keys, so the search operation a select runs was "called by no model or code" — the
-  one operation kind the previous release said would be credited *only when something names it*, and
-  nothing ever could. 75 such keys across the real projects are followed now.
-
-- **A data object typed by a dictionary type has the type's properties.** A service-registry data
-  object names its type — `referencedDataDictionaryModelKey` plus `dataDictionaryTypeName` — and its
-  own `fieldMappings` say only what needs saying about a field: the lookup id, a label. Atlas read the
-  mappings alone, so a twelve-property object had one field, its page listed one property, and eleven
-  columns the service maps were "used by no data object" — 15 of the 16 `schemaGaps` findings on two
-  real projects. The type's properties are the object's fields now, labels and lookup flags merged
-  from the mappings, and `dictionaryType` sits on the data object in `graph.json`.
-
-- **A REST button's response lands where the button stores it.** A button bound to
-  `{{$temp.info}}` with *Store response attributes* `deploymentId` writes `$temp.info.deploymentId` —
-  the platform's button calls back onto its own binding — and the same form reads it as
-  `{{$temp.info.deploymentId}}`. Atlas recorded a variable `deploymentId` written by the mapping and
-  read by nothing: eleven "written but never read" on two real projects. A mapping stored under a
-  binding is a property of that value now — form-local under `$temp`, a field of the bound variable
-  otherwise — and the payload table shows the full path it lands on.
-
-- **A property table is not a component.** The legacy Design editor keeps a `pathProperties` map on
-  every form body — `{"id": "id", "url": "extraSettings.url", …}`, property name to JSON path. Walked as
-  content, that map has an `id` and a `url`, so every such form called `GET extraSettings.url`: 59 REST
-  calls to a path that is not a URL, each with its own external node, across five real projects. The
-  editor's bookkeeping maps are skipped now, and a REST call needs a component with a type behind it.
-
-- **A Design-workspace export is read in full.** The legacy editor stores a form or page body as a
-  tree of `childShapes` with hyphenated properties (`form-ref`, `rest-button-url`, `actiondefinitionkey`),
-  and Atlas registered such a model by key with no fields: 47 forms across the measured projects were
-  empty shells — blank pages in the explorer, at least 25 false "unused form" findings because the
-  subform that embedded them was never read, and ~1 000 references that never reached the graph. The old
-  shape is rewritten into the one the current Design writes — stencil to type as real exports pair them,
-  property to setting by spelling — and parsed by the same reader, so fields, subforms, data-object and
-  service references, action buttons, REST calls and payload mappings come out as from a current export.
-
-- **References Atlas did not read yet.** A select over a master-data table (`tableKey`), a page's work
-  list (`scopeDefinitionKey` — six processes on one page that looked less used than they are), Design's
-  own namespace on a process or case element — `design:securitypolicy`, `design:processdefinitionkey`,
-  `design:casedefinitionkey`, `design:inboundchannelreference`, 34 references on the real projects — and
-  `<flowable:eventCorrelationParameter>`, the other half of what a send- or receive-event task
-  correlates on, are references and payload now. A data import's column mappings
-  (`design:variablemapping`), its report variable and a task's `additionalvariables` are variable
-  writes. And an in/out parameter tag is matched by its lower-cased name, the way form keys already were,
-  so an export that lower-cases `<flowable:inputparameter>` loses nothing.
-
-- **Master data is master data.** A `.data` whose `dataObjectType` is `masterData` — a managed
-  reference list — was a data object like any other: one real project read "143 data objects" for 143
-  lists, and each list's `variables` map (`lang`, `color`) became project variables, 35 of them. It is its
-  own kind now, `masterData`, counted apart ("143 master data"), and a select over such a table
-  (`tableKey`) links to it.
-
-- **Templates have their bodies.** A deployment archive keeps a template's text outside the `.tpl` —
-  in `template-<key>.tplvariation` — and an attached document's name in `.tplfile-metadata`; Atlas
-  dropped both without a word, so 23 of 23 template nodes on the real projects had no body: nothing to
-  search, and the `${root.travelerFirstName}` a mail template reads never reached the variable graph. The
-  parts are read wherever the `.tpl` is, loose or archived; the variations, their parameters and the
-  attachments sit on the template, its `${…}` are the template's expressions, and `${root.x}` is a read
-  of `x`. A legacy wrapper in a folder Design does not use (`decision-service-models`, on one real export)
-  is said instead of vanishing, and the folders Design added since — SLA, knowledge base, master data,
-  dashboard component, palette — are typed.
-
-- **A constant at a key position names the model.** `startProcessInstanceByKey(ModelConstants.MAIN_CASE)`,
-  `.caseDefinitionKey(MAIN_CASE)`, `.decisionKey(Keys.GROUP_MAPPING)`: Atlas followed only a *literal* in
-  those positions, so a project whose Java layer is written against a generated constants class — one
-  real one, wholesale — had no code → model edge at all. A constant is resolved to its
-  `static final String` value once every source is read and recorded as the literal would be; a name two
-  classes define differently is left alone rather than guessed.
-
-- **Small corrections.** A file that is not a Flowable model at all — a Helm chart's `.tpl`, a palette
-  or manifest JSON — is recorded in `diagnostics` and printed by `-v`, no longer a warning finding about
-  somebody else's file. A variable written by three tasks of the same name reads "3 init-variables
-  mappings on `Initialize variables`", not the same phrase three times. The `unguardedTasks` message names
-  the fix for its kind of call — a synchronous mail task is told to go async or get a boundary event. A
-  custom-function diagnostic carries a file, so it can be accepted like any other finding. A Java
-  `@Value("${mail.from}")` placeholder no longer makes `mail` a project variable. And a form button's
-  `invokeServiceUrl` / `invokeActionUrl` are REST calls to the IDE's scanner, as they were to the report.
-
-- **A CMMN lifecycle listener's script problem is a finding.** The parser has always flagged a
-  `planItemLifecycleListener` that carries a script — the engine's listener factory has no script branch,
-  so it is a silent no-op — but the note sat on the plan item, and the check read only a process's task
-  buckets. It reaches the case's page now, on the plan item that holds the listener.
-
 - **A report page scrolls inside the page.** The Checks, Tree, Variables, Scripts and Schema pages had no
   scroll container of their own, so a page taller than the window scrolled the whole document — and took
   the sidebar, the breadcrumb, ⌘K and the *Save to waivers.json* bar along, while a model's page kept
   its menu in place. Every view scrolls inside the shell now.
-
 - **Back and forward, on every page.** Inside the IDE the explorer has no browser chrome, and the only
   way back was a small button in a model page's header that hides its label in a narrow tab — a report
   page had none at all, so a jump from the Checks table to a model was a dead end. The top bar carries
   ‹ › on every view, `Alt+←` / `Alt+→` drive them (the brackets stay the tab keys), the explorer tab's
   toolbar in the IDE has Back and Forward, and the page's place in the history survives a reload.
-
 - **Long text never clips a control.** A table cell ellipsises text but slices an inline box, so a long
   key cut its model chip mid-chip in the checks table, a type tag mid-word in a fields table, and a
   chip's type wrapped onto a second line; a 2 900-character binding label overprinted the project crumb
   and filled a page as a 26px headline. A chip now shrinks by its name only and never past its cell, a
   tag ellipsises, the current crumb has a width, and an expression's or binding's label is shown as code
   — three lines, with *show all* for the rest.
-
-- **Defects and advice on the page, and a badge toggle on the diagram.** The Checks page and the
-  health list lead with `3 defects · 41 advice` and group their rows under those two headings — the
-  four tier labels are gone; the sidebar's *Checks* badge turns red only while a defect is open. On a
-  diagram an element's badge takes the tone of its worst finding — red for an error, amber for a
-  defect, grey for advice alone — so a process whose every task lacks a boundary event no longer wears
-  an orange badge on every task; and a ⚑ button in the top bar hides the badges on every diagram,
-  remembered like the ≈ toggle beside it.
-
-- **The tree's keys work on the second visit too.** The reference tree wired its keyboard handler on
-  every render and never unwired it, so after `#/tree → overview → #/tree` Space toggled a row twice —
-  a no-op — and Enter opened the node twice. Wired once now.
-
 - **One unit per number, and a stale link says so.** `unreadInputs` fires once per callee, so a
   variable mapped into seven processes was seven findings on one row: the sidebar said 72, the page 66,
   the health row 16 and the list it opened 10. A review list's badge now counts the rows it has, a
@@ -352,55 +323,40 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   says "16 findings on 10 of 95 variables", and a filtered list heads "12 of 332" like every other filter.
   And a link to a model this report does not contain — renamed, or a report from a smaller scope —
   landed on the overview without a word and kept the dead hash; it says so now and cleans the address bar.
-
-- **Small explorer corrections.** The Checks filter's "N of M" counted the review-notes rows (a selector
-  named a section that does not exist); a *not mapped* cell in a coverage table looked like an ordinary
-  value and a tree's *+N more parents* badge like plain text; *close others* was offered with one tab
-  open; the Unused-variables page opened on a 35-row table of what is not wrong and said "nothing
-  flagged" underneath; a column empty in every row kept its header; "All 7 checks clean" did not say that
-  16 more had nothing to judge; a note meant for Atlas's developers was shown as help; and the heading
-  focus after a navigation was drawn as a text field.
-
+- **Hiding uncertain links hides them everywhere.** The ≈ toggle repainted the detail panel and nothing
+  else: the reference tree kept its shape and the overview kept counting suspect edges in its hotspots
+  and reference counts until the next navigation. Every view follows the toggle now.
+- **A list that matches nothing says so.** Typing a filter no row matched left a blank column; it now
+  says *No match in Forms* and offers to search everything. And a deep link into a CMMN diagram
+  (`&e=`) lights up the plan item like the ⌖ button does — the link never passed the element's name,
+  and CMMN's diagram references plan items by a different id than the parsed tree.
 - **A diagram stays legible, and the search says what matched.** *Fit* fitted the width alone, so a
   process 6 700px wide landed at 12 % in an ordinary panel — a grey strip of boxes; inline it now stops
   at 40 %, wider than the panel, with a line saying to drag or open full screen. And the search palette's
   "why it matched" hint for a plain word named the field's *id* (`label · date1`, twelve times in a row)
   where the facet path already named the caption; both paths lead with the matched text now.
+- **The search grammar stays a click away, tabs show from the first, and two keys for the two things
+  you do next.** The `label:` / `key:` / `type:` / `in:` chips appeared only while the query matched
+  nothing, so a reader who always got some result never saw them — a *narrow ▾* chip keeps the row
+  reachable under any result set. The tab strip appeared only from the second tab, which is how the
+  tabs and their Alt shortcuts stayed undiscovered; it shows from the first. And on a selected node,
+  `c` copies its key and, inside the IDE, `o` opens its file.
+- **A smaller page.** Every explorer shipped the run's `diagnostics` and the custom-function catalog in
+  its data island, and nothing on the page read either (the checks come as findings, the functions as
+  nodes) — on a project with parse problems that was kilobytes of dead weight per page.
+- **Small explorer corrections.** The Checks filter's "N of M" counted the review-notes rows; a *not
+  mapped* cell in a coverage table looked like an ordinary value and a tree's *+N more parents* badge
+  like plain text; *close others* was offered with one tab open; the Unused-variables page opened on a
+  35-row table of what is not wrong and said "nothing flagged" underneath; a column empty in every row
+  kept its header; "All 7 checks clean" did not say that 16 more had nothing to judge; a note meant for
+  Atlas's developers was shown as help; and the heading focus after a navigation was drawn as a text
+  field.
 
-- **Identical findings fold into one row.** The same `22 "hours"` missing its comma, copied across 22
-  forms, was 22 rows of the Checks page; 66 mail tasks with the same missing error path were 66. Three
-  or more findings with one message shape — names and numbers aside — read *22 ×* on one row now, the
-  members and their accept controls a chevron away, so the page has as many rows as it has causes. A
-  model's own page keeps every row.
-
-- **JCEF is optional for real.** The plugin declares the bundled *Web Browser (JCEF)* plugin optional,
-  yet named its classes in the editor provider the IDE asks on every file open — with that plugin
-  disabled, the class failed to link (`NoClassDefFoundError`) instead of bowing out. The explorer editor
-  is registered from the optional descriptor now, every other check goes through one probe that catches
-  the missing link, and the explorer tab no longer touches its browser client after it was disposed.
-
-- **The model index's lifecycle is honest.** A cancelled build came back as an error (the cancellation
-  wrapped in an `ExecutionException`), and Cancel in Find Usages did not stop the scan; a build that
-  failed left the Hub at *scanning…* forever, retrying a doomed scan on every refresh with nothing in
-  the log — it says *index failed*, names the reason and offers Rebuild now; a lookup memo written after
-  a Design pull's invalidation could carry the pre-pull answer until the next change; a model renamed
-  away from its extension (`x.bpmn` → `x.bpmn.bak`) stayed indexed; and a folder added to a monorepo
-  appeared in the project picker after a restart only. And nothing builds the index under a read lock
-  any more: hovering a key with a cold index, the value-field inspection and the Liquibase coverage
-  inspection all read the cached index or wait for the next pass.
-
-- **The model-constants class follows the index.** Its refresher listened to the file system and ran
-  1.5 s after a model changed — on the very change that had just dropped the index, so it found none,
-  gave up, and nothing brought it round again unless the rebuild finished inside the window: kept in
-  sync on small repositories only. It listens to the index now and regenerates when a rebuild lands.
-- **Nothing slow on the EDT.** *Regenerate Atlas Explorer* — the menu item, the Hub's line, the tab's
-  banner — walked the project six levels deep on the UI thread looking for pages; the first click on a
-  diagram gutter icon rendered the SVG there; and every rendered diagram was kept for the session. Both
-  run in the background now, the cache holds the 32 most recent drawings, and *Regenerate* with no page
-  on disk says so and offers the generator instead of writing the whole artifact set.
-- **Small guards.** The Liquibase output folder is validated like the two folders on the parent page
-  (project-relative, no `..`), and the two value-matching inlays leave test sources alone, as the
-  inspections do.
+- **Ctrl+click lands on the key.** A model key resolved to its *file*: line 1 of a minified Design JSON,
+  or the top of a deployment XML holding three processes, with nothing saying where the key is. Every
+  key reference — a Java literal, a constant, a cross-reference attribute in model XML, an operation or
+  value field — and the Search Everywhere row now land on the key's declaration: the `id` of the
+  process, case or decision, the `"key"` of a JSON model.
 - **A key in a JSON model is a link.** Ctrl+click worked on a model key in Java and on the attributes
   of model XML — not on the JSON models that carry most of a project's references: a data object's
   backing service, a form component's subform, data object, service or action, a document's forms, an
@@ -408,8 +364,7 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   catalog in `:core`, so the graph and the editor cannot disagree), and Find Usages on a model's key
   lists them. In model XML the key in an extension element's text — `eventType`, `channelKey`,
   `sla-definition-key` — is a link too, CDATA-wrapped as Design writes it; the broken-key inspection
-  reads that text the same way (a CDATA-wrapped key was flagged as unknown, markers and all) and, in a
-  monorepo, says which sub-project's index the key is unknown in.
+  reads that text the same way (a CDATA-wrapped key was flagged as unknown, markers and all).
 - **Model files get the hover, the inlay and the gutter.** The documentation card, the inline name and
   the diagram mark were Java-only: a `calledElement="DEMO-P002"` in a BPMN said nothing about which
   process that is, and the diagram of the process you were reading was a Java literal away. Inside a
@@ -417,6 +372,16 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   (type, name, backing table, file), the referenced model's name as an inline hint (*Model names* under
   Inlay Hints → Values, off in one click), and the diagram mark on the file's own key and on every
   process, case or decision reference.
+- **Find Usages on a model's own key.** Selected in its file — the `id` of a process, case or decision,
+  the `"key"` of a JSON model — a key answered "no usages". It lists every model that references it (a
+  call activity, a form key, a service mapping, an extension element's text) and every Java call site
+  that names it at a Flowable API position.
+- **Search Everywhere finds elements, not only models.** The index has carried every model's user task
+  ids, activity ids, variables, messages, signals, payload fields, form fields and outcomes since the
+  completion work — and Search Everywhere and Go to Symbol listed model keys alone, so the `approveTask`
+  from a log line or a test led nowhere. Every one of those is a symbol now, labelled with its kind and
+  its model (*User task · in DEMO-P001*), ranked under the models and over the text hits in the
+  *Flowable Model* tab, and opening the model at the element's declaration.
 - **`${bean}` goes to the bean.** Completion after `orderService.` has offered the class's methods since
   the expression language arrived, but the name itself was inert: no Ctrl+click, and Ctrl+Q showed
   catalog documentation or nothing. The root of a backend expression that names a Spring bean is a
@@ -427,15 +392,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   computed where in each model the Java symbol, bot or URL is used — and then opened the file at line
   1, while Find Usages on the same data landed on the offset. Each model now opens at its first usage:
   the `${bean…}` in a deployment XML holding three processes, the action's `botKey`, the calling URL.
-- **Open in Atlas Explorer, from a model file.** The Alt+Enter action that opens a model's explorer page
-  was offered in Java only; inside a BPMN or a form there was no way to the page of the process you were
-  reading. It is offered on a cross-reference and on the file's own key in every model file now.
-- **Search Everywhere finds elements, not only models.** The index has carried every model's user task
-  ids, activity ids, variables, messages, signals, payload fields, form fields and outcomes since the
-  completion work — and Search Everywhere and Go to Symbol listed model keys alone, so the `approveTask`
-  from a log line or a test led nowhere. Every one of those is a symbol now, labelled with its kind and
-  its model (*User task · in DEMO-P001*), ranked under the models and over the text hits in the
-  *Flowable Model* tab, and opening the model at the element's declaration.
+- **Open in Atlas Explorer, from Java and from a model file.** Alt+Enter on a model key — a literal or a
+  constant at a Flowable API site, or any literal equal to a known key when that recognition is on —
+  opens the newest generated explorer inside the IDE on that model's page: who references it, what it
+  uses, its findings, its diagram. The reverse of the page's own "open in IDE" button; it offers to
+  generate an explorer when there is none. Inside a BPMN or a form it is offered on a cross-reference
+  and on the file's own key, so the page of the process you are reading is one Alt+Enter away.
 - **Copy a key, find your way back, click the count.** *Copy Model Key* — in the editor's context menu
   on a key in Java or in a model file — puts the bare key on the clipboard, the way the explorer page's
   copy button has since the IDE bridge. The Hub gains a *Recent Models* block: the models opened last,
@@ -448,114 +410,53 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   time now, so the banner above an explorer tab says *3 models changed since this page was generated:
   DEMO-F002, DEMO-P001, DEMO-P007* (the first five, then a count) and the Hub's attention line names the
   first three; a packed model is named by its key, an unreadable file by its name.
+- **Inspections leave test sources alone, and say which scope they judged against.** A test that starts
+  `no-such-process` to assert the failure was flagged like production code; `src/test/**` is skipped now
+  (test *models* are still judged, as the CLI always did), and the two value-matching inlays follow the
+  same rule. In a monorepo the message reads *not a known Process key in apps/orders* — a key from
+  another module is unknown here, not nonexistent.
 - **The Liquibase inspection has a way out.** *Column 'BOGUS_' is not mapped in Flowable service model
   'DEMO-S010'* was a verdict with no door: no quick fix, and in a monorepo no word on which sub-project's
   index had judged. The warning offers *Open the Flowable service model 'DEMO-S010'* — the model whose
   mappings decide, at its key — and names the sub-project like the key inspections do.
-
-## 0.25.0
-
-- **Findings explain themselves.** Every check is described once, in `CheckCatalog`: what it is, its
-  severity, why a finding matters, what to do about it — accepting included — and where the docs are.
-  The summary, the overview, the agent primer, the CLI's `--fail-on` vocabulary and the explorer all read
-  it, where until now a check was a string id in one place, a label in a second, a second label in a
-  third and a severity stated only on the documentation page. A renamed docs heading is now a red build
-  rather than a dead link.
-- **The explorer shows the findings :core computed.** The Checks page rebuilt its blocks from the live
-  nodes and took the counts from :core — two computations of one thing, which disagreed the moment
-  anything was accepted, and left the three runtime checks with rows that went nowhere. The page now
-  receives the itemised findings and renders one block per check: severity in words, model, element (a
-  jump into the model), message, `file:line` with the open-in-IDE button, the catalog's explanation and
-  docs link. Accepted findings fold under their block with the reason, out of the counts; a check whose
-  every finding was accepted keeps its block; every count on the page — blocks, health rows, the sidebar
-  badge, the parse chip — moves with a decision taken on the page. One filter over the whole page, and
-  no more strip of chips repeating the health list.
-- **Accept a finding where you read it.** Every finding row — on the Checks page, under *Findings on this
-  model* (now right under the diagram), on a diagram element's card — carries **accept…**: a labelled
-  reason that is refused in words when empty, an optional *until*, *by* prefilled with the project's git
-  identity in the IDE, and, for a finding that names an element or a subject, a choice between this
-  finding only (the default) and every finding of the check on the model. A rule narrowed by hand no
-  longer renders as un-accepted with one click to broaden it. Accepted rows stay in place with *edit*
-  and *restore*; a bar under the top bar says on every view how many decisions are unsaved, with *Save
-  to waivers.json* in the IDE or *Export* elsewhere and a two-step *discard*. After a save the IDE
-  confirms, the page regenerates, and the diff reconciles itself against the file — no more "1 unsaved
-  change" forever.
-- **One writer for waivers.json, and every rule counted.** Saving from the explorer dropped `by`,
-  `until` and every note, and stamped today's date on every rule. The browser writer is now a marked,
-  DOM-free block that mirrors `Waivers.serialize` key for key, and `WaiverWriterParityTest` runs the same
-  set through both and compares the bytes. A second rule covering the same finding was reported as
-  "matched nothing" — with `--fail-on-stale-waivers`, a red build for a correct file — and the counter
-  added every run to the last; matching is per run now and counts every covering rule. The inert `file`
-  key is gone. The *Deliberately accepted* table shows every decision as it stands — scope, reason,
-  author, expiry, how many findings it covers — with its troubles as marks on the row and *restore*
-  beside it; notes get a table of their own.
-- **The IDE honours waivers.json, and regenerates after you save.** The plugin wrote the file and never
-  read it, so a page generated from the IDE showed every accepted finding as open and the balloon's
-  advice to regenerate regenerated the contradiction. Both generate paths now load `waivers.json` from
-  the folder the artifacts land in, generate-all drops the CLI's `.gitignore` there, and a save tells the
-  page, regenerates the explorer and opens the file from its balloon.
-- **A model with findings looks like one.** A count pill on tree rows and list items, coloured by the
-  worst open finding; a marker on every diagram element with a finding, whose card lists them and hands
-  *accept…* to the finding's row. Focus follows a navigation to the new view's heading when the clicked
-  control went away; filter counts are live regions; the tree's *expand all* states itself; *shown above*
-  is a keyboard stop.
-- **Six new checks — questions, not verdicts, each quiet where it cannot be sure.** `hardcodedSecrets`
-  (error): a password, token or API key written as plain text into a `.service`, `.channel`, agent or
-  knowledge-base model or a task's field injections, or credentials inside a URL — paths only, never
-  values; quiet for expressions and for keys that merely talk about a secret. `gatewayNoDefault`: an
-  exclusive or inclusive gateway whose every outgoing flow is conditional and that names no default —
-  "no outgoing sequence flow" waiting for the data nobody thought of. `implicitSplit`: two unconditional
-  flows out of one activity, a fork nobody drew; quiet when every flow is conditional. `unsafeQueries`:
-  `${name}` in a query template with no escaping behind it; any built-in silences it. `leftoverMarkers`:
-  a `TODO`, `FIXME` or `HACK` in a model file, with its line. `unusedDecisions`: a decision table nothing
-  calls, app membership not counting as use. FindingsTest pins each one's quiet path — and, for the
-  first time, the quiet paths of the three runtime checks from 0.24.0.
-- **CLI.** `--waivers` defaulted to `<output>/waivers.json`, which in every single-artifact mode named a
-  file rather than a folder, found nothing and silently reported every finding; it is now the folder the
-  artifact lands in. The status line counted parse issues from the raw diagnostics and contradicted the
-  report once one was accepted; it reads `checks` now. New `--waiver-author` prefills the `by` of a rule
-  accepted from a CLI-generated page — without it such a page carries no name, on purpose.
+- **The model index's lifecycle is honest, and nothing builds it under a read lock.** A cancelled build
+  came back as an error (the cancellation wrapped in an `ExecutionException`), and Cancel in Find Usages
+  did not stop the scan; a build that failed left the Hub at *scanning…* forever, retrying a doomed scan
+  on every refresh with nothing in the log — it says *index failed*, names the reason and offers Rebuild
+  now; a lookup memo written after a Design pull's invalidation could carry the pre-pull answer until the
+  next change; a model renamed away from its extension (`x.bpmn` → `x.bpmn.bak`) stayed indexed; and a
+  folder added to a monorepo appeared in the project picker after a restart only. Ctrl+click on a model
+  key used to build a cold index inline, freezing the IDE for the length of a model scan, and the
+  constants auto-refresher did the same after every pull: hovering a key, the value-field inspection and
+  the Liquibase coverage inspection all read the cached index or wait for the next pass, like every other
+  reference already did.
+- **No file-system refresh while holding the read lock, and a cancellation is not a failure.** Find Usages
+  and the index build opened archives with a synchronous jar refresh under the read lock — the deadlock
+  the scanner's own documentation warns about. And a cancelled scan was reported as an unreadable archive
+  (the Hub's *archives could not be read* line), an empty script picker, or a Design pull bounced to
+  Settings as "not configured".
+- **The model-constants class follows the index.** Its refresher listened to the file system and ran
+  1.5 s after a model changed — on the very change that had just dropped the index, so it found none,
+  gave up, and nothing brought it round again unless the rebuild finished inside the window: kept in
+  sync on small repositories only. It listens to the index now and regenerates when a rebuild lands.
+- **Nothing slow on the EDT.** *Regenerate Atlas Explorer* — the menu item, the Hub's line, the tab's
+  banner — walked the project six levels deep on the UI thread looking for pages; the first click on a
+  diagram gutter icon rendered the SVG there; and every rendered diagram was kept for the session. Both
+  run in the background now, the cache holds the 32 most recent drawings, and *Regenerate* with no page
+  on disk says so and offers the generator instead of writing the whole artifact set.
+- **JCEF is optional for real.** The plugin declares the bundled *Web Browser (JCEF)* plugin optional,
+  yet named its classes in the editor provider the IDE asks on every file open — with that plugin
+  disabled, the class failed to link (`NoClassDefFoundError`) instead of bowing out. The explorer editor
+  is registered from the optional descriptor now, every other check goes through one probe that catches
+  the missing link, and the explorer tab no longer touches its browser client after it was disposed.
+- **Guards.** The output, pull and Liquibase folders in Settings must be relative to the project and stay
+  inside it — an absolute path or a `..` made a pull write outside the repository. An `*.explorer.html`
+  inside an archive opens as a plain file rather than in a viewer whose Regenerate and Open-in-browser
+  throw. And `waivers.json` is written as UTF-8 (it was written in the project's encoding and read as
+  UTF-8), with an open, edited file saved first instead of fighting the write.
 - **Docs.** The checks table said `invalidExpr` is error-only (the golden carries a warning), named an
   *Atlas Hub Checks tab* that never existed, and left `waived` out of the `checks` key; the README still
   counted fourteen checks.
-
-## 0.24.0
-
-- **A reference tree.** The explorer could not answer "what does this app actually start, and what does
-  that reach?" — relationships were single-hop everywhere, so following a chain meant clicking through
-  it and losing your place at every step. `#/tree` walks the graph instead: the app as a grouping
-  header (plus *Outside any app*, which is a finding in itself), its functional roots — a model nothing
-  points at except its app — and everything those reach. App membership is deliberately not the spine:
-  `contains` is app → model and one level deep, so nesting by it buries the edge that explains why a
-  form exists. A node is expanded once, at the shallowest place it is reached; later arrivals are
-  leaves marked *shown above* that jump to it, which keeps the tree bounded where rebuilding a shared
-  subtree per path is exponential. Cycles terminate and say so. The filter takes the palette's search
-  grammar, and a row survives it if it matches **or** a descendant does.
-- **Findings can be accepted, in a file you commit.** Some findings are correct and still not worth
-  acting on, and until now the only answer was to drop the check for everyone or stop running
-  `--fail-on` at all. A project can now carry `waivers.json` next to its artifacts, beside a generated
-  `.gitignore` that ignores everything in the folder *except* that file — the analysis is regenerated
-  and may hold client data, the decisions are yours and belong in review. A waiver names check + node,
-  narrowed by element and subject, so it survives the message rewording; a waived finding stays in the
-  report, in a section of its own, and leaves the counts and the gate. A rule that matched nothing,
-  expired, or gives no reason is reported on every surface. In the explorer, a node with findings
-  offers to accept them with a reason; **Export** hands you the file, and inside the IDE
-  **Save to waivers.json** writes it beside the report through the IDE's own file system,
-  so it appears in the Git tool window like any other edit. New flags: `--waivers`,
-  `--no-waivers`, `--fail-on-stale-waivers`, and `any` as the honest spelling of what `--fail-on
-  warning` has always meant.
-- **Three checks about how a process behaves, not whether it resolves.** `nonExclusiveAsync` — an async
-  element that explicitly set `exclusive="false"`, so the jobs of one process instance may run
-  concurrently; it fires on the opt-out only, never on the absence, because `exclusive` defaults to
-  true. `unguardedTasks` — a service task that leaves the engine with nothing catching its failure,
-  quiet wherever containment cannot be established. `asyncWithoutRetry` — async work with no
-  `failedJobRetryTimeCycle` of its own.
-- **Findings carry a `subject`.** Several checks fire more than once on one node, and the only thing
-  telling those apart was the message — generated prose that rewords when something unrelated changes.
-  A finding now names which one it is: the scope, the column, the name an expression could not resolve.
-- **The CLI status line no longer contradicts the report.** It counted script issues from
-  `stats.scriptIssues`, a second counter that knows nothing about waivers; it reads the same numbers
-  the report does now.
 
 ## 0.23.1
 

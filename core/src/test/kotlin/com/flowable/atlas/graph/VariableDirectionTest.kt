@@ -152,7 +152,7 @@ class VariableDirectionTest {
             assertNull(variable(name)["writes"])
             assertNull(variable(name)["reads"])
         }
-        // A master-data list's columns are not project variables at all any more (0.26.0): they were the
+        // A master-data list's columns are not project variables at all any more (0.24.0): they were the
         // other example here, and would now fail to be found rather than fail to have a direction.
         for (name in listOf("color", "level")) assertTrue("$name is a reference-table column, not a variable", variableOrNull(name) == null)
     }
