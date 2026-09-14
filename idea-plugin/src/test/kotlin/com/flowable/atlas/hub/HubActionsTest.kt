@@ -84,6 +84,23 @@ class HubActionsTest : BasePlatformTestCase() {
         assertFalse("the pair has to be told apart without reading", goTo == find)
     }
 
+    fun testGoToModelRunsOnTheHostRatherThanTheThinClient() {
+        // It was briefly built on SearchEverywhereBaseAction, which is marked
+        // ActionRemoteBehaviorSpecification.Frontend — that routes an action to the thin client, where
+        // this plugin is not loaded at all, so under Remote Development it ran nowhere. The action has
+        // to stay on the host: only there can it see that it is remote and open the result list instead.
+        val action = ActionManager.getInstance().getAction(FlowableActionIds.GO_TO_MODEL)
+        val interfaces = generateSequence(action.javaClass as Class<*>) { it.superclass }
+            .flatMap { it.interfaces.asSequence() }
+            .flatMap { generateSequence(it) { p -> p.interfaces.firstOrNull() } }
+            .map { it.name }
+            .toSet()
+        assertFalse(
+            "Go to Model must run on the host: $interfaces",
+            interfaces.any { it.endsWith("ActionRemoteBehaviorSpecification\$Frontend") },
+        )
+    }
+
     fun testTheThreeDestinationsAreDumbAware() {
         val am = ActionManager.getInstance()
         listOf(

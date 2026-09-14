@@ -12,6 +12,19 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.24.2
+
+- **Go to Model does something under Remote Development.** It still did nothing there after 0.24.1, and
+  the reason was one layer below the one that release fixed: on a remote IDE the **Flowable Model** tab
+  is not in Search Everywhere at all. The popup renders in the thin client, a tab contributed by a plugin
+  running on the host does not reach it, so there was nothing for the action to select. Routing the
+  action to the client — what 0.24.1 did — is worse rather than better: the plugin is not loaded there,
+  so the action has no implementation to run. On a remote host *Go to Model…* now asks for a pattern and
+  opens the result list, which is the same search reaching the same index; a dialog and a tool window are
+  ordinary UI that Remote Development mirrors. Locally nothing changes. Putting the tab itself in the
+  remote popup means republishing the contributor through the platform's newer provider API, which is
+  its own piece of work.
+
 ## 0.24.1
 
 - **The model search works under Remote Development.** *Search Models…* did nothing at all on a remote

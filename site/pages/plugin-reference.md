@@ -36,7 +36,7 @@ nothing on any other file.
 | Atlas Hub | — |
 | Open Atlas Explorer | Atlas Hub toolbar and its *Explorer* block |
 | Open Expression Playground | Atlas Hub toolbar and its *Playground* block |
-| Go to Model… | Atlas Hub toolbar and the model count in its header; Project view context menu; `Ctrl+Alt+Shift+M` |
+| Go to Model… | Atlas Hub toolbar and the model count in its header; Project view context menu; `Ctrl+Alt+Shift+M`. Under Remote Development it opens the *Find in Models…* list, because Search Everywhere has no Flowable tab there |
 | Find in Models… | The *Go to Model…* popup, with `⇧⏎` on any row |
 | Copy Model Key | Editor context menu, on a key — a literal or constant at a Flowable API site in Java, a cross-reference or the file's own key in a model file; the Atlas Hub's *Recent Models* context menu |
 | Generate → Generate Atlas Explorer… | Atlas Hub, *Explorer* block; Project view context menu |

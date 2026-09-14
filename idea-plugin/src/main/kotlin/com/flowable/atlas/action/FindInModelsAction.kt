@@ -22,22 +22,13 @@ import com.intellij.openapi.ui.Messages
  *
  * Prefilled from the editor: the selection, else the model key under the caret (the same one
  * [CopyModelKeyAction] copies), so searching for the key you are looking at costs no typing.
+ *
+ * It is also the *only* of the two that works under Remote Development — see [ask], which
+ * [GoToModelAction] falls back to there.
  */
 class FindInModelsAction : AnAction(), DumbAware {
 
-    override fun actionPerformed(e: AnActionEvent) {
-        val project = e.project ?: return
-        val pattern = Messages.showInputDialog(
-            project,
-            message("findInModels.prompt"),
-            message("findInModels.title"),
-            AllIcons.Actions.Find,
-            preset(e),
-            LongEnough,
-        )?.trim() ?: return
-        if (pattern.length < ModelSearchUsages.MIN_PATTERN_LENGTH) return
-        ModelSearchUsages.show(project, pattern)
-    }
+    override fun actionPerformed(e: AnActionEvent) = ask(e)
 
     override fun update(e: AnActionEvent) {
         e.presentation.isEnabled = e.project != null
@@ -46,18 +37,40 @@ class FindInModelsAction : AnAction(), DumbAware {
     /** EDT: the dialog is modal and the preset reads PSI, which the EDT may do without a read action. */
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 
-    private fun preset(e: AnActionEvent): String {
-        val editor = e.getData(CommonDataKeys.EDITOR) ?: return ""
-        editor.selectionModel.selectedText?.trim()?.takeIf { it.isNotEmpty() && !it.contains('\n') }?.let { return it }
-        val file = e.getData(CommonDataKeys.PSI_FILE) ?: return ""
-        return CopyModelKeyAction.keyAt(file, editor.caretModel.offset).orEmpty()
-    }
+    companion object {
+        /**
+         * Asks for a pattern and opens the result list. A modal dialog and a tool window are both
+         * ordinary UI that Remote Development mirrors to the client, which is what makes this route
+         * work there when the Search Everywhere popup cannot.
+         */
+        fun ask(e: AnActionEvent, title: String = message("findInModels.title")) {
+            val project = e.project ?: return
+            val pattern = Messages.showInputDialog(
+                project,
+                message("findInModels.prompt"),
+                title,
+                AllIcons.Actions.Find,
+                preset(e),
+                LongEnough,
+            )?.trim() ?: return
+            if (pattern.length < ModelSearchUsages.MIN_PATTERN_LENGTH) return
+            ModelSearchUsages.show(project, pattern)
+        }
 
-    /** One character matches most of every model's text — the dialog says so rather than searching. */
-    private object LongEnough : InputValidator {
-        override fun checkInput(inputString: String?): Boolean =
-            (inputString?.trim()?.length ?: 0) >= ModelSearchUsages.MIN_PATTERN_LENGTH
+        private fun preset(e: AnActionEvent): String {
+            val editor = e.getData(CommonDataKeys.EDITOR) ?: return ""
+            editor.selectionModel.selectedText?.trim()
+                ?.takeIf { it.isNotEmpty() && !it.contains('\n') }?.let { return it }
+            val file = e.getData(CommonDataKeys.PSI_FILE) ?: return ""
+            return CopyModelKeyAction.keyAt(file, editor.caretModel.offset).orEmpty()
+        }
 
-        override fun canClose(inputString: String?): Boolean = checkInput(inputString)
+        /** One character matches most of every model's text — the dialog says so rather than searching. */
+        private object LongEnough : InputValidator {
+            override fun checkInput(inputString: String?): Boolean =
+                (inputString?.trim()?.length ?: 0) >= ModelSearchUsages.MIN_PATTERN_LENGTH
+
+            override fun canClose(inputString: String?): Boolean = checkInput(inputString)
+        }
     }
 }

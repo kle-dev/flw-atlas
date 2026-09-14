@@ -142,6 +142,20 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.24.2</h3>
+        <ul>
+          <li><b>Go to Model does something under Remote Development.</b> It still did nothing there after
+              0.24.1, and the reason was one layer below the one that release fixed: on a remote IDE the
+              <b>Flowable Model</b> tab is not in Search Everywhere at all. The popup renders in the thin
+              client, a tab contributed by a plugin running on the host does not reach it, so there was
+              nothing for the action to select. Routing the action to the client — what 0.24.1 did — is
+              worse rather than better: the plugin is not loaded there, so the action has no implementation
+              to run. On a remote host <i>Go to Model…</i> now asks for a pattern and opens the result list,
+              which is the same search reaching the same index; a dialog and a tool window are ordinary UI
+              that Remote Development mirrors. Locally nothing changes. Putting the tab itself in the remote
+              popup means republishing the contributor through the platform's newer provider API, which is
+              its own piece of work.</li>
+        </ul>
         <h3>0.24.1</h3>
         <ul>
           <li><b>The model search works under Remote Development.</b> <i>Search Models…</i> did nothing at
@@ -533,14 +547,6 @@
               in the summary was led by <code>initVariablesService</code>, two IDM URLs,
               <code>flwTimeUtils</code> and a security policy — things every model references and nobody
               navigates to. Externals and security policies are left out now.</li>
-          <li><b>Small corrections.</b> A file that is not a Flowable model at all — a Helm chart's
-              <code>.tpl</code>, a palette or manifest JSON — is recorded in <code>diagnostics</code> and
-              printed by <code>-v</code>, no longer a warning finding about somebody else's file. A variable
-              written by three tasks of the same name reads "3 init-variables mappings on <code>Initialize
-              variables</code>", not the same phrase three times. A custom-function diagnostic carries a
-              file, so it can be accepted like any other finding. And a form button's
-              <code>invokeServiceUrl</code> / <code>invokeActionUrl</code> are REST calls to the IDE's
-              scanner, as they were to the report.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

@@ -298,6 +298,11 @@ There is also a dedicated **Flowable Model** tab in Search Everywhere that searc
 *inside* `.bar` / `.zip` archives, and — while that tab is open — the full text of every model, showing
 the matched line.
 
+Under **Remote Development** that popup has no Flowable tab: a tab contributed by a plugin on the host
+does not reach the thin client where the popup renders. *Go to Model…* asks for a pattern there and
+opens the result list below instead — the same index and the same model text, one dialog more. *Find in
+Models…* works the same in both.
+
 That popup is for reaching **one** place, and it closes when you do. For the other question — *where is
 this string, everywhere?* — press **⇧⏎** on any row, or run **Find in Models…**: the same three kinds of
 hit land in the Find tool window as a list that stays open, grouped by file, archive entries included,
