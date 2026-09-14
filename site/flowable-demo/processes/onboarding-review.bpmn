@@ -17,7 +17,7 @@
     <serviceTask id="enrich" name="Enrich application"
                  flowable:delegateExpression="${orderDelegate}">
       <extensionElements>
-        <flowable:executionListener event="end" flowable:delegateExpression="${auditListener}"/>
+        <flowable:executionListener event="end" delegateExpression="${auditListener}"/>
       </extensionElements>
     </serviceTask>
     <sequenceFlow id="f2" sourceRef="enrich" targetRef="lookupOrder"/>

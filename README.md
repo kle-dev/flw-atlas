@@ -94,5 +94,6 @@ Proprietary — source available, **no license granted**. The source is publishe
 use by Flowable AG and its authorized users; publication grants no right to use, copy, modify or
 redistribute it. See [LICENSE](LICENSE) for the full terms and for licensing enquiries.
 
-The bundled third-party components — the Geist font, the Lucide icons and, in the CLI jar, the Kotlin
-standard library — are listed with their licences in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+The bundled third-party components — the Geist font, the Lucide icons, the BPMN, CMMN and DMN schemas
+and, in the CLI jar, the Kotlin standard library — are listed with their licences in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

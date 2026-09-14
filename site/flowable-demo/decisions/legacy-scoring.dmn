@@ -2,7 +2,7 @@
 <!-- A decision table nothing calls any more: the scoring the onboarding review used before dec_risk
      replaced it. Kept so the unusedDecisions check has an honest example — and because this is exactly
      how such tables survive in real projects, referenced by nothing and maintained by habit. -->
-<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+<definitions name="Legacy scoring" xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
              xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/"
              xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
              xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/"

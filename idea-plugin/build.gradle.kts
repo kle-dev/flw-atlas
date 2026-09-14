@@ -278,3 +278,17 @@ gradle.taskGraph.whenReady {
         logger.warn("signPlugin: no signing key configured — the plugin ZIP will be UNSIGNED.")
     }
 }
+
+// Points BundledSchemaValidationTest at a real model checkout, on demand:
+//
+//     ./gradlew :idea-plugin:test --tests "*BundledSchemaValidationTest" -Patlas.corpus=/path/to/checkout
+//
+// Nothing to configure without it, and it can never run in CI: a real corpus is customer work and must
+// not be copied into this public repository. See site/pages/develop.md.
+tasks.named<Test>("test") {
+    providers.gradleProperty("atlas.corpus").orNull?.let {
+        systemProperty("atlas.corpus", it)
+        testLogging { showStandardStreams = true }
+        outputs.upToDateWhen { false }
+    }
+}

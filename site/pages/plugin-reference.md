@@ -304,9 +304,9 @@ archive icon. The icon is decided from the file name alone, so the Project view 
 
 | Extension | Treated as | What Atlas adds |
 |---|---|---|
-| `.bpmn`, `.bpmn20.xml` | XML | Keys, members, expression and script injection, XML key completion and validation, diagram from `bpmndi` |
-| `.cmmn`, `.cmmn.xml` | XML | The same, plus CMMN script fields and criteria; diagram from `cmmndi` |
-| `.dmn`, `.dmn.xml` | XML | Decision variables for `variable(…)` completion; diagram from `dmndi`, else the decision table is painted |
+| `.bpmn`, `.bpmn20.xml` | XML | Keys, members, expression and script injection, XML key completion and validation, diagram from `bpmndi`, and schema-backed element and attribute completion and validation |
+| `.cmmn`, `.cmmn.xml` | XML | The same, plus CMMN script fields and criteria; diagram from `cmmndi`; schema-backed as above |
+| `.dmn`, `.dmn.xml` | XML | Decision variables for `variable(…)` completion; diagram from `dmndi`, else the decision table is painted; schema-backed at DMN 1.1, 1.2 and 1.3 |
 | `.form` | JSON | Frontend and backend expression injection; fields and outcomes feed completion |
 | `.action` | JSON | Script injection into the bot script; `botKey` ↔ `BotService` linking; action-name inlay hint |
 | `.data` | JSON | Field mappings drive DTO generation, `value(…)` validation, Liquibase synthesis and table hints |

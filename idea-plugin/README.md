@@ -52,3 +52,40 @@ panels, not the plugin. The explorer editor tab is registered from the optional 
 (`flowable-atlas-jcef.xml`), so the platform never asks it about a file when the browser plugin is off,
 and every other call site goes through `JcefSupport.isAvailable()`, which catches the missing class link
 — a direct `JBCefApp.isSupported()` in a class the main descriptor names fails to *link*, not to answer.
+
+## Why the schemas are vendored, and what was changed in one of them
+
+`src/main/resources/schemas/{bpmn,cmmn,dmn}/` holds the XML schemas the plugin registers for model
+files. They are copies, taken by hand from the open-source engine at
+`/modules/flowable-{bpmn,cmmn,dmn-xml}-converter/src/main/resources/org/flowable/impl/*/parser/`,
+revision **`flowable-8.0.0-76-ga50dd0c581`**. A build-time pull is not possible: the engine is not a
+dependency of this project, and adding one to obtain nineteen static files would be the larger cost.
+
+Three directories rather than one, because `DC.xsd` and `DI.xsd` exist three times with different target
+namespaces, and a relative `<xsd:include>` resolves against the directory of the file naming it.
+
+### The one modified file
+
+`bpmn/flowable-bpmn-extensions.xsd` carries Atlas changes, marked in place with
+`MODIFIED BY FLOWABLE ATLAS` and stated in its header, as Apache-2.0 §4(b) requires. Everything else is
+byte-identical to upstream.
+
+| Change | Why |
+|---|---|
+| a service task's `type`: enumeration → `string` | The open-source list has eight values. A real corpus uses `service-registry` (260×), `agent` (86×), `init-variables` (50×), `audit` (47×), `data-object` (31×) and three document types besides — 488 tasks across **140 of 989** process files, none of them invalid. |
+| an execution listener's and a task listener's `event`: enumeration → `string` | Same class of defect. Flowable accepts listener events the open-source list does not carry, and a red error on a model the engine runs is worse than a missing one. |
+| a `<script>` element, added, and allowed inside both listeners | A listener can carry a script instead of a class; the engine both parses it (`FlowableListenerParser`) and writes it (`FlowableListenerExport`). The schema never declared the element, so such a listener validated as unexpected content. |
+
+The measurement behind the first row, against a real checkout: **841 of 989** BPMN files clean with the
+schema as published, **981 of 989** with it widened. The difference is the 140.
+
+### Refreshing them from a newer engine
+
+1. Copy the files again from the engine checkout, into the same three directories.
+2. Re-apply the changes above and their `MODIFIED BY FLOWABLE ATLAS` markers — `SchemaResourcesTest`
+   fails if the marked file stops being the only marked one, but nothing can tell you a *missing* change.
+3. `./gradlew :idea-plugin:test --tests "com.flowable.atlas.schema.*"` — the shipped models must still
+   validate and a realistic Design export must still highlight clean.
+4. Run the corpus measurement (see `site/pages/develop.md`) and compare the percentage with the one
+   above. A drop is a schema that grew stricter than the platform it describes.
+5. Update the revision named at the top of this section.

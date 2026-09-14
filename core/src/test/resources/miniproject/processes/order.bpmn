@@ -23,7 +23,7 @@
                  flowable:delegateExpression="${notifierBean}">
       <extensionElements>
         <flowable:executionListener event="end">
-          <flowable:script scriptFormat="groovy">execution.setVariable('notified', true)</flowable:script>
+          <flowable:script language="groovy">execution.setVariable('notified', true)</flowable:script>
         </flowable:executionListener>
       </extensionElements>
     </serviceTask>

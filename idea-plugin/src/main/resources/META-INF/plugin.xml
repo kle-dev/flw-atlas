@@ -917,6 +917,12 @@
                   extensions="form;action;page;data;dictionary;query;sequence;sla;event;channel;agent;service;tpl;policy;extractor;knowledgebase;masterdata;dashboardcomponent;document;palette;app"/>
         <!-- The XML-serialized models. .bpmn20.xml / .cmmn.xml / .dmn.xml already end in .xml. -->
         <fileType name="XML" extensions="bpmn;cmmn;dmn"/>
+
+        <!-- Schemas for that model XML. Without them a .bpmn / .cmmn / .dmn opens with an unresolved
+             namespace and no tag or attribute completion at all: the IDE ships no BPMN, CMMN or DMN
+             schemas of its own. The namespace-to-file table, what is deliberately left unvalidated, and
+             why this is a provider rather than the declarative standardResource bean: FlowableSchemas. -->
+        <standardResourceProvider implementation="com.flowable.atlas.schema.FlowableSchemas"/>
         <!-- A model file wears its type's icon — the explorer's glyph and colour — in the Project view
              and the editor tabs; a .bar the archive icon. Decided from the name alone. -->
         <fileIconProvider implementation="com.flowable.atlas.icons.ModelFileIconProvider"/>

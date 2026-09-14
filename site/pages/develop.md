@@ -55,6 +55,27 @@ They **skip themselves** when node or Chrome is missing, so `./gradlew build` st
 without them. `ATLAS_REQUIRE_BROWSER_TESTS=1` turns that skip into a failure — CI sets it, so a green
 pipeline can never mean "the frontend was never opened".
 
+### Checking against a real corpus
+
+The bundled BPMN, CMMN and DMN schemas turn on the IDE's XML validation for every model file, at error
+level, so a schema that is stricter than the platform it describes paints correct models red. `./gradlew
+build` validates the models this repository ships; the question that cannot be answered here is how real
+ones fare, because a real corpus is customer work and must never be copied into this public repository.
+
+Point the same test at a checkout that already exists on your machine:
+
+```bash
+./gradlew :idea-plugin:test --tests "*BundledSchemaValidationTest" -Patlas.corpus=/path/to/a/checkout
+```
+
+It prints a count per format and the ten most common causes. A cause is only worth acting on when it is
+a *schema gap* — a construct Flowable supports that the schema does not declare — rather than a model
+defect such as an id that is not a valid XML name. The threshold for shipping a schema change is 99 % of
+files clean with no single cause above 1 %; at the time of writing it is 99.1 %, and every remaining
+finding is a real defect or a template file full of `$MODEL_KEY` placeholders. Run it before changing
+anything under `idea-plugin/src/main/resources/schemas/`, and again after — see `idea-plugin/README.md`
+for what may be changed in them and why.
+
 ### The compatibility gate
 
 ```bash

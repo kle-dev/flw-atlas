@@ -12,6 +12,8 @@ Nothing here is a licence to Atlas. It is a licence to the components inside it.
 | [Geist](https://github.com/vercel/geist-font) | subset (Regular / Medium / SemiBold) | SIL Open Font License 1.1 | `core/.../frontend/explorer.css` as `data:` URIs → the plugin JAR **and every generated `*.explorer.html`** |
 | [Lucide](https://lucide.dev) | 1.39.0, 51 icons | ISC (six Feather-derived icons: MIT) | `core/.../frontend/explorer.js` as inline SVG paths (`TYPE_ICONS`) → the plugin JAR **and every generated `*.explorer.html`**; `idea-plugin/src/main/resources/icons/atlas/*.svg` (generated from that table by `scripts/plugin-icons.mjs`, plus compass, shapes and route) → the plugin JAR |
 | [Kotlin standard library](https://github.com/JetBrains/kotlin) | 2.3.21 | Apache License 2.0 | `cli-<version>-all.jar` only — the IntelliJ plugin uses the platform's copy and bundles none |
+| BPMN 2.0, CMMN 1.1, DMN 1.1–1.3 and DD 1.0 XML schemas | as published by the OMG, taken from `flowable-8.0.0-76-ga50dd0c581` | OMG specification terms — see below | `idea-plugin/src/main/resources/schemas/{bpmn,cmmn,dmn}/*.xsd` → the plugin JAR |
+| [Flowable BPMN extensions schema](https://github.com/flowable/flowable-engine) | `flowable-8.0.0-76-ga50dd0c581` | Apache License 2.0 | `idea-plugin/src/main/resources/schemas/bpmn/flowable-bpmn-extensions.xsd` → the plugin JAR — **modified**, see below |
 
 JUnit 4.13.2 (EPL 1.0) is a test-only dependency and is not redistributed in any artifact.
 
@@ -28,6 +30,35 @@ generated report redistributes them. The ISC permission notice therefore sits in
 `TYPE_ICONS` table in `core/src/main/resources/frontend/explorer.js` as well, in the header of
 `scripts/plugin-icons.mjs` (which adds the three bodies the explorer does not use), and as a one-line
 pointer in every generated icon file under `idea-plugin/src/main/resources/icons/atlas/`.
+
+---
+
+## The model schemas
+
+The plugin bundles the XML schemas for BPMN, CMMN and DMN so that a model file can be edited with
+completion and validation; without them the IDE knows none of these formats. All of them were copied
+from the open-source [Flowable engine](https://github.com/flowable/flowable-engine) at revision
+`flowable-8.0.0-76-ga50dd0c581`, which distributes them under the Apache License 2.0 alongside its own
+code, and they are the same files Flowable's own runtime parses with.
+
+Two things are worth stating plainly, because neither is visible in the files themselves — none of these
+XSDs carries a licence header of any kind:
+
+- **The OMG-authored schemas** (`BPMN20.xsd`, `Semantic.xsd`, `BPMNDI.xsd`, `CMMN11*.xsd`, `CMMNDI11.xsd`,
+  `DMN1*.xsd`, `DMNDI1*.xsd` and the `DC.xsd` / `DI.xsd` files) are machine-readable artifacts of OMG
+  specifications — [BPMN 2.0](https://www.omg.org/spec/BPMN/2.0/), [CMMN 1.1](https://www.omg.org/spec/CMMN/1.1/),
+  [DMN 1.3](https://www.omg.org/spec/DMN/1.3/) — and are governed by the OMG's own terms of use for those
+  specifications rather than by Apache 2.0. They are vendored **byte for byte**, which is itself the
+  provenance record: anyone can diff them against the published files. Redistributing them alongside an
+  implementation is long-standing practice among BPM vendors, Flowable included, but the terms are the
+  OMG's and not ours to restate here.
+
+- **`flowable-bpmn-extensions.xsd`** is Flowable's own, under Apache 2.0, and **Atlas has modified it**.
+  Section 4(b) of that licence requires modified files to carry prominent notice of the change: the file
+  says so in its header and at each of the six changed places, and `idea-plugin/README.md` records what
+  was changed and the measurement that justified it. In short, three attributes that upstream declares as
+  closed enumerations are plain strings here, and a `<script>` element the engine both parses and writes
+  was missing entirely — validating against the file as published would report correct models as errors.
 
 ---
 

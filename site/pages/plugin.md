@@ -308,6 +308,22 @@ The catalog of API positions is transcribed from the public Flowable interfaces 
 subinterfaces, so one entry covers every service that extends it. Both `org.flowable.*` and
 `com.flowable.*`.
 
+### Schema support in model XML
+
+A `.bpmn`, `.cmmn` or `.dmn` opens like any other schema-backed XML: `<` inside a process offers the
+BPMN elements, `flowable:` offers the Flowable attributes, and a missing required attribute is said in
+the editor rather than at deployment. The IDE ships none of these schemas itself, so before this the
+same file opened with an unresolved namespace and no completion at all. The schemas are Flowable's own
+copies, bundled with the plugin — nothing is fetched, and it works offline.
+
+What is deliberately *not* validated: `http://flowable.org/design`, `http://flowable.org/cmmn` and
+`http://flowable.org/modeler`. No schema for them exists anywhere, so they are registered as ignored —
+the *URI is not registered* warning goes away without pretending we can check them. That costs nothing,
+because all three formats allow foreign attributes at every element, so an undescribed namespace is
+skipped rather than rejected. Measured against a real corpus, 99 % of models validate clean, and the
+remainder are genuine defects: an id that is not a valid XML name, a diagram edge with no waypoints, a
+required attribute nobody filled in. Those were always wrong; now they are visible.
+
 ### Key validation
 
 A key that matches no model in the project is flagged in the editor, with a quick fix to the closest

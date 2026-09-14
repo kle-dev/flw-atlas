@@ -352,6 +352,22 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   Atlas's developers was shown as help; and the heading focus after a navigation was drawn as a text
   field.
 
+- **Model XML gets its schemas.** A `.bpmn`, `.cmmn` or `.dmn` opened with an unresolved namespace and
+  no completion at all: the IDE ships none of these schemas, and nothing supplied them. The plugin now
+  bundles Flowable's own copies and registers them, so `<` inside a process offers BPMN elements,
+  `flowable:` offers the Flowable attributes, and a missing required attribute is said in the editor
+  instead of at deployment. Nothing is fetched; it works offline. `http://flowable.org/design`,
+  `.../cmmn` and `.../modeler` have no schema anywhere and are registered as *ignored* rather than left
+  unknown — the warning goes, without pretending they can be checked, and because all three formats
+  allow foreign attributes everywhere, an undescribed namespace is skipped rather than rejected. One
+  schema needed widening before this was safe: the open-source `flowable:type` is an enumeration of
+  eight values, while a real project also writes `service-registry`, `agent`, `init-variables`, `audit`
+  and `data-object` — validating against it as published reported 140 of 989 real process files as
+  errors, where the widened copy reports 8. A listener's `<script>`, which the engine both reads and
+  writes, was missing from the schema entirely and is declared now. Measured across 1 784 real models,
+  99.1 % validate clean and every remaining finding is a genuine defect — an id that is not a valid XML
+  name, a diagram edge with no waypoints. Five such defects were in this repository's own demo models,
+  and are fixed.
 - **A search result list that stays open.** The *Flowable Model* tab finds a string in every model —
   keys, element ids, and the full text, archive entries included — and then closes on the first result
   you open, so a string that sits in thirty places could only be walked one query at a time. **⇧⏎** on

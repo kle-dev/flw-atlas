@@ -13,12 +13,12 @@
       <planItem id="pi_order" definitionRef="startOrder">
         <entryCriterion id="crit_order" sentryRef="sentry_reviewed"/>
       </planItem>
+      <planItem id="pi_lookup" definitionRef="lookupTask"/>
       <sentry id="sentry_reviewed">
         <planItemOnPart id="onpart_reviewed" sourceRef="pi_review">
           <standardEvent>complete</standardEvent>
         </planItemOnPart>
       </sentry>
-      <planItem id="pi_lookup" definitionRef="lookupTask"/>
       <humanTask id="reviewTask" name="Review order"
                  flowable:candidateGroups="auditors" flowable:formKey="orderForm"/>
       <processTask id="startOrder" name="Start order" processRef="orderProcess"/>
@@ -36,22 +36,28 @@
     <cmmndi:CMMNDiagram id="dia_reviewCase">
       <cmmndi:CMMNShape id="s_planModel" cmmnElementRef="planModel">
         <dc:Bounds x="40" y="40" width="520" height="180"/>
+        <cmmndi:CMMNLabel/>
       </cmmndi:CMMNShape>
       <cmmndi:CMMNShape id="s_pi_review" cmmnElementRef="pi_review">
         <dc:Bounds x="80" y="110" width="100" height="60"/>
+        <cmmndi:CMMNLabel/>
       </cmmndi:CMMNShape>
       <cmmndi:CMMNShape id="s_pi_order" cmmnElementRef="pi_order">
         <dc:Bounds x="240" y="110" width="100" height="60"/>
+        <cmmndi:CMMNLabel/>
       </cmmndi:CMMNShape>
       <cmmndi:CMMNShape id="s_crit_order" cmmnElementRef="crit_order">
         <dc:Bounds x="233" y="129" width="14" height="22"/>
+        <cmmndi:CMMNLabel/>
       </cmmndi:CMMNShape>
       <cmmndi:CMMNShape id="s_pi_lookup" cmmnElementRef="pi_lookup">
         <dc:Bounds x="400" y="110" width="100" height="60"/>
+        <cmmndi:CMMNLabel/>
       </cmmndi:CMMNShape>
       <cmmndi:CMMNEdge id="e_onpart_reviewed" cmmnElementRef="onpart_reviewed">
         <di:waypoint x="180" y="140"/>
         <di:waypoint x="233" y="140"/>
+        <cmmndi:CMMNLabel/>
       </cmmndi:CMMNEdge>
     </cmmndi:CMMNDiagram>
   </cmmndi:CMMNDI>
