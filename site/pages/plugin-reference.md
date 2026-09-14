@@ -21,10 +21,14 @@ registers languages and file types.
 
 All actions live under **Tools → Flowable Atlas**, and are also reachable through *Find Action*. The
 Hub is the plugin's visible surface, so there are no main-toolbar entries and only one shortcut:
-**Search Models…** is `Ctrl+Alt+Shift+M` (`⌥⇧⌘M` on macOS), because it is the one action that competes
+*Go to Model…* and *Find in Models…* are the same search with two endings, named after the platform's
+own pair: *Go to File* takes you to one place and closes, *Find in Files* leaves a list. `⇧⏎` in the
+popup switches from the first to the second without retyping.
+
+**Go to Model…** is `Ctrl+Alt+Shift+M` (`⌥⇧⌘M` on macOS), because it is the one action that competes
 with Shift-Shift for the hand; rebind it under *Settings → Keymap → Plugins → Flowable Atlas*. A
 right-click on a **folder, a model file or an archive** in the Project view offers *Generate Atlas
-Explorer…* and *Search Models…* — the two actions that are about the thing under the cursor — and
+Explorer…* and *Go to Model…* — the two actions that are about the thing under the cursor — and
 nothing on any other file.
 
 | Action | Also in |
@@ -32,8 +36,8 @@ nothing on any other file.
 | Atlas Hub | — |
 | Open Atlas Explorer | Atlas Hub toolbar and its *Explorer* block |
 | Open Expression Playground | Atlas Hub toolbar and its *Playground* block |
-| Search Models… | Atlas Hub toolbar and the model count in its header; Project view context menu; `Ctrl+Alt+Shift+M` |
-| Find in Models… | Atlas Hub toolbar's *Search Models…* popup, with `⇧⏎` on any row |
+| Go to Model… | Atlas Hub toolbar and the model count in its header; Project view context menu; `Ctrl+Alt+Shift+M` |
+| Find in Models… | The *Go to Model…* popup, with `⇧⏎` on any row |
 | Copy Model Key | Editor context menu, on a key — a literal or constant at a Flowable API site in Java, a cross-reference or the file's own key in a model file; the Atlas Hub's *Recent Models* context menu |
 | Generate → Generate Atlas Explorer… | Atlas Hub, *Explorer* block; Project view context menu |
 | Generate → Regenerate Atlas Explorer | Atlas Hub attention line, when models changed since the last generation; the explorer tab's banner and toolbar; the balloon after a Design pull |
@@ -60,7 +64,7 @@ Settings…*; and the Script Playground's language and context selectors with *L
 
 | Tool window | Where | Contents |
 |---|---|---|
-| **Atlas Hub** | Right stripe | A status header — Flowable project · model count (a link to *Search Models…*, *Rebuild* beside it) · index age · one attention line when something needs a hand — over four blocks: Explorer · Recent Models (the models opened last, newest first; double-click opens at the key, the context menu copies the key or opens the explorer page) · Design Pull (environment · workspace · apps · pull) · Playground. See [the Hub](../#the-atlas-hub) |
+| **Atlas Hub** | Right stripe | A status header — Flowable project · model count (a link to *Go to Model…*, *Rebuild* beside it) · index age · one attention line when something needs a hand — over four blocks: Explorer · Recent Models (the models opened last, newest first; double-click opens at the key, the context menu copies the key or opens the explorer page) · Design Pull (environment · workspace · apps · pull) · Playground. See [the Hub](../#the-atlas-hub) |
 | **Flowable Expressions** | Bottom stripe (secondary) | Two tabs on one shell — editor and problems · context · result: *Expressions* (Backend / Frontend) and *Scripts*. See [the playgrounds](../#the-playgrounds) |
 
 The generated explorer opens as an editor tab, **Atlas Explorer** (the page, in the embedded browser);

@@ -1,31 +1,37 @@
 package com.flowable.atlas.hub
 
 import com.flowable.atlas.action.FlowableActionIds
+import com.intellij.openapi.actionSystem.ActionGroup
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnAction
-import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.project.DumbAware
+import com.intellij.testFramework.TestActionEvent
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 
 /**
- * The Hub toolbar's shape.
+ * The Hub toolbar's shape, and the one property that keeps it honest: the `⋮` is *Tools → Flowable
+ * Atlas*, not a second list of the same actions.
  *
- * Three actions moved out of the `⋮` menu onto the toolbar itself, which changes two things a menu never
- * had to answer for. A toolbar is a row of icons, so an action that arrives without one draws as a text
- * button in a stripe that has no room for it; and a toolbar button is visible the whole time, where a
- * menu entry is only visible while the menu is open, so a button that misbehaves on a cold index
- * misbehaves in plain sight. Both are asserted here.
+ * Both halves are here because both were wrong before. Three actions moved out of the menu onto the
+ * toolbar, which a menu never had to answer for — a toolbar is a row of icons, so one arriving without
+ * an icon draws as a text button in a stripe with no room for it, and a toolbar button is visible the
+ * whole time, where a menu entry is only visible while the menu is open. And the two menus over the same
+ * actions had drifted into different contents *and* a different order, which is a navigation people have
+ * to learn twice.
  */
 class HubActionsTest : BasePlatformTestCase() {
 
     private fun toolbar(): List<AnAction> = HubActions.toolbar(project) {}.childActionsOrStubs.toList()
 
-    private fun overflow(): DefaultActionGroup = toolbar().filterIsInstance<DefaultActionGroup>().single()
+    private fun overflow(): ActionGroup = toolbar().last() as ActionGroup
+
+    private fun childrenOf(group: ActionGroup): List<AnAction> =
+        group.getChildren(TestActionEvent.createTestEvent()).toList()
 
     private fun idOf(action: AnAction): String? = ActionManager.getInstance().getId(action)
 
-    fun testTheToolbarReadsPanelVerbsThenDestinationsThenOverflow() {
+    fun testTheToolbarReadsPanelVerbsThenDestinationsThenTheMenu() {
         val children = toolbar()
         // Refresh and Settings are anonymous — they act on this panel and are registered nowhere else.
         assertNull(idOf(children[0]))
@@ -35,11 +41,11 @@ class HubActionsTest : BasePlatformTestCase() {
             listOf(
                 FlowableActionIds.OPEN_ATLAS_EXPLORER,
                 FlowableActionIds.OPEN_EXPRESSION_PLAYGROUND,
-                FlowableActionIds.SEARCH_MODELS,
+                FlowableActionIds.GO_TO_MODEL,
             ),
             children.subList(3, 6).map { idOf(it) },
         )
-        assertTrue("the ⋮ group is last", children.last() is DefaultActionGroup)
+        assertTrue("the ⋮ group is last", children.last() is ActionGroup)
         assertEquals(7, children.size)
     }
 
@@ -51,25 +57,31 @@ class HubActionsTest : BasePlatformTestCase() {
         assertEquals("a toolbar button with no icon draws as text in the stripe", emptyList<String>(), nameless)
     }
 
-    fun testTheThreeDestinationsLeftTheOverflowMenu() {
-        val ids = overflow().childActionsOrStubs.mapNotNull { idOf(it) }
-        assertFalse(ids.contains(FlowableActionIds.OPEN_ATLAS_EXPLORER))
-        assertFalse(ids.contains(FlowableActionIds.OPEN_EXPRESSION_PLAYGROUND))
-        assertFalse(ids.contains(FlowableActionIds.SEARCH_MODELS))
+    fun testTheOverflowMenuIsTheToolsMenuItself() {
+        val menu = ActionManager.getInstance().getAction(FlowableActionIds.MENU) as ActionGroup
+        val fromMenu = childrenOf(menu).map { idOf(it) ?: it.javaClass.name }
+        val fromHub = childrenOf(overflow()).map { idOf(it) ?: it.javaClass.name }
+        assertEquals("the Hub's ⋮ renders the Tools menu, so the two cannot drift apart", fromMenu, fromHub)
+        assertTrue("and it is not empty — a mirror of nothing would pass the line above too", fromHub.isNotEmpty())
     }
 
-    fun testTheOverflowMenuKeepsWhatTheToolbarDoesNotCarry() {
-        val children = overflow().childActionsOrStubs
-        val ids = children.mapNotNull { idOf(it) }
-        assertTrue("maintenance stays in the menu", ids.containsAll(
-            listOf(
-                FlowableActionIds.GENERATE_MODEL_CONSTANTS,
-                FlowableActionIds.REBUILD_MODEL_INDEX,
-                FlowableActionIds.MANAGE_ENVIRONMENTS,
-            ),
-        ))
-        // The environments group is anonymous like the panel verbs, so it is counted by its type.
-        assertEquals(1, children.count { it !is DefaultActionGroup && it !is Separator && idOf(it) == null })
+    fun testBothSearchesAreReachableFromTheMenu() {
+        // The pair a reader has to tell apart: one opens the popup, the other the result list. Neither
+        // may be the one that is only in the other menu.
+        val ids = childrenOf(overflow()).mapNotNull { idOf(it) }
+        assertTrue(ids.contains(FlowableActionIds.GO_TO_MODEL))
+        assertTrue(ids.contains(FlowableActionIds.FIND_IN_MODELS))
+    }
+
+    fun testTheTwoSearchesDoNotShareAnIcon() {
+        // They sit next to each other in the menu and differ by one word. Actions.Search and Actions.Find
+        // are near-identical magnifiers, which left the wording to carry the whole distinction.
+        val am = ActionManager.getInstance()
+        val goTo = am.getAction(FlowableActionIds.GO_TO_MODEL).templatePresentation.icon
+        val find = am.getAction(FlowableActionIds.FIND_IN_MODELS).templatePresentation.icon
+        assertNotNull(goTo)
+        assertNotNull(find)
+        assertFalse("the pair has to be told apart without reading", goTo == find)
     }
 
     fun testTheThreeDestinationsAreDumbAware() {
@@ -77,7 +89,7 @@ class HubActionsTest : BasePlatformTestCase() {
         listOf(
             FlowableActionIds.OPEN_ATLAS_EXPLORER,
             FlowableActionIds.OPEN_EXPRESSION_PLAYGROUND,
-            FlowableActionIds.SEARCH_MODELS,
+            FlowableActionIds.GO_TO_MODEL,
         ).forEach { id ->
             assertTrue("$id is on the toolbar while the index builds, so it must be DumbAware",
                 am.getAction(id) is DumbAware)

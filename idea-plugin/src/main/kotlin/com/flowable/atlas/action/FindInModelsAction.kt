@@ -15,10 +15,10 @@ import com.intellij.openapi.ui.Messages
  * *Find in Models…* — every occurrence of a string in every Flowable model, as a Find-tool-window list
  * that stays open.
  *
- * The sibling of *Search Models…*, and the difference is the whole point of it: the search popup is for
- * getting to **one** place quickly and closes when you do; this is for working through **all** of them.
- * Both read the same index and the same model text, archive entries included, so a hit one finds the
- * other finds too. The popup also hands over directly — ⇧⏎ there opens the same list.
+ * The sibling of *Go to Model…*, and the pair is named after the platform's own: *Go to File* jumps to
+ * one place and closes, *Find in Files* leaves a list you work through. Both read the same index and the
+ * same model text, archive entries included, so a hit one finds the other finds too, and the popup hands
+ * over directly — ⇧⏎ there opens this list.
  *
  * Prefilled from the editor: the selection, else the model key under the caret (the same one
  * [CopyModelKeyAction] copies), so searching for the key you are looking at costs no typing.

@@ -102,12 +102,13 @@ The toolbar reads left to right as what acts on the panel, then where the plugin
 **Refresh** re-reads everything on the panel — the index status, the generated pages and the Flowable
 Design workspace and app lists; there is no second reload button. **Settings** opens the Atlas pages.
 Then, past a separator, the three destinations: **Open Atlas Explorer**, **Open Expression Playground**
-and **Search Models…**, each one click rather than two. They stay reachable where they always were —
+and **Go to Model…**, each one click rather than two. They stay reachable where they always were —
 the Explorer and Playground blocks have their own buttons, the model count in the header is still a
 link to the search — because a panel that offers a thing twice costs nothing, and a panel that hides
-its three exits costs a visit to a menu every time. The **⋮** menu holds what is left:
-*Generate Model Constants…*, *Rebuild Model Index*, *Manage Environments…* — and **Open Environment in
-Browser**, which lists every address in the catalog — Design, the app, Control, Hub — grouped by stage,
+its three exits costs a visit to a menu every time. The **⋮** menu is *Tools → Flowable Atlas* itself — the same entries in the same order, so there is one
+navigation to learn rather than two. It holds everything the toolbar does not: the *Generate* submenu,
+the Flowable Design environment switches and pull, *Manage Environments…*, *Rebuild Model Index* — and
+**Open Environment in Browser**, which lists every address in the catalog — Design, the app, Control, Hub — grouped by stage,
 and hands the one you pick to your browser. The Hub knows those URLs already; without this they stayed
 bookmarks, and *which one was QA's Control again?* was a question answered in the browser rather than
 here. It follows neither of the two environment pointers, because a third rule about which environment

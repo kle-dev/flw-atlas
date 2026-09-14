@@ -12,6 +12,25 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.24.1
+
+- **The model search works under Remote Development.** *Search Models…* did nothing at all on a remote
+  host: the Search Everywhere popup is a frontend component, an ordinary action runs on the backend, and
+  the call reached no UI — it failed silently, which is the worst way for a button to fail. It is built
+  on the platform's own `SearchEverywhereBaseAction` now, the same base every *Go to Class / File /
+  Symbol* uses, whose whole purpose is to route the action to the thin client.
+- **One menu, in two places.** *Tools → Flowable Atlas* and the Atlas Hub's **⋮** were two hand-kept
+  lists over the same actions, and they had drifted into different contents *and* a different order — so
+  the same plugin had two navigations to learn, and an entry was reliably in the one you were not
+  looking at. The ⋮ now renders the Tools group itself: an action added to the descriptor appears in
+  both, in the same place, or in neither. *Open Environment in Browser*, which only the Hub had, is a
+  registered group now and is in both.
+- **The two searches say which is which.** *Search Models…* and *Find in Models…* differed by one word,
+  and nothing in the pair said that the first takes you to one place and closes while the second leaves
+  a list. They are **Go to Model…** and **Find in Models…** now, after the platform's own *Go to File* /
+  *Find in Files* — and they no longer share a magnifier: the list carries the Find tool window's own
+  icon, which is the window it opens. The keyboard shortcut is unchanged.
+
 ## 0.24.0
 
 - **Findings can be accepted, in a file you commit.** Some findings are correct and still not worth

@@ -39,8 +39,8 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
     }
     // The count is the way into the index — Search Everywhere's Flowable Model tab — and Rebuild sits
     // beside it instead of two levels down in ⋮; the age stays plain text.
-    private val status = ActionLink("") { host.invokeAction(FlowableActionIds.SEARCH_MODELS) }.apply {
-        toolTipText = FlowableActionIds.text(FlowableActionIds.SEARCH_MODELS)
+    private val status = ActionLink("") { host.invokeAction(FlowableActionIds.GO_TO_MODEL) }.apply {
+        toolTipText = FlowableActionIds.text(FlowableActionIds.GO_TO_MODEL)
     }
     private val age = JBLabel().apply { foreground = UIUtil.getContextHelpForeground() }
     private val rebuild = ActionLink("") { host.invokeAction(FlowableActionIds.REBUILD_MODEL_INDEX) }.apply {

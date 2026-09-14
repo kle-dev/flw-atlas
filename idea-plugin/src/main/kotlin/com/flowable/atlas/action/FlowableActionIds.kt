@@ -4,10 +4,13 @@ import com.intellij.openapi.actionSystem.ActionManager
 
 /** Action IDs registered in plugin.xml — referenced from code (hub toolbar, cross-invocation). */
 object FlowableActionIds {
+    /** The Tools → Flowable Atlas group. The Atlas Hub's ⋮ renders this same group. */
+    const val MENU = "Flowable.Menu"
+
     const val OPEN_ATLAS_HUB = "Flowable.OpenAtlasHub"
     const val OPEN_ATLAS_EXPLORER = "Flowable.OpenAtlasExplorer"
     const val OPEN_EXPRESSION_PLAYGROUND = "Flowable.OpenExpressionPlayground"
-    const val SEARCH_MODELS = "Flowable.SearchModels"
+    const val GO_TO_MODEL = "Flowable.GoToModel"
     const val FIND_IN_MODELS = "Flowable.FindInModels"
     const val GENERATE_ATLAS_EXPLORER = "Flowable.GenerateAtlasExplorer"
     const val GENERATE_MODEL_CONSTANTS = "Flowable.GenerateModelConstants"

@@ -142,6 +142,28 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.24.1</h3>
+        <ul>
+          <li><b>The model search works under Remote Development.</b> <i>Search Models…</i> did nothing at
+              all on a remote host: the Search Everywhere popup is a frontend component, an ordinary action
+              runs on the backend, and the call reached no UI — it failed silently, which is the worst way
+              for a button to fail. It is built on the platform's own
+              <code>SearchEverywhereBaseAction</code> now, the same base every <i>Go to Class / File /
+              Symbol</i> uses, whose whole purpose is to route the action to the thin client.</li>
+          <li><b>One menu, in two places.</b> <i>Tools → Flowable Atlas</i> and the Atlas Hub's <b>⋮</b>
+              were two hand-kept lists over the same actions, and they had drifted into different contents
+              <i>and</i> a different order — so the same plugin had two navigations to learn, and an entry
+              was reliably in the one you were not looking at. The ⋮ now renders the Tools group itself: an
+              action added to the descriptor appears in both, in the same place, or in neither. <i>Open
+              Environment in Browser</i>, which only the Hub had, is a registered group now and is in
+              both.</li>
+          <li><b>The two searches say which is which.</b> <i>Search Models…</i> and <i>Find in Models…</i>
+              differed by one word, and nothing in the pair said that the first takes you to one place and
+              closes while the second leaves a list. They are <b>Go to Model…</b> and <b>Find in Models…</b>
+              now, after the platform's own <i>Go to File</i> / <i>Find in Files</i> — and they no longer
+              share a magnifier: the list carries the Find tool window's own icon, which is the window it
+              opens. The keyboard shortcut is unchanged.</li>
+        </ul>
         <h3>0.24.0</h3>
         <ul>
           <li><b>Findings can be accepted, in a file you commit.</b> Some findings are correct and still not
@@ -519,29 +541,6 @@
               file, so it can be accepted like any other finding. And a form button's
               <code>invokeServiceUrl</code> / <code>invokeActionUrl</code> are REST calls to the IDE's
               scanner, as they were to the report.</li>
-          <li><b>A reference tree.</b> The explorer could not answer "what does this app actually start, and
-              what does that reach?" — relationships were single-hop everywhere, so following a chain meant
-              clicking through it and losing your place at every step. <code>#/tree</code> walks the graph
-              instead: the app as a grouping header (plus <i>Outside any app</i>, which is a finding in
-              itself), its functional roots — a model nothing points at except its app — and everything
-              those reach. App membership is deliberately not the spine: <code>contains</code> is app →
-              model and one level deep, so nesting by it buries the edge that explains why a form exists. A
-              node is expanded once, at the shallowest place it is reached; later arrivals are leaves marked
-              <i>shown above</i> that jump to it, which keeps the tree bounded where rebuilding a shared
-              subtree per path is exponential. Cycles terminate and say so. The filter takes the palette's
-              search grammar, and a row survives it if it matches <b>or</b> a descendant does.</li>
-          <li><b>A report page can be reloaded, and sent.</b> The browse list round-tripped its filter and
-              sort through the URL; the report pages did not, so a reload of <code>#/checks</code> dropped
-              the severity chip and the filter, and "the four crossed mappings I found" could only be shared
-              as a screenshot. <code>#/checks</code>, <code>#/tree</code>, <code>#/scripts</code>,
-              <code>#/variables</code> and <code>#/schema</code> now carry their filter text, their chip,
-              <i>show accepted</i> and the tree's lens in the URL, written as you type or pick and read back
-              on arrival.</li>
-          <li><b>A report page scrolls inside the page.</b> The Checks, Tree, Variables, Scripts and Schema
-              pages had no scroll container of their own, so a page taller than the window scrolled the
-              whole document — and took the sidebar, the breadcrumb, ⌘K and the <i>Save to waivers.json</i>
-              bar along, while a model's page kept its menu in place. Every view scrolls inside the shell
-              now.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>
@@ -979,18 +978,21 @@
                     icon="/icons/atlas/playground.svg"/>
             <!-- Opens Search Everywhere on the "Flowable Model" tab — otherwise reachable only by
                  pressing Shift twice and tabbing across to it, which nobody discovers unaided. -->
-            <action id="Flowable.SearchModels"
-                    class="com.flowable.atlas.action.SearchFlowableModelsAction"
+            <action id="Flowable.GoToModel"
+                    class="com.flowable.atlas.action.GoToModelAction"
                     icon="AllIcons.Actions.Search">
                 <!-- The one action that competes with Shift-Shift for the hand: worth a chord. -->
                 <keyboard-shortcut keymap="$default" first-keystroke="control alt shift M"/>
             </action>
             <!-- The same hits as the tab above, in a list that stays open: the popup is for reaching one
                  place, this is for working through all of them. No second chord — it is reached from the
-                 popup with Shift+Enter, and from here. -->
+                 popup with Shift+Enter, and from here.
+                 The icon is the Find tool window's own, not a second magnifier: Actions.Search and
+                 Actions.Find are near-identical glasses, and two adjacent entries that differ only in
+                 wording are exactly what made this pair hard to tell apart. -->
             <action id="Flowable.FindInModels"
                     class="com.flowable.atlas.action.FindInModelsAction"
-                    icon="AllIcons.Actions.Find"/>
+                    icon="AllIcons.Toolwindows.ToolWindowFind"/>
             <!-- The key under the caret — a literal or constant at a Flowable API site in Java, a reference or
                  the file's own key in a model file — onto the clipboard. Also in the editor's context menu. -->
             <action id="Flowable.CopyModelKey"
@@ -1034,6 +1036,12 @@
                     icon="AllIcons.Actions.Download"/>
             <action id="Flowable.SwitchWorkEnvironment"
                     class="com.flowable.atlas.action.SwitchWorkEnvironmentAction"/>
+            <!-- Every address in the catalog — Design, the app, Control, Hub — grouped by stage. It lives
+                 in the descriptor rather than in the Hub because the Hub's ⋮ renders this very group:
+                 an entry built only there is what made the two menus disagree. -->
+            <group id="Flowable.OpenEnvironmentInBrowser"
+                   class="com.flowable.atlas.action.OpenEnvironmentInBrowserGroup"
+                   popup="true"/>
             <action id="Flowable.ManageEnvironments"
                     class="com.flowable.atlas.action.ManageEnvironmentsAction"/>
             <separator/>
@@ -1051,7 +1059,7 @@
         <group id="Flowable.ProjectViewPopup" class="com.flowable.atlas.action.FlowableProjectViewGroup" popup="false">
             <separator/>
             <reference ref="Flowable.GenerateAtlasExplorer"/>
-            <reference ref="Flowable.SearchModels"/>
+            <reference ref="Flowable.GoToModel"/>
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
         </group>
     </actions>
