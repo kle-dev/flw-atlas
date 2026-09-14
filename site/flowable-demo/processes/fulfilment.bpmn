@@ -3,7 +3,7 @@
      variable checks real: the caller maps `orderId` in as `subOrderId`, and nothing here ever reads that
      name (the `unreadInputs` check), while `orderNotes` is declared as a `<dataObject>` and *is* read, so
      the declaration path is covered without adding a second finding. -->
-<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+<definitions xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:flowable="http://flowable.org/bpmn"
              targetNamespace="http://flowable.org/test"
              xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"

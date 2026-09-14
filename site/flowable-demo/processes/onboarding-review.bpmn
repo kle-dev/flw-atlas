@@ -50,13 +50,16 @@
     </serviceTask>
     <sequenceFlow id="f5" sourceRef="askAssistant" targetRef="reviewCase"/>
 
-    <caseTask id="reviewCase" name="Manual review" flowable:caseRef="DEMO-reviewCase">
+    <!-- How Flowable really starts a case from a process: a service task of type "case". A <caseTask>
+         is CMMN's element and the engine would not run one here. -->
+    <serviceTask id="reviewCase" name="Manual review" flowable:type="case"
+                 flowable:caseDefinitionKey="DEMO-reviewCase">
       <extensionElements>
         <flowable:in source="companyName" target="companyName"/>
         <!-- Never read on the other side: one honest `unreadInputs` row for the demo. -->
         <flowable:in source="expectedVolume" target="applicationVolume"/>
       </extensionElements>
-    </caseTask>
+    </serviceTask>
     <sequenceFlow id="f6" sourceRef="reviewCase" targetRef="decide"/>
 
     <userTask id="decide" name="Final decision"

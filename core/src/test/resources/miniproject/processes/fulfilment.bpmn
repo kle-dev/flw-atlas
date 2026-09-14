@@ -5,7 +5,7 @@
      the declaration path is covered without adding a second finding. Also carries the element shapes the
      structural extraction has to keep covered: lanes, a boundary event on its host, a gateway with a
      default flow, a conditional catch event, and an async activity. -->
-<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+<definitions xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:flowable="http://flowable.org/bpmn"
              targetNamespace="http://flowable.org/test">
   <process id="fulfilmentProcess" name="Fulfilment Process">
