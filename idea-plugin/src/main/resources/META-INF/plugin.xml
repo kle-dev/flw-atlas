@@ -286,6 +286,48 @@
               has no script branch, so it is a silent no-op — but the note sat on the plan item, and the
               check read only a process's task buckets. It reaches the case's page now, on the plan item
               that holds the listener.</li>
+          <li><b>Model XML gets its schemas.</b> A <code>.bpmn</code>, <code>.cmmn</code> or
+              <code>.dmn</code> opened with an unresolved namespace and no completion at all: the IDE ships
+              none of these schemas, and nothing supplied them. The plugin now bundles Flowable's own copies
+              and registers them, so <code>&lt;</code> inside a process offers BPMN elements,
+              <code>flowable:</code> offers the Flowable attributes, and a missing required attribute is
+              said in the editor instead of at deployment. Nothing is fetched; it works offline.
+              <code>http://flowable.org/design</code>, <code>.../cmmn</code> and <code>.../modeler</code>
+              have no schema anywhere and are registered as <i>ignored</i> rather than left unknown — the
+              warning goes, without pretending they can be checked, and because all three formats allow
+              foreign attributes everywhere, an undescribed namespace is skipped rather than rejected. One
+              schema needed widening before this was safe: the open-source <code>flowable:type</code> is an
+              enumeration of eight values, while a real project also writes <code>service-registry</code>,
+              <code>agent</code>, <code>init-variables</code>, <code>audit</code> and
+              <code>data-object</code> — validating against it as published reported 140 of 989 real process
+              files as errors, where the widened copy reports 8. A listener's <code>&lt;script&gt;</code>,
+              which the engine both reads and writes, was missing from the schema entirely and is declared
+              now. Measured across 1 784 real models, 99.1 % validate clean and every remaining finding is a
+              genuine defect — an id that is not a valid XML name, a diagram edge with no waypoints. Five
+              such defects were in this repository's own demo models, and are fixed.</li>
+          <li><b>A search result list that stays open.</b> The <i>Flowable Model</i> tab finds a string in
+              every model — keys, element ids, and the full text, archive entries included — and then closes
+              on the first result you open, so a string that sits in thirty places could only be walked one
+              query at a time. <b>⇧⏎</b> on any row, or the new <b>Find in Models…</b>, puts the whole
+              result set into the Find tool window instead: every occurrence its own row, grouped by file,
+              <code>.bar</code>/<code>.zip</code> entries among them, and the window names the scope it
+              searched. <i>Find in Models…</i> is prefilled from the editor — the selection, else the model
+              key under the caret. The platform's own <i>Open in Find Tool Window</i> button would have been
+              the obvious route and is a trap: its flag only lights the button, while the action behind it
+              can only render three item shapes, none of which this tab produces — it would have opened an
+              empty window. The list is built on the usage-view API that Find Usages on a model key already
+              uses, so an offset is found again in the file's own text rather than carried over from the
+              scanner, which decodes UTF-8 where the editor uses the file's charset.</li>
+          <li><b>The Hub's three exits are on its toolbar.</b> <i>Open Atlas Explorer</i>, <i>Open
+              Expression Playground</i> and <i>Search Models…</i> sat two clicks down in the ⋮ menu, which
+              is where a reader who has not memorised the menu stops looking. They are buttons now, past a
+              separator from Refresh and Settings — what acts on the panel first, then where the plugin
+              takes you — and the ⋮ keeps what is left: the environments, <i>Generate Model Constants…</i>,
+              <i>Rebuild Model Index</i>, <i>Manage Environments…</i>. They stay reachable where they
+              already were, in the Explorer and Playground blocks and on the header's model count. Each of
+              the three is <code>DumbAware</code>, which had to be checked rather than assumed: a toolbar
+              button is visible the whole time, where a menu entry is only visible while the menu is
+              open.</li>
           <li><b>The platform-bean set is read off the platform's own configuration.</b>
               <code>${flw.setOutput(…)}</code> in a task listener is the platform's scripting API root, and
               <code>planItemInstances</code> the CMMN query root; both were listed as beans of the project's
@@ -500,53 +542,6 @@
               whole document — and took the sidebar, the breadcrumb, ⌘K and the <i>Save to waivers.json</i>
               bar along, while a model's page kept its menu in place. Every view scrolls inside the shell
               now.</li>
-          <li><b>Back and forward, on every page.</b> Inside the IDE the explorer has no browser chrome, and
-              the only way back was a small button in a model page's header that hides its label in a narrow
-              tab — a report page had none at all, so a jump from the Checks table to a model was a dead
-              end. The top bar carries ‹ › on every view, <code>Alt+←</code> / <code>Alt+→</code> drive them
-              (the brackets stay the tab keys), the explorer tab's toolbar in the IDE has Back and Forward,
-              and the page's place in the history survives a reload.</li>
-          <li><b>Long text never clips a control.</b> A table cell ellipsises text but slices an inline box,
-              so a long key cut its model chip mid-chip in the checks table, a type tag mid-word in a fields
-              table, and a chip's type wrapped onto a second line; a 2 900-character binding label
-              overprinted the project crumb and filled a page as a 26px headline. A chip now shrinks by its
-              name only and never past its cell, a tag ellipsises, the current crumb has a width, and an
-              expression's or binding's label is shown as code — three lines, with <i>show all</i> for the
-              rest.</li>
-          <li><b>One unit per number, and a stale link says so.</b> <code>unreadInputs</code> fires once per
-              callee, so a variable mapped into seven processes was seven findings on one row: the sidebar
-              said 72, the page 66, the health row 16 and the list it opened 10. A review list's badge now
-              counts the rows it has, a health row whose findings outnumber their models says "on 10
-              variables", the Unused-variables page says "16 findings on 10 of 95 variables", and a filtered
-              list heads "12 of 332" like every other filter. And a link to a model this report does not
-              contain — renamed, or a report from a smaller scope — landed on the overview without a word
-              and kept the dead hash; it says so now and cleans the address bar.</li>
-          <li><b>Hiding uncertain links hides them everywhere.</b> The ≈ toggle repainted the detail panel
-              and nothing else: the reference tree kept its shape and the overview kept counting suspect
-              edges in its hotspots and reference counts until the next navigation. Every view follows the
-              toggle now.</li>
-          <li><b>A list that matches nothing says so.</b> Typing a filter no row matched left a blank
-              column; it now says <i>No match in Forms</i> and offers to search everything. And a deep link
-              into a CMMN diagram (<code>&amp;e=</code>) lights up the plan item like the ⌖ button does —
-              the link never passed the element's name, and CMMN's diagram references plan items by a
-              different id than the parsed tree.</li>
-          <li><b>A diagram stays legible, and the search says what matched.</b> <i>Fit</i> fitted the width
-              alone, so a process 6 700px wide landed at 12 % in an ordinary panel — a grey strip of boxes;
-              inline it now stops at 40 %, wider than the panel, with a line saying to drag or open full
-              screen. And the search palette's "why it matched" hint for a plain word named the field's
-              <i>id</i> (<code>label · date1</code>, twelve times in a row) where the facet path already
-              named the caption; both paths lead with the matched text now.</li>
-          <li><b>The search grammar stays a click away, tabs show from the first, and two keys for the two
-              things you do next.</b> The <code>label:</code> / <code>key:</code> / <code>type:</code> /
-              <code>in:</code> chips appeared only while the query matched nothing, so a reader who always
-              got some result never saw them — a <i>narrow ▾</i> chip keeps the row reachable under any
-              result set. The tab strip appeared only from the second tab, which is how the tabs and their
-              Alt shortcuts stayed undiscovered; it shows from the first. And on a selected node,
-              <code>c</code> copies its key and, inside the IDE, <code>o</code> opens its file.</li>
-          <li><b>A smaller page.</b> Every explorer shipped the run's <code>diagnostics</code> and the
-              custom-function catalog in its data island, and nothing on the page read either (the checks
-              come as findings, the functions as nodes) — on a project with parse problems that was
-              kilobytes of dead weight per page.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

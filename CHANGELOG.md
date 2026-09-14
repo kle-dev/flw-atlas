@@ -135,6 +135,42 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   so it is a silent no-op — but the note sat on the plan item, and the check read only a process's task
   buckets. It reaches the case's page now, on the plan item that holds the listener.
 
+- **Model XML gets its schemas.** A `.bpmn`, `.cmmn` or `.dmn` opened with an unresolved namespace and
+  no completion at all: the IDE ships none of these schemas, and nothing supplied them. The plugin now
+  bundles Flowable's own copies and registers them, so `<` inside a process offers BPMN elements,
+  `flowable:` offers the Flowable attributes, and a missing required attribute is said in the editor
+  instead of at deployment. Nothing is fetched; it works offline. `http://flowable.org/design`,
+  `.../cmmn` and `.../modeler` have no schema anywhere and are registered as *ignored* rather than left
+  unknown — the warning goes, without pretending they can be checked, and because all three formats
+  allow foreign attributes everywhere, an undescribed namespace is skipped rather than rejected. One
+  schema needed widening before this was safe: the open-source `flowable:type` is an enumeration of
+  eight values, while a real project also writes `service-registry`, `agent`, `init-variables`, `audit`
+  and `data-object` — validating against it as published reported 140 of 989 real process files as
+  errors, where the widened copy reports 8. A listener's `<script>`, which the engine both reads and
+  writes, was missing from the schema entirely and is declared now. Measured across 1 784 real models,
+  99.1 % validate clean and every remaining finding is a genuine defect — an id that is not a valid XML
+  name, a diagram edge with no waypoints. Five such defects were in this repository's own demo models,
+  and are fixed.
+- **A search result list that stays open.** The *Flowable Model* tab finds a string in every model —
+  keys, element ids, and the full text, archive entries included — and then closes on the first result
+  you open, so a string that sits in thirty places could only be walked one query at a time. **⇧⏎** on
+  any row, or the new **Find in Models…**, puts the whole result set into the Find tool window instead:
+  every occurrence its own row, grouped by file, `.bar`/`.zip` entries among them, and the window names
+  the scope it searched. *Find in Models…* is prefilled from the editor — the selection, else the model
+  key under the caret. The platform's own *Open in Find Tool Window* button would have been the obvious
+  route and is a trap: its flag only lights the button, while the action behind it can only render three
+  item shapes, none of which this tab produces — it would have opened an empty window. The list is built
+  on the usage-view API that Find Usages on a model key already uses, so an offset is found again in the
+  file's own text rather than carried over from the scanner, which decodes UTF-8 where the editor uses
+  the file's charset.
+- **The Hub's three exits are on its toolbar.** *Open Atlas Explorer*, *Open Expression Playground* and
+  *Search Models…* sat two clicks down in the ⋮ menu, which is where a reader who has not memorised the
+  menu stops looking. They are buttons now, past a separator from Refresh and Settings — what acts on
+  the panel first, then where the plugin takes you — and the ⋮ keeps what is left: the environments,
+  *Generate Model Constants…*, *Rebuild Model Index*, *Manage Environments…*. They stay reachable where
+  they already were, in the Explorer and Playground blocks and on the header's model count. Each of the
+  three is `DumbAware`, which had to be checked rather than assumed: a toolbar button is visible the
+  whole time, where a menu entry is only visible while the menu is open.
 - **The platform-bean set is read off the platform's own configuration.** `${flw.setOutput(…)}` in a
   task listener is the platform's scripting API root, and `planItemInstances` the CMMN query root; both
   were listed as beans of the project's own — 36 times on one real project — and each was a call out of
@@ -352,42 +388,6 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   Atlas's developers was shown as help; and the heading focus after a navigation was drawn as a text
   field.
 
-- **Model XML gets its schemas.** A `.bpmn`, `.cmmn` or `.dmn` opened with an unresolved namespace and
-  no completion at all: the IDE ships none of these schemas, and nothing supplied them. The plugin now
-  bundles Flowable's own copies and registers them, so `<` inside a process offers BPMN elements,
-  `flowable:` offers the Flowable attributes, and a missing required attribute is said in the editor
-  instead of at deployment. Nothing is fetched; it works offline. `http://flowable.org/design`,
-  `.../cmmn` and `.../modeler` have no schema anywhere and are registered as *ignored* rather than left
-  unknown — the warning goes, without pretending they can be checked, and because all three formats
-  allow foreign attributes everywhere, an undescribed namespace is skipped rather than rejected. One
-  schema needed widening before this was safe: the open-source `flowable:type` is an enumeration of
-  eight values, while a real project also writes `service-registry`, `agent`, `init-variables`, `audit`
-  and `data-object` — validating against it as published reported 140 of 989 real process files as
-  errors, where the widened copy reports 8. A listener's `<script>`, which the engine both reads and
-  writes, was missing from the schema entirely and is declared now. Measured across 1 784 real models,
-  99.1 % validate clean and every remaining finding is a genuine defect — an id that is not a valid XML
-  name, a diagram edge with no waypoints. Five such defects were in this repository's own demo models,
-  and are fixed.
-- **A search result list that stays open.** The *Flowable Model* tab finds a string in every model —
-  keys, element ids, and the full text, archive entries included — and then closes on the first result
-  you open, so a string that sits in thirty places could only be walked one query at a time. **⇧⏎** on
-  any row, or the new **Find in Models…**, puts the whole result set into the Find tool window instead:
-  every occurrence its own row, grouped by file, `.bar`/`.zip` entries among them, and the window names
-  the scope it searched. *Find in Models…* is prefilled from the editor — the selection, else the model
-  key under the caret. The platform's own *Open in Find Tool Window* button would have been the obvious
-  route and is a trap: its flag only lights the button, while the action behind it can only render three
-  item shapes, none of which this tab produces — it would have opened an empty window. The list is built
-  on the usage-view API that Find Usages on a model key already uses, so an offset is found again in the
-  file's own text rather than carried over from the scanner, which decodes UTF-8 where the editor uses
-  the file's charset.
-- **The Hub's three exits are on its toolbar.** *Open Atlas Explorer*, *Open Expression Playground* and
-  *Search Models…* sat two clicks down in the ⋮ menu, which is where a reader who has not memorised the
-  menu stops looking. They are buttons now, past a separator from Refresh and Settings — what acts on
-  the panel first, then where the plugin takes you — and the ⋮ keeps what is left: the environments,
-  *Generate Model Constants…*, *Rebuild Model Index*, *Manage Environments…*. They stay reachable where
-  they already were, in the Explorer and Playground blocks and on the header's model count. Each of the
-  three is `DumbAware`, which had to be checked rather than assumed: a toolbar button is visible the
-  whole time, where a menu entry is only visible while the menu is open.
 - **Ctrl+click lands on the key.** A model key resolved to its *file*: line 1 of a minified Design JSON,
   or the top of a deployment XML holding three processes, with nothing saying where the key is. Every
   key reference — a Java literal, a constant, a cross-reference attribute in model XML, an operation or
