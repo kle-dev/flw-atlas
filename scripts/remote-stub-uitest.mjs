@@ -147,8 +147,19 @@ async function withChrome(profile, fn) {
     const { sessionId } = await call('Target.attachToTarget', { targetId: page.targetId, flatten: true });
     return await fn((method, params) => call(method, params, sessionId));
   } finally {
-    proc.kill();
-    await Promise.race([exited, sleep(3000)]);
+    // Chrome writes localStorage lazily and flushes it on a *clean* shutdown. Killing it and racing a
+    // 3s sleep meant a slow runner could start the next run on the same profile while the last one was
+    // still writing — which is the "[reopen] bridge calls: expected 0, got 2" flake: the same commit
+    // passed on one runner and failed on another. Browser.close is the clean shutdown; the wait is long
+    // enough to mean something, and says so rather than moving on in silence.
+    await call('Browser.close').catch(() => proc.kill());
+    const exitedCleanly = await Promise.race([exited.then(() => true), sleep(20000).then(() => false)]);
+    if (!exitedCleanly) {
+      console.error('remote-stub-uitest: Chrome did not exit within 20s — killing it. A [reopen] result ' +
+        'after this is not trustworthy: the profile may hold a half-written localStorage.');
+      proc.kill('SIGKILL');
+      await Promise.race([exited, sleep(5000)]);
+    }
   }
 }
 
