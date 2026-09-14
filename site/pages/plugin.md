@@ -98,10 +98,14 @@ without arguing with the repository. Shared entries are read-only in the editor;
 makes one yours in a click, and a `git pull` that moves a URL reaches the pickers without anyone
 reopening Settings.
 
-The toolbar has three buttons. **Refresh** re-reads everything on the panel — the index status, the
-generated pages and the Flowable Design workspace and app lists; there is no second reload button.
-**Settings** opens the Atlas pages. The **⋮** menu holds the registered actions that used to be links
-scattered through the sections — *Open Atlas Explorer*, *Open Expression Playground*, *Search Models…*,
+The toolbar reads left to right as what acts on the panel, then where the plugin takes you.
+**Refresh** re-reads everything on the panel — the index status, the generated pages and the Flowable
+Design workspace and app lists; there is no second reload button. **Settings** opens the Atlas pages.
+Then, past a separator, the three destinations: **Open Atlas Explorer**, **Open Expression Playground**
+and **Search Models…**, each one click rather than two. They stay reachable where they always were —
+the Explorer and Playground blocks have their own buttons, the model count in the header is still a
+link to the search — because a panel that offers a thing twice costs nothing, and a panel that hides
+its three exits costs a visit to a menu every time. The **⋮** menu holds what is left:
 *Generate Model Constants…*, *Rebuild Model Index*, *Manage Environments…* — and **Open Environment in
 Browser**, which lists every address in the catalog — Design, the app, Control, Hub — grouped by stage,
 and hands the one you pick to your browser. The Hub knows those URLs already; without this they stayed

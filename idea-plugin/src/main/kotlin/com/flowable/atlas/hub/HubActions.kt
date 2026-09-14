@@ -19,14 +19,21 @@ import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 
 /**
- * The Hub's toolbar: Refresh, Settings, and a `⋮` menu of the registered actions that used to be links
- * scattered through the sections. Their texts come from the actions, so the menu and the Hub cannot
- * disagree about a name.
+ * The Hub's toolbar: what acts on the panel (Refresh, Settings), then the three places the plugin takes
+ * you (the explorer, the playground, the search), then a `⋮` menu of what is left. Texts *and* icons
+ * come from the registered actions — [registered] hands over the same instances the menus use — so no
+ * two surfaces can disagree about a name.
  *
  * Refresh is the one refresh. It re-gathers the panel *and* marks the Flowable Design lists stale, so
  * the section's own reload button — same icon, four pixels away, different meaning — is gone.
  */
 internal object HubActions {
+
+    /** Registered actions by id, in the order asked for; an id the descriptor does not carry is skipped. */
+    private fun registered(vararg ids: String): List<AnAction> {
+        val am = ActionManager.getInstance()
+        return ids.mapNotNull { am.getAction(it) }
+    }
 
     fun toolbar(project: Project, onRefresh: () -> Unit): DefaultActionGroup = DefaultActionGroup().apply {
         add(object : AnAction(
@@ -43,25 +50,31 @@ internal object HubActions {
             }
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
         })
+        add(Separator.getInstance())
+        // The three destinations, on the toolbar rather than two clicks down in the menu. Each is
+        // DumbAware and stays honest on a cold index — the search reads the cached index and asks for a
+        // build rather than waiting for one — which had to be checked: a toolbar button is visible the
+        // whole time, where a menu entry is only visible while the menu is open.
+        registered(
+            FlowableActionIds.OPEN_ATLAS_EXPLORER,
+            FlowableActionIds.OPEN_EXPRESSION_PLAYGROUND,
+            FlowableActionIds.SEARCH_MODELS,
+        ).forEach(::add)
         add(more(project))
     }
 
-    /** Getting somewhere, then maintenance, then the environments — registered actions by id. */
-    private fun more(project: Project): DefaultActionGroup {
-        val am = ActionManager.getInstance()
-        fun registered(vararg ids: String): List<AnAction> = ids.mapNotNull { am.getAction(it) }
-        return DefaultActionGroup(message("hub.toolbar.more"), null, AllIcons.Actions.More).apply {
+    /** What the toolbar does not carry: the environments, then maintenance, then managing them. */
+    private fun more(project: Project): DefaultActionGroup =
+        DefaultActionGroup(message("hub.toolbar.more"), null, AllIcons.Actions.More).apply {
             isPopup = true
-            registered(FlowableActionIds.OPEN_ATLAS_EXPLORER, FlowableActionIds.OPEN_EXPRESSION_PLAYGROUND).forEach(::add)
             add(OpenEnvironmentGroup(project))
             add(Separator.getInstance())
             registered(
-                FlowableActionIds.SEARCH_MODELS, FlowableActionIds.GENERATE_MODEL_CONSTANTS, FlowableActionIds.REBUILD_MODEL_INDEX,
+                FlowableActionIds.GENERATE_MODEL_CONSTANTS, FlowableActionIds.REBUILD_MODEL_INDEX,
             ).forEach(::add)
             add(Separator.getInstance())
             registered(FlowableActionIds.MANAGE_ENVIRONMENTS).forEach(::add)
         }
-    }
 
     /**
      * Hands an environment's own pages to the browser — Design, the app, Control, Hub — one separator per

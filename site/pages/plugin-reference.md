@@ -30,9 +30,9 @@ nothing on any other file.
 | Action | Also in |
 |---|---|
 | Atlas Hub | — |
-| Open Atlas Explorer | Atlas Hub, *Explorer* block and ⋮ menu |
-| Open Expression Playground | Atlas Hub, *Playground* block and ⋮ menu |
-| Search Models… | Atlas Hub ⋮ menu and the model count in its header; Project view context menu; `Ctrl+Alt+Shift+M` |
+| Open Atlas Explorer | Atlas Hub toolbar and its *Explorer* block |
+| Open Expression Playground | Atlas Hub toolbar and its *Playground* block |
+| Search Models… | Atlas Hub toolbar and the model count in its header; Project view context menu; `Ctrl+Alt+Shift+M` |
 | Copy Model Key | Editor context menu, on a key — a literal or constant at a Flowable API site in Java, a cross-reference or the file's own key in a model file; the Atlas Hub's *Recent Models* context menu |
 | Generate → Generate Atlas Explorer… | Atlas Hub, *Explorer* block; Project view context menu |
 | Generate → Regenerate Atlas Explorer | Atlas Hub attention line, when models changed since the last generation; the explorer tab's banner and toolbar; the balloon after a Design pull |

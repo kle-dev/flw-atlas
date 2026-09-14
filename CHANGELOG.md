@@ -352,6 +352,14 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   Atlas's developers was shown as help; and the heading focus after a navigation was drawn as a text
   field.
 
+- **The Hub's three exits are on its toolbar.** *Open Atlas Explorer*, *Open Expression Playground* and
+  *Search Models…* sat two clicks down in the ⋮ menu, which is where a reader who has not memorised the
+  menu stops looking. They are buttons now, past a separator from Refresh and Settings — what acts on
+  the panel first, then where the plugin takes you — and the ⋮ keeps what is left: the environments,
+  *Generate Model Constants…*, *Rebuild Model Index*, *Manage Environments…*. They stay reachable where
+  they already were, in the Explorer and Playground blocks and on the header's model count. Each of the
+  three is `DumbAware`, which had to be checked rather than assumed: a toolbar button is visible the
+  whole time, where a menu entry is only visible while the menu is open.
 - **Ctrl+click lands on the key.** A model key resolved to its *file*: line 1 of a minified Design JSON,
   or the top of a deployment XML holding three processes, with nothing saying where the key is. Every
   key reference — a Java literal, a constant, a cross-reference attribute in model XML, an operation or
