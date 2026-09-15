@@ -82,7 +82,12 @@ class AtlasGeneratorService(private val project: Project) {
                 // user's repo.
                 AtlasArtifact.GRAPH_JSON to { GraphJsonRenderer.render(result) },
                 AtlasArtifact.EXPLORER_HTML to { ExplorerHtmlRenderer.render(result, root, waiverAuthor = Waivers.defaultAuthor(root)) },
-                AtlasArtifact.CLAUDE_MD to { ClaudeRenderer.render(result, root) },
+                // The file spells its sibling paths from the project root and only names the ones that
+                // are actually being written — the user picks the artifact set in Settings → Generation.
+                AtlasArtifact.CLAUDE_MD to {
+                    val siblings = AtlasArtifact.SUMMARY_MD in artifacts && AtlasArtifact.GRAPH_JSON in artifacts
+                    ClaudeRenderer.render(result, root, ClaudeRenderer.Layout(outputDir.toFile(), siblings))
+                },
             )
             val written = ArrayList<Path>()
             for (artifact in AtlasArtifact.entries) {

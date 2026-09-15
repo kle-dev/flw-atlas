@@ -12,6 +12,42 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.24.3
+
+- **`CLAUDE.md` says less, and none of it is wrong.** Gloaguen et al. (ETH Zürich, *Evaluating AGENTS.md*,
+  2026) measured what a repository-level context file does for a coding agent: its instructions are
+  followed, its repository overview adds nothing the agent would not read anyway, and the file costs about
+  a fifth more per task. Held against that, a third of the generated file was overview — the scale line,
+  the app list, the model inventory, the Java-by-role tally, the directory counts and the per-check health
+  tallies, every one a copy of the summary that §0 has the agent read whole — and §5 restated four of its
+  own six rules in a "pitfalls" paragraph. All of that is gone. What stays is what the agent cannot get
+  from the repository: the procedure, the Design-vs-repo convention, the wiring examples to mirror, the
+  known issues not to copy, and the catalogs. §1 lost its ASCII diagram and the `ACT_*` table paragraph on
+  the same grounds.
+- **The catalog is complete.** §6 cut every list at a fixed length — `flw.` showed 34 of its 59 members,
+  `bpmn:` and `cmmn:` ended in "(+4 more)" — under a sentence that calls anything outside the list a
+  hallucination. That sentence was declaring real functions hallucinations. The lists are whole now, and
+  the section opens by saying when it is needed at all.
+- **The file works from where it is read.** It is meant to be the project's `CLAUDE.md`, read from the
+  repository root, but it named its siblings (`<project>.summary.md`, `.graph.json`, …) as bare file names
+  relative to wherever Atlas had written them — which, with the launcher's default, is a folder next to
+  the Atlas checkout. From the root not one of them resolved. The renderer now knows the output directory:
+  inside the project the paths are spelled from the root (`atlas-output/<project>/<project>.summary.md`)
+  and the header offers the `@`-import line for a hand-kept `CLAUDE.md`; outside it, one line says where
+  the files are and how to regenerate them. `--claude` on its own, which writes nothing but this file, no
+  longer sends the agent to read a summary that does not exist — its first step is to generate the
+  artifacts. And the `--slice` recipe is written in the form that runs: through the launcher it never
+  did, because the launcher adds `--all`, which `--slice` refuses.
+- **What not to touch is stated, not hedged.** §3 said "unless this project's convention is to edit the
+  model files directly (check existing commits)". Atlas knows whether the models came out of Design
+  export archives or sit in the repository as loose files, so §4 now says which — "Design exports packed
+  in `apps/demo.zip` — never edit the exports", or "unpacked files under `processes/` — check `git log`
+  before you decide" — next to where the custom Java goes. The "Flowable version: not auto-detected" line,
+  a sentence about the absence of a fact, is dropped when nothing is found; so is the generic *Run &
+  verify* fallback that fitted every Flowable project and told this one nothing. The house-rules reminder
+  is a real HTML comment now, which Claude Code strips before loading, instead of the same text in
+  backticks that every session paid for.
+
 ## 0.24.2
 
 - **Go to Model does something under Remote Development.** It still did nothing there after 0.24.1, and

@@ -142,6 +142,48 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.24.3</h3>
+        <ul>
+          <li><b><code>CLAUDE.md</code> says less, and none of it is wrong.</b> Gloaguen et al. (ETH Zürich,
+              <i>Evaluating AGENTS.md</i>, 2026) measured what a repository-level context file does for a
+              coding agent: its instructions are followed, its repository overview adds nothing the agent
+              would not read anyway, and the file costs about a fifth more per task. Held against that, a
+              third of the generated file was overview — the scale line, the app list, the model inventory,
+              the Java-by-role tally, the directory counts and the per-check health tallies, every one a
+              copy of the summary that §0 has the agent read whole — and §5 restated four of its own six
+              rules in a "pitfalls" paragraph. All of that is gone. What stays is what the agent cannot get
+              from the repository: the procedure, the Design-vs-repo convention, the wiring examples to
+              mirror, the known issues not to copy, and the catalogs. §1 lost its ASCII diagram and the
+              <code>ACT_*</code> table paragraph on the same grounds.</li>
+          <li><b>The catalog is complete.</b> §6 cut every list at a fixed length — <code>flw.</code> showed
+              34 of its 59 members, <code>bpmn:</code> and <code>cmmn:</code> ended in "(+4 more)" — under a
+              sentence that calls anything outside the list a hallucination. That sentence was declaring
+              real functions hallucinations. The lists are whole now, and the section opens by saying when
+              it is needed at all.</li>
+          <li><b>The file works from where it is read.</b> It is meant to be the project's
+              <code>CLAUDE.md</code>, read from the repository root, but it named its siblings
+              (<code>&lt;project&gt;.summary.md</code>, <code>.graph.json</code>, …) as bare file names
+              relative to wherever Atlas had written them — which, with the launcher's default, is a folder
+              next to the Atlas checkout. From the root not one of them resolved. The renderer now knows the
+              output directory: inside the project the paths are spelled from the root
+              (<code>atlas-output/&lt;project&gt;/&lt;project&gt;.summary.md</code>) and the header offers
+              the <code>@</code>-import line for a hand-kept <code>CLAUDE.md</code>; outside it, one line
+              says where the files are and how to regenerate them. <code>--claude</code> on its own, which
+              writes nothing but this file, no longer sends the agent to read a summary that does not exist
+              — its first step is to generate the artifacts. And the <code>--slice</code> recipe is written
+              in the form that runs: through the launcher it never did, because the launcher adds
+              <code>--all</code>, which <code>--slice</code> refuses.</li>
+          <li><b>What not to touch is stated, not hedged.</b> §3 said "unless this project's convention is
+              to edit the model files directly (check existing commits)". Atlas knows whether the models
+              came out of Design export archives or sit in the repository as loose files, so §4 now says
+              which — "Design exports packed in <code>apps/demo.zip</code> — never edit the exports", or
+              "unpacked files under <code>processes/</code> — check <code>git log</code> before you decide"
+              — next to where the custom Java goes. The "Flowable version: not auto-detected" line, a
+              sentence about the absence of a fact, is dropped when nothing is found; so is the generic
+              <i>Run &amp; verify</i> fallback that fitted every Flowable project and told this one nothing.
+              The house-rules reminder is a real HTML comment now, which Claude Code strips before loading,
+              instead of the same text in backticks that every session paid for.</li>
+        </ul>
         <h3>0.24.2</h3>
         <ul>
           <li><b>Go to Model does something under Remote Development.</b> It still did nothing there after
@@ -506,47 +548,6 @@
               same pass, the platform's own event models — <code>_flowableMailEvent</code> and the
               <code>_flowableEngage…Received…</code> events, which ship with the palette — resolve to a
               platform-provided external node instead of a <i>missing model</i> error.</li>
-          <li><b>A property before a ternary's colon is not a function namespace.</b> <code>… ?
-              findUser(x).displayName : findUser(y).displayName</code> reads, around the colon, exactly like
-              <code>date:now()</code> — <code>name : name (</code> — and the catalog walk reported "Unknown
-              function namespace 'displayName'" on every conditional shaped that way. A name reached through
-              a dot is a property, and a colon that closes a <code>?</code> is the ternary's; neither is
-              looked up in the catalog now. (A <i>bare</i> name before the colon is different: JUEL's own
-              parser reads <code>flag ? name : fmt(y)</code> as the function <code>name:fmt</code>, so that
-              stays the one syntax error it always was.)</li>
-          <li><b>A script's <code>${…}</code> is not an expression.</b> The text harvest read every
-              <code>${…}</code> in a model file, script bodies included, so a Groovy
-              <code>"${user?.firstName ?: ''}"</code> in an action's script came back as an invalid backend
-              expression (<code>?.</code> is not JUEL), <code>flw</code> and <code>flwTimeUtils</code> were
-              listed as beans the action calls, and the script's locals became variables. Script bodies —
-              <code>&lt;script&gt;</code>, an action's <code>scriptInfo.script</code>, a script operation's
-              <code>config.script</code>, a form script button's <code>script</code> — have their
-              <code>${…}</code> blanked out of the harvest now; the script checker still reads every one of
-              them, and a <code>{{…}}</code> in a form script stays the binding it is.</li>
-          <li><b>A Spring placeholder is configuration, not an expression.</b> A channel's
-              <code>${email.inbound.channel.imap-url:imap://localhost:3143/inbox}</code> was validated as
-              JUEL (an error at the colon) and harvested as four variables — <code>email</code>,
-              <code>imap</code>, <code>localhost</code>, <code>inbox</code>. A
-              <code>${dotted.key:default}</code> is now marked <code>placeholder</code> in the graph, gets
-              no verdict, and yields no variables; <code>${order.total}</code> is still the property path it
-              always was. A Java <code>@Value("${mail.from}")</code> no longer makes <code>mail</code> a
-              project variable either.</li>
-          <li><b>A byte-order mark is not a parse failure.</b> A JSON model beginning with a UTF-8 BOM — an
-              export touched by a Windows editor — failed with "Expecting value at char 0", an error-level
-              parse issue, and vanished from the report with every reference into and out of it. It is read
-              like any other file now.</li>
-          <li><b>The status line counts models, not files, and agrees with the report.</b> <code>3 models ·
-              4 java</code> was the first thing Atlas said about a repository of 27 Design exports holding
-              610 models — <code>stats.models</code> counted loose files. The CLI, the summary, the overview
-              and the agent primer now say <code>610 models (3 files · 27 archives)</code>, and
-              <code>graph.json</code> carries the count as <code>stats.modelCount</code>. The line's finding
-              counts come from the same numbers the report does, rather than from second counters
-              (<code>stats.scriptIssues</code>, the raw diagnostics) that know nothing about what was
-              accepted.</li>
-          <li><b>Hotspots are the project's own artifacts.</b> The most-referenced list on the overview and
-              in the summary was led by <code>initVariablesService</code>, two IDM URLs,
-              <code>flwTimeUtils</code> and a security policy — things every model references and nobody
-              navigates to. Externals and security policies are left out now.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

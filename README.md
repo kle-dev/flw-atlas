@@ -17,7 +17,7 @@ That writes five artifacts to `./atlas-output/<project>/` and opens the explorer
 | `<project>.summary.md` | A compact (~few KB) LLM-first overview: apps, inventory, entry points, integrations, hotspots, health. |
 | `<project>.overview.md` | The full human report — every model in execution order, the access map, the data layer, every finding with `file:line`. |
 | `<project>.graph.json` | The traversable model↔code graph, for agents to **query** rather than read: every node carries `usedBy`, and a `_schema` key documents the shape and ships `jq` recipes. |
-| `<project>.CLAUDE.md` | Drop-in context for AI agents — a Flowable primer plus this project's discovered facts. Copy it to your repo root as `CLAUDE.md`. |
+| `<project>.CLAUDE.md` | Context for AI agents: a Flowable primer, this project's conventions, wiring examples and known issues, and the complete expression/script catalogs. Copy it to your repo root as `CLAUDE.md`, or import it from your own `CLAUDE.md` with `@atlas-output/<project>/<project>.CLAUDE.md`. |
 
 It resolves the relationships a Flowable repository does not state: app → models, process → the case,
 decision or form it calls, `${bean.method()}` → the **Java or Kotlin class and method** with `file:line` (a `@Bean` factory method included), form →

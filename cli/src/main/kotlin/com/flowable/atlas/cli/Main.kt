@@ -292,7 +292,8 @@ fun run(args: Array<String>): Int {
             "$name.overview.md" to OverviewRenderer.render(result, root),
             "$name.graph.json" to GraphJsonRenderer.render(result, pretty = pretty),
             "$name.explorer.html" to ExplorerHtmlRenderer.render(result, root, waiverAuthor = waiverAuthor),
-            "$name.CLAUDE.md" to ClaudeRenderer.render(result, root),
+            // The file names its siblings from the project root, so it needs to know where they land.
+            "$name.CLAUDE.md" to ClaudeRenderer.render(result, root, ClaudeRenderer.Layout(outdir, siblings = true)),
         )
         val written = ArrayList<File>()
         for ((fn, content) in artifacts) {
@@ -344,7 +345,8 @@ fun run(args: Array<String>): Int {
 
     // ---- single-artifact modes ----
     val (out, ext) = when {
-        claude -> ClaudeRenderer.render(result, root) to "CLAUDE.md"
+        // Alone, `--claude` writes no summary/graph next to itself; the file must not pretend otherwise.
+        claude -> ClaudeRenderer.render(result, root, ClaudeRenderer.Layout(siblings = false)) to "CLAUDE.md"
         summary -> SummaryRenderer.render(result, root) to "summary.md"
         html -> ExplorerHtmlRenderer.render(result, root, waiverAuthor = waiverAuthor) to "html"
         json -> GraphJsonRenderer.render(result, pretty = pretty) to "json"

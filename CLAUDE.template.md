@@ -20,25 +20,13 @@ Flowable is a Java process-automation platform. A solution project is custom Jav
 
 - **Work** = the **runtime *and* the end-user React frontend** (executes definitions, renders forms,
   hosts tasks/cases). Custom Java + REST controllers run here. **Design** = the visual modeler.
-  (Control/Hub = admin consoles; Engage = the conversational/omnichannel layer, often unused.)
   Engines: BPMN (processes), CMMN (cases), DMN (decisions), Form, Content, IDM (users/groups), plus
   platform engines (data objects, actions, agents, indexing).
 
-**Models vs Definitions (the key concept):** models are mutable design-time JSON; when deployed they
-become **immutable, versioned Definitions**. Everything is referenced by **key**
-(process/case/form/decision key) — cross-references between models, from Java, and from the frontend are
-all by key.
-
-```
-DESIGN (models, editable JSON)              WORK (definitions, deployed & IMMUTABLE)
-  App (package model) ── publish/export ──►   Deployment
-    ├─ BPMN / CMMN / DMN / Form model ────►     Process/Case/Decision/Form definition (versioned)
-    └─ data object / service / query / … ─►     platform definitions
-```
-
-Where state lives in the DB (rarely touched directly — use the engine services/APIs): `ACT_RU_*`
-runtime, `ACT_HI_*` history, `ACT_RE_*` deployed definitions, `ACT_ID_*` identity, `ACT_DE_*` Design
-models.
+**Models vs Definitions (the key concept):** models are mutable design-time JSON; when an app is
+published or exported and deployed, they become **immutable, versioned Definitions**. Everything is
+referenced by **key** (process/case/form/decision key) — cross-references between models, from Java, and
+from the frontend are all by key.
 
 **In a solution project, models are authored in Design and *exported into this repo*** — the `.app`/`.zip`
 and model files under `src/main/resources` are **exported build artifacts**, not the editing surface.
@@ -97,9 +85,5 @@ made in Design and re-exported, unless this project's convention is to edit the 
 - **Match model ↔ code:** a `delegateExpression`/`flowable:class` in a model needs the bean/class to exist (and vice-versa). The graph's unresolved references show mismatches.
 - **Keys are contracts:** models/Java/frontend reference definitions by key. Before renaming a key, check the graph for who references it (both directions).
 - **Respect access/security:** candidate groups, app/page permissions and security policies are part of the feature.
+- **Variable scope:** `setVariable` writes to the process/case scope, `setVariableLocal` to the current execution/plan item — pick deliberately.
 - **Minimal, consistent changes:** mirror existing patterns; touch only what's necessary.
-
-**Common Flowable pitfalls (the knowledge gap):** don't invent engine APIs (verify against deps/docs);
-don't hand-edit the exported app `.zip` (model changes go via Design); mind variable scope
-(`setVariable` vs `setVariableLocal`); never rename a definition `key` without checking who references it
-(both directions); don't forget candidate groups / access on new tasks & pages.

@@ -8,10 +8,20 @@ invents them.
 
 ## Four sizes — use the smallest one that answers the question
 
-**1 · `<project>.CLAUDE.md`** — drop it into the repository root as `CLAUDE.md` (or `AGENTS.md`).
-Roughly 10–14 KB. A Flowable primer, this project's discovered facts and wiring examples, its open
-findings, and a cheatsheet of the expression namespaces, script bindings and platform beans that
-actually exist. That last part is the one that earns its keep: it stops an agent inventing APIs.
+**1 · `<project>.CLAUDE.md`** — drop it into the repository root as `CLAUDE.md` (or `AGENTS.md`), or
+keep your own `CLAUDE.md` and import it with `@atlas-output/<project>/<project>.CLAUDE.md`. Roughly
+10–15 KB. A Flowable primer, this project's conventions and wiring examples, which model files are Design
+exports not to be edited, its open findings, and the complete list of the expression namespaces, script
+bindings and platform beans that actually exist. That last part is the one that earns its keep: it stops
+an agent inventing APIs.
+
+Deliberately *not* in it: the inventory, the counts, the directory layout. Those are the summary's, and a
+repository overview is the one kind of context-file content that measurably does not help.
+[Gloaguen et al. (ETH Zürich, 2026)](https://arxiv.org/abs/2602.11988) ran Claude Code, Codex and Qwen
+Code over real issues with and without context files: agents follow a file's *instructions* — a named
+tool is used, a stated rule is kept — but gain nothing from its *overviews*, which repeat what they would
+read anyway, and the file costs about a fifth more per task. So the file holds instructions, conventions
+and catalogs an agent cannot get out of the repository, and nothing it can.
 
 **2 · `--summary`** — a few KB of orientation: apps, inventory, entry points, integrations, hotspots,
 health. The health line reads *3 defects · 41 advice* — what is wrong now, and what is only worth a
@@ -53,7 +63,11 @@ jq '.findings[] | select(.severity=="error") | {check, label, message, file}' gr
 ## A workable agent loop
 
 1. **Once per project:** `./atlas <project>`, then copy `<project>.CLAUDE.md` to the repository root as
-   `CLAUDE.md`. Regenerate it when the models change materially.
+   `CLAUDE.md`. Or write the output into the project — `./atlas <project> <project>/atlas-output` — keep
+   your own `CLAUDE.md` and add the `@atlas-output/<project>.CLAUDE.md` line the file's header prints;
+   then a regeneration is what Claude reads next time, with no copy step. (Atlas's output folder ignores
+   itself in git; add `!<project>.CLAUDE.md` to its `.gitignore` if the team should get the file.) Either
+   way, regenerate when the models change materially.
 2. **Starting a task:** give the agent `--summary`, or let it read the `CLAUDE.md` you committed.
 3. **Working on one model:** `--slice <type:key>`. It contains the callers, which is the context an
    agent most often lacks and most confidently guesses at.

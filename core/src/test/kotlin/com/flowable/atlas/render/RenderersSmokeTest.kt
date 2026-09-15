@@ -33,6 +33,11 @@ class RenderersSmokeTest {
         )) {
             assertTrue("expected CLAUDE.md to contain: $needle", md.contains(needle))
         }
+        // What was cut on purpose: the summary's inventory, the rules' echo of themselves, and the
+        // truncated catalog lists — see ClaudeFactsTest for the reasoning behind each.
+        for (gone in listOf("**Scale:**", "**Models:**", "Common Flowable pitfalls", " … (+", "not auto-detected")) {
+            assertFalse("CLAUDE.md still contains: $gone", md.contains(gone))
+        }
     }
 
     @Test

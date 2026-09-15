@@ -99,11 +99,16 @@ jq '.findings[] | select(.severity=="error")' graph.json
 ## `<project>.CLAUDE.md` — context for an agent
 
 A Flowable primer *plus* this project's discovered facts, written to be dropped into a repository root
-as `CLAUDE.md` (or `AGENTS.md`). It contains a starting procedure that names the project's real
-filenames, the platform mental model an LLM usually gets wrong, how custom code attaches to models,
-this project's inventory and conventions, its open findings, and a cheatsheet of the expression
-namespaces, script bindings and platform beans that **actually exist** — which is the part that stops
-an agent inventing APIs.
+as `CLAUDE.md` (or `AGENTS.md`), or imported from one with `@<path>`. It contains a starting procedure
+that names the project's real files by their path from the root, the platform mental model an LLM usually
+gets wrong, how custom code attaches to models, where this project's custom Java goes and which model
+files are Design exports not to be edited, its key conventions and wiring examples, its open findings, and
+the complete list of the expression namespaces, script bindings and platform beans that **actually
+exist** — which is the part that stops an agent inventing APIs.
+
+Not in it: the inventory, the counts, the directory layout. They are the summary's, and an overview an
+agent could derive itself is the one kind of context-file content measured not to help
+([Gloaguen et al. 2026](https://arxiv.org/abs/2602.11988)); see [For LLMs & agents](../agents/).
 
 `CLAUDE.template.md` in the repository is the project-independent primer alone, generated from the same
 source so the two cannot drift. `--claude-template` prints it without needing a project.
