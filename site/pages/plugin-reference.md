@@ -27,9 +27,11 @@ popup switches from the first to the second without retyping.
 
 **Go to Model…** is `Ctrl+Alt+Shift+M` (`⌥⇧⌘M` on macOS), because it is the one action that competes
 with Shift-Shift for the hand; rebind it under *Settings → Keymap → Plugins → Flowable Atlas*. A
-right-click on a **folder, a model file or an archive** in the Project view offers *Generate Atlas
-Explorer…* and *Go to Model…* — the two actions that are about the thing under the cursor — and
-nothing on any other file.
+right-click on a **folder, a model file, an archive or a `.json`** in the Project view offers *Generate
+Atlas Explorer…*, *Go to Model…* and *Compare Model with Archive* — the actions that are about the thing
+under the cursor — and nothing on any other file. The `.json` is in that list for the comparison: a model
+generated into the project folder is a `.json` that counts as a model only inside a Design `*-models/`
+folder, which is precisely the file the comparison is wanted on.
 
 | Action | Also in |
 |---|---|
@@ -39,6 +41,7 @@ nothing on any other file.
 | Go to Model… | Atlas Hub toolbar and the model count in its header; Project view context menu; `Ctrl+Alt+Shift+M`. Under Remote Development it opens the *Find in Models…* list, because Search Everywhere has no Flowable tab there |
 | Find in Models… | The *Go to Model…* popup, with `⇧⏎` on any row |
 | Copy Model Key | Editor context menu, on a key — a literal or constant at a Flowable API site in Java, a cross-reference or the file's own key in a model file; the Atlas Hub's *Recent Models* context menu |
+| Compare Model with Archive | Project view context menu, on a model file or a `.json`; editor context menu, which is how an entry inside a `.bar`/`.zip` is reached. Its text names the direction it is about to take — *Compare with Model in Archive* on a file in the project, *Compare with Model in Project* on an entry in an archive |
 | Generate → Generate Atlas Explorer… | Atlas Hub, *Explorer* block; Project view context menu |
 | Generate → Regenerate Atlas Explorer | Atlas Hub attention line, when models changed since the last generation; the explorer tab's banner and toolbar; the balloon after a Design pull |
 | Generate → Generate Model Constants… | Atlas Hub ⋮ menu |

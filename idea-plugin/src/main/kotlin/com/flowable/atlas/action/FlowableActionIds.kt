@@ -25,6 +25,7 @@ object FlowableActionIds {
     const val REBUILD_MODEL_INDEX = "Flowable.RebuildModelIndex"
     const val REGENERATE_ATLAS_EXPLORER = "Flowable.RegenerateAtlasExplorer"
     const val COPY_MODEL_KEY = "Flowable.CopyModelKey"
+    const val COMPARE_MODEL_WITH_ARCHIVE = "Flowable.CompareModelWithArchive"
 
     /**
      * The registered action's menu text, for a button or link that does the same thing elsewhere. One

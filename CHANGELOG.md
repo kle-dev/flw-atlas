@@ -12,6 +12,31 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.25.0
+
+- **A model in the project, compared against the model in the app.** Models are increasingly generated
+  rather than modelled — a form written by an LLM, say — and the file lands in the project folder, not in
+  the app export. The question that follows is "what does this change against the app we have?", and that
+  is a diff the IDE can draw, except that one of its two sides lives inside `<App>.zip` and nothing
+  offered that pairing: the route was to unzip by hand into a temp folder. *Compare Model with Archive* is
+  that pairing, in the platform's own diff viewer, from either end — a file in the project is matched
+  against the model entries of every `.bar`/`.zip` in scope, an entry inside an archive against the
+  project's own model files. The counterpart is found by file name, by the name behind the `<kind>-` prefix
+  a deployment archive gives its entries, and failing both by the model key inside the file, because a
+  generator rarely names a file the way Design does. One match opens straight away; several, or none,
+  offer the archive's model entries in a list that filters as you type. It is in the Project view's
+  context menu — which now also comes up on a `.json`, the one file the comparison is most wanted on and
+  the one it was hidden from — and in the editor's, which is how an entry opened by *Go to Model* is
+  reached.
+- **Both sides are laid out before they are compared.** A Design export is minified: one long line per
+  model, and the same goes for every `.form` in a deployment archive. Held against a file that some
+  generator or formatter wrote out over hundreds of lines, *everything* differs and the viewer has nothing
+  to say — so without this the comparison would have been an answer nobody can read. Both sides are
+  re-indented first, whitespace only and never a value, so a number still reads the way its own file
+  spells it; the pair is then read-only, because neither side is the file on disk any more. *Show Raw
+  Files* in the diff toolbar gives the two files themselves, where the project side stays editable.
+  Processes, cases and decisions are exported formatted already and are always shown as they are.
+
 ## 0.24.3
 
 - **`CLAUDE.md` says less, and none of it is wrong.** Gloaguen et al. (ETH Zürich, *Evaluating AGENTS.md*,

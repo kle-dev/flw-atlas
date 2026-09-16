@@ -90,6 +90,97 @@ object MiniJson {
         }
     }
 
+    /**
+     * Re-indent JSON **without reading its values** — one token per line, [indent] spaces per level,
+     * `": "` between a key and its value, empty objects and arrays left inline.
+     *
+     * Token-level on purpose. `stringify(parseOrNull(text), indent)` is the one-line alternative, but it
+     * round-trips every value through [Double] (see [writeIndented]), so `"version": 1` comes back as
+     * `1.0` and a long integer in scientific notation. Here every string, number and keyword is copied
+     * through character for character and only the whitespace *between* them changes — which is what a
+     * side-by-side comparison needs: both sides laid out the same way, neither showing a value its file
+     * does not contain.
+     *
+     * Null when [text] is not a `{`/`[`-rooted, correctly paired document (an unterminated string, a
+     * missing bracket): the caller then shows the bytes as they are rather than a guess at them.
+     */
+    fun reindent(text: String, indent: Int = 2): String? {
+        val s = text.removePrefix("\uFEFF")
+        var i = 0
+        while (i < s.length && s[i].isWhitespace()) i++
+        if (i >= s.length || (s[i] != '{' && s[i] != '[')) return null
+
+        val sb = StringBuilder(s.length + s.length / 3)
+        val open = ArrayDeque<Char>()          // the closers still expected, innermost last
+        var rootClosed = false                 // anything but whitespace after this is trailing junk
+        fun newline() {
+            sb.append('\n')
+            repeat(open.size * indent) { sb.append(' ') }
+        }
+        while (i < s.length) {
+            when (val c = s[i]) {
+                '"' -> {
+                    val end = copyString(s, i, sb) ?: return null
+                    i = end
+                }
+                '{', '[' -> {
+                    val closer = if (c == '{') '}' else ']'
+                    var next = i + 1
+                    while (next < s.length && s[next].isWhitespace()) next++
+                    if (next < s.length && s[next] == closer) {
+                        sb.append(c).append(closer)         // {} / [] stay on one line
+                        i = next + 1
+                        rootClosed = open.isEmpty()
+                    } else {
+                        sb.append(c)
+                        open.addLast(closer)
+                        newline()
+                        i++
+                    }
+                }
+                '}', ']' -> {
+                    if (open.removeLastOrNull() != c) return null
+                    newline()
+                    sb.append(c)
+                    i++
+                    rootClosed = open.isEmpty()
+                }
+                ',' -> { sb.append(c); newline(); i++ }
+                ':' -> { sb.append(": "); i++ }
+                else -> {
+                    if (!c.isWhitespace()) sb.append(c)     // a number/keyword character; whitespace goes
+                    i++
+                }
+            }
+            if (rootClosed) {
+                while (i < s.length && s[i].isWhitespace()) i++
+                return if (i >= s.length) sb.toString() else null
+            }
+        }
+        return null                            // ran out of input with brackets still open
+    }
+
+    /** Copies the string literal starting at the quote at [from] verbatim; returns the index after its
+     *  closing quote, or null when it is never closed. */
+    private fun copyString(s: String, from: Int, sb: StringBuilder): Int? {
+        sb.append('"')
+        var i = from + 1
+        while (i < s.length) {
+            val c = s[i]
+            sb.append(c)
+            when (c) {
+                '\\' -> {
+                    if (i + 1 >= s.length) return null
+                    sb.append(s[i + 1])
+                    i += 2
+                }
+                '"' -> return i + 1
+                else -> i++
+            }
+        }
+        return null
+    }
+
     /** JSON string escaping matching Python's `json.dumps(..., ensure_ascii=False)`: escape the
      *  quote/backslash and control chars (`\b \t \n \f \r`, others as `\u00xx`); keep everything else
      *  — including non-ASCII — literal. */

@@ -569,6 +569,24 @@ The pull names the environment it is running against, in the progress bar and in
 environment marked **Protected** asks first, modally, because a pull replaces archives in the working
 tree — and it asks every time, since a guard you can switch off is not a guard.
 
+### Compare a model against the app archive
+
+A model that was generated rather than modelled — a form written by an LLM, say — lands in the project
+folder, not in the app export. *Compare Model with Archive* puts the two side by side in the IDE's own
+diff viewer: the entry inside the app's `.zip` on the left, the file in the project on the right. It works
+from either end, so an entry opened by *Go to Model* can be compared against the project just as well.
+The counterpart is found by file name, by the name behind the `<kind>-` prefix a deployment `.bar` gives
+its entries, and failing both by the model key inside the file — because a generator rarely names a file
+the way Design does. One match opens straight away; several, or none, offer the archive's model entries in
+a list that filters as you type.
+
+**Both sides are laid out first, and that is the point.** A Design export is minified — one long line per
+model — so compared as it stands, every line differs and the viewer has nothing to say. Atlas re-indents
+both sides, whitespace only and never a value, so a number still reads the way its file spells it; the
+pair is then read-only, because neither side is the file on disk any more. *Show Raw Files* in the diff
+toolbar gives the two files themselves, where the project side stays editable. Processes, cases and
+decisions are exported formatted already and are always shown as they are.
+
 ---
 
 ## Foundations
