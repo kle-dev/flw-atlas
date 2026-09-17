@@ -36,9 +36,9 @@ data class ExprRoot(val name: String, val doc: String? = null)
  * objects — the expression counterpart of the plugin's `FlowableApiCatalog`.
  *
  * Transcribed (and empirically verified) from the Flowable engine + platform sources: the
- * `FlowableFunctionDelegate` implementations (community `flowable-engine`/`-cmmn`/`-dmn` + commercial
- * `flowable-platform`), the `VariableScopeELResolver` family, and the frontend `@flowable/forms`
- * `flw.*` namespace (`Expression/functions/index.ts`). Adding support for new Flowable versions means
+ * `FlowableFunctionDelegate` implementations (community `flowable-engine`/`-cmmn`/`-dmn` + the commercial
+ * platform), the `VariableScopeELResolver` family, and the frontend `@flowable/forms`
+ * `flw.*` namespace. Adding support for new Flowable versions means
  * appending here — nothing else changes.
  */
 object FlowableExpressionCatalog {
@@ -205,13 +205,13 @@ object FlowableExpressionCatalog {
         fn(null, "JSON", doc = "flw.JSON.parse / stringify"),
         fn(null, "numberFormat"), fn(null, "sanitizeHtml"), fn(null, "escapeHtml"),
         fn(null, "exists"), fn(null, "notExists"),
-        // Work/platform-injected members — NOT part of the base `@flowable/forms` FunctionsFactory.
-        // The Work runtime merges these onto `flw` at eval time via `additionalData.flw`
-        // (`useGlobalResolver` in flowable-shared) and `Form.tsx`. They call the backend / drive the
+        // Work/platform-injected members — NOT part of the base `@flowable/forms` function set.
+        // The Work runtime merges these onto `flw` at eval time via `additionalData.flw`. They call
+        // the backend / drive the
         // running form, so they cannot be evaluated in the payload preview (see [FlwLibrary]).
         // A project can inject *further* custom functions we can't enumerate — onto `flw` (via
         // `flowable.externals.additionalData.flw`) or as top-level identifiers (any other
-        // `externals.additionalData` key, spread into the scope by `hookEvalExpression`). The validator
+        // `externals.additionalData` key, spread into the scope by the Work runtime). The validator
         // stays lenient about them (a no-near-match `flw.<x>` isn't flagged; top-level calls never are)
         // and the preview reports them as "not available" rather than invalid.
         fn(null, "getUser", doc = "Work: user object for a userId (async, cached)"),

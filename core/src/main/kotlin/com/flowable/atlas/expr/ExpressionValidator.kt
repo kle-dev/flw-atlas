@@ -198,7 +198,7 @@ object ExpressionValidator {
                     val suggestion = Suggestions.closest(member.text, names)
                     // A member with no near-match to any known flw function is most likely a *custom*
                     // function a project injected onto `flw` via `flowable.externals.additionalData.flw`
-                    // (see useGlobalResolver / hookEvalExpression). If we extracted that source
+                    // (merged onto `flw` by the Work runtime). If we extracted that source
                     // (customFlw) the name is known and validates cleanly; otherwise it's invisible to
                     // us, so we don't flag it. Only a plausible typo (`flw.sim` → `sum`) is surfaced.
                     if (suggestion != null) {

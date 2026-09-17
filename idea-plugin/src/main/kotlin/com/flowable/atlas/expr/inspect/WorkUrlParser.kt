@@ -16,7 +16,7 @@ package com.flowable.atlas.expr.inspect
  * (`?caseInstanceId=…` / `?taskInstanceId=…` / `?taskId=…`), the `/case-view/…` routes, and plain
  * path routing (no `#`).
  *
- * Scope mapping (from `flowable-work-api/model/scopeType.ts`): `case → CMMN`, `process → BPMN`,
+ * Scope mapping (as the Work frontend maps its routes): `case → CMMN`, `process → BPMN`,
  * `task → TASK`.
  *
  * Pure and unit-tested — no IDE, PSI, network or EDT dependency.

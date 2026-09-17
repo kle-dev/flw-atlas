@@ -238,8 +238,8 @@ object FrontendExpressionEvaluator {
                 is IdentNode -> when (val target = context[callee.name]) {
                     is FlwCallable -> target.call(args)
                     // An identifier that isn't in scope at all is most likely a custom function injected
-                    // via `flowable.externals.additionalData` (spread into the top-level scope by
-                    // `hookEvalExpression`) — valid at runtime, just not previewable here. A name that
+                    // via `flowable.externals.additionalData` (spread into the top-level scope by the
+                    // Work runtime) — valid at runtime, just not previewable here. A name that
                     // *is* in scope but resolved to a non-function value is a genuine error.
                     else -> if (!context.containsKey(callee.name))
                         throw PreviewUnavailableException(

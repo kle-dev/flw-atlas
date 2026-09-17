@@ -143,7 +143,7 @@ object OryxFormReader {
     private fun typeOf(stencilId: String?, stencil: String?): String {
         STENCIL_TYPE[stencilId]?.let { return it }
         STENCIL_TYPE[stencil]?.let { return it }
-        // a custom component keeps its palette name, camel-cased the way Design does (`kyc-debounce` → `kycDebounce`)
+        // a custom component keeps its palette name, camel-cased the way Design does (`demo-debounce` → `demoDebounce`)
         val raw = stencilId ?: stencil ?: "component"
         return raw.removePrefix("cloud-").split('-').mapIndexed { i, p -> if (i == 0) p else p.replaceFirstChar { it.uppercase() } }.joinToString("")
     }

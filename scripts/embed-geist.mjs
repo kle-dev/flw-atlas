@@ -10,14 +10,19 @@
 // Usage:  npm install subset-font --registry=https://registry.npmjs.org/
 //         node scripts/embed-geist.mjs
 //         (the registry override matters: the Flowable default registry does not mirror subset-font)
-// Fonts:  ../flowable-platform/frontend/packages/flowable-api/styles/fonts/geist
+// Fonts:  GEIST_FONT_DIR — a directory holding Geist-Regular/Medium/SemiBold.ttf
+//         (https://github.com/vercel/geist-font)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import subsetFont from 'subset-font';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const fontDir = path.resolve(here, '../../flowable-platform/frontend/packages/flowable-api/styles/fonts/geist');
+const fontDir = process.env.GEIST_FONT_DIR ? path.resolve(process.env.GEIST_FONT_DIR) : null;
+if (!fontDir) {
+  console.error('embed-geist: set GEIST_FONT_DIR to a directory holding Geist-Regular/Medium/SemiBold.ttf');
+  process.exit(2);
+}
 const cssFile = path.resolve(here, '../core/src/main/resources/frontend/explorer.css');
 
 // weight ranges: bold text (700) intentionally resolves to SemiBold — the Hub

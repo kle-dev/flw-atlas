@@ -9,7 +9,7 @@ import java.math.RoundingMode
 
 /**
  * A JVM reimplementation of the pure, deterministic parts of the frontend `flw.*` namespace
- * (`@flowable/forms` `Expression/functions`). Collection/aggregation/math/JSON helpers evaluate
+ * of `@flowable/forms`. Collection/aggregation/math/JSON helpers evaluate
  * exactly; environment- or locale-dependent members (date formatting, `timeZone`, `numberFormat`,
  * `sanitizeHtml`, `$currentUser`-derived) are reported as "not available in the payload preview"
  * rather than faked, so a green result never misleads.

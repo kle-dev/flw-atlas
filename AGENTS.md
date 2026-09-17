@@ -127,7 +127,7 @@ drift, and the relevant repo files are declared as test inputs so the gate actua
 | `core/src/test/resources/golden/*` | the current extractor/renderer output | `./gradlew :core:updateGoldens` |
 | `CLAUDE.template.md` | `ClaudeRenderer.renderGeneric` | `./gradlew :core:updateGoldens` |
 | `<change-notes>` in `plugin.xml` | `CHANGELOG.md` (a size-budgeted window onto its newest entries — the field is capped at 65535 chars) | `./gradlew :core:updateGoldens` |
-| the Geist `@font-face` block in `explorer.css` | the platform's font files | `node scripts/embed-geist.mjs` |
+| the Geist `@font-face` block in `explorer.css` | the Geist font files (`GEIST_FONT_DIR`) | `node scripts/embed-geist.mjs` |
 | `<version>` in `plugin.xml` | the Gradle project version | `patchPluginXml`, at build time |
 | the docs site, the demo artifacts, `updatePlugins.xml`, release ZIPs/jars | the sources + CI | never committed |
 

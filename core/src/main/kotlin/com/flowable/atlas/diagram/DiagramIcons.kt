@@ -19,9 +19,8 @@ package com.flowable.atlas.diagram
  * Anything unrecognised resolves to `null`, and the painter draws the plain silhouette it drew before —
  * an unfamiliar element never disappears and never gets a wrong icon.
  *
- * The labels are Design's own, taken from its palette bundles (`stencil_translations_bpmn.properties`,
- * `stencil_translations_cmmn.properties` and the platform palette's `platform-translation.properties`),
- * so a diagram tooltip says exactly what the modeller sees in the Design palette.
+ * The labels are Design's own, taken from its palette translation bundles, so a diagram tooltip says
+ * exactly what the modeller sees in the Design palette.
  */
 object DiagramIcons {
 

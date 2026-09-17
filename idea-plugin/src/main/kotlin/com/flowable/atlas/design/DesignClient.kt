@@ -249,7 +249,7 @@ object DesignClient {
         }
     }
 
-    /** The `CreateAccessTokenResponse` body, or null when it carries no token value. */
+    /** The token-creation response body, or null when it carries no token value. */
     fun parseNewToken(json: String): NewToken? {
         val map = runCatching { MiniJson.parse(json) }.getOrNull() as? Map<*, *> ?: return null
         val value = (map["value"] as? String)?.takeUnless { it.isBlank() } ?: return null

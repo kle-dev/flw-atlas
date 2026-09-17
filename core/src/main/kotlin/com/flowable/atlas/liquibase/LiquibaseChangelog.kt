@@ -147,7 +147,7 @@ object LiquibaseChangelog {
 
     /**
      * The Liquibase column `type` Flowable Design generates for a service `columnMappings[].type`,
-     * ported from `LiquibaseModelResourceServiceImpl.asLiquibaseColumnType` (the `${'$'}{varchar.type}` /
+     * the same mapping Design applies when it generates a changelog (the `${'$'}{varchar.type}` /
      * `${'$'}{datetime.type}` placeholders are the properties every generated changelog declares).
      */
     fun liquibaseType(logicalType: String?): String? = when (logicalType?.uppercase()) {

@@ -47,7 +47,7 @@ class ExpressionValidatorTest {
 
     @Test
     fun workInjectedFlwMembersAreValid() {
-        // Work/platform-injected flw.* members (useGlobalResolver + Form.tsx), not base @flowable/forms.
+        // Work/platform-injected flw.* members (merged by the Work runtime), not base @flowable/forms.
         assertTrue(frontend("flw.getUser('userId').displayName").isEmpty())
         assertTrue(frontend("flw.getMasterDataInstance('id').name").isEmpty())
         assertTrue(frontend("flw.getMasterDataInstanceByKey('k', 'd').name").isEmpty())

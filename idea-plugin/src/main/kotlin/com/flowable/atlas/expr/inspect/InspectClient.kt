@@ -30,7 +30,7 @@ import java.util.Base64
  * The engine evaluates against a **live** process/case/task instance — there is no transient
  * variable-map mode — so [scopeId] is required (a processInstanceId / caseInstanceId / taskId) and
  * only backend `${…}` expressions are supported. On a parse/eval error the server returns HTTP 400
- * with `valid:false` and an `exception` message (see [ExpressionValueDTO] in flowable-platform).
+ * with `valid:false` and an `exception` message.
  *
  * Request/response (de)serialisation is pure and unit-tested; [evaluate] performs the network call.
  */
@@ -55,7 +55,7 @@ object InspectClient {
         val auth: AuthContext = AuthContext(),
     )
 
-    /** Mirrors the server `ExpressionValueDTO`. */
+    /** Mirrors the server's evaluation response. */
     data class Response(val valid: Boolean, val value: Any?, val valueType: String?, val exception: String?)
 
     sealed interface Outcome {
@@ -63,7 +63,7 @@ object InspectClient {
         data class Failed(val message: String) : Outcome
     }
 
-    /** The JSON request body (`EvaluateExpressionDTO`). */
+    /** The JSON request body. */
     fun buildBody(expression: String, scopeType: ScopeType, scopeId: String, subScopeId: String?): String {
         val fields = LinkedHashMap<String, Any?>()
         fields["expression"] = expression
@@ -73,7 +73,7 @@ object InspectClient {
         return MiniJson.stringify(fields)
     }
 
-    /** Parse the `ExpressionValueDTO` response body. */
+    /** Parse the evaluation response body. */
     fun parseResponse(json: String): Response {
         val map = MiniJson.parse(json) as? Map<*, *> ?: throw IllegalArgumentException("Unexpected response: $json")
         return Response(

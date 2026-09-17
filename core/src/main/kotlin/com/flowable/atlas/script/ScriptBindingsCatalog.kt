@@ -41,9 +41,8 @@ data class ScriptRoot(
  *    `CmmnVariableScopeResolver` (`caseInstance` / `planItemInstance` / `task`), plus the service
  *    bindings each registers; member surfaces from `VariableScope`, `DelegateExecution`,
  *    `DelegateTask`, `DelegatePlanItemInstance`/`PlanItemInstance` and `CaseInstance`;
- *  - commercial `flowable-platform` 2026.2.0-SNAPSHOT — `FlowableApiResolver` binds the script
- *    `flw` (`FlowableApiInstance`) into BPMN/CMMN/bot/service-registry scripts; the bot context
- *    (`ScriptEvaluationBot`) additionally binds `flwActionContext`.
+ *  - the commercial platform — it binds the script `flw` root into BPMN/CMMN/bot/service-registry
+ *    scripts; the bot context additionally binds `flwActionContext`.
  *
  * The member sets are the UNION across supported versions (3.17 has no `flw.error`/`flw.cmmn`);
  * combined with the typo-gate (only near-miss members are flagged) that can hide a
@@ -182,7 +181,7 @@ object ScriptBindingsCatalog {
     private fun flwSub(name: String, doc: String, vararg members: String) =
         ScriptRoot(name, doc, derive(members.toSet(), FLW_SIGS))
 
-    /** Script `flw` (`FlowableApiInstance`) — NOT the EL `flw` (see [EL_ONLY_FLW_MEMBERS]). */
+    /** Script `flw` — NOT the EL `flw` (see [EL_ONLY_FLW_MEMBERS]). */
     private val FLW = ScriptRoot(
         "flw", "Flowable platform script API (Work/Engage)",
         members = mapOf(
@@ -238,7 +237,7 @@ object ScriptBindingsCatalog {
         ))
 
     private val FLW_ACTION_CONTEXT = ScriptRoot(
-        "flwActionContext", "bot invocation context (ScriptBotInvocationContext)",
+        "flwActionContext", "bot invocation context",
         members = derive(setOf("getHistoricActionInstance", "getActionDefinition", "getActionDefinitionModel",
             "getPayload", "getIntent", "setIntent"), overrides = mapOf("setIntent" to "intent")),
     )

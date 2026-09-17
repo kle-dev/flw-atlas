@@ -53,7 +53,7 @@ class ExpressionCatalogTest {
 
     @Test
     fun workInjectedFrontendMembersAreKnown() {
-        // Merged onto `flw` by the Work runtime (useGlobalResolver + Form.tsx), not base @flowable/forms.
+        // Merged onto `flw` by the Work runtime, not base @flowable/forms.
         assertTrue(FlowableExpressionCatalog.isFrontendMember("getUser"))
         assertTrue(FlowableExpressionCatalog.isFrontendMember("getMasterDataInstance"))
         assertTrue(FlowableExpressionCatalog.isFrontendMember("getMasterDataInstanceByKey"))

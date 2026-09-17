@@ -142,7 +142,7 @@ object FlowableApiCatalog {
         val svcInvoke = "com.flowable.serviceregistry.api.runtime.ServiceInvocationBuilder"
         key("com.flowable.serviceregistry.api.runtime.ServiceRegistryRuntimeService", "getLookupIdByServiceKey", 1, SERVICE)
         // getLookupIdByReferenceKey(data, referenceKey, tenantId) — a service's referenceKey names
-        // the data object it backs (see ServiceModelReferenceExtractor), so offer data-object keys
+        // the data object it backs, so offer data-object keys
         key("com.flowable.serviceregistry.api.runtime.ServiceRegistryRuntimeService", "getLookupIdByReferenceKey", 1, DATA_OBJECT)
         key(svcInvoke, "serviceKey", 0, SERVICE)
         key("com.flowable.serviceregistry.api.repository.ServiceRegistryRepositoryService", "getServiceDefinitionModelByKey", 0, SERVICE)

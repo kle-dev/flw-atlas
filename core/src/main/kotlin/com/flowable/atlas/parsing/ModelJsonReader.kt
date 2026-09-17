@@ -63,7 +63,7 @@ object ModelJsonReader {
 
     /**
      * Every button flavour of the Design palettes, by the `type` a deployed `.form` / `.page` carries
-     * (the authoritative list is the platform's `DefaultFormComponentType`). A button is the one
+     * (the authoritative list is the platform's form component type enumeration). A button is the one
      * component that acts on its own — it calls an action, a service, a URL — so [isFormComponent]
      * accepts it on its `type` alone, without insisting on a caption.
      */

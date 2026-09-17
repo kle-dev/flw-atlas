@@ -293,7 +293,7 @@ object ModelParsers {
         withDesc(info, doc)
         // Where a password or a key is written down rather than resolved — paths, never values.
         SecretScan.scan(doc).takeIf { it.isNotEmpty() }?.let { info["literalSecrets"] = it }
-        // Cross-model references (parity with the platform's ServiceModelReferenceExtractor):
+        // Cross-model references (the same ones Design itself extracts from a service model):
         // referenceKey → data object; typeReference.modelKey → data dictionary (output and
         // per-operation input/output parameters); operation body templates → template model;
         // a column relation joins to the table of another service model.
@@ -607,7 +607,7 @@ object ModelParsers {
                 // carries the callee, which is what lets the invoked action/agent/service turn around and
                 // show the values its callers actually pass.
                 val (refKind, refKey) = calleeOf(es, n)
-                // A REST button's response lands under its own `value` binding: the platform's RestButton
+                // A REST button's response lands under its own `value` binding: the platform's REST button
                 // calls `onChange({$path: name})` on the component, so `{name: "deploymentId"}` on a button
                 // bound to `{{$temp.info}}` writes `$temp.info.deploymentId` — a form-local value, read in
                 // the same form as `{{$temp.info.deploymentId}}` — and on a button bound to `{{customer}}`
@@ -882,7 +882,7 @@ object ModelParsers {
             if (mt == "service") ctx.addOpUse(key, "service", tm["key"], tm["operationKey"])
         }
         // freemarker behavior templates (documentClassification + operations), guardrails and
-        // evaluators — parity with the platform's AgentModelReferenceExtractor (both persisted
+        // evaluators — the same references Design itself extracts from an agent model (both persisted
         // shapes: `agentModel.key` directly and nested under `configuration`).
         fun behaviorTemplateRefs(behavior: Map<String, Any?>?) {
             if (behavior?.get("type") != "freemarkerTemplate") return

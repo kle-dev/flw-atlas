@@ -70,17 +70,15 @@ object Constants {
     /**
      * Beans the Flowable platform provides (engine-provided, not project source): the delegate Design
      * writes into every task type's `delegateExpression`, and the `flw*Utils` expression helpers the
-     * platform registers (`PlatformExpressionsAutoConfiguration`). One set for every surface: the graph
+     * platform registers. One set for every surface: the graph
      * marks these `platform`, the reports list them apart from the project's own beans, and the runtime
      * checks know that a call into one of them stays inside the engine. It used to be declared three
      * times, once per renderer, which is how a bean could be "platform" on one page and "review" on the next.
      *
-     * The names are read off the platform's own auto-configuration, not guessed — regenerate from
-     * the platform's `starters` module: `TasksAutoConfiguration` (the task delegates Design writes),
-     * `EngageTaskAutoConfiguration` (the Engage task delegates), `PlatformEngineServicesAutoConfiguration`
-     * and `PlatformServiceAutoConfiguration` (the platform services an expression may call),
-     * `PlatformExpressionsAutoConfiguration` (the `flw*Utils` helpers). `flw` itself is the platform's EL
-     * root for its scripting API (`FlwApiELResolver`): `${flw.setOutput(…)}` in a task listener is
+     * The names are read off the platform's own auto-configurations, not guessed — regenerate from
+     * the platform starters: the task delegates Design writes, the Engage task delegates, the platform
+     * services an expression may call, and the `flw*Utils` helpers. `flw` itself is the platform's EL
+     * root for its scripting API: `${flw.setOutput(…)}` in a task listener is
      * platform API, not a bean of the project's — 36 "unresolved beans" on one real project said otherwise.
      * `jacksonObjectMapper` is Spring Boot's `ObjectMapper` bean and `environmentEndpoint` the actuator's;
      * the platform starter brings both.
@@ -112,8 +110,8 @@ object Constants {
     )
 
     /**
-     * Model keys the platform ships itself (the `.event` files under `com/flowable/design/system/` in the platform
-     * and engage palettes — `*` in a KDoc path would open a nested comment). A project consumes them without defining them, so a reference to one is a
+     * Model keys the platform ships itself (the system `.event` files the platform and Engage palettes
+     * ship). A project consumes them without defining them, so a reference to one is a
      * platform-provided external, not a missing model.
      */
     val FLOWABLE_PLATFORM_MODEL_KEYS = setOf(
