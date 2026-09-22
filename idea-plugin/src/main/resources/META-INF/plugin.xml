@@ -942,6 +942,11 @@
         <!-- A process, case, decision, form or page opens as text and picture side by side — loose or out
              of an archive. The picture is painted in Swing, not JCEF, so it stays fast under Remote Dev. -->
         <fileEditorProvider implementation="com.flowable.atlas.preview.FlowableModelPreviewEditorProvider"/>
+        <!-- The Structure tool window for a form/page (its components as nested in Design) and a
+             process/case (its elements by name). Asked before the language's builder; any other
+             JSON or XML file gets null and keeps its usual outline. -->
+        <structureViewBuilder key="JSON" factoryClass="com.flowable.atlas.structure.ModelStructureViewProvider"/>
+        <structureViewBuilder key="XML" factoryClass="com.flowable.atlas.structure.ModelStructureViewProvider"/>
         <!-- Reader Mode's visual formatting layer crashes on minified single-line JSON, which is what a
              Design model export is; order="last" is load-bearing, because the platform enables the layer
              from this same extension point. See FlowableModelVisualFormattingGuard. -->
