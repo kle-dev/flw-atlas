@@ -9,7 +9,8 @@ import com.intellij.ide.structureView.StructureViewModel
 import com.intellij.ide.structureView.StructureViewModelBase
 import com.intellij.ide.structureView.StructureViewTreeElement
 import com.intellij.ide.structureView.TreeBasedStructureViewBuilder
-import com.intellij.ide.structureView.impl.common.PsiTreeElementBase
+import com.intellij.ide.util.treeView.smartTree.TreeElement
+import com.intellij.navigation.ItemPresentation
 import com.intellij.json.psi.JsonArray
 import com.intellij.json.psi.JsonFile
 import com.intellij.json.psi.JsonObject
@@ -19,6 +20,8 @@ import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileTypes.FileType
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.pom.Navigatable
+import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
 import com.intellij.psi.xml.XmlFile
@@ -59,8 +62,24 @@ class ModelStructureViewProvider : StructureViewBuilderProvider {
         }
     }
 
+    /** One PSI element in the outline: presents itself, navigates to itself, equal by its element. */
+    private abstract class Node<T : PsiElement>(protected val psi: T) : StructureViewTreeElement, ItemPresentation {
+        protected val element: T? get() = psi.takeIf { it.isValid }
+
+        abstract fun childNodes(): Collection<StructureViewTreeElement>
+
+        override fun getValue(): Any = psi
+        override fun getPresentation(): ItemPresentation = this
+        override fun getChildren(): Array<TreeElement> = if (psi.isValid) childNodes().toTypedArray() else emptyArray()
+        override fun navigate(requestFocus: Boolean) { (psi as? Navigatable)?.navigate(requestFocus) }
+        override fun canNavigate(): Boolean = psi.isValid && (psi as? Navigatable)?.canNavigate() == true
+        override fun canNavigateToSource(): Boolean = canNavigate()
+        override fun equals(other: Any?): Boolean = other is Node<*> && other.psi == psi
+        override fun hashCode(): Int = psi.hashCode()
+    }
+
     /** A form/page (the file's top object), a component, or a tab / accordion section. */
-    private class FormNode(obj: JsonObject) : PsiTreeElementBase<JsonObject>(obj) {
+    private class FormNode(obj: JsonObject) : Node<JsonObject>(obj) {
 
         override fun getPresentableText(): String? {
             val obj = element ?: return null
@@ -79,7 +98,7 @@ class ModelStructureViewProvider : StructureViewBuilderProvider {
         override fun getIcon(open: Boolean): Icon =
             if (element?.let { children(it).isNotEmpty() } == true) AllIcons.Nodes.Folder else AllIcons.Nodes.Field
 
-        override fun getChildrenBase(): Collection<StructureViewTreeElement> =
+        override fun childNodes(): Collection<StructureViewTreeElement> =
             element?.let { children(it) }.orEmpty().map(::FormNode)
 
         private companion object {
@@ -113,7 +132,7 @@ class ModelStructureViewProvider : StructureViewBuilderProvider {
     }
 
     /** A BPMN / CMMN element with an id: its name, its kind beside it, its own elements beneath. */
-    private class XmlNode(tag: XmlTag) : PsiTreeElementBase<XmlTag>(tag) {
+    private class XmlNode(tag: XmlTag) : Node<XmlTag>(tag) {
 
         override fun getPresentableText(): String? {
             val tag = element ?: return null
@@ -125,7 +144,7 @@ class ModelStructureViewProvider : StructureViewBuilderProvider {
         override fun getIcon(open: Boolean): Icon =
             if (element?.let(::children)?.isNotEmpty() == true) AllIcons.Nodes.Folder else AllIcons.Nodes.Tag
 
-        override fun getChildrenBase(): Collection<StructureViewTreeElement> =
+        override fun childNodes(): Collection<StructureViewTreeElement> =
             element?.let(::children).orEmpty().map(::XmlNode)
 
         private companion object {

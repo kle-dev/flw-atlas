@@ -17,7 +17,6 @@ import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
@@ -54,6 +53,7 @@ internal class FlowableModelPreview(
     }
     private val root = JPanel(BorderLayout())
     private val redraw = SingleAlarm(::render, 300, this)
+    @Volatile private var disposed = false
 
     init {
         val toolbar = ActionManager.getInstance().createActionToolbar("FlowableModelPreview", zoomActions(), true)
@@ -80,7 +80,7 @@ internal class FlowableModelPreview(
                 .onFailure { LOG.warn("Could not draw the preview of ${file.path}", it) }
                 .getOrNull()
             ApplicationManager.getApplication().invokeLater({
-                if (Disposer.isDisposed(this)) return@invokeLater
+                if (disposed) return@invokeLater
                 if (doc == null) {
                     show(FlowableAtlasBundle.message("linemarker.diagram.nolayout"))
                 } else {
@@ -125,7 +125,7 @@ internal class FlowableModelPreview(
     override fun isValid(): Boolean = file.isValid
     override fun addPropertyChangeListener(listener: PropertyChangeListener) {}
     override fun removePropertyChangeListener(listener: PropertyChangeListener) {}
-    override fun dispose() {}
+    override fun dispose() { disposed = true }
 
     private companion object {
         val LOG = logger<FlowableModelPreview>()
