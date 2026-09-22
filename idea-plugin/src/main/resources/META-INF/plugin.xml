@@ -923,6 +923,9 @@
                   extensions="form;action;page;data;dictionary;query;sequence;sla;event;channel;agent;service;tpl;policy;extractor;knowledgebase;masterdata;dashboardcomponent;document;palette;app"/>
         <!-- The XML-serialized models. .bpmn20.xml / .cmmn.xml / .dmn.xml already end in .xml. -->
         <fileType name="XML" extensions="bpmn;cmmn;dmn"/>
+        <!-- A .bar is a zip under another name. As the platform's ARCHIVE a double-click expands it (see
+             ArchiveTreeStructureProvider) instead of asking which file type it is. -->
+        <fileType name="ARCHIVE" extensions="bar"/>
 
         <!-- Schemas for that model XML. Without them a .bpmn / .cmmn / .dmn opens with an unresolved
              namespace and no tag or attribute completion at all: the IDE ships no BPMN, CMMN or DMN
@@ -932,6 +935,9 @@
         <!-- A model file wears its type's icon — the explorer's glyph and colour — in the Project view
              and the editor tabs; a .bar the archive icon. Decided from the name alone. -->
         <fileIconProvider implementation="com.flowable.atlas.icons.ModelFileIconProvider"/>
+        <!-- .zip / .bar nodes in the Project view list their entries — the platform drops them for an
+             archive inside a content root. -->
+        <treeStructureProvider implementation="com.flowable.atlas.model.ArchiveTreeStructureProvider"/>
         <!-- Reader Mode's visual formatting layer crashes on minified single-line JSON, which is what a
              Design model export is; order="last" is load-bearing, because the platform enables the layer
              from this same extension point. See FlowableModelVisualFormattingGuard. -->
