@@ -5,6 +5,13 @@ import com.intellij.codeInsight.actions.ReaderModeProvider
 import com.intellij.formatting.visualLayer.VisualFormattingLayerService
 import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.util.io.FileUtil
+import com.intellij.openapi.vfs.JarFileSystem
+import com.intellij.openapi.vfs.LocalFileSystem
+import java.io.File
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 /**
  * [FlowableModelVisualFormattingGuard] — the guard that keeps IntelliJ 2026.x's visual formatting layer
@@ -51,6 +58,28 @@ class FlowableModelVisualFormattingGuardTest : BasePlatformTestCase() {
         enableLayer()
         applyGuard()
         assertFalse(VisualFormattingLayerService.isEnabledForEditor(myFixture.editor))
+    }
+
+    fun testAnyArchiveEntryIsCovered() {
+        // The Project view expands archives, so a non-model entry opens as easily as a model.
+        val dir = FileUtil.createTempDirectory("atlas-guard", null)
+        val zip = File(dir, "DEMO-app.zip")
+        ZipOutputStream(zip.outputStream().buffered()).use {
+            it.putNextEntry(ZipEntry("manifest.json"))
+            it.write("""{"name":"DEMO","models":[{"key":"a"},{"key":"b"}]}""".toByteArray())
+            it.closeEntry()
+        }
+        try {
+            val local = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(zip)!!
+            val entry = JarFileSystem.getInstance().getJarRootForLocalFile(local)!!.findChild("manifest.json")!!
+            myFixture.openFileInEditor(entry)
+            enableLayer()
+            applyGuard()
+            assertFalse(VisualFormattingLayerService.isEnabledForEditor(myFixture.editor))
+        } finally {
+            FileEditorManager.getInstance(project).openFiles.forEach(FileEditorManager.getInstance(project)::closeFile)
+            FileUtil.delete(dir)
+        }
     }
 
     fun testAFileThatIsNotAModelIsLeftAlone() {

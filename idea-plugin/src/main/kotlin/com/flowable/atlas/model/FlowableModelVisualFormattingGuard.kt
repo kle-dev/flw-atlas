@@ -5,6 +5,7 @@ import com.intellij.formatting.visualLayer.VisualFormattingLayerService
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.newvfs.ArchiveFileSystem
 
 /**
  * Keeps Reader Mode's **visual formatting layer** off Flowable model files, because on IntelliJ 2026.x
@@ -25,6 +26,10 @@ import com.intellij.openapi.project.Project
  * document). So the platform bug is not ours, but the path to it is, and an IDE error balloon straight
  * after an Atlas action reads as an Atlas defect.
  *
+ * The same holds for every other entry of an archive: since the Project view expands a `.bar`/`.zip`,
+ * a `manifest.json` or a model under a name Atlas does not recognise opens just as easily, and just as
+ * minified. Any file inside an archive is guarded.
+ *
  * What is given up is nothing: the layer virtually reformats a file you cannot edit anyway, and on a
  * minified model export it has never been able to do so without crashing.
  *
@@ -39,7 +44,7 @@ class FlowableModelVisualFormattingGuard : ReaderModeProvider {
 
     override fun applyModeChanged(project: Project, editor: Editor, readerMode: Boolean, fileIsOpenAlready: Boolean) {
         val file = FileDocumentManager.getInstance().getFile(editor.document) ?: return
-        if (ModelFiles.typeOf(file) == null) return
+        if (ModelFiles.typeOf(file) == null && file.fileSystem !is ArchiveFileSystem) return
         VisualFormattingLayerService.disableForEditor(editor)
     }
 }
