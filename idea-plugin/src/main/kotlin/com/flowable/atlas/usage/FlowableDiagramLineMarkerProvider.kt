@@ -36,13 +36,14 @@ import javax.swing.Icon
  * generated model-constants / local-variable pattern — a constant reference at a key site such as
  * `processDefinitionKey(ModelConstants.ONBOARDING)`, whose compile-time value [SiteMatching] resolves.
  * Inside a model file the same mark sits on the file's own key and on every cross-reference to a
- * process, case or decision ([ModelFileKeySites]) — the diagram of the process you are reading, one
+ * process, case, decision or form ([ModelFileKeySites]) — the diagram of the process you are reading, one
  * click away, and the callee's from its call activity.
  * The icon appears when the resolved model has an openable diagram (a bundled `.svg` from Flowable
  * Design's export layout, or a DI layout Atlas can render — see [FlowableDiagram]); clicking it opens
  * that diagram in IntelliJ's built-in image/SVG viewer, so the process/case/decision can be seen
- * without opening Flowable Design. When there is no diagram (e.g. a deployment BAR of a form) no
- * marker is added — the marker is self-limiting, so it never appears where it would do nothing.
+ * without opening Flowable Design; a form or page opens as a wireframe of its grid. When there is no
+ * diagram (an action, say) no marker is added — the marker is self-limiting, so it never appears where
+ * it would do nothing.
  *
  * Mirrors [FlowableModelReferenceLineMarkerProvider]: the highlight pass does only cheap cached-index
  * lookups (never builds the index) plus a sibling-file check; opening the editor is done on the click.

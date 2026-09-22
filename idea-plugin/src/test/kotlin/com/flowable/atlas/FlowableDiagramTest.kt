@@ -56,11 +56,26 @@ class FlowableDiagramTest : BasePlatformTestCase() {
     }
 
     fun testNonDiagramTypeResolvesToNull() {
-        val model = myFixture.addFileToProject("form-models/DEMO-claim2.form", "{}").virtualFile
+        val model = myFixture.addFileToProject("action-models/DEMO-notify.action", "{}").virtualFile
         assertNull(
-            "a form has no diagram to render",
-            DiagramSvgCache.getInstance(project).resolveDiagram(model, ModelType.FORM),
+            "an action has no diagram to render",
+            DiagramSvgCache.getInstance(project).resolveDiagram(model, ModelType.ACTION),
         )
+    }
+
+    fun testAFormRendersAsAWireframe() {
+        val model = myFixture.addFileToProject(
+            "form-models/DEMO-claim2.form",
+            """{"metadata":{"name":"Claim"},"rows":[{"cols":[{"id":"amount","type":"number","label":"Amount","size":12}]}]}""",
+        ).virtualFile
+        val svg = DiagramSvgCache.getInstance(project).resolveDiagram(model, ModelType.FORM)
+        assertEquals("DEMO-claim2.svg", svg!!.name)
+        assertTrue("the wireframe names the field", String(svg.contentsToByteArray()).contains("Amount"))
+    }
+
+    fun testAFormThatIsNoFormResolvesToNull() {
+        val model = myFixture.addFileToProject("form-models/DEMO-claim3.form", "{}").virtualFile
+        assertNull(DiagramSvgCache.getInstance(project).resolveDiagram(model, ModelType.FORM))
     }
 
     fun testDiagramBearingModelWithoutLayoutResolvesToNull() {
@@ -75,7 +90,9 @@ class FlowableDiagramTest : BasePlatformTestCase() {
         val process = myFixture.addFileToProject("bpmn-models/DEMO-p.bpmn20.xml", "<definitions/>").virtualFile
         assertTrue("a process type always warrants a marker (rendered lazily)", FlowableDiagram.hasOpenableDiagram(process, ModelType.PROCESS))
         val form = myFixture.addFileToProject("form-models/DEMO-f.form", "{}").virtualFile
-        assertFalse("a form with no sibling .svg warrants no diagram marker", FlowableDiagram.hasOpenableDiagram(form, ModelType.FORM))
+        assertTrue("a form is drawn as its grid", FlowableDiagram.hasOpenableDiagram(form, ModelType.FORM))
+        val action = myFixture.addFileToProject("action-models/DEMO-a.action", "{}").virtualFile
+        assertFalse("an action with no sibling .svg warrants no diagram marker", FlowableDiagram.hasOpenableDiagram(action, ModelType.ACTION))
     }
 
     private companion object {

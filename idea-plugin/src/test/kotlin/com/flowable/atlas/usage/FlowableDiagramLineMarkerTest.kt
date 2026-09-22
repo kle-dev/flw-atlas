@@ -82,6 +82,21 @@ class FlowableDiagramLineMarkerTest : BasePlatformTestCase() {
         assertEquals("a qualified constant at a key site should carry one diagram marker", 1, diagramGutters().size)
     }
 
+    fun testAFormKeyInAProcessOpensTheFormsWireframe() {
+        myFixture.addFileToProject(
+            "models/DEMO-F001.form",
+            """{"metadata":{"key":"DEMO-F001","name":"Claim"},"rows":[{"cols":[{"id":"amount","type":"number","label":"Amount","size":12}]}]}""",
+        )
+        project.service<FlowableModelIndexService>().index()
+        myFixture.configureByText(
+            "DEMO-P040.bpmn20.xml",
+            """<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn">""" +
+                """<process id="DEMO-P040"><userTask id="t" flowable:formKey="DEMO-F001"/></process></definitions>""",
+        )
+        myFixture.doHighlighting()
+        assertEquals(1, myFixture.findAllGutters().count { it.tooltipText == "Form diagram: DEMO-F001" })
+    }
+
     fun testDecisionTableWithoutLayoutStillOpensItsTable() {
         // A Design decision table has no dmndi layout, so DI rendering yields nothing — the click must
         // still land on something: the table painted from the rules.

@@ -732,12 +732,13 @@
                 language="JAVA"
                 implementationClass="com.flowable.atlas.usage.FlowableEndpointUsageLineMarkerProvider"/>
         <!-- Gutter icon on a model-key expression — a literal or a constant/local reference at a key
-             call site — whose model has a diagram (bundled Design .svg, or rendered from its DI layout)
-             → open it in the IDE's built-in image/SVG viewer. No diagram (e.g. a form BAR) → no marker. -->
+             call site — whose model has a diagram (bundled Design .svg, rendered from its DI layout, or a
+             form/page drawn as its grid) → open it in the IDE's built-in image/SVG viewer. No diagram
+             (e.g. an action) → no marker. -->
         <codeInsight.lineMarkerProvider
                 language="JAVA"
                 implementationClass="com.flowable.atlas.usage.FlowableDiagramLineMarkerProvider"/>
-        <!-- …and inside a model file: on the file's own key and on every process/case/decision reference. -->
+        <!-- …and inside a model file: on the file's own key and on every process/case/decision/form reference. -->
         <codeInsight.lineMarkerProvider
                 language="XML"
                 implementationClass="com.flowable.atlas.usage.FlowableDiagramLineMarkerProvider"/>

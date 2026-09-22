@@ -2,6 +2,7 @@ package com.flowable.atlas.usage
 
 import com.flowable.atlas.diagram.DiagramRenderer
 import com.flowable.atlas.diagram.DmnTableSvgRenderer
+import com.flowable.atlas.diagram.FormSvgRenderer
 import com.flowable.atlas.model.ModelType
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
@@ -20,9 +21,9 @@ import com.intellij.testFramework.LightVirtualFile
  * so the IDE view and the generated files are identical. Failing that, a **decision table** is painted
  * from its rules ([DmnTableSvgRenderer]): a Design decision table has no canvas and therefore no `dmndi`
  * layout, so DI rendering finds nothing to draw — but the table is exactly what the reader wanted. A
- * generated diagram is returned as an in-memory [LightVirtualFile] named `<base>.svg`, which IntelliJ's
+ * form or page is drawn as a wireframe of its grid ([FormSvgRenderer]). A generated diagram is returned as an in-memory [LightVirtualFile] named `<base>.svg`, which IntelliJ's
  * bundled Images viewer renders like any other SVG. Returns null when the model has no diagram at all
- * (non-diagram type, or a process/case with no layout).
+ * (another model type, a process/case with no layout, or a form that is not one).
  */
 @Service(Service.Level.PROJECT)
 class DiagramSvgCache {
@@ -64,11 +65,13 @@ class DiagramSvgCache {
     }
 
     /**
-     * DI layout first (a DRD, a process, a case), then — for a decision — the decision table itself.
-     * XML only: a Design-workspace decision-table `.json` carries neither `dmndi` nor `<decisionTable>`.
+     * A form/page's grid; otherwise DI layout first (a DRD, a process, a case), then — for a decision —
+     * the decision table itself. XML only: a Design-workspace decision-table `.json` carries neither
+     * `dmndi` nor `<decisionTable>`.
      */
     private fun renderSvg(bytes: ByteArray, fileName: String, type: ModelType): String? =
-        DiagramRenderer.renderSvg(bytes, fileName, type)
+        if (type == ModelType.FORM || type == ModelType.PAGE) FormSvgRenderer.renderSvg(bytes)
+        else DiagramRenderer.renderSvg(bytes, fileName, type)
             ?: if (type == ModelType.DECISION && ModelType.isXmlModel(fileName)) {
                 DmnTableSvgRenderer.renderSvg(bytes)
             } else {
