@@ -22,10 +22,10 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   straight into it: the action opens the editor itself when no environment exists yet and pulls the
   moment one does, and a connection created in that dialog has no secret stored yet; and *Sign out &
   retry* on a failed pull clears the secret before doing exactly the same thing. The editor is now
-  offered once per pull, and the attempt that follows it reports instead of reopening anything — "Not
-  signed in to <server>", "No Flowable Design environment is selected", "This project has no folder on
-  disk to pull into", each on the usual balloon with its *Configure…* action for a second try that the
-  reader asks for.
+  offered once per pull, and the attempt that follows it reports instead of reopening anything —
+  `Not signed in to <server>`, `No Flowable Design environment is selected`, `This project has no folder
+  on disk to pull into`, each on the usual balloon with its *Configure…* action for a second try that
+  the reader asks for.
 
 ## 0.25.0
 

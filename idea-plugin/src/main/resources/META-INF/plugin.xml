@@ -153,10 +153,10 @@
               itself when no environment exists yet and pulls the moment one does, and a connection created
               in that dialog has no secret stored yet; and <i>Sign out &amp; retry</i> on a failed pull
               clears the secret before doing exactly the same thing. The editor is now offered once per
-              pull, and the attempt that follows it reports instead of reopening anything — "Not signed in
-              to &lt;server&gt;", "No Flowable Design environment is selected", "This project has no folder
-              on disk to pull into", each on the usual balloon with its <i>Configure…</i> action for a
-              second try that the reader asks for.</li>
+              pull, and the attempt that follows it reports instead of reopening anything — <code>Not signed
+              in to &lt;server&gt;</code>, <code>No Flowable Design environment is selected</code>,
+              <code>This project has no folder on disk to pull into</code>, each on the usual balloon with
+              its <i>Configure…</i> action for a second try that the reader asks for.</li>
         </ul>
         <h3>0.25.0</h3>
         <ul>
