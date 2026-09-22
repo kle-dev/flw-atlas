@@ -449,15 +449,7 @@ object ModelParsers {
             var component: MutableMap<String, Any?>? = null
             if (ModelJsonReader.isFormComponent(n)) {
                 val ftype = (n["type"] as? String) ?: ""
-                val isButton = ftype in ModelJsonReader.BUTTON_TYPES
-                // A button has no `label`; its caption is `extraSettings.text` (see [isFormComponent]),
-                // failing that a localised override, failing that — on an icon-only REST or link button —
-                // its literal `value`. A `{{…}}` value is a binding, not a caption: on an expression
-                // button it is where the *result* lands.
-                val label = pyOr(
-                    pyOr(pyOr(n["label"], objOf(n["extraSettings"])?.get("text")), i18nCaption(n)),
-                    if (isButton) (n["value"] as? String)?.takeIf { !it.contains("{{") } else null,
-                )
+                val label = componentCaption(n)
                 component = linkedMapOf(
                     "id" to n["id"], "type" to n["type"], "label" to label,
                     "required" to (n["isRequired"] ?: false), "value" to n["value"],
@@ -763,6 +755,20 @@ object ModelParsers {
     }
 
     /**
+     * What a form/page component is called. A button has no `label`; its caption is
+     * `extraSettings.text` (see [ModelJsonReader.isFormComponent]), failing that a localised override,
+     * failing that — on an icon-only REST or link button — its literal `value`. A `{{…}}` value is a
+     * binding, not a caption: on an expression button it is where the *result* lands.
+     */
+    internal fun componentCaption(n: Map<String, Any?>): Any? {
+        val isButton = n["type"] in ModelJsonReader.BUTTON_TYPES
+        return pyOr(
+            pyOr(pyOr(n["label"], objOf(n["extraSettings"])?.get("text")), i18nCaption(n)),
+            if (isButton) (n["value"] as? String)?.takeIf { !it.contains("{{") } else null,
+        )
+    }
+
+    /**
      * Whether a component renders, can be used, and is submitted — recorded whenever the model departs
      * from the default (`visible`/`enabled` true, `ignore` false), never when it agrees with it.
      *
@@ -771,7 +777,7 @@ object ModelParsers {
      * worth saying and they are not the same statement, so the value is kept as the model spells it.
      * `ignore` excludes the component's binding from the payload — the value is computed and discarded.
      */
-    private fun gatingOf(n: Map<String, Any?>): MutableMap<String, Any?>? {
+    internal fun gatingOf(n: Map<String, Any?>): MutableMap<String, Any?>? {
         val out = linkedMapOf<String, Any?>()
         fun gate(field: String, default: Boolean) {
             val v = n[field] ?: return
@@ -826,7 +832,7 @@ object ModelParsers {
     }
 
     /** A model reference: a bare key, or the `{key, id}` object the newer Design editor writes. */
-    private fun modelRefKey(v: Any?): Any? = if (v is Map<*, *>) v["key"] else v
+    internal fun modelRefKey(v: Any?): Any? = if (v is Map<*, *>) v["key"] else v
 
     /** The variable root a `{{binding}}` names, or null when the value is an expression, not a target. */
     private fun bindingRoot(value: Any?): String? {
