@@ -221,9 +221,10 @@ section shows an element, the graph already has an edge for it.
 
 ### Diagrams in the gutter
 
-A gutter icon next to any model key opens that model's diagram — next to a key literal or constant in
-Java, and inside a model file next to the file's own key and every call activity, case task or
-decision reference, so a minified export opens its own diagram from its first line.
+A gutter icon next to any model key opens that model beside its diagram — next to a key literal or
+constant in Java, and inside a model file next to the file's own key and every call activity, case task,
+decision or form reference, so a minified export opens its own diagram from its first line. A form or
+page opens beside a wireframe of its layout (see below).
 
 <figure class="fig mock">
   <div class="body">{{mockup:diagrams}}</div>
@@ -242,6 +243,32 @@ table** instead.
 
 Turn on *Recognize model keys anywhere in code* to get the icon on any literal that matches a key, and
 tick *Diagrams (SVG)* under Generation to also write them out as files.
+
+### App archives, opened in the IDE
+
+A Design export is a `.zip`, a deployment is a `.bar`, and both used to be closed boxes in the Project
+view: the platform expands an archive only when it is a library, so the models inside could be searched
+but not browsed. Both now expand into their folders and entries, and a model opens straight from the
+tree, read-only.
+
+A process, case, decision, form or page opens as **text and picture side by side** — loose in the
+project or out of an archive. The picture is the diagram, the decision table, or for a form or page a
+**wireframe of its layout**: Design's twelve-column grid at its real proportions, each component as a
+placeholder of its kind with its caption, a star when it is required, and its id underneath, which is
+the name a `{{…}}` or a script reaches it by. Panels, tabs and accordions keep their own grids, a data
+table shows its column headers, and a subform names the form it embeds. A `visible` or `enabled` that
+depends on an expression is spelled out beside the id; one that is plainly off greys the component out.
+It is a developer's map of the form, not a preview of the Work UI.
+
+The picture is painted in Swing on the IDE host, not in a browser panel, so it stays fast under Remote
+Development, where every resource a JCEF view loads is a round trip to the client. It fits the width,
+zooms from its toolbar, and redraws when the file changes on disk. The editor's layout toggle hides
+either half; going to a line brings the text back.
+
+The **Structure** tool window outlines the same models: a form's or page's components as Design nests
+them, each by its caption with its id beside it, and a process's or case's elements by name, without the
+connectors and the diagram interchange. A click goes to the component or the element, in an archive
+entry as much as in a loose file.
 
 ### Interactive diagrams
 

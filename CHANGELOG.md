@@ -12,6 +12,38 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.26.0
+
+- **A `.zip` or `.bar` in the Project view opens up.** A Design export in the repository could be searched
+  but not browsed: the platform expands an archive only when it is a library, and for one inside a content
+  root it mounts the archive and then drops every entry. A `.bar` was not even an archive to it, so a
+  double-click asked which file type it was. Both now expand into their folders and entries, and a model
+  opens straight from the tree, read-only.
+- **A model opens beside its picture.** A process, case, decision, form or page, loose or out of an
+  archive, opens as text and picture side by side: the diagram, the decision table, or a form's wireframe.
+  The picture is painted in Swing on the IDE host with the SVG library the platform draws its icons with,
+  not in the IDE's SVG viewer, which is a browser panel — slow under Remote Development, and one that
+  opens on the markup until its layout toggle is clicked. It fits the width, zooms from its toolbar and
+  redraws when the file changes on disk. The diagram gutter icon opens this editor with the picture
+  showing.
+- **Forms and pages have a picture at last.** A wireframe of Design's twelve-column grid at its real
+  proportions: each component as a placeholder of its kind with its caption, a star when it is required,
+  and its id underneath — the name a `{{…}}` or a script reaches it by. Panels, modals, tabs and
+  accordions keep their own grids, a data table shows its column headers, a subform names the form it
+  embeds. A `visible` or `enabled` that depends on an expression is spelled out beside the id; one that is
+  plainly off greys the component out. It is a developer's map of the form, not a preview of the Work UI.
+  The gutter icon on a form key — in Java, on a user task's `flowable:formKey`, on a subform reference —
+  opens it like any other diagram. All 153 forms and pages of two real app corpora render.
+- **The Structure tool window outlines a model.** A form's or page's components as Design nests them, by
+  caption with the id beside it; a process's or case's elements by name, without the connectors, the plan
+  items and the diagram interchange. A click goes to the component or the element, in an archive entry as
+  much as in a loose file. Any other JSON or XML keeps its usual outline.
+- **Any file opened out of an archive is safe from the formatting-layer crash.** Since the Project view
+  expands archives, a `manifest.json` or a model under a name Atlas does not recognise opens just as
+  easily, and is just as read-only and minified. The platform's visual formatting layer throws on such a
+  file (`Wrong line: 1. Available lines count: 1`); the guard that kept it off model files now keeps it
+  off every file inside an archive.
+
 ## 0.25.1
 
 - **A pull that cannot run no longer traps the IDE.** *Pull from Flowable Design* answers missing
