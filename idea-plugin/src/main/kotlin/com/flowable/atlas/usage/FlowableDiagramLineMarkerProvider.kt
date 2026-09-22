@@ -11,6 +11,7 @@ import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelFiles
 import com.flowable.atlas.model.ModelType
 import com.flowable.atlas.navigation.ModelFileKeySites
+import com.flowable.atlas.preview.FlowableModelPreviewEditorProvider
 import com.intellij.json.psi.JsonStringLiteral
 import com.intellij.psi.xml.XmlAttributeValue
 import com.intellij.psi.xml.XmlText
@@ -40,8 +41,9 @@ import javax.swing.Icon
  * click away, and the callee's from its call activity.
  * The icon appears when the resolved model has an openable diagram (a bundled `.svg` from Flowable
  * Design's export layout, or a DI layout Atlas can render — see [FlowableDiagram]); clicking it opens
- * that diagram in IntelliJ's built-in image/SVG viewer, so the process/case/decision can be seen
- * without opening Flowable Design; a form or page opens as a wireframe of its grid. When there is no
+ * the model beside its diagram ([FlowableModelPreviewEditorProvider]), so the process/case/decision
+ * can be seen without opening Flowable Design; a form or page shows a wireframe of its grid. A model that
+ * editor does not take, but that ships a bundled `.svg`, opens that in IntelliJ's image viewer. When there is no
  * diagram (an action, say) no marker is added — the marker is self-limiting, so it never appears where
  * it would do nothing.
  *
@@ -139,6 +141,9 @@ class FlowableDiagramLineMarkerProvider : LineMarkerProvider {
     }
 
     private fun openDiagram(project: Project, modelFile: VirtualFile, type: ModelType) {
+        // The model's own editor, text and picture side by side, painted in Swing — the IDE's SVG viewer
+        // is a JCEF browser, slow under Remote Dev, and opens on the markup rather than the picture.
+        if (FlowableModelPreviewEditorProvider.openWithPreview(project, modelFile)) return
         // Resolve the bundled sibling .svg or render one from the model's DI layout; both open in the
         // bundled Images viewer. The render — bytes plus a full DI layout pass on a large process — runs
         // in the background; only the opening is the click thread's. A diagram-bearing model that

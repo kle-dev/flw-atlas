@@ -939,6 +939,9 @@
         <!-- .zip / .bar nodes in the Project view list their entries — the platform drops them for an
              archive inside a content root. -->
         <treeStructureProvider implementation="com.flowable.atlas.model.ArchiveTreeStructureProvider"/>
+        <!-- A process, case, decision, form or page opens as text and picture side by side — loose or out
+             of an archive. The picture is painted in Swing, not JCEF, so it stays fast under Remote Dev. -->
+        <fileEditorProvider implementation="com.flowable.atlas.preview.FlowableModelPreviewEditorProvider"/>
         <!-- Reader Mode's visual formatting layer crashes on minified single-line JSON, which is what a
              Design model export is; order="last" is load-bearing, because the platform enables the layer
              from this same extension point. See FlowableModelVisualFormattingGuard. -->
