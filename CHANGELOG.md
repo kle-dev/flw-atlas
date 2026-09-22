@@ -12,6 +12,21 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.25.1
+
+- **A pull that cannot run no longer traps the IDE.** *Pull from Flowable Design* answers missing
+  configuration by opening the environment editor and running again once that closes, and the check in
+  front of the second attempt asked whether a workspace and some apps were selected — which a missing
+  password does not change. So a connection with nothing signed in reopened the page every single time
+  it was closed, with nothing to break the loop but closing the project. Two ordinary routes led
+  straight into it: the action opens the editor itself when no environment exists yet and pulls the
+  moment one does, and a connection created in that dialog has no secret stored yet; and *Sign out &
+  retry* on a failed pull clears the secret before doing exactly the same thing. The editor is now
+  offered once per pull, and the attempt that follows it reports instead of reopening anything — "Not
+  signed in to <server>", "No Flowable Design environment is selected", "This project has no folder on
+  disk to pull into", each on the usual balloon with its *Configure…* action for a second try that the
+  reader asks for.
+
 ## 0.25.0
 
 - **A model in the project, compared against the model in the app.** Models are increasingly generated

@@ -142,6 +142,22 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.25.1</h3>
+        <ul>
+          <li><b>A pull that cannot run no longer traps the IDE.</b> <i>Pull from Flowable Design</i>
+              answers missing configuration by opening the environment editor and running again once that
+              closes, and the check in front of the second attempt asked whether a workspace and some apps
+              were selected — which a missing password does not change. So a connection with nothing signed
+              in reopened the page every single time it was closed, with nothing to break the loop but
+              closing the project. Two ordinary routes led straight into it: the action opens the editor
+              itself when no environment exists yet and pulls the moment one does, and a connection created
+              in that dialog has no secret stored yet; and <i>Sign out &amp; retry</i> on a failed pull
+              clears the secret before doing exactly the same thing. The editor is now offered once per
+              pull, and the attempt that follows it reports instead of reopening anything — "Not signed in
+              to &lt;server&gt;", "No Flowable Design environment is selected", "This project has no folder
+              on disk to pull into", each on the usual balloon with its <i>Configure…</i> action for a
+              second try that the reader asks for.</li>
+        </ul>
         <h3>0.25.0</h3>
         <ul>
           <li><b>A model in the project, compared against the model in the app.</b> Models are increasingly
@@ -537,12 +553,6 @@
               variable and a task's <code>additionalvariables</code> are variable writes. And an in/out
               parameter tag is matched by its lower-cased name, the way form keys already were, so an export
               that lower-cases <code>&lt;flowable:inputparameter&gt;</code> loses nothing.</li>
-          <li><b>Master data is master data.</b> A <code>.data</code> whose <code>dataObjectType</code> is
-              <code>masterData</code> — a managed reference list — was a data object like any other: one
-              real project read "143 data objects" for 143 lists, and each list's <code>variables</code> map
-              (<code>lang</code>, <code>color</code>) became project variables, 35 of them. It is its own
-              kind now, <code>masterData</code>, counted apart ("143 master data"), and a select over such a
-              table (<code>tableKey</code>) links to it.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

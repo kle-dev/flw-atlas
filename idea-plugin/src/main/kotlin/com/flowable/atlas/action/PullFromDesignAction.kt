@@ -41,7 +41,9 @@ class PullFromDesignAction : AnAction(), DumbAware {
         if (available.isEmpty()) {
             ShowSettingsUtil.getInstance().showSettingsDialog(project, EnvironmentsConfigurable::class.java)
             if (AtlasConnectionSelection.selected(project, ConnectionKind.DESIGN) != null) {
-                DesignPullService.getInstance(project).pullInBackground()
+                // The settings have just been on screen: a pull that cannot run now says so, rather than
+                // reopening the page the user closed a moment ago.
+                DesignPullService.getInstance(project).pullAfterConfiguring()
             }
             return
         }

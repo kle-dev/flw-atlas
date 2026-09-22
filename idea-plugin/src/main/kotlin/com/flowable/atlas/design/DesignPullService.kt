@@ -133,6 +133,12 @@ class DesignPullService(private val project: Project) {
         pullInBackground(DesignPullSelection(workspaceKey, appKeys.toList()))
 
     /**
+     * The pull that runs *because* the environment editor was just closed. Whatever is still missing is
+     * reported rather than answered by opening that editor a second time — see [blocked].
+     */
+    fun pullAfterConfiguring() = pullInBackground(selection = null, mayConfigure = false)
+
+    /**
      * Resolves the target and asks about a protected environment **before** queueing anything.
      *
      * The confirmation has to happen here rather than inside the background task: this is called from
@@ -140,11 +146,13 @@ class DesignPullService(private val project: Project) {
      * a progress indicator is exactly the kind of thing that gets dismissed without being read. A pull
      * overwrites archives in the working tree, so the question is modal — the weight matches the
      * consequence.
+     *
+     * [mayConfigure] is false for a pull that has already had the environment editor opened for it.
      */
-    private fun pullInBackground(selection: DesignPullSelection?) {
+    private fun pullInBackground(selection: DesignPullSelection?, mayConfigure: Boolean = true) {
         val target = AtlasDesignTarget.resolve(project)
         if (target == null) {
-            configureThenRetry()
+            blocked("No Flowable Design environment is selected — pick one in the Atlas Hub.", mayConfigure)
             return
         }
         if (target.connection.requiresConfirmation &&
@@ -154,7 +162,7 @@ class DesignPullService(private val project: Project) {
         }
         val title = "Pulling from ${target.connection.environmentName} (Flowable Design)"
         object : Task.Backgroundable(project, title, true) {
-            override fun run(indicator: ProgressIndicator) = pull(indicator, target, selection)
+            override fun run(indicator: ProgressIndicator) = pull(indicator, target, selection, mayConfigure)
         }.queue()
     }
 
@@ -162,10 +170,11 @@ class DesignPullService(private val project: Project) {
         indicator: ProgressIndicator,
         target: AtlasDesignTarget,
         requested: DesignPullSelection?,
+        mayConfigure: Boolean,
     ) {
         val projectDir = AtlasProjectRootService.getInstance(project).activeProjectDir()
         if (projectDir == null) {
-            configureThenRetry()
+            blocked("This project has no folder on disk to pull into.", mayConfigure)
             return
         }
         val connection = target.connection
@@ -181,7 +190,8 @@ class DesignPullService(private val project: Project) {
         // Empty, not null: a captured browser session authenticates on its own, so "no stored secret"
         // is only a dead end when there is no session either.
         if (auth == null || auth.isEmpty) {
-            configureThenRetry()   // e.g. keychain entry was deleted, or the chosen mode has no secret yet
+            // e.g. the keychain entry was deleted, or the chosen mode has no secret yet
+            blocked("Not signed in to ${connection.baseUrl} — store a password or token for it.", mayConfigure)
             return
         }
         val conn = DesignClient.Connection(connection.baseUrl, auth)
@@ -311,13 +321,32 @@ class DesignPullService(private val project: Project) {
         })
     }
 
+    /**
+     * A pull that cannot start. The first attempt offers the environment editor and runs again once it
+     * closes; an attempt that *is* that re-run reports [reason] instead.
+     *
+     * The second half is the whole point. Retrying unconditionally made "Pull from Flowable Design"
+     * impossible to get out of: the retry asks [AtlasDesignTarget.isPullReady], which reads the
+     * *selection* — and a missing password or an unreadable keychain entry does not change the
+     * selection. So a connection with nothing signed in reopened the editor every single time the user
+     * closed it, with no way out but closing the project.
+     */
+    private fun blocked(reason: String, mayConfigure: Boolean) {
+        if (mayConfigure) configureThenRetry() else notifyFailure(reason)
+    }
+
     /** Opens the settings on the EDT and re-runs the pull once it can actually run. */
     private fun configureThenRetry() {
         ApplicationManager.getApplication().invokeLater {
             if (project.isDisposed) return@invokeLater
-            openEnvironments()
-            if (AtlasDesignTarget.resolve(project)?.isPullReady() == true) pullInBackground()
+            openEnvironmentsThenRetry()
         }
+    }
+
+    /** The editor, then one more attempt at what the user actually asked for. EDT only. */
+    private fun openEnvironmentsThenRetry() {
+        openEnvironments()
+        if (AtlasDesignTarget.resolve(project)?.isPullReady() == true) pullAfterConfiguring()
     }
 
     /**
@@ -394,10 +423,7 @@ class DesignPullService(private val project: Project) {
         val notification = NotificationGroupManager.getInstance()
             .getNotificationGroup(GROUP_ID)
             .createNotification("Pull from Flowable Design failed", message, NotificationType.ERROR)
-            .addAction(NotificationAction.createSimple("Configure…") {
-                openEnvironments()
-                if (AtlasDesignTarget.resolve(project)?.isPullReady() == true) pullInBackground()
-            })
+            .addAction(NotificationAction.createSimple("Configure…") { openEnvironmentsThenRetry() })
         if (isUnauthorized(message)) addSignOutAndRetry(notification)
         notification.notify(project)
         recordPullFinished(succeeded = false)
