@@ -19,6 +19,14 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   gap table is drawn one way, the schema coverage table first: a row per thing that should line up, tinted by how badly it does not, a pill per kind of gap and
   *only gaps* to hide the rows that are fine. A cell says ✓ it fits, ✗ it is missing, ⚠ it looks wrong, or
   ? Atlas cannot tell — and then why, in its tooltip.
+- **A process's page says whether its calls fit.** *Does it fit?* lists every call a process or case
+  makes — sub-process, case, decision, operation, agent, form, event — with what it hands over and takes
+  back, and every caller of it against what it reads: a value it reads that no caller passes, a value
+  passed in that it never reads (the same verdict as the *unread call input* finding), a value mapped
+  back that it never writes, a required operation parameter left out or one the operation does not
+  declare. A process nothing calls lists the values whoever starts it has to provide. Where Atlas
+  cannot see far enough — a callee outside the project, a call with no explicit mappings, a name only a
+  script guesses at — the cell is a ? that says why.
 - **A health strip under every title.** Before the first section, a page says whether the model is fine:
   its open defects and advice, the gaps its tables found (or *✓ fits*), how many models it uses and is
   used by, the apps that ship it — or *in no app* — and the tests that deploy it; each jumps to the section

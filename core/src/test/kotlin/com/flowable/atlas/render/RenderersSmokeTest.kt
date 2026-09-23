@@ -293,6 +293,9 @@ class RenderersSmokeTest {
         // Every "does it fit" question — the schema coverage first — is one gap table with one set of marks.
         assertTrue("expected the gap table from explorer.js", html.contains("function gapTable(") && html.contains("function gm("))
         assertTrue("expected the gap marks from explorer.css", html.contains(".gm-miss{"))
+        assertTrue("expected the health strip", html.contains("function healthStripHtml(") && html.contains(".dhealth{"))
+        assertTrue("expected the contract engine from explorer.js",
+            html.contains("function contractOf(") && html.contains("function callsTable(") && html.contains("function callersMatrix("))
 
 
     }

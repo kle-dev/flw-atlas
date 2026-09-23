@@ -150,6 +150,15 @@
               a row per thing that should line up, tinted by how badly it does not, a pill per kind of gap
               and <i>only gaps</i> to hide the rows that are fine. A cell says ✓ it fits, ✗ it is missing, ⚠
               it looks wrong, or ? Atlas cannot tell — and then why, in its tooltip.</li>
+          <li><b>A process's page says whether its calls fit.</b> <i>Does it fit?</i> lists every call a
+              process or case makes — sub-process, case, decision, operation, agent, form, event — with what
+              it hands over and takes back, and every caller of it against what it reads: a value it reads
+              that no caller passes, a value passed in that it never reads (the same verdict as the
+              <i>unread call input</i> finding), a value mapped back that it never writes, a required
+              operation parameter left out or one the operation does not declare. A process nothing calls
+              lists the values whoever starts it has to provide. Where Atlas cannot see far enough — a
+              callee outside the project, a call with no explicit mappings, a name only a script guesses at
+              — the cell is a ? that says why.</li>
           <li><b>A health strip under every title.</b> Before the first section, a page says whether the
               model is fine: its open defects and advice, the gaps its tables found (or <i>✓ fits</i>), how
               many models it uses and is used by, the apps that ship it — or <i>in no app</i> — and the
@@ -557,12 +566,6 @@
               every decision as it stands — scope, reason, author, expiry, how many findings it covers —
               with its troubles as marks on the row and <i>restore</i> beside it; notes get a table of their
               own.</li>
-          <li><b>A model with findings looks like one.</b> A count pill on tree rows and list items,
-              coloured by the worst open finding; a marker on every diagram element with a finding, whose
-              card lists them and hands <i>accept…</i> to the finding's row. A review list that mirrors a
-              check carries the check's open count — so accepting the three unused forms empties the list
-              instead of leaving <i>Unused forms 3</i> in the sidebar — and a model whose every finding was
-              accepted wears a small ✓ in lists and in the tree.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

@@ -3369,7 +3369,8 @@ function gapTable(cols, rows, o){
   rows=(rows||[]).filter(Boolean);
   if(!rows.length) return o.empty?'<div class="muted tbl-empty">'+esc(o.empty)+'</div>':'';
   const isGap=r=>GAP_TONES.indexOf(r.gap||'')>=0;
-  const gaps=rows.filter(isGap), fine=rows.length-gaps.length;
+  // a row Atlas cannot judge (`unk`) is neither a gap nor a fit — it gets a pill of its own
+  const gaps=rows.filter(isGap), unclear=rows.filter(r=>!isGap(r)&&r.unk).length, fine=rows.length-gaps.length-unclear;
   const tally={sect:o.sect||'fit', bad:0, warn:0, info:0, rows:rows.length};
   gaps.forEach(r=>{ tally[r.gap]++; });
   if(_gapReg && o.count!==false) _gapReg.push(tally);
@@ -3383,6 +3384,7 @@ function gapTable(cols, rows, o){
       GAP_TONES.forEach(t=>{ if(tally[t]) pills+='<span class="cov-badge cov-'+t+'">'+tally[t]+' '+(t==='bad'?'missing':t==='warn'?'doubtful':'to note')+'</span>'; });
     }
     if(fine) pills+='<span class="cov-badge cov-good">'+esc(o.okLabel?o.okLabel(fine):fine+' fit')+'</span>';
+    if(unclear) pills+='<span class="cov-badge" data-tip="Rows where Atlas cannot see far enough to judge — each ? says why">'+unclear+' unclear</span>';
   }
   const legend=(o.legend||[]).length
     ? '<div class="covlegend">'+o.legend.map(k=>'<span>'+gm(k)+' '+esc(GM_LABEL[k]||k)+'</span>').join('')+'</div>' : '';
@@ -3644,6 +3646,330 @@ function paramSection(list, hasDg){
   return section('params','Parameters', cards(gs.map(g=>paramGroupHtml(g, null, hasDg))),
     {count:list.length, hint:paramSummary(list), tools});
 }
+
+// "Does it fit?" blocks per node type — see S.fit.
+const FIT={};
+// ---------- contracts: what a model expects, and what each of its callers hands it ----------
+// A call is a contract between two models: the called one reads some values and writes others; the caller
+// maps its own variables onto them. `contractOf(callee)` says what the callee expects and gives,
+// `callSitesOf(caller)` finds every element that calls something, `mappingOf` lines a site's mappings up
+// with the contract. Two views draw the result: the callee's page shows every caller against its contract
+// (`callersMatrix`), the caller's page every call it makes (`callsTable`). Both are gap tables.
+//
+// Where Atlas cannot see far enough the cell says ? and why, instead of claiming a gap — the reasons are
+// CT_SILENCE, and each one mirrors a silence rule of the unused-variable check, so a table never
+// contradicts a finding.
+const CT_MODEL_TYPES=new Set(['process','case','decision','form','page','template','document','dataObject','service','agent','action','java','bot','event']);  // mirrors UnusedVariables.MODEL_TYPES
+const CT_DEPTH=2;                                                              // mirrors UnusedVariables.CALLEE_DEPTH
+// the models that read and write a process's own variables: the forms it shows, the decisions it runs,
+// the classes and templates it calls — not its sub-processes, which have scopes of their own
+const OWN_SCOPE_TYPES=new Set(['form','page','decision','java','template','document','bot']);
+const CT_SILENCE={
+  callee:'The called model is not part of this project, or named by an expression — Atlas cannot see what it expects.',
+  noMaps:'This call maps no variables explicitly. Atlas cannot see variables="all", inherited variables or a Java start — it cannot tell what is passed.',
+  unknown:'Atlas saw a construct whose direction it cannot determine for this name (a variable listener, hasVariable, a container object, a reader outside the models), so it will not call it missing.',
+  guess:'Only a bare identifier in a script reads this name — probably a variable, but Atlas cannot prove it.',
+  capped:'This name is used in more places than Atlas lists, so an absence in the listed ones proves nothing.',
+  external:'Java code or a variable extractor writes this name, which Atlas cannot place in a scope.',
+  engine:'The engine or the app provides this value — an app variable, the case initiator — not a caller.',
+  literal:'The name also occurs as a string literal, which may be a variable lookup Atlas cannot parse.',
+  expression:'The value is an expression — mapped, but not something Atlas can check.',
+  op:'Atlas cannot tell which operation this call runs, so it cannot check its parameters.',
+  inexact:'Atlas cannot read everything this model expects, so a value it does not recognise may still be used.',
+};
+let _vsi=null;
+/** Every variable site, by the model whose scope it is in: `w`/`r` a model's own writes and reads, `inW`
+ *  what callers write into it through in-mappings, `outR` what callers read out of it. Plus, per name, why
+ *  an absence would prove nothing. Built once — the variable data does not change on the page. */
+function varScopeIndex(){
+  if(_vsi) return _vsi;
+  const I=new Map(), flags=new Map();
+  const at=id=>{ let x=I.get(id); if(!x){ x={w:new Map(), r:new Map(), inW:new Map(), outR:new Map()}; I.set(id, x); } return x; };
+  const add=(m,k,st)=>{ if(!m.has(k)) m.set(k,[]); m.get(k).push(st); };
+  nodes.forEach(v=>{ if(v.type!=='variable') return;
+    const d=v.data||{}, k=v.key, ws=d.writes||[], rs=d.reads||[];
+    ws.forEach(st=>{ if(st&&st.model) add(st.scope?at(st.scope).inW:at(st.model).w, k, st); });
+    rs.forEach(st=>{ if(st&&st.model) add(st.scope?at(st.scope).outR:at(st.model).r, k, st); });
+    flags.set(k, {capped:(d.writeCount||0)>ws.length||(d.readCount||0)>rs.length, unknown:!!d.readsUnknown, heuristic:!!d.heuristic,
+      external:ws.some(st=>st.via==='javaApi'||st.via==='variableExtractor'||st.scopeUnresolved), literal:byId.has('string:'+k),
+      unreadIn:d.unreadIn||[]});
+  });
+  return _vsi={I, flags};
+}
+/** Why Atlas cannot judge the name `v`, or '' — the CT_SILENCE key. */
+function ctSilence(v){
+  const f=varScopeIndex().flags.get(v); if(!f) return '';
+  return f.unknown?'unknown':f.external?'external':f.capped?'capped':f.literal?'literal':f.heuristic?'guess':'';
+}
+/** The model, plus every model it reaches within CT_DEPTH hops over non-`contains` edges — the same reach
+ *  the unused-variable check gives a callee. */
+function calleeClosure(id){
+  const seen=new Set([id]); let fr=[id];
+  for(let i=0;i<CT_DEPTH;i++){ const nx=[];
+    fr.forEach(x=>(outM.get(x)||[]).forEach(e=>{ if(e.rel==='contains'||seen.has(e.id)) return;
+      const t=byId.get(e.id); if(!t||!CT_MODEL_TYPES.has(t.type)) return; seen.add(e.id); nx.push(e.id); }));
+    fr=nx; }
+  return seen;
+}
+function ownScope(id){
+  const s=new Set([id]);
+  (outM.get(id)||[]).forEach(e=>{ const t=byId.get(e.id); if(t&&OWN_SCOPE_TYPES.has(t.type)) s.add(e.id); });
+  return s;
+}
+const ctKnown=(kind,key)=>{ const id=kind+':'+key; return byId.get(id)?id:null; };
+const ctDynamic=k=>/\$\{|#\{|\{\{/.test(String(k||''));
+/**
+ * Every element of `n` that calls another model, with the mappings it hands over:
+ * [{el, name, type, sub, callee:{id, kind, key, op, state}, maps}] — `state` is ok, missing (a key no model
+ * of this project has), dynamic (an expression) or unknown (a service call whose operation Atlas cannot pin).
+ */
+function callSitesOf(n){
+  const d=n.data||{}, out=[], seen=new Set();
+  const maps=paramGroups(d.ioParameters||[]);
+  const mapsOf=el=>{ const g=maps.find(x=>String(x.element)===String(el)); return g?g.rows:[]; };
+  const push=(rec, kind, key, op, extra)=>{
+    if(key==null||key==='') return;
+    const k=rec.id+'|'+kind+'|'+key; if(seen.has(k)) return; seen.add(k);
+    let id=null, state='ok';
+    if(ctDynamic(key)) state='dynamic';
+    else if(kind==='service'){ id=op&&!ctDynamic(op)?ctKnown('serviceOperation', key+'#'+op):null;
+      if(!ctKnown('service', key)) state='missing'; else if(!id){ id='service:'+key; state='unknown'; } }
+    else { id=ctKnown(kind, key); if(!id) state='missing'; }
+    out.push(Object.assign({el:rec.id, name:rec.name, type:rec.type||rec.tag, sub:rec.serviceTaskType||rec.subType,
+      callee:{id, kind, key:String(key), op:op||null, state}, maps:mapsOf(rec.id)}, extra||{}));
+  };
+  const opOf=(rec, key)=>{ if(rec.operationKey) return rec.operationKey;
+    const m=mapsOf(rec.id).find(p=>p.refKind==='service'&&p.refKey===key&&p.refOp); return m?m.refOp:null; };
+  const visit=rec=>{
+    if(!rec||typeof rec!=='object'||rec.id==null) return;
+    if(rec.calledElement) push(rec, 'process', rec.calledElement, null, {byId:String(rec.calledElementType||'').toLowerCase()==='id'});
+    if(rec.processRef) push(rec, 'process', rec.processRef);
+    if(rec.caseRef) push(rec, 'case', rec.caseRef);
+    if(rec.caseDefinitionKey) push(rec, 'case', rec.caseDefinitionKey);
+    if(rec.decisionRef) push(rec, 'decision', rec.decisionRef);
+    if(rec.serviceModelKey) push(rec, 'service', rec.serviceModelKey, opOf(rec, rec.serviceModelKey));
+    if(rec.agentModelKey) push(rec, 'agent', rec.agentModelKey, rec.agentOperationKey);
+    if(rec.dataObjectKey) push(rec, 'dataObject', rec.dataObjectKey, rec.dataObjectOperationKey);
+    if(rec.formKey) push(rec, 'form', rec.formKey);
+    if(rec.eventType) push(rec, 'event', rec.eventType, null, {role:rec.eventRole||'receive'});
+  };
+  if(n.type==='process'||n.type==='case'){
+    [d.callActivities, d.serviceTasks, d.ruleTasks, d.userTasks, d.events, d.otherTasks, d.eventListeners].forEach(l=>(l||[]).forEach(visit));
+    if(d.planModel)(function walk(nd){ visit(nd); (nd.children||[]).forEach(walk); })(d.planModel);
+    // a call activity recorded twice (callActivities and subProcesses) is one call
+  }
+  // anything the mappings name that no element record did — the mapping's own callee
+  maps.forEach(g=>{ if(!g.refKind||!g.refKey||g.refKind==='rest'||g.refKind==='bot') return;
+    if(out.some(x=>String(x.el)===String(g.element))) return;
+    const op=(g.rows.find(p=>p.refOp)||{}).refOp;
+    push({id:g.element, name:g.name, type:g.type, subType:g.sub}, g.refKind, g.refKey, op); });
+  return out;
+}
+/** The call sites, in other models, that call `n` — each with the model it is in. */
+function callersOf(n){
+  const out=[], seen=new Set();
+  (incM.get(n.id)||[]).forEach(e=>{ if(seen.has(e.id)) return; seen.add(e.id);
+    const m=byId.get(e.id); if(!m||!CT_CALLER_TYPES.has(m.type)) return;
+    callSitesOf(m).forEach(st=>{ if(st.callee.id===n.id) out.push(Object.assign({model:m.id}, st)); });
+  });
+  return out.sort((a,b)=>byId.get(a.model).label.localeCompare(byId.get(b.model).label)||String(a.name||a.el).localeCompare(String(b.name||b.el)));
+}
+const CT_CALLER_TYPES=new Set(['process','case','form','page','action','agent']);
+/**
+ * What `n` expects from a caller and gives back: {kind, exact, items:[{name, dir, type, required, dflt,
+ * silent, guess}], gives:Set|null}. `exact`: the contract is declared (an operation's parameters), so a
+ * missing required value is a defect and an unknown one a mistake; an inexact one (a process's inputs,
+ * inferred from what it reads) only ever warns. Null when Atlas knows nothing a caller has to match.
+ */
+function contractOf(n){
+  const d=n.data||{};
+  if(n.type==='process'||n.type==='case') return procContract(n);
+  if(n.type==='serviceOperation'){
+    const items=(d.params||[]).map(p=>({name:p.name, dir:'in', type:p.type, required:!!p.required&&(p['default']==null||p['default']===''), dflt:p['default']}))
+      .concat((d.outParams||[]).map(p=>({name:p.name, dir:'out', type:p.type})));
+    // exact per direction: an operation that declares no output parameters returns whatever its call
+    // returns, so a result field a caller reads cannot be "not a parameter"
+    return {kind:'op', exact:true, declared:{in:(d.params||[]).length>0, out:(d.outParams||[]).length>0}, items:items.filter(it=>it.name)};
+  }
+  return null;
+}
+/** A process or case expects what it — and the forms, decisions and classes it runs — reads without
+ *  anything in its reach writing it first; it gives back what its reach writes. */
+function procContract(n){
+  const {I}=varScopeIndex(), own=ownScope(n.id), reach=calleeClosure(n.id), d=n.data||{};
+  const gives=new Set();
+  reach.forEach(id=>{ const x=I.get(id); if(x) x.w.forEach((_,k)=>gives.add(k)); });
+  const reads=new Map();
+  own.forEach(id=>{ const x=I.get(id); if(x) x.r.forEach((ss,k)=>{ if(!reads.has(k)) reads.set(k,[]); reads.get(k).push(...ss); }); });
+  // what the app or the engine hands every instance is no caller's job
+  const provided=new Set([d.initiatorVariableName].filter(Boolean));
+  (incM.get(n.id)||[]).forEach(e=>{ const a=byId.get(e.id); if(a&&a.type==='app') ((a.data||{}).variables||[]).forEach(v=>v&&v.key&&provided.add(v.key)); });
+  // a project function's namespace reads like a variable in `${demofns.x()}` — it is no input
+  const fnNs=new Set(nodes.filter(x=>x.type==='customFunction').map(x=>String(x.key).split('.')[0]));
+  const items=[...reads.entries()].filter(([k])=>!gives.has(k)&&!fnNs.has(k))
+    .map(([k,ss])=>({name:k, dir:'in', silent:provided.has(k)?'engine':'', guess:ss.every(st=>st.guess), sites:ss}))
+    .sort((a,b)=>a.name.localeCompare(b.name));
+  return {kind:'proc', exact:false, items, gives, reads};
+}
+/** The contract-side name a mapping record addresses: the callee's parameter for an in, its result field
+ *  for an out; null when the record addresses the whole result (a result variable). */
+function ctName(p){
+  const IN_BY_TARGET=['in','inputParameter','eventInParameter','sendPayloadMapping','dataObjectDataTableCreatePayloadMapping','eventCorrelationParameter','signalVariable','flwScript'];
+  if(p.dir==='in') return IN_BY_TARGET.indexOf(p.kind)>=0?p.target:null;
+  if(p.kind==='responsePayloadMapping'||p.kind==='errorResponsePayloadMapping'){
+    const m=/\{\{\s*\$response\.(?:executionPayload\.)?([A-Za-z_$][\w$]*)/.exec(String(p.source||'')); return m?m[1]:null; }
+  if(p.kind==='resultVariable'||p.kind==='outputVariableName') return null;
+  return p.source;
+}
+/** A mapping's own side — the caller's variable or expression — as text. */
+const ctSide=p=>p.dir==='in'?(p.source!=null&&p.source!==''?String(p.source):''):(p.target!=null?String(p.target):'');
+/**
+ * One call site against its callee's contract: every contract item and every extra mapping, each with a
+ * status — ok ✓, impl (✓ by name or full payload), miss ✗, warn ⚠ (a mapping that names nothing the callee
+ * takes, a value it never writes), unk ? (with the CT_SILENCE reason) — and `worst`, the row's gap tone.
+ */
+function mappingOf(st, callee){
+  const ct=callee?contractOf(callee):null, rows=[];
+  if(!ct) return {ct:null, rows, worst:'', noContract:true};
+  const ins=st.maps.filter(p=>p.dir==='in'), outs=st.maps.filter(p=>p.dir!=='in');
+  const named=(list,nm)=>list.filter(p=>ctName(p)===nm);
+  const miss=ct.exact?'bad':'warn';
+  ct.items.forEach(it=>{
+    const via=named(it.dir==='in'?ins:outs, it.name);
+    if(via.length){ rows.push({it, dir:it.dir, name:it.name, via, st:via.some(p=>p.expression)?'ok':'ok'}); return; }
+    if(it.dir==='out'){ rows.push({it, dir:'out', name:it.name, via:[], st:'none'}); return; }
+    // an input nobody passes
+    const why=it.silent||(ct.kind==='proc'&&!ins.length?'noMaps':'')||(ct.kind==='proc'?ctSilence(it.name):'')||(it.guess?'guess':'');
+    if(ct.kind==='op'&&!it.required){ rows.push({it, dir:'in', name:it.name, via:[], st:'none', tip:it.dflt!=null?'Optional — defaults to '+it.dflt:'Optional'}); return; }
+    rows.push({it, dir:'in', name:it.name, via:[], st:why?'unk':'miss', tip:why?CT_SILENCE[why]:'', tone:miss});
+  });
+  // mappings that name nothing the contract lists
+  const listed=new Set(ct.items.map(it=>it.dir+'|'+it.name));
+  st.maps.forEach(p=>{ const nm=ctName(p), dir=p.dir==='in'?'in':'out';
+    if(nm==null||listed.has(dir+'|'+nm)) return; listed.add(dir+'|'+nm);
+    const via=named(dir==='in'?ins:outs, nm);
+    if(ct.kind==='proc'){
+      if(dir==='in'){
+        const f=varScopeIndex().flags.get(nm)||{}, readThere=(ct.reads||new Map()).has(nm)||[...calleeClosure(callee.id)].some(id=>{ const x=varScopeIndex().I.get(id); return x&&x.r.has(nm); });
+        if(readThere) rows.push({dir, name:nm, via, st:'ok'});
+        else if(f.unreadIn&&f.unreadIn.indexOf(callee.id)>=0) rows.push({dir, name:nm, via, st:'warn', tone:'warn', tip:'Passed in, but '+callee.label+' never reads it — the mapping has no effect there.'});
+        else { const why=ctSilence(nm); rows.push({dir, name:nm, via, st:why?'unk':'warn', tone:'warn', tip:why?CT_SILENCE[why]:'Passed in, but nothing in '+callee.label+' reads it.'}); }
+      } else {
+        if(ct.gives.has(nm)) rows.push({dir, name:nm, via, st:'ok'});
+        else { const why=ctSilence(nm); rows.push({dir, name:nm, via, st:why?'unk':'warn', tone:'warn', tip:why?CT_SILENCE[why]:callee.label+' never writes it — the out-mapping copies nothing.'}); }
+      }
+    } else if(ct.exact && (!ct.declared || ct.declared[dir])){
+      rows.push({dir, name:nm, via, st:'warn', tone:'warn', tip:'Not a'+(dir==='in'?'n input':'n output')+' parameter of '+callee.label+'.'});
+    } else rows.push({dir, name:nm, via, st:'unk', tip:ct.exact?callee.label+' declares no '+(dir==='in'?'input':'output')+' parameters, so Atlas cannot check what is '+(dir==='in'?'passed':'taken')+'.':CT_SILENCE.inexact});
+  });
+  const worst=rows.some(r=>r.st==='miss'&&r.tone==='bad')?'bad':rows.some(r=>r.st==='miss'||r.st==='warn')?'warn':'';
+  return {ct, rows, worst};
+}
+const CT_GM_TIP={ok:'Mapped', impl:'Provided by name', none:'Nothing expected here'};
+// the kinds of gap a contract row can have — one pill each, worst first
+const CT_KINDS={
+  required:{tone:'bad', label:n=>n+' required, not passed'},
+  notPassed:{tone:'warn', label:n=>n+' not passed'},
+  notParam:{tone:'warn', label:n=>n+' not a parameter'},
+  notRead:{tone:'warn', label:n=>n+' passed, never read'},
+  notWritten:{tone:'warn', label:n=>n+' never written back'},
+};
+/** The kind of gap of one contract row, or ''. */
+function ctKind(r, exact){
+  if(r.st==='miss') return r.tone==='bad'?'required':'notPassed';
+  if(r.st!=='warn') return '';
+  if(exact) return 'notParam';
+  return r.dir==='in'?'notRead':'notWritten';
+}
+const CT_ORDER=['required','notPassed','notParam','notRead','notWritten'];
+/** The worst kind among rows, for a row that sums several up. */
+const ctWorstKind=(rows, exact)=>rows.map(r=>ctKind(r, exact)).filter(Boolean).sort((a,b)=>CT_ORDER.indexOf(a)-CT_ORDER.indexOf(b))[0]||'';
+function ctCell(r){ return gm(r.st, '', r.tip||CT_GM_TIP[r.st]||''); }
+/** The param-level table under a call: direction, what the callee calls it, what the caller maps, status. */
+function ctDetailTbl(res){
+  if(!res.rows.length) return '';
+  return tbl([{k:'dir',label:'',w:'5ch',cls:'tags'},{k:'name',label:'Callee side',w:'minmax(12ch,1.3fr)',mono:true},
+      {k:'side',label:'Caller side',w:'minmax(12ch,1.6fr)',mono:true,cls:'wrap'},{k:'st',label:'',w:'minmax(10ch,1fr)',cls:'tags'}],
+    res.rows.map(r=>({cls:r.st==='miss'||r.st==='warn'?'cov-'+(r.tone||'warn'):'', cells:{
+      dir:'<span class="pd" style="color:var('+(PDIR_COLOR[r.dir]||'--ink-faint')+')">'+esc(r.dir)+'</span>',
+      name:esc(r.name)+(r.it&&r.it.type?' <span class="muted">'+esc(r.it.type)+'</span>':'')+(r.it&&r.it.required?' <span class="tag">required</span>':''),
+      side:r.via.length?r.via.map(p=>p.expression?'<span class="muted">'+esc(ctSide(p))+'</span>':paramSide(ctSide(p))).join(', '):'<span class="muted">—</span>',
+      st:gm(r.st, r.st==='miss'?'not passed':r.st==='warn'?(r.dir==='in'?'not read':'not written'):'', r.tip||CT_GM_TIP[r.st]||'')}})), {filter:false});
+}
+/** "3/3", "✗ stockLevel", "⚠ 2" — one side of a call, summed up for its row. */
+function ctSummary(res, dir){
+  const rs=res.rows.filter(r=>r.dir===dir); if(!rs.length) return '';
+  const miss=rs.filter(r=>r.st==='miss'), warn=rs.filter(r=>r.st==='warn'), unk=rs.filter(r=>r.st==='unk'), ok=rs.filter(r=>r.st==='ok'||r.st==='impl');
+  const names=l=>l.slice(0,2).map(r=>r.name).join(', ')+(l.length>2?' +'+(l.length-2):'');
+  let h='';
+  if(miss.length) h+=gm('miss', names(miss), miss.length+' not passed: '+miss.map(r=>r.name).join(', '));
+  if(warn.length) h+=gm('warn', names(warn), warn.map(r=>r.name+' — '+(r.tip||'')).join(' · '));
+  if(unk.length) h+=gm('unk', unk.length+' unclear', unk.map(r=>r.name+' — '+(r.tip||'')).join(' · '));
+  if(ok.length && !miss.length && !warn.length) h+=gm('ok', ok.length+(dir==='in'?' passed':' taken'));
+  else if(ok.length) h+=gm('ok', String(ok.length));
+  return h;
+}
+/** The calls `n` makes, one row per element: what it calls, and whether what it hands over fits. */
+function callsTable(n, c){
+  const sites=callSitesOf(n); if(!sites.length) return '';
+  return gapTable([{k:'el',label:'Element',w:'minmax(12ch,1.3fr)'},{k:'callee',label:'Calls',w:'minmax(14ch,1.5fr)'},
+      {k:'in',label:'Hands over',w:'minmax(12ch,1.3fr)',cls:'tags'},{k:'out',label:'Takes back',w:'minmax(10ch,1fr)',cls:'tags',opt:true}],
+    sites.map(st=>{
+      const cn=st.callee.id&&byId.get(st.callee.id);
+      const known=st.callee.state==='ok'||st.callee.state==='unknown';
+      const res=known&&st.callee.state==='ok'?mappingOf(st, cn):{rows:[], worst:'', noContract:true};
+      const calleeCell=cn?nodeChip(cn.id)+(st.callee.state==='unknown'?' '+gm('unk','operation?', CT_SILENCE.op):'')
+        : '<span class="mono">'+esc(st.callee.key)+'</span> '+tag(st.callee.state==='dynamic'?'dynamic':'not in project');
+      const unkAll=!known?gm('unk','', CT_SILENCE.callee):'';
+      const inC=unkAll||(res.noContract?(st.maps.some(p=>p.dir==='in')?'<span class="muted">'+esc(paramSummary(st.maps.filter(p=>p.dir==='in')))+'</span>':''):ctSummary(res,'in'));
+      const outC=unkAll?'':(res.noContract?(st.maps.some(p=>p.dir!=='in')?'<span class="muted">'+esc(paramSummary(st.maps.filter(p=>p.dir!=='in')))+'</span>':''):ctSummary(res,'out'));
+      const unk=!known||(!res.worst&&res.rows&&res.rows.some(r=>r.st==='unk'));
+      return {el:st.el, gap:res.worst, unk, kind:res.ct?ctWorstKind(res.rows, res.ct.exact):'', hay:elHay(st.name, st.el, st.callee.key, st.callee.op, cn&&cn.label),
+        cells:{el:elCell(c, {id:st.el, name:st.name}), callee:calleeCell, in:inC, out:outC},
+        body:res.rows&&res.rows.length?ctDetailTbl(res):''};
+    }), {okLabel:n=>n+' call'+(n>1?'s':'')+' fit', kinds:CT_KINDS});
+}
+/** The callers of `n` against its contract: a row per value it expects or is handed, a column per caller. */
+function callersMatrix(n, c){
+  const ct=contractOf(n); if(!ct) return '';
+  const callers=callersOf(n);
+  if(!callers.length){
+    // nobody in the project calls it: what it expects is what whoever starts it must provide
+    const ins=ct.items.filter(it=>it.dir==='in'); if(!ins.length) return '';
+    return '<div class="muted tbl-more">Nothing in this project calls it — these are the values it reads that nothing in its reach writes, so whoever starts it provides them:</div>'+
+      gapTable([{k:'name',label:'Value',w:'minmax(14ch,1.4fr)',mono:true},{k:'note',label:'',w:'minmax(16ch,2fr)',cls:'tags'}],
+        ins.map(it=>({hay:it.name, gap:'', cells:{name:paramSide(it.name)+(it.type?' <span class="muted">'+esc(it.type)+'</span>':''),
+          note:it.silent?gm('none','', CT_SILENCE[it.silent]):it.guess?gm('unk','script read', CT_SILENCE.guess):''}})), {count:false, okLabel:k=>k+' expected'});
+  }
+  const res=callers.map(st=>({st, r:mappingOf(st, n)}));
+  // the rows: every contract item, then every name some caller maps that the contract does not list
+  const keys=[], seen=new Set();
+  const addKey=(dir,name,it)=>{ const k=dir+'|'+name; if(seen.has(k)) return; seen.add(k); keys.push({dir,name,it}); };
+  ct.items.forEach(it=>addKey(it.dir, it.name, it));
+  res.forEach(x=>x.r.rows.forEach(r=>addKey(r.dir, r.name, r.it)));
+  const cols=callers.length<=4
+    ? callers.map((st,i)=>({k:'c'+i, labelHtml:esc(byId.get(st.model).label)+(st.name||st.el?' <span class="muted">› '+esc(st.name||st.el)+'</span>':''), w:'minmax(9ch,1fr)', cls:'tags'}))
+    : [{k:'all', label:callers.length+' callers', w:'minmax(16ch,2.4fr)', cls:'tags gcs'}];
+  const rows=keys.map(k=>{
+    const cells={dir:'<span class="pd" style="color:var('+(PDIR_COLOR[k.dir]||'--ink-faint')+')">'+esc(k.dir)+'</span>',
+      name:esc(k.name)+(k.it&&k.it.type?' <span class="muted">'+esc(k.it.type)+'</span>':'')+(k.it&&k.it.required?' <span class="tag">required</span>':'')};
+    let worst='';
+    const per=res.map(x=>x.r.rows.find(r=>r.dir===k.dir&&r.name===k.name)||{st:'none', tip:'Not mapped by this caller'});
+    per.forEach(r=>{ if(r.st==='miss'&&r.tone==='bad') worst='bad'; else if((r.st==='miss'||r.st==='warn')&&worst!=='bad') worst='warn'; });
+    if(callers.length<=4) per.forEach((r,i)=>{ cells['c'+i]=gm(r.st, r.via&&r.via.length?r.via.map(ctSide).join(', '):'', r.tip||CT_GM_TIP[r.st]||''); });
+    else cells.all=per.map((r,i)=>'<span class="gc gc-'+r.st+'" data-tip="'+esc(byId.get(callers[i].model).label+' › '+(callers[i].name||callers[i].el)+': '+(r.tip||CT_GM_TIP[r.st]||r.st))+'">'+GM[r.st]+'</span>').join('');
+    // with a column per caller the row says it all; with mini cells, the unfolded row names each caller
+    return {gap:worst, unk:!worst&&per.some(r=>r.st==='unk'), kind:ctWorstKind(per, ct.exact), hay:k.name, cells,
+      body:callers.length<=4?'':'<div class="relsub">'+res.map((x,i)=>{ const r=per[i];
+        return '<div class="relsub-h">'+vlink(x.st.model, byId.get(x.st.model).label)+' › '+elJumpHtml(x.st.model, x.st.el, x.st.name||x.st.el, 'Open the calling element')+' '+
+          gm(r.st, r.via&&r.via.length?r.via.map(ctSide).join(', '):'', r.tip||CT_GM_TIP[r.st]||'')+'</div>'; }).join('')+'</div>'};
+  });
+  return gapTable([{k:'dir',label:'',w:'5ch',cls:'tags'},{k:'name',label:'Value',w:'minmax(12ch,1.4fr)',mono:true}].concat(cols), rows,
+    {okLabel:k=>k+' fit', kinds:CT_KINDS,
+     meta:'<span class="muted">called by</span>'+[...new Set(callers.map(x=>x.model))].map(id=>nodeChip(id)).join('')});
+}
+FIT.process=[{title:'Calls', build:(n,c)=>callsTable(n,c)}, {title:'Called by', build:(n,c)=>callersMatrix(n,c)}];
+FIT.case=FIT.process;
 
 // ---------- form / page components ----------
 /** The processes and cases that show a form, with the element that does — a user task, a human task —
@@ -4553,9 +4879,9 @@ ELEMENT_GROUPS.process=[S.userTasks, S.serviceTasks, S.scriptTasks, S.decisionTa
   S.gateways, S.flows, S.lanes, S.multiInstance, S.declaredVars, S.listeners, S.eldocs];
 ELEMENT_GROUPS.case=[S.plan, S.sentries, S.eventListeners, S.caseScripts, S.listeners, S.eldocs];
 // ---------- "Does it fit?": the contract tables of a page ----------
-// FIT[type] lists the blocks a type's page asks — each {title, build(n,c)} returning a gap table (or '').
-// They share one section, so a page with five questions still has one navigator chip for them.
-const FIT={};
+// FIT[type] (declared with the contract engine, which fills most of it) lists the blocks a type's page
+// asks — each {title, build(n,c)} returning a gap table (or ''). They share one section, so a page with
+// five questions still has one navigator chip for them.
 S.fit={raw:true, build:(n,c)=>{
   const specs=FIT[n.type]||[]; if(!specs.length) return '';
   const before=_gapReg?_gapReg.length:0;
@@ -4565,7 +4891,9 @@ S.fit={raw:true, build:(n,c)=>{
   const mine=_gapReg?_gapReg.slice(before):[];
   mine.forEach(t=>{ t.sect='fit'; });
   const gaps=mine.reduce((a,t)=>a+t.bad+t.warn,0);
-  return section('fit','Does it fit?', blocks.join(''), {count:gaps,
+  const legend='<div class="covlegend fitlegend">'+['ok','impl','miss','warn','unk'].map(k=>'<span>'+gm(k)+' '+esc(GM_LABEL[k])+'</span>').join('')+
+    '<span class="muted">— a ? always says why in its tooltip</span></div>';
+  return section('fit','Does it fit?', legend+blocks.join(''), {count:gaps,
     hint:specs.filter(sp=>sp.title).map(sp=>sp.title.toLowerCase()).slice(0,3).join(' · ')});
 }};
 // Every page reads in the same order (see renderDetail): the picture — a drawing, or the table that IS the

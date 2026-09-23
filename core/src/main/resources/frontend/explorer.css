@@ -1028,6 +1028,16 @@
   .gm-unk{color:var(--ink-faint);cursor:help;text-decoration:underline dotted var(--line2);text-underline-offset:2px}
   .gm-none,.gm-info{color:var(--ink-faint)}
   .covlegend .gm{font-size:inherit}
+  .tbl .td.tags .gm+.gm{margin-left:var(--space-1)}
+  .fitlegend{margin:0 0 var(--space-2)}
+  .tbl .td .card-id{margin-left:var(--space-15)}
+  /* a callers matrix with more callers than columns: one mini cell per caller, hover says who */
+  .gc{display:inline-flex;align-items:center;justify-content:center;min-width:1.6em;height:1.6em;border-radius:var(--radius-sm);
+    border:1px solid var(--line);font-size:var(--text-2xs);margin:0 2px 2px 0;cursor:help}
+  .gc-ok,.gc-impl{color:var(--ok-text)}
+  .gc-miss{color:var(--bad-text);background:var(--bad-bg);border-color:var(--bad-border)}
+  .gc-warn{color:var(--warn-text);background:var(--warn-bg);border-color:var(--warn-border)}
+  .gc-unk,.gc-none{color:var(--ink-faint)}
 
   /* a term that carries an explanation: the dotted underline is the affordance for "hover me" */
   .term[title]{text-decoration:underline dotted var(--line2);text-underline-offset:2px;cursor:help}

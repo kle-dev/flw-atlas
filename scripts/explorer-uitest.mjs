@@ -752,6 +752,28 @@ const probe = `<script>
        row?row.querySelectorAll('.rnb').length+' chips':'(no row)');
   });
 
+  // --- does it fit: a called process against its callers, and the call from the caller's side ---
+  steps.push(()=>{ location.hash=enc('process:fulfilmentProcess'); });
+  steps.push(()=>{
+    const s=document.querySelector('#detail details.sect[data-sect="fit"]');
+    ok('a called process shows whether its callers fit, open by default', !!s && s.open);
+    const row=nm=>s?[...s.querySelectorAll('.tbl .tr')].find(r=>{ const c=r.querySelector('.td.mono'); return c && c.textContent.trim().split(' ')[0]===nm; }):null;
+    const st=row('stockLevel'), oi=row('orderId'), tot=row('subTotal');
+    ok('a value it reads that no caller passes is a gap', !!st && st.classList.contains('cov-warn'), st?st.className:'(no row)');
+    ok('a value passed in that it never reads is a gap too', !!oi && oi.classList.contains('cov-warn'), oi?oi.className:'(no row)');
+    ok('a value it hands back fits', !!tot && !/cov-/.test(tot.className), tot?tot.className:'(no row)');
+    ok('the gap kinds are named in the pills', !!s && /not passed/.test(s.textContent) && /never read/.test(s.textContent));
+    const call=s&&s.querySelector('.tbl .tr[data-el="callCourier"]');
+    ok('a call into a model outside the project is a question, not a fit', !!call && !!call.querySelector('.gm-unk') && !/cov-/.test(call.className));
+    const hs=document.querySelector('#detail .dhealth .hs[data-jump-sect="fit"]');
+    ok('the health strip counts the gaps and jumps to them', !!hs && /gap/.test(hs.textContent));
+    location.hash=enc('process:orderProcess');
+  });
+  steps.push(()=>{
+    const r=document.querySelector('#detail [data-sect="fit"] .tr[data-el="callSub"]');
+    ok('the caller sees the same gap on its call', !!r && r.classList.contains('cov-warn') && /stockLevel/.test(r.textContent), r?r.textContent:'(no row)');
+  });
+
   // --- sidebar groups fold and remember ---
   steps.push(()=>{
     const h=document.querySelector('#nav .side-group[data-group="Models"]');
