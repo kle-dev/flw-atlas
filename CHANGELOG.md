@@ -55,6 +55,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   catches it, and an error thrown but never caught is a gap. An endpoint lists every call that reaches
   it with the verb each uses; a class's methods name the models that call them, and its bean names the
   expressions that use them.
+- **A form's page opens with its layout.** The wireframe the IDE's model preview draws — the twelve-column
+  grid, panels and tabs, every component with its caption and id — is the picture of a form or page in
+  the explorer, clickable like a diagram: a component opens its card (what it is bound to, what it calls,
+  its parameters) and *Show in details* lands on its row; finding badges sit on it. The explorer, the IDE
+  and the diagrams folder draw every model through one renderer. A page keeps its drawings within a
+  budget, so a project with hundreds of forms does not double in size; a form left out says so.
 - **A health strip under every title.** Before the first section, a page says whether the model is fine:
   its open defects and advice, the gaps its tables found (or *✓ fits*), how many models it uses and is
   used by, the apps that ship it — or *in no app* — and the tests that deploy it; each jumps to the section

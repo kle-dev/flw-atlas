@@ -2,12 +2,12 @@ package com.flowable.atlas.render
 
 import com.flowable.atlas.model.Dyn
 import com.flowable.atlas.AtlasBuildInfo
-import com.flowable.atlas.diagram.DiagramRenderer
 import com.flowable.atlas.diagram.ModelBytes
+import com.flowable.atlas.diagram.ModelPicture
+import com.flowable.atlas.diagram.Picture
 import com.flowable.atlas.graph.CheckCatalog
 import com.flowable.atlas.graph.UnusedVariables
 import com.flowable.atlas.model.MiniJson
-import com.flowable.atlas.model.ModelType
 import java.io.File
 
 /**
@@ -108,16 +108,27 @@ object ExplorerHtmlRenderer {
     }
 
     /**
-     * Attach each process/case/decision node's rendered diagram SVG to its (already-slimmed) `data` map
-     * under `diagram`, so the explorer can show the diagram inline. Runs *after* [slimNodes] on the
-     * fresh payload maps — the shared graph and the `extract()` result are never touched, and a project
-     * without any BPMN/CMMN/DMN layout adds nothing (leaving the payload byte-for-byte as before).
+     * How much wireframe SVG an explorer page carries. Every form and page of a project is drawn, and a
+     * project with three hundred forms would otherwise double the page — which the Remote Development
+     * stub stops caching past four million characters. Deterministic: the smallest wireframes go in first
+     * (node id breaks ties) until [total] is used; one larger than [perPicture] never does. A form left
+     * out says so on its page, and the IDE preview and the diagrams folder still draw it.
      */
-    private fun attachDiagrams(nodes: Any?, root: File): Any? {
+    internal data class WireframeBudget(val perPicture: Int = 64_000, val total: Int = 1_500_000)
+
+    /**
+     * Attach each model node's picture to its (already-slimmed) `data`: a process, case or decision its
+     * diagram under `diagram`, a form or page its wireframe, with `diagramKind` saying which. A decision
+     * drawn only as a table is left out — its page renders the rules as HTML. Runs *after* [slimNodes] on
+     * the fresh payload maps — the shared graph and the `extract()` result are never touched, and a project
+     * without anything to draw adds nothing.
+     */
+    internal fun attachDiagrams(nodes: Any?, root: File, budget: WireframeBudget = WireframeBudget()): Any? {
         val list = nodes as? List<*> ?: return nodes
+        val wireframes = ArrayList<Triple<String, MutableMap<Any?, Any?>, String>>()
         for (nodeAny in list) {
             val node = Dyn.anyMutableMapOrNull(nodeAny) ?: continue
-            val type = diagramType(node["type"] as? String) ?: continue
+            val type = ModelPicture.typeOfNode(node["type"] as? String) ?: continue
             val file = node["file"] as? String ?: continue
             val data = Dyn.anyMutableMapOrNull(node["data"]) ?: continue
             // Resolve via ModelBytes (handles loose files AND "<archive>!<entry>" labels) — a plain
@@ -128,19 +139,27 @@ object ExplorerHtmlRenderer {
             val resolved = ModelBytes.resolve(root, file)
             if (resolved == null) { data["diagramError"] = "model source could not be read from $file"; continue }
             val (bytes, name) = resolved
-            val svg = runCatching { DiagramRenderer.renderSvg(bytes, name, type) }
+            val pic = runCatching { ModelPicture.render(bytes, name, type) }
                 .onFailure { data["diagramError"] = "diagram could not be rendered: ${it.message ?: it.javaClass.simpleName}" }
                 .getOrNull() ?: continue
-            data["diagram"] = svg
+            when (pic.kind) {
+                Picture.Kind.DIAGRAM -> { data["diagram"] = pic.svg; data["diagramKind"] = pic.kind.id }
+                Picture.Kind.WIREFRAME -> wireframes.add(Triple(node["id"]?.toString() ?: "", data, pic.svg))
+                Picture.Kind.DECISION_TABLE -> {}
+            }
+        }
+        var used = 0
+        for ((_, data, svg) in wireframes.sortedWith(compareBy({ it.third.length }, { it.first }))) {
+            if (svg.length <= budget.perPicture && used + svg.length <= budget.total) {
+                data["diagram"] = svg
+                data["diagramKind"] = Picture.Kind.WIREFRAME.id
+                used += svg.length
+            } else {
+                data["diagramOmitted"] = "The wireframe (${(svg.length + 1023) / 1024} KB) is not embedded — over this page's " +
+                    "budget for drawings. The IDE's model preview and the generated diagrams folder draw it."
+            }
         }
         return list
-    }
-
-    private fun diagramType(nodeType: String?): ModelType? = when (nodeType) {
-        "process" -> ModelType.PROCESS
-        "case" -> ModelType.CASE
-        "decision" -> ModelType.DECISION
-        else -> null
     }
 
     private fun slimData(data: Map<*, *>): Map<Any?, Any?> {

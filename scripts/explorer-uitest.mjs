@@ -850,6 +850,26 @@ const probe = `<script>
     ok('a page whose every row is a question does not claim it fits', !!hs && !/fits/.test(hs.textContent));
   });
 
+  // --- a form's picture is its layout: the wireframe the IDE preview draws, clickable like a diagram ---
+  steps.push(()=>{ location.hash=enc('form:orderForm'); });
+  steps.push(()=>{
+    const s=document.querySelector('#detail details.sect[data-sect="diagram"]');
+    ok('a form opens with its layout', !!s && /Layout/.test((s.querySelector('summary')||{}).textContent||''));
+    if(s) s.open=true;
+  });
+  steps.push(()=>{
+    const g=document.querySelector('#detail [data-sect="diagram"] .dgview g[data-el="notifyButton"]');
+    ok('a component of the layout is a clickable element', !!g && g.getAttribute('role')==='button' && !!g.getAttribute('aria-label'),
+       g?g.outerHTML.slice(0,160):'(no element)');
+    if(g) click(g);
+  });
+  steps.push(()=>{
+    const card=document.querySelector('.dgcard');
+    ok('clicking it opens its card, with the action it calls', !!card && !!card.querySelector('.nc[data-id="'+enc('action:notifyCustomerAction')+'"]'),
+       card?card.textContent.slice(0,200):'(no card)');
+    document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
+  });
+
   // --- sidebar groups fold and remember ---
   steps.push(()=>{
     const h=document.querySelector('#nav .side-group[data-group="Models"]');

@@ -190,6 +190,13 @@
               or escalation lists who throws and who catches it, and an error thrown but never caught is a
               gap. An endpoint lists every call that reaches it with the verb each uses; a class's methods
               name the models that call them, and its bean names the expressions that use them.</li>
+          <li><b>A form's page opens with its layout.</b> The wireframe the IDE's model preview draws — the
+              twelve-column grid, panels and tabs, every component with its caption and id — is the picture
+              of a form or page in the explorer, clickable like a diagram: a component opens its card (what
+              it is bound to, what it calls, its parameters) and <i>Show in details</i> lands on its row;
+              finding badges sit on it. The explorer, the IDE and the diagrams folder draw every model
+              through one renderer. A page keeps its drawings within a budget, so a project with hundreds of
+              forms does not double in size; a form left out says so.</li>
           <li><b>A health strip under every title.</b> Before the first section, a page says whether the
               model is fine: its open defects and advice, the gaps its tables found (or <i>✓ fits</i>), how
               many models it uses and is used by, the apps that ship it — or <i>in no app</i> — and the
@@ -551,13 +558,6 @@
               for a button to fail. It is built on the platform's own
               <code>SearchEverywhereBaseAction</code> now, the same base every <i>Go to Class / File /
               Symbol</i> uses, whose whole purpose is to route the action to the thin client.</li>
-          <li><b>One menu, in two places.</b> <i>Tools → Flowable Atlas</i> and the Atlas Hub's <b>⋮</b>
-              were two hand-kept lists over the same actions, and they had drifted into different contents
-              <i>and</i> a different order — so the same plugin had two navigations to learn, and an entry
-              was reliably in the one you were not looking at. The ⋮ now renders the Tools group itself: an
-              action added to the descriptor appears in both, in the same place, or in neither. <i>Open
-              Environment in Browser</i>, which only the Hub had, is a registered group now and is in
-              both.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

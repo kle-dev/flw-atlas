@@ -5536,19 +5536,23 @@ const PARAM_ROWS_INLINE=10;
 
 // ---------- rendered model diagram (BPMN/CMMN/DMN), when Atlas embedded one ----------
 function diagramView(n){
-  const svg = n.data && n.data.diagram;
-  if(!svg) return '';
+  const d=n.data||{}, svg=d.diagram, kind=d.diagramKind, omitted=d.diagramOmitted;
+  // a form's or page's picture is its wireframe — the same one the IDE's preview draws
+  const wire=kind==='wireframe'||((n.type==='form'||n.type==='page')&&!!(svg||omitted));
+  if(!svg){
+    return omitted?section('diagram', wire?'Layout':'Diagram', '<div class="muted tbl-empty">'+esc(omitted)+'</div>'):'';
+  }
   // Atlas-generated, script-free SVG; scale it to fit the panel while keeping its aspect ratio.
   // The SVG keeps its intrinsic size; the viewport scales it. A diagram of 40 elements is unreadable
   // squeezed into the panel, so it gets zoom, pan and a fullscreen view instead of `max-width:100%`.
-  return section('diagram','Diagram',
+  return section('diagram', wire?'Layout':'Diagram',
     '<div class="dgbar">'+
       '<button data-z="out" title="Zoom out">−</button>'+
       '<button data-z="fit" title="Fit to width">fit</button>'+
       '<button data-z="in" title="Zoom in">+</button>'+
       '<span class="dgpct">100%</span>'+
       '<button data-z="full" title="Open full screen">⤢ full screen</button>'+
-      '<span class="dghint">click an element for details · drag to pan · '+MODK+' + scroll to zoom</span>'+
+      '<span class="dghint">click '+(wire?'a component':'an element')+' for details · drag to pan · '+MODK+' + scroll to zoom</span>'+
     '</div>'+
     '<div class="dgview"><div class="dgpan">'+svg+'</div></div>');
 }
@@ -6188,6 +6192,8 @@ function liftSvgTitles(view){
   view.querySelectorAll('svg g > title').forEach(t=>{
     const g=t.parentNode;
     if(!g.hasAttribute('data-tip')) g.setAttribute('data-tip', t.textContent);
+    // the title was a clickable element's accessible name (a wireframe cell has no aria-label of its own)
+    if(g.getAttribute('role')==='button' && !g.hasAttribute('aria-label')) g.setAttribute('aria-label', t.textContent);
     g.removeChild(t);
   });
 }
@@ -6209,6 +6215,8 @@ function elementNames(n){
   (d.eventListeners||[]).forEach(e=>put(e.id,e.name,e.type));
   (d.lanes||[]).forEach(l=>put(l.id,l.name,'lane'));
   (d.milestones||[]).forEach(x=>{ if(x&&typeof x==='object') put(x.id,x.name,'milestone'); });
+  // a form's components are the elements of its wireframe
+  if(n.type==='form'||n.type==='page') (d.fields||[]).forEach(f=>{ if(f&&typeof f==='object') put(f.id, f.label, f.type); });
   if(d.planModel)(function walk(nd){ put(nd.id,nd.name,nd.type,nd.serviceTaskType); (nd.children||[]).forEach(walk); })(d.planModel);
   // criterion diamonds: named after the plan item they guard, typed entry/exitCriterion.
   // (Resolve via the definition already indexed above — `planItem` may be a raw definition id.)
@@ -6647,6 +6655,14 @@ function dgCardHtml(n, elId, g){
     row('guards', esc(elName(em, crit.planItemDef!=null?crit.planItemDef:(crit.planItem||''))));
     if(crit.condition) row('condition','<code class="mono" style="font-size:var(--text-xs)">'+esc(crit.condition)+'</code>');
     if(crit.onParts.length) row('on', esc(crit.onParts.join(', ')));
+  }
+  // a form component: what it is bound to, what it calls, whether it must be filled
+  const fld=(n.type==='form'||n.type==='page')?(d.fields||[]).find(f=>f&&sameId(f.id)):null;
+  if(fld){
+    if(fld.value) row('bound to','<span class="mono">'+esc(String(fld.value))+'</span>');
+    const cl=fld.callee; if(cl&&cl.kind&&cl.key){ const cid=byId.get(cl.kind+':'+cl.key)?cl.kind+':'+cl.key:null;
+      row('calls', (cid?nodeChip(cid):'<span class="mono">'+esc(cl.key)+'</span>')+(cl.op?' <span class="mono muted">'+esc(cl.op)+'</span>':'')); }
+    if(fld.required) row('required','yes');
   }
   // a DMN DRD shape is a decision table of its own — link straight to its node
   if(n.type==='decision'&&byId.get('decision:'+elId)&&('decision:'+elId)!==n.id) row('model', nodeChip('decision:'+elId));
@@ -7228,7 +7244,8 @@ const SX_ENV={TM:{}, elementNames:()=>new Map()};
 const HAY_SKIP=new Set([
   // `diagram` is the rendered SVG (a wall of path data) — indexing it would make every query match
   // every model. The rest is node-id bookkeeping the palette already navigates by.
-  'diagram','_uses','usedBy','usages','scopes','_idx','_search',
+  // `diagramKind` / `diagramOmitted` say what the picture is and why a form has none; the section shows them.
+  'diagram','diagramKind','diagramOmitted','_uses','usedBy','usages','scopes','_idx','_search',
 ]);
 // The index is built in the browser and never embedded in the report, so a generous entry cap costs
 // runtime memory only — not a byte of report size. 400 silently lost the tail of big models.
