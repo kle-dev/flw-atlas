@@ -16,32 +16,45 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
 
 - **Detail pages ask whether a model fits.** Every page reads in one order: the picture — the drawing, or
   the table that *is* the model — then *Does it fit?*, the findings, the relations and the details. Every
-  gap table is drawn one way, the schema coverage table first: a row per thing that should line up, tinted by how badly it does not, a pill per kind of gap and
-  *only gaps* to hide the rows that are fine. A cell says ✓ it fits, ✗ it is missing, ⚠ it looks wrong, or
-  ? Atlas cannot tell — and then why, in its tooltip.
-- **A process's page says whether its calls fit.** *Does it fit?* lists every call a process or case
-  makes — sub-process, case, decision, operation, agent, form, event — with what it hands over and takes
-  back, and every caller of it against what it reads: a value it reads that no caller passes, a value
-  passed in that it never reads (the same verdict as the *unread call input* finding), a value mapped
-  back that it never writes, a required operation parameter left out or one the operation does not
-  declare. A process nothing calls lists the values whoever starts it has to provide. Where Atlas
-  cannot see far enough — a callee outside the project, a call with no explicit mappings, a name only a
-  script guesses at — the cell is a ? that says why.
+  gap table is drawn one way, the schema coverage table first: a row per thing that should line up, tinted
+  by how badly it does not, a pill per kind of gap and *only gaps* to hide the rows that are fine. A cell
+  says ✓ it fits, ✗ it is missing, ⚠ it looks wrong, or ? Atlas cannot tell — and then why, in its
+  tooltip.
+- **A health strip under every title.** Before the first section, a page says whether the model is fine:
+  its open defects and advice, the gaps its tables found (or *✓ fits*), how many models it uses and is
+  used by, the apps that ship it — or *in no app* — and the tests that deploy it; each jumps to the
+  section that explains it. The facts beside it stop repeating what a section says: a form states its
+  outcomes, who opens it and where the outcome lands; an operation shows its call as one line and the
+  endpoint that answers it; a class its bean names; a sequence what its numbers look like. The orphan
+  banners on operations and functions are gone — the finding says it.
+- **Relations take a row per relation.** Under the drawing, a relation lists its neighbours as chips on
+  one row — *App contains* five models is one row, not five — and unfolds only where a neighbour has more
+  to say: a caller's parameter mappings, every REST call with its verb. An operation's page is related to
+  its service, and a variable's page lists the models that write, read or merely mention it, where both
+  used to say they had no relationships.
+- **A process's page says whether its calls fit.** *Does it fit?* lists every call a process or case makes
+  — sub-process, case, decision, operation, agent, form, event — with what it hands over and takes back,
+  and every caller of it against what it reads: a value it reads that no caller passes, a value passed in
+  that it never reads (the same verdict as the *unread call input* finding), a value mapped back that it
+  never writes, a required operation parameter left out or one the operation does not declare. A process
+  nothing calls lists the values whoever starts it has to provide. Where Atlas cannot see far enough — a
+  callee outside the project, a call with no explicit mappings, a name only a script guesses at — the cell
+  is a ? that says why.
 - **A service's page says whether its operations fit.** Per operation: who calls it and whether what they
-  pass fits its parameters, the endpoint of this project that answers it, whether that handler serves
-  the operation's verb and every `{path variable}` has a parameter, and the handler method with its line.
-  An operation's own page lists every caller against every parameter — a form button, a task, a Java
-  class or an agent that fills them itself. Where no changelog lets the schema coverage compare them, the
-  service's column mappings are held against the data object's fields; a data object's properties name
-  the service column behind each field and the forms that show it.
+  pass fits its parameters, the endpoint of this project that answers it, whether that handler serves the
+  operation's verb and every `{path variable}` has a parameter, and the handler method with its line. An
+  operation's own page lists every caller against every parameter — a form button, a task, a Java class or
+  an agent that fills them itself. Where no changelog lets the schema coverage compare them, the service's
+  column mappings are held against the data object's fields; a data object's properties name the service
+  column behind each field and the forms that show it.
 - **Decisions, forms and actions say whether they fit.** A decision table is drawn as Design draws it —
   the hit policy in the corner, Input and Output bands, each column headed by its label, expression and
-  type, a number per rule — and lists every model that runs it: an input the caller never writes before,
-  a result it never reads. A form's page lists every call it makes — buttons, data sources, REST calls
-  with the verb checked against the handler — the variables its fields write and who reads them, the
+  type, a number per rule — and lists every model that runs it: an input the caller never writes before, a
+  result it never reads. A form's page lists every call it makes — buttons, data sources, REST calls with
+  the verb checked against the handler — the variables its fields write and who reads them, the
   data-object paths it binds that are no field of the object, and, for each task that shows it, the
-  outcomes no condition tests and the tested values that are no outcome. An action lists the buttons
-  that invoke it against what its script reads with `flw.getInput`.
+  outcomes no condition tests and the tested values that are no outcome. An action lists the buttons that
+  invoke it against what its script reads with `flw.getInput`.
 - **Apps and groups say who can reach what.** An app's page lists every model its members reach and
   whether it ships them: in this app, in another app, in no app at all, or not in the project — and the
   models only packed beside it that its definition does not list. It also lists every group with a right
@@ -49,49 +62,36 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   open the app. A group's page shows, per model, what the group may do and the app it gets there through —
   or that it can open none of the apps that ship it.
 - **Events, signals, endpoints and classes meet their counterparts.** An event's page holds every payload
-  field against every element that publishes or consumes it — a field no publisher sends, a correlation
-  a receiver does not supply — and its channels against who uses them; a channel lists the events it
-  carries without a publisher or consumer. A signal, message, error or escalation lists who throws and who
-  catches it, and an error thrown but never caught is a gap. An endpoint lists every call that reaches
-  it with the verb each uses; a class's methods name the models that call them, and its bean names the
-  expressions that use them. An agent's page holds its tools against the models and operations they
-  name, and its callers against the operations it has.
+  field against every element that publishes or consumes it — a field no publisher sends, a correlation a
+  receiver does not supply — and its channels against who uses them; a channel lists the events it carries
+  without a publisher or consumer. A signal, message, error or escalation lists who throws and who catches
+  it, and an error thrown but never caught is a gap. An endpoint lists every call that reaches it with the
+  verb each uses; a class's methods name the models that call them, and its bean names the expressions
+  that use them. An agent's page holds its tools against the models and operations they name, and its
+  callers against the operations it has.
 - **A form's page opens with its layout.** The wireframe the IDE's model preview draws — the twelve-column
-  grid, panels and tabs, every component with its caption and id — is the picture of a form or page in
-  the explorer, clickable like a diagram: a component opens its card (what it is bound to, what it calls,
-  its parameters) and *Show in details* lands on its row; finding badges sit on it. The explorer, the IDE
-  and the diagrams folder draw every model through one renderer, so the diagrams folder now holds forms,
-  pages and layout-less decision tables too. A page keeps its drawings within a
-  budget, so a project with hundreds of forms does not double in size; a form left out says so.
+  grid, panels and tabs, every component with its caption and id — is the picture of a form or page in the
+  explorer, clickable like a diagram: a component opens its card (what it is bound to, what it calls, its
+  parameters) and *Show in details* lands on its row; finding badges sit on it. The explorer, the IDE and
+  the diagrams folder draw every model through one renderer, so the diagrams folder now holds forms, pages
+  and layout-less decision tables too. A page keeps its drawings within a budget, so a project with
+  hundreds of forms does not double in size; a form left out says so.
 - **What a model's variables are for.** *Variables & expressions* lists a model's variables as a table —
   how this model writes and reads each one, which other models share it, and the unused-variable verdict —
-  before the expressions, bindings and functions it uses. An SLA checks that the task it watches exists
-  in each model it governs, a query that some queried model writes the variable behind each column, and
-  a template that the models rendering it provide every variable it prints.
-- **A health strip under every title.** Before the first section, a page says whether the model is fine:
-  its open defects and advice, the gaps its tables found (or *✓ fits*), how many models it uses and is
-  used by, the apps that ship it — or *in no app* — and the tests that deploy it; each jumps to the section
-  that explains it. The facts beside it stop repeating what a section says: a form states its outcomes,
-  who opens it and where the outcome lands; an operation shows its call as one line and the endpoint that
-  answers it; a class its bean names; a sequence what its numbers look like. The orphan banners on
-  operations and functions are gone — the finding says it.
-- **A REST call links to the handler for its verb.** `GET /api/orders/{orderNumber}` and
-  `POST /api/orders/archive` share a path shape — the variable takes `archive` — and path-only matching
-  linked each call to both handlers. A call now reaches the handler for its verb, and of those the one
-  that spells out most of the path, as Spring routes it; a verb no handler serves is a suspect link that
-  says *verb differs*. The IDE's endpoint gutter and Find Usages use the same rule.
+  before the expressions, bindings and functions it uses. An SLA checks that the task it watches exists in
+  each model it governs, a query that some queried model writes the variable behind each column, and a
+  template that the models rendering it provide every variable it prints.
+- **A REST call links to the handler for its verb.** `GET /api/orders/{orderNumber}` and `POST
+  /api/orders/archive` share a path shape — the variable takes `archive` — and path-only matching linked
+  each call to both handlers. A call now reaches the handler for its verb, and of those the one that
+  spells out most of the path, as Spring routes it; a verb no handler serves is a suspect link that says
+  *verb differs*. The IDE's endpoint gutter and Find Usages use the same rule.
 - **A service or agent task configured by fields calls its model.** A service-registry task whose service
   and operation are field injections (`serviceKey`, `operationKey`) — or an agent task naming its
-  `agentModelKey` that way — was linked to nothing, so its operation was reported unused. It is linked like
-  a task with a mapping element now, and a data-object task's operation counts as used too. And a task's `in` into a service or agent names the callee's
-  parameter, an `out` its result field: neither is a variable of any scope, so neither is reported as an
-  input the callee never reads.
-- **Relations take a row per relation.** Under the drawing, a relation lists its neighbours as chips on one
-  row — *App contains* five models is one row, not five — and unfolds only where a neighbour has more to
-  say: a caller's parameter mappings, every REST call with its verb. An operation's page is related to its
-  service, and a variable's page lists the models that write, read or merely mention it, where both used to
-  say they had no relationships.
-
+  `agentModelKey` that way — was linked to nothing, so its operation was reported unused. It is linked
+  like a task with a mapping element now, and a data-object task's operation counts as used too. And a
+  task's `in` into a service or agent names the callee's parameter, an `out` its result field: neither is
+  a variable of any scope, so neither is reported as an input the callee never reads.
 - **Operations Java calls through the service registry are used.** A service-registry invocation —
   `.serviceKey(…).operationKey(…)` — was invisible, so an operation only Java called was reported unused and
   nothing linked it to the code. The call is rarely one statement — a helper sets the service key and a

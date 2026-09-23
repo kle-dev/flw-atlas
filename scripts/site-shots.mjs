@@ -163,9 +163,11 @@ const SHOTS = [
   ['#/variables', 'variables-page', { w: 1400, h: 900 }],
   ['#/schema', 'schema-page', { w: 1400, h: 800 }],
   ['#/scripts', 'scripts-page', { w: 1400, h: 900 }],
-  // Two detail pages: a form (the Fields table) and a process (its sections and their chips).
+  // Detail pages: a form (its layout), a process (its sections and their chips), and an operation whose
+  // caller leaves out a required parameter — a "Does it fit?" table with its gap near the top.
   ['#form%3AorderForm', 'detail-form', { w: 1400, h: 1000 }],
   ['#process%3AorderProcess', 'detail-process', { w: 1400, h: 1000 }],
+  ['#serviceOperation%3AcustomerService%23findById', 'detail-fit', { w: 1400, h: 900 }],
 ];
 
 /* Each shot twice, because a light screenshot on a dark documentation page looks like a mistake. The

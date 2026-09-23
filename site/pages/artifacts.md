@@ -10,7 +10,7 @@ atlas-output/order-management/
   order-management.overview.md     the full human report, every model in execution order
   order-management.graph.json      the traversable graph, for querying — not for reading
   order-management.CLAUDE.md       drop-in context for an AI agent
-  order-management.diagrams/       one SVG per model that has a layout
+  order-management.diagrams/       one SVG per model that can be drawn
 ```
 
 Only `--all` names files after the project. A single-artifact run writes `APP_OVERVIEW.*` unless you
@@ -117,10 +117,11 @@ See [For LLMs & agents](../agents/) for how the four sizes fit together.
 
 ## `<project>.diagrams/` — SVG per model
 
-Written by `--all` when any model carries a layout. One SVG per process, case or decision, rendered
-from the model's diagram interchange — deployment `bpmndi` / `cmmndi` / `dmndi` XML, or a Flowable
-Design workspace's ORYX JSON. A decision with no canvas has no layout to render, so in the IDE its
-gutter icon paints the **decision table** instead.
+Written by `--all` when any model can be drawn. One SVG per process, case or decision, rendered from
+the model's diagram interchange — deployment `bpmndi` / `cmmndi` / `dmndi` XML, or a Flowable Design
+workspace's ORYX JSON; one per form or page, as a **wireframe** of its twelve-column grid; and for a
+decision with no canvas, its **decision table** drawn from its rules. They are the pictures the explorer
+shows on a model's page and the IDE's model preview draws — one renderer for all three.
 
 Nothing is downloaded and no Design instance is contacted: the geometry is already in your models.
 

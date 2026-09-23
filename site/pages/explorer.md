@@ -104,60 +104,123 @@ fourteen rows of chips.
 
 ## The detail panel
 
-Selecting a node opens its page. It starts with a **header**: the type's icon in a tinted tile, the
-title, one identity line — kind · key · file path, each copyable, the path opening the file inside
-IntelliJ — and the description the modeller wrote in Design, as prose. Under it the **facts**: the
-handful of properties that describe the model itself (a data object's backing service and table, a
-decision table's hit policy, a service's base URL). Counts are not facts here — every section carries
-its own count in its heading. A sticky bar keeps the kind and the page actions (*back*, *expand all*,
-*copy link*) in reach while the page scrolls.
+Selecting a node opens its page, and every page reads in the same order, whatever the node is:
 
-Then a row of **chips, one per section**, each with the section's count — the page's map: click one and
-the section opens and scrolls into view. A big process fits it on one line: Diagram, Relations, Findings,
-Elements, Parameters, Variables & expressions.
+1. **The header** — the type's icon in a tinted tile, the title, one identity line (kind · key · file
+   path, each copyable, the path opening the file inside IntelliJ) and the description the modeller wrote
+   in Design, as prose.
+2. **The health strip** under the title answers "is this one fine?" before a single section: the open
+   defects and advice, the gaps the page's tables found (or *✓ fits*, or *? unclear* when all Atlas can
+   say is that it cannot tell), how many models it *uses* and is *used by*, the apps that ship it — or
+   *in no app* — and the tests that deploy it. Every item jumps to the section that explains it.
+3. **The facts** — the handful of properties that describe the model itself: a data object's backing
+   service and table, a form's outcomes and the tasks that open it, an operation's call as one line and
+   the endpoint that answers it, a sequence's first numbers. Counts are not facts — every section carries
+   its own count in its heading.
+4. **The picture** — the drawing, or the table that *is* the model: a process's diagram, a form's layout,
+   a decision table, a service's operations, an event's payload, a data object's properties.
+5. **Does it fit?** — the gap tables, below.
+6. **Findings** on this model, then **Relations**, then the **details**: elements, fields, parameters,
+   variables and expressions, the tests that deploy it, and *Other attributes*.
+
+A sticky bar keeps the kind and the page actions (*back*, *expand all*, *copy link*) in reach while the
+page scrolls, and a row of **chips, one per section**, each with its count, is the page's map: click one
+and the section opens and scrolls into view. A big process fits it on one line.
 
 <figure class="fig">
-  <div class="body"><img class="only-light" src="../assets/img/detail-form.png" alt="A form's detail page: the header with icon tile, title and identity line, the section chips, and the Fields table with column headers" width="1400" height="1000"><img class="only-dark" src="../assets/img/detail-form-dark.png" alt="A form's detail page: the header with icon tile, title and identity line, the section chips, and the Fields table with column headers" width="1400" height="1000"></div>
-  <figcaption><b>A form's page</b> — the header, the chips that map the sections, and the Fields table:
-  every component, what it is bound to, and what a button does.
+  <div class="body"><img class="only-light" src="../assets/img/detail-form.png" alt="A form's detail page: the header with icon tile, title, identity line and health strip, the facts, the section chips, and the form's layout — the wireframe of its grid" width="1400" height="1000"><img class="only-dark" src="../assets/img/detail-form-dark.png" alt="A form's detail page: the header with icon tile, title, identity line and health strip, the facts, the section chips, and the form's layout — the wireframe of its grid" width="1400" height="1000"></div>
+  <figcaption><b>A form's page</b> — the health strip and facts under the title, the chips that map the
+  sections, and the form's layout: the wireframe the IDE's model preview draws, clickable like a diagram.
   <a href="../demo/explorer.html#form%3AorderForm" target="_blank" rel="noopener">Open it ↗</a></figcaption>
 </figure>
 
-The sections come in reading order, not parser order, and each node type has its own list: what the
-model *is* first (a form's fields, a data object's properties, a decision table's inputs, outputs and
-rules, a service's operations), then what flows through it (**Parameters** — every in/out mapping,
-grouped by the element that declares it) and the **Variables & expressions** it touches. A process or a
-case lists what it is made of in one **Elements** section: a group per kind — user, service, script and
-decision tasks, call activities, events, gateways, sequence flows with their conditions, lanes,
-multi-instance, listeners and documentation; for a case its plan model, sentries and event listeners —
-each group with its own table and columns, a chip per kind that keeps only that kind, and one filter over
-all of them. A group remembers whether you left it open, like a section.
+### Does it fit?
 
-Right under the diagram sits the section that is the point of the whole thing — **Relations**, both
-directions, always, for every node type, in one place. Its drawing reads left to right: what the node
-uses in a column on the left, what uses it on the right, the node in the middle, the arrows pointing the
-way each reference goes; a dashed connector with `≈` or `ƒ` is an uncertain link, the most-referenced
-neighbours come first, and *+N more* opens that side of the table below. Then one table per direction —
-**Uses** (what this node points at) and **Used by** (what points at it) — with a row per relation and
-neighbour, the relation named at the head of its run. A row says more where the data does: the element
-that makes the reference, a REST call's verb and URL, an agent tool's operation, and — expanded — the
-parameters a caller passes in, which is how to check that a form button's payload names line up with
-what the callee reads. A long table gets a filter with chips: *uses →*, *← used by*, *≈ uncertain* and
-*with mappings*. That is the question a model file cannot answer on its own, and it is why the graph
-carries `usedBy`.
+The question a model file cannot answer on its own is whether it fits what it meets — the callers that
+hand it values, the models it calls, the code that answers it, the app that ships it. *Does it fit?*
+answers it with one kind of table, the schema coverage table first: a row per thing that should line up,
+tinted by how badly it does not, a pill per kind of gap on top, and *only gaps* to hide the rows that are
+fine. A cell says ✓ it fits, a faint ✓ it fits by name (a decision reads its inputs by name, a button that
+sends the whole form hands over every field), ✗ it is missing, ⚠ it looks wrong, or ? Atlas cannot tell —
+and then why, in its tooltip: a callee outside the project, a call with no explicit mappings (Atlas
+cannot see `variables="all"` or a Java start), a name only a script guesses at, a name Java writes, a
+list longer than Atlas records. The reasons are the silence rules of the
+[unused-variable check](../variables/), so a table never contradicts a finding.
+
+<figure class="fig">
+  <div class="body"><img class="only-light" src="../assets/img/detail-fit.png" alt="An operation's page: its parameter customerId is required, and the one task that calls it passes nothing — the Does it fit? table marks the row red with a cross, and the health strip counts one gap" width="1400" height="900"><img class="only-dark" src="../assets/img/detail-fit-dark.png" alt="An operation's page: its parameter customerId is required, and the one task that calls it passes nothing — the Does it fit? table marks the row red with a cross, and the health strip counts one gap" width="1400" height="900"></div>
+  <figcaption><b>Does it fit?</b> — an operation against its callers: the task passes nothing for a
+  required parameter, so the row is a gap, the pill names its kind, and the health strip counts it.
+  <a href="../demo/explorer.html#serviceOperation%3AcustomerService%23findById" target="_blank" rel="noopener">Open it ↗</a></figcaption>
+</figure>
+
+What each page asks:
+
+- **a process or case** — every call it makes (sub-process, case, decision, operation, agent, form,
+  event) with what it hands over and takes back, and every caller of it against what it reads: a value
+  it reads that no caller passes, a value passed in that it never reads, a value mapped back that it never
+  writes. A process nothing calls lists the values whoever starts it has to provide;
+- **a service and its operations** — per operation, who calls it and whether their mappings fit its
+  parameters (a required one left out is a defect, one the operation does not declare a mistake); which
+  endpoint of the project answers it, whether that handler serves the operation's verb and every
+  `{path variable}` has a parameter, and the handler method; and, where no changelog lets the schema
+  coverage do it, the service's column mappings against the data object's fields;
+- **a data object and a Liquibase changelog** — the schema coverage table: every changelog column
+  through the service mapping to the data-object field, and where the chain breaks;
+- **a decision** — every model that runs it: an input the caller never writes, a result it never reads;
+- **a form or page** — every call it makes (buttons, data sources, REST calls with the verb checked
+  against the handler), the variables its fields write and who reads them, the data-object paths it binds
+  that are no field of the object, and, for each task that shows it, the outcomes no downstream condition
+  tests and the tested values that are no outcome;
+- **an action** — the buttons that invoke it against what its script reads with `flw.getInput`;
+- **an app** — every model its members reach and whether it ships them (in this app, another app, no app,
+  not in the project), the models only packed beside it, and every group that may act on its models but
+  cannot open it; **a group** — per model, what it may do and the app it gets there through;
+- **an event** — every payload field against every element that publishes or consumes it, correlation
+  included, and its channels against who uses them; **a channel** — the events it carries without a
+  publisher or consumer for its direction; **a signal, message, error or escalation** — who throws it and
+  who catches it (an error nobody catches is a gap);
+- **an endpoint** — every call that reaches it, with its verb; **a class** — its bean names against the
+  expressions that use them, and its methods against the models that call them;
+- **an agent** — its tools against the models and operations they name, its callers against its
+  operations; **an SLA** — the task it watches in each model it governs; **a query** — the variable behind
+  each column against what the queried processes write; **a template** — every variable it prints
+  against the models that render it.
+
+### Relations
+
+**Relations** lists both directions, always, for every node type, in one place. Its drawing reads left
+to right: what the node uses in a column on the left, what uses it on the right, the node in the middle,
+the arrows pointing the way each reference goes; a dashed connector with `≈` or `ƒ` is an uncertain link,
+the most-referenced neighbours come first, and *+N more* opens that side of the list below. Then one table
+per direction — **Uses** and **Used by** — with **a row per relation**, its neighbours as chips on that
+row: an app's five members are one *App contains* row, not five. A row unfolds only where a neighbour has
+more to say: the parameters a caller passes in (which is how to check that a button's payload names line
+up with what the callee reads), every REST call with its verb and URL. An outgoing mapping's tally and an
+agent tool's operation sit beside the chip. A long list gets a filter with chips — *uses →*, *← used by*,
+*≈ uncertain* and *with mappings* — that act on the neighbours. An operation is related to its service,
+and a variable to the models that write, read or mention it. That is why the graph carries `usedBy`.
+
+### Details
+
+A process or a case lists what it is made of in one **Elements** section: a group per kind — user,
+service, script and decision tasks, call activities, events, gateways, sequence flows with their
+conditions, lanes, multi-instance, declared data objects, listeners and documentation; for a case its
+plan model, sentries and event listeners — each group with its own table and columns, a chip per kind
+that keeps only that kind, and one filter over all of them. A group remembers whether you left it open,
+like a section. **Parameters** lists every in/out mapping, grouped by the element that declares it, and
+**Variables & expressions** the variables a model writes and reads — how it writes and reads each one,
+which other models share it, the unused-variable verdict — before the expressions, bindings, functions
+and literals it uses.
 
 A few kinds of node have a page of their own beyond the model types:
 
-- a **REST endpoint** lists the models that call it among its relations — the model, the verb, the URL
-  as the model spells it and the button or task that calls it — and a form's REST call or a service
-  operation whose URL lands on a project endpoint links to it;
-- a **group** lists what its members may do, per model — start it, work on it, see it — as its relations;
 - a **Spring property** a model reads with `environment.getProperty('…')` lists the file and line of
   every `application*.properties` / `application*.yml` that sets it. None is not a finding — the value may
   come from the environment;
 - a **user definition** names the forms that create, show and edit such a user and the groups it joins;
   a **tenant setup** the groups it defines and how many users of each definition it creates — never who;
-- a **master-data** definition lists the files that load its rows;
+- a **master-data** definition lists its key and name fields and the files that load its rows;
 - any model that a test deploys with `@Deployment(resources = …)` lists those tests under *Deployed by
   tests*, each opening at its annotation.
 
@@ -167,52 +230,39 @@ into the model it invokes, the payload it sends and stores, its settings and its
 task into its code with line numbers and the validator's findings; a service task into its
 implementation, the operation it calls and its field injections. A long table gets a filter of its own,
 and past a hundred rows it shows the first ones and a *show all* button — the filter still searches
-every row. The relations table folds the same way.
-In a narrow panel — an IntelliJ tool window — the optional columns drop under the row instead of being
-clipped, and nothing scrolls sideways.
+every row. In a narrow panel — an IntelliJ tool window — a table keeps its subject and its verdict on the
+row, drops the other columns under it, and a matrix cell that drops says whose it is; nothing scrolls
+sideways.
+
+On a form or page, a row in **Fields** expands when the component does something: the model a button
+invokes (as a chip you can follow), the payload it sends and stores back, the `{{binding}}` its result is
+stored in, a REST button's endpoint with its verb and response path, an expression button's expression and
+the interval it re-runs on, whether it fires by itself, and the note the modeller left on it. A plain
+input has nothing to add and stays a one-line row. **Hidden**, **disabled** and **not submitted** are
+stated on the row itself, because a hidden button that auto-executes is a worker nobody presses; and when
+a button is configured to send the whole payload or store the whole response, that is said first and the
+mapping it overrides is marked unused, because the runtime never reads it.
 
 Inside IntelliJ the panel also opens code: the `↗` beside a source path and every `:line` on a method
 or endpoint open that file in an editor tab (see [the plugin](../plugin/#the-atlas-explorer-inside-the-ide)).
 In a browser those affordances are not shown — the page cannot open a file there.
 
-Every section remembers whether you left it open, per section, across reloads; the section that *is*
-the model (a form's Fields, a service's Operations, a process's tasks) starts open, everything else
-starts folded. Up to twelve nodes can be open as **detail tabs**, which are viewports with their own
-history rather than pins. When the strip holds more than it can show, its edges fade on the side that
-hides tabs, the wheel scrolls it sideways, and a **+N** button lists the tabs out of view — pick one to
-switch to it. The split between the list and the panel is yours to move — drag the handle
-between them, `←`/`→` nudge it, `Home` resets — and it is remembered, which matters most in a narrow
-IDE tool window where the list used to take half the width. In an editor tab the list starts at most
-224px wide, and it **folds away**: the button in its head hides it, as does dragging the handle shut,
-and the button at the page's top-left corner brings it back. The fold is remembered too.
+Every section remembers whether you left it open, per section, across reloads; the picture, *Does it
+fit?*, the findings and the relations start open, everything else starts folded. Up to twelve nodes can
+be open as **detail tabs**, which are viewports with their own history rather than pins. When the strip
+holds more than it can show, its edges fade on the side that hides tabs, the wheel scrolls it sideways,
+and a **+N** button lists the tabs out of view — pick one to switch to it. The split between the list and
+the panel is yours to move — drag the handle between them, `←`/`→` nudge it, `Home` resets — and it is
+remembered, which matters most in a narrow IDE tool window where the list used to take half the width.
+In an editor tab the list starts at most 224px wide, and it **folds away**: the button in its head hides
+it, as does dragging the handle shut, and the button at the page's top-left corner brings it back. The
+fold is remembered too.
 
 Nothing the parser extracted is invisible: whatever no specific section consumed renders at the bottom
 as a collapsed **Other attributes** key/value tree. When a new model attribute starts being parsed, it
 shows up there by default — a dedicated section is an upgrade, not a precondition for seeing it. The
 same rule holds structurally on the generator side: a parsed field the report would silently drop
 fails the build.
-
-A process page shows what its diagram alone does not: call activities and sub-processes with the
-process each one calls, gateways with their default flow, receive, send and manual tasks, every event
-with what it is attached to, every sequence flow with its condition, and the `async` and skip flags on
-the rows that carry them. Beyond processes, cases, decisions, forms and the integration models, the
-structured types include queries (parameters, result columns, the search-template body), SLAs (due-date
-targets, escalations — including the process or case an escalation starts), sequences (the number
-format), templates (their variations' actual text), knowledge bases (retrieval settings; credentials
-never leave the model, only their kind), variable extractors (which indexed variable is written from
-which scope) and document models (per-action forms and permissions).
-
-On a form or page, a row in **Fields** expands when the component does something: the model a button
-invokes (as a chip you can follow), the payload it sends and stores back, the `{{binding}}` its result is
-stored in, a REST button's endpoint with its verb and response path, an expression button's expression and
-the interval it re-runs on, whether it fires by itself, and the note the modeller left on it. A plain
-input has nothing to add and stays a one-line row.
-
-Two kinds of honesty live on that row. **Hidden**, **disabled** and **not submitted** are stated on the
-row itself, because a hidden button that auto-executes is a worker nobody presses and you should not have
-to expand anything to learn that — when the state is a condition instead, the condition is in the body.
-And when a button is configured to send the whole payload or store the whole response, that is said
-first and the mapping it overrides is marked unused, because the runtime never reads it.
 
 The report pages — `#/checks`, `#/scripts`, `#/variables`, `#/schema` — are built from the same parts:
 the same header with the page's own numbers as facts, the same sections with their chips, the same
@@ -222,8 +272,11 @@ is a section the health rows jump to.
 ## Diagrams
 
 Processes, cases and decisions render their diagram inline, from the layout already in your models —
-deployment `bpmndi` / `cmmndi` / `dmndi`, or a Design workspace's ORYX JSON. Nothing is downloaded and
-no Design instance is contacted.
+deployment `bpmndi` / `cmmndi` / `dmndi`, or a Design workspace's ORYX JSON. A form or page renders its
+**layout**: a wireframe of its twelve-column grid, panels and tabs, every component with its caption and
+id — the same picture the IDE's model preview and the generated diagrams folder show. Nothing is
+downloaded and no Design instance is contacted. A page keeps its drawings within a budget, so a project
+with hundreds of forms does not double in size; a form left out says so, and the IDE still draws it.
 
 Drag to pan, ⌘/Ctrl-scroll to zoom, `−` `fit` `+` to step, `⤢` for full screen. On a touch screen a
 vertical swipe over an inline diagram scrolls the page, a sideways drag pans, and two fingers zoom. Clicking an element
@@ -237,8 +290,11 @@ Inline, *fit* never goes below 40 %: a process six thousand pixels wide is shown
 the panel — drag to pan, or open it full screen — with a line under it saying so, instead of as a strip
 of boxes nobody can read.
 
-A decision table has no canvas, so there is nothing to lay out: its rules render as a real table
-instead.
+A form's components are elements in the same way: clicking one opens its card — what it is bound to,
+what it calls, its parameters — and *Show in details* lands on its row in Fields. A decision table has no
+canvas, so there is nothing to lay out: its rules render as a real table instead, drawn as Design draws
+it — the hit policy in the corner, an Input and an Output band, each column headed by its label,
+expression and type, a number per rule.
 
 <figure class="fig">
   <div class="body"><img class="only-light" src="../assets/img/scripts-page.png" alt="The script tasks page: every script body in the project, grouped by model, with its language, variables and problems" width="1400" height="900"><img class="only-dark" src="../assets/img/scripts-page-dark.png" alt="The script tasks page: every script body in the project, grouped by model, with its language, variables and problems" width="1400" height="900"></div>

@@ -262,7 +262,10 @@ It is a developer's map of the form, not a preview of the Work UI.
 
 The picture is painted in Swing on the IDE host, not in a browser panel, so it stays fast under Remote
 Development, where every resource a JCEF view loads is a round trip to the client. It fits the width,
-zooms from its toolbar, and redraws when the file changes on disk. The editor's layout toggle hides
+zooms from its toolbar, and redraws when the file changes on disk. A click on what it draws — a task, a
+plan item, a decision rule, a form component — puts the caret on that element's declaration beside it:
+the id itself, not a flow or a JSON key that happens to mention it first. It is the same picture the
+explorer shows on the model's page and the diagrams folder holds. The editor's layout toggle hides
 either half; going to a line brings the text back.
 
 The **Structure** tool window outlines the same models: a form's or page's components as Design nests

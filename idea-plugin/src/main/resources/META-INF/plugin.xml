@@ -150,6 +150,19 @@
               a row per thing that should line up, tinted by how badly it does not, a pill per kind of gap
               and <i>only gaps</i> to hide the rows that are fine. A cell says ✓ it fits, ✗ it is missing, ⚠
               it looks wrong, or ? Atlas cannot tell — and then why, in its tooltip.</li>
+          <li><b>A health strip under every title.</b> Before the first section, a page says whether the
+              model is fine: its open defects and advice, the gaps its tables found (or <i>✓ fits</i>), how
+              many models it uses and is used by, the apps that ship it — or <i>in no app</i> — and the
+              tests that deploy it; each jumps to the section that explains it. The facts beside it stop
+              repeating what a section says: a form states its outcomes, who opens it and where the outcome
+              lands; an operation shows its call as one line and the endpoint that answers it; a class its
+              bean names; a sequence what its numbers look like. The orphan banners on operations and
+              functions are gone — the finding says it.</li>
+          <li><b>Relations take a row per relation.</b> Under the drawing, a relation lists its neighbours
+              as chips on one row — <i>App contains</i> five models is one row, not five — and unfolds only
+              where a neighbour has more to say: a caller's parameter mappings, every REST call with its
+              verb. An operation's page is related to its service, and a variable's page lists the models
+              that write, read or merely mention it, where both used to say they had no relationships.</li>
           <li><b>A process's page says whether its calls fit.</b> <i>Does it fit?</i> lists every call a
               process or case makes — sub-process, case, decision, operation, agent, form, event — with what
               it hands over and takes back, and every caller of it against what it reads: a value it reads
@@ -206,14 +219,6 @@
               SLA checks that the task it watches exists in each model it governs, a query that some queried
               model writes the variable behind each column, and a template that the models rendering it
               provide every variable it prints.</li>
-          <li><b>A health strip under every title.</b> Before the first section, a page says whether the
-              model is fine: its open defects and advice, the gaps its tables found (or <i>✓ fits</i>), how
-              many models it uses and is used by, the apps that ship it — or <i>in no app</i> — and the
-              tests that deploy it; each jumps to the section that explains it. The facts beside it stop
-              repeating what a section says: a form states its outcomes, who opens it and where the outcome
-              lands; an operation shows its call as one line and the endpoint that answers it; a class its
-              bean names; a sequence what its numbers look like. The orphan banners on operations and
-              functions are gone — the finding says it.</li>
           <li><b>A REST call links to the handler for its verb.</b> <code>GET
               /api/orders/{orderNumber}</code> and <code>POST /api/orders/archive</code> share a path shape
               — the variable takes <code>archive</code> — and path-only matching linked each call to both
@@ -228,11 +233,6 @@
               <code>in</code> into a service or agent names the callee's parameter, an <code>out</code> its
               result field: neither is a variable of any scope, so neither is reported as an input the
               callee never reads.</li>
-          <li><b>Relations take a row per relation.</b> Under the drawing, a relation lists its neighbours
-              as chips on one row — <i>App contains</i> five models is one row, not five — and unfolds only
-              where a neighbour has more to say: a caller's parameter mappings, every REST call with its
-              verb. An operation's page is related to its service, and a variable's page lists the models
-              that write, read or merely mention it, where both used to say they had no relationships.</li>
           <li><b>Operations Java calls through the service registry are used.</b> A service-registry
               invocation — <code>.serviceKey(…).operationKey(…)</code> — was invisible, so an operation only
               Java called was reported unused and nothing linked it to the code. The call is rarely one
