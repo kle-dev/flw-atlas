@@ -35,20 +35,25 @@ class RecentModelsService(private val project: Project) : PersistentStateCompone
         var urls: MutableList<String> = ArrayList()
     }
 
+    // Written on the EDT on every tab switch, read by the Hub's snapshot on a pooled thread: every
+    // access to the list goes through this lock, and readers take a copy.
+    private val lock = Any()
     private var state = State()
 
-    override fun getState(): State = state
-    override fun loadState(state: State) { this.state = state }
+    override fun getState(): State = synchronized(lock) { State().also { it.urls = ArrayList(state.urls) } }
+    override fun loadState(state: State) { synchronized(lock) { this.state = state } }
 
     /** Moves [file] to the front when it is a model; anything else is ignored. */
     fun record(file: VirtualFile) {
-        if (ModelFiles.typeOf(file) == null || ModelFiles.isExcluded(file.path)) return
+        if (ModelFiles.typeOf(file) == null || ModelFiles.excluder(project)(file.path)) return
         val url = file.url
-        val urls = state.urls
-        if (urls.firstOrNull() == url) return
-        urls.remove(url)
-        urls.add(0, url)
-        while (urls.size > CAPACITY) urls.removeAt(urls.size - 1)
+        synchronized(lock) {
+            val urls = state.urls
+            if (urls.firstOrNull() == url) return
+            urls.remove(url)
+            urls.add(0, url)
+            while (urls.size > CAPACITY) urls.removeAt(urls.size - 1)
+        }
         AtlasEvents.recentModelsChanged(project)
     }
 
@@ -56,7 +61,7 @@ class RecentModelsService(private val project: Project) : PersistentStateCompone
     internal fun recent(index: FlowableIndex?): List<RecentModel> {
         val vfm = VirtualFileManager.getInstance()
         val byFile = index?.allEntries()?.groupBy { it.file }.orEmpty()
-        return state.urls.mapNotNull { url ->
+        return synchronized(lock) { state.urls.toList() }.mapNotNull { url ->
             val file = vfm.findFileByUrl(url)?.takeIf { it.isValid } ?: return@mapNotNull null
             val entry = byFile[file]?.firstOrNull()
             RecentModel(file, entry?.key ?: bareName(file), entry?.type ?: ModelFiles.typeOf(file), entry?.name ?: "", entry)
@@ -72,7 +77,7 @@ class RecentModelsService(private val project: Project) : PersistentStateCompone
 
     /** For tests and the Hub's context menu. */
     fun clear() {
-        state.urls.clear()
+        synchronized(lock) { state.urls.clear() }
         AtlasEvents.recentModelsChanged(project)
     }
 
