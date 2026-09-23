@@ -829,6 +829,21 @@
   .ptdot-advice{background:var(--neutral-text)}
   .dpane>.ddesc:first-child{margin-top:var(--space-4)}
   .dpane>.props.facts{border-top:0;padding-top:0}
+  /* On a node page a section is a heading, not a ruled label in capitals: the tables under it are the
+     boxes, so a second frame around them would only nest. Space separates sections; the explanation
+     waits behind the ⓘ, and only what changes per model (2 in · 1 out, 3 accepted) stays beside the title. */
+  .dpane details.sect{margin:var(--space-6) 0 0;border-top:0}
+  .dpane>details.sect:first-child,.dpane>.props.facts+details.sect,.dpane>.ddesc+details.sect{margin-top:var(--space-4)}
+  .dpane details.sect>summary{gap:var(--space-15);padding:var(--space-1) 0;font-size:var(--text-lg);font-weight:600;
+    letter-spacing:-.005em;text-transform:none;color:var(--ink)}
+  .dpane details.sect>summary:before{font-size:var(--text-2xs);width:1em}
+  .dpane details.sect>summary .scount{font-size:var(--text-2xs);font-weight:500;line-height:1.5;color:var(--ink-faint);
+    background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius-full);padding:0 var(--space-15)}
+  .dpane details.sect>summary .smeta{flex:none;font-size:var(--text-xs);font-weight:400;letter-spacing:0;color:var(--ink-faint)}
+  .sinfo{display:inline-flex;align-items:center;flex:none;color:var(--ink-faint);cursor:help}
+  .sinfo .ui{width:13px;height:13px}
+  .sinfo:hover{color:var(--ink-dim)}
+  .dpane .sb{padding:var(--space-1) 0 0}
   .ui{flex:none;width:12px;height:12px;display:inline-block;vertical-align:-.1em}
   .dbody{padding:0 var(--space-6) var(--space-8);max-width:1000px}
   .chip{display:inline-flex;align-items:center;gap:var(--space-15);font-size:var(--text-xs);font-weight:500;

@@ -502,6 +502,13 @@ const probe = `<script>
     ok('the hero carries the title', !!title && /Demo App/.test(title.textContent), title?title.textContent:'(none)');
     ok('the identity line names kind, key and path', !!det.querySelector('.dident .dkey') && /demoApp/.test(det.querySelector('.dident').textContent));
     ok('the actions are one group with labels', det.querySelectorAll('.dhead .dhead-actions button .lbl').length>=2);
+    // a node page's sections are headings: what explains one waits behind its ⓘ, and every one starts
+    // open but Other attributes — unless the reader folded it before
+    ok('a section explains itself behind an ⓘ, not in a grey line', !det.querySelector('.dpane details.sect>summary .shint') && !!det.querySelector('.dpane details.sect>summary .sinfo[data-tip]'));
+    let st={}; try{ st=JSON.parse(localStorage.getItem('atlas-sect2')||'{}')||{}; }catch(e){}
+    const fresh=[...det.querySelectorAll('.dpane details.sect')].filter(s=>!(dec(s.dataset.sect) in st));
+    ok('sections start open, Other attributes folded', fresh.length>0 && fresh.every(s=>s.open===(s.dataset.sect!=='otherattrs')),
+       fresh.filter(s=>s.open!==(s.dataset.sect!=='otherattrs')).map(s=>s.dataset.sect).join());
   });
   // --- the page's tabs: a tab per pane that has something, the sections sorted into them, one on screen ---
   steps.push(()=>{ closeOtherTabs(); location.hash=enc('process:orderProcess'); });
@@ -681,9 +688,9 @@ const probe = `<script>
     if(g) g.open=!g.open; window.__gwOpen=!!(g&&g.open);
   });
   steps.push(()=>{
-    let st=null; try{ st=JSON.parse(localStorage.getItem('atlas-sect')); }catch(e){}
+    let st=null; try{ st=JSON.parse(localStorage.getItem('atlas-sect2')); }catch(e){}
     ok('a group remembers its fold under its old section id', !!window.__gwId && !!st && st[window.__gwId]===window.__gwOpen, window.__gwId+' '+JSON.stringify(st));
-    if(st&&window.__gwId){ delete st[window.__gwId]; delete st.flows; try{ localStorage.setItem('atlas-sect', JSON.stringify(st)); }catch(e){} }
+    if(st&&window.__gwId){ delete st[window.__gwId]; delete st.flows; try{ localStorage.setItem('atlas-sect2', JSON.stringify(st)); }catch(e){} }
     const nav=[...document.querySelectorAll('#detail [data-sect]')].map(c=>c.dataset.sect);
     // the health strip under the title: findings, connections — each a way into its section
     const hs=document.querySelector('#detail .dhero .dhealth');
@@ -726,9 +733,9 @@ const probe = `<script>
     if(s) s.open=false;
   });
   steps.push(()=>{
-    let st=null; try{ st=JSON.parse(localStorage.getItem('atlas-sect')); }catch(e){}
+    let st=null; try{ st=JSON.parse(localStorage.getItem('atlas-sect2')); }catch(e){}
     ok('closing the relations is remembered', !!st && st.relations===false, JSON.stringify(st));
-    if(st){ delete st.relations; try{ localStorage.setItem('atlas-sect', JSON.stringify(st)); }catch(e){} }
+    if(st){ delete st.relations; try{ localStorage.setItem('atlas-sect2', JSON.stringify(st)); }catch(e){} }
     const s=document.querySelector('#detail details.sect[data-sect="relations"]');
     if(s){ s.open=true; const g=s.querySelector('.gn[data-id]'); window.__nbFrom=state.sel; if(g) click(g); }
   });

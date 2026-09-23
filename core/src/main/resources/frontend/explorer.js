@@ -121,6 +121,7 @@ const UI_ICONS={
   expand:'<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>',
   link:'<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
   chevron:'<path d="m6 9 6 6 6-6"/>',
+  info:'<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
   check:'<path d="M20 6 9 17l-5-5"/>',
   alert:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   error:'<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
@@ -1021,7 +1022,7 @@ function route(){
 }
 
 // ---------- sidebar ----------
-// Which groups are folded, remembered like the detail sections are (atlas-sect). Absent = open.
+// Which groups are folded, remembered like the detail sections are (atlas-sect2). Absent = open.
 const NAVG_STORE='atlas-navgroups';
 function navGroups(){ try{ return JSON.parse(localStorage.getItem(NAVG_STORE)||'{}')||{}; }catch(e){ return {}; } }
 function navGroupRemember(sec, open){
@@ -2112,7 +2113,7 @@ function nodeFindingsHtml(n){
     const tones=[...new Set(rows.filter(f=>!waiverFor(f)).map(findTone))].sort((a,b)=>TONE_ORDER[a]-TONE_ORDER[b]);
     body+=checkHeadHtml(c, {scope:'n', title:true, pills:tones})+findingTable(rows, {onNode:true});
   });
-  return section('findings','Findings on this model', body, {count:open.length, hint:acc?acc+' accepted':'', attrs:' id="findings"'});
+  return section('findings','Findings on this model', body, {count:open.length, meta:acc?acc+' accepted':'', attrs:' id="findings"'});
 }
 /** What the project decided to live with, rule by rule — the Checks page's last section. Rendered from
  *  the rules as they stand now (the file's, minus what was restored here, plus what was accepted here),
@@ -3192,21 +3193,38 @@ const incFrom= (id,rel)=>{ const e=(incM.get(id)||[]).find(x=>x.rel===rel); retu
 // ---------- collapsible detail sections ----------
 // Every block in the detail panel is a <details> so a node with 35 parameters can still be skimmed.
 // Open/closed is remembered per SECTION (not per node) in localStorage: a section you open stays open as
-// you walk the graph. Everything defaults to closed except the diagram and the relations — and the
-// one section that IS the model (a form's fields, a service's operations) — see DEFAULT_OPEN_SECTIONS.
-const SECT_STORE='atlas-sect';
+// you walk the graph. On a node page every section starts open — a tab holds only what belongs together,
+// and a whitelist of open ones had left a query's own columns folded while the fit table repeating them
+// stood open — except DEFAULT_CLOSED; an Elements group, and a report page's section, start folded unless
+// DEFAULT_OPEN_SECTIONS names it. (The store's key changed with that rule, so a fold remembered under the
+// old one does not keep a picture closed.)
+const SECT_STORE='atlas-sect2';
+const DEFAULT_CLOSED={otherattrs:true};
 const DEFAULT_OPEN_SECTIONS={diagram:true, relations:true, elements:true, findings:true, fit:true, formfields:true, columns:true, usertasks:true, svctasks:true, scripttasks:true,
   plan:true, ops:true, dmnrules:true, permissions:true, escalations:true, rw:true, payload:true, dicttypes:true, agentops:true,
   endpoints:true, script:true, templatebody:true, extractors:true, coverage:true, problems:true, opparams:true};
 function sectAll(){ try{ return JSON.parse(localStorage.getItem(SECT_STORE)||'{}')||{}; }catch(e){ return {}; } }
-function sectRemember(id, open){
-  try{ const m=sectAll(); m[id]=open; localStorage.setItem(SECT_STORE, JSON.stringify(m)); }catch(e){}
+/** `dflt` (a node page's default for this section) keeps the store to what the reader changed: a <details>
+ *  rendered open fires `toggle` on insertion, and remembering that as a choice froze every default the day
+ *  it was first seen. */
+function sectRemember(id, open, dflt){
+  try{ const m=sectAll(); if(dflt!==undefined && open===dflt) delete m[id]; else m[id]=open;
+    localStorage.setItem(SECT_STORE, JSON.stringify(m)); }catch(e){}
 }
-function sectIsOpen(id){
+/** Remember a node page's section or Elements group, against the default it started from. */
+function rememberFold(el){
+  if(el.classList.contains('elgrp')) sectRemember(el.dataset.eg, el.open, !!DEFAULT_OPEN_SECTIONS[el.dataset.eg]);
+  else { const id=dec(el.dataset.sect); sectRemember(id, el.open, !DEFAULT_CLOSED[id]); }
+}
+function sectIsOpen(id, o){
   const m=sectAll();
-  // a report page's findings are its point — its sections start open; a node page starts folded
-  return id in m ? !!m[id] : (!!DEFAULT_OPEN_SECTIONS[id] || /^(chk|rpt)-/.test(id));
+  if(id in m) return !!m[id];
+  if(_detailRender && !(o&&o.group)) return !DEFAULT_CLOSED[id];
+  // a report page's findings are its point — its sections start open
+  return !!DEFAULT_OPEN_SECTIONS[id] || /^(chk|rpt)-/.test(id);
 }
+// True while renderDetail builds a node page: its sections read as headings, their explanation behind an ⓘ.
+let _detailRender=false;
 // What rendered, in page order: `section()` appends to it while a page is being built and the section
 // navigator reads it afterwards — so the navigator lists exactly the sections that exist, never one that
 // was skipped for an empty body. Null outside a render, so stray callers register nothing.
@@ -3216,10 +3234,11 @@ const stripTags=s=>String(s==null?'':s).replace(/<[^>]*>/g,'').replace(/&amp;/g,
 /**
  * `titleHtml` is pre-built markup (callers escape); an empty body renders nothing at all. `o.count` is
  * shown as a pill after the title and travels into the navigator; `o.hint` is the one-line explanation
- * beside it; `o.tools` (a filter bar, a button row) sits at the top of the body — not in the summary,
- * where a click would also toggle the section; `o.nav` overrides the navigator label. A legacy title
- * of the form "Fields (7) — …" is split into title and count so the navigator reads the same for every
- * section.
+ * — on a node page behind an ⓘ beside the title, on a report page beside it in the summary; `o.meta` is
+ * a short summary that stays in view (2 in · 1 out, 3 accepted); `o.tools` (a filter bar, a button row)
+ * sits at the top of the body — not in the summary, where a click would also toggle the section; `o.nav`
+ * overrides the navigator label. A legacy title of the form "Fields (7) — …" is split into title and
+ * count so the navigator reads the same for every section, and on a node page its "— …" becomes the ⓘ.
  */
 function section(id, titleHtml, bodyHtml, o){
   if(!bodyHtml) return '';
@@ -3230,10 +3249,18 @@ function section(id, titleHtml, bodyHtml, o){
     if(m){ count=+m[2]; title=m[1]+(m[3]||''); }
   }
   if(_sectReg) _sectReg.push({id, title:o.nav||stripTags(title).replace(/\s*—[\s\S]*$/,''), count});
+  let shown=o.count!=null||count==null?titleHtml:esc(title), hint=o.hint||'';
+  if(_detailRender && count!=null && o.count==null){
+    const i=title.indexOf(' — ');
+    if(i>=0){ shown=esc(title.slice(0,i).trim()); hint=hint||title.slice(i+3).trim(); }
+  }
+  const aside=_detailRender
+    ? (o.meta?'<span class="smeta">'+esc(o.meta)+'</span>':'')+
+      (hint?'<span class="sinfo" data-tip="'+esc(hint)+'" aria-label="'+esc(hint)+'">'+uiIcon('info')+'</span>':'')
+    : ((o.hint||o.meta)?'<span class="shint">'+esc([o.meta, o.hint].filter(Boolean).join(' · '))+'</span>':'');
   return '<details class="sect" data-sect="'+enc(id)+'"'+(o.attrs||'')+(sectIsOpen(id)?' open':'')+'>'+
-    '<summary><span class="st">'+(o.count!=null||count==null?titleHtml:esc(title))+'</span>'+
-    (count!=null?'<span class="scount">'+esc(String(count))+'</span>':'')+
-    (o.hint?'<span class="shint">'+esc(o.hint)+'</span>':'')+'</summary>'+
+    '<summary><span class="st">'+shown+'</span>'+
+    (count!=null?'<span class="scount">'+esc(String(count))+'</span>':'')+aside+'</summary>'+
     '<div class="sb">'+(o.tools?'<div class="sbar">'+o.tools+'</div>':'')+bodyHtml+'</div></details>';
 }
 
@@ -3658,7 +3685,7 @@ function paramSection(list, hasDg){
         .concat(['in','out','error-out'].filter(d=>c[d]).map(d=>({fk:'dir',fv:d,label:d,n:c[d]})))});
   }
   return section('params','Parameters', cards(gs.map(g=>paramGroupHtml(g, null, hasDg))),
-    {count:list.length, hint:paramSummary(list), tools});
+    {count:list.length, meta:paramSummary(list), tools});
 }
 
 // "Does it fit?" blocks per node type — see S.fit.
@@ -5106,7 +5133,7 @@ function elementsSection(n, c, list){
   const bar=groups.length>1 ? filterBar({placeholder:'filter elements — a name, an id, a condition…', label:'Filter elements',
     chips:[{fk:'eg',fv:'all',label:'all',n:total||null}].concat(groups.map(g=>({fk:'eg',fv:g.id,label:g.title,n:g.count})))})
     : '';
-  const body=groups.map(g=>'<details class="fgroup elgrp" data-eg="'+esc(g.id)+'" id="el-'+esc(g.id)+'"'+(sectIsOpen(g.id)?' open':'')+'>'+
+  const body=groups.map(g=>'<details class="fgroup elgrp" data-eg="'+esc(g.id)+'" id="el-'+esc(g.id)+'"'+(sectIsOpen(g.id,{group:true})?' open':'')+'>'+
     '<summary class="elgrp-h"><span class="elgrp-t">'+esc(g.title)+'</span>'+(g.count!=null?'<span class="scount">'+g.count+'</span>':'')+
     (g.hint?'<span class="shint">'+esc(g.hint)+'</span>':'')+'</summary><div class="elgrp-b">'+g.body+'</div></details>').join('');
   return section('elements','Elements', body, {count:total||null, tools:bar,
@@ -5661,9 +5688,9 @@ function diagramView(n){
       '<button data-z="in" title="Zoom in">+</button>'+
       '<span class="dgpct">100%</span>'+
       '<button data-z="full" title="Open full screen">⤢ full screen</button>'+
-      '<span class="dghint">click '+(wire?'a component':'an element')+' for details · drag to pan · '+MODK+' + scroll to zoom</span>'+
     '</div>'+
-    '<div class="dgview"'+(wire?' data-kind="wireframe"':'')+'><div class="dgpan">'+svg+'</div></div>');
+    '<div class="dgview"'+(wire?' data-kind="wireframe"':'')+'><div class="dgpan">'+svg+'</div></div>',
+    {hint:'Click '+(wire?'a component':'an element')+' for its details · drag to pan · '+MODK+' + scroll to zoom'});
 }
 
 // ---------- relations: the graph at the top of the page, and every relation as one table ----------
@@ -5891,8 +5918,8 @@ function relationsSection(n, c, R){
     set('out', rowsOut, 'Uses', '→ what this points at')+
     set('in', rowsIn, 'Used by', '← what points at this')+
     (loose.length?'<div class="muted tbl-more">Not in this report: '+loose.map(esc).join(', ')+'</div>':'');
-  return section('relations','Relations', body, {count:total,
-    hint:[outN?outN+' outgoing':'', inN?inN+' incoming':'', unc?unc+' uncertain':''].filter(Boolean).join(' · ')});
+  return section('relations','Relations', body, {count:total, meta:unc?unc+' uncertain':'',
+    hint:'What it points at on the left, what points at it on the right — every edge of the graph, one row per relation'});
 }
 
 // Resolve a service-task implementation to a clickable Java node chip + method.
@@ -6057,7 +6084,7 @@ function renderDetail(){
   })};
   const facts=factsFor(rn);
   const ctx=detailCtx(rn), R=relationsOf(rn, rn.data);
-  _gapReg=[];
+  _gapReg=[]; _detailRender=true;
   // Every pane into a string before the header: the health strip reads what the gap tables found, and
   // the tab bar what rendered at all. The order is the one the page used to read top to bottom.
   // Overview — the description as prose and the facts, then the picture: the drawing, or the table that
@@ -6084,7 +6111,7 @@ function renderDetail(){
       rest.map(k=>kvEntry(k,(n.data||{})[k],0)).join(''), {count:rest.length,
         hint:'everything else the parser read for this model'});
   }
-  const gaps=_gapReg; _gapReg=null;
+  const gaps=_gapReg; _gapReg=null; _detailRender=false;
   const panes=detailPanes(n, R, gaps, {overview:intro+pic, findings:finds, connections:fit+rel, details:inner});
   const cur=panes.some(p=>p.id===state.pane)?state.pane:panes[0].id;
   const paneChanged=cur!==state.pane;
@@ -6109,13 +6136,12 @@ function renderDetail(){
     m.textContent=open?'show less':'show all'; m.setAttribute('aria-expanded', String(open)); }; });
   // Remember every section's open state, and offer one control to flip them all at once — the Elements
   // groups included, each under the id its section used to have. It works on the tab on screen.
-  det.querySelectorAll('details.elgrp').forEach(g=>g.addEventListener('toggle',()=>sectRemember(g.dataset.eg, g.open)));
-  det.querySelectorAll('details.sect').forEach(s=>s.addEventListener('toggle',()=>sectRemember(dec(s.dataset.sect), s.open)));
+  det.querySelectorAll('details.elgrp, details.sect').forEach(g=>g.addEventListener('toggle',()=>rememberFold(g)));
   const sa=document.getElementById('sectall');
   if(sa){
     det.querySelectorAll('details.sect, details.elgrp').forEach(s=>s.addEventListener('toggle',()=>syncSectAll(det)));
     sa.onclick=()=>{ const sects=paneSects(det), open=!sects.every(s=>s.open);
-      sects.forEach(s=>{ s.open=open; sectRemember(s.dataset.eg||dec(s.dataset.sect), open); }); syncSectAll(det); };
+      sects.forEach(s=>{ s.open=open; rememberFold(s); }); syncSectAll(det); };
     syncSectAll(det);
   }
   wirePaneBar(det);
@@ -6158,7 +6184,7 @@ function renderDetail(){
       const sect=det.querySelector('details.sect[data-sect="relations"]'), set=det.querySelector('details.relset[data-rset="'+b.dataset.relOpen+'"]');
       if(!sect||!set) return;
       showPaneOf(det, sect);
-      sect.open=true; set.open=true; sectRemember('relations', true); set.scrollIntoView({block:'start'});
+      sect.open=true; set.open=true; rememberFold(sect); set.scrollIntoView({block:'start'});
     };
     b.onclick=e=>{ e.stopPropagation(); open(); };
     b.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } };
@@ -6168,7 +6194,7 @@ function renderDetail(){
     const open=()=>{
       const d=det.querySelector('details.sect[data-sect="'+b.dataset.jumpSect+'"]'); if(!d) return;
       showPaneOf(det, d);
-      d.open=true; sectRemember(dec(b.dataset.jumpSect), true); d.scrollIntoView({block:'start'});
+      d.open=true; rememberFold(d); d.scrollIntoView({block:'start'});
     };
     b.onclick=e=>{ e.stopPropagation(); open(); };
     b.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } };
