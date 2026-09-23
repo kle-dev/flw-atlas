@@ -19,6 +19,13 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   gap table is drawn one way, the schema coverage table first: a row per thing that should line up, tinted by how badly it does not, a pill per kind of gap and
   *only gaps* to hide the rows that are fine. A cell says ✓ it fits, ✗ it is missing, ⚠ it looks wrong, or
   ? Atlas cannot tell — and then why, in its tooltip.
+- **A health strip under every title.** Before the first section, a page says whether the model is fine:
+  its open defects and advice, the gaps its tables found (or *✓ fits*), how many models it uses and is
+  used by, the apps that ship it — or *in no app* — and the tests that deploy it; each jumps to the section
+  that explains it. The facts beside it stop repeating what a section says: a form states its outcomes,
+  who opens it and where the outcome lands; an operation shows its call as one line and the endpoint that
+  answers it; a class its bean names; a sequence what its numbers look like. The orphan banners on
+  operations and functions are gone — the finding says it.
 - **Relations take a row per relation.** Under the drawing, a relation lists its neighbours as chips on one
   row — *App contains* five models is one row, not five — and unfolds only where a neighbour has more to
   say: a caller's parameter mappings, every REST call with its verb. An operation's page is related to its

@@ -364,6 +364,11 @@ const probe = `<script>
     // The field count is in the section heading and the navigator; a "Fields 7" fact would say it thrice.
     const fac=[...document.querySelectorAll('#detail .facts dd')].map(d=>d.textContent.trim());
     ok('no fact is a bare count that a section already carries', !fac.some(t=>/^\\d+$/.test(t)), fac.join(' | '));
+    // the outcomes are a fact of the form now, not a table of their own
+    const facts=[...document.querySelectorAll('#detail .facts .fact')];
+    const oc=facts.find(f=>/Outcomes/i.test(f.querySelector('dt').textContent));
+    ok('the form states its outcomes in its facts', !!oc && /approve/.test(oc.querySelector('dd').textContent), oc?oc.textContent:'(none)');
+    ok('and has no Outcomes section', !document.querySelector('#detail [data-sect="outcomes"]'));
 
     const btn=document.querySelector('#detail details.fldrow[data-el="notifyButton"]');
     ok('an action button is an expandable row', !!btn, 'no expandable row for notifyButton');
@@ -646,6 +651,17 @@ const probe = `<script>
     if(st&&window.__gwId){ delete st[window.__gwId]; delete st.flows; try{ localStorage.setItem('atlas-sect', JSON.stringify(st)); }catch(e){} }
     const nav=[...document.querySelectorAll('#detail .secnav .snc')].map(c=>c.dataset.jumpSect);
     ok('the navigator is short again', nav.length<=9, nav.join());
+    // the health strip under the title: findings, connections — each a way into its section
+    const hs=document.querySelector('#detail .dhero .dhealth');
+    ok('a model page has a health strip under its title', !!hs);
+    const n0=byId.get('process:orderProcess'), R0=relationsOf(n0, n0.data||{});
+    const usesB=hs&&[...hs.querySelectorAll('.hs')].find(b=>/^uses /.test(b.textContent)), byB=hs&&[...hs.querySelectorAll('.hs')].find(b=>/^used by /.test(b.textContent));
+    ok('it counts neighbours, not edges', !!usesB && !!byB && +usesB.textContent.replace(/\\D+/g,'')===new Set(R0.out.map(e=>e.id)).size &&
+       +byB.textContent.replace(/\\D+/g,'')===new Set(R0.inc.map(e=>e.id)).size, (usesB&&usesB.textContent)+' / '+(byB&&byB.textContent));
+    const fb=hs&&hs.querySelector('.hs[data-jump-sect="findings"]');
+    ok('its findings item says defects or advice', !!fb && /defect|advice/.test(fb.textContent), fb?fb.textContent:'(none)');
+    const fs=document.querySelector('#detail details.sect[data-sect="findings"]');
+    if(fb&&fs){ fs.open=false; click(fb); ok('and opens the findings', fs.open); }
     // every page reads picture, fit, findings, relations, details — in that order
     const at=id=>nav.indexOf(id);
     ok('the findings come before the relations, the relations before the elements',
@@ -717,6 +733,9 @@ const probe = `<script>
   });
   steps.push(()=>{
     const det=document.getElementById('detail');
+    const other=det.querySelector('[data-sect="otherattrs"]'), keys=other?[...other.querySelectorAll('.kvk')].map(k=>k.textContent.trim()):[];
+    ok("an operation's url and key are facts, not left-overs", keys.indexOf('url')<0 && keys.indexOf('operation')<0, keys.join());
+    ok('its call is one fact: verb and URL', [...det.querySelectorAll('.facts .fact')].some(f=>/^Call$/i.test(f.querySelector('dt').textContent.trim())));
     ok('an operation is related to its service', !!det.querySelector('[data-sect="relations"] .tr[data-rel="operation-of"] .nc[data-id^="'+enc('service:')+'"]'));
     location.hash=enc('variable:total');
   });

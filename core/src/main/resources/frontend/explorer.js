@@ -2181,7 +2181,7 @@ function acceptedNoteHtml(rule){
 }
 const FIND_COLS=[
   {k:'sev',label:'',w:'minmax(7ch,.55fr)',cls:'tags'},
-  {k:'model',label:'Model',w:'minmax(14ch,1.6fr)'},
+  {k:'model',label:'Model',w:'minmax(14ch,1.6fr)',cls:'fmodel'},
   {k:'el',label:'Element',w:'minmax(10ch,1fr)',opt:true},
   {k:'msg',label:'Finding',w:'minmax(24ch,3fr)',cls:'wrap'},
   {k:'where',label:'File',w:'minmax(10ch,1fr)',mono:true,opt:true},
@@ -2225,7 +2225,7 @@ function findingTable(rows, o){
   // 66 mail tasks with the same missing error path: one row each, with the members a chevron away, so
   // the list has as many rows as it has causes. Not on a model's own page — its findings are few, and
   // the reader is there for the elements.
-  if(o.onNode || rows.length<FIND_GROUP_FROM) return tbl(cols, rows.map(f=>findingRow(f,o)), {filter:false, more:o.more});
+  if(o.onNode || rows.length<FIND_GROUP_FROM) return tbl(cols, rows.map(f=>findingRow(f,o)), {filter:false, more:o.more, cls:'fndtbl'});
   const groups=new Map();
   rows.forEach(f=>{ const k=findingShape(f); if(!groups.has(k)) groups.set(k, []); groups.get(k).push(f); });
   const out=[];
@@ -2236,11 +2236,11 @@ function findingTable(rows, o){
     const shape=k.slice(k.indexOf('|')+1).replace(/`…`/g,'…');
     const members=fs.map(f=>findingRow(f,o));
     out.push({hay:members.map(m=>m.hay).join(' '), cls:'fgrp', attrs:' data-sev="'+esc(worst)+'"',
-      body:tbl(cols, members, {filter:false}), bodyCls:'fgrp-body',
+      body:tbl(cols, members, {filter:false, cls:'fndtbl'}), bodyCls:'fgrp-body',
       cells:{sev:tonePill(worst), model:'<span class="muted">'+models.size+' model'+(models.size>1?'s':'')+'</span>', el:'',
              msg:'<span class="fgn">'+fs.length+' ×</span> '+esc(shape), where:'', act:''}});
   });
-  return tbl(cols, out, {filter:false, more:o.more});
+  return tbl(cols, out, {filter:false, more:o.more, cls:'fndtbl'});
 }
 /**
  * A check's head, in one line: (on a model page, where defects and advice share one section, the check's
@@ -3478,7 +3478,7 @@ function identLine(n){
  *  icons do. */
 /** Node types whose label is source text, not a name: shown as code, clamped, with the rest on request. */
 const CODE_LABEL_TYPES=new Set(['expression','binding','string']);
-function heroHtml(n, facts){
+function heroHtml(n, facts, health){
   const d=n.data||{};
   const code=CODE_LABEL_TYPES.has(n.type);
   const title=code
@@ -3489,7 +3489,45 @@ function heroHtml(n, facts){
     '<div class="dhero-top"><span class="dtile" style="--tc:'+nodeColor(n)+'">'+nodeIcon(n)+'</span>'+
     '<div class="dhero-main">'+title+identLine(n)+
     (d.description?'<p class="ddesc">'+esc(String(d.description))+'</p>':'')+'</div></div>'+
-    props(facts,{cls:'facts'})+'</div>';
+    (health||'')+props(facts,{cls:'facts'})+'</div>';
+}
+// Types an app packages: "in no app" is said of these only, and only in a project that has apps at all.
+const APP_MEMBER_TYPES=new Set(['process','case','decision','form','page','dataObject','masterData','service','agent','action',
+  'event','channel','dataDictionary','securityPolicy','sla','template','query','sequence','knowledgeBase','document','variableExtractor']);
+/**
+ * The answer to "is this one fine?" before a single section: its open findings, the gaps its fit tables
+ * found, how connected it is, which apps ship it and whether a test deploys it. Every item jumps to the
+ * section that explains it. Built after the sections, so the gap tables have registered (_gapReg).
+ */
+function healthStripHtml(n, R){
+  const d=n.data||{}, items=[];
+  const hs=(tone, label, attrs, tip)=>'<button type="button" class="hs hs-'+tone+'"'+(attrs||'')+(tip?' data-tip="'+esc(tip)+'"':'')+'>'+label+'</button>';
+  const plural=(k,w)=>k+' '+w+(k===1?'':'s');
+  // findings: defects and advice kept apart, as the Checks page keeps them
+  const all=FIND_BY_NODE.get(n.id)||[], open=all.filter(f=>!waiverFor(f));
+  const defects=open.filter(f=>checkKind(f.check)!=='advice'), advice=open.length-defects.length, acc=all.length-open.length;
+  if(defects.length) items.push(hs(defects.some(f=>f.severity==='error')?'bad':'warn', uiIcon('alert')+esc(plural(defects.length,'defect')), ' data-jump-sect="findings"', 'Open findings Atlas reports on this model'));
+  if(advice) items.push(hs('advice', esc(advice+' advice'), ' data-jump-sect="findings"', 'Advice: worth a look, not a defect'));
+  if(!open.length && acc) items.push(hs('ok', esc(acc+' accepted'), ' data-jump-sect="findings"', 'Every finding on this model was accepted'));
+  // gaps: what the "does it fit" tables found — bad and doubtful rows; notes are not gaps
+  const reg=_gapReg||[], bad=reg.reduce((a,t)=>a+t.bad,0), warn=reg.reduce((a,t)=>a+t.warn,0);
+  if(bad+warn){ const first=reg.find(t=>t.bad+t.warn);
+    items.push(hs(bad?'bad':'warn', esc(plural(bad+warn,'gap')), ' data-jump-sect="'+enc(first.sect)+'"', 'Rows of the gap tables below that do not line up')); }
+  else if(reg.some(t=>t.rows)) items.push(hs('ok', '✓ fits', ' data-jump-sect="'+enc(reg.find(t=>t.rows).sect)+'"', 'Every row of the gap tables below lines up'));
+  // connections, counted by neighbour — a model reached through two relations is one neighbour
+  const uses=new Set(R.out.map(e=>e.id)).size, usedBy=new Set(R.inc.map(e=>e.id)).size;
+  if(uses) items.push(hs('n', esc('uses '+uses), ' data-rel-open="out"', 'What this model points at'));
+  if(usedBy) items.push(hs('n', esc('used by '+usedBy), ' data-rel-open="in"', 'What points at this model'));
+  else if(APP_MEMBER_TYPES.has(n.type) && !uses) items.push('<span class="hs hs-info" data-tip="Nothing Atlas scanned refers to it, and it refers to nothing">unconnected</span>');
+  // the apps that ship it
+  const apps=[...new Set((incM.get(n.id)||[]).filter(e=>e.rel==='contains'&&(byId.get(e.id)||{}).type==='app').map(e=>e.id))];
+  if(apps.length) items.push('<span class="hs hs-app">'+typeIcon('app')+'in '+apps.slice(0,3).map(id=>vlink(id, byId.get(id).label)).join(', ')+
+    (apps.length>3?' <span class="muted">+'+(apps.length-3)+'</span>':'')+'</span>');
+  else if(APP_MEMBER_TYPES.has(n.type) && INSIGHTS.apps.length)
+    items.push('<span class="hs hs-info" data-tip="No app of this project contains it, so no app deploys it">in no app</span>');
+  const tests=(d.deployedByTests||[]).length;
+  if(tests) items.push(hs('n', esc('tested by '+tests), ' data-jump-sect="tests"', 'Test classes whose @Deployment names this model'));
+  return items.length?'<div class="dhealth" role="group" aria-label="At a glance">'+items.join('')+'</div>':'';
 }
 /** One chip per rendered section, in page order — the answer to a twenty-section page. Fewer than
  *  three sections need no map. */
@@ -3608,6 +3646,23 @@ function paramSection(list, hasDg){
 }
 
 // ---------- form / page components ----------
+/** The processes and cases that show a form, with the element that does — a user task, a human task —
+ *  where the model records one; a model that opens it some other way (a start form) is listed alone. */
+function openersOf(n){
+  const out=[], seen=new Set();
+  (incM.get(n.id)||[]).forEach(e=>{ const m=byId.get(e.id); if(!m||(m.type!=='process'&&m.type!=='case')) return;
+    const els=elementRecords(m).filter(r=>r.formKey===n.key);
+    if(!els.length){ if(!seen.has(m.id)){ seen.add(m.id); out.push({model:m.id}); } return; }
+    els.forEach(r=>{ const k=m.id+'|'+r.id; if(seen.has(k)) return; seen.add(k); seen.add(m.id); out.push({model:m.id, el:r.id, name:r.name}); });
+  });
+  return out.sort((a,b)=>byId.get(a.model).label.localeCompare(byId.get(b.model).label));
+}
+/** The variable a form's outcome lands in: the one the form names (a `formOutcome` write site), else
+ *  Flowable's default `form_<key>_outcome`. */
+function formOutcomeVar(n){
+  const v=nodes.find(x=>x.type==='variable'&&((x.data||{}).writes||[]).some(w=>w.model===n.id&&w.via==='formOutcome'));
+  return v?{name:v.key}:{name:'form_'+n.key+'_outcome', dflt:true};
+}
 // A field id like `customer.email` binds the variable root `customer`. Top-level because the Fields
 // rows and the REST-call rows both link ids this way.
 function fieldLink(id){
@@ -3659,7 +3714,18 @@ const FACTS={
       x.rows.push(['Decisions',{html:d.decisions.map(k=>byId.get('decision:'+k)?vlink('decision:'+k,k):esc(String(k))).join(', ')}]);
     x.add('Hit policy',d.hitPolicy);
   },
-  form(n,d,x){},
+  // A form's own facts: what it can end with, who opens it, and the variable its outcome lands in.
+  form(n,d,x){
+    const os=(d.outcomes||[]).filter(o=>o&&(o.value||o.label)), oc=os.map(o=>o.value||o.label);
+    // the value is what a condition tests; the caption, when it says something else, is what the user reads
+    if(os.length) x.rows.push(['Outcomes',{html:os.map(o=>'<span class="mono">'+esc(String(o.value||o.label))+'</span>'+
+      (o.label&&o.value&&!sameText(o.label,o.value)?' <span class="muted">'+esc(String(o.label))+'</span>':'')).join(', '), copy:oc.join(', ')}]);
+    const op=openersOf(n);
+    if(op.length) x.rows.push(['Opened by',{html:op.slice(0,4).map(o=>o.el?vlink(o.model, byId.get(o.model).label)+' › '+elJumpHtml(o.model, o.el, o.name||o.el, 'Open the task that shows this form'):vlink(o.model, byId.get(o.model).label)).join('<br>')+
+      (op.length>4?'<br><span class="muted">+'+(op.length-4)+' more under Relations</span>':''), copy:null}]);
+    const ov=formOutcomeVar(n);
+    if(ov&&oc.length) x.rows.push(['Outcome variable',{html:vlink('variable:'+ov.name, ov.name)+(ov.dflt?' <span class="muted" data-tip="The form sets no outcome variable name, so Flowable uses this one">default</span>':''), copy:ov.name, mono:true}]);
+  },
   page:'form',
   app(n,d,x){ x.add('Theme',d.theme);
     const ga=String(d.groupsAccess||'').split(/[,;]/).map(s=>s.trim()).filter(Boolean);
@@ -3675,10 +3741,17 @@ const FACTS={
   service(n,d,x){ x.add('Type',d.type); x.mono('Base URL',d.baseUrl); x.add('Auth',d.auth); x.mono('Table',d.tableName);
     if(d.referencedLiquibaseModelKey){ const lid=(byId.get('liquibase:'+d.referencedLiquibaseModelKey)&&'liquibase:'+d.referencedLiquibaseModelKey)||outTo(n.id,'schema');
       x.rows.push(['Liquibase model',{html:vlink(lid, d.referencedLiquibaseModelKey)}]); }
-    if(d.schemaCoverage){ const c=d.schemaCoverage.counts||{}; const g=(c.noService||0)+(c.noDataObject||0); if(g) x.add('Schema gaps',g+' of '+(c.total||0)+' columns'); } },
+    },
+  // what a caller invokes: the service, the call as one line, and the code that answers it
   serviceOperation(n,d,x){
-    if(d.service) x.rows.push(['Service',{html:'<span class="vlink" data-id="'+enc('service:'+d.service)+'" tabindex="0" role="link" title="Defined by service '+esc(d.service)+'">'+esc(d.service)+'</span>'}]);
-    x.add('Name',d.name); x.mono('Method',d.method); x.mono('URL',d.fullUrl||d.url);
+    void d.operation;                                   // the node's label — said by the title
+    if(d.service) x.rows.push(['Service',{html:vlink('service:'+d.service, d.service, 'Defined by service '+d.service), copy:d.service}]);
+    if(d.name && !sameText(d.name, n.label)) x.add('Name',d.name);
+    const url=d.fullUrl||'', rel=d.url||'', call=url||rel;
+    if(call) x.rows.push(['Call',{html:(d.method?'<span class="tag verb">'+esc(d.method)+'</span> ':'')+'<span class="mono">'+esc(call)+'</span>', copy:call}]);
+    else x.mono('Method',d.method);
+    const eps=call&&d.service?endpointsFor('service:'+d.service, call, d.method):[];
+    if(eps.length) x.rows.push(['Endpoint',{html:eps.map(ep=>vlink(ep.id, byId.get(ep.id).label)).join(', '), copy:null}]);
   },
   agent(n,d,x){
     // compose only what is there — "Vendor / model: /" and "API endpoint: undefined" were rows once
@@ -3691,10 +3764,17 @@ const FACTS={
   event(n,d,x){
     // payload entries are `{name, type, …}` records (older payloads were bare names)
     x.mono('Correlation',(d.correlation||[]).join(', ')); },
-  java(n,d,x){ x.mono('Package',d.package); x.add('Roles',(d.roles||[]).join(', ')); x.add('Bot key',d.botKey); x.mono('Implements',(d.interfaces||[]).join(', ')); },
+  java(n,d,x){ void d.fqn;                              // the key, in the identity line
+    x.mono('Package',d.package); x.add('Roles',(d.roles||[]).join(', ')); x.add('Bot key',d.botKey); x.mono('Implements',(d.interfaces||[]).join(', '));
+    // the names an expression reaches the class by — ${orderDelegate} — each a link to where it is used
+    const bn=(d.beanNames||[]).filter(Boolean);
+    if(bn.length) x.rows.push(['Bean names',{html:bn.map(b=>'<span class="mono">'+esc(b)+'</span>').join(', '), copy:bn.join(', ')}]); },
   endpoint(n,d,x){ x.mono('Method',d.http); x.mono('Path',d.path);
     if(d.controller||d.handler) x.rows.push(['Handler',{html:vlink(incFrom(n.id,'serves'), [d.controller,d.handler].filter(Boolean).join('#')), copy:d.controller||undefined}]); },  // FQN for 'Go to Class'
   masterData(n,d,x){
+    x.add('Kind',[d.type,d.subType].filter(Boolean).join(' / ')||d.dataObjectType); x.mono('Data source',d.sourceId);
+    x.mono('Key field',d.keyField||d.idField); x.mono('Name field',d.nameField);
+    if(d.supportsNameFiltering!=null) x.add('Name filtering',d.supportsNameFiltering?'supported':'not supported');
     // the files that load this definition's rows at startup, each opening in the IDE
     const lf=d.loadedFrom||[];
     if(lf.length) x.rows.push(['Rows loaded from',{html:lf.map(r=>'<span class="mono">'+esc(r.file)+'</span>'+openBtn(r.file)+
@@ -3723,8 +3803,14 @@ const FACTS={
     if(d.inProgressStartOnClaim!=null) x.add('Starts on claim',String(d.inProgressStartOnClaim));
     x.mono('Task',d.taskDefinitionKey); },
   sequence(n,d,x){ x.mono('Format',d.format);
-    x.add('Start',d.start!=null?d.start:d.startValue); x.add('Increment',d.increment);
-    if(d.cycle) x.add('Cycle','true'); },
+    const start=d.start!=null?d.start:d.startValue, inc=d.increment!=null?Number(d.increment):1;
+    x.add('Start',start); x.add('Increment',d.increment);
+    if(d.cycle) x.add('Cycle','true');
+    // what the numbers look like: {seq:N} zero-padded from the start value; other tokens are left as written
+    if(d.format && /\{seq(?::\d+)?\}/.test(d.format)){
+      const at=v=>String(d.format).replace(/\{seq(?::(\d+))?\}/g,(m,w)=>String(v).padStart(w?+w:0,'0'));
+      const s0=Number(start!=null?start:1);
+      if(isFinite(s0)) x.mono('Preview', at(s0)+', '+at(s0+(isFinite(inc)?inc:1))+', …'); } },
   template(n,d,x){ x.add('Type',d.templateType||d.documentType||d.type);
     x.addCount('Variations',(d.variations||[]).length);
     if((d.variationParameters||[]).length) x.rows.push(['Variation parameters',
@@ -3857,11 +3943,6 @@ S.fields={id:'formfields', title:'Fields', hint:'every component, what it is bou
   count:(n,c)=>(c.d.fields||[]).length,
   build:(n,c)=>{ const fs=c.d.fields||[]; if(!fs.length) return '';
     return tbl(FIELD_COLS, fs.map(f=>fieldRow(f,c.d)), {placeholder:'filter fields — id, caption, type…'}); }};
-S.outcomes={id:'outcomes', title:'Outcomes', hint:'the buttons that complete the task, value and caption',
-  count:(n,c)=>(c.d.outcomes||[]).length,
-  build:(n,c)=>{ const os=(c.d.outcomes||[]).filter(o=>o&&(o.value||o.label)); if(!os.length) return '';
-    return tbl([{k:'value',label:'Value',w:'minmax(10ch,1fr)',mono:true},{k:'label',label:'Caption',w:'minmax(10ch,2fr)',cls:'dim'}],
-      os.map(o=>({hay:(o.value||'')+' '+(o.label||''), cells:{value:esc(o.value||''), label:esc(o.label||'')}}))); }};
 S.dataSources={id:'datasources', title:'Data sources', hint:'where selects, tables and lists take their rows from',
   count:(n,c)=>(c.d.dataSources||[]).length,
   build:(n,c)=>{ const ss=c.d.dataSources||[]; if(!ss.length) return '';
@@ -3876,17 +3957,28 @@ function epPathSegs(p){ return String(p||'').replace(/^[a-z]+:\/\/[^/]+/,'').spl
   .replace(/[#$]\{[^}]*\}|\{\{[^}]*\}\}|\{[^}]*\}/g,'*').toLowerCase().split('/').filter(Boolean); }
 /** The project endpoints a URL that [srcId] calls lands on: the model's own `rest-call` edges, narrowed
  *  to the endpoints whose path the URL ends with. */
-function endpointsFor(srcId, url){
+/** An HTTP verb a caller or a handler states for certain — '' for none, `?`, `ANY` or an expression. */
+const knownVerb=m=>{ const v=String(m==null?'':m).trim().toUpperCase(); return /^[A-Z]+$/.test(v)&&v!=='ANY'?v:''; };
+/**
+ * The project endpoints a URL called from `srcId` reaches, among that node's rest-call edges. With a
+ * `method`, a handler for another verb is not one of them; and a path segment the handler spells out
+ * beats one it takes as a variable — `/orders/archive` is `POST /orders/archive`, not `GET /orders/{n}`.
+ */
+function endpointsFor(srcId, url, method){
   if(!url) return [];
-  const u=epPathSegs(url);
-  return (outM.get(srcId)||[]).filter(e=>e.rel==='rest-call').map(e=>byId.get(e.id))
+  const u=epPathSegs(url), verb=knownVerb(method);
+  const lit=ep=>{ const p=epPathSegs((ep.data||{}).path), tail=u.slice(u.length-p.length); return p.filter((s,i)=>s!=='*'&&s===tail[i]).length; };
+  const hits=(outM.get(srcId)||[]).filter(e=>e.rel==='rest-call').map(e=>byId.get(e.id))
     .filter(ep=>{ if(!ep||ep.type!=='endpoint') return false;
       const p=epPathSegs((ep.data||{}).path); if(!p.length||p.length>u.length) return false;
-      const tail=u.slice(u.length-p.length); return p.every((s,i)=>s==='*'||tail[i]==='*'||s===tail[i]); });
+      const tail=u.slice(u.length-p.length); return p.every((s,i)=>s==='*'||tail[i]==='*'||s===tail[i]); })
+    .filter(ep=>{ const hv=knownVerb((ep.data||{}).http); return !verb||!hv||hv===verb; });
+  const best=Math.max(0, ...hits.map(lit));
+  return [...new Set(hits)].filter(ep=>lit(ep)===best);
 }
 /** The URL, linked to the project endpoint it calls when there is one. */
-function urlCell(srcId, url){
-  const ep=endpointsFor(srcId, url)[0];
+function urlCell(srcId, url, method){
+  const ep=endpointsFor(srcId, url, method)[0];
   return ep?'<span class="vlink" data-id="'+enc(ep.id)+'" tabindex="0" role="link" data-tip="Served by '+esc(ep.label||ep.id)+' in this project">'+esc(url)+'</span>':esc(url||'');
 }
 S.restCalls={id:'restcalls', title:'REST calls', hint:'what this form calls over HTTP, and which button does it',
@@ -3895,7 +3987,7 @@ S.restCalls={id:'restcalls', title:'REST calls', hint:'what this form calls over
     return tbl([{k:'method',label:'Method',w:'7ch',cls:'tags'},{k:'url',label:'URL',w:'minmax(16ch,3fr)',mono:true},
                 {k:'where',label:'Button',w:'minmax(8ch,1fr)',mono:true,opt:true},{k:'path',label:'Response path',w:'minmax(8ch,1fr)',mono:true,opt:true}],
       rs.map(r=>({el:r.where, hay:(r.method||'')+' '+(r.url||'')+' '+(r.where||''), cells:{
-        method:tag(r.method), url:urlCell(n.id, r.url), where:fieldLink(r.where), path:esc(r.path||'')}}))); }};
+        method:tag(r.method), url:urlCell(n.id, r.url, r.method), where:fieldLink(r.where), path:esc(r.path||'')}}))); }};
 // --- data object ---
 S.properties={id:'columns', title:'Properties', hint:'the fields of the object, typed, with the objects they point at',
   count:(n,c)=>(c.d.columns||[]).length,
@@ -4320,7 +4412,7 @@ S.ops={id:'ops', title:'Operations', hint:'what the service offers, and what eac
       const opid='serviceOperation:'+n.key+'#'+(o.key||'');
       const key=o.key?(byId.get(opid)?'<span class="vlink mono" data-id="'+enc(opid)+'" tabindex="0" role="link" data-tip="Show where '+esc(o.key)+' is used">'+esc(o.key)+'</span>':'<span class="mono">'+esc(o.key)+'</span>'):'';
       const rows=opParamRows(o);
-      return {hay:elHay(o.key,o.name,o.method,o.url,o.fullUrl), name:(o.method?'<span class="tag verb">'+esc(o.method)+'</span> ':'')+'<span class="mono">'+urlCell(n.id, o.fullUrl||o.url||o.name||'')+'</span>',
+      return {hay:elHay(o.key,o.name,o.method,o.url,o.fullUrl), name:(o.method?'<span class="tag verb">'+esc(o.method)+'</span> ':'')+'<span class="mono">'+urlCell(n.id, o.fullUrl||o.url||o.name||'', o.method)+'</span>',
         badges:[o.name&&o.name!==(o.fullUrl||o.url)?'<span class="muted">'+esc(o.name)+'</span>':'', key], right:rows.length?paramSummary(rows.map(r=>({dir:r.cells.dir.indexOf('"in"')>0?'in':'out'}))):'no params',
         body:rows.length?tbl(OP_PARAM_COLS, rows, {filter:false}):''}; })); }};
 S.coverage={id:'coverage', title:'Schema coverage', hint:'Liquibase → service → data object: every column, and where the chain breaks',
@@ -4357,7 +4449,7 @@ S.svcColumns={id:'columns', title:'Column mappings', hint:'the service’s field
 S.opParams={id:'opparams', title:'Parameters', hint:'what a caller supplies, and what comes back',
   count:(n,c)=>(c.d.params||[]).length+(c.d.outParams||[]).length,
   build:(n,c)=>{ const rows=opParamRows(c.d); return rows.length?tbl(OP_PARAM_COLS, rows, {filter:false}):''; }};
-S.opOrphan={raw:true, build:(n,c)=>(c.d.usedBy||[]).length?'':'<div class="authnote authnote-orphan">No service button, data-object field or CMMN service mapping in the scanned models calls this operation.</div>'};
+
 // --- code ---
 S.endpoints={id:'endpoints', title:'Endpoints served', hint:'the REST routes this class handles',
   count:(n,c)=>(c.d.endpoints||[]).length,
@@ -4412,7 +4504,6 @@ S.problems={id:'problems', title:'Problems', hint:'what the validator found in t
     return tbl([{k:'sev',label:'',w:'8ch',cls:'tags'},{k:'msg',label:'Finding',w:'minmax(20ch,3fr)',cls:'wrap'},{k:'snip',label:'Snippet',w:'minmax(12ch,1.4fr)',mono:true,cls:'faint',opt:true}],
       ps.map(p=>{ const bad=p.severity==='error'; return {hay:elHay(p.severity,p.message,p.snippet), cells:{
         sev:'<span class="sev sev-'+(bad?'bad':'warn')+'">'+(bad?'error':'warning')+'</span>', msg:esc(p.message||''), snip:esc(p.snippet||'')}}; }), {filter:false}); }};
-S.fnOrphan={raw:true, build:(n,c)=>(c.d.usedBy||[]).length?'':'<div class="authnote authnote-orphan">Registered via <b>externals.additionalData</b> but no <code>{{…}}</code> binding in the scanned models calls it.</div>'};
 // --- variables and string literals ---
 /** Written where, read where — the two lists the "never read" verdict rests on, so a reader can check the
  *  reasoning instead of taking the verdict on faith. Each row jumps to its element in the model. */
@@ -4484,12 +4575,12 @@ const FIT_SLOT=[S.coverage, S.coverageOf, S.fit];
 const PAGES={
   process:{det:[S.elements]},
   case:{det:[S.elements]},
-  form:{det:[S.fields, S.outcomes, S.dataSources, S.restCalls]},
+  form:{det:[S.fields, S.dataSources, S.restCalls]},
   page:'form',
   dataObject:{pic:[S.properties]},
   decision:{pic:[S.dmnIO, S.dmnRules]},
   service:{pic:[S.ops], det:[S.svcColumns]},
-  serviceOperation:{pic:[S.opParams, S.opOrphan]},
+  serviceOperation:{pic:[S.opParams]},
   app:{pic:[S.appPages], det:[S.appVars]},
   agent:{pic:[S.agentOps]},
   action:{pic:[S.botScript]},
@@ -4507,7 +4598,8 @@ const PAGES={
   liquibase:{pic:[S.lqBanner, S.lqColumns]},
   expression:{pic:[S.problems]},
   binding:'expression',
-  customFunction:{pic:[S.fnOrphan]},
+  customFunction:{},
+  masterData:{pic:[S.properties]},
   variable:{pic:[S.rw], det:[S.passedAs, S.inScripts, S.usedIn]},
   string:{pic:[S.usedIn]},
   _:{},
@@ -4760,8 +4852,8 @@ function relNbDetail(n, c, dir, e, seen){
   }
   // REST calls: the verb and the URL as the model spells it, and the button or task that makes the call
   if(e.rel==='rest-call'){
-    const calls=dir==='in' ? (md.restCalls||[]).filter(x=>endpointsFor(m.id, x.url).some(ep=>ep.id===n.id))
-                           : (c.d.restCalls||[]).filter(x=>endpointsFor(n.id, x.url).some(ep=>ep.id===m.id));
+    const calls=dir==='in' ? (md.restCalls||[]).filter(x=>endpointsFor(m.id, x.url, x.method).some(ep=>ep.id===n.id))
+                           : (c.d.restCalls||[]).filter(x=>endpointsFor(n.id, x.url, x.method).some(ep=>ep.id===m.id));
     if(calls.length){
       r.inline+=[...new Set(calls.map(x=>x.method).filter(Boolean))].map(tag).join('');
       r.hay+=' '+calls.map(x=>(x.method||'')+' '+(x.url||'')+' '+(x.where||'')).join(' ');
@@ -4948,7 +5040,7 @@ function renderDetail(){
   body+=renderSections(rn, ctx, 'det');
   // The hero reads through the recording proxy too, so what it shows (a file's line, a class's name)
   // is not listed again below.
-  const hero=heroHtml(rn, facts);
+  const hero=heroHtml(rn, facts, healthStripHtml(rn, R));
   // Whatever no renderer above consumed. Identity fields live in the header; HAY_SKIP is the same
   // bookkeeping the search index skips.
   {
