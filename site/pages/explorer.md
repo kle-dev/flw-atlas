@@ -104,54 +104,64 @@ fourteen rows of chips.
 
 ## The detail panel
 
-Selecting a node opens its page, and every page reads in the same order, whatever the node is:
+Selecting a node opens its page: a header that says what the node is and whether it is fine, and under
+it the page's **tabs**, one per question a reader brings. Every kind of node has the same four, and a tab
+with nothing to show is left out:
 
-1. **The header** — the type's icon in a tinted tile, the title, one identity line (kind · key · file
-   path, each copyable, the path opening the file inside IntelliJ) and the description the modeller wrote
-   in Design, as prose.
-2. **The health strip** under the title answers "is this one fine?" before a single section: the open
-   defects and advice, the gaps the page's tables found (or *✓ fits*, or *? unclear* when all Atlas can
-   say is that it cannot tell), how many models it *uses* and is *used by*, the apps that ship it — or
-   *in no app* — and the tests that deploy it. Every item jumps to the section that explains it.
-3. **The facts** — the handful of properties that describe the model itself: a data object's backing
-   service and table, a form's outcomes and the tasks that open it, an operation's call as one line and
-   the endpoint that answers it, a sequence's first numbers. Counts are not facts — every section carries
-   its own count in its heading.
-4. **The picture** — the drawing, or the table that *is* the model: a process's diagram, a form's layout,
-   a decision table, a service's operations, an event's payload, a data object's properties.
-5. **Does it fit?** — the gap tables, below.
-6. **Findings** on this model, then **Relations**, then the **details**: elements, fields, parameters,
-   variables and expressions, the tests that deploy it, and *Other attributes*.
+- **Overview** — what the model is: the description the modeller wrote in Design (and a process's or
+  case's documentation) as prose, the facts, and the picture — the drawing, or the table that *is* the
+  model: a process's diagram, a form's layout, a decision table, a service's operations, an event's
+  payload, a data object's properties.
+- **Findings** — what Atlas reports on it, check by check, each row with its *accept…*.
+- **Connections** — whether it fits what it meets, a section per question ([below](#does-it-fit)), and
+  its **Relations**.
+- **Details** — what it is made of: elements, fields, parameters, variables and expressions, the tests
+  that deploy it, and *Other attributes*.
 
-A sticky bar keeps the kind and the page actions (*back*, *expand all*, *copy link*) in reach while the
-page scrolls, and a row of **chips, one per section**, each with its count, is the page's map: click one
-and the section opens and scrolls into view. A big process fits it on one line.
+The header is the type's icon in a tinted tile, the title and one identity line (kind · key · file path,
+each copyable, the path opening the file inside IntelliJ). The **health strip** under it answers "is this
+one fine?" whichever tab is open: the open defects and advice, the gaps the Connections tables found (or
+*✓ fits*, or *? unclear* when all Atlas can say is that it cannot tell), how many models it *uses* and is
+*used by*, the apps that ship it — or *in no app* — and the tests that deploy it. Every item brings up the
+tab and the section that explains it. The **facts** are the handful of properties that describe the model
+itself: a data object's backing service and table, a form's outcomes and the tasks that open it, an
+operation's call as one line and the endpoint that answers it, a sequence's first numbers. Counts are not
+facts: a section carries its own count in its heading, and a tab in its label — Findings the open ones,
+Connections the neighbours, with a dot when one of its tables found a gap.
+
+The tab bar stays in reach while the page scrolls, with the page's two actions at its end: *expand all*,
+for the tab on screen, and *copy link*. The tab is part of the link — `&p=findings`, `&p=connections`,
+`&p=details` — and it carries over as you walk the graph: a reader going through callers on Connections
+stays on Connections on the next page that has the tab, and Back returns to the tab the page was left on.
+`1`–`4` pick a tab. A section is a heading with its count; what it shows is explained behind its ⓘ.
 
 <figure class="fig">
-  <div class="body"><img class="only-light" src="../assets/img/detail-form.png" alt="A form's detail page: the header with icon tile, title, identity line and health strip, the facts, the section chips, and the form's layout — the wireframe of its grid" width="1400" height="1000"><img class="only-dark" src="../assets/img/detail-form-dark.png" alt="A form's detail page: the header with icon tile, title, identity line and health strip, the facts, the section chips, and the form's layout — the wireframe of its grid" width="1400" height="1000"></div>
-  <figcaption><b>A form's page</b> — the health strip and facts under the title, the chips that map the
-  sections, and the form's layout: the wireframe the IDE's model preview draws, clickable like a diagram.
+  <div class="body"><img class="only-light" src="../assets/img/detail-form.png" alt="A form's detail page: the header with icon tile, title, identity line and health strip, the tabs Overview, Connections and Details, and on Overview the facts and the form's layout — the wireframe of its grid" width="1400" height="1000"><img class="only-dark" src="../assets/img/detail-form-dark.png" alt="A form's detail page: the header with icon tile, title, identity line and health strip, the tabs Overview, Connections and Details, and on Overview the facts and the form's layout — the wireframe of its grid" width="1400" height="1000"></div>
+  <figcaption><b>A form's page</b> — the health strip under the title, the tabs, and on Overview the facts
+  and the form's layout: the wireframe the IDE's model preview draws, clickable like a diagram.
   <a href="../demo/explorer.html#form%3AorderForm" target="_blank" rel="noopener">Open it ↗</a></figcaption>
 </figure>
 
 ### Does it fit?
 
 The question a model file cannot answer on its own is whether it fits what it meets — the callers that
-hand it values, the models it calls, the code that answers it, the app that ships it. *Does it fit?*
-answers it with one kind of table, the schema coverage table first: a row per thing that should line up,
-tinted by how badly it does not, a pill per kind of gap on top, and *only gaps* to hide the rows that are
-fine. A cell says ✓ it fits, a faint ✓ it fits by name (a decision reads its inputs by name, a button that
+hand it values, the models it calls, the code that answers it, the app that ships it. The Connections
+tab answers it with one kind of table, a section per question — *Calls*, *Called by*, *Fields and the
+variables they write* — the schema coverage table first: a row per thing that should line up, tinted by
+how badly it does not, a pill per kind of gap in the section's heading, and *only gaps* to hide the rows
+that are fine. A cell says ✓ it fits, a faint ✓ it fits by name (a decision reads its inputs by name, a button that
 sends the whole form hands over every field), ✗ it is missing, ⚠ it looks wrong, or ? Atlas cannot tell —
 and then why, in its tooltip: a callee outside the project, a call with no explicit mappings (Atlas
 cannot see `variables="all"` or a Java start), a name only a script guesses at, a name Java writes, a
-list longer than Atlas records. The reasons are the silence rules of the
+list longer than Atlas records. Every mark says what it means in its tooltip, ahead of that reason, and
+every question's ⓘ carries the legend. The reasons are the silence rules of the
 [unused-variable check](../variables/), so a table never contradicts a finding.
 
 <figure class="fig">
   <div class="body"><img class="only-light" src="../assets/img/detail-fit.png" alt="An operation's page: its parameter customerId is required, and the one task that calls it passes nothing — the Does it fit? table marks the row red with a cross, and the health strip counts one gap" width="1400" height="900"><img class="only-dark" src="../assets/img/detail-fit-dark.png" alt="An operation's page: its parameter customerId is required, and the one task that calls it passes nothing — the Does it fit? table marks the row red with a cross, and the health strip counts one gap" width="1400" height="900"></div>
   <figcaption><b>Does it fit?</b> — an operation against its callers: the task passes nothing for a
   required parameter, so the row is a gap, the pill names its kind, and the health strip counts it.
-  <a href="../demo/explorer.html#serviceOperation%3AcustomerService%23findById" target="_blank" rel="noopener">Open it ↗</a></figcaption>
+  <a href="../demo/explorer.html#serviceOperation%3AcustomerService%23findById&amp;p=connections" target="_blank" rel="noopener">Open it ↗</a></figcaption>
 </figure>
 
 What each page asks:
@@ -189,17 +199,21 @@ What each page asks:
 
 ### Relations
 
-**Relations** lists both directions, always, for every node type, in one place. Its drawing reads left
-to right: what the node uses in a column on the left, what uses it on the right, the node in the middle,
-the arrows pointing the way each reference goes; a dashed connector with `≈` or `ƒ` is an uncertain link,
-the most-referenced neighbours come first, and *+N more* opens that side of the list below. Then one table
-per direction — **Uses** and **Used by** — with **a row per relation**, its neighbours as chips on that
-row: an app's five members are one *App contains* row, not five. A row unfolds only where a neighbour has
+**Relations** lists both directions, always, for every node type, in one place: **Uses** and **Used
+by**, with **a row per relation** — the relation on the left, its neighbours as chips on the right. An
+app's five members are one *App contains* row, not five. A chip opens its model, `⌘`/`Ctrl`-click or a
+middle-click opens it in a new tab. A row unfolds only where a neighbour has
 more to say: the parameters a caller passes in (which is how to check that a button's payload names line
 up with what the callee reads), every REST call with its verb and URL. An outgoing mapping's tally and an
 agent tool's operation sit beside the chip. A long list gets a filter with chips — *uses →*, *← used by*,
 *≈ uncertain* and *with mappings* — that act on the neighbours. An operation is related to its service,
 and a variable to the models that write, read or mention it. That is why the graph carries `usedBy`.
+
+The same relations as a drawing are one switch away — *graph*, above the list — and the switch stays on
+from page to page until you turn it off. The drawing reads left to right: what the node uses in a column
+on the left, what uses it on the right, the node in the middle, the arrows pointing the way each reference
+goes; a dashed connector with `≈` or `ƒ` is an uncertain link, the most-referenced neighbours come first,
+and *+N more* opens that side of the list.
 
 ### Details
 
@@ -247,8 +261,10 @@ Inside IntelliJ the panel also opens code: the `↗` beside a source path and ev
 or endpoint open that file in an editor tab (see [the plugin](../plugin/#the-atlas-explorer-inside-the-ide)).
 In a browser those affordances are not shown — the page cannot open a file there.
 
-Every section remembers whether you left it open, per section, across reloads; the picture, *Does it
-fit?*, the findings and the relations start open, everything else starts folded. Up to twelve nodes can
+Every section starts open but *Other attributes*, and remembers it when you fold it, per section, across
+reloads; a process's Elements groups start as they always did, the tasks open and the rest folded. On a
+model's own page a finding says only what the page does not: no model, the line instead of the file, and
+no severity column when its check's head already says it. Up to twelve nodes can
 be open as **detail tabs**, which are viewports with their own history rather than pins. When the strip
 holds more than it can show, its edges fade on the side that hides tabs, the wheel scrolls it sideways,
 and a **+N** button lists the tabs out of view — pick one to switch to it. The split between the list and
@@ -265,8 +281,8 @@ same rule holds structurally on the generator side: a parsed field the report wo
 fails the build.
 
 The report pages — `#/checks`, `#/scripts`, `#/variables`, `#/schema` — are built from the same parts:
-the same header with the page's own numbers as facts, the same sections with their chips, the same
-tables. A script on the Scripts page is the card the process page shows; a finding on the Checks page
+the same header with the page's own numbers as facts, the same sections, the same tables; there a row of
+chips, one per section, is the page's map. A script on the Scripts page is the card the process page shows; a finding on the Checks page
 is a section the health rows jump to.
 
 ## Diagrams
@@ -397,6 +413,7 @@ page, grouped by where each key works.
 | `Alt+1`…`Alt+9` | browse | Activate that detail tab |
 | `Alt+[` / `Alt+]` | browse | Previous / next tab |
 | `Alt+W` | browse | Close the active tab |
+| `1`…`4` | browse, a node selected | Its Overview, Findings, Connections or Details tab — the tabs it has, in order |
 | `c` | browse, a node selected | Copy the node's key |
 | `o` | browse, a node selected, inside the IDE | Open the node's file in the IDE |
 | `↓` / `↑` | *View* button | Open the View menu on its first / last switch |
@@ -430,7 +447,7 @@ The explorer never presents a guess as a fact:
   referenced* sorts by. A row whose key only repeats its name, as a REST endpoint's does, shows it once. On the model's diagram the same count sits as a
   **badge** on each element with a finding — red for an error, amber for a [defect](../checks/)'s
   warning, grey when the element carries advice alone — click it and the element's card lists them, with *restore*
-  for an accepted one and *accept…* landing on the finding's row under the diagram. **View › Finding
+  for an accepted one and *accept…* landing on the finding's row on the Findings tab. **View › Finding
   badges on diagrams** hides the badges on every diagram and is remembered, for a reader who wants the diagram
   as Design draws it.
 - The overview's health summary leads with the two numbers, *N defects* and *M advice*, each split by

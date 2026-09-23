@@ -14,24 +14,34 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
 
 ## 0.27.0
 
-- **Detail pages ask whether a model fits.** Every page reads in one order: the picture — the drawing, or
-  the table that *is* the model — then *Does it fit?*, the findings, the relations and the details. Every
-  gap table is drawn one way, the schema coverage table first: a row per thing that should line up, tinted
-  by how badly it does not, a pill per kind of gap and *only gaps* to hide the rows that are fine. A cell
-  says ✓ it fits, ✗ it is missing, ⚠ it looks wrong, or ? Atlas cannot tell — and then why, in its
-  tooltip.
-- **A health strip under every title.** Before the first section, a page says whether the model is fine:
-  its open defects and advice, the gaps its tables found (or *✓ fits*), how many models it uses and is
-  used by, the apps that ship it — or *in no app* — and the tests that deploy it; each jumps to the
-  section that explains it. The facts beside it stop repeating what a section says: a form states its
-  outcomes, who opens it and where the outcome lands; an operation shows its call as one line and the
-  endpoint that answers it; a class its bean names; a sequence what its numbers look like. The orphan
-  banners on operations and functions are gone — the finding says it.
-- **Relations take a row per relation.** Under the drawing, a relation lists its neighbours as chips on
-  one row — *App contains* five models is one row, not five — and unfolds only where a neighbour has more
-  to say: a caller's parameter mappings, every REST call with its verb. An operation's page is related to
-  its service, and a variable's page lists the models that write, read or merely mention it, where both
-  used to say they had no relationships.
+- **A detail page in four tabs.** Under the title, a page is *Overview* — Design's description and a
+  process's documentation as prose, the facts, and the picture: the drawing, or the table that *is* the
+  model — *Findings*, *Connections* — whether it fits what it meets, and its relations — and *Details*:
+  elements, fields, parameters, variables, the tests that deploy it, *Other attributes*. A tab with
+  nothing to show is left out, Findings counts what is open and Connections carries a dot when a table
+  found a gap. The tab is part of the link (`&p=connections`), carries over to the next page that has it,
+  and `1`–`4` pick one. A section is a heading with its count and its explanation behind an ⓘ, and every
+  section starts open but *Other attributes*. On a model's own page a finding drops the model, the file
+  and a severity its check's head already says.
+- **Detail pages ask whether a model fits.** On the Connections tab each question is a section of its own
+  — *Calls*, *Called by*, *Fields and the variables they write* — and every gap table is drawn one way,
+  the schema coverage table first: a row per thing that should line up, tinted by how badly it does not,
+  a pill per kind of gap in its heading and *only gaps* to hide the rows that are fine. A cell says ✓ it
+  fits, ✗ it is missing, ⚠ it looks wrong, or ? Atlas cannot tell — and its tooltip says what the mark
+  means and why.
+- **A health strip under every title.** Whichever tab is open, a page says whether the model is fine: its
+  open defects and advice, the gaps its tables found (or *✓ fits*), how many models it uses and is used
+  by, the apps that ship it — or *in no app* — and the tests that deploy it; each brings up the tab and
+  the section that explains it. The facts stop repeating what a section says: a form states its outcomes,
+  who opens it and where the outcome lands; an operation shows its call as one line and the endpoint that
+  answers it; a class its bean names; a sequence what its numbers look like; a query the groups it
+  filters by, where it said *0* before. The orphan banners on operations and functions are gone — the
+  finding says it.
+- **Relations take a row per relation.** A relation lists its neighbours as chips on one row — *App
+  contains* five models is one row, not five — and unfolds only where a neighbour has more to say: a
+  caller's parameter mappings, every REST call with its verb. The drawing is a switch away and stays on
+  from page to page. An operation's page is related to its service, and a variable's page lists the
+  models that write, read or merely mention it, where both used to say they had no relationships.
 - **A process's page says whether its calls fit.** *Does it fit?* lists every call a process or case makes
   — sub-process, case, decision, operation, agent, form, event — with what it hands over and takes back,
   and every caller of it against what it reads: a value it reads that no caller passes, a value passed in
@@ -164,8 +174,8 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   the page the whole width; a long name no longer pushes its findings pill out of sight.
 - **A node's relations in one section.** A page told its relations three and four times — a neighbourhood
   drawing, *Uses / references*, *Used by / referenced from*, and a type's own copies (*Called by*,
-  *Access*, *Subforms*, *Tools*, *Used by*, *Called with*). *Relations* is one section under the diagram:
-  the drawing, then a table per direction with a row per relation and neighbour, carrying what the old
+  *Access*, *Subforms*, *Tools*, *Used by*, *Called with*). *Relations* is one section on the Connections
+  tab: a list per direction with a row per relation and neighbour, carrying what the old
   sections added — the element that makes a reference, a REST call's verb and URL, a tool's operation, and
   a caller's parameter mappings in its expanded row — with chips for *uses*, *used by*, *uncertain* and
   *with mappings*. An expression, a binding, a function and a service operation get the same section from
@@ -173,9 +183,9 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   *Variables & expressions* now; as *Uses* it collided with the drawing's USES column.
 - **A process's elements in one section.** User tasks, service tasks, script tasks, call activities,
   events, gateways, sequence flows, lanes, listeners and documentation — for a case its plan model,
-  sentries and event listeners — were a section each, and a big process's navigator ran to seventeen
-  chips in three rows. They are the groups of one *Elements* section now, each keeping its own table, with
-  a chip per kind that keeps only that kind and one filter over all of them; the navigator fits one line.
+  sentries and event listeners — were a section each, seventeen on a big process. They are the groups of
+  one *Elements* section on the Details tab now, each keeping its own table, with a chip per kind that
+  keeps only that kind and one filter over all of them.
 - **The overview summarises instead of repeating.** Its health block was the Checks page's list and its
   inventory the sidebar's entries as ungrouped chips. Health is now two numbers — the open defects and
   advice, each split by tier (broken, runtime risk, unfinished, noise) — the five checks with the most
