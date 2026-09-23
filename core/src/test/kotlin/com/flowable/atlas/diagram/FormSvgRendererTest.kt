@@ -58,7 +58,21 @@ class FormSvgRendererTest {
             assertTrue("expected \"$expected\" in the wireframe", svg.contains(expected))
         }
         assertTrue("a required field carries a star", svg.contains("> *</tspan>"))
-        assertTrue("a hidden component is greyed out", svg.contains("""<g opacity="0.45">"""))
+        assertTrue("a hidden component is greyed out", svg.contains(""" opacity="0.45">"""))
+    }
+
+    @Test
+    fun everyComponentIsAClickableElementWithAHotspot() {
+        val pic = FormSvgRenderer.picture(onboarding)!!
+        assertEquals(Picture.Kind.WIREFRAME, pic.kind)
+        // the same contract as a diagram shape: the element id on a focusable group
+        assertTrue(svg.contains("""<g data-el="firstName" tabindex="0" role="button""""))
+        val ids = pic.hotspots.map { it.id }
+        assertTrue(ids.toString(), ids.containsAll(listOf("firstName", "country", "startDate", "remote", "notes")))
+        // a field inside a panel wins the click over the panel around it
+        val remote = pic.hotspots.single { it.id == "remote" }
+        assertEquals("remote", pic.hotspotAt(remote.x + remote.width / 2, remote.y + remote.height / 2)!!.id)
+        assertNull("the margin is no component", pic.hotspotAt(2.0, 2.0))
     }
 
     @Test

@@ -11,8 +11,9 @@ import kotlin.math.max
  * beside the id; one that is plainly `false` greys the component out.
  *
  * It is a developer's map of the form, not a preview of the Work UI: no styling, no data, no runtime
- * logic. Like [DmnTableSvgRenderer] it is for the IDE (the gutter icon and the model preview); the
- * explorer lists a form's components as a table.
+ * logic. The IDE's gutter icon and model preview and the explorer's form page all draw it (see
+ * [ModelPicture]); every component is a `<g data-el="<id>">` and a [Picture.Hotspot], so a click on it
+ * lands on the component — its row on the explorer page, its declaration in the editor.
  *
  * Output is deterministic and draws its own white background, so it is legible in any viewer theme.
  */
@@ -50,8 +51,13 @@ object FormSvgRenderer {
     private val CHOICE_TYPES = setOf("select", "radio", "people", "group", "multiselect")
 
     /** The wireframe of a form/page document, or null when [bytes] is not one. */
-    fun renderSvg(bytes: ByteArray): String? {
+    fun renderSvg(bytes: ByteArray): String? = picture(bytes)?.svg
+
+    /** The wireframe with every component's box as a hotspot, in drawing order — a panel before the
+     *  components inside it, so the innermost one wins a click. */
+    fun picture(bytes: ByteArray): Picture? {
         val layout = FormLayout.parse(bytes) ?: return null
+        val hits = ArrayList<Picture.Hotspot>()
         val inner = WIDTH - 2 * PAD
         val gridH = if (layout.rows.isEmpty()) LABEL_H else gridHeight(layout, inner)
         val titleH = if (layout.title != null) TITLE_H else 0.0
@@ -68,10 +74,10 @@ object FormSvgRenderer {
         if (layout.rows.isEmpty()) {
             sb.append(text(PAD, top + 13.0, "No components", fill = MUTED))
         } else {
-            drawGrid(sb, layout, PAD, top, inner)
+            drawGrid(sb, layout, PAD, top, inner, hits)
         }
         sb.append("</svg>")
-        return sb.toString()
+        return Picture(sb.toString(), Picture.Kind.WIREFRAME, Picture.Box(0.0, 0.0, WIDTH, height), hits)
     }
 
     // ---- layout ------------------------------------------------------------------------------
@@ -115,27 +121,36 @@ object FormSvgRenderer {
 
     // ---- painting ----------------------------------------------------------------------------
 
-    private fun drawGrid(sb: StringBuilder, layout: FormLayout, x0: Double, y0: Double, width: Double) {
+    private fun drawGrid(
+        sb: StringBuilder, layout: FormLayout, x0: Double, y0: Double, width: Double, hits: MutableList<Picture.Hotspot>,
+    ) {
         var y = y0
         for (line in layout.rows.flatMap(::lines)) {
             var col = 0
             val h = line.maxOf { cellHeight(it, span(it, width)) }
             for (c in line) {
                 val x = x0 + (width + GAP) * col / 12
-                drawCell(sb, c, x, y, span(c, width))
+                drawCell(sb, c, x, y, span(c, width), hits)
                 col += c.size
             }
             y += h + ROW_GAP
         }
     }
 
-    private fun drawCell(sb: StringBuilder, c: FormLayout.Cell, x: Double, y: Double, w: Double) {
+    private fun drawCell(sb: StringBuilder, c: FormLayout.Cell, x: Double, y: Double, w: Double, hits: MutableList<Picture.Hotspot>) {
         val hidden = c.visible == false
-        sb.append(if (hidden) """<g opacity="0.45">""" else "<g>")
+        // the component is one clickable element — the same contract as a diagram shape
+        val id = c.id.takeIf { it.isNotBlank() }
+        sb.append("<g")
+        if (id != null) {
+            sb.append(""" data-el="${esc(id)}" tabindex="0" role="button"""")
+            hits.add(Picture.Hotspot(id, x, y, w, cellHeight(c, w)))
+        }
+        sb.append(if (hidden) """ opacity="0.45">""" else ">")
         c.label?.let { sb.append("<title>${esc(it)} (${esc(c.type)})</title>") }
         val bodyH = cellHeight(c, w) - META_H
         when {
-            c.sections.isNotEmpty() -> drawContainer(sb, c, x, y, w)
+            c.sections.isNotEmpty() -> drawContainer(sb, c, x, y, w, hits)
             c.subform != null -> {
                 sb.append(box(x, y, w, bodyH, PANEL_FILL, dashed = true))
                 sb.append(text(x + 10.0, y + 18.0, clip(c.label ?: "Subform", w - 20.0), weight = "600"))
@@ -175,7 +190,7 @@ object FormSvgRenderer {
     }
 
     /** A panel: a title bar over its grid; tabs and accordions: one strip + grid per section. */
-    private fun drawContainer(sb: StringBuilder, c: FormLayout.Cell, x: Double, y: Double, w: Double) {
+    private fun drawContainer(sb: StringBuilder, c: FormLayout.Cell, x: Double, y: Double, w: Double, hits: MutableList<Picture.Hotspot>) {
         val bodyH = cellHeight(c, w) - META_H
         sb.append(box(x, y, w, bodyH, PANEL_FILL))
         sb.append(box(x, y, w, HEADER_H, HEADER_FILL))
@@ -193,7 +208,7 @@ object FormSvgRenderer {
                 sb.append(text(x + INSET, sy + INSET + 12.0, "Empty", fill = MUTED))
                 sy += INSET + LABEL_H + INSET
             } else {
-                drawGrid(sb, s.layout, x + INSET, sy + INSET, inner)
+                drawGrid(sb, s.layout, x + INSET, sy + INSET, inner, hits)
                 sy += INSET + gridHeight(s.layout, inner) + INSET
             }
         }

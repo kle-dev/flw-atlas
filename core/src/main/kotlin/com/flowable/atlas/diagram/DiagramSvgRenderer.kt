@@ -27,7 +27,12 @@ object DiagramSvgRenderer {
     private const val LANE_FILL = "#f7f9fa"
 
     /** Render [geometry] to an SVG document, or null when there is nothing to draw. */
-    fun render(geometry: DiagramGeometry): String? {
+    fun render(geometry: DiagramGeometry): String? = picture(geometry)?.svg
+
+    /** The drawing of [geometry] with every element's box as a hotspot — the shapes, in the model's own
+     *  coordinates, which are the SVG's viewBox coordinates. Edges are drawn clickable but are no hotspot:
+     *  a point on a line is close to a shape as often as not. */
+    fun picture(geometry: DiagramGeometry): Picture? {
         if (geometry.isEmpty()) return null
         val box = boundingBox(geometry) ?: return null
         val (minX, minY, maxX, maxY) = box
@@ -51,7 +56,9 @@ object DiagramSvgRenderer {
         for (s in geometry.shapes) if (!isContainer(s.kind)) drawShape(sb, s)
 
         sb.append("</svg>")
-        return sb.toString()
+        val hotspots = geometry.shapes.filter { it.elementId.isNotBlank() }
+            .map { Picture.Hotspot(it.elementId, it.x, it.y, it.width, it.height) }
+        return Picture(sb.toString(), Picture.Kind.DIAGRAM, Picture.Box(viewX, viewY, viewW, viewH), hotspots)
     }
 
     private fun isContainer(k: ShapeKind): Boolean =
