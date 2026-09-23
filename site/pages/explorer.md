@@ -173,7 +173,9 @@ history rather than pins. When the strip holds more than it can show, its edges 
 hides tabs, the wheel scrolls it sideways, and a **+N** button lists the tabs out of view — pick one to
 switch to it. The split between the list and the panel is yours to move — drag the handle
 between them, `←`/`→` nudge it, `Home` resets — and it is remembered, which matters most in a narrow
-IDE tool window where the list used to take half the width.
+IDE tool window where the list used to take half the width. In an editor tab the list starts at most
+224px wide, and it **folds away**: the button in its head hides it, as does dragging the handle shut,
+and the button at the page's top-left corner brings it back. The fold is remembered too.
 
 Nothing the parser extracted is invisible: whatever no specific section consumed renders at the bottom
 as a collapsed **Other attributes** key/value tree. When a new model attribute starts being parsed, it

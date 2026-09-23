@@ -582,13 +582,27 @@
   /* ------------------------------------------------------------------ */
   .listhead{position:sticky;top:0;background:var(--panel2);border-bottom:1px solid var(--line);padding:var(--space-25);z-index:5}
   .listhead .t{font-size:var(--text-2xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-dim);
-    margin-bottom:var(--space-2);display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
+    margin-bottom:var(--space-2);display:flex;align-items:center;gap:var(--space-15);font-variant-numeric:tabular-nums}
+  .listhead .t #lcount{margin-left:auto}
   .lh-controls{display:flex;gap:var(--space-15)}
+  .lh-hide,.listshow{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;flex:none;
+    background:transparent;border:1px solid transparent;border-radius:var(--radius-sm);color:var(--ink-faint);cursor:pointer}
+  .lh-hide:hover,.listshow:hover{color:var(--ink);background:var(--hover);border-color:var(--line2)}
+  .lh-hide .ui{width:14px;height:14px}
+  /* the list folded away: the page takes the whole width, the show button sits at its top-left corner,
+     and the tab strip makes room for it */
+  @media (min-width:801px){
+    .view-browse.list-off{grid-template-columns:minmax(0,1fr)}
+    .view-browse.list-off .listcol,.view-browse.list-off .listresize{display:none}
+    .listshow{position:absolute;left:var(--space-1);top:var(--space-1);z-index:9;background:var(--panel);border-color:var(--line2)}
+    .view-browse.list-off .dtabs{padding-left:32px}
+  }
   .listhead input{flex:1;min-width:0;background:var(--input);border:1px solid var(--line2);color:var(--ink);
     font-family:var(--sans);font-size:var(--text-sm);padding:var(--space-15) var(--space-2);border-radius:var(--radius-md);outline:none}
   .listhead input:focus{border-color:var(--accent)}
   #lsort{background:var(--input);border:1px solid var(--line2);color:var(--ink-dim);
-    font-family:var(--sans);font-size:var(--text-xs);border-radius:var(--radius-md);padding:0 var(--space-15);outline:none;flex:none}
+    font-family:var(--sans);font-size:var(--text-xs);border-radius:var(--radius-md);padding:0 var(--space-15);outline:none;flex:none;
+    max-width:45%}
   #lsort:focus{border-color:var(--accent)}
   /* "N marked" button in the list head, shown only while a multi-selection exists. */
   .lh-open{width:100%;margin-top:var(--space-15);background:var(--accent);border:1px solid var(--accent);
@@ -624,7 +638,10 @@
   .item:hover .ck{visibility:visible;border-color:var(--line2)}
   .item.mark .ck{visibility:visible;background:var(--accent);border-color:var(--accent)}
   .item .meta{min-width:0;flex:1}
-  .item .nm{color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* the name gives way before its badges do: a long name in a narrow list used to cut the findings pill off */
+  .item .nm{color:var(--ink);display:flex;align-items:center;min-width:0}
+  .item .nmt{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .item .nm .pill{flex:none}
   .item .sub{font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .refn{flex:none;align-self:center;display:inline-flex;align-items:center;gap:2px;font-size:var(--text-2xs);
     font-variant-numeric:tabular-nums;color:var(--ink-faint);
@@ -1083,13 +1100,14 @@
   @media (max-width:1100px){
     .dbody{padding:0 var(--space-4) var(--space-8)}
     .dtab{max-width:160px}
-    .view-browse{grid-template-columns:min(var(--list-w),280px) 1fr}
-    .listresize{left:calc(min(var(--list-w),280px) - 3px)}
+    .view-browse{grid-template-columns:min(var(--list-w),224px) 1fr}
+    .listresize{left:calc(min(var(--list-w),224px) - 3px)}
     .searchbtn{width:auto}
     .searchbtn .ph{display:none}
     #viewbtn .lbl{display:none}
   }
   @media (max-width:800px){
+    .lh-hide{display:none}             /* stacked layout: the list is a block above the page, nothing to fold */
     html,body{height:auto}
     .shell{display:flex;flex-direction:column;height:auto}
     .side-resize{display:none}

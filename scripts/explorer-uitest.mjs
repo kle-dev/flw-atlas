@@ -1206,6 +1206,25 @@ const ideProbe = `<script>
   steps.push(()=>{
     ok('picking one activates that tab', !!window.__pick && state.sel===window.__pick, state.sel+' vs '+window.__pick);
     ok('and the menu closes', document.getElementById('dtmenu').hidden);
+    const lw=document.querySelector('.listcol').getBoundingClientRect().width;
+    ok('the list is narrower in an editor tab', lw>0 && lw<=226, 'width='+Math.round(lw));
+    window.__detW=document.getElementById('detail').getBoundingClientRect().width;
+    const hide=document.getElementById('lhide');
+    ok('the list head offers to hide the list', !!hide);
+    if(hide) hide.click();
+  });
+  steps.push(()=>{
+    ok('hiding the list folds it away', !document.querySelector('.listcol').getBoundingClientRect().width);
+    ok('and gives its room to the page', document.getElementById('detail').getBoundingClientRect().width>window.__detW+150);
+    let st=''; try{ st=localStorage.getItem('atlas-list-hidden')||''; }catch(e){}
+    ok('the fold is remembered', st==='1');
+    const show=document.getElementById('listshow');
+    ok('a button brings it back', !!show && !show.hidden);
+    ok('no horizontal page scroll with the list folded', noHScroll());
+    if(show) show.click();
+  });
+  steps.push(()=>{
+    ok('showing the list brings it back', document.querySelector('.listcol').getBoundingClientRect().width>0 && document.getElementById('listshow').hidden);
   });
   let i=0;(function run(){
     if(i>=steps.length){

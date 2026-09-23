@@ -137,6 +137,10 @@ try{
       <section class="view" id="view-tree" hidden></section>
       <section class="view view-browse" id="view-browse" hidden>
         <div class="listcol"><div id="list"></div></div>
+        <!-- shown while the list is folded away (atlas-list-hidden) -->
+        <button type="button" class="listshow" id="listshow" hidden data-tip="Show the list" aria-label="Show the list">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/></svg>
+        </button>
         <div class="listresize" id="listresize" role="separator" aria-orientation="vertical" tabindex="0"
              aria-label="Resize the list — drag, arrow keys, Home to reset"></div>
         <!-- The tab strip must not scroll with the detail body, so it is a sibling of #detail

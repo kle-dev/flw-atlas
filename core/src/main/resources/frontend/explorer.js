@@ -126,6 +126,8 @@ const UI_ICONS={
   error:'<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
   advice:'<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
   search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  panelClose:'<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/>',
+  panelOpen:'<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/>',
   eye:'<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
 };
 function uiIcon(name){
@@ -2757,7 +2759,8 @@ function renderList(){
   const list = document.getElementById('list'); list.innerHTML='';
   if(!cat) return;
   const head=document.createElement('div'); head.className='listhead';
-  head.innerHTML='<div class="t"><span>'+esc(cat.label)+'</span><span class="muted" id="lcount">'+cat.count+'</span></div>'+
+  head.innerHTML='<div class="t"><span>'+esc(cat.label)+'</span><span class="muted" id="lcount">'+cat.count+'</span>'+
+    '<button type="button" class="lh-hide" id="lhide" data-tip="Hide the list — more room for the page" aria-label="Hide the list">'+uiIcon('panelClose')+'</button></div>'+
     '<div class="lh-controls"><input id="lf" placeholder="filter '+esc(cat.label.toLowerCase())+'…" aria-label="Filter list">'+
     '<select id="lsort" aria-label="Sort list"><option value="name">Name</option>'+
     '<option value="refs">Most referenced</option><option value="file">File</option></select></div>'+
@@ -2774,6 +2777,7 @@ function renderList(){
   const ls=document.getElementById('lsort'); ls.value=state.sort;
   ls.onchange=()=>{ state.sort=ls.value; renderItems(cat, wrap); syncHashContext(); };
   wrap.onkeydown=rowKeys(wrap, '.item[data-id]');
+  document.getElementById('lhide').onclick=()=>setListHidden(true);
   renderListMarkBar();
 }
 
@@ -2930,7 +2934,7 @@ function renderItems(cat, wrap){
     const sub=(w&&w.hint)||(sameText(n.key, n.label)?'':n.key);
     const rl='Referenced by '+rn+' node'+(rn>1?'s':'')+' — the count Most referenced sorts by';
     el.innerHTML=nodeIcon(n)+
-      '<div class="meta"><div class="nm">'+hlHtml(n.label, parsed)+authBadge(n)+findPillHtml(n.id)+'</div>'+
+      '<div class="meta"><div class="nm"><span class="nmt">'+hlHtml(n.label, parsed)+'</span>'+authBadge(n)+findPillHtml(n.id)+'</div>'+
       (sub?'<div class="sub" title="'+esc(sub)+'">'+hlHtml(sub, parsed)+'</div>':'')+'</div>'+
       (rn?'<span class="refn" data-tip="'+esc(rl)+'" aria-label="'+esc(rl)+'">'+uiIcon('link')+rn+'</span>':'')+
       '<span class="ck" aria-hidden="true">✓</span>';
@@ -7428,7 +7432,21 @@ function wireSidebarResize(){
 // The list/detail split. The sidebar has had a drag handle with a remembered width for a while; the
 // browse split was a fixed 330px, which in a narrow IDE tool window let the list eat half the panel.
 // Same contract as the sidebar handle: drag, ←/→ by 16px, Home resets, double-click resets.
-const LW_MIN=200, LW_MAX=640, LW_DEF=330;
+const LW_MIN=200, LW_MAX=640, LW_DEF=330, LW_COLLAPSE=120;
+// The list folds away — in an editor tab it is the widest thing beside the page, and once a node is open
+// the tabs and the breadcrumb already say where you are. Remembered; the button at the detail's left
+// edge (or dragging the handle out again) brings it back.
+function listHidden(){ try{ return localStorage.getItem('atlas-list-hidden')==='1'; }catch(e){ return false; } }
+function applyListPref(){
+  const vb=document.getElementById('view-browse'), show=document.getElementById('listshow'), off=listHidden();
+  if(vb) vb.classList.toggle('list-off', off);
+  if(show) show.hidden=!off;
+}
+function setListHidden(off){
+  try{ if(off) localStorage.setItem('atlas-list-hidden','1'); else localStorage.removeItem('atlas-list-hidden'); }catch(e){}
+  applyListPref();
+  const t=document.getElementById(off?'listshow':'lf'); if(t) t.focus();
+}
 function lwClamp(v){ return Math.max(LW_MIN, Math.min(LW_MAX, v)); }
 function listWidth(){ let w=NaN; try{ w=parseInt(localStorage.getItem('atlas-list-w'),10); }catch(e){} return (w>=LW_MIN&&w<=LW_MAX)?w:LW_DEF; }
 function setListWidth(w){
@@ -7440,16 +7458,20 @@ function wireListResize(){
   const h=document.getElementById('listresize'), vb=document.getElementById('view-browse');
   if(!h||!vb) return;
   setListWidth(listWidth());
+  applyListPref();
+  const show=document.getElementById('listshow'); if(show) show.onclick=()=>setListHidden(false);
   let startX=0, startW=0, dragging=false;
   h.addEventListener('pointerdown',e=>{
-    dragging=true; startX=e.clientX; startW=parseInt(vb.style.getPropertyValue('--list-w'),10)||LW_DEF;
+    dragging=true; raw=0; startX=e.clientX; startW=parseInt(vb.style.getPropertyValue('--list-w'),10)||LW_DEF;
     try{ h.setPointerCapture(e.pointerId); }catch(_){}
     e.preventDefault();
   });
-  h.addEventListener('pointermove',e=>{ if(dragging) vb.style.setProperty('--list-w', lwClamp(startW+(e.clientX-startX))+'px'); });
+  let raw=0;
+  h.addEventListener('pointermove',e=>{ if(!dragging) return; raw=startW+(e.clientX-startX); vb.style.setProperty('--list-w', lwClamp(raw)+'px'); });
   const end=e=>{
     if(!dragging) return; dragging=false;
     try{ h.releasePointerCapture(e.pointerId); }catch(_){}
+    if(raw && raw<LW_COLLAPSE){ setListWidth(startW); setListHidden(true); return; }   // dragged shut: fold it
     setListWidth(parseInt(vb.style.getPropertyValue('--list-w'),10)||LW_DEF);
   };
   h.addEventListener('pointerup',end);
