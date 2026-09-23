@@ -26,7 +26,9 @@ object ModelBytes {
      */
     fun resolve(root: File, fileLabel: String): Pair<ByteArray, String>? {
         val bang = fileLabel.indexOf('!') // Extractor archive label: "$rel!${entry.name}"
-        if (bang >= 0) {
+        // A loose file whose own path holds a `!` (`models/Q&A!/x.bpmn`) is that file, not an archive entry.
+        val loose = File(root, fileLabel)
+        if (bang >= 0 && !loose.isFile) {
             val archiveRel = fileLabel.substring(0, bang)
             val entryPath = fileLabel.substring(bang + 1)
             // When the project input is itself a single archive (`./atlas app.zip`), `Extractor.relOf`
@@ -46,8 +48,7 @@ object ModelBytes {
                 }
             }.getOrNull()
         }
-        val f = File(root, fileLabel)
-        return if (f.isFile) runCatching { f.readBytes() }.getOrNull()?.let { it to f.name } else null
+        return if (loose.isFile) runCatching { loose.readBytes() }.getOrNull()?.let { it to loose.name } else null
     }
 
     /** [entryPath] inside the archive whose bytes are [archiveBytes]; one more `!` descends again. */
