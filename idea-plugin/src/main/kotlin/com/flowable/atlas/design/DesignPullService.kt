@@ -207,6 +207,12 @@ class DesignPullService(private val project: Project) {
         }
         val targetDir = projectDir.resolve(target.targetFolder).normalize()
 
+        // Post-pull drift, part one: the keys the project had, taken before anything is written. Taken
+        // after the VFS refresh (as it was), the refresh had already dropped the index, the snapshot was
+        // always empty, and the "keys removed by this pull" warning could never fire.
+        val indexService = project.service<FlowableModelIndexService>()
+        val previousKeys = indexService.cachedOrNull()?.let { modelKeys(it) }
+
         // Resolve display names/versions once, up front (best-effort — a list failure only degrades the
         // filename/notification to the raw key and never aborts the pull).
         val apps = (DesignClient.listApps(conn, workspaceKey) as? DesignClient.Result.Success)?.value.orEmpty()
@@ -257,11 +263,8 @@ class DesignPullService(private val project: Project) {
         // the whole folder. Synchronous refresh is fine: we are on a pooled thread, not the EDT.
         val outsideContent = refreshVfsAndDetectOutsideContent(targetDir, written.map { it.target })
 
-        // Post-pull drift: snapshot the keys the project had, rebuild, and flag any the pull removed —
-        // code or models still referencing them may now be broken. refresh() rebuilds synchronously and
-        // returns the fresh index, so the after-snapshot is exact.
-        val indexService = project.service<FlowableModelIndexService>()
-        val previousKeys = indexService.cachedOrNull()?.let { modelKeys(it) }
+        // Part two: rebuild, and flag any key the pull removed — code or models still referencing it may
+        // now be broken. refresh() rebuilds synchronously and returns the fresh index, so the after-snapshot is exact.
         indicator.text = "Rebuilding Flowable index…"
         val removedKeys = removedModelKeys(previousKeys, modelKeys(indexService.refresh()))
 
