@@ -9,8 +9,7 @@ import com.flowable.atlas.expr.eval.EvalResult
 import com.flowable.atlas.expr.eval.FrontendExpressionEvaluator
 import com.flowable.atlas.expr.eval.PayloadScopePath
 import com.flowable.atlas.expr.eval.PayloadScopes
-import com.flowable.atlas.expr.eval.TraceEntry
-import com.flowable.atlas.expr.eval.TraceNodeKind
+import com.flowable.atlas.expr.eval.SubExpressionHints
 import com.flowable.atlas.expr.eval.TraceOutcome
 import com.flowable.atlas.expr.eval.TracedEvaluation
 import com.flowable.atlas.model.MiniJson
@@ -229,19 +228,15 @@ internal class PlaygroundDiagnostics(
     // ---- sub-expression value inlays (frontend) ----------------------------------------------
 
     private companion object {
-        /** Node kinds worth a hint — a `= value` after every literal or member read is noise. */
-        val HINTED_KINDS = setOf(
-            TraceNodeKind.BINARY, TraceNodeKind.CALL, TraceNodeKind.PIPE,
-            TraceNodeKind.TERNARY, TraceNodeKind.INDEX,
-        )
-        const val MAX_INLAYS = 8
-        const val MAX_VALUE_LENGTH = 40
-        const val MIN_NODE_SPAN = 3
+        /** A Remote-Dev fallback row names its sub-expression in this many characters at most — a long
+         *  `||` chain's operand would otherwise make a row, and the strip, as wide as the expression. */
+        const val MAX_ROW_EXPR = 60
     }
 
     /**
-     * Rebuild the sub-expression `= value` hints from the last computed trace, on the EDT. Two
-     * surfaces, both gated on the "Show Sub-Expression Values" toggle:
+     * Rebuild the sub-expression `= value` hints from the last computed trace, on the EDT. Which nodes get
+     * one, and where, is [SubExpressionHints] (`:core`, unit-tested). Two surfaces, both gated on the
+     * "Show Sub-Expression Values" toggle:
      *  - inline [Inlay]s via the platform's [PresentationRenderer] — a serializable presentation, so
      *    it renders locally AND stands a chance on a Remote-Dev thin client, unlike a raw custom paint;
      *  - on a Remote-Dev host, the very same values as guaranteed plain-Swing rows in [strip].
@@ -253,7 +248,7 @@ internal class PlaygroundDiagnostics(
         inlays.clear()
         val c = lastComputed
         val hints = if (host.showSubEvaluations && c?.trace != null)
-            computeSubHints(c.text, c.trace.entries) else emptyList()
+            SubExpressionHints.compute(c.text, c.trace.entries) else emptyList()
         (field.editor as? EditorEx)?.let { editor ->
             val factory = PresentationFactory(editor)
             val length = editor.document.textLength
@@ -265,73 +260,7 @@ internal class PlaygroundDiagnostics(
                 inlays += inlay
             }
         }
-        if (remoteDevHost) strip.setSubEvaluations(hints.map { "${it.exprText}${it.label}" })
-    }
-
-    /** One sub-expression hint: where the inline badge anchors, the node's own source text, and the
-     *  ` = value` label — shared verbatim by the inline inlays and the Remote-Dev Swing fallback. */
-    private data class SubHint(val anchor: Int, val exprText: String, val label: String)
-
-    /** Pick the trace nodes worth a hint (the same filter the inlays always used) and format each. */
-    private fun computeSubHints(text: String, entries: List<TraceEntry>): List<SubHint> {
-        val parenMatch = matchParens(text)
-        val hints = ArrayList<SubHint>()
-        for (entry in entries) {
-            if (hints.size >= MAX_INLAYS) break
-            if (entry.depth == 0) continue                        // the root's value lives in the result pane
-            if (entry.kind !in HINTED_KINDS) continue
-            if (entry.end - entry.start < MIN_NODE_SPAN) continue
-            val (anchor, parenthesized) = anchorAfterParens(text, entry, parenMatch)
-            if (entry.depth > 2 && !parenthesized) continue
-            val label = when (val o = entry.outcome) {
-                is TraceOutcome.Value -> " = ${truncateMiddle(display(o.value), MAX_VALUE_LENGTH)}"
-                is TraceOutcome.Unavailable -> " = ?"
-                is TraceOutcome.Error, TraceOutcome.NotEvaluated -> continue   // errors are squiggled already
-            }
-            val s = entry.start.coerceIn(0, text.length)
-            val e = entry.end.coerceIn(s, text.length)
-            hints += SubHint(anchor, text.substring(s, e), label)
-        }
-        return hints
-    }
-
-    /** Close-paren index → its open-paren index; quick scan that skips string literals. */
-    private fun matchParens(text: String): Map<Int, Int> {
-        val match = HashMap<Int, Int>()
-        val stack = ArrayDeque<Int>()
-        var quote: Char? = null
-        var i = 0
-        while (i < text.length) {
-            val ch = text[i]
-            when {
-                quote != null -> if (ch == '\\') i++ else if (ch == quote) quote = null
-                ch == '\'' || ch == '"' -> quote = ch
-                ch == '(' -> stack.addLast(i)
-                ch == ')' -> stack.removeLastOrNull()?.let { match[i] = it }
-            }
-            i++
-        }
-        return match
-    }
-
-    /**
-     * `(1+1)` has no paren node in the AST and the [TraceEntry] offsets exclude the parens — hop the
-     * anchor over every closing paren whose matching `(` sits before the node, so the hint reads
-     * `(1+1) = 2`, not `(1+1 = 2)`. Doubles as the "is parenthesized" detector for the noise filter.
-     */
-    private fun anchorAfterParens(text: String, entry: TraceEntry, parenMatch: Map<Int, Int>): Pair<Int, Boolean> {
-        var anchor = entry.end
-        var parenthesized = false
-        var i = entry.end
-        while (true) {
-            while (i < text.length && text[i] == ' ') i++
-            if (i < text.length && text[i] == ')' && (parenMatch[i] ?: Int.MAX_VALUE) < entry.start) {
-                i++
-                anchor = i
-                parenthesized = true
-            } else break
-        }
-        return anchor to parenthesized
+        if (remoteDevHost) strip.setSubEvaluations(hints.map { SubExpressionHints.truncateMiddle(it.exprText, MAX_ROW_EXPR) + it.label })
     }
 
     // ---- evaluate selection -------------------------------------------------------------------
@@ -347,7 +276,7 @@ internal class PlaygroundDiagnostics(
         }
         strip.setSelectionInfo(entry?.let {
             val value = (it.outcome as TraceOutcome.Value).value
-            "Selection = ${truncateMiddle(display(value), MAX_VALUE_LENGTH)}   (${typeName(value)})"
+            "Selection = ${SubExpressionHints.truncateMiddle(SubExpressionHints.display(value), SubExpressionHints.MAX_VALUE_LENGTH)}   (${typeName(value)})"
         })
     }
 
@@ -361,7 +290,7 @@ internal class PlaygroundDiagnostics(
             while (e > s && text[e - 1].isWhitespace()) e--
         }
         trim()
-        val parenMatch = matchParens(text)
+        val parenMatch = SubExpressionHints.matchParens(text)
         while (e - s >= 2 && text[s] == '(' && text[e - 1] == ')' && parenMatch[e - 1] == s) {
             s++; e--; trim()
         }
@@ -369,12 +298,6 @@ internal class PlaygroundDiagnostics(
     }
 
     // ---- value rendering ------------------------------------------------------------------------
-
-    private fun display(value: Any?): String = when (value) {
-        null -> "null"
-        is String -> "\"$value\""
-        else -> MiniJson.stringify(value)
-    }
 
     private fun typeName(value: Any?): String = when (value) {
         null -> "null"
@@ -385,7 +308,4 @@ internal class PlaygroundDiagnostics(
         is Map<*, *> -> "object"
         else -> value.javaClass.simpleName
     }
-
-    private fun truncateMiddle(s: String, max: Int): String =
-        if (s.length <= max) s else s.take(max / 2) + "…" + s.takeLast(max / 2 - 1)
 }
