@@ -27,10 +27,11 @@ class FlowableAtlasConfigurable : AtlasApplicationConfigurable(
                 row {
                     checkBox("Also index raw Flowable Design workspace sources")
                         .comment(
-                            "By default only exported deployment artifacts are indexed " +
-                                "(.bpmn/.cmmn/.dmn/.form/.data/.service, incl. inside .bar/.zip). Enable this to " +
-                                "also index the raw Design-workspace source JSON (bpmn-models/, form-models/, …) — " +
-                                "needed when the repository holds the Design export rather than deployment artifacts.",
+                            "By default deployment artifacts (.bpmn/.cmmn/.dmn/.form/.data/.service) are indexed, " +
+                                "and inside a .bar/.zip also the forms, pages, actions and data objects a Design " +
+                                "export keeps as form-models/*.json and the like. Enable this to also read loose " +
+                                "Design-workspace JSON (bpmn-models/, form-models/, …) checked into the repository. " +
+                                "The index, the preview, the outline and the file icons all follow this setting.",
                         )
                         .bindSelected(settings::indexDesignWorkspace)
                         .onApply {

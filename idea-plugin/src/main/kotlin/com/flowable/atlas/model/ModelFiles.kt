@@ -6,6 +6,7 @@ import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.vfs.newvfs.ArchiveFileSystem
 
 /**
  * Shared file classification for Flowable model files — used by both the index and the
@@ -79,17 +80,23 @@ object ModelFiles {
 
     /**
      * Model type of a file, by its deployment-artifact extension (.bpmn, .cmmn, .dmn, .form, .action, ...).
-     * When "Index Flowable Design workspace" is enabled, per-model `.json` files under the
-     * Design `*-models/` folders are classified by their containing folder too; otherwise only the
-     * exported deployment artifacts are indexed (they already carry every published key).
+     * Per-model `.json` files under the Design `*-models/` folders are classified by their containing
+     * folder: inside an archive always (JSON-only types), loose only when "Index Flowable Design
+     * workspace" is enabled.
      */
     fun typeOf(file: VirtualFile): ModelType? {
         ModelType.byExtension(file.name)?.let { return it }
-        if (designIndexingEnabled() && file.name.endsWith(".json", ignoreCase = true)) {
-            return ModelType.byDesignFolder(file.parent?.name)
-        }
-        return null
+        if (!file.name.endsWith(".json", ignoreCase = true)) return null
+        val type = ModelType.byDesignFolder(file.parent?.name) ?: return null
+        if (designIndexingEnabled()) return type
+        // Inside a Design app export a form, page, action or data object exists only as its
+        // `form-models/X.json` — the command line reads those whatever the setting says, and the IDE did
+        // not: no key, no preview, no outline. Processes, cases and decisions ship their .bpmn/.cmmn/.dmn
+        // beside the JSON, which stays the one they are read from.
+        return type.takeIf { file.fileSystem is ArchiveFileSystem && it !in XML_BACKED }
     }
+
+    private val XML_BACKED = setOf(ModelType.PROCESS, ModelType.CASE, ModelType.DECISION)
 
     /** True if the path points at a Flowable model artifact we index (excludes build output). */
     fun isModelPath(path: String): Boolean {
