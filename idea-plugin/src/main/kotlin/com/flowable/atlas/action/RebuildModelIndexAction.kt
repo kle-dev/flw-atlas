@@ -13,6 +13,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
@@ -40,7 +41,17 @@ class RebuildModelIndexAction : AnAction(), DumbAware {
         fun rebuild(project: Project) {
             object : Task.Backgroundable(project, "Indexing Flowable models", true) {
                 override fun run(indicator: ProgressIndicator) {
-                    val index = project.service<FlowableModelIndexService>().refresh()
+                    // A failed scan is a message for the user, not a red IDE error for the plugin.
+                    val index = try {
+                        project.service<FlowableModelIndexService>().refresh()
+                    } catch (pce: ProcessCanceledException) {
+                        throw pce
+                    } catch (e: Exception) {
+                        AtlasNotifications.group()
+                            .createNotification("Model index could not be rebuilt", e.message ?: e.javaClass.simpleName, NotificationType.WARNING)
+                            .notify(project)
+                        return
+                    }
                     ApplicationManager.getApplication().invokeLater {
                         if (!project.isDisposed) notifyRebuilt(project, index)
                     }

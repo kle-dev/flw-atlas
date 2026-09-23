@@ -260,7 +260,18 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
      *  flight — it may have started before the files this rebuild is about were written. */
     fun refresh(): FlowableIndex {
         drop()
-        return buildAndCache()
+        try {
+            return buildAndCache()
+        } catch (pce: ProcessCanceledException) {
+            throw pce
+        } catch (t: Throwable) {
+            // Recorded as a background build's failure is, so the Hub says the index could not be built
+            // instead of scanning forever; the caller still hears about it.
+            LOG.warn("The Flowable model index could not be rebuilt", t)
+            lastFailure = t
+            publishUpdated()
+            throw t
+        }
     }
 
     /** Drop the cached index so it is rebuilt lazily on next use (cheap; safe on the EDT). */
