@@ -48,6 +48,13 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   on it or its members, and flags one that may start a process or work on a task of the app but cannot
   open the app. A group's page shows, per model, what the group may do and the app it gets there through —
   or that it can open none of the apps that ship it.
+- **Events, signals, endpoints and classes meet their counterparts.** An event's page holds every payload
+  field against every element that publishes or consumes it — a field no publisher sends, a correlation
+  a receiver does not supply — and its channels against who uses them; a channel lists the events it
+  carries without a publisher or consumer. A signal, message, error or escalation lists who throws and who
+  catches it, and an error thrown but never caught is a gap. An endpoint lists every call that reaches
+  it with the verb each uses; a class's methods name the models that call them, and its bean names the
+  expressions that use them.
 - **A health strip under every title.** Before the first section, a page says whether the model is fine:
   its open defects and advice, the gaps its tables found (or *✓ fits*), how many models it uses and is
   used by, the apps that ship it — or *in no app* — and the tests that deploy it; each jumps to the section

@@ -829,6 +829,27 @@ const probe = `<script>
     ok('an app lists what its models reach that no app ships', !!row && row.classList.contains('cov-warn') && /in no app/.test(row.textContent), row?row.textContent:'(no row)');
   });
 
+  // --- events, endpoints and classes against their counterparts ---
+  steps.push(()=>{ location.hash=enc('endpoint:GET /api/customers/{id}/canEdit'); });
+  steps.push(()=>{
+    const s=document.querySelector('#detail details.sect[data-sect="fit"]');
+    const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>r.querySelector('.vlink[data-id="'+enc('form:orderForm')+'"]'));
+    ok('an endpoint lists its callers with the verb each uses', !!row && /canEditButton/.test(row.textContent) && !!row.querySelector('.gm-ok'), row?row.textContent:'(no row)');
+    location.hash=enc('java:com.example.DemoBean');
+  });
+  steps.push(()=>{
+    const m=document.querySelector('#detail [data-sect="methods"]'); if(m) m.open=true;
+    const row=m&&[...m.querySelectorAll('.tbl .tr')].find(r=>((r.querySelector('.td.mono')||{}).textContent||'').indexOf('run(')===0);
+    ok("a class's methods name the models that call them", !!row && !!row.querySelector('.vlink[data-id="'+enc('process:orderProcess')+'"]'), row?row.textContent:'(no row)');
+    location.hash=enc('event:orderShipped');
+  });
+  steps.push(()=>{
+    const s=document.querySelector('#detail details.sect[data-sect="fit"]');
+    ok('an event lists its payload against its publishers and consumers', !!s && /Publishers and consumers/.test(s.textContent) && /consumed by/.test(s.textContent));
+    const hs=document.querySelector('#detail .dhealth');
+    ok('a page whose every row is a question does not claim it fits', !!hs && !/fits/.test(hs.textContent));
+  });
+
   // --- sidebar groups fold and remember ---
   steps.push(()=>{
     const h=document.querySelector('#nav .side-group[data-group="Models"]');

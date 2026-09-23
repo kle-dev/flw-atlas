@@ -3371,7 +3371,7 @@ function gapTable(cols, rows, o){
   const isGap=r=>GAP_TONES.indexOf(r.gap||'')>=0;
   // a row Atlas cannot judge (`unk`) is neither a gap nor a fit — it gets a pill of its own
   const gaps=rows.filter(isGap), unclear=rows.filter(r=>!isGap(r)&&r.unk).length, fine=rows.length-gaps.length-unclear;
-  const tally={sect:o.sect||'fit', bad:0, warn:0, info:0, rows:rows.length};
+  const tally={sect:o.sect||'fit', bad:0, warn:0, info:0, rows:rows.length, fine, unclear};
   gaps.forEach(r=>{ tally[r.gap]++; });
   if(_gapReg && o.count!==false) _gapReg.push(tally);
   let pills=o.pills;
@@ -3515,7 +3515,9 @@ function healthStripHtml(n, R){
   const reg=_gapReg||[], bad=reg.reduce((a,t)=>a+t.bad,0), warn=reg.reduce((a,t)=>a+t.warn,0);
   if(bad+warn){ const first=reg.find(t=>t.bad+t.warn);
     items.push(hs(bad?'bad':'warn', esc(plural(bad+warn,'gap')), ' data-jump-sect="'+enc(first.sect)+'"', 'Rows of the gap tables below that do not line up')); }
-  else if(reg.some(t=>t.rows)) items.push(hs('ok', '✓ fits', ' data-jump-sect="'+enc(reg.find(t=>t.rows).sect)+'"', 'Every row of the gap tables below lines up'));
+  else if(reg.some(t=>t.fine)&&!reg.some(t=>t.unclear)) items.push(hs('ok', '✓ fits', ' data-jump-sect="'+enc(reg.find(t=>t.fine).sect)+'"', 'Every row of the gap tables below lines up'));
+  else if(reg.some(t=>t.unclear)){ const u=reg.reduce((a,t)=>a+(t.unclear||0),0);
+    items.push(hs('n', '? '+u+' unclear', ' data-jump-sect="'+enc(reg.find(t=>t.unclear).sect)+'"', 'Rows where Atlas cannot see far enough to judge — each ? says why')); }
   // connections, counted by neighbour — a model reached through two relations is one neighbour
   const uses=new Set(R.out.map(e=>e.id)).size, usedBy=new Set(R.inc.map(e=>e.id)).size;
   if(uses) items.push(hs('n', esc('uses '+uses), ' data-rel-open="out"', 'What this model points at'));
@@ -4324,6 +4326,127 @@ function groupAccessFit(g){
 }
 FIT.app=[{title:'What its models reach', build:n=>appReachFit(n)}, {title:'Who can reach it', build:n=>appAccessFit(n)}];
 FIT.group=[{title:'Access', build:n=>groupAccessFit(n)}];
+
+// --- events, channels, signals and messages: every publisher against every consumer ---
+/** Every payload field of an event against every element that publishes or consumes it: is the field
+ *  sent, is it taken, is the correlation a receiver needs supplied? */
+function eventPayloadFit(ev){
+  const pl=((ev.data||{}).payload||[]).filter(f=>f&&f.name);
+  const sites=callersOf(ev);
+  if(!sites.length) return '';
+  const pubs=sites.filter(st=>st.role==='send'), subs=sites.filter(st=>st.role!=='send');
+  const ordered=pubs.concat(subs);
+  const colLabel=st=>(st.role==='send'?'→ ':'← ')+esc(byId.get(st.model).label)+(st.name||st.el?' <span class="muted">› '+esc(st.name||st.el)+'</span>':'');
+  const many=ordered.length>4;
+  const cols=many?[{k:'all', label:pubs.length+' publish · '+subs.length+' consume', w:'minmax(16ch,2.4fr)', cls:'tags'}]
+    : ordered.map((st,i)=>({k:'c'+i, labelHtml:colLabel(st), w:'minmax(10ch,1fr)', cls:'tags'}));
+  const cell=(st, f)=>{
+    if(!st.maps.length) return {st:'unk', tip:'This element maps no payload field explicitly — it may use the whole payload or variables of the same names'};
+    if(st.role==='send'){ const m=st.maps.find(p=>p.kind==='eventInParameter'&&p.target===f.name);
+      return m?{st:'ok', txt:ctSide(m), tip:'Sent from '+ctSide(m)}:{st:'miss', tip:'Not sent — consumers get no value for it', tone:'warn'}; }
+    const out=st.maps.find(p=>p.kind==='eventOutParameter'&&p.source===f.name), cor=st.maps.find(p=>p.kind==='eventCorrelationParameter'&&p.target===f.name);
+    if(f.correlation&&!cor&&st.type!=='startEvent') return {st:'warn', tip:'A correlation field this receiver does not supply — every waiting instance matches', tone:'warn', cor:true};
+    if(cor) return {st:'ok', txt:'correlates', tip:'Correlates on '+ctSide(cor)};
+    return out?{st:'ok', txt:out.target, tip:'Taken into '+out.target}:{st:'none', tip:'Not taken by this consumer'};
+  };
+  const rows=pl.map(f=>{ const per=ordered.map(st=>cell(st, f));
+    const miss=per.some(r=>r.st==='miss'), cor=per.some(r=>r.cor);
+    const cells={name:esc(f.name)+(f.type?' <span class="muted">'+esc(f.type)+'</span>':'')+(f.correlation?' <span class="tag">correlates</span>':'')};
+    if(many) cells.all=per.map((r,i)=>'<span class="gc gc-'+r.st+'" data-tip="'+esc(byId.get(ordered[i].model).label+' › '+(ordered[i].name||ordered[i].el)+': '+(r.tip||r.st))+'">'+GM[r.st]+'</span>').join('');
+    else per.forEach((r,i)=>{ cells['c'+i]=gm(r.st, r.txt||'', r.tip||''); });
+    return {gap:miss||cor?'warn':'', unk:per.every(r=>r.st==='unk'), kind:cor?'cor':miss?'unsent':'', hay:f.name, cells};
+  });
+  if(!rows.length) return '';
+  return gapTable([{k:'name',label:'Payload field',w:'minmax(14ch,1.4fr)',mono:true}].concat(cols), rows,
+    {okLabel:k=>k+' fit', kinds:{unsent:{tone:'warn', label:k=>k+' not sent by a publisher'}, cor:{tone:'warn', label:k=>k+' correlation not supplied'}},
+     meta:(pubs.length?'<span class="muted">published by</span> '+[...new Set(pubs.map(x=>x.model))].map(id=>vlink(id, byId.get(id).label)).join(', '):'<span class="muted">no publisher in this project</span>')+
+       ' · '+(subs.length?'<span class="muted">consumed by</span> '+[...new Set(subs.map(x=>x.model))].map(id=>vlink(id, byId.get(id).label)).join(', '):'<span class="muted">no consumer in this project</span>')});
+}
+/** The channels an event travels over, against who publishes and consumes it. */
+function eventChannelsFit(ev){
+  const ch=new Map();
+  (outM.get(ev.id)||[]).forEach(e=>{ if(e.rel==='inbound-channel'||e.rel==='outbound-channel') ch.set(e.id, e.rel); });
+  (incM.get(ev.id)||[]).forEach(e=>{ if(e.rel==='channel-event'&&!ch.has(e.id)) ch.set(e.id, 'channel-event'); });
+  if(!ch.size) return '';
+  const sites=callersOf(ev), pubs=sites.filter(x=>x.role==='send').length, subs=sites.length-pubs;
+  return gapTable([{k:'ch',label:'Channel',w:'minmax(16ch,1.6fr)'},{k:'dir',label:'Direction',w:'minmax(10ch,1fr)',cls:'tags'},{k:'st',label:'',w:'minmax(16ch,1.6fr)',cls:'tags'}],
+    [...ch.entries()].map(([cid, rel])=>{ const c=byId.get(cid), dir=String(((c&&c.data)||{}).channelType||'').toLowerCase()||(rel==='inbound-channel'?'inbound':rel==='outbound-channel'?'outbound':'');
+      const bad=dir==='inbound'&&!subs?'nobody consumes what arrives':dir==='outbound'&&!pubs?'nobody publishes onto it':'';
+      return {gap:bad?'warn':'', kind:bad?'dir':'', hay:c?c.label:cid, cells:{ch:iconLink(cid), dir:tag(dir),
+        st:bad?gm('warn', bad, dir==='inbound'?'An inbound channel delivers this event, but no model of this project consumes it':'An outbound channel carries this event, but no model of this project publishes it'):gm('ok', dir==='inbound'?subs+' consume':pubs+' publish')}}; }),
+    {okLabel:k=>k+' fit', kinds:{dir:{tone:'warn', label:k=>k+' direction without a counterpart'}}});
+}
+/** The events a channel carries, against who publishes and consumes them here. */
+function channelFit(ch){
+  const evs=new Set();
+  (outM.get(ch.id)||[]).forEach(e=>{ if(e.rel==='channel-event') evs.add(e.id); });
+  (incM.get(ch.id)||[]).forEach(e=>{ if(e.rel==='inbound-channel'||e.rel==='outbound-channel'||e.rel==='via-channel') { const x=byId.get(e.id); if(x&&x.type==='event') evs.add(e.id); } });
+  if(!evs.size) return '';
+  const dir=String((ch.data||{}).channelType||'').toLowerCase();
+  return gapTable([{k:'ev',label:'Event',w:'minmax(16ch,1.6fr)'},{k:'pub',label:'Published by',w:'minmax(14ch,1.4fr)'},{k:'sub',label:'Consumed by',w:'minmax(14ch,1.4fr)'},{k:'st',label:'',w:'minmax(12ch,1fr)',cls:'tags'}],
+    [...evs].map(eid=>{ const ev=byId.get(eid), sites=ev?callersOf(ev):[], pubs=[...new Set(sites.filter(x=>x.role==='send').map(x=>x.model))], subs=[...new Set(sites.filter(x=>x.role!=='send').map(x=>x.model))];
+      const bad=dir==='inbound'&&!subs.length?'nobody consumes it':dir==='outbound'&&!pubs.length?'nobody publishes it':'';
+      const l=ids=>'<span>'+ids.slice(0,3).map(id=>vlink(id, byId.get(id).label)).join(', ')+(ids.length>3?' +'+(ids.length-3):'')+'</span>';
+      return {gap:bad?'warn':'', kind:bad?'dir':'', hay:ev?ev.label:eid, cells:{ev:iconLink(eid), pub:l(pubs), sub:l(subs), st:bad?gm('warn', bad):gm('ok')}}; }),
+    {okLabel:k=>k+' fit', kinds:{dir:{tone:'warn', label:k=>k+' without a '+(dir==='inbound'?'consumer':'publisher')}}});
+}
+/** Who throws a signal, message, error or escalation and who catches it — by the name the shared node is
+ *  keyed by. An error nobody catches ends the instance; the other kinds just go unheard. */
+function thrownCaughtFit(n){
+  const throwers=[], catchers=[];
+  (incM.get(n.id)||[]).forEach(e=>{ const m=byId.get(e.id); if(!m) return;
+    const side=/^throws-|^triggers-signal$/.test(e.rel)?'throw':/^catches-/.test(e.rel)?'catch':''; if(!side) return;
+    const els=elementRecords(m).filter(r=>r.ref===n.key&&(side==='throw'?/Throw|endEvent/.test(r.type||''):!/Throw|endEvent/.test(r.type||'')));
+    const list=side==='throw'?throwers:catchers;
+    if(els.length) els.forEach(r=>list.push({model:m.id, el:r.id, name:r.name}));
+    else list.push({model:m.id});
+  });
+  if(!throwers.length&&!catchers.length) return '';
+  const where=x=>vlink(x.model, byId.get(x.model).label)+(x.el?' › '+elJumpHtml(x.model, x.el, x.name||x.el, 'Open the element'):'');
+  const err=n.type==='error';
+  const rows=throwers.map(x=>({gap:catchers.length?'':err?'warn':'info', kind:catchers.length?'':'uncaught', hay:byId.get(x.model).label,
+      cells:{side:tag('throws'), where:where(x), st:catchers.length?gm('ok', 'caught '+catchers.length+'×'):gm(err?'warn':'info', 'nobody catches it', err?'An error no boundary or event sub-process catches ends the instance':'Nothing in this project listens for it')}}))
+    .concat(catchers.map(x=>({gap:throwers.length?'':'info', kind:throwers.length?'':'unthrown', hay:byId.get(x.model).label,
+      cells:{side:tag('catches'), where:where(x), st:throwers.length?gm('ok', 'thrown '+throwers.length+'×'):gm('info', 'nothing throws it', 'Nothing in this project throws it — it may come from outside, or never')}})));
+  return gapTable([{k:'side',label:'',w:'minmax(8ch,.6fr)',cls:'tags'},{k:'where',label:'Where',w:'minmax(18ch,2fr)'},{k:'st',label:'',w:'minmax(14ch,1.2fr)',cls:'tags'}],
+    rows, {okLabel:k=>k+' matched', kinds:{uncaught:{tone:err?'warn':'info', label:k=>k+' thrown, never caught'}, unthrown:{tone:'info', label:k=>k+' caught, never thrown'}}});
+}
+// --- code: an endpoint against its callers, a class against the models that use it ---
+/** Every call that reaches an endpoint: the caller, the button, operation or task, the verb it uses. */
+function endpointCallersFit(ep){
+  const verb=knownVerb((ep.data||{}).http), rows=[];
+  (incM.get(ep.id)||[]).forEach(e=>{ if(e.rel!=='rest-call') return; const m=byId.get(e.id); if(!m) return; const md=m.data||{};
+    const calls=[];
+    if(m.type==='service') (md.operations||[]).forEach(o=>{ const u=o.fullUrl||o.url; if(u&&endpointsFor(m.id, u, null).some(x=>x.id===ep.id)) calls.push({where:o.key, whereHtml:vlink('serviceOperation:'+m.key+'#'+o.key, o.key), method:o.method, url:u}); });
+    (md.restCalls||[]).forEach(r=>{ if(endpointsFor(m.id, r.url, null).some(x=>x.id===ep.id)) calls.push({where:r.where, whereHtml:r.where?elJumpHtml(m.id, r.where, r.where, 'Open the button that makes the call'):'', method:r.method, url:r.url}); });
+    if(!calls.length) calls.push({method:null, url:''});
+    calls.forEach(x=>{ const cv=knownVerb(x.method), mis=verb&&cv&&cv!==verb;
+      rows.push({gap:mis?'warn':'', kind:mis?'verb':'', unk:!cv&&!e.sus, hay:elHay(m.label, x.where, x.url),
+        cells:{m:iconLink(m.id), where:x.whereHtml||'', verb:cv?(mis?gm('warn', cv+' ≠ '+verb, 'The call uses another verb than this handler serves'):gm('ok', cv)):gm('unk','', 'The call states no verb Atlas can read'),
+          url:x.url?'<span class="mono">'+esc(x.url)+'</span>':''}}); });
+  });
+  if(!rows.length) return '';
+  return gapTable([{k:'m',label:'Caller',w:'minmax(14ch,1.4fr)'},{k:'where',label:'Button / operation',w:'minmax(12ch,1.2fr)'},{k:'verb',label:'Verb',w:'minmax(9ch,.8fr)',cls:'tags'},{k:'url',label:'URL as called',w:'minmax(16ch,2fr)',opt:true}],
+    rows, {okLabel:k=>k+' fit', kinds:{verb:{tone:'warn', label:k=>k+' verb differs'}}});
+}
+/** The names an expression reaches a class by, and the expressions and tasks that use them. */
+function beanUseFit(j){
+  const bns=((j.data||{}).beanNames||[]).filter(Boolean); if(!bns.length) return '';
+  const rows=bns.map(b=>{ const re=new RegExp('[#$]\\{\\s*'+b.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b');
+    const exprs=nodes.filter(x=>x.type==='expression'&&re.test(x.label));
+    const models=[...new Set([].concat(...exprs.map(x=>(x.data||{}).usedBy||[])))].filter(id=>byId.get(id));
+    return {gap:models.length?'':'info', kind:models.length?'':'unused', hay:b,
+      cells:{b:'<span class="mono">'+esc(b)+'</span>', ex:exprs.slice(0,3).map(x=>vlink(x.id, x.label)).join(', ')+(exprs.length>3?' <span class="muted">+'+(exprs.length-3)+'</span>':''),
+        by:'<span>'+models.slice(0,4).map(id=>vlink(id, byId.get(id).label)).join(', ')+(models.length>4?' +'+(models.length-4):'')+'</span>',
+        st:models.length?gm('ok', models.length+' model'+(models.length>1?'s':'')):gm('info', 'no expression', 'No expression in the scanned models names this bean — a delegate class or Java may still use it')}}; });
+  return gapTable([{k:'b',label:'Bean name',w:'minmax(12ch,1fr)'},{k:'ex',label:'Expressions',w:'minmax(16ch,1.8fr)',opt:true},{k:'by',label:'In',w:'minmax(14ch,1.4fr)'},{k:'st',label:'',w:'minmax(10ch,.9fr)',cls:'tags'}],
+    rows, {okLabel:k=>k+' used', kinds:{unused:{tone:'info', label:k=>k+' named by no expression'}}});
+}
+FIT.event=[{title:'Publishers and consumers', build:n=>eventPayloadFit(n)}, {title:'Channels', build:n=>eventChannelsFit(n)}];
+FIT.channel=[{title:'Events it carries', build:n=>channelFit(n)}];
+FIT.signal=FIT.message=FIT.error=FIT.escalation=[{title:'Thrown and caught', build:n=>thrownCaughtFit(n)}];
+FIT.endpoint=[{title:'Callers', build:n=>endpointCallersFit(n)}];
+FIT.java=[{title:'Bean names and the expressions that use them', build:n=>beanUseFit(n)}];
 
 // ---------- form / page components ----------
 /** The processes and cases that show a form, with the element that does — a user task, a human task —
@@ -5150,12 +5273,26 @@ S.propDefined={id:'defined', title:'Defined in', hint:'the Spring configuration 
     return tbl([{k:'f',label:'File',w:'minmax(20ch,3fr)',mono:true},{k:'line',label:'Line',w:'minmax(6ch,.6fr)',mono:true,cls:'faint'}],
       at.map(s=>{ const i=String(s).lastIndexOf(':'), f=s.slice(0,i), l=s.slice(i+1);
         return {hay:elHay(f), cells:{f:esc(f)+openBtn(f,l), line:lineRef(f,l)}}; })); }};
-S.methods={id:'methods', title:'Declared methods', hint:'every method, and which ones a model calls',
+S.methods={id:'methods', title:'Declared methods', hint:'every method, and the models that call it',
   count:(n,c)=>(c.d.methods||[]).length,
-  build:(n,c)=>{ const ms=c.d.methods||[]; if(!ms.length) return ''; const cm=new Set(c.d.calledMethods||[]);
-    return tbl([{k:'m',label:'Method',w:'minmax(16ch,2.4fr)',mono:true},{k:'line',label:'Line',w:'minmax(6ch,.6fr)',mono:true,cls:'faint'},{k:'tags',label:'',w:'minmax(10ch,1fr)',cls:'tags'}],
-      ms.map(m=>({hay:elHay(m.name,m.params), cells:{m:esc(m.name)+'('+esc(String(m.params==null?'':m.params))+')', line:lineRef(n.file,m.line),
-        tags:cm.has(m.name)?'<span class="tag" data-tip="A model expression or task calls this method">◀ called by models</span>':''}})), {placeholder:'filter methods…'}); }};
+  build:(n,c)=>{ const ms=c.d.methods||[], cm=c.d.calledMethods||[];
+    if(!ms.length&&!cm.length) return '';
+    // the models behind a call: `calls run()` edges onto the class, `calls` edges onto the method node —
+    // an expression stands for the models that evaluate it
+    const callers=name=>{ const ids=new Set();
+      (incM.get('method:'+n.key+'#'+name)||[]).forEach(e=>{ if(e.rel!=='calls') return; const m=byId.get(e.id); if(!m) return;
+        if(m.type==='expression'||m.type==='binding') ((m.data||{}).usedBy||[]).forEach(u=>ids.add(u)); else ids.add(e.id); });
+      (incM.get(n.id)||[]).forEach(e=>{ if(e.rel==='calls '+name+'()') ids.add(e.id); });
+      return [...ids].filter(id=>byId.get(id)); };
+    const declared=new Set(ms.map(m=>m.name));
+    const rows=ms.map(m=>{ const by=callers(m.name);
+      return {hay:elHay(m.name,m.params), cells:{m:esc(m.name)+'('+esc(String(m.params==null?'':m.params))+')', line:lineRef(n.file,m.line),
+        by:by.length?'<span>'+by.slice(0,4).map(id=>vlink(id, byId.get(id).label)).join(', ')+(by.length>4?' +'+(by.length-4):'')+'</span>':''}}; })
+      // a method a model calls that the class does not declare: inherited — or a typo the engine finds at runtime
+      .concat(cm.filter(x=>!declared.has(x)).map(x=>({hay:x, cells:{m:esc(x)+'()', line:gm('info','not declared here', 'Called by a model but not declared in this class — inherited, or misspelt'),
+        by:'<span>'+callers(x).map(id=>vlink(id, byId.get(id).label)).join(', ')+'</span>'}})));
+    return tbl([{k:'m',label:'Method',w:'minmax(16ch,2fr)',mono:true},{k:'line',label:'Line',w:'minmax(6ch,.7fr)',mono:true,cls:'faint tags'},{k:'by',label:'Called by',w:'minmax(14ch,1.6fr)',opt:true}],
+      rows, {placeholder:'filter methods…'}); }};
 S.lqBanner={raw:true, build:(n,c)=>{ const d=c.d, a=d.authority||{};
   if(a.status==='superseded'){ const chips=(a.supersededBy||[]).map(k=>nodeChip('liquibase:'+k)).join('');
     return '<div class="authnote authnote-old">⚠ Superseded revision — the live definition of <b>'+esc((d.effectiveTables||[]).join(', '))+'</b> is referenced elsewhere. These columns reflect an older revision of the same table.'+(chips?'<div class="nodechips">'+chips+'</div>':'')+'</div>'; }
@@ -5252,7 +5389,7 @@ S.fit={raw:true, build:(n,c)=>{
   const gaps=mine.reduce((a,t)=>a+t.bad+t.warn,0);
   const legend='<div class="covlegend fitlegend">'+['ok','impl','miss','warn','unk'].map(k=>'<span>'+gm(k)+' '+esc(GM_LABEL[k])+'</span>').join('')+
     '<span class="muted">— a ? always says why in its tooltip</span></div>';
-  return section('fit','Does it fit?', legend+blocks.join(''), {count:gaps,
+  return section('fit','Does it fit?', legend+blocks.join(''), {count:gaps||null,
     hint:specs.filter(sp=>sp.title).map(sp=>sp.title.toLowerCase()).slice(0,3).join(' · ')});
 }};
 // Every page reads in the same order (see renderDetail): the picture — a drawing, or the table that IS the
