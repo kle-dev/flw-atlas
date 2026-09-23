@@ -14,8 +14,9 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
 
 ## 0.27.0
 
-- **Detail pages ask whether a model fits.** Every gap table is drawn one way, the schema coverage table
-  first: a row per thing that should line up, tinted by how badly it does not, a pill per kind of gap and
+- **Detail pages ask whether a model fits.** Every page reads in one order: the picture — the drawing, or
+  the table that *is* the model — then *Does it fit?*, the findings, the relations and the details. Every
+  gap table is drawn one way, the schema coverage table first: a row per thing that should line up, tinted by how badly it does not, a pill per kind of gap and
   *only gaps* to hide the rows that are fine. A cell says ✓ it fits, ✗ it is missing, ⚠ it looks wrong, or
   ? Atlas cannot tell — and then why, in its tooltip.
 - **Relations take a row per relation.** Under the drawing, a relation lists its neighbours as chips on one

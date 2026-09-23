@@ -3180,7 +3180,7 @@ const incFrom= (id,rel)=>{ const e=(incM.get(id)||[]).find(x=>x.rel===rel); retu
 // you walk the graph. Everything defaults to closed except the diagram and the relations — and the
 // one section that IS the model (a form's fields, a service's operations) — see DEFAULT_OPEN_SECTIONS.
 const SECT_STORE='atlas-sect';
-const DEFAULT_OPEN_SECTIONS={diagram:true, relations:true, elements:true, findings:true, formfields:true, columns:true, usertasks:true, svctasks:true, scripttasks:true,
+const DEFAULT_OPEN_SECTIONS={diagram:true, relations:true, elements:true, findings:true, fit:true, formfields:true, columns:true, usertasks:true, svctasks:true, scripttasks:true,
   plan:true, ops:true, dmnio:true, dmnrules:true, permissions:true, escalations:true, rw:true, payload:true, dicttypes:true, agentops:true,
   endpoints:true, script:true, templatebody:true, extractors:true, coverage:true, problems:true, opparams:true};
 function sectAll(){ try{ return JSON.parse(localStorage.getItem(SECT_STORE)||'{}')||{}; }catch(e){ return {}; } }
@@ -4337,6 +4337,7 @@ function coverageServicesFor(n){
     .sort((a,b)=>a.label.localeCompare(b.label));
 }
 S.coverageOf={raw:true, build:(n,c)=>{
+  if(n.type!=='dataObject'&&n.type!=='liquibase') return '';
   const svcs=coverageServicesFor(n); if(!svcs.length) return '';
   const body=svcs.map(sv=>'<div class="covblk" data-fscope>'+schemaCoverageHtml(sv.data.schemaCoverage, false, sv.id, sv.data.crossedColumns, 'coverage')+'</div>').join('');
   const who=svcs.length>1?svcs.length+' services':'the service '+svcs[0].label;
@@ -4458,46 +4459,65 @@ S.testedBy={id:'tests', title:'Deployed by tests', hint:'test classes whose @Dep
         return {hay:elHay(f), cells:{f:esc(f.split('/').pop())+openBtn(f,l), line:lineRef(f,l)}}; })); }};
 const PAGE_TAIL=[S.params, S.varExpr, S.testedBy];
 ELEMENT_GROUPS.process=[S.userTasks, S.serviceTasks, S.scriptTasks, S.decisionTasks, S.callActivities, S.otherTasks, S.events,
-  S.gateways, S.flows, S.lanes, S.multiInstance, S.listeners, S.eldocs];
+  S.gateways, S.flows, S.lanes, S.multiInstance, S.declaredVars, S.listeners, S.eldocs];
 ELEMENT_GROUPS.case=[S.plan, S.sentries, S.eventListeners, S.caseScripts, S.listeners, S.eldocs];
+// ---------- "Does it fit?": the contract tables of a page ----------
+// FIT[type] lists the blocks a type's page asks — each {title, build(n,c)} returning a gap table (or '').
+// They share one section, so a page with five questions still has one navigator chip for them.
+const FIT={};
+S.fit={raw:true, build:(n,c)=>{
+  const specs=FIT[n.type]||[]; if(!specs.length) return '';
+  const before=_gapReg?_gapReg.length:0;
+  const blocks=specs.map(sp=>{ const b=sp.build(n,c); return b?'<div class="fitblk" data-fscope>'+(sp.title?'<div class="sublab">'+esc(sp.title)+'</div>':'')+b+'</div>':''; }).filter(Boolean);
+  if(!blocks.length) return '';
+  // the section counts the gaps its tables found — bad and doubtful rows; notes are not gaps
+  const mine=_gapReg?_gapReg.slice(before):[];
+  mine.forEach(t=>{ t.sect='fit'; });
+  const gaps=mine.reduce((a,t)=>a+t.bad+t.warn,0);
+  return section('fit','Does it fit?', blocks.join(''), {count:gaps,
+    hint:specs.filter(sp=>sp.title).map(sp=>sp.title.toLowerCase()).slice(0,3).join(' · ')});
+}};
+// Every page reads in the same order (see renderDetail): the picture — a drawing, or the table that IS the
+// model — then whether it fits what it meets, the findings, the relations, and the details. `pic` and `det`
+// are a type's own sections; the fit slot is the same for every type, each block guarding itself.
+const FIT_SLOT=[S.coverage, S.coverageOf, S.fit];
 const PAGES={
-  process:[S.elements, S.declaredVars],
-  case:[S.elements],
-  form:[S.fields, S.outcomes, S.dataSources, S.restCalls],
+  process:{det:[S.elements]},
+  case:{det:[S.elements]},
+  form:{det:[S.fields, S.outcomes, S.dataSources, S.restCalls]},
   page:'form',
-  dataObject:[S.properties, S.coverageOf],
-  decision:[S.dmnIO, S.dmnRules],
-  service:[S.ops, S.coverage, S.svcColumns],
-  serviceOperation:[S.opParams, S.opOrphan],
-  app:[S.appPages, S.appVars],
-  agent:[S.agentOps],
-  action:[S.botScript],
-  event:[S.payload],
-  dataDictionary:[S.dictTypes],
-  securityPolicy:[S.permissions],
-  sla:[S.escalations, S.thresholds],
-  template:[S.templateBody],
-  query:[S.queryParams, S.queryCols, S.queryTpl],
-  document:[S.docConfig, S.docVars],
-  variableExtractor:[S.extractors],
-  knowledgeBase:[S.kbSources],
-  java:[S.endpoints, S.methods],
-  endpoint:[],
-  group:[],
-  property:[S.propDefined],
-  liquibase:[S.lqBanner, S.lqColumns, S.coverageOf],
-  expression:[S.problems],
-  binding:[S.problems],
-  customFunction:[S.fnOrphan],
-  variable:[S.rw, S.passedAs, S.inScripts, S.usedIn],
-  string:[S.usedIn],
-  _:[],
+  dataObject:{pic:[S.properties]},
+  decision:{pic:[S.dmnIO, S.dmnRules]},
+  service:{pic:[S.ops], det:[S.svcColumns]},
+  serviceOperation:{pic:[S.opParams, S.opOrphan]},
+  app:{pic:[S.appPages], det:[S.appVars]},
+  agent:{pic:[S.agentOps]},
+  action:{pic:[S.botScript]},
+  event:{pic:[S.payload]},
+  dataDictionary:{pic:[S.dictTypes]},
+  securityPolicy:{pic:[S.permissions]},
+  sla:{pic:[S.escalations, S.thresholds]},
+  template:{pic:[S.templateBody]},
+  query:{pic:[S.queryParams, S.queryCols], det:[S.queryTpl]},
+  document:{pic:[S.docConfig, S.docVars]},
+  variableExtractor:{pic:[S.extractors]},
+  knowledgeBase:{pic:[S.kbSources]},
+  java:{pic:[S.methods], det:[S.endpoints]},
+  property:{pic:[S.propDefined]},
+  liquibase:{pic:[S.lqBanner, S.lqColumns]},
+  expression:{pic:[S.problems]},
+  binding:'expression',
+  customFunction:{pic:[S.fnOrphan]},
+  variable:{pic:[S.rw], det:[S.passedAs, S.inScripts, S.usedIn]},
+  string:{pic:[S.usedIn]},
+  _:{},
 };
-/** The typed sections of a page plus the shared tail. A `raw` builder returns finished markup (a section
- *  that owns its heading and count, or a banner). */
-function renderSections(n, c){
-  let list=PAGES[n.type]||PAGES._; if(typeof list==='string') list=PAGES[list];
-  return list.concat(PAGE_TAIL).map(s=>{
+/** One slot of a page: its `pic` sections, the shared fit slot, or its `det` sections plus the shared tail.
+ *  A `raw` builder returns finished markup (a section that owns its heading and count, or a banner). */
+function renderSections(n, c, slot){
+  let spec=PAGES[n.type]||PAGES._; if(typeof spec==='string') spec=PAGES[spec];
+  const list=slot==='fit'?FIT_SLOT : slot==='pic'?(spec.pic||[]) : (spec.det||[]).concat(PAGE_TAIL);
+  return list.map(s=>{
     const body=s.build(n,c); if(!body) return '';
     if(s.raw) return body;
     return section(s.id, esc(s.title), body, {count:s.count?s.count(n,c):null, hint:s.hint, nav:s.nav});
@@ -4913,14 +4933,22 @@ function renderDetail(){
   // rendered before the header that carries it can be written.
   const facts=factsFor(rn);
   const ctx=detailCtx(rn), R=relationsOf(rn, rn.data);
-  _sectReg=[];
+  _sectReg=[]; _gapReg=[];
   let body='';
+  // The picture — the drawing, or the table that IS the model (a service's operations, an event's payload)
   body+=diagramView(rn);
-  body+=relationsSection(rn, ctx, R);
-  // The findings sit right under the diagram they are about — this is where a reader has the context
-  // to judge one, and the locate button puts the element in view.
+  body+=renderSections(rn, ctx, 'pic');
+  // … then whether it fits what it meets: the schema coverage and every contract table …
+  body+=renderSections(rn, ctx, 'fit');
+  // … the findings, right under what they are about — the locate button puts the element in view …
   body+=nodeFindingsHtml(n);
-  body+=renderSections(rn, ctx);
+  // … the neighbours …
+  body+=relationsSection(rn, ctx, R)||'<p class="muted relnone">No relationships recorded for this node.</p>';
+  // … and the details: elements, fields, parameters, variables.
+  body+=renderSections(rn, ctx, 'det');
+  // The hero reads through the recording proxy too, so what it shows (a file's line, a class's name)
+  // is not listed again below.
+  const hero=heroHtml(rn, facts);
   // Whatever no renderer above consumed. Identity fields live in the header; HAY_SKIP is the same
   // bookkeeping the search index skips.
   {
@@ -4930,8 +4958,7 @@ function renderDetail(){
       rest.map(k=>kvEntry(k,(n.data||{})[k],0)).join(''), {count:rest.length,
         hint:'everything else the parser read for this model'});
   }
-  if(!R.out.length && !R.inc.length) body+='<p class="muted" style="margin-top:18px">No relationships recorded for this node.</p>';
-  const reg=_sectReg; _sectReg=null;
+  const reg=_sectReg; _sectReg=null; _gapReg=null;
   // The sticky bar: kind on the left, the actions right. The title stays in the body — at 26px it is
   // the one thing a reader should not have pinned over what they are reading.
   const kindHint=term('type', n.type).hint;
@@ -4942,7 +4969,7 @@ function renderDetail(){
      '<button id="sectall" data-tip="Expand or collapse every section on this page">'+uiIcon('expand')+'<span class="lbl">expand all</span></button>'+
      '<button id="permalink" data-tip="Copy a shareable link to this node">'+uiIcon('link')+'<span class="lbl">copy link</span></button>'+
      '</span></div>';
-  h+='<div class="dbody">'+heroHtml(n, facts)+secnavHtml(reg)+body+'</div>';
+  h+='<div class="dbody">'+hero+secnavHtml(reg)+body+'</div>';
   det.innerHTML=h;
   det.scrollTop=0;
   const b=document.getElementById('back'); if(b) b.onclick=()=>history.back();

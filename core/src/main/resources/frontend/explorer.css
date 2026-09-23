@@ -896,6 +896,7 @@
   /* Gesture hint at the top of a relationship section — faint on purpose: it teaches once and then
      has to get out of the way of the chips it describes. */
   .relhint{font-size:var(--text-2xs);color:var(--ink-faint);margin:0 0 var(--space-25)}
+  .relnone{margin:var(--space-4) 0;font-size:var(--text-sm)}
   .relhint b{font-weight:600;color:var(--ink-dim)}
   /* the relations table: a direction per <details>, a table per relation, the relation named in its header */
   details.relset{margin:var(--space-2) 0 0}

@@ -144,11 +144,12 @@
     <change-notes><![CDATA[
         <h3>0.27.0</h3>
         <ul>
-          <li><b>Detail pages ask whether a model fits.</b> Every gap table is drawn one way, the schema
-              coverage table first: a row per thing that should line up, tinted by how badly it does not, a
-              pill per kind of gap and <i>only gaps</i> to hide the rows that are fine. A cell says ✓ it
-              fits, ✗ it is missing, ⚠ it looks wrong, or ? Atlas cannot tell — and then why, in its
-              tooltip.</li>
+          <li><b>Detail pages ask whether a model fits.</b> Every page reads in one order: the picture — the
+              drawing, or the table that <i>is</i> the model — then <i>Does it fit?</i>, the findings, the
+              relations and the details. Every gap table is drawn one way, the schema coverage table first:
+              a row per thing that should line up, tinted by how badly it does not, a pill per kind of gap
+              and <i>only gaps</i> to hide the rows that are fine. A cell says ✓ it fits, ✗ it is missing, ⚠
+              it looks wrong, or ? Atlas cannot tell — and then why, in its tooltip.</li>
           <li><b>Relations take a row per relation.</b> Under the drawing, a relation lists its neighbours
               as chips on one row — <i>App contains</i> five models is one row, not five — and unfolds only
               where a neighbour has more to say: a caller's parameter mappings, every REST call with its

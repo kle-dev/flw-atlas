@@ -646,6 +646,11 @@ const probe = `<script>
     if(st&&window.__gwId){ delete st[window.__gwId]; delete st.flows; try{ localStorage.setItem('atlas-sect', JSON.stringify(st)); }catch(e){} }
     const nav=[...document.querySelectorAll('#detail .secnav .snc')].map(c=>c.dataset.jumpSect);
     ok('the navigator is short again', nav.length<=9, nav.join());
+    // every page reads picture, fit, findings, relations, details — in that order
+    const at=id=>nav.indexOf(id);
+    ok('the findings come before the relations, the relations before the elements',
+       at('findings')>=0 && at('relations')>at('findings') && at('elements')>at('relations'), nav.join());
+    ok('the declared data objects are a group of the elements', !document.querySelector('#detail details.sect[data-sect="declaredvars"]'));
   });
 
   // --- relations: one section — the drawing, then every relation as a table; remembered; its rows are links ---
