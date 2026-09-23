@@ -169,7 +169,9 @@ In a browser those affordances are not shown — the page cannot open a file the
 Every section remembers whether you left it open, per section, across reloads; the section that *is*
 the model (a form's Fields, a service's Operations, a process's tasks) starts open, everything else
 starts folded. Up to twelve nodes can be open as **detail tabs**, which are viewports with their own
-history rather than pins. The split between the list and the panel is yours to move — drag the handle
+history rather than pins. When the strip holds more than it can show, its edges fade on the side that
+hides tabs, the wheel scrolls it sideways, and a **+N** button lists the tabs out of view — pick one to
+switch to it. The split between the list and the panel is yours to move — drag the handle
 between them, `←`/`→` nudge it, `Home` resets — and it is remembered, which matters most in a narrow
 IDE tool window where the list used to take half the width.
 

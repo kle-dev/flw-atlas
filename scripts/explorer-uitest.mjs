@@ -1185,6 +1185,27 @@ const ideProbe = `<script>
   steps.push(()=>{
     ok('a node page opens', state.sel==='process:orderProcess');
     ok('no horizontal page scroll', noHScroll(), document.documentElement.scrollWidth+' > '+window.innerWidth);
+    // more tabs than the strip can show
+    openTabs(nodes.filter(n=>['process','form','decision','case','service','java'].indexOf(n.type)>=0).slice(0,12).map(n=>n.id));
+  });
+  steps.push(()=>{
+    const list=document.getElementById('dtablist'), more=document.getElementById('dtmore');
+    ok('the strip overflows with twelve tabs', !!list && list.scrollWidth>list.clientWidth);
+    ok('a +N button says how many tabs are out of view', !!more && !more.hidden && /^\\+\\d+$/.test(more.textContent||''), more&&more.textContent);
+    const act=list&&list.querySelector('.dtab.on'), lr=list&&list.getBoundingClientRect(), ar=act&&act.getBoundingClientRect();
+    ok('the active tab is scrolled into view', !!ar && ar.left>=lr.left-1 && ar.right<=lr.right+1);
+    ok('the hidden edge fades', !!list && (list.style.getPropertyValue('--fl')==='24px' || list.style.getPropertyValue('--fr')==='24px'));
+    if(more) more.click();
+  });
+  steps.push(()=>{
+    const menu=document.getElementById('dtmenu'), items=menu?[...menu.querySelectorAll('[role=menuitem]')]:[];
+    ok('the +N menu lists the tabs out of view', !!menu && !menu.hidden && items.length===parseInt(document.getElementById('dtmore').textContent.slice(1),10));
+    window.__pick=items[0]&&state.tabs[+items[0].dataset.i];
+    if(items[0]) items[0].click();
+  });
+  steps.push(()=>{
+    ok('picking one activates that tab', !!window.__pick && state.sel===window.__pick, state.sel+' vs '+window.__pick);
+    ok('and the menu closes', document.getElementById('dtmenu').hidden);
   });
   let i=0;(function run(){
     if(i>=steps.length){
@@ -1214,7 +1235,9 @@ function runProbe(probeHtml, windowSize, label) {
     console.error(`explorer-uitest (${label}): Chrome failed to run —`, e.message);
     process.exit(1);
   }
-  const m = dom.match(/UITEST_BEGIN([\s\S]*?)UITEST_END/);
+  // Only the page title counts: a probe that fails to parse never sets it, and the dumped DOM still
+  // carries the probe's own source text, which a bare search for the markers used to "find".
+  const m = dom.match(/<title>UITEST_BEGIN([\s\S]*?)UITEST_END<\/title>/);
   if (!m) {
     console.error(`explorer-uitest (${label}): the probe never finished — the page most likely threw during boot.`);
     const t = dom.match(/<title>([\s\S]*?)<\/title>/);

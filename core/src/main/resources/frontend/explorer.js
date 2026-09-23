@@ -5603,8 +5603,12 @@ function renderTabs(){
       '<span class="nm">'+esc(n.label)+'</span>'+
       '<button class="x" tabindex="-1" aria-label="'+esc('Close '+n.label)+'" data-close-i="'+i+'">×</button></div>';
   }).join('');
-  // "close others" only when there are others: a visible control that does nothing teaches distrust
+  // "close others" only when there are others: a visible control that does nothing teaches distrust.
+  // `+N` lists the tabs scrolled out of view (see syncTabOverflow) — a strip that ran off its left edge
+  // said nothing about the tabs beyond it, and most mice cannot scroll sideways.
   bar.innerHTML='<div class="dtablist" id="dtablist" role="tablist" aria-label="Open nodes">'+rows+'</div>'+
+    '<button type="button" class="dtmore" id="dtmore" hidden aria-haspopup="menu" aria-expanded="false" aria-controls="dtmenu"></button>'+
+    '<div class="dtmenu" id="dtmenu" role="menu" aria-label="Tabs out of view" hidden></div>'+
     (state.tabs.length>1?'<button class="dtclose" id="dtcloseall" data-tip="Close every tab but the active one">close others</button>':'');
   const list=bar.querySelector('#dtablist');
   list.querySelectorAll('.dtab').forEach(t=>{
@@ -5630,9 +5634,78 @@ function renderTabs(){
     };
   });
   const ca=bar.querySelector('#dtcloseall'); if(ca) ca.onclick=()=>closeOtherTabs();
+  // Arithmetic instead of scrollIntoView: that also scrolls every ancestor, and it lands the active tab
+  // flush against the edge, where the fade would half-hide it.
   const act=list.querySelector('.dtab.on');
-  if(act) act.scrollIntoView({block:'nearest', inline:'nearest'});
+  if(act) scrollTabIntoView(list, act);
+  let raf=0;
+  list.onscroll=()=>{ if(!raf) raf=requestAnimationFrame(()=>{ raf=0; syncTabOverflow(); }); };
+  // A wheel turned over an overflowing strip scrolls it sideways, as editor tabs do.
+  list.onwheel=e=>{
+    if(list.scrollWidth<=list.clientWidth || Math.abs(e.deltaY)<=Math.abs(e.deltaX)) return;
+    e.preventDefault(); list.scrollLeft+=e.deltaY;
+  };
+  wireTabMore(bar, list);
+  // deferred: syncTabOverflow shows or hides the +N button, which resizes the strip it observes
+  if(!_tabRO && window.ResizeObserver) _tabRO=new ResizeObserver(()=>requestAnimationFrame(syncTabOverflow));
+  if(_tabRO){ _tabRO.disconnect(); _tabRO.observe(list); }
+  syncTabOverflow();
 }
+let _tabRO=null;
+function scrollTabIntoView(list, t){
+  const m=24, l=t.offsetLeft, r=l+t.offsetWidth;
+  if(l-m<list.scrollLeft) list.scrollLeft=Math.max(0, l-m);
+  else if(r+m>list.scrollLeft+list.clientWidth) list.scrollLeft=r+m-list.clientWidth;
+}
+/** The tabs a scrolled strip is not showing, and the edge fades that say there is more that way. */
+function tabsOutOfView(list){
+  const sl=list.scrollLeft, cw=list.clientWidth;
+  return [...list.querySelectorAll('.dtab')].filter(t=>t.offsetLeft<sl-1 || t.offsetLeft+t.offsetWidth>sl+cw+1);
+}
+function syncTabOverflow(){
+  const list=document.getElementById('dtablist'), more=document.getElementById('dtmore');
+  if(!list||!more) return;
+  // The button takes room from the strip, so it is placed first and the tabs counted after.
+  more.hidden=list.scrollWidth<=list.clientWidth+1;
+  const n=more.hidden?0:tabsOutOfView(list).length;
+  if(!n) more.hidden=true;
+  const sl=list.scrollLeft, cw=list.clientWidth, sw=list.scrollWidth;
+  list.style.setProperty('--fl', sl>1?'24px':'0px');
+  list.style.setProperty('--fr', sl+cw<sw-1?'24px':'0px');
+  if(n){
+    const l=n+' tab'+(n>1?'s':'')+' out of view — list '+(n>1?'them':'it');
+    more.textContent='+'+n; more.setAttribute('aria-label', l); more.setAttribute('data-tip', l);
+  }
+}
+/** The `+N` button's menu: one item per tab out of view; picking one activates it. */
+function wireTabMore(bar, list){
+  const more=bar.querySelector('#dtmore'), menu=bar.querySelector('#dtmenu');
+  if(!more||!menu) return;
+  const close=refocus=>{ if(menu.hidden) return; menu.hidden=true; more.setAttribute('aria-expanded','false'); if(refocus) more.focus(); };
+  more.onclick=()=>{
+    if(!menu.hidden){ close(false); return; }
+    menu.innerHTML=tabsOutOfView(list).map(t=>{ const i=+t.dataset.i, n=byId.get(state.tabs[i]); if(!n) return '';
+      return '<button type="button" role="menuitem" tabindex="-1" data-i="'+i+'">'+nodeIcon(n)+'<span class="nm">'+esc(n.label)+'</span>'+
+        '<span class="ty">'+esc(nodeKind(n))+'</span></button>'; }).join('');
+    menu.hidden=false; more.setAttribute('aria-expanded','true');
+    const first=menu.querySelector('[role=menuitem]'); if(first) first.focus();
+  };
+  menu.onclick=e=>{ const it=e.target.closest('[role=menuitem]'); if(!it) return; close(false); activateTab(+it.dataset.i); };
+  menu.onkeydown=e=>{
+    const els=[...menu.querySelectorAll('[role=menuitem]')], i=els.indexOf(document.activeElement);
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'){ e.preventDefault(); if(els.length) els[(i+(e.key==='ArrowDown'?1:-1)+els.length)%els.length].focus(); }
+    else if(e.key==='Home'){ e.preventDefault(); if(els[0]) els[0].focus(); }
+    else if(e.key==='End'){ e.preventDefault(); if(els.length) els[els.length-1].focus(); }
+    else if(e.key==='Enter'||e.key===' '){ e.preventDefault(); if(i>=0){ close(false); activateTab(+els[i].dataset.i); } }
+    else if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); close(true); }
+    else if(e.key==='Tab'){ close(false); }
+  };
+}
+document.addEventListener('mousedown', e=>{
+  const menu=document.getElementById('dtmenu');
+  if(menu && !menu.hidden && !e.target.closest('#dtmenu, #dtmore')){ menu.hidden=true;
+    const more=document.getElementById('dtmore'); if(more) more.setAttribute('aria-expanded','false'); }
+});
 
 /**
  * Open `ids` as tabs. Returns {opened, dropped} — `dropped` is how many did not fit under MAX_TABS,

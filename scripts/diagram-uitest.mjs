@@ -228,7 +228,9 @@ try {
   process.exit(1);
 }
 
-const m = dom.match(/UITEST_BEGIN([\s\S]*?)UITEST_END/);
+// Only the page title counts: a probe that fails to parse never sets it, and the dumped DOM still carries
+// the probe's own source text, which a bare search for the markers would "find".
+const m = dom.match(/<title>UITEST_BEGIN([\s\S]*?)UITEST_END<\/title>/);
 if (!m) {
   console.error('diagram-uitest: the probe never finished — the page most likely threw during boot.');
   const t = dom.match(/<title>([\s\S]*?)<\/title>/);

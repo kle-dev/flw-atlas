@@ -641,12 +641,15 @@
   /* ---- tab strip: one tab per open node, hidden while only one is open ---- */
   /* Hidden at ≤1 tab so the single-node case looks exactly as it always did — chrome that never
      offers a choice is only noise. flex:none keeps it out of the detail scroll. */
-  .dtabs{flex:none;display:flex;align-items:stretch;background:var(--panel2);
+  .dtabs{flex:none;display:flex;align-items:stretch;background:var(--panel2);position:relative;z-index:8;
     border-bottom:1px solid var(--line);padding:var(--space-1) var(--space-1) 0}
   /* The scroll container is the tablist, so "close others" stays pinned right. A role=tablist must
      contain nothing but tabs, which is the other reason for the split. */
-  .dtablist{flex:1;min-width:0;display:flex;align-items:stretch;gap:var(--space-05);
-    overflow-x:auto;overflow-y:hidden}
+  /* --fl/--fr (set by syncTabOverflow) fade the edge a tab is hiding behind — more that way */
+  .dtablist{flex:1;min-width:0;display:flex;align-items:stretch;gap:var(--space-05);position:relative;
+    overflow-x:auto;overflow-y:hidden;
+    -webkit-mask-image:linear-gradient(to right,transparent 0,#000 var(--fl,0px),#000 calc(100% - var(--fr,0px)),transparent 100%);
+    mask-image:linear-gradient(to right,transparent 0,#000 var(--fl,0px),#000 calc(100% - var(--fr,0px)),transparent 100%)}
   .dtablist::-webkit-scrollbar{height:5px}
   .dtablist::-webkit-scrollbar-thumb{border:none;border-radius:0}
   /* flex:0 0 auto, NOT 0 1 auto: with shrink enabled a full strip squeezes every tab into an
@@ -670,6 +673,17 @@
     color:var(--ink-faint);cursor:pointer;font-size:var(--text-2xs);
     padding:0 var(--space-15);border-radius:var(--radius-sm);white-space:nowrap}
   .dtabs .dtclose:hover{color:var(--ink);background:var(--hover)}
+  .dtmore{flex:none;align-self:center;margin:0 var(--space-1);height:20px;padding:0 var(--space-15);cursor:pointer;
+    background:var(--panel);border:1px solid var(--line2);border-radius:var(--radius-full);color:var(--ink-dim);
+    font-family:var(--sans);font-size:var(--text-2xs);font-variant-numeric:tabular-nums}
+  .dtmore:hover,.dtmore[aria-expanded="true"]{color:var(--ink);border-color:var(--accent)}
+  .dtmenu{position:absolute;right:var(--space-1);top:100%;z-index:60;min-width:200px;max-width:min(320px,90vw);max-height:60vh;
+    overflow:auto;background:var(--panel);border:1px solid var(--line2);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:var(--space-1)}
+  .dtmenu [role=menuitem]{display:flex;align-items:center;gap:var(--space-15);width:100%;text-align:left;background:none;border:0;
+    border-radius:var(--radius-md);padding:var(--space-1) var(--space-2);cursor:pointer;color:var(--ink);font:inherit;font-size:var(--text-sm)}
+  .dtmenu [role=menuitem]:hover,.dtmenu [role=menuitem]:focus-visible{background:var(--hover);outline:none}
+  .dtmenu .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dtmenu .ty{flex:none;font-size:var(--text-2xs);color:var(--ink-faint)}
 
   /* ---- transient status line ---- */
   /* z-index above the element card (120) and the fullscreen diagram (100): a ⌘-click inside either
@@ -1068,6 +1082,7 @@
   /* ------------------------------------------------------------------ */
   @media (max-width:1100px){
     .dbody{padding:0 var(--space-4) var(--space-8)}
+    .dtab{max-width:160px}
     .view-browse{grid-template-columns:min(var(--list-w),280px) 1fr}
     .listresize{left:calc(min(var(--list-w),280px) - 3px)}
     .searchbtn{width:auto}
