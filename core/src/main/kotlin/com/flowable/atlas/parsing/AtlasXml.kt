@@ -66,12 +66,24 @@ object AtlasXml {
             return null
         }
 
-        /** ElementTree `.text`: the text directly after the start tag (before the first child). */
+        /**
+         * ElementTree `.text`: the text directly after the start tag (before the first child element).
+         * The DOM splits that run into several nodes — whitespace before a CDATA section, a body split
+         * into two CDATA sections, a comment in between — so every text and CDATA node up to the first
+         * element is joined; comments and processing instructions are skipped, as ElementTree drops them.
+         */
         val text: String?
             get() {
-                val first = e.firstChild ?: return null
-                return if (first.nodeType == Node.TEXT_NODE || first.nodeType == Node.CDATA_SECTION_NODE)
-                    first.nodeValue else null
+                var n = e.firstChild ?: return null
+                var out: StringBuilder? = null
+                while (true) {
+                    when (n.nodeType) {
+                        Node.ELEMENT_NODE -> break
+                        Node.TEXT_NODE, Node.CDATA_SECTION_NODE -> (out ?: StringBuilder().also { out = it }).append(n.nodeValue)
+                    }
+                    n = n.nextSibling ?: break
+                }
+                return out?.toString()
             }
 
         /** Direct child elements, in document order. */
