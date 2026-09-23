@@ -5,7 +5,6 @@ import com.flowable.atlas.action.FlowableActionIds
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.events.AtlasEventsListener
 import com.flowable.atlas.project.AtlasProjectRootService
-import com.flowable.atlas.hub.HubHeader
 import com.flowable.atlas.model.MiniJson
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.icons.AllIcons
@@ -32,15 +31,12 @@ import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
-import com.intellij.openapi.vfs.JarFileSystem
-import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.EditorNotifications
 import com.intellij.ui.JBColor
 import com.intellij.ui.jcef.JBCefBrowser
 import com.intellij.ui.jcef.JBCefBrowserBase
 import com.flowable.atlas.graph.Waivers
-import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.ui.jcef.JBCefJSQuery
 import com.intellij.util.ui.update.UiNotifyConnector
@@ -290,20 +286,9 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
             return
         }
         try {
-            var kept = 0
-            val target = WriteAction.compute<VirtualFile, Exception> {
-                val t = dir.findChild(Waivers.FILE_NAME) ?: dir.createChildData(this, Waivers.FILE_NAME)
-                // An open, edited waivers.json is flushed first, or the document and the file would fight.
-                FileDocumentManager.getInstance().getDocument(t)?.let { FileDocumentManager.getInstance().saveDocument(it) }
-                // Last-write-wins against a generation-time snapshot deleted whatever the file gained
-                // while the page was open; the merge keeps a rule the page never saw.
-                val disk = Waivers.load(t.toNioPath().toFile())
-                val merged = Waivers.merge(Waivers.parse(text), disk, base)
-                kept = merged.waivers.size + merged.notes.size - Waivers.parse(text).let { it.waivers.size + it.notes.size }
-                // UTF-8 explicitly: every other Atlas writer pins it, and :core reads the file as UTF-8.
-                t.setBinaryContent(Waivers.serialize(merged, HubHeader.atlasVersion()).toByteArray(Charsets.UTF_8))
-                t
-            }
+            val written = WaiverFileWriter.write(dir, Waivers.parse(text), base)
+            val kept = written.kept
+            val target = written.file
             tellPage(true)
             val rules = Regex("\"check\"\\s*:").findAll(text).count() + kept
             say("Waivers saved",
@@ -339,21 +324,11 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
         descriptor.navigate(true)
     }
 
-    /**
-     * A label is relative to the folder the report was generated from (the active Flowable project);
-     * `archive!entry` names a model inside a .bar/.zip, which the jar file system mounts read-only. A
-     * doubly nested `archive!inner.bar!entry` cannot be mounted, so the outer archive opens instead.
-     */
+    /** A label of this page, relative to the folder the report was generated from (see [AtlasFileLabels]). */
     private fun resolveLabel(label: String): VirtualFile? {
         val root = AtlasExplorerFiles.rootOf(project, file.toNioPath())
             ?: AtlasProjectRootService.getInstance(project).activeProjectDir() ?: return null
-        val lfs = LocalFileSystem.getInstance()
-        val bang = label.indexOf('!')
-        if (bang < 0) return lfs.refreshAndFindFileByNioFile(root.resolve(label))
-        val archive = lfs.refreshAndFindFileByNioFile(root.resolve(label.substring(0, bang))) ?: return null
-        val entry = label.substring(bang + 1)
-        if (entry.contains('!')) return archive
-        return JarFileSystem.getInstance().findFileByPath(archive.path + JarFileSystem.JAR_SEPARATOR + entry) ?: archive
+        return AtlasFileLabels.resolve(root, label)
     }
 
     private fun buildToolbarGroup() = DefaultActionGroup(

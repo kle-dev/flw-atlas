@@ -133,14 +133,14 @@ class AtlasGeneratorService(private val project: Project) {
         }
 
     /** `waivers.json` beside the artifacts in [outputDir] — the file the explorer's Save writes. */
-    private fun waiverFile(outputDir: Path?): File? = outputDir?.resolve(Waivers.FILE_NAME)?.toFile()
+    internal fun waiverFile(outputDir: Path?): File? = outputDir?.resolve(Waivers.FILE_NAME)?.toFile()
 
     /**
      * [Atlas.extract] with the project's allowlist and custom-function settings applied, and the
      * accepted findings in [waiverFile] honoured — the CLI reads that file, and a page generated
      * here that ignored it would show a team the findings it had already decided about.
      */
-    private fun extract(root: File, indicator: ProgressIndicator, waiverFile: File?): LinkedHashMap<String, Any?> {
+    internal fun extract(root: File, indicator: ProgressIndicator, waiverFile: File?): LinkedHashMap<String, Any?> {
         indicator.isIndeterminate = true
         indicator.text = "Analyzing Flowable project…"
         val settings = FlowableAtlasProjectSettings.getInstance(project)

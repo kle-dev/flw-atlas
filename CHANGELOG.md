@@ -41,6 +41,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   REST call or a service operation whose URL lands on a project endpoint links to it. A table past a
   hundred rows, or a relation past sixty neighbours, shows the first ones and *show all*. On a touch screen
   a vertical swipe over a diagram scrolls the page and two fingers zoom.
+- **The findings in a tool window of their own.** *Atlas Findings* lists every defect — and, when asked,
+  the advice and the accepted findings — from the same analysis the explorer is built from, grouped by
+  check. A double-click opens the finding's file at its line, and *Accept…* writes the selected findings,
+  with a reason, to the `waivers.json` the explorer's Save writes, so the page, the CLI gate and this list
+  agree. It is Swing, so it works under Remote Development and in an IDE without JCEF, where the explorer
+  was the only place to see or accept a finding.
 - **The model preview is interactive.** A click on a process, case or decision element puts the caret on
   its declaration beside it, Ctrl/⌘ + wheel zooms about the pointer, a drag pans, and Ctrl/⌘ + `=` `-` `0`
   zoom in, out and fit. The picture follows the editor's unsaved text, and a renderer that fails says so

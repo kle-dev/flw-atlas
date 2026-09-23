@@ -36,6 +36,7 @@ folder, which is precisely the file the comparison is wanted on.
 | Action | Also in |
 |---|---|
 | Atlas Hub | — |
+| Atlas Findings | — |
 | Open Atlas Explorer | Atlas Hub toolbar and its *Explorer* block |
 | Open Expression Playground | Atlas Hub toolbar and its *Playground* block |
 | Go to Model… | Atlas Hub toolbar and the model count in its header; Project view context menu; `Ctrl+Alt+Shift+M`. Under Remote Development it opens the *Find in Models…* list, because Search Everywhere has no Flowable tab there |
@@ -67,7 +68,8 @@ Settings…*; and the Script Playground's language and context selectors with *L
 
 | Tool window | Where | Contents |
 |---|---|---|
-| **Atlas Hub** | Right stripe | A status header — Flowable project · model count (a link to *Go to Model…*, *Rebuild* beside it) · index age · one attention line when something needs a hand — over four blocks: Explorer · Recent Models (the models opened last, newest first; double-click opens at the key, the context menu copies the key or opens the explorer page) · Design Pull (environment · workspace · apps · pull) · Playground. See [the Hub](../#the-atlas-hub) |
+| **Atlas Hub** | Right stripe | A status header — Flowable project · model count (a link to *Go to Model…*, *Rebuild* beside it) · index age · one attention line when something needs a hand — over four blocks: Explorer · Recent Models (the models opened last, newest first; double-click opens at the key, the context menu copies the key, opens the explorer page, or removes one entry or all) · Design Pull (environment · workspace · apps · pull) · Playground. See [the Hub](../#the-atlas-hub) |
+| **Atlas Findings** | Bottom stripe | Every finding of the project from the same in-process analysis the explorer is built from, as a tree: *Defects*, then — when asked for — *Advice* and *Accepted*, each by check. Double-click or Enter opens the finding's file at its line; *Accept…* asks for a reason and writes one rule per selected finding to the output folder's `waivers.json`, the file the explorer's Save writes, then analyses again. Swing, so it works under Remote Development and without JCEF |
 | **Expression Playground** | Bottom stripe (secondary) | Two tabs on one shell — editor and problems · context · result: *Expressions* (Backend / Frontend) and *Scripts*. See [the playgrounds](../#the-playgrounds) |
 
 The generated explorer opens as an editor tab, **Atlas Explorer** (the page, in the embedded browser);

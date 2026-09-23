@@ -180,6 +180,13 @@
               links to it. A table past a hundred rows, or a relation past sixty neighbours, shows the first
               ones and <i>show all</i>. On a touch screen a vertical swipe over a diagram scrolls the page
               and two fingers zoom.</li>
+          <li><b>The findings in a tool window of their own.</b> <i>Atlas Findings</i> lists every defect —
+              and, when asked, the advice and the accepted findings — from the same analysis the explorer is
+              built from, grouped by check. A double-click opens the finding's file at its line, and
+              <i>Accept…</i> writes the selected findings, with a reason, to the <code>waivers.json</code>
+              the explorer's Save writes, so the page, the CLI gate and this list agree. It is Swing, so it
+              works under Remote Development and in an IDE without JCEF, where the explorer was the only
+              place to see or accept a finding.</li>
           <li><b>The model preview is interactive.</b> A click on a process, case or decision element puts
               the caret on its declaration beside it, Ctrl/⌘ + wheel zooms about the pointer, a drag pans,
               and Ctrl/⌘ + <code>=</code> <code>-</code> <code>0</code> zoom in, out and fit. The picture
@@ -969,6 +976,11 @@
         <!-- The Atlas Hub: the plugin's control center (model-index status, generated explorers,
              Flowable Design sync). Right anchor — the home of project control-center panels
              (Gradle, Maven, Database). -->
+        <!-- The explorer's findings in Swing: works under Remote Development and without JCEF. -->
+        <toolWindow id="Atlas Findings"
+                    anchor="bottom"
+                    icon="AllIcons.Toolwindows.ToolWindowProblems"
+                    factoryClass="com.flowable.atlas.findings.AtlasFindingsToolWindowFactory"/>
         <toolWindow id="Atlas Hub"
                     anchor="right"
                     icon="/icons/atlas/hub.svg"
@@ -1011,6 +1023,9 @@
             <!-- Icons: AtlasIcons (/icons/atlas) where the thing has a meaning of its own, platform icons
                  for platform verbs (search, download). No entry in the main toolbar — the hub is the
                  plugin's visible surface, everything else stays in the menu. -->
+            <action id="Flowable.OpenAtlasFindings"
+                    class="com.flowable.atlas.action.OpenAtlasFindingsAction"
+                    icon="AllIcons.Toolwindows.ToolWindowProblems"/>
             <action id="Flowable.OpenAtlasExplorer"
                     class="com.flowable.atlas.action.OpenAtlasExplorerAction"
                     icon="/icons/atlas/explorer.svg"/>
