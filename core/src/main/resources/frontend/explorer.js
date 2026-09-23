@@ -3235,7 +3235,8 @@ const stripTags=s=>String(s==null?'':s).replace(/<[^>]*>/g,'').replace(/&amp;/g,
  * `titleHtml` is pre-built markup (callers escape); an empty body renders nothing at all. `o.count` is
  * shown as a pill after the title and travels into the navigator; `o.hint` is the one-line explanation
  * — on a node page behind an ⓘ beside the title, on a report page beside it in the summary; `o.meta` is
- * a short summary that stays in view (2 in · 1 out, 3 accepted); `o.tools` (a filter bar, a button row)
+ * a short summary that stays in view (2 in · 1 out, 3 accepted); `o.badges` (HTML pills) join the heading
+ * the same way — a gap table's "3 fit · 1 unclear"; `o.tools` (a filter bar, a button row)
  * sits at the top of the body — not in the summary, where a click would also toggle the section; `o.nav`
  * overrides the navigator label. A legacy title of the form "Fields (7) — …" is split into title and
  * count so the navigator reads the same for every section, and on a node page its "— …" becomes the ⓘ.
@@ -3254,10 +3255,10 @@ function section(id, titleHtml, bodyHtml, o){
     const i=title.indexOf(' — ');
     if(i>=0){ shown=esc(title.slice(0,i).trim()); hint=hint||title.slice(i+3).trim(); }
   }
-  const aside=_detailRender
+  const aside=(o.badges?'<span class="sbadges">'+o.badges+'</span>':'')+(_detailRender
     ? (o.meta?'<span class="smeta">'+esc(o.meta)+'</span>':'')+
       (hint?'<span class="sinfo" data-tip="'+esc(hint)+'" aria-label="'+esc(hint)+'">'+uiIcon('info')+'</span>':'')
-    : ((o.hint||o.meta)?'<span class="shint">'+esc([o.meta, o.hint].filter(Boolean).join(' · '))+'</span>':'');
+    : ((o.hint||o.meta)?'<span class="shint">'+esc([o.meta, o.hint].filter(Boolean).join(' · '))+'</span>':''));
   return '<details class="sect" data-sect="'+enc(id)+'"'+(o.attrs||'')+(sectIsOpen(id)?' open':'')+'>'+
     '<summary><span class="st">'+shown+'</span>'+
     (count!=null?'<span class="scount">'+esc(String(count))+'</span>':'')+aside+'</summary>'+
@@ -3390,7 +3391,9 @@ function codeblk(src, lang, problems, o){
 const GM={ok:'✓', impl:'✓', miss:'✗', warn:'⚠', unk:'?', none:'—', info:'·'};
 const GM_LABEL={ok:'fits', impl:'fits by name', miss:'missing', warn:'looks wrong', unk:'Atlas cannot tell', none:'not expected', info:'note'};
 function gm(kind, text, tip){
-  return '<span class="gm gm-'+kind+'"'+(tip?' data-tip="'+esc(tip)+'"':'')+'>'+GM[kind]+
+  // the mark's meaning leads its tooltip, the reason follows — no legend line has to say what ⚠ is
+  const t=GM_LABEL[kind]?GM_LABEL[kind]+(tip?' — '+tip:''):tip;
+  return '<span class="gm gm-'+kind+'"'+(t?' data-tip="'+esc(t)+'"':'')+'>'+GM[kind]+
     (text!=null&&text!==''?' '+esc(String(text)):'')+'</span>';
 }
 // Set while a detail page renders (like _sectReg): every gap table adds its tally, which the health strip
@@ -3428,6 +3431,7 @@ function gapTable(cols, rows, o){
     if(fine) pills+='<span class="cov-badge cov-good">'+esc(o.okLabel?o.okLabel(fine):fine+' fit')+'</span>';
     if(unclear) pills+='<span class="cov-badge" data-tip="Rows where Atlas cannot see far enough to judge — each ? says why">'+unclear+' unclear</span>';
   }
+  if(pills){ tally.pills=pills; tally.pillsHtml='<div class="covbadges">'+pills+'</div>'; }
   const legend=(o.legend||[]).length
     ? '<div class="covlegend">'+o.legend.map(k=>'<span>'+gm(k)+' '+esc(GM_LABEL[k]||k)+'</span>').join('')+'</div>' : '';
   const shown=(o.onlyGaps?gaps:rows).map(r=>Object.assign({}, r, {
@@ -5500,22 +5504,24 @@ ELEMENT_GROUPS.process=[S.userTasks, S.serviceTasks, S.scriptTasks, S.decisionTa
   S.gateways, S.flows, S.lanes, S.multiInstance, S.declaredVars, S.listeners, S.eldocs];
 ELEMENT_GROUPS.case=[S.plan, S.sentries, S.eventListeners, S.caseScripts, S.listeners, S.eldocs];
 // ---------- "Does it fit?": the contract tables of a page ----------
-// FIT[type] (declared with the contract engine, which fills most of it) lists the blocks a type's page
-// asks — each {title, build(n,c)} returning a gap table (or ''). They share one section, so a page with
-// five questions still has one navigator chip for them.
+// FIT[type] (declared with the contract engine, which fills most of it) lists the questions a type's page
+// asks — each {title, build(n,c)} returning a gap table (or ''). Each is a section of its own on the
+// Connections tab: one heading over one table, where they used to be sub-labels inside a shared "Does it
+// fit?" with a legend line of their own. What a mark means is its tooltip now, and the section's ⓘ.
+const FIT_HINT='Does it fit? ✓ fits · a faint ✓ fits by name · ✗ missing · ⚠ looks wrong · ? Atlas cannot tell — every mark says why in its tooltip';
+const fitSlug=t=>'fit-'+String(t||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
 S.fit={raw:true, build:(n,c)=>{
-  const specs=FIT[n.type]||[]; if(!specs.length) return '';
-  const before=_gapReg?_gapReg.length:0;
-  const blocks=specs.map(sp=>{ const b=sp.build(n,c); return b?'<div class="fitblk" data-fscope>'+(sp.title?'<div class="sublab">'+esc(sp.title)+'</div>':'')+b+'</div>':''; }).filter(Boolean);
-  if(!blocks.length) return '';
-  // the section counts the gaps its tables found — bad and doubtful rows; notes are not gaps
-  const mine=_gapReg?_gapReg.slice(before):[];
-  mine.forEach(t=>{ t.sect='fit'; });
-  const gaps=mine.reduce((a,t)=>a+t.bad+t.warn,0);
-  const legend='<div class="covlegend fitlegend">'+['ok','impl','miss','warn','unk'].map(k=>'<span>'+gm(k)+' '+esc(GM_LABEL[k])+'</span>').join('')+
-    '<span class="muted">— a ? always says why in its tooltip</span></div>';
-  return section('fit','Does it fit?', legend+blocks.join(''), {count:gaps||null,
-    hint:specs.filter(sp=>sp.title).map(sp=>sp.title.toLowerCase()).slice(0,3).join(' · ')});
+  const specs=FIT[n.type]||[];
+  return specs.map(sp=>{
+    const before=_gapReg?_gapReg.length:0;
+    let b=sp.build(n,c); if(!b) return '';
+    const mine=_gapReg?_gapReg.slice(before):[], id=fitSlug(sp.title);
+    mine.forEach(t=>{ t.sect=id; });           // the health strip jumps to the question that found the gap
+    // one table: its pills (3 fit · 1 unclear) join the heading instead of a line of their own
+    let badges='';
+    if(mine.length===1 && mine[0].pillsHtml && b.indexOf(mine[0].pillsHtml)>=0){ badges=mine[0].pills; b=b.replace(mine[0].pillsHtml,''); }
+    return section(id, esc(sp.title), b, {count:mine.reduce((a,t)=>a+t.rows,0)||null, badges, hint:FIT_HINT});
+  }).join('');
 }};
 // Every page reads in the same order (see renderDetail): the picture — a drawing, or the table that IS the
 // model — then whether it fits what it meets, the findings, the relations, and the details. `pic` and `det`

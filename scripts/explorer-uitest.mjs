@@ -66,6 +66,12 @@ const probe = `<script>
   const rows=()=>[...document.querySelectorAll('#palresults .pal-item')];
   const click=(el,opt)=>el.dispatchEvent(new MouseEvent('click', Object.assign({bubbles:true}, opt||{})));
   const key=k=>palq.dispatchEvent(new KeyboardEvent('keydown', {key:k, bubbles:true}));
+  // A page's fit questions are sections of their own on its Connections tab: one view over all of them,
+  // which leaves the relations (whose unfolded rows name models too) out.
+  const fitView=()=>{ const ss=[...document.querySelectorAll('#detail details.sect[data-sect^="fit-"]')]; if(!ss.length) return null;
+    return {open:ss.every(x=>x.open), textContent:ss.map(x=>x.textContent).join(' '),
+      querySelector:q=>{ for(const x of ss){ const r=x.querySelector(q); if(r) return r; } return null; },
+      querySelectorAll:q=>ss.flatMap(x=>[...x.querySelectorAll(q)])}; };
   const type=q=>{ palq.value=q; palq.dispatchEvent(new Event('input')); };
   const steps=[];
 
@@ -523,7 +529,12 @@ const probe = `<script>
     // (miniproject carries no DI, so this process has no drawing: its Overview is its facts)
     ok('the facts are on Overview, the findings on Findings', !!det.querySelector('#pane-overview > .facts') && inPane('findings','findings'));
     ok('the fit and the relations on Connections, the elements on Details',
-       inPane('fit','connections') && inPane('relations','connections') && inPane('elements','details'));
+       inPane('fit-calls','connections') && inPane('relations','connections') && inPane('elements','details'));
+    ok('every fit question is a section of its own, explained behind its ⓘ',
+       det.querySelectorAll('[data-sect^="fit-"]').length>=2 && [...det.querySelectorAll('[data-sect^="fit-"]>summary')].every(x=>!!x.querySelector('.sinfo[data-tip]')));
+    ok('no legend line repeats what a mark means', !det.querySelector('.fitlegend'));
+    const mk=det.querySelector('[data-sect^="fit-"] .gm');
+    ok('a mark says what it means in its tooltip', !!mk && /fits|missing|looks wrong|cannot tell|expected|note/.test(mk.getAttribute('data-tip')||''), mk?mk.getAttribute('data-tip'):'(no mark)');
     ok('no pane is empty', panes.every(p=>p.children.length>0), panes.filter(p=>!p.children.length).map(p=>p.dataset.pane).join());
     const t=tabs.find(x=>x.dataset.pane==='details');
     const d=det.querySelector('details.sect[data-sect="elements"]');
@@ -796,7 +807,7 @@ const probe = `<script>
   // --- does it fit: a called process against its callers, and the call from the caller's side ---
   steps.push(()=>{ location.hash=enc('process:fulfilmentProcess'); });
   steps.push(()=>{
-    const s=document.querySelector('#detail details.sect[data-sect="fit"]');
+    const s=fitView();
     ok('a called process shows whether its callers fit, open by default', !!s && s.open);
     const row=nm=>s?[...s.querySelectorAll('.tbl .tr')].find(r=>{ const c=r.querySelector('.ctn'); return c && c.textContent.trim()===nm; }):null;
     const st=row('stockLevel'), oi=row('orderId'), tot=row('subTotal');
@@ -806,19 +817,19 @@ const probe = `<script>
     ok('the gap kinds are named in the pills', !!s && /not passed/.test(s.textContent) && /never read/.test(s.textContent));
     const call=s&&s.querySelector('.tbl .tr[data-el="callCourier"]');
     ok('a call into a model outside the project is a question, not a fit', !!call && !!call.querySelector('.gm-unk') && !/cov-/.test(call.className));
-    const hs=document.querySelector('#detail .dhealth .hs[data-jump-sect="fit"]');
+    const hs=document.querySelector('#detail .dhealth .hs[data-jump-sect^="fit-"]');
     ok('the health strip counts the gaps and jumps to them', !!hs && /gap/.test(hs.textContent));
     location.hash=enc('process:orderProcess');
   });
   steps.push(()=>{
-    const r=document.querySelector('#detail [data-sect="fit"] .tr[data-el="callSub"]');
+    const r=document.querySelector('#detail [data-sect^="fit-"] .tr[data-el="callSub"]');
     ok('the caller sees the same gap on its call', !!r && r.classList.contains('cov-warn') && /stockLevel/.test(r.textContent), r?r.textContent:'(no row)');
   });
 
   // --- a service fits its callers, the code that answers it, and its data object ---
   steps.push(()=>{ location.hash=enc('service:customerService'); });
   steps.push(()=>{
-    const s=document.querySelector('#detail details.sect[data-sect="fit"]');
+    const s=fitView();
     ok('a service asks whether its operations fit', !!s);
     const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>/GET/.test(r.textContent) && r.querySelector('.vlink[data-id="'+enc('endpoint:GET /api/customers')+'"]'));
     ok('each operation names the endpoint that answers it, with the verb checked', !!row && !!row.querySelector('.gm-ok'), row?row.textContent:'(no row)');
@@ -837,19 +848,19 @@ const probe = `<script>
     ok('a decision table is drawn with its hit policy and its input and output bands',
        !!det.querySelector('.dmntab th.hp') && !!det.querySelector('.dmntab .band-in') && !!det.querySelector('.dmntab .band-out'));
     ok('its inputs and outputs are the head of the table, not a section of their own', !det.querySelector('[data-sect="dmnio"]'));
-    const s=det.querySelector('details.sect[data-sect="fit"]');
+    const s=fitView();
     const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>{ const c=r.querySelector('.ctn'); return c && c.textContent.trim()==='total'; });
     ok('an input the calling process writes fits by name', !!row && !!row.querySelector('.gm-impl'), row?row.innerHTML.slice(0,200):'(no row)');
     location.hash=enc('action:notifyCustomerAction');
   });
   steps.push(()=>{
-    const s=document.querySelector('#detail details.sect[data-sect="fit"]');
+    const s=fitView();
     const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>{ const c=r.querySelector('.ctn'); return c && c.textContent.trim()==='customerEmail'; });
     ok("an action's input its calling button sends fits", !!row && !!row.querySelector('.gm-ok'), row?row.textContent:'(no row)');
     location.hash=enc('form:orderForm');
   });
   steps.push(()=>{
-    const s=document.querySelector('#detail details.sect[data-sect="fit"]');
+    const s=fitView();
     const rest=s&&s.querySelector('.tbl .tr[data-el="canEditButton"]');
     ok("a form's REST button is a call, its verb checked against the handler", !!rest && /GET/.test(rest.textContent) && !!rest.querySelector('.gm-ok'), rest?rest.textContent:'(no row)');
     ok('the data sources and REST calls are no sections of their own', !document.querySelector('#detail [data-sect="datasources"], #detail [data-sect="restcalls"]'));
@@ -859,13 +870,13 @@ const probe = `<script>
   // --- apps and groups: what an app reaches, and who can reach what ---
   steps.push(()=>{ location.hash=enc('group:sales'); });
   steps.push(()=>{
-    const s=document.querySelector('#detail details.sect[data-sect="fit"]');
+    const s=fitView();
     const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>r.querySelector('.vlink[data-id="'+enc('process:orderProcess')+'"]'));
     ok('a group sees what it may do per model, and through which app', !!row && /May start/.test(row.textContent) && /via Demo App/.test(row.textContent), row?row.textContent:'(no row)');
     location.hash=enc('app:demoApp');
   });
   steps.push(()=>{
-    const s=document.querySelector('#detail details.sect[data-sect="fit"]');
+    const s=fitView();
     const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>r.querySelector('.vlink[data-id="'+enc('decision:orderDecision')+'"]'));
     ok('an app lists what its models reach that no app ships', !!row && row.classList.contains('cov-warn') && /in no app/.test(row.textContent), row?row.textContent:'(no row)');
   });
@@ -873,7 +884,7 @@ const probe = `<script>
   // --- events, endpoints and classes against their counterparts ---
   steps.push(()=>{ location.hash=enc('endpoint:GET /api/customers/{id}/canEdit'); });
   steps.push(()=>{
-    const s=document.querySelector('#detail details.sect[data-sect="fit"]');
+    const s=fitView();
     const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>r.querySelector('.vlink[data-id="'+enc('form:orderForm')+'"]'));
     ok('an endpoint lists its callers with the verb each uses', !!row && /canEditButton/.test(row.textContent) && !!row.querySelector('.gm-ok'), row?row.textContent:'(no row)');
     location.hash=enc('java:com.example.DemoBean');
@@ -885,7 +896,7 @@ const probe = `<script>
     location.hash=enc('event:orderShipped');
   });
   steps.push(()=>{
-    const s=document.querySelector('#detail details.sect[data-sect="fit"]');
+    const s=fitView();
     ok('an event lists its payload against its publishers and consumers', !!s && /Publishers and consumers/.test(s.textContent) && /consumed by/.test(s.textContent));
     const hs=document.querySelector('#detail .dhealth');
     ok('a page whose every row is a question does not claim it fits', !!hs && !/fits/.test(hs.textContent));

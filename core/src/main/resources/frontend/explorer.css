@@ -841,6 +841,9 @@
     background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius-full);padding:0 var(--space-15)}
   .dpane details.sect>summary .smeta{flex:none;font-size:var(--text-xs);font-weight:400;letter-spacing:0;color:var(--ink-faint)}
   .sinfo{display:inline-flex;align-items:center;flex:none;color:var(--ink-faint);cursor:help}
+  /* a gap table's pills in its section's heading: "3 fit · 1 unclear" read with the title */
+  details.sect>summary .sbadges{display:inline-flex;flex-wrap:wrap;gap:var(--space-1);min-width:0;font-weight:400;letter-spacing:0;text-transform:none}
+  details.sect>summary .sbadges .cov-badge{margin:0}
   .sinfo .ui{width:13px;height:13px}
   .sinfo:hover{color:var(--ink-dim)}
   .dpane .sb{padding:var(--space-1) 0 0}
@@ -1064,8 +1067,7 @@
   .tbl>.tr.cov-warn{background:var(--status-warn-bg);box-shadow:inset 3px 0 0 var(--cov-warn)}
   .tbl>.tr.cov-info{background:var(--status-info-bg)}
   /* gap tables: the same grammar for every "does it fit" question (gapTable / gm in explorer.js) */
-  .gapblk+.gapblk,.fitblk+.fitblk{border-top:1px solid var(--line);margin-top:var(--space-3);padding-top:var(--space-2)}
-  .fitblk>.sublab:first-child{margin-top:0}
+  .gapblk+.gapblk{border-top:1px solid var(--line);margin-top:var(--space-3);padding-top:var(--space-2)}
   .gm{white-space:nowrap;font-size:var(--text-xs)}
   .gm-ok{color:var(--ok-text)}
   .gm-impl{color:var(--ok-text);opacity:.65}
@@ -1075,7 +1077,6 @@
   .gm-none,.gm-info{color:var(--ink-faint)}
   .covlegend .gm{font-size:inherit}
   .tbl .td.tags .gm+.gm{margin-left:var(--space-1)}
-  .fitlegend{margin:0 0 var(--space-2)}
   .ctdir{display:inline-block;min-width:3ch;margin-right:var(--space-15);font-family:var(--sans);font-size:var(--text-2xs);font-weight:600}
   /* a chip in a gap table shows its name; the icon says the kind */
   .gapblk .nc .ty{display:none}
