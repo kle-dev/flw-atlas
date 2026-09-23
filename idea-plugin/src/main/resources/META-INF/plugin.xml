@@ -155,6 +155,11 @@
               and its explanation behind an ⓘ, and every section starts open but <i>Other attributes</i>. On
               a model's own page a finding drops the model, the file and a severity its check's head already
               says.</li>
+          <li><b>A leftover TODO says where it is.</b> In a JSON model the finding names the element that
+              carries the marker and quotes it — <i>TODO in the label: "Current Pod (TODO)"</i> on the
+              field, which ⌖ finds — instead of a path like <code>rows[1].cols[0].label</code> and "TODO
+              left in the model". The same form as an app's <code>.form</code> and as a Design export is one
+              finding per marker, not two, and a one-line model gives no line number.</li>
           <li><b>Detail pages ask whether a model fits.</b> On the Connections tab each question is a
               section of its own — <i>Calls</i>, <i>Called by</i>, <i>Fields and the variables they
               write</i> — and every gap table is drawn one way, the schema coverage table first: a row per
@@ -547,20 +552,6 @@
               read-only, because neither side is the file on disk any more. <i>Show Raw Files</i> in the
               diff toolbar gives the two files themselves, where the project side stays editable. Processes,
               cases and decisions are exported formatted already and are always shown as they are.</li>
-        </ul>
-        <h3>0.24.3</h3>
-        <ul>
-          <li><b><code>CLAUDE.md</code> says less, and none of it is wrong.</b> Gloaguen et al. (ETH Zürich,
-              <i>Evaluating AGENTS.md</i>, 2026) measured what a repository-level context file does for a
-              coding agent: its instructions are followed, its repository overview adds nothing the agent
-              would not read anyway, and the file costs about a fifth more per task. Held against that, a
-              third of the generated file was overview — the scale line, the app list, the model inventory,
-              the Java-by-role tally, the directory counts and the per-check health tallies, every one a
-              copy of the summary that §0 has the agent read whole — and §5 restated four of its own six
-              rules in a "pitfalls" paragraph. All of that is gone. What stays is what the agent cannot get
-              from the repository: the procedure, the Design-vs-repo convention, the wiring examples to
-              mirror, the known issues not to copy, and the catalogs. §1 lost its ASCII diagram and the
-              <code>ACT_*</code> table paragraph on the same grounds.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

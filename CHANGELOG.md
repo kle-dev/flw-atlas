@@ -23,6 +23,10 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   and `1`–`4` pick one. A section is a heading with its count and its explanation behind an ⓘ, and every
   section starts open but *Other attributes*. On a model's own page a finding drops the model, the file
   and a severity its check's head already says.
+- **A leftover TODO says where it is.** In a JSON model the finding names the element that carries the
+  marker and quotes it — *TODO in the label: "Current Pod (TODO)"* on the field, which ⌖ finds — instead
+  of a path like `rows[1].cols[0].label` and "TODO left in the model". The same form as an app's `.form`
+  and as a Design export is one finding per marker, not two, and a one-line model gives no line number.
 - **Detail pages ask whether a model fits.** On the Connections tab each question is a section of its own
   — *Calls*, *Called by*, *Fields and the variables they write* — and every gap table is drawn one way,
   the schema coverage table first: a row per thing that should line up, tinted by how badly it does not,

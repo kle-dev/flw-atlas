@@ -262,17 +262,31 @@ object Findings {
             // A marker with no text of its own is told apart by where it sits: the path of the JSON element
             // holding it (a minified model is one line, and a column moves on every export), else its line.
             val subject = text.ifEmpty { m["path"]?.toString() ?: "@${m["line"]}" }
-            if (!seenMarkers.add(listOf(owner?.get("id") ?: m["file"], m["marker"], subject, m["line"]))) continue
+            val element = m["element"]?.toString()
+            val value = m["value"]?.toString()
+            // The element and what it says name the marker in every copy of the model: a Design export
+            // (`components[0].components[4]`) and the app's `.bar` (`rows[1].cols[0]`) spell the same label's
+            // path two ways, which made one TODO two findings.
+            val seenKey = if (element != null) listOf(owner?.get("id") ?: m["file"], m["marker"], "@$element", value ?: text)
+                          else listOf(owner?.get("id") ?: m["file"], m["marker"], subject, m["line"])
+            if (!seenMarkers.add(seenKey)) continue
+            // what carries it — "the label" — from the path's last key
+            val what = (m["path"]?.toString())?.substringAfterLast('.')?.substringBefore('[')?.takeIf { it.isNotBlank() && !it.first().isDigit() }
+            val message = when {
+                text.isNotEmpty() -> "${m["marker"]}: $text"
+                value != null && what != null -> "${m["marker"]} in the $what: \"$value\""
+                value != null -> "${m["marker"]} in \"$value\""
+                else -> "${m["marker"]} left in the model"
+            }
             findings.add(linkedMapOf(
                 "check" to "leftoverMarkers",
                 "severity" to WARNING,
                 "node" to owner?.get("id"),
                 "label" to (owner?.get("label") ?: owner?.get("key") ?: m["file"]),
-                "message" to "${m["marker"]}" + (if (text.isEmpty()) " left in the model" else ": $text"),
+                "message" to message,
                 "file" to m["file"],
-                "line" to m["line"],
                 "subject" to subject,
-            ))
+            ).apply { m["line"]?.let { put("line", it) }; if (element != null) put("element", element) })
         }
         val customFns = result["customFunctions"] as? Map<String, Any?>
         for (d in (customFns?.get("diagnostics") as? List<*> ?: emptyList<Any?>())) {

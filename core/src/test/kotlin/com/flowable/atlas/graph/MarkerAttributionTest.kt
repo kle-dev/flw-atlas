@@ -31,6 +31,14 @@ class MarkerAttributionTest {
             val out = ByteArrayOutputStream()
             ZipOutputStream(out).use { z -> z.putNextEntry(ZipEntry("minified.form")); z.write(form.toByteArray()); z.closeEntry() }
             File(dir, "export.zip").writeBytes(out.toByteArray())
+            // the same form twice, as an app's `.form` and as a Design export whose components nest — one
+            // label marked "(TODO)", spelled by two different paths
+            File(dir, "DEMO-F001.form").writeText(
+                """{"metadata":{"key":"DEMO-F001","name":"Demo form","modelType":"form"},"rows":[{"cols":[{"id":"text1","type":"text","label":"Crew"}]},{"cols":[{"id":"text3","type":"text","label":"Current Pod (TODO)"}]}]}""")
+            val design = """{"key":"DEMO-F001","name":"Demo form","modelType":"form","components":[{"id":"panel1","type":"panel","components":[{"id":"text1","type":"text","label":"Crew"},{"id":"text3","type":"text","label":"Current Pod (TODO)"}]}]}"""
+            val dz = ByteArrayOutputStream()
+            ZipOutputStream(dz).use { z -> z.putNextEntry(ZipEntry("form-models/DEMO-F001.json")); z.write(design.toByteArray()); z.closeEntry() }
+            File(dir, "DEMO-design.zip").writeBytes(dz.toByteArray())
             result = Atlas.extract(dir)
         }
 
@@ -49,6 +57,15 @@ class MarkerAttributionTest {
         val todo = markers().single { it["file"] == "two.bpmn" }
         assertEquals("process:second", todo["node"])
         assertEquals("wire the escalation", todo["subject"])
+    }
+
+    @Test
+    fun aMarkerInALabelNamesTheComponentAndWhatItSays() {
+        val inForm = markers().filter { it["node"] == "form:DEMO-F001" }
+        assertEquals("app copy + Design export = one finding: $inForm", 1, inForm.size)
+        val f = inForm.single()
+        assertEquals("text3", f["element"])
+        assertEquals("TODO in the label: \"Current Pod (TODO)\"", f["message"])
     }
 
     @Test

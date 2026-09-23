@@ -1,6 +1,7 @@
 package com.flowable.atlas.graph
 
 import com.flowable.atlas.model.Dyn
+import com.flowable.atlas.model.MiniJson
 import com.flowable.atlas.expr.catalog.CustomFunctionCatalog
 import com.flowable.atlas.expr.catalog.CustomFunctionExtractor
 import com.flowable.atlas.parsing.Constants
@@ -43,6 +44,25 @@ object Atlas {
         for (i in from until raw.length) { val c = raw[i]; if (c == '\n' || c == '"' || c == '<' || c == '\\') { end = i; break } }
         return raw.substring(from, end).trim().removeSuffix("-->").removeSuffix("*/")
             .trimEnd('"', ',', ' ', ':', ')', '.').trimStart(':', '-', ' ', '(').trim().take(120)
+    }
+
+    private val PATH_SEG_RE = Regex("""([^.\[\]]+)|\[(\d+)]""")
+
+    /**
+     * Where a marker sits in a JSON model, from its [JsonPath]: the whole string holding it — a label reading
+     * `Current Pod (TODO)`, where the text after the marker is only `)` — and the id of the innermost element
+     * around it, a form component or a shape. With them the finding names the element and what it says,
+     * and the page can point at it; with only the path a reader had `rows[1].cols[0].label` to go on.
+     */
+    private fun markerSite(doc: Any?, path: String): Pair<String?, String?> {
+        var cur: Any? = doc
+        var id: String? = null
+        for (seg in PATH_SEG_RE.findAll(path)) {
+            val idx = seg.groupValues[2]
+            cur = if (idx.isNotEmpty()) (cur as? List<*>)?.getOrNull(idx.toInt()) else (cur as? Map<*, *>)?.get(seg.groupValues[1])
+            ((cur as? Map<*, *>)?.get("id") as? String)?.takeIf { it.isNotBlank() }?.let { id = it }
+        }
+        return (cur as? String)?.replace(Regex("\\s+"), " ")?.trim()?.take(160) to id
     }
 
     /** A model file or archive entry above this is not read; a `.form` with embedded images stays far below. */
@@ -197,15 +217,23 @@ object Atlas {
             // a minified JSON model gets the path of the element carrying it, which survives a re-export.
             val markerNodes = mkeys.filterNotNull().map { "$nodeType:$it" }
             val spans = ModelSpans.ranges(raw, mtype, mkeys)
+            val jsonDoc by lazy { if (mtype in XML_MODEL_TYPES) null else runCatching { MiniJson.parse(raw) }.getOrNull() }
+            val minified = raw.indexOf('\n').let { it < 0 || it >= raw.trimEnd().length }
             for (m in MARKER_RE.findAll(raw)) {
                 val before = raw.substring(0, m.range.first)
                 val owner = spans?.firstOrNull { m.range.first in it.second }?.first
                 val rec = linkedMapOf<String, Any?>(
-                    "file" to label, "line" to before.count { it == '\n' } + 1,
+                    // a minified model is one line: "line 1" says nothing there, the path does
+                    "file" to label, "line" to (if (minified) null else before.count { it == '\n' } + 1),
                     "marker" to m.groupValues[1], "text" to markerText(raw, m.range.last + 1),
                     "models" to (if (owner != null) listOf("$nodeType:$owner") else markerNodes),
                 )
-                if (mtype !in XML_MODEL_TYPES) JsonPath.at(raw, m.range.first)?.let { rec["path"] = it }
+                if (mtype !in XML_MODEL_TYPES) JsonPath.at(raw, m.range.first)?.let { path ->
+                    rec["path"] = path
+                    val (value, element) = markerSite(jsonDoc, path)
+                    value?.let { rec["value"] = it }
+                    element?.let { rec["element"] = it }
+                }
                 bucketList("markers").add(rec)
             }
 
