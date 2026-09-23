@@ -116,7 +116,8 @@ object DmnTableSvgRenderer {
                 val outsCells = r.findChildren("outputEntry").map { it.textOfDescendant("text").orEmpty() }
                 // Pad to the header width so a rule with missing entries stays column-aligned.
                 val cells = pad(ins, inputs.size) + pad(outsCells, outputs.size)
-                Rule(cells, r.textOfDescendant("description"))
+                // The rule's own annotation — an entry's <description> sits deeper and is not it.
+                Rule(cells, r.childText("description"))
             }
             out.add(
                 Table(
