@@ -229,7 +229,7 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
             val scoped = LinkedHashSet<String>()
             scopeModelKey(parameters, service)?.let { key ->
                 val members = if (dialect == ExpressionDialect.FRONTEND) {
-                    service.scopedMembers(key, listOf(ModelType.FORM))?.formFields
+                    service.scopedMembers(key, listOf(ModelType.FORM, ModelType.PAGE))?.formFields
                 } else {
                     service.scopedMembers(key, listOf(ModelType.PROCESS, ModelType.CASE))?.variables
                 }
