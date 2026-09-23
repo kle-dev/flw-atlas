@@ -564,9 +564,9 @@
   .dgview[data-kind="wireframe"] svg [data-el]:hover,
   .dgview[data-kind="wireframe"] svg [data-el].dgsel,
   .dgview[data-kind="wireframe"] svg [data-el]:focus-visible{filter:none}
-  .dgview[data-kind="wireframe"] svg [data-el]:hover rect{stroke:#0f55d6}
-  .dgview[data-kind="wireframe"] svg [data-el].dgsel rect,
-  .dgview[data-kind="wireframe"] svg [data-el]:focus-visible rect{stroke:#0f55d6;stroke-width:2}
+  .dgview[data-kind="wireframe"] svg [data-el]:hover > rect{stroke:#0f55d6}
+  .dgview[data-kind="wireframe"] svg [data-el].dgsel > rect,
+  .dgview[data-kind="wireframe"] svg [data-el]:focus-visible > rect{stroke:#0f55d6;stroke-width:2}
   .dgview svg [data-el].dgsel{filter:drop-shadow(0 0 2px rgba(15,85,214,.9)) drop-shadow(0 0 7px rgba(15,85,214,.45))}
   /* shapes are keyboard stops (tabindex from the renderer): the focused one shows like a selection */
   .dgview svg [data-el]:focus{outline:none}

@@ -27,6 +27,7 @@ object DiagramArtifacts {
         val graph = result["graph"] as? Map<*, *> ?: return emptyMap()
         val nodes = graph["nodes"] as? List<*> ?: return emptyMap()
         val out = LinkedHashMap<String, String>()
+        val subforms = ModelPicture.subformsOf(nodes, root)
         for (nodeAny in nodes) {
             val node = nodeAny as? Map<*, *> ?: continue
             val type = ModelPicture.typeOfNode(node["type"] as? String) ?: continue
@@ -36,7 +37,7 @@ object DiagramArtifacts {
             val resolved = ModelBytes.resolve(root, filePath)
             if (resolved == null) { onFailure?.invoke(key, "model source could not be read from $filePath"); continue }
             val (bytes, name) = resolved
-            val svg = runCatching { ModelPicture.render(bytes, name, type)?.svg }
+            val svg = runCatching { ModelPicture.render(bytes, name, type, subforms)?.svg }
                 .onFailure { onFailure?.invoke(key, it.message ?: it.javaClass.simpleName) }
                 .getOrNull() ?: continue
             out[uniqueName(sanitize(key), node["type"] as String, out.keys)] = svg

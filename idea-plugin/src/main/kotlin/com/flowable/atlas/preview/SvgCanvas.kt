@@ -27,7 +27,8 @@ import javax.swing.SwingUtilities
  *
  * Fits the width of the view by default (never enlarging past 100 %). [zoomBy] switches to a fixed
  * zoom, and [fitWidth] switches back. Ctrl/⌘ + wheel zooms about the pointer, a drag pans, a plain wheel
- * scrolls; a click that is not a drag reports the point in the drawing's own coordinates to [onClick].
+ * scrolls; a click that is not a drag reports the point in the drawing's own coordinates to [onClick] —
+ * a double click or a Ctrl/⌘-click to [onOpen], when there is one.
  */
 internal class SvgCanvas : JComponent(), Scrollable {
 
@@ -40,6 +41,9 @@ internal class SvgCanvas : JComponent(), Scrollable {
 
     /** Told where a click (not a drag) landed, in the document's coordinates. */
     var onClick: ((Point2D.Double) -> Unit)? = null
+
+    /** Told where a double click or a Ctrl/⌘-click landed, in the document's coordinates. */
+    var onOpen: ((Point2D.Double) -> Unit)? = null
 
     private var fixedZoom: Double? = null
 
@@ -71,7 +75,10 @@ internal class SvgCanvas : JComponent(), Scrollable {
             }
 
             override fun mouseReleased(e: MouseEvent) {
-                if (pressedAt != null && !dragged) toDocument(e.point)?.let { onClick?.invoke(it) }
+                if (pressedAt != null && !dragged) toDocument(e.point)?.let { p ->
+                    val open = onOpen?.takeIf { e.clickCount >= 2 || e.isControlDown || e.isMetaDown }
+                    (open ?: onClick)?.invoke(p)
+                }
                 pressedAt = null
                 dragged = false
                 cursor = Cursor.getDefaultCursor()

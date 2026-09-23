@@ -527,6 +527,8 @@ object ModelParsers {
                 if (truthy(es["formRef"])) {
                     // a bare key or, from a newer export, a `{id, key}` reference — the list shows the key
                     subforms.add(modelRefKey(es["formRef"])); ctx.addRef(key, mtype, ffile, "subform", "form", es["formRef"])
+                    // and the component says which form it embeds, so its row and its box can open it
+                    component?.set("subform", modelRefKey(es["formRef"]))
                 }
                 if (truthy(es["dataObjectDefinitionKey"])) {
                     dataSources.add(linkedMapOf("kind" to "dataObject", "key" to es["dataObjectDefinitionKey"], "op" to es["dataObjectOperationKey"]))

@@ -51,12 +51,18 @@ object FormSvgRenderer {
     private val CHOICE_TYPES = setOf("select", "radio", "people", "group", "multiselect")
 
     /** The wireframe of a form/page document, or null when [bytes] is not one. */
-    fun renderSvg(bytes: ByteArray): String? = picture(bytes)?.svg
+    fun renderSvg(bytes: ByteArray, subforms: ((String) -> ByteArray?)? = null): String? = picture(bytes, subforms)?.svg
 
-    /** The wireframe with every component's box as a hotspot, in drawing order — a panel before the
-     *  components inside it, so the innermost one wins a click. */
-    fun picture(bytes: ByteArray): Picture? {
-        val layout = FormLayout.parse(bytes) ?: return null
+    /**
+     * The wireframe with every component's box as a hotspot, in drawing order — a panel before the
+     * components inside it, so the innermost one wins a click. With [subforms] (a form's raw model by
+     * key), a subform is drawn with the components of the form it embeds; those belong to that form, so
+     * they are not elements of this picture — the subform itself is, and its hotspot's
+     * [Picture.Hotspot.ref] names the form it opens.
+     */
+    fun picture(bytes: ByteArray, subforms: ((String) -> ByteArray?)? = null): Picture? {
+        val parsed = FormLayout.parse(bytes) ?: return null
+        val layout = if (subforms == null) parsed else parsed.resolveSubforms({ key -> subforms(key)?.let(FormLayout::parse) })
         val hits = ArrayList<Picture.Hotspot>()
         val inner = WIDTH - 2 * PAD
         val gridH = if (layout.rows.isEmpty()) LABEL_H else gridHeight(layout, inner)
@@ -107,6 +113,10 @@ object FormSvgRenderer {
             val grid = if (s.layout.rows.isEmpty()) LABEL_H else gridHeight(s.layout, w - 2 * INSET)
             (if (c.sections.size > 1) HEADER_H else 0.0) + INSET + grid + INSET
         }
+        c.subform != null && c.subformLayout != null -> {
+            val inner = c.subformLayout
+            HEADER_H + INSET + (if (inner.rows.isEmpty()) LABEL_H else gridHeight(inner, w - 2 * INSET)) + INSET
+        }
         c.subform != null -> 46.0
         c.type == "dataTable" -> LABEL_H + 24.0 + 2 * 20.0
         c.type == "hline" -> 10.0
@@ -122,8 +132,9 @@ object FormSvgRenderer {
 
     // ---- painting ----------------------------------------------------------------------------
 
+    /** [hits] null: the components are drawn but are no elements of this picture (a subform's). */
     private fun drawGrid(
-        sb: StringBuilder, layout: FormLayout, x0: Double, y0: Double, width: Double, hits: MutableList<Picture.Hotspot>,
+        sb: StringBuilder, layout: FormLayout, x0: Double, y0: Double, width: Double, hits: MutableList<Picture.Hotspot>?,
     ) {
         var y = y0
         for (line in layout.rows.flatMap(::lines)) {
@@ -138,20 +149,24 @@ object FormSvgRenderer {
         }
     }
 
-    private fun drawCell(sb: StringBuilder, c: FormLayout.Cell, x: Double, y: Double, w: Double, hits: MutableList<Picture.Hotspot>) {
+    private fun drawCell(sb: StringBuilder, c: FormLayout.Cell, x: Double, y: Double, w: Double, hits: MutableList<Picture.Hotspot>?) {
         val hidden = c.visible == false
-        // the component is one clickable element — the same contract as a diagram shape
-        val id = c.id.takeIf { it.isNotBlank() }
+        // the component is one clickable element — the same contract as a diagram shape; a subform also
+        // says which form it opens
+        val id = c.id.takeIf { it.isNotBlank() && hits != null }
+        val ref = c.subform?.let { "form:$it" }
         sb.append("<g")
         if (id != null) {
             sb.append(""" data-el="${esc(id)}" tabindex="0" role="button"""")
-            hits.add(Picture.Hotspot(id, x, y, w, cellHeight(c, w)))
+            if (ref != null) sb.append(""" data-ref="${esc(ref)}"""")
+            hits!!.add(Picture.Hotspot(id, x, y, w, cellHeight(c, w), ref))
         }
         sb.append(if (hidden) """ opacity="0.45">""" else ">")
         c.label?.let { sb.append("<title>${esc(it)} (${esc(c.type)})</title>") }
         val bodyH = cellHeight(c, w) - META_H
         when {
             c.sections.isNotEmpty() -> drawContainer(sb, c, x, y, w, hits)
+            c.subform != null && c.subformLayout != null -> drawSubform(sb, c, c.subformLayout, x, y, w)
             c.subform != null -> {
                 sb.append(box(x, y, w, bodyH, PANEL_FILL, dashed = true))
                 sb.append(text(x + 10.0, y + 18.0, clip(c.label ?: "Subform", w - 20.0), weight = "600"))
@@ -190,8 +205,23 @@ object FormSvgRenderer {
         sb.append("</g>")
     }
 
+    /** A subform with the form it embeds: a dashed frame, a bar naming the form, and that form's grid —
+     *  drawn, but not clickable part by part: its components are the other form's. */
+    private fun drawSubform(sb: StringBuilder, c: FormLayout.Cell, inner: FormLayout, x: Double, y: Double, w: Double) {
+        val bodyH = cellHeight(c, w) - META_H
+        sb.append(box(x, y, w, bodyH, PANEL_FILL, dashed = true))
+        sb.append(box(x, y, w, HEADER_H, HEADER_FILL, dashed = true))
+        val key = "↳ ${c.subform}"
+        val keyW = minOf(w / 2, key.length * MONO_W + 20.0)
+        sb.append(text(x + 10.0, y + 17.0, clip("Subform · ${c.label ?: inner.title ?: c.subform}", w - keyW - 20.0), weight = "600"))
+        sb.append(text(x + w - keyW, y + 17.0, clip(key, keyW - 10.0, MONO_W), size = 10.5, fill = ACCENT, mono = true))
+        val gw = w - 2 * INSET
+        if (inner.rows.isEmpty()) sb.append(text(x + INSET, y + HEADER_H + INSET + 12.0, "Empty", fill = MUTED))
+        else drawGrid(sb, inner, x + INSET, y + HEADER_H + INSET, gw, null)
+    }
+
     /** A panel: a title bar over its grid; tabs and accordions: one strip + grid per section. */
-    private fun drawContainer(sb: StringBuilder, c: FormLayout.Cell, x: Double, y: Double, w: Double, hits: MutableList<Picture.Hotspot>) {
+    private fun drawContainer(sb: StringBuilder, c: FormLayout.Cell, x: Double, y: Double, w: Double, hits: MutableList<Picture.Hotspot>?) {
         val bodyH = cellHeight(c, w) - META_H
         sb.append(box(x, y, w, bodyH, PANEL_FILL))
         sb.append(box(x, y, w, HEADER_H, HEADER_FILL))

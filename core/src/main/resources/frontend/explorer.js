@@ -5630,10 +5630,11 @@ function fieldRow(f, d){
     ?'<span class="muted">←</span> '+paramSide(String(f.value)):'';
   const ty=termHtml('el', f.type, 'tag')||tag(f.type);
   const req=(f.required===true||f.required==='true')?'<span class="tag" data-tip="Required field">required</span>':'';
-  const hay=[id, f.label, f.type, f.value, callee&&callee.key, f.description].filter(Boolean).join(' ');
+  const hay=[id, f.label, f.type, f.value, callee&&callee.key, f.subform, f.description].filter(Boolean).join(' ');
   return {el:f.id, hay, body:b, cls:b?'fldrow':'', bodyCls:'fldbody', cells:{
     id:fieldLink(f.id), label:esc(f.label==null?'':String(f.label)), type:ty,
-    value:(cid?'<span class="opref">→ '+esc(String(callee.key))+'</span> ':'')+val,
+    value:(cid?'<span class="opref">→ '+esc(String(callee.key))+'</span> ':'')+
+      (f.subform?'<span class="opref" data-tip="The form this subform embeds">↳ '+vlink('form:'+f.subform, String(f.subform))+'</span> ':'')+val,
     flags:(ps.length?tag(paramSummary(ps)):'')+req+gates}};
 }
 // Above this many mapping rows the component's own body stops being a summary; the rest stay one click
@@ -6313,6 +6314,15 @@ if(dgmodal){
   });
 }
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&_dgCard&&(!dgmodal||dgmodal.hidden)) dgCardEscape(); });
+// A press anywhere outside the card and the drawing it came from closes it, as the ✕ does. Inside the
+// drawing its own click decides (another element's card, or none on the blank); a card spread over the
+// page has its scrim for that.
+document.addEventListener('pointerdown',e=>{
+  if(!_dgCard||_dgCard.classList.contains('big')) return;
+  const view=_dgCard._view, t=e.target;
+  if(_dgCard.contains(t)||(view&&view.contains(t))) return;
+  hideDgCard(); if(view) dgSelect(view, null);
+}, true);
 /** Escape unwinds the card one step at a time: the overlay shrinks back first, the card closes second
  *  — same reasoning as the palette's marks-then-panel chain. */
 function dgCardEscape(){
@@ -6663,6 +6673,9 @@ function wireDgClicks(view, inModal){
     const g=dgTargetOf(view, t);
     if(!g||!view.contains(g)){ hideDgCard(); dgSelect(view, null); return; }
     dgSelect(view, g);
+    // a subform's box opens the form it embeds on a double click; the first click showed its card
+    const ref=g.getAttribute('data-ref');
+    if(ref&&e.detail>=2&&byId.get(ref)){ hideDgCard(); if(inModal) closeDiagramModal(); select(ref); return; }
     showDgCard(view, g, e, inModal);
   });
   // Shapes are focusable (the renderer stamps tabindex/role): Enter or Space on one is a click.
@@ -6807,6 +6820,10 @@ function dgCardHtml(n, elId, g){
       row('calls', (cid?nodeChip(cid):'<span class="mono">'+esc(cl.key)+'</span>')+(cl.op?' <span class="mono muted">'+esc(cl.op)+'</span>':'')); }
     if(fld.required) row('required','yes');
   }
+  // a subform: the form it embeds, which a double click on the box opens
+  const sref=g.getAttribute('data-ref')||(fld&&fld.subform?'form:'+fld.subform:'');
+  if(sref) row('embeds', byId.get(sref)?nodeChip(sref)+' <span class="muted">double-click the box to open it</span>'
+    :'<span class="mono">'+esc(sref.slice(sref.indexOf(':')+1))+'</span> <span class="muted">not in this project</span>');
   // a DMN DRD shape is a decision table of its own — link straight to its node
   if(n.type==='decision'&&byId.get('decision:'+elId)&&('decision:'+elId)!==n.id) row('model', nodeChip('decision:'+elId));
   const mi=(d.multiInstance||[]).find(m=>sameId(m.activity));

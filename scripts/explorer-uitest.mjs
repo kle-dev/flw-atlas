@@ -891,6 +891,37 @@ const probe = `<script>
     document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
   });
 
+  // --- a subform: drawn with the form it embeds, named on its card and its row, opened by a double click ---
+  steps.push(()=>{ location.hash=enc('form:DEMO-LF001'); });
+  steps.push(()=>{
+    const s=document.querySelector('#detail details.sect[data-sect="diagram"]');
+    if(s) s.open=true;
+    const row=document.querySelector('#detail [data-sect="formfields"] [data-el="orderSub"]');
+    ok('the subform row links the form it embeds', !!row && !!row.querySelector('.vlink[data-id="'+enc('form:orderForm')+'"]'),
+       row?row.textContent.slice(0,160):'(no row)');
+  });
+  steps.push(()=>{
+    const g=document.querySelector('#detail [data-sect="diagram"] .dgview g[data-el="orderSub"]');
+    ok('the subform box says which form it opens', !!g && g.getAttribute('data-ref')==='form:orderForm', g?g.outerHTML.slice(0,160):'(no box)');
+    ok('and draws that form inside it, as a picture, not as its elements', !!g && /Subform/.test(g.textContent) &&
+       !!g.querySelector('g:not([data-el])') && !g.querySelector('g[data-el="notifyButton"]'));
+    if(g) click(g);
+  });
+  steps.push(()=>{
+    const card=document.querySelector('.dgcard');
+    ok('its card names the embedded form as a link', !!card && !!card.querySelector('.nc[data-id="'+enc('form:orderForm')+'"]'),
+       card?card.textContent.slice(0,200):'(no card)');
+    // a press anywhere outside the card and the drawing closes it
+    document.body.dispatchEvent(new PointerEvent('pointerdown', {bubbles:true}));
+    ok('a press outside the card closes it', !document.querySelector('.dgcard'));
+    const g=document.querySelector('#detail [data-sect="diagram"] .dgview g[data-el="orderSub"]');
+    if(g){ click(g); click(g, {detail:2}); }
+  });
+  steps.push(()=>{
+    ok('a double click on the subform opens the form it embeds', state.sel==='form:orderForm', state.sel);
+    ok('and leaves no card behind', !document.querySelector('.dgcard'));
+  });
+
   // --- a bean the Flowable platform ships is not an external library ---
   steps.push(()=>{
     const bean={type:'external', data:{kind:'bean', platform:true}}, lib={type:'external', data:{kind:'class', platform:false}};

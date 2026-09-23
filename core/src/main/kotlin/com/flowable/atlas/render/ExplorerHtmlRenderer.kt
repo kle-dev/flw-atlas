@@ -126,6 +126,7 @@ object ExplorerHtmlRenderer {
     internal fun attachDiagrams(nodes: Any?, root: File, budget: WireframeBudget = WireframeBudget()): Any? {
         val list = nodes as? List<*> ?: return nodes
         val wireframes = ArrayList<Triple<String, MutableMap<Any?, Any?>, String>>()
+        val subforms = ModelPicture.subformsOf(list, root)
         for (nodeAny in list) {
             val node = Dyn.anyMutableMapOrNull(nodeAny) ?: continue
             val type = ModelPicture.typeOfNode(node["type"] as? String) ?: continue
@@ -139,7 +140,7 @@ object ExplorerHtmlRenderer {
             val resolved = ModelBytes.resolve(root, file)
             if (resolved == null) { data["diagramError"] = "model source could not be read from $file"; continue }
             val (bytes, name) = resolved
-            val pic = runCatching { ModelPicture.render(bytes, name, type) }
+            val pic = runCatching { ModelPicture.render(bytes, name, type, subforms) }
                 .onFailure { data["diagramError"] = "diagram could not be rendered: ${it.message ?: it.javaClass.simpleName}" }
                 .getOrNull() ?: continue
             when (pic.kind) {

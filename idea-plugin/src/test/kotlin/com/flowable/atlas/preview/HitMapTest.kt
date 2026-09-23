@@ -43,6 +43,17 @@ class HitMapTest : TestCase() {
         assertEquals("the field, not the panel around it", "amount", map.elementAt(Point2D.Double(amount.x + amount.width / 2, amount.y + amount.height / 2)))
     }
 
+    fun testASubformSaysWhichFormItOpens() {
+        val form = """{"name":"DEMO-F001","rows":[{"cols":[{"id":"amount","type":"number","label":"Amount","size":6},
+            {"id":"addressSub","type":"subform","label":"Address","size":6,"extraSettings":{"formRef":{"key":"DEMO-F002"}}}]}]}""".toByteArray()
+        val pic = ModelPicture.render(form, "DEMO-F001.form", ModelType.FORM)!!
+        val map = HitMap.of(pic)!!
+        fun centre(id: String) = pic.hotspots.single { it.id == id }.let { Point2D.Double(it.x + it.width / 2, it.y + it.height / 2) }
+        assertEquals("form:DEMO-F002", map.refAt(centre("addressSub")))
+        assertNull("a field opens nothing", map.refAt(centre("amount")))
+        assertTrue(map.opensModels)
+    }
+
     fun testARuleRowIsItsRule() {
         val dmn = """<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"><decision id="DEMO-D1" name="D"><decisionTable hitPolicy="FIRST">
             <input label="Total"><inputExpression><text>total</text></inputExpression></input><output name="ok"/>

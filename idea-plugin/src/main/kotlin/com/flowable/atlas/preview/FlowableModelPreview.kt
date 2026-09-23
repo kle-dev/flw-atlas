@@ -21,7 +21,11 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.util.SystemInfo
+import com.flowable.atlas.index.FlowableModelIndexService
+import com.flowable.atlas.index.ModelEntry
 import com.flowable.atlas.navigation.ModelElements
+import com.flowable.atlas.navigation.ModelKeyTargets
+import com.intellij.openapi.components.service
 import com.flowable.atlas.usage.FlowableDiagram
 import java.awt.event.InputEvent
 import java.awt.event.KeyEvent
@@ -52,7 +56,8 @@ import javax.swing.SwingConstants
  * [DiagramSvgCache] renders it, painted by [SvgCanvas]. Rendering runs off the EDT; a loose model file
  * that changes on disk (a pull, a checkout) or in its editor is drawn again. Archive entries do not
  * change in place. A click on an element — a task, a plan item, a decision rule, a form component — puts
- * the text editor's caret on its declaration.
+ * the text editor's caret on its declaration; a double click (or Ctrl/⌘-click) on a subform opens the
+ * form it embeds.
  */
 internal class FlowableModelPreview(
     private val project: Project,
@@ -73,6 +78,9 @@ internal class FlowableModelPreview(
     /** The drawn elements, in the SVG's viewBox space, for mapping a click back to an element id. */
     @Volatile private var hitMap: HitMap? = null
 
+    /** The files of the subforms drawn inside this form — a change to one redraws it, like its own. */
+    @Volatile private var embedded: Set<VirtualFile> = emptySet()
+
     init {
         val actions = zoomActions()
         val toolbar = ActionManager.getInstance().createActionToolbar("FlowableModelPreview", actions, true)
@@ -80,12 +88,13 @@ internal class FlowableModelPreview(
         root.add(toolbar.component, BorderLayout.NORTH)
         root.add(cards, BorderLayout.CENTER)
         canvas.onClick = ::select
+        canvas.onOpen = { at -> if (!open(at)) select(at) }
         show(FlowableAtlasBundle.message("preview.rendering"))
         render()
         if (file.isInLocalFileSystem) {
             project.messageBus.connect(this).subscribe(VirtualFileManager.VFS_CHANGES, object : BulkFileListener {
                 override fun after(events: List<VFileEvent>) {
-                    if (events.any { it.file == file }) redraw.cancelAndRequest()
+                    if (events.any { it.file == file || it.file in embedded }) redraw.cancelAndRequest()
                 }
             })
             // Typing in the text half redraws the picture too, from the unsaved text.
@@ -112,7 +121,9 @@ internal class FlowableModelPreview(
                     doc == null -> show(FlowableAtlasBundle.message("linemarker.diagram.nolayout"))
                     else -> {
                         canvas.document = doc
-                        canvas.toolTipText = if (hitMap != null) FlowableAtlasBundle.message("preview.hint") else null
+                        canvas.toolTipText = hitMap?.let {
+                            FlowableAtlasBundle.message(if (it.opensModels) "preview.hint.subform" else "preview.hint")
+                        }
                         (cards.layout as CardLayout).show(cards, CANVAS)
                     }
                 }
@@ -132,9 +143,11 @@ internal class FlowableModelPreview(
         // A bundled export SVG is drawn in its own coordinates and knows no elements: shown, not clickable.
         val sibling = if (bytes == null) FlowableDiagram.siblingSvg(file) else null
         val picture = when {
-            bytes != null -> cache.picture(bytes, file.name, type)
+            bytes != null -> cache.Subforms().let { subforms ->
+                cache.picture(bytes, file.name, type, subforms).also { embedded = subforms.read.keys.toSet() }
+            }
             sibling != null -> null
-            else -> cache.resolvePicture(file, type)
+            else -> cache.resolvePicture(file, type).also { embedded = cache.embeddedFiles(file) }
         }
         val svgText = picture?.svg ?: sibling?.let { String(it.contentsToByteArray(), Charsets.UTF_8) }
         hitMap = HitMap.of(picture)
@@ -148,6 +161,20 @@ internal class FlowableModelPreview(
         val text = FileDocumentManager.getInstance().getDocument(file)?.text ?: return
         val offset = offsetAt(at, text) ?: return
         OpenFileDescriptor(project, file, offset).navigate(true)
+    }
+
+    /** A double click on the picture: open the model the element under it embeds — a form's subform. */
+    private fun open(at: Point2D.Double): Boolean {
+        val entry = openTarget(at) ?: return false
+        ModelKeyTargets.openAt(project, entry.file) { ModelKeyTargets.lineColumn(entry) }
+        return true
+    }
+
+    /** The model a double click at [at] opens: the subform's form, found in the model index. */
+    internal fun openTarget(at: Point2D.Double): ModelEntry? {
+        val ref = hitMap?.refAt(at) ?: return null
+        val type = ModelType.entries.firstOrNull { it.id == ref.substringBefore(':') } ?: return null
+        return project.service<FlowableModelIndexService>().cachedOrRequest()?.find(ref.substringAfter(':'), type)
     }
 
     /** Where in [text] the element under [at] — a point in the SVG document's coordinates — is declared. */

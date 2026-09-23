@@ -98,6 +98,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   over a drawing now scrolls without the page's script in the way (⌘/Ctrl + wheel still zooms), the
   drawing ignores the pointer while the pane scrolls, and a form's cells highlight with an outline instead
   of a blur.
+- **A subform shows the form it embeds, and opens it.** A subform was a dashed box with its id: nothing
+  said what it held, and nothing opened the form behind it. The wireframe now draws the embedded form inside
+  the box (nested subforms three levels deep, a form embedding itself once), in the explorer, the IDE's
+  preview and the diagrams folder alike. A double click on the box opens that form — in the explorer, and
+  in the IDE, where Ctrl/⌘-click does too. Its card and its row in *Fields* link the form. The element card
+  of any drawing also closes on a click outside it, not only on its ✕.
 - **Every operand of a long `||` gets its value.** With *Show Sub-Expression Values* on, `a || b || c ||
   d` showed values for its last operands only, and one spot carried two: the chain parses as `((a || b) ||
   c) || d`, so the first operands sank below the depth the hints stop at, and every inner `(…) || c` ended

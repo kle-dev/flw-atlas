@@ -34,6 +34,9 @@ class ExplorerWireframeTest {
             dir = Files.createTempDirectory("atlas-explorer-wireframe-test").toFile()
             File(dir, "small.form").writeText(form("DEMO-small", 1).replace("\"f1\"", "\"amount\""))
             File(dir, "large.form").writeText(form("DEMO-large", 20))
+            File(dir, "outer.form").writeText(
+                """{"metadata":{"key":"DEMO-outer","name":"Outer","modelType":"form"},"rows":[{"cols":[""" +
+                    """{"id":"smallSub","type":"subform","label":"Small","size":12,"extraSettings":{"formRef":"DEMO-small"}}]}]}""")
             File(dir, "table.dmn").writeText(
                 """<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"><decision id="DEMO-D1" name="D">
                   |<decisionTable hitPolicy="FIRST"><input label="T"><inputExpression><text>t</text></inputExpression></input>
@@ -61,6 +64,17 @@ class ExplorerWireframeTest {
         val d = nodes().getValue("form:DEMO-small")
         assertEquals("wireframe", d["diagramKind"])
         assertTrue(d["diagram"].toString().contains("data-el=\"amount\""))
+    }
+
+    @Test
+    fun aSubformIsDrawnWithTheProjectsFormAndOpensIt() {
+        val svg = nodes().getValue("form:DEMO-outer")["diagram"].toString()
+        assertTrue(svg.contains("""data-el="smallSub" tabindex="0" role="button" data-ref="form:DEMO-small"""))
+        assertTrue("the embedded form's field is drawn", svg.contains("Field 1"))
+        assertFalse("but it is not this form's element", svg.contains("""data-el="amount"""))
+        @Suppress("UNCHECKED_CAST")
+        val field = (nodes().getValue("form:DEMO-outer")["fields"] as List<Map<String, Any?>>).single()
+        assertEquals("the field record names the form it embeds", "DEMO-small", field["subform"])
     }
 
     @Test

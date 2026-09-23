@@ -119,5 +119,41 @@ class FormSvgRendererTest {
         assertEquals(svg, FormSvgRenderer.renderSvg(onboarding))
     }
 
+    /** The form DEMO-onboarding's `addressForm` embeds — and one that embeds itself. */
+    private val address = """{"metadata":{"key":"DEMO-F002","name":"Address"},"rows":[{"cols":[
+        |{"id":"street","type":"text","label":"Street","size":8},{"id":"zip","type":"text","label":"ZIP","size":4}]}]}""".trimMargin()
+    private val selfEmbedding = """{"metadata":{"key":"DEMO-F002"},"rows":[{"cols":[
+        |{"id":"again","type":"subform","label":"Again","extraSettings":{"formRef":"DEMO-F002"}}]}]}""".trimMargin()
+
+    @Test
+    fun aResolvedSubformIsDrawnWithTheFormItEmbeds() {
+        val pic = FormSvgRenderer.picture(onboarding) { key -> if (key == "DEMO-F002") address.toByteArray() else null }!!
+        assertTrue(pic.svg.contains("Subform · Address"))
+        assertTrue("the embedded form's fields are drawn", pic.svg.contains("Street") && pic.svg.contains("ZIP"))
+        assertFalse("the placeholder is gone", pic.svg.contains("↳ subform DEMO-F002"))
+        // the subform is this form's element and opens the other form; its parts are that form's
+        val sub = pic.hotspots.single { it.id == "addressForm" }
+        assertEquals("form:DEMO-F002", sub.ref)
+        assertTrue(pic.svg.contains("""data-el="addressForm" tabindex="0" role="button" data-ref="form:DEMO-F002"""))
+        assertTrue(pic.hotspots.none { it.id == "street" || it.id == "zip" })
+        assertFalse(pic.svg.contains("""data-el="street"""))
+        // a click on the embedded field lands on the subform
+        val onStreet = Regex("""<text x="([\d.]+)" y="([\d.]+)"[^>]*>Street""").find(pic.svg)!!.groupValues
+        assertEquals("addressForm", pic.hotspotAt(onStreet[1].toDouble() + 2, onStreet[2].toDouble() - 4)!!.id)
+        // and it grew to fit: taller than the placeholder the unresolved one draws
+        val placeholder = FormSvgRenderer.picture(onboarding)!!.hotspots.single { it.id == "addressForm" }
+        assertTrue(sub.height > placeholder.height)
+        assertEquals("unresolved, it still says which form it opens", "form:DEMO-F002", placeholder.ref)
+    }
+
+    @Test
+    fun aSubformThatEmbedsItselfStops() {
+        val bytes = selfEmbedding.toByteArray()
+        val pic = FormSvgRenderer.picture(bytes) { bytes }!!
+        // drawn once inside itself — the key is already on the way down — then the placeholder
+        assertEquals(1, Regex("Subform · Again").findAll(pic.svg).count())
+        assertTrue(pic.svg.contains("↳ subform DEMO-F002"))
+    }
+
     private fun quote(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 }

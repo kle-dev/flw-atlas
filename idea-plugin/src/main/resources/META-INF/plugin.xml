@@ -239,6 +239,13 @@
               Swing frame by frame. A plain wheel over a drawing now scrolls without the page's script in
               the way (⌘/Ctrl + wheel still zooms), the drawing ignores the pointer while the pane scrolls,
               and a form's cells highlight with an outline instead of a blur.</li>
+          <li><b>A subform shows the form it embeds, and opens it.</b> A subform was a dashed box with its
+              id: nothing said what it held, and nothing opened the form behind it. The wireframe now draws
+              the embedded form inside the box (nested subforms three levels deep, a form embedding itself
+              once), in the explorer, the IDE's preview and the diagrams folder alike. A double click on the
+              box opens that form — in the explorer, and in the IDE, where Ctrl/⌘-click does too. Its card
+              and its row in <i>Fields</i> link the form. The element card of any drawing also closes on a
+              click outside it, not only on its ✕.</li>
           <li><b>Every operand of a long <code>||</code> gets its value.</b> With <i>Show Sub-Expression
               Values</i> on, <code>a || b || c || d</code> showed values for its last operands only, and one
               spot carried two: the chain parses as <code>((a || b) || c) || d</code>, so the first operands
@@ -545,19 +552,6 @@
               sentence that calls anything outside the list a hallucination. That sentence was declaring
               real functions hallucinations. The lists are whole now, and the section opens by saying when
               it is needed at all.</li>
-          <li><b>The file works from where it is read.</b> It is meant to be the project's
-              <code>CLAUDE.md</code>, read from the repository root, but it named its siblings
-              (<code>&lt;project&gt;.summary.md</code>, <code>.graph.json</code>, …) as bare file names
-              relative to wherever Atlas had written them — which, with the launcher's default, is a folder
-              next to the Atlas checkout. From the root not one of them resolved. The renderer now knows the
-              output directory: inside the project the paths are spelled from the root
-              (<code>atlas-output/&lt;project&gt;/&lt;project&gt;.summary.md</code>) and the header offers
-              the <code>@</code>-import line for a hand-kept <code>CLAUDE.md</code>; outside it, one line
-              says where the files are and how to regenerate them. <code>--claude</code> on its own, which
-              writes nothing but this file, no longer sends the agent to read a summary that does not exist
-              — its first step is to generate the artifacts. And the <code>--slice</code> recipe is written
-              in the form that runs: through the launcher it never did, because the launcher adds
-              <code>--all</code>, which <code>--slice</code> refuses.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

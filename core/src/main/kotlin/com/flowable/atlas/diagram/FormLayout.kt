@@ -12,7 +12,7 @@ import com.flowable.atlas.parsing.OryxFormReader
  *
  * Containers carry their own grids: a panel or modal one under `extraSettings.layoutDefinition`, tabs and
  * accordions one per `extraSettings.sections[]`. A data table's `columns` are its header, not
- * components; a subform is a reference, drawn as one.
+ * components; a subform is a reference — with [resolveSubforms], it also carries the layout it embeds.
  */
 data class FormLayout(val title: String?, val rows: List<Row>) {
 
@@ -35,7 +35,26 @@ data class FormLayout(val title: String?, val rows: List<Row>) {
         val columns: List<String>,
         /** A container's grids: one untitled section for a panel, one per tab or accordion section. */
         val sections: List<Section>,
+        /** The layout of the form [subform] names, when it could be resolved (see [resolveSubforms]). */
+        val subformLayout: FormLayout? = null,
     )
+
+    /**
+     * This layout with every subform's own layout filled in, as [resolve] finds it by key — nested
+     * subforms too, up to [depth] levels, and never a form inside itself (a subform that embeds its
+     * parent is left a reference).
+     */
+    fun resolveSubforms(resolve: (String) -> FormLayout?, depth: Int = 3, seen: Set<String> = emptySet()): FormLayout =
+        copy(rows = rows.map { row -> row.copy(cells = row.cells.map { it.resolved(resolve, depth, seen) }) })
+
+    private fun Cell.resolved(resolve: (String) -> FormLayout?, depth: Int, seen: Set<String>): Cell {
+        val withSections = if (sections.isEmpty()) this
+            else copy(sections = sections.map { it.copy(layout = it.layout.resolveSubforms(resolve, depth, seen)) })
+        val key = subform ?: return withSections
+        if (depth <= 0 || key in seen) return withSections
+        val inner = runCatching { resolve(key) }.getOrNull() ?: return withSections
+        return withSections.copy(subformLayout = inner.resolveSubforms(resolve, depth - 1, seen + key))
+    }
 
     data class Section(val label: String?, val layout: FormLayout)
 

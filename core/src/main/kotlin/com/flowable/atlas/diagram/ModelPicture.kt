@@ -1,6 +1,7 @@
 package com.flowable.atlas.diagram
 
 import com.flowable.atlas.model.ModelType
+import java.io.File
 
 /**
  * A model drawn as a picture — a BPMN/CMMN/DMN diagram from its layout, a form or page as a wireframe of
@@ -16,7 +17,8 @@ data class Picture(val svg: String, val kind: Kind, val viewBox: Box, val hotspo
 
     data class Box(val x: Double, val y: Double, val width: Double, val height: Double)
 
-    data class Hotspot(val id: String, val x: Double, val y: Double, val width: Double, val height: Double) {
+    /** [ref] names the model the element opens, as `<type>:<key>` — a form's subform. */
+    data class Hotspot(val id: String, val x: Double, val y: Double, val width: Double, val height: Double, val ref: String? = null) {
         fun contains(px: Double, py: Double): Boolean = px >= x && px <= x + width && py >= y && py <= y + height
     }
 
@@ -40,12 +42,36 @@ object ModelPicture {
 
     /** The picture of a model given its raw [bytes] and [fileName] (which picks the XML vs JSON reader), or
      *  null when there is none: another type, a process without a layout, a file that is not a model. */
-    fun render(bytes: ByteArray, fileName: String, type: ModelType): Picture? = when (type) {
-        ModelType.FORM, ModelType.PAGE -> FormSvgRenderer.picture(bytes)
+    fun render(
+        bytes: ByteArray,
+        fileName: String,
+        type: ModelType,
+        /** A form's subform by key, as the raw model — drawn inside the form when it resolves. */
+        subforms: ((String) -> ByteArray?)? = null,
+    ): Picture? = when (type) {
+        ModelType.FORM, ModelType.PAGE -> FormSvgRenderer.picture(bytes, subforms)
         ModelType.PROCESS, ModelType.CASE, ModelType.DECISION ->
             DiagramRenderer.geometry(bytes, fileName, type)?.let(DiagramSvgRenderer::picture)
                 ?: if (type == ModelType.DECISION && ModelType.isXmlModel(fileName)) DmnTableSvgRenderer.picture(bytes) else null
         else -> null
+    }
+
+    /**
+     * The subform resolver for [render] over a project's graph [nodes]: a form's key → its raw model, read
+     * off disk under [root] on first use (see [ModelBytes]) and remembered, so a form embedded by fifty
+     * others is read once.
+     */
+    fun subformsOf(nodes: List<*>, root: File): (String) -> ByteArray? {
+        val files = HashMap<String, String>()
+        for (n in nodes) {
+            val node = n as? Map<*, *> ?: continue
+            if (node["type"] != "form") continue
+            val key = node["key"] as? String ?: continue
+            val file = node["file"] as? String ?: continue
+            files.putIfAbsent(key, file)
+        }
+        val read = HashMap<String, ByteArray?>()
+        return { key -> read.getOrPut(key) { files[key]?.let { ModelBytes.resolve(root, it)?.first } } }
     }
 
     /** The [ModelType] of a graph node type that can have a picture, or null. */

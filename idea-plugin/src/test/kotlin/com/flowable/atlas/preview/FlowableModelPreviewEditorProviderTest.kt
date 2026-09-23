@@ -98,6 +98,29 @@ class FlowableModelPreviewEditorProviderTest : BasePlatformTestCase() {
         }
     }
 
+    fun testASubformIsDrawnInsideItsFormAndADoubleClickOpensIt() {
+        myFixture.addFileToProject("models/DEMO-F005.form",
+            """{"metadata":{"key":"DEMO-F005","name":"Address"},"rows":[{"cols":[{"id":"street","type":"text","label":"Street","size":12}]}]}""")
+        val text = """{"metadata":{"key":"DEMO-F004","name":"Claim"},"rows":[{"cols":[""" +
+            """{"id":"addressSub","type":"subform","label":"Address","size":12,"extraSettings":{"formRef":"DEMO-F005"}}]}]}"""
+        val file = myFixture.addFileToProject("models/DEMO-F004.form", text).virtualFile
+        val editor = provider.createEditor(project, file) as FlowableModelPreviewEditorProvider.ModelEditor
+        try {
+            editor.component
+            val preview = editor.previewEditor as FlowableModelPreview
+            PlatformTestUtil.waitWithEventsDispatching("the wireframe never arrived", { preview.document != null }, 10)
+            val picture = com.flowable.atlas.usage.DiagramSvgCache.getInstance(project)
+                .resolvePicture(file, com.flowable.atlas.model.ModelType.FORM)!!
+            assertTrue("the embedded form's field is drawn", picture.svg.contains("Street"))
+            val sub = picture.hotspots.single { it.id == "addressSub" }
+            val target = preview.openTarget(java.awt.geom.Point2D.Double(sub.x + sub.width / 2, sub.y + sub.height / 2))
+            assertEquals("DEMO-F005.form", target?.file?.name)
+            assertNull("a plain field opens nothing", preview.openTarget(java.awt.geom.Point2D.Double(1.0, 1.0)))
+        } finally {
+            Disposer.dispose(editor)
+        }
+    }
+
     private companion object {
         const val FORM = """{"metadata":{"name":"Claim"},"rows":[{"cols":[{"id":"amount","type":"number","label":"Amount","size":12}]}]}"""
     }
