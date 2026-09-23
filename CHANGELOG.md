@@ -54,7 +54,8 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   carries without a publisher or consumer. A signal, message, error or escalation lists who throws and who
   catches it, and an error thrown but never caught is a gap. An endpoint lists every call that reaches
   it with the verb each uses; a class's methods name the models that call them, and its bean names the
-  expressions that use them.
+  expressions that use them. An agent's page holds its tools against the models and operations they
+  name, and its callers against the operations it has.
 - **A form's page opens with its layout.** The wireframe the IDE's model preview draws — the twelve-column
   grid, panels and tabs, every component with its caption and id — is the picture of a form or page in
   the explorer, clickable like a diagram: a component opens its card (what it is bound to, what it calls,

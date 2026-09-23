@@ -4501,6 +4501,31 @@ function templateVarsFit(n){
       return {gap:worst, kind:worst?'unwritten':'', hay:v, cells}; }),
     {okLabel:k=>k+' provided', kinds:{unwritten:{tone:'warn', label:k=>k+' not provided by a model that renders it'}}});
 }
+/** An agent's tools against the models and operations they name, and its callers against its operations. */
+function agentToolsFit(a){
+  const tools=((a.data||{}).tools||[]).filter(t=>t&&t.key); if(!tools.length) return '';
+  return gapTable([{k:'t',label:'Tool',w:'minmax(16ch,1.6fr)'},{k:'op',label:'Operation',w:'minmax(12ch,1.2fr)',mono:true,opt:true},{k:'st',label:'',w:'minmax(14ch,1.4fr)',cls:'tags'}],
+    tools.map(t=>{ const kind=t.type||'service', mid=kind+':'+t.key, m=byId.get(mid);
+      const opId=t.operation&&kind==='service'?'serviceOperation:'+t.key+'#'+t.operation:null, op=opId&&byId.get(opId);
+      const gap=!m?'bad':(opId&&!op)?'bad':'';
+      return {gap, kind:!m?'noModel':gap?'noOp':'', hay:elHay(t.key, t.operation, kind),
+        cells:{t:m?iconLink(mid):'<span class="mono">'+esc(t.key)+'</span> '+tag(kind), op:op?vlink(opId, t.operation):esc(t.operation||''),
+          st:!m?gm('miss','not in the project', 'No '+kind+' of this key in the project — the agent cannot call it')
+            :(opId&&!op)?gm('miss','no such operation', m.label+' declares no operation '+t.operation):gm('ok')}}; }),
+    {okLabel:k=>k+' found', kinds:{noModel:{tone:'bad', label:k=>k+' tool not in the project'}, noOp:{tone:'bad', label:k=>k+' operation not declared'}}});
+}
+function agentCallersFit(a){
+  const ops=new Set(((a.data||{}).operations||[]).map(o=>o&&o.key).filter(Boolean));
+  const sites=callersOf(a); if(!sites.length) return '';
+  return gapTable([{k:'where',label:'Caller',w:'minmax(18ch,2fr)'},{k:'op',label:'Operation',w:'minmax(12ch,1.2fr)',mono:true,opt:true},{k:'st',label:'',w:'minmax(14ch,1.2fr)',cls:'tags'}],
+    sites.map(st=>{ const op=st.callee.op, has=op&&ops.has(op);
+      const gap=op&&!has&&ops.size?'bad':'';
+      return {gap, kind:gap?'noOp':'', unk:!op, hay:elHay(byId.get(st.model).label, st.name, op),
+        cells:{where:vlink(st.model, byId.get(st.model).label)+(st.el?' › '+elJumpHtml(st.model, st.el, st.name||st.el, 'Open the calling element'):''),
+          op:esc(op||''), st:!op?gm('unk','no operation named', 'The caller names no operation — the agent\'s default applies'):has?gm('ok'):ops.size?gm('miss','not an operation of it', a.label+' has no operation '+op):gm('unk','', 'The agent declares no operations Atlas can read')}}; }),
+    {okLabel:k=>k+' fit', kinds:{noOp:{tone:'bad', label:k=>k+' call an operation it does not have'}}});
+}
+FIT.agent=[{title:'Tools and what they call', build:n=>agentToolsFit(n)}, {title:'Callers and its operations', build:n=>agentCallersFit(n)}];
 FIT.sla=[{title:'The task it watches', build:n=>slaTaskFit(n)}];
 FIT.query=[{title:'Columns and the variables they show', build:n=>queryColumnsFit(n)}];
 FIT.template=[{title:'Variables and the models that render it', build:n=>templateVarsFit(n)}];
