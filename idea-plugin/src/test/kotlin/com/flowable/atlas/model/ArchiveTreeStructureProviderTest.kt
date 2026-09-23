@@ -64,6 +64,17 @@ class ArchiveTreeStructureProviderTest : BasePlatformTestCase() {
         assertEquals(2, expanded(archive("DEMO-app.bar")).size)
     }
 
+    fun testANestedArchiveSaysItIsNotExpanded() {
+        val file = File(dir, "DEMO-export.zip")
+        ZipOutputStream(file.outputStream().buffered()).use { zip ->
+            zip.putNextEntry(ZipEntry("DEMO-app.bar")); zip.write(byteArrayOf(1, 2, 3)); zip.closeEntry()
+        }
+        val vf = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file)!!
+        val nested = expanded(vf).single() as ProjectViewNode<*>
+        nested.update()
+        assertTrue(nested.presentation.locationString.orEmpty().contains("not expanded"))
+    }
+
     fun testOtherFilesAreLeftAlone() {
         File(dir, "README.md").writeText("x")
         val node = platformNode(LocalFileSystem.getInstance().refreshAndFindFileByIoFile(File(dir, "README.md"))!!)

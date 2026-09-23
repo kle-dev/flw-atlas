@@ -1,5 +1,6 @@
 package com.flowable.atlas.structure
 
+import com.intellij.ide.util.treeView.smartTree.Sorter
 import com.flowable.atlas.model.ModelFiles
 import com.flowable.atlas.model.ModelType
 import com.intellij.icons.AllIcons
@@ -60,6 +61,9 @@ class ModelStructureViewProvider : StructureViewBuilderProvider {
         init {
             withSuitableClasses(JsonObject::class.java, XmlTag::class.java)
         }
+
+        // A form of eighty fields read top to bottom is a form; looking for one field by name is a list.
+        override fun getSorters(): Array<Sorter> = arrayOf(Sorter.ALPHA_SORTER)
     }
 
     /** One PSI element in the outline: presents itself, navigates to itself, equal by its element. */
