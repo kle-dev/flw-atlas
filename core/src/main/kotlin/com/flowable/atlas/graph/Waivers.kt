@@ -189,6 +189,10 @@ object Waivers {
             val m = any as? Map<String, Any?> ?: run { problems += "waivers[$i] is not an object"; continue }
             val check = str(m, "check") ?: run { problems += "waivers[$i] has no check"; continue }
             val node = str(m, "node") ?: run { problems += "waivers[$i] has no node"; continue }
+            // An unreadable date would otherwise keep the waiver open for good, without a word.
+            str(m, "until")?.trim()?.takeIf { it.isNotEmpty() && runCatching { LocalDate.parse(it) }.isFailure }?.let {
+                problems += "waivers[$i] until \"$it\" is not a date (YYYY-MM-DD), so it never expires"
+            }
             waivers += Waiver(
                 check = check, node = node,
                 element = str(m, "element"), subject = str(m, "subject"),

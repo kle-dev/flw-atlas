@@ -229,6 +229,14 @@ class WaiversTest {
     }
 
     @Test
+    fun anUnreadableExpiryDateIsReported() {
+        val set = Waivers.parse("""{"version": 1, "waivers": [
+            {"check": "unusedForms", "node": "form:a", "until": "31.12.2026"}]}""")
+        assertEquals(1, set.waivers.size)
+        assertTrue(set.problems.single().contains("31.12.2026"))
+    }
+
+    @Test
     fun aSaveKeepsWhatTheFileGainedWhileThePageWasOpen() {
         fun w(node: String, reason: String) = Waivers.Waiver(check = "unusedForms", node = node, reason = reason)
         val atGeneration = listOf(w("form:a", "old a"), w("form:b", "old b"))
