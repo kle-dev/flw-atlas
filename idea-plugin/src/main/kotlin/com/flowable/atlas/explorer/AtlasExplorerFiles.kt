@@ -1,6 +1,8 @@
 package com.flowable.atlas.explorer
 
+import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.project.Project
 import java.io.IOException
 import java.nio.file.FileVisitResult
 import java.nio.file.Files
@@ -25,6 +27,22 @@ object AtlasExplorerFiles {
         ".git", ".gradle", ".idea", ".kotlin", ".intellijPlatform",
         "node_modules", "build", "target", "out", "dist",
     )
+
+    /**
+     * Remember which folder [html] was generated from. A page's Regenerate, and its links into the
+     * sources, re-analysed whatever sub-project was active at the time — so a page for one app was
+     * overwritten with another's analysis, and its links said "file not found". Kept in the workspace,
+     * never in the page: the page is a file a team may share, the path is this machine's.
+     */
+    fun rememberRoot(project: Project, html: Path, root: Path) {
+        PropertiesComponent.getInstance(project).setValue(rootKey(html), root.toAbsolutePath().normalize().toString())
+    }
+
+    /** The folder [html] was generated from in this IDE, or null for a page it never generated. */
+    fun rootOf(project: Project, html: Path): Path? =
+        PropertiesComponent.getInstance(project).getValue(rootKey(html))?.let { Path.of(it) }?.takeIf { Files.isDirectory(it) }
+
+    private fun rootKey(html: Path) = "flowable.atlas.explorerRoot:" + html.toAbsolutePath().normalize()
 
     fun find(base: Path, outputDir: String = "atlas-output"): List<Path> {
         val found = LinkedHashSet<Path>()

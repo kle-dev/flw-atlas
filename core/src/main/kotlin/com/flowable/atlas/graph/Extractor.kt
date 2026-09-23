@@ -84,6 +84,9 @@ object Atlas {
      *  - [customPath] — explicit frontend-customization source (dir or index file); defaults to [root].
      *  - [waivers] — findings the project has decided to accept; they stay in the report, marked, and
      *    out of the counts.
+     *  - [checkCanceled] — called between models and between phases; the IDE passes its progress
+     *    indicator's check, which throws to abandon the run. A cancelled generation used to run to the
+     *    end and overwrite the artifacts anyway.
      */
     fun extract(
         root: File,
@@ -91,6 +94,7 @@ object Atlas {
         discoverCustom: Boolean = true,
         customPath: File? = null,
         waivers: Waivers.Set = Waivers.EMPTY,
+        checkCanceled: () -> Unit = {},
     ): LinkedHashMap<String, Any?> {
         val ctx = Ctx()
         val result = LinkedHashMap<String, Any?>()
@@ -352,6 +356,7 @@ object Atlas {
         }
 
         for (path in discovered.models) {
+            checkCanceled()
             val rel = relOf(path)
             try {
                 if (tooLarge(rel, path.length())) continue
@@ -441,6 +446,8 @@ object Atlas {
         }
 
         for (arc in discovered.archives) {
+            // Outside the try below: its catch would record a cancellation as an unreadable archive.
+            checkCanceled()
             val rel = relOf(arc)
             try {
                 java.util.zip.ZipFile(arc).use { zf ->
@@ -492,6 +499,7 @@ object Atlas {
             if (LiquibaseCoverage.isChangelog(txt)) modelIndex.putIfAbsent("liquibase" to LiquibaseCoverage.keyOf(rel), rel)
         }
 
+        checkCanceled()
         val resolvedData = ReferenceResolver.resolve(
             result, ctx, modelIndex, byKey, discovered.javas,
             { f -> relOf(f) }, { kind, path, msg -> diag(kind, path, msg) },
@@ -525,6 +533,7 @@ object Atlas {
 
         // Navigable graph (nodes + edges) + `_uses` enrichment + stats — Python `_build_graph`.
         // The graph builder receives the raw catalog + allowlist (Python `_build_graph(..., expr_allowlist, custom)`).
+        checkCanceled()
         GraphBuilder.build(
             result, ctx, resolvedData.resolved, resolvedData.allJava, resolvedData.beanMethods, resolvedData.knownBeans, byKey,
             exprAllowlist = exprAllowlist, custom = custom,
@@ -547,6 +556,7 @@ object Atlas {
 
         // Health findings, derived from everything above (graph + buckets + diagnostics + custom fns),
         // so every renderer can state what is wrong instead of pointing at the explorer's Checks tab.
+        checkCanceled()
         Findings.apply(result, waivers)
         return result
     }

@@ -10,6 +10,7 @@ import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
@@ -36,9 +37,20 @@ object AtlasGenerationRunner {
         quiet: Boolean = false,
         onSuccess: ((explorerVf: VirtualFile?) -> Unit)? = null,
     ) {
-        val projectDir = projectDir(project) ?: return
-        run(project, "Generating Flowable Atlas explorer", quiet, onSuccess) { indicator ->
-            AtlasGeneratorService.getInstance(project).generateExplorer(projectDir, outputHtml, indicator)
+        // The folder this page was made from, not whichever sub-project is active now.
+        val projectDir = AtlasExplorerFiles.rootOf(project, outputHtml) ?: projectDir(project) ?: return
+        generateExplorers(project, projectDir, listOf(outputHtml), quiet, onSuccess)
+    }
+
+    private fun generateExplorers(
+        project: Project,
+        projectDir: Path,
+        outputs: List<Path>,
+        quiet: Boolean = false,
+        onSuccess: ((explorerVf: VirtualFile?) -> Unit)? = null,
+    ) {
+        run(project, projectDir, "Generating Flowable Atlas explorer", quiet, onSuccess) { indicator ->
+            AtlasGeneratorService.getInstance(project).generateExplorers(projectDir, outputs, indicator)
         }
     }
 
@@ -51,7 +63,7 @@ object AtlasGenerationRunner {
         onSuccess: ((explorerVf: VirtualFile?) -> Unit)? = null,
     ) {
         val projectDir = projectDir(project) ?: return
-        run(project, "Generating Flowable Atlas artifacts", quiet, onSuccess) { indicator ->
+        run(project, projectDir, "Generating Flowable Atlas artifacts", quiet, onSuccess) { indicator ->
             AtlasGeneratorService.getInstance(project).generateAll(projectDir, outputDir, indicator)
         }
     }
@@ -76,8 +88,11 @@ object AtlasGenerationRunner {
             override fun onSuccess() {
                 if (project.isDisposed) return
                 when {
+                    // One analysis per report, not per page: pages from the same folder, made from the same
+                    // sub-project, share it — each page used to start its own full run, all at once.
                     settings.atlasArtifacts == setOf(AtlasArtifact.EXPLORER_HTML) && existing.isNotEmpty() ->
-                        existing.forEach { generateExplorer(project, it) }
+                        existing.groupBy { (AtlasExplorerFiles.rootOf(project, it) ?: projectDir) to it.parent }
+                            .forEach { (key, pages) -> generateExplorers(project, key.first, pages) }
                     // "Regenerate" promises to refresh what exists; with no page on disk the honest answer
                     // is to say so and offer the generator's dialog, not to write the whole artifact set.
                     existing.isEmpty() -> AtlasNotifications.group()
@@ -103,21 +118,33 @@ object AtlasGenerationRunner {
 
     private fun run(
         project: Project,
+        projectDir: Path,
         title: String,
         quiet: Boolean,
         onSuccess: ((VirtualFile?) -> Unit)?,
         generate: (ProgressIndicator) -> AtlasGeneratorService.Outcome,
     ) {
+        // Generation reads the files on disk: an edit still in an editor would be left out.
+        val app = ApplicationManager.getApplication()
+        if (app.isDispatchThread) FileDocumentManager.getInstance().saveAllDocuments()
+        else app.invokeAndWait { FileDocumentManager.getInstance().saveAllDocuments() }
         object : Task.Backgroundable(project, title, true) {
             override fun run(indicator: ProgressIndicator) {
                 val outcome = generate(indicator)
+                var explorerVf: VirtualFile? = null
+                if (outcome is AtlasGeneratorService.Outcome.Success) {
+                    // One refresh for everything written, here on the pooled thread — refreshing file by
+                    // file on the EDT froze the IDE for a project with a few hundred diagrams.
+                    val lfs = LocalFileSystem.getInstance()
+                    lfs.refreshNioFiles(outcome.written)
+                    explorerVf = outcome.explorerHtml?.let { lfs.findFileByNioFile(it) }
+                    outcome.written.filter { it.fileName.toString().endsWith(".explorer.html") }
+                        .forEach { AtlasExplorerFiles.rememberRoot(project, it, projectDir) }
+                }
                 ApplicationManager.getApplication().invokeLater {
                     if (project.isDisposed) return@invokeLater
                     when (outcome) {
                         is AtlasGeneratorService.Outcome.Success -> {
-                            val lfs = LocalFileSystem.getInstance()
-                            outcome.written.forEach { lfs.refreshAndFindFileByNioFile(it) }
-                            val explorerVf = outcome.explorerHtml?.let { lfs.refreshAndFindFileByNioFile(it) }
                             project.messageBus.syncPublisher(AtlasEvents.TOPIC)
                                 .artifactsGenerated(outcome.explorerHtml, outcome.written)
                             AtlasExplorerNotifier.notifySuccess(

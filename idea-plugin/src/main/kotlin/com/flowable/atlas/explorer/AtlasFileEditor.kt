@@ -346,7 +346,8 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
      * doubly nested `archive!inner.bar!entry` cannot be mounted, so the outer archive opens instead.
      */
     private fun resolveLabel(label: String): VirtualFile? {
-        val root = AtlasProjectRootService.getInstance(project).activeProjectDir() ?: return null
+        val root = AtlasExplorerFiles.rootOf(project, file.toNioPath())
+            ?: AtlasProjectRootService.getInstance(project).activeProjectDir() ?: return null
         val lfs = LocalFileSystem.getInstance()
         val bang = label.indexOf('!')
         if (bang < 0) return lfs.refreshAndFindFileByNioFile(root.resolve(label))
