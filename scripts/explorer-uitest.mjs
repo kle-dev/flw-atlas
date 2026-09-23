@@ -864,6 +864,27 @@ const probe = `<script>
     if(g) click(g);
   });
   steps.push(()=>{
+    // scrolling over the layout must not wait on the page's script: a plain wheel is not taken, a
+    // modified one zooms; and a cell's highlight is an outline, not a blur filter repainted per row
+    const view=document.querySelector('#detail [data-sect="diagram"] .dgview');
+    const plain=new WheelEvent('wheel', {deltaY:40, bubbles:true, cancelable:true});
+    view.dispatchEvent(plain);
+    ok('a plain wheel over the layout scrolls the page', !plain.defaultPrevented);
+    const before=view._z.scale;
+    window.dispatchEvent(new KeyboardEvent('keydown', {key:'Meta', metaKey:true}));
+    const zoom=new WheelEvent('wheel', {deltaY:-40, metaKey:true, bubbles:true, cancelable:true});
+    view.dispatchEvent(zoom);
+    ok('with the modifier held, the wheel zooms the drawing', zoom.defaultPrevented && view._z.scale>before, before+' -> '+view._z.scale);
+    window.dispatchEvent(new KeyboardEvent('keyup', {key:'Meta'}));
+    const after=new WheelEvent('wheel', {deltaY:40, bubbles:true, cancelable:true});
+    view.dispatchEvent(after);
+    ok('and lets go of it when the modifier is released', !after.defaultPrevented);
+    ok('the layout says it is a wireframe', view.dataset.kind==='wireframe');
+    const sel=view.querySelector('g[data-el].dgsel');
+    ok('the selected cell is outlined, not blurred', !!sel && getComputedStyle(sel).filter==='none' && !!sel.querySelector('rect') &&
+       getComputedStyle(sel.querySelector('rect')).stroke.indexOf('15, 85, 214')>=0, sel?getComputedStyle(sel).filter:'(no selection)');
+  });
+  steps.push(()=>{
     const card=document.querySelector('.dgcard');
     ok('clicking it opens its card, with the action it calls', !!card && !!card.querySelector('.nc[data-id="'+enc('action:notifyCustomerAction')+'"]'),
        card?card.textContent.slice(0,200):'(no card)');

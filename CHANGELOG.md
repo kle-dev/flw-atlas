@@ -92,6 +92,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   like a task with a mapping element now, and a data-object task's operation counts as used too. And a
   task's `in` into a service or agent names the callee's parameter, an `out` its result field: neither is
   a variable of any scope, so neither is reported as an input the callee never reads.
+- **Scrolling over a form's layout no longer stutters in the IDE.** With the pointer resting on a drawing,
+  every wheel step waited for the page's zoom handler, and each form row sliding under the cursor redrew a
+  blurred highlight — which the IDE's off-screen browser copies into Swing frame by frame. A plain wheel
+  over a drawing now scrolls without the page's script in the way (⌘/Ctrl + wheel still zooms), the
+  drawing ignores the pointer while the pane scrolls, and a form's cells highlight with an outline instead
+  of a blur.
 - **Every operand of a long `||` gets its value.** With *Show Sub-Expression Values* on, `a || b || c ||
   d` showed values for its last operands only, and one spot carried two: the chain parses as `((a || b) ||
   c) || d`, so the first operands sank below the depth the hints stop at, and every inner `(…) || c` ended

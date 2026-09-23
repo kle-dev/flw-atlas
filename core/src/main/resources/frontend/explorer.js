@@ -5660,7 +5660,7 @@ function diagramView(n){
       '<button data-z="full" title="Open full screen">⤢ full screen</button>'+
       '<span class="dghint">click '+(wire?'a component':'an element')+' for details · drag to pan · '+MODK+' + scroll to zoom</span>'+
     '</div>'+
-    '<div class="dgview"><div class="dgpan">'+svg+'</div></div>');
+    '<div class="dgview"'+(wire?' data-kind="wireframe"':'')+'><div class="dgpan">'+svg+'</div></div>');
 }
 
 // ---------- relations: the graph at the top of the page, and every relation as one table ----------
@@ -6143,12 +6143,22 @@ function zoomable(view, opts){
     }
     z.scale=next; z.apply();
   };
-  view.addEventListener('wheel', e=>{
-    if(opts.modWheel && !e.ctrlKey && !e.metaKey){ wheelHint(view); return; }   // let the page scroll
+  const zoomWheel=e=>{
+    if(opts.modWheel && !e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
     const r=view.getBoundingClientRect();
     z.zoom(e.deltaY<0?1.12:1/1.12, e.clientX-r.left, e.clientY-r.top);
-  }, {passive:false});
+  };
+  if(opts.modWheel){
+    // Inline, a plain wheel scrolls the page. A non-passive wheel listener would make every scroll step
+    // over the drawing wait for this script first — in the IDE's off-screen-rendered browser that is a
+    // stutter each time the pointer rests on a diagram or a form's layout. So the drawing listens
+    // passively (only to teach the modifier) and takes the wheel for zooming only while ⌘/Ctrl is held.
+    view.addEventListener('wheel', e=>{ if(!e.ctrlKey && !e.metaKey) wheelHint(view); }, {passive:true});
+    dgZoomViews.add(view);
+    z.zoomWheel=zoomWheel;
+    if(dgModHeld) view.addEventListener('wheel', zoomWheel, {passive:false});
+  } else view.addEventListener('wheel', zoomWheel, {passive:false});
   // Touch: inline, a vertical swipe scrolls the page (a finger on a 60vh diagram used to trap the page,
   // since the view took every gesture); a sideways drag still pans. Two fingers pinch-zoom, in both views.
   if(opts.modWheel) view.style.touchAction='pan-y';
@@ -6193,8 +6203,35 @@ function zoomable(view, opts){
   });
   return z;
 }
+// The inline drawings that zoom on ⌘/Ctrl + wheel: their zoom listener is attached while the modifier is
+// down and detached when it is released (or the window loses focus with it held).
+const dgZoomViews=new Set();
+let dgModHeld=false;
+function setDgModHeld(held){
+  if(held===dgModHeld) return;
+  dgModHeld=held;
+  dgZoomViews.forEach(v=>{
+    if(!v.isConnected){ dgZoomViews.delete(v); return; }
+    const z=v._z; if(!z||!z.zoomWheel) return;
+    if(held) v.addEventListener('wheel', z.zoomWheel, {passive:false}); else v.removeEventListener('wheel', z.zoomWheel);
+  });
+}
+window.addEventListener('keydown', e=>{ if(e.key==='Meta'||e.key==='Control') setDgModHeld(true); });
+window.addEventListener('keyup', e=>{ if(e.key==='Meta'||e.key==='Control') setDgModHeld(e.metaKey||e.ctrlKey); });
+window.addEventListener('blur', ()=>setDgModHeld(false));
+// While the detail pane scrolls, the drawings ignore the pointer: a shape or a form's row sliding under a
+// resting cursor restyled on every step — a highlight redrawn per frame, which the IDE's off-screen
+// browser has to copy into Swing each time. Hover comes back a moment after the scrolling stops.
+let _dgScrollT=null;
+document.addEventListener('scroll', e=>{
+  const sc=e.target; if(!sc||!sc.querySelectorAll) return;
+  const views=sc.querySelectorAll('.dgview'); if(!views.length) return;
+  if(!_dgScrollT) views.forEach(v=>v.classList.add('dgscrolling'));
+  clearTimeout(_dgScrollT);
+  _dgScrollT=setTimeout(()=>{ _dgScrollT=null; document.querySelectorAll('.dgview.dgscrolling').forEach(v=>v.classList.remove('dgscrolling')); }, 160);
+}, {capture:true, passive:true});
 // A transient "how do I zoom" pill, shown when a plain wheel passes over the inline diagram —
-// the page scrolled as expected, this just teaches the modifier.
+// the page scrolled as expected, this just teaches the modifier. Touched once per showing, not per tick.
 function wheelHint(view){
   let h=view.querySelector('.dgwheelhint');
   if(!h){
@@ -6202,7 +6239,7 @@ function wheelHint(view){
     h.textContent=MODK+' + scroll to zoom';
     view.appendChild(h);
   }
-  h.classList.add('show');
+  if(!h.classList.contains('show')) h.classList.add('show');
   clearTimeout(h._t); h._t=setTimeout(()=>h.classList.remove('show'), 1100);
 }
 function wireZoomButtons(bar, z){

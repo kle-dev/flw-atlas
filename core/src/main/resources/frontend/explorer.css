@@ -557,6 +557,16 @@
   .dgview svg .dgmark:focus{outline:none}
   .dgview svg .dgmark:focus-visible circle{stroke:var(--accent);stroke-width:2.5}
   .dgview svg [data-el]:hover{filter:drop-shadow(0 0 2.5px rgba(15,85,214,.7))}
+  /* while the pane scrolls, nothing under the resting pointer restyles (see the scroll listener) */
+  .dgview.dgscrolling svg{pointer-events:none}
+  /* a form's layout: its cells are page-wide, and a blur filter over one is costly to repaint — the
+     highlight is the cell's outline in the accent colour instead */
+  .dgview[data-kind="wireframe"] svg [data-el]:hover,
+  .dgview[data-kind="wireframe"] svg [data-el].dgsel,
+  .dgview[data-kind="wireframe"] svg [data-el]:focus-visible{filter:none}
+  .dgview[data-kind="wireframe"] svg [data-el]:hover rect{stroke:#0f55d6}
+  .dgview[data-kind="wireframe"] svg [data-el].dgsel rect,
+  .dgview[data-kind="wireframe"] svg [data-el]:focus-visible rect{stroke:#0f55d6;stroke-width:2}
   .dgview svg [data-el].dgsel{filter:drop-shadow(0 0 2px rgba(15,85,214,.9)) drop-shadow(0 0 7px rgba(15,85,214,.45))}
   /* shapes are keyboard stops (tabindex from the renderer): the focused one shows like a selection */
   .dgview svg [data-el]:focus{outline:none}

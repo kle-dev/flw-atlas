@@ -233,6 +233,12 @@
               <code>in</code> into a service or agent names the callee's parameter, an <code>out</code> its
               result field: neither is a variable of any scope, so neither is reported as an input the
               callee never reads.</li>
+          <li><b>Scrolling over a form's layout no longer stutters in the IDE.</b> With the pointer resting
+              on a drawing, every wheel step waited for the page's zoom handler, and each form row sliding
+              under the cursor redrew a blurred highlight — which the IDE's off-screen browser copies into
+              Swing frame by frame. A plain wheel over a drawing now scrolls without the page's script in
+              the way (⌘/Ctrl + wheel still zooms), the drawing ignores the pointer while the pane scrolls,
+              and a form's cells highlight with an outline instead of a blur.</li>
           <li><b>Every operand of a long <code>||</code> gets its value.</b> With <i>Show Sub-Expression
               Values</i> on, <code>a || b || c || d</code> showed values for its last operands only, and one
               spot carried two: the chain parses as <code>((a || b) || c) || d</code>, so the first operands
