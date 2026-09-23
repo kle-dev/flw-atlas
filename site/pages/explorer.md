@@ -24,7 +24,7 @@ view you are looking at can be copied as a link.
 
 | Hash | View |
 |---|---|
-| *(empty)* or `#/overview` | The dashboard: the inventory by type, the health list, hotspots (the project's own most-referenced models and code — platform beans, URLs and security policies aside), apps and entry points |
+| *(empty)* or `#/overview` | The dashboard: a health summary (the open defects and advice, each split by tier — broken, runtime risk, unfinished, noise — and the checks with the most to say, every part a way into the Checks page), hotspots (the project's own most-referenced models and code — platform beans, URLs and security policies aside), the inventory grouped as the sidebar groups it, apps and entry points |
 | `#/tree` | The reference tree: what each app starts, and what those models reach |
 | `#/checks` | Every [finding](../checks/) in one place, in two groups — **Defects** (wrong now) and **Advice** (a pattern worth a look): a block per check with its rows under one line saying what it means (*why · what to do* opens beneath it), the accept controls, and what the project already accepted — with its reasons |
 | `#/variables` | The [unused-variable](../variables/) report and what Atlas could not judge |
@@ -373,8 +373,9 @@ The explorer never presents a guess as a fact:
   for an accepted one and *accept…* landing on the finding's row under the diagram. **View › Finding
   badges on diagrams** hides the badges on every diagram and is remembered, for a reader who wants the diagram
   as Design draws it.
-- The health list — on the overview and at the top of the Checks page — leads with the two numbers,
-  *N defects · M advice*, and groups its rows under those two headings; the sidebar's *Checks* badge is
+- The overview's health summary leads with the two numbers, *N defects* and *M advice*, each split by
+  tier; the health list at the top of the Checks page groups its rows under those two headings; the
+  sidebar's *Checks* badge is
   red while an error is open, amber for a defect's warning and grey when only advice is.
 - **One vocabulary for findings.** A defect is labelled by its severity, *error* or *warning*; an advice
   finding is labelled *advice* and drawn grey — in the pills, the health rows, the diagram badges and
@@ -434,7 +435,7 @@ downloads it anywhere else; **discard** (twice) throws the unsaved decisions awa
 it was made, so re-saving an unchanged file produces no diff, and the notes and hand-written fields the
 file already had travel through untouched.
 
-A decision taken on the page moves every count that depends on it: the Checks page, the health list, the
+A decision taken on the page moves every count that depends on it: the Checks page, the health list and the overview's summary, the
 sidebar's *Checks* badge and the review lists' own counts (an *Unused forms* entry counts the open findings,
 not the forms), and a model whose every finding was accepted wears a small ✓ in lists and in the tree where an
 open finding would show its count.

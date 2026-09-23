@@ -15,7 +15,7 @@ Atlas answers those questions by resolving the whole project — every model, ev
 reference between them — and then handing you the answer in whichever shape you need it.
 
 <figure class="fig">
-  <div class="body"><img class="only-light" src="assets/img/hero-explorer.png" alt="The Atlas explorer showing a project overview: inventory, health and hotspots" width="1600" height="1000"><img class="only-dark" src="assets/img/hero-explorer-dark.png" alt="The Atlas explorer showing a project overview: inventory, health and hotspots" width="1600" height="1000"></div>
+  <div class="body"><img class="only-light" src="assets/img/hero-explorer.png" alt="The Atlas explorer showing a project overview: health, hotspots and inventory" width="1600" height="1000"><img class="only-dark" src="assets/img/hero-explorer-dark.png" alt="The Atlas explorer showing a project overview: health, hotspots and inventory" width="1600" height="1000"></div>
   <figcaption><b>One self-contained HTML file.</b> No server, no network, no install — and it opens on
   a machine with no IDE at all. <a href="demo/explorer.html" target="_blank" rel="noopener">Try the live one ↗</a></figcaption>
 </figure>

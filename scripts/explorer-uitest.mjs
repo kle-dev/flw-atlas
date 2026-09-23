@@ -689,18 +689,29 @@ const probe = `<script>
     ok('exactly one theme toggle', document.querySelectorAll('[data-theme-btn]').length===1);
   });
 
-  // --- the overview's health list ---
+  // --- the overview's health summary and inventory ---
   steps.push(()=>{ location.hash='/overview'; });
   steps.push(()=>{
-    const rows=[...document.querySelectorAll('#view-overview .hlist .hrow')];
-    ok('the overview has a health list', rows.length>0);
-    // defects before advice, and within the defects the errors first
-    const rank=r=>r.classList.contains('tone-bad')?0:r.classList.contains('tone-warn')?1:r.classList.contains('tone-advice')?2:3;
-    ok('health rows are sorted error → warning → advice → clean', rows.every((r,i)=>!i||rank(rows[i-1])<=rank(r)));
-    ok('only rows with findings are links', rows.every(r=>r.classList.contains('hall') ||
-       r.hasAttribute('data-jump')===(parseInt(r.querySelector('.hn').textContent,10)>0)));
-    ok('clean checks are folded away', rows.filter(r=>r.classList.contains('tone-ok')&&!r.classList.contains('hall')).every(r=>!!r.closest('details.hclean')));
-    ok('the inventory names the types', document.querySelectorAll('#view-overview .invc[data-cat]').length>0);
+    const ov=document.getElementById('view-overview'), K=kindCounts();
+    ok('the overview has a health summary', !!ov.querySelector('.hsum'));
+    const num=sel=>parseInt((ov.querySelector(sel)||{}).textContent,10);
+    ok('its tiles count the open defects and advice', num('.hk-defect .hk-n')===K.defects && num('.hk-advice .hk-n')===K.advice,
+       num('.hk-defect .hk-n')+'/'+num('.hk-advice .hk-n')+' vs '+K.defects+'/'+K.advice);
+    const sum=kind=>[...ov.querySelectorAll('.hk-'+kind+' .hk-tiers .pchipn')].reduce((a,x)=>a+parseInt(x.textContent,10),0);
+    ok("each tile's tiers add up to its number", sum('defect')===K.defects && sum('advice')===K.advice);
+    const tops=[...ov.querySelectorAll('.hlist-top .hrow[data-jump]')].map(r=>r.dataset.jump);
+    const want=healthRows().filter(r=>r.n).slice(0,5).map(r=>r.jump);
+    ok('it lists the top open checks, no more than five', tops.length<=5 && tops.join()===want.join(), tops.join()+' vs '+want.join());
+    ok('it does not repeat the whole Checks list', !ov.querySelector('details.hclean'));
+    ok('the Checks page is one click away', !!ov.querySelector('.seclabel [data-route="/checks"]'));
+    // the inventory is the sidebar's entries, grouped the same way
+    const inv=[...ov.querySelectorAll('.invg-row[data-cat]')];
+    ok('the inventory names the categories', inv.length>0);
+    ok('each inventory row says what its sidebar entry says', inv.every(r=>{
+      const sb=document.querySelector('#nav .side-item[data-cat="'+cssEsc(r.dataset.cat)+'"]');
+      return !!sb && (sb.querySelector('.lbl')||{}).textContent===(r.querySelector('.lbl')||{}).textContent &&
+        (sb.querySelector('.n')||{textContent:''}).textContent===(r.querySelector('.n')||{}).textContent; }));
+    ok('no review list is inventory', inv.every(r=>!CAT_CHECK[r.dataset.cat]));
     const first=document.querySelector('#view-overview .hrow[data-jump]');
     ok('this report has a finding to click', !!first);
     if(first) click(first);

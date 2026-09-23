@@ -1206,19 +1206,12 @@ function renderDashboard(){
     +' <span data-tip="suspect = loose/cross-type match — dynamic = expression-valued reference">link'+((suN+dyN)>1?'s':'')+'</span>':'';
   h+='<div class="dash-title">'+esc(DATA.project)+'</div>'+
      '<div class="dash-sub">'+nodes.length+' nodes · '+edges.length+' links'+uncertain+' across the model &amp; code graph</div>';
-  h+='<div class="seclabel">Inventory</div>'+inventoryHtml();
-  // Two columns from here: health beside hotspots, apps beside entry points — the four things a reader
-  // came for, above the fold on an ordinary screen instead of below a grid of health cards.
+  // Health beside hotspots, then the inventory, then apps beside entry points — what a reader came for
+  // above the fold. The health block is a summary with a way in, not a copy of the Checks page's list
+  // (it used to be exactly that, beside an inventory that repeated the sidebar chip for chip).
   h+='<div class="dash-cols">';
-  // health — the same list the Checks tab opens with; the overview stays a summary and links there for the
-  // findings themselves (one place to review, instead of two that drift apart)
-  const list=healthListHtml();
-  if(list){
-    const open=INSIGHTS.checksOpen, K=kindCounts();
-    h+='<div class="dash-col"><div class="seclabel row">Health'+
-       '<button class="dgbtn" data-route="/checks">'+
-       (open?esc(kindHeadline(K))+' ↗':'open Checks ↗')+'</button></div>'+list+'</div>';
-  }
+  const hs=healthSummaryHtml();
+  if(hs) h+='<div class="dash-col"><div class="seclabel row">Health<button class="dgbtn" data-route="/checks">all checks ↗</button></div>'+hs+'</div>';
   // hotspots
   if(INSIGHTS.hotspots.length){
     h+='<div class="dash-col"><div class="seclabel">Hotspots — most referenced</div><div class="dashrows">';
@@ -1231,6 +1224,10 @@ function renderDashboard(){
     });
     h+='</div></div>';
   }
+  h+='</div>';
+  const inv=inventoryHtml();
+  if(inv) h+='<div class="seclabel">Inventory</div>'+inv;
+  h+='<div class="dash-cols">';
   // apps
   if(INSIGHTS.apps.length){
     h+='<div class="dash-col"><div class="seclabel">Apps</div><div class="dashrows">';
@@ -1261,23 +1258,72 @@ function renderDashboard(){
   wireNodeLinks(v, '[data-id]', {first:reportNav});
   const epMore=v.querySelector('[data-ep-toggle]');
   if(epMore) epMore.onclick=()=>{ v.querySelectorAll('[data-ep-more]').forEach(r=>r.hidden=false); epMore.remove(); };
+  v.querySelectorAll('[data-inv-toggle]').forEach(b=>b.onclick=e=>{ e.stopPropagation();
+    b.parentElement.querySelectorAll('[data-inv-more]').forEach(r=>r.hidden=false); b.remove(); });
 }
-// One chip per node type present — the icon, the count, Design's name — in sidebar order; a chip opens the
-// type's browse list. The four metric cards this replaces (models / Java / endpoints / groups) were four
-// numbers with forty pixels of air around each; the strip says the same and names every type it counted.
-// Derived nodes (variables, expressions, bindings, literals, externals) are not inventory and stay out.
+// ---------- the overview's health summary ----------
+// The two numbers a reader acts on — defects and advice — each split by the catalog's tiers, then the
+// checks with the most to say, then a line for everything else. Every part is a way into the Checks page
+// (data-jump / data-route, which reportNav() already routes), never a second place to review.
+const TIER_LABEL={broken:'broken', runtime:'runtime risk', unfinished:'unfinished', noise:'noise'};
+const TIER_HINT={broken:'something will fail', runtime:'configured to behave riskily at runtime',
+                 unfinished:'work left half-done', noise:'probably harmless — worth a tidy-up'};
+function checkTier(id){ const c=(DATA.checkCatalog||[]).find(x=>x.id===id); return (c&&c.tier)||'other'; }
+/** Open findings per kind and tier, in reading order, with the first open check of each tier — the block
+ *  its chip jumps to. Each kind's tiers add up to kindCounts(). */
+function tierCounts(){
+  const C=findingCounts(), out={defect:{}, advice:{}};
+  checksInOrder().forEach(c=>{ const n=C.open[c.id]||0; if(!n) return;
+    const k=checkKind(c.id)==='advice'?'advice':'defect', t=checkTier(c.id);
+    const e=out[k][t]||(out[k][t]={n:0, first:c.id}); e.n+=n; });
+  return out;
+}
+const HEALTH_TOP=5;
+function healthSummaryHtml(){
+  const rows=healthRows(); if(!rows.length) return '';
+  const open=rows.filter(r=>r.n>0), C=findingCounts();
+  if(!open.length) return '<div class="hsum"><div class="hlist hlist-top">'+healthAllCleanHtml(rows, 'on the Checks page')+'</div></div>';
+  const K=kindCounts(), T=tierCounts();
+  const worstDefect=open.filter(r=>r.kind==='defect').reduce((a,r)=>worseTone(a, r.sev), '');
+  const tile=(kind, n)=>{
+    const tone=!n?'ok':kind==='advice'?'advice':TONE[worstDefect||'warning'].row;
+    const tiers=Object.keys(T[kind]).sort((a,b)=>(TIER_RANK[a]??9)-(TIER_RANK[b]??9));
+    return '<div class="hk hk-'+kind+' tone-'+tone+'">'+
+      '<button type="button" class="hk-main" data-jump="chk-kind-'+kind+'" data-tip="'+esc(KIND_HINT[kind])+
+        ' — open findings; accepted ones are not counted"><span class="hk-n">'+n+'</span><span class="hk-l">'+
+        (kind==='advice'?'advice':n===1?'defect':'defects')+'</span></button>'+
+      (tiers.length?'<div class="hk-tiers">'+tiers.map(t=>'<button type="button" class="pchip" data-jump="chk-'+esc(T[kind][t].first)+
+        '" data-tip="'+esc(TIER_HINT[t]||'')+'">'+esc(TIER_LABEL[t]||t)+'<span class="pchipn">'+T[kind][t].n+'</span></button>').join('')+'</div>'
+        :'<div class="hk-none">'+(kind==='advice'?'nothing to look at':'nothing wrong')+'</div>')+'</div>';
+  };
+  let top='', lastKind=null;
+  open.slice(0, HEALTH_TOP).forEach(r=>{
+    if(r.kind!==lastKind){ top+='<div class="htier hkind-'+r.kind+'">'+esc(KIND_LABEL[r.kind]||r.kind)+'</div>'; lastKind=r.kind; }
+    top+=healthRowHtml(r); });
+  const more=open.length-Math.min(HEALTH_TOP, open.length), clean=rows.length-open.length;
+  const foot=[more?'<button type="button" class="hsum-link" data-route="/checks">'+more+' more check'+(more>1?'s':'')+' with findings</button>':'',
+    clean?clean+' clean':'',
+    C.waivedN?(waiverRules().length?'<button type="button" class="hsum-link" data-jump="chk-waived">'+C.waivedN+' accepted</button>'
+                                    :C.waivedN+' accepted'):''].filter(Boolean).join(' · ');
+  return '<div class="hsum"><div class="hsum-kinds">'+tile('defect', K.defects)+tile('advice', K.advice)+'</div>'+
+    '<div class="hlist hlist-top">'+top+'</div>'+(foot?'<div class="hsum-foot">'+foot+'</div>':'')+'</div>';
+}
+// What the project is made of, grouped the way the sidebar groups it — the same entries, labels and counts
+// (navItems), in columns, so the overview answers "how much of what" without being a second sidebar in a
+// different order. A group shows its first six and the rest one click away. Report pages, review lists and
+// derived nodes (variables, expressions, bindings, literals, externals) are not inventory and stay out.
+const INV_SHOWN=6;
 function inventoryHtml(){
-  const byType={};
-  nodes.forEach(n=>{ byType[n.type]=(byType[n.type]||0)+1; });
   const skip=new Set(['variable','expression','binding','string','external']);
-  const order=t=>SECTIONS.indexOf((TM[t]||[t,'Other'])[1]);
-  const types=Object.keys(byType).filter(t=>!skip.has(t))
-    .sort((a,b)=>order(a)-order(b)||(byType[b]-byType[a])||a.localeCompare(b));
-  if(!types.length) return '';
-  return '<div class="inv">'+types.map(t=>{
-    const attrs=CATS.some(c=>c.id===t)?' data-cat="'+esc(t)+'" role="link" tabindex="0"':'';
-    return '<span class="invc"'+attrs+'>'+typeIcon(t)+'<b>'+byType[t]+'</b>'+esc(typeLabel(t))+'</span>';
-  }).join('')+'</div>';
+  const items=navItems().filter(c=>!c.route && c.sec!=='Checks' && !skip.has(String(c.id).split('::')[0]));
+  if(!items.length) return '';
+  const groups=[];
+  items.forEach(c=>{ let g=groups.find(x=>x.sec===c.sec); if(!g) groups.push(g={sec:c.sec, items:[]}); g.items.push(c); });
+  return '<div class="invg">'+groups.map(g=>'<div class="invg-sec"><div class="invg-h">'+esc(g.sec)+'</div>'+
+    g.items.map((c,i)=>'<div class="invg-row" data-cat="'+esc(c.id)+'" role="link" tabindex="0"'+(i>=INV_SHOWN?' data-inv-more hidden':'')+'>'+
+      typeIcon(c.icon,{color:c.color})+'<span class="lbl">'+esc(c.label)+'</span><span class="n">'+c.count+'</span></div>').join('')+
+    (g.items.length>INV_SHOWN?'<button type="button" class="dgbtn invg-more" data-inv-toggle>+'+(g.items.length-INV_SHOWN)+' more</button>':'')+
+    '</div>').join('')+'</div>';
 }
 
 // ---------- schema coverage: one renderer for the service detail AND the schema tab ----------

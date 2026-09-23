@@ -318,16 +318,43 @@
     color:var(--ink-dim);margin:26px 0 var(--space-25)}
   .seclabel.row{display:flex;align-items:center;gap:var(--space-2)}
   /* Inventory: one chip per node type — icon, count, Design's name; a chip with a list opens it */
-  .inv{display:flex;flex-wrap:wrap;gap:var(--space-15)}
-  .invc{display:inline-flex;align-items:center;gap:var(--space-15);background:var(--panel);border:1px solid var(--line);
-    border-radius:var(--radius-md);padding:var(--space-1) var(--space-25);font-size:var(--text-sm);color:var(--ink-dim)}
-  .invc b{font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;margin-right:1px}
-  .invc[data-cat]{cursor:pointer}
-  .invc[data-cat]:hover{border-color:var(--accent);color:var(--ink)}
-  /* Two columns of sections where there is room — health beside hotspots, apps beside entry points */
+  /* the inventory, grouped like the sidebar, in columns */
+  .invg{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:var(--space-3) var(--space-5);margin-bottom:var(--space-2)}
+  .invg-sec{min-width:0;display:flex;flex-direction:column}
+  .invg-h{font-size:var(--text-2xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);
+    padding:0 var(--space-2) var(--space-1)}
+  .invg-row{display:flex;align-items:center;gap:var(--space-15);height:26px;padding:0 var(--space-2);border-radius:var(--radius-md);
+    font-size:var(--text-sm);color:var(--ink-dim);cursor:pointer}
+  .invg-row:hover{background:var(--hover);color:var(--ink)}
+  .invg-row .lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .invg-row .n{flex:none;font-size:var(--text-xs);color:var(--ink-faint);font-variant-numeric:tabular-nums}
+  .invg-row .ti{width:calc(14px*var(--ui-scale));height:calc(14px*var(--ui-scale));flex:none}
+  .invg-more{align-self:flex-start;margin:var(--space-1) 0 0 var(--space-2)}
+  /* the health summary: two tiles (defects, advice) with their tiers, the top checks, a line for the rest */
+  .hsum{border:1px solid var(--line);border-radius:var(--radius-md);background:var(--panel);overflow:hidden}
+  .hsum-kinds{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);border-bottom:1px solid var(--line)}
+  .hk{padding:var(--space-25) var(--space-3);min-width:0;display:flex;flex-direction:column;gap:var(--space-15)}
+  .hk+.hk{border-left:1px solid var(--line)}
+  .hk-main{display:flex;align-items:baseline;gap:var(--space-15);background:none;border:0;padding:0;cursor:pointer;font:inherit;color:inherit;text-align:left}
+  .hk-n{font-size:var(--text-xl);font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
+  .hk-l{font-size:var(--text-xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-dim)}
+  .hk-main:hover .hk-l{color:var(--ink)}
+  .hk.tone-bad .hk-n{color:var(--bad-text)} .hk.tone-warn .hk-n{color:var(--warn-text)}
+  .hk.tone-advice .hk-n{color:var(--ink-dim)} .hk.tone-ok .hk-n{color:var(--ok-text)}
+  .hk-tiers{display:flex;flex-wrap:wrap;gap:var(--space-1)}
+  .hk-none{font-size:var(--text-xs);color:var(--ink-faint)}
+  .hsum .hlist{border:0;border-radius:0}
+  .hlist-top .hs{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hsum-foot{border-top:1px solid var(--line);padding:var(--space-15) var(--space-3);font-size:var(--text-xs);color:var(--ink-faint)}
+  .hsum-link{background:none;border:0;padding:0;font:inherit;color:var(--accent);cursor:pointer}
+  .hsum-link:hover{text-decoration:underline}
+  /* Two columns of sections where there is room — health beside hotspots, apps beside entry points. A
+     container query, not a viewport one: the room is the overview's, and the sidebar takes a share of the
+     window that differs between a browser and an editor tab. */
+  #view-overview{container-type:inline-size}
   .dash-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 var(--space-6);align-items:start}
   .dash-col{min-width:0}
-  @media (max-width:1000px){ .dash-cols{grid-template-columns:minmax(0,1fr)} }
+  @container (max-width:760px){ .dash-cols{grid-template-columns:minmax(0,1fr)} .hsum-kinds{grid-template-columns:minmax(0,1fr)} .hk+.hk{border-left:0;border-top:1px solid var(--line)} }
   /* Health list: tone bar · count · check · reason, sorted bad → warn; the clean ones fold under one line */
   .hlist{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-md);overflow:hidden}
   .hrow{display:grid;grid-template-columns:3px 2.5ch 6ch minmax(0,auto) minmax(0,1fr);align-items:center;gap:var(--space-25);

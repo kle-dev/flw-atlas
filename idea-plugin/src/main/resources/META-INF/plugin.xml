@@ -201,6 +201,13 @@
               hidden tabs behind a <b>+N</b> button. The browse list is narrower there and folds away from a
               button in its head — or by dragging its edge shut — to give the page the whole width; a long
               name no longer pushes its findings pill out of sight.</li>
+          <li><b>The overview summarises instead of repeating.</b> Its health block was the Checks page's
+              list and its inventory the sidebar's entries as ungrouped chips. Health is now two numbers —
+              the open defects and advice, each split by tier (broken, runtime risk, unfinished, noise) —
+              the five checks with the most to say and one line for the rest, every part a way into the
+              Checks page; the inventory lists the sidebar's entries grouped as the sidebar groups them. The
+              two-column layout follows the overview's own width, so an editor tab stacks it where the room
+              runs out.</li>
           <li><b>A category opens as a table.</b> Picking a category no longer shows its list beside an
               empty page: the page is a sortable table of the category — name, key, file, references in and
               out, open findings, and a column the type is worth more with (a model's app, a service's
@@ -544,22 +551,6 @@
               red for an error, amber for a defect, grey for advice alone — so a process whose every task
               lacks a boundary event no longer wears an orange badge on every task; a ⚑ button in the top
               bar hides the badges on every diagram, remembered like the ≈ toggle beside it.</li>
-          <li><b>Three checks about how a process behaves, not whether it resolves.</b>
-              <code>nonExclusiveAsync</code> — an async element that explicitly set
-              <code>exclusive="false"</code>, so the jobs of one process instance may run concurrently; it
-              fires on the opt-out only, never on the absence, because <code>exclusive</code> defaults to
-              true. <code>asyncWithoutRetry</code> — async work with no <code>failedJobRetryTimeCycle</code>
-              of its own. And <code>unguardedTasks</code> — a call that leaves the engine with nothing
-              catching its failure. Design writes a platform bean into every service task's delegate
-              expression, so "a service task with a class or a delegate" would have been 94 % noise (275
-              findings on one project of 81 processes): it fires on the task types that call out (HTTP,
-              external worker, agent, mail), on a class or a bean of the project's own, on an
-              <code>expression</code> whose root is neither an engine context nor a platform bean, and on a
-              service-registry task whose service is REST. An HTTP task carrying
-              <code>ignoreException</code> or <code>handleStatusCodes</code> has its error path and is
-              quiet, and so is any async task — its failure is a failed job, retried and then reported,
-              never an exception to the caller. The message names the fix for the kind of call it found: a
-              synchronous mail task is told to go async or get a boundary event.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

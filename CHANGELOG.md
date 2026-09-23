@@ -58,6 +58,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   that hides tabs, scrolls with the wheel, and lists the hidden tabs behind a **+N** button. The browse
   list is narrower there and folds away from a button in its head — or by dragging its edge shut — to give
   the page the whole width; a long name no longer pushes its findings pill out of sight.
+- **The overview summarises instead of repeating.** Its health block was the Checks page's list and its
+  inventory the sidebar's entries as ungrouped chips. Health is now two numbers — the open defects and
+  advice, each split by tier (broken, runtime risk, unfinished, noise) — the five checks with the most
+  to say and one line for the rest, every part a way into the Checks page; the inventory lists the
+  sidebar's entries grouped as the sidebar groups them. The two-column layout follows the overview's own
+  width, so an editor tab stacks it where the room runs out.
 - **A category opens as a table.** Picking a category no longer shows its list beside an empty page: the
   page is a sortable table of the category — name, key, file, references in and out, open findings, and
   a column the type is worth more with (a model's app, a service's table, a Java class's package, a
