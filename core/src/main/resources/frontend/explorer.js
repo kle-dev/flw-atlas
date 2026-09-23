@@ -715,7 +715,7 @@ function findingsChanged(){
 // ---------- insights (dashboard fuel) — one edge pass + one node pass at boot ----------
 let INSIGHTS = null;
 function computeInsights(){
-  const indeg = new Map(), containsByApp = new Map(), openAppByApp = new Map(), entryPoints = [];
+  const indeg = new Map(), outdeg = new Map(), containsByApp = new Map(), openAppByApp = new Map(), entryPoints = [];
   edges.forEach(e=>{
     if(hideUncertain && (e.suspect||e.dynamic)) return;   // hidden everywhere means here too
     if(e.rel==='contains'){ containsByApp.set(e.s,(containsByApp.get(e.s)||0)+1); return; }
@@ -725,7 +725,7 @@ function computeInsights(){
       else if(e.rel==='start' && byId.get(e.t)) entryPoints.push({group:e.s, model:e.t});
       return;                                    // access edges don't count as "references"
     }
-    if(byId.get(e.t)) indeg.set(e.t,(indeg.get(e.t)||0)+1);
+    if(byId.get(e.t)){ indeg.set(e.t,(indeg.get(e.t)||0)+1); outdeg.set(e.s,(outdeg.get(e.s)||0)+1); }
   });
   // The project's own central artifacts: a platform bean, a URL or a security policy is referenced by
   // every model that uses it and would take the whole list (the summary excludes the same types).
@@ -770,7 +770,7 @@ function computeInsights(){
   // the same list rather than copied from `checks`, so a decision taken on this page moves them too.
   const FC = findingCounts();
   const health = healthMap();
-  INSIGHTS = { indeg, hotspots, apps, entryPoints,
+  INSIGHTS = { indeg, outdeg, hotspots, apps, entryPoints,
     totalExprs, totalForms, totalChangelogs, totalCovServices, totalColServices, totalOps, totalFns,
     totalDirectedVars, silentVars, totalQueries, totalDecisionTables, totalSecretBearers,
     totalModels: (DATA.stats||{}).modelCount||0,
@@ -970,6 +970,43 @@ function navGroups(){ try{ return JSON.parse(localStorage.getItem(NAVG_STORE)||'
 function navGroupRemember(sec, open){
   try{ const m=navGroups(); m[sec]=open; localStorage.setItem(NAVG_STORE, JSON.stringify(m)); }catch(e){}
 }
+/** Every sidebar entry in sidebar order: the categories (a review list counted by the nodes with something
+ *  open) plus the report pages, each with its section, icon, colour and count. The sidebar, its <select>
+ *  stand-in and the overview's inventory all read this, so they cannot list different things. */
+function navItems(){
+  // A review list is a list of nodes, so its badge counts the nodes with something open — not the
+  // findings, which can outnumber them (16 unread-input findings on 10 variables read "16" on a list of 10).
+  const items=CATS.map(c=>CAT_CHECK[c.id]?Object.assign({}, c, {count:openNodeCount(CAT_CHECK[c.id])}):c);
+  // A tab belongs to a section like any other list — "Script tasks" is an Integration thing, the
+  // review reports belong under Checks. `pri` keeps a section's tabs above its drill-down lists.
+  const scriptCount=allScripts().length;
+  if(scriptCount) items.push({route:'/scripts', label:'Script tasks', sec:'Integration', pri:0, icon:'scripts',
+    color:color('process'), count:scriptCount,
+    tip:'Script tasks ('+scriptCount+') — every script task, listener script and bot script'});
+  items.push({route:'/tree', label:'Reference tree', sec:'Models', pri:0, icon:'tree',
+    color:color('process'),
+    tip:'What each app starts, and what those models reach — every relation except app membership'});
+  const openChecks=INSIGHTS.checksOpen, K0=kindCounts();
+  items.push({route:'/checks', label:'Checks', sec:'Checks', pri:0, icon:'checks',
+    color:covColor(K0.defects?'bad':openChecks?'warn':'good'), count:openChecks,
+    tip:(openChecks?kindHeadline(K0)+' — ':'')+'a defect is wrong now, an advice is a pattern worth a look'});
+  if(INSIGHTS.totalCovServices>0){
+    const gaps=INSIGHTS.health.schemaGaps;
+    items.push({route:'/schema', label:'Schema gaps', sec:'Checks', pri:1, icon:'schema',
+      color:covColor(gaps?'bad':'good'), count:gaps,
+      tip:'Schema gaps — Liquibase → Service → Data object coverage'});
+  }
+  if(INSIGHTS.totalDirectedVars>0){
+    const unusedVars=INSIGHTS.health.unusedVars+INSIGHTS.health.unreadInputs;
+    items.push({route:'/variables', label:'Unused variables', sec:'Variables', pri:0, icon:'variable',
+      color:covColor(unusedVars?'bad':'good'), count:unusedVars,
+      tip:'Variables something writes and nothing reads, and inputs mapped into a model that never '+
+          'reads them'});
+  }
+  items.sort((a,b)=> (SECTIONS.indexOf(a.sec)-SECTIONS.indexOf(b.sec)) ||
+                     ((a.pri==null?2:a.pri)-(b.pri==null?2:b.pri)) || a.label.localeCompare(b.label));
+  return items;
+}
 function renderSidebar(){
   const nav = document.getElementById('nav'); nav.innerHTML='';
   // One keyboard model for headers and entries: ↑/↓ walk what is visible (a folded group's entries are
@@ -1007,38 +1044,7 @@ function renderSidebar(){
   ov.dataset.route='/overview';
   ov.onclick=()=>{ location.hash='/overview'; };
   nav.appendChild(ov);
-  // A tab belongs to a section like any other list — "Script tasks" is an Integration thing, the
-  // review reports belong under Checks. `pri` keeps a section's tabs above its drill-down lists.
-  const C0=findingCounts();
-  // A review list is a list of nodes, so its badge counts the nodes with something open — not the
-  // findings, which can outnumber them (16 unread-input findings on 10 variables read "16" on a list of 10).
-  const items=CATS.map(c=>CAT_CHECK[c.id]?Object.assign({}, c, {count:openNodeCount(CAT_CHECK[c.id])}):c);
-  const scriptCount=allScripts().length;
-  if(scriptCount) items.push({route:'/scripts', label:'Script tasks', sec:'Integration', pri:0, icon:'scripts',
-    color:color('process'), count:scriptCount,
-    tip:'Script tasks ('+scriptCount+') — every script task, listener script and bot script'});
-  items.push({route:'/tree', label:'Reference tree', sec:'Models', pri:0, icon:'tree',
-    color:color('process'),
-    tip:'What each app starts, and what those models reach — every relation except app membership'});
-  const openChecks=INSIGHTS.checksOpen, K0=kindCounts();
-  items.push({route:'/checks', label:'Checks', sec:'Checks', pri:0, icon:'checks',
-    color:covColor(K0.defects?'bad':openChecks?'warn':'good'), count:openChecks,
-    tip:(openChecks?kindHeadline(K0)+' — ':'')+'a defect is wrong now, an advice is a pattern worth a look'});
-  if(INSIGHTS.totalCovServices>0){
-    const gaps=INSIGHTS.health.schemaGaps;
-    items.push({route:'/schema', label:'Schema gaps', sec:'Checks', pri:1, icon:'schema',
-      color:covColor(gaps?'bad':'good'), count:gaps,
-      tip:'Schema gaps — Liquibase → Service → Data object coverage'});
-  }
-  if(INSIGHTS.totalDirectedVars>0){
-    const unusedVars=INSIGHTS.health.unusedVars+INSIGHTS.health.unreadInputs;
-    items.push({route:'/variables', label:'Unused variables', sec:'Variables', pri:0, icon:'variable',
-      color:covColor(unusedVars?'bad':'good'), count:unusedVars,
-      tip:'Variables something writes and nothing reads, and inputs mapped into a model that never '+
-          'reads them'});
-  }
-  items.sort((a,b)=> (SECTIONS.indexOf(a.sec)-SECTIONS.indexOf(b.sec)) ||
-                     ((a.pri==null?2:a.pri)-(b.pri==null?2:b.pri)) || a.label.localeCompare(b.label));
+  const items=navItems();
   // Groups fold. The header is a <button aria-expanded>, its entries live in a <div role=group> that
   // hides with the `hidden` attribute, and the fold is remembered per section. Sixty entries in eight
   // groups is the ordinary size of this list; the reader decides which groups earn their space.
@@ -1408,15 +1414,30 @@ function healthRows(keys){
 }
 const KIND_RANK={defect:0, advice:1};
 const TIER_RANK={broken:0, runtime:1, unfinished:2, noise:3};
-function healthListHtml(keys){
-  const rows=healthRows(keys);
-  if(!rows.length) return '';
-  // `data-jump` is what reportNav() already understands: a block on this page scrolls into view, a block
-  // on the Checks page is opened there. A row with nothing open and nothing accepted has nowhere to go.
-  const row=r=>'<div class="hrow tone-'+r.tone+'"'+((r.n>0||r.w>0)?' data-jump="'+esc(r.jump)+'" role="button" tabindex="0"':'')+'>'+
+/** One health row: tone bar, count, severity, name, one-line reason. `data-jump` is what reportNav()
+ *  already understands: a block on this page scrolls into view, a block on the Checks page is opened
+ *  there. A row with nothing open and nothing accepted has nowhere to go. */
+function healthRowHtml(r){
+  return '<div class="hrow tone-'+r.tone+'"'+((r.n>0||r.w>0)?' data-jump="'+esc(r.jump)+'" role="button" tabindex="0"':'')+'>'+
     '<span class="hbar"></span><span class="hn">'+r.n+'</span>'+
     '<span class="hsev">'+esc(r.sev)+'</span>'+
     '<span class="hl">'+esc(r.label)+'</span><span class="hs">'+esc(r.sub)+'</span></div>';
+}
+/** The one row that stands for a clean project. "All 7 checks clean" on a project the other 16 checks
+ *  could not judge (no process, no form, no changelog) is not the same statement as "all 23 clean" — say
+ *  which. `where` says where the accepted findings are listed. */
+function healthAllCleanHtml(rows, where){
+  const clean=rows.filter(r=>!r.n);
+  const total=(DATA.checkCatalog||[]).length, na=total>rows.length?total-rows.length:0;
+  return '<div class="hrow tone-ok hall"><span class="hbar"></span><span class="hn">'+uiIcon('check')+'</span><span class="hsev"></span>'+
+    '<span class="hl">All '+clean.length+(na?' applicable':'')+' checks clean</span><span class="hs">'+
+    (clean.some(r=>r.w)?'nothing open — what was accepted is listed '+where:'nothing flagged in this report')+
+    (na?' · '+na+' of '+total+' need a process, a form or a changelog to judge':'')+'</span></div>';
+}
+function healthListHtml(keys){
+  const rows=healthRows(keys);
+  if(!rows.length) return '';
+  const row=healthRowHtml;
   const open=rows.filter(r=>r.n>0), clean=rows.filter(r=>!r.n);
   // Two headings, not four: "Defects" and "Advice" is the distinction a reader acts on — a task without a
   // boundary event beside an expression that does not parse taught readers to skim both.
@@ -1425,13 +1446,7 @@ function healthListHtml(keys){
     if(r.kind!==lastKind){ const n=open.filter(x=>x.kind===r.kind).reduce((a,x)=>a+x.n,0);
       h+='<div class="htier hkind-'+r.kind+'" data-tip="'+esc(KIND_HINT[r.kind]||'')+'">'+esc(KIND_LABEL[r.kind]||r.kind)+'<span class="hkn">'+n+'</span></div>'; lastKind=r.kind; }
     h+=row(r); });
-  // "All 7 checks clean" on a project the other 16 checks could not judge (no process, no form, no
-  // changelog) is not the same statement as "all 23 clean" — say which.
-  const total=(DATA.checkCatalog||[]).length, na=total>rows.length?total-rows.length:0;
-  if(!open.length) h+='<div class="hrow tone-ok hall"><span class="hbar"></span><span class="hn">'+uiIcon('check')+'</span><span class="hsev"></span>'+
-    '<span class="hl">All '+clean.length+(na?' applicable':'')+' checks clean</span><span class="hs">'+
-    (clean.some(r=>r.w)?'nothing open — what was accepted is listed below':'nothing flagged in this report')+
-    (na?' · '+na+' of '+total+' need a process, a form or a changelog to judge':'')+'</span></div>';
+  if(!open.length) h+=healthAllCleanHtml(rows, 'below');
   if(clean.length) h+='<details class="hclean"><summary>'+clean.length+' check'+(clean.length>1?'s':'')+' with nothing open</summary>'+
     clean.map(row).join('')+'</details>';
   return h+'</div>';
@@ -2558,8 +2573,11 @@ function renderScripts(){
 let listMarks=new Set(), listAnchor=null;
 function listMarksClear(){ listMarks.clear(); listAnchor=null; }
 /** Ids of the rows currently in the DOM — a Shift range or ⌘A can only span what is rendered. */
+// The rows marks live on: the browse list's items, or the category table's rows — only one of the two is
+// in the DOM at a time.
+const MARKABLE_ROWS='#listitems .item[data-id], #catrows .tr[data-id]';
 function listRenderedIds(){
-  return [...document.querySelectorAll('#listitems .item[data-id]')].map(el=>el.dataset.id);
+  return [...document.querySelectorAll(MARKABLE_ROWS)].map(el=>el.dataset.id);
 }
 /** Add ids up to the cap. Returns the number refused, so the caller can say so instead of
  *  pretending: marking more than MAX_TABS would promise an "open all" that cannot be kept. */
@@ -2581,7 +2599,7 @@ function listMarkRange(fromId, toId){
 /** Repaint marks only. Deliberately NOT syncListSelection(): that one scrolls the selected row into
  *  view, which would yank the list back to the open node on every Shift+Arrow. */
 function syncListMarks(){
-  document.querySelectorAll('#listitems .item[data-id]').forEach(el=>{
+  document.querySelectorAll(MARKABLE_ROWS).forEach(el=>{
     const mk=listMarks.has(el.dataset.id);
     el.classList.toggle('mark', mk);
     el.setAttribute('aria-checked', mk?'true':'false');
@@ -2618,30 +2636,15 @@ function openMarkedList(background){
   setMarkNote(r.dropped ? r.dropped+' not opened — '+MAX_TABS+' tabs is the limit' : '');
 }
 
-function renderList(){
-  const cat = CATS.find(c=>c.id===state.cat);
-  const list = document.getElementById('list'); list.innerHTML='';
-  if(!cat) return;
-  const head=document.createElement('div'); head.className='listhead';
-  head.innerHTML='<div class="t"><span>'+esc(cat.label)+'</span><span class="muted" id="lcount">'+cat.count+'</span></div>'+
-    '<div class="lh-controls"><input id="lf" placeholder="filter '+esc(cat.label.toLowerCase())+'…" aria-label="Filter list">'+
-    '<select id="lsort" aria-label="Sort list"><option value="name">Name</option>'+
-    '<option value="refs">Most referenced</option><option value="file">File</option></select></div>'+
-    '<div id="lwider"></div><div id="lmark"></div>';
-  list.appendChild(head);
-  const wrap=document.createElement('div'); wrap.id='listitems';
-  wrap.setAttribute('role','listbox');
-  wrap.setAttribute('aria-label',cat.label);
-  list.appendChild(wrap);
-  renderItems(cat, wrap);
-  // The input lives outside the re-rendered items wrap, so typing never loses focus.
-  const lf=document.getElementById('lf'); lf.value=state.filter;
-  lf.oninput=debounce(()=>{ state.filter=lf.value; renderItems(cat, wrap); syncHashContext(); },120);
-  const ls=document.getElementById('lsort'); ls.value=state.sort;
-  ls.onchange=()=>{ state.sort=ls.value; renderItems(cat, wrap); syncHashContext(); };
-  // Arrow/Enter keyboard navigation over the items (roving focus), plus Shift+Arrow multi-select.
-  wrap.onkeydown=e=>{
-    const els=[...wrap.querySelectorAll('.item[data-id]')];
+/**
+ * The list keyboard model, for any column of markable rows (the browse list, the category table): ↑/↓
+ * walk with roving focus, Shift+↑/↓ extends a mark range, Home/End jump, ⌘A marks what is rendered, Space
+ * toggles a mark, Enter opens (the marks as tabs when there are any; ⌘/Ctrl+Enter keeps the current tab),
+ * Escape drops the marks.
+ */
+function rowKeys(wrap, rowSel){
+  return e=>{
+    const els=[...wrap.querySelectorAll(rowSel)];
     const i=els.indexOf(document.activeElement);
     const mod=e.metaKey||e.ctrlKey;
     if(e.key==='ArrowDown'||e.key==='ArrowUp'){
@@ -2687,6 +2690,30 @@ function renderList(){
       e.preventDefault(); listMarksClear(); syncListMarks(); setMarkNote('');
     }
   };
+}
+
+function renderList(){
+  const cat = CATS.find(c=>c.id===state.cat);
+  const list = document.getElementById('list'); list.innerHTML='';
+  if(!cat) return;
+  const head=document.createElement('div'); head.className='listhead';
+  head.innerHTML='<div class="t"><span>'+esc(cat.label)+'</span><span class="muted" id="lcount">'+cat.count+'</span></div>'+
+    '<div class="lh-controls"><input id="lf" placeholder="filter '+esc(cat.label.toLowerCase())+'…" aria-label="Filter list">'+
+    '<select id="lsort" aria-label="Sort list"><option value="name">Name</option>'+
+    '<option value="refs">Most referenced</option><option value="file">File</option></select></div>'+
+    '<div id="lwider"></div><div id="lmark"></div>';
+  list.appendChild(head);
+  const wrap=document.createElement('div'); wrap.id='listitems';
+  wrap.setAttribute('role','listbox');
+  wrap.setAttribute('aria-label',cat.label);
+  list.appendChild(wrap);
+  renderItems(cat, wrap);
+  // The input lives outside the re-rendered items wrap, so typing never loses focus.
+  const lf=document.getElementById('lf'); lf.value=state.filter;
+  lf.oninput=debounce(()=>{ state.filter=lf.value; renderItems(cat, wrap); syncHashContext(); },120);
+  const ls=document.getElementById('lsort'); ls.value=state.sort;
+  ls.onchange=()=>{ state.sort=ls.value; renderItems(cat, wrap); syncHashContext(); };
+  wrap.onkeydown=rowKeys(wrap, '.item[data-id]');
   renderListMarkBar();
 }
 
@@ -2736,41 +2763,89 @@ function renderListBridge(cat, parsed, shown){
 // category is reachable by scrolling (the old hard cap cut off at 600).
 const LIST_CHUNK=200;
 let _listIO=null;
-function renderItems(cat, wrap){
-  if(_listIO){ _listIO.disconnect(); _listIO=null; }
-  wrap.innerHTML='';
-  let items = nodes.filter(cat.match);
+/** A node's open findings as one sortable number: anything with an error ranks above any count of
+ *  warnings, then the count decides. */
+function findRank(id){ const c=nodeFindingCounts(id); return (c.worst==='error'?1e6:0)+c.open; }
+/** How a node list can be ordered. The browse list and the category table sort through this one table,
+ *  so the two can never disagree. A leading `-` on a key reverses it; the counts sort most-first. */
+const SORTS={
+  name:(a,b)=>a.label.localeCompare(b.label),
+  key:(a,b)=>String(a.key||'').localeCompare(String(b.key||''))||a.label.localeCompare(b.label),
+  file:(a,b)=>String(a.file||'').localeCompare(String(b.file||''))||a.label.localeCompare(b.label),
+  refs:(a,b)=>(INSIGHTS.indeg.get(b.id)||0)-(INSIGHTS.indeg.get(a.id)||0)||a.label.localeCompare(b.label),
+  out:(a,b)=>(INSIGHTS.outdeg.get(b.id)||0)-(INSIGHTS.outdeg.get(a.id)||0)||a.label.localeCompare(b.label),
+  findings:(a,b)=>findRank(b.id)-findRank(a.id)||a.label.localeCompare(b.label),
+};
+function sortNodes(items, sort, parsed){
+  const s=String(sort||'name'), k=s.replace(/^-/,''), rev=s.charAt(0)==='-';
+  // An explicit sort wins, but plain "Name" under a filter yields to the relevance order of the match.
+  if(k==='name' && !rev && parsed && !parsed.empty) return items;
+  const f=SORTS[k]||SORTS.name;
+  return items.slice().sort(rev?(a,b)=>f(b,a):f);
+}
+/** A category's nodes under a filter and a sort — the rows the browse list and the category table show. */
+function catItems(cat, filter, sort){
+  let items=nodes.filter(cat.match);
   // Same engine as ⌘K: words count independently and in any order, and a hyphen or a camel hump is a
   // word boundary. Before this, the box was a single raw substring test over name/key/file only, so
   // "customer name" found nothing in a category full of nodes matching both words.
-  const parsed = qParse(state.filter);
+  const parsed=qParse(filter);
   if(!parsed.empty){
     const ranked=[];
     items.forEach(n=>{ const r=scoreNode(n, parsed); if(r) ranked.push({n, score:r.score}); });
     ranked.sort((a,b)=>b.score-a.score||a.n.label.localeCompare(b.n.label));
     items=ranked.map(x=>x.n);
   }
-  if(state.sort==='refs')
-    items.sort((a,b)=>(INSIGHTS.indeg.get(b.id)||0)-(INSIGHTS.indeg.get(a.id)||0)||a.label.localeCompare(b.label));
-  else if(state.sort==='file')
-    items.sort((a,b)=>String(a.file||'').localeCompare(String(b.file||''))||a.label.localeCompare(b.label));
-  else if(parsed.empty)
-    items.sort((a,b)=>a.label.localeCompare(b.label));
-  // else: an explicit sort wins, but plain "Name" yields to the relevance order above.
-  renderListBridge(cat, parsed, items.length);
-  // The head counts what the list shows: "N of M" under a filter (every other filter on the page says
-  // so), and for a review list the number of rows with something open beside the row count.
-  const lc=document.getElementById('lcount');
-  if(lc){
-    const openN=CAT_CHECK[cat.id]?openNodeCount(CAT_CHECK[cat.id]):null;
-    lc.textContent=(parsed.empty?String(cat.count):items.length+' of '+cat.count)+
-      (openN!=null&&openN!==cat.count&&parsed.empty?' · '+openN+' open':'');
+  return {items:sortNodes(items, sort, parsed), parsed};
+}
+/** The head counts what the list shows: "N of M" under a filter (every other filter on the page says so),
+ *  and for a review list the number of rows with something open beside the row count. */
+function listCountText(cat, parsed, n){
+  const openN=CAT_CHECK[cat.id]?openNodeCount(CAT_CHECK[cat.id]):null;
+  return (parsed.empty?String(cat.count):n+' of '+cat.count)+
+    (openN!=null&&openN!==cat.count&&parsed.empty?' · '+openN+' open':'');
+}
+/** "nothing found" is the one answer a find-it-fast tool must state; a blank column stated nothing. The
+ *  button hands the words to ⌘K, which searches everything. */
+function listEmptyHtml(cat, parsed, filter, btnId){
+  return '<div class="estate list-empty"><div class="et">'+(parsed.empty?'Nothing in ':'No match in ')+esc(cat.label)+'</div>'+
+    '<div class="eh">'+(parsed.empty?'':'Nothing here matches “'+esc(filter)+'” — ')+
+    '<button type="button" class="dgbtn" id="'+btnId+'">search everything ('+(IS_MAC?'⌘':'Ctrl+')+'K)</button></div></div>';
+}
+/**
+ * A click on a markable row. ⌘/Ctrl+click toggles and Shift+click extends — the list-selection
+ * convention, not the browser's "open in new tab" one (middle-click and ⌘/Ctrl+Enter cover that). The box
+ * that appears on hover is the same toggle: a checkbox you can see is a checkbox you can click. A plain
+ * click opens the node, carrying the filter term and the matched element (`o.q`, `o.el`) exactly like a
+ * palette hit, so the detail panel opens on the row the match came from.
+ */
+function activateRow(e, id, o){
+  o=o||{};
+  if(modKey(e) || (e.target.closest&&e.target.closest('.ck'))){
+    e.preventDefault();
+    let refused=0;
+    if(listMarks.has(id)) listMarks.delete(id); else { refused=listMarkAdd([id]); listAnchor=id; }
+    syncListMarks(); setMarkNote(refused?CAP_NOTE():''); return;
   }
+  if(e.shiftKey){
+    e.preventDefault();
+    if(listAnchor===null) listAnchor=state.sel||id;
+    listMarks.clear();
+    const refused=listMarkRange(listAnchor, id);
+    syncListMarks(); setMarkNote(refused?CAP_NOTE():''); return;
+  }
+  if(listMarks.size){ listMarksClear(); setMarkNote(''); }
+  select(id, o.q, o.el);
+}
+function renderItems(cat, wrap){
+  if(_listIO){ _listIO.disconnect(); _listIO=null; }
+  wrap.innerHTML='';
+  const {items, parsed}=catItems(cat, state.filter, state.sort);
+  renderListBridge(cat, parsed, items.length);
+  const lc=document.getElementById('lcount');
+  if(lc) lc.textContent=listCountText(cat, parsed, items.length);
   if(!items.length){
-    // "nothing found" is the one answer a find-it-fast tool must state; a blank column stated nothing
-    wrap.innerHTML='<div class="estate list-empty"><div class="et">'+(parsed.empty?'Nothing in ':'No match in ')+esc(cat.label)+'</div>'+
-      '<div class="eh">'+(parsed.empty?'':'Nothing here matches “'+esc(state.filter)+'” — ')+
-      '<button type="button" class="dgbtn" id="lemptypal">search everything ('+(IS_MAC?'⌘':'Ctrl+')+'K)</button></div></div>';
+    wrap.innerHTML=listEmptyHtml(cat, parsed, state.filter, 'lemptypal');
     const b=wrap.querySelector('#lemptypal'); if(b) b.onclick=()=>openPalette(state.filter);
     return;
   }
@@ -2798,28 +2873,7 @@ function renderItems(cat, wrap){
       '</div><div class="sub" title="'+esc(sub)+'">'+hlHtml(sub, parsed)+'</div></div>'+
       (rn?'<span class="refn" title="referenced by '+rn+' node'+(rn>1?'s':'')+'">'+rn+'</span>':'')+
       '<span class="ck" aria-hidden="true">✓</span>';
-    // ⌘/Ctrl+click toggles and Shift+click extends — the list-selection convention, not the
-    // browser's "open in new tab" one (middle-click and ⌘/Ctrl+Enter cover that). The box that
-    // appears on hover is the same toggle: a checkbox you can see is a checkbox you can click.
-    el.onclick=e=>{
-      if(modKey(e) || (e.target.closest&&e.target.closest('.ck'))){
-        e.preventDefault();
-        let refused=0;
-        if(listMarks.has(n.id)) listMarks.delete(n.id); else { refused=listMarkAdd([n.id]); listAnchor=n.id; }
-        syncListMarks(); setMarkNote(refused?CAP_NOTE():''); return;
-      }
-      if(e.shiftKey){
-        e.preventDefault();
-        if(listAnchor===null) listAnchor=state.sel||n.id;
-        listMarks.clear();
-        const refused=listMarkRange(listAnchor, n.id);
-        syncListMarks(); setMarkNote(refused?CAP_NOTE():''); return;
-      }
-      if(listMarks.size){ listMarksClear(); setMarkNote(''); }
-      // carry the filter term and the matched element, exactly like a palette hit — the detail panel
-      // then opens and highlights the row the match came from
-      select(n.id, parsed.empty?undefined:state.filter, (w&&w.el)||undefined);
-    };
+    el.onclick=e=>activateRow(e, n.id, {q:parsed.empty?undefined:state.filter, el:(w&&w.el)||undefined});
     el.onmousedown=e=>{ if(e.button===1) e.preventDefault(); };   // no autoscroll cursor
     el.onauxclick=e=>{ if(e.button===1){ e.preventDefault(); openTabs([n.id], {background:true}); } };
     return el;
@@ -2963,32 +3017,46 @@ document.addEventListener('click', e=>{
   t.dataset.all='1'; t.querySelectorAll('[data-over]').forEach(r=>r.hidden=false); b.remove();
 });
 const hayAttr=h=>(h==null||h==='')?'':' data-hay="'+esc(String(h).toLowerCase())+'"';
+const tdCls=c=>'td'+(c.cls?' '+c.cls:'')+(c.mono?' mono':'')+(c.opt?' opt':'');
+/** One table row. Split out of tbl() so a caller that appends rows later (the category table's "show
+ *  more") draws exactly the markup the first chunk had. */
+function tblRowHtml(cols, r, i, cap){
+  const cells=cols.map(c=>{ const v=r.cells[c.k]; return '<span class="'+tdCls(c)+'">'+(v==null?'':v)+'</span>'; }).join('');
+  const attrs=dataEl(r.el)+hayAttr(r.hay)+(r.attrs||'')+(i>=cap?' data-over hidden':'');
+  if(r.body) return '<details class="tr'+(r.cls?' '+r.cls:'')+'"'+attrs+(r.open?' open':'')+
+    '><summary class="trs"><span class="td tdc">'+uiIcon('chevron')+'</span>'+cells+'</summary>'+
+    '<div class="tx'+(r.bodyCls?' '+r.bodyCls:'')+'">'+r.body+'</div></details>';
+  return '<div class="tr'+(r.cls?' '+r.cls:'')+'"'+attrs+'><span class="td tdc">'+(r.lead||'')+'</span>'+cells+'</div>';
+}
 /**
- * cols: [{k, label, w, cls, mono, opt}] — `w` is a grid track that is never content-sized (`Nch`, `Nfr`,
- * `minmax(Nch,Nfr)`), so rows laid out independently still line up; `opt` marks a column that drops
- * under the row in a narrow panel instead of being clipped. rows: [{el, hay, cells:{k:html}, body, open,
- * cls}] — a row with a body is a <details> (native toggle; a row is not a section, so nothing is
- * remembered). Cell values are HTML — callers escape. `o.filter` (false | min rows) adds a filter bar,
- * `o.more` a trailing "+N more" line, `o.empty` the text shown for an empty list.
+ * cols: [{k, label, labelHtml, w, cls, mono, opt, sort}] — `w` is a grid track that is never content-sized
+ * (`Nch`, `Nfr`, `minmax(Nch,Nfr)`), so rows laid out independently still line up; `opt` marks a column
+ * that drops under the row in a narrow panel instead of being clipped. rows: [{el, hay, cells:{k:html},
+ * body, open, cls, lead}] — a row with a body is a <details> (native toggle; a row is not a section, so
+ * nothing is remembered); `lead` fills the narrow first cell of a flat row. Cell values are HTML — callers
+ * escape. `o.filter` (false | min rows) adds a filter bar, `o.more` a trailing "+N more" line, `o.empty`
+ * the text shown for an empty list, `o.keepCols` keeps a column that is empty in every row (tables drawn
+ * side by side on one track list), `o.sort` (the current sort key, `-` for descending) turns the header of
+ * every column with a `sort` key into a button.
  */
 function tbl(cols, rows, o){
   o=o||{};
   if(!rows||!rows.length) return o.empty?'<div class="muted tbl-empty">'+esc(o.empty)+'</div>':'';
   // A column empty in every row is a header over nothing — dropped, unless it holds the row's controls.
-  cols=cols.filter(c=>c.k==='act'||rows.some(r=>{ const v=r.cells[c.k]; return v!=null&&v!==''; }));
+  if(!o.keepCols) cols=cols.filter(c=>c.k==='act'||rows.some(r=>{ const v=r.cells[c.k]; return v!=null&&v!==''; }));
   const tracks='1.1em '+cols.map(c=>c.w||'minmax(0,1fr)').join(' ');
-  const tdCls=c=>'td'+(c.cls?' '+c.cls:'')+(c.mono?' mono':'')+(c.opt?' opt':'');
-  const head='<div class="th" aria-hidden="true"><span class="td tdc"></span>'+
-    cols.map(c=>'<span class="'+tdCls(c)+'">'+esc(c.label||'')+'</span>').join('')+'</div>';
+  const sorted=o.sort!=null, cur=String(o.sort||'').replace(/^-/,''), desc=/^-/.test(String(o.sort||''));
+  const headCell=c=>{
+    const lbl=c.labelHtml!=null?c.labelHtml:esc(c.label||'');
+    if(!sorted||!c.sort) return '<span class="'+tdCls(c)+'">'+lbl+'</span>';
+    const on=cur===c.sort;
+    return '<button type="button" class="'+tdCls(c)+' th-s'+(on?' on':'')+'" data-sort="'+esc(c.sort)+'" aria-pressed="'+on+'"'+
+      ' aria-label="Sort by '+esc(c.label||c.sort)+'">'+lbl+(on?'<span class="th-dir" aria-hidden="true">'+(desc?'▴':'▾')+'</span>':'')+'</button>';
+  };
+  // A sortable header is a row of real buttons, so it cannot stay hidden from assistive technology.
+  const head='<div class="th"'+(sorted?'':' aria-hidden="true"')+'><span class="td tdc"></span>'+cols.map(headCell).join('')+'</div>';
   const cap=o.cap||TBL_CAP;
-  const body=rows.map((r,i)=>{
-    const cells=cols.map(c=>{ const v=r.cells[c.k]; return '<span class="'+tdCls(c)+'">'+(v==null?'':v)+'</span>'; }).join('');
-    const attrs=dataEl(r.el)+hayAttr(r.hay)+(r.attrs||'')+(i>=cap?' data-over hidden':'');
-    if(r.body) return '<details class="tr'+(r.cls?' '+r.cls:'')+'"'+attrs+(r.open?' open':'')+
-      '><summary class="trs"><span class="td tdc">'+uiIcon('chevron')+'</span>'+cells+'</summary>'+
-      '<div class="tx'+(r.bodyCls?' '+r.bodyCls:'')+'">'+r.body+'</div></details>';
-    return '<div class="tr'+(r.cls?' '+r.cls:'')+'"'+attrs+'><span class="td tdc"></span>'+cells+'</div>';
-  }).join('');
+  const body=rows.map((r,i)=>tblRowHtml(cols, r, i, cap)).join('');
   const filt=(o.filter!==false && rows.length>=(typeof o.filter==='number'?o.filter:TBL_FILTER_FROM))
     ? filterBar({placeholder:o.placeholder||'filter rows…', total:rows.length, chips:o.chips}) : '';
   return filt+'<div class="tbl'+(o.cls?' '+o.cls:'')+'" style="--cols:'+tracks+'">'+head+body+'</div>'+
@@ -3043,12 +3111,13 @@ function codeblk(src, lang, problems, o){
 /**
  * A text box plus optional chips over the rows that follow it in the same section body. Chips are
  * single-select: `{fk, fv, label, n}` keeps only rows whose `data-<fk>` equals `fv` (`fv:'all'` keeps
- * all). wireSectionFilter() does the work; this only draws.
+ * all); `open:true` also unfolds every expandable row the chip keeps — a chip that selects rows *for*
+ * their body. wireSectionFilter() does the work; this only draws.
  */
 function filterBar(o){
   o=o||{};
   const chips=(o.chips||[]).map((c,i)=>'<button type="button" class="pchip'+((c.on||(i===0&&c.fv==='all'))?' on':'')+
-    '" data-fk="'+esc(c.fk||'')+'" data-fv="'+esc(c.fv)+'">'+esc(c.label)+
+    '" data-fk="'+esc(c.fk||'')+'" data-fv="'+esc(c.fv)+'"'+(c.open?' data-fopen="1"':'')+'>'+esc(c.label)+
     (c.n!=null?'<span class="pchipn">'+esc(String(c.n))+'</span>':'')+'</button>').join('');
   return '<div class="pbar fbar"><input class="pf" type="search" placeholder="'+esc(o.placeholder||'filter…')+
     '" aria-label="'+esc(o.label||o.placeholder||'Filter')+'">'+chips+(o.extra||'')+'<span class="pcount" role="status"></span></div>';
@@ -3088,6 +3157,7 @@ function wireSectionFilter(root){
         // an unfiltered table keeps rows past its cap folded until "show all" is pressed
         const folded=!q&&fv==='all'&&row.dataset.over!==undefined&&!row.closest('[data-all]');
         row.hidden=!ok||folded; if(ok && counted.indexOf(row)>=0) shown++;
+        if(ok && on && on.dataset.fopen && row.tagName==='DETAILS') row.open=true;
       });
       containers.forEach(c=>{
         const any=[...c.querySelectorAll('[data-hay]')].some(r=>!r.hidden&&!r.querySelector('[data-hay]'));
