@@ -75,6 +75,17 @@ class FormSvgRendererTest {
         assertNull("the margin is no component", pic.hotspotAt(2.0, 2.0))
     }
 
+    /**
+     * Every form of a project is embedded in its explorer page, so a wireframe's bytes count: the font, the
+     * 12px size and the text colour are written once on a group, not on every label.
+     */
+    @Test
+    fun staysSmall() {
+        val perComponent = svg.length / FormSvgRenderer.picture(onboarding)!!.hotspots.size
+        assertTrue("$perComponent characters per component", perComponent < 600)
+        assertFalse("no label repeats the font list", Regex("""<text [^>]*font-family="'Segoe UI'""").containsMatchIn(svg))
+    }
+
     @Test
     fun sixPlusSixSitSideBySide() {
         // The second half-width field starts halfway across the grid, on the same line as the first.

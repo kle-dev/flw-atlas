@@ -74,12 +74,13 @@ object DmnTableSvgRenderer {
                 """viewBox="0 0 ${fmt(width)} ${fmt(height)}">""",
         )
         sb.append("""<rect width="${fmt(width)}" height="${fmt(height)}" fill="#ffffff"/>""")
+        sb.append("""<g font-family="$FONT" font-size="12" fill="$TEXT">""")
         var y = PAD
         for (t in laidOut) {
             draw(sb, t, PAD, y, hits)
             y += t.height + TABLE_GAP
         }
-        sb.append("</svg>")
+        sb.append("</g></svg>")
         return Picture(sb.toString(), Picture.Kind.DECISION_TABLE, Picture.Box(0.0, 0.0, width, height), hits)
     }
 
@@ -272,14 +273,14 @@ object DmnTableSvgRenderer {
 
     private fun frame(x: Double, y: Double, right: Double, bottom: Double): String =
         """<rect x="${fmt(x)}" y="${fmt(y)}" width="${fmt(right - x)}" height="${fmt(bottom - y)}" """ +
-            """fill="none" stroke="$STROKE_STRONG" stroke-width="1"/>"""
+            """fill="none" stroke="$STROKE_STRONG"/>"""
 
     private fun vline(x: Double, y1: Double, y2: Double): String =
-        """<line x1="${fmt(x)}" y1="${fmt(y1)}" x2="${fmt(x)}" y2="${fmt(y2)}" stroke="$STROKE" stroke-width="1"/>"""
+        """<line x1="${fmt(x)}" y1="${fmt(y1)}" x2="${fmt(x)}" y2="${fmt(y2)}" stroke="$STROKE"/>"""
 
     private fun hline(x1: Double, x2: Double, y: Double, strong: Boolean = false): String =
         """<line x1="${fmt(x1)}" y1="${fmt(y)}" x2="${fmt(x2)}" y2="${fmt(y)}" """ +
-            """stroke="${if (strong) STROKE_STRONG else STROKE}" stroke-width="1"/>"""
+            """stroke="${if (strong) STROKE_STRONG else STROKE}"/>"""
 
     private fun text(
         x: Double,
@@ -289,9 +290,15 @@ object DmnTableSvgRenderer {
         fill: String = TEXT,
         weight: String = "400",
         mono: Boolean = false,
-    ): String =
-        """<text x="${fmt(x)}" y="${fmt(y)}" font-family="${if (mono) MONO else FONT}" """ +
-            """font-size="${fmt(size)}" font-weight="$weight" fill="$fill">${esc(s)}</text>"""
+    ): String = buildString {
+        // only what differs from the drawing's group — family, 12px, regular, text colour — is written
+        append("""<text x="${fmt(x)}" y="${fmt(y)}"""")
+        if (mono) append(""" font-family="$MONO"""")
+        if (size != 12.0) append(""" font-size="${fmt(size)}"""")
+        if (weight != "400") append(""" font-weight="$weight"""")
+        if (fill != TEXT) append(""" fill="$fill"""")
+        append(">").append(esc(s)).append("</text>")
+    }
 
     private fun fmt(v: Double): String {
         val r = Math.round(v * 100.0) / 100.0

@@ -69,6 +69,7 @@ object FormSvgRenderer {
                 """viewBox="0 0 ${fmt(WIDTH)} ${fmt(height)}">""",
         )
         sb.append("""<rect width="${fmt(WIDTH)}" height="${fmt(height)}" fill="#ffffff"/>""")
+        sb.append("""<g font-family="$FONT" font-size="12" fill="$TEXT">""")
         layout.title?.let { sb.append(text(PAD, PAD + 16.0, clip(it, inner, CHAR_W * 1.2), size = 15.0, weight = "600")) }
         val top = PAD + titleH
         if (layout.rows.isEmpty()) {
@@ -76,7 +77,7 @@ object FormSvgRenderer {
         } else {
             drawGrid(sb, layout, PAD, top, inner, hits)
         }
-        sb.append("</svg>")
+        sb.append("</g></svg>")
         return Picture(sb.toString(), Picture.Kind.WIREFRAME, Picture.Box(0.0, 0.0, WIDTH, height), hits)
     }
 
@@ -261,7 +262,7 @@ object FormSvgRenderer {
         } else {
             ""
         }
-        return """<text x="${fmt(x)}" y="${fmt(baseline)}" font-family="$FONT" font-size="12" fill="$TEXT">${esc(caption)}$star</text>"""
+        return """<text x="${fmt(x)}" y="${fmt(baseline)}">${esc(caption)}$star</text>"""
     }
 
     private fun chevron(cx: Double, cy: Double): String =
@@ -279,10 +280,10 @@ object FormSvgRenderer {
         dashed: Boolean = false,
     ): String =
         """<rect x="${fmt(x)}" y="${fmt(y)}" width="${fmt(w)}" height="${fmt(h)}" rx="${fmt(radius)}" fill="$fill" """ +
-            """stroke="$stroke" stroke-width="1"${if (dashed) " stroke-dasharray=\"4 3\"" else ""}/>"""
+            """stroke="$stroke" ${if (dashed) " stroke-dasharray=\"4 3\"" else ""}/>"""
 
     private fun line(x1: Double, y1: Double, x2: Double, y2: Double): String =
-        """<line x1="${fmt(x1)}" y1="${fmt(y1)}" x2="${fmt(x2)}" y2="${fmt(y2)}" stroke="$STROKE" stroke-width="1"/>"""
+        """<line x1="${fmt(x1)}" y1="${fmt(y1)}" x2="${fmt(x2)}" y2="${fmt(y2)}" stroke="$STROKE"/>"""
 
     private fun text(
         x: Double,
@@ -292,9 +293,15 @@ object FormSvgRenderer {
         fill: String = TEXT,
         weight: String = "400",
         mono: Boolean = false,
-    ): String =
-        """<text x="${fmt(x)}" y="${fmt(y)}" font-family="${if (mono) MONO else FONT}" """ +
-            """font-size="${fmt(size)}" font-weight="$weight" fill="$fill">${esc(s)}</text>"""
+    ): String = buildString {
+        // only what differs from the drawing's group — family, 12px, regular, text colour — is written
+        append("""<text x="${fmt(x)}" y="${fmt(y)}"""")
+        if (mono) append(""" font-family="$MONO"""")
+        if (size != 12.0) append(""" font-size="${fmt(size)}"""")
+        if (weight != "400") append(""" font-weight="$weight"""")
+        if (fill != TEXT) append(""" fill="$fill"""")
+        append(">").append(esc(s)).append("</text>")
+    }
 
     /** [s] on one line, cut with an ellipsis to what fits in [width] at [charW] per character. */
     private fun clip(s: String, width: Double, charW: Double = CHAR_W): String {
