@@ -606,11 +606,13 @@ object GraphBuilder {
 
         // ------------------------------------------------------------------ edges
         val edges = ArrayList<LinkedHashMap<String, Any?>>()
-        fun addEdge(s: String?, t: String?, rel: String, suspect: Boolean = false, dynamic: Boolean = false) {
+        fun addEdge(s: String?, t: String?, rel: String, suspect: Boolean = false, dynamic: Boolean = false,
+                    colocated: Boolean = false) {
             if (!s.isNullOrEmpty() && !t.isNullOrEmpty() && s != t) {
                 val e = linkedMapOf<String, Any?>("s" to s, "t" to t, "rel" to rel)
                 if (suspect) e["suspect"] = true
                 if (dynamic) e["dynamic"] = true
+                if (colocated) e["colocated"] = true
                 edges.add(e)
             }
         }
@@ -934,8 +936,10 @@ object GraphBuilder {
                 val containers = LinkedHashSet<String?>()
                 for ((_, f) in (byKey[key] ?: emptyList())) containers.add(containerOf(f))
                 containers.add(containerOf(n["file"] as? String))
+                // a member only because it sits beside the app — the app definition does not list it, which
+                // the app's completeness table tells apart from a declared member
                 for (c in containers) {
-                    if (c != null && c in appByContainer) addEdge(appByContainer[c], n["id"] as String, "contains")
+                    if (c != null && c in appByContainer) addEdge(appByContainer[c], n["id"] as String, "contains", colocated = true)
                 }
             }
         }
@@ -972,6 +976,8 @@ object GraphBuilder {
             } else {
                 if (prev["suspect"] == true && e["suspect"] != true) prev.remove("suspect")
                 if (prev["dynamic"] == true && e["dynamic"] != true) prev.remove("dynamic")
+                // declared in the app definition as well as sitting beside it: a declared member
+                if (prev["colocated"] == true && e["colocated"] != true) prev.remove("colocated")
             }
         }
         val uniq = ArrayList<Map<String, Any?>>(edgeByKey.values)
