@@ -118,8 +118,10 @@ private class FlowableOperationModelReference(
         val service = project.service<FlowableModelIndexService>()
         // A reference resolves under the read lock — the cached index only, never a build here.
         if (service.cachedOrRequest() == null) return ResolveResult.EMPTY_ARRAY
+        // The cached variant: the index can be dropped between the gate above and this call, and the
+        // plain one would then build the whole index inline, under the read lock.
         val serviceKey = if (keyIsService) siblingKey
-            else service.backingServiceKey(siblingKey) ?: return ResolveResult.EMPTY_ARRAY
+            else service.cachedBackingServiceKey(siblingKey) ?: return ResolveResult.EMPTY_ARRAY
         return resolveKeyToModelFiles(project, serviceKey, listOf(ModelType.SERVICE))
     }
 
