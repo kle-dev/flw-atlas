@@ -10,6 +10,7 @@ import com.flowable.atlas.parsing.ModelKinds
 import com.flowable.atlas.parsing.ModelParsers
 import com.flowable.atlas.parsing.ModelSpans
 import com.flowable.atlas.parsing.ScriptMask
+import com.flowable.atlas.parsing.SpringProperties
 import com.flowable.atlas.parsing.VarHarvest
 import java.io.File
 
@@ -236,6 +237,10 @@ object Atlas {
                 }
                 VarHarvest.collectDeclaredVars(ctx, text, ks)
                 VarHarvest.collectDirectedVars(ctx, text, ks)
+                // A Spring property the model reads: correlated by its key, like a signal by its name.
+                for (pm in Constants.PROPERTY_READ_RE.findAll(Constants.htmlUnescape(text))) {
+                    for (k in ks) ctx.addRef(k, mtype, label, "reads-property", "property", pm.groupValues[1])
+                }
             }
 
             if (mtype == "query") {
@@ -538,6 +543,7 @@ object Atlas {
             result, ctx, resolvedData.resolved, resolvedData.allJava, resolvedData.beanMethods, resolvedData.knownBeans, byKey,
             exprAllowlist = exprAllowlist, custom = custom,
         )
+        attachPropertyDefinitions(result, discovered.configs, ::relOf)
 
         // Mirror Python's `result.update({... "customFunctions": {...} if custom else None ...})`:
         // ReferenceResolver already set this key to null; overwrite it with the summary shape when
@@ -559,6 +565,29 @@ object Atlas {
         checkCanceled()
         Findings.apply(result, waivers)
         return result
+    }
+
+    /**
+     * Where each property a model reads is set: `file:line` in the project's Spring configuration, every
+     * profile. Matched in Spring's relaxed form (`crm.base-url` = `crm.baseUrl` = `crm.base_url`). An
+     * empty list is not a defect — the value can come from the environment, a Helm chart or a vault.
+     */
+    private fun attachPropertyDefinitions(result: Map<String, Any?>, configs: List<File>, relOf: (File) -> String) {
+        val nodes = ((result["graph"] as? Map<*, *>)?.get("nodes") as? List<*>)
+            ?.mapNotNull { it as? MutableMap<String, Any?> }?.filter { it["type"] == "property" }.orEmpty()
+        if (nodes.isEmpty()) return
+        fun relaxed(k: String) = k.lowercase().replace("-", "").replace("_", "")
+        val defined = LinkedHashMap<String, MutableList<String>>()
+        for (f in configs) {
+            if (f.length() > MAX_MODEL_BYTES) continue
+            val text = runCatching { f.readText(Charsets.UTF_8) }.getOrNull() ?: continue
+            val rel = relOf(f)
+            for ((k, line) in SpringProperties.keys(text, f.name)) defined.getOrPut(relaxed(k)) { ArrayList() }.add("$rel:$line")
+        }
+        for (n in nodes) {
+            val data = n["data"] as? MutableMap<String, Any?> ?: continue
+            data["definedIn"] = defined[relaxed(n["key"].toString())].orEmpty()
+        }
     }
 
     private fun relativize(root: File, file: File): String =

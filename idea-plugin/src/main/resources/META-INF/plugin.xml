@@ -871,6 +871,9 @@
              default bean name; Ctrl-Q then shows that class's documentation. -->
         <psi.referenceContributor language="FlowableBackendExpr"
                   implementation="com.flowable.atlas.expr.navigation.FlowableExprBeanReferenceContributor"/>
+        <!-- environment.getProperty('k') → the line of every application*.properties|yml that sets k. -->
+        <psi.referenceContributor language="FlowableBackendExpr"
+                  implementation="com.flowable.atlas.expr.navigation.FlowableExprPropertyReferenceContributor"/>
         <lang.documentationProvider language="FlowableBackendExpr"
                   implementationClass="com.flowable.atlas.expr.documentation.FlowableExprDocumentationProvider"/>
         <lang.documentationProvider language="FlowableFrontendExpr"

@@ -27,6 +27,7 @@ const TM = {
   signal:['Signals','Integration'],message:['Messages','Integration'],error:['Errors','Integration'],
   escalation:['Escalations','Integration'],topic:['External Worker topics','Integration'],
   endpoint:['REST endpoints','Code'],java:['Java classes','Code'],method:['Java methods','Code'],liquibase:['Liquibase changelogs','Code'],
+  property:['Spring properties','Code'],
   action:['Actions','Integration'],bot:['Bots','Integration'],
   query:['Queries','Other'],template:['Templates','Other'],sequence:['Sequences','Other'],
   document:['Content','Other'],variableExtractor:['Variable extractors','Other'],
@@ -77,6 +78,7 @@ const TYPE_ICONS={
   escalation:'<circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4"/><path d="M12 16V8"/>',
   topic:'<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
   endpoint:'<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+  property:'<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>',
   java:'<path d="M10 2v2"/><path d="M14 2v2"/><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1"/><path d="M6 2v2"/>',
   method:'<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3"/><path d="M9 11.2h5.7"/>',
   liquibase:'<path d="M15 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M21 9H3"/><path d="M21 15H3"/>',
@@ -3919,6 +3921,15 @@ S.endpoints={id:'endpoints', title:'Endpoints served', hint:'the REST routes thi
   build:(n,c)=>{ const es=c.d.endpoints||[]; if(!es.length) return '';
     return tbl([{k:'verb',label:'Verb',w:'7ch',cls:'tags'},{k:'path',label:'Path',w:'minmax(16ch,2.4fr)',mono:true},{k:'h',label:'Handler',w:'minmax(12ch,1.4fr)',mono:true,opt:true}],
       es.map(e=>({hay:elHay(e.http,e.path,e.handler), cells:{verb:'<span class="tag verb">'+esc(e.http||'')+'</span>', path:esc(e.path||''), h:esc(e.handler||'')+'() '+lineRef(n.file,e.line)}}))); }};
+/** Where a Spring property a model reads is set — every profile's file, each line opening in the IDE.
+ *  None is not a defect: the value may come from the environment, a Helm chart or a vault. */
+S.propDefined={id:'defined', title:'Defined in', hint:'the Spring configuration files that set this property',
+  count:(n,c)=>(c.d.definedIn||[]).length,
+  build:(n,c)=>{ const at=c.d.definedIn||[];
+    if(!at.length) return '<div class="muted tbl-empty">Not set in any application*.properties or application*.yml of this project — the value comes from the environment, if anywhere.</div>';
+    return tbl([{k:'f',label:'File',w:'minmax(20ch,3fr)',mono:true},{k:'line',label:'Line',w:'minmax(6ch,.6fr)',mono:true,cls:'faint'}],
+      at.map(s=>{ const i=String(s).lastIndexOf(':'), f=s.slice(0,i), l=s.slice(i+1);
+        return {hay:elHay(f), cells:{f:esc(f)+openBtn(f,l), line:lineRef(f,l)}}; })); }};
 S.methods={id:'methods', title:'Declared methods', hint:'every method, and which ones a model calls',
   count:(n,c)=>(c.d.methods||[]).length,
   build:(n,c)=>{ const ms=c.d.methods||[]; if(!ms.length) return ''; const cm=new Set(c.d.calledMethods||[]);
@@ -4027,6 +4038,7 @@ const PAGES={
   variableExtractor:[S.extractors],
   knowledgeBase:[S.kbSources],
   java:[S.endpoints, S.methods],
+  property:[S.propDefined],
   liquibase:[S.lqBanner, S.lqColumns],
   expression:[S.problems, S.usedBy],
   binding:[S.problems, S.calls, S.usedBy],
@@ -5595,7 +5607,7 @@ const HAY_LAB_KEYS=new Set(['label','elementName']);
 // `label:octo` answer with the variable `octoCaseId` — the identifier a field binds to, not its caption.
 // Those nodes stay findable by name, key and free text, exactly as before; they are simply not labels.
 const LAB_NOT_A_CAPTION=new Set(['variable','expression','binding','string','customFunction','external',
-  'java','method','endpoint','liquibase','topic','group']);
+  'java','method','endpoint','liquibase','topic','group','property']);
 const HAY_DESC_KEYS=new Set(['description','documentation','annotation']);
 // Labels and descriptions get their own cap, not a share of HAY_MAX_ENTRIES: `id`/`type`/`value` fill
 // the generic bag four times faster than labels arrive, so a 500-field form would have lost the tail of
@@ -5707,7 +5719,7 @@ const SX_KIND_BOOST={
   channel:140, event:140, knowledgeBase:140, sequence:140, document:140,
   variableExtractor:140, sla:140, dashboardComponent:140, palette:100,
   bot:130, serviceOperation:120, topic:120, signal:120, message:120, error:120, escalation:120,
-  group:110, endpoint:100, java:90, liquibase:90, method:70, variable:60,
+  group:110, endpoint:100, java:90, liquibase:90, property:80, method:70, variable:60,
   customFunction:40, expression:10, binding:10, string:0, external:0,
 };
 // Ordered by weight, descending: the phrase loop in scoreIndex() takes the first field that contains

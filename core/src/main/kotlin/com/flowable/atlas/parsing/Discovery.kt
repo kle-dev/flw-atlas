@@ -19,6 +19,8 @@ object Discovery {
         /** A template's body and attachment metadata: `.tplvariation`, `.tplfile-metadata` — parts of a
          *  `.tpl` model, not models of their own (see [isTemplatePart]). */
         val templateParts: List<File> = emptyList(),
+        /** Spring Boot configuration — `application*.properties|yml` — outside the test source sets. */
+        val configs: List<File> = emptyList(),
     )
 
     /** A file that belongs to a template model without being one: the variation that holds the body a
@@ -32,6 +34,7 @@ object Discovery {
         val javas = ArrayList<File>()
         val xmls = ArrayList<File>()
         val templateParts = ArrayList<File>()
+        val configs = ArrayList<File>()
 
         if (root.isFile) {
             if (ModelPaths.isArchive(root.name)) archives.add(root)
@@ -56,8 +59,10 @@ object Discovery {
                         com.flowable.atlas.model.ModelType.byDesignFolder(f.parentFile?.name) != null ->
                         models.add(f)
                     low.endsWith(".xml") || low.endsWith(".sql") -> xmls.add(f)  // liquibase candidates
+                    SpringProperties.isConfigFile(f.name) ->
+                        if (!ModelPaths.isTestSource(f.relativeTo(root).invariantSeparatorsPath)) configs.add(f)
                 }
             }
-        return Discovered(models, archives, javas, xmls, templateParts)
+        return Discovered(models, archives, javas, xmls, templateParts, configs)
     }
 }

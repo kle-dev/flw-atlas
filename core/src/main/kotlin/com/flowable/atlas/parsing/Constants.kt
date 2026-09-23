@@ -129,6 +129,9 @@ object Constants {
     // it used to be validated like one and could only ever come out wrong.
     val EXPR_RE = Regex("(?<!\\\\)[#$]\\{[^}]*\\}")
     val MUSTACHE_RE = Regex("\\{\\{[^}]*\\}\\}")
+    /** `environment.getProperty('crm.endpoint', '')` / `propertyConfigurationService.getProperty("k")` in a
+     *  model's expression — a Spring property the model reads. The quote may be JSON-escaped. */
+    val PROPERTY_READ_RE = Regex("""\b(?:environment|propertyConfigurationService)\s*\.\s*getProperty\(\s*\\?["']([A-Za-z0-9_.\-\[\]]+)\\?["']""")
     val METHOD_CALL_FULL_RE = Regex("(?<![\\w.\$])([A-Za-z_][\\w]*)\\s*\\.\\s*([A-Za-z_][\\w]*)\\s*\\(")
     val DELEGATE_CLASS_RE = Regex("(?:flowable|activiti):class=\"([^\"]+)\"")
 

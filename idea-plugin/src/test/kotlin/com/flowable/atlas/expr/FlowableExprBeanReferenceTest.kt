@@ -47,4 +47,14 @@ class FlowableExprBeanReferenceTest : BasePlatformTestCase() {
         assertNull("…that resolves to nothing when no such class exists — and is soft, so nothing is painted", order!!.resolve())
         assertTrue(order.isSoft)
     }
+
+    fun testAPropertyKeyResolvesToEveryProfileThatSetsIt() {
+        myFixture.addFileToProject("src/main/resources/application.properties", "server.port=8080\ncrm.baseUrl=https://crm\n")
+        myFixture.addFileToProject("src/main/resources/application-k8s.yml", "crm:\n  base-url: https://k8s\n")
+        myFixture.addFileToProject("src/test/resources/application-test.properties", "crm.base-url=test\n")
+        myFixture.configureByText("t.flowable-be", "environment.getProperty('crm.base-<caret>url', '')")
+        val ref = myFixture.file.findReferenceAt(myFixture.caretOffset) as com.intellij.psi.PsiPolyVariantReference
+        val files = ref.multiResolve(false).mapNotNull { it.element?.containingFile?.name }.sorted()
+        assertEquals("both profiles of the application, not the test one", listOf("application-k8s.yml", "application.properties"), files)
+    }
 }

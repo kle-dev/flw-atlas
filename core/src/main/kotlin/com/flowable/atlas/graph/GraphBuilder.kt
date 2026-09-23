@@ -64,7 +64,7 @@ object GraphBuilder {
 
     /** Ref kinds correlated by NAME (not by model key): throw side and catch side of a signal/
      *  message/error/escalation — and external-worker topics — meet in one shared node. */
-    private val NAMED_REF_KINDS = setOf("signal", "message", "error", "escalation", "topic")
+    private val NAMED_REF_KINDS = setOf("signal", "message", "error", "escalation", "topic", "property")
 
     /** Node types that are not models: code, correlation names, harvested text, and the derived nodes.
      *  What is left is what `stats.modelCount` counts — including apps, which a reader calls models too. */
