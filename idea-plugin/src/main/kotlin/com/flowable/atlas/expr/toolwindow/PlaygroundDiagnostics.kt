@@ -31,7 +31,6 @@ import com.intellij.openapi.editor.event.SelectionEvent
 import com.intellij.openapi.editor.event.SelectionListener
 import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.Computable
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.wm.IdeFocusManager
 import com.intellij.ui.LanguageTextField
@@ -150,10 +149,9 @@ internal class PlaygroundDiagnostics(
         ApplicationManager.getApplication().executeOnPooledThread {
             if (project.isDisposed) return@executeOnPooledThread
             val allowlist = FlowableAtlasProjectSettings.getInstance(project)
-            // the first catalog() call scans the file system / index — pooled + read action, never the EDT
-            val custom = ApplicationManager.getApplication().runReadAction(
-                Computable { FlowableCustomFunctions.getInstance(project).catalog() },
-            )
+            // the first catalog() call walks the file system — here on the pooled thread, never the EDT,
+            // and without the read lock: it reads files, not PSI
+            val custom = FlowableCustomFunctions.getInstance(project).catalog()
             val problems = (
                 ExpressionValidator.validateSyntax(text, dialect) +
                     ExpressionValidator.validateSemantics(text, dialect, custom).filterNot { allowlist.isAllowlisted(it) }

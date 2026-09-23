@@ -105,7 +105,7 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
          *  (`flowdemo` → `flowdemo.` + re-popup) and each bare top-level helper. `flw.*` custom members
          *  are offered after `flw.` (see [addFrontendMembers]). */
         private fun addCustomRoot(out: CompletionResultSet, project: com.intellij.openapi.project.Project) {
-            val cat = FlowableCustomFunctions.getInstance(project).catalog() ?: return
+            val cat = FlowableCustomFunctions.getInstance(project).readyOrRequest()?.catalog ?: return
             for (ns in cat.namespaces.keys.sorted())
                 out.addElement(
                     LookupElementBuilder.create(ns).withIcon(AllIcons.Nodes.Plugin).withTypeText("custom", true)
@@ -168,7 +168,7 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
                 out.addElement(b)
             }
             // Project custom members: `flw.<custom>` and `<namespace>.<member>` from externals.additionalData.
-            val cat = FlowableCustomFunctions.getInstance(project).catalog() ?: return
+            val cat = FlowableCustomFunctions.getInstance(project).readyOrRequest()?.catalog ?: return
             val qualify = if (receiver == FlowableExpressionCatalog.FRONTEND_NS) "flw." else "$receiver."
             val custom = if (receiver == FlowableExpressionCatalog.FRONTEND_NS) cat.flw else cat.namespaces[receiver]
             custom?.sorted()?.forEach { out.addElement(customFnLookup(it, cat.signatureOf(qualify + it))) }
