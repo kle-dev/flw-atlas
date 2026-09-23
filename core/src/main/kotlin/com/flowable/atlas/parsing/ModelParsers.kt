@@ -780,7 +780,10 @@ object ModelParsers {
     internal fun gatingOf(n: Map<String, Any?>): MutableMap<String, Any?>? {
         val out = linkedMapOf<String, Any?>()
         fun gate(field: String, default: Boolean) {
-            val v = n[field] ?: return
+            val raw = n[field] ?: return
+            // Design sometimes writes the literal as a string (`"enabled": "true"`); it is the same literal,
+            // not an expression, so it must neither read as "visible if true" nor hide a `"false"`.
+            val v = when ((raw as? String)?.trim()?.lowercase()) { "true" -> true; "false" -> false; else -> raw }
             if (v != default) out[field] = v
         }
         gate("visible", true)

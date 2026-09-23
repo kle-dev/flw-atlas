@@ -18,6 +18,13 @@ class ModelParsersTest {
         ctx.refs.map { Triple(it["rel"], it["kind"], it["value"]) }.toSet()
 
     @Test
+    fun aGateWrittenAsAStringLiteralIsTheLiteral() {
+        assertNull(ModelParsers.gatingOf(mapOf("visible" to "true", "enabled" to " TRUE ", "ignore" to "false")))
+        assertEquals(mapOf("visible" to false), ModelParsers.gatingOf(mapOf("visible" to "false")))
+        assertEquals(mapOf("enabled" to "{{locked}}"), ModelParsers.gatingOf(mapOf("enabled" to "{{locked}}")))
+    }
+
+    @Test
     fun modelTypeFor() {
         assertEquals("bpmn", ModelKinds.modelTypeFor("x.bpmn"))
         assertEquals("bpmn", ModelKinds.modelTypeFor("x.bpmn20.xml"))
