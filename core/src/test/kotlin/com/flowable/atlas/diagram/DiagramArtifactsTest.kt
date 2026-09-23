@@ -65,7 +65,7 @@ class DiagramArtifactsTest {
     fun skipsNonDiagramTypesModelsWithoutDiAndUnreadableFiles() {
         val out = DiagramArtifacts.render(
             resultWith(
-                node("form", "DEMO-form", "DEMO-onboarding.bpmn20.xml"),   // non-diagram type
+                node("form", "DEMO-form", "DEMO-onboarding.bpmn20.xml"),   // a form whose file is no form
                 node("process", "DEMO-nolayout", "DEMO-nolayout.bpmn"),     // no DI
                 node("process", "DEMO-missing", "does-not-exist.bpmn"),     // unreadable
             ),
@@ -131,5 +131,17 @@ class DiagramArtifactsTest {
     fun emptyOrGraphlessResultYieldsNothing() {
         assertTrue(DiagramArtifacts.render(emptyMap(), root).isEmpty())
         assertTrue(DiagramArtifacts.render(mapOf("graph" to mapOf("nodes" to emptyList<Any?>())), root).isEmpty())
+    }
+
+    @Test
+    fun drawsFormsAndDecisionTablesToo() {
+        // the same pictures the explorer and the IDE show: a form's wireframe, a decision table without a layout
+        val formDir = java.io.File(javaClass.classLoader.getResource("formlayout")!!.toURI())
+        val forms = DiagramArtifacts.render(resultWith(node("form", "DEMO-onboarding-form", "DEMO-onboarding.form")), formDir)
+        assertEquals(setOf("DEMO-onboarding-form.svg"), forms.keys)
+        assertTrue(forms.values.single().contains("data-el="))
+        val dmnDir = java.io.File(javaClass.classLoader.getResource("dmntable")!!.toURI())
+        val tables = DiagramArtifacts.render(resultWith(node("decision", "DEMO-eligibility", "DEMO-eligibility.dmn")), dmnDir)
+        assertEquals(setOf("DEMO-eligibility.svg"), tables.keys)
     }
 }

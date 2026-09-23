@@ -25,13 +25,19 @@ class CliTest {
         val expected = setOf(
             "miniproject.summary.md", "miniproject.overview.md", "miniproject.graph.json",
             "miniproject.explorer.html", "miniproject.CLAUDE.md",
+            // The drawings: the fixture has no diagram layout, so only its forms and pages are drawn —
+            // as the wireframes the explorer and the IDE preview show.
+            "miniproject.diagrams",
             // Not an artifact: it is what lets the folder be committed for the sake of waivers.json
             // without ever carrying an analysis into a repository.
             ".gitignore",
         )
-        assertEquals("exactly the five artifacts and the gitignore", expected,
+        assertEquals("exactly the five artifacts, the drawings and the gitignore", expected,
             out.listFiles()!!.map { it.name }.toSet())
         for (f in out.listFiles()!!) assertTrue("${f.name} is empty", f.length() > 0)
+        val drawings = File(out, "miniproject.diagrams").listFiles()!!.map { it.name }.toSet()
+        assertTrue("the order form is drawn: $drawings", "orderForm.svg" in drawings)
+        assertTrue("no process of the fixture has a layout to draw: $drawings", "orderProcess.svg" !in drawings)
         val ignore = File(out, ".gitignore").readText()
         assertTrue("everything is ignored", ignore.lineSequence().any { it.trim() == "*" })
         assertTrue("except the waivers", ignore.contains("!waivers.json"))
