@@ -57,10 +57,18 @@ object Atlas {
         if (i < 0) return false
         if (raw[i] == '[') return true
         if (raw[i] != '{') return false
-        // `{{` opens a Go/Helm template, not a JSON object: after `{` JSON allows only `"` or `}`
-        val j = raw.withIndex().drop(i + 1).firstOrNull { !it.value.isWhitespace() }?.value ?: return false
-        return j == '"' || j == '}'
+        // `{{` opens a Go/Helm template, not a JSON object: after `{` JSON allows only `"` or `}`.
+        // An index loop, not `withIndex().drop()`, which copied the whole file into a list to find one character.
+        var j = i + 1
+        while (j < raw.length && raw[j].isWhitespace()) j++
+        return j < raw.length && (raw[j] == '"' || raw[j] == '}')
     }
+
+    /**
+     * An entry's bytes, but never more than one past [MAX_MODEL_BYTES]: a stream whose size is not known up
+     * front is read only far enough for the caller's size check to reject it.
+     */
+    private fun readCapped(input: java.io.InputStream): ByteArray = input.readNBytes((MAX_MODEL_BYTES + 1).toInt())
 
     private val QUERY_KEY_RE = Regex("\"key\"\\s*:\\s*\"([^\"]+)\"")
     private val QUERY_GROUPS_RE = Regex("seq_contains\\(\\s*\\\\?\"([A-Za-z0-9_.\\-]+)")
@@ -403,8 +411,9 @@ object Atlas {
                         if (!inner.isDirectory) {
                             val innerLabel = "$label!${inner.name}"
                             try {
-                                val innerBytes = zin.readBytes()
-                                scanEntry(inner.name, innerBytes.size.toLong(), innerLabel, depth + 1) { innerBytes }
+                                // Named and sized before anything is read: an image, a jar or a zip bomb
+                                // inside the inner archive is skipped, not inflated into memory first.
+                                scanEntry(inner.name, inner.size, innerLabel, depth + 1) { readCapped(zin) }
                             } catch (e: Exception) {
                                 diag("archive", innerLabel, e.message ?: e.toString())
                             }
@@ -425,6 +434,7 @@ object Atlas {
             // export lost a decision service that way); any other JSON in a subfolder is nobody's model.
             val folder = entryName.split('/').dropLast(1).lastOrNull()
             val bytes = read()
+            if (size < 0 && tooLarge(label, bytes.size.toLong())) return
             if (com.flowable.atlas.model.ModelType.byDesignFolder(folder) == null && entryName.contains('/') &&
                 !String(bytes, Charsets.UTF_8).contains("\"editorJson\"")) return
             dispatchDesignJson(folder, bytes, label)
@@ -440,7 +450,7 @@ object Atlas {
                         if (entry.name.endsWith("/")) continue
                         val label = "$rel!${entry.name}"
                         try {
-                            scanEntry(entry.name, entry.size, label, 0) { zf.getInputStream(entry).use { it.readBytes() } }
+                            scanEntry(entry.name, entry.size, label, 0) { zf.getInputStream(entry).use(::readCapped) }
                         } catch (e: Exception) {
                             diag("archive", label, e.message ?: e.toString())
                         }
@@ -471,6 +481,9 @@ object Atlas {
         // missing model. Indexed by the key their file name carries, never in `byKey`: a changelog named
         // after its service is the expected shape, not a clash.
         val looseChangelogs = discovered.xmls.mapNotNull { f ->
+            // A 2 GB data.sql dump is not a changelog anyone wrote by hand; like an oversized archive
+            // resource it is left alone without a word.
+            if (f.length() > MAX_MODEL_BYTES) return@mapNotNull null
             val txt = try { f.readText(Charsets.UTF_8) } catch (e: Exception) { return@mapNotNull null }
             relOf(f) to txt
         }

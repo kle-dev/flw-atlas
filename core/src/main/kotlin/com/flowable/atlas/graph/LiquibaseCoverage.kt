@@ -36,6 +36,7 @@ object LiquibaseCoverage {
     fun apply(result: MutableMap<String, Any?>, xmlFiles: List<File>, root: File) = apply(
         result,
         xmlFiles.mapNotNull { f ->
+            if (f.length() > Atlas.MAX_MODEL_BYTES) return@mapNotNull null
             val txt = try { f.readText(Charsets.UTF_8) } catch (e: Exception) { return@mapNotNull null }
             (if (root.isDirectory) relpath(root, f) else f.name) to txt
         },
