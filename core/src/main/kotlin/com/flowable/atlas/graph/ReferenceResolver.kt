@@ -382,10 +382,12 @@ object ReferenceResolver {
         // ---- Resolve REST calls -> code endpoints ----
         val codeEndpoints = bucketList("endpoints") as List<Map<String, Any?>>
         for (rc in ctx.restCalls) {
-            val matchEps = JavaParser.matchRest(rc["url"] as? String, codeEndpoints)
+            // the call's verb too: a GET is not answered by the POST handler on the same path
+            val matchEps = JavaParser.matchRest(rc["url"] as? String, codeEndpoints, rc["method"] as? String)
             rc["_matchEps"] = matchEps
             fun describe(m: Map<String, Any?>) =
-                "${m["http"]} ${m["path"]} -> ${m["controller"]}#${m["handler"]} (${m["file"]}:${m["line"]})"
+                "${m["http"]} ${m["path"]} -> ${m["controller"]}#${m["handler"]} (${m["file"]}:${m["line"]})" +
+                    (if (m["methodMismatch"] == true) " (verb differs)" else "")
             // Clean (segment-suffix) and loose (shared-last-literal-segment) hits are kept apart: a loose
             // hit is a guess, and reporting it as "served by" states something untrue — e.g. a call to
             // `…/customers/{{id}}/canEdit` loosely matches `GET /api/customers` on the shared `customers`

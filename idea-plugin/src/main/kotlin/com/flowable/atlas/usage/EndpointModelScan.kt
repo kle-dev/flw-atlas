@@ -11,12 +11,11 @@ import com.intellij.openapi.vfs.VirtualFile
  * endpoint counterpart to [ModelReferenceScan] (which links Java symbols). Every URL-carrying model
  * field counts, not just an HTTP service task's `requestUrl`: see [RestCallScanner.URL_FIELDS].
  *
- * Path matching reuses the exact, tested `:core` [JavaParser.matchRest] used by the Atlas graph, so the
- * IDE navigation and the generated explorer agree on what "a model calls this endpoint" means. Only
- * clean (segment-suffix) matches count; the loose shared-last-segment matches are dropped to keep
- * gutter navigation free of false links. On top of the path, the model's `requestMethod` is compared
- * to the endpoint verb **when both are concrete** — so a GET task no longer lights up a POST-only
- * handler on the same path — while an unknown verb on either side falls back to a path-only match.
+ * Matching is the exact, tested `:core` [JavaParser.matchRest] used by the Atlas graph — path and verb —
+ * so the IDE navigation and the generated explorer agree on what "a model calls this endpoint" means.
+ * Only clean (segment-suffix, same verb) matches count; loose shared-last-segment matches and wrong-verb
+ * hits are dropped to keep gutter navigation free of false links. A verb that is unknown on either side
+ * (no `requestMethod`, an expression, a handler mapped to `ANY`) falls back to a path-only match.
  */
 object EndpointModelScan {
 
@@ -26,11 +25,9 @@ object EndpointModelScan {
 
     /** True when [call] hits [endpoint]: a clean path match and (when both verbs are concrete) same verb. */
     fun calls(call: RestCallScanner.RestRef, endpoint: EndpointPsi.Endpoint): Boolean =
-        meaningful(endpoint) && pathMatches(call.url, endpoint.path) && verbMatches(call.method, endpoint.verb)
-
-    /** Model verb vs endpoint verb: only discriminates when both are known (endpoint ≠ `ANY`, model set). */
-    private fun verbMatches(modelMethod: String?, endpointVerb: String): Boolean =
-        endpointVerb == "ANY" || modelMethod.isNullOrBlank() || modelMethod.equals(endpointVerb, ignoreCase = true)
+        meaningful(endpoint) &&
+            JavaParser.matchRest(call.url, listOf(mapOf("path" to endpoint.path, "http" to endpoint.verb)), call.method)
+                .any { it["loose"] != true }
 
     /** A path worth matching — a blank / root `/` endpoint would match everything, so it is ignored. */
     private fun meaningful(endpoint: EndpointPsi.Endpoint): Boolean =

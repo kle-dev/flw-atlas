@@ -365,15 +365,29 @@ object JavaParser {
         return p.lowercase().split("/").filter { it.isNotEmpty() }
     }
 
-    /** REST endpoints whose path matches [url]. A segment-suffix match (placeholders `*` match any
-     *  segment) is a confident hit; the legacy shared-last-literal-segment rule still matches but is
-     *  annotated `loose=true` so the graph flags the edge as suspect instead of presenting it clean. */
-    fun matchRest(url: String?, codeEndpoints: List<Map<String, Any?>>): List<Map<String, Any?>> {
+    /**
+     * REST endpoints whose path matches [url]. A segment-suffix match (placeholders `*` match any segment)
+     * is a confident hit; the legacy shared-last-literal-segment rule still matches but is annotated
+     * `loose=true` so the graph flags the edge as suspect instead of presenting it clean.
+     *
+     * Among the confident hits, a handler whose path spells out more of the URL's literal segments wins,
+     * as it does in Spring's routing: `/orders/archive` is served by `POST /orders/archive`, not by
+     * `GET /orders/{id}` whose variable would also take `archive`.
+     *
+     * With a [method] the caller states for certain, a handler for another verb is not a match. A
+     * confident path hit with the wrong verb is dropped when a handler with the right verb also matches,
+     * and otherwise kept as loose with `methodMismatch=true` — a PUT against a POST-only handler is a
+     * suspect link worth seeing, not nothing. A loose hit with the wrong verb is dropped. The method is
+     * unknown when it is null, blank, `?` or an expression; a handler mapped to `ANY` takes every verb.
+     */
+    fun matchRest(url: String?, codeEndpoints: List<Map<String, Any?>>, method: String? = null): List<Map<String, Any?>> {
         val target = normPath(url)
         if (target.isEmpty()) return emptyList()
         fun segsMatch(ep: List<String>, tail: List<String>): Boolean =
             ep.size == tail.size && ep.indices.all { ep[it] == "*" || tail[it] == "*" || ep[it] == tail[it] }
-        val matches = ArrayList<Map<String, Any?>>()
+        fun literals(ep: List<String>, tail: List<String>): Int = ep.indices.count { ep[it] != "*" && ep[it] == tail[it] }
+        val clean = ArrayList<Pair<Map<String, Any?>, Int>>()
+        val loose = ArrayList<Map<String, Any?>>()
         for (ep in codeEndpoints) {
             val epSegs = normPath(ep["path"] as? String)
             if (epSegs.isEmpty()) continue
@@ -386,10 +400,28 @@ object JavaParser {
                 segsMatch(epSegs.subList(epSegs.size - (target.size - 1), epSegs.size), target.subList(1, target.size))
             val lits = epSegs.filter { it != "*" }
             when {
-                suffix || varBase -> matches.add(ep)
-                lits.isNotEmpty() && lits.last() in target -> matches.add(ep + mapOf("loose" to true))
+                suffix -> clean.add(ep to literals(epSegs, target.subList(target.size - epSegs.size, target.size)))
+                varBase -> clean.add(ep to literals(epSegs.subList(epSegs.size - (target.size - 1), epSegs.size), target.subList(1, target.size)))
+                lits.isNotEmpty() && lits.last() in target -> loose.add(ep + mapOf("loose" to true))
             }
         }
+        val verb = knownVerb(method)
+        fun fits(ep: Map<String, Any?>): Boolean { val hv = knownVerb(ep["http"] as? String); return verb == null || hv == null || hv == verb }
+        // the verb first — a GET call is not answered by the POST handler that happens to spell more of the
+        // path — then, among the handlers for the right verb, the most literal path
+        val cleanFit = clean.filter { fits(it.first) }
+        val best = cleanFit.maxOfOrNull { it.second }
+        val matches = ArrayList<Map<String, Any?>>()
+        cleanFit.filter { it.second == best }.forEach { matches.add(it.first) }
+        if (cleanFit.isEmpty()) clean.forEach { matches.add(it.first + mapOf("loose" to true, "methodMismatch" to true)) }
+        loose.filter(::fits).forEach(matches::add)
         return matches
     }
+
+    /** An HTTP verb stated for certain, upper-cased — null for none, `?`, `ANY` or an expression. */
+    private fun knownVerb(m: String?): String? {
+        val v = m?.trim()?.uppercase() ?: return null
+        return if (VERB_RE.matches(v) && v != "ANY") v else null
+    }
+    private val VERB_RE = Regex("[A-Z]+")
 }

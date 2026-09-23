@@ -26,6 +26,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   who opens it and where the outcome lands; an operation shows its call as one line and the endpoint that
   answers it; a class its bean names; a sequence what its numbers look like. The orphan banners on
   operations and functions are gone — the finding says it.
+- **A REST call links to the handler for its verb.** `GET /api/orders/{orderNumber}` and
+  `POST /api/orders/archive` share a path shape — the variable takes `archive` — and path-only matching
+  linked each call to both handlers. A call now reaches the handler for its verb, and of those the one
+  that spells out most of the path, as Spring routes it; a verb no handler serves is a suspect link that
+  says *verb differs*. The IDE's endpoint gutter and Find Usages use the same rule.
 - **Relations take a row per relation.** Under the drawing, a relation lists its neighbours as chips on one
   row — *App contains* five models is one row, not five — and unfolds only where a neighbour has more to
   say: a caller's parameter mappings, every REST call with its verb. An operation's page is related to its

@@ -258,6 +258,35 @@ class JavaParserTest {
     }
 
     @Test
+    fun matchRestIsMethodAware() {
+        val eps = listOf(
+            mapOf<String, Any?>("http" to "GET", "path" to "/api/orders/{orderNumber}", "handler" to "byNumber"),
+            mapOf<String, Any?>("http" to "POST", "path" to "/api/orders/archive", "handler" to "archive"),
+            mapOf<String, Any?>("http" to "GET", "path" to "/api/orders", "handler" to "orders"),
+        )
+        fun hits(url: String, method: String?) = JavaParser.matchRest(url, eps, method)
+        fun clean(url: String, method: String?) = hits(url, method).filter { it["loose"] != true }.map { it["handler"] }
+        // a GET with a path variable is not answered by the POST handler the variable would also take
+        assertEquals(listOf("byNumber"), clean("/api/orders/{orderNumber}", "GET"))
+        // a POST to the literal path is the POST handler, not the GET one whose variable takes "archive"
+        assertEquals(listOf("archive"), clean("/api/orders/archive", "POST"))
+        assertFalse("the loose GET list is not a POST's match", hits("/api/orders/archive", "POST").any { it["handler"] == "orders" })
+        // a literal segment beats a variable even when the verb is unknown — Spring routes it that way
+        assertEquals(listOf("archive"), clean("/api/orders/archive", null))
+        // an unknown verb matches by path: null, blank, "?", an expression
+        for (unknown in listOf(null, "", "?", "\${method}", "{{verb}}")) {
+            assertEquals("verb '$unknown'", setOf("byNumber", "archive"), clean("/api/orders/{{n}}", unknown).toSet())
+        }
+        // no handler for the verb: the path hit is kept, demoted to loose and marked
+        val put = hits("/api/orders/archive", "PUT").single { it["handler"] == "archive" }
+        assertEquals(true, put["loose"])
+        assertEquals(true, put["methodMismatch"])
+        // a handler mapped to every verb takes every verb
+        val any = listOf(mapOf<String, Any?>("http" to "ANY", "path" to "/api/ping", "handler" to "ping"))
+        assertEquals(listOf("ping"), JavaParser.matchRest("/api/ping", any, "DELETE").filter { it["loose"] != true }.map { it["handler"] })
+    }
+
+    @Test
     fun matchRestVariableMultiSegmentBase() {
         // The endpoint carries a multi-segment base; the model expresses that base as a single variable
         // segment, so the model path is shorter — the leading wildcard must absorb the extra base segs.
