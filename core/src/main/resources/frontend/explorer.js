@@ -4031,7 +4031,14 @@ S.usedIn={id:'usedin', title:'Used in', hint:'every effective occurrence, per mo
 S.params={id:'params', title:'Parameters', build:(n,c)=>(c.d.ioParameters||[]).length?paramSection(c.d.ioParameters, c.hasDg):'', raw:true};
 S.calledWith={id:'called-with', title:'Called with', build:(n,c)=>calledWithSection(n), raw:true};
 S.uses={id:'uses', title:'Uses', build:(n,c)=>usesSection(n), raw:true};
-const PAGE_TAIL=[S.params, S.calledWith, S.uses];
+/** The tests that deploy this model with `@Deployment(resources=…)`, each opening at its annotation. */
+S.testedBy={id:'tests', title:'Deployed by tests', hint:'test classes whose @Deployment names this model',
+  count:(n,c)=>(c.d.deployedByTests||[]).length,
+  build:(n,c)=>{ const at=c.d.deployedByTests||[]; if(!at.length) return '';
+    return tbl([{k:'f',label:'Test',w:'minmax(20ch,3fr)',mono:true},{k:'line',label:'Line',w:'minmax(6ch,.6fr)',mono:true,cls:'faint'}],
+      at.map(s=>{ const i=String(s).lastIndexOf(':'), f=s.slice(0,i), l=s.slice(i+1);
+        return {hay:elHay(f), cells:{f:esc(f.split('/').pop())+openBtn(f,l), line:lineRef(f,l)}}; })); }};
+const PAGE_TAIL=[S.params, S.calledWith, S.uses, S.testedBy];
 const PAGES={
   process:[S.userTasks, S.serviceTasks, S.scriptTasks, S.decisionTasks, S.callActivities, S.otherTasks, S.events, S.gateways,
            S.flows, S.lanes, S.multiInstance, S.declaredVars, S.listeners, S.eldocs],

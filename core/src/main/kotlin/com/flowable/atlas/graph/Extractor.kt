@@ -548,6 +548,7 @@ object Atlas {
         )
         attachPropertyDefinitions(result, discovered.configs, ::relOf)
         IdentitySetup.apply(result, discovered.identity, ::relOf)
+        TestDeployments.apply(result, discovered.testSources, ::relOf)
 
         // Mirror Python's `result.update({... "customFunctions": {...} if custom else None ...})`:
         // ReferenceResolver already set this key to null; overwrite it with the summary shape when

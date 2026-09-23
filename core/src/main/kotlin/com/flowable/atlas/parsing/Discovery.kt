@@ -23,6 +23,8 @@ object Discovery {
         val configs: List<File> = emptyList(),
         /** User definitions and tenant setups (see [com.flowable.atlas.graph.IdentitySetup]). */
         val identity: List<File> = emptyList(),
+        /** Java and Kotlin under a test source set — read only for the models they deploy. */
+        val testSources: List<File> = emptyList(),
     )
 
     /** A file that belongs to a template model without being one: the variation that holds the body a
@@ -38,6 +40,7 @@ object Discovery {
         val templateParts = ArrayList<File>()
         val configs = ArrayList<File>()
         val identity = ArrayList<File>()
+        val testSources = ArrayList<File>()
 
         if (root.isFile) {
             if (ModelPaths.isArchive(root.name)) archives.add(root)
@@ -53,7 +56,7 @@ object Discovery {
                     // Test code is not the project (see ModelPaths.isTestSource); models under a test
                     // source set still are, which is why this is a per-file rule and not a pruned directory.
                     low.endsWith(".java") || low.endsWith(".kt") ->
-                        if (!ModelPaths.isTestSource(f.relativeTo(root).invariantSeparatorsPath)) javas.add(f)
+                        if (!ModelPaths.isTestSource(f.relativeTo(root).invariantSeparatorsPath)) javas.add(f) else testSources.add(f)
                     ModelPaths.isArchive(low) -> archives.add(f)
                     isTemplatePart(low) -> templateParts.add(f)
                     ModelKinds.modelTypeFor(f.name) != null -> models.add(f)
@@ -68,6 +71,6 @@ object Discovery {
                         if (!ModelPaths.isTestSource(f.relativeTo(root).invariantSeparatorsPath)) configs.add(f)
                 }
             }
-        return Discovered(models, archives, javas, xmls, templateParts, configs, identity)
+        return Discovered(models, archives, javas, xmls, templateParts, configs, identity, testSources)
     }
 }
