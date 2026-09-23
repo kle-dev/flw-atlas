@@ -38,6 +38,16 @@ class RecentModelsServiceTest : BasePlatformTestCase() {
         assertEquals(listOf("DEMO-P001", "DEMO-F001"), service.recent(null).map { it.key })
     }
 
+    fun testOneModelCanBeTakenOffTheList() {
+        val service = RecentModelsService.getInstance(project)
+        service.clear()
+        val a = myFixture.addFileToProject("models/DEMO-F101.form", """{"key":"DEMO-F101"}""").virtualFile
+        val b = myFixture.addFileToProject("models/DEMO-F102.form", """{"key":"DEMO-F102"}""").virtualFile
+        service.record(a); service.record(b)
+        service.remove(a)
+        assertEquals(listOf("DEMO-F102"), service.recent(null).map { it.key })
+    }
+
     fun testTheListIsCappedAndAPanelShowsIt() {
         val service = RecentModelsService.getInstance(project)
         service.clear()

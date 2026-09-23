@@ -6,6 +6,7 @@ import com.flowable.atlas.action.FlowableActionIds
 import com.flowable.atlas.hub.HubLists
 import com.flowable.atlas.hub.HubSnapshot
 import com.flowable.atlas.hub.RecentModel
+import com.flowable.atlas.hub.RecentModelsService
 import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.intention.OpenInAtlasExplorerIntention
 import com.flowable.atlas.navigation.ModelKeyTargets
@@ -14,6 +15,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.project.DumbAware
 import com.intellij.ui.CollectionListModel
 import com.intellij.ui.PopupHandler
@@ -38,7 +40,7 @@ import javax.swing.ListCellRenderer
 /**
  * The models opened most recently, newest first — the way back to the process you were reading before
  * the Ctrl+click took you three files away. Double-click opens the model at its key; the context menu
- * copies the key or opens the model's explorer page. One grey line until something has been opened.
+ * copies the key, opens the model's explorer page, or takes one model or all of them off the list. One grey line until something has been opened.
  */
 internal class RecentModelsSection(private val host: HubHost) : HubSection {
 
@@ -51,7 +53,9 @@ internal class RecentModelsSection(private val host: HubHost) : HubSection {
                 if (e.clickCount == 2) selectedValue?.let(::open)
             }
         })
-        PopupHandler.installPopupMenu(this, DefaultActionGroup(copyKeyAction(), openInExplorerAction()), "AtlasHubRecent")
+        PopupHandler.installPopupMenu(this, DefaultActionGroup(
+            copyKeyAction(), openInExplorerAction(), Separator.getInstance(), removeAction(), clearAction(),
+        ), "AtlasHubRecent")
     }
     private val scroll = JBScrollPane(list)
     private val hint = JBLabel(message("hub.recent.empty")).apply { foreground = UIUtil.getContextHelpForeground() }
@@ -94,6 +98,20 @@ internal class RecentModelsSection(private val host: HubHost) : HubSection {
             list.selectedValue?.entry?.let { OpenInAtlasExplorerIntention.openPage(host.project, it) }
         }
         override fun update(e: AnActionEvent) { e.presentation.isEnabled = list.selectedValue?.entry != null }
+        override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+    }
+
+    private fun removeAction(): AnAction = object : AnAction(message("hub.recent.remove")), DumbAware {
+        override fun actionPerformed(e: AnActionEvent) {
+            list.selectedValue?.let { RecentModelsService.getInstance(host.project).remove(it.file) }
+        }
+        override fun update(e: AnActionEvent) { e.presentation.isEnabled = list.selectedValue != null }
+        override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+    }
+
+    private fun clearAction(): AnAction = object : AnAction(message("hub.recent.clear")), DumbAware {
+        override fun actionPerformed(e: AnActionEvent) = RecentModelsService.getInstance(host.project).clear()
+        override fun update(e: AnActionEvent) { e.presentation.isEnabled = model.size > 0 }
         override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
     }
 

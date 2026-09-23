@@ -45,6 +45,8 @@ class FlowableIndex(
     /** Names of the `.bar`/`.zip` archives in scope that could not be opened or read — what the Hub has
      *  to say, because an unindexed archive is otherwise indistinguishable from an empty project. */
     val skippedArchives: List<String> = emptyList(),
+    /** The same archives by name: the file, and why it could not be read — what the Hub points at. */
+    val skippedArchiveFiles: Map<String, SkippedArchive> = emptyMap(),
     /** Every model file and archive scanned, with its modification time — what "which models changed
      *  since this page was generated?" is answered from; [newestModelMtime] is this map's maximum. */
     val fileMtimes: Map<VirtualFile, Long> = emptyMap(),
@@ -93,3 +95,6 @@ class FlowableIndex(
 
     fun distinctCount(): Int = distinctByType.values.sumOf { it.size }
 }
+
+/** An archive the index could not look into, and why. */
+data class SkippedArchive(val file: VirtualFile, val reason: String)

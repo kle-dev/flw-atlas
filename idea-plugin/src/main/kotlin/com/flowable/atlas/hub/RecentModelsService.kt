@@ -75,6 +75,12 @@ class RecentModelsService(private val project: Project) : PersistentStateCompone
         return if (compound != null) file.name.dropLast(compound.length) else file.nameWithoutExtension
     }
 
+    /** Takes [file] off the list — the Hub's context menu. */
+    fun remove(file: VirtualFile) {
+        val removed = synchronized(lock) { state.urls.remove(file.url) }
+        if (removed) AtlasEvents.recentModelsChanged(project)
+    }
+
     /** For tests and the Hub's context menu. */
     fun clear() {
         synchronized(lock) { state.urls.clear() }

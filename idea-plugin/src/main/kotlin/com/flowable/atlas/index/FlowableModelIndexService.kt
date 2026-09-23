@@ -514,6 +514,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
         // Archives Atlas could not look into. Logged at debug before, which made "the only .bar in the
         // repository is unreadable" indistinguishable from "this project has no models".
         val skippedArchives = ArrayList<String>()
+        val skippedArchiveFiles = LinkedHashMap<String, SkippedArchive>()
         // Index one model's content, associating its entry with [navFile] for navigation
         // (a loose file, or a navigable entry inside a .bar/.zip archive).
         fun processModel(fileName: String, bytes: ByteArray, type: ModelType, navFile: VirtualFile) {
@@ -555,6 +556,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
                     // synchronous jar-FS refresh there. And a cancelled scan is not an unreadable
                     // archive — `runCatching` used to swallow the cancellation and light the Hub's
                     // "archives could not be read" line for it.
+                    var reason = "the archive could not be opened — it may be damaged, encrypted, or not a zip"
                     val opened = try {
                         ArchiveModelScanner.scan(
                             file, allowRefresh = !ApplicationManager.getApplication().isReadAccessAllowed,
@@ -562,9 +564,14 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
                     } catch (e: ProcessCanceledException) {
                         throw e
                     } catch (e: Exception) {
-                        LOG.debug("skipping unreadable archive ${file.name}", e); false
+                        LOG.debug("skipping unreadable archive ${file.name}", e)
+                        reason = e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
+                        false
                     }
-                    if (!opened) skippedArchives.add(file.name)
+                    if (!opened) {
+                        skippedArchives.add(file.name)
+                        skippedArchiveFiles.putIfAbsent(file.name, SkippedArchive(file, reason))
+                    }
                 }
             }
         }
@@ -577,6 +584,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
             // `timeStamp` is a cached VFS attribute — no I/O — and the candidates were visited anyway.
             newestModelMtime = candidates.maxOfOrNull { it.timeStamp } ?: 0L,
             skippedArchives = skippedArchives.sorted(),
+            skippedArchiveFiles = skippedArchiveFiles,
             fileMtimes = candidates.associateWith { it.timeStamp },
         )
     }

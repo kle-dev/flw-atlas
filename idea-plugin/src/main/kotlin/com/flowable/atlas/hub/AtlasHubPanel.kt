@@ -1,5 +1,10 @@
 package com.flowable.atlas.hub
 
+import com.intellij.openapi.components.service
+import com.flowable.atlas.index.FlowableModelIndexService
+import com.flowable.atlas.AtlasNotifications
+import com.intellij.notification.NotificationType
+import com.intellij.ide.projectView.ProjectView
 import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.action.FlowableActionIds
 import com.flowable.atlas.environment.ConnectionKind
@@ -120,13 +125,23 @@ class AtlasHubPanel(override val project: Project) : SimpleToolWindowPanel(true,
             is HubAttention.RemovedEnvironment -> invokeAction(FlowableActionIds.MANAGE_ENVIRONMENTS)
             is HubAttention.ChooseProject -> header.projectCombo.showPopup()
             is HubAttention.IndexFailed -> invokeAction(FlowableActionIds.REBUILD_MODEL_INDEX)
+            // A pick shows the archive in the Project view and says why it could not be read.
             is HubAttention.UnreadableArchives -> JBPopupFactory.getInstance()
                 .createPopupChooserBuilder(attention.names)
                 .setTitle(message("hub.attention.archives.title"))
+                .setItemChosenCallback(::showUnreadableArchive)
                 .createPopup()
                 .showUnderneathOf(header.projectCombo)
             is HubAttention.StaleExplorer -> AtlasGenerationRunner.regenerate(project)
         }
+    }
+
+    private fun showUnreadableArchive(name: String) {
+        val skipped = project.service<FlowableModelIndexService>().cachedOrNull()?.skippedArchiveFiles?.get(name) ?: return
+        if (skipped.file.isValid) ProjectView.getInstance(project).select(null, skipped.file, true)
+        AtlasNotifications.group()
+            .createNotification(message("hub.attention.archives.why", name, skipped.reason), NotificationType.WARNING)
+            .notify(project)
     }
 
     override fun dispose() {}
