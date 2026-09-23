@@ -2110,9 +2110,12 @@ function nodeFindingsHtml(n){
   const open=all.filter(f=>!waiverFor(f)), acc=all.length-open.length;
   const byCheck={}; all.forEach(f=>{ (byCheck[f.check]=byCheck[f.check]||[]).push(f); });
   let body='';
+  const own=f=>!f.file||f.file===n.file;
   checksInOrder().forEach(c=>{ const rows=byCheck[c.id]; if(!rows) return;
     const tones=[...new Set(rows.filter(f=>!waiverFor(f)).map(findTone))].sort((a,b)=>TONE_ORDER[a]-TONE_ORDER[b]);
-    body+=checkHeadHtml(c, {scope:'n', title:true, pills:tones})+findingTable(rows, {onNode:true});
+    const allTones=new Set(rows.map(findTone));
+    body+=checkHeadHtml(c, {scope:'n', title:true, pills:tones})+
+      findingTable(rows, {onNode:true, noSev:allTones.size===1&&tones.length===1, lineOnly:rows.every(own)});
   });
   return section('findings','Findings on this model', body, {count:open.length, meta:acc?acc+' accepted':'', attrs:' id="findings"'});
 }
@@ -2226,9 +2229,12 @@ function findingRow(f, o){
       model:n?nodeChip(f.node):'<span class="mono">'+esc(f.node||f.label||'')+'</span>',
       el:elCell,
       msg:esc(f.message)+(f.snippet?' <span class="mono muted">'+esc(f.snippet)+'</span>':'')+(rule?acceptedNoteHtml(rule):''),
-      where:f.file?'<span class="fp">'+esc(fileBase(f.file))+'</span>'+lineRef(f.file,f.line)+openBtn(f.file,f.line):'',
-      act:rule?'<button type="button" class="dgbtn wv-edit" data-fi="'+f.fi+'">edit</button><button type="button" class="dgbtn wv-restore" data-fi="'+f.fi+'">restore</button>'
-              :'<button type="button" class="dgbtn wv-acc" data-fi="'+f.fi+'" data-tip="'+ACCEPT_TIP+'">accept…</button>',
+      // on a model's own page the file is the page's: its line is what is left, and the button that opens
+      // it joins the actions — a column of nothing but an IDE-only button read as an empty one in a browser
+      where:!f.file?'' : o.lineOnly?(f.line!=null?lineRef(f.file,f.line):'')
+        : '<span class="fp">'+esc(fileBase(f.file))+'</span>'+lineRef(f.file,f.line)+openBtn(f.file,f.line),
+      act:(o.lineOnly&&f.file?openBtn(f.file,f.line):'')+(rule?'<button type="button" class="dgbtn wv-edit" data-fi="'+f.fi+'">edit</button><button type="button" class="dgbtn wv-restore" data-fi="'+f.fi+'">restore</button>'
+              :'<button type="button" class="dgbtn wv-acc" data-fi="'+f.fi+'" data-tip="'+ACCEPT_TIP+'">accept…</button>'),
     }};
 }
 /** One cause, many rows: the message with its names and numbers blanked, so twenty-two copies of the
@@ -2237,7 +2243,10 @@ function findingShape(f){ return f.check+'|'+String(f.message||'').replace(/`[^`
 const FIND_GROUP_FROM=3;
 function findingTable(rows, o){
   o=o||{};
-  const cols=o.onNode?FIND_COLS.filter(c=>c.k!=='model'):FIND_COLS;
+  // A model's own page drops what every row would repeat: the model, a severity its check's head already
+  // says (o.noSev), and a file that is the page's own — its column shrinks to the line (o.lineOnly).
+  let cols=o.onNode?FIND_COLS.filter(c=>c.k!=='model'&&!(o.noSev&&c.k==='sev')):FIND_COLS;
+  if(o.lineOnly) cols=cols.map(c=>c.k==='where'?Object.assign({}, c, {label:'Line', w:'minmax(7ch,.45fr)'}):c);
   // Identical findings fold into one row. A binding copied across 22 forms with the same missing comma,
   // 66 mail tasks with the same missing error path: one row each, with the members a chevron away, so
   // the list has as many rows as it has causes. Not on a model's own page — its findings are few, and

@@ -714,6 +714,8 @@ const probe = `<script>
     ok('its findings item says defects or advice', !!fb && /defect|advice/.test(fb.textContent), fb?fb.textContent:'(none)');
     const fs=document.querySelector('#detail details.sect[data-sect="findings"]');
     if(fb&&fs){ fs.open=false; click(fb); ok('and opens the findings', fs.open); }
+    const fh=fs?[...fs.querySelectorAll('.fndtbl .th .td')].map(t=>t.textContent.trim()):[];
+    ok("a model's own findings name neither the model nor its file", fh.length>0 && fh.indexOf('Model')<0 && fh.indexOf('File')<0, fh.join('|'));
     // every page reads picture, findings, fit and relations, details — in that order, a tab each
     const at=id=>nav.indexOf(id);
     ok('the findings come before the relations, the relations before the elements',
