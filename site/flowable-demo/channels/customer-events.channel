@@ -3,7 +3,7 @@
   "name": "Customer events",
   "channelType": "inbound",
   "type": "kafka",
-  "topic": "customer-events",
+  "topics": ["customer-events"],
   "deserializerType": "json",
-  "eventKeys": ["customerCreated"]
+  "channelEventKeyDetection": {"fixedValue": "customerCreated"}
 }

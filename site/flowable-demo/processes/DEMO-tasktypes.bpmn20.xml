@@ -9,7 +9,9 @@
     <userTask id="t1" name="Approve order"/>
     <serviceTask id="t2" name="Calculate" flowable:class="com.acme.X"/>
     <serviceTask id="t3" name="Lookup customer" flowable:type="service-registry">
-      <extensionElements><design:stencilid><![CDATA[ServiceRegistryTask]]></design:stencilid></extensionElements>
+      <!-- calls an operation whose required customerId it never passes: the operation page shows the gap -->
+      <extensionElements><design:stencilid><![CDATA[ServiceRegistryTask]]></design:stencilid>
+        <flowable:serviceMapping serviceModelKey="customerService" operationKey="findById"/></extensionElements>
     </serviceTask>
     <serviceTask id="t4" name="Ask the agent" flowable:type="agent"/>
     <serviceTask id="t5" name="Call REST" flowable:type="http"/>

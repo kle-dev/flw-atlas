@@ -7,6 +7,8 @@
              xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
              xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
              xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI">
+  <!-- The signal's id differs from its name on purpose: another model catches it by the name. -->
+  <signal id="sigOnboarded" name="customerOnboarded"/>
   <process id="onboardingReviewProcess" name="Onboarding Review"
            flowable:candidateStarterGroups="sales,compliance">
     <documentation>Reviews an onboarding application and scores its risk.</documentation>
@@ -66,7 +68,17 @@
               flowable:candidateGroups="compliance" flowable:formKey="onboardingForm">
       <documentation>Compliance signs off, or rejects with a reason.</documentation>
     </userTask>
-    <sequenceFlow id="f7" sourceRef="decide" targetRef="stamp"/>
+    <sequenceFlow id="f7" sourceRef="decide" targetRef="gwDecision"/>
+
+    <!-- Routes on the form's outcome. `reject` is tested; `accept` only falls through to the default —
+         the form page's "Outcomes and the conditions that test them" says so. -->
+    <exclusiveGateway id="gwDecision" name="Accepted?" default="fAccept"/>
+    <sequenceFlow id="fAccept" sourceRef="gwDecision" targetRef="stamp"/>
+    <sequenceFlow id="fReject" sourceRef="gwDecision" targetRef="endRejected">
+      <conditionExpression xsi:type="tFormalExpression"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${form_onboardingForm_outcome == 'reject'}</conditionExpression>
+    </sequenceFlow>
+    <endEvent id="endRejected" name="Rejected"/>
 
     <scriptTask id="stamp" name="Record the decision" scriptFormat="groovy">
       <documentation>Builds an audit note. `retryCount` is named only here — Atlas says so rather
@@ -76,10 +88,26 @@
         execution.setVariable('auditNote', note)
       </script>
     </scriptTask>
-    <sequenceFlow id="f8" sourceRef="stamp" targetRef="end">
+    <sequenceFlow id="f8" sourceRef="stamp" targetRef="tell">
       <conditionExpression xsi:type="tFormalExpression"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${myfns:isComplete(auditNote)}</conditionExpression>
     </sequenceFlow>
+
+    <!-- Thrown here, caught in the welcome process — the signal's page lists both sides. -->
+    <intermediateThrowEvent id="tell" name="Onboarded"><signalEventDefinition signalRef="sigOnboarded"/></intermediateThrowEvent>
+    <sequenceFlow id="f9" sourceRef="tell" targetRef="announce"/>
+
+    <!-- Publishes the event the welcome process starts on. `campaign` is a payload field it does not
+         send, which the event's page shows as a gap. -->
+    <serviceTask id="announce" name="Announce the customer" flowable:type="send-event">
+      <extensionElements>
+        <flowable:eventType>customerCreated</flowable:eventType>
+        <flowable:channelKey>customerEventsOutChannel</flowable:channelKey>
+        <flowable:eventInParameter source="companyName" target="companyName"/>
+        <flowable:eventInParameter sourceExpression="${execution.processInstanceBusinessKey}" target="customerId"/>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="f10" sourceRef="announce" targetRef="end"/>
     <endEvent id="end"/>
   </process>
 
@@ -106,13 +134,25 @@
         <omgdc:Bounds x="100" y="240" width="100" height="60"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="s_decide" bpmnElement="decide">
-        <omgdc:Bounds x="260" y="240" width="100" height="60"/>
+        <omgdc:Bounds x="240" y="240" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_gwDecision" bpmnElement="gwDecision">
+        <omgdc:Bounds x="380" y="250" width="40" height="40"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_endRejected" bpmnElement="endRejected">
+        <omgdc:Bounds x="385" y="340" width="30" height="30"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="s_stamp" bpmnElement="stamp">
-        <omgdc:Bounds x="420" y="240" width="100" height="60"/>
+        <omgdc:Bounds x="460" y="240" width="100" height="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_tell" bpmnElement="tell">
+        <omgdc:Bounds x="610" y="255" width="30" height="30"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_announce" bpmnElement="announce">
+        <omgdc:Bounds x="690" y="240" width="100" height="60"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="s_end" bpmnElement="end">
-        <omgdc:Bounds x="580" y="255" width="30" height="30"/>
+        <omgdc:Bounds x="840" y="255" width="30" height="30"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="e_f1" bpmnElement="f1">
         <omgdi:waypoint x="130" y="130"/>
@@ -138,15 +178,31 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="e_f6" bpmnElement="f6">
         <omgdi:waypoint x="200" y="270"/>
-        <omgdi:waypoint x="260" y="270"/>
+        <omgdi:waypoint x="240" y="270"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="e_f7" bpmnElement="f7">
-        <omgdi:waypoint x="360" y="270"/>
+        <omgdi:waypoint x="340" y="270"/>
+        <omgdi:waypoint x="380" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_fAccept" bpmnElement="fAccept">
         <omgdi:waypoint x="420" y="270"/>
+        <omgdi:waypoint x="460" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_fReject" bpmnElement="fReject">
+        <omgdi:waypoint x="400" y="290"/>
+        <omgdi:waypoint x="400" y="340"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="e_f8" bpmnElement="f8">
-        <omgdi:waypoint x="520" y="270"/>
-        <omgdi:waypoint x="580" y="270"/>
+        <omgdi:waypoint x="560" y="270"/>
+        <omgdi:waypoint x="610" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f9" bpmnElement="f9">
+        <omgdi:waypoint x="640" y="270"/>
+        <omgdi:waypoint x="690" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e_f10" bpmnElement="f10">
+        <omgdi:waypoint x="790" y="270"/>
+        <omgdi:waypoint x="840" y="270"/>
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

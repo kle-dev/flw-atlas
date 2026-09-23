@@ -17,6 +17,8 @@
     <scriptTask id="packTask" name="Pack shipment" scriptFormat="groovy">
       <script>
         def label = "pack:" + orderNotes
+        // read here, passed by no caller: the call contract on this page shows it
+        def priority = execution.getVariable('shippingPriority')
         execution.setVariable('subTotal', 10)
       </script>
     </scriptTask>

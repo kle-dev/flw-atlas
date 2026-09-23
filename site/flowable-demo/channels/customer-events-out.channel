@@ -1,0 +1,9 @@
+{
+  "key": "customerEventsOutChannel",
+  "name": "Customer events (out)",
+  "channelType": "outbound",
+  "type": "kafka",
+  "destination": "customer-events",
+  "serializerType": "json",
+  "channelEventKeyDetection": {"fixedValue": "customerCreated"}
+}
