@@ -2953,6 +2953,15 @@ function section(id, titleHtml, bodyHtml, o){
 // captions are set in the sans face; identifiers, expressions, URLs, paths and code are monospace —
 // `mono:true` on a column or a value says so, nothing else does.
 const TBL_FILTER_FROM=12;   // above this many rows a table gets a filter of its own
+// Above this many rows a table shows the first ones and a button for the rest: a group every process
+// lets start, or a platform bean every model calls, made a page of thousands of rows. The filter still
+// searches all of them.
+const TBL_CAP=100;
+document.addEventListener('click', e=>{
+  const b=e.target.closest&&e.target.closest('.tbl-all'); if(!b) return;
+  const t=b.previousElementSibling; if(!t) return;
+  t.dataset.all='1'; t.querySelectorAll('[data-over]').forEach(r=>r.hidden=false); b.remove();
+});
 const hayAttr=h=>(h==null||h==='')?'':' data-hay="'+esc(String(h).toLowerCase())+'"';
 /**
  * cols: [{k, label, w, cls, mono, opt}] — `w` is a grid track that is never content-sized (`Nch`, `Nfr`,
@@ -2971,9 +2980,10 @@ function tbl(cols, rows, o){
   const tdCls=c=>'td'+(c.cls?' '+c.cls:'')+(c.mono?' mono':'')+(c.opt?' opt':'');
   const head='<div class="th" aria-hidden="true"><span class="td tdc"></span>'+
     cols.map(c=>'<span class="'+tdCls(c)+'">'+esc(c.label||'')+'</span>').join('')+'</div>';
-  const body=rows.map(r=>{
+  const cap=o.cap||TBL_CAP;
+  const body=rows.map((r,i)=>{
     const cells=cols.map(c=>{ const v=r.cells[c.k]; return '<span class="'+tdCls(c)+'">'+(v==null?'':v)+'</span>'; }).join('');
-    const attrs=dataEl(r.el)+hayAttr(r.hay)+(r.attrs||'');
+    const attrs=dataEl(r.el)+hayAttr(r.hay)+(r.attrs||'')+(i>=cap?' data-over hidden':'');
     if(r.body) return '<details class="tr'+(r.cls?' '+r.cls:'')+'"'+attrs+(r.open?' open':'')+
       '><summary class="trs"><span class="td tdc">'+uiIcon('chevron')+'</span>'+cells+'</summary>'+
       '<div class="tx'+(r.bodyCls?' '+r.bodyCls:'')+'">'+r.body+'</div></details>';
@@ -2982,6 +2992,7 @@ function tbl(cols, rows, o){
   const filt=(o.filter!==false && rows.length>=(typeof o.filter==='number'?o.filter:TBL_FILTER_FROM))
     ? filterBar({placeholder:o.placeholder||'filter rows…', total:rows.length, chips:o.chips}) : '';
   return filt+'<div class="tbl'+(o.cls?' '+o.cls:'')+'" style="--cols:'+tracks+'">'+head+body+'</div>'+
+    (rows.length>cap?'<button type="button" class="dgbtn tbl-all">show all '+rows.length+'</button>':'')+
     (o.more?'<div class="tbl-more muted">'+esc(o.more)+'</div>':'');
 }
 /** items: [{el, hay, name, id, badges:[html], right, body, open, cls, attrs}] — `name` is HTML; a chip
@@ -3073,7 +3084,10 @@ function wireSectionFilter(root){
       leaves.forEach(row=>{
         const okC=(!fk||fv==='all'||row.dataset[fk]===fv);
         const okQ=!q||(row.dataset.hay||row.textContent||'').toLowerCase().indexOf(q)>=0;
-        const ok=okC&&okQ; row.hidden=!ok; if(ok && counted.indexOf(row)>=0) shown++;
+        const ok=okC&&okQ;
+        // an unfiltered table keeps rows past its cap folded until "show all" is pressed
+        const folded=!q&&fv==='all'&&row.dataset.over!==undefined&&!row.closest('[data-all]');
+        row.hidden=!ok||folded; if(ok && counted.indexOf(row)>=0) shown++;
       });
       containers.forEach(c=>{
         const any=[...c.querySelectorAll('[data-hay]')].some(r=>!r.hidden&&!r.querySelector('[data-hay]'));
@@ -3496,13 +3510,54 @@ S.dataSources={id:'datasources', title:'Data sources', hint:'where selects, tabl
         kind:termHtml('kind-ds', s.kind, 'tag'),
         src:s.kind==='dataObject'?vlink('dataObject:'+s.key, s.key):s.kind==='service'?vlink('service:'+s.key, s.key):esc(s.url||s.key||''),
         op:esc(s.op||'')}}))); }};
+/** A URL's path as segments, placeholders as `*` — the same normal form :core matches endpoints with. */
+function epPathSegs(p){ return String(p||'').replace(/^[a-z]+:\/\/[^/]+/,'').split('?')[0]
+  .replace(/[#$]\{[^}]*\}|\{\{[^}]*\}\}|\{[^}]*\}/g,'*').toLowerCase().split('/').filter(Boolean); }
+/** The project endpoints a URL that [srcId] calls lands on: the model's own `rest-call` edges, narrowed
+ *  to the endpoints whose path the URL ends with. */
+function endpointsFor(srcId, url){
+  if(!url) return [];
+  const u=epPathSegs(url);
+  return (outM.get(srcId)||[]).filter(e=>e.rel==='rest-call').map(e=>byId.get(e.id))
+    .filter(ep=>{ if(!ep||ep.type!=='endpoint') return false;
+      const p=epPathSegs((ep.data||{}).path); if(!p.length||p.length>u.length) return false;
+      const tail=u.slice(u.length-p.length); return p.every((s,i)=>s==='*'||tail[i]==='*'||s===tail[i]); });
+}
+/** The URL, linked to the project endpoint it calls when there is one. */
+function urlCell(srcId, url){
+  const ep=endpointsFor(srcId, url)[0];
+  return ep?'<span class="vlink" data-id="'+enc(ep.id)+'" tabindex="0" role="link" data-tip="Served by '+esc(ep.label||ep.id)+' in this project">'+esc(url)+'</span>':esc(url||'');
+}
 S.restCalls={id:'restcalls', title:'REST calls', hint:'what this form calls over HTTP, and which button does it',
   count:(n,c)=>(c.d.restCalls||[]).length,
   build:(n,c)=>{ const rs=c.d.restCalls||[]; if(!rs.length) return '';
     return tbl([{k:'method',label:'Method',w:'7ch',cls:'tags'},{k:'url',label:'URL',w:'minmax(16ch,3fr)',mono:true},
                 {k:'where',label:'Button',w:'minmax(8ch,1fr)',mono:true,opt:true},{k:'path',label:'Response path',w:'minmax(8ch,1fr)',mono:true,opt:true}],
       rs.map(r=>({el:r.where, hay:(r.method||'')+' '+(r.url||'')+' '+(r.where||''), cells:{
-        method:tag(r.method), url:esc(r.url||''), where:fieldLink(r.where), path:esc(r.path||'')}}))); }};
+        method:tag(r.method), url:urlCell(n.id, r.url), where:fieldLink(r.where), path:esc(r.path||'')}}))); }};
+/** Who calls this endpoint, with the verb, the URL as they spell it and the button or task that does. */
+S.epCallers={id:'callers', title:'Called by', hint:'the models whose REST calls land on this endpoint',
+  count:(n,c)=>(incM.get(n.id)||[]).filter(e=>e.rel==='rest-call').length,
+  build:(n,c)=>{
+    const rows=[];
+    (incM.get(n.id)||[]).filter(e=>e.rel==='rest-call').forEach(e=>{
+      const m=byId.get(e.id); if(!m) return;
+      const calls=((m.data||{}).restCalls||[]).filter(r=>endpointsFor(m.id, r.url).some(ep=>ep.id===n.id));
+      (calls.length?calls:[{}]).forEach(r=>rows.push({hay:elHay(m.label,m.key,r.url,r.where),
+        cells:{m:vlink(m.id, m.label||m.key), method:r.method?tag(r.method):'', url:esc(r.url||''), where:esc(r.where||'')}}));
+    });
+    return tbl([{k:'m',label:'Model',w:'minmax(14ch,2fr)'},{k:'method',label:'Method',w:'7ch',cls:'tags'},
+                {k:'url',label:'URL',w:'minmax(16ch,3fr)',mono:true},{k:'where',label:'Button / task',w:'minmax(8ch,1fr)',mono:true,opt:true}], rows); }};
+/** What a group may do, per model: start it, work on it, see it — the access edges, as one table. */
+S.groupAccess={id:'access', title:'Access', hint:'what members of this group may do, per model',
+  count:(n,c)=>new Set((outM.get(n.id)||[]).map(e=>e.id)).size,
+  build:(n,c)=>{
+    const per=new Map();
+    (outM.get(n.id)||[]).forEach(e=>{ if(!byId.get(e.id)) return; (per.get(e.id)||per.set(e.id,new Set()).get(e.id)).add(e.rel); });
+    if(!per.size) return '';
+    return tbl([{k:'m',label:'Model',w:'minmax(16ch,2fr)'},{k:'can',label:'May',w:'minmax(12ch,2fr)'}],
+      [...per.entries()].map(([id,rels])=>{ const m=byId.get(id);
+        return {hay:elHay(m.label,m.key,[...rels].join(' ')), cells:{m:vlink(id, m.label||m.key), can:[...rels].map(r=>termHtml('rel',r)).join(', ')}}; })); }};
 S.subforms={id:'subforms', title:'Subforms', hint:'forms embedded in this one',
   count:(n,c)=>(c.d.subforms||[]).length,
   build:(n,c)=>{ const sf=c.d.subforms||[]; if(!sf.length) return '';
@@ -3909,7 +3964,7 @@ S.ops={id:'ops', title:'Operations', hint:'what the service offers, and what eac
       const opid='serviceOperation:'+n.key+'#'+(o.key||'');
       const key=o.key?(byId.get(opid)?'<span class="vlink mono" data-id="'+enc(opid)+'" tabindex="0" role="link" data-tip="Show where '+esc(o.key)+' is used">'+esc(o.key)+'</span>':'<span class="mono">'+esc(o.key)+'</span>'):'';
       const rows=opParamRows(o);
-      return {hay:elHay(o.key,o.name,o.method,o.url,o.fullUrl), name:(o.method?'<span class="tag verb">'+esc(o.method)+'</span> ':'')+'<span class="mono">'+esc(o.fullUrl||o.url||o.name||'')+'</span>',
+      return {hay:elHay(o.key,o.name,o.method,o.url,o.fullUrl), name:(o.method?'<span class="tag verb">'+esc(o.method)+'</span> ':'')+'<span class="mono">'+urlCell(n.id, o.fullUrl||o.url||o.name||'')+'</span>',
         badges:[o.name&&o.name!==(o.fullUrl||o.url)?'<span class="muted">'+esc(o.name)+'</span>':'', key], right:rows.length?paramSummary(rows.map(r=>({dir:r.cells.dir.indexOf('"in"')>0?'in':'out'}))):'no params',
         body:rows.length?tbl(OP_PARAM_COLS, rows, {filter:false}):''}; })); }};
 S.coverage={id:'coverage', title:'Schema coverage', hint:'Liquibase → service → data object: every column, and where the chain breaks',
@@ -4062,6 +4117,8 @@ const PAGES={
   variableExtractor:[S.extractors],
   knowledgeBase:[S.kbSources],
   java:[S.endpoints, S.methods],
+  endpoint:[S.epCallers],
+  group:[S.groupAccess],
   property:[S.propDefined],
   liquibase:[S.lqBanner, S.lqColumns],
   expression:[S.problems, S.usedBy],
@@ -4367,9 +4424,14 @@ function renderDetail(){
   // The gesture is stated where the reference chips actually are. Walking a fan of references is the
   // case it exists for: without it, every chip you follow costs you the node you started from.
   const relHint='<div class="relhint">click follows · <b>'+MODK+'-click</b> or middle-click opens a tab</div>';
-  const relBody=g=>relHint+Object.keys(g).sort().map(rel=>
-    '<div class="relgrp"><div class="lab">'+termHtml('rel', rel)+'</div><div class="nodechips">'+
-    [...g[rel].values()].map(e=>nodeChip(e.id,e)).join('')+'</div></div>').join('');
+  // A relation with hundreds of neighbours (every model a platform bean serves) shows the first ones and a
+  // button for the rest, the way a long table does.
+  const REL_CAP=60;
+  const relBody=g=>relHint+Object.keys(g).sort().map(rel=>{
+    const es=[...g[rel].values()];
+    return '<div class="relgrp"><div class="lab">'+termHtml('rel', rel)+'</div><div class="nodechips">'+
+      es.map((e,i)=>i<REL_CAP?nodeChip(e.id,e):'<span data-over hidden>'+nodeChip(e.id,e)+'</span>').join('')+'</div>'+
+      (es.length>REL_CAP?'<button type="button" class="dgbtn tbl-all">show all '+es.length+'</button>':'')+'</div>'; }).join('');
   const ok=Object.keys(out).sort(), ik=Object.keys(inc).sort();
   if(ok.length) body+=section('rels-out','Uses / references', relBody(out), {count:ok.reduce((a,k)=>a+out[k].size,0), nav:'References'});
 
@@ -4519,8 +4581,29 @@ function zoomable(view, opts){
     const r=view.getBoundingClientRect();
     z.zoom(e.deltaY<0?1.12:1/1.12, e.clientX-r.left, e.clientY-r.top);
   }, {passive:false});
+  // Touch: inline, a vertical swipe scrolls the page (a finger on a 60vh diagram used to trap the page,
+  // since the view took every gesture); a sideways drag still pans. Two fingers pinch-zoom, in both views.
+  if(opts.modWheel) view.style.touchAction='pan-y';
+  const touches=new Map();
+  let pinch=null;
+  view.addEventListener('pointerdown', e=>{
+    if(e.pointerType!=='touch') return;
+    touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(touches.size===2){ const [a,b]=[...touches.values()]; pinch={d:Math.hypot(a.x-b.x,a.y-b.y)||1}; }
+  }, true);
+  view.addEventListener('pointermove', e=>{
+    if(!touches.has(e.pointerId)) return;
+    touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pinch&&touches.size===2){
+      const [a,b]=[...touches.values()], d=Math.hypot(a.x-b.x,a.y-b.y)||1, r=view.getBoundingClientRect();
+      z.zoom(d/pinch.d, (a.x+b.x)/2-r.left, (a.y+b.y)/2-r.top); pinch.d=d; z.moved=true;
+    }
+  }, true);
+  const lift=e=>{ touches.delete(e.pointerId); if(touches.size<2) pinch=null; };
+  view.addEventListener('pointerup', lift, true); view.addEventListener('pointercancel', lift, true);
   view.addEventListener('pointerdown', e=>{
     if(e.button!==0) return;
+    if(pinch) return;                              // the second finger of a pinch does not start a pan
     // setPointerCapture retargets the eventual `click` to the view itself, so e.target there never
     // reaches the SVG element that was pressed — remember the real press target for the click handler.
     z.downTarget=e.target;
@@ -4528,6 +4611,7 @@ function zoomable(view, opts){
     const sx=e.clientX-z.tx, sy=e.clientY-z.ty, ox=e.clientX, oy=e.clientY;
     z.moved=false;
     const move=ev=>{
+      if(pinch) return;                            // two fingers zoom; the first one no longer pans
       if(Math.abs(ev.clientX-ox)+Math.abs(ev.clientY-oy)>4) z.moved=true;   // a pan, not a click
       z.tx=ev.clientX-sx; z.ty=ev.clientY-sy; z.apply();
     };
