@@ -958,6 +958,8 @@ const probe = `<script>
     ok('a model page lists its findings, open', !!sect && sect.open);
     ok('with the check named and an accept control on each row', !!sect && !!sect.querySelector('.chk-title') && !!sect.querySelector('.wv-acc'));
     ok('and the element as a locate-on-diagram button where there is one', !sect || !DATA.findings[wvFi].element || !!sect.querySelector('.dgloc'));
+    ok('what accepting does is said on the button, not in a paragraph over every model', !!sect && !sect.querySelector('.sb > p.ddesc') &&
+       [...sect.querySelectorAll('.wv-acc')].every(b=>/stays in the report/.test(b.dataset.tip||'')));
     try{ localStorage.removeItem(WAIVER_KEY); }catch(e){}
   });
 

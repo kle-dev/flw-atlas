@@ -185,8 +185,11 @@
     gap:var(--space-2);text-align:center;color:var(--ink-faint);padding:var(--space-8)}
   .estate-ic{width:52px;height:52px;border-radius:var(--radius-2xl);background:var(--accent-subtle);color:var(--accent);
     display:flex;align-items:center;justify-content:center;font-size:var(--text-xl);margin-bottom:var(--space-1)}
+  .estate-ic .ui,.estate-ic .ti{width:calc(24px*var(--ui-scale));height:calc(24px*var(--ui-scale))}
   .estate .et{font-size:var(--text-lg);font-weight:600;color:var(--ink-dim)}
   .estate .eh{font-size:var(--text-sm);max-width:340px;line-height:1.5}
+  /* a short line should not end on one orphaned word */
+  .ddesc,.estate .eh,.kindhint{text-wrap:pretty}
 
   /* ------------------------------------------------------------------ */
   /* Shell: full-height sidebar + (topbar / content) column              */
@@ -1143,6 +1146,8 @@
 
   /* ---------- accepting a finding (waivers) ---------- */
   .wv-cell{display:flex;gap:var(--space-1);justify-content:flex-end}
+  /* the button sits on the cell's edge: a clipping cell would shave its focus ring */
+  .tbl .td.wv-cell{overflow:visible}
   .wv-cell .dgbtn{padding:1px var(--space-15);font-size:var(--text-2xs)}
   .tbl .tx.wv-body{padding-top:var(--space-2)}
   .wv-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:var(--space-2) var(--space-3)}
@@ -1157,7 +1162,8 @@
     padding:var(--space-1) var(--space-2);margin:0;font-size:var(--text-xs);color:var(--ink-dim)}
   .wv-scope legend{font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.04em;padding:0 var(--space-1)}
   .wv-scope label{display:inline-flex;align-items:center;gap:var(--space-1);text-transform:none;letter-spacing:0}
-  .wv-act{display:flex;gap:var(--space-1)}
+  .wv-act{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1)}
+  .wv-note{font-size:var(--text-2xs);color:var(--ink-faint);margin-left:var(--space-1)}
   .wv-why{color:var(--ink-dim);font-size:var(--text-sm)}
   .chk-title{font-weight:600;font-size:var(--text-md);display:flex;align-items:center;gap:var(--space-15)}
   .fpill{margin-left:var(--space-1)}

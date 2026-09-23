@@ -1366,9 +1366,8 @@ function renderSchema(){
      :'every column of all '+svcs.length+' service'+(svcs.length>1?'s':'')+' maps through cleanly')+
     (crossTotal?' · '+crossTotal+' mapping'+(crossTotal>1?'s':'')+' look'+(crossTotal>1?'':'s')+' crossed':'')});
   if(!svcs.length){
-    h+='<div class="estate"><div class="estate-ic" aria-hidden="true">▦</div>'+
-       '<div class="et">Nothing to check</div>'+
-       '<div class="eh">No service in this project references a Liquibase changelog, so there is no schema to compare against.</div></div>';
+    h+=estateHtml({icon:typeIcon('schema',{color:'var(--accent)'}), title:'Nothing to check',
+       hint:'No service in this project references a Liquibase changelog, so there is no schema to compare against.'});
   }
   h+=secnavHtml(reg)+b;
   h+='</div>';
@@ -1491,6 +1490,13 @@ function findingBlock(id,title,count,body,cat,extraTools){
     ? '<button type="button" class="dgbtn" data-cat="'+esc(cat)+'">open the list ↗</button>' : '';
   const tools=[list, extraTools||''].filter(Boolean).join(' ');
   return section(id, esc(title), body, {count, attrs:' id="'+esc(id)+'"', tools:tools?'<div class="toolrow">'+tools+'</div>':''});
+}
+/** An empty state: an icon tile, a title and one line. The icon is SVG markup — the tiles used to hold
+ *  text glyphs (⌕, ▦) that the embedded font subset does not have, so a fallback face drew them at a
+ *  third of the tile's size. */
+function estateHtml(o){
+  return '<div class="estate"><div class="estate-ic" aria-hidden="true">'+o.icon+'</div>'+
+    '<div class="et">'+o.title+'</div><div class="eh">'+o.hint+'</div></div>';
 }
 /** The header of a report page — the hero without the sticky bar: icon tile, title, one line saying
  *  what the page is, and the page's own numbers as facts. */
@@ -1974,7 +1980,8 @@ function acceptFormHtml(f, rule){
       '<label><input type="radio" name="'+id+'-s" value="all"'+(narrow?'':' checked')+'> every '+esc(cat.title)+' finding on this model'+
       (same>1?' <span class="muted">('+same+')</span>':'')+'</label></fieldset>':'')+
     '<div class="wv-act"><button type="submit" class="dgbtn">'+(rule?'save the change':'accept')+'</button>'+
-    '<button type="button" class="dgbtn wv-cancel">cancel</button></div></form>';
+    '<button type="button" class="dgbtn wv-cancel">cancel</button>'+
+    '<span class="wv-note">kept in the report, out of the counts and the gate — written to waivers.json when you save</span></div></form>';
 }
 /** Wire every accept control under [root]: the buttons that open a row's form, the forms themselves,
  *  and the edit/restore controls on an accepted row. Validation speaks: an empty reason or a past
@@ -2025,8 +2032,7 @@ function nodeFindingsHtml(n){
   const all=FIND_BY_NODE.get(n.id)||[]; if(!all.length) return '';
   const open=all.filter(f=>!waiverFor(f)), acc=all.length-open.length;
   const byCheck={}; all.forEach(f=>{ (byCheck[f.check]=byCheck[f.check]||[]).push(f); });
-  let body='<p class="ddesc">Accepting one keeps it in the report, in its own section, and out of the counts and '+
-    'the CI gate. Nothing is written until you save — the bar at the top says what is still unsaved.</p>';
+  let body='';
   checksInOrder().forEach(c=>{ const rows=byCheck[c.id]; if(!rows) return;
     const tones=[...new Set(rows.filter(f=>!waiverFor(f)).map(findTone))].sort((a,b)=>TONE_ORDER[a]-TONE_ORDER[b]);
     body+='<div class="chk-head"><div class="chk-title">'+esc(c.title)+' '+tones.map(tonePill).join(' ')+'</div>'+
@@ -2077,7 +2083,7 @@ function waivedBlockHtml(){
            {k:'why',label:'Accepted because',w:'minmax(20ch,2.6fr)',cls:'wrap'},
            {k:'who',label:'By · when',w:'minmax(10ch,1fr)',opt:true},
            {k:'state',label:'',w:'minmax(9ch,.9fr)',cls:'tags'},
-           {k:'act',label:'',w:'minmax(7ch,.5fr)',cls:'tags wv-cell'}], rows, {filter:false}),
+           {k:'act',label:'',w:'minmax(9ch,.5fr)',cls:'tags wv-cell'}], rows, {filter:false}),
       {count:rules.length, attrs:' id="chk-waived"'});
   }
   // The one thing left that is about the file rather than a rule: it could not be fully read.
@@ -2104,6 +2110,9 @@ function waivedBlockHtml(){
 }
 // ---------- the findings themselves ----------
 const FIND_CAP=200;
+// What accepting does, said where the decision is taken — on the button and in the form — instead of as a
+// paragraph above every model's findings, which a reader met on every page and stopped reading.
+const ACCEPT_TIP='Accept: it stays in the report, in its own section, out of the counts and the CI gate. Nothing is written until you save.';
 const fileBase=p=>String(p||'').split('/').pop();
 const SHOWACC_KEY='atlas-chk-showacc';
 function showAccepted(){ try{ return localStorage.getItem(SHOWACC_KEY)==='1'; }catch(e){ return false; } }
@@ -2121,7 +2130,7 @@ const FIND_COLS=[
   {k:'el',label:'Element',w:'minmax(10ch,1fr)',opt:true},
   {k:'msg',label:'Finding',w:'minmax(24ch,3fr)',cls:'wrap'},
   {k:'where',label:'File',w:'minmax(10ch,1fr)',mono:true,opt:true},
-  {k:'act',label:'',w:'minmax(9ch,.8fr)',cls:'tags wv-cell'},
+  {k:'act',label:'',w:'minmax(12ch,.7fr)',cls:'tags wv-cell'},
 ];
 /** One finding as a table row: severity as a word, the model as a chip, the element as a jump into the
  *  model (or, on the model's own page, a locate-on-diagram button), the message, the file with the
@@ -2147,7 +2156,7 @@ function findingRow(f, o){
       msg:esc(f.message)+(f.snippet?' <span class="mono muted">'+esc(f.snippet)+'</span>':'')+(rule?acceptedNoteHtml(rule):''),
       where:f.file?'<span class="fp">'+esc(fileBase(f.file))+'</span>'+lineRef(f.file,f.line)+openBtn(f.file,f.line):'',
       act:rule?'<button type="button" class="dgbtn wv-edit" data-fi="'+f.fi+'">edit</button><button type="button" class="dgbtn wv-restore" data-fi="'+f.fi+'">restore</button>'
-              :'<button type="button" class="dgbtn wv-acc" data-fi="'+f.fi+'">accept…</button>',
+              :'<button type="button" class="dgbtn wv-acc" data-fi="'+f.fi+'" data-tip="'+ACCEPT_TIP+'">accept…</button>',
     }};
 }
 /** One cause, many rows: the message with its names and numbers blanked, so twenty-two copies of the
@@ -2233,8 +2242,7 @@ function renderChecks(){
   _sectReg=null;   // the health list above is this page's navigator; a second strip repeated it (0.25.0)
   let h='<div class="dash" data-fscope>';
   h+=pageHeader({icon:'checks', color:color('checks'), title:'Checks', sub:C.openN
-       ? '<b>'+esc(kindHeadline(K))+'</b> — a defect is wrong now, an advice is a pattern worth a look and optional to act on'+
-         (C.waivedN?' · '+C.waivedN+' already accepted':'')
+       ? '<b>'+esc(kindHeadline(K))+'</b>'+(C.waivedN?' · '+C.waivedN+' already accepted':'')
        : C.waivedN ? 'nothing open — '+C.waivedN+' finding'+(C.waivedN>1?'s':'')+' deliberately accepted, listed below with the reasons'
        : 'nothing flagged — no parse issues, no broken expressions, nothing unused or unproven'});
   h+=healthListHtml();
@@ -2250,9 +2258,8 @@ function renderChecks(){
         '">show accepted<span class="pchipn">'+C.waivedN+'</span></button>':''});
   }
   h+=b;
-  if(!C.openN && !C.waivedN) h+='<div class="estate"><div class="estate-ic" aria-hidden="true">✓</div>'+
-    '<div class="et">Nothing to check</div>'+
-    '<div class="eh">No parse issue, no flagged expression, no unused or unresolved model.</div></div>';
+  if(!C.openN && !C.waivedN) h+=estateHtml({icon:uiIcon('check'), title:'Nothing to check',
+    hint:'No parse issue, no flagged expression, no unused or unresolved model.'});
   h+='</div>';
   v.innerHTML=h;
   wireReport(v);
@@ -2368,9 +2375,8 @@ function renderVariables(){
   }
   // The reassurance first, then the declared-only table and the caveat: a page that opens on a 35-row
   // table of what is *not* wrong and says "nothing flagged" at the bottom reads as 35 findings.
-  if(!open) h+='<div class="estate"><div class="estate-ic" aria-hidden="true">✓</div>'+
-       '<div class="et">Nothing written and forgotten</div>'+
-       '<div class="eh">Every variable a model writes is read somewhere — by an expression, a script, a form field, a decision or a called model.</div></div>';
+  if(!open) h+=estateHtml({icon:uiIcon('check'), title:'Nothing written and forgotten',
+       hint:'Every variable a model writes is read somewhere — by an expression, a script, a form field, a decision or a called model.'});
   h+=secnavHtml(reg)+b;
   h+='</div>';
   v.innerHTML=h;
@@ -2570,9 +2576,8 @@ function renderScripts(){
     facts:all.length?[['Scripts',all.length],['Models',models.length],['Lines',totalLines],
       ['With findings',{html:withIssues?'<span class="sev sev-bad">⚠ '+withIssues+'</span>':'0',copy:null}]]:[]});
   if(!all.length){
-    h+='<div class="estate"><div class="estate-ic" aria-hidden="true">{ }</div>'+
-       '<div class="et">No script tasks</div>'+
-       '<div class="eh">Nothing to show — no script task, listener script or bot script was found.</div></div>';
+    h+=estateHtml({icon:typeIcon('scripts',{color:'var(--accent)'}), title:'No script tasks',
+       hint:'Nothing to show — no script task, listener script or bot script was found.'});
   } else {
     // chips narrow by kind (same single-select pattern as every filter bar), the text box searches names,
     // languages and the code itself; one control opens or closes every body at once — reading a
@@ -4487,7 +4492,7 @@ function renderDetail(){
   hideDgCard();
   if(!state.sel || !byId.get(state.sel)){
     const alt=IS_MAC?'⌥':'Alt+';
-    det.innerHTML='<div class="estate"><div class="estate-ic" aria-hidden="true">⌕</div>'+
+    det.innerHTML='<div class="estate"><div class="estate-ic" aria-hidden="true">'+uiIcon('search')+'</div>'+
       '<div class="et">'+(state.cat?'Nothing selected':'Flowable Atlas')+'</div>'+
       '<div class="eh">Pick an item from the list — click any relationship to travel the graph.<br>'+
       'Search everything with <b>/</b> or <b>'+MODK+'K</b> · '+
@@ -5354,7 +5359,7 @@ function dgCardHtml(n, elId, g){
     return '<div class="dgfind" data-fi="'+f.fi+'">'+tonePill(findTone(f))+' <span class="tag">'+esc(checkTitle(f.check))+'</span> '+esc(f.message)+
       (rule?acceptedNoteHtml(rule):'')+'<div class="dgfind-act">'+
       (rule?'<button type="button" class="dgbtn wv-restore" data-fi="'+f.fi+'">restore</button>'
-           :'<button type="button" class="dgbtn" data-dgaccept="'+f.fi+'">accept…</button>')+'</div></div>'; }).join('');
+           :'<button type="button" class="dgbtn" data-dgaccept="'+f.fi+'" data-tip="'+ACCEPT_TIP+'">accept…</button>')+'</div></div>'; }).join('');
   const det=document.getElementById('detail');
   // a criterion has no detail row of its own — its "details" are the guarded plan item's row
   const revealId=crit&&crit.planItemDef!=null?String(crit.planItemDef):String(elId);

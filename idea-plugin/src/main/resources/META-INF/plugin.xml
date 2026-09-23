@@ -190,7 +190,11 @@
               <i>Checks</i> badge is grey while only advice is open.</li>
           <li><b>Smaller things in the explorer.</b> A list row's findings pill carries its tone's icon and
               says what it counts, the reference count beside it carries a link icon and says so too, and a
-              key that only repeats the name is shown once.</li>
+              key that only repeats the name is shown once. What accepting a finding does is said on the
+              <i>accept…</i> button and in its form, instead of in a paragraph above every model's findings.
+              Empty states draw their icon instead of a glyph the embedded font did not have, the Checks
+              page's subtitle states its numbers and leaves the explanation to its two headings, and an
+              accept button's focus ring is no longer clipped by its cell.</li>
           <li><b>The findings in a tool window of their own.</b> <i>Atlas Findings</i> lists every defect —
               and, when asked, the advice and the accepted findings — from the same analysis the explorer is
               built from, grouped by check. A double-click opens the finding's file at its line, and
@@ -557,12 +561,6 @@
               use of the form, so a form nothing opens but a group may use was never reported. And a DMN
               service task, listed by the parser as both a service task and a rule task, produced every
               topology finding twice.</li>
-          <li><b><code>schemaGaps</code> compares a service against its own table only.</b> When a changelog
-              creating several tables matched none of a service's columns, the coverage pass fell back to
-              <i>every</i> column of the changelog, so another table's columns were reported as this
-              service's unmapped ones. And a service no data object binds at all no longer reports every
-              mapped column as "used by no data object": the service is used directly, and the row said
-              nothing about the column.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

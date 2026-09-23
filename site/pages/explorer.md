@@ -392,7 +392,8 @@ with the members a chevron away — the list has as many rows as it has causes. 
 every row: the reader is there for the elements.)
 
 Every finding row — on the Checks page, and under **Findings on this model** on the model's own page,
-where the ⌖ button puts the element on the diagram — carries **accept…**. It opens a form on the row:
+where the ⌖ button puts the element on the diagram — carries **accept…**; hovering it says what
+accepting does, and the form repeats it in one line beside its buttons. It opens a form on the row:
 the reason (required — it is the only part of a waiver a reviewer can review, and an empty one is
 refused with a sentence, not a red border), an optional **until** date after which the finding comes
 back, and **by**, prefilled with the project's git identity inside the IDE. A finding that names an

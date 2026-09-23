@@ -270,6 +270,12 @@ class RenderersSmokeTest {
         // The report pages share the detail page's bones: the same header, sections and tables.
         assertTrue("expected the report page header from explorer.js", html.contains("function pageHeader("))
         assertTrue("expected the report wiring from explorer.js", html.contains("function wireReport("))
+        // One vocabulary for findings, and empty states drawn with icons rather than glyphs the font lacks.
+        assertTrue("expected the finding tone from explorer.js", html.contains("function findTone("))
+        assertTrue("expected the advice pill from explorer.css", html.contains(".pill-advice{"))
+        assertTrue("expected the empty-state helper from explorer.js", html.contains("function estateHtml("))
+        assertFalse("what accepting does is said on the button, not above every model's findings",
+            html.contains("Accepting one keeps it in the report"))
         assertFalse("the old operation card styling is gone", html.contains("details.op>summary"))
         assertFalse("the old row list styling is gone", html.contains(".oplist{"))
 
