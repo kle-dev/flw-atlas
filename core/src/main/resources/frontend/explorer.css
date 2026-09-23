@@ -792,27 +792,48 @@
   .toast.show{opacity:1;transform:none}
 
   /* ---- the page header ----
-     A sticky bar keeps the kind and the actions in reach. Below it the hero: the type's icon in a tinted
-     tile, the title, one identity line (kind · key · path), Design's description as prose, and the facts
-     as a definition list. Counts are not facts here: a section carries its own count in its heading and
-     in the navigator. */
+     The hero: the type's icon in a tinted tile, the title, one identity line (kind · key · path) and the
+     health strip. Under it the sticky bar — a node page's tabs and its actions (a category landing keeps
+     its kind label there). Design's description and the facts open the Overview tab. Counts are not facts:
+     a section carries its own count in its heading, a tab in its label. */
   .detailcol{container-type:inline-size}
   .dhead{position:sticky;top:0;z-index:6;display:flex;align-items:center;gap:var(--space-2);min-height:44px;
     padding:var(--space-15) var(--space-4);background:var(--panel);border-bottom:1px solid var(--line)}
   .dkind{display:inline-flex;align-items:center;gap:var(--space-15);flex:none;font-size:var(--text-xs);font-weight:600;
     letter-spacing:.06em;text-transform:uppercase;color:var(--ink-dim);white-space:nowrap}
   .dhead-actions{display:inline-flex;gap:var(--space-1);flex:none;margin-left:auto}
-  .dhead button{display:inline-flex;align-items:center;gap:var(--space-1);flex:none;height:26px;
+  .dhead-actions button{display:inline-flex;align-items:center;gap:var(--space-1);flex:none;height:26px;
     background:var(--panel);border:1px solid var(--line2);color:var(--ink-dim);
     border-radius:var(--radius-md);padding:0 var(--space-2);cursor:pointer;font-family:var(--sans);font-size:var(--text-xs)}
-  .dhead button:hover{color:var(--ink);border-color:var(--accent)}
-  .dhead button.ok{color:var(--ok-text);border-color:var(--ok-border)}
-  @container (max-width:480px){ .dhead button .lbl{display:none} .dhead button{padding:0 var(--space-15)} .dhealth{padding-left:0} }
+  .dhead-actions button:hover{color:var(--ink);border-color:var(--accent)}
+  .dhead-actions button.ok{color:var(--ok-text);border-color:var(--ok-border)}
+  @container (max-width:480px){ .dhealth{padding-left:0} }
+  /* a node page's sticky bar is its tabs: full-bleed across the body's gutter, the underline of the
+     selected tab sitting on the bar's own rule. The actions drop their labels before the tabs crowd. */
+  .dbody>.dhead{margin:0 calc(-1*var(--space-6));padding:0 var(--space-6);align-items:flex-end;min-height:42px}
+  .dbody>.dhead .dhead-actions{align-self:center}
+  @container (max-width:720px){ .dhead-actions button .lbl{display:none} .dhead-actions button{padding:0 var(--space-15)} }
+  .ptabs{display:flex;gap:var(--space-4);min-width:0;overflow-x:auto;scrollbar-width:none}
+  .ptabs::-webkit-scrollbar{display:none}
+  .ptab{appearance:none;background:none;border:0;border-bottom:2px solid transparent;margin:0 0 -1px;
+    padding:var(--space-25) 0 calc(var(--space-25) - 1px);display:inline-flex;align-items:center;gap:var(--space-15);
+    font-family:var(--sans);font-size:var(--text-sm);font-weight:500;color:var(--ink-dim);cursor:pointer;white-space:nowrap}
+  .ptab:hover{color:var(--ink)}
+  .ptab[aria-selected="true"]{color:var(--ink);font-weight:600;border-bottom-color:var(--accent)}
+  .ptab:focus-visible{outline:2px solid var(--focus);outline-offset:-2px;border-radius:var(--radius-sm)}
+  .ptn{font-size:var(--text-2xs);font-weight:500;font-variant-numeric:tabular-nums;line-height:1.5;color:var(--ink-faint);
+    background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius-full);padding:0 var(--space-15)}
+  .ptdot{flex:none;width:7px;height:7px;border-radius:50%}
+  .ptdot-bad{background:var(--bad-text)}
+  .ptdot-warn{background:var(--warn-text)}
+  .ptdot-advice{background:var(--neutral-text)}
+  .dpane>.ddesc:first-child{margin-top:var(--space-4)}
+  .dpane>.props.facts{border-top:0;padding-top:0}
   .ui{flex:none;width:12px;height:12px;display:inline-block;vertical-align:-.1em}
   .dbody{padding:0 var(--space-6) var(--space-8);max-width:1000px}
   .chip{display:inline-flex;align-items:center;gap:var(--space-15);font-size:var(--text-xs);font-weight:500;
     border:1px solid var(--line2);border-radius:var(--radius-full);padding:var(--space-05) var(--space-2);color:var(--ink-dim)}
-  .dhero{padding:var(--space-5) 0 var(--space-2)}
+  .dhero{padding:var(--space-5) 0 var(--space-3)}
   .dhero-top{display:flex;gap:var(--space-3);align-items:flex-start}
   .dtile{flex:none;width:40px;height:40px;border-radius:var(--radius-lg);display:inline-flex;align-items:center;justify-content:center;
     background:color-mix(in srgb, var(--tc) 14%, transparent);color:var(--tc)}

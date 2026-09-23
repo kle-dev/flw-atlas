@@ -257,10 +257,13 @@ class RenderersSmokeTest {
         // The IDE palette bridge: the page takes nine LaF colours from the URL and the live push.
         assertTrue("expected the IDE palette applier from explorer.js", html.contains("function applyIdePalette("))
         assertTrue("expected the idePal URL seed in explorer.html", html.contains("idePal"))
-        // The detail page: a hero header with the facts as a definition list and a section navigator, and
-        // the components every section is built from — a column-headed table, cards, a code block.
+        // The detail page: a hero header, the page's tabs (the facts as a definition list open Overview),
+        // and the components every section is built from — a column-headed table, cards, a code block. The
+        // section navigator stays for the report pages.
         assertTrue("expected the hero builder from explorer.js", html.contains("function heroHtml("))
         assertTrue("expected the facts table from explorer.js", html.contains("const FACTS="))
+        assertTrue("expected the page's tabs from explorer.js", html.contains("function paneBarHtml(") && html.contains("function setPane("))
+        assertTrue("expected the page's tabs styling from explorer.css", html.contains(".ptab[aria-selected=\"true\"]{"))
         assertTrue("expected the section navigator from explorer.js", html.contains("function secnavHtml("))
         assertTrue("expected the table component from explorer.js", html.contains("function tbl("))
         assertTrue("expected the cards component from explorer.js", html.contains("function cards("))

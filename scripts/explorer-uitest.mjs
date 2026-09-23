@@ -489,12 +489,12 @@ const probe = `<script>
   });
 
   // Design's model Description used to render for apps only, because each type spelled the row itself.
-  // It is the hero's prose now — under the title, not a labelled fact.
+  // It is prose now — the first thing on the Overview tab, not a labelled fact.
   steps.push(()=>{ closeOtherTabs(); location.hash=enc('app:demoApp'); });
   steps.push(()=>{
     const det=document.getElementById('detail');
-    const desc=det.querySelector('.dhero .ddesc');
-    ok('the hero shows the model Description as prose', !!desc && /Miniature fixture app/.test(desc.textContent),
+    const desc=det.querySelector('#pane-overview > .ddesc');
+    ok('the Overview tab opens with the model Description as prose', !!desc && /Miniature fixture app/.test(desc.textContent),
        desc?desc.textContent.slice(0,140):'(no .ddesc)');
     ok('and not as a labelled fact', ![...det.querySelectorAll('.facts dt')].some(t=>/^Description$/i.test(t.textContent)));
     // --- the page header: title in the hero, the same title in the sticky bar, the identity line ---
@@ -503,23 +503,58 @@ const probe = `<script>
     ok('the identity line names kind, key and path', !!det.querySelector('.dident .dkey') && /demoApp/.test(det.querySelector('.dident').textContent));
     ok('the actions are one group with labels', det.querySelectorAll('.dhead .dhead-actions button .lbl').length>=2);
   });
-  // --- the section navigator: one chip per rendered section, in order, and a chip opens its section ---
+  // --- the page's tabs: a tab per pane that has something, the sections sorted into them, one on screen ---
   steps.push(()=>{ closeOtherTabs(); location.hash=enc('process:orderProcess'); });
   steps.push(()=>{
     const det=document.getElementById('detail');
-    const chips=[...det.querySelectorAll('.secnav .snc')], sects=[...det.querySelectorAll('details.sect')];
-    ok('the navigator lists every rendered section', chips.length>0 && chips.length===sects.length,
-       chips.length+' chips vs '+sects.length+' sections');
-    ok('and in page order', chips.every((c,i)=>sects[i] && sects[i].dataset.sect===c.dataset.jumpSect));
-    const target=chips.find(c=>c.dataset.jumpSect==='usertasks')||chips[chips.length-1];
-    const d=det.querySelector('details.sect[data-sect="'+target.dataset.jumpSect+'"]');
+    const tabs=[...det.querySelectorAll('.ptabs .ptab')], panes=[...det.querySelectorAll('.dpane')];
+    ok('a page has a tab per pane', tabs.length>=2 && tabs.length===panes.length && tabs.every((t,i)=>t.dataset.pane===panes[i].dataset.pane),
+       tabs.map(t=>t.dataset.pane).join()+' / '+panes.map(p=>p.dataset.pane).join());
+    ok('the panes keep the page order', panes.map(p=>p.dataset.pane).join()==='overview,findings,connections,details', panes.map(p=>p.dataset.pane).join());
+    ok('one pane is on screen, the first', panes.filter(p=>!p.hidden).length===1 && !panes[0].hidden && tabs[0].getAttribute('aria-selected')==='true');
+    const inPane=(sect, pane)=>{ const d=det.querySelector('[data-sect="'+sect+'"]'); return !!d && d.closest('.dpane').dataset.pane===pane; };
+    // (miniproject carries no DI, so this process has no drawing: its Overview is its facts)
+    ok('the facts are on Overview, the findings on Findings', !!det.querySelector('#pane-overview > .facts') && inPane('findings','findings'));
+    ok('the fit and the relations on Connections, the elements on Details',
+       inPane('fit','connections') && inPane('relations','connections') && inPane('elements','details'));
+    ok('no pane is empty', panes.every(p=>p.children.length>0), panes.filter(p=>!p.children.length).map(p=>p.dataset.pane).join());
+    const t=tabs.find(x=>x.dataset.pane==='details');
+    const d=det.querySelector('details.sect[data-sect="elements"]');
     if(d) d.open=false;
     window.__navSect=d;
-    click(target);
+    if(t) click(t);
   });
   steps.push(()=>{
-    const d=window.__navSect;
-    ok('clicking a navigator chip opens its section', !!d && d.open, d?d.dataset.sect+' still closed':'(no section)');
+    const det=document.getElementById('detail');
+    const pane=det.querySelector('#pane-details');
+    ok('clicking a tab brings its pane up', !!pane && !pane.hidden && det.querySelectorAll('.dpane:not([hidden])').length===1);
+    ok('and the hash says which', /&p=details/.test(location.hash), location.hash);
+    ok('a folded section stays folded on its tab', !!window.__navSect && !window.__navSect.open);
+    if(window.__navSect) window.__navSect.open=true;
+    // the digit keys pick a tab by its place
+    document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'1', code:'Digit1', bubbles:true}));
+    ok('1 brings the first tab back', !det.querySelector('#pane-overview').hidden && !/&p=/.test(location.hash), location.hash);
+    // the tab carries over to the next page when that page has it
+    const t=det.querySelector('.ptab[data-pane="connections"]'); if(t) click(t);
+    select('form:orderForm');
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    const pane=det.querySelector('#pane-connections');
+    ok('the tab carries over to the next page', !!pane && !pane.hidden && /&p=connections/.test(location.hash), location.hash);
+    history.back();
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    ok('Back returns to the page on the tab it was left on', state.sel==='process:orderProcess' && !det.querySelector('#pane-connections').hidden, state.sel+' '+location.hash);
+    // the health strip reaches into another tab: its findings item brings Findings up
+    click(det.querySelector('.ptab[data-pane="overview"]'));
+    const fb=det.querySelector('.dhealth .hs[data-jump-sect="findings"]');
+    if(fb) click(fb);
+    ok('a health item brings up the tab its section is on', !!fb && !det.querySelector('#pane-findings').hidden);
+    click(det.querySelector('.ptab[data-pane="details"]'));
+  });
+  steps.push(()=>{
     // --- "N parameter mappings ↓" on a service task lands on that task's group in the Parameters section,
     // not on the card it sits in (also a row of the same element, and first in the document)
     const det=document.getElementById('detail');
@@ -649,8 +684,7 @@ const probe = `<script>
     let st=null; try{ st=JSON.parse(localStorage.getItem('atlas-sect')); }catch(e){}
     ok('a group remembers its fold under its old section id', !!window.__gwId && !!st && st[window.__gwId]===window.__gwOpen, window.__gwId+' '+JSON.stringify(st));
     if(st&&window.__gwId){ delete st[window.__gwId]; delete st.flows; try{ localStorage.setItem('atlas-sect', JSON.stringify(st)); }catch(e){} }
-    const nav=[...document.querySelectorAll('#detail .secnav .snc')].map(c=>c.dataset.jumpSect);
-    ok('the navigator is short again', nav.length<=9, nav.join());
+    const nav=[...document.querySelectorAll('#detail [data-sect]')].map(c=>c.dataset.sect);
     // the health strip under the title: findings, connections — each a way into its section
     const hs=document.querySelector('#detail .dhero .dhealth');
     ok('a model page has a health strip under its title', !!hs);
@@ -662,7 +696,7 @@ const probe = `<script>
     ok('its findings item says defects or advice', !!fb && /defect|advice/.test(fb.textContent), fb?fb.textContent:'(none)');
     const fs=document.querySelector('#detail details.sect[data-sect="findings"]');
     if(fb&&fs){ fs.open=false; click(fb); ok('and opens the findings', fs.open); }
-    // every page reads picture, fit, findings, relations, details — in that order
+    // every page reads picture, findings, fit and relations, details — in that order, a tab each
     const at=id=>nav.indexOf(id);
     ok('the findings come before the relations, the relations before the elements',
        at('findings')>=0 && at('relations')>at('findings') && at('elements')>at('relations'), nav.join());
@@ -1558,6 +1592,12 @@ const ideProbe = `<script>
   steps.push(()=>{
     ok('a node page opens', state.sel==='process:orderProcess');
     ok('no horizontal page scroll', noHScroll(), document.documentElement.scrollWidth+' > '+window.innerWidth);
+    // the page's tabs and its two actions share one bar at this width: the tabs whole, the actions as icons
+    const pt=document.querySelector('#detail .ptabs'), pa=document.querySelector('#detail .dhead-actions');
+    ok('the page tabs fit an editor-tab width', !!pt && pt.children.length>=3 && pt.scrollWidth<=pt.clientWidth+1, pt&&(pt.scrollWidth+' > '+pt.clientWidth));
+    const lastTab=pt&&pt.lastElementChild.getBoundingClientRect(), ar=pa&&pa.getBoundingClientRect();
+    ok('and leave room for the actions', !!lastTab && !!ar && lastTab.right<=ar.left, lastTab&&ar&&(Math.round(lastTab.right)+' > '+Math.round(ar.left)));
+    ok('which drop their labels', !!pa && [...pa.querySelectorAll('.lbl')].every(l=>getComputedStyle(l).display==='none'));
     // more tabs than the strip can show
     openTabs(nodes.filter(n=>['process','form','decision','case','service','java'].indexOf(n.type)>=0).slice(0,12).map(n=>n.id));
   });

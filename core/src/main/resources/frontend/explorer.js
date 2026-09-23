@@ -530,8 +530,10 @@ const isUnusedForm = n => n.type==='form' && !(incM.get(n.id)||[]).some(e=>e.rel
 // `focusEl` is the model element a search hit came from — the detail panel opens that row directly.
 // `tabs`/`tab` are the open detail tabs (node ids + active index). Invariant: while the browse view
 // shows a node, `sel === tabs[tab]` — that is what keeps every existing `state.sel` reader correct.
+// `pane` is the part of a node's page on screen (Overview, Findings, Connections, Details — see PANES):
+// a page's own tabs, not the editor tabs above it.
 let state = {view:'overview', cat:null, sel:null, filter:'', sort:'name', focus:'', focusEl:'',
-             tabs:[], tab:-1};
+             tabs:[], tab:-1, pane:'overview'};
 // the tree's lens was written to localStorage on every switch and never read back — a reload reset it
 try{ state.treeLens=localStorage.getItem('atlas-tree-lens')||undefined; }catch(e){}
 
@@ -868,11 +870,11 @@ function parseHash(){
   // is URI-encoded, so a literal '&' cannot occur inside one and the split is unambiguous.
   const parts = raw.split('&');
   const id = dec(parts[0]), ctx = hashContext(parts.slice(1));
-  return byId.get(id) ? {view:'browse', sel:id, q:ctx.q, e:ctx.e, f:ctx.f, s:ctx.s} : {view:'overview', stale:raw};
+  return byId.get(id) ? {view:'browse', sel:id, q:ctx.q, e:ctx.e, f:ctx.f, s:ctx.s, p:ctx.p} : {view:'overview', stale:raw};
 }
 /** The `k=v` pairs behind a route's first part; unknown keys are ignored, absent ones stay undefined. */
 function hashContext(pairs){
-  const out={q:'', e:'', f:undefined, s:undefined, c:undefined, a:undefined, l:undefined};
+  const out={q:'', e:'', f:undefined, s:undefined, c:undefined, a:undefined, l:undefined, p:undefined};
   pairs.forEach(p=>{ const i=p.indexOf('='); if(i<0) return; const k=p.slice(0,i); if(k in out) out[k]=dec(p.slice(i+1)); });
   return out;
 }
@@ -895,7 +897,8 @@ function syncHashContext(){
   const base=state.sel?enc(state.sel):(state.cat?'/browse/'+enc(state.cat):'');
   if(!base) return;
   let h=base;
-  if(state.sel){ if(state.focus) h+='&q='+enc(state.focus); if(state.focusEl) h+='&e='+enc(state.focusEl); }
+  if(state.sel){ if(state.focus) h+='&q='+enc(state.focus); if(state.focusEl) h+='&e='+enc(state.focusEl);
+    if(state.pane && state.pane!=='overview') h+='&p='+enc(state.pane); }
   if(state.filter) h+='&f='+enc(state.filter);
   if(state.sort && state.sort!=='name') h+='&s='+enc(state.sort);
   if(location.hash.slice(1)!==h){ try{ history.replaceState(history.state, '', '#'+h); }catch(e){} }
@@ -998,6 +1001,8 @@ function route(){
     showView('variables'); renderVariables();
     renderSidebarActive(); renderCrumbs();
   } else if(r.sel){
+    // the page's tab rides in the hash, so Back lands on the tab the reader left (select() carries it on)
+    state.pane = r.p || 'overview';
     applySelection(r.sel, {filter:r.f, sort:r.s});        // handles view/list/detail/crumbs
   } else {
     state.view='browse';
@@ -3485,13 +3490,12 @@ function identLine(n){
       '"><span class="fp">'+esc(n.file)+'</span>'+copyBtn(n.file,'path')+openBtn(n.file,(n.data||{}).line)+'</span>':'')+
     '</div>';
 }
-/** Icon tile, title, identity line, Design's description as prose, and the facts strip. The tile's
- *  tint derives from the same --c-<type> token the icon uses, so it survives the IDE palette as the
- *  icons do. */
+/** Icon tile, title, identity line and the health strip — what a page says whichever tab is open. The
+ *  description and the facts open the Overview tab (see renderDetail). The tile's tint derives from the
+ *  same --c-<type> token the icon uses, so it survives the IDE palette as the icons do. */
 /** Node types whose label is source text, not a name: shown as code, clamped, with the rest on request. */
 const CODE_LABEL_TYPES=new Set(['expression','binding','string']);
-function heroHtml(n, facts, health){
-  const d=n.data||{};
+function heroHtml(n, health){
   const code=CODE_LABEL_TYPES.has(n.type);
   const title=code
     ? '<div class="dtitle dtitle-code" data-tip="'+esc(n.label.length>160?n.label.slice(0,160)+'…':n.label)+'">'+esc(n.label)+'</div>'+
@@ -3499,9 +3503,7 @@ function heroHtml(n, facts, health){
     : '<div class="dtitle">'+esc(n.label)+authBadge(n)+'</div>';
   return '<div class="dhero">'+
     '<div class="dhero-top"><span class="dtile" style="--tc:'+nodeColor(n)+'">'+nodeIcon(n)+'</span>'+
-    '<div class="dhero-main">'+title+identLine(n)+
-    (d.description?'<p class="ddesc">'+esc(String(d.description))+'</p>':'')+'</div></div>'+
-    (health||'')+props(facts,{cls:'facts'})+'</div>';
+    '<div class="dhero-main">'+title+identLine(n)+'</div></div>'+(health||'')+'</div>';
 }
 // Types an app packages: "in no app" is said of these only, and only in a project that has apps at all.
 const APP_MEMBER_TYPES=new Set(['process','case','decision','form','page','dataObject','masterData','service','agent','action',
@@ -5943,6 +5945,96 @@ function kvTree(v,depth){
 const kvTruthy=v=>!(v==null||v===''||(Array.isArray(v)&&!v.length)||
   (typeof v==='object'&&!Array.isArray(v)&&!Object.keys(v).length));
 
+// ---------- the page's tabs ----------
+// A node's page is four panes: what the model is (its facts and its picture), what Atlas reports on it,
+// how it meets the rest of the project (does it fit, and every relation), and what is inside it. They
+// are the slots every page already read in one column, top to bottom — where a reader who came for the
+// callers scrolled past the drawing and the findings to reach them, and a page of twenty sections needed
+// a strip of chips to be navigable at all. Every pane is rendered and the ones not on screen are `hidden`,
+// so the recording proxy, the filters and every link into a section work as they did; a pane with
+// nothing in it gets no tab.
+const PANES=[
+  {id:'overview', label:'Overview', tip:'What it is: its facts and its picture'},
+  {id:'findings', label:'Findings', tip:'What Atlas reports on this model'},
+  {id:'connections', label:'Connections', tip:'Whether it fits what it meets, and every relation'},
+  {id:'details', label:'Details', tip:'What is inside it: elements, fields, parameters, variables'},
+];
+/** The panes that have something to show, with their tab's count and tone. `html` maps pane id → markup. */
+function detailPanes(n, R, gaps, html){
+  const open=(FIND_BY_NODE.get(n.id)||[]).filter(f=>!waiverFor(f));
+  const defects=open.filter(f=>checkKind(f.check)!=='advice');
+  const bad=(gaps||[]).reduce((a,t)=>a+t.bad,0), warn=(gaps||[]).reduce((a,t)=>a+t.warn,0);
+  const plural=(k,w)=>k+' '+w+(k===1?'':'s');
+  // Findings counts what is open; Connections counts neighbours, not edges, as the health strip does —
+  // its dot says the gap tables found something, and the strip says how much.
+  const extra={
+    findings:{count:open.length||null,
+      tone:defects.some(f=>f.severity==='error')?'bad':defects.length?'warn':open.length?'advice':'',
+      toneLabel:defects.length?plural(defects.length,'defect'):open.length?'advice only':''},
+    connections:{count:new Set(R.out.map(e=>e.id).concat(R.inc.map(e=>e.id))).size||null,
+      tone:bad?'bad':warn?'warn':'', toneLabel:bad+warn?plural(bad+warn,'gap'):''},
+  };
+  const panes=PANES.filter(p=>html[p.id]).map(p=>Object.assign({}, p, extra[p.id]||{}, {html:html[p.id]}));
+  return panes.length?panes:[Object.assign({}, PANES[0], {html:'<p class="muted relnone">Nothing recorded for this node.</p>'})];
+}
+/** The tab bar: underlined tabs, so it never reads as a second row of editor tabs. One pane needs none. */
+function paneBarHtml(panes, cur){
+  if(panes.length<2) return '<span class="ptabs-none"></span>';
+  return '<div class="ptabs" role="tablist" aria-label="Parts of this page">'+panes.map((p,i)=>{
+    const on=p.id===cur;
+    return '<button type="button" role="tab" class="ptab" id="ptab-'+p.id+'" data-pane="'+p.id+'" aria-controls="pane-'+p.id+'"'+
+      ' aria-selected="'+on+'" tabindex="'+(on?0:-1)+'" data-tip="'+esc(p.tip+' — press '+(i+1))+'">'+esc(p.label)+
+      (p.count!=null?'<span class="ptn">'+esc(String(p.count))+'</span>':'')+
+      (p.tone?'<span class="ptdot ptdot-'+p.tone+'" aria-hidden="true"></span><span class="vh">'+esc(p.toneLabel)+'</span>':'')+
+      '</button>';
+  }).join('')+'</div>';
+}
+/** Bring one pane up. `o.top`: when the page is scrolled past the title, the new pane starts under the bar
+ *  instead of somewhere in its middle. */
+function setPane(det, id, o){
+  o=o||{};
+  const pane=det.querySelector('.dpane[data-pane="'+id+'"]'); if(!pane) return null;
+  det.querySelectorAll('.dpane').forEach(p=>{ p.hidden=p!==pane; });
+  det.querySelectorAll('.ptab').forEach(t=>{ const on=t.dataset.pane===id; t.setAttribute('aria-selected', String(on)); t.tabIndex=on?0:-1; });
+  const changed=state.pane!==id;
+  state.pane=id;
+  // a drawing laid out on a hidden tab had no width to fit to
+  pane.querySelectorAll('.dgview').forEach(v=>{ if(v._tryFit) v._tryFit(); });
+  if(changed){ syncHashContext(); syncSectAll(det); }
+  if(o.top){
+    const hero=det.querySelector('.dhero');
+    if(hero){ const top=hero.getBoundingClientRect().bottom-det.getBoundingClientRect().top+det.scrollTop;
+      if(det.scrollTop>top) det.scrollTop=top; }
+  }
+  return pane;
+}
+/** Bring up the pane `el` sits in, when it is not the one on screen. */
+function showPaneOf(det, el){
+  const p=el&&el.closest?el.closest('.dpane'):null;
+  if(p && p.hidden) setPane(det, p.dataset.pane);
+}
+const paneSects=det=>[...(det.querySelector('.dpane:not([hidden])')||det).querySelectorAll('details.sect, details.elgrp')];
+/** "expand all" works on the tab on screen, and says which way it would flip it. */
+function syncSectAll(det){
+  const sa=det.querySelector('#sectall'); if(!sa) return;
+  const sects=paneSects(det), lbl=sa.querySelector('.lbl');
+  sa.hidden=!sects.length;
+  if(lbl) lbl.textContent=sects.length&&sects.every(s=>s.open)?'collapse all':'expand all';
+}
+function wirePaneBar(det){
+  const tabs=[...det.querySelectorAll('.ptab')];
+  tabs.forEach((t,i)=>{
+    t.onclick=()=>setPane(det, t.dataset.pane, {top:true});
+    // the tablist pattern: arrows move along the tabs and bring each one up, Home/End jump to the ends
+    t.onkeydown=e=>{
+      const j=e.key==='ArrowRight'?(i+1)%tabs.length : e.key==='ArrowLeft'?(i-1+tabs.length)%tabs.length
+        : e.key==='Home'?0 : e.key==='End'?tabs.length-1 : -1;
+      if(j<0) return;
+      e.preventDefault(); tabs[j].focus(); setPane(det, tabs[j].dataset.pane, {top:true});
+    };
+  });
+}
+
 function renderDetail(){
   const det=document.getElementById('detail');
   // The info card lives on <body> now, so it survives this re-render — drop it, or it would keep
@@ -5963,68 +6055,70 @@ function renderDetail(){
   const rn={...n, data:new Proxy(n.data||{}, {
     get:(t,k)=>{ if(typeof k==='string') consumed.add(k); return t[k]; },
   })};
-  // Facts first (the hero), then every section into a string — the navigator needs to know what
-  // rendered before the header that carries it can be written.
   const facts=factsFor(rn);
   const ctx=detailCtx(rn), R=relationsOf(rn, rn.data);
-  _sectReg=[]; _gapReg=[];
-  let body='';
-  // The picture — the drawing, or the table that IS the model (a service's operations, an event's payload)
-  body+=diagramView(rn);
-  body+=renderSections(rn, ctx, 'pic');
-  // … then whether it fits what it meets: the schema coverage and every contract table …
-  body+=renderSections(rn, ctx, 'fit');
-  // … the findings, right under what they are about — the locate button puts the element in view …
-  body+=nodeFindingsHtml(n);
-  // … the neighbours …
-  body+=relationsSection(rn, ctx, R)||'<p class="muted relnone">No relationships recorded for this node.</p>';
-  // … and the details: elements, fields, parameters, variables.
-  body+=renderSections(rn, ctx, 'det');
+  _gapReg=[];
+  // Every pane into a string before the header: the health strip reads what the gap tables found, and
+  // the tab bar what rendered at all. The order is the one the page used to read top to bottom.
+  // Overview — the description as prose and the facts, then the picture: the drawing, or the table that
+  // IS the model (a service's operations, an event's payload).
+  const intro=(rn.data.description?'<p class="ddesc">'+esc(String(rn.data.description))+'</p>':'')+props(facts,{cls:'facts'});
+  const pic=diagramView(rn)+renderSections(rn, ctx, 'pic');
+  // Connections — whether it fits what it meets (the schema coverage and every contract table), then the
+  // relations.
+  const fit=renderSections(rn, ctx, 'fit');
+  // Findings — the locate button in a row puts the element in view on the Overview's drawing.
+  const finds=nodeFindingsHtml(n);
+  const rel=relationsSection(rn, ctx, R);
+  // Details — elements, fields, parameters, variables, tests.
+  let inner=renderSections(rn, ctx, 'det');
   // The hero reads through the recording proxy too, so what it shows (a file's line, a class's name)
   // is not listed again below.
-  const hero=heroHtml(rn, facts, healthStripHtml(rn, R));
+  const hero=heroHtml(rn, healthStripHtml(rn, R));
   // Whatever no renderer above consumed. Identity fields live in the header; HAY_SKIP is the same
   // bookkeeping the search index skips.
   {
     const skip=new Set([...HAY_SKIP,'key','name','file','description','modelType','type','label']);
     const rest=Object.keys(n.data||{}).filter(k=>!consumed.has(k)&&!skip.has(k)&&kvTruthy((n.data||{})[k]));
-    if(rest.length) body+=section('otherattrs','Other attributes',
+    if(rest.length) inner+=section('otherattrs','Other attributes',
       rest.map(k=>kvEntry(k,(n.data||{})[k],0)).join(''), {count:rest.length,
         hint:'everything else the parser read for this model'});
   }
-  const reg=_sectReg; _sectReg=null; _gapReg=null;
-  // The sticky bar: kind on the left, the actions right. The title stays in the body — at 26px it is
-  // the one thing a reader should not have pinned over what they are reading.
-  const kindHint=term('type', n.type).hint;
-  let h='<div class="dhead">'+
-     '<span class="dkind"'+(kindHint?' data-tip="'+esc(kindHint)+'"':'')+'>'+nodeIcon(n)+esc(nodeKind(n))+'</span>'+
+  const gaps=_gapReg; _gapReg=null;
+  const panes=detailPanes(n, R, gaps, {overview:intro+pic, findings:finds, connections:fit+rel, details:inner});
+  const cur=panes.some(p=>p.id===state.pane)?state.pane:panes[0].id;
+  const paneChanged=cur!==state.pane;
+  state.pane=cur;
+  // The sticky bar is the page's tabs, with the page's two actions at its end. The hero stays above it,
+  // unpinned — at 26px the title is the one thing a reader should not have pinned over what they read;
+  // the editor tab above names the page anyway. (Back lives in the top bar.)
+  let h='<div class="dbody">'+hero+
+     '<div class="dhead">'+paneBarHtml(panes, cur)+
      '<span class="dhead-actions">'+
-     (navCanBack()?'<button id="back" data-tip="Back to the previous page (Alt+←)">'+uiIcon('back')+'<span class="lbl">back</span></button>':'')+
-     '<button id="sectall" data-tip="Expand or collapse every section on this page">'+uiIcon('expand')+'<span class="lbl">expand all</span></button>'+
-     '<button id="permalink" data-tip="Copy a shareable link to this node">'+uiIcon('link')+'<span class="lbl">copy link</span></button>'+
-     '</span></div>';
-  h+='<div class="dbody">'+hero+secnavHtml(reg)+body+'</div>';
+     '<button id="sectall" data-tip="Expand or collapse every section on this tab">'+uiIcon('expand')+'<span class="lbl">expand all</span></button>'+
+     '<button id="permalink" data-tip="Copy a shareable link to this page">'+uiIcon('link')+'<span class="lbl">copy link</span></button>'+
+     '</span></div>'+
+     panes.map(p=>'<section class="dpane" id="pane-'+p.id+'" data-pane="'+p.id+'"'+
+       (panes.length>1?' role="tabpanel" aria-labelledby="ptab-'+p.id+'"':'')+(p.id===cur?'':' hidden')+'>'+p.html+'</section>').join('')+
+     '</div>';
   det.innerHTML=h;
   det.scrollTop=0;
-  const b=document.getElementById('back'); if(b) b.onclick=()=>history.back();
+  if(paneChanged) syncHashContext();          // the link asked for a tab this page does not have
   det.querySelectorAll('.dtitle-more').forEach(m=>{ m.onclick=()=>{
     const t=m.previousElementSibling; const open=t.classList.toggle('open');
     m.textContent=open?'show less':'show all'; m.setAttribute('aria-expanded', String(open)); }; });
   // Remember every section's open state, and offer one control to flip them all at once — the Elements
-  // groups included, each under the id its section used to have.
+  // groups included, each under the id its section used to have. It works on the tab on screen.
   det.querySelectorAll('details.elgrp').forEach(g=>g.addEventListener('toggle',()=>sectRemember(g.dataset.eg, g.open)));
-  const sects=[...det.querySelectorAll('details.sect, details.elgrp')];
   det.querySelectorAll('details.sect').forEach(s=>s.addEventListener('toggle',()=>sectRemember(dec(s.dataset.sect), s.open)));
   const sa=document.getElementById('sectall');
   if(sa){
-    const lbl=sa.querySelector('.lbl');
-    const sync=()=>{ lbl.textContent = sects.every(s=>s.open) ? 'collapse all' : 'expand all'; };
-    sync();
-    sects.forEach(s=>s.addEventListener('toggle',sync));
-    sa.onclick=()=>{ const open=!sects.every(s=>s.open);
-      sects.forEach(s=>{ s.open=open; sectRemember(s.dataset.eg||dec(s.dataset.sect), open); }); sync(); };
-    if(!sects.length) sa.hidden=true;
+    det.querySelectorAll('details.sect, details.elgrp').forEach(s=>s.addEventListener('toggle',()=>syncSectAll(det)));
+    sa.onclick=()=>{ const sects=paneSects(det), open=!sects.every(s=>s.open);
+      sects.forEach(s=>{ s.open=open; sectRemember(s.dataset.eg||dec(s.dataset.sect), open); }); syncSectAll(det); };
+    syncSectAll(det);
   }
+  wirePaneBar(det);
   const pl=document.getElementById('permalink');
   if(pl) pl.onclick=()=>{
     // strip ?ideTheme=… (IDE embedding seed) — a stale param in a shared link only confuses
@@ -6063,15 +6157,17 @@ function renderDetail(){
     const open=()=>{
       const sect=det.querySelector('details.sect[data-sect="relations"]'), set=det.querySelector('details.relset[data-rset="'+b.dataset.relOpen+'"]');
       if(!sect||!set) return;
+      showPaneOf(det, sect);
       sect.open=true; set.open=true; sectRemember('relations', true); set.scrollIntoView({block:'start'});
     };
     b.onclick=e=>{ e.stopPropagation(); open(); };
     b.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } };
   });
-  // The section navigator's chips — open the section and scroll to it
+  // The health strip's items — open the section, on whichever tab it is, and scroll to it
   det.querySelectorAll('[data-jump-sect]').forEach(b=>{
     const open=()=>{
       const d=det.querySelector('details.sect[data-sect="'+b.dataset.jumpSect+'"]'); if(!d) return;
+      showPaneOf(det, d);
       d.open=true; sectRemember(dec(b.dataset.jumpSect), true); d.scrollIntoView({block:'start'});
     };
     b.onclick=e=>{ e.stopPropagation(); open(); };
@@ -6257,6 +6353,7 @@ function wireDiagram(det){
   if(!z) return;
   // A collapsed section has no layout (clientWidth 0) — fit on the first real layout instead.
   const tryFit=()=>{ if(!z._fitted && view.clientWidth>0){ z.fit(); z._fitted=true; dgMarkFindings(view, state.sel&&byId.get(state.sel)); } };
+  view._tryFit=tryFit;                  // …and on a hidden tab, when setPane() brings it up
   tryFit();
   const sect=view.closest('details');
   if(sect) sect.addEventListener('toggle',()=>{ if(sect.open) tryFit(); });
@@ -6483,6 +6580,7 @@ function dgFind(view, elId, name){
 function locateOnDiagram(det, elId, name){
   const sect=det.querySelector('details.sect[data-sect="diagram"]');
   if(!sect) return;
+  showPaneOf(det, sect);                // a ⌖ in Findings or Details goes to the drawing on Overview
   sect.open=true;
   const view=sect.querySelector('.dgview'), z=view&&view._z;
   if(!z) return;
@@ -6500,9 +6598,19 @@ function locateOnDiagram(det, elId, name){
 function revealByEl(det, elId, scope){
   const root=scope?det.querySelector(scope):det;
   if(!root) return false;
-  const rows=[...root.querySelectorAll('[data-el]')]
+  let rows=[...root.querySelectorAll('[data-el]')]
     .filter(x=>x.dataset.el===String(elId) && !x.closest('.dgview'));
   if(!rows.length) return false;
+  // The element's rows on the tab on screen win; failing that, the tab that says most about an element —
+  // Overview, Details, Connections, then Findings — is brought up, and only its rows are marked.
+  const paneOf=r=>r.closest('.dpane');
+  const here=rows.filter(r=>{ const p=paneOf(r); return !p||!p.hidden; });
+  if(here.length) rows=here;
+  else {
+    const order=['overview','details','connections','findings'];
+    const p=rows.map(paneOf).filter(Boolean).sort((a,b)=>order.indexOf(a.dataset.pane)-order.indexOf(b.dataset.pane))[0];
+    if(p){ setPane(det, p.dataset.pane); rows=rows.filter(r=>paneOf(r)===p); }
+  }
   det.querySelectorAll('.hit').forEach(x=>x.classList.remove('hit'));
   rows.forEach(el=>{
     for(let p=el.parentElement; p&&p!==det; p=p.parentElement){ if(p.tagName==='DETAILS') p.open=true; if(p.hidden) p.hidden=false; }
@@ -6744,14 +6852,15 @@ function showDgCard(view, g, e, inModal){
     b.onclick=ev=>{ ev.stopPropagation();
       atlasCopy(dec(b.dataset.copy), ()=>{ b.classList.add('ok'); setTimeout(()=>b.classList.remove('ok'),1200); }); };
   });
-  // The findings on the element: restore here; accepting lands on the finding's own row under the
-  // diagram, where the form has room — the card is a window, not a place to type a paragraph.
+  // The findings on the element: restore here; accepting lands on the finding's own row on the Findings
+  // tab, where the form has room — the card is a window, not a place to type a paragraph.
   wireAccept(card);
   card.querySelectorAll('[data-dgaccept]').forEach(b=>b.onclick=ev=>{ ev.preventDefault(); ev.stopPropagation();
     const fi=b.getAttribute('data-dgaccept');
     hideDgCard(); if(inModal) closeDiagramModal();
     const det=document.getElementById('detail'), row=det&&det.querySelector('.tr[data-fi="'+cssEsc(fi)+'"]');
     if(!row) return;
+    showPaneOf(det, row);
     for(let q=row.parentElement; q&&q!==det; q=q.parentElement){ if(q.tagName==='DETAILS') q.open=true; }
     row.open=true; row.scrollIntoView({block:'center'});
     const inp=row.querySelector('.wv-form input.wv-in[required]'); if(inp) inp.focus();
@@ -6933,6 +7042,7 @@ function applyFocus(det){
   if(!rows.length) rows=pick('details.card, details.op, .dgcond, .dmntab td');
   if(!rows.length) rows=pick('.fact');
   if(!rows.length) return;
+  showPaneOf(det, rows[0]);             // a hit on another tab brings that tab up
   rows.forEach(el=>{ el.classList.add('hit'); if(el.tagName==='DETAILS') el.open=true; });
   for(let p=rows[0].parentElement; p && p!==det; p=p.parentElement){
     if(p.tagName==='DETAILS') p.open=true;
@@ -6951,8 +7061,11 @@ function applyFocus(det){
 // highlight without any extra plumbing.
 function select(id, q, el){
   if(!byId.get(id)) return;
+  // The page's tab carries over: a reader walking callers on Connections stays on Connections. A page
+  // without that tab opens on its first one (renderDetail), and the hash is corrected to say so.
   const hash=encodeURIComponent(id)+(q?'&q='+encodeURIComponent(q):'')+
-             (el?'&e='+encodeURIComponent(el):'');
+             (el?'&e='+encodeURIComponent(el):'')+
+             (state.pane&&state.pane!=='overview'?'&p='+encodeURIComponent(state.pane):'');
   if(location.hash.slice(1)===hash){ state.focus=q||''; state.focusEl=el||''; applySelection(id); return; }
   location.hash=hash;
 }
@@ -8477,6 +8590,13 @@ document.addEventListener('keydown',e=>{
     const n=byId.get(state.sel); if(!n) return;
     if(e.key==='c'){ e.preventDefault(); atlasCopy(n.key, ()=>{}); }
     else if(n.file && window.__atlasOpen){ e.preventDefault(); atlasOpen(n.file); }
+  } else if(!e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code||'') && pal.hidden
+            && state.view==='browse' && state.sel && (!dgmodal || dgmodal.hidden)
+            && !e.target.closest('input,textarea,select,[contenteditable]')){
+    // A page's own tabs by number. Plain digits, because Alt+digit is the editor tabs' (below) and
+    // ⌘/Ctrl+digit is the browser's; e.code, so a layout that puts digits behind Shift still answers.
+    const t=document.querySelectorAll('#detail .ptab')[+e.code.slice(5)-1];
+    if(t){ e.preventDefault(); t.click(); t.focus(); }
   } else if(e.altKey && !e.metaKey && !e.ctrlKey && pal.hidden && (e.key==='ArrowLeft'||e.key==='ArrowRight')
             && (!dgmodal || dgmodal.hidden)
             && !e.target.closest('input,textarea,select,[contenteditable]')){
@@ -8622,6 +8742,7 @@ const SHORTCUTS=[
     [['Alt+W'], 'Close the active tab'],
   ]],
   ['On a node', [
+    [['1…4'], 'Its Overview, Findings, Connections or Details tab — the ones it has, in order'],
     [['c'], 'Copy its key'],
     [['o'], 'Open its file in the IDE', {ide:true}],
   ]],
