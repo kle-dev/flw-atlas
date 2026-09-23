@@ -225,18 +225,10 @@ object MiniJson {
         }
     }
 
-    private fun writeString(s: String, sb: StringBuilder) {
-        sb.append('"')
-        for (c in s) when (c) {
-            '"' -> sb.append("\\\"")
-            '\\' -> sb.append("\\\\")
-            '\n' -> sb.append("\\n")
-            '\r' -> sb.append("\\r")
-            '\t' -> sb.append("\\t")
-            else -> sb.append(c)
-        }
-        sb.append('"')
-    }
+    // The compact writer escapes exactly what the indented one does: a raw control character (a
+    // vertical tab pasted from Word into a description) is invalid inside a JSON string, and the
+    // explorer's JSON.parse refused the whole page over it.
+    private fun writeString(s: String, sb: StringBuilder) = writeJsonString(s, sb)
 
     private class P(val s: String) {
         var pos = 0

@@ -66,14 +66,21 @@ object ExplorerHtmlRenderer {
         payload["waiverAuthor"] = waiverAuthor ?: ""
         payload["nodes"] = attachDiagrams(slimNodes(graph["nodes"]), root)
         payload["edges"] = graph["edges"]
-        // json.dumps(payload, ensure_ascii=False, default=list).replace("</", "<\/")
-        val data = MiniJson.stringify(payload).replace("</", "<\\/")
+        val data = dataIsland(payload)
         // Stamp the version before the data island so a version like "__ATLAS_VERSION__" can't collide
         // with anything inside the (already-built) JSON.
         return composeTemplate()
             .replace("__ATLAS_VERSION__", "Atlas $version")
             .replace("__ATLAS_DATA__", data)
     }
+
+    /**
+     * The payload as the text of the `<script type="application/json">` island. Every `<` goes out as
+     * `<`, not just `</`: a string holding `<!--<script>` (a commented-out tag in an htmlComponent)
+     * puts the HTML tokenizer into its double-escaped state, where the real `</script>` no longer closes
+     * the island. `<` only ever occurs inside JSON strings, where the escape reads back as the same character.
+     */
+    internal fun dataIsland(payload: Any?): String = MiniJson.stringify(payload).replace("<", "\\u003c")
 
     /**
      * Project each node's `data` down to what the frontend actually reads before embedding it.
