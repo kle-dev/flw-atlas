@@ -3319,6 +3319,11 @@ const FACTS={
   java(n,d,x){ x.mono('Package',d.package); x.add('Roles',(d.roles||[]).join(', ')); x.add('Bot key',d.botKey); x.mono('Implements',(d.interfaces||[]).join(', ')); },
   endpoint(n,d,x){ x.mono('Method',d.http); x.mono('Path',d.path);
     if(d.controller||d.handler) x.rows.push(['Handler',{html:vlink(incFrom(n.id,'serves'), [d.controller,d.handler].filter(Boolean).join('#')), copy:d.controller||undefined}]); },  // FQN for 'Go to Class'
+  masterData(n,d,x){
+    // the files that load this definition's rows at startup, each opening in the IDE
+    const lf=d.loadedFrom||[];
+    if(lf.length) x.rows.push(['Rows loaded from',{html:lf.map(r=>'<span class="mono">'+esc(r.file)+'</span>'+openBtn(r.file)+
+      (r.rows!=null?' <span class="muted">'+esc(String(r.rows))+' rows</span>':'')).join('<br>')}]); },
   userDefinition(n,d,x){ x.add('User type',[d.userType,d.userSubType].filter(Boolean).join(' / '));
     // the form that creates, shows and edits a user of this kind — a link when the project has it
     for(const [slot,lbl] of [['init','Create form'],['view','View form'],['edit','Edit form']]){

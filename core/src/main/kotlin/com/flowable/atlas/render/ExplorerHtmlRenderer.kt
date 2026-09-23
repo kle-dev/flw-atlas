@@ -172,7 +172,7 @@ object ExplorerHtmlRenderer {
      * a container key that is neither here nor in [STRIPPED_DATA_KEYS]).
      */
     internal val FRONTEND_DATA_KEYS = setOf(
-        "actionPermissions", "aggregations", "definedIn", "memberGroups", "lookupGroups", "usersPerDefinition",
+        "actionPermissions", "aggregations", "definedIn", "memberGroups", "lookupGroups", "usersPerDefinition", "loadedFrom",
         "aiVendor", "annotation", "assignmentActions", "auth", "authority", "baseUrl", "beanNames",
         "bindings", "botKey",
         "callActivities", "completionActions",

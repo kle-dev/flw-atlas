@@ -10,18 +10,23 @@ import java.io.File
  * `com/flowable/tenant-setup/` — the groups and users a tenant starts with, each of a user definition).
  *
  * Relationships only, drawn after the graph is built: a user definition to the forms and groups it
- * names, a tenant setup to the user definitions and groups it sets up. A form or user definition the
+ * names, a tenant setup to the user definitions and groups it sets up, and a master-data definition to
+ * the files under `com/flowable/master-data/` that load its rows. A form or user definition the
  * project does not contain is not reported: the platform ships its own (`F01_userInitFormDefault`,
  * `user-default`), and nothing here can tell those from a typo.
  */
 internal object IdentitySetup {
 
-    /** A user-definition or tenant-setup file, by its path relative to the project. */
+    /** A user-definition, tenant-setup or master-data instance file, by its path relative to the project. */
     fun isIdentityFile(relPath: String): Boolean {
         val low = relPath.lowercase()
         if (!low.endsWith(".json")) return false
-        return low.endsWith(".user.json") || low.contains("/tenant-setup/") || low.substringAfterLast('/').contains("tenant-setup")
+        return low.endsWith(".user.json") || low.contains("/tenant-setup/") || low.substringAfterLast('/').contains("tenant-setup") ||
+            isMasterDataRows(low)
     }
+
+    /** `com/flowable/master-data/custom/x.data.json`: the rows a master-data definition is loaded with. */
+    private fun isMasterDataRows(low: String) = low.endsWith(".data.json") && low.contains("master-data/")
 
     private val FORM_RELS = linkedMapOf("init" to "user-init-form", "view" to "user-view-form", "edit" to "user-edit-form")
 
@@ -64,7 +69,17 @@ internal object IdentitySetup {
                 for (g in lookup) addEdge(id, group(g), "looks-up")
             }
         }
-        for ((f, rel, json) in parsed.filter { !it.second.lowercase().endsWith(".user.json") }) {
+        // Master-data rows: which file loads a definition's entries, and how many. Rows of a definition the
+        // project does not contain are left alone — the platform ships master data of its own.
+        for ((_, rel, json) in parsed.filter { isMasterDataRows(it.second.lowercase()) }) {
+            val rows = json as? Map<String, Any?> ?: continue
+            val key = rows["dataObjectDefinitionKey"] as? String ?: continue
+            val node = nodes.firstOrNull { (it as? Map<*, *>)?.get("id") == "masterData:$key" } as? MutableMap<String, Any?> ?: continue
+            val data = node["data"] as? MutableMap<String, Any?> ?: continue
+            val loaded = (data["loadedFrom"] as? List<Map<String, Any?>>).orEmpty()
+            data["loadedFrom"] = loaded + linkedMapOf("file" to rel, "rows" to (rows["masterData"] as? List<*>)?.size)
+        }
+        for ((f, rel, json) in parsed.filter { !it.second.lowercase().endsWith(".user.json") && !isMasterDataRows(it.second.lowercase()) }) {
             val setup = json as? Map<String, Any?> ?: continue
             val users = (setup["users"] as? List<*>).orEmpty().mapNotNull { it as? Map<String, Any?> }
             val groups = (setup["groups"] as? List<*>).orEmpty().mapNotNull { (it as? Map<*, *>)?.get("key") as? String }

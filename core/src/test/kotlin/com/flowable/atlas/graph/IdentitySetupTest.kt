@@ -34,6 +34,11 @@ class IdentitySetupTest {
                 "users":[{"login":"alice","password":"secret","userDefinitionKey":"DEMO-client"},
                          {"login":"bob","userDefinitionKey":"DEMO-client"},
                          {"login":"root","userDefinitionKey":"user-admin"}]}""")
+            put("models/DEMO-md.data", """{"key":"DEMO-md","name":"Categories","dataObjectType":"masterData"}""")
+            put("src/main/resources/com/flowable/master-data/custom/categories.data.json",
+                """{"dataObjectDefinitionKey":"DEMO-md","masterData":[{"key":"a"},{"key":"b"}]}""")
+            put("src/main/resources/com/flowable/master-data/custom/platform.data.json",
+                """{"dataObjectDefinitionKey":"platform-countries","masterData":[{"key":"CH"}]}""")
             result = Atlas.extract(dir)
         }
 
@@ -76,5 +81,15 @@ class IdentitySetupTest {
             listOf("userDefinition:", "tenantSetup:").any { (f["node"] as? String)?.startsWith(it) == true }
         }
         assertTrue(findings.toString(), findings.isEmpty())
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aMasterDataDefinitionKnowsTheFileThatLoadsItsRows() {
+        val md = (graph["nodes"] as List<Map<String, Any?>>).single { it["id"] == "masterData:DEMO-md" }
+        assertEquals(
+            listOf(mapOf("file" to "src/main/resources/com/flowable/master-data/custom/categories.data.json", "rows" to 2)),
+            (md["data"] as Map<String, Any?>)["loadedFrom"],
+        )
     }
 }
