@@ -13,8 +13,8 @@ import java.io.File
 object DiagramArtifacts {
 
     /**
-     * Render every process/case/decision node's diagram. Returns `"<sanitized-key>.svg" → svg`, in
-     * graph-node order, skipping models whose file is unreadable or carries no drawable diagram.
+     * Render every process/case/decision node's diagram. Returns `"<sanitized-key>.svg" → svg` (see
+     * [uniqueName] for keys that clash), in graph-node order, skipping models whose file is unreadable or carries no drawable diagram.
      * [root] is the project root the node `file` paths are relative to.
      */
     fun render(
@@ -39,9 +39,25 @@ object DiagramArtifacts {
             val svg = runCatching { DiagramRenderer.renderSvg(bytes, name, type) }
                 .onFailure { onFailure?.invoke(key, it.message ?: it.javaClass.simpleName) }
                 .getOrNull() ?: continue
-            out.putIfAbsent(sanitize(key) + ".svg", svg)
+            out[uniqueName(sanitize(key), node["type"] as String, out.keys)] = svg
         }
         return out
+    }
+
+    /**
+     * `<key>.svg`, unless that name is taken — compared ignoring case, since macOS and Windows file
+     * systems would let `Order.svg` overwrite `order.svg`. A process and a case sharing a key, or two keys
+     * that sanitize alike (`a/b`, `a_b`), then get `<type>-<key>.svg`, and a counter if even that clashes.
+     * The first model keeps the plain name, so a project without clashes sees the names it always had.
+     */
+    private fun uniqueName(base: String, type: String, taken: Set<String>): String {
+        val lower = taken.mapTo(HashSet()) { it.lowercase() }
+        fun free(name: String) = name.lowercase() !in lower
+        "$base.svg".let { if (free(it)) return it }
+        "$type-$base.svg".let { if (free(it)) return it }
+        var i = 2
+        while (!free("$type-$base-$i.svg")) i++
+        return "$type-$base-$i.svg"
     }
 
     private fun modelType(nodeType: String?): ModelType? = when (nodeType) {

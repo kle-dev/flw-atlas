@@ -46,6 +46,22 @@ class DiagramArtifactsTest {
     }
 
     @Test
+    fun keysThatClashKeepEveryDiagram() {
+        val out = DiagramArtifacts.render(
+            resultWith(
+                node("process", "DEMO-onboarding", "DEMO-onboarding.bpmn20.xml"),
+                node("process", "demo-onboarding", "DEMO-onboarding.bpmn20.xml"),   // differs only in case
+                node("process", "DEMO-onboarding", "DEMO-onboarding.bpmn20.xml"),   // the same key again
+            ),
+            root,
+        )
+        assertEquals(
+            listOf("DEMO-onboarding.svg", "process-demo-onboarding.svg", "process-DEMO-onboarding-2.svg"),
+            out.keys.toList(),
+        )
+    }
+
+    @Test
     fun skipsNonDiagramTypesModelsWithoutDiAndUnreadableFiles() {
         val out = DiagramArtifacts.render(
             resultWith(
