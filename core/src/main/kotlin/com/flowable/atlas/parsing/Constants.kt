@@ -135,16 +135,18 @@ object Constants {
     private val NAMED_ENTITIES = mapOf(
         "amp" to "&", "lt" to "<", "gt" to ">", "quot" to "\"", "apos" to "'", "nbsp" to " ",
     )
-    private val ENTITY_RE = Regex("&(#x?[0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]*);")
+    private val ENTITY_RE = Regex("&(#[xX]?[0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]*);")
+
+    /** A numeric entity's character, or null for one past U+10FFFF, which `Character.toChars` would throw on. */
+    private fun codePoint(cp: Int?): String? =
+        cp?.takeIf { Character.isValidCodePoint(it) }?.let { String(Character.toChars(it)) }
 
     /** Minimal HTML/XML entity unescape mirroring Python `html.unescape` for the entities models use. */
     fun htmlUnescape(s: String): String = ENTITY_RE.replace(s) { m ->
         val body = m.groupValues[1]
         when {
-            body.startsWith("#x") || body.startsWith("#X") ->
-                body.substring(2).toIntOrNull(16)?.let { String(Character.toChars(it)) } ?: m.value
-            body.startsWith("#") ->
-                body.substring(1).toIntOrNull()?.let { String(Character.toChars(it)) } ?: m.value
+            body.startsWith("#x") || body.startsWith("#X") -> codePoint(body.substring(2).toIntOrNull(16)) ?: m.value
+            body.startsWith("#") -> codePoint(body.substring(1).toIntOrNull()) ?: m.value
             else -> NAMED_ENTITIES[body] ?: m.value
         }
     }

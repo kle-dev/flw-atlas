@@ -16,6 +16,9 @@ object MiniJson {
 
     class JsonException(message: String) : RuntimeException(message)
 
+    /** Python's `json` gives up at its recursion limit (about a thousand levels); no model comes near it. */
+    private const val MAX_DEPTH = 1000
+
     // A UTF-8 byte-order mark is not whitespace to `isWhitespace()`, so a BOM'd model — an export edited
     // on Windows, say — parsed as "Expecting value at char 0" and vanished from the report.
     private fun P(text: String, dropBom: Boolean) = P(if (dropBom) text.removePrefix("\uFEFF") else text)
@@ -260,11 +263,18 @@ object MiniJson {
             }
         }
 
+        /** Open containers. The parser recurses per level, and a StackOverflowError is an Error that gets
+         *  past every `catch (e: Exception)` above it — so nesting past Python's own limit fails as JSON. */
+        private var depth = 0
+
+        private fun enter() { if (++depth > MAX_DEPTH) fail("Nesting deeper than $MAX_DEPTH levels", pos) }
+
         private fun readObject(): Map<String, Any?> {
+            enter()
             val map = LinkedHashMap<String, Any?>()
             pos++ // {
             skipWs()
-            if (peek() == '}') { pos++; return map }
+            if (peek() == '}') { pos++; depth--; return map }
             while (true) {
                 skipWs()
                 if (peek() != '"') fail("Expecting property name enclosed in double quotes", pos)
@@ -276,23 +286,24 @@ object MiniJson {
                 skipWs()
                 when (peek()) {
                     ',' -> { pos++; continue }
-                    '}' -> { pos++; return map }
+                    '}' -> { pos++; depth--; return map }
                     else -> fail("Expecting ',' delimiter", pos)
                 }
             }
         }
 
         private fun readArray(): List<Any?> {
+            enter()
             val list = ArrayList<Any?>()
             pos++ // [
             skipWs()
-            if (peek() == ']') { pos++; return list }
+            if (peek() == ']') { pos++; depth--; return list }
             while (true) {
                 list += readValue()
                 skipWs()
                 when (peek()) {
                     ',' -> { pos++; continue }
-                    ']' -> { pos++; return list }
+                    ']' -> { pos++; depth--; return list }
                     else -> fail("Expecting ',' delimiter", pos)
                 }
             }
@@ -318,7 +329,10 @@ object MiniJson {
                             'b' -> sb.append('\b')
                             'f' -> sb.append('\u000C')
                             'u' -> {
-                                if (pos + 4 > s.length) fail("Invalid \\uXXXX escape", pos - 2)
+                                // Four hex digits, checked here: `toInt(16)` threw a NumberFormatException the
+                                // callers (the playground's "Invalid payload JSON") do not catch, and took "+1f".
+                                if (pos + 4 > s.length || (pos until pos + 4).any { Character.digit(s[it], 16) < 0 })
+                                    fail("Invalid \\uXXXX escape", pos - 2)
                                 sb.append(s.substring(pos, pos + 4).toInt(16).toChar()); pos += 4
                             }
                             else -> fail("Invalid \\escape", pos - 2)
