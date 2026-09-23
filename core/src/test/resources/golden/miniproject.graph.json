@@ -789,7 +789,8 @@
         {
           "callee": {
             "key": "customerDO",
-            "kind": "dataObject"
+            "kind": "dataObject",
+            "op": "findAll"
           },
           "id": "customerRecord",
           "label": "Customer record",
@@ -800,7 +801,8 @@
         {
           "callee": {
             "key": "customerService",
-            "kind": "service"
+            "kind": "service",
+            "op": "findAll"
           },
           "id": "lookupCustomer",
           "label": "Lookup customer",
@@ -1072,7 +1074,8 @@
         {
           "callee": {
             "key": "customerDO",
-            "kind": "dataObject"
+            "kind": "dataObject",
+            "op": "findAll"
           },
           "id": "customerPick",
           "label": "Customer",
@@ -1615,7 +1618,8 @@
             {
               "callee": {
                 "key": "customerDO",
-                "kind": "dataObject"
+                "kind": "dataObject",
+                "op": "findAll"
               },
               "id": "customerRecord",
               "label": "Customer record",
@@ -1626,7 +1630,8 @@
             {
               "callee": {
                 "key": "customerService",
-                "kind": "service"
+                "kind": "service",
+                "op": "findAll"
               },
               "id": "lookupCustomer",
               "label": "Lookup customer",
@@ -1905,7 +1910,8 @@
             {
               "callee": {
                 "key": "customerDO",
-                "kind": "dataObject"
+                "kind": "dataObject",
+                "op": "findAll"
               },
               "id": "customerPick",
               "label": "Customer",

@@ -607,7 +607,8 @@ object ModelParsers {
                 // a field of `customer`, whose write the binding pass already records. Neither is a
                 // variable called `deploymentId`; eleven "written but never read" on two real projects were.
                 val stores = if ((n["type"] as? String) in RESULT_BINDING_TYPES) (n["value"] as? String)?.takeIf { it.contains("{{") } else null
-                val payload = payloadParams(es, refKind, refKey).map { p ->
+                val refOp = calleeOp(es, refKind)
+                val payload = payloadParams(es, refKind, refKey, refOp).map { p ->
                     if (stores == null || p["kind"] !in RESPONSE_MAPPINGS) p
                     else LinkedHashMap(p).apply {
                         val inner = stores.removeSurrounding("{{", "}}").trim()
@@ -628,6 +629,7 @@ object ModelParsers {
                 component?.let { c ->
                     if (refKind != null && truthy(refKey)) {
                         c["callee"] = linkedMapOf<String, Any?>("kind" to refKind, "key" to refKey)
+                            .apply { if (refOp != null) put("op", refOp) }
                     }
                     buttonSettings(n, es)?.let { flavour ->
                         @Suppress("UNCHECKED_CAST")
@@ -692,13 +694,17 @@ object ModelParsers {
      * REST button, a bare string that is the whole request body as one expression. `headerPropertyMapping`
      * uses `{name, value}` instead and describes HTTP headers, so it keeps its own `kind`.
      */
-    private fun payloadParams(es: Map<String, Any?>, refKind: String?, refKey: Any?): List<Map<String, Any?>> {
+    private fun payloadParams(es: Map<String, Any?>, refKind: String?, refKey: Any?, refOp: String? = null): List<Map<String, Any?>> {
         val out = ArrayList<Map<String, Any?>>()
+        // a data table's create payload feeds the table's own create operation, not the lookup the
+        // component reads its rows with
+        val createOp = (es["dataObjectDataTableCreateOperationKey"] as? String)?.takeIf { it.isNotBlank() }
         fun rec(dir: String, kind: String, source: Any?, target: Any?, expression: Boolean = false) {
             val r = linkedMapOf<String, Any?>("dir" to dir, "kind" to kind, "source" to source, "target" to target)
             if (expression) r["expression"] = true
             if (refKind != null) r["refKind"] = refKind
             if (refKey != null) r["refKey"] = refKey
+            (if (kind == "dataObjectDataTableCreatePayloadMapping") createOp ?: refOp else refOp)?.let { r["refOp"] = it }
             out.add(r)
         }
         for ((k, dir) in PAYLOAD_MAPPINGS) {
@@ -847,6 +853,14 @@ object ModelParsers {
         val root = inner.trimStart('$').substringBefore('.').substringBefore('[')
         return root.takeIf { it.isNotEmpty() && it !in FIELD_ID_IGNORE }
     }
+
+    /** The operation of the service, agent or data object a component calls — null for any other callee. */
+    private fun calleeOp(es: Map<String, Any?>, kind: String?): String? = when (kind) {
+        "service" -> objOf(es["serviceModel"])?.get("operationKey")
+        "agent" -> objOf(es["agentModel"])?.get("operationKey")
+        "dataObject" -> es["dataObjectOperationKey"]
+        else -> null
+    }?.toString()?.trim()?.takeIf { it.isNotEmpty() && !it.contains("\${") && !it.contains("{{") }
 
     /** What a button invokes, as `(kind, key)` — the callee its payload is mapped onto. */
     private fun calleeOf(es: Map<String, Any?>, n: Map<String, Any?>): Pair<String?, Any?> {

@@ -244,6 +244,62 @@ class IoParametersTest {
     }
 
     @Test
+    fun mappingsNameTheOperationTheyFeed() {
+        // the operation is what joins a mapping to the parameters the callee declares
+        val (p, ctx) = bpmn(
+            """<serviceTask id="svc" flowable:type="service-registry">
+                 <extensionElements>
+                   <flowable:serviceMapping serviceModelKey="custSvc" operationKey="findById"/>
+                   <flowable:inputParameter name="id" value="custId"/>
+                 </extensionElements>
+               </serviceTask>
+               <serviceTask id="ai" flowable:type="agent">
+                 <extensionElements>
+                   <flowable:agentMapping agentModelKey="itAgent" operationKey="summarise"/>
+                   <flowable:inputParameter name="text" value="${'$'}{notes}"/>
+                 </extensionElements>
+               </serviceTask>
+               <serviceTask id="lookup" flowable:type="data-object">
+                 <extensionElements>
+                   <flowable:dataObjectMapping definitionKey="customerDO" operationKey="lookup" type="lookup"/>
+                   <flowable:outputParameter name="name" value="customerName"/>
+                 </extensionElements>
+               </serviceTask>
+               <callActivity id="call" calledElement="sub">
+                 <extensionElements><flowable:in source="a" target="b"/></extensionElements>
+               </callActivity>"""
+        )
+        val byEl = params(p).associateBy { it["element"] }
+        assertEquals("findById", byEl["svc"]!!["refOp"])
+        assertEquals("summarise", byEl["ai"]!!["refOp"])
+        assertEquals("lookup", byEl["lookup"]!!["refOp"])
+        assertEquals("a process has no operations", null, byEl["call"]!!["refOp"])
+        // the variable flows carry it too, so a variable page can say which operation it was handed to
+        assertTrue(ctx.paramFlows.any { it["variable"] == "customerName" && it["calleeOp"] == "lookup" })
+    }
+
+    @Test
+    fun aButtonsPayloadNamesItsOperation() {
+        val (f, _) = form(
+            """{"id":"tbl","type":"dataTable","extraSettings":{
+                 "dataObjectDefinitionKey":"orderDO","dataObjectOperationKey":"search",
+                 "dataObjectDataTableCreateOperationKey":"create",
+                 "dataObjectDataTableCreatePayloadMapping":[{"name":"orderNumber","expression":"{{nr}}"}]}},
+               {"id":"svcBtn","type":"button","extraSettings":{
+                 "serviceModel":{"serviceModelKey":"custSvc","operationKey":"findById"},
+                 "sendPayloadMapping":[{"name":"id","expression":"{{customerId}}"}]}}"""
+        )
+        val byEl = params(f).groupBy { it["element"] }
+        // a data table's create payload feeds its create operation, not the search it lists rows with
+        assertEquals(listOf("create"), byEl["tbl"]!!.map { it["refOp"] })
+        assertEquals(listOf("findById"), byEl["svcBtn"]!!.map { it["refOp"] })
+        @Suppress("UNCHECKED_CAST")
+        val fields = (f["fields"] as List<Map<String, Any?>>).associateBy { it["id"] }
+        @Suppress("UNCHECKED_CAST")
+        assertEquals("findById", (fields["svcBtn"]!!["callee"] as Map<String, Any?>)["op"])
+    }
+
+    @Test
     fun eventVariableMappingAndResultVariableFlavours() {
         val (p, _) = bpmn(
             """<startEvent id="evStart">

@@ -181,6 +181,8 @@ class Ctx {
             if (callee != null && p["refKey"] == null) {
                 rec["refKind"] = callee.kind
                 rec["refKey"] = callee.key
+                // the operation the values feed — what joins a mapping to the operation's declared parameters
+                callee.op?.let { rec["refOp"] = it }
             }
             rec.putAll(p)
             rollup.add(rec)
@@ -195,6 +197,7 @@ class Ctx {
             // the variable it declares belongs to that model, not to this one.
             val calleeKind = p["refKind"] as? String ?: callee?.kind
             val calleeKey = p["refKey"] as? String ?: callee?.key
+            val calleeOp = p["refOp"] as? String ?: callee?.op
             // An Init-Variables mapping's `value` is bare EL — `root.chaserList.add(chaserInfo)`, with no
             // `${…}` wrapper for the expression harvester to find. Every name in it is read at runtime,
             // and Atlas has no parser for this position, so they are recorded as names whose readers it
@@ -211,7 +214,7 @@ class Ctx {
             // is identical, so only the side and the name it carries appear at the call.
             fun bind(side: String, variable: Any?) = addParamFlow(
                 model, variable, dir, kind, side, elementId, elementName, elementType,
-                p["source"], p["target"], calleeKind, calleeKey,
+                p["source"], p["target"], calleeKind, calleeKey, calleeOp,
             )
             // Into a service, agent, data object, event or URL, an `in` names the callee's *parameter* and an
             // `out` reads its *result field* — neither is a variable of any scope. Recording them as writes
@@ -231,7 +234,7 @@ class Ctx {
     private fun addParamFlow(
         model: Any?, variable: Any?, dir: String, kind: String?, side: String,
         element: Any?, elementName: Any?, elementType: String?,
-        source: Any?, target: Any?, calleeKind: String?, calleeKey: String?,
+        source: Any?, target: Any?, calleeKind: String?, calleeKey: String?, calleeOp: String? = null,
     ) {
         if (model == null) return
         val v = varName(variable) ?: return
@@ -243,6 +246,7 @@ class Ctx {
         flow["side"] = side
         if (calleeKind != null) flow["calleeKind"] = calleeKind
         if (calleeKey != null) flow["calleeKey"] = calleeKey
+        if (calleeOp != null) flow["calleeOp"] = calleeOp
         paramFlows.add(flow)
 
         val role = roleOf(kind, dir, side) ?: return
