@@ -86,7 +86,7 @@
               DEV1 is an ordinary way to work. Mark an environment <i>Protected</i> and Atlas asks before
               pulling from it or evaluating against it. Passwords and tokens stay in the IDE password
               safe.</li>
-          <li><b>Expression Playground</b> (the <i>Flowable Expressions</i> tool window) — type an
+          <li><b>Expression Playground</b> (a tool window) — type an
               expression, pick backend or frontend, and get instant validation and completion; scope
               completion to one model; evaluate a frontend expression live against a pasted JSON payload;
               or evaluate a backend expression against a running app through the Flowable Inspect REST API.
@@ -966,7 +966,7 @@
         <readerModeProvider implementation="com.flowable.atlas.model.FlowableModelVisualFormattingGuard"
                             order="last"/>
         <!-- The Expression Playground: type an expression, get validation + completion. -->
-        <toolWindow id="Flowable Expressions"
+        <toolWindow id="Expression Playground"
                     anchor="bottom"
                     secondary="true"
                     icon="/icons/atlas/playground.svg"

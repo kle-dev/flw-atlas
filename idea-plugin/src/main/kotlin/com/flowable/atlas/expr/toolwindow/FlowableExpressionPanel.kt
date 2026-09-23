@@ -798,7 +798,7 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
     )
 
     companion object {
-        const val TOOL_WINDOW_ID = "Flowable Expressions"
+        const val TOOL_WINDOW_ID = "Expression Playground"
         private const val ALL_VARIABLES_LABEL = "All variables"
         private const val FRONTEND_EMPTY_HINT = "Type an expression to evaluate"
         private const val BACKEND_EMPTY_HINT = "Choose an environment and a live instance id, then press Evaluate (Ctrl+Enter)"

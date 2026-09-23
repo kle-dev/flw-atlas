@@ -58,5 +58,5 @@ class OpenInExpressionPlaygroundIntention : IntentionAction, DumbAware {
 
     // Opens a tool window, mutates no file — the default preview would render an empty diff.
     override fun generatePreview(project: Project, editor: Editor, file: PsiFile): IntentionPreviewInfo =
-        IntentionPreviewInfo.Html("Opens this expression in the Flowable Expressions playground, scoped to the enclosing model. The playground's previous expression for this dialect is replaced (Ctrl+Z there brings it back).")
+        IntentionPreviewInfo.Html("Opens this expression in the Expression Playground, scoped to the enclosing model. The playground's previous expression for this dialect is replaced (Ctrl+Z there brings it back).")
 }

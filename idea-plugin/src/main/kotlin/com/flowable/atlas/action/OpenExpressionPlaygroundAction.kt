@@ -8,7 +8,7 @@ import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.wm.ToolWindowManager
 
 /**
- * Tools → Flowable Atlas → "Open Expression Playground": show and focus the "Flowable Expressions"
+ * Tools → Flowable Atlas → "Open Expression Playground": show and focus the "Expression Playground"
  * tool window. A menu-driven entry point that does not depend on the tool-window stripe button being
  * visible (which requires the plugin to be fully loaded — i.e. the IDE restarted after install).
  */
@@ -20,7 +20,7 @@ class OpenExpressionPlaygroundAction : AnAction(), DumbAware {
         if (toolWindow == null) {
             AtlasNotifications.info(
                 project,
-                "The Flowable Expressions tool window isn't registered yet. If you just installed or " +
+                "The Expression Playground tool window isn't registered yet. If you just installed or " +
                     "updated the plugin, restart the IDE and try again.",
             )
             return
@@ -33,7 +33,7 @@ class OpenExpressionPlaygroundAction : AnAction(), DumbAware {
     }
 
     private companion object {
-        const val TOOL_WINDOW_ID = "Flowable Expressions"
+        const val TOOL_WINDOW_ID = "Expression Playground"
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT

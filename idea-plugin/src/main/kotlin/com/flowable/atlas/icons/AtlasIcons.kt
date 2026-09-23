@@ -23,7 +23,7 @@ import javax.swing.Icon
 object AtlasIcons {
     /** The Atlas Hub tool window and the action that opens it. */
     @JvmField val Hub: Icon = load("hub")
-    /** The Flowable Expressions tool window (the playground) and the action that opens it. */
+    /** The Expression Playground tool window (the playground) and the action that opens it. */
     @JvmField val Playground: Icon = load("playground")
     /** A generated Atlas Explorer — the artifact rows in the Hub, the open/generate actions. */
     @JvmField val Explorer: Icon = load("explorer")
