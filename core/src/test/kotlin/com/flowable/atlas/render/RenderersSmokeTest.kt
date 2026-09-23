@@ -120,7 +120,8 @@ class RenderersSmokeTest {
         // A form/page REST button's endpoint reaches the page (it used to live only in the shared Ctx,
         // which the payload never carried) and is both rendered and searchable.
         assertTrue("expected the REST button's endpoint in the payload", html.contains("/canEdit"))
-        assertTrue("expected the REST calls section from explorer.js", html.contains("'restcalls'"))
+        // A form's REST calls and data sources are rows of its calls table; its fields answer "who reads this".
+        assertTrue("expected the form's fit tables from explorer.js", html.contains("function formFieldVars(") && html.contains("function formOutcomesFit("))
         // The ⌘K palette is resizable from its corner and remembers the size the user settles on.
         assertTrue("expected the palette resize wiring from explorer.js", html.contains("function wirePaletteResize("))
         assertTrue("expected the palette size store from explorer.js", html.contains("atlas-palette"))

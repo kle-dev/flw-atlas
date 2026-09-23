@@ -34,6 +34,14 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   class or an agent that fills them itself. Where no changelog lets the schema coverage compare them, the
   service's column mappings are held against the data object's fields; a data object's properties name
   the service column behind each field and the forms that show it.
+- **Decisions, forms and actions say whether they fit.** A decision table is drawn as Design draws it —
+  the hit policy in the corner, Input and Output bands, each column headed by its label, expression and
+  type, a number per rule — and lists every model that runs it: an input the caller never writes before,
+  a result it never reads. A form's page lists every call it makes — buttons, data sources, REST calls
+  with the verb checked against the handler — the variables its fields write and who reads them, the
+  data-object paths it binds that are no field of the object, and, for each task that shows it, the
+  outcomes no condition tests and the tested values that are no outcome. An action lists the buttons
+  that invoke it against what its script reads with `flw.getInput`.
 - **A health strip under every title.** Before the first section, a page says whether the model is fine:
   its open defects and advice, the gaps its tables found (or *✓ fits*), how many models it uses and is
   used by, the apps that ship it — or *in no app* — and the tests that deploy it; each jumps to the section

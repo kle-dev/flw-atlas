@@ -3181,7 +3181,7 @@ const incFrom= (id,rel)=>{ const e=(incM.get(id)||[]).find(x=>x.rel===rel); retu
 // one section that IS the model (a form's fields, a service's operations) — see DEFAULT_OPEN_SECTIONS.
 const SECT_STORE='atlas-sect';
 const DEFAULT_OPEN_SECTIONS={diagram:true, relations:true, elements:true, findings:true, fit:true, formfields:true, columns:true, usertasks:true, svctasks:true, scripttasks:true,
-  plan:true, ops:true, dmnio:true, dmnrules:true, permissions:true, escalations:true, rw:true, payload:true, dicttypes:true, agentops:true,
+  plan:true, ops:true, dmnrules:true, permissions:true, escalations:true, rw:true, payload:true, dicttypes:true, agentops:true,
   endpoints:true, script:true, templatebody:true, extractors:true, coverage:true, problems:true, opparams:true};
 function sectAll(){ try{ return JSON.parse(localStorage.getItem(SECT_STORE)||'{}')||{}; }catch(e){ return {}; } }
 function sectRemember(id, open){
@@ -3676,6 +3676,7 @@ const CT_SILENCE={
   expression:'The value is an expression — mapped, but not something Atlas can check.',
   op:'Atlas cannot tell which operation this call runs, so it cannot check its parameters.',
   inexact:'Atlas cannot read everything this model expects, so a value it does not recognise may still be used.',
+  start:'The calling model is started from outside this project, so the values it starts with are not visible to Atlas.',
   implicit:'This caller fills the parameters itself — Java code, an AI agent, a list or select looking up its rows — so Atlas cannot see what it passes.',
 };
 let _vsi=null;
@@ -3736,7 +3737,7 @@ function callSitesOf(n){
     else if(kind==='service'){ id=op&&!ctDynamic(op)?ctKnown('serviceOperation', key+'#'+op):null;
       if(!ctKnown('service', key)) state='missing'; else if(!id){ id='service:'+key; state='unknown'; } }
     else { id=ctKnown(kind, key); if(!id) state='missing'; }
-    out.push(Object.assign({el:rec.id, name:rec.name, type:rec.type||rec.tag, sub:rec.serviceTaskType||rec.subType,
+    out.push(Object.assign({model:n.id, el:rec.id, name:rec.name, type:rec.type||rec.tag, sub:rec.serviceTaskType||rec.subType,
       callee:{id, kind, key:String(key), op:op||null, state}, maps:mapsOf(rec.id)}, extra||{}));
   };
   const opOf=(rec, key)=>{ if(rec.operationKey) return rec.operationKey;
@@ -3761,7 +3762,8 @@ function callSitesOf(n){
   // a form's component calls what its callee names; a list or a select fills its lookup parameters
   // itself, so only a component that maps a payload is held to the callee's inputs
   if(n.type==='form'||n.type==='page') (d.fields||[]).forEach(f=>{ const cl=f&&f.callee; if(!cl||!cl.kind||!cl.key||cl.kind==='rest') return;
-    push({id:f.id, name:f.label||f.id, type:f.type}, cl.kind, cl.key, cl.op, {implicit:!mapsOf(f.id).length}); });
+    push({id:f.id, name:f.label||f.id, type:f.type}, cl.kind, cl.key, cl.op,
+      {implicit:!mapsOf(f.id).length&&cl.kind!=='action', payloadMode:f.payloadMode}); });
   // an agent's tools: the model fills the parameters — Atlas cannot see what it passes
   if(n.type==='agent') (d.tools||[]).forEach(t=>{ if(t&&t.key) push({id:'tool:'+t.key, name:t.operation?t.key+' · '+t.operation:t.key, type:'tool'},
     t.type||'service', t.key, t.operation, {implicit:true}); });
@@ -3798,6 +3800,21 @@ const CT_CALLER_TYPES=new Set(['process','case','form','page','action','agent'])
 function contractOf(n){
   const d=n.data||{};
   if(n.type==='process'||n.type==='case') return procContract(n);
+  if(n.type==='decision'&&!d.decisionService){
+    // a decision reads its inputs by name from the caller's variables and writes its outputs back there —
+    // nobody maps them, so a caller fits by writing the one and reading the other
+    const io=dmnIORows(d), root=e=>{ const m=/^\s*([A-Za-z_$][\w$]*)/.exec(String(e||'')); return m?m[1]:''; };
+    const hp=String(d.hitPolicy||'').toUpperCase();
+    return {kind:'dmn', exact:false, implicit:true, multi:['COLLECT','RULE ORDER','OUTPUT ORDER'].indexOf(hp)>=0,
+      items:io.map(r=>({name:r.dir==='in'?root(r.expr):(r.expr||''), dir:r.dir, type:r.type, label:r.label, expr:r.expr})).filter(it=>it.name)};
+  }
+  if(n.type==='action'){
+    // what the bot script reads with flw.getInput and returns with flw.setOutput — its payload contract
+    const ps=(d.ioParameters||[]).filter(p=>p.kind==='flwScript');
+    const items=[...new Set(ps.filter(p=>p.dir==='in').map(p=>p.target).filter(Boolean))].map(k=>({name:k, dir:'in'}))
+      .concat([...new Set(ps.filter(p=>p.dir!=='in').map(p=>p.target).filter(Boolean))].map(k=>({name:k, dir:'out'})));
+    return {kind:'action', exact:!!d.script, missTone:'warn', items};
+  }
   if(n.type==='serviceOperation'){
     const items=(d.params||[]).map(p=>({name:p.name, dir:'in', type:p.type, required:!!p.required&&(p['default']==null||p['default']===''), dflt:p['default']}))
       .concat((d.outParams||[]).map(p=>({name:p.name, dir:'out', type:p.type})));
@@ -3847,7 +3864,10 @@ function mappingOf(st, callee){
   if(!ct) return {ct:null, rows, worst:'', noContract:true};
   const ins=st.maps.filter(p=>p.dir==='in'), outs=st.maps.filter(p=>p.dir!=='in');
   const named=(list,nm)=>list.filter(p=>ctName(p)===nm);
-  const miss=ct.exact?'bad':'warn';
+  const miss=ct.missTone||(ct.exact?'bad':'warn');
+  if(ct.implicit) return implicitMapping(st, ct);
+  // a button that sends the whole form hands over every field by name
+  const full=st.payloadMode&&/full/i.test(JSON.stringify(st.payloadMode));
   if(st.implicit){
     ct.items.filter(it=>it.dir==='in').forEach(it=>rows.push({it, dir:'in', name:it.name, via:[], st:it.required?'unk':'none', tip:CT_SILENCE.implicit}));
     return {ct, rows, worst:''};
@@ -3859,6 +3879,7 @@ function mappingOf(st, callee){
     // an input nobody passes
     const why=it.silent||(ct.kind==='proc'&&!ins.length?'noMaps':'')||(ct.kind==='proc'?ctSilence(it.name):'')||(it.guess?'guess':'');
     if(ct.kind==='op'&&!it.required){ rows.push({it, dir:'in', name:it.name, via:[], st:'none', tip:it.dflt!=null?'Optional — defaults to '+it.dflt:'Optional'}); return; }
+    if(full){ rows.push({it, dir:'in', name:it.name, via:[], st:'impl', tip:'The button sends the whole form, so a field of this name is handed over'}); return; }
     rows.push({it, dir:'in', name:it.name, via:[], st:why?'unk':'miss', tip:why?CT_SILENCE[why]:'', tone:miss});
   });
   // mappings that name nothing the contract lists
@@ -3883,6 +3904,31 @@ function mappingOf(st, callee){
   const worst=rows.some(r=>r.st==='miss'&&r.tone==='bad')?'bad':rows.some(r=>r.st==='miss'||r.st==='warn')?'warn':'';
   return {ct, rows, worst};
 }
+/** A decision's callers map nothing: an input fits when the caller writes it before the decision runs
+ *  (or is handed it), an output when the caller reads it afterwards. */
+function implicitMapping(st, ct){
+  const cid=st.model, cn=byId.get(cid), {I}=varScopeIndex(), rows=[];
+  if(!cn) return {ct, rows, worst:''};
+  const reach=calleeClosure(cid), own=ownScope(cid);
+  const written=k=>[...reach].some(id=>{ const x=I.get(id); return x&&x.w.has(k); })||(I.get(cid)&&I.get(cid).inW.has(k));
+  const read=k=>[...own].some(id=>{ const x=I.get(id); return x&&x.r.has(k); });
+  // a caller nothing in the project starts gets its first values from outside — a REST call, a Java start
+  const startedOutside=!callersOf(cn).length;
+  ct.items.forEach(it=>{
+    if(it.dir==='in'){
+      if(written(it.name)) rows.push({it, dir:'in', name:it.name, via:[], st:'impl', tip:'Written in '+cn.label});
+      else { const why=ctSilence(it.name)||(startedOutside?'start':'');
+        rows.push({it, dir:'in', name:it.name, via:[], st:why?'unk':'miss', tone:'warn', tip:why?CT_SILENCE[why]:'Nothing in '+cn.label+' writes it before the decision reads it'}); }
+    } else {
+      if(ct.multi) rows.push({it, dir:'out', name:it.name, via:[], st:'info', tip:'The hit policy collects every match into a list — whether '+cn.label+' uses it is its own business'});
+      else if(read(it.name)) rows.push({it, dir:'out', name:it.name, via:[], st:'impl', tip:'Read in '+cn.label});
+      else { const why=ctSilence(it.name);
+        rows.push({it, dir:'out', name:it.name, via:[], st:why?'unk':'warn', tone:'warn', tip:why?CT_SILENCE[why]:cn.label+' never reads this result'}); }
+    }
+  });
+  const worst=rows.some(r=>r.st==='miss'||r.st==='warn')?'warn':'';
+  return {ct, rows, worst};
+}
 const CT_GM_TIP={ok:'Mapped', impl:'Provided by name', none:'Nothing expected here'};
 // the kinds of gap a contract row can have — one pill each, worst first
 const CT_KINDS={
@@ -3891,17 +3937,20 @@ const CT_KINDS={
   notParam:{tone:'warn', label:n=>n+' not a parameter'},
   notRead:{tone:'warn', label:n=>n+' passed, never read'},
   notWritten:{tone:'warn', label:n=>n+' never written back'},
+  notWrittenIn:{tone:'warn', label:n=>n+' not written before'},
+  notReadOut:{tone:'warn', label:n=>n+' result never read'},
 };
 /** The kind of gap of one contract row, or ''. */
-function ctKind(r, exact){
-  if(r.st==='miss') return r.tone==='bad'?'required':'notPassed';
+function ctKind(r, exact, implicit){
+  if(r.st==='miss') return r.tone==='bad'?'required':implicit?'notWrittenIn':'notPassed';
   if(r.st!=='warn') return '';
+  if(implicit) return 'notReadOut';
   if(exact) return 'notParam';
   return r.dir==='in'?'notRead':'notWritten';
 }
-const CT_ORDER=['required','notPassed','notParam','notRead','notWritten'];
+const CT_ORDER=['required','notPassed','notWrittenIn','notParam','notRead','notWritten','notReadOut'];
 /** The worst kind among rows, for a row that sums several up. */
-const ctWorstKind=(rows, exact)=>rows.map(r=>ctKind(r, exact)).filter(Boolean).sort((a,b)=>CT_ORDER.indexOf(a)-CT_ORDER.indexOf(b))[0]||'';
+const ctWorstKind=(rows, exact, implicit)=>rows.map(r=>ctKind(r, exact, implicit)).filter(Boolean).sort((a,b)=>CT_ORDER.indexOf(a)-CT_ORDER.indexOf(b))[0]||'';
 function ctCell(r){ return gm(r.st, '', r.tip||CT_GM_TIP[r.st]||''); }
 /** The param-level table under a call: direction, what the callee calls it, what the caller maps, status. */
 function ctDetailTbl(res){
@@ -3929,7 +3978,22 @@ function ctSummary(res, dir){
 }
 /** The calls `n` makes, one row per element: what it calls, and whether what it hands over fits. */
 function callsTable(n, c){
-  const sites=callSitesOf(n); if(!sites.length) return '';
+  const sites=callSitesOf(n);
+  // a form's REST buttons and REST data sources call an endpoint: the verb is what can be checked
+  const d=n.data||{}; void d.dataSources;               // the data sources are these rows now
+  const rest=(n.type==='form'||n.type==='page')?(d.restCalls||[]):[];
+  if(!sites.length&&!rest.length) return '';
+  const restRows=rest.map(r=>{
+    const right=endpointsFor(n.id, r.url, r.method), any=endpointsFor(n.id, r.url, null);
+    const ep=right[0]||null, other=!ep&&any.length?any[0]:null, verb=knownVerb(r.method);
+    const vc=ep?gm('ok', verb||'', 'The handler serves this verb')
+      : other?gm('warn', (verb||'?')+' ≠ '+((other.data||{}).http||'?'), 'The only handler for this path serves another verb')
+      : gm('none','', 'No handler in this project answers this URL — it is served elsewhere');
+    return {el:r.where, gap:other?'warn':'', kind:other?'verb':'', hay:elHay(r.where, r.method, r.url),
+      cells:{el:r.where?fieldLink(r.where):'<span class="muted">data source</span>',
+        callee:(ep||other)?vlink((ep||other).id, (ep||other).label):'<span class="mono">'+esc(r.url||'')+'</span> '+tag('not in project'),
+        in:(r.method?tag(r.method)+' ':'')+vc, out:r.path?'<span class="mono">'+esc(r.path)+'</span>':''}};
+  });
   return gapTable([{k:'el',label:'Element',w:'minmax(12ch,1.3fr)'},{k:'callee',label:'Calls',w:'minmax(14ch,1.5fr)'},
       {k:'in',label:'Hands over',w:'minmax(12ch,1.3fr)',cls:'tags'},{k:'out',label:'Takes back',w:'minmax(10ch,1fr)',cls:'tags',opt:true}],
     sites.map(st=>{
@@ -3942,15 +4006,18 @@ function callsTable(n, c){
       const inC=unkAll||(res.noContract?(st.maps.some(p=>p.dir==='in')?'<span class="muted">'+esc(paramSummary(st.maps.filter(p=>p.dir==='in')))+'</span>':''):ctSummary(res,'in'));
       const outC=unkAll?'':(res.noContract?(st.maps.some(p=>p.dir!=='in')?'<span class="muted">'+esc(paramSummary(st.maps.filter(p=>p.dir!=='in')))+'</span>':''):ctSummary(res,'out'));
       const unk=!known||(!res.worst&&res.rows&&res.rows.some(r=>r.st==='unk'));
-      return {el:st.el, gap:res.worst, unk, kind:res.ct?ctWorstKind(res.rows, res.ct.exact):'', hay:elHay(st.name, st.el, st.callee.key, st.callee.op, cn&&cn.label),
+      return {el:st.el, gap:res.worst, unk, kind:res.ct?ctWorstKind(res.rows, res.ct.exact, res.ct.implicit):'', hay:elHay(st.name, st.el, st.callee.key, st.callee.op, cn&&cn.label),
         cells:{el:elCell(c, {id:st.el, name:st.name}), callee:calleeCell, in:inC, out:outC},
         body:res.rows&&res.rows.length?ctDetailTbl(res):''};
-    }), {okLabel:n=>n+' call'+(n>1?'s':'')+' fit', kinds:CT_KINDS});
+    }).concat(restRows), {okLabel:n=>n+' call'+(n>1?'s':'')+' fit', kinds:Object.assign({verb:{tone:'warn', label:k=>k+' verb differs'}}, CT_KINDS)});
 }
 /** The callers of `n` against its contract: a row per value it expects or is handed, a column per caller. */
 function callersMatrix(n, c){
   const ct=contractOf(n); if(!ct) return '';
   const callers=callersOf(n);
+  // a decision, an operation or an action nobody calls has its own finding; only a process or case lists
+  // what whoever starts it must provide
+  if(!callers.length && ct.kind!=='proc') return '';
   if(!callers.length){
     // nobody in the project calls it: what it expects is what whoever starts it must provide
     const ins=ct.items.filter(it=>it.dir==='in'); if(!ins.length) return '';
@@ -3978,7 +4045,7 @@ function callersMatrix(n, c){
     if(callers.length<=4) per.forEach((r,i)=>{ cells['c'+i]=gm(r.st, r.via&&r.via.length?r.via.map(ctSide).join(', '):'', r.tip||CT_GM_TIP[r.st]||''); });
     else cells.all=per.map((r,i)=>'<span class="gc gc-'+r.st+'" data-tip="'+esc(byId.get(callers[i].model).label+' › '+(callers[i].name||callers[i].el)+': '+(r.tip||CT_GM_TIP[r.st]||r.st))+'">'+GM[r.st]+'</span>').join('');
     // with a column per caller the row says it all; with mini cells, the unfolded row names each caller
-    return {gap:worst, unk:!worst&&per.some(r=>r.st==='unk'), kind:ctWorstKind(per, ct.exact), hay:k.name, cells,
+    return {gap:worst, unk:!worst&&per.some(r=>r.st==='unk'), kind:ctWorstKind(per, ct.exact, ct.implicit), hay:k.name, cells,
       body:callers.length<=4?'':'<div class="relsub">'+res.map((x,i)=>{ const r=per[i];
         return '<div class="relsub-h">'+vlink(x.st.model, byId.get(x.st.model).label)+' › '+elJumpHtml(x.st.model, x.st.el, x.st.name||x.st.el, 'Open the calling element')+' '+
           gm(r.st, r.via&&r.via.length?r.via.map(ctSide).join(', '):'', r.tip||CT_GM_TIP[r.st]||'')+'</div>'; }).join('')+'</div>'};
@@ -4074,6 +4141,96 @@ FIT.service=[{title:'Operations and their callers', build:n=>opCallersFit(n)},
   {title:'Operations and the code that answers them', build:n=>opEndpointsFit(n)},
   {title:'Service and data object', build:n=>svcDoFit(n)}];
 FIT.dataObject=[{title:'Service and data object', build:n=>svcDoFit(n)}];
+
+// --- a form: the variables its fields write and who reads them, the data-object paths it binds, and
+// whether the process that shows it tests every outcome it can end with ---
+/** Every variable a field writes, with the models that read it — the opener's forms and decisions first. */
+function formFieldVars(n){
+  const openers=new Set(openersOf(n).map(o=>o.model)), near=new Set();
+  openers.forEach(id=>ownScope(id).forEach(x=>near.add(x)));
+  const rows=[];
+  nodes.forEach(v=>{ if(v.type!=='variable') return; const d=v.data||{};
+    const ws=(d.writes||[]).filter(w=>w.model===n.id&&(w.via==='formField'||w.via==='restButton'||w.via==='responsePayloadMapping'||w.via==='scriptButton'));
+    if(!ws.length) return;
+    const readers=[...new Set((d.reads||[]).map(r=>r.model).filter(m=>m&&m!==n.id))];
+    const byOpener=readers.filter(m=>near.has(m));
+    let st, tip='';
+    if(d.unread){ st='warn'; tip='Written here and read nowhere Atlas can see — see Variables · never read'; }
+    else if(byOpener.length){ st='ok'; tip='Read by '+byOpener.map(m=>(byId.get(m)||{}).label||m).join(', '); }
+    else if(readers.length){ st='ok'; tip='Read elsewhere — not by a model that shows this form'; }
+    else if(d.readsUnknown){ st='unk'; tip=CT_SILENCE.unknown; }
+    else { st='none'; tip='No reader Atlas can see'; }
+    const fields=[...new Set(ws.map(w=>w.element).filter(Boolean))];
+    rows.push({gap:st==='warn'?'warn':'', unk:st==='unk', kind:st==='warn'?'unread':'', hay:elHay(v.key, fields.join(' '), readers.join(' ')),
+      cells:{field:fields.map(f=>fieldLink(f)).join(', '), v:vlink(v.id, v.key),
+        by:readers.slice(0,4).map(m=>vlink(m, (byId.get(m)||{}).label||m)).join(', ')+(readers.length>4?' <span class="muted">+'+(readers.length-4)+'</span>':''),
+        st:gm(st, st==='ok'&&!byOpener.length&&readers.length?'elsewhere':st==='warn'?'never read':'', tip)}});
+  });
+  if(!rows.length) return '';
+  rows.sort((a,b)=>a.hay.localeCompare(b.hay));
+  return gapTable([{k:'field',label:'Field',w:'minmax(12ch,1.3fr)',mono:true},{k:'v',label:'Variable',w:'minmax(12ch,1.2fr)',mono:true},
+      {k:'by',label:'Read by',w:'minmax(14ch,1.8fr)',opt:true},{k:'st',label:'',w:'minmax(10ch,.9fr)',cls:'tags'}], rows,
+    {okLabel:k=>k+' read', kinds:{unread:{tone:'warn', label:k=>k+' never read'}}});
+}
+/** `x.f` components under a component bound to a data object: is `f` a field of that object? */
+function formDoPaths(n){
+  const fs=(n.data||{}).fields||[], bound=fs.filter(f=>f&&f.callee&&f.callee.kind==='dataObject'&&f.callee.key&&f.id);
+  if(!bound.length) return '';
+  const rows=[];
+  bound.forEach(b=>{ const dobj=byId.get('dataObject:'+b.callee.key); if(!dobj) return;
+    const cols=new Set(((dobj.data||{}).columns||[]).map(x=>looseCol(x.name)));
+    fs.forEach(f=>{ const id=String((f&&f.id)||''); if(id.indexOf(b.id+'.')!==0) return;
+      const sub=id.slice(b.id.length+1).split('.')[0].split('[')[0]; if(!sub) return;
+      const okF=cols.has(looseCol(sub));
+      rows.push({gap:okF?'':'bad', kind:okF?'':'notField', hay:elHay(id, dobj.label),
+        cells:{path:fieldLink(id), dobj:vlink(dobj.id, dobj.label), st:okF?gm('ok', sub):gm('miss', sub, 'Not a field of '+dobj.label+' — the component shows nothing')}});
+    });
+  });
+  if(!rows.length) return '';
+  return gapTable([{k:'path',label:'Component',w:'minmax(14ch,1.6fr)',mono:true},{k:'dobj',label:'Data object',w:'minmax(12ch,1.2fr)'},{k:'st',label:'Field',w:'minmax(12ch,1fr)',cls:'tags'}],
+    rows, {okLabel:k=>k+' bound', kinds:{notField:{tone:'bad', label:k=>k+' not a field of the object'}}});
+}
+/** The string literals the conditions downstream of `el` compare `v` with — the flows out of the task and
+ *  out of a gateway right after it, and a case's sentries. `mentioned`: some condition reads `v` at all. */
+function outcomeTests(opener, el, v){
+  const d=opener.data||{}, flows=d.flows||[], gws=new Set((d.gateways||[]).map(g=>g.id)), conds=[];
+  const outs=id=>flows.filter(f=>f.from===id);
+  outs(el).forEach(f=>{ if(f.condition) conds.push(f.condition); if(gws.has(f.to)) outs(f.to).forEach(g=>{ if(g.condition) conds.push(g.condition); }); });
+  (d.sentries||[]).forEach(se=>{ if(se.condition) conds.push(se.condition); });
+  const ve=v.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), lits=new Set();
+  const res=[new RegExp('\\b'+ve+'\\s*(?:==|!=|eq|ne)\\s*[\'"]([^\'"]*)[\'"]','g'), new RegExp('[\'"]([^\'"]*)[\'"]\\s*(?:==|!=|eq|ne)\\s*'+ve+'\\b','g'),
+    new RegExp('\\b'+ve+'\\.equals\\(\\s*[\'"]([^\'"]*)[\'"]','g')];
+  let mentioned=false;
+  conds.forEach(cd=>{ if(String(cd).indexOf(v)<0) return; mentioned=true; res.forEach(re=>{ re.lastIndex=0; let m; while((m=re.exec(cd))) lits.add(m[1]); }); });
+  return {mentioned, lits};
+}
+/** Every outcome the form can end with against the conditions of each task that shows it: an outcome no
+ *  condition tests, a value a condition tests that is no outcome. */
+function formOutcomesFit(n){
+  const os=((n.data||{}).outcomes||[]).map(o=>o&&(o.value||o.label)).filter(Boolean);
+  if(!os.length) return '';
+  const ov=formOutcomeVar(n).name, openers=openersOf(n).filter(o=>o.el);
+  if(!openers.length) return '';
+  const rows=[];
+  openers.forEach(o=>{ const m=byId.get(o.model), t=outcomeTests(m, o.el, ov);
+    const where=vlink(m.id, m.label)+' › '+elJumpHtml(m.id, o.el, o.name||o.el, 'Open the task that shows this form');
+    if(!t.mentioned){ rows.push({gap:'', unk:true, hay:m.label, cells:{outcome:'<span class="muted">—</span>', where,
+      st:gm('unk','no condition reads it', 'No condition after this task reads '+ov+' — the outcome may be routed by Java, a listener or not at all')}}); return; }
+    os.forEach(v=>{ const tested=t.lits.has(String(v));
+      rows.push({gap:tested?'':'warn', kind:tested?'':'untested', hay:elHay(v, m.label),
+        cells:{outcome:'<span class="mono">'+esc(v)+'</span>', where, st:tested?gm('ok','tested'):gm('warn','not tested', 'No condition after this task compares '+ov+' with \''+v+'\' — it falls through to the default flow, if there is one')}}); });
+    [...t.lits].filter(l=>os.indexOf(l)<0).forEach(l=>rows.push({gap:'warn', kind:'noOutcome', hay:elHay(l, m.label),
+      cells:{outcome:'<span class="mono">'+esc(l)+'</span>', where, st:gm('warn','not an outcome', 'A condition tests \''+l+'\', which this form cannot end with')}}));
+  });
+  return gapTable([{k:'outcome',label:'Outcome',w:'minmax(10ch,1fr)'},{k:'where',label:'Shown by',w:'minmax(16ch,2fr)'},{k:'st',label:'',w:'minmax(12ch,1fr)',cls:'tags'}],
+    rows, {meta:'<span class="muted">outcome variable</span> '+vlink('variable:'+ov, ov), okLabel:k=>k+' tested',
+      kinds:{untested:{tone:'warn', label:k=>k+' outcome not tested'}, noOutcome:{tone:'warn', label:k=>k+' tested value is no outcome'}}});
+}
+FIT.form=[{title:'Calls', build:(n,c)=>callsTable(n,c)}, {title:'Fields and the variables they write', build:n=>formFieldVars(n)},
+  {title:'Data-object paths', build:n=>formDoPaths(n)}, {title:'Outcomes and the conditions that test them', build:n=>formOutcomesFit(n)}];
+FIT.page=FIT.form;
+FIT.decision=[{title:'Called by', build:(n,c)=>callersMatrix(n,c)}];
+FIT.action=[{title:'Called by', build:(n,c)=>callersMatrix(n,c)}];
 
 // ---------- form / page components ----------
 /** The processes and cases that show a form, with the element that does — a user task, a human task —
@@ -4373,15 +4530,6 @@ S.fields={id:'formfields', title:'Fields', hint:'every component, what it is bou
   count:(n,c)=>(c.d.fields||[]).length,
   build:(n,c)=>{ const fs=c.d.fields||[]; if(!fs.length) return '';
     return tbl(FIELD_COLS, fs.map(f=>fieldRow(f,c.d)), {placeholder:'filter fields — id, caption, type…'}); }};
-S.dataSources={id:'datasources', title:'Data sources', hint:'where selects, tables and lists take their rows from',
-  count:(n,c)=>(c.d.dataSources||[]).length,
-  build:(n,c)=>{ const ss=c.d.dataSources||[]; if(!ss.length) return '';
-    return tbl([{k:'kind',label:'Kind',w:'minmax(8ch,.6fr)',cls:'tags'},{k:'src',label:'Source',w:'minmax(14ch,2fr)',mono:true},
-                {k:'op',label:'Operation',w:'minmax(8ch,1fr)',mono:true,opt:true}],
-      ss.map(s=>({hay:(s.kind||'')+' '+(s.key||s.url||'')+' '+(s.op||''), cells:{
-        kind:termHtml('kind-ds', s.kind, 'tag'),
-        src:s.kind==='dataObject'?vlink('dataObject:'+s.key, s.key):s.kind==='service'?vlink('service:'+s.key, s.key):esc(s.url||s.key||''),
-        op:esc(s.op||'')}}))); }};
 /** A URL's path as segments, placeholders as `*` — the same normal form :core matches endpoints with. */
 function epPathSegs(p){ return String(p||'').replace(/^[a-z]+:\/\/[^/]+/,'').split('?')[0]
   .replace(/[#$]\{[^}]*\}|\{\{[^}]*\}\}|\{[^}]*\}/g,'*').toLowerCase().split('/').filter(Boolean); }
@@ -4409,13 +4557,6 @@ function urlCell(srcId, url, method){
   const ep=endpointsFor(srcId, url, method)[0];
   return ep?'<span class="vlink" data-id="'+enc(ep.id)+'" tabindex="0" role="link" data-tip="Served by '+esc(ep.label||ep.id)+' in this project">'+esc(url)+'</span>':esc(url||'');
 }
-S.restCalls={id:'restcalls', title:'REST calls', hint:'what this form calls over HTTP, and which button does it',
-  count:(n,c)=>(c.d.restCalls||[]).length,
-  build:(n,c)=>{ const rs=c.d.restCalls||[]; if(!rs.length) return '';
-    return tbl([{k:'method',label:'Method',w:'7ch',cls:'tags'},{k:'url',label:'URL',w:'minmax(16ch,3fr)',mono:true},
-                {k:'where',label:'Button',w:'minmax(8ch,1fr)',mono:true,opt:true},{k:'path',label:'Response path',w:'minmax(8ch,1fr)',mono:true,opt:true}],
-      rs.map(r=>({el:r.where, hay:(r.method||'')+' '+(r.url||'')+' '+(r.where||''), cells:{
-        method:tag(r.method), url:urlCell(n.id, r.url, r.method), where:fieldLink(r.where), path:esc(r.path||'')}}))); }};
 // --- data object ---
 S.properties={id:'columns', title:'Properties', hint:'the fields of the object, typed, with the objects they point at',
   count:(n,c)=>(c.d.columns||[]).length,
@@ -4710,13 +4851,6 @@ S.eventListeners={id:'eventlisteners', title:'Event listeners', hint:'what the c
 // --- decision tables ---
 /** Inputs and outputs with what each one reads or writes — `inputDefs`/`outputDefs` when the parser has
  *  them, the bare name lists otherwise. Names link to their variable nodes. */
-S.dmnIO={id:'dmnio', title:'Inputs & outputs', hint:'what the table reads, in which order, and what it writes',
-  count:(n,c)=>dmnIORows(c.d).length,
-  build:(n,c)=>{ const rs=dmnIORows(c.d); if(!rs.length) return '';
-    return tbl([{k:'dir',label:'',w:'5ch',cls:'tags'},{k:'label',label:'Label',w:'minmax(10ch,1.2fr)'},{k:'expr',label:'Expression / variable',w:'minmax(12ch,1.6fr)',mono:true},
-                {k:'type',label:'Type',w:'minmax(7ch,.7fr)',cls:'tags',opt:true},{k:'allowed',label:'Allowed values',w:'minmax(10ch,1.4fr)',mono:true,opt:true,cls:'wrap'}],
-      rs.map(r=>({hay:elHay(r.label,r.expr,r.type), cells:{dir:'<span class="dir" data-dir="'+r.dir+'">'+r.dir+'</span>', label:esc(r.label||''),
-        expr:r.expr?vlink('variable:'+String(r.expr).split('.')[0], r.expr):'', type:tag(r.type), allowed:esc(r.allowed||'')}}))); }};
 function dmnIORows(d){
   const out=[], ie=d.inputExpressions||[];   // the expression behind a labelled input — that is what actually reads a variable
   const ins=(d.inputDefs||[]).length?d.inputDefs:(d.inputs||[]).map((x,i)=>({label:x, expression:ie[i]}));
@@ -4725,18 +4859,35 @@ function dmnIORows(d){
   outs.forEach(x=>{ const o=(x&&typeof x==='object')?x:{label:x,name:x}; out.push({dir:'out', label:o.label, expr:o.name||o.label, type:o.type, allowed:Array.isArray(o.allowed)?o.allowed.join(', '):o.allowed}); });
   return out;
 }
-/** The decision table itself — the conditions and values that are the actual business logic. A wide
- *  table scrolls inside the section, never sideways. */
-S.dmnRules={id:'dmnrules', title:'Rules', hint:'the decision table — inputs left of the divider, outputs right',
+/** The decision table as Design draws it: the hit policy in the corner, an Input and an Output band, each
+ *  column headed by its label, the expression or variable it reads or writes and its type, a number per
+ *  rule, the annotation last. What the old Inputs & outputs table said is the head of this one. */
+const HIT_POLICY={FIRST:'F', UNIQUE:'U', ANY:'A', PRIORITY:'P', COLLECT:'C', 'RULE ORDER':'R', 'OUTPUT ORDER':'O'};
+S.dmnRules={id:'dmnrules', title:'Rules', hint:'the decision table — what it reads, what it writes, and the rules between',
   count:(n,c)=>c.d.ruleCount||(c.d.rules||[]).length,
-  build:(n,c)=>{ const d=c.d; if(!(d.rules||[]).length) return '';
-    const ann=d.rules.some(r=>r.annotation);
-    // `o` marks where the inputs end and the outputs begin
-    const cell=(t,v,i)=>'<'+t+(i===0?' class="o"':'')+'>'+esc(v==null||v===''?'—':String(v))+'</'+t+'>';
-    const row=r=>'<tr>'+(r.inputs||[]).map(x=>cell('td',x,-1)).join('')+(r.outputs||[]).map((x,i)=>cell('td',x,i)).join('')+(ann?'<td>'+esc(r.annotation||'')+'</td>':'')+'</tr>';
-    return '<div class="dmntab"><table><thead><tr>'+(d.inputs||[]).map(x=>cell('th',x,-1)).join('')+(d.outputs||[]).map((x,i)=>cell('th',x,i)).join('')+
-      (ann?'<th>annotation</th>':'')+'</tr></thead><tbody>'+d.rules.map(row).join('')+'</tbody></table>'+
-      (d.rulesTruncated?'<div class="tbl-more muted">showing '+d.rules.length+' of '+d.rulesTruncated+' rules</div>':'')+'</div>'; }};
+  build:(n,c)=>{ const d=c.d, io=dmnIORows(d), rules=d.rules||[];
+    void d.inputs, d.outputs;              // the plain label lists — the column heads say them, from the definitions
+    if(!io.length&&!rules.length) return '';
+    const ins=io.filter(r=>r.dir==='in'), outs=io.filter(r=>r.dir==='out');
+    // a rule's cells follow the table's columns; a table without column definitions falls back to them
+    const nIn=Math.max(ins.length, ...rules.map(r=>(r.inputs||[]).length), 0), nOut=Math.max(outs.length, ...rules.map(r=>(r.outputs||[]).length), 0);
+    const ann=rules.some(r=>r.annotation);
+    const hp=String(d.hitPolicy||'').toUpperCase(), hpL=HIT_POLICY[hp]||hp.charAt(0)||'';
+    const colHead=(r,i,first)=>'<th class="dh'+(first?' o':'')+'">'+
+      '<div class="dh-l">'+esc(r&&r.label||'')+'</div>'+
+      (r&&r.expr?'<div class="dh-e">'+vlink('variable:'+String(r.expr).split('.')[0], r.expr)+'</div>':'')+
+      (r&&(r.type||r.allowed)?'<div class="dh-t">'+esc([r.type, r.allowed].filter(Boolean).join(' · '))+'</div>':'')+'</th>';
+    const cell=(v,first)=>'<td'+(first?' class="o"':'')+'>'+esc(v==null||v===''?'—':String(v))+'</td>';
+    let h='<div class="dmntab"><table><thead><tr>'+
+      '<th class="hp" rowspan="2"'+(hp?' data-tip="Hit policy: '+esc(d.hitPolicy)+'"':'')+'>'+esc(hpL)+'</th>'+
+      (nIn?'<th class="band band-in" colspan="'+nIn+'">Input</th>':'')+(nOut?'<th class="band band-out o" colspan="'+nOut+'">Output</th>':'')+
+      (ann?'<th class="band" rowspan="2">Annotation</th>':'')+'</tr><tr>'+
+      Array.from({length:nIn},(_,i)=>colHead(ins[i]||{label:(d.inputs||[])[i]},i,false)).join('')+
+      Array.from({length:nOut},(_,i)=>colHead(outs[i]||{label:(d.outputs||[])[i]},i,i===0)).join('')+'</tr></thead><tbody>'+
+      rules.map((r,ri)=>'<tr><td class="rn">'+(ri+1)+'</td>'+Array.from({length:nIn},(_,i)=>cell((r.inputs||[])[i],false)).join('')+
+        Array.from({length:nOut},(_,i)=>cell((r.outputs||[])[i],i===0)).join('')+(ann?'<td class="ann">'+esc(r.annotation||'')+'</td>':'')+'</tr>').join('')+
+      '</tbody></table>'+(d.rulesTruncated?'<div class="tbl-more muted">showing '+rules.length+' of '+d.rulesTruncated+' rules</div>':'')+'</div>';
+    return h; }};
 // --- access, dictionaries, SLAs, templates, queries, documents, extractors, knowledge bases, events ---
 S.permissions={id:'permissions', title:'Permissions', hint:'who may do what',
   count:(n,c)=>(c.d.permissions||[]).length,
@@ -5018,10 +5169,10 @@ const FIT_SLOT=[S.coverage, S.coverageOf, S.fit];
 const PAGES={
   process:{det:[S.elements]},
   case:{det:[S.elements]},
-  form:{det:[S.fields, S.dataSources, S.restCalls]},
+  form:{det:[S.fields]},
   page:'form',
   dataObject:{pic:[S.properties]},
-  decision:{pic:[S.dmnIO, S.dmnRules]},
+  decision:{pic:[S.dmnRules]},
   service:{pic:[S.ops], det:[S.svcColumns]},
   serviceOperation:{pic:[S.opParams]},
   app:{pic:[S.appPages], det:[S.appVars]},

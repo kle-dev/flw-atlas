@@ -789,6 +789,32 @@ const probe = `<script>
     ok("a data object's properties name the service column behind each field", cols.indexOf('Service column')>=0, cols.join('|'));
   });
 
+  // --- a decision, an action and a form against what they meet ---
+  steps.push(()=>{ location.hash=enc('decision:orderDecision'); });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    ok('a decision table is drawn with its hit policy and its input and output bands',
+       !!det.querySelector('.dmntab th.hp') && !!det.querySelector('.dmntab .band-in') && !!det.querySelector('.dmntab .band-out'));
+    ok('its inputs and outputs are the head of the table, not a section of their own', !det.querySelector('[data-sect="dmnio"]'));
+    const s=det.querySelector('details.sect[data-sect="fit"]');
+    const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>{ const c=r.querySelector('.td.mono'); return c && c.textContent.trim().split(' ')[0]==='total'; });
+    ok('an input the calling process writes fits by name', !!row && !!row.querySelector('.gm-impl'), row?row.innerHTML.slice(0,200):'(no row)');
+    location.hash=enc('action:notifyCustomerAction');
+  });
+  steps.push(()=>{
+    const s=document.querySelector('#detail details.sect[data-sect="fit"]');
+    const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>{ const c=r.querySelector('.td.mono'); return c && c.textContent.trim().split(' ')[0]==='customerEmail'; });
+    ok("an action's input its calling button sends fits", !!row && !!row.querySelector('.gm-ok'), row?row.textContent:'(no row)');
+    location.hash=enc('form:orderForm');
+  });
+  steps.push(()=>{
+    const s=document.querySelector('#detail details.sect[data-sect="fit"]');
+    const rest=s&&s.querySelector('.tbl .tr[data-el="canEditButton"]');
+    ok("a form's REST button is a call, its verb checked against the handler", !!rest && /GET/.test(rest.textContent) && !!rest.querySelector('.gm-ok'), rest?rest.textContent:'(no row)');
+    ok('the data sources and REST calls are no sections of their own', !document.querySelector('#detail [data-sect="datasources"], #detail [data-sect="restcalls"]'));
+    ok('its fields say who reads the variables they write', !!s && /Fields and the variables they write/.test(s.textContent));
+  });
+
   // --- sidebar groups fold and remember ---
   steps.push(()=>{
     const h=document.querySelector('#nav .side-group[data-group="Models"]');

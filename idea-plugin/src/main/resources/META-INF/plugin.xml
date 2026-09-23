@@ -167,6 +167,15 @@
               itself. Where no changelog lets the schema coverage compare them, the service's column
               mappings are held against the data object's fields; a data object's properties name the
               service column behind each field and the forms that show it.</li>
+          <li><b>Decisions, forms and actions say whether they fit.</b> A decision table is drawn as Design
+              draws it — the hit policy in the corner, Input and Output bands, each column headed by its
+              label, expression and type, a number per rule — and lists every model that runs it: an input
+              the caller never writes before, a result it never reads. A form's page lists every call it
+              makes — buttons, data sources, REST calls with the verb checked against the handler — the
+              variables its fields write and who reads them, the data-object paths it binds that are no
+              field of the object, and, for each task that shows it, the outcomes no condition tests and the
+              tested values that are no outcome. An action lists the buttons that invoke it against what its
+              script reads with <code>flw.getInput</code>.</li>
           <li><b>A health strip under every title.</b> Before the first section, a page says whether the
               model is fine: its open defects and advice, the gaps its tables found (or <i>✓ fits</i>), how
               many models it uses and is used by, the apps that ship it — or <i>in no app</i> — and the
@@ -539,26 +548,6 @@
               now, after the platform's own <i>Go to File</i> / <i>Find in Files</i> — and they no longer
               share a magnifier: the list carries the Find tool window's own icon, which is the window it
               opens. The keyboard shortcut is unchanged.</li>
-        </ul>
-        <h3>0.24.0</h3>
-        <ul>
-          <li><b>Findings can be accepted, in a file you commit.</b> Some findings are correct and still not
-              worth acting on, and until now the only answer was to drop the check for everyone or stop
-              running <code>--fail-on</code> at all. A project can now carry <code>waivers.json</code> next
-              to its artifacts, beside a generated <code>.gitignore</code> that ignores everything in the
-              folder <i>except</i> that file — the analysis is regenerated and may hold client data, the
-              decisions are yours and belong in review. A waiver names check + node, narrowed by element and
-              subject, so it survives the message rewording; an accepted finding stays in the report, in a
-              section of its own, and leaves the counts and the gate. A rule that matched nothing, expired,
-              or gives no reason is reported on every surface, and matching is counted per run, so a second
-              rule covering the same finding is not "matched nothing". The explorer and
-              <code>Waivers.serialize</code> write the same bytes — <code>WaiverWriterParityTest</code> runs
-              one set through both — and a save from the IDE merges into the file rather than over it: a
-              rule a colleague committed, or the CLI added, after the page was generated survives. New
-              flags: <code>--waivers</code> (the folder the artifact lands in), <code>--no-waivers</code>,
-              <code>--fail-on-stale-waivers</code>, <code>--waiver-author</code> to prefill the
-              <code>by</code> of a rule accepted from a CLI-generated page, and <code>any</code> as the
-              honest spelling of what <code>--fail-on warning</code> has always meant.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

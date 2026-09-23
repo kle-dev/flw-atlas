@@ -1059,13 +1059,26 @@
   .tok-c{color:var(--ink-faint);font-style:italic}
   .tok-n{color:var(--warn-text)}
   .tok-i{color:var(--accent-hover)}
-  /* DMN decision table: the rules themselves. Wide tables scroll inside the section, never sideways. */
-  .dmntab{overflow-x:auto;padding:var(--space-2) var(--space-3)}
-  .dmntab table{border-collapse:collapse;font-family:var(--mono);font-size:var(--text-xs)}
-  .dmntab th,.dmntab td{border:1px solid var(--line);padding:2px var(--space-15);
-    text-align:left;white-space:pre;vertical-align:top}
-  .dmntab th{background:var(--panel2);color:var(--ink-dim);font-family:var(--sans);font-weight:600}
-  .dmntab td{color:var(--ink-dim)}
+  /* DMN decision table, as Design draws it: the hit policy in the corner, an Input and an Output band, a
+     head per column (label, expression, type), a number per rule. Wide tables scroll inside the section. */
+  .dmntab{overflow-x:auto;margin:var(--space-2) 0;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--panel)}
+  .dmntab table{border-collapse:collapse;font-size:var(--text-xs);min-width:100%}
+  .dmntab th,.dmntab td{border:1px solid var(--line);padding:var(--space-1) var(--space-2);text-align:left;vertical-align:top}
+  .dmntab tr>:first-child{border-left:0}
+  .dmntab tr>:last-child{border-right:0}
+  .dmntab thead tr:first-child>*{border-top:0}
+  .dmntab tbody tr:last-child>*{border-bottom:0}
+  .dmntab thead th{background:var(--panel2);font-weight:400}
+  .dmntab .band{font-size:var(--text-2xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}
+  .dmntab .band-in{color:var(--info-text)}
+  .dmntab .band-out{color:var(--ok-text)}
+  .dmntab .hp{font-family:var(--mono);font-weight:700;font-size:var(--text-sm);color:var(--accent);text-align:center;vertical-align:middle;cursor:help;width:2.4em}
+  .dmntab .dh-l{font-family:var(--sans);font-weight:600;color:var(--ink);white-space:nowrap}
+  .dmntab .dh-e{font-family:var(--mono);color:var(--ink-dim);white-space:nowrap}
+  .dmntab .dh-t{font-size:var(--text-2xs);color:var(--ink-faint)}
+  .dmntab td{font-family:var(--mono);color:var(--ink-dim);white-space:pre}
+  .dmntab td.rn{color:var(--ink-faint);text-align:center;font-variant-numeric:tabular-nums}
+  .dmntab td.ann{font-family:var(--sans);white-space:normal;min-width:16ch}
   .dmntab .o{border-left:2px solid var(--line2)}          /* where inputs end and outputs begin */
   .opref{flex:none;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:45%}
   .card-r .opref,.tbl .opref{max-width:none}
