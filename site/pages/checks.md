@@ -400,7 +400,7 @@ eight cases in which this check deliberately says nothing.
 | `<project>.overview.md` | Section 14, *Findings*, with `file:line` for each. |
 | `<project>.graph.json` | `findings` (itemised), `checks` (per-check counts plus `open` and `waived`) and `stats.defects` / `stats.advice`. |
 | `<project>.CLAUDE.md` | A findings summary, so an agent starts from what is already known to be wrong. |
-| The explorer | The **Checks** page (`#/checks`): a row per check — worst first, its tone in words (*error*, *warning*, *advice*), the clean ones folded with what they examined — then a block per check with the finding's tone, model, element (a jump into the model), message and `file:line`, what the check means and what to do, and an **accept…** control on every row. A model's own page lists its findings under the diagram, with a ⌖ button that puts the element in view. |
+| The explorer | The **Checks** page (`#/checks`): a row per check — worst first, its tone in words (*error*, *warning*, *advice*), the clean ones folded with what they examined — then a block per check with the finding's tone, model, element (a jump into the model), message and `file:line`, headed by one line saying what the check means with *why · what to do* beside it, and an **accept…** control on every row. A model's own page lists its findings under the diagram, with a ⌖ button that puts the element in view. |
 | The IDE | The same explorer page, opened as an editor tab. |
 
 ## Accepting a finding

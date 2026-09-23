@@ -706,6 +706,13 @@ const probe = `<script>
     const row=cv.querySelector('details.sect[data-sect^="chk-"] .tbl .tr');
     ok('a finding row names its severity, model and message', !!row && !!row.querySelector('.pill') && !!row.querySelector('.nc, .mono') && (row.textContent||'').length>20);
     ok('the page has one filter over every block', cv.querySelectorAll('.fbar').length===1);
+    // a check's head is one line; why it matters and what to do open beneath it
+    const wb=cv.querySelector('details.sect[data-sect^="chk-"] .chk-head .chk-whybtn');
+    ok('a check block has a why · what to do toggle in its head', !!wb && wb.getAttribute('aria-expanded')==='false');
+    if(wb){ click(wb); const p=document.getElementById(wb.getAttribute('aria-controls'));
+      ok('the toggle opens the explanation', !!p && !p.hidden && wb.getAttribute('aria-expanded')==='true'); click(wb);
+      ok('and closes it again', !!p && p.hidden); }
+    ok('no severity chip row repeats what the rows say', !cv.querySelector('.chk-sev'));
   });
   steps.push(()=>{
     const cv=document.getElementById('view-checks');

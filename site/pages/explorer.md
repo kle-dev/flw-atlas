@@ -26,7 +26,7 @@ view you are looking at can be copied as a link.
 |---|---|
 | *(empty)* or `#/overview` | The dashboard: the inventory by type, the health list, hotspots (the project's own most-referenced models and code — platform beans, URLs and security policies aside), apps and entry points |
 | `#/tree` | The reference tree: what each app starts, and what those models reach |
-| `#/checks` | Every [finding](../checks/) in one place, in two groups — **Defects** (wrong now) and **Advice** (a pattern worth a look): a block per check with its rows, what it means and what to do, the accept controls, and what the project already accepted — with its reasons |
+| `#/checks` | Every [finding](../checks/) in one place, in two groups — **Defects** (wrong now) and **Advice** (a pattern worth a look): a block per check with its rows under one line saying what it means (*why · what to do* opens beneath it), the accept controls, and what the project already accepted — with its reasons |
 | `#/variables` | The [unused-variable](../variables/) report and what Atlas could not judge |
 | `#/scripts` | Every script body in the project |
 | `#/schema` | Schema gaps: Liquibase → service → data object, per column |

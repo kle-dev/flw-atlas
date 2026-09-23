@@ -1124,16 +1124,17 @@
   .tv-key{font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-faint)}
 
   /* ---------- the Checks page: a block per check ---------- */
-  .chk-head{display:flex;flex-direction:column;gap:var(--space-1);margin:0 0 var(--space-25)}
-  .chk-head .ddesc{margin:0}
-  .chk-sev{display:flex;gap:var(--space-1)}
-  .chk-more{font-size:var(--text-sm);color:var(--ink-dim);max-width:72ch}
-  .chk-more>summary{cursor:pointer;color:var(--accent);font-size:var(--text-xs);list-style:none}
-  .chk-more>summary::-webkit-details-marker{display:none}
-  .chk-more>summary:before{content:"+ ";font-family:var(--mono)}
-  .chk-more[open]>summary:before{content:"− "}
-  .chk-more p{margin:var(--space-1) 0;line-height:1.5}
-  .chk-more .dgbtn{margin-top:var(--space-1)}
+  /* a check's head is one wrapping line: (title and tones,) what it means, and its buttons on the right */
+  .chk-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-1) var(--space-3);margin:0 0 var(--space-2)}
+  .chk-what{color:var(--ink-dim);font-size:var(--text-sm);min-width:0;flex:1 1 24ch;text-wrap:pretty}
+  .chk-tools{margin-left:auto;display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-15)}
+  .chk-whybtn{background:none;border:0;padding:0;cursor:pointer;color:var(--accent);font:inherit;font-size:var(--text-xs);white-space:nowrap}
+  .chk-whybtn:before{content:"+ ";font-family:var(--mono)}
+  .chk-whybtn[aria-expanded="true"]:before{content:"− "}
+  .chk-whybtn:hover{text-decoration:underline}
+  .chk-why{font-size:var(--text-sm);color:var(--ink-dim);max-width:72ch;margin:0 0 var(--space-25)}
+  .chk-why p{margin:var(--space-1) 0;line-height:1.5}
+  .chk-why .dgbtn{margin-top:var(--space-1)}
   .chk-acc{margin-top:var(--space-25)}
   .chk-acc>summary{cursor:pointer;font-size:var(--text-xs);color:var(--ink-faint);padding:var(--space-1) 0}
   .chk-acc>summary:hover{color:var(--ink-dim)}

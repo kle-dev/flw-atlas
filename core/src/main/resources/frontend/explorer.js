@@ -2035,12 +2035,7 @@ function nodeFindingsHtml(n){
   let body='';
   checksInOrder().forEach(c=>{ const rows=byCheck[c.id]; if(!rows) return;
     const tones=[...new Set(rows.filter(f=>!waiverFor(f)).map(findTone))].sort((a,b)=>TONE_ORDER[a]-TONE_ORDER[b]);
-    body+='<div class="chk-head"><div class="chk-title">'+esc(c.title)+' '+tones.map(tonePill).join(' ')+'</div>'+
-      (c.what?'<p class="ddesc">'+esc(c.what)+'</p>':'')+
-      ((c.why||c.fix||c.docs)?'<details class="chk-more"><summary>why it matters · what to do</summary>'+
-        (c.why?'<p>'+esc(c.why)+'</p>':'')+(c.fix?'<p>'+esc(c.fix)+'</p>':'')+
-        (c.docs?'<a class="dgbtn" href="'+esc(c.docs)+'" target="_blank" rel="noopener">read the docs ↗</a>':'')+'</details>':'')+
-      '</div>'+findingTable(rows, {onNode:true});
+    body+=checkHeadHtml(c, {scope:'n', title:true, pills:tones})+findingTable(rows, {onNode:true});
   });
   return section('findings','Findings on this model', body, {count:open.length, hint:acc?acc+' accepted':'', attrs:' id="findings"'});
 }
@@ -2187,6 +2182,31 @@ function findingTable(rows, o){
   });
   return tbl(cols, out, {filter:false, more:o.more});
 }
+/**
+ * A check's head, in one line: (on a model page, where defects and advice share one section, the check's
+ * title and tones), what the check means, and on the right the block's buttons — including the toggle for
+ * why it matters and what to do, whose text opens underneath. It used to be four stacked lines (buttons,
+ * severity chips, the description, the toggle) before the first finding. `o.scope` keeps the ids apart:
+ * the Checks page and the detail panel are both in the DOM.
+ */
+function checkHeadHtml(c, o){
+  o=o||{};
+  const hasWhy=!!(c.why||c.fix||c.docs), wid='chk-why-'+o.scope+'-'+c.id;
+  const why=hasWhy?'<button type="button" class="chk-whybtn" aria-expanded="false" aria-controls="'+esc(wid)+'">why · what to do</button>':'';
+  const tools=[why, o.tools||''].filter(Boolean).join('');
+  return '<div class="chk-head">'+
+    (o.title?'<span class="chk-title">'+esc(c.title)+' '+(o.pills||[]).map(tonePill).join(' ')+'</span>':'')+
+    (c.what?'<span class="chk-what">'+esc(c.what)+'</span>':'')+
+    (tools?'<span class="chk-tools">'+tools+'</span>':'')+'</div>'+
+    (hasWhy?'<div class="chk-why" id="'+esc(wid)+'" hidden>'+
+      (c.why?'<p>'+esc(c.why)+'</p>':'')+(c.fix?'<p>'+esc(c.fix)+'</p>':'')+
+      (c.docs?'<a class="dgbtn" href="'+esc(c.docs)+'" target="_blank" rel="noopener">read the docs ↗</a>':'')+'</div>':'');
+}
+document.addEventListener('click', e=>{
+  const b=e.target.closest&&e.target.closest('.chk-whybtn'); if(!b) return;
+  const p=document.getElementById(b.getAttribute('aria-controls')); if(!p) return;
+  p.hidden=!p.hidden; b.setAttribute('aria-expanded', String(!p.hidden));
+});
 /** One check's block: the catalog's explanation, the open findings, and the accepted ones folded under
  *  them. Rendered whenever there is anything at all — a check whose every finding was accepted keeps its
  *  block, because "what did we agree to carry" is a question the page has to keep answering. */
@@ -2194,21 +2214,15 @@ function checkBlockHtml(c, all){
   const open=all.filter(f=>!waiverFor(f)), acc=all.filter(f=>waiverFor(f));
   if(!open.length && !acc.length) return '';
   const m=metaOf(c.id);
-  const tones=[...new Set(open.map(findTone))].sort((a,b)=>TONE_ORDER[a]-TONE_ORDER[b]);
-  const head='<div class="chk-head">'+
-    (tones.length?'<span class="chk-sev">'+tones.map(tonePill).join(' ')+'</span>':'')+
-    (c.what?'<p class="ddesc">'+esc(c.what)+'</p>':'')+
-    ((c.why||c.fix||c.docs)?'<details class="chk-more"><summary>why it matters · what to do</summary>'+
-      (c.why?'<p>'+esc(c.why)+'</p>':'')+(c.fix?'<p>'+esc(c.fix)+'</p>':'')+
-      (c.docs?'<a class="dgbtn" href="'+esc(c.docs)+'" target="_blank" rel="noopener">read the docs ↗</a>':'')+'</details>':'')+
-    '</div>';
   const tools=[m.cat&&CATS.some(x=>x.id===m.cat)?'<button type="button" class="dgbtn" data-cat="'+esc(m.cat)+'">open the list ↗</button>':'',
                m.route?routeBtn(m.route):''].filter(Boolean).join(' ');
+  // The rows carry their tone, so the block's head no longer repeats it as a row of chips.
+  const head=checkHeadHtml(c, {scope:'c', tools});
   let body=head+findingTable(open.slice(0,FIND_CAP), {more:open.length>FIND_CAP?'showing '+FIND_CAP+' of '+open.length+' — narrow the filter, or open the list':''});
   if(acc.length) body+='<details class="chk-acc"'+(showAccepted()?' open':'')+'><summary>'+acc.length+' accepted — kept in the report, out of the counts and the gate</summary>'+
     findingTable(acc)+'</details>';
   return section('chk-'+c.id, esc(c.title), body, {count:open.length, hint:acc.length?acc.length+' accepted':'',
-    attrs:' id="chk-'+esc(c.id)+'"', tools:tools?'<div class="toolrow">'+tools+'</div>':''});
+    attrs:' id="chk-'+esc(c.id)+'"'});
 }
 function renderChecks(){
   const v=document.getElementById('view-checks');

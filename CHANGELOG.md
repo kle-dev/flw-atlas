@@ -52,7 +52,9 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   the name is shown once. What accepting a finding does is said on the *accept…* button and in its form,
   instead of in a paragraph above every model's findings. Empty states draw their icon instead of a
   glyph the embedded font did not have, the Checks page's subtitle states its numbers and leaves the
-  explanation to its two headings, and an accept button's focus ring is no longer clipped by its cell.
+  explanation to its two headings, and an accept button's focus ring is no longer clipped by its cell. A
+  check's block opens with one line — what it means, then its buttons and *why · what to do* — where it
+  had four, and no longer repeats its rows' severities as a row of chips.
 - **The findings in a tool window of their own.** *Atlas Findings* lists every defect — and, when asked,
   the advice and the accepted findings — from the same analysis the explorer is built from, grouped by
   check. A double-click opens the finding's file at its line, and *Accept…* writes the selected findings,

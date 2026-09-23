@@ -274,6 +274,7 @@ class RenderersSmokeTest {
         assertTrue("expected the finding tone from explorer.js", html.contains("function findTone("))
         assertTrue("expected the advice pill from explorer.css", html.contains(".pill-advice{"))
         assertTrue("expected the empty-state helper from explorer.js", html.contains("function estateHtml("))
+        assertTrue("expected the one-line check head from explorer.js", html.contains("function checkHeadHtml("))
         assertFalse("what accepting does is said on the button, not above every model's findings",
             html.contains("Accepting one keeps it in the report"))
         assertFalse("the old operation card styling is gone", html.contains("details.op>summary"))
