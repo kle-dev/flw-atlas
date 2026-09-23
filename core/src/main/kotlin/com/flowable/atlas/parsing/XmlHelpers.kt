@@ -224,6 +224,36 @@ object XmlHelpers {
 
     private fun String?.nonEmpty(): String? = this?.trim()?.ifEmpty { null }
 
+    /**
+     * Whether an element with an event-registry `eventType` publishes the event (`send`) or consumes it
+     * (`receive`). Direction follows the element, not only a `type` attribute: a send-event task and throw /
+     * end events publish; start, catch and boundary events and receive tasks consume. [serviceTaskType] is
+     * the CMMN spelling of the task type.
+     */
+    fun eventRole(el: El, serviceTaskType: Any? = null): String {
+        val type = el.attr("type") ?: serviceTaskType as? String
+        return if (type == "send-event" || type == "sendEvent" || el.tag == "intermediateThrowEvent" || el.tag == "endEvent") "send"
+        else "receive"
+    }
+
+    /**
+     * The event and channel an element uses, for its own record: `eventType` (from the extension element,
+     * or a send-event task's field injection), which way it goes, the `triggerEventType` that resumes a
+     * send-and-receive task, and the `channelKey` it travels over. What the contract tables on an event's
+     * page join on — the refs alone said a model used the event, not which element did.
+     */
+    fun eventKeys(el: El, serviceTaskType: Any? = null): Map<String, Any?> {
+        val ext = extEl(el) ?: return emptyMap()
+        val out = LinkedHashMap<String, Any?>()
+        val type = el.attr("type") ?: serviceTaskType as? String
+        val ev = ext.childText("eventType").nonEmpty()
+            ?: if (type == "send-event" || type == "sendEvent") (readFields(el)["eventType"] as? String).nonEmpty() else null
+        if (ev != null) { out["eventType"] = ev; out["eventRole"] = eventRole(el, serviceTaskType) }
+        ext.childText("triggerEventType").nonEmpty()?.let { out["triggerEventType"] = it }
+        ext.childText("channelKey").nonEmpty()?.let { out["channelKey"] = it }
+        return out
+    }
+
     /** An attribute-derived out-parameter, for the `resultVariable`-style attributes that have no element. */
     fun resultVariableParam(kind: String, name: String?): Map<String, Any?>? =
         if (name.isNullOrEmpty()) null

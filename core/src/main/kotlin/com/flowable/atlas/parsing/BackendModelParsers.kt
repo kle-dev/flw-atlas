@@ -144,11 +144,7 @@ object BackendModelParsers {
                         if (!ev.isNullOrEmpty()) {
                             // Direction follows the element, not just a `type` attribute: throw/end
                             // events and send-event tasks publish; start/catch/boundary consume.
-                            val rel = when {
-                                el.attr("type") in listOf("send-event", "sendEvent") -> "sends-event"
-                                tag in listOf("intermediateThrowEvent", "endEvent") -> "sends-event"
-                                else -> "receives-event"
-                            }
+                            val rel = if (XmlHelpers.eventRole(el) == "send") "sends-event" else "receives-event"
                             ctx.addRef(pkey, "bpmn", ffile, rel, "event", ev)
                         }
                         ctx.addRef(pkey, "bpmn", ffile, "trigger-event", "event", eext.childText("triggerEventType"))
@@ -366,6 +362,9 @@ object BackendModelParsers {
                             val throwing = tag in listOf("intermediateThrowEvent", "endEvent")
                             val rel = (if (throwing) "throws-" else "catches-") + k
                             ctx.addRef(pkey, "bpmn", ffile, rel, k, correlate(k, v))
+                            // the name the shared node is keyed by — `value` is the definition's id, which
+                            // another model's definition of the same signal need not share
+                            ev["ref"] = correlate(k, v)
                         }
                     }
                     tag in XmlHelpers.BPMN_GW_TAGS -> {
@@ -536,10 +535,10 @@ object BackendModelParsers {
         if (dext != null) {
             val ev = dext.childText("eventType")
             if (!ev.isNullOrEmpty()) {
-                val rel = if (pyOr(el.attr("type"), d["serviceTaskType"]) in listOf("send-event", "sendEvent"))
-                    "sends-event" else "receives-event"
+                val rel = if (XmlHelpers.eventRole(el, d["serviceTaskType"]) == "send") "sends-event" else "receives-event"
                 ctx.addRef(caseKey, "cmmn", ffile, rel, "event", ev)
             }
+            d.putAll(XmlHelpers.eventKeys(el, d["serviceTaskType"]))
             ctx.addRef(caseKey, "cmmn", ffile, "trigger-event", "event", dext.childText("triggerEventType"))
             // send/receive via an explicit channel + document event configuration
             ctx.addRef(caseKey, "cmmn", ffile, "via-channel", "channel", dext.childText("channelKey"))
@@ -768,6 +767,9 @@ object BackendModelParsers {
         // The retry policy is a child element under extensionElements, not an attribute.
         XmlHelpers.extEl(el)?.childText("failedJobRetryTimeCycle")?.let { rec["retryTimeCycle"] = it }
         if (listeners.isNotEmpty()) rec["listeners"] = listeners
+        // the event it publishes or consumes and the channel it uses — which element does, not only
+        // that the model does
+        rec.putAll(XmlHelpers.eventKeys(el))
         return rec
     }
 

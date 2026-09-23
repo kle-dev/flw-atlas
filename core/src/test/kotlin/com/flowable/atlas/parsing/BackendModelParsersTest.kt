@@ -145,4 +145,39 @@ class BackendModelParsersTest {
         // starter/candidate groups feed the group index
         assertTrue(ctx.groups.contains("auditors"))
     }
+
+    /**
+     * The event contract tables join an event's publishers and consumers element by element — which task
+     * sends it, over which channel — and a signal's throw and catch by the name the shared node is keyed
+     * by, not by each model's own definition id.
+     */
+    @Test
+    fun anElementSaysWhichEventAndChannelItUses() {
+        val xml = """<?xml version="1.0" encoding="UTF-8"?>
+            <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn">
+              <signal id="sigDone" name="customerOnboarded"/>
+              <process id="p">
+                <startEvent id="start"><extensionElements><flowable:eventType>customerCreated</flowable:eventType></extensionElements></startEvent>
+                <serviceTask id="announce" flowable:type="send-event">
+                  <extensionElements>
+                    <flowable:eventType>customerCreated</flowable:eventType>
+                    <flowable:channelKey>customerEventsOut</flowable:channelKey>
+                  </extensionElements>
+                </serviceTask>
+                <serviceTask id="legacy" flowable:type="send-event">
+                  <extensionElements><flowable:field name="eventType"><flowable:string>orderShipped</flowable:string></flowable:field></extensionElements>
+                </serviceTask>
+                <intermediateThrowEvent id="tell"><signalEventDefinition signalRef="sigDone"/></intermediateThrowEvent>
+              </process>
+            </definitions>"""
+        val p = BackendModelParsers.parseBpmn(xml.toByteArray(), Ctx(), "p.bpmn")[0]
+        val events = listOfMaps(p["events"]).associateBy { it["id"] }
+        assertEquals("customerCreated", events["start"]!!["eventType"])
+        assertEquals("receive", events["start"]!!["eventRole"])
+        assertEquals("the name, not the definition id", "customerOnboarded", events["tell"]!!["ref"])
+        val tasks = listOfMaps(p["serviceTasks"]).associateBy { it["id"] }
+        assertEquals("send", tasks["announce"]!!["eventRole"])
+        assertEquals("customerEventsOut", tasks["announce"]!!["channelKey"])
+        assertEquals("a send-event task configured by field", "orderShipped", tasks["legacy"]!!["eventType"])
+    }
 }

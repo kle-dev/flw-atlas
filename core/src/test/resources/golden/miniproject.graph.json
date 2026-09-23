@@ -2427,6 +2427,8 @@
           "name": "Order Process",
           "otherTasks": [
             {
+              "eventRole": "receive",
+              "eventType": "orderShipped",
               "id": "waitShipped",
               "name": "Wait for shipment",
               "type": "receiveTask"
@@ -6905,6 +6907,8 @@
       "name": "Order Process",
       "otherTasks": [
         {
+          "eventRole": "receive",
+          "eventType": "orderShipped",
           "id": "waitShipped",
           "name": "Wait for shipment",
           "type": "receiveTask"
