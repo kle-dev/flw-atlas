@@ -1,5 +1,6 @@
 package com.flowable.atlas.generate.dto
 
+import com.flowable.atlas.AtlasNotifications
 import com.flowable.atlas.AtlasNotifications.GROUP_ID
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.intention.DataObjectBeanGenerator
@@ -193,8 +194,7 @@ class DataObjectDtoService(private val project: Project) {
         if (project.isDisposed) return
         written.firstOrNull()?.let { FileEditorManager.getInstance(project).openFile(it, true) }
         val skippedNote = if (skipped > 0) " $skipped file(s) already existed and were kept." else ""
-        val notification = NotificationGroupManager.getInstance()
-            .getNotificationGroup(GROUP_ID)
+        val notification = AtlasNotifications.results()
             .createNotification(
                 "Generated ${written.size} data-object DTO(s)",
                 "Written under $target.$skippedNote Each class maps its data object's fields and carries " +

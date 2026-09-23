@@ -1,5 +1,6 @@
 package com.flowable.atlas.generate.liquibase
 
+import com.flowable.atlas.AtlasNotifications
 import com.flowable.atlas.AtlasNotifications.GROUP_ID
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.liquibase.LiquibaseChangelog
@@ -272,8 +273,7 @@ class LiquibaseScaffoldService(private val project: Project) {
         if (project.isDisposed) return
         written.firstOrNull()?.let { FileEditorManager.getInstance(project).openFile(it, true) }
         val skippedNote = if (skipped > 0) " $skipped file(s) already existed and were kept." else ""
-        val notification = NotificationGroupManager.getInstance()
-            .getNotificationGroup(GROUP_ID)
+        val notification = AtlasNotifications.results()
             .createNotification(
                 "Generated ${written.size} Liquibase changelog(s)",
                 "Written under $outputDir and registered in ${LiquibaseChangelogGenerator.MASTER_CHANGELOG} " +

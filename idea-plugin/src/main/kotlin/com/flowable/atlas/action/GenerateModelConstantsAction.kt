@@ -1,6 +1,6 @@
 package com.flowable.atlas.action
 
-import com.flowable.atlas.AtlasNotifications.GROUP_ID
+import com.flowable.atlas.AtlasNotifications
 import com.flowable.atlas.generate.JavaSourceRoots
 import com.flowable.atlas.generate.ModelConstantsService
 import com.flowable.atlas.generate.ModelConstantsSettings
@@ -102,9 +102,7 @@ class GenerateModelConstantsAction : AnAction() {
             type: NotificationType,
             withSettings: Boolean = false,
         ) {
-            val notification = NotificationGroupManager.getInstance()
-                .getNotificationGroup(GROUP_ID)
-                .createNotification(title, message, type)
+            val notification = AtlasNotifications.groupFor(type).createNotification(title, message, type)
             if (withSettings) {
                 notification.addAction(NotificationAction.createSimple("Open Model Constants settings") {
                     // the FQCN lives on the child page, not on Generation itself

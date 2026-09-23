@@ -5,7 +5,6 @@ import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
 import com.intellij.notification.NotificationAction
-import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
@@ -60,8 +59,7 @@ class RebuildModelIndexAction : AnAction(), DumbAware {
         }
 
         private fun notifyRebuilt(project: Project, index: FlowableIndex) {
-            NotificationGroupManager.getInstance()
-                .getNotificationGroup(AtlasNotifications.GROUP_ID)
+            AtlasNotifications.results()
                 .createNotification(
                     "Model index rebuilt",
                     "${index.distinctCount()} models indexed",

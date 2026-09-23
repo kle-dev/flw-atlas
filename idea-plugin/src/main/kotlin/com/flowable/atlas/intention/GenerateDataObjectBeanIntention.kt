@@ -9,7 +9,6 @@ import com.flowable.atlas.parsing.DataObjectInfo
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.codeInsight.intention.PsiElementBaseIntentionAction
 import com.intellij.ide.highlighter.JavaFileType
-import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.components.service
@@ -148,8 +147,7 @@ class GenerateDataObjectBeanIntention : PsiElementBaseIntentionAction() {
     private data class Resolved(val info: DataObjectInfo, val modelName: String?)
 
     private fun notify(project: Project, title: String, message: String) =
-        NotificationGroupManager.getInstance()
-            .getNotificationGroup(AtlasNotifications.GROUP_ID)
+        AtlasNotifications.results()
             .createNotification(title, message, NotificationType.INFORMATION)
             .notify(project)
 

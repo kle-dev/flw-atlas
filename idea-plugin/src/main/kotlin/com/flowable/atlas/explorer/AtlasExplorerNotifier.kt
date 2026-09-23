@@ -1,5 +1,6 @@
 package com.flowable.atlas.explorer
 
+import com.flowable.atlas.AtlasNotifications
 import com.flowable.atlas.AtlasNotifications.GROUP_ID
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
@@ -58,8 +59,7 @@ object AtlasExplorerNotifier {
         else "$TITLE_ARTIFACTS_GENERATED (${written.size} files)"
         val body = written.joinToString("<br>") { it.fileName.toString() }
 
-        val notification = NotificationGroupManager.getInstance()
-            .getNotificationGroup(GROUP_ID)
+        val notification = AtlasNotifications.results()
             .createNotification(title, body, NotificationType.INFORMATION)
 
         if (explorerHtml != null) {

@@ -278,8 +278,7 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
         @Suppress("UNCHECKED_CAST")
         val base = (envelope?.get("base") as? List<Any?>).orEmpty().map { it.toString() }
         fun say(title: String, body: String, type: NotificationType) =
-            NotificationGroupManager.getInstance().getNotificationGroup(AtlasNotifications.GROUP_ID)
-                .createNotification(title, body, type)
+            AtlasNotifications.groupFor(type).createNotification(title, body, type)
         fun tellPage(ok: Boolean) = browser.cefBrowser.executeJavaScript(
             "window.__atlasWaiversSaved && window.__atlasWaiversSaved($ok);", browser.cefBrowser.url, 0)
         // Beside the report it came from: that folder is the analysis output, and waivers.json is the

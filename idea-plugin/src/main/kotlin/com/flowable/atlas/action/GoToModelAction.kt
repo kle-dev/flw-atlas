@@ -1,5 +1,6 @@
 package com.flowable.atlas.action
 
+import com.flowable.atlas.AtlasNotifications
 import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.navigation.se.FlowableModelSeContributor
 import com.intellij.ide.actions.searcheverywhere.SearchEverywhereManager
@@ -9,7 +10,6 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.DumbAware
-import com.intellij.openapi.ui.Messages
 
 /**
  * Tools → Flowable Atlas → *Go to Model…*: opens Search Everywhere with the **Flowable Model** tab
@@ -54,11 +54,10 @@ class GoToModelAction : AnAction(), DumbAware {
         if (!opened) {
             // The tab is contributed by an extension point, so it only exists once the plugin is fully
             // loaded — same restart caveat as the tool window.
-            Messages.showInfoMessage(
+            AtlasNotifications.info(
                 project,
                 "The Flowable Model search tab isn't registered yet. If you just installed or " +
                     "updated the plugin, restart the IDE and try again.",
-                "Flowable Atlas",
             )
         }
     }

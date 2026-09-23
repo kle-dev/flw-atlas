@@ -796,6 +796,9 @@
                 implementation="com.flowable.atlas.usage.FlowableRenameWarningProvider"/>
         <!-- Balloon shown after generating the Atlas explorer (open in browser / open in IDE). -->
         <notificationGroup id="Flowable Atlas" displayType="BALLOON"/>
+        <!-- "It worked": the index was rebuilt, artifacts were generated, waivers were saved — its own
+             group, so it can be silenced in Settings → Notifications without silencing the warnings. -->
+        <notificationGroup id="Flowable Atlas Results" displayType="BALLOON"/>
         <!-- The embedded "Atlas Explorer" editor tab is registered in flowable-atlas-jcef.xml: it needs
              the bundled JCEF plugin, and a provider named here would be asked on every file open
              whether or not that plugin is loaded. -->

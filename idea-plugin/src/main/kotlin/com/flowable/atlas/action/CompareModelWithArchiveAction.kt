@@ -1,5 +1,6 @@
 package com.flowable.atlas.action
 
+import com.flowable.atlas.AtlasNotifications
 import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.compare.ArchiveEntryCandidates
 import com.flowable.atlas.compare.ArchiveEntryCandidates.ArchiveEntry
@@ -18,7 +19,6 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.vfs.JarFileSystem
 import com.intellij.openapi.vfs.LocalFileSystem
@@ -163,5 +163,5 @@ class CompareModelWithArchiveAction : AnAction(), DumbAware {
     private fun onEdt(project: Project, show: () -> Unit) =
         ApplicationManager.getApplication().invokeLater({ if (!project.isDisposed) show() }, ModalityState.any())
 
-    private fun info(project: Project, text: String) = Messages.showInfoMessage(project, text, "Flowable Atlas")
+    private fun info(project: Project, text: String) = AtlasNotifications.info(project, text)
 }
