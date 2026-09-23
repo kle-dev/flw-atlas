@@ -123,7 +123,7 @@ internal class FlowableModelPreview(
         if (!file.isValid) return null
         val cache = DiagramSvgCache.getInstance(project)
         // The editor's text when it holds edits not yet saved; the file otherwise.
-        val unsaved = ReadAction.compute<String?, RuntimeException> {
+        val unsaved = ReadAction.computeBlocking<String?, RuntimeException> {
             val fdm = FileDocumentManager.getInstance()
             if (fdm.isFileModified(file)) fdm.getCachedDocument(file)?.text else null
         }

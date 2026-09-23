@@ -142,6 +142,57 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.27.0</h3>
+        <ul>
+          <li><b>Operations Java calls through the service registry are used.</b> A service-registry
+              invocation — <code>.serviceKey(…).operationKey(…)</code> — was invisible, so an operation only
+              Java called was reported unused and nothing linked it to the code. The call is rarely one
+              statement — a helper sets the service key and a lambda elsewhere names the operation, or the
+              class hands its own <code>SERVICE_KEY</code> constant to a shared client — and each shape is
+              followed now. On one real project twelve operations show the Java class that calls them and
+              six <i>unused operation</i> findings are gone. In the IDE, <code>.serviceData("name",
+              v)</code> is checked against the operation's input parameters, as a data object's
+              <code>.value(…)</code> already was.</li>
+          <li><b>A Spring property a model reads links to where it is set.</b>
+              <code>environment.getProperty('crm.base-url')</code> and
+              <code>propertyConfigurationService.getProperty("…")</code> in a model are edges to a property
+              node whose page lists the file and line of every <code>application*.properties</code> and
+              <code>application*.yml</code> that sets it, in Spring's relaxed spelling. Ctrl/⌘-click on the
+              key in the expression opens those lines. A property set nowhere in the repository is not a
+              finding: the value may come from the environment.</li>
+          <li><b>User definitions and tenant setups join the graph.</b> A <code>.user.json</code> user
+              definition links to the forms that create, show and edit such a user and to the groups it
+              joins; a tenant setup to the groups it defines and the user definitions its users are of. A
+              tenant setup contributes how many users of each kind it creates, never their logins or
+              passwords. A form the platform ships is not reported missing.</li>
+          <li><b>More of what Java hands the engine is seen.</b> A map passed to
+              <code>startProcessInstanceByKey</code>, <code>complete</code>, <code>.variables(…)</code> or
+              <code>setVariables</code> writes every name put into it. A model that renders a template
+              against its whole variable container reads every variable it holds, so none of them is
+              reported unread. <code>mainContentTemplate(…)</code> and <code>userDefinitionKey(…)</code>
+              name a model like the other key-taking calls.</li>
+          <li><b>A model's page names the tests that deploy it</b>, from <code>@Deployment(resources =
+              …)</code> and its CMMN, DMN and app siblings; a master-data definition lists the files that
+              load its rows.</li>
+          <li><b>Explorer pages for endpoints and groups.</b> An endpoint lists who calls it, with the verb,
+              the URL as the model spells it and the button that does; a group lists what its members may do
+              per model. A form's REST call or a service operation whose URL lands on a project endpoint
+              links to it. A table past a hundred rows, or a relation past sixty neighbours, shows the first
+              ones and <i>show all</i>. On a touch screen a vertical swipe over a diagram scrolls the page
+              and two fingers zoom.</li>
+          <li><b>The model preview is interactive.</b> A click on a process, case or decision element puts
+              the caret on its declaration beside it, Ctrl/⌘ + wheel zooms about the pointer, a drag pans,
+              and Ctrl/⌘ + <code>=</code> <code>-</code> <code>0</code> zoom in, out and fit. The picture
+              follows the editor's unsaved text, and a renderer that fails says so instead of claiming the
+              model has no layout.</li>
+          <li><b>Smaller things in the IDE.</b> The Hub's <i>archives could not be read</i> line shows which
+              archive and why when one is picked; Recent Models can drop one entry or be cleared. Success
+              balloons have their own notification group, <i>Flowable Atlas Results</i>, so they can be
+              muted without muting warnings, and the restart-the-IDE notices are balloons instead of
+              dialogs. The playground tool window is called <i>Expression Playground</i>, like the action
+              that opens it. The model outline sorts by name, and an archive packed inside an archive says
+              it is not expanded.</li>
+        </ul>
         <h3>0.26.1</h3>
         <ul>
           <li><b>A condition written on its own line is read.</b> Design indents a sequence flow's
@@ -504,62 +555,6 @@
               has no script branch, so it is a silent no-op — but the note sat on the plan item, and the
               check read only a process's task buckets. It reaches the case's page now, on the plan item
               that holds the listener.</li>
-          <li><b>Model XML gets its schemas.</b> A <code>.bpmn</code>, <code>.cmmn</code> or
-              <code>.dmn</code> opened with an unresolved namespace and no completion at all: the IDE ships
-              none of these schemas, and nothing supplied them. The plugin now bundles Flowable's own copies
-              and registers them, so <code>&lt;</code> inside a process offers BPMN elements,
-              <code>flowable:</code> offers the Flowable attributes, and a missing required attribute is
-              said in the editor instead of at deployment. Nothing is fetched; it works offline.
-              <code>http://flowable.org/design</code>, <code>.../cmmn</code> and <code>.../modeler</code>
-              have no schema anywhere and are registered as <i>ignored</i> rather than left unknown — the
-              warning goes, without pretending they can be checked, and because all three formats allow
-              foreign attributes everywhere, an undescribed namespace is skipped rather than rejected. One
-              schema needed widening before this was safe: the open-source <code>flowable:type</code> is an
-              enumeration of eight values, while a real project also writes <code>service-registry</code>,
-              <code>agent</code>, <code>init-variables</code>, <code>audit</code> and
-              <code>data-object</code> — validating against it as published reported 140 of 989 real process
-              files as errors, where the widened copy reports 8. A listener's <code>&lt;script&gt;</code>,
-              which the engine both reads and writes, was missing from the schema entirely and is declared
-              now. Measured across 1 784 real models, 99.1 % validate clean and every remaining finding is a
-              genuine defect — an id that is not a valid XML name, a diagram edge with no waypoints. Five
-              such defects were in this repository's own demo models, and are fixed.</li>
-          <li><b>A search result list that stays open.</b> The <i>Flowable Model</i> tab finds a string in
-              every model — keys, element ids, and the full text, archive entries included — and then closes
-              on the first result you open, so a string that sits in thirty places could only be walked one
-              query at a time. <b>⇧⏎</b> on any row, or the new <b>Find in Models…</b>, puts the whole
-              result set into the Find tool window instead: every occurrence its own row, grouped by file,
-              <code>.bar</code>/<code>.zip</code> entries among them, and the window names the scope it
-              searched. <i>Find in Models…</i> is prefilled from the editor — the selection, else the model
-              key under the caret. The platform's own <i>Open in Find Tool Window</i> button would have been
-              the obvious route and is a trap: its flag only lights the button, while the action behind it
-              can only render three item shapes, none of which this tab produces — it would have opened an
-              empty window. The list is built on the usage-view API that Find Usages on a model key already
-              uses, so an offset is found again in the file's own text rather than carried over from the
-              scanner, which decodes UTF-8 where the editor uses the file's charset.</li>
-          <li><b>The Hub's three exits are on its toolbar.</b> <i>Open Atlas Explorer</i>, <i>Open
-              Expression Playground</i> and <i>Search Models…</i> sat two clicks down in the ⋮ menu, which
-              is where a reader who has not memorised the menu stops looking. They are buttons now, past a
-              separator from Refresh and Settings — what acts on the panel first, then where the plugin
-              takes you — and the ⋮ keeps what is left: the environments, <i>Generate Model Constants…</i>,
-              <i>Rebuild Model Index</i>, <i>Manage Environments…</i>. They stay reachable where they
-              already were, in the Explorer and Playground blocks and on the header's model count. Each of
-              the three is <code>DumbAware</code>, which had to be checked rather than assumed: a toolbar
-              button is visible the whole time, where a menu entry is only visible while the menu is
-              open.</li>
-          <li><b>The platform-bean set is read off the platform's own configuration.</b>
-              <code>${flw.setOutput(…)}</code> in a task listener is the platform's scripting API root, and
-              <code>planItemInstances</code> the CMMN query root; both were listed as beans of the project's
-              own — 36 times on one real project — and each was a call out of the engine with no error path.
-              The set is declared once now (it lived in three renderers) and carries every task delegate the
-              platform and Engage auto-configurations declare (<code>mergeDocumentService</code>,
-              <code>housekeepingServiceTask</code>, <code>generateSequenceServiceTask</code>,
-              <code>processSendMessageTask</code> and the other conversation tasks…), the platform services
-              an expression calls (<code>commentService</code>, <code>queryService</code>,
-              <code>platformFormService</code>, <code>coreContentService</code>…), the
-              <code>flw*Utils</code> expression helpers, <code>propertyConfigurationService</code>, Spring
-              Boot's <code>jacksonObjectMapper</code> and the actuator's <code>environmentEndpoint</code>.
-              None of them appear under <i>Review — unresolved in project</i> any more, and the KDoc names
-              the source files so the list can be regenerated instead of grown by complaint.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

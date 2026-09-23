@@ -70,7 +70,8 @@ grouped into **Models · Integration · Code · Expressions · Checks · Variabl
 
 - one per **node type** present — process, case, decision, form, page, data object, service, agent,
   channel, event, action, bot, query, template, sequence, security policy, endpoint, method, Liquibase
-  changelog, signal, message, error, escalation, topic, group, and more;
+  changelog, signal, message, error, escalation, topic, group, Spring property, user definition,
+  tenant setup, and more;
 - one per **Java role** found — controller, delegate, listener, service, repository, configuration,
   component, bot;
 - one per **variable scope**, plus the variables that travel through an in/out mapping;
@@ -124,11 +125,28 @@ last the two lists that are the point of the whole thing:
 Both directions, always, for every node type. That is the question a model file cannot answer on its
 own, and it is why the graph carries `usedBy`.
 
+A few kinds of node have a page of their own beyond the model types:
+
+- a **REST endpoint** lists the models that call it — the model, the verb, the URL as the model spells it
+  and the button or task that calls it — and a form's REST call or a service operation whose URL lands on
+  a project endpoint links to it;
+- a **group** lists what its members may do, per model: start it, work on it, see it;
+- a **Spring property** a model reads with `environment.getProperty('…')` lists the file and line of
+  every `application*.properties` / `application*.yml` that sets it. None is not a finding — the value may
+  come from the environment;
+- a **user definition** names the forms that create, show and edit such a user and the groups it joins;
+  a **tenant setup** the groups it defines and how many users of each definition it creates — never who;
+- a **master-data** definition lists the files that load its rows;
+- any model that a test deploys with `@Deployment(resources = …)` lists those tests under *Deployed by
+  tests*, each opening at its annotation.
+
 Every list is a **table with column headers** — names and captions in the text face, identifiers,
 expressions, paths and code in monospace — and a row with more to say expands in place: a form button
 into the model it invokes, the payload it sends and stores, its settings and its expression; a script
 task into its code with line numbers and the validator's findings; a service task into its
-implementation, the operation it calls and its field injections. A long table gets a filter of its own.
+implementation, the operation it calls and its field injections. A long table gets a filter of its own,
+and past a hundred rows it shows the first ones and a *show all* button — the filter still searches
+every row. A relation with more than sixty neighbours folds the same way.
 In a narrow panel — an IntelliJ tool window — the optional columns drop under the row instead of being
 clipped, and nothing scrolls sideways.
 
@@ -188,7 +206,8 @@ Processes, cases and decisions render their diagram inline, from the layout alre
 deployment `bpmndi` / `cmmndi` / `dmndi`, or a Design workspace's ORYX JSON. Nothing is downloaded and
 no Design instance is contacted.
 
-Drag to pan, ⌘/Ctrl-scroll to zoom, `−` `fit` `+` to step, `⤢` for full screen. Clicking an element
+Drag to pan, ⌘/Ctrl-scroll to zoom, `−` `fit` `+` to step, `⤢` for full screen. On a touch screen a
+vertical swipe over an inline diagram scrolls the page, a sideways drag pans, and two fingers zoom. Clicking an element
 opens a draggable, resizable info card — and the `⌖` buttons in the detail panel work the other way
 round, locating an element on the diagram from its row in a list. Every shape is a keyboard stop:
 Tab through them, Enter or Space opens the card. The selection joins the link (`#<node>&e=<element>`),

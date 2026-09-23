@@ -128,6 +128,8 @@ typing filters by key or name.
 | Ctrl/⌘-click | A cross-reference in model XML — an attribute (`calledElement`, `formKey`, `caseRef`, …) or an extension element's text (`eventType`, `channelKey`, `sla-definition-key`, …), CDATA-wrapped or not | The referenced model, at its key |
 | Ctrl/⌘-click | A model key in a JSON model — a data object's backing service or dictionary, a form component's subform, data object, service, action, process or case, a document's forms, an action's form, an app's models, an agent's tools, a channel's event | The referenced model, at its key. The sites are the ones the report draws edges for, from one shared catalog |
 | Ctrl/⌘-click | The root of a backend expression that names a Spring bean — `orderService` in `${orderService.process(x)}`, injected in a model or in the playground | The project class the bean name denotes (Spring's default: the decapitalised simple class name); Ctrl-Q then shows that class's documentation. A root that is a variable resolves to nothing and stays unmarked |
+| Ctrl/⌘-click | The key of `environment.getProperty('…')` / `propertyConfigurationService.getProperty("…")` in a backend expression | The line of every `application*.properties` / `application*.yml` of the project that sets it, one per profile, matched in Spring's relaxed form. Test profiles are left out; a property set nowhere resolves to nothing |
+| Click | An element of a process, case or decision in the model editor's picture | The element's declaration in the text beside it, so the Structure tool window follows. Ctrl/⌘ + wheel zooms about the pointer, a drag pans, Ctrl/⌘ + `=`, `-`, `0` zoom in, out and fit |
 | Ctrl/⌘-click | Any literal whose value is a known key | Its model, at its key — **only** with *Recognize model keys anywhere in code* enabled |
 | Ctrl-Q / F1 | A key literal in Java; a cross-reference or the file's own key inside a model file | A documentation card: key and type, the name, the backing table for a service or data object, the project-relative file (archive → entry for a packed model) |
 | Find Usages | A model's own key, in its file — the `id` of a process, case or decision, the `"key"` of a JSON model | Every model that references it (a call activity's `calledElement`, a `formKey`, a service mapping, an extension element's text) and every Java call site that names it at a Flowable API position |
@@ -323,13 +325,16 @@ archive icon. The icon is decided from the file name alone, so the Project view 
 | `.page`, `.dictionary`, `.query`, `.sequence`, `.sla`, `.agent`, `.tpl`, `.policy`, `.extractor`, `.knowledgebase`, `.dashboardcomponent`, `.document`, `.palette`, `.app` | JSON | Indexed by key, completed, navigable, hoverable, searchable — and they open with their content instead of a "file type not associated" panel |
 | `.bar`, `.zip` | Archive | Entries are indexed, navigable, searchable by path and content, and can render diagrams — without unpacking |
 | Liquibase changelog XML | XML | Column, table and type completion; the coverage inspection |
-| Design workspace `*-models/*.json` | JSON | Indexed **only** with *Also index raw Flowable Design workspace sources* enabled |
+| Design workspace `*-models/*.json` | JSON | Inside a `.bar` / `.zip`, the forms, pages, actions and data objects are always models. Loose in the repository, indexed **only** with *Also index raw Flowable Design workspace sources* enabled |
 | `*.explorer.html` | — | Opens as the Atlas Explorer tab; its toolbar opens the Expression Playground |
 
 ## Notifications
 
-One group, **Flowable Atlas**, used for generation results, model-index rebuilds, Design pulls, rename
-warnings, and the code generators. Generation failures offer *Show details* or *Open log*.
+Two groups, so either can be silenced in *Settings → Appearance & Behavior → Notifications* without the
+other. **Flowable Atlas Results** says a job finished: the model index was rebuilt, artifacts, DTOs or
+changelogs were generated, waivers were saved. **Flowable Atlas** carries what asks for attention: a
+failed pull or generation (with *Show details* or *Open log*), a rename not applied to the models, an
+archive that could not be read.
 
 ## Reporting a problem
 

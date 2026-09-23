@@ -12,6 +12,46 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.27.0
+
+- **Operations Java calls through the service registry are used.** A service-registry invocation —
+  `.serviceKey(…).operationKey(…)` — was invisible, so an operation only Java called was reported unused and
+  nothing linked it to the code. The call is rarely one statement — a helper sets the service key and a
+  lambda elsewhere names the operation, or the class hands its own `SERVICE_KEY` constant to a shared
+  client — and each shape is followed now. On one real project twelve operations show the Java class that
+  calls them and six *unused operation* findings are gone. In the IDE, `.serviceData("name", v)` is
+  checked against the operation's input parameters, as a data object's `.value(…)` already was.
+- **A Spring property a model reads links to where it is set.** `environment.getProperty('crm.base-url')`
+  and `propertyConfigurationService.getProperty("…")` in a model are edges to a property node whose page
+  lists the file and line of every `application*.properties` and `application*.yml` that sets it, in
+  Spring's relaxed spelling. Ctrl/⌘-click on the key in the expression opens those lines. A property set
+  nowhere in the repository is not a finding: the value may come from the environment.
+- **User definitions and tenant setups join the graph.** A `.user.json` user definition links to the forms
+  that create, show and edit such a user and to the groups it joins; a tenant setup to the groups it
+  defines and the user definitions its users are of. A tenant setup contributes how many users of each
+  kind it creates, never their logins or passwords. A form the platform ships is not reported missing.
+- **More of what Java hands the engine is seen.** A map passed to `startProcessInstanceByKey`, `complete`,
+  `.variables(…)` or `setVariables` writes every name put into it. A model that renders a template against
+  its whole variable container reads every variable it holds, so none of them is reported unread.
+  `mainContentTemplate(…)` and `userDefinitionKey(…)` name a model like the other key-taking calls.
+- **A model's page names the tests that deploy it**, from `@Deployment(resources = …)` and its CMMN, DMN
+  and app siblings; a master-data definition lists the files that load its rows.
+- **Explorer pages for endpoints and groups.** An endpoint lists who calls it, with the verb, the URL as
+  the model spells it and the button that does; a group lists what its members may do per model. A form's
+  REST call or a service operation whose URL lands on a project endpoint links to it. A table past a
+  hundred rows, or a relation past sixty neighbours, shows the first ones and *show all*. On a touch screen
+  a vertical swipe over a diagram scrolls the page and two fingers zoom.
+- **The model preview is interactive.** A click on a process, case or decision element puts the caret on
+  its declaration beside it, Ctrl/⌘ + wheel zooms about the pointer, a drag pans, and Ctrl/⌘ + `=` `-` `0`
+  zoom in, out and fit. The picture follows the editor's unsaved text, and a renderer that fails says so
+  instead of claiming the model has no layout.
+- **Smaller things in the IDE.** The Hub's *archives could not be read* line shows which archive and why
+  when one is picked; Recent Models can drop one entry or be cleared. Success balloons have their own
+  notification group, *Flowable Atlas Results*, so they can be muted without muting warnings, and the
+  restart-the-IDE notices are balloons instead of dialogs. The playground tool window is called
+  *Expression Playground*, like the action that opens it. The model outline sorts by name, and an archive
+  packed inside an archive says it is not expanded.
+
 ## 0.26.1
 
 - **A condition written on its own line is read.** Design indents a sequence flow's condition, a
