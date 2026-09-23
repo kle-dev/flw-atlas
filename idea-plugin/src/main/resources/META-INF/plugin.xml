@@ -237,6 +237,12 @@
               generated from one table. It replaces the sentence in the empty detail pane, which only
               someone with nothing selected ever saw, and which said tabs switch with Alt+←→ (that is
               history; tabs are Alt+[ and Alt+]).</li>
+          <li><b>The schema coverage table on every link of the chain.</b> A data object's page and a
+              Liquibase changelog's page show the same <i>Schema coverage</i> table the service page has —
+              every column from the changelog through the service mapping to the data object field — for
+              each service whose coverage names them, so the table no longer has to be looked for one hop
+              away. Its <code>⇄ crossed</code> marker wraps instead of being cut off in a narrow
+              column.</li>
           <li><b>Smaller things in the explorer.</b> A list row's findings pill carries its tone's icon and
               says what it counts, the reference count beside it carries a link icon and says so too, and a
               key that only repeats the name is shown once. What accepting a finding does is said on the
@@ -560,10 +566,6 @@
               missing error path were 66. Three or more findings with one message shape — names and numbers
               aside — read <i>22 ×</i> on one row now, the members and their accept controls a chevron away,
               so the page has as many rows as it has causes. A model's own page keeps every row.</li>
-          <li><b>Findings carry a <code>subject</code>.</b> Several checks fire more than once on one node,
-              and the only thing telling those apart was the message — generated prose that rewords when
-              something unrelated changes. A finding now names which one it is: the scope, the column, the
-              name an expression could not resolve.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

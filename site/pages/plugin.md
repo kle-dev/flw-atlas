@@ -562,7 +562,8 @@ Your changelogs and your Flowable data models are checked against each other, in
 Schema drift between a changelog and the model that reads the table is silent by nature — everything
 deploys, then a query returns nothing or a write fails on a column that is not there. The explorer
 surfaces the same comparison project-wide as a Liquibase → service → data object coverage table, so you
-can see every gap at once.
+can see every gap at once — and shows each service's table on its data object's and its changelog's page
+too, wherever you started from.
 
 Changelogs are parsed and replayed with a small dedicated reader — no XSD, no Liquibase runtime on the
 classpath — which is why this works regardless of how Liquibase is wired in your project.

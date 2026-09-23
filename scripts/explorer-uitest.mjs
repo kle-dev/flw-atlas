@@ -1201,6 +1201,26 @@ const probe = `<script>
     document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
   });
 
+  // --- the schema coverage table is on all three links of the chain, not only on the service ---
+  steps.push(()=>{ location.hash=enc('service:customerService'); });
+  steps.push(()=>{
+    const s=document.querySelector('#detail [data-sect="coverage"]');
+    window.__covRows=s?s.querySelectorAll('.tbl .tr').length:0;
+    ok('the service shows its schema coverage', window.__covRows>0);
+    location.hash=enc('dataObject:customerDO');
+  });
+  steps.push(()=>{
+    const s=document.querySelector('#detail [data-sect="coverage"]');
+    ok('the data object shows the same coverage table', !!s && s.querySelectorAll('.tbl .tr').length===window.__covRows,
+       s?s.querySelectorAll('.tbl .tr').length+' vs '+window.__covRows:'(no section)');
+    ok('led by the service that maps it', !!s && !!s.querySelector('.covmeta .nc[data-id="'+enc('service:customerService')+'"]'));
+    location.hash=enc('liquibase:001-customer');
+  });
+  steps.push(()=>{
+    const s=document.querySelector('#detail [data-sect="coverage"]');
+    ok('the changelog shows it too', !!s && s.querySelectorAll('.tbl .tr').length===window.__covRows);
+  });
+
   // --- list badges explain themselves; a key that repeats the name is shown once ---
   steps.push(()=>{ location.hash=enc(nodes.find(n=>n.type==='endpoint').id); });   // on a node, so the list is beside it
   steps.push(()=>{

@@ -1378,7 +1378,8 @@ function schemaCoverageHtml(sc, onlyGaps, leadChipId, crossed){
   const miss='<span class="miss">✗ not mapped</span>';
   const rows=onlyGaps?(sc.rows||[]).filter(r=>r.status!=='ok'||crossOf(r)):(sc.rows||[]);
   if(rows.length){
-    b+=tbl([{k:'lb',label:'Liquibase column',w:'minmax(14ch,1.4fr)',mono:true},{k:'sv',label:'Service mapping',w:'minmax(14ch,1.4fr)',mono:true},{k:'do',label:'Data object field',w:'minmax(12ch,1.2fr)',mono:true}],
+    // the service column wraps: its ⇄ crossed marker sits last, and a clipped cell cut exactly that off
+    b+=tbl([{k:'lb',label:'Liquibase column',w:'minmax(14ch,1.4fr)',mono:true},{k:'sv',label:'Service mapping',w:'minmax(14ch,1.4fr)',mono:true,cls:'wrap'},{k:'do',label:'Data object field',w:'minmax(12ch,1.2fr)',mono:true}],
       rows.map(r=>{
         const lb = r.inLiquibase ? esc(r.sql)+(r.sqlType?' <span class="muted">'+esc(r.sqlType)+'</span>':'') : '<span class="miss">— not in changelog</span>';
         const cr = crossOf(r);
@@ -4265,6 +4266,23 @@ S.ops={id:'ops', title:'Operations', hint:'what the service offers, and what eac
 S.coverage={id:'coverage', title:'Schema coverage', hint:'Liquibase → service → data object: every column, and where the chain breaks',
   build:(n,c)=>{ const sc=c.d.schemaCoverage;
     return (sc&&(sc.rows||[]).length)?schemaCoverageHtml(sc, false, null, c.d.crossedColumns):''; }};
+/** The same coverage table on the other two links of the chain: a data object's page and a changelog's
+ *  page show the table of every service whose coverage names them — the service is where Atlas compares
+ *  the three, and the table used to be only there, one hop away from where a reader stood. Found through
+ *  the coverage itself (`liquibase`, `dataObjects`), so it is exactly the table the service shows. */
+function coverageServicesFor(n){
+  return nodes.filter(s=>{ const sc=s.type==='service'&&(s.data||{}).schemaCoverage;
+    if(!sc||!(sc.rows||[]).length) return false;
+    return n.type==='dataObject' ? (sc.dataObjects||[]).indexOf(n.key)>=0 : sc.liquibase===n.key; })
+    .sort((a,b)=>a.label.localeCompare(b.label));
+}
+S.coverageOf={raw:true, build:(n,c)=>{
+  const svcs=coverageServicesFor(n); if(!svcs.length) return '';
+  const body=svcs.map(sv=>'<div class="covblk">'+schemaCoverageHtml(sv.data.schemaCoverage, false, sv.id, sv.data.crossedColumns)+'</div>').join('');
+  const who=svcs.length>1?svcs.length+' services':'the service '+svcs[0].label;
+  return section('coverage','Schema coverage', body, {hint:'Liquibase → service → data object, as '+who+' maps '+
+    (n.type==='dataObject'?'this data object':'this changelog')});
+}};
 S.svcColumns={id:'columns', title:'Column mappings', hint:'the service’s fields and the table columns behind them',
   count:(n,c)=>(c.d.columns||[]).length,
   build:(n,c)=>{ const d=c.d, cs=d.columns||[];   // read before the early return: the coverage table shows the same columns
@@ -4387,7 +4405,7 @@ const PAGES={
   case:[S.elements],
   form:[S.fields, S.outcomes, S.dataSources, S.restCalls],
   page:'form',
-  dataObject:[S.properties],
+  dataObject:[S.properties, S.coverageOf],
   decision:[S.dmnIO, S.dmnRules],
   service:[S.ops, S.coverage, S.svcColumns],
   serviceOperation:[S.opParams, S.opOrphan],
@@ -4407,7 +4425,7 @@ const PAGES={
   endpoint:[],
   group:[],
   property:[S.propDefined],
-  liquibase:[S.lqBanner, S.lqColumns],
+  liquibase:[S.lqBanner, S.lqColumns, S.coverageOf],
   expression:[S.problems],
   binding:[S.problems],
   customFunction:[S.fnOrphan],

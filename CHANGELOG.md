@@ -88,6 +88,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   keyboard shortcut, grouped by where it works and generated from one table. It replaces the sentence in
   the empty detail pane, which only someone with nothing selected ever saw, and which said tabs switch
   with Alt+←→ (that is history; tabs are Alt+[ and Alt+]).
+- **The schema coverage table on every link of the chain.** A data object's page and a Liquibase
+  changelog's page show the same *Schema coverage* table the service page has — every column from the
+  changelog through the service mapping to the data object field — for each service whose coverage names
+  them, so the table no longer has to be looked for one hop away. Its `⇄ crossed` marker wraps instead of
+  being cut off in a narrow column.
 - **Smaller things in the explorer.** A list row's findings pill carries its tone's icon and says what it
   counts, the reference count beside it carries a link icon and says so too, and a key that only repeats
   the name is shown once. What accepting a finding does is said on the *accept…* button and in its form,

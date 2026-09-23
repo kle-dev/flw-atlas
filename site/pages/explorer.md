@@ -386,8 +386,11 @@ The explorer never presents a guess as a fact:
   the findings filter alike. The severity `graph.json` records for advice (always `warning`) is what the
   summary and `--fail-on` read; the page only stops printing it where it contradicted the heading.
 - Liquibase changelogs carry **live / superseded / orphan**, and services carry per-column schema
-  coverage badges. A column mapping that pairs a field with another field's column is marked
-  **`⇄ crossed`** on the service page and in the schema report — it is not a coverage gap, so the row
+  coverage badges. The **Schema coverage** table — every column from the changelog through the service
+  mapping to the data object field — is on all three pages of the chain: the service's, and the data
+  object's and the changelog's, which show the table of every service whose coverage names them. A column
+  mapping that pairs a field with another field's column is marked **`⇄ crossed`** in that table and in
+  the schema report — it is not a coverage gap, so the row
   would otherwise look like the cleanest one in the table (see
   [`crossedColumns`](../checks/#crossedcolumns-the-column-mapping-pairs-the-wrong-two-names)).
 
