@@ -52,6 +52,18 @@ class CheckCatalogTest {
         assertTrue(CheckCatalog.payload().all { it["kind"] == CheckCatalog.DEFECT || it["kind"] == CheckCatalog.ADVICE })
     }
 
+    /**
+     * The explorer and the findings tool window label an advice finding *advice* rather than printing its
+     * severity — which is only right while no advice check can emit an error. An advice that could fail
+     * `--fail-on error` would be a defect.
+     */
+    @Test
+    fun adviceIsNeverAnError() {
+        for (c in CheckCatalog.CHECKS.filter { it.kind == CheckCatalog.ADVICE }) {
+            assertEquals("${c.id} is advice, so its severity must be warning", "warning", c.severity)
+        }
+    }
+
     @Test
     fun countOpenIgnoresWaivedAndUnknown() {
         val findings = listOf<Map<String, Any?>>(

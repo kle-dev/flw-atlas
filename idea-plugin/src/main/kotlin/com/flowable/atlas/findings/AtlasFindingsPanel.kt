@@ -146,6 +146,7 @@ internal class AtlasFindingsPanel(private val project: Project) : SimpleToolWind
                 }
                 is FindingItem -> {
                     icon = if (item.finding["waived"] != null) AllIcons.RunConfigurations.TestIgnored
+                        else if (item.isAdvice) AllIcons.General.Information
                         else if (item.isError) AllIcons.General.Error else AllIcons.General.Warning
                     append(item.label)
                     if (item.message.isNotEmpty()) append(" — ${item.message}", SimpleTextAttributes.GRAYED_ATTRIBUTES)

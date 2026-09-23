@@ -180,6 +180,14 @@
               links to it. A table past a hundred rows, or a relation past sixty neighbours, shows the first
               ones and <i>show all</i>. On a touch screen a vertical swipe over a diagram scrolls the page
               and two fingers zoom.</li>
+          <li><b>One vocabulary for findings.</b> A defect is labelled by its severity, <i>error</i> or
+              <i>warning</i>; an advice finding is labelled <i>advice</i> and drawn grey — in the health
+              rows, the finding pills, the diagram badges, the Checks filter (which gains an <i>advice</i>
+              chip) and the Atlas Findings tool window, where advice wears the information icon. Every
+              advice row used to read WARNING under the <i>Advice</i> heading. <code>graph.json</code>, the
+              summary and <code>--fail-on</code> keep the severity; a saved
+              <code>#/checks&amp;c=warning</code> link now keeps a defect's warnings only, and the sidebar's
+              <i>Checks</i> badge is grey while only advice is open.</li>
           <li><b>The findings in a tool window of their own.</b> <i>Atlas Findings</i> lists every defect —
               and, when asked, the advice and the accepted findings — from the same analysis the explorer is
               built from, grouped by check. A double-click opens the finding's file at its line, and
@@ -557,11 +565,6 @@
               a variable whose 26th write was the one that silences the check (a mapping into a model
               outside the project, a scope that reads everything) was reported as never read. The decision
               runs on the full list now; the cap is applied afterwards, for display.</li>
-          <li><b>A CMMN lifecycle listener's script problem is a finding.</b> The parser has always flagged
-              a <code>planItemLifecycleListener</code> that carries a script — the engine's listener factory
-              has no script branch, so it is a silent no-op — but the note sat on the plan item, and the
-              check read only a process's task buckets. It reaches the case's page now, on the plan item
-              that holds the listener.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

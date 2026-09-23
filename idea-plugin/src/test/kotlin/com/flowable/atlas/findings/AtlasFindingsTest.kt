@@ -41,6 +41,11 @@ class AtlasFindingsTest : BasePlatformTestCase() {
         assertEquals(listOf("DEMO-P1"), titles(defects.getChildAt(0) as DefaultMutableTreeNode))
     }
 
+    fun testAnAdviceFindingIsMarkedAsAdviceWhateverItsSeverity() {
+        assertTrue(FindingItem(finding("unusedForms", "form:DEMO-F1")).isAdvice)
+        assertFalse(FindingItem(finding("missingRefs", "process:DEMO-P1")).isAdvice)
+    }
+
     fun testAcceptingWritesTheExplorersWaiverFileAndTheNextAnalysisHonoursIt() {
         val dir = FileUtil.createTempDirectory("atlas-findings", null)
         try {

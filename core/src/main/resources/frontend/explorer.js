@@ -452,6 +452,8 @@ const SECTIONS = ['Models','Integration','Code','Expressions','Checks','Variable
 // no getComputedStyle per node, which used to force a style recalculation in large lists).
 const color = t => 'var(--c-'+t+', #79848f)';
 const covColor = k => 'var(--cov-'+k+', #79848f)';
+/** Advice has no traffic-light colour: it is grey wherever it shows, like its badge on a diagram. */
+const ADVICE_COLOR='var(--ink-faint)';
 const debounce = (fn,ms) => { let t; return function(){ clearTimeout(t); t=setTimeout(()=>fn.apply(this,arguments),ms); }; };
 const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform||'');
 const MODK = IS_MAC ? '⌘' : 'Ctrl';
@@ -641,22 +643,22 @@ function waiverFor(f){
   return null;
 }
 let _fcache=null; const _nfc=new Map();
-/** Open and accepted counts per check, the worst open severity per check, and the two totals. */
+/** Open and accepted counts per check, the worst open tone per check (see findTone), and the two totals. */
 function findingCounts(){
   if(_fcache) return _fcache;
   const open={}, waived={}, worst={}; let openN=0, waivedN=0;
   FINDS.forEach(f=>{
     if(waiverFor(f)){ waived[f.check]=(waived[f.check]||0)+1; waivedN++; return; }
     open[f.check]=(open[f.check]||0)+1; openN++;
-    if(f.severity==='error'||!worst[f.check]) worst[f.check]=f.severity||'warning';
+    worst[f.check]=worseTone(worst[f.check], findTone(f));
   });
   return _fcache={open, waived, worst, openN, waivedN};
 }
-/** What one node carries: open findings, accepted ones, and the worst open severity — for badges. */
+/** What one node carries: open findings, accepted ones, and the worst open tone — for badges. */
 function nodeFindingCounts(id){
   if(_nfc.has(id)) return _nfc.get(id);
   let open=0, waived=0, worst=null;
-  (FIND_BY_NODE.get(id)||[]).forEach(f=>{ if(waiverFor(f)) waived++; else { open++; if(f.severity==='error'||!worst) worst=f.severity||'warning'; } });
+  (FIND_BY_NODE.get(id)||[]).forEach(f=>{ if(waiverFor(f)) waived++; else { open++; worst=worseTone(worst, findTone(f)); } });
   const r={open, waived, worst}; _nfc.set(id, r); return r;
 }
 /** A small count of a node's open findings, coloured by the worst one — nothing when there are none.
@@ -671,13 +673,29 @@ function findPillHtml(id){
     return '<span class="pill fpill pill-ok" aria-label="'+l+'" data-tip="'+l+' — see Findings on this model">✓</span>';
   }
   const lbl=c.open+' open finding'+(c.open>1?'s':'');
-  return '<span class="pill fpill '+(c.worst==='error'?'pill-bad':'pill-warn')+'" aria-label="'+lbl+'" data-tip="'+lbl+' — see Findings on this model">'+c.open+'</span>';
+  return '<span class="pill fpill '+TONE[c.worst||'warning'].pill+'" aria-label="'+lbl+'" data-tip="'+lbl+' — see Findings on this model">'+c.open+'</span>';
 }
 /** The catalog's title for a check id, or the id itself for one the catalog does not name. */
 function checkTitle(id){ const c=(DATA.checkCatalog||[]).find(x=>x.id===id); return c?c.title:id; }
 /** `defect` or `advice` — the split every surface leads with (CheckCatalog.kind). A check the catalog
  *  does not name is treated as a defect: something the page cannot explain is not advice. */
 function checkKind(id){ const c=(DATA.checkCatalog||[]).find(x=>x.id===id); return (c&&c.kind)||'defect'; }
+/** A finding's tone on this page: a defect speaks its own severity, an advice is `advice` whatever the
+ *  severity in graph.json says. Every advice check carries severity `warning` there (CheckCatalogTest pins
+ *  it), so printing the severity put WARNING on every row under the "Advice" heading — two vocabularies
+ *  in one line, and the second one contradicted the first. The file, the summary and --fail-on keep the
+ *  severity; only what a reader sees changes. */
+function findTone(f){ return checkKind(f.check)==='advice' ? 'advice' : (f.severity==='error'?'error':'warning'); }
+const TONE_ORDER={error:0, warning:1, advice:2};
+/** The worse of two tones; either may be empty. */
+const worseTone=(a,b)=>!a?b:!b?a:(TONE_ORDER[a]<=TONE_ORDER[b]?a:b);
+/** Per tone: the pill class, the health-row tone class and the word. */
+const TONE={error:{pill:'pill-bad', row:'bad', label:'error'},
+            warning:{pill:'pill-warn', row:'warn', label:'warning'},
+            advice:{pill:'pill-advice', row:'advice', label:'advice'}};
+const tonePill=t=>'<span class="pill '+TONE[t||'warning'].pill+'">'+TONE[t||'warning'].label+'</span>';
+/** The tone of everything open, for a single badge: `error`, `warning`, `advice` — or '' when clean. */
+function openTone(){ const W=findingCounts().worst; return Object.keys(W).reduce((a,k)=>worseTone(a, W[k]), ''); }
 const KIND_LABEL={defect:'Defects', advice:'Advice'};
 const KIND_HINT={defect:'something is wrong now — it fails, or two things disagree',
                  advice:'nothing is broken — a pattern worth a look, optional to act on'};
@@ -986,20 +1004,21 @@ function navItems(){
   items.push({route:'/tree', label:'Reference tree', sec:'Models', pri:0, icon:'tree',
     color:color('process'),
     tip:'What each app starts, and what those models reach — every relation except app membership'});
-  const openChecks=INSIGHTS.checksOpen, K0=kindCounts();
+  // red while an error is open, amber for a defect's warning, grey when only advice is open
+  const openChecks=INSIGHTS.checksOpen, K0=kindCounts(), ot=openTone();
   items.push({route:'/checks', label:'Checks', sec:'Checks', pri:0, icon:'checks',
-    color:covColor(K0.defects?'bad':openChecks?'warn':'good'), count:openChecks,
+    color:ot==='error'?covColor('bad'):ot==='warning'?covColor('warn'):ot==='advice'?ADVICE_COLOR:covColor('good'), count:openChecks,
     tip:(openChecks?kindHeadline(K0)+' — ':'')+'a defect is wrong now, an advice is a pattern worth a look'});
   if(INSIGHTS.totalCovServices>0){
     const gaps=INSIGHTS.health.schemaGaps;
     items.push({route:'/schema', label:'Schema gaps', sec:'Checks', pri:1, icon:'schema',
-      color:covColor(gaps?'bad':'good'), count:gaps,
+      color:covColor(gaps?'warn':'good'), count:gaps,
       tip:'Schema gaps — Liquibase → Service → Data object coverage'});
   }
   if(INSIGHTS.totalDirectedVars>0){
     const unusedVars=INSIGHTS.health.unusedVars+INSIGHTS.health.unreadInputs;
     items.push({route:'/variables', label:'Unused variables', sec:'Variables', pri:0, icon:'variable',
-      color:covColor(unusedVars?'bad':'good'), count:unusedVars,
+      color:unusedVars?ADVICE_COLOR:covColor('good'), count:unusedVars,
       tip:'Variables something writes and nothing reads, and inputs mapped into a model that never '+
           'reads them'});
   }
@@ -1389,16 +1408,16 @@ function checksInOrder(){
     cat.push({id:f.check, title:f.check, severity:'', what:'', clean:'', why:'', fix:'', docs:''}); } });
   return cat;
 }
-/** The health list: one row per check — tone bar, count, severity, name, one-line reason — sorted bad →
- *  warn → clean, the clean ones folded under a single summary line. [keys] narrows it to a subset, so a
- *  page shows only the checks it has blocks for. The severity is the worst *open* finding's, not a flag
- *  on the check: a check that can emit both reads as an error only where it actually did. */
-const TONE_RANK={bad:0,warn:1,ok:2};
+/** The health list: one row per check — tone bar, count, tone, name, one-line reason — sorted bad → warn →
+ *  advice → clean, the clean ones folded under a single summary line. [keys] narrows it to a subset, so a
+ *  page shows only the checks it has blocks for. The tone is the worst *open* finding's, not a flag on the
+ *  check: a check that can emit both reads as an error only where it actually did. */
+const TONE_RANK={bad:0,warn:1,advice:2,ok:3};
 function healthRows(keys){
   const C=findingCounts();
   return checksInOrder().filter(c=>(!keys||keys.indexOf(c.id)>=0)&&(metaOf(c.id).show||(()=>true))()).map(c=>{
     const m=metaOf(c.id), n=C.open[c.id]||0, w=C.waived[c.id]||0;
-    const sev=n?(C.worst[c.id]||'warning'):'', tone=n?(sev==='error'?'bad':'warn'):'ok';
+    const sev=n?(C.worst[c.id]||'warning'):'', tone=n?TONE[sev].row:'ok';
     const ex=(!n&&m.examined)?m.examined():null;
     let sub=n?c.what:c.clean;
     // several findings on one node: say so, or the row's number contradicts the list it opens
@@ -1997,8 +2016,8 @@ function nodeFindingsHtml(n){
   let body='<p class="ddesc">Accepting one keeps it in the report, in its own section, and out of the counts and '+
     'the CI gate. Nothing is written until you save — the bar at the top says what is still unsaved.</p>';
   checksInOrder().forEach(c=>{ const rows=byCheck[c.id]; if(!rows) return;
-    const sevs=[...new Set(rows.filter(f=>!waiverFor(f)).map(f=>f.severity||'warning'))].sort();
-    body+='<div class="chk-head"><div class="chk-title">'+esc(c.title)+' '+sevs.map(sevPill).join(' ')+'</div>'+
+    const tones=[...new Set(rows.filter(f=>!waiverFor(f)).map(findTone))].sort((a,b)=>TONE_ORDER[a]-TONE_ORDER[b]);
+    body+='<div class="chk-head"><div class="chk-title">'+esc(c.title)+' '+tones.map(tonePill).join(' ')+'</div>'+
       (c.what?'<p class="ddesc">'+esc(c.what)+'</p>':'')+
       ((c.why||c.fix||c.docs)?'<details class="chk-more"><summary>why it matters · what to do</summary>'+
         (c.why?'<p>'+esc(c.why)+'</p>':'')+(c.fix?'<p>'+esc(c.fix)+'</p>':'')+
@@ -2073,7 +2092,6 @@ function waivedBlockHtml(){
 }
 // ---------- the findings themselves ----------
 const FIND_CAP=200;
-const sevPill=s=>'<span class="pill '+(s==='error'?'pill-bad':'pill-warn')+'">'+esc(s||'warning')+'</span>';
 const fileBase=p=>String(p||'').split('/').pop();
 const SHOWACC_KEY='atlas-chk-showacc';
 function showAccepted(){ try{ return localStorage.getItem(SHOWACC_KEY)==='1'; }catch(e){ return false; } }
@@ -2106,11 +2124,12 @@ function findingRow(f, o){
     : !n ? '<span class="mono">'+esc(f.element)+'</span>'
     : o.onNode ? locateBtn(f.element, elLabel)+' '+esc(elLabel)
     : elJumpHtml(f.node, f.element, elLabel, 'Open this element in its model');
-  return {hay:elHay(f.label, f.message, f.element, elLabel, f.subject, f.check, f.severity, n?nodeKind(n):'', f.file),
-    attrs:' data-sev="'+esc(f.severity||'warning')+'" data-fi="'+f.fi+'"', cls:rule?'wv-done':'',
+  const tone=findTone(f);
+  return {hay:elHay(f.label, f.message, f.element, elLabel, f.subject, f.check, tone, n?nodeKind(n):'', f.file),
+    attrs:' data-sev="'+tone+'" data-fi="'+f.fi+'"', cls:rule?'wv-done':'',
     body:acceptFormHtml(f, rule), bodyCls:'wv-body',
     cells:{
-      sev:sevPill(f.severity),
+      sev:tonePill(tone),
       model:n?nodeChip(f.node):'<span class="mono">'+esc(f.node||f.label||'')+'</span>',
       el:elCell,
       msg:esc(f.message)+(f.snippet?' <span class="mono muted">'+esc(f.snippet)+'</span>':'')+(rule?acceptedNoteHtml(rule):''),
@@ -2136,13 +2155,13 @@ function findingTable(rows, o){
   const out=[];
   groups.forEach((fs, k)=>{
     if(fs.length<FIND_GROUP_FROM){ fs.forEach(f=>out.push(findingRow(f,o))); return; }
-    const worst=fs.some(f=>f.severity==='error')?'error':'warning';
+    const worst=fs.map(findTone).reduce(worseTone, '');
     const models=new Set(fs.map(f=>f.node).filter(Boolean));
     const shape=k.slice(k.indexOf('|')+1).replace(/`…`/g,'…');
     const members=fs.map(f=>findingRow(f,o));
     out.push({hay:members.map(m=>m.hay).join(' '), cls:'fgrp', attrs:' data-sev="'+esc(worst)+'"',
       body:tbl(cols, members, {filter:false}), bodyCls:'fgrp-body',
-      cells:{sev:sevPill(worst), model:'<span class="muted">'+models.size+' model'+(models.size>1?'s':'')+'</span>', el:'',
+      cells:{sev:tonePill(worst), model:'<span class="muted">'+models.size+' model'+(models.size>1?'s':'')+'</span>', el:'',
              msg:'<span class="fgn">'+fs.length+' ×</span> '+esc(shape), where:'', act:''}});
   });
   return tbl(cols, out, {filter:false, more:o.more});
@@ -2154,9 +2173,9 @@ function checkBlockHtml(c, all){
   const open=all.filter(f=>!waiverFor(f)), acc=all.filter(f=>waiverFor(f));
   if(!open.length && !acc.length) return '';
   const m=metaOf(c.id);
-  const sevs=[...new Set(open.map(f=>f.severity||'warning'))].sort();
+  const tones=[...new Set(open.map(findTone))].sort((a,b)=>TONE_ORDER[a]-TONE_ORDER[b]);
   const head='<div class="chk-head">'+
-    (sevs.length?'<span class="chk-sev">'+sevs.map(sevPill).join(' ')+'</span>':'')+
+    (tones.length?'<span class="chk-sev">'+tones.map(tonePill).join(' ')+'</span>':'')+
     (c.what?'<p class="ddesc">'+esc(c.what)+'</p>':'')+
     ((c.why||c.fix||c.docs)?'<details class="chk-more"><summary>why it matters · what to do</summary>'+
       (c.why?'<p>'+esc(c.why)+'</p>':'')+(c.fix?'<p>'+esc(c.fix)+'</p>':'')+
@@ -2184,7 +2203,7 @@ function renderChecks(){
     if(!blocks) return;
     const n=kind==='advice'?K.advice:K.defects;
     b+='<div class="kindhead kind-'+kind+'" id="chk-kind-'+kind+'"><span class="kindlbl">'+esc(KIND_LABEL[kind])+'</span>'+
-       '<span class="pill '+(kind==='advice'?'pill-info':(n?'pill-bad':'pill-ok'))+'">'+n+' open</span>'+
+       '<span class="pill '+(kind==='advice'?(n?'pill-advice':'pill-ok'):(n?'pill-bad':'pill-ok'))+'">'+n+' open</span>'+
        '<span class="kindhint">'+esc(KIND_HINT[kind])+'</span></div>'+blocks;
   });
   // uncertain edges are a property of the graph, not of one node — say so once
@@ -2210,9 +2229,11 @@ function renderChecks(){
   // the URL's `&a=` wins over the remembered preference, so a copied link shows what its author saw
   const accShown=()=>state.acc==='1'?true:state.acc==='0'?false:showAccepted();
   if(C.openN||C.waivedN){
-    const errN=FINDS.filter(f=>f.severity==='error'&&!waiverFor(f)).length;
+    // One chip per tone, counted like the rows: a defect's error, a defect's warning, and advice.
+    const TN={error:0, warning:0, advice:0}; FINDS.forEach(f=>{ if(!waiverFor(f)) TN[findTone(f)]++; });
     h+=filterBar({placeholder:'filter findings — a model, an element, a word of the message…', label:'Filter findings',
-      chips:[{fk:'sev',fv:'all',label:'all',n:C.openN},{fk:'sev',fv:'error',label:'error',n:errN},{fk:'sev',fv:'warning',label:'warning',n:C.openN-errN}],
+      chips:[{fk:'sev',fv:'all',label:'all',n:C.openN}].concat(['error','warning','advice'].filter(t=>TN[t])
+        .map(t=>({fk:'sev',fv:t,label:t,n:TN[t]}))),
       extra:C.waivedN?'<button type="button" class="pchip'+(accShown()?' on':'')+'" id="chk-showacc" aria-pressed="'+(accShown()?'true':'false')+
         '">show accepted<span class="pchipn">'+C.waivedN+'</span></button>':''});
   }
@@ -4894,13 +4915,12 @@ function dgMarkFindings(view, n){
   svg.querySelectorAll('.dgmark').forEach(x=>x.remove());
   if(hideMarkers) return;                       // the ⚑ toggle in the top bar: a diagram without badges
   const byEl=new Map();
-  // An element's badge takes the tone of its worst finding: red for an error, amber for a defect, grey
+  // An element's badge takes the tone of its worst finding: red for an error, amber for a warning, grey
   // for advice alone — a diagram with an orange badge on every task said "everything is wrong" when it
   // meant "every task is a call with no boundary event".
   (FIND_BY_NODE.get(n.id)||[]).forEach(f=>{ if(f.element==null||waiverFor(f)) return;
-    const k=String(f.element), m=byEl.get(k)||{n:0, worst:'advice'}; m.n++;
-    const kind=checkKind(f.check);
-    if(f.severity==='error') m.worst='error'; else if(kind==='defect'&&m.worst!=='error') m.worst='warning';
+    const k=String(f.element), m=byEl.get(k)||{n:0, worst:''}; m.n++;
+    m.worst=worseTone(m.worst, findTone(f));
     byEl.set(k, m); });
   if(!byEl.size) return;
   const names=elementNames(n), NS='http://www.w3.org/2000/svg';
@@ -4910,7 +4930,7 @@ function dgMarkFindings(view, n){
     if(!bb||!(bb.width>0)) return;
     const label=(names.get(el)||{}).name||el, lbl=m.n+' finding'+(m.n>1?'s':'')+' on '+label;
     const mk=document.createElementNS(NS,'g');
-    mk.setAttribute('class','dgmark dgmark-'+(m.worst==='error'?'bad':m.worst==='warning'?'warn':'advice'));
+    mk.setAttribute('class','dgmark dgmark-'+TONE[m.worst].row);
     mk.setAttribute('data-mark-el', String(g.dataset.el));
     mk.setAttribute('role','button'); mk.setAttribute('tabindex','0'); mk.setAttribute('aria-label', lbl);
     const c=document.createElementNS(NS,'circle'); c.setAttribute('cx', bb.x+bb.width); c.setAttribute('cy', bb.y); c.setAttribute('r','7.5');
@@ -5318,7 +5338,7 @@ function dgCardHtml(n, elId, g){
   // -- the findings on this element: what the marker on the shape was counting --
   const fs=(FIND_BY_NODE.get(n.id)||[]).filter(f=>f.element!=null&&sameId(f.element));
   if(fs.length) body+='<div class="dgsec">Findings ('+fs.length+')</div>'+fs.map(f=>{ const rule=waiverFor(f);
-    return '<div class="dgfind" data-fi="'+f.fi+'">'+sevPill(f.severity)+' <span class="tag">'+esc(checkTitle(f.check))+'</span> '+esc(f.message)+
+    return '<div class="dgfind" data-fi="'+f.fi+'">'+tonePill(findTone(f))+' <span class="tag">'+esc(checkTitle(f.check))+'</span> '+esc(f.message)+
       (rule?acceptedNoteHtml(rule):'')+'<div class="dgfind-act">'+
       (rule?'<button type="button" class="dgbtn wv-restore" data-fi="'+f.fi+'">restore</button>'
            :'<button type="button" class="dgbtn" data-dgaccept="'+f.fi+'">accept…</button>')+'</div></div>'; }).join('');
@@ -6905,7 +6925,7 @@ function wireMarkToggle(){
     b.classList.toggle('off', hideMarkers);
     b.setAttribute('aria-pressed', hideMarkers?'true':'false');
     const tip=(hideMarkers?'Finding badges hidden on diagrams':'Finding badges shown on diagrams')+
-      ' — red for an error, amber for a defect, grey for advice. Click to toggle.';
+      ' — red for an error, amber for a warning, grey for advice. Click to toggle.';
     b.setAttribute('data-tip', tip); b.setAttribute('aria-label', tip);
   };
   paint();

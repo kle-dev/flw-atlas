@@ -35,7 +35,7 @@ view you are looking at can be copied as a link.
 | `#<nodeId>&q=<term>` | …with the search term that led there highlighted |
 | `#<nodeId>&e=<elementId>` | …with a specific model element opened — and selected on the diagram |
 | `…&f=<filter>&s=<sort>` | On a node or a category route: the list's filter text and sort order. Written by the page as you type or pick (no history entry), so a reload or a copied link brings the list back as you left it |
-| `#/checks&f=…&c=error&a=1`, `#/tree&l=all&f=…`, `#/scripts&f=…&c=…`, `#/variables&f=…&c=…` | On a report route: the filter text (`f`), the active chip (`c` — a severity, a script group, a write construct), *show accepted* (`a`) and, on the tree, the lens (`l`). Written the same way, so a report can be reloaded or sent to a colleague exactly as it was left |
+| `#/checks&f=…&c=error&a=1`, `#/tree&l=all&f=…`, `#/scripts&f=…&c=…`, `#/variables&f=…&c=…` | On a report route: the filter text (`f`), the active chip (`c` — a tone (`error`, `warning`, `advice`), a script group, a write construct), *show accepted* (`a`) and, on the tree, the lens (`l`). Written the same way, so a report can be reloaded or sent to a colleague exactly as it was left |
 
 An unknown route or an unresolvable node id — a model renamed since the link was copied, a report
 generated from a smaller scope — falls back to the overview, says so in a toast, and replaces the dead
@@ -341,14 +341,18 @@ The explorer never presents a guess as a fact:
   not read is never silent.
 - A **count pill** on a tree row or a list item says how many open findings that model carries, coloured
   by the worst of them; a clean model wears none. On the model's diagram the same count sits as a
-  **badge** on each element with a finding — red for an error, amber for a [defect](../checks/), grey
-  when the element carries advice alone — click it and the element's card lists them, with *restore*
+  **badge** on each element with a finding — red for an error, amber for a [defect](../checks/)'s
+  warning, grey when the element carries advice alone — click it and the element's card lists them, with *restore*
   for an accepted one and *accept…* landing on the finding's row under the diagram. The toolbar's
   **⚑ button** hides the badges on every diagram and is remembered, for a reader who wants the diagram
   as Design draws it.
 - The health list — on the overview and at the top of the Checks page — leads with the two numbers,
   *N defects · M advice*, and groups its rows under those two headings; the sidebar's *Checks* badge is
-  red only while a defect is open.
+  red while an error is open, amber for a defect's warning and grey when only advice is.
+- **One vocabulary for findings.** A defect is labelled by its severity, *error* or *warning*; an advice
+  finding is labelled *advice* and drawn grey — in the pills, the health rows, the diagram badges and
+  the findings filter alike. The severity `graph.json` records for advice (always `warning`) is what the
+  summary and `--fail-on` read; the page only stops printing it where it contradicted the heading.
 - Liquibase changelogs carry **live / superseded / orphan**, and services carry per-column schema
   coverage badges. A column mapping that pairs a field with another field's column is marked
   **`⇄ crossed`** on the service page and in the schema report — it is not a coverage gap, so the row

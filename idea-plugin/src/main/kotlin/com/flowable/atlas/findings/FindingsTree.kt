@@ -19,6 +19,9 @@ internal object FindingsTree {
         val file: String? get() = finding["file"] as? String
         val line: Int? get() = (finding["line"] as? Number)?.toInt()
         val isError: Boolean get() = finding["severity"] == "error"
+        /** Advice wears its own mark, as in the explorer: its severity is `warning` in the file, and a
+         *  warning icon on "a form nothing references" read as something being wrong. */
+        val isAdvice: Boolean get() = CheckCatalog.kind(finding["check"]?.toString().orEmpty()) == CheckCatalog.ADVICE
     }
 
     fun build(findings: List<Map<String, Any?>>, showAdvice: Boolean, showAccepted: Boolean): DefaultMutableTreeNode {

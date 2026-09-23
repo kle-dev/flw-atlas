@@ -41,6 +41,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   REST call or a service operation whose URL lands on a project endpoint links to it. A table past a
   hundred rows, or a relation past sixty neighbours, shows the first ones and *show all*. On a touch screen
   a vertical swipe over a diagram scrolls the page and two fingers zoom.
+- **One vocabulary for findings.** A defect is labelled by its severity, *error* or *warning*; an advice
+  finding is labelled *advice* and drawn grey — in the health rows, the finding pills, the diagram badges,
+  the Checks filter (which gains an *advice* chip) and the Atlas Findings tool window, where advice wears
+  the information icon. Every advice row used to read WARNING under the *Advice* heading. `graph.json`,
+  the summary and `--fail-on` keep the severity; a saved `#/checks&c=warning` link now keeps a defect's
+  warnings only, and the sidebar's *Checks* badge is grey while only advice is open.
 - **The findings in a tool window of their own.** *Atlas Findings* lists every defect — and, when asked,
   the advice and the accepted findings — from the same analysis the explorer is built from, grouped by
   check. A double-click opens the finding's file at its line, and *Accept…* writes the selected findings,

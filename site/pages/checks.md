@@ -27,6 +27,10 @@ with the two numbers (`3 defects · 41 advice`), `graph.json` carries them as `s
 checks are ordered by how much they deserve attention: broken first, then unfinished, then how a process
 is configured to behave.
 
+The explorer and the IDE's findings tool window label every advice finding *advice* and draw it grey. The
+*Severity* column below is what `graph.json`, the summary and `--fail-on` see — every advice check is a
+`warning` there, so the page would otherwise print *warning* under the *Advice* heading.
+
 <figure class="fig">
   <div class="body"><img class="only-light" src="../assets/img/checks-page.png" alt="The explorer's Checks page: a row per check, then a block per finding kind" width="1400" height="900"><img class="only-dark" src="../assets/img/checks-page-dark.png" alt="The explorer's Checks page: a row per check, then a block per finding kind" width="1400" height="900"></div>
   <figcaption><b>The Checks page of the live demo.</b> Every check row is clickable when its
@@ -396,7 +400,7 @@ eight cases in which this check deliberately says nothing.
 | `<project>.overview.md` | Section 14, *Findings*, with `file:line` for each. |
 | `<project>.graph.json` | `findings` (itemised), `checks` (per-check counts plus `open` and `waived`) and `stats.defects` / `stats.advice`. |
 | `<project>.CLAUDE.md` | A findings summary, so an agent starts from what is already known to be wrong. |
-| The explorer | The **Checks** page (`#/checks`): a row per check — worst first, its severity in words, the clean ones folded with what they examined — then a block per check with the finding's severity, model, element (a jump into the model), message and `file:line`, what the check means and what to do, and an **accept…** control on every row. A model's own page lists its findings under the diagram, with a ⌖ button that puts the element in view. |
+| The explorer | The **Checks** page (`#/checks`): a row per check — worst first, its tone in words (*error*, *warning*, *advice*), the clean ones folded with what they examined — then a block per check with the finding's tone, model, element (a jump into the model), message and `file:line`, what the check means and what to do, and an **accept…** control on every row. A model's own page lists its findings under the diagram, with a ⌖ button that puts the element in view. |
 | The IDE | The same explorer page, opened as an editor tab. |
 
 ## Accepting a finding

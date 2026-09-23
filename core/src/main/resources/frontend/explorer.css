@@ -176,7 +176,8 @@
   .pill-warn{background:var(--warn-bg);border-color:var(--warn-border);color:var(--warn-text)}
   .pill-bad{background:var(--bad-bg);border-color:var(--bad-border);color:var(--bad-text)}
   .pill-info{background:var(--info-bg);border-color:var(--info-border);color:var(--info-text)}
-  .pill-ok{background:var(--ok-bg);border-color:var(--ok-border);color:var(--ok-text)}
+  /* advice is grey wherever it shows — the pill, the health row, the diagram badge: nothing is broken */
+  .pill-advice{background:var(--neutral-bg);border-color:var(--neutral-border);color:var(--neutral-text)}
   .dtitle .pill,.item .nm .pill{margin-left:var(--space-15)}
 
   /* empty state (Hub EmptyState recipe) */
@@ -326,10 +327,12 @@
   .hrow .hbar{align-self:stretch;background:var(--line)}
   .hrow.tone-bad .hbar{background:var(--bad-bar)}
   .hrow.tone-warn .hbar{background:var(--warn-bar)}
+  .hrow.tone-advice .hbar{background:var(--ink-faint)}
   .hrow.tone-ok .hbar{background:var(--ok-bar)}
   .hrow .hn{font-weight:600;font-variant-numeric:tabular-nums;text-align:right;display:flex;justify-content:flex-end}
   .hrow.tone-bad .hn{color:var(--bad-text)}
   .hrow.tone-warn .hn{color:var(--warn-text)}
+  .hrow.tone-advice .hn{color:var(--ink-dim)}
   .hrow.tone-ok .hn{color:var(--ok-text)}
   .hrow .hn .ui{width:14px;height:14px}
   .hrow .hl{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -338,6 +341,7 @@
   .hrow .hsev{font-size:var(--text-2xs);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
   .hrow.tone-bad .hsev{color:var(--bad-text)}
   .hrow.tone-warn .hsev{color:var(--warn-text)}
+  .hrow.tone-advice .hsev{color:var(--ink-faint)}
   .hrow[data-jump]{cursor:pointer}
   .hrow[data-jump]:hover{background:var(--hover)}
   .hclean>summary{cursor:pointer;list-style:none;padding:var(--space-15) var(--space-3);font-size:var(--text-xs);color:var(--ink-faint)}

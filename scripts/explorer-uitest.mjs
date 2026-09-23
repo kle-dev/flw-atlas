@@ -668,8 +668,9 @@ const probe = `<script>
   steps.push(()=>{
     const rows=[...document.querySelectorAll('#view-overview .hlist .hrow')];
     ok('the overview has a health list', rows.length>0);
-    const rank=r=>r.classList.contains('tone-bad')?0:r.classList.contains('tone-warn')?1:2;
-    ok('health rows are sorted bad → warn → clean', rows.every((r,i)=>!i||rank(rows[i-1])<=rank(r)));
+    // defects before advice, and within the defects the errors first
+    const rank=r=>r.classList.contains('tone-bad')?0:r.classList.contains('tone-warn')?1:r.classList.contains('tone-advice')?2:3;
+    ok('health rows are sorted error → warning → advice → clean', rows.every((r,i)=>!i||rank(rows[i-1])<=rank(r)));
     ok('only rows with findings are links', rows.every(r=>r.classList.contains('hall') ||
        r.hasAttribute('data-jump')===(parseInt(r.querySelector('.hn').textContent,10)>0)));
     ok('clean checks are folded away', rows.filter(r=>r.classList.contains('tone-ok')&&!r.classList.contains('hall')).every(r=>!!r.closest('details.hclean')));
@@ -693,10 +694,24 @@ const probe = `<script>
     ok('the runtime-risk checks have blocks of their own', ['nonExclusiveAsync','unguardedTasks','asyncWithoutRetry']
        .every(k=>!(DATA.checks||{})[k] || !!document.getElementById('chk-'+k)));
     ok('no navigator strip duplicates the health list', !cv.querySelector('.secnav'));
-    ok('every health row names its severity in words', [...cv.querySelectorAll('.hrow[data-jump]')].every(r=>/^(error|warning)$/.test((r.querySelector('.hsev')||{}).textContent||'')));
+    ok('every health row names its tone in words', [...cv.querySelectorAll('.hrow[data-jump]')].every(r=>/^(error|warning|advice)$/.test((r.querySelector('.hsev')||{}).textContent||'')));
+    // One vocabulary: a row under "Advice" says advice, never the severity graph.json carries for it.
+    const adv=[...cv.querySelectorAll('.hlist .hrow[data-jump]')].filter(r=>checkKind(r.dataset.jump.replace(/^chk-/,''))==='advice'&&!r.closest('details.hclean'));
+    ok('an advice row says advice', adv.length>0 && adv.every(r=>(r.querySelector('.hsev').textContent||'')==='advice' && r.classList.contains('tone-advice')), adv.length+' advice rows');
+    ok('no advice finding wears a warning pill', [...cv.querySelectorAll('.tbl .tr[data-fi]')].filter(r=>checkKind(FINDS[+r.dataset.fi].check)==='advice')
+       .every(r=>r.dataset.sev==='advice' && !r.querySelector('.pill-warn')));
+    const ac=cv.querySelector('.fbar .pchip[data-fv="advice"]');
+    ok('the findings filter has an advice chip', !!ac);
+    if(ac) click(ac);
     const row=cv.querySelector('details.sect[data-sect^="chk-"] .tbl .tr');
     ok('a finding row names its severity, model and message', !!row && !!row.querySelector('.pill') && !!row.querySelector('.nc, .mono') && (row.textContent||'').length>20);
     ok('the page has one filter over every block', cv.querySelectorAll('.fbar').length===1);
+  });
+  steps.push(()=>{
+    const cv=document.getElementById('view-checks');
+    const shown=[...cv.querySelectorAll('.tbl .tr[data-sev]')].filter(r=>!r.hidden && !r.closest('[hidden]') && !r.closest('details.chk-acc'));
+    ok('the advice chip keeps only advice rows', shown.length>0 && shown.every(r=>r.dataset.sev==='advice'), shown.length+' shown');
+    const all=cv.querySelector('.fbar .pchip[data-fv="all"]'); if(all) click(all);
   });
   // --- the Scripts page: every script body, as the same card the process page shows ---
   steps.push(()=>{ location.hash='/scripts'; });
