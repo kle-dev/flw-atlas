@@ -815,6 +815,20 @@ const probe = `<script>
     ok('its fields say who reads the variables they write', !!s && /Fields and the variables they write/.test(s.textContent));
   });
 
+  // --- apps and groups: what an app reaches, and who can reach what ---
+  steps.push(()=>{ location.hash=enc('group:sales'); });
+  steps.push(()=>{
+    const s=document.querySelector('#detail details.sect[data-sect="fit"]');
+    const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>r.querySelector('.vlink[data-id="'+enc('process:orderProcess')+'"]'));
+    ok('a group sees what it may do per model, and through which app', !!row && /May start/.test(row.textContent) && /via Demo App/.test(row.textContent), row?row.textContent:'(no row)');
+    location.hash=enc('app:demoApp');
+  });
+  steps.push(()=>{
+    const s=document.querySelector('#detail details.sect[data-sect="fit"]');
+    const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>r.querySelector('.vlink[data-id="'+enc('decision:orderDecision')+'"]'));
+    ok('an app lists what its models reach that no app ships', !!row && row.classList.contains('cov-warn') && /in no app/.test(row.textContent), row?row.textContent:'(no row)');
+  });
+
   // --- sidebar groups fold and remember ---
   steps.push(()=>{
     const h=document.querySelector('#nav .side-group[data-group="Models"]');

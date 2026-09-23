@@ -4232,6 +4232,99 @@ FIT.page=FIT.form;
 FIT.decision=[{title:'Called by', build:(n,c)=>callersMatrix(n,c)}];
 FIT.action=[{title:'Called by', build:(n,c)=>callersMatrix(n,c)}];
 
+// --- apps and groups: what an app ships and reaches, and who can get at it ---
+/** An app's members, from the raw edges (the adjacency maps drop the co-located flag). */
+function appMembers(app){
+  const m=new Map();
+  edges.forEach(e=>{ if(e.s===app.id&&e.rel==='contains'&&byId.get(e.t)){ const o=m.get(e.t); m.set(e.t, {id:e.t, colocated:o?(o.colocated&&!!e.colocated):!!e.colocated}); } });
+  return [...m.values()];
+}
+/** The apps that contain a model. */
+const appsOf=id=>[...new Set(edges.filter(e=>e.rel==='contains'&&e.t===id&&(byId.get(e.s)||{}).type==='app').map(e=>e.s))];
+const iconLink=id=>{ const x=byId.get(id); return x?nodeIcon(x)+' '+vlink(id, x.label):esc(id); };
+/** Every model the app's members reach, and whether the app ships it: in this app, in another one, in
+ *  none, not in the project at all — plus the members only packed beside it, which its definition does
+ *  not list. */
+function appReachFit(app){
+  const mem=appMembers(app), inApp=new Set(mem.map(m=>m.id)), reached=new Map();
+  mem.forEach(m=>(outM.get(m.id)||[]).forEach(e=>{ if(e.rel==='contains') return; const t=byId.get(e.id); if(!t||t.id===app.id) return;
+    const td=t.data||{}, keep=APP_MEMBER_TYPES.has(t.type)||(t.type==='external'&&(td.missingModel||td.dynamic));
+    if(!keep) return; if(!reached.has(t.id)) reached.set(t.id, new Set()); reached.get(t.id).add(m.id); }));
+  const rows=[];
+  reached.forEach((from, tid)=>{ const t=byId.get(tid), td=t.data||{};
+    let gap='', kind='', unk=false, where;
+    if(inApp.has(tid)) where=gm('ok','in this app');
+    else if(t.type==='external'&&td.missingModel){ gap='bad'; kind='missing'; where=gm('miss','not in the project', 'A member names a model no file of this project defines'); }
+    else if(t.type==='external'){ unk=true; where=gm('unk','named by an expression', 'The key is an expression — Atlas cannot tell which model it is at runtime'); }
+    else { const others=appsOf(tid);
+      if(others.length){ gap='info'; kind='other'; where=gm('info','in', 'Deployed with another app — this app needs it deployed too')+' <span>'+others.map(a=>vlink(a, byId.get(a).label)).join(', ')+'</span>'; }
+      else { gap='warn'; kind='noApp'; where=gm('warn','in no app', 'No app of this project contains it, so no app deploys it'); } }
+    rows.push({gap, kind, unk, hay:elHay(t.label, t.key, [...from].map(f=>byId.get(f).label).join(' ')),
+      cells:{model:iconLink(tid), from:[...from].slice(0,3).map(f=>vlink(f, byId.get(f).label)).join(', ')+(from.size>3?' <span class="muted">+'+(from.size-3)+'</span>':''), where}});
+  });
+  mem.filter(m=>m.colocated).forEach(m=>rows.push({gap:'info', kind:'coloc', hay:byId.get(m.id).label,
+    cells:{model:iconLink(m.id), from:'<span class="muted">—</span>', where:gm('info','packed beside it, not listed', 'The model sits in the app\'s folder or archive, but the app definition does not list it')}}));
+  if(!rows.length) return '';
+  const order={bad:0, warn:1, info:2, '':3};
+  rows.sort((a,b)=>(order[a.gap]-order[b.gap])||a.hay.localeCompare(b.hay));
+  return gapTable([{k:'model',label:'Model',w:'minmax(16ch,1.6fr)'},{k:'from',label:'Reached from',w:'minmax(14ch,1.4fr)',opt:true},{k:'where',label:'Shipped',w:'minmax(16ch,1.6fr)',cls:'tags'}],
+    rows, {okLabel:k=>k+' in this app', kinds:{missing:{tone:'bad', label:k=>k+' not in the project'}, noApp:{tone:'warn', label:k=>k+' in no app'},
+      other:{tone:'info', label:k=>k+' in another app'}, coloc:{tone:'info', label:k=>k+' packed beside it, not listed'}}});
+}
+/** Access that means working with the model in the app — not a data object's query right. */
+const INTERACTIVE_ACCESS=new Set(['start','assign','view','use','participate','watch','trigger','manually-start']);
+/** The groups with any right on the app or its members: can they open it, and what may they do inside?
+ *  A group that may start a process or work on a task of the app, but cannot open the app, is a gap. */
+function appAccessFit(app){
+  const mem=new Set(appMembers(app).map(m=>m.id)), G=new Map();
+  const grp=id=>{ let x=G.get(id); if(!x){ x={open:false, start:new Set(), work:new Set(), other:new Map()}; G.set(id,x); } return x; };
+  edges.forEach(e=>{ const g=byId.get(e.s); if(!g||g.type!=='group') return;
+    if(e.t===app.id&&e.rel==='open-app') grp(e.s).open=true;
+    else if(mem.has(e.t)){ const x=grp(e.s);
+      if(e.rel==='start') x.start.add(e.t); else if(INTERACTIVE_ACCESS.has(e.rel)) x.work.add(e.t);
+      else { if(!x.other.has(e.rel)) x.other.set(e.rel, new Set()); x.other.get(e.rel).add(e.t); } } });
+  if(!G.size) return '';
+  const anyOpen=[...G.values()].some(x=>x.open);
+  // one span: inside a flex tag cell, loose text between links would take a gap of its own before each comma
+  const links=set=>'<span>'+[...set].slice(0,3).map(id=>vlink(id, byId.get(id).label)).join(', ')+(set.size>3?' <span class="muted">+'+(set.size-3)+'</span>':'')+'</span>';
+  const rows=[...G.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([gid,x])=>{
+    const acts=x.start.size||x.work.size, cant=!x.open&&anyOpen&&acts;
+    return {gap:cant?'warn':'', kind:cant?'cantOpen':'', hay:byId.get(gid).label,
+      cells:{g:vlink(gid, byId.get(gid).label),
+        open:x.open?gm('ok','opens it'):anyOpen?gm(acts?'warn':'none', acts?'cannot open it':'', acts?'It may start or work on models of this app, but cannot open the app to do so':''):gm('unk','', 'The app grants no group access explicitly — who may open it is decided elsewhere'),
+        start:links(x.start), work:links(x.work),
+        other:[...x.other.entries()].map(([rel,set])=>tag(term('rel', rel).label)+' '+links(set)).join(' ')}};
+  });
+  return gapTable([{k:'g',label:'Group',w:'minmax(10ch,1fr)'},{k:'open',label:'App',w:'minmax(12ch,1fr)',cls:'tags'},{k:'start',label:'May start',w:'minmax(12ch,1.3fr)',opt:true},
+      {k:'work',label:'Works on',w:'minmax(12ch,1.3fr)',opt:true},{k:'other',label:'Other rights',w:'minmax(12ch,1.3fr)',cls:'tags',opt:true}],
+    rows, {okLabel:k=>k+' fine', kinds:{cantOpen:{tone:'warn', label:k=>k+' may act but cannot open the app'}}});
+}
+/** What a group may do, per model, and whether it can reach each model through an app it may open. */
+function groupAccessFit(g){
+  const opens=new Set((outM.get(g.id)||[]).filter(e=>e.rel==='open-app').map(e=>e.id));
+  const T=new Map();
+  (outM.get(g.id)||[]).forEach(e=>{ if(e.rel==='open-app'||!byId.get(e.id)) return; if(!T.has(e.id)) T.set(e.id, new Set()); T.get(e.id).add(e.rel); });
+  if(!T.size) return '';
+  const anyApps=INSIGHTS.apps.length>0;
+  const rows=[...T.entries()].map(([tid, rels])=>{
+    const t=byId.get(tid), apps=appsOf(tid), inter=[...rels].some(r=>INTERACTIVE_ACCESS.has(r));
+    const reach=apps.filter(a=>opens.has(a));
+    let gap='', kind='', st;
+    if(!anyApps||t.type==='app') st='';
+    else if(!apps.length) st=gm('none','in no app', 'No app of this project contains it');
+    else if(reach.length) st=gm('ok','via '+reach.map(a=>byId.get(a).label).join(', '));
+    else if(inter){ gap='warn'; kind='cantOpen'; st=gm('warn','cannot open '+apps.map(a=>byId.get(a).label).join(', '), 'The group may act on it, but may open none of the apps that ship it'); }
+    else st=gm('none','', 'Not something a member works with inside an app');
+    return {gap, kind, hay:elHay(t.label, [...rels].join(' ')),
+      cells:{t:iconLink(tid), may:[...rels].map(r=>'<span class="tag">'+esc(term('rel', r).label)+'</span>').join(''), st}};
+  }).sort((a,b)=>(a.gap?0:1)-(b.gap?0:1)||a.hay.localeCompare(b.hay));
+  return gapTable([{k:'t',label:'Model',w:'minmax(16ch,1.6fr)'},{k:'may',label:'May',w:'minmax(14ch,1.4fr)',cls:'tags'},{k:'st',label:'Through',w:'minmax(14ch,1.4fr)',cls:'tags'}],
+    rows, {okLabel:k=>k+' reachable', meta:opens.size?'<span class="muted">opens</span> '+[...opens].map(a=>vlink(a, byId.get(a).label)).join(', '):'',
+      kinds:{cantOpen:{tone:'warn', label:k=>k+' cannot be reached through an app'}}});
+}
+FIT.app=[{title:'What its models reach', build:n=>appReachFit(n)}, {title:'Who can reach it', build:n=>appAccessFit(n)}];
+FIT.group=[{title:'Access', build:n=>groupAccessFit(n)}];
+
 // ---------- form / page components ----------
 /** The processes and cases that show a form, with the element that does — a user task, a human task —
  *  where the model records one; a model that opens it some other way (a start form) is listed alone. */

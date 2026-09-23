@@ -42,6 +42,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   data-object paths it binds that are no field of the object, and, for each task that shows it, the
   outcomes no condition tests and the tested values that are no outcome. An action lists the buttons
   that invoke it against what its script reads with `flw.getInput`.
+- **Apps and groups say who can reach what.** An app's page lists every model its members reach and
+  whether it ships them: in this app, in another app, in no app at all, or not in the project — and the
+  models only packed beside it that its definition does not list. It also lists every group with a right
+  on it or its members, and flags one that may start a process or work on a task of the app but cannot
+  open the app. A group's page shows, per model, what the group may do and the app it gets there through —
+  or that it can open none of the apps that ship it.
 - **A health strip under every title.** Before the first section, a page says whether the model is fine:
   its open defects and advice, the gaps its tables found (or *✓ fits*), how many models it uses and is
   used by, the apps that ship it — or *in no app* — and the tests that deploy it; each jumps to the section

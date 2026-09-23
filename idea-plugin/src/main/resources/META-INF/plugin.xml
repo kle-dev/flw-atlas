@@ -176,6 +176,13 @@
               field of the object, and, for each task that shows it, the outcomes no condition tests and the
               tested values that are no outcome. An action lists the buttons that invoke it against what its
               script reads with <code>flw.getInput</code>.</li>
+          <li><b>Apps and groups say who can reach what.</b> An app's page lists every model its members
+              reach and whether it ships them: in this app, in another app, in no app at all, or not in the
+              project — and the models only packed beside it that its definition does not list. It also
+              lists every group with a right on it or its members, and flags one that may start a process or
+              work on a task of the app but cannot open the app. A group's page shows, per model, what the
+              group may do and the app it gets there through — or that it can open none of the apps that
+              ship it.</li>
           <li><b>A health strip under every title.</b> Before the first section, a page says whether the
               model is fine: its open defects and advice, the gaps its tables found (or <i>✓ fits</i>), how
               many models it uses and is used by, the apps that ship it — or <i>in no app</i> — and the
