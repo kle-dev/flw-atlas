@@ -62,6 +62,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   and the diagrams folder draw every model through one renderer, so the diagrams folder now holds forms,
   pages and layout-less decision tables too. A page keeps its drawings within a
   budget, so a project with hundreds of forms does not double in size; a form left out says so.
+- **What a model's variables are for.** *Variables & expressions* lists a model's variables as a table —
+  how this model writes and reads each one, which other models share it, and the unused-variable verdict —
+  before the expressions, bindings and functions it uses. An SLA checks that the task it watches exists
+  in each model it governs, a query that some queried model writes the variable behind each column, and
+  a template that the models rendering it provide every variable it prints.
 - **A health strip under every title.** Before the first section, a page says whether the model is fine:
   its open defects and advice, the gaps its tables found (or *✓ fits*), how many models it uses and is
   used by, the apps that ship it — or *in no app* — and the tests that deploy it; each jumps to the section

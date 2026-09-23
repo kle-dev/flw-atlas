@@ -4450,6 +4450,60 @@ FIT.event=[{title:'Publishers and consumers', build:n=>eventPayloadFit(n)}, {tit
 FIT.channel=[{title:'Events it carries', build:n=>channelFit(n)}];
 FIT.signal=FIT.message=FIT.error=FIT.escalation=[{title:'Thrown and caught', build:n=>thrownCaughtFit(n)}];
 FIT.endpoint=[{title:'Callers', build:n=>endpointCallersFit(n)}];
+// --- the small ones: an SLA's task, a query's columns, a template's variables ---
+/** The task an SLA watches, in every model it governs: does that model have a task of that key? */
+function slaTaskFit(n){
+  const key=(n.data||{}).taskDefinitionKey; if(!key) return '';
+  const gov=(outM.get(n.id)||[]).filter(e=>e.rel==='sla-of-process').map(e=>e.id)
+    .concat((incM.get(n.id)||[]).filter(e=>e.rel==='sla-definition-key').map(e=>e.id)).filter(id=>byId.get(id));
+  if(!gov.length) return '';
+  return gapTable([{k:'m',label:'Governed model',w:'minmax(16ch,1.6fr)'},{k:'st',label:'Task '+key,w:'minmax(16ch,1.6fr)',cls:'tags'}],
+    [...new Set(gov)].map(id=>{ const m=byId.get(id), el=elementRecords(m).find(r=>r.id===key);
+      return {gap:el?'':'bad', kind:el?'':'noTask', hay:m.label, cells:{m:iconLink(id),
+        st:el?gm('ok', el.name||key)+' '+elJumpHtml(id, key, 'open', 'Open the task in its model'):gm('miss', 'no task '+key, m.label+' has no element with this id — the SLA never starts')}}; }),
+    {okLabel:k=>k+' found', kinds:{noTask:{tone:'bad', label:k=>k+' without the task'}}});
+}
+/** A query's columns read variables of the instances it queries: does anything in those models write them? */
+function queryColumnsFit(n){
+  const cols=((n.data||{}).columns||[]).filter(c=>c&&c.variableName);
+  const procs=(outM.get(n.id)||[]).filter(e=>e.rel==='queries-process'&&byId.get(e.id)).map(e=>e.id);
+  if(!cols.length||!procs.length) return '';
+  const {I}=varScopeIndex();
+  // written in a queried model's reach, or handed to it by a caller — and a value it reads that nothing
+  // writes is an input: whoever starts the instance provides it
+  const written=new Set(), inputs=new Set();
+  procs.forEach(p=>{ calleeClosure(p).forEach(id=>{ const x=I.get(id); if(x) x.w.forEach((_,k)=>written.add(k)); });
+    const x=I.get(p); if(x) x.inW.forEach((_,k)=>written.add(k));
+    const ct=contractOf(byId.get(p)); if(ct) ct.items.forEach(it=>{ if(it.dir==='in') inputs.add(it.name); }); });
+  return gapTable([{k:'c',label:'Column',w:'minmax(12ch,1.2fr)'},{k:'v',label:'Variable',w:'minmax(12ch,1.2fr)',mono:true},{k:'st',label:'',w:'minmax(14ch,1.4fr)',cls:'tags'}],
+    cols.map(c=>{ const v=String(c.variableName).split('.')[0], ok=written.has(v), inp=!ok&&inputs.has(v), why=ok||inp?'':ctSilence(v);
+      return {gap:ok||inp||why?'':'warn', unk:!!why, kind:ok||inp||why?'':'unwritten', hay:elHay(c.name, c.label, v),
+        cells:{c:esc(c.label||c.name||''), v:paramSide(c.variableName),
+          st:ok?gm('ok','written'):inp?gm('impl','provided at start', 'The queried process reads it without writing it — whoever starts an instance provides it')
+            :why?gm('unk','', CT_SILENCE[why]):gm('warn','never written', 'No queried model writes it — the column stays empty')}}; }),
+    {meta:'<span class="muted">queries</span> '+procs.map(id=>vlink(id, byId.get(id).label)).join(', '), okLabel:k=>k+' filled',
+     kinds:{unwritten:{tone:'warn', label:k=>k+' never written by a queried model'}}});
+}
+/** The variables a template renders, against every model that renders it. */
+function templateVarsFit(n){
+  const {I}=varScopeIndex(), reads=[...((I.get(n.id)||{}).r||new Map()).keys()].sort();
+  const TPL_RELS=new Set(['templateKey','subjectTemplateModelKey','bodyTemplateModelKey','body-template','message-template','template-form']);
+  const users=[...new Set((incM.get(n.id)||[]).filter(e=>TPL_RELS.has(e.rel)).map(e=>e.id))].filter(id=>byId.get(id));
+  if(!reads.length||!users.length) return '';
+  const writtenBy=id=>{ const s=new Set(); calleeClosure(id).forEach(x=>{ const i=I.get(x); if(i) i.w.forEach((_,k)=>s.add(k)); }); const i=I.get(id); if(i) i.inW.forEach((_,k)=>s.add(k)); return s; };
+  const W=users.map(writtenBy);
+  const cols=users.slice(0,4).map((id,i)=>({k:'u'+i, label:byId.get(id).label, w:'minmax(10ch,1fr)', cls:'tags', opt:true}));
+  return gapTable([{k:'v',label:'Variable',w:'minmax(12ch,1.2fr)',mono:true}].concat(cols),
+    reads.map(v=>{ const cells={v:paramSide(v)}; let worst='';
+      users.slice(0,4).forEach((id,i)=>{ const ok=W[i].has(v), why=ok?'':ctSilence(v);
+        if(!ok&&!why) worst='warn';
+        cells['u'+i]=narrowLabel(byId.get(id).label)+(ok?gm('impl','', 'Written in '+byId.get(id).label):why?gm('unk','', CT_SILENCE[why]):gm('warn','', byId.get(id).label+' never writes it — the template renders it empty')); });
+      return {gap:worst, kind:worst?'unwritten':'', hay:v, cells}; }),
+    {okLabel:k=>k+' provided', kinds:{unwritten:{tone:'warn', label:k=>k+' not provided by a model that renders it'}}});
+}
+FIT.sla=[{title:'The task it watches', build:n=>slaTaskFit(n)}];
+FIT.query=[{title:'Columns and the variables they show', build:n=>queryColumnsFit(n)}];
+FIT.template=[{title:'Variables and the models that render it', build:n=>templateVarsFit(n)}];
 FIT.java=[{title:'Bean names and the expressions that use them', build:n=>beanUseFit(n)}];
 
 // ---------- form / page components ----------
@@ -5452,14 +5506,31 @@ function renderSections(n, c, slot){
 function varExprSection(n){
   const uses=usesOf(n.id);
   if(!uses) return '';
-  const ord=[['variable','Variables'],['expression','Backend expressions ${ }'],
-             ['binding','Frontend bindings {{ }}'],['customFunction','Custom functions 🧩'],
-             ['serviceOperation','Service operations'],['string','String literals']];
   let parts='', total=0;
+  // the variables as a table: what this model does with each one, which other models share it, and the
+  // verdict of the unused-variable check — the question a reader brings to this section
+  const vs=(uses.variable||[]).map(id=>byId.get(id)).filter(Boolean);
+  if(vs.length){ total+=vs.length;
+    const via=(list)=>[...new Set(list.map(x=>term('via', x.via).label||x.via).filter(Boolean))].join(', ');
+    parts+=tbl([{k:'v',label:'Variable',w:'minmax(12ch,1.2fr)',mono:true},{k:'w',label:'Written here',w:'minmax(10ch,1.2fr)',cls:'dim',opt:true},
+        {k:'r',label:'Read here',w:'minmax(10ch,1.2fr)',cls:'dim',opt:true},{k:'o',label:'Also in',w:'minmax(12ch,1.4fr)',opt:true},{k:'st',label:'',w:'minmax(10ch,.9fr)',cls:'tags'}],
+      vs.sort((a,b)=>a.key.localeCompare(b.key)).map(v=>{ const d=v.data||{};
+        const w=(d.writes||[]).filter(x=>x.model===n.id), r=(d.reads||[]).filter(x=>x.model===n.id);
+        const others=(d.usedBy||[]).filter(id=>id!==n.id&&byId.get(id));
+        const st=d.unread?'<span class="pill pill-advice" data-tip="Written and never read anywhere Atlas can see">never read</span>'
+          :(d.unreadIn||[]).indexOf(n.id)>=0?'<span class="pill pill-advice" data-tip="Passed into this model, which never reads it">unread here</span>'
+          :d.readsUnknown?'<span class="tag" data-tip="'+esc(CT_SILENCE.unknown)+'">readers unknown</span>':'';
+        return {hay:elHay(v.key, via(w), via(r)), cells:{v:vlink(v.id, v.key), w:esc(via(w)), r:esc(via(r)),
+          o:others.length?'<span>'+others.slice(0,3).map(id=>vlink(id, byId.get(id).label)).join(', ')+(others.length>3?' +'+(others.length-3):'')+'</span>':'', st}};
+      }), {placeholder:'filter variables…'});
+  }
+  // the rest as chips, a group per kind
+  const ord=[['expression','Backend expressions ${ }'],['binding','Frontend bindings {{ }}'],['customFunction','Custom functions 🧩'],
+             ['serviceOperation','Service operations'],['string','String literals']];
   ord.forEach(([t,lbl])=>{ const ids=uses[t]; if(ids&&ids.length){ total+=ids.length;
     parts+='<details class="uses"><summary>'+lbl+' ('+ids.length+')</summary><div class="nodechips">'+ids.map(nodeChip).join('')+'</div></details>'; } });
   return section('varexpr','Variables &amp; expressions', parts, {count:total,
-    hint:'the variables, expressions, bindings and functions this model touches'});
+    hint:'the variables it writes and reads, and the expressions, bindings and functions it uses'});
 }
 
 /**

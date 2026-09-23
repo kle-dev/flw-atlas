@@ -553,7 +553,7 @@ const probe = `<script>
     const det=document.getElementById('detail');
     const sect=det.querySelector('[data-sect="varexpr"]');
     ok('a model lists the variables and expressions it uses', !!sect, 'no [data-sect="varexpr"] on the process');
-    ok('and each one is a chip you can follow', !!sect && !!sect.querySelector('details.uses .nc[data-id^="variable"]'),
+    ok('and each one is a link you can follow', !!sect && !!sect.querySelector('.tbl .vlink[data-id^="variable"]'),
        sect?sect.textContent.slice(0,120):'(no section)');
   });
 
