@@ -188,6 +188,11 @@
               summary and <code>--fail-on</code> keep the severity; a saved
               <code>#/checks&amp;c=warning</code> link now keeps a defect's warnings only, and the sidebar's
               <i>Checks</i> badge is grey while only advice is open.</li>
+          <li><b>A View menu in the explorer's top bar.</b> The two switches that sat there as bare glyphs —
+              <code>≈</code> for uncertain links and a flag for the finding badges on diagrams — are
+              labelled items of one <i>View</i> menu, each with a line saying what it shows, and the button
+              carries a dot while something is hidden. It is keyboard-driven like a menu: <code>↓</code>
+              opens it, <code>Space</code> flips a switch, <code>Escape</code> closes it.</li>
           <li><b>Smaller things in the explorer.</b> A list row's findings pill carries its tone's icon and
               says what it counts, the reference count beside it carries a link icon and says so too, and a
               key that only repeats the name is shown once. What accepting a finding does is said on the
@@ -557,12 +562,6 @@
               counting as use and the decision <i>service</i> Design generates around a set of tables
               counting as the caller it is. FindingsTest pins each one's quiet path, and the three runtime
               checks' too.</li>
-          <li><b>Two corrections to "defined, never used", and a rule task counted once.</b> A data table's
-              <i>delete</i> form was the one of its four form keys Atlas did not follow, so a form used only
-              to confirm a deletion was "unused". A group allowed to press a button on a form counted as a
-              use of the form, so a form nothing opens but a group may use was never reported. And a DMN
-              service task, listed by the parser as both a service task and a rule task, produced every
-              topology finding twice.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

@@ -2246,7 +2246,7 @@ function renderChecks(){
   if(suN+dyN){
     b+=section('chk-uncertain','Uncertain links','<p class="ddesc">'+
        (suN?suN+' suspect (≈ resolved by a loose or cross-type match)':'')+(suN&&dyN?' · ':'')+
-       (dyN?dyN+' dynamic (ƒ expression-valued reference)':'')+' — the ≈ button in the toolbar hides them everywhere.</p>',
+       (dyN?dyN+' dynamic (ƒ expression-valued reference)':'')+' — View › Uncertain links in the top bar hides them everywhere.</p>',
        {count:suN+dyN, attrs:' id="chk-uncertain"'});
   }
   // What this project decided to live with, rule by rule. Its own section, not a strike-through in the
@@ -4945,7 +4945,7 @@ function dgCenter(z, g){
 function dgMarkFindings(view, n){
   const svg=view&&view.querySelector('svg'); if(!svg||!n) return;
   svg.querySelectorAll('.dgmark').forEach(x=>x.remove());
-  if(hideMarkers) return;                       // the ⚑ toggle in the top bar: a diagram without badges
+  if(hideMarkers) return;                       // View › Finding badges on diagrams, switched off
   const byEl=new Map();
   // An element's badge takes the tone of its worst finding: red for an error, amber for a warning, grey
   // for advice alone — a diagram with an orange badge on every task said "everything is wrong" when it
@@ -6948,48 +6948,66 @@ function wireSearchTrigger(){
   if(nf) nf.onclick=()=>history.forward();
 }
 
-// ---------- diagram finding badges toggle ----------
-function wireMarkToggle(){
-  const b=document.getElementById('markfilter');
-  if(!b || !FINDS.length) return;              // nothing to badge — keep the button hidden
-  b.hidden=false;
-  const paint=()=>{
-    b.classList.toggle('off', hideMarkers);
-    b.setAttribute('aria-pressed', hideMarkers?'true':'false');
-    const tip=(hideMarkers?'Finding badges hidden on diagrams':'Finding badges shown on diagrams')+
-      ' — red for an error, amber for a warning, grey for advice. Click to toggle.';
-    b.setAttribute('data-tip', tip); b.setAttribute('aria-label', tip);
-  };
-  paint();
-  b.onclick=()=>{
-    hideMarkers=!hideMarkers;
-    try{ localStorage.setItem('atlas-dgmarks', hideMarkers?'hide':'show'); }catch(e){}
-    paint();
-    // repaint every visible diagram in place — no re-render, the reader keeps the place
-    document.querySelectorAll('.dgview').forEach(v=>{ const n=state.sel&&byId.get(state.sel); if(v._z) dgMarkFindings(v, n); });
-  };
-}
-
-// ---------- uncertain-links toggle (suspect ≈ / dynamic ƒ edges) ----------
-function wireLinkFilter(){
-  const b=document.getElementById('linkfilter');
+// ---------- the View menu: what the page shows ----------
+// Two switches used to sit in the top bar as bare glyphs — "≈" for uncertain links, a flag for the badges
+// on diagrams — whose meaning only a hover bubble told, and whose aria-pressed="true" meant *hidden*. They
+// are labelled items of one menu now, each with a line saying what it does, and aria-checked means shown.
+// The keyboard is the WAI-ARIA menu pattern: ↓/↑ open it on the button and walk it, Space toggles and
+// keeps it open, Enter toggles and closes, Escape and Tab close.
+function wireViewMenu(){
+  const menu=document.getElementById('viewmenu'), btn=document.getElementById('viewbtn'), pop=document.getElementById('viewpop');
+  if(!menu||!btn||!pop) return;
   const st=DATA.stats||{}, su=st.suspectEdges||0, dy=st.dynamicEdges||0;
-  if(!b || !(su+dy)) return;              // nothing flagged — keep the button hidden
-  b.hidden=false;
+  const ITEMS=[
+    {id:'linkfilter', show:su+dy>0, on:()=>!hideUncertain,
+     desc:()=>su+' suspect ≈ (a loose or cross-type match) · '+dy+' dynamic ƒ (an expression) — '+
+       (hideUncertain?'hidden':'shown')+' in the panel, the tree and the overview counts',
+     flip:()=>{
+       hideUncertain=!hideUncertain;
+       try{ localStorage.setItem('atlas-uncertain', hideUncertain?'hide':'show'); }catch(e){}
+       rebuildAdj(); computeInsights();
+       renderSidebar(); rerenderView();                        // the tree and the overview count edges too
+     }},
+    {id:'markfilter', show:FINDS.length>0, on:()=>!hideMarkers,
+     desc:()=>'a count on each element with a finding — red for an error, amber for a warning, grey for advice',
+     flip:()=>{
+       hideMarkers=!hideMarkers;
+       try{ localStorage.setItem('atlas-dgmarks', hideMarkers?'hide':'show'); }catch(e){}
+       // repaint every visible diagram in place — no re-render, the reader keeps the place
+       document.querySelectorAll('.dgview').forEach(v=>{ const n=state.sel&&byId.get(state.sel); if(v._z) dgMarkFindings(v, n); });
+     }},
+  ].filter(it=>{ it.el=document.getElementById(it.id); return !!it.el && it.show; });
+  if(!ITEMS.length) return;                      // nothing to switch — the menu stays hidden
+  menu.hidden=false;
+  ITEMS.forEach(it=>{ it.el.hidden=false; });
+  const els=ITEMS.map(it=>it.el);
   const paint=()=>{
-    b.classList.toggle('off', hideUncertain);
-    b.setAttribute('aria-pressed', hideUncertain?'true':'false');
-    const tip=(hideUncertain?'Uncertain links hidden':'Uncertain links shown')+' — '+
-      su+' suspect (≈ loose/cross-type match), '+dy+' dynamic (ƒ expression-valued). Click to toggle.';
-    b.setAttribute('data-tip', tip); b.setAttribute('aria-label', tip);   // data-tip drives the hover bubble
+    ITEMS.forEach(it=>{ it.el.setAttribute('aria-checked', String(it.on())); it.el.querySelector('.vm-d').textContent=it.desc(); });
+    const off=ITEMS.some(it=>!it.on());
+    btn.classList.toggle('mod', off);
+    const tip=off?'View options — something is hidden':'View options';
+    btn.setAttribute('data-tip', tip); btn.setAttribute('aria-label', tip);
   };
   paint();
-  b.onclick=()=>{
-    hideUncertain=!hideUncertain;
-    try{ localStorage.setItem('atlas-uncertain', hideUncertain?'hide':'show'); }catch(e){}
-    rebuildAdj(); computeInsights(); paint();
-    renderSidebar(); rerenderView();                        // the tree and the overview count edges too
+  const open=i=>{ pop.hidden=false; btn.setAttribute('aria-expanded','true'); const t=els[i<0?els.length-1:(i||0)]; if(t) t.focus(); };
+  const close=refocus=>{ if(pop.hidden) return; pop.hidden=true; btn.setAttribute('aria-expanded','false'); if(refocus) btn.focus(); };
+  btn.onclick=()=>{ if(pop.hidden) open(0); else close(false); };
+  btn.onkeydown=e=>{
+    if(e.key==='ArrowDown'){ e.preventDefault(); open(0); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); open(-1); }
   };
+  ITEMS.forEach(it=>{ it.el.onclick=e=>{ e.preventDefault(); it.flip(); paint(); close(true); }; });
+  pop.onkeydown=e=>{
+    const i=els.indexOf(document.activeElement);
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'){ e.preventDefault(); const j=(i+(e.key==='ArrowDown'?1:-1)+els.length)%els.length; els[j].focus(); }
+    else if(e.key==='Home'){ e.preventDefault(); els[0].focus(); }
+    else if(e.key==='End'){ e.preventDefault(); els[els.length-1].focus(); }
+    else if(e.key===' '){ e.preventDefault(); if(i>=0){ ITEMS[i].flip(); paint(); } }
+    else if(e.key==='Enter'){ e.preventDefault(); if(i>=0){ ITEMS[i].flip(); paint(); } close(true); }
+    else if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); close(true); }
+    else if(e.key==='Tab'){ close(false); }
+  };
+  document.addEventListener('mousedown', e=>{ if(!pop.hidden && !menu.contains(e.target)) close(false); });
 }
 
 // ---------- utils ----------
@@ -7379,8 +7397,7 @@ wireRailAutoCollapse();
 wireSearchTrigger();
 stampProvenance();
 wirePaletteResize();
-wireLinkFilter();
-  wireMarkToggle();
+wireViewMenu();
 tabsRestore();                  // before route(): a permalink then ADDS to the restored set
 window.addEventListener('hashchange',route);
 route();

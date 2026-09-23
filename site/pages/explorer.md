@@ -320,6 +320,10 @@ the category you are in, with a button to widen the search.
 | `Alt+W` | browse | Close the active tab |
 | `c` | browse, a node selected | Copy the node's key |
 | `o` | browse, a node selected, inside the IDE | Open the node's file in the IDE |
+| `↓` / `↑` | *View* button | Open the View menu on its first / last switch |
+| `↑` `↓` / `Home` `End` | View menu | Move between its switches |
+| `Space` / `Enter` | View menu | Flip the switch and keep the menu open / flip it and close |
+| `Escape` | View menu | Close and return to the button |
 | `+` `-` `0` | diagram (full screen) | Zoom in, out, fit |
 | `←` `→` / `Home` | list splitter (focused) | Nudge the list width / reset it |
 | `Tab` / `⇧Tab` | diagram | Move between elements |
@@ -334,7 +338,7 @@ The explorer never presents a guess as a fact:
 
 - **`≈` suspect** — the link was resolved through a loose or cross-type match. The chip is dashed.
 - **`ƒ` dynamic** — the reference was an expression, so its target is only certain at runtime.
-- The toolbar's **`≈` button** hides every uncertain link at once — in the detail panel, the reference tree, the
+- **View › Uncertain links** in the top bar hides every uncertain link at once — in the detail panel, the reference tree, the
   overview's hotspots and reference counts alike — so you can see what is left when only
   the certain relationships count. It appears only when there are any.
 - **`⚠ N parse issues`** in the sidebar footer jumps straight to the parse findings. A file Atlas could
@@ -346,8 +350,8 @@ The explorer never presents a guess as a fact:
   referenced* sorts by. A row whose key only repeats its name, as a REST endpoint's does, shows it once. On the model's diagram the same count sits as a
   **badge** on each element with a finding — red for an error, amber for a [defect](../checks/)'s
   warning, grey when the element carries advice alone — click it and the element's card lists them, with *restore*
-  for an accepted one and *accept…* landing on the finding's row under the diagram. The toolbar's
-  **⚑ button** hides the badges on every diagram and is remembered, for a reader who wants the diagram
+  for an accepted one and *accept…* landing on the finding's row under the diagram. **View › Finding
+  badges on diagrams** hides the badges on every diagram and is remembered, for a reader who wants the diagram
   as Design draws it.
 - The health list — on the overview and at the top of the Checks page — leads with the two numbers,
   *N defects · M advice*, and groups its rows under those two headings; the sidebar's *Checks* badge is

@@ -60,7 +60,7 @@ This is the part that decides whether a tool like this is usable. Atlas distingu
 never quietly presents the third as the first:
 
 - **resolved** — the reference ties to something real.
-- **suspect** — resolved through a loose or cross-type match. Marked `≈`, and hideable in one click.
+- **suspect** — resolved through a loose or cross-type match. Marked `≈`, and hideable from the explorer's *View* menu.
 - **dynamic** — the target was an expression, so it is only certain at runtime. Marked `ƒ`.
 
 A file it could not parse becomes a finding rather than a smaller project, and it appears in every

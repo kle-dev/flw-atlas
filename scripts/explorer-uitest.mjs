@@ -1061,6 +1061,27 @@ const probe = `<script>
        v.querySelectorAll('.tv-row[tabindex="0"]').length===1 && document.activeElement!==rows[0]);
   });
 
+  // --- the View menu: labelled switches, the WAI-ARIA menu keyboard ---
+  steps.push(()=>{
+    const vb=document.getElementById('viewbtn'), vp=document.getElementById('viewpop');
+    ok('the View menu is offered', !document.getElementById('viewmenu').hidden);
+    ok('no bare ≈ glyph is left as a top-bar button', ![...document.querySelectorAll('.topbar .tbtn')].some(b=>(b.textContent||'').trim()==='≈'));
+    vb.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowDown', bubbles:true}));
+    ok('↓ on the button opens the menu', !vp.hidden && vb.getAttribute('aria-expanded')==='true');
+    ok('and puts focus on an item', !!document.activeElement && document.activeElement.getAttribute('role')==='menuitemcheckbox');
+    const mf=document.getElementById('markfilter');
+    ok('an item is checked while its thing is shown', mf.getAttribute('aria-checked')==='true');
+    mf.focus(); mf.dispatchEvent(new KeyboardEvent('keydown', {key:' ', bubbles:true}));
+    let stored=''; try{ stored=localStorage.getItem('atlas-dgmarks')||''; }catch(e){}
+    ok('Space flips the item and keeps the menu open', mf.getAttribute('aria-checked')==='false' && stored==='hide' && !vp.hidden);
+    ok('the button marks that something is hidden', vb.classList.contains('mod'));
+    mf.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
+    ok('Escape closes the menu and returns to the button', vp.hidden && document.activeElement===vb);
+    click(vb); click(mf);
+    ok('a click flips it back and closes the menu', mf.getAttribute('aria-checked')==='true' && vp.hidden);
+    try{ localStorage.removeItem('atlas-dgmarks'); }catch(e){}
+  });
+
   // --- list badges explain themselves; a key that repeats the name is shown once ---
   steps.push(()=>{ location.hash='/browse/endpoint'; });
   steps.push(()=>{

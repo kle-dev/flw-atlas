@@ -47,6 +47,10 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   the information icon. Every advice row used to read WARNING under the *Advice* heading. `graph.json`,
   the summary and `--fail-on` keep the severity; a saved `#/checks&c=warning` link now keeps a defect's
   warnings only, and the sidebar's *Checks* badge is grey while only advice is open.
+- **A View menu in the explorer's top bar.** The two switches that sat there as bare glyphs — `≈` for
+  uncertain links and a flag for the finding badges on diagrams — are labelled items of one *View* menu,
+  each with a line saying what it shows, and the button carries a dot while something is hidden. It is
+  keyboard-driven like a menu: `↓` opens it, `Space` flips a switch, `Escape` closes it.
 - **Smaller things in the explorer.** A list row's findings pill carries its tone's icon and says what it
   counts, the reference count beside it carries a link icon and says so too, and a key that only repeats
   the name is shown once. What accepting a finding does is said on the *accept…* button and in its form,

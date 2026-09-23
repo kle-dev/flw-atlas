@@ -157,6 +157,23 @@
   .tbtn:disabled{opacity:.35;cursor:default;pointer-events:none}
   .navbtns{display:inline-flex;gap:var(--space-05);flex:none}
   .tbtn svg{display:block}  /* align the reload icon within the button padding */
+  /* ---- the View menu: labelled switches for what the page shows ---- */
+  .viewmenu{position:relative;flex:none}
+  #viewbtn{position:relative;padding:0 var(--space-2)}
+  #viewbtn.mod:after{content:"";position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+  .viewpop{position:absolute;right:0;top:calc(100% + 4px);z-index:60;width:min(320px,92vw);background:var(--panel);
+    border:1px solid var(--line2);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:var(--space-1)}
+  .viewpop [role=menuitemcheckbox]{display:flex;align-items:flex-start;gap:var(--space-2);width:100%;text-align:left;
+    background:none;border:0;border-radius:var(--radius-md);padding:var(--space-15) var(--space-2);cursor:pointer;color:var(--ink);font:inherit}
+  .viewpop [role=menuitemcheckbox]:hover,.viewpop [role=menuitemcheckbox]:focus-visible{background:var(--hover);outline:none}
+  .vm-ck{flex:none;width:16px;height:16px;margin-top:2px;border:1px solid var(--line2);border-radius:var(--radius-xs);
+    display:flex;align-items:center;justify-content:center;color:var(--on-accent)}
+  .vm-ck svg{visibility:hidden}
+  [aria-checked="true"]>.vm-ck{background:var(--accent);border-color:var(--accent)}
+  [aria-checked="true"]>.vm-ck svg{visibility:visible}
+  .vm-t{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .vm-l{font-size:var(--text-sm);font-weight:500}
+  .vm-d{font-size:var(--text-2xs);color:var(--ink-faint);line-height:1.4}
 
   /* Custom hover tooltip for icon-only controls (the ≈ link filter, the theme toggle). Native
      title= tooltips don't render in the embedded JCEF viewer (off-screen rendering, esp. over Remote
@@ -799,9 +816,6 @@
   .nc.nc-sus,.nc.nc-dyn{border-style:dashed;opacity:.85}
   .nc .ncflag{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint);flex:none;cursor:help}
   .nc.nc-sus .ncflag{color:var(--cov-warn,#c98a1b)}
-  #linkfilter.off{opacity:.5;text-decoration:line-through}
-  #markfilter.off{opacity:.5}
-  #markfilter.off svg{stroke-dasharray:2 2}
   details.uses{border:1px solid var(--line);border-radius:var(--radius-md);margin:var(--space-15) 0;background:var(--panel)}
   details.uses>summary{cursor:pointer;padding:var(--space-2) var(--space-3);font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-dim);list-style:none}
   details.uses>summary::-webkit-details-marker{display:none}
@@ -1040,6 +1054,7 @@
     .listresize{left:calc(min(var(--list-w),280px) - 3px)}
     .searchbtn{width:auto}
     .searchbtn .ph{display:none}
+    #viewbtn .lbl{display:none}
   }
   @media (max-width:800px){
     html,body{height:auto}
