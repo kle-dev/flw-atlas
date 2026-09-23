@@ -2,7 +2,13 @@ package com.flowable.atlas.navigation
 
 import com.flowable.atlas.index.ModelEntry
 import com.flowable.atlas.model.ModelKeyDeclaration
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiElementResolveResult
 import com.intellij.psi.PsiManager
@@ -30,6 +36,23 @@ internal object ModelKeyTargets {
     fun resolve(project: Project, entries: List<ModelEntry>): Array<ResolveResult> {
         val psiManager = PsiManager.getInstance(project)
         return entries.mapNotNull { target(psiManager, it) }.map { PsiElementResolveResult(it) }.toTypedArray()
+    }
+
+    /**
+     * Open [file] where [position] says — `(line, column)`, or null for the top of the file. [position]
+     * reads the file, which for an archive entry means decompressing it, so it runs off the EDT and the
+     * editor opens once it is known. Inline in a unit test, so a test can assert on the open editor.
+     */
+    fun openAt(project: Project, file: VirtualFile, position: () -> Pair<Int, Int>?) {
+        fun open(at: Pair<Int, Int>?) {
+            if (project.isDisposed || !file.isValid) return
+            (if (at != null) OpenFileDescriptor(project, file, at.first, at.second) else OpenFileDescriptor(project, file)).navigate(true)
+        }
+        if (ApplicationManager.getApplication().isUnitTestMode) return open(position())
+        ReadAction.nonBlocking<Pair<Int, Int>?> { position() }
+            .expireWith(project)
+            .finishOnUiThread(ModalityState.defaultModalityState(), ::open)
+            .submit(AppExecutorUtil.getAppExecutorService())
     }
 
     /** `(line, column)` of [entry]'s key declaration in its file, both 0-based — null when the text does not declare it. */

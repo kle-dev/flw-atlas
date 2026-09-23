@@ -9,8 +9,6 @@ import com.intellij.codeInsight.intention.preview.IntentionPreviewInfo
 import com.intellij.codeInspection.LocalInspectionTool
 import com.intellij.codeInspection.LocalQuickFix
 import com.intellij.codeInspection.ProblemDescriptor
-import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.components.service
 import com.intellij.codeInspection.ProblemHighlightType
@@ -92,9 +90,7 @@ class LiquibaseCoverageInspection : LocalInspectionTool() {
 
         override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
             val entry = project.service<FlowableModelIndexService>().cachedOrNull()?.find(serviceKey, ModelType.SERVICE) ?: return
-            val at = ModelKeyTargets.lineColumn(entry)
-            if (at != null) OpenFileDescriptor(project, entry.file, at.first, at.second).navigate(true)
-            else FileEditorManager.getInstance(project).openFile(entry.file, true)
+            ModelKeyTargets.openAt(project, entry.file) { ModelKeyTargets.lineColumn(entry) }
         }
     }
 }

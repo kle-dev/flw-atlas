@@ -14,8 +14,6 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
-import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.DumbAware
 import com.intellij.ui.CollectionListModel
 import com.intellij.ui.PopupHandler
@@ -80,9 +78,7 @@ internal class RecentModelsSection(private val host: HubHost) : HubSection {
     /** On the key's declaration when the index knows it, else the top of the file. */
     private fun open(recent: RecentModel) {
         if (!recent.file.isValid) return
-        val at = recent.entry?.let { ModelKeyTargets.lineColumn(it) }
-        if (at != null) OpenFileDescriptor(host.project, recent.file, at.first, at.second).navigate(true)
-        else FileEditorManager.getInstance(host.project).openFile(recent.file, true)
+        ModelKeyTargets.openAt(host.project, recent.file) { recent.entry?.let { ModelKeyTargets.lineColumn(it) } }
     }
 
     private fun copyKeyAction(): AnAction = object : AnAction(FlowableActionIds.text(FlowableActionIds.COPY_MODEL_KEY)), DumbAware {

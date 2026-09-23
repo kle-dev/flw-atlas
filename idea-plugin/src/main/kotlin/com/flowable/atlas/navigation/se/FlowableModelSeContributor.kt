@@ -1,5 +1,6 @@
 package com.flowable.atlas.navigation.se
 
+import com.flowable.atlas.model.ModelKeyDeclaration
 import com.flowable.atlas.completion.FlowableInfixMatcher
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.navigation.ModelElements
@@ -15,7 +16,6 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.DataSink
 import com.intellij.openapi.components.service
-import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.project.DumbAware
@@ -196,17 +196,12 @@ class FlowableModelSeContributor(private val project: Project) :
         if (!selected.file.isValid) return true
         when (selected) {
             // On the key's declaration, like a Ctrl+click — not line 1 of a minified model.
-            is FlowableSeItem.Model -> {
-                val at = ModelKeyTargets.lineColumn(selected.entry)
-                if (at != null) OpenFileDescriptor(project, selected.file, at.first, at.second).navigate(true)
-                else FileEditorManager.getInstance(project).openFile(selected.file, true)
-            }
+            is FlowableSeItem.Model ->
+                ModelKeyTargets.openAt(project, selected.file) { ModelKeyTargets.lineColumn(selected.entry) }
             // On the element's declaration — its quoted id — when the text spells it that way.
-            is FlowableSeItem.Element -> {
+            is FlowableSeItem.Element -> ModelKeyTargets.openAt(project, selected.file) {
                 val text = runCatching { String(selected.file.contentsToByteArray(), Charsets.UTF_8) }.getOrNull()
-                val offset = text?.let { ModelElements.declarationOffset(it, selected.element.id) }
-                if (offset != null) OpenFileDescriptor(project, selected.file, offset).navigate(true)
-                else FileEditorManager.getInstance(project).openFile(selected.file, true)
+                text?.let { t -> ModelElements.declarationOffset(t, selected.element.id)?.let { ModelKeyDeclaration.lineColumn(t, it) } }
             }
             // Line/column rather than a raw offset: we decode as UTF-8 while the Document uses the
             // file's detected charset, so offsets can drift on a non-UTF-8 model.
