@@ -987,6 +987,12 @@
                   topic="com.intellij.openapi.fileEditor.FileEditorManagerListener"/>
     </projectListeners>
 
+    <applicationListeners>
+        <!-- The Hub's list of generated explorer pages is remembered until a page appears or goes. -->
+        <listener class="com.flowable.atlas.explorer.AtlasExplorerFiles$Listener"
+                  topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
+    </applicationListeners>
+
     <!-- Action/group texts and descriptions come from messages/FlowableAtlasBundle.properties
          (action.<id>.text / .description keys). Ellipsis convention: only actions that always need
          further input before they can complete carry one. -->

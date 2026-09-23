@@ -3,6 +3,11 @@ package com.flowable.atlas.explorer
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.newvfs.BulkFileListener
+import com.intellij.openapi.vfs.newvfs.events.VFileContentChangeEvent
+import com.intellij.openapi.vfs.newvfs.events.VFileEvent
+import com.intellij.openapi.vfs.newvfs.events.VFileMoveEvent
+import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent
 import java.io.IOException
 import java.nio.file.FileVisitResult
 import java.nio.file.Files
@@ -43,6 +48,40 @@ object AtlasExplorerFiles {
         PropertiesComponent.getInstance(project).getValue(rootKey(html))?.let { Path.of(it) }?.takeIf { Files.isDirectory(it) }
 
     private fun rootKey(html: Path) = "flowable.atlas.explorerRoot:" + html.toAbsolutePath().normalize()
+
+    /**
+     * [find], remembered until a `*.explorer.html` is created, deleted, moved or renamed anywhere. The Hub
+     * asks on every refresh, and with an empty output folder each ask walked the project six levels deep.
+     */
+    fun findCached(base: Path, outputDir: String = "atlas-output"): List<Path> {
+        val key = base.toAbsolutePath().normalize().toString() + "\u0000" + outputDir
+        found[key]?.let { return it }
+        val gen = generation.get()
+        val result = find(base, outputDir)
+        if (generation.get() == gen) found[key] = result
+        return result
+    }
+
+    /** Drop every remembered answer — the Hub's explicit Refresh. */
+    fun forget() { generation.incrementAndGet(); found.clear() }
+
+    private val found = java.util.concurrent.ConcurrentHashMap<String, List<Path>>()
+    private val generation = java.util.concurrent.atomic.AtomicLong()
+
+    /** Drops [findCached]'s answers when a page appears or goes. Registered in plugin.xml. */
+    class Listener : BulkFileListener {
+        override fun after(events: List<VFileEvent>) {
+            val pageChanged = events.any { e ->
+                e !is VFileContentChangeEvent && (isPage(e.path) ||
+                    (e as? VFilePropertyChangeEvent)?.oldPath?.let(::isPage) == true ||
+                    (e as? VFileMoveEvent)?.oldPath?.let(::isPage) == true ||
+                    runCatching { e.file?.isDirectory == true }.getOrDefault(false))
+            }
+            if (pageChanged) forget()
+        }
+
+        private fun isPage(path: String) = path.endsWith(".explorer.html", ignoreCase = true)
+    }
 
     fun find(base: Path, outputDir: String = "atlas-output"): List<Path> {
         val found = LinkedHashSet<Path>()

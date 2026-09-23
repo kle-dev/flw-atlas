@@ -83,6 +83,8 @@ class AtlasHubPanel(override val project: Project) : SimpleToolWindowPanel(true,
      *  after which those lists are known to be wrong. */
     private fun refreshEverything() {
         design.invalidate()
+        // A page the command line wrote into a folder the IDE never refreshed sends no file event.
+        com.flowable.atlas.explorer.AtlasExplorerFiles.forget()
         refreshAlarm.cancelAndRequest()
     }
 

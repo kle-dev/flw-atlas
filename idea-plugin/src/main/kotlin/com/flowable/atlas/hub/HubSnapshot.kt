@@ -102,7 +102,7 @@ internal data class HubSnapshot(
             }.orEmpty()
 
             val artifacts = base?.let { b ->
-                AtlasExplorerFiles.find(b, settings.atlasOutputDir).map { p ->
+                AtlasExplorerFiles.findCached(b, settings.atlasOutputDir).map { p ->
                     val rel = runCatching { b.relativize(p).parent?.toString() ?: "" }.getOrDefault("")
                     val modified = runCatching { Files.getLastModifiedTime(p).toMillis() }.getOrDefault(0L)
                     ExplorerArtifact(p, rel, modified)
