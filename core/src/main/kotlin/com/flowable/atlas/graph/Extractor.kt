@@ -544,6 +544,7 @@ object Atlas {
             exprAllowlist = exprAllowlist, custom = custom,
         )
         attachPropertyDefinitions(result, discovered.configs, ::relOf)
+        IdentitySetup.apply(result, discovered.identity, ::relOf)
 
         // Mirror Python's `result.update({... "customFunctions": {...} if custom else None ...})`:
         // ReferenceResolver already set this key to null; overwrite it with the summary shape when

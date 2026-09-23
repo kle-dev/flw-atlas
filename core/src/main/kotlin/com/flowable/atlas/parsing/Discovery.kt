@@ -21,6 +21,8 @@ object Discovery {
         val templateParts: List<File> = emptyList(),
         /** Spring Boot configuration — `application*.properties|yml` — outside the test source sets. */
         val configs: List<File> = emptyList(),
+        /** User definitions and tenant setups (see [com.flowable.atlas.graph.IdentitySetup]). */
+        val identity: List<File> = emptyList(),
     )
 
     /** A file that belongs to a template model without being one: the variation that holds the body a
@@ -35,6 +37,7 @@ object Discovery {
         val xmls = ArrayList<File>()
         val templateParts = ArrayList<File>()
         val configs = ArrayList<File>()
+        val identity = ArrayList<File>()
 
         if (root.isFile) {
             if (ModelPaths.isArchive(root.name)) archives.add(root)
@@ -58,11 +61,13 @@ object Discovery {
                     low.endsWith(".json") &&
                         com.flowable.atlas.model.ModelType.byDesignFolder(f.parentFile?.name) != null ->
                         models.add(f)
+                    com.flowable.atlas.graph.IdentitySetup.isIdentityFile(f.relativeTo(root).invariantSeparatorsPath) ->
+                        if (!ModelPaths.isTestSource(f.relativeTo(root).invariantSeparatorsPath)) identity.add(f)
                     low.endsWith(".xml") || low.endsWith(".sql") -> xmls.add(f)  // liquibase candidates
                     SpringProperties.isConfigFile(f.name) ->
                         if (!ModelPaths.isTestSource(f.relativeTo(root).invariantSeparatorsPath)) configs.add(f)
                 }
             }
-        return Discovered(models, archives, javas, xmls, templateParts, configs)
+        return Discovered(models, archives, javas, xmls, templateParts, configs, identity)
     }
 }

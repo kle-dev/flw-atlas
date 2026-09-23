@@ -57,7 +57,7 @@
     --c-bot:#c44133;--c-liquibase:#2a63a0;--c-expression:#776785;--c-binding:#006c72;
     --c-variable:#8c6900;--c-string:#478500;--c-method:#4f7eb1;--c-customFunction:#267a8b;--c-serviceOperation:#2a63a0;
     --c-invalidExpr:#be2323;--c-suspectExpr:#cc6100;
-    --c-signal:#a3520e;--c-message:#0d6b4d;--c-error:#be2323;--c-escalation:#a3520e;--c-topic:#5a5f8f;--c-property:#5f6b3a;
+    --c-signal:#a3520e;--c-message:#0d6b4d;--c-error:#be2323;--c-escalation:#a3520e;--c-topic:#5a5f8f;--c-property:#5f6b3a;--c-userDefinition:#8a4f7d;--c-tenantSetup:#4f6d7a;
     --cov-good:#437e00;--cov-warn:#cc6100;--cov-bad:#be2323;--cov-info:#04478f;--cov-miss:#be2323;
   }
   :root[data-theme=dark]{
@@ -88,7 +88,7 @@
     --c-bot:#ee8277;--c-liquibase:#759ac1;--c-expression:#b1a8b9;--c-binding:#4dd6de;
     --c-variable:#ffd24d;--c-string:#87ba4d;--c-method:#9bb5d2;--c-customFunction:#99c0c8;--c-serviceOperation:#759ac1;
     --c-invalidExpr:#f8abab;--c-suspectExpr:#ffbf00;
-    --c-signal:#e8a15c;--c-message:#5cc9a4;--c-error:#f8abab;--c-escalation:#e8a15c;--c-topic:#a3a8d9;--c-property:#b6c28a;
+    --c-signal:#e8a15c;--c-message:#5cc9a4;--c-error:#f8abab;--c-escalation:#e8a15c;--c-topic:#a3a8d9;--c-property:#b6c28a;--c-userDefinition:#d59ac8;--c-tenantSetup:#9dbbc7;
     --cov-good:#87ba4d;--cov-warn:#ffc926;--cov-bad:#e37379;--cov-info:#759ac1;--cov-miss:#e99195;
   }
   *{box-sizing:border-box}

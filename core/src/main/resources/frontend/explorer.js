@@ -28,6 +28,7 @@ const TM = {
   escalation:['Escalations','Integration'],topic:['External Worker topics','Integration'],
   endpoint:['REST endpoints','Code'],java:['Java classes','Code'],method:['Java methods','Code'],liquibase:['Liquibase changelogs','Code'],
   property:['Spring properties','Code'],
+  userDefinition:['User definitions','Other'],tenantSetup:['Tenant setups','Other'],
   action:['Actions','Integration'],bot:['Bots','Integration'],
   query:['Queries','Other'],template:['Templates','Other'],sequence:['Sequences','Other'],
   document:['Content','Other'],variableExtractor:['Variable extractors','Other'],
@@ -78,6 +79,8 @@ const TYPE_ICONS={
   escalation:'<circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4"/><path d="M12 16V8"/>',
   topic:'<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
   endpoint:'<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+  userDefinition:'<path d="M2 21a8 8 0 0 1 13.292-6"/><circle cx="10" cy="8" r="5"/><path d="M19 16v6"/><path d="M22 19h-6"/>',
+  tenantSetup:'<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/>',
   property:'<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>',
   java:'<path d="M10 2v2"/><path d="M14 2v2"/><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1"/><path d="M6 2v2"/>',
   method:'<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3"/><path d="M9 11.2h5.7"/>',
@@ -3316,6 +3319,15 @@ const FACTS={
   java(n,d,x){ x.mono('Package',d.package); x.add('Roles',(d.roles||[]).join(', ')); x.add('Bot key',d.botKey); x.mono('Implements',(d.interfaces||[]).join(', ')); },
   endpoint(n,d,x){ x.mono('Method',d.http); x.mono('Path',d.path);
     if(d.controller||d.handler) x.rows.push(['Handler',{html:vlink(incFrom(n.id,'serves'), [d.controller,d.handler].filter(Boolean).join('#')), copy:d.controller||undefined}]); },  // FQN for 'Go to Class'
+  userDefinition(n,d,x){ x.add('User type',[d.userType,d.userSubType].filter(Boolean).join(' / '));
+    // the form that creates, shows and edits a user of this kind — a link when the project has it
+    for(const [slot,lbl] of [['init','Create form'],['view','View form'],['edit','Edit form']]){
+      const k=(d.forms||{})[slot]; if(!k) continue;
+      x.rows.push([lbl, byId.get('form:'+k)?{html:vlink('form:'+k,k)}:{html:'<span class="mono">'+esc(k)+'</span> <span class="muted" data-tip="Not a form of this project — the platform ships its own user forms">platform</span>', copy:k}]); } },
+  tenantSetup(n,d,x){ x.add('Groups',(d.groups||[]).length); x.add('Users',d.userCount);
+    const per=d.usersPerDefinition||{};
+    if(Object.keys(per).length) x.rows.push(['By user definition',{html:Object.entries(per).map(([k,c])=>
+      (byId.get('userDefinition:'+k)?vlink('userDefinition:'+k,k):'<span class="mono">'+esc(k)+'</span>')+' ×'+c).join(', ')}]); },
   method(n,d,x){ if(d.name) x.rows.push(['Method',{html:esc(d.name)+'()', copy:d.name}]);  // copy the bare name for IntelliJ 'Go to Symbol'
     if(d.class) x.rows.push(['Declared in',{html:vlink(d.declaredIn||'java:'+d.class, d.class), copy:d.class}]); },  // FQN for 'Go to Class'
   query(n,d,x){ x.mono('Source index',d.sourceIndex); x.add('Type',d.type);
