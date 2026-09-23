@@ -233,6 +233,24 @@
               <code>in</code> into a service or agent names the callee's parameter, an <code>out</code> its
               result field: neither is a variable of any scope, so neither is reported as an input the
               callee never reads.</li>
+          <li><b>Every operand of a long <code>||</code> gets its value.</b> With <i>Show Sub-Expression
+              Values</i> on, <code>a || b || c || d</code> showed values for its last operands only, and one
+              spot carried two: the chain parses as <code>((a || b) || c) || d</code>, so the first operands
+              sank below the depth the hints stop at, and every inner <code>(…) || c</code> ended where
+              <code>c</code> ends. The operands of a chain are siblings now, each with its own value; an
+              operand of <code>||</code> or <code>&amp;&amp;</code> is hinted even when it is a plain flag,
+              one the evaluation short-circuited says <i>skipped</i>, and a spot never carries two
+              values.</li>
+          <li><b>The playground's panes can be resized after a long expression.</b> The message rows under
+              the expression field — and, under Remote Development, its sub-expression rows — asked for
+              their whole text's width, and the playground's splitters honour that: after a long expression
+              the divider to the payload was stuck. The rows are clipped now, with the full text on hover,
+              and at most eight sub-expression rows are listed.</li>
+          <li><b>Flowable's own beans are not an external library.</b> A bean the platform ships —
+              <code>flwTimeUtils</code>, <code>initVariablesService</code> — was listed under <i>External /
+              library</i> with the third-party classes. It has a category of its own, <i>Flowable
+              platform</i>, beside <i>Flowable API</i>; a model key given as an expression is a <i>Dynamic
+              reference</i>.</li>
           <li><b>Operations Java calls through the service registry are used.</b> A service-registry
               invocation — <code>.serviceKey(…).operationKey(…)</code> — was invisible, so an operation only
               Java called was reported unused and nothing linked it to the code. The call is rarely one
@@ -534,30 +552,6 @@
               — its first step is to generate the artifacts. And the <code>--slice</code> recipe is written
               in the form that runs: through the launcher it never did, because the launcher adds
               <code>--all</code>, which <code>--slice</code> refuses.</li>
-          <li><b>What not to touch is stated, not hedged.</b> §3 said "unless this project's convention is
-              to edit the model files directly (check existing commits)". Atlas knows whether the models
-              came out of Design export archives or sit in the repository as loose files, so §4 now says
-              which — "Design exports packed in <code>apps/demo.zip</code> — never edit the exports", or
-              "unpacked files under <code>processes/</code> — check <code>git log</code> before you decide"
-              — next to where the custom Java goes. The "Flowable version: not auto-detected" line, a
-              sentence about the absence of a fact, is dropped when nothing is found; so is the generic
-              <i>Run &amp; verify</i> fallback that fitted every Flowable project and told this one nothing.
-              The house-rules reminder is a real HTML comment now, which Claude Code strips before loading,
-              instead of the same text in backticks that every session paid for.</li>
-        </ul>
-        <h3>0.24.2</h3>
-        <ul>
-          <li><b>Go to Model does something under Remote Development.</b> It still did nothing there after
-              0.24.1, and the reason was one layer below the one that release fixed: on a remote IDE the
-              <b>Flowable Model</b> tab is not in Search Everywhere at all. The popup renders in the thin
-              client, a tab contributed by a plugin running on the host does not reach it, so there was
-              nothing for the action to select. Routing the action to the client — what 0.24.1 did — is
-              worse rather than better: the plugin is not loaded there, so the action has no implementation
-              to run. On a remote host <i>Go to Model…</i> now asks for a pattern and opens the result list,
-              which is the same search reaching the same index; a dialog and a tool window are ordinary UI
-              that Remote Development mirrors. Locally nothing changes. Putting the tab itself in the remote
-              popup means republishing the contributor through the platform's newer provider API, which is
-              its own piece of work.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

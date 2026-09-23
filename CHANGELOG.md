@@ -92,6 +92,20 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   like a task with a mapping element now, and a data-object task's operation counts as used too. And a
   task's `in` into a service or agent names the callee's parameter, an `out` its result field: neither is
   a variable of any scope, so neither is reported as an input the callee never reads.
+- **Every operand of a long `||` gets its value.** With *Show Sub-Expression Values* on, `a || b || c ||
+  d` showed values for its last operands only, and one spot carried two: the chain parses as `((a || b) ||
+  c) || d`, so the first operands sank below the depth the hints stop at, and every inner `(…) || c` ended
+  where `c` ends. The operands of a chain are siblings now, each with its own value; an operand of `||` or
+  `&&` is hinted even when it is a plain flag, one the evaluation short-circuited says *skipped*, and a
+  spot never carries two values.
+- **The playground's panes can be resized after a long expression.** The message rows under the expression
+  field — and, under Remote Development, its sub-expression rows — asked for their whole text's width, and
+  the playground's splitters honour that: after a long expression the divider to the payload was stuck.
+  The rows are clipped now, with the full text on hover, and at most eight sub-expression rows are listed.
+- **Flowable's own beans are not an external library.** A bean the platform ships — `flwTimeUtils`,
+  `initVariablesService` — was listed under *External / library* with the third-party classes. It has a
+  category of its own, *Flowable platform*, beside *Flowable API*; a model key given as an expression is a
+  *Dynamic reference*.
 - **Operations Java calls through the service registry are used.** A service-registry invocation —
   `.serviceKey(…).operationKey(…)` — was invisible, so an operation only Java called was reported unused and
   nothing linked it to the code. The call is rarely one statement — a helper sets the service key and a

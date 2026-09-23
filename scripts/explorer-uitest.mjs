@@ -870,6 +870,15 @@ const probe = `<script>
     document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
   });
 
+  // --- a bean the Flowable platform ships is not an external library ---
+  steps.push(()=>{
+    const bean={type:'external', data:{kind:'bean', platform:true}}, lib={type:'external', data:{kind:'class', platform:false}};
+    const libCat=CATS.find(c=>c.id==='external::lib');
+    ok('a platform bean (flwTimeUtils) is a Flowable platform reference', nodeKind(bean)==='Flowable platform');
+    ok('and is not listed under External / library', !!libCat && libCat.match(bean)===false && libCat.match(lib)===true);
+    ok('a key given as an expression is a dynamic reference, not a library', nodeKind({type:'external', data:{kind:'process', dynamic:true}})==='Dynamic reference');
+  });
+
   // --- sidebar groups fold and remember ---
   steps.push(()=>{
     const h=document.querySelector('#nav .side-group[data-group="Models"]');

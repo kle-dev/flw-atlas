@@ -482,9 +482,15 @@ const looseCol = s => String(s==null?'':s).toLowerCase().replace(/[^a-z0-9]/g,''
 const nodeColor = n => (n && n.type==='external')
   ? (n.data&&n.data.flowableApi?color('endpoint'):n.data&&n.data.route?color('page'):color('external'))
   : color(n?n.type:'');
+// A reference to something the project does not define is not always a library: Flowable ships the
+// platform beans (`flwTimeUtils`, `initVariablesService`) and some model keys, and a key given as an
+// expression names no one thing at all.
+const isPlatformRef = d => !!(d && d.platform && !d.flowableApi && !d.route && !d.missingModel);
+const isDynamicRef = d => !!(d && d.dynamic && !d.platform && !d.flowableApi && !d.route && !d.missingModel);
 const nodeKind = n => (n.type!=='external')
   ? (TM[n.type]?TM[n.type][0]:n.type)
-  : (n.data.flowableApi?'Flowable API':n.data.route?'Navigation route':'External / library');
+  : (n.data.flowableApi?'Flowable API':n.data.route?'Navigation route':isPlatformRef(n.data)?'Flowable platform'
+     :isDynamicRef(n.data)?'Dynamic reference':'External / library');
 
 // adjacency — entries carry the edge's suspect/dynamic flags so chips, relation lists and the
 // ego graph can mark uncertain links; rebuilt when the uncertain-links toggle flips.
@@ -554,12 +560,16 @@ function categories(){
       if(pc) cats.push({id:'variable::parameter', label:'Variable · parameter', sec:'Variables',
         color:color('variable'), icon:'variable', count:pc, match:isParamVar});
     } else if(t==='external'){
-      // external nodes are not all "library": split out Flowable platform API calls
-      // (endpoints.*) and in-app navigation routes (#/...) from real third-party deps.
+      // external nodes are not all "library": split out Flowable platform API calls (endpoints.*), the
+      // beans and models the platform ships (flwTimeUtils…), in-app navigation routes (#/...) and keys
+      // given as expressions from real third-party deps.
       [{id:'external::api',  label:'Flowable API',        sec:'Integration', color:color('endpoint'), icon:'endpoint', match:n=>n.type==='external'&&n.data.flowableApi},
+       {id:'external::platform',label:'Flowable platform', sec:'Integration', color:color('external'), icon:'external', match:n=>n.type==='external'&&isPlatformRef(n.data)},
        {id:'external::route',label:'Navigation · routes', sec:'Other',       color:color('page'),     icon:'page',     match:n=>n.type==='external'&&n.data.route},
        {id:'external::missing',label:checkTitle('missingRefs'),sec:'Checks',      color:color('external'), icon:'invalidExpr', match:n=>n.type==='external'&&n.data.missingModel},
-       {id:'external::lib',  label:'External / library',  sec:'Other',       color:color('external'), icon:'external', match:n=>n.type==='external'&&!n.data.flowableApi&&!n.data.route&&!n.data.missingModel}
+       {id:'external::dynamic',label:'Dynamic references', sec:'Other',       color:color('external'), icon:'external', match:n=>n.type==='external'&&isDynamicRef(n.data)},
+       {id:'external::lib',  label:'External / library',  sec:'Other',       color:color('external'), icon:'external',
+        match:n=>n.type==='external'&&!n.data.flowableApi&&!n.data.route&&!n.data.missingModel&&!isPlatformRef(n.data)&&!isDynamicRef(n.data)}
       ].forEach(c=>{ const count=byType.external.filter(c.match).length; if(count) cats.push(Object.assign({count}, c)); });
     } else {
       const m = TM[t]||[t,'Other'];
