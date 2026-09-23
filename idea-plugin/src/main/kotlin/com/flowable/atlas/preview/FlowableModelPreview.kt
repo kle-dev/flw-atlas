@@ -13,7 +13,20 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.actionSystem.CustomShortcutSet
+import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.editor.event.DocumentEvent
+import com.intellij.openapi.editor.event.DocumentListener
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditor
+import com.intellij.openapi.fileEditor.OpenFileDescriptor
+import com.intellij.openapi.util.SystemInfo
+import com.flowable.atlas.navigation.ModelElements
+import com.flowable.atlas.usage.FlowableDiagram
+import java.awt.event.InputEvent
+import java.awt.event.KeyEvent
+import java.awt.geom.Point2D
+import javax.swing.KeyStroke
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
@@ -37,7 +50,8 @@ import javax.swing.SwingConstants
 /**
  * The picture half of a model's editor: its diagram, decision table or form wireframe, as
  * [DiagramSvgCache] renders it, painted by [SvgCanvas]. Rendering runs off the EDT; a loose model file
- * that changes on disk (a pull, a checkout) is drawn again. Archive entries do not change in place.
+ * that changes on disk (a pull, a checkout) or in its editor is drawn again. Archive entries do not
+ * change in place. A click on a process, case or decision element puts the text editor's caret on it.
  */
 internal class FlowableModelPreview(
     private val project: Project,
@@ -55,11 +69,16 @@ internal class FlowableModelPreview(
     private val redraw = SingleAlarm(::render, 300, this)
     @Volatile private var disposed = false
 
+    /** The drawn elements, in the SVG's viewBox space, for mapping a click back to an element id. */
+    @Volatile private var hitMap: HitMap? = null
+
     init {
-        val toolbar = ActionManager.getInstance().createActionToolbar("FlowableModelPreview", zoomActions(), true)
+        val actions = zoomActions()
+        val toolbar = ActionManager.getInstance().createActionToolbar("FlowableModelPreview", actions, true)
         toolbar.targetComponent = canvas
         root.add(toolbar.component, BorderLayout.NORTH)
         root.add(cards, BorderLayout.CENTER)
+        canvas.onClick = ::select
         show(FlowableAtlasBundle.message("preview.rendering"))
         render()
         if (file.isInLocalFileSystem) {
@@ -68,6 +87,10 @@ internal class FlowableModelPreview(
                     if (events.any { it.file == file }) redraw.cancelAndRequest()
                 }
             })
+            // Typing in the text half redraws the picture too, from the unsaved text.
+            FileDocumentManager.getInstance().getDocument(file)?.addDocumentListener(object : DocumentListener {
+                override fun documentChanged(event: DocumentEvent) = redraw.cancelAndRequest()
+            }, this)
         }
     }
 
@@ -76,16 +99,21 @@ internal class FlowableModelPreview(
 
     private fun render() {
         ApplicationManager.getApplication().executeOnPooledThread {
-            val doc = runCatching { load() }
+            val drawn = runCatching { load() }
                 .onFailure { LOG.warn("Could not draw the preview of ${file.path}", it) }
-                .getOrNull()
             ApplicationManager.getApplication().invokeLater({
                 if (disposed) return@invokeLater
-                if (doc == null) {
-                    show(FlowableAtlasBundle.message("linemarker.diagram.nolayout"))
-                } else {
-                    canvas.document = doc
-                    (cards.layout as CardLayout).show(cards, CANVAS)
+                val doc = drawn.getOrNull()
+                when {
+                    // A renderer that threw is a defect worth naming — not a model without a layout.
+                    drawn.isFailure -> show(FlowableAtlasBundle.message("preview.failed",
+                        drawn.exceptionOrNull()?.message ?: drawn.exceptionOrNull()?.javaClass?.simpleName ?: ""))
+                    doc == null -> show(FlowableAtlasBundle.message("linemarker.diagram.nolayout"))
+                    else -> {
+                        canvas.document = doc
+                        canvas.toolTipText = if (hitMap != null) FlowableAtlasBundle.message("preview.hint") else null
+                        (cards.layout as CardLayout).show(cards, CANVAS)
+                    }
                 }
             }, project.disposed)
         }
@@ -93,9 +121,29 @@ internal class FlowableModelPreview(
 
     private fun load(): SVGDocument? {
         if (!file.isValid) return null
-        val svg = DiagramSvgCache.getInstance(project).resolveDiagram(file, type) ?: return null
-        val text = SvgFonts.resolvable(String(svg.contentsToByteArray(), Charsets.UTF_8))
+        val cache = DiagramSvgCache.getInstance(project)
+        // The editor's text when it holds edits not yet saved; the file otherwise.
+        val unsaved = ReadAction.compute<String?, RuntimeException> {
+            val fdm = FileDocumentManager.getInstance()
+            if (fdm.isFileModified(file)) fdm.getCachedDocument(file)?.text else null
+        }
+        val bytes = unsaved?.toByteArray(Charsets.UTF_8)
+        val svgText = if (bytes != null) cache.renderSvg(bytes, file.name, type)
+            else cache.resolveDiagram(file, type)?.let { String(it.contentsToByteArray(), Charsets.UTF_8) }
+        if (svgText == null) { hitMap = null; return null }
+        // A bundled export SVG is drawn in its own coordinates, not the layout's: no mapping for that one.
+        hitMap = if (bytes == null && FlowableDiagram.siblingSvg(file) != null) null
+            else HitMap.of(svgText, bytes ?: runCatching { file.contentsToByteArray() }.getOrNull(), file.name, type)
+        val text = SvgFonts.resolvable(svgText)
         return text.byteInputStream().use { SVGLoader().load(it, null, LoaderContext.createDefault()) }
+    }
+
+    /** A click on the picture: put the text editor's caret on the element under it. */
+    private fun select(at: Point2D.Double) {
+        val id = hitMap?.elementAt(at) ?: return
+        val text = FileDocumentManager.getInstance().getDocument(file)?.text ?: return
+        val offset = ModelElements.declarationOffset(text, id) ?: return
+        OpenFileDescriptor(project, file, offset).navigate(true)
     }
 
     private fun show(text: String) {
@@ -104,16 +152,20 @@ internal class FlowableModelPreview(
     }
 
     private fun zoomActions() = DefaultActionGroup(
-        zoomAction("preview.zoomIn", AllIcons.Graph.ZoomIn) { canvas.zoomBy(1.25) },
-        zoomAction("preview.zoomOut", AllIcons.Graph.ZoomOut) { canvas.zoomBy(0.8) },
-        zoomAction("preview.fitWidth", AllIcons.General.FitContent) { canvas.fitWidth() },
+        zoomAction("preview.zoomIn", AllIcons.Graph.ZoomIn, KeyEvent.VK_EQUALS) { canvas.zoomBy(1.25) },
+        zoomAction("preview.zoomOut", AllIcons.Graph.ZoomOut, KeyEvent.VK_MINUS) { canvas.zoomBy(0.8) },
+        zoomAction("preview.fitWidth", AllIcons.General.FitContent, KeyEvent.VK_0) { canvas.fitWidth() },
     )
 
-    private fun zoomAction(key: String, icon: javax.swing.Icon, run: () -> Unit) =
+    /** A toolbar zoom action, also on Ctrl/⌘ + [key] while the picture has the focus. */
+    private fun zoomAction(key: String, icon: javax.swing.Icon, keyCode: Int, run: () -> Unit) =
         object : DumbAwareAction(FlowableAtlasBundle.message(key), null, icon) {
             override fun actionPerformed(e: AnActionEvent) = run()
             override fun update(e: AnActionEvent) { e.presentation.isEnabled = canvas.document != null }
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+        }.also {
+            val mask = if (SystemInfo.isMac) InputEvent.META_DOWN_MASK else InputEvent.CTRL_DOWN_MASK
+            it.registerCustomShortcutSet(CustomShortcutSet(KeyStroke.getKeyStroke(keyCode, mask)), canvas)
         }
 
     override fun getComponent(): JComponent = root

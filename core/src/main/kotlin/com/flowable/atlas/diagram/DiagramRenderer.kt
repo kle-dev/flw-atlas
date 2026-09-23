@@ -21,14 +21,21 @@ object DiagramRenderer {
      * type (only process/case/decision have one), no DI/layout in the file, or a parse failure — the
      * caller then simply has no diagram (no artifact / no gutter marker).
      */
-    fun renderSvg(bytes: ByteArray, fileName: String, type: ModelType): String? {
+    fun renderSvg(bytes: ByteArray, fileName: String, type: ModelType): String? =
+        geometry(bytes, fileName, type)?.let(DiagramSvgRenderer::render)
+
+    /**
+     * The laid-out shapes and edges [renderSvg] draws, in the model's own coordinates — the SVG's viewBox
+     * is in the same space, so a point on the picture maps back to the element under it. Null for a type
+     * with no diagram.
+     */
+    fun geometry(bytes: ByteArray, fileName: String, type: ModelType): DiagramGeometry? {
         val notation = notationOf(type) ?: return null
-        val geometry = if (ModelType.isXmlModel(fileName)) {
+        return if (ModelType.isXmlModel(fileName)) {
             XmlDiExtractor.extract(bytes, notation)
         } else {
             OryxJsonDiExtractor.extract(bytes, notation)
         }
-        return DiagramSvgRenderer.render(geometry)
     }
 
     private fun notationOf(type: ModelType): DiagramGeometry.Notation? = when (type) {

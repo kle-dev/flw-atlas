@@ -69,7 +69,7 @@ class DiagramSvgCache {
      * the decision table itself. XML only: a Design-workspace decision-table `.json` carries neither
      * `dmndi` nor `<decisionTable>`.
      */
-    private fun renderSvg(bytes: ByteArray, fileName: String, type: ModelType): String? =
+    internal fun renderSvg(bytes: ByteArray, fileName: String, type: ModelType): String? =
         if (type == ModelType.FORM || type == ModelType.PAGE) FormSvgRenderer.renderSvg(bytes)
         else DiagramRenderer.renderSvg(bytes, fileName, type)
             ?: if (type == ModelType.DECISION && ModelType.isXmlModel(fileName)) {
