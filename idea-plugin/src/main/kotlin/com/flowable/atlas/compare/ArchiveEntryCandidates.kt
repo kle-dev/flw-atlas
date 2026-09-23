@@ -77,8 +77,9 @@ internal object ArchiveEntryCandidates {
 
     private fun filesInScope(project: Project, accept: (VirtualFile) -> Boolean): List<VirtualFile> {
         val out = ArrayList<VirtualFile>()
+        val excluded = ModelFiles.excluder(project)
         ProjectModelScope.iterateFiles(project) { file ->
-            if (!file.isDirectory && !ModelFiles.isExcluded(file.path) && accept(file)) out.add(file)
+            if (!file.isDirectory && !excluded(file.path) && accept(file)) out.add(file)
             true
         }
         return out

@@ -68,8 +68,9 @@ object ModelReferenceScan {
         // The same scope as the model index (the active sub-project, else the content roots) — a
         // Find Usages that answered from every app while the index was narrowed to one was two scopes
         // for one query.
+        val excluded = ModelFiles.excluder(project)
         ProjectModelScope.iterateFiles(project) { file ->
-            if (!file.isDirectory && !ModelFiles.isExcluded(file.path)) {
+            if (!file.isDirectory && !excluded(file.path)) {
                 when {
                     ModelFiles.typeOf(file) != null ->
                         runCatching { String(file.contentsToByteArray(), Charsets.UTF_8) }.getOrNull()

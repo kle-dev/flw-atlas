@@ -91,8 +91,9 @@ class FlowableModelTextScanner(private val project: Project) : Disposable {
             val out = ArrayList<VirtualFile>()
             // The model index's scope, not the whole repository: with a sub-project chosen in the Hub,
             // the keys half of the Search Everywhere tab was narrowed and this full-text half was not.
+            val excluded = ModelFiles.excluder(project)
             ProjectModelScope.iterateFiles(project) { file ->
-                if (!file.isDirectory && !ModelFiles.isExcluded(file.path) &&
+                if (!file.isDirectory && !excluded(file.path) &&
                     (ModelFiles.typeOf(file) != null || ArchiveModelScanner.isArchive(file))
                 ) {
                     out.add(file)

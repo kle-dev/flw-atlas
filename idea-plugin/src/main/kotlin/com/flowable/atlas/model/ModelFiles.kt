@@ -3,6 +3,8 @@ package com.flowable.atlas.model
 import com.flowable.atlas.settings.FlowableAtlasSettings
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.progress.ProcessCanceledException
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.vfs.VirtualFile
 
 /**
@@ -14,6 +16,41 @@ object ModelFiles {
     private val LOG = logger<ModelFiles>()
 
     fun isExcluded(path: String): Boolean = ModelPaths.isExcluded(path)
+
+    /**
+     * [isExcluded] for absolute IDE paths, judged below the project folder they lie in. Tested whole, a
+     * project that itself lives under a folder named `build`, `out`, `bin` or `target` (a CI agent's
+     * workspace, a dev container) had every file excluded and an empty index. The roots are read once,
+     * so a walk asks the returned function per file.
+     */
+    fun excluder(project: Project): (String) -> Boolean {
+        val roots = projectRoots(project)
+        return { path -> isExcluded(relativeTo(roots, path) ?: path) }
+    }
+
+    /**
+     * [path] relative to the outermost of the project folder and its content roots that holds it, or
+     * null when it lies outside all of them — a download, another open project, the sandbox IDE's own
+     * files. The outermost root, so a content root inside a build folder is still judged as inside it.
+     */
+    fun projectRelative(project: Project, path: String): String? = relativeTo(projectRoots(project), path)
+
+    private fun projectRoots(project: Project): List<String> {
+        if (project.isDisposed) return emptyList()
+        return buildList {
+            project.basePath?.let(::add)
+            ProjectRootManager.getInstance(project).contentRoots.forEach { add(it.path) }
+        }
+    }
+
+    private fun relativeTo(roots: List<String>, path: String): String? {
+        val root = roots.filter { path == it || path.startsWith("$it/") }.minByOrNull { it.length } ?: return null
+        return path.substring(root.length).removePrefix("/")
+    }
+
+    /** [isModelPath] for an absolute IDE path: false outside the project, and judged below its folder. */
+    fun isModelPath(project: Project, path: String): Boolean =
+        projectRelative(project, path)?.let { rel -> isModelPath(rel.ifEmpty { path.substringAfterLast('/') }) } == true
 
     /** Set once the settings read has failed, so the hot path below logs the cause once, not per file. */
     @Volatile private var settingsReadFailed = false

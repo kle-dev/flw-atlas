@@ -25,6 +25,8 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
+import com.intellij.openapi.vfs.newvfs.events.VFileCopyEvent
+import com.intellij.openapi.vfs.newvfs.events.VFileCreateEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileMoveEvent
 import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent
@@ -93,10 +95,25 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
         )
     }
 
-    private fun touchesModel(e: VFileEvent): Boolean =
-        ModelFiles.isModelPath(e.path) ||
-            (e as? VFilePropertyChangeEvent)?.takeIf { it.propertyName == VirtualFile.PROP_NAME }?.oldPath?.let(ModelFiles::isModelPath) == true ||
-            (e as? VFileMoveEvent)?.oldPath?.let(ModelFiles::isModelPath) == true
+    // Only this project's files count: the listener hears every change in the IDE, and a zip landing in
+    // ~/Downloads or a model saved in another open project used to drop this index and rescan every archive.
+    private fun touchesModel(e: VFileEvent): Boolean {
+        val oldPath = (e as? VFilePropertyChangeEvent)?.takeIf { it.propertyName == VirtualFile.PROP_NAME }?.oldPath
+            ?: (e as? VFileMoveEvent)?.oldPath
+        if (ModelFiles.isModelPath(project, e.path) || oldPath?.let { ModelFiles.isModelPath(project, it) } == true) return true
+        // A folder created, deleted, moved or renamed arrives as one event for the folder, never one per
+        // file: a checkout adding `process-models/` or an unzipped export went unseen until a Rebuild.
+        return isDirectory(e) && (inScope(e.path) || oldPath?.let(::inScope) == true)
+    }
+
+    private fun inScope(path: String): Boolean =
+        ModelFiles.projectRelative(project, path)?.let { !ModelFiles.isExcluded(it) } == true
+
+    private fun isDirectory(e: VFileEvent): Boolean = when (e) {
+        is VFileCreateEvent -> e.isDirectory
+        is VFileCopyEvent -> e.file.isDirectory
+        else -> runCatching { e.file?.isDirectory == true }.getOrDefault(false)
+    }
 
     private fun drop() {
         generation.incrementAndGet()
@@ -462,8 +479,9 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
         val out = ArrayList<VirtualFile>()
         // The scope — the active sub-project's subtree, else the content roots — is ProjectModelScope's
         // to define, so the Search Everywhere scan and Find Usages into models walk the same files.
+        val excluded = ModelFiles.excluder(project)
         ProjectModelScope.iterateFiles(project) { file ->
-            if (!file.isDirectory && !ModelFiles.isExcluded(file.path) &&
+            if (!file.isDirectory && !excluded(file.path) &&
                 (ModelFiles.typeOf(file) != null || ArchiveModelScanner.isArchive(file))
             ) out.add(file)
             true
