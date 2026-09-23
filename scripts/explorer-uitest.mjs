@@ -757,7 +757,7 @@ const probe = `<script>
   steps.push(()=>{
     const s=document.querySelector('#detail details.sect[data-sect="fit"]');
     ok('a called process shows whether its callers fit, open by default', !!s && s.open);
-    const row=nm=>s?[...s.querySelectorAll('.tbl .tr')].find(r=>{ const c=r.querySelector('.td.mono'); return c && c.textContent.trim().split(' ')[0]===nm; }):null;
+    const row=nm=>s?[...s.querySelectorAll('.tbl .tr')].find(r=>{ const c=r.querySelector('.ctn'); return c && c.textContent.trim()===nm; }):null;
     const st=row('stockLevel'), oi=row('orderId'), tot=row('subTotal');
     ok('a value it reads that no caller passes is a gap', !!st && st.classList.contains('cov-warn'), st?st.className:'(no row)');
     ok('a value passed in that it never reads is a gap too', !!oi && oi.classList.contains('cov-warn'), oi?oi.className:'(no row)');
@@ -797,13 +797,13 @@ const probe = `<script>
        !!det.querySelector('.dmntab th.hp') && !!det.querySelector('.dmntab .band-in') && !!det.querySelector('.dmntab .band-out'));
     ok('its inputs and outputs are the head of the table, not a section of their own', !det.querySelector('[data-sect="dmnio"]'));
     const s=det.querySelector('details.sect[data-sect="fit"]');
-    const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>{ const c=r.querySelector('.td.mono'); return c && c.textContent.trim().split(' ')[0]==='total'; });
+    const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>{ const c=r.querySelector('.ctn'); return c && c.textContent.trim()==='total'; });
     ok('an input the calling process writes fits by name', !!row && !!row.querySelector('.gm-impl'), row?row.innerHTML.slice(0,200):'(no row)');
     location.hash=enc('action:notifyCustomerAction');
   });
   steps.push(()=>{
     const s=document.querySelector('#detail details.sect[data-sect="fit"]');
-    const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>{ const c=r.querySelector('.td.mono'); return c && c.textContent.trim().split(' ')[0]==='customerEmail'; });
+    const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>{ const c=r.querySelector('.ctn'); return c && c.textContent.trim()==='customerEmail'; });
     ok("an action's input its calling button sends fits", !!row && !!row.querySelector('.gm-ok'), row?row.textContent:'(no row)');
     location.hash=enc('form:orderForm');
   });

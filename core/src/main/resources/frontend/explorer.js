@@ -1378,7 +1378,7 @@ function schemaCoverageHtml(sc, onlyGaps, leadChipId, crossed, sect){
   const gapOf={'no-service':'bad','no-dataobject':'warn','extra-service':'info','ok':''};
   const miss=gm('miss','not mapped');
   // the service column wraps: its ⇄ crossed marker sits last, and a clipped cell cut exactly that off
-  return gapTable([{k:'lb',label:'Liquibase column',w:'minmax(14ch,1.4fr)',mono:true},{k:'sv',label:'Service mapping',w:'minmax(14ch,1.4fr)',mono:true,cls:'wrap'},{k:'do',label:'Data object field',w:'minmax(12ch,1.2fr)',mono:true}],
+  return gapTable([{k:'lb',label:'Liquibase column',w:'minmax(14ch,1.4fr)',mono:true},{k:'sv',label:'Service mapping',w:'minmax(14ch,1.4fr)',mono:true,cls:'wrap'},{k:'do',label:'Data object field',w:'minmax(12ch,1.2fr)',mono:true,opt:true}],
     (sc.rows||[]).map(r=>{
       const lb = r.inLiquibase ? esc(r.sql)+(r.sqlType?' <span class="muted">'+esc(r.sqlType)+'</span>':'') : '<span class="miss">— not in changelog</span>';
       const cr = crossOf(r);
@@ -3932,6 +3932,11 @@ function implicitMapping(st, ct){
   return {ct, rows, worst};
 }
 const CT_GM_TIP={ok:'Mapped', impl:'Provided by name', none:'Nothing expected here'};
+/** in / out, coloured like a parameter's direction — the start of a contract row's name. */
+const ctDir=d=>'<span class="pd ctdir" style="color:var('+(PDIR_COLOR[d]||'--ink-faint')+')">'+esc(d)+'</span>';
+/** Who a matrix cell is about, shown only in a narrow panel — where the column headers are hidden and the
+ *  cells stack under the row. */
+const narrowLabel=t=>'<span class="nl">'+esc(t)+'</span>';
 // the kinds of gap a contract row can have — one pill each, worst first
 const CT_KINDS={
   required:{tone:'bad', label:n=>n+' required, not passed'},
@@ -3957,11 +3962,10 @@ function ctCell(r){ return gm(r.st, '', r.tip||CT_GM_TIP[r.st]||''); }
 /** The param-level table under a call: direction, what the callee calls it, what the caller maps, status. */
 function ctDetailTbl(res){
   if(!res.rows.length) return '';
-  return tbl([{k:'dir',label:'',w:'5ch',cls:'tags'},{k:'name',label:'Callee side',w:'minmax(12ch,1.3fr)',mono:true},
-      {k:'side',label:'Caller side',w:'minmax(12ch,1.6fr)',mono:true,cls:'wrap'},{k:'st',label:'',w:'minmax(10ch,1fr)',cls:'tags'}],
+  return tbl([{k:'name',label:'Callee side',w:'minmax(14ch,1.4fr)',mono:true},
+      {k:'side',label:'Caller side',w:'minmax(12ch,1.6fr)',mono:true,cls:'wrap',opt:true},{k:'st',label:'',w:'minmax(10ch,1fr)',cls:'tags'}],
     res.rows.map(r=>({cls:r.st==='miss'||r.st==='warn'?'cov-'+(r.tone||'warn'):'', cells:{
-      dir:'<span class="pd" style="color:var('+(PDIR_COLOR[r.dir]||'--ink-faint')+')">'+esc(r.dir)+'</span>',
-      name:esc(r.name)+(r.it&&r.it.type?' <span class="muted">'+esc(r.it.type)+'</span>':'')+(r.it&&r.it.required?' <span class="tag">required</span>':''),
+      name:ctDir(r.dir)+'<span class="ctn">'+esc(r.name)+'</span>'+(r.it&&r.it.type?' <span class="muted">'+esc(r.it.type)+'</span>':'')+(r.it&&r.it.required?' <span class="tag">required</span>':''),
       side:r.via.length?r.via.map(p=>p.expression?'<span class="muted">'+esc(ctSide(p))+'</span>':paramSide(ctSide(p))).join(', '):'<span class="muted">—</span>',
       st:gm(r.st, r.st==='miss'?'not passed':r.st==='warn'?(r.dir==='in'?'not read':'not written'):'', r.tip||CT_GM_TIP[r.st]||'')}})), {filter:false});
 }
@@ -3997,7 +4001,7 @@ function callsTable(n, c){
         in:(r.method?tag(r.method)+' ':'')+vc, out:r.path?'<span class="mono">'+esc(r.path)+'</span>':''}};
   });
   return gapTable([{k:'el',label:'Element',w:'minmax(12ch,1.3fr)'},{k:'callee',label:'Calls',w:'minmax(14ch,1.5fr)'},
-      {k:'in',label:'Hands over',w:'minmax(12ch,1.3fr)',cls:'tags'},{k:'out',label:'Takes back',w:'minmax(10ch,1fr)',cls:'tags',opt:true}],
+      {k:'in',label:'Hands over',w:'minmax(12ch,1.3fr)',cls:'tags',opt:true},{k:'out',label:'Takes back',w:'minmax(10ch,1fr)',cls:'tags',opt:true}],
     sites.map(st=>{
       const cn=st.callee.id&&byId.get(st.callee.id);
       const known=st.callee.state==='ok'||st.callee.state==='unknown';
@@ -4035,16 +4039,16 @@ function callersMatrix(n, c){
   ct.items.forEach(it=>addKey(it.dir, it.name, it));
   res.forEach(x=>x.r.rows.forEach(r=>addKey(r.dir, r.name, r.it)));
   const cols=callers.length<=4
-    ? callers.map((st,i)=>({k:'c'+i, labelHtml:esc(byId.get(st.model).label)+(st.name||st.el?' <span class="muted">› '+esc(st.name||st.el)+'</span>':''), w:'minmax(9ch,1fr)', cls:'tags'}))
+    ? callers.map((st,i)=>({k:'c'+i, labelHtml:esc(byId.get(st.model).label)+(st.name||st.el?' <span class="muted">› '+esc(st.name||st.el)+'</span>':''), w:'minmax(9ch,1fr)', cls:'tags', opt:true}))
 
-    : [{k:'all', label:callers.length+' callers', w:'minmax(16ch,2.4fr)', cls:'tags gcs'}];
+    : [{k:'all', label:callers.length+' callers', w:'minmax(16ch,2.4fr)', cls:'tags gcs', opt:true}];
   const rows=keys.map(k=>{
-    const cells={dir:'<span class="pd" style="color:var('+(PDIR_COLOR[k.dir]||'--ink-faint')+')">'+esc(k.dir)+'</span>',
-      name:esc(k.name)+(k.it&&k.it.type?' <span class="muted">'+esc(k.it.type)+'</span>':'')+(k.it&&k.it.required?' <span class="tag">required</span>':'')};
+    const cells={name:ctDir(k.dir)+'<span class="ctn">'+esc(k.name)+'</span>'+(k.it&&k.it.type?' <span class="muted">'+esc(k.it.type)+'</span>':'')+(k.it&&k.it.required?' <span class="tag">required</span>':'')};
     let worst='';
     const per=res.map(x=>x.r.rows.find(r=>r.dir===k.dir&&r.name===k.name)||{st:'none', tip:'Not mapped by this caller'});
     per.forEach(r=>{ if(r.st==='miss'&&r.tone==='bad') worst='bad'; else if((r.st==='miss'||r.st==='warn')&&worst!=='bad') worst='warn'; });
-    if(callers.length<=4) per.forEach((r,i)=>{ cells['c'+i]=gm(r.st, r.via&&r.via.length?r.via.map(ctSide).join(', '):'', r.tip||CT_GM_TIP[r.st]||''); });
+    if(callers.length<=4) per.forEach((r,i)=>{ cells['c'+i]=narrowLabel(byId.get(callers[i].model).label+(callers[i].name||callers[i].el?' › '+(callers[i].name||callers[i].el):''))+
+      gm(r.st, r.via&&r.via.length?r.via.map(ctSide).join(', '):'', r.tip||CT_GM_TIP[r.st]||''); });
     else cells.all=per.map((r,i)=>'<span class="gc gc-'+r.st+'" data-tip="'+esc(byId.get(callers[i].model).label+' › '+(callers[i].name||callers[i].el)+': '+(r.tip||CT_GM_TIP[r.st]||r.st))+'">'+GM[r.st]+'</span>').join('');
     // with a column per caller the row says it all; with mini cells, the unfolded row names each caller
     return {gap:worst, unk:!worst&&per.some(r=>r.st==='unk'), kind:ctWorstKind(per, ct.exact, ct.implicit), hay:k.name, cells,
@@ -4052,7 +4056,7 @@ function callersMatrix(n, c){
         return '<div class="relsub-h">'+vlink(x.st.model, byId.get(x.st.model).label)+' › '+elJumpHtml(x.st.model, x.st.el, x.st.name||x.st.el, 'Open the calling element')+' '+
           gm(r.st, r.via&&r.via.length?r.via.map(ctSide).join(', '):'', r.tip||CT_GM_TIP[r.st]||'')+'</div>'; }).join('')+'</div>'};
   });
-  return gapTable([{k:'dir',label:'',w:'5ch',cls:'tags'},{k:'name',label:'Value',w:'minmax(12ch,1.4fr)',mono:true}].concat(cols), rows,
+  return gapTable([{k:'name',label:'Value',w:'minmax(14ch,1.5fr)',mono:true}].concat(cols), rows,
     {okLabel:k=>k+' fit', kinds:CT_KINDS,
      meta:'<span class="muted">called by</span>'+[...new Set(callers.map(x=>x.model))].map(id=>nodeChip(id)).join('')});
 }
@@ -4064,7 +4068,7 @@ function svcOps(svc){ return ((svc.data||{}).operations||[]).filter(o=>o&&o.key)
 /** One row per operation: who calls it and whether what they pass fits — the operation page's matrix, summed. */
 function opCallersFit(svc){
   const ops=svcOps(svc); if(!ops.length) return '';
-  return gapTable([{k:'op',label:'Operation',w:'minmax(16ch,1.8fr)'},{k:'callers',label:'Called by',w:'minmax(14ch,1.6fr)'},{k:'st',label:'',w:'minmax(14ch,1.4fr)',cls:'tags'}],
+  return gapTable([{k:'op',label:'Operation',w:'minmax(16ch,1.8fr)'},{k:'callers',label:'Called by',w:'minmax(14ch,1.6fr)',opt:true},{k:'st',label:'',w:'minmax(14ch,1.4fr)',cls:'tags'}],
     ops.map(({o,n})=>{
       const callers=n?callersOf(n):[], res=callers.map(st=>mappingOf(st, n));
       const rows=[].concat(...res.map(r=>r.rows));
@@ -4089,7 +4093,7 @@ const urlVars=u=>[...String(u||'').matchAll(/\{([A-Za-z_][\w.-]*)\}/g)].map(m=>m
  *  path variable has a parameter, and the handler method in the code. */
 function opEndpointsFit(svc){
   const ops=svcOps(svc).filter(x=>x.o.url||x.o.fullUrl); if(!ops.length) return '';
-  return gapTable([{k:'op',label:'Operation',w:'minmax(18ch,2fr)'},{k:'ep',label:'Endpoint',w:'minmax(16ch,1.8fr)'},
+  return gapTable([{k:'op',label:'Operation',w:'minmax(18ch,2fr)'},{k:'ep',label:'Endpoint',w:'minmax(16ch,1.8fr)',opt:true},
       {k:'verb',label:'Verb',w:'minmax(10ch,.9fr)',cls:'tags'},{k:'path',label:'Path variables',w:'minmax(12ch,1.2fr)',cls:'tags',opt:true},
       {k:'h',label:'Handler',w:'minmax(14ch,1.4fr)',opt:true}],
     ops.map(({o,n})=>{
@@ -4126,7 +4130,7 @@ function svcDoFit(n){
   return dobjs.map(dobj=>{
     const f=(dobj.data||{}).columns||[], byS=new Map(cols.map(c=>[looseCol(c.name), c])), byD=new Map(f.map(x=>[looseCol(x.name), x]));
     const keys=[...new Set([...byD.keys(), ...byS.keys()])];
-    return gapTable([{k:'do',label:'Data object field',w:'minmax(12ch,1.3fr)',mono:true},{k:'svc',label:'Service mapping',w:'minmax(14ch,1.5fr)',mono:true},{k:'note',label:'',w:'minmax(12ch,1fr)',cls:'tags'}],
+    return gapTable([{k:'do',label:'Data object field',w:'minmax(12ch,1.3fr)',mono:true},{k:'svc',label:'Service mapping',w:'minmax(14ch,1.5fr)',mono:true},{k:'note',label:'',w:'minmax(12ch,1fr)',cls:'tags',opt:true}],
       keys.map(k=>{ const a=byD.get(k), b=byS.get(k);
         const tMis=a&&b&&a.type&&b.type&&String(a.type).toLowerCase()!==String(b.type).toLowerCase();
         return {gap:!b?'bad':!a?'warn':tMis?'info':'', kind:!b?'noSvc':!a?'noDo':'',
@@ -4170,7 +4174,7 @@ function formFieldVars(n){
   });
   if(!rows.length) return '';
   rows.sort((a,b)=>a.hay.localeCompare(b.hay));
-  return gapTable([{k:'field',label:'Field',w:'minmax(12ch,1.3fr)',mono:true},{k:'v',label:'Variable',w:'minmax(12ch,1.2fr)',mono:true},
+  return gapTable([{k:'field',label:'Field',w:'minmax(12ch,1.3fr)',mono:true},{k:'v',label:'Variable',w:'minmax(12ch,1.2fr)',mono:true,opt:true},
       {k:'by',label:'Read by',w:'minmax(14ch,1.8fr)',opt:true},{k:'st',label:'',w:'minmax(10ch,.9fr)',cls:'tags'}], rows,
     {okLabel:k=>k+' read', kinds:{unread:{tone:'warn', label:k=>k+' never read'}}});
 }
@@ -4189,7 +4193,7 @@ function formDoPaths(n){
     });
   });
   if(!rows.length) return '';
-  return gapTable([{k:'path',label:'Component',w:'minmax(14ch,1.6fr)',mono:true},{k:'dobj',label:'Data object',w:'minmax(12ch,1.2fr)'},{k:'st',label:'Field',w:'minmax(12ch,1fr)',cls:'tags'}],
+  return gapTable([{k:'path',label:'Component',w:'minmax(14ch,1.6fr)',mono:true},{k:'dobj',label:'Data object',w:'minmax(12ch,1.2fr)',opt:true},{k:'st',label:'Field',w:'minmax(12ch,1fr)',cls:'tags'}],
     rows, {okLabel:k=>k+' bound', kinds:{notField:{tone:'bad', label:k=>k+' not a field of the object'}}});
 }
 /** The string literals the conditions downstream of `el` compare `v` with — the flows out of the task and
@@ -4224,7 +4228,7 @@ function formOutcomesFit(n){
     [...t.lits].filter(l=>os.indexOf(l)<0).forEach(l=>rows.push({gap:'warn', kind:'noOutcome', hay:elHay(l, m.label),
       cells:{outcome:'<span class="mono">'+esc(l)+'</span>', where, st:gm('warn','not an outcome', 'A condition tests \''+l+'\', which this form cannot end with')}}));
   });
-  return gapTable([{k:'outcome',label:'Outcome',w:'minmax(10ch,1fr)'},{k:'where',label:'Shown by',w:'minmax(16ch,2fr)'},{k:'st',label:'',w:'minmax(12ch,1fr)',cls:'tags'}],
+  return gapTable([{k:'outcome',label:'Outcome',w:'minmax(10ch,1fr)'},{k:'where',label:'Shown by',w:'minmax(16ch,2fr)',opt:true},{k:'st',label:'',w:'minmax(12ch,1fr)',cls:'tags'}],
     rows, {meta:'<span class="muted">outcome variable</span> '+vlink('variable:'+ov, ov), okLabel:k=>k+' tested',
       kinds:{untested:{tone:'warn', label:k=>k+' outcome not tested'}, noOutcome:{tone:'warn', label:k=>k+' tested value is no outcome'}}});
 }
@@ -4320,7 +4324,7 @@ function groupAccessFit(g){
     return {gap, kind, hay:elHay(t.label, [...rels].join(' ')),
       cells:{t:iconLink(tid), may:[...rels].map(r=>'<span class="tag">'+esc(term('rel', r).label)+'</span>').join(''), st}};
   }).sort((a,b)=>(a.gap?0:1)-(b.gap?0:1)||a.hay.localeCompare(b.hay));
-  return gapTable([{k:'t',label:'Model',w:'minmax(16ch,1.6fr)'},{k:'may',label:'May',w:'minmax(14ch,1.4fr)',cls:'tags'},{k:'st',label:'Through',w:'minmax(14ch,1.4fr)',cls:'tags'}],
+  return gapTable([{k:'t',label:'Model',w:'minmax(16ch,1.6fr)'},{k:'may',label:'May',w:'minmax(14ch,1.4fr)',cls:'tags',opt:true},{k:'st',label:'Through',w:'minmax(14ch,1.4fr)',cls:'tags'}],
     rows, {okLabel:k=>k+' reachable', meta:opens.size?'<span class="muted">opens</span> '+[...opens].map(a=>vlink(a, byId.get(a).label)).join(', '):'',
       kinds:{cantOpen:{tone:'warn', label:k=>k+' cannot be reached through an app'}}});
 }
@@ -4338,8 +4342,8 @@ function eventPayloadFit(ev){
   const ordered=pubs.concat(subs);
   const colLabel=st=>(st.role==='send'?'→ ':'← ')+esc(byId.get(st.model).label)+(st.name||st.el?' <span class="muted">› '+esc(st.name||st.el)+'</span>':'');
   const many=ordered.length>4;
-  const cols=many?[{k:'all', label:pubs.length+' publish · '+subs.length+' consume', w:'minmax(16ch,2.4fr)', cls:'tags'}]
-    : ordered.map((st,i)=>({k:'c'+i, labelHtml:colLabel(st), w:'minmax(10ch,1fr)', cls:'tags'}));
+  const cols=many?[{k:'all', label:pubs.length+' publish · '+subs.length+' consume', w:'minmax(16ch,2.4fr)', cls:'tags', opt:true}]
+    : ordered.map((st,i)=>({k:'c'+i, labelHtml:colLabel(st), w:'minmax(10ch,1fr)', cls:'tags', opt:true}));
   const cell=(st, f)=>{
     if(!st.maps.length) return {st:'unk', tip:'This element maps no payload field explicitly — it may use the whole payload or variables of the same names'};
     if(st.role==='send'){ const m=st.maps.find(p=>p.kind==='eventInParameter'&&p.target===f.name);
@@ -4353,7 +4357,7 @@ function eventPayloadFit(ev){
     const miss=per.some(r=>r.st==='miss'), cor=per.some(r=>r.cor);
     const cells={name:esc(f.name)+(f.type?' <span class="muted">'+esc(f.type)+'</span>':'')+(f.correlation?' <span class="tag">correlates</span>':'')};
     if(many) cells.all=per.map((r,i)=>'<span class="gc gc-'+r.st+'" data-tip="'+esc(byId.get(ordered[i].model).label+' › '+(ordered[i].name||ordered[i].el)+': '+(r.tip||r.st))+'">'+GM[r.st]+'</span>').join('');
-    else per.forEach((r,i)=>{ cells['c'+i]=gm(r.st, r.txt||'', r.tip||''); });
+    else per.forEach((r,i)=>{ cells['c'+i]=narrowLabel((ordered[i].role==='send'?'→ ':'← ')+byId.get(ordered[i].model).label)+gm(r.st, r.txt||'', r.tip||''); });
     return {gap:miss||cor?'warn':'', unk:per.every(r=>r.st==='unk'), kind:cor?'cor':miss?'unsent':'', hay:f.name, cells};
   });
   if(!rows.length) return '';
@@ -4369,7 +4373,7 @@ function eventChannelsFit(ev){
   (incM.get(ev.id)||[]).forEach(e=>{ if(e.rel==='channel-event'&&!ch.has(e.id)) ch.set(e.id, 'channel-event'); });
   if(!ch.size) return '';
   const sites=callersOf(ev), pubs=sites.filter(x=>x.role==='send').length, subs=sites.length-pubs;
-  return gapTable([{k:'ch',label:'Channel',w:'minmax(16ch,1.6fr)'},{k:'dir',label:'Direction',w:'minmax(10ch,1fr)',cls:'tags'},{k:'st',label:'',w:'minmax(16ch,1.6fr)',cls:'tags'}],
+  return gapTable([{k:'ch',label:'Channel',w:'minmax(16ch,1.6fr)'},{k:'dir',label:'Direction',w:'minmax(10ch,1fr)',cls:'tags',opt:true},{k:'st',label:'',w:'minmax(16ch,1.6fr)',cls:'tags'}],
     [...ch.entries()].map(([cid, rel])=>{ const c=byId.get(cid), dir=String(((c&&c.data)||{}).channelType||'').toLowerCase()||(rel==='inbound-channel'?'inbound':rel==='outbound-channel'?'outbound':'');
       const bad=dir==='inbound'&&!subs?'nobody consumes what arrives':dir==='outbound'&&!pubs?'nobody publishes onto it':'';
       return {gap:bad?'warn':'', kind:bad?'dir':'', hay:c?c.label:cid, cells:{ch:iconLink(cid), dir:tag(dir),
@@ -4383,7 +4387,7 @@ function channelFit(ch){
   (incM.get(ch.id)||[]).forEach(e=>{ if(e.rel==='inbound-channel'||e.rel==='outbound-channel'||e.rel==='via-channel') { const x=byId.get(e.id); if(x&&x.type==='event') evs.add(e.id); } });
   if(!evs.size) return '';
   const dir=String((ch.data||{}).channelType||'').toLowerCase();
-  return gapTable([{k:'ev',label:'Event',w:'minmax(16ch,1.6fr)'},{k:'pub',label:'Published by',w:'minmax(14ch,1.4fr)'},{k:'sub',label:'Consumed by',w:'minmax(14ch,1.4fr)'},{k:'st',label:'',w:'minmax(12ch,1fr)',cls:'tags'}],
+  return gapTable([{k:'ev',label:'Event',w:'minmax(16ch,1.6fr)'},{k:'pub',label:'Published by',w:'minmax(14ch,1.4fr)',opt:true},{k:'sub',label:'Consumed by',w:'minmax(14ch,1.4fr)',opt:true},{k:'st',label:'',w:'minmax(12ch,1fr)',cls:'tags'}],
     [...evs].map(eid=>{ const ev=byId.get(eid), sites=ev?callersOf(ev):[], pubs=[...new Set(sites.filter(x=>x.role==='send').map(x=>x.model))], subs=[...new Set(sites.filter(x=>x.role!=='send').map(x=>x.model))];
       const bad=dir==='inbound'&&!subs.length?'nobody consumes it':dir==='outbound'&&!pubs.length?'nobody publishes it':'';
       const l=ids=>'<span>'+ids.slice(0,3).map(id=>vlink(id, byId.get(id).label)).join(', ')+(ids.length>3?' +'+(ids.length-3):'')+'</span>';
@@ -4405,10 +4409,10 @@ function thrownCaughtFit(n){
   const where=x=>vlink(x.model, byId.get(x.model).label)+(x.el?' › '+elJumpHtml(x.model, x.el, x.name||x.el, 'Open the element'):'');
   const err=n.type==='error';
   const rows=throwers.map(x=>({gap:catchers.length?'':err?'warn':'info', kind:catchers.length?'':'uncaught', hay:byId.get(x.model).label,
-      cells:{side:tag('throws'), where:where(x), st:catchers.length?gm('ok', 'caught '+catchers.length+'×'):gm(err?'warn':'info', 'nobody catches it', err?'An error no boundary or event sub-process catches ends the instance':'Nothing in this project listens for it')}}))
+      cells:{where:tag('throws')+' '+where(x), st:catchers.length?gm('ok', 'caught '+catchers.length+'×'):gm(err?'warn':'info', 'nobody catches it', err?'An error no boundary or event sub-process catches ends the instance':'Nothing in this project listens for it')}}))
     .concat(catchers.map(x=>({gap:throwers.length?'':'info', kind:throwers.length?'':'unthrown', hay:byId.get(x.model).label,
-      cells:{side:tag('catches'), where:where(x), st:throwers.length?gm('ok', 'thrown '+throwers.length+'×'):gm('info', 'nothing throws it', 'Nothing in this project throws it — it may come from outside, or never')}})));
-  return gapTable([{k:'side',label:'',w:'minmax(8ch,.6fr)',cls:'tags'},{k:'where',label:'Where',w:'minmax(18ch,2fr)'},{k:'st',label:'',w:'minmax(14ch,1.2fr)',cls:'tags'}],
+      cells:{where:tag('catches')+' '+where(x), st:throwers.length?gm('ok', 'thrown '+throwers.length+'×'):gm('info', 'nothing throws it', 'Nothing in this project throws it — it may come from outside, or never')}})));
+  return gapTable([{k:'where',label:'Where',w:'minmax(20ch,2.4fr)'},{k:'st',label:'',w:'minmax(14ch,1.2fr)',cls:'tags'}],
     rows, {okLabel:k=>k+' matched', kinds:{uncaught:{tone:err?'warn':'info', label:k=>k+' thrown, never caught'}, unthrown:{tone:'info', label:k=>k+' caught, never thrown'}}});
 }
 // --- code: an endpoint against its callers, a class against the models that use it ---
@@ -4426,7 +4430,7 @@ function endpointCallersFit(ep){
           url:x.url?'<span class="mono">'+esc(x.url)+'</span>':''}}); });
   });
   if(!rows.length) return '';
-  return gapTable([{k:'m',label:'Caller',w:'minmax(14ch,1.4fr)'},{k:'where',label:'Button / operation',w:'minmax(12ch,1.2fr)'},{k:'verb',label:'Verb',w:'minmax(9ch,.8fr)',cls:'tags'},{k:'url',label:'URL as called',w:'minmax(16ch,2fr)',opt:true}],
+  return gapTable([{k:'m',label:'Caller',w:'minmax(14ch,1.4fr)'},{k:'where',label:'Button / operation',w:'minmax(12ch,1.2fr)',opt:true},{k:'verb',label:'Verb',w:'minmax(9ch,.8fr)',cls:'tags'},{k:'url',label:'URL as called',w:'minmax(16ch,2fr)',opt:true}],
     rows, {okLabel:k=>k+' fit', kinds:{verb:{tone:'warn', label:k=>k+' verb differs'}}});
 }
 /** The names an expression reaches a class by, and the expressions and tasks that use them. */
@@ -4439,7 +4443,7 @@ function beanUseFit(j){
       cells:{b:'<span class="mono">'+esc(b)+'</span>', ex:exprs.slice(0,3).map(x=>vlink(x.id, x.label)).join(', ')+(exprs.length>3?' <span class="muted">+'+(exprs.length-3)+'</span>':''),
         by:'<span>'+models.slice(0,4).map(id=>vlink(id, byId.get(id).label)).join(', ')+(models.length>4?' +'+(models.length-4):'')+'</span>',
         st:models.length?gm('ok', models.length+' model'+(models.length>1?'s':'')):gm('info', 'no expression', 'No expression in the scanned models names this bean — a delegate class or Java may still use it')}}; });
-  return gapTable([{k:'b',label:'Bean name',w:'minmax(12ch,1fr)'},{k:'ex',label:'Expressions',w:'minmax(16ch,1.8fr)',opt:true},{k:'by',label:'In',w:'minmax(14ch,1.4fr)'},{k:'st',label:'',w:'minmax(10ch,.9fr)',cls:'tags'}],
+  return gapTable([{k:'b',label:'Bean name',w:'minmax(12ch,1fr)'},{k:'ex',label:'Expressions',w:'minmax(16ch,1.8fr)',opt:true},{k:'by',label:'In',w:'minmax(14ch,1.4fr)',opt:true},{k:'st',label:'',w:'minmax(10ch,.9fr)',cls:'tags'}],
     rows, {okLabel:k=>k+' used', kinds:{unused:{tone:'info', label:k=>k+' named by no expression'}}});
 }
 FIT.event=[{title:'Publishers and consumers', build:n=>eventPayloadFit(n)}, {title:'Channels', build:n=>eventChannelsFit(n)}];
@@ -4536,12 +4540,13 @@ const FACTS={
   dataDictionary(n,d,x){ x.mono('Types',(d.types||[]).length&&(d.types||[]).join(', ')); },
   securityPolicy(n,d,x){ x.add('Type',d.type); },
   dataObject(n,d,x){ x.add('Type',d.dataObjectType); x.mono('Data source',d.sourceId);
-    if(d.service) x.rows.push(['Backing service',{html:vlink('service:'+d.service, d.service, 'Service model '+d.service)}]);
+    if(d.service) x.rows.push(['Backing service',{html:vlink('service:'+d.service, d.service, 'Service model '+d.service)+(d.serviceType?' <span class="muted">'+esc(d.serviceType)+'</span>':''), copy:d.service}]);
     // When backed by a service, surface that service's physical table here and link the name back to the service node.
     const svc=d.service&&byId.get('service:'+d.service), tbl=d.serviceTableName||(svc&&(svc.data||{}).tableName);
     if(tbl) x.rows.push(['Table',{html:'<span class="vlink" data-id="'+enc('service:'+d.service)+'" tabindex="0" role="link" title="Provided by service '+esc(d.service)+'">'+esc(tbl)+'</span>', copy:tbl}]);
     if(d.dictionary) x.rows.push(['Data dictionary',{html:vlink('dataDictionary:'+d.dictionary, d.dictionary)}]); },
   service(n,d,x){ x.add('Type',d.type); x.mono('Base URL',d.baseUrl); x.add('Auth',d.auth); x.mono('Table',d.tableName);
+    void d.literalSecrets;             // where a secret is written as plain text — the Hardcoded secrets finding says it
     if(d.referencedLiquibaseModelKey){ const lid=(byId.get('liquibase:'+d.referencedLiquibaseModelKey)&&'liquibase:'+d.referencedLiquibaseModelKey)||outTo(n.id,'schema');
       x.rows.push(['Liquibase model',{html:vlink(lid, d.referencedLiquibaseModelKey)}]); }
     },
@@ -4575,8 +4580,10 @@ const FACTS={
   endpoint(n,d,x){ x.mono('Method',d.http); x.mono('Path',d.path);
     if(d.controller||d.handler) x.rows.push(['Handler',{html:vlink(incFrom(n.id,'serves'), [d.controller,d.handler].filter(Boolean).join('#')), copy:d.controller||undefined}]); },  // FQN for 'Go to Class'
   masterData(n,d,x){
-    x.add('Kind',[d.type,d.subType].filter(Boolean).join(' / ')||d.dataObjectType); x.mono('Data source',d.sourceId);
-    x.mono('Key field',d.keyField||d.idField); x.mono('Name field',d.nameField);
+    const kind=[d.type,d.subType].filter(Boolean).join(' / '), dot=d.dataObjectType;   // both read: one says what the other would
+    x.add('Kind',kind||dot); x.mono('Data source',d.sourceId);
+    const kf=d.keyField, idf=d.idField;
+    x.mono('Key field',kf||idf); if(kf&&idf&&kf!==idf) x.mono('Id field',idf); x.mono('Name field',d.nameField);
     if(d.supportsNameFiltering!=null) x.add('Name filtering',d.supportsNameFiltering?'supported':'not supported');
     // the files that load this definition's rows at startup, each opening in the IDE
     const lf=d.loadedFrom||[];

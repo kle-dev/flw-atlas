@@ -1030,6 +1030,10 @@
   .covlegend .gm{font-size:inherit}
   .tbl .td.tags .gm+.gm{margin-left:var(--space-1)}
   .fitlegend{margin:0 0 var(--space-2)}
+  .ctdir{display:inline-block;min-width:3ch;margin-right:var(--space-15);font-family:var(--sans);font-size:var(--text-2xs);font-weight:600}
+  /* a chip in a gap table shows its name; the icon says the kind */
+  .gapblk .nc .ty{display:none}
+  .tbl .nl{display:none}
   .tbl .td .card-id{margin-left:var(--space-15)}
   /* a callers matrix with more callers than columns: one mini cell per caller, hover says who */
   .gc{display:inline-flex;align-items:center;justify-content:center;min-width:1.6em;height:1.6em;border-radius:var(--radius-sm);
@@ -1156,6 +1160,8 @@
     .fndtbl .th,.fndtbl>div.tr,.fndtbl .trs{grid-template-columns:1.1em auto minmax(0,1fr) auto}
     .fndtbl .td.fmodel{grid-column:2/-1}
     .fndtbl .th .td.fmodel{display:none}
+    /* a matrix cell that dropped under its row says whose it is */
+    .tbl .td.opt .nl{display:inline;margin-right:var(--space-15);color:var(--ink-dim)}
     /* relations: the relation on a line of its own, its chips on the next */
     .reltbl .th{display:none}
     .reltbl .td.rel,.reltbl .td.rnbs{grid-column:2/-1}
