@@ -656,6 +656,32 @@
   .item .nm{color:var(--ink);display:flex;align-items:center;min-width:0}
   .item .nmt{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .item .nm .pill{flex:none}
+  /* the category table: the list column steps aside while the table shows the same rows */
+  .view-browse.landing{grid-template-columns:minmax(0,1fr)}
+  .view-browse.landing .listcol,.view-browse.landing .listresize,.view-browse.landing .listshow{display:none}
+  .dbody.catland{max-width:none;padding-top:var(--space-3)}
+  .cath .cath-n{font-size:var(--text-xs);color:var(--ink-faint);font-variant-numeric:tabular-nums;flex:none}
+  .cath .cat-pf{flex:1;min-width:120px;height:28px;background:var(--input);border:1px solid var(--line2);color:var(--ink);
+    font-family:var(--sans);font-size:var(--text-sm);padding:0 var(--space-2);border-radius:var(--radius-md);outline:none}
+  .cath .cat-pf:focus{border-color:var(--accent)}
+  .cattbl .tr[data-id]{cursor:pointer}
+  .cattbl .tr[data-id]:hover{background:var(--hover)}
+  .cattbl .tr[data-id]:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  .cattbl .tr.mark{background:var(--accent-subtle);box-shadow:inset 3px 0 0 var(--accent)}
+  .cattbl .tdc .ck{display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border:1px solid var(--line2);
+    border-radius:var(--radius-xs);font-size:var(--text-2xs);line-height:1;color:var(--on-accent);visibility:hidden}
+  .cattbl .tr:hover .ck{visibility:visible}
+  .cattbl .tr.mark .ck{visibility:visible;background:var(--accent);border-color:var(--accent)}
+  .cattbl .td .nm{font-weight:500}
+  .cattbl .td .ti{vertical-align:-3px;margin-right:var(--space-15)}
+  .cat-why{display:block;font-size:var(--text-2xs);color:var(--ink-faint);overflow:hidden;text-overflow:ellipsis}
+  #catmore{margin-top:var(--space-2)}
+  /* a sortable header is a row of buttons that look like the plain header */
+  .tbl .th-s{background:none;border:0;padding:0;margin:0;font:inherit;letter-spacing:inherit;text-transform:inherit;
+    color:inherit;cursor:pointer;text-align:inherit;display:flex;align-items:center;gap:3px}
+  .tbl .th-s.num{justify-content:flex-end}
+  .tbl .th-s:hover,.tbl .th-s.on{color:var(--ink)}
+  .th-dir{font-size:.9em}
   .item .sub{font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .refn{flex:none;align-self:center;display:inline-flex;align-items:center;gap:2px;font-size:var(--text-2xs);
     font-variant-numeric:tabular-nums;color:var(--ink-faint);

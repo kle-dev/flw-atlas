@@ -989,7 +989,7 @@ function route(){
     // reset here: it stays a valid write pointer, because "no active tab" would make syncTabsWith
     // append — and then every sidebar category visit would silently grow the tab set.
     state.sel=null;
-    showView('browse'); renderList(); renderTabs(); renderDetail();
+    showView('browse'); renderTabs(); renderDetail();             // renderDetail() draws the category table
     renderSidebarActive(); renderCrumbs();
     syncHashContext();
   }
@@ -2762,8 +2762,9 @@ function renderList(){
   head.innerHTML='<div class="t"><span>'+esc(cat.label)+'</span><span class="muted" id="lcount">'+cat.count+'</span>'+
     '<button type="button" class="lh-hide" id="lhide" data-tip="Hide the list — more room for the page" aria-label="Hide the list">'+uiIcon('panelClose')+'</button></div>'+
     '<div class="lh-controls"><input id="lf" placeholder="filter '+esc(cat.label.toLowerCase())+'…" aria-label="Filter list">'+
-    '<select id="lsort" aria-label="Sort list"><option value="name">Name</option>'+
-    '<option value="refs">Most referenced</option><option value="file">File</option></select></div>'+
+    '<select id="lsort" aria-label="Sort list"><option value="name">Name</option><option value="key">Key</option>'+
+    '<option value="refs">Most referenced</option><option value="out">Most references out</option>'+
+    '<option value="findings">Most findings</option><option value="file">File</option></select></div>'+
     '<div id="lwider"></div><div id="lmark"></div>';
   list.appendChild(head);
   const wrap=document.createElement('div'); wrap.id='listitems';
@@ -2774,7 +2775,7 @@ function renderList(){
   // The input lives outside the re-rendered items wrap, so typing never loses focus.
   const lf=document.getElementById('lf'); lf.value=state.filter;
   lf.oninput=debounce(()=>{ state.filter=lf.value; renderItems(cat, wrap); syncHashContext(); },120);
-  const ls=document.getElementById('lsort'); ls.value=state.sort;
+  const ls=document.getElementById('lsort'); ls.value=String(state.sort||'name').replace(/^-/,'');
   ls.onchange=()=>{ state.sort=ls.value; renderItems(cat, wrap); syncHashContext(); };
   wrap.onkeydown=rowKeys(wrap, '.item[data-id]');
   document.getElementById('lhide').onclick=()=>setListHidden(true);
@@ -2954,6 +2955,116 @@ function renderItems(cat, wrap){
                                    {root: wrap.closest('.listcol'), rootMargin:'600px'});
   _listIO.observe(sentinel);
   append();
+}
+
+// ---------- the category table (#/browse/<cat> with nothing selected) ----------
+// A category used to open as its list beside ~870px of "Nothing selected". It opens as a table instead:
+// name, key, file, references in and out, open findings — sortable by each, filtered with the list's own
+// engine (catItems), and marked, walked and opened exactly like the list (activateRow, rowKeys). The list
+// column steps aside while the table shows the same rows, and comes back beside the node a row opens,
+// carrying the filter and the sort (&f=, &s=).
+const CAT_ROWS=200;
+let _catShown=CAT_ROWS;
+/** One or two columns a category is worth more with — cheap to compute, dropped when every row is empty. */
+function catExtraCols(cat){
+  const t=cat.id.split('::')[0], ex=[];
+  const models=new Set(['process','case','form','page','decision','dataObject','service','query','agent','action','channel','event']);
+  if(models.has(t)) ex.push({k:'app', label:'App', w:'minmax(10ch,1fr)', opt:true, get:n=>{
+    const apps=(incM.get(n.id)||[]).filter(e=>e.rel==='contains').map(e=>byId.get(e.id)).filter(Boolean);
+    return apps.map(a=>esc(a.label)).join(', '); }});
+  if(t==='service') ex.push({k:'table', label:'Table', w:'minmax(10ch,1fr)', mono:true, opt:true, get:n=>esc((n.data||{}).tableName||'')});
+  if(t==='decision') ex.push({k:'hit', label:'Hit policy', w:'minmax(8ch,.8fr)', opt:true, get:n=>esc((n.data||{}).hitPolicy||'')});
+  if(t==='java') ex.push({k:'pkg', label:'Package', w:'minmax(12ch,1.2fr)', mono:true, opt:true,
+    get:n=>{ const k=String(n.key||''), i=k.lastIndexOf('.'); return i>0?esc(k.slice(0,i)):''; }});
+  if(t==='variable') ex.push({k:'rw', label:'Writes · reads', w:'minmax(9ch,.8fr)', opt:true,
+    get:n=>{ const d=n.data||{}; return (d.writeCount||d.readCount)?(d.writeCount||0)+' · '+(d.readCount||0):''; }});
+  // a review list: what is open on the row, in the check's own words
+  const chk=CAT_CHECK[cat.id];
+  if(chk) ex.push({k:'why', label:'Finding', w:'minmax(18ch,2fr)', cls:'wrap', get:n=>{
+    const f=(FIND_BY_NODE.get(n.id)||[]).find(x=>x.check===chk && !waiverFor(x)); return f?esc(f.message||''):''; }});
+  return ex;
+}
+function renderCatLanding(){
+  const det=document.getElementById('detail'), vb=document.getElementById('view-browse');
+  const cat=CATS.find(c=>c.id===state.cat); if(!cat) return;
+  vb.classList.add('landing');
+  if(_listIO){ _listIO.disconnect(); _listIO=null; }
+  document.getElementById('list').innerHTML='';      // the table stands in for the list; ids below are the list's
+  const chk=CAT_CHECK[cat.id];
+  det.innerHTML='<div class="dhead cath"><span class="dkind">'+typeIcon(cat.icon,{color:cat.color})+esc(cat.label)+'</span>'+
+    '<span class="cath-n" id="lcount"></span>'+
+    '<input class="cat-pf" id="catf" type="search" value="'+esc(state.filter||'')+'" placeholder="filter '+esc(cat.label.toLowerCase())+
+      ' — any words, any order…" aria-label="Filter '+esc(cat.label)+'">'+
+    (chk?'<span class="dhead-actions"><button type="button" id="catcheck" data-tip="Open this check on the Checks page">'+
+      uiIcon('link')+'<span class="lbl">the check</span></button></span>':'')+'</div>'+
+    '<div class="dbody catland"><h2 class="dtitle vh">'+esc(cat.label)+'</h2><div id="lwider"></div><div id="lmark"></div>'+
+    '<p class="relhint">click opens · <b>'+MODK+'-click</b> or <b>⇧-click</b> marks · middle-click opens a background tab · '+
+      '<b>?</b> every shortcut</p>'+
+    '<div id="catrows" role="listbox" aria-multiselectable="true" aria-label="'+esc(cat.label)+'"></div></div>';
+  det.scrollTop=0;
+  const f=document.getElementById('catf');
+  f.oninput=debounce(()=>{ state.filter=f.value; paintCatRows(true); syncHashContext(); },120);
+  const cc=document.getElementById('catcheck');
+  if(cc) cc.onclick=()=>{ _checkJump='chk-'+chk; location.hash='/checks'; };
+  const box=document.getElementById('catrows');
+  box.onkeydown=rowKeys(box, '.tr[data-id]');
+  box.onclick=e=>{
+    const s=e.target.closest('.th-s');
+    if(s){ const k=s.dataset.sort, cur=String(state.sort||'name');
+      state.sort=cur===k?'-'+k:k; paintCatRows(true); syncHashContext();
+      const again=box.querySelector('.th-s[data-sort="'+cssEsc(k)+'"]'); if(again) again.focus(); return; }
+    if(e.target.closest('.cpy, .opn-line, #catmore')) return;          // the row's own buttons act for themselves
+    const tr=e.target.closest('.tr[data-id]'); if(!tr) return;
+    const w=_catWhere.get(tr.dataset.id);
+    activateRow(e, tr.dataset.id, {q:state.filter||undefined, el:(w&&w.el)||undefined});
+  };
+  box.onmousedown=e=>{ if(e.button===1 && e.target.closest('.tr[data-id]')) e.preventDefault(); };
+  box.onauxclick=e=>{ const tr=e.button===1&&e.target.closest('.tr[data-id]'); if(tr){ e.preventDefault(); openTabs([tr.dataset.id], {background:true}); } };
+  paintCatRows(true);
+  renderListMarkBar();
+}
+let _catWhere=new Map();
+function paintCatRows(reset){
+  const cat=CATS.find(c=>c.id===state.cat), box=document.getElementById('catrows');
+  if(!cat||!box) return;
+  if(reset) _catShown=CAT_ROWS;
+  const {items, parsed}=catItems(cat, state.filter, state.sort);
+  renderListBridge(cat, parsed, items.length);
+  const lc=document.getElementById('lcount'); if(lc) lc.textContent=listCountText(cat, parsed, items.length);
+  if(!items.length){
+    box.innerHTML=listEmptyHtml(cat, parsed, state.filter, 'catemptypal');
+    const b=box.querySelector('#catemptypal'); if(b) b.onclick=()=>openPalette(state.filter);
+    return;
+  }
+  const extra=catExtraCols(cat);
+  const cols=[{k:'name', label:'Name', w:'minmax(16ch,2.2fr)', sort:'name'},
+    {k:'key', label:'Key', w:'minmax(10ch,1.3fr)', mono:true, opt:true, sort:'key'}]
+    .concat(extra)
+    .concat([{k:'file', label:'File', w:'minmax(10ch,1.1fr)', mono:true, opt:true, sort:'file'},
+      {k:'in', label:'In', w:'5ch', cls:'num', opt:true, sort:'refs'},
+      {k:'out', label:'Out', w:'5ch', cls:'num', opt:true, sort:'out'},
+      {k:'find', label:'Findings', w:'minmax(7ch,.7fr)', cls:'tags', sort:'findings'}]);
+  _catWhere=new Map();
+  const shown=items.slice(0,_catShown);
+  const rows=shown.map((n,i)=>{
+    const w=parsed.empty?null:matchWhere(n, parsed); if(w) _catWhere.set(n.id, w);
+    const mk=listMarks.has(n.id), cells={
+      name:nodeIcon(n)+'<span class="nm">'+hlHtml(n.label, parsed)+'</span>'+authBadge(n)+
+        (w&&w.hint?'<span class="cat-why">'+hlHtml(w.hint, parsed)+'</span>':''),
+      key:sameText(n.key, n.label)?'':hlHtml(n.key||'', parsed),
+      file:n.file?'<span class="fp" data-tip="'+esc(n.file)+'">'+esc(fileBase(n.file))+'</span>'+openBtn(n.file,(n.data||{}).line):'',
+      in:String(INSIGHTS.indeg.get(n.id)||''), out:String(INSIGHTS.outdeg.get(n.id)||''),
+      find:findPillHtml(n.id)};
+    extra.forEach(c=>{ cells[c.k]=c.get(n); });
+    return {cells, cls:mk?'mark':'', lead:'<span class="ck" aria-hidden="true">✓</span>',
+      attrs:' data-id="'+esc(n.id)+'" role="option" tabindex="'+(i?-1:0)+'" aria-checked="'+mk+'"'};
+  });
+  box.innerHTML=tbl(cols, rows, {filter:false, sort:state.sort||'name', cap:1e9, cls:'cattbl'})+
+    (items.length>shown.length?'<button type="button" class="dgbtn" id="catmore">show '+Math.min(CAT_ROWS, items.length-shown.length)+
+      ' more · '+(items.length-shown.length)+' not shown</button>':'');
+  const more=document.getElementById('catmore');
+  if(more) more.onclick=()=>{ _catShown+=CAT_ROWS; paintCatRows(false); };
+  wireCopyButtons(box); wireOpenButtons(box);
 }
 
 // Selection within the current category only toggles classes — no full list rebuild.
@@ -4517,11 +4628,12 @@ function renderDetail(){
   // showing an element of the model we are navigating away from.
   hideDgCard();
   if(!state.sel || !byId.get(state.sel)){
-    det.innerHTML=estateHtml({icon:uiIcon('search'), title:state.cat?'Nothing selected':'Flowable Atlas',
-      hint:'Pick an item from the list — click any relationship to travel the graph. Search everything with <b>/</b> or <b>'+
-        MODK+'K</b>; press <b>?</b> for every shortcut.'});
+    if(state.cat && CATS.some(c=>c.id===state.cat)){ renderCatLanding(); return; }
+    det.innerHTML=estateHtml({icon:uiIcon('search'), title:'Flowable Atlas',
+      hint:'Pick a category on the left — or search everything with <b>/</b> or <b>'+MODK+'K</b>; press <b>?</b> for every shortcut.'});
     return;
   }
+  document.getElementById('view-browse').classList.remove('landing');
   const n=byId.get(state.sel);
   // Recording wrapper: every data key factsFor()/diagramView()/detailExtra() (and their helpers —
   // elementNames, elementRecords, caseCriteria, paramSection all receive this node) actually reads is

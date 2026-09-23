@@ -233,12 +233,18 @@ const probe = `<script>
     if(c) click(c); else say('note','no Data objects category');
   });
   steps.push(()=>{
-    const it=document.querySelector('#listitems .item[data-id]');
-    ok('list rendered rows', !!it);
+    // a category with nothing selected opens as a table, and the list column steps aside
+    const it=document.querySelector('#catrows .tr[data-id]');
+    ok('a category opens as a table of its rows', !!it && document.getElementById('view-browse').classList.contains('landing'));
+    ok('the list column steps aside while the table shows', !document.querySelector('.listcol').getBoundingClientRect().width);
+    // a column empty in every row is dropped, so only the name is certain; the rest depends on the rows
+    ok('the table has sortable columns, the name first', (document.querySelector('#catrows .th-s')||{}).dataset.sort==='name' &&
+       document.querySelectorAll('#catrows .th-s').length>=2);
     if(it) click(it);
   });
   steps.push(()=>{
-    ok('list click opened the node', (document.getElementById('detail').textContent||'').length>40);
+    ok('a table row opens the node', (document.getElementById('detail').textContent||'').length>40 && !!state.sel);
+    ok('the list comes back beside the node', !!document.querySelector('#listitems .item[data-id]') && document.querySelector('.listcol').getBoundingClientRect().width>0);
     const lf=document.getElementById('lf');
     ok('list filter present', !!lf);
     if(lf){ lf.value='zzzznope'; lf.dispatchEvent(new Event('input')); }
@@ -457,14 +463,14 @@ const probe = `<script>
     if(c) click(c); else say('note','no Processes category');
   });
   steps.push(()=>{
-    const lf=document.getElementById('lf');
-    if(lf){ lf.value='setVariable'; lf.dispatchEvent(new Event('input')); }
+    const f=document.getElementById('catf');
+    if(f){ f.value='setVariable'; f.dispatchEvent(new Event('input')); }
   });
   steps.push(()=>{
-    const it=document.querySelector('#listitems .item[data-id]');
+    const it=document.querySelector('#catrows .tr[data-id]');
     ok('a script-body match still shows rows', !!it);
-    ok('and the row says why it matched', !!it && /script/.test((it.querySelector('.sub')||{}).textContent||''),
-       it?((it.querySelector('.sub')||{}).textContent||'(no sub)'):'(none)');
+    ok('and the row says why it matched', !!it && /script/.test((it.querySelector('.cat-why')||{}).textContent||''),
+       it?((it.querySelector('.cat-why')||{}).textContent||'(no why)'):'(none)');
   });
 
   // --- nothing extracted is invisible: unconsumed data renders as Other attributes ---
@@ -569,9 +575,28 @@ const probe = `<script>
   // --- the list context travels in the link, and comes back on reload ---
   steps.push(()=>{ closeOtherTabs(); location.hash='/browse/'+enc('process'); });
   steps.push(()=>{
-    const lf=document.getElementById('lf'), ls=document.getElementById('lsort');
-    if(lf){ lf.value='order'; lf.dispatchEvent(new Event('input')); }
-    if(ls){ ls.value='refs'; ls.dispatchEvent(new Event('change')); }
+    const s=document.querySelector('#catrows .th-s[data-sort="refs"]');
+    ok('a column header sorts', !!s);
+    if(s) click(s);
+  });
+  steps.push(()=>{
+    const ids=[...document.querySelectorAll('#catrows .tr[data-id]')].map(r=>r.dataset.id);
+    ok('sorting by In puts the most referenced first', ids.length>1 && ids.every((id,i)=>!i||(INSIGHTS.indeg.get(ids[i-1])||0)>=(INSIGHTS.indeg.get(id)||0)));
+    ok('the sorted header says so', !!document.querySelector('#catrows .th-s.on[data-sort="refs"]'));
+    const before=state.tabs.length, row=document.querySelector('#catrows .tr[data-id]');
+    window.__tabsB=before;
+    if(row) row.dispatchEvent(new MouseEvent('auxclick', {bubbles:true, button:1}));
+  });
+  steps.push(()=>{
+    ok('a middle-click opens a background tab and stays on the table', state.tabs.length===window.__tabsB+1 && !state.sel);
+    const rows=[...document.querySelectorAll('#catrows .tr[data-id]')];
+    if(rows[0]) click(rows[0], {metaKey:true, ctrlKey:true});
+  });
+  steps.push(()=>{
+    ok('a mod-click marks a table row', !!document.querySelector('#catrows .tr.mark[aria-checked="true"]') && !!document.getElementById('lopen'));
+    listMarksClear(); syncListMarks(); setMarkNote('');
+    const f=document.getElementById('catf');
+    if(f){ f.value='order'; f.dispatchEvent(new Event('input')); }
   });
   steps.push(()=>{
     const h=decodeURIComponent(location.hash);
@@ -582,9 +607,10 @@ const probe = `<script>
     location.hash='/browse/'+enc('form')+'&f=zzz-none&s=refs';
   });
   steps.push(()=>{
-    const lf=document.getElementById('lf'), ls=document.getElementById('lsort');
-    ok('a link with &f= restores the filter', !!lf && lf.value==='zzz-none', lf?('filter="'+lf.value+'"'):'no #lf');
-    ok('a link with &s= restores the sort', !!ls && ls.value==='refs', ls?('sort="'+ls.value+'"'):'no #lsort');
+    const f=document.getElementById('catf');
+    ok('a link with &f= restores the filter', !!f && f.value==='zzz-none', f?('filter="'+f.value+'"'):'no #catf');
+    ok('a link with &s= restores the sort', state.sort==='refs', 'sort="'+state.sort+'"');
+    ok('a filter matching nothing says so', !!document.querySelector('#catrows .list-empty'));
     location.hash=enc('form:orderForm');
   });
   steps.push(()=>{
@@ -953,8 +979,8 @@ const probe = `<script>
   });
   steps.push(()=>{
     const f=DATA.findings[wvFi];
-    const it=f&&document.querySelector('#list .item[data-id="'+cssEsc(f.node)+'"]');
-    ok('a list item of a model with findings carries the pill', !f || !!(it&&it.querySelector('.fpill')));
+    const it=f&&document.querySelector('#catrows .tr[data-id="'+cssEsc(f.node)+'"]');
+    ok('a table row of a model with findings carries the pill', !f || !!(it&&it.querySelector('.fpill')));
     const fp=it&&it.querySelector('.fpill');
     ok('the pill carries its tone icon and says what it counts', !f || (!!fp && !!fp.querySelector('svg') && /finding|advice/.test(fp.dataset.tip||'')));
     if(f) location.hash=enc(f.node);
@@ -1100,7 +1126,7 @@ const probe = `<script>
   });
 
   // --- list badges explain themselves; a key that repeats the name is shown once ---
-  steps.push(()=>{ location.hash='/browse/endpoint'; });
+  steps.push(()=>{ location.hash=enc(nodes.find(n=>n.type==='endpoint').id); });   // on a node, so the list is beside it
   steps.push(()=>{
     const items=[...document.querySelectorAll('#listitems .item[data-id]')];
     const same=items.filter(el=>{ const n=byId.get(el.dataset.id); return n && sameText(n.key, n.label); });

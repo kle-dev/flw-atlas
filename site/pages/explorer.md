@@ -30,11 +30,11 @@ view you are looking at can be copied as a link.
 | `#/variables` | The [unused-variable](../variables/) report and what Atlas could not judge |
 | `#/scripts` | Every script body in the project |
 | `#/schema` | Schema gaps: Liquibase → service → data object, per column |
-| `#/browse/<category>` | A category list — one per node type, Java role, variable scope and review list |
+| `#/browse/<category>` | A category — one per node type, Java role, variable scope and review list — as a sortable table: name, key, file, references in and out, open findings, and a column or two the type is worth more with (the app a model belongs to, a service's table, a review list's finding). Opening a row brings the list back beside the node |
 | `#<nodeId>` | Browse with that node selected. This is the permalink form |
 | `#<nodeId>&q=<term>` | …with the search term that led there highlighted |
 | `#<nodeId>&e=<elementId>` | …with a specific model element opened — and selected on the diagram |
-| `…&f=<filter>&s=<sort>` | On a node or a category route: the list's filter text and sort order. Written by the page as you type or pick (no history entry), so a reload or a copied link brings the list back as you left it |
+| `…&f=<filter>&s=<sort>` | On a node or a category route: the list's filter text and sort order (`name`, `key`, `file`, `refs`, `out`, `findings`; a leading `-` reverses it). Written by the page as you type or pick (no history entry), so a reload or a copied link brings the list back as you left it |
 | `#/checks&f=…&c=error&a=1`, `#/tree&l=all&f=…`, `#/scripts&f=…&c=…`, `#/variables&f=…&c=…` | On a report route: the filter text (`f`), the active chip (`c` — a tone (`error`, `warning`, `advice`), a script group, a write construct), *show accepted* (`a`) and, on the tree, the lens (`l`). Written the same way, so a report can be reloaded or sent to a colleague exactly as it was left |
 
 An unknown route or an unresolvable node id — a model renamed since the link was copied, a report
@@ -66,7 +66,12 @@ descendant does, so the path to a hit is never hidden. The **models** lens shows
 ## Browse categories
 
 The sidebar is generated from the graph, so it only ever shows categories this project actually has,
-grouped into **Models · Integration · Code · Expressions · Checks · Variables · Access · Other**:
+grouped into **Models · Integration · Code · Expressions · Checks · Variables · Access · Other**. A
+category opens as a **table** of its nodes, sorted by any column header (a second click reverses it) and
+filtered with the same engine as the search; rows are marked, walked and opened exactly like the list —
+a click opens, `⌘/Ctrl`-click or `⇧`-click marks, a middle-click opens a background tab. The list column
+steps aside while the table shows the same rows, and comes back beside the node a row opens, with the
+filter and the sort. The categories are:
 
 - one per **node type** present — process, case, decision, form, page, data object, service, agent,
   channel, event, action, bot, query, template, sequence, security policy, endpoint, method, Liquibase
@@ -312,14 +317,14 @@ page, grouped by where each key works.
 | `⌘K` / `Ctrl+K`, or `/` | anywhere | Open the search palette |
 | `?` | anywhere | Every shortcut, in a sheet over the page |
 | `Tab` / `⇧Tab` | palette | Cycle the dialog's controls — facet chips, ×, "Show more", "Did you mean" |
-| `↑` `↓` | palette, list | Move |
-| `⇧↑` `⇧↓` | palette, list | Extend the marked range |
-| `Enter` | palette, list | Open — or open everything marked, as tabs |
-| `⌘/Ctrl+Enter` | palette, list | Open in a background tab |
-| `Space` | list | Toggle the mark under the cursor |
-| `⌘/Ctrl+A` | list | Mark every rendered row |
-| `Home` / `End` | list | First / last row |
-| `Escape` | palette, list | Clear marks, then close |
+| `↑` `↓` | palette, list, category table | Move |
+| `⇧↑` `⇧↓` | palette, list, category table | Extend the marked range |
+| `Enter` | palette, list, category table | Open — or open everything marked, as tabs |
+| `⌘/Ctrl+Enter` | palette, list, category table | Open in a background tab |
+| `Space` | list, category table | Toggle the mark under the cursor |
+| `⌘/Ctrl+A` | list, category table | Mark every rendered row |
+| `Home` / `End` | list, category table | First / last row |
+| `Escape` | palette, list, category table | Clear marks, then close |
 | `↑` `↓` / `Home` `End` | sidebar | Move between group headers and entries (folded entries are skipped) |
 | `Enter` / `Space` | sidebar group header | Fold or unfold the group |
 | `←` / `→` | sidebar | Fold the group you are in and land on its header / unfold a folded header |

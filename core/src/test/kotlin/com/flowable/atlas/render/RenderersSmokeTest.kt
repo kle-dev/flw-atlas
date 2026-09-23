@@ -280,6 +280,7 @@ class RenderersSmokeTest {
         assertTrue("expected the tab strip's overflow menu", html.contains("function syncTabOverflow(") && html.contains("id=\"dtmore\""))
         assertTrue("expected the list to fold away", html.contains("function setListHidden(") && html.contains("id=\"listshow\""))
         assertTrue("expected the keyboard sheet", html.contains("id=\"keysheet\"") && html.contains("const SHORTCUTS="))
+        assertTrue("expected the category table", html.contains("function renderCatLanding(") && html.contains(".tbl .th-s{"))
         assertFalse("what accepting does is said on the button, not above every model's findings",
             html.contains("Accepting one keeps it in the report"))
         assertFalse("the old operation card styling is gone", html.contains("details.op>summary"))
