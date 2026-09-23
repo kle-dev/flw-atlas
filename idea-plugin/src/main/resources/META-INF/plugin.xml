@@ -159,6 +159,14 @@
               lists the values whoever starts it has to provide. Where Atlas cannot see far enough — a
               callee outside the project, a call with no explicit mappings, a name only a script guesses at
               — the cell is a ? that says why.</li>
+          <li><b>A service's page says whether its operations fit.</b> Per operation: who calls it and
+              whether what they pass fits its parameters, the endpoint of this project that answers it,
+              whether that handler serves the operation's verb and every <code>{path variable}</code> has a
+              parameter, and the handler method with its line. An operation's own page lists every caller
+              against every parameter — a form button, a task, a Java class or an agent that fills them
+              itself. Where no changelog lets the schema coverage compare them, the service's column
+              mappings are held against the data object's fields; a data object's properties name the
+              service column behind each field and the forms that show it.</li>
           <li><b>A health strip under every title.</b> Before the first section, a page says whether the
               model is fine: its open defects and advice, the gaps its tables found (or <i>✓ fits</i>), how
               many models it uses and is used by, the apps that ship it — or <i>in no app</i> — and the
@@ -551,21 +559,6 @@
               <code>--fail-on-stale-waivers</code>, <code>--waiver-author</code> to prefill the
               <code>by</code> of a rule accepted from a CLI-generated page, and <code>any</code> as the
               honest spelling of what <code>--fail-on warning</code> has always meant.</li>
-          <li><b>Accept a finding where you read it.</b> Every finding row — on the Checks page, under
-              <i>Findings on this model</i> (right under the diagram), on a diagram element's card — carries
-              <b>accept…</b>: a labelled reason that is refused in words when empty, an optional
-              <i>until</i>, <i>by</i> prefilled with the project's git identity in the IDE, and, for a
-              finding that names an element or a subject, a choice between this finding only (the default)
-              and every finding of the check on the model. Accepted rows stay in place with <i>edit</i> and
-              <i>restore</i>; a bar under the top bar says on every view how many decisions are unsaved,
-              with <i>Save to waivers.json</i> in the IDE or <i>Export</i> elsewhere and a two-step
-              <i>discard</i>. After a save the IDE confirms, regenerates the page — on the block or node you
-              were reading, not back on the dashboard — and the diff reconciles itself against the file. The
-              IDE reads <code>waivers.json</code> on both generate paths, so a page generated from the IDE
-              no longer shows every accepted finding as open. The <i>Deliberately accepted</i> table shows
-              every decision as it stands — scope, reason, author, expiry, how many findings it covers —
-              with its troubles as marks on the row and <i>restore</i> beside it; notes get a table of their
-              own.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

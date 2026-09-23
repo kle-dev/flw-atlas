@@ -3676,6 +3676,7 @@ const CT_SILENCE={
   expression:'The value is an expression — mapped, but not something Atlas can check.',
   op:'Atlas cannot tell which operation this call runs, so it cannot check its parameters.',
   inexact:'Atlas cannot read everything this model expects, so a value it does not recognise may still be used.',
+  implicit:'This caller fills the parameters itself — Java code, an AI agent, a list or select looking up its rows — so Atlas cannot see what it passes.',
 };
 let _vsi=null;
 /** Every variable site, by the model whose scope it is in: `w`/`r` a model's own writes and reads, `inW`
@@ -3756,8 +3757,14 @@ function callSitesOf(n){
   if(n.type==='process'||n.type==='case'){
     [d.callActivities, d.serviceTasks, d.ruleTasks, d.userTasks, d.events, d.otherTasks, d.eventListeners].forEach(l=>(l||[]).forEach(visit));
     if(d.planModel)(function walk(nd){ visit(nd); (nd.children||[]).forEach(walk); })(d.planModel);
-    // a call activity recorded twice (callActivities and subProcesses) is one call
   }
+  // a form's component calls what its callee names; a list or a select fills its lookup parameters
+  // itself, so only a component that maps a payload is held to the callee's inputs
+  if(n.type==='form'||n.type==='page') (d.fields||[]).forEach(f=>{ const cl=f&&f.callee; if(!cl||!cl.kind||!cl.key||cl.kind==='rest') return;
+    push({id:f.id, name:f.label||f.id, type:f.type}, cl.kind, cl.key, cl.op, {implicit:!mapsOf(f.id).length}); });
+  // an agent's tools: the model fills the parameters — Atlas cannot see what it passes
+  if(n.type==='agent') (d.tools||[]).forEach(t=>{ if(t&&t.key) push({id:'tool:'+t.key, name:t.operation?t.key+' · '+t.operation:t.key, type:'tool'},
+    t.type||'service', t.key, t.operation, {implicit:true}); });
   // anything the mappings name that no element record did — the mapping's own callee
   maps.forEach(g=>{ if(!g.refKind||!g.refKey||g.refKind==='rest'||g.refKind==='bot') return;
     if(out.some(x=>String(x.el)===String(g.element))) return;
@@ -3767,10 +3774,17 @@ function callSitesOf(n){
 }
 /** The call sites, in other models, that call `n` — each with the model it is in. */
 function callersOf(n){
-  const out=[], seen=new Set();
-  (incM.get(n.id)||[]).forEach(e=>{ if(seen.has(e.id)) return; seen.add(e.id);
-    const m=byId.get(e.id); if(!m||!CT_CALLER_TYPES.has(m.type)) return;
-    callSitesOf(m).forEach(st=>{ if(st.callee.id===n.id) out.push(Object.assign({model:m.id}, st)); });
+  const d=n.data||{}, out=[], cand=new Set(), usedBy=new Set(d.usedBy||[]);
+  (incM.get(n.id)||[]).forEach(e=>cand.add(e.id));
+  usedBy.forEach(id=>cand.add(id));
+  // an operation has no edges of its own: its callers are among its service's
+  if(n.type==='serviceOperation'&&d.service) (incM.get('service:'+d.service)||[]).forEach(e=>cand.add(e.id));
+  cand.forEach(id=>{ const m=byId.get(id); if(!m) return;
+    const sites=CT_CALLER_TYPES.has(m.type)?callSitesOf(m).filter(st=>st.callee.id===n.id):[];
+    if(sites.length) sites.forEach(st=>out.push(Object.assign({model:m.id}, st)));
+    // a caller Atlas knows of but cannot open — a Java class, the engine behind a data object is not one:
+    // it calls the CRUD operations by itself
+    else if(usedBy.has(id)&&m.type!=='dataObject') out.push({model:m.id, el:null, name:'', callee:{id:n.id, state:'ok'}, maps:[], implicit:true});
   });
   return out.sort((a,b)=>byId.get(a.model).label.localeCompare(byId.get(b.model).label)||String(a.name||a.el).localeCompare(String(b.name||b.el)));
 }
@@ -3834,6 +3848,10 @@ function mappingOf(st, callee){
   const ins=st.maps.filter(p=>p.dir==='in'), outs=st.maps.filter(p=>p.dir!=='in');
   const named=(list,nm)=>list.filter(p=>ctName(p)===nm);
   const miss=ct.exact?'bad':'warn';
+  if(st.implicit){
+    ct.items.filter(it=>it.dir==='in').forEach(it=>rows.push({it, dir:'in', name:it.name, via:[], st:it.required?'unk':'none', tip:CT_SILENCE.implicit}));
+    return {ct, rows, worst:''};
+  }
   ct.items.forEach(it=>{
     const via=named(it.dir==='in'?ins:outs, it.name);
     if(via.length){ rows.push({it, dir:it.dir, name:it.name, via, st:via.some(p=>p.expression)?'ok':'ok'}); return; }
@@ -3949,6 +3967,7 @@ function callersMatrix(n, c){
   res.forEach(x=>x.r.rows.forEach(r=>addKey(r.dir, r.name, r.it)));
   const cols=callers.length<=4
     ? callers.map((st,i)=>({k:'c'+i, labelHtml:esc(byId.get(st.model).label)+(st.name||st.el?' <span class="muted">› '+esc(st.name||st.el)+'</span>':''), w:'minmax(9ch,1fr)', cls:'tags'}))
+
     : [{k:'all', label:callers.length+' callers', w:'minmax(16ch,2.4fr)', cls:'tags gcs'}];
   const rows=keys.map(k=>{
     const cells={dir:'<span class="pd" style="color:var('+(PDIR_COLOR[k.dir]||'--ink-faint')+')">'+esc(k.dir)+'</span>',
@@ -3970,6 +3989,91 @@ function callersMatrix(n, c){
 }
 FIT.process=[{title:'Calls', build:(n,c)=>callsTable(n,c)}, {title:'Called by', build:(n,c)=>callersMatrix(n,c)}];
 FIT.case=FIT.process;
+
+// --- a service: its operations against their callers, the code that answers them, the data object behind it ---
+function svcOps(svc){ return ((svc.data||{}).operations||[]).filter(o=>o&&o.key).map(o=>({o, n:byId.get('serviceOperation:'+svc.key+'#'+o.key)})); }
+/** One row per operation: who calls it and whether what they pass fits — the operation page's matrix, summed. */
+function opCallersFit(svc){
+  const ops=svcOps(svc); if(!ops.length) return '';
+  return gapTable([{k:'op',label:'Operation',w:'minmax(16ch,1.8fr)'},{k:'callers',label:'Called by',w:'minmax(14ch,1.6fr)'},{k:'st',label:'',w:'minmax(14ch,1.4fr)',cls:'tags'}],
+    ops.map(({o,n})=>{
+      const callers=n?callersOf(n):[], res=callers.map(st=>mappingOf(st, n));
+      const rows=[].concat(...res.map(r=>r.rows));
+      const worst=res.some(r=>r.worst==='bad')?'bad':res.some(r=>r.worst==='warn')?'warn':'';
+      const models=[...new Set(callers.map(x=>x.model))];
+      const miss=rows.filter(r=>r.st==='miss'), warn=rows.filter(r=>r.st==='warn'), unk=rows.filter(r=>r.st==='unk');
+      const stc=!callers.length?gm('none','no caller','Nothing in this project calls this operation — see the Unused operations finding')
+        : (miss.length?gm('miss', miss.length+' required, not passed', [...new Set(miss.map(r=>r.name))].join(', ')):'')+
+          (warn.length?gm('warn', warn.length+' not a parameter', [...new Set(warn.map(r=>r.name))].join(', ')):'')+
+          (unk.length&&!miss.length&&!warn.length?gm('unk', 'unclear', unk.map(r=>r.name+' — '+(r.tip||'')).join(' · ')):'')+
+          (!miss.length&&!warn.length&&!unk.length?gm('ok','fits'):'');
+      return {gap:worst, unk:!worst&&callers.length&&unk.length>0, kind:ctWorstKind(rows, true),
+        hay:elHay(o.key, o.name, o.method, o.url, models.map(id=>byId.get(id).label).join(' ')),
+        cells:{op:(o.method?'<span class="tag verb">'+esc(o.method)+'</span> ':'')+(n?vlink(n.id, o.key):'<span class="mono">'+esc(o.key)+'</span>'),
+          callers:models.slice(0,3).map(id=>vlink(id, byId.get(id).label)).join(', ')+(models.length>3?' <span class="muted">+'+(models.length-3)+'</span>':''),
+          st:stc}};
+    }), {okLabel:k=>k+' fit', kinds:CT_KINDS});
+}
+/** The `{placeholder}` names of a URL template — what the handler takes from the path. */
+const urlVars=u=>[...String(u||'').matchAll(/\{([A-Za-z_][\w.-]*)\}/g)].map(m=>m[1]);
+/** One row per operation with a URL: the endpoint that answers it, whether the verb matches, whether every
+ *  path variable has a parameter, and the handler method in the code. */
+function opEndpointsFit(svc){
+  const ops=svcOps(svc).filter(x=>x.o.url||x.o.fullUrl); if(!ops.length) return '';
+  return gapTable([{k:'op',label:'Operation',w:'minmax(18ch,2fr)'},{k:'ep',label:'Endpoint',w:'minmax(16ch,1.8fr)'},
+      {k:'verb',label:'Verb',w:'minmax(10ch,.9fr)',cls:'tags'},{k:'path',label:'Path variables',w:'minmax(12ch,1.2fr)',cls:'tags',opt:true},
+      {k:'h',label:'Handler',w:'minmax(14ch,1.4fr)',opt:true}],
+    ops.map(({o,n})=>{
+      const url=o.fullUrl||o.url, verb=knownVerb(o.method);
+      const right=endpointsFor(svc.id, url, o.method), any=endpointsFor(svc.id, url, null);
+      const ep=right[0]||null, other=!ep&&any.length?any[0]:null;
+      const params=new Set((o.params||[]).map(p=>p&&p.name).filter(Boolean));
+      const vars=urlVars(url), noParam=vars.filter(v=>!params.has(v));
+      let gap='', kind='';
+      const verbC=ep?gm('ok', verb||'', 'The handler serves this verb')
+        : other?(gap='warn', kind='verb', gm('warn', (verb||'?')+' ≠ '+((other.data||{}).http||'?'), 'The only handler for this path serves another verb'))
+        : gm('none','', 'No handler in this project answers this URL — it is served elsewhere');
+      if(noParam.length && !gap){ gap='warn'; kind='pathVar'; }
+      const target=ep||other, jid=target?incFrom(target.id,'serves'):null, td=(target&&target.data)||{};
+      return {gap, kind, hay:elHay(o.key, url, o.method, target&&target.label),
+        cells:{op:(o.method?'<span class="tag verb">'+esc(o.method)+'</span> ':'')+(n?vlink(n.id, o.key):'<span class="mono">'+esc(o.key)+'</span>')+
+            ' <span class="muted mono">'+esc(url)+'</span>',
+          ep:target?vlink(target.id, target.label):'<span class="muted">not in this project</span>', verb:verbC,
+          path:vars.length?vars.map(v=>params.has(v)?gm('ok', '{'+v+'}', 'A parameter of the operation fills it'):gm('warn', '{'+v+'}', 'No parameter of the operation is called '+v)).join(''):'',
+          h:jid?vlink(jid, (td.controller||byId.get(jid).label)+'#'+(td.handler||''))+lineRef(byId.get(jid).file, td.line):''}};
+    }), {okLabel:k=>k+' answered', kinds:{verb:{tone:'warn', label:k=>k+' verb differs'}, pathVar:{tone:'warn', label:k=>k+' path variable without parameter'}}});
+}
+/** The service's column mappings against the data object's fields, joined by name — the schema coverage
+ *  without a changelog. Only where there is no schema coverage table to say it better. */
+function svcDoFit(n){
+  const svc=n.type==='service'?n:byId.get('service:'+((n.data||{}).service||'')), dobjs=[];
+  if(!svc) return '';
+  const sd=svc.data||{};
+  if(sd.schemaCoverage&&(sd.schemaCoverage.rows||[]).length) return '';
+  const cols=sd.columns||[]; if(!cols.length) return '';
+  if(n.type==='dataObject') dobjs.push(n);
+  else nodes.forEach(x=>{ if(x.type==='dataObject'&&(x.data||{}).service===svc.key) dobjs.push(x); });
+  if(!dobjs.length) return '';
+  return dobjs.map(dobj=>{
+    const f=(dobj.data||{}).columns||[], byS=new Map(cols.map(c=>[looseCol(c.name), c])), byD=new Map(f.map(x=>[looseCol(x.name), x]));
+    const keys=[...new Set([...byD.keys(), ...byS.keys()])];
+    return gapTable([{k:'do',label:'Data object field',w:'minmax(12ch,1.3fr)',mono:true},{k:'svc',label:'Service mapping',w:'minmax(14ch,1.5fr)',mono:true},{k:'note',label:'',w:'minmax(12ch,1fr)',cls:'tags'}],
+      keys.map(k=>{ const a=byD.get(k), b=byS.get(k);
+        const tMis=a&&b&&a.type&&b.type&&String(a.type).toLowerCase()!==String(b.type).toLowerCase();
+        return {gap:!b?'bad':!a?'warn':tMis?'info':'', kind:!b?'noSvc':!a?'noDo':'',
+          hay:elHay(a&&a.name, b&&b.name, b&&b.columnName),
+          cells:{do:a?esc(a.name)+(a.type?' <span class="muted">'+esc(a.type)+'</span>':''):gm('miss','not a field'),
+            svc:b?esc(b.name)+(b.columnName&&looseCol(b.columnName)!==looseCol(b.name)?' <span class="muted">'+esc(b.columnName)+'</span>':'')+(b.type?' <span class="muted">'+esc(b.type)+'</span>':''):gm('miss','not mapped'),
+            note:tMis?gm('info', a.type+' ≠ '+b.type, 'The field and the column mapping disagree on the type'):''}};
+      }), {meta:(n.type==='dataObject'?nodeChip(svc.id):nodeChip(dobj.id)), okLabel:k=>k+' mapped through',
+        kinds:{noSvc:{tone:'bad', label:k=>k+' not mapped by the service'}, noDo:{tone:'warn', label:k=>k+' not a field of the data object'}}});
+  }).join('');
+}
+FIT.serviceOperation=[{title:'Called by', build:(n,c)=>callersMatrix(n,c)}];
+FIT.service=[{title:'Operations and their callers', build:n=>opCallersFit(n)},
+  {title:'Operations and the code that answers them', build:n=>opEndpointsFit(n)},
+  {title:'Service and data object', build:n=>svcDoFit(n)}];
+FIT.dataObject=[{title:'Service and data object', build:n=>svcDoFit(n)}];
 
 // ---------- form / page components ----------
 /** The processes and cases that show a form, with the element that does — a user task, a human task —
@@ -4281,8 +4385,6 @@ S.dataSources={id:'datasources', title:'Data sources', hint:'where selects, tabl
 /** A URL's path as segments, placeholders as `*` — the same normal form :core matches endpoints with. */
 function epPathSegs(p){ return String(p||'').replace(/^[a-z]+:\/\/[^/]+/,'').split('?')[0]
   .replace(/[#$]\{[^}]*\}|\{\{[^}]*\}\}|\{[^}]*\}/g,'*').toLowerCase().split('/').filter(Boolean); }
-/** The project endpoints a URL that [srcId] calls lands on: the model's own `rest-call` edges, narrowed
- *  to the endpoints whose path the URL ends with. */
 /** An HTTP verb a caller or a handler states for certain — '' for none, `?`, `ANY` or an expression. */
 const knownVerb=m=>{ const v=String(m==null?'':m).trim().toUpperCase(); return /^[A-Z]+$/.test(v)&&v!=='ANY'?v:''; };
 /**
@@ -4319,12 +4421,25 @@ S.properties={id:'columns', title:'Properties', hint:'the fields of the object, 
   count:(n,c)=>(c.d.columns||[]).length,
   build:(n,c)=>{ const cs=c.d.columns||[]; void c.d.fields;   // `fields` is columns[].name again — read, so it does not surface as an "other attribute"
     if(!cs.length) return '';
+    // where each field lives and who shows it: the backing service's column behind it, and the forms
+    // and pages that bind it (a component bound to this object, `customerRecord.name` → `name`)
+    const svc=n.type==='dataObject'&&c.d.service?byId.get('service:'+c.d.service):null;
+    const svcCols=new Map(((svc&&svc.data||{}).columns||[]).map(x=>[looseCol(x.name), x]));
+    const binders=new Map();
+    if(n.type==='dataObject') (incM.get(n.id)||[]).forEach(e=>{ const m=byId.get(e.id); if(!m||(m.type!=='form'&&m.type!=='page')) return;
+      ((m.data||{}).fields||[]).forEach(f=>{ const id=String((f&&f.id)||''); if(id.indexOf('.')<0) return;
+        const k=looseCol(id.split('.').pop()); if(!binders.has(k)) binders.set(k, new Set()); binders.get(k).add(m.id); }); });
+    const dict=c.d.dictionary;
     return tbl([{k:'name',label:'Name',w:'minmax(10ch,1.2fr)',mono:true},{k:'label',label:'Label',w:'minmax(10ch,1.4fr)',cls:'dim',opt:true},
-
-                {k:'type',label:'Type',w:'minmax(8ch,.8fr)',cls:'tags'},{k:'ref',label:'Relation',w:'minmax(10ch,1.2fr)',opt:true}],
-      cs.map(col=>({hay:(col.name||'')+' '+(col.label||'')+' '+(col.type||'')+' '+(col.refDataObject||''), cells:{
-        name:esc(col.name||''), label:esc(col.label||''), type:tag(col.type),
-        ref:col.refDataObject?vlink('dataObject:'+col.refDataObject, '→ '+col.refDataObject)+(col.relationship?' <span class="muted">'+esc(col.relationship)+'</span>':''):''}}))); }};
+                {k:'type',label:'Type',w:'minmax(8ch,.8fr)',cls:'tags'},{k:'ref',label:'Relation',w:'minmax(10ch,1.2fr)',opt:true},
+                {k:'col',label:'Service column',w:'minmax(10ch,1.1fr)',mono:true,opt:true},{k:'used',label:'Shown in',w:'minmax(10ch,1.2fr)',opt:true}],
+      cs.map(col=>{ const k=looseCol(col.name), sc=svcCols.get(k), used=[...(binders.get(k)||[])];
+        return {hay:(col.name||'')+' '+(col.label||'')+' '+(col.type||'')+' '+(col.refDataObject||''), cells:{
+        name:esc(col.name||''), label:esc(col.label||''),
+        type:/dictionary/i.test(col.type||'')&&dict&&byId.get('dataDictionary:'+dict)?'<span class="tag">'+vlink('dataDictionary:'+dict, col.type)+'</span>':tag(col.type),
+        ref:col.refDataObject?vlink('dataObject:'+col.refDataObject, '→ '+col.refDataObject)+(col.relationship?' <span class="muted">'+esc(col.relationship)+'</span>':''):'',
+        col:sc?esc(sc.columnName||sc.name):(svcCols.size?'<span class="muted">—</span>':''),
+        used:used.map(id=>vlink(id, byId.get(id).label)).join(', ')}}; })); }};
 // --- process & case: the elements, in the order a reader asks about them ---
 /** A Design term wrapped as a tag — the element kind at the end of a row. */
 const kindTag=(type,sub)=>{ const t=elementTerm(type, sub); return t?'<span class="tag">'+t+'</span>':''; };

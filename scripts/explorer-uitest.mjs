@@ -774,6 +774,21 @@ const probe = `<script>
     ok('the caller sees the same gap on its call', !!r && r.classList.contains('cov-warn') && /stockLevel/.test(r.textContent), r?r.textContent:'(no row)');
   });
 
+  // --- a service fits its callers, the code that answers it, and its data object ---
+  steps.push(()=>{ location.hash=enc('service:customerService'); });
+  steps.push(()=>{
+    const s=document.querySelector('#detail details.sect[data-sect="fit"]');
+    ok('a service asks whether its operations fit', !!s);
+    const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>/GET/.test(r.textContent) && r.querySelector('.vlink[data-id="'+enc('endpoint:GET /api/customers')+'"]'));
+    ok('each operation names the endpoint that answers it, with the verb checked', !!row && !!row.querySelector('.gm-ok'), row?row.textContent:'(no row)');
+    ok('and the handler in the code', !!row && /CustomerController#/.test(row.textContent));
+    location.hash=enc('dataObject:customerDO');
+  });
+  steps.push(()=>{
+    const cols=[...document.querySelectorAll('#detail [data-sect="columns"] .tbl .th .td')].map(t=>t.textContent.trim());
+    ok("a data object's properties name the service column behind each field", cols.indexOf('Service column')>=0, cols.join('|'));
+  });
+
   // --- sidebar groups fold and remember ---
   steps.push(()=>{
     const h=document.querySelector('#nav .side-group[data-group="Models"]');

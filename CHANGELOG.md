@@ -27,6 +27,13 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   declare. A process nothing calls lists the values whoever starts it has to provide. Where Atlas
   cannot see far enough — a callee outside the project, a call with no explicit mappings, a name only a
   script guesses at — the cell is a ? that says why.
+- **A service's page says whether its operations fit.** Per operation: who calls it and whether what they
+  pass fits its parameters, the endpoint of this project that answers it, whether that handler serves
+  the operation's verb and every `{path variable}` has a parameter, and the handler method with its line.
+  An operation's own page lists every caller against every parameter — a form button, a task, a Java
+  class or an agent that fills them itself. Where no changelog lets the schema coverage compare them, the
+  service's column mappings are held against the data object's fields; a data object's properties name
+  the service column behind each field and the forms that show it.
 - **A health strip under every title.** Before the first section, a page says whether the model is fine:
   its open defects and advice, the gaps its tables found (or *✓ fits*), how many models it uses and is
   used by, the apps that ship it — or *in no app* — and the tests that deploy it; each jumps to the section
