@@ -44,7 +44,7 @@ const TM = {
 // ---------- node-type icons ----------
 // One stroke icon per node type (Lucide, ISC — see THIRD-PARTY-NOTICES.md), keyed like the --c-* palette
 // so the icon and its colour come from the same name. Values are the inner markup of a 24×24 icon, not
-// a whole <svg>: the same string is wrapped for HTML by typeIcon() and dropped into the neighborhood
+// a whole <svg>: the same string is wrapped for HTML by typeIcon() and dropped into the relations
 // diagram as a <g>. Bare coloured dots used to stand for forty types whose hues nobody can tell apart.
 //
 // Lucide Icons — ISC License. Copyright (c) 2026 Lucide Icons and Contributors (https://lucide.dev).
@@ -320,6 +320,12 @@ const DESIGN_TERMS = {
   'rel:schema': ['Table schema', 'The Liquibase changelog that defines the physical table.'],
   'rel:serves': ['Serves endpoint', 'That controller method handles the endpoint.'],
   'rel:rest-call': ['Calls endpoint', 'A component or task calls that REST endpoint.'],
+  // relations the page derives from an artifact's own lists (usedBy, calls, bindings) — not graph edges
+  'rel:uses-expression': ['Evaluates expression', 'The model evaluates that backend expression.'],
+  'rel:uses-binding': ['Renders binding', 'The form or page renders that frontend binding.'],
+  'rel:uses-customFunction': ['Calls function', 'The model calls that project function.'],
+  'rel:uses-serviceOperation': ['Calls operation', 'The model calls that service operation.'],
+  'rel:calls-function': ['Binding calls function', 'The binding invokes that project function.'],
   'rel:bot': ['Dispatched to bot', 'The action is executed by that bot.'],
   'rel:action-form': ['Action → form', 'That form collects the action’s payload before it runs.'],
   'rel:assign': ['Assigned to', 'Who may work on it.'],
@@ -3146,8 +3152,6 @@ function elJumpHtml(model, element, label, tip){
     ' tabindex="0" role="link" style="cursor:pointer"'+(tip?' data-tip="'+esc(tip)+'"':'')+'>'+
     esc(label)+' ↓</span>';
 }
-// rel -> Map(id -> adjacency entry) — the Map keeps per-target flags while deduping ids.
-function groupRels(arr){ const g={}; (arr||[]).forEach(x=>{ (g[x.rel]=g[x.rel]||new Map()).set(x.id,x); }); return g; }
 // Small badge marking a changelog as the live definition of its table vs a superseded/orphan revision.
 function authBadge(n){
   if(n.type!=='liquibase') return '';
@@ -3175,12 +3179,12 @@ const incFrom= (id,rel)=>{ const e=(incM.get(id)||[]).find(x=>x.rel===rel); retu
 // ---------- collapsible detail sections ----------
 // Every block in the detail panel is a <details> so a node with 35 parameters can still be skimmed.
 // Open/closed is remembered per SECTION (not per node) in localStorage: a section you open stays open as
-// you walk the graph. Everything defaults to closed except the diagram and the neighborhood — and the
+// you walk the graph. Everything defaults to closed except the diagram and the relations — and the
 // one section that IS the model (a form's fields, a service's operations) — see DEFAULT_OPEN_SECTIONS.
 const SECT_STORE='atlas-sect';
-const DEFAULT_OPEN_SECTIONS={diagram:true, neighborhood:true, findings:true, formfields:true, columns:true, usertasks:true, svctasks:true, scripttasks:true,
+const DEFAULT_OPEN_SECTIONS={diagram:true, relations:true, findings:true, formfields:true, columns:true, usertasks:true, svctasks:true, scripttasks:true,
   plan:true, ops:true, dmnio:true, dmnrules:true, permissions:true, escalations:true, rw:true, payload:true, dicttypes:true, agentops:true,
-  endpoints:true, script:true, templatebody:true, extractors:true, coverage:true, problems:true, opparams:true, usedby:true};
+  endpoints:true, script:true, templatebody:true, extractors:true, coverage:true, problems:true, opparams:true};
 function sectAll(){ try{ return JSON.parse(localStorage.getItem(SECT_STORE)||'{}')||{}; }catch(e){ return {}; } }
 function sectRemember(id, open){
   try{ const m=sectAll(); m[id]=open; localStorage.setItem(SECT_STORE, JSON.stringify(m)); }catch(e){}
@@ -3459,7 +3463,8 @@ function calleeNodeId(g){
 }
 // One group of mapping rows, headed by the declaring element and *what it calls* — a card item for cards().
 // `hasDg`: the node has a diagram — the group gets a ⌖ locate button targeting its element.
-function paramGroupHtml(g, extraBody, hasDg){
+function paramGroupHtml(g, extraBody, hasDg, o){
+  o=o||{};
   const label=g.name||g.element||'—';
   // The element id, when the label isn't already it: that is what you search for in the BPMN/CMMN XML or
   // pick out on the diagram, and a named task would otherwise never show it.
@@ -3469,10 +3474,10 @@ function paramGroupHtml(g, extraBody, hasDg){
   // click cannot fight the toggle
   const cid=calleeNodeId(g);
   const chip=cid?'<div class="nodechips">'+nodeChip(cid)+'</div>':'';
-  return {el:g.element, name:esc(label)+loc, id:eid, open:true,
+  return {el:o.noEl?null:g.element, name:esc(label)+loc, id:eid, open:true,
     badges:[g.refKey?'<span class="opref">→ '+esc(String(g.refKey))+'</span>':'', kindTag(g.type, g.sub)],
     right:g.rows.length+' param'+(g.rows.length>1?'s':''),
-    body:(extraBody||'')+chip+'<div class="parmgrid">'+g.rows.map(paramRow).join('')+'</div>'};
+    body:(extraBody||'')+chip+'<div class="parmgrid">'+g.rows.map(p=>paramRow(p, o)).join('')+'</div>'};
 }
 // data-el attribute for a detail row/group attributed to a model element — the reveal contract with
 // the diagram (revealByEl / dgCardHtml match on it).
@@ -3514,12 +3519,12 @@ function paramFlowHtml(p){
   if(has(p.source)) return paramSide(p.source)+arrow.trimEnd();
   return '';
 }
-function paramRow(p){
+function paramRow(p, o){
   // the mapping kind gets Design's wording plus a tooltip; type/transient stay as the model spells them
   const tags=termHtml('kind', p.kind, 'pt')+
     [p.type,p.transient?'transient':''].filter(Boolean).map(t=>'<span class="pt">'+esc(t)+'</span>').join('');
   // data-dir / data-hay let the filter and the search highlight work without re-rendering or text parsing
-  return '<div class="pc" data-dir="'+esc(p.dir)+'" data-hay="'+esc(paramHaystack(p).toLowerCase())+'">'+
+  return '<div class="pc" data-dir="'+esc(p.dir)+'"'+((o&&o.noHay)?'':' data-hay="'+esc(paramHaystack(p).toLowerCase())+'"')+'>'+
     '<span class="pd" style="color:var('+(PDIR_COLOR[p.dir]||'--ink-faint')+')">'+esc(p.dir)+'</span>'+
     '<span class="pn">'+paramFlowHtml(p)+'</span>'+tags+'</div>';
 }
@@ -3827,34 +3832,6 @@ S.restCalls={id:'restcalls', title:'REST calls', hint:'what this form calls over
                 {k:'where',label:'Button',w:'minmax(8ch,1fr)',mono:true,opt:true},{k:'path',label:'Response path',w:'minmax(8ch,1fr)',mono:true,opt:true}],
       rs.map(r=>({el:r.where, hay:(r.method||'')+' '+(r.url||'')+' '+(r.where||''), cells:{
         method:tag(r.method), url:urlCell(n.id, r.url), where:fieldLink(r.where), path:esc(r.path||'')}}))); }};
-/** Who calls this endpoint, with the verb, the URL as they spell it and the button or task that does. */
-S.epCallers={id:'callers', title:'Called by', hint:'the models whose REST calls land on this endpoint',
-  count:(n,c)=>(incM.get(n.id)||[]).filter(e=>e.rel==='rest-call').length,
-  build:(n,c)=>{
-    const rows=[];
-    (incM.get(n.id)||[]).filter(e=>e.rel==='rest-call').forEach(e=>{
-      const m=byId.get(e.id); if(!m) return;
-      const calls=((m.data||{}).restCalls||[]).filter(r=>endpointsFor(m.id, r.url).some(ep=>ep.id===n.id));
-      (calls.length?calls:[{}]).forEach(r=>rows.push({hay:elHay(m.label,m.key,r.url,r.where),
-        cells:{m:vlink(m.id, m.label||m.key), method:r.method?tag(r.method):'', url:esc(r.url||''), where:esc(r.where||'')}}));
-    });
-    return tbl([{k:'m',label:'Model',w:'minmax(14ch,2fr)'},{k:'method',label:'Method',w:'7ch',cls:'tags'},
-                {k:'url',label:'URL',w:'minmax(16ch,3fr)',mono:true},{k:'where',label:'Button / task',w:'minmax(8ch,1fr)',mono:true,opt:true}], rows); }};
-/** What a group may do, per model: start it, work on it, see it — the access edges, as one table. */
-S.groupAccess={id:'access', title:'Access', hint:'what members of this group may do, per model',
-  count:(n,c)=>new Set((outM.get(n.id)||[]).map(e=>e.id)).size,
-  build:(n,c)=>{
-    const per=new Map();
-    (outM.get(n.id)||[]).forEach(e=>{ if(!byId.get(e.id)) return; (per.get(e.id)||per.set(e.id,new Set()).get(e.id)).add(e.rel); });
-    if(!per.size) return '';
-    return tbl([{k:'m',label:'Model',w:'minmax(16ch,2fr)'},{k:'can',label:'May',w:'minmax(12ch,2fr)'}],
-      [...per.entries()].map(([id,rels])=>{ const m=byId.get(id);
-        return {hay:elHay(m.label,m.key,[...rels].join(' ')), cells:{m:vlink(id, m.label||m.key), can:[...rels].map(r=>termHtml('rel',r)).join(', ')}}; })); }};
-S.subforms={id:'subforms', title:'Subforms', hint:'forms embedded in this one',
-  count:(n,c)=>(c.d.subforms||[]).length,
-  build:(n,c)=>{ const sf=c.d.subforms||[]; if(!sf.length) return '';
-    return '<div class="nodechips">'+sf.map(k=>byId.get('form:'+k)?nodeChip('form:'+k)
-      :'<span class="nc"><span class="nm">'+esc(String(k))+'</span><span class="ty">form</span></span>').join('')+'</div>'; }};
 // --- data object ---
 S.properties={id:'columns', title:'Properties', hint:'the fields of the object, typed, with the objects they point at',
   count:(n,c)=>(c.d.columns||[]).length,
@@ -4216,11 +4193,6 @@ S.payload={id:'payload', title:'Payload', hint:'the event’s fields — the con
       pl.map(p=>{ const o=(p&&typeof p==='object')?p:{name:p}; return {hay:elHay(o.name,o.type), cells:{name:vlink('variable:'+String(o.name||'').split('.')[0], o.name||''), type:tag(o.type),
         flags:(o.required?tag('required'):'')+(o.correlation?'<span class="tag" data-tip="Used to match the event to a waiting instance">correlates</span>':'')}}; })); }};
 // --- agents, apps, actions ---
-S.tools={id:'tools', title:'Tools', hint:'what the agent may call',
-  count:(n,c)=>(c.d.tools||[]).length,
-  build:(n,c)=>{ const ts=c.d.tools||[]; if(!ts.length) return '';
-    return '<div class="nodechips">'+ts.map(t=>{ const id=(t.type||'service')+':'+(t.key||'');
-      return byId.get(id)?nodeChip(id):'<span class="nc"><span class="nm">'+esc(t.key||'')+'</span><span class="ty">'+esc(t.type||'')+'</span></span>'; }).join('')+'</div>'; }};
 S.agentOps={id:'agentops', title:'Operations', hint:'each operation with the prompts it sends the model',
   count:(n,c)=>(c.d.operations||[]).length,
   build:(n,c)=>{ const os=c.d.operations||[]; if(!os.length) return '';
@@ -4275,9 +4247,6 @@ S.svcColumns={id:'columns', title:'Column mappings', hint:'the service’s field
 S.opParams={id:'opparams', title:'Parameters', hint:'what a caller supplies, and what comes back',
   count:(n,c)=>(c.d.params||[]).length+(c.d.outParams||[]).length,
   build:(n,c)=>{ const rows=opParamRows(c.d); return rows.length?tbl(OP_PARAM_COLS, rows, {filter:false}):''; }};
-S.usedBy={id:'usedby', title:'Used by', hint:'the models that use this',
-  count:(n,c)=>(c.d.usedBy||[]).length,
-  build:(n,c)=>{ const ids=c.d.usedBy||[]; return ids.length?'<div class="nodechips">'+ids.map(nodeChip).join('')+'</div>':''; }};
 S.opOrphan={raw:true, build:(n,c)=>(c.d.usedBy||[]).length?'':'<div class="authnote authnote-orphan">No service button, data-object field or CMMN service mapping in the scanned models calls this operation.</div>'};
 // --- code ---
 S.endpoints={id:'endpoints', title:'Endpoints served', hint:'the REST routes this class handles',
@@ -4333,12 +4302,6 @@ S.problems={id:'problems', title:'Problems', hint:'what the validator found in t
     return tbl([{k:'sev',label:'',w:'8ch',cls:'tags'},{k:'msg',label:'Finding',w:'minmax(20ch,3fr)',cls:'wrap'},{k:'snip',label:'Snippet',w:'minmax(12ch,1.4fr)',mono:true,cls:'faint',opt:true}],
       ps.map(p=>{ const bad=p.severity==='error'; return {hay:elHay(p.severity,p.message,p.snippet), cells:{
         sev:'<span class="sev sev-'+(bad?'bad':'warn')+'">'+(bad?'error':'warning')+'</span>', msg:esc(p.message||''), snip:esc(p.snippet||'')}}; }), {filter:false}); }};
-S.calls={id:'calls', title:'Calls custom functions 🧩', hint:'the project functions this binding invokes',
-  count:(n,c)=>(c.d.calls||[]).length,
-  build:(n,c)=>{ const ids=c.d.calls||[]; return ids.length?'<div class="nodechips">'+ids.map(nodeChip).join('')+'</div>':''; }};
-S.inBindings={id:'inbindings', title:'Called in bindings', hint:'the exact {{…}} bindings that call it',
-  count:(n,c)=>(c.d.bindings||[]).length,
-  build:(n,c)=>{ const ids=c.d.bindings||[]; return ids.length?'<div class="nodechips">'+ids.map(nodeChip).join('')+'</div>':''; }};
 S.fnOrphan={raw:true, build:(n,c)=>(c.d.usedBy||[]).length?'':'<div class="authnote authnote-orphan">Registered via <b>externals.additionalData</b> but no <code>{{…}}</code> binding in the scanned models calls it.</div>'};
 // --- variables and string literals ---
 /** Written where, read where — the two lists the "never read" verdict rests on, so a reader can check the
@@ -4376,8 +4339,7 @@ S.usedIn={id:'usedin', title:'Used in', hint:'every effective occurrence, per mo
     return tbl([{k:'model',label:'Model',w:'minmax(12ch,1fr)'},{k:'snip',label:'Occurrence',w:'minmax(20ch,3fr)',mono:true,cls:'wrap'}], rows, {placeholder:'filter occurrences…'}); }};
 // --- shared tail: what flows through the model, and what it uses ---
 S.params={id:'params', title:'Parameters', build:(n,c)=>(c.d.ioParameters||[]).length?paramSection(c.d.ioParameters, c.hasDg):'', raw:true};
-S.calledWith={id:'called-with', title:'Called with', build:(n,c)=>calledWithSection(n), raw:true};
-S.uses={id:'uses', title:'Uses', build:(n,c)=>usesSection(n), raw:true};
+S.varExpr={id:'varexpr', title:'Variables & expressions', build:(n,c)=>varExprSection(n), raw:true};
 /** The tests that deploy this model with `@Deployment(resources=…)`, each opening at its annotation. */
 S.testedBy={id:'tests', title:'Deployed by tests', hint:'test classes whose @Deployment names this model',
   count:(n,c)=>(c.d.deployedByTests||[]).length,
@@ -4385,19 +4347,19 @@ S.testedBy={id:'tests', title:'Deployed by tests', hint:'test classes whose @Dep
     return tbl([{k:'f',label:'Test',w:'minmax(20ch,3fr)',mono:true},{k:'line',label:'Line',w:'minmax(6ch,.6fr)',mono:true,cls:'faint'}],
       at.map(s=>{ const i=String(s).lastIndexOf(':'), f=s.slice(0,i), l=s.slice(i+1);
         return {hay:elHay(f), cells:{f:esc(f.split('/').pop())+openBtn(f,l), line:lineRef(f,l)}}; })); }};
-const PAGE_TAIL=[S.params, S.calledWith, S.uses, S.testedBy];
+const PAGE_TAIL=[S.params, S.varExpr, S.testedBy];
 const PAGES={
   process:[S.userTasks, S.serviceTasks, S.scriptTasks, S.decisionTasks, S.callActivities, S.otherTasks, S.events, S.gateways,
            S.flows, S.lanes, S.multiInstance, S.declaredVars, S.listeners, S.eldocs],
   case:[S.plan, S.sentries, S.eventListeners, S.caseScripts, S.listeners, S.eldocs],
-  form:[S.fields, S.outcomes, S.dataSources, S.restCalls, S.subforms],
+  form:[S.fields, S.outcomes, S.dataSources, S.restCalls],
   page:'form',
   dataObject:[S.properties],
   decision:[S.dmnIO, S.dmnRules],
   service:[S.ops, S.coverage, S.svcColumns],
-  serviceOperation:[S.opParams, S.usedBy, S.opOrphan],
+  serviceOperation:[S.opParams, S.opOrphan],
   app:[S.appPages, S.appVars],
-  agent:[S.agentOps, S.tools],
+  agent:[S.agentOps],
   action:[S.botScript],
   event:[S.payload],
   dataDictionary:[S.dictTypes],
@@ -4409,13 +4371,13 @@ const PAGES={
   variableExtractor:[S.extractors],
   knowledgeBase:[S.kbSources],
   java:[S.endpoints, S.methods],
-  endpoint:[S.epCallers],
-  group:[S.groupAccess],
+  endpoint:[],
+  group:[],
   property:[S.propDefined],
   liquibase:[S.lqBanner, S.lqColumns],
-  expression:[S.problems, S.usedBy],
-  binding:[S.problems, S.calls, S.usedBy],
-  customFunction:[S.inBindings, S.usedBy, S.fnOrphan],
+  expression:[S.problems],
+  binding:[S.problems],
+  customFunction:[S.fnOrphan],
   variable:[S.rw, S.passedAs, S.inScripts, S.usedIn],
   string:[S.usedIn],
   _:[],
@@ -4430,28 +4392,10 @@ function renderSections(n, c){
     return section(s.id, esc(s.title), body, {count:s.count?s.count(n,c):null, hint:s.hint, nav:s.nav});
   }).join('');
 }
-// The mirror image of Parameters: what this node actually receives from its callers. A payload is modelled
-// on the *calling* side (a form button, a call activity), so without this you would have to visit every
-// caller to see whether the names line up with what the callee expects. `refKind` mirrors the node type,
-// so matching on both is what keeps a service and a data object of the same key apart.
-function calledWithSection(n){
-  const callers=[];
-  (incM.get(n.id)||[]).forEach(e=>{
-    const src=byId.get(e.id); if(!src) return;
-    const rows=((src.data||{}).ioParameters||[]).filter(p=>p.refKind===n.type && p.refKey===n.key);
-    if(rows.length) callers.push({id:e.id, rows});
-  });
-  const total=callers.reduce((a,c)=>a+c.rows.length,0);
-  if(!total) return '';
-  return section('called-with','Called with',
-    // here the interesting other side is the *caller*, so its chip replaces the callee's
-    cards(callers.flatMap(c=>paramGroups(c.rows).map(g=>
-      paramGroupHtml({...g, refKey:null, refKind:null}, '<div class="nodechips">'+nodeChip(c.id)+'</div>')
-    ))), {count:total, hint:paramSummary(callers.flatMap(c=>c.rows))+' from '+callers.length+' caller'+(callers.length>1?'s':'')});
-}
 // Reverse direction: a model lists all the variables/expressions/strings it uses (collapsible).
-// Derived from the artifact nodes' `usedBy` (see usesIndex) — the payload carries no `_uses`.
-function usesSection(n){
+// Derived from the artifact nodes' `usedBy` (see usesIndex) — the payload carries no `_uses`. Called
+// "Variables & expressions": as "Uses" it sat under a drawing whose USES column meant the model's edges.
+function varExprSection(n){
   const uses=usesOf(n.id);
   if(!uses) return '';
   const ord=[['variable','Variables'],['expression','Backend expressions ${ }'],
@@ -4460,7 +4404,7 @@ function usesSection(n){
   let parts='', total=0;
   ord.forEach(([t,lbl])=>{ const ids=uses[t]; if(ids&&ids.length){ total+=ids.length;
     parts+='<details class="uses"><summary>'+lbl+' ('+ids.length+')</summary><div class="nodechips">'+ids.map(nodeChip).join('')+'</div></details>'; } });
-  return section('uses','Uses — variables &amp; expressions', parts, {count:total, nav:'Uses',
+  return section('varexpr','Variables &amp; expressions', parts, {count:total,
     hint:'the variables, expressions, bindings and functions this model touches'});
 }
 
@@ -4555,21 +4499,27 @@ function diagramView(n){
     '<div class="dgview"><div class="dgpan">'+svg+'</div></div>');
 }
 
-// ---------- neighborhood graph (ego view: selected node + 1-hop neighbors) ----------
-// Per side — what this node uses on the left, what uses it on the right — sorted by how referenced the
-// neighbour is and cut here; the two chip sections below carry the rest, and a "+N more" row jumps there.
+// ---------- relations: the graph at the top of the page, and every relation as one table ----------
+// A node's relations were told three and four times over: a neighbourhood drawing, "Uses / references",
+// "Used by / referenced from", and a type's own lists of the same edges (Called by, Access, Subforms,
+// Tools, Used by, Called with …). They are one section now — the drawing, then one table per direction and
+// relation — and the section that listed the variables and expressions a model touches is called that,
+// instead of "Uses", which meant something else in the drawing right above it.
+//
+// Per side of the drawing — what this node uses on the left, what uses it on the right — sorted by how
+// referenced the neighbour is and cut here; the table carries the rest, and "+N more" opens that side of it.
 const GRAPH_MAX_PER_SIDE = 12;
-function neighborhoodSvg(n){
+function relGraphSvg(n, R){
   // A neighbour can sit on both sides (a form the process opens that also writes back to it) and then
   // appears in both columns — that is the truth of the graph. The radial star this replaces put it on
   // whichever side was seen first and encoded direction as dashing, which nobody read.
-  const side=m=>{ const seen=new Map(); (m.get(n.id)||[]).forEach(e=>{ if(byId.get(e.id)&&!seen.has(e.id)) seen.set(e.id,e); }); return [...seen.values()]; };
+  const side=list=>{ const seen=new Map(); list.forEach(e=>{ if(byId.get(e.id)&&!seen.has(e.id)) seen.set(e.id,e); }); return [...seen.values()]; };
   const rank=(a,b)=>(INSIGHTS.indeg.get(b.id)||0)-(INSIGHTS.indeg.get(a.id)||0)||byId.get(a.id).label.localeCompare(byId.get(b.id).label);
-  const L=side(outM).sort(rank), R=side(incM).sort(rank);
-  const total=L.length+R.length;
+  const L=side(R.out).sort(rank), Rt=side(R.inc).sort(rank);
+  const total=L.length+Rt.length;
   if(!total) return '';
-  const l=L.slice(0,GRAPH_MAX_PER_SIDE), r=R.slice(0,GRAPH_MAX_PER_SIDE);
-  const moreL=L.length-l.length, moreR=R.length-r.length;
+  const l=L.slice(0,GRAPH_MAX_PER_SIDE), r=Rt.slice(0,GRAPH_MAX_PER_SIDE);
+  const moreL=L.length-l.length, moreR=Rt.length-r.length;
   // viewBox units; the <svg> scales to the column width and keeps this aspect, so no resize code
   const W=680, COLW=220, ROW=22, HEAD=16, PAD=8, CX=W/2;
   const nL=l.length+(moreL?1:0), nR=r.length+(moreR?1:0);
@@ -4605,17 +4555,151 @@ function neighborhoodSvg(n){
              icon(nn,ix,y,14)+
              '<text class="nb-label" x="'+tx+'" y="'+f(y+4)+'" text-anchor="'+(left?'end':'start')+'">'+esc(trunc(nn.label,26))+flag+'</text></g>';
   };
-  const moreHtml=(cnt,x,y,left,sect)=>'<text class="nb-more" x="'+x+'" y="'+f(y+4)+'" text-anchor="'+(left?'end':'start')+
-    '" data-jump-sect="'+sect+'" tabindex="0" role="button">+'+cnt+' more…</text>';
-  let y=y0(nL); l.forEach(e=>{ g+=rowHtml(e,y,true); y+=ROW; }); if(moreL) g+=moreHtml(moreL,COLW-18,y,true,'rels-out');
-  y=y0(nR); r.forEach(e=>{ g+=rowHtml(e,y,false); y+=ROW; }); if(moreR) g+=moreHtml(moreR,W-COLW+18,y,false,'rels-in');
+  const moreHtml=(cnt,x,y,left,dir)=>'<text class="nb-more" x="'+x+'" y="'+f(y+4)+'" text-anchor="'+(left?'end':'start')+
+    '" data-rel-open="'+dir+'" tabindex="0" role="button">+'+cnt+' more…</text>';
+  let y=y0(nL); l.forEach(e=>{ g+=rowHtml(e,y,true); y+=ROW; }); if(moreL) g+=moreHtml(moreL,COLW-18,y,true,'out');
+  y=y0(nR); r.forEach(e=>{ g+=rowHtml(e,y,false); y+=ROW; }); if(moreR) g+=moreHtml(moreR,W-COLW+18,y,false,'in');
   // the node itself, on top of the connectors
   g+='<circle cx="'+CX+'" cy="'+f(yc)+'" r="15" fill="var(--panel)" stroke="'+nodeColor(n)+'" stroke-width="1.5"/>'+icon(n,CX,yc,16)+
      '<text class="nb-self" x="'+CX+'" y="'+f(yc+30)+'" text-anchor="middle">'+esc(trunc(n.label,30))+'</text>';
-  const svg='<svg class="nbh-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMin meet" role="img"'+
+  return '<svg class="nbh-svg" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMin meet" role="img"'+
     ' aria-label="'+esc('Relationship graph of '+n.label+': what it uses on the left, what uses it on the right')+'">'+g+'</svg>';
-  // a section like every other: remembered, and part of "expand all"
-  return section('neighborhood','Neighborhood <span class="muted">('+total+')</span>','<div class="nbh">'+svg+'</div>');
+}
+/**
+ * A node's relations, both directions: its graph edges (outM/incM, so hiding uncertain links hides them
+ * here too), one entry per relation and neighbour — a certain edge wins over a suspect copy of it — plus
+ * what an artifact's own lists say (usedBy, a binding's calls, a function's bindings), which are not edges
+ * and were the only relation view those pages had. `R.out` / `R.inc`: [{rel, id, sus, dyn, gen}].
+ */
+function relationsOf(n, d){
+  const side=list=>{
+    const m=new Map();
+    (list||[]).forEach(e=>{ if(!byId.get(e.id)) return; const k=e.rel+'|'+e.id, o=m.get(k);
+      if(!o) m.set(k, {rel:e.rel, id:e.id, sus:!!e.sus, dyn:!!e.dyn});
+      else { o.sus=o.sus&&!!e.sus; o.dyn=o.dyn&&!!e.dyn; } });
+    return m;
+  };
+  const out=side(outM.get(n.id)), inc=side(incM.get(n.id));
+  const linked=(m,id)=>[...m.values()].some(e=>e.id===id);
+  const gen=(m, ids, rel)=>(ids||[]).forEach(id=>{ if(byId.get(id) && !linked(m,id)) m.set(rel+'|'+id, {rel, id, gen:true}); });
+  if(n.type==='expression'||n.type==='binding'||n.type==='customFunction'||n.type==='serviceOperation') gen(inc, d.usedBy, 'uses-'+n.type);
+  if(n.type==='binding') gen(out, d.calls, 'calls-function');
+  if(n.type==='customFunction') gen(inc, d.bindings, 'calls-function');
+  return {out:[...out.values()], inc:[...inc.values()]};
+}
+/**
+ * What a relation row can add beyond "an edge exists": `via` (the element that makes the reference, only
+ * where the data pins it down), `info` (a verb and URL, a tool's operation, a mapping tally) and `body` (the
+ * caller's parameter mappings — what used to be the Called with section). Nothing here may carry a
+ * [data-hay] or a [data-el]: the first would turn the row into a filter container, the second would answer
+ * this page's &e= links with the *caller's* element ids.
+ */
+function relDetail(n, c, dir, e, seen){
+  const m=byId.get(e.id), md=(m&&m.data)||{}, r={via:'', info:'', body:'', hay:'', map:false};
+  if(!m) return r;
+  // parameter mappings: the caller's, onto this node (incoming) — or this node's, onto the callee (outgoing)
+  const maps=dir==='in' ? (md.ioParameters||[]).filter(p=>p.refKind===n.type && p.refKey===n.key)
+                        : (c.d.ioParameters||[]).filter(p=>p.refKind===m.type && p.refKey===m.key);
+  if(maps.length){
+    const gs=paramGroups(maps);
+    r.map=true;
+    r.hay=maps.map(paramHaystack).join(' ');
+    if(dir==='in'){
+      r.via=gs.map(g=>elJumpHtml(m.id, g.element, g.name||g.element, 'Open this element in its model')).filter(Boolean).join(', ');
+      r.info='<span class="tag">'+esc(paramSummary(maps))+'</span>';
+      // one body per caller, however many relations it has onto this node
+      if(!seen.has(m.id)){ seen.add(m.id);
+        r.body=cards(gs.map(g=>paramGroupHtml({...g, refKey:null, refKind:null}, '', false, {noHay:true, noEl:true}))); }
+    } else {
+      r.via=gs.map(g=>esc(String(g.name||g.element||''))).filter(Boolean).join(', ');
+      r.info='<button type="button" class="dgbtn" data-reveal-el="'+esc(String(gs[0].element==null?'':gs[0].element))+
+        '" data-tip="Show these mappings under Parameters">'+esc(paramSummary(maps))+' ↓</button>';
+    }
+  }
+  // REST calls: the verb and the URL as the model spells it, and the button or task that makes the call
+  if(e.rel==='rest-call'){
+    const calls=dir==='in' ? (md.restCalls||[]).filter(x=>endpointsFor(m.id, x.url).some(ep=>ep.id===n.id))
+                           : (c.d.restCalls||[]).filter(x=>endpointsFor(n.id, x.url).some(ep=>ep.id===m.id));
+    if(calls.length){
+      const x=calls[0];
+      r.info=tag(x.method)+' <span class="mono">'+esc(x.url||'')+'</span>'+(calls.length>1?' <span class="muted">+'+(calls.length-1)+' more</span>':'');
+      r.via=dir==='in' ? elJumpHtml(m.id, x.where, x.where, 'Open the button or task that makes the call') : esc(x.where||'');
+      r.hay+=' '+calls.map(x=>(x.method||'')+' '+(x.url||'')+' '+(x.where||'')).join(' ');
+      if(calls.length>1) r.body=tbl([{k:'method',label:'Method',w:'7ch',cls:'tags'},{k:'url',label:'URL',w:'minmax(16ch,3fr)',mono:true},
+          {k:'where',label:'Button / task',w:'minmax(8ch,1fr)',mono:true,opt:true}],
+        calls.map(x=>({cells:{method:tag(x.method), url:esc(x.url||''), where:esc(x.where||'')}})), {filter:false});
+    }
+  }
+  // an agent's tool: which operation of it the agent may call
+  if(e.rel==='tool' && dir==='out'){
+    const t=(c.d.tools||[]).find(x=>(x.type||'service')+':'+(x.key||'')===m.id);
+    if(t&&t.operation){ r.info='operation <span class="mono">'+esc(t.operation)+'</span>'; r.hay+=' '+t.operation; }
+  }
+  return r;
+}
+const REL_OPEN_MAX=GRAPH_MAX_PER_SIDE;   // a direction with more rows than this starts folded
+// One table per direction, the relation its first column: a table per relation repeated the header and
+// its empty columns for every one-row relation, and fifteen of them made the page longer than the chips.
+// A column empty in every row of a direction is dropped (tbl does that).
+const REL_COLS=[
+  {k:'rel', label:'Relation', w:'minmax(12ch,1.1fr)', cls:'rel'},
+  {k:'node', label:'Node', w:'minmax(16ch,2fr)', cls:'reln'},
+  {k:'via', label:'Where', w:'minmax(10ch,1.2fr)', opt:true},
+  {k:'info', label:'Detail', w:'minmax(10ch,1.5fr)', cls:'tags', opt:true},
+  {k:'flag', label:'', w:'minmax(7ch,.6fr)', cls:'tags relf'},
+];
+function relationsSection(n, c, R){
+  const d=c.d;
+  // Read before anything can return: these keys are shown here now, as relations, and a key the page
+  // never reads is listed under "Other attributes" by the recording proxy in renderDetail.
+  void d.subforms, d.tools, d.calls, d.bindings, d.usedBy;
+  const total=R.out.length+R.inc.length;
+  if(!total) return '';
+  const seen=new Set();
+  // rows sorted by relation, then neighbour; the relation is named on the first row of its run (the rest
+  // carry it for screen readers only) and a run starts with a rule
+  const build=(dir, list)=>{
+    const lab=e=>term('rel', e.rel).label;
+    return list.slice().sort((a,b)=>lab(a).localeCompare(lab(b))||byId.get(a.id).label.localeCompare(byId.get(b.id).label))
+      .map((e,i,arr)=>{
+        const m=byId.get(e.id), x=relDetail(n, c, dir, e, seen), unc=!!(e.sus||e.dyn), t=term('rel', e.rel);
+        const first=!i||arr[i-1].rel!==e.rel;
+        return {hay:elHay(m.label, m.key, nodeKind(m), t.label, x.hay),
+          attrs:' data-rdir="'+dir+'" data-rel="'+esc(e.rel)+'"'+(unc?' data-runc="1"':'')+(x.map?' data-rmap="1"':''),
+          cls:[unc?'rel-unc':'', first?'rel-head':'', first&&i?'rel-first':''].filter(Boolean).join(' '), body:x.body, open:false,
+          cells:{rel:first?'<span class="rellab"'+(t.hint?' data-tip="'+esc(t.hint)+'"':'')+'>'+esc(t.label)+'</span>':'<span class="vh">'+esc(t.label)+'</span>',
+            node:nodeChip(e.id, e), via:x.via, info:x.info,
+            flag:e.sus?'<span class="tag" data-tip="suspect — resolved by a loose or cross-type match">≈ suspect</span>'
+                :e.dyn?'<span class="tag" data-tip="dynamic — the reference is an expression">ƒ dynamic</span>':''}};
+      });
+  };
+  const rowsOut=build('out', R.out), rowsIn=build('in', R.inc), all=rowsOut.concat(rowsIn);
+  // a small table shows its callers' mappings open, as the Called with cards always were
+  if(all.length<TBL_FILTER_FROM) all.forEach(r=>{ if(r.body && r.attrs.indexOf('data-rmap')>=0) r.open=true; });
+  const set=(dir, rows, title, sub)=>{
+    if(!rows.length) return '';
+    return '<details class="fgroup relset" data-rset="'+dir+'"'+(rows.length<=REL_OPEN_MAX?' open':'')+'>'+
+      '<summary class="relset-h"><span class="relset-t">'+title+'</span><span class="scount">'+rows.length+'</span>'+
+      '<span class="shint">'+sub+'</span></summary>'+tbl(REL_COLS, rows, {filter:false, cls:'reltbl'})+'</details>';
+  };
+  const unc=all.filter(r=>r.cls.indexOf('rel-unc')>=0).length, maps=all.filter(r=>r.attrs.indexOf('data-rmap')>=0).length;
+  const outN=rowsOut.length, inN=rowsIn.length;
+  const tools=all.length>=TBL_FILTER_FROM ? filterBar({placeholder:'filter relations — a name, a key, a relation…', label:'Filter relations',
+    chips:[{fk:'rdir',fv:'all',label:'all',n:all.length}]
+      .concat(outN&&inN?[{fk:'rdir',fv:'out',label:'uses →',n:outN},{fk:'rdir',fv:'in',label:'← used by',n:inN}]:[])
+      .concat(unc?[{fk:'runc',fv:'1',label:'≈ uncertain',n:unc}]:[])
+      .concat(maps?[{fk:'rmap',fv:'1',label:'with mappings',n:maps,open:true}]:[])}) : '';
+  // the notes for keys a list names and no node answers — a subform or a tool this report does not contain
+  const loose=[];
+  (d.subforms||[]).forEach(k=>{ if(!byId.get('form:'+k)) loose.push('subform '+k); });
+  (d.tools||[]).forEach(t=>{ if(!byId.get((t.type||'service')+':'+(t.key||''))) loose.push((t.type||'tool')+' '+(t.key||'')); });
+  const body='<div class="nbh">'+relGraphSvg(n, R)+'</div>'+
+    '<div class="relhint">click follows · <b>'+MODK+'-click</b> or middle-click opens a tab</div>'+tools+
+    set('out', rowsOut, 'Uses', '→ what this points at')+
+    set('in', rowsIn, 'Used by', '← what points at this')+
+    (loose.length?'<div class="muted tbl-more">Not in this report: '+loose.map(esc).join(', ')+'</div>':'');
+  return section('relations','Relations', body, {count:total,
+    hint:[outN?outN+' outgoing':'', inN?inN+' incoming':'', unc?unc+' uncertain':''].filter(Boolean).join(' · ')});
 }
 
 // Resolve a service-task implementation to a clickable Java node chip + method.
@@ -4688,18 +4772,18 @@ function renderDetail(){
   const rn={...n, data:new Proxy(n.data||{}, {
     get:(t,k)=>{ if(typeof k==='string') consumed.add(k); return t[k]; },
   })};
-  const out=groupRels(outM.get(n.id)), inc=groupRels(incM.get(n.id));
   // Facts first (the hero), then every section into a string — the navigator needs to know what
   // rendered before the header that carries it can be written.
   const facts=factsFor(rn);
+  const ctx=detailCtx(rn), R=relationsOf(rn, rn.data);
   _sectReg=[];
   let body='';
   body+=diagramView(rn);
-  body+=neighborhoodSvg(n);
+  body+=relationsSection(rn, ctx, R);
   // The findings sit right under the diagram they are about — this is where a reader has the context
   // to judge one, and the locate button puts the element in view.
   body+=nodeFindingsHtml(n);
-  body+=renderSections(rn, detailCtx(rn));
+  body+=renderSections(rn, ctx);
   // Whatever no renderer above consumed. Identity fields live in the header; HAY_SKIP is the same
   // bookkeeping the search index skips.
   {
@@ -4709,22 +4793,7 @@ function renderDetail(){
       rest.map(k=>kvEntry(k,(n.data||{})[k],0)).join(''), {count:rest.length,
         hint:'everything else the parser read for this model'});
   }
-  // The gesture is stated where the reference chips actually are. Walking a fan of references is the
-  // case it exists for: without it, every chip you follow costs you the node you started from.
-  const relHint='<div class="relhint">click follows · <b>'+MODK+'-click</b> or middle-click opens a tab</div>';
-  // A relation with hundreds of neighbours (every model a platform bean serves) shows the first ones and a
-  // button for the rest, the way a long table does.
-  const REL_CAP=60;
-  const relBody=g=>relHint+Object.keys(g).sort().map(rel=>{
-    const es=[...g[rel].values()];
-    return '<div class="relgrp"><div class="lab">'+termHtml('rel', rel)+'</div><div class="nodechips">'+
-      es.map((e,i)=>i<REL_CAP?nodeChip(e.id,e):'<span data-over hidden>'+nodeChip(e.id,e)+'</span>').join('')+'</div>'+
-      (es.length>REL_CAP?'<button type="button" class="dgbtn tbl-all">show all '+es.length+'</button>':'')+'</div>'; }).join('');
-  const ok=Object.keys(out).sort(), ik=Object.keys(inc).sort();
-  if(ok.length) body+=section('rels-out','Uses / references', relBody(out), {count:ok.reduce((a,k)=>a+out[k].size,0), nav:'References'});
-
-  if(ik.length) body+=section('rels-in','Used by / referenced from', relBody(inc), {count:ik.reduce((a,k)=>a+inc[k].size,0), nav:'Used by'});
-  if(!ok.length && !ik.length) body+='<p class="muted" style="margin-top:18px">No relationships recorded for this node.</p>';
+  if(!R.out.length && !R.inc.length) body+='<p class="muted" style="margin-top:18px">No relationships recorded for this node.</p>';
   const reg=_sectReg; _sectReg=null;
   // The sticky bar: kind on the left, the actions right. The title stays in the body — at 26px it is
   // the one thing a reader should not have pinned over what they are reading.
@@ -4789,7 +4858,17 @@ function renderDetail(){
     b.onclick=e=>{ e.stopPropagation(); revealByEl(det, b.dataset.revealEl, 'details.sect[data-sect="params"]'); };
   });
 
-  // The section navigator's chips and the neighborhood's "+N more" — open the section and scroll to it
+  // The drawing's "+N more" opens that side of the relations table and scrolls to it
+  det.querySelectorAll('[data-rel-open]').forEach(b=>{
+    const open=()=>{
+      const sect=det.querySelector('details.sect[data-sect="relations"]'), set=det.querySelector('details.relset[data-rset="'+b.dataset.relOpen+'"]');
+      if(!sect||!set) return;
+      sect.open=true; set.open=true; sectRemember('relations', true); set.scrollIntoView({block:'start'});
+    };
+    b.onclick=e=>{ e.stopPropagation(); open(); };
+    b.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } };
+  });
+  // The section navigator's chips — open the section and scroll to it
   det.querySelectorAll('[data-jump-sect]').forEach(b=>{
     const open=()=>{
       const d=det.querySelector('details.sect[data-sect="'+b.dataset.jumpSect+'"]'); if(!d) return;

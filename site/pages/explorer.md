@@ -127,21 +127,27 @@ model *is* first (a form's fields, a data object's properties, a process's user,
 tasks, a decision table's inputs, outputs and rules, a service's operations), then how it behaves
 (events, gateways, sequence flows with their conditions, lanes, multi-instance, listeners,
 documentation), then what flows through it (**Parameters** — every in/out mapping, grouped by the
-element that declares it — and **Called with**, the mirror image: what callers actually pass in), and
-last the two lists that are the point of the whole thing:
+element that declares it) and the **Variables & expressions** it touches.
 
-- **Uses / references** — what this node points at.
-- **Used by / referenced from** — what points at it.
-
-Both directions, always, for every node type. That is the question a model file cannot answer on its
-own, and it is why the graph carries `usedBy`.
+Right under the diagram sits the section that is the point of the whole thing — **Relations**, both
+directions, always, for every node type, in one place. Its drawing reads left to right: what the node
+uses in a column on the left, what uses it on the right, the node in the middle, the arrows pointing the
+way each reference goes; a dashed connector with `≈` or `ƒ` is an uncertain link, the most-referenced
+neighbours come first, and *+N more* opens that side of the table below. Then one table per direction —
+**Uses** (what this node points at) and **Used by** (what points at it) — with a row per relation and
+neighbour, the relation named at the head of its run. A row says more where the data does: the element
+that makes the reference, a REST call's verb and URL, an agent tool's operation, and — expanded — the
+parameters a caller passes in, which is how to check that a form button's payload names line up with
+what the callee reads. A long table gets a filter with chips: *uses →*, *← used by*, *≈ uncertain* and
+*with mappings*. That is the question a model file cannot answer on its own, and it is why the graph
+carries `usedBy`.
 
 A few kinds of node have a page of their own beyond the model types:
 
-- a **REST endpoint** lists the models that call it — the model, the verb, the URL as the model spells it
-  and the button or task that calls it — and a form's REST call or a service operation whose URL lands on
-  a project endpoint links to it;
-- a **group** lists what its members may do, per model: start it, work on it, see it;
+- a **REST endpoint** lists the models that call it among its relations — the model, the verb, the URL
+  as the model spells it and the button or task that calls it — and a form's REST call or a service
+  operation whose URL lands on a project endpoint links to it;
+- a **group** lists what its members may do, per model — start it, work on it, see it — as its relations;
 - a **Spring property** a model reads with `environment.getProperty('…')` lists the file and line of
   every `application*.properties` / `application*.yml` that sets it. None is not a finding — the value may
   come from the environment;
@@ -157,15 +163,9 @@ into the model it invokes, the payload it sends and stores, its settings and its
 task into its code with line numbers and the validator's findings; a service task into its
 implementation, the operation it calls and its field injections. A long table gets a filter of its own,
 and past a hundred rows it shows the first ones and a *show all* button — the filter still searches
-every row. A relation with more than sixty neighbours folds the same way.
+every row. The relations table folds the same way.
 In a narrow panel — an IntelliJ tool window — the optional columns drop under the row instead of being
 clipped, and nothing scrolls sideways.
-
-The **neighbourhood** draws the two reference lists as a picture that reads left to right: what the node
-uses in a column on the left, what uses it on the right, the node in the middle, the arrows pointing the
-way each reference goes. A dashed connector with `≈` or `ƒ` is an uncertain link, the most-referenced
-neighbours come first, and *+N more* opens the full list below. It is a section like the others —
-remembered, and part of *expand all*.
 
 Inside IntelliJ the panel also opens code: the `↗` beside a source path and every `:line` on a method
 or endpoint open that file in an editor tab (see [the plugin](../plugin/#the-atlas-explorer-inside-the-ide)).

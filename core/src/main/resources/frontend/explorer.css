@@ -897,8 +897,19 @@
      has to get out of the way of the chips it describes. */
   .relhint{font-size:var(--text-2xs);color:var(--ink-faint);margin:0 0 var(--space-25)}
   .relhint b{font-weight:600;color:var(--ink-dim)}
-  .relgrp{margin:0 0 var(--space-35)}
-  .relgrp .lab{font-size:var(--text-xs);font-weight:500;color:var(--ink-faint);margin:0 0 var(--space-15)}
+  /* the relations table: a direction per <details>, a table per relation, the relation named in its header */
+  details.relset{margin:var(--space-2) 0 0}
+  details.relset>summary{display:flex;align-items:baseline;gap:var(--space-15);cursor:pointer;list-style:none;
+    padding:var(--space-15) 0;border-top:1px solid var(--line)}
+  details.relset>summary::-webkit-details-marker{display:none}
+  details.relset>summary:before{content:"▸";color:var(--ink-faint);font-size:var(--text-2xs);width:1em}
+  details.relset[open]>summary:before{content:"▾"}
+  .relset-t{font-weight:600;font-size:var(--text-sm)}
+  .relset-h .muted{font-size:var(--text-xs)}
+  .reltbl{margin:0 0 var(--space-25)}
+  .reltbl .rellab{font-size:var(--text-xs);font-weight:500;color:var(--ink-dim)}
+  .reltbl>.tr.rel-first{border-top:1px solid var(--line2)}
+  .tbl>.tr.rel-unc{box-shadow:inset 3px 0 0 var(--cov-warn,#c98a1b)}
   .nodechips{display:flex;flex-wrap:wrap;gap:var(--space-15)}
   .nc{display:inline-flex;align-items:center;gap:var(--space-15);background:var(--panel);border:1px solid var(--line2);
     border-radius:var(--radius-md);padding:var(--space-1) var(--space-25);cursor:pointer;max-width:380px}
@@ -1065,6 +1076,12 @@
     .tbl .th,.tbl>div.tr,.tbl .trs{grid-template-columns:1.1em minmax(0,1fr) auto}
     .tbl .td.opt{grid-column:2/-1;font-size:var(--text-2xs);color:var(--ink-faint);white-space:normal}
     .tbl .th .td.opt{display:none}
+    /* relations: the relation heads its run on a line of its own, the node and its flag share the next */
+    .reltbl .th{display:none}
+    .reltbl .td.rel{grid-column:2/-1}
+    .reltbl .td.reln{grid-column:2}
+    .reltbl .td.relf{grid-column:3}
+    .reltbl .tr:not(.rel-head) .td.rel{display:none}
   }
   .cards{display:flex;flex-direction:column;gap:var(--space-15);margin:var(--space-2) 0}
   .card{border:1px solid var(--line);border-radius:var(--radius-md);background:var(--panel);overflow:hidden}

@@ -179,13 +179,13 @@ which name on the other side, and what every caller passes in.
 
 <figure class="fig mock">
   <div class="body">{{mockup:io-parameters}}</div>
-  <figcaption><b>Parameters, and the mirror view.</b> <i>Called with</i> shows what every caller
-  actually passes — the check that catches a payload name that does not line up.</figcaption>
+  <figcaption><b>Parameters, and the mirror view.</b> A caller's row under <i>Relations</i> shows what
+  it actually passes — the check that catches a payload name that does not line up.</figcaption>
 </figure>
 
 Renaming a variable is the quietest way to break a Flowable app, because the mapping that carries it
-lives in a different model from the code that reads it. *Called with* is the part that pays for itself:
-in one place you can check whether a form button's payload names line up with what the bot reads via
+lives in a different model from the code that reads it. The mirror view is the part that pays for
+itself: the caller rows under *Relations* let you check, in one place, whether a form button's payload names line up with what the bot reads via
 `flw.getInput(…)` — a mismatch that otherwise surfaces as a null at runtime, in a task nobody exercises
 until month-end.
 

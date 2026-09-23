@@ -545,8 +545,8 @@ const probe = `<script>
   steps.push(()=>{ closeOtherTabs(); location.hash=enc('process:orderProcess'); });
   steps.push(()=>{
     const det=document.getElementById('detail');
-    const sect=det.querySelector('[data-sect="uses"]');
-    ok('a model lists the variables and expressions it uses', !!sect, 'no [data-sect="uses"] on the process');
+    const sect=det.querySelector('[data-sect="varexpr"]');
+    ok('a model lists the variables and expressions it uses', !!sect, 'no [data-sect="varexpr"] on the process');
     ok('and each one is a chip you can follow', !!sect && !!sect.querySelector('details.uses .nc[data-id^="variable"]'),
        sect?sect.textContent.slice(0,120):'(no section)');
   });
@@ -618,28 +618,63 @@ const probe = `<script>
        decodeURIComponent(location.hash).indexOf('&f=zzz-none')>0, 'hash='+location.hash);
   });
 
-  // --- the neighborhood is a section: remembered, left-to-right, and its rows are links ---
+  // --- relations: one section — the drawing, then every relation as a table; remembered; its rows are links ---
+  steps.push(()=>{ closeOtherTabs(); location.hash=enc('process:orderProcess'); });
   steps.push(()=>{
-    const pr=nodes.find(n=>n.type==='process' && (outM.get(n.id)||[]).length);
-    ok('the fixture has a process with references', !!pr);
-    if(pr) location.hash=enc(pr.id);
-  });
-  steps.push(()=>{
-    const s=document.querySelector('#detail details.sect[data-sect="neighborhood"]');
-    ok('the neighborhood is a section, open by default', !!s && s.open);
-    ok('it reads uses on the left, used by on the right', !!s && s.querySelectorAll('.nb-head').length===2 && s.querySelectorAll('.gn[data-id]').length>0);
-    ok('the radial star is gone', ![...document.querySelectorAll('#detail details.uses>summary')].some(x=>/Neighborhood/.test(x.textContent)));
+    const det=document.getElementById('detail'), s=det.querySelector('details.sect[data-sect="relations"]');
+    ok('the relations are one section, open by default', !!s && s.open);
+    ok('its drawing reads uses on the left, used by on the right', !!s && s.querySelectorAll('.nb-head').length===2 && s.querySelectorAll('.gn[data-id]').length>0);
+    ok('the relations are told once', ['neighborhood','rels-out','rels-in','called-with','usedby','uses'].every(id=>!det.querySelector('[data-sect="'+id+'"]')));
+    // never filter silently: one row per direction, relation and neighbour the graph holds
+    const n=byId.get('process:orderProcess'), R=relationsOf(n, n.data||{});
+    const rows=s?s.querySelectorAll('.tr[data-rdir]').length:0;
+    ok('the table has a row for every relation of the node', rows===R.out.length+R.inc.length && rows>0, rows+' vs '+(R.out.length+R.inc.length));
+    const want=new Set((outM.get(n.id)||[]).filter(e=>byId.get(e.id)).map(e=>'out|'+e.rel+'|'+e.id).concat((incM.get(n.id)||[]).filter(e=>byId.get(e.id)).map(e=>'in|'+e.rel+'|'+e.id)));
+    ok('and exactly the distinct edges of the graph', want.size===rows, want.size+' vs '+rows);
+    const chip=s&&s.querySelector('.fbar .pchip[data-fv="in"]');
+    if(chip){ click(chip);
+      ok('the ← used by chip keeps the incoming rows only', [...s.querySelectorAll('.tr[data-rdir]')].every(r=>r.hidden===(r.dataset.rdir==='out')));
+      click(s.querySelector('.fbar .pchip[data-fv="all"]')); }
     if(s) s.open=false;
   });
   steps.push(()=>{
     let st=null; try{ st=JSON.parse(localStorage.getItem('atlas-sect')); }catch(e){}
-    ok('closing the neighborhood is remembered', !!st && st.neighborhood===false, JSON.stringify(st));
-    if(st){ delete st.neighborhood; try{ localStorage.setItem('atlas-sect', JSON.stringify(st)); }catch(e){} }
-    const s=document.querySelector('#detail details.sect[data-sect="neighborhood"]');
+    ok('closing the relations is remembered', !!st && st.relations===false, JSON.stringify(st));
+    if(st){ delete st.relations; try{ localStorage.setItem('atlas-sect', JSON.stringify(st)); }catch(e){} }
+    const s=document.querySelector('#detail details.sect[data-sect="relations"]');
     if(s){ s.open=true; const g=s.querySelector('.gn[data-id]'); window.__nbFrom=state.sel; if(g) click(g); }
   });
   steps.push(()=>{
     ok('a neighbour in the drawing is a link', !!state.sel && state.sel!==window.__nbFrom, 'sel='+state.sel);
+    location.hash=enc('process:fulfilmentProcess');
+  });
+  steps.push(()=>{
+    // what the Called with section said: the caller's mappings, in the caller's row
+    const row=document.querySelector('#detail [data-sect="relations"] .tr[data-rdir="in"][data-rmap]');
+    ok('a caller that maps parameters is marked as such', !!row);
+    ok('and its row carries the mappings', !!row && [...row.querySelectorAll('.pc')].some(p=>/subOrderId/.test(p.textContent)));
+    ok("without answering this page's element links", !!row && !row.querySelector('.tx [data-el], .tx [data-hay]'));
+    location.hash=enc('endpoint:GET /api/customers/{id}/canEdit');
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    const row=[...det.querySelectorAll('[data-sect="relations"] .tr[data-rdir="in"]')].find(r=>r.querySelector('.nc[data-id="'+enc('form:orderForm')+'"]'));
+    ok('an endpoint names who calls it, with the verb and the URL', !!row && /GET/.test(row.textContent) && /canEdit/.test(row.textContent));
+    ok('no separate Called by section', !det.querySelector('[data-sect="callers"]'));
+    location.hash=enc('group:auditors');
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    ok('a group lists what its members may do, a run per permission', new Set([...det.querySelectorAll('[data-sect="relations"] .tr[data-rel]')].map(r=>r.dataset.rel)).size===2);
+    ok('no separate Access section', !det.querySelector('[data-sect="access"]'));
+    location.hash=enc('agent:orderAssistant');
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    ok("an agent's tools are relations, with the operation", !det.querySelector('[data-sect="tools"]') &&
+       /findAll/.test((det.querySelector('[data-sect="relations"] .tr[data-rel="tool"]')||{}).textContent||''));
+    const other=det.querySelector('[data-sect="otherattrs"]');
+    ok('and the tools key is not left over under Other attributes', !other || ![...other.querySelectorAll('*')].some(el=>el.children.length===0 && (el.textContent||'').trim()==='tools'));
   });
 
   // --- sidebar groups fold and remember ---

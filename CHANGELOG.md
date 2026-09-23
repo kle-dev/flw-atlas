@@ -58,6 +58,15 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   that hides tabs, scrolls with the wheel, and lists the hidden tabs behind a **+N** button. The browse
   list is narrower there and folds away from a button in its head — or by dragging its edge shut — to give
   the page the whole width; a long name no longer pushes its findings pill out of sight.
+- **A node's relations in one section.** A page told its relations three and four times — a neighbourhood
+  drawing, *Uses / references*, *Used by / referenced from*, and a type's own copies (*Called by*,
+  *Access*, *Subforms*, *Tools*, *Used by*, *Called with*). *Relations* is one section under the diagram:
+  the drawing, then a table per direction with a row per relation and neighbour, carrying what the old
+  sections added — the element that makes a reference, a REST call's verb and URL, a tool's operation, and
+  a caller's parameter mappings in its expanded row — with chips for *uses*, *used by*, *uncertain* and
+  *with mappings*. An expression, a binding, a function and a service operation get the same section from
+  their own lists. The section listing the variables and expressions a model touches is called
+  *Variables & expressions* now; as *Uses* it collided with the drawing's USES column.
 - **The overview summarises instead of repeating.** Its health block was the Checks page's list and its
   inventory the sidebar's entries as ungrouped chips. Health is now two numbers — the open defects and
   advice, each split by tier (broken, runtime risk, unfinished, noise) — the five checks with the most

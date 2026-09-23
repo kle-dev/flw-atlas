@@ -94,8 +94,8 @@ Once the explorer is open, three views answer most first questions:
 
 - the **overview** — what this project is, what is central to it, who can start what;
 - **`#/checks`** — everything already known to be wrong;
-- any model's detail panel — and specifically its **Used by** list, which is the question a model file
-  cannot answer about itself.
+- any model's detail panel — and specifically the *Used by* side of its **Relations**, which is the
+  question a model file cannot answer about itself.
 
 Then:
 

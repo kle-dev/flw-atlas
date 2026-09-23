@@ -163,7 +163,7 @@ const SHOTS = [
   ['#/variables', 'variables-page', { w: 1400, h: 900 }],
   ['#/schema', 'schema-page', { w: 1400, h: 800 }],
   ['#/scripts', 'scripts-page', { w: 1400, h: 900 }],
-  // Two detail pages: a form (the Fields table) and a process (twenty sections and their chips).
+  // Two detail pages: a form (the Fields table) and a process (its sections and their chips).
   ['#form%3AorderForm', 'detail-form', { w: 1400, h: 1000 }],
   ['#process%3AorderProcess', 'detail-process', { w: 1400, h: 1000 }],
 ];

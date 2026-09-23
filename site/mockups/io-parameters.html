@@ -1,4 +1,4 @@
-<div class="mockfit ide" data-w="1010" data-h="858" style="width:1010px;height:858px">
+<div class="mockfit ide" data-w="1010" data-h="889" style="width:1010px;height:889px">
    <div class="title">
      <span class="tl"><i class="r"></i><i class="y"></i><i class="g"></i></span>
      <span class="proj">flowable-demo — <b>Atlas Explorer</b></span>
@@ -16,7 +16,7 @@
              </div>
              <span class="xall">⇕ collapse all</span>
            </div>
-           <div class="xchips"><span class="xchip">Diagram</span><span class="xchip">User tasks <b>3</b></span><span class="xchip">Service tasks <b>2</b></span><span class="xchip">Sequence flows <b>6</b></span><span class="xchip">Parameters <b>8</b></span><span class="xchip">Called with <b>4</b></span><span class="xchip">References <b>7</b></span><span class="xchip">Used by <b>3</b></span></div>
+           <div class="xchips"><span class="xchip">Diagram</span><span class="xchip">User tasks <b>3</b></span><span class="xchip">Service tasks <b>2</b></span><span class="xchip">Sequence flows <b>6</b></span><span class="xchip">Parameters <b>8</b></span><span class="xchip">Relations <b>10</b></span><span class="xchip">Variables &amp; expressions <b>12</b></span></div>
 
            <div class="xsec">
              <div class="xsech"><span class="tri">▾</span>Parameters <span class="cnt">8</span><span class="hint">4 in · 3 out · 1 error-out</span></div>
@@ -48,18 +48,19 @@
            </div>
 
            <div class="xsec">
-             <div class="xsech"><span class="tri">▾</span>Called with <span class="cnt">4</span><span class="hint">3 in · 1 out from 3 callers</span></div>
-             <div class="xcard">
+             <div class="xsech"><span class="tri">▾</span>Relations <span class="cnt">10</span><span class="hint">7 outgoing · 3 incoming</span></div>
+             <div class="xrelh">Used by <span class="dim">← what points at this</span></div>
+             <div class="xrel"><span class="xrell">Action button → action</span><span class="xchip">{{icon:form}} Order form <b>FORMS</b></span><span class="xtag">2 in</span></div>
+             <div class="xcard xrelb">
                <div class="xcardh open"><span class="tri">⌄</span>Start order <span class="xid">startOrder</span><span class="xtag">action button</span><span class="rt">2 params</span></div>
-               <div class="xcardb" style="padding-bottom:4px"><span class="xchip">{{icon:form}} Order form <b>FORMS</b></span></div>
                <div class="xpg">
                  <div class="xpr"><span class="xdir i">in</span><span class="pn">{{total}} → <span class="lk">orderTotal</span></span><span class="pk">Send payload map</span></div>
                  <div class="xpr"><span class="xdir i">in</span><span class="pn">{{cust.id}} → <span class="lk">customerRef</span></span><span class="pk">Send payload map</span></div>
                </div>
              </div>
-             <div class="xcard">
+             <div class="xrel"><span class="xrell">Process task → process</span><span class="xchip">{{icon:case}} Customer Onboarding <b>CASES</b></span><span class="xtag">1 in</span></div>
+             <div class="xcard xrelb">
                <div class="xcardh open"><span class="tri">⌄</span>Handle order <span class="xid">handleOrder</span><span class="xtag">process task</span><span class="rt">1 param</span></div>
-               <div class="xcardb" style="padding-bottom:4px"><span class="xchip">{{icon:case}} Customer Onboarding <b>CASES</b></span></div>
                <div class="xpg">
                  <div class="xpr"><span class="xdir i">in</span><span class="pn"><span class="lk">caseOrderId</span> → orderId</span><span class="pk">In parameter</span></div>
                </div>
