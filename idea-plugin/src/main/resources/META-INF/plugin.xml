@@ -193,6 +193,10 @@
               labelled items of one <i>View</i> menu, each with a line saying what it shows, and the button
               carries a dot while something is hidden. It is keyboard-driven like a menu: <code>↓</code>
               opens it, <code>Space</code> flips a switch, <code>Escape</code> closes it.</li>
+          <li><b>The explorer fits an editor tab.</b> A window of 1100px or less — the IDE editor tab the
+              page is mostly read in — gets a compact, labelled sidebar instead of the rail of 27 unlabelled
+              icons; the rail is still there by dragging the sidebar's edge below 140px, and a double-click
+              on the edge goes back to the automatic layout instead of pinning 240px.</li>
           <li><b>Smaller things in the explorer.</b> A list row's findings pill carries its tone's icon and
               says what it counts, the reference count beside it carries a link icon and says so too, and a
               key that only repeats the name is shown once. What accepting a finding does is said on the
@@ -540,28 +544,6 @@
               quiet, and so is any async task — its failure is a failed job, retried and then reported,
               never an exception to the caller. The message names the fix for the kind of call it found: a
               synchronous mail task is told to go async or get a boundary event.</li>
-          <li><b>Six more checks — questions, not verdicts, each quiet where it cannot be sure.</b>
-              <code>hardcodedSecrets</code> (error): a password, token or API key written as plain text into
-              a <code>.service</code>, <code>.channel</code>, agent or knowledge-base model or a task's
-              field injections, or credentials inside a URL — paths only, never values; quiet for
-              expression-valued credentials (<code>https://${user}:${password}@host</code> is what the
-              finding asks you to write) and for a key that merely talks <i>about</i> a secret
-              (<code>tokenizerModel</code>, <code>maxTokens</code>, <code>passwordPolicyDescription</code>).
-              <code>gatewayNoDefault</code>: an exclusive or inclusive gateway whose every outgoing flow is
-              conditional and that names no default — "no outgoing sequence flow" waiting for the data
-              nobody thought of; a single conditional flow throws the same error and counts.
-              <code>implicitSplit</code>: two unconditional flows out of one activity, a fork nobody drew;
-              quiet when every flow is conditional and when the activity carries a <i>default</i> flow
-              beside its conditions, which BPMN allows. <code>unsafeQueries</code>: <code>${name}</code> in
-              a query template with no escaping behind it; any built-in silences it.
-              <code>leftoverMarkers</code>: a <code>TODO</code>, <code>FIXME</code> or <code>HACK</code> in
-              a model file, attributed to the model whose element holds it — in a deployment file holding
-              several processes, not to the first — with its line, or, where the text is minified away, the
-              path of the element (<code>rows[2].cols[0].label</code>) rather than a column that moves on
-              every export. <code>unusedDecisions</code>: a decision table nothing calls, app membership not
-              counting as use and the decision <i>service</i> Design generates around a set of tables
-              counting as the caller it is. FindingsTest pins each one's quiet path, and the three runtime
-              checks' too.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

@@ -51,6 +51,10 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   uncertain links and a flag for the finding badges on diagrams — are labelled items of one *View* menu,
   each with a line saying what it shows, and the button carries a dot while something is hidden. It is
   keyboard-driven like a menu: `↓` opens it, `Space` flips a switch, `Escape` closes it.
+- **The explorer fits an editor tab.** A window of 1100px or less — the IDE editor tab the page is
+  mostly read in — gets a compact, labelled sidebar instead of the rail of 27 unlabelled icons; the rail
+  is still there by dragging the sidebar's edge below 140px, and a double-click on the edge goes back to
+  the automatic layout instead of pinning 240px.
 - **Smaller things in the explorer.** A list row's findings pill carries its tone's icon and says what it
   counts, the reference count beside it carries a link icon and says so too, and a key that only repeats
   the name is shown once. What accepting a finding does is said on the *accept…* button and in its form,

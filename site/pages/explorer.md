@@ -85,6 +85,12 @@ appears — the browse list, the chips, the detail tabs, the breadcrumb, the sea
 form and a service tell apart at a glance in a long list, and in the collapsed sidebar rail the icons are
 the navigation. The icons scale with the text (see [Themes and text size](#themes-and-text-size)).
 
+The sidebar's width is yours: drag its edge, or focus the edge and press `←` / `→`. In a window of 1100px
+or less — an editor tab inside the IDE — it starts **compact**: labelled, 184px wide, with denser rows,
+and a label cut short shows in full on hover. Dragging the edge below 140px, or pressing `←` at the
+narrowest width, collapses it to the icon rail, which flies out on hover; a double-click on the edge, or
+`Home`, goes back to the automatic layout.
+
 Each group folds — click its header, or press `←` on any of its entries — and the fold is remembered, so
 a project with forty variable scopes need not show them on every visit. A folded group whose entry is
 the one you are on says so with a dot on its header, and stays folded: the sidebar never reopens itself
@@ -326,6 +332,7 @@ the category you are in, with a button to widen the search.
 | `Escape` | View menu | Close and return to the button |
 | `+` `-` `0` | diagram (full screen) | Zoom in, out, fit |
 | `←` `→` / `Home` | list splitter (focused) | Nudge the list width / reset it |
+| `←` `→` / `Home` | sidebar edge (focused) | Nudge the sidebar width, `←` at the narrowest collapses it to the rail / back to the automatic layout |
 | `Tab` / `⇧Tab` | diagram | Move between elements |
 | `Enter` / `Space` | diagram element | Open its info card |
 | `Escape` | diagram, info card | Close |

@@ -152,7 +152,7 @@ our terms to read it.
 The tab is the generated HTML in an embedded browser, handed the IDE's theme *and its colours* on load —
 the page wears the look-and-feel's own panel, editor and selection colours rather than its browser
 palette, so it sits in Darcula or the New UI like any other tab — and restyled live when you switch
-either. Every tooltip is drawn by the page's own bubble rather than the browser's, because
+either. It lays itself out for an editor tab's width, with a compact, labelled sidebar. Every tooltip is drawn by the page's own bubble rather than the browser's, because
 native tooltips never appear in the embedded viewer — and the plugin injects two bridges: a clipboard
 one, because copy is blocked for local files there, and **Open in IDE** — the `↗` beside every model's
 and Java class's source path, and every `:line` on a method or REST handler, opens that file in an editor

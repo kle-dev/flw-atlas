@@ -1010,6 +1010,23 @@
 
 
   /* ------------------------------------------------------------------ */
+  /* Compact sidebar: the automatic layout of a 801–1100px window — an    */
+  /* IDE editor tab. Labelled, 184px, denser rows and smaller type; the   */
+  /* rail below stays available by dragging the handle.                   */
+  /* ------------------------------------------------------------------ */
+  @media (min-width:801px){
+    .shell.compact .side-logo{padding:0 var(--space-3)}
+    .shell.compact .side-logo svg{height:24px}
+    .shell.compact .side-nav{padding:var(--space-2) var(--space-1)}
+    .shell.compact .side-group{padding:var(--space-25) var(--space-15) var(--space-1)}
+    .shell.compact .side-item{height:28px;gap:var(--space-15);padding:0 var(--space-2);font-size:var(--text-sm)}
+    .shell.compact .side-item .ti{width:calc(14px*var(--ui-scale));height:calc(14px*var(--ui-scale))}
+    .shell.compact .side-item .n{font-size:var(--text-2xs)}
+    .shell.compact .side-foot{padding:var(--space-15) var(--space-2)}
+    .shell.compact .side-warn .wtxt{display:none}
+  }
+
+  /* ------------------------------------------------------------------ */
   /* Sidebar collapse ("rail"): state-driven via .shell.rail, toggled by  */
   /* the drag handle / auto-default in explorer.js (previously a hard     */
   /* ≤1100px media query). ≥801px only — the ≤800px block below owns the  */
@@ -1050,6 +1067,7 @@
   /* everything vertically and the page scrolls.                          */
   /* ------------------------------------------------------------------ */
   @media (max-width:1100px){
+    .dbody{padding:0 var(--space-4) var(--space-8)}
     .view-browse{grid-template-columns:min(var(--list-w),280px) 1fr}
     .listresize{left:calc(min(var(--list-w),280px) - 3px)}
     .searchbtn{width:auto}

@@ -1156,6 +1156,48 @@ const narrowProbe = `<script>
 })();
 </script>`;
 
+// An IDE editor tab is about 1000px wide, which is where the page is read most — the probe checks the
+// layout that width gets when nothing is stored: a labelled compact sidebar, not the icon rail.
+const ideProbe = `<script>
+(function(){
+  const log=[], errs=[];
+  const ok=(k,cond,detail)=>log.push(k+': '+(cond?'ok':'FAIL '+(detail||'')));
+  window.addEventListener('error', e=>errs.push(e.message));
+  const vis=el=>!!el && el.offsetParent!==null && el.getBoundingClientRect().width>0;
+  const noHScroll=()=>document.documentElement.scrollWidth<=window.innerWidth+1;
+  const steps=[];
+  steps.push(()=>{
+    ['atlas-sidebar','atlas-sidebar-w','atlas-list-hidden','atlas-tabs'].forEach(k=>{ try{ localStorage.removeItem(k); }catch(e){} });
+    applySidebar();
+    const shell=document.querySelector('.shell');
+    ok('an editor-tab width gets the compact sidebar', shell.classList.contains('compact') && !shell.classList.contains('rail'));
+    const sb=document.getElementById('sidebar').getBoundingClientRect().width;
+    ok('the compact sidebar is narrow', sb>=170 && sb<=200, 'width='+Math.round(sb));
+    ok('its entries keep their labels', vis(document.querySelector('#nav .side-item .lbl')));
+    const foot=document.getElementById('sidefoot');
+    ok('its footer does not overflow', !!foot && foot.scrollWidth<=foot.clientWidth+1, foot&&(foot.scrollWidth+' > '+foot.clientWidth));
+    setSidebar('rail');
+    ok('the rail is still there on request', shell.classList.contains('rail') && !shell.classList.contains('compact'));
+    sbReset();
+    ok('a reset goes back to the automatic layout', shell.classList.contains('compact') && !shell.classList.contains('rail'));
+    location.hash=enc('process:orderProcess');
+  });
+  steps.push(()=>{
+    ok('a node page opens', state.sel==='process:orderProcess');
+    ok('no horizontal page scroll', noHScroll(), document.documentElement.scrollWidth+' > '+window.innerWidth);
+  });
+  let i=0;(function run(){
+    if(i>=steps.length){
+      log.push('uncaught errors: '+(errs.length?('FAIL '+errs.join(' | ')):'none'));
+      document.title='UITEST_BEGIN '+log.join(' ;; ')+' UITEST_END';
+      return;
+    }
+    try{ steps[i++](); }catch(e){ log.push('FAIL threw in step '+i+': '+e.message); }
+    setTimeout(run, 300);
+  })();
+})();
+</script>`;
+
 function runProbe(probeHtml, windowSize, label) {
   fs.writeFileSync(tmp, html.replace('</body>', probeHtml + '</body>'));
   let dom;
@@ -1185,6 +1227,7 @@ function runProbe(probeHtml, windowSize, label) {
 const lines = [
   ...runProbe(probe, '1400,900', 'desktop'),
   ...runProbe(narrowProbe, '800,600', 'narrow').map(l => '[800px] ' + l),
+  ...runProbe(ideProbe, '1000,760', 'ide').map(l => '[1000px] ' + l),
 ];
 let failed = 0;
 for (const l of lines) {

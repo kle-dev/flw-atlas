@@ -1118,7 +1118,7 @@ function renderSidebar(){
     const n=findingCounts().open.parseIssues||0;
     chip.hidden=!n;
     if(n){
-      chip.innerHTML='⚠<span class="wtxt">&nbsp;'+n+' parse issue'+(n>1?'s':'')+'</span>';
+      chip.innerHTML='⚠ <b>'+n+'</b><span class="wtxt">&nbsp;parse issue'+(n>1?'s':'')+'</span>';
       chip.setAttribute('aria-label',
         n+' parse issue'+(n>1?'s':'')+' — files the generator could not fully analyze');
       chip.onclick=()=>{
@@ -1128,6 +1128,14 @@ function renderSidebar(){
     }
   }
 }
+// No bubble on a sidebar entry, as a rule: the label and count are right there. The compact sidebar is
+// the exception — a long category name can end in an ellipsis there, and then the bubble is the label.
+document.getElementById('nav').addEventListener('mouseover', e=>{
+  const it=e.target.closest&&e.target.closest('.side-item'); if(!it) return;
+  const l=it.querySelector('.lbl');
+  const cut=!!l && document.querySelector('.shell.compact') && l.scrollWidth>l.clientWidth;
+  if(cut) it.setAttribute('data-tip', it.getAttribute('aria-label')||l.textContent); else it.removeAttribute('data-tip');
+});
 function renderSidebarActive(){
   document.querySelectorAll('#nav .side-item').forEach(el=>{
     const on = el.dataset.route ? el.dataset.route==='/'+state.view
@@ -7261,10 +7269,13 @@ window.addEventListener('scroll',()=>{ if(_tipFor||_tipT) hideTip(); }, true);
 // The expanded width lives in the --sidebar-w custom property; the collapsed
 // "rail" is the .shell.rail class. Both are user-controllable via the drag
 // handle (#sideresize) and remembered. atlas-sidebar='rail'|'wide' records an
-// explicit choice; with none stored the rail auto-engages below 1100px, which
-// preserves the old media-query behavior. localStorage is wrapped in try/catch
-// for private-mode / file:// quirks, matching the theme prefs above.
-const SB_MIN=180, SB_MAX=480, SB_DEF=240, SB_COLLAPSE=140, SB_RAIL=64;
+// explicit choice. With none stored, a window of 1100px or less gets the compact
+// sidebar (.shell.compact): labelled, 184px, denser. That width is an IDE editor
+// tab — the main place this page is read — and the icon rail it used to get there
+// was 27 unlabelled glyphs in similar colours. The rail is what dragging the
+// handle below 140px (or a stored 'rail') gives. localStorage is wrapped in
+// try/catch for private-mode / file:// quirks, matching the theme prefs above.
+const SB_MIN=180, SB_MAX=480, SB_DEF=240, SB_COLLAPSE=140, SB_RAIL=64, SB_COMPACT=184;
 const _sbNarrow=matchMedia('(max-width:1100px)');
 function sbPref(){ try{ return localStorage.getItem('atlas-sidebar'); }catch(e){ return null; } }
 function sbWidth(){
@@ -7275,16 +7286,24 @@ function sbClamp(v){ return Math.max(SB_MIN,Math.min(SB_MAX,v)); }
 function applySidebar(){
   const shell=document.querySelector('.shell'); if(!shell) return;
   const pref=sbPref();                              // 'rail' | 'wide' | null(auto)
-  const rail = pref ? pref==='rail' : _sbNarrow.matches;
-  const w=sbWidth();
+  const rail=pref==='rail';
+  const compact=!pref && _sbNarrow.matches;         // never stored: it follows the window
+  const w=compact?SB_COMPACT:sbWidth();
   shell.style.setProperty('--sidebar-w', w+'px');
   shell.classList.toggle('rail', rail);
+  shell.classList.toggle('compact', compact);
   const h=document.getElementById('sideresize');
   if(h){
     h.setAttribute('aria-valuenow', rail?'0':String(w));
     h.setAttribute('aria-label', rail?'Sidebar collapsed — drag to expand'
-                                      :'Sidebar width '+w+'px — drag to resize');
+                                      :'Sidebar width '+w+'px — drag to resize, double-click to reset');
   }
+}
+/** Back to automatic: the stored choice goes, so the window decides again (compact in an editor tab). A
+ *  reset used to pin 240px, which then stayed pinned in the narrow tab it was meant to fit. */
+function sbReset(){
+  try{ localStorage.removeItem('atlas-sidebar'); localStorage.removeItem('atlas-sidebar-w'); }catch(e){}
+  applySidebar();
 }
 function setSidebar(state, w){                       // persist an explicit choice, then re-apply
   try{ localStorage.setItem('atlas-sidebar', state); }catch(e){}
@@ -7298,7 +7317,7 @@ function wireSidebarResize(){
   let startX=0, startW=0, dragging=false;
   h.addEventListener('pointerdown',e=>{
     dragging=true; startX=e.clientX;
-    startW=shell.classList.contains('rail')?SB_RAIL:sbWidth();
+    startW=shell.classList.contains('rail')?SB_RAIL:(parseInt(shell.style.getPropertyValue('--sidebar-w'),10)||sbWidth());
     try{ h.setPointerCapture(e.pointerId); }catch(_){}
     shell.classList.add('dragging'); e.preventDefault();
   });
@@ -7317,13 +7336,16 @@ function wireSidebarResize(){
   };
   h.addEventListener('pointerup',end);
   h.addEventListener('pointercancel',end);
-  h.addEventListener('dblclick',()=>setSidebar('wide',SB_DEF));   // reset to default width
+  h.addEventListener('dblclick',sbReset);
   h.addEventListener('keydown',e=>{
     if(e.key==='ArrowLeft'||e.key==='ArrowRight'){
       e.preventDefault();
-      const base=shell.classList.contains('rail')?SB_MIN:sbWidth();
-      setSidebar('wide', sbClamp(base+(e.key==='ArrowRight'?16:-16)));
-    } else if(e.key==='Home'){ e.preventDefault(); setSidebar('wide',SB_DEF); }
+      const cur=parseInt(shell.style.getPropertyValue('--sidebar-w'),10)||sbWidth();
+      const base=shell.classList.contains('rail')?SB_MIN:cur;
+      // ← at the narrowest width folds to the rail, so the keyboard reaches it as the drag does
+      if(e.key==='ArrowLeft' && !shell.classList.contains('rail') && base<=SB_MIN) setSidebar('rail');
+      else setSidebar('wide', sbClamp(base+(e.key==='ArrowRight'?16:-16)));
+    } else if(e.key==='Home'){ e.preventDefault(); sbReset(); }
   });
   // Re-evaluate the auto default on viewport crossings, but only while the
   // user has not made an explicit choice.

@@ -276,6 +276,7 @@ class RenderersSmokeTest {
         assertTrue("expected the empty-state helper from explorer.js", html.contains("function estateHtml("))
         assertTrue("expected the one-line check head from explorer.js", html.contains("function checkHeadHtml("))
         assertTrue("expected the View menu in the top bar", html.contains("id=\"viewbtn\"") && html.contains("role=\"menuitemcheckbox\""))
+        assertTrue("expected the compact sidebar for an editor-tab width", html.contains(".shell.compact .side-item{"))
         assertFalse("what accepting does is said on the button, not above every model's findings",
             html.contains("Accepting one keeps it in the report"))
         assertFalse("the old operation card styling is gone", html.contains("details.op>summary"))
