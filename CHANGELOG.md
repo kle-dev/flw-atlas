@@ -47,6 +47,9 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   the information icon. Every advice row used to read WARNING under the *Advice* heading. `graph.json`,
   the summary and `--fail-on` keep the severity; a saved `#/checks&c=warning` link now keeps a defect's
   warnings only, and the sidebar's *Checks* badge is grey while only advice is open.
+- **Smaller things in the explorer.** A list row's findings pill carries its tone's icon and says what it
+  counts, the reference count beside it carries a link icon and says so too, and a key that only repeats
+  the name is shown once.
 - **The findings in a tool window of their own.** *Atlas Findings* lists every defect — and, when asked,
   the advice and the accepted findings — from the same analysis the explorer is built from, grouped by
   check. A double-click opens the finding's file at its line, and *Accept…* writes the selected findings,

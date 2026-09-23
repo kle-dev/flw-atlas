@@ -948,6 +948,8 @@ const probe = `<script>
     const f=DATA.findings[wvFi];
     const it=f&&document.querySelector('#list .item[data-id="'+cssEsc(f.node)+'"]');
     ok('a list item of a model with findings carries the pill', !f || !!(it&&it.querySelector('.fpill')));
+    const fp=it&&it.querySelector('.fpill');
+    ok('the pill carries its tone icon and says what it counts', !f || (!!fp && !!fp.querySelector('svg') && /finding|advice/.test(fp.dataset.tip||'')));
     if(f) location.hash=enc(f.node);
   });
   steps.push(()=>{
@@ -1048,6 +1050,17 @@ const probe = `<script>
     rows[0].dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));
     ok('arrow down moves the roving tabindex',
        v.querySelectorAll('.tv-row[tabindex="0"]').length===1 && document.activeElement!==rows[0]);
+  });
+
+  // --- list badges explain themselves; a key that repeats the name is shown once ---
+  steps.push(()=>{ location.hash='/browse/endpoint'; });
+  steps.push(()=>{
+    const items=[...document.querySelectorAll('#listitems .item[data-id]')];
+    const same=items.filter(el=>{ const n=byId.get(el.dataset.id); return n && sameText(n.key, n.label); });
+    ok('this fixture has an endpoint named by its key', same.length>0);
+    ok('a key that repeats the name is not printed twice', same.every(el=>!el.querySelector('.sub')));
+    const rf=document.querySelector('#listitems .refn');
+    ok('the reference count says what it counts', !rf || (/Referenced by/.test(rf.dataset.tip||'') && !!rf.querySelector('svg')));
   });
 
   // --- a report route carries its context ---

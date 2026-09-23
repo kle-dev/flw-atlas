@@ -188,6 +188,9 @@
               summary and <code>--fail-on</code> keep the severity; a saved
               <code>#/checks&amp;c=warning</code> link now keeps a defect's warnings only, and the sidebar's
               <i>Checks</i> badge is grey while only advice is open.</li>
+          <li><b>Smaller things in the explorer.</b> A list row's findings pill carries its tone's icon and
+              says what it counts, the reference count beside it carries a link icon and says so too, and a
+              key that only repeats the name is shown once.</li>
           <li><b>The findings in a tool window of their own.</b> <i>Atlas Findings</i> lists every defect —
               and, when asked, the advice and the accepted findings — from the same analysis the explorer is
               built from, grouped by check. A double-click opens the finding's file at its line, and
@@ -560,11 +563,6 @@
               service's unmapped ones. And a service no data object binds at all no longer reports every
               mapped column as "used by no data object": the service is used directly, and the row said
               nothing about the column.</li>
-          <li><b>A variable with many write sites is judged on all of them.</b> The write list on a variable
-              node is capped at 25 for the page, and the unused-variable decision read the capped list — so
-              a variable whose 26th write was the one that silences the check (a mapping into a model
-              outside the project, a scope that reads everything) was reported as never read. The decision
-              runs on the full list now; the cap is applied afterwards, for display.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

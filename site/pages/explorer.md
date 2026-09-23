@@ -340,7 +340,10 @@ The explorer never presents a guess as a fact:
 - **`⚠ N parse issues`** in the sidebar footer jumps straight to the parse findings. A file Atlas could
   not read is never silent.
 - A **count pill** on a tree row or a list item says how many open findings that model carries, coloured
-  by the worst of them; a clean model wears none. On the model's diagram the same count sits as a
+  by the worst of them and marked with its icon — a cross for an error, a triangle for a warning, a light
+  bulb for advice; a clean model wears none, and hovering the pill says what it counts. The grey number
+  with the link icon at the end of a list row is how many nodes reference it — the count *Most
+  referenced* sorts by. A row whose key only repeats its name, as a REST endpoint's does, shows it once. On the model's diagram the same count sits as a
   **badge** on each element with a finding — red for an error, amber for a [defect](../checks/)'s
   warning, grey when the element carries advice alone — click it and the element's card lists them, with *restore*
   for an accepted one and *accept…* landing on the finding's row under the diagram. The toolbar's

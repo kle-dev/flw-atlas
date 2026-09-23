@@ -606,8 +606,12 @@
   .item .meta{min-width:0;flex:1}
   .item .nm{color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .item .sub{font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .refn{flex:none;align-self:center;font-size:var(--text-2xs);font-variant-numeric:tabular-nums;color:var(--ink-faint);
+  .refn{flex:none;align-self:center;display:inline-flex;align-items:center;gap:2px;font-size:var(--text-2xs);
+    font-variant-numeric:tabular-nums;color:var(--ink-faint);
     border:1px solid var(--line);border-radius:var(--radius-full);padding:0 var(--space-15)}
+  /* the icon says which number is which: findings carry their tone's glyph, references the link */
+  .fpill .ui,.refn .ui{width:calc(10px*var(--ui-scale));height:calc(10px*var(--ui-scale));flex:none}
+  .fpill{gap:3px}
   .sentinel{height:1px}
   @media (prefers-reduced-motion: reduce){ .pal-panel{animation:none} }
 

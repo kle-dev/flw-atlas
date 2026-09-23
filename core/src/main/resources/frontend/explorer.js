@@ -122,6 +122,11 @@ const UI_ICONS={
   link:'<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
   chevron:'<path d="m6 9 6 6 6-6"/>',
   check:'<path d="M20 6 9 17l-5-5"/>',
+  alert:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  error:'<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
+  advice:'<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
+  search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  eye:'<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
 };
 function uiIcon(name){
   return '<svg class="ui ui-'+name+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"'+
@@ -661,8 +666,10 @@ function nodeFindingCounts(id){
   (FIND_BY_NODE.get(id)||[]).forEach(f=>{ if(waiverFor(f)) waived++; else { open++; worst=worseTone(worst, findTone(f)); } });
   const r={open, waived, worst}; _nfc.set(id, r); return r;
 }
-/** A small count of a node's open findings, coloured by the worst one — nothing when there are none.
- *  Worn by tree rows and list items, so a model with five findings no longer looks like a clean one. */
+/** A small count of a node's open findings, coloured by the worst one and marked with its icon — nothing
+ *  when there are none. Worn by tree rows and list items, so a model with five findings no longer looks
+ *  like a clean one. The bubble says what the number is: a bare coloured "2" beside a grey "3" (the
+ *  reference count) left a reader to guess which was which. */
 function findPillHtml(id){
   const c=nodeFindingCounts(id);
   if(!c.open){
@@ -670,11 +677,16 @@ function findPillHtml(id){
     // looks exactly like a clean one.
     if(!c.waived) return '';
     const l=c.waived+' accepted finding'+(c.waived>1?'s':'');
-    return '<span class="pill fpill pill-ok" aria-label="'+l+'" data-tip="'+l+' — see Findings on this model">✓</span>';
+    return '<span class="pill fpill pill-ok" aria-label="'+l+'" data-tip="'+l+' — see Findings on this model">'+uiIcon('check')+'</span>';
   }
-  const lbl=c.open+' open finding'+(c.open>1?'s':'');
-  return '<span class="pill fpill '+TONE[c.worst||'warning'].pill+'" aria-label="'+lbl+'" data-tip="'+lbl+' — see Findings on this model">'+c.open+'</span>';
+  const t=c.worst||'warning';
+  const lbl=t==='advice' ? c.open+' advice — nothing broken'
+    : c.open+' open finding'+(c.open>1?'s':'')+' — the worst is '+(t==='error'?'an error':'a warning');
+  return '<span class="pill fpill '+TONE[t].pill+'" aria-label="'+lbl+'" data-tip="'+lbl+' · listed under Findings on this model">'+
+    uiIcon(TONE[t].icon)+c.open+'</span>';
 }
+/** Two labels that say the same thing — a REST endpoint's key is its name — are shown once. */
+const sameText=(a,b)=>String(a==null?'':a).replace(/\s+/g,' ').trim().toLowerCase()===String(b==null?'':b).replace(/\s+/g,' ').trim().toLowerCase();
 /** The catalog's title for a check id, or the id itself for one the catalog does not name. */
 function checkTitle(id){ const c=(DATA.checkCatalog||[]).find(x=>x.id===id); return c?c.title:id; }
 /** `defect` or `advice` — the split every surface leads with (CheckCatalog.kind). A check the catalog
@@ -690,9 +702,9 @@ const TONE_ORDER={error:0, warning:1, advice:2};
 /** The worse of two tones; either may be empty. */
 const worseTone=(a,b)=>!a?b:!b?a:(TONE_ORDER[a]<=TONE_ORDER[b]?a:b);
 /** Per tone: the pill class, the health-row tone class and the word. */
-const TONE={error:{pill:'pill-bad', row:'bad', label:'error'},
-            warning:{pill:'pill-warn', row:'warn', label:'warning'},
-            advice:{pill:'pill-advice', row:'advice', label:'advice'}};
+const TONE={error:{pill:'pill-bad', row:'bad', label:'error', icon:'error'},
+            warning:{pill:'pill-warn', row:'warn', label:'warning', icon:'alert'},
+            advice:{pill:'pill-advice', row:'advice', label:'advice', icon:'advice'}};
 const tonePill=t=>'<span class="pill '+TONE[t||'warning'].pill+'">'+TONE[t||'warning'].label+'</span>';
 /** The tone of everything open, for a single badge: `error`, `warning`, `advice` — or '' when clean. */
 function openTone(){ const W=findingCounts().worst; return Object.keys(W).reduce((a,k)=>worseTone(a, W[k]), ''); }
@@ -2888,11 +2900,12 @@ function renderItems(cat, wrap){
     // Why this row matched, same as in the palette: a hit from a script body or a mapping used to
     // show a row with no visible reason at all. Falls back to the key — the line it always showed.
     const w=parsed.empty?null:matchWhere(n, parsed);
-    const sub=(w&&w.hint)||n.key;
+    const sub=(w&&w.hint)||(sameText(n.key, n.label)?'':n.key);
+    const rl='Referenced by '+rn+' node'+(rn>1?'s':'')+' — the count Most referenced sorts by';
     el.innerHTML=nodeIcon(n)+
-      '<div class="meta"><div class="nm">'+hlHtml(n.label, parsed)+authBadge(n)+findPillHtml(n.id)+
-      '</div><div class="sub" title="'+esc(sub)+'">'+hlHtml(sub, parsed)+'</div></div>'+
-      (rn?'<span class="refn" title="referenced by '+rn+' node'+(rn>1?'s':'')+'">'+rn+'</span>':'')+
+      '<div class="meta"><div class="nm">'+hlHtml(n.label, parsed)+authBadge(n)+findPillHtml(n.id)+'</div>'+
+      (sub?'<div class="sub" title="'+esc(sub)+'">'+hlHtml(sub, parsed)+'</div>':'')+'</div>'+
+      (rn?'<span class="refn" data-tip="'+esc(rl)+'" aria-label="'+esc(rl)+'">'+uiIcon('link')+rn+'</span>':'')+
       '<span class="ck" aria-hidden="true">✓</span>';
     el.onclick=e=>activateRow(e, n.id, {q:parsed.empty?undefined:state.filter, el:(w&&w.el)||undefined});
     el.onmousedown=e=>{ if(e.button===1) e.preventDefault(); };   // no autoscroll cursor
@@ -6717,7 +6730,7 @@ function palRender(){
       // Hits that did not come from the name explain themselves: "script · scriptTask1", "doc · order".
       const w=parsed.empty?null:matchWhere(n, parsed, hit.fields);
       palList.push({n, el:(w&&w.el)||''});
-      const hint=(w&&w.hint)||n.key;
+      const hint=(w&&w.hint)||(sameText(n.key, n.label)?'':n.key);
       // title on both: whatever the panel width clips is still readable on hover, without resizing.
       const mk=palMarks.has(n.id);
       h+='<div class="pal-item'+(i===palSel?' sel':'')+(mk?' mark':'')+'" id="pal-'+i+'" role="option"'+
