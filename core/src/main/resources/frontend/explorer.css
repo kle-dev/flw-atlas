@@ -921,8 +921,18 @@
   details.sect[data-sect="elements"]>.sb>.sbar .pbar .pf{flex:1 1 100%}
   .reltbl{margin:0 0 var(--space-25)}
   .reltbl .rellab{font-size:var(--text-xs);font-weight:500;color:var(--ink-dim)}
-  .reltbl>.tr.rel-first{border-top:1px solid var(--line2)}
-  .tbl>.tr.rel-unc{box-shadow:inset 3px 0 0 var(--cov-warn,#c98a1b)}
+  .reltbl .rcount{margin-left:var(--space-15);font-size:var(--text-2xs);color:var(--ink-faint);font-variant-numeric:tabular-nums}
+  /* a relation's neighbours flow as chips on its row; the row grows a line when they do not fit */
+  .reltbl .td.rnbs{white-space:normal;overflow:visible;display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-15);align-items:center;
+    padding-top:var(--space-05);padding-bottom:var(--space-05)}
+  .rnb{display:inline-flex;align-items:center;gap:var(--space-1);max-width:100%;min-width:0}
+  .rnb[hidden]{display:none}
+  .rnb>.nc{max-width:100%;min-width:0}
+  .rnb-x{font-size:var(--text-2xs);color:var(--ink-faint);white-space:nowrap}
+  .rnb .tag{flex:none}
+  .relsub+.relsub{border-top:1px solid var(--line);margin-top:var(--space-2);padding-top:var(--space-2)}
+  .relsub-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-15);font-size:var(--text-sm)}
+  .relsub-h .muted{font-size:var(--text-xs)}
   .nodechips{display:flex;flex-wrap:wrap;gap:var(--space-15)}
   .nc{display:inline-flex;align-items:center;gap:var(--space-15);background:var(--panel);border:1px solid var(--line2);
     border-radius:var(--radius-md);padding:var(--space-1) var(--space-25);cursor:pointer;max-width:380px}
@@ -1102,12 +1112,9 @@
     .tbl .th,.tbl>div.tr,.tbl .trs{grid-template-columns:1.1em minmax(0,1fr) auto}
     .tbl .td.opt{grid-column:2/-1;font-size:var(--text-2xs);color:var(--ink-faint);white-space:normal}
     .tbl .th .td.opt{display:none}
-    /* relations: the relation heads its run on a line of its own, the node and its flag share the next */
+    /* relations: the relation on a line of its own, its chips on the next */
     .reltbl .th{display:none}
-    .reltbl .td.rel{grid-column:2/-1}
-    .reltbl .td.reln{grid-column:2}
-    .reltbl .td.relf{grid-column:3}
-    .reltbl .tr:not(.rel-head) .td.rel{display:none}
+    .reltbl .td.rel,.reltbl .td.rnbs{grid-column:2/-1}
   }
   .cards{display:flex;flex-direction:column;gap:var(--space-15);margin:var(--space-2) 0}
   .card{border:1px solid var(--line);border-radius:var(--radius-md);background:var(--panel);overflow:hidden}

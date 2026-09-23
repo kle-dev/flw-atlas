@@ -655,12 +655,15 @@ const probe = `<script>
     ok('the relations are one section, open by default', !!s && s.open);
     ok('its drawing reads uses on the left, used by on the right', !!s && s.querySelectorAll('.nb-head').length===2 && s.querySelectorAll('.gn[data-id]').length>0);
     ok('the relations are told once', ['neighborhood','rels-out','rels-in','called-with','usedby','uses'].every(id=>!det.querySelector('[data-sect="'+id+'"]')));
-    // never filter silently: one row per direction, relation and neighbour the graph holds
+    // never filter silently: a row per direction and relation, a chip per neighbour the graph holds
     const n=byId.get('process:orderProcess'), R=relationsOf(n, n.data||{});
     const rows=s?s.querySelectorAll('.tr[data-rdir]').length:0;
-    ok('the table has a row for every relation of the node', rows===R.out.length+R.inc.length && rows>0, rows+' vs '+(R.out.length+R.inc.length));
+    const kinds=new Set(R.out.map(e=>'out|'+e.rel)).size+new Set(R.inc.map(e=>'in|'+e.rel)).size;
+    ok('the table has a row for every relation of the node', rows===kinds && rows>0, rows+' vs '+kinds);
+    const chips=s?s.querySelectorAll('.rnb[data-rdir]').length:0;
+    ok('and a chip for every neighbour of every relation', chips===R.out.length+R.inc.length, chips+' vs '+(R.out.length+R.inc.length));
     const want=new Set((outM.get(n.id)||[]).filter(e=>byId.get(e.id)).map(e=>'out|'+e.rel+'|'+e.id).concat((incM.get(n.id)||[]).filter(e=>byId.get(e.id)).map(e=>'in|'+e.rel+'|'+e.id)));
-    ok('and exactly the distinct edges of the graph', want.size===rows, want.size+' vs '+rows);
+    ok('and exactly the distinct edges of the graph', want.size===chips, want.size+' vs '+chips);
     const chip=s&&s.querySelector('.fbar .pchip[data-fv="in"]');
     if(chip){ click(chip);
       ok('the ← used by chip keeps the incoming rows only', [...s.querySelectorAll('.tr[data-rdir]')].every(r=>r.hidden===(r.dataset.rdir==='out')));
@@ -705,6 +708,24 @@ const probe = `<script>
        /findAll/.test((det.querySelector('[data-sect="relations"] .tr[data-rel="tool"]')||{}).textContent||''));
     const other=det.querySelector('[data-sect="otherattrs"]');
     ok('and the tools key is not left over under Other attributes', !other || ![...other.querySelectorAll('*')].some(el=>el.children.length===0 && (el.textContent||'').trim()==='tools'));
+    location.hash=enc(nodes.find(x=>x.type==='serviceOperation').id);
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    ok('an operation is related to its service', !!det.querySelector('[data-sect="relations"] .tr[data-rel="operation-of"] .nc[data-id^="'+enc('service:')+'"]'));
+    location.hash=enc('variable:total');
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    ok('a variable lists the models that write and read it', !!det.querySelector('[data-sect="relations"] .tr[data-rel="writes-variable"] .rnb') &&
+       !!det.querySelector('[data-sect="relations"] .tr[data-rel="reads-variable"] .rnb'));
+    ok('and no longer says it has no relationships', !/No relationships recorded/.test(det.textContent));
+    location.hash=enc('app:demoApp');
+  });
+  steps.push(()=>{
+    const row=document.querySelector('#detail [data-sect="relations"] .tr[data-rel="contains"]');
+    ok('a relation names all its neighbours on one row', !!row && row.querySelectorAll('.rnb .nc[data-id]').length>1,
+       row?row.querySelectorAll('.rnb').length+' chips':'(no row)');
   });
 
   // --- sidebar groups fold and remember ---

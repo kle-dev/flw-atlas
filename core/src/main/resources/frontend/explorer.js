@@ -325,6 +325,10 @@ const DESIGN_TERMS = {
   'rel:uses-binding': ['Renders binding', 'The form or page renders that frontend binding.'],
   'rel:uses-customFunction': ['Calls function', 'The model calls that project function.'],
   'rel:uses-serviceOperation': ['Calls operation', 'The model calls that service operation.'],
+  'rel:operation-of': ['Operation of', 'The service that declares this operation.'],
+  'rel:writes-variable': ['Writes it', 'The model sets this variable — a task result, an out-mapping, a form field, a script.'],
+  'rel:reads-variable': ['Reads it', 'The model reads this variable — a condition, an in-mapping, a decision input, a binding.'],
+  'rel:uses-variable': ['Mentions it', 'The model names this variable where Atlas cannot tell whether it is read or written.'],
   'rel:calls-function': ['Binding calls function', 'The binding invokes that project function.'],
   'rel:bot': ['Dispatched to bot', 'The action is executed by that bot.'],
   'rel:action-form': ['Action → form', 'That form collects the action’s payload before it runs.'],
@@ -3423,7 +3427,7 @@ function wireSectionFilter(root){
     // The count answers the chips: accepted rows and the rule/notes tables are filtered too, but "12 of
     // 340" against a chip saying 42 open contradicted itself.
     const counted=leaves.filter(el=>!el.closest('details.chk-acc, #chk-waived, #chk-waiver-notes, #chk-waiver-health'));
-    const containers=[...scope.querySelectorAll('details.card, details.tr, details.sect, details.chk-acc, .fgroup')].filter(c=>c.querySelector('[data-hay]'));
+    const containers=[...scope.querySelectorAll('details.card, details.tr, details.sect, details.chk-acc, .fgroup, .relrow')].filter(c=>c.querySelector('[data-hay]'));
     // A report page's own bar keeps its text and chip in the URL (see syncHashContext) and starts from it.
     const pageBar=state.view!=='browse' && scope.classList.contains('dash');
     if(pageBar){
@@ -4692,17 +4696,29 @@ function relationsOf(n, d){
   if(n.type==='expression'||n.type==='binding'||n.type==='customFunction'||n.type==='serviceOperation') gen(inc, d.usedBy, 'uses-'+n.type);
   if(n.type==='binding') gen(out, d.calls, 'calls-function');
   if(n.type==='customFunction') gen(inc, d.bindings, 'calls-function');
+  // an operation belongs to its service — its page named the service in the header and then said it had
+  // no relationships
+  if(n.type==='serviceOperation' && d.service) gen(out, ['service:'+d.service], 'operation-of');
+  // a variable's models, by what they do with it: a model that writes and reads it is both — keyed by
+  // relation and model, not by model alone. `usedBy` is complete where writes/reads are capped lists.
+  if(n.type==='variable'){
+    const ms=list=>[...new Set((list||[]).map(x=>x&&x.model).filter(Boolean))];
+    const w=ms(d.writes), r=ms(d.reads);
+    const add=(ids, rel)=>ids.forEach(id=>{ if(byId.get(id) && !inc.has(rel+'|'+id)) inc.set(rel+'|'+id, {rel, id, gen:true}); });
+    add(w, 'writes-variable'); add(r, 'reads-variable');
+    add((d.usedBy||[]).filter(id=>w.indexOf(id)<0 && r.indexOf(id)<0), 'uses-variable');
+  }
   return {out:[...out.values()], inc:[...inc.values()]};
 }
 /**
- * What a relation row can add beyond "an edge exists": `via` (the element that makes the reference, only
- * where the data pins it down), `info` (a verb and URL, a tool's operation, a mapping tally) and `body` (the
- * caller's parameter mappings — what used to be the Called with section). Nothing here may carry a
- * [data-hay] or a [data-el]: the first would turn the row into a filter container, the second would answer
- * this page's &e= links with the *caller's* element ids.
+ * What one neighbour of a relation adds beyond "an edge exists": `inline` (beside its chip — a mapping
+ * tally that jumps to Parameters, a verb, a tool's operation), `body` (a block for the row's unfolded part
+ * — the caller's parameter mappings, every REST call), `hay` (what the filter searches) and `map`. Nothing
+ * in a body may carry a [data-hay] or a [data-el]: the first would turn it into a filter leaf, the second
+ * would answer this page's &e= links with the *caller's* element ids.
  */
-function relDetail(n, c, dir, e, seen){
-  const m=byId.get(e.id), md=(m&&m.data)||{}, r={via:'', info:'', body:'', hay:'', map:false};
+function relNbDetail(n, c, dir, e, seen){
+  const m=byId.get(e.id), md=(m&&m.data)||{}, r={inline:'', body:'', hay:'', map:false};
   if(!m) return r;
   // parameter mappings: the caller's, onto this node (incoming) — or this node's, onto the callee (outgoing)
   const maps=dir==='in' ? (md.ioParameters||[]).filter(p=>p.refKind===n.type && p.refKey===n.key)
@@ -4712,14 +4728,13 @@ function relDetail(n, c, dir, e, seen){
     r.map=true;
     r.hay=maps.map(paramHaystack).join(' ');
     if(dir==='in'){
-      r.via=gs.map(g=>elJumpHtml(m.id, g.element, g.name||g.element, 'Open this element in its model')).filter(Boolean).join(', ');
-      r.info='<span class="tag">'+esc(paramSummary(maps))+'</span>';
+      r.inline='<span class="rnb-x">'+esc(paramSummary(maps))+'</span>';
       // one body per caller, however many relations it has onto this node
       if(!seen.has(m.id)){ seen.add(m.id);
-        r.body=cards(gs.map(g=>paramGroupHtml({...g, refKey:null, refKind:null}, '', false, {noHay:true, noEl:true}))); }
+        const via=gs.map(g=>elJumpHtml(m.id, g.element, g.name||g.element, 'Open this element in its model')).filter(Boolean).join(', ');
+        r.body+=relSub(m, via, cards(gs.map(g=>paramGroupHtml({...g, refKey:null, refKind:null}, '', false, {noHay:true, noEl:true})))); }
     } else {
-      r.via=gs.map(g=>esc(String(g.name||g.element||''))).filter(Boolean).join(', ');
-      r.info='<button type="button" class="dgbtn" data-reveal-el="'+esc(String(gs[0].element==null?'':gs[0].element))+
+      r.inline='<button type="button" class="dgbtn rnb-x" data-reveal-el="'+esc(String(gs[0].element==null?'':gs[0].element))+
         '" data-tip="Show these mappings under Parameters">'+esc(paramSummary(maps))+' ↓</button>';
     }
   }
@@ -4728,33 +4743,41 @@ function relDetail(n, c, dir, e, seen){
     const calls=dir==='in' ? (md.restCalls||[]).filter(x=>endpointsFor(m.id, x.url).some(ep=>ep.id===n.id))
                            : (c.d.restCalls||[]).filter(x=>endpointsFor(n.id, x.url).some(ep=>ep.id===m.id));
     if(calls.length){
-      const x=calls[0];
-      r.info=tag(x.method)+' <span class="mono">'+esc(x.url||'')+'</span>'+(calls.length>1?' <span class="muted">+'+(calls.length-1)+' more</span>':'');
-      r.via=dir==='in' ? elJumpHtml(m.id, x.where, x.where, 'Open the button or task that makes the call') : esc(x.where||'');
+      r.inline+=[...new Set(calls.map(x=>x.method).filter(Boolean))].map(tag).join('');
       r.hay+=' '+calls.map(x=>(x.method||'')+' '+(x.url||'')+' '+(x.where||'')).join(' ');
-      if(calls.length>1) r.body=tbl([{k:'method',label:'Method',w:'7ch',cls:'tags'},{k:'url',label:'URL',w:'minmax(16ch,3fr)',mono:true},
-          {k:'where',label:'Button / task',w:'minmax(8ch,1fr)',mono:true,opt:true}],
-        calls.map(x=>({cells:{method:tag(x.method), url:esc(x.url||''), where:esc(x.where||'')}})), {filter:false});
+      r.body+=relSub(m, '', tbl([{k:'method',label:'Method',w:'7ch',cls:'tags'},{k:'url',label:'URL',w:'minmax(16ch,3fr)',mono:true},
+          {k:'where',label:'Button / task',w:'minmax(8ch,1fr)',opt:true}],
+        calls.map(x=>({cells:{method:tag(x.method), url:esc(x.url||''),
+          where:dir==='in'?elJumpHtml(m.id, x.where, x.where, 'Open the button or task that makes the call'):'<span class="mono">'+esc(x.where||'')+'</span>'}})), {filter:false}));
     }
   }
   // an agent's tool: which operation of it the agent may call
   if(e.rel==='tool' && dir==='out'){
     const t=(c.d.tools||[]).find(x=>(x.type||'service')+':'+(x.key||'')===m.id);
-    if(t&&t.operation){ r.info='operation <span class="mono">'+esc(t.operation)+'</span>'; r.hay+=' '+t.operation; }
+    if(t&&t.operation){ r.inline+='<span class="rnb-x">operation <span class="mono">'+esc(t.operation)+'</span></span>'; r.hay+=' '+t.operation; }
   }
   return r;
 }
-const REL_OPEN_MAX=GRAPH_MAX_PER_SIDE;   // a direction with more rows than this starts folded
-// One table per direction, the relation its first column: a table per relation repeated the header and
-// its empty columns for every one-row relation, and fifteen of them made the page longer than the chips.
-// A column empty in every row of a direction is dropped (tbl does that).
+/** One neighbour's block in a relation row's unfolded part: who, through which element, then the detail. */
+function relSub(m, via, inner){
+  return '<div class="relsub"><div class="relsub-h">'+vlink(m.id, m.label)+
+    (via?'<span class="muted">via</span>'+via:'')+'</div>'+inner+'</div>';
+}
+const REL_OPEN_MAX=GRAPH_MAX_PER_SIDE;   // a direction with more relations than this starts folded
+const REL_CHIPS_SHOWN=30;                // per relation — the rest wait behind "+N more"
+// One row per direction and relation, its neighbours as chips flowing on one line: a row per neighbour
+// made an app's page a column of "App contains" rows. A row unfolds only when a neighbour has more to
+// say — the caller's mappings, the REST calls — and then says it neighbour by neighbour.
 const REL_COLS=[
-  {k:'rel', label:'Relation', w:'minmax(12ch,1.1fr)', cls:'rel'},
-  {k:'node', label:'Node', w:'minmax(16ch,2fr)', cls:'reln'},
-  {k:'via', label:'Where', w:'minmax(10ch,1.2fr)', opt:true},
-  {k:'info', label:'Detail', w:'minmax(10ch,1.5fr)', cls:'tags', opt:true},
-  {k:'flag', label:'', w:'minmax(7ch,.6fr)', cls:'tags relf'},
+  {k:'rel', label:'Relation', w:'minmax(12ch,1fr)', cls:'rel'},
+  {k:'nbs', label:'Nodes', w:'minmax(20ch,3.5fr)', cls:'rnbs'},
 ];
+document.addEventListener('click', e=>{
+  const b=e.target.closest&&e.target.closest('.rnb-all'); if(!b) return;
+  e.preventDefault(); e.stopPropagation();          // inside a <summary> it must not fold the row
+  const row=b.closest('.tr'); if(!row) return;
+  row.dataset.all='1'; row.querySelectorAll('.rnb[data-over]').forEach(x=>x.hidden=false); b.remove();
+});
 function relationsSection(n, c, R){
   const d=c.d;
   // Read before anything can return: these keys are shown here now, as relations, and a key the page
@@ -4763,36 +4786,43 @@ function relationsSection(n, c, R){
   const total=R.out.length+R.inc.length;
   if(!total) return '';
   const seen=new Set();
-  // rows sorted by relation, then neighbour; the relation is named on the first row of its run (the rest
-  // carry it for screen readers only) and a run starts with a rule
+  let maps=0;                            // neighbours that carry mappings — the "with mappings" chip counts them
   const build=(dir, list)=>{
-    const lab=e=>term('rel', e.rel).label;
-    return list.slice().sort((a,b)=>lab(a).localeCompare(lab(b))||byId.get(a.id).label.localeCompare(byId.get(b.id).label))
-      .map((e,i,arr)=>{
-        const m=byId.get(e.id), x=relDetail(n, c, dir, e, seen), unc=!!(e.sus||e.dyn), t=term('rel', e.rel);
-        const first=!i||arr[i-1].rel!==e.rel;
-        return {hay:elHay(m.label, m.key, nodeKind(m), t.label, x.hay),
-          attrs:' data-rdir="'+dir+'" data-rel="'+esc(e.rel)+'"'+(unc?' data-runc="1"':'')+(x.map?' data-rmap="1"':''),
-          cls:[unc?'rel-unc':'', first?'rel-head':'', first&&i?'rel-first':''].filter(Boolean).join(' '), body:x.body, open:false,
-          cells:{rel:first?'<span class="rellab"'+(t.hint?' data-tip="'+esc(t.hint)+'"':'')+'>'+esc(t.label)+'</span>':'<span class="vh">'+esc(t.label)+'</span>',
-            node:nodeChip(e.id, e), via:x.via, info:x.info,
-            flag:e.sus?'<span class="tag" data-tip="suspect — resolved by a loose or cross-type match">≈ suspect</span>'
-                :e.dyn?'<span class="tag" data-tip="dynamic — the reference is an expression">ƒ dynamic</span>':''}};
+    const byRel=new Map();
+    list.forEach(e=>{ if(!byRel.has(e.rel)) byRel.set(e.rel, []); byRel.get(e.rel).push(e); });
+    return [...byRel.entries()]
+      .sort((a,b)=>term('rel', a[0]).label.localeCompare(term('rel', b[0]).label))
+      .map(([rel, es])=>{
+        const t=term('rel', rel);
+        let body='', anyMap=false;
+        const chips=es.slice().sort((a,b)=>byId.get(a.id).label.localeCompare(byId.get(b.id).label)).map((e,i)=>{
+          const m=byId.get(e.id), x=relNbDetail(n, c, dir, e, seen), unc=!!(e.sus||e.dyn);
+          body+=x.body; anyMap=anyMap||x.map; if(x.map) maps++;
+          return '<span class="rnb" data-hay="'+esc(elHay(m.label, m.key, nodeKind(m), t.label, x.hay).toLowerCase())+'" data-rdir="'+dir+
+            '" data-rel="'+esc(rel)+'"'+(unc?' data-runc="1"':'')+(x.map?' data-rmap="1"':'')+(i>=REL_CHIPS_SHOWN?' data-over hidden':'')+'>'+
+            nodeChip(e.id, e)+x.inline+'</span>';
+        }).join('');
+        const more=es.length>REL_CHIPS_SHOWN?'<button type="button" class="dgbtn rnb-all">+'+(es.length-REL_CHIPS_SHOWN)+' more</button>':'';
+        return {cls:'relrow', body, open:false, n:es.length,
+          attrs:' data-rdir="'+dir+'" data-rel="'+esc(rel)+'"'+(anyMap?' data-rmap="1"':''),
+          cells:{rel:'<span class="rellab"'+(t.hint?' data-tip="'+esc(t.hint)+'"':'')+'>'+esc(t.label)+'</span>'+
+            (es.length>1?'<span class="rcount">'+es.length+'</span>':''), nbs:chips+more}};
       });
   };
   const rowsOut=build('out', R.out), rowsIn=build('in', R.inc), all=rowsOut.concat(rowsIn);
-  // a small table shows its callers' mappings open, as the Called with cards always were
-  if(all.length<TBL_FILTER_FROM) all.forEach(r=>{ if(r.body && r.attrs.indexOf('data-rmap')>=0) r.open=true; });
+  // a small relation list shows its callers' mappings open, as the Called with cards always were
+  if(total<TBL_FILTER_FROM) all.forEach(r=>{ if(r.body && r.attrs.indexOf('data-rmap')>=0) r.open=true; });
   const set=(dir, rows, title, sub)=>{
     if(!rows.length) return '';
+    const cnt=rows.reduce((a,r)=>a+r.n,0);
     return '<details class="fgroup relset" data-rset="'+dir+'"'+(rows.length<=REL_OPEN_MAX?' open':'')+'>'+
-      '<summary class="relset-h"><span class="relset-t">'+title+'</span><span class="scount">'+rows.length+'</span>'+
+      '<summary class="relset-h"><span class="relset-t">'+title+'</span><span class="scount">'+cnt+'</span>'+
       '<span class="shint">'+sub+'</span></summary>'+tbl(REL_COLS, rows, {filter:false, cls:'reltbl'})+'</details>';
   };
-  const unc=all.filter(r=>r.cls.indexOf('rel-unc')>=0).length, maps=all.filter(r=>r.attrs.indexOf('data-rmap')>=0).length;
-  const outN=rowsOut.length, inN=rowsIn.length;
-  const tools=all.length>=TBL_FILTER_FROM ? filterBar({placeholder:'filter relations — a name, a key, a relation…', label:'Filter relations',
-    chips:[{fk:'rdir',fv:'all',label:'all',n:all.length}]
+  const unc=R.out.concat(R.inc).filter(e=>e.sus||e.dyn).length;
+  const outN=R.out.length, inN=R.inc.length;
+  const tools=total>=TBL_FILTER_FROM ? filterBar({placeholder:'filter relations — a name, a key, a relation…', label:'Filter relations',
+    chips:[{fk:'rdir',fv:'all',label:'all',n:total}]
       .concat(outN&&inN?[{fk:'rdir',fv:'out',label:'uses →',n:outN},{fk:'rdir',fv:'in',label:'← used by',n:inN}]:[])
       .concat(unc?[{fk:'runc',fv:'1',label:'≈ uncertain',n:unc}]:[])
       .concat(maps?[{fk:'rmap',fv:'1',label:'with mappings',n:maps,open:true}]:[])}) : '';

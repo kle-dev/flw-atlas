@@ -18,6 +18,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   first: a row per thing that should line up, tinted by how badly it does not, a pill per kind of gap and
   *only gaps* to hide the rows that are fine. A cell says ✓ it fits, ✗ it is missing, ⚠ it looks wrong, or
   ? Atlas cannot tell — and then why, in its tooltip.
+- **Relations take a row per relation.** Under the drawing, a relation lists its neighbours as chips on one
+  row — *App contains* five models is one row, not five — and unfolds only where a neighbour has more to
+  say: a caller's parameter mappings, every REST call with its verb. An operation's page is related to its
+  service, and a variable's page lists the models that write, read or merely mention it, where both used to
+  say they had no relationships.
 
 - **Operations Java calls through the service registry are used.** A service-registry invocation —
   `.serviceKey(…).operationKey(…)` — was invisible, so an operation only Java called was reported unused and
