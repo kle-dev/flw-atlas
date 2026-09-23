@@ -125,6 +125,8 @@ class IoParametersTest {
         assertEquals("customerDO", tasks["lookup"]!!["dataObjectKey"])
         assertEquals("findById", tasks["lookup"]!!["dataObjectOperationKey"])
         assertTrue(ctx.refs.any { it["rel"] == "agentMapping" && it["value"] == "itAgent" })
+        // the data-object task's operation is used, through the data object (resolved to its service later)
+        assertTrue(ctx.opUse.any { it["targetKind"] == "dataObject" && it["targetKey"] == "customerDO" && it["op"] == "findById" })
     }
 
     @Test

@@ -286,6 +286,9 @@ object XmlHelpers {
             info["dataObjectKey"] = dom.attr("definitionKey")
             dom.attr("operationKey")?.ifEmpty { null }?.let { info["dataObjectOperationKey"] = it }
             ctx.addRef(frm, ftype, ffile, "dataObjectMapping", "dataObject", dom.attr("definitionKey"))
+            // the operation the task runs is used — resolved through the data object's backing service,
+            // as a form's data-object operation key already was
+            ctx.addOpUse(frm, "dataObject", dom.attr("definitionKey"), dom.attr("operationKey"))
         }
         ext.findChild("agentMapping")?.let { am ->
             info["agentModelKey"] = am.attr("agentModelKey")

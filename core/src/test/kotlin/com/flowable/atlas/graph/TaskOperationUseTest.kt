@@ -27,8 +27,12 @@ class TaskOperationUseTest {
                 """{"key":"orderService","name":"Order Service","type":"rest","operations":[
                     {"key":"findByNumber","name":"Find by number","config":{"method":"GET","url":"/api/orders/{n}"},
                      "inputParameters":[{"name":"orderNumber","type":"string"}]},
-                    {"key":"archive","name":"Archive","config":{"method":"POST","url":"/api/orders/archive"}}
+                    {"key":"archive","name":"Archive","config":{"method":"POST","url":"/api/orders/archive"}},
+                    {"key":"searchOpen","name":"Search open","type":"search","config":{}}
                   ]}""")
+            File(dir, "order.data").writeText(
+                """{"key":"orderDO","name":"Order","dataObjectType":"master","referencedServiceDefinitionModelKey":"orderService",
+                    "fieldMappings":[{"name":"id","type":"string"}]}""")
             File(dir, "p.bpmn").writeText(
                 """<?xml version="1.0" encoding="UTF-8"?>
                   |<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn">
@@ -42,6 +46,11 @@ class TaskOperationUseTest {
                   |      </extensionElements>
                   |    </serviceTask>
                   |    <scriptTask id="seed" scriptFormat="groovy"><script>execution.setVariable('orderNumber', '1')</script></scriptTask>
+                  |    <serviceTask id="findOpen" flowable:type="data-object">
+                  |      <extensionElements>
+                  |        <flowable:dataObjectMapping definitionKey="orderDO" operationKey="searchOpen" type="search"/>
+                  |      </extensionElements>
+                  |    </serviceTask>
                   |    <sequenceFlow id="f1" sourceRef="s" targetRef="seed"/>
                   |    <sequenceFlow id="f2" sourceRef="seed" targetRef="lookupOrder"/>
                   |  </process>
@@ -71,6 +80,15 @@ class TaskOperationUseTest {
         assertFalse("findByNumber is not reported unused", findings().any {
             it["check"] == "unusedOps" && it["node"] == "serviceOperation:orderService#findByNumber" })
         assertTrue("archive still is", findings().any { it["check"] == "unusedOps" && it["node"] == "serviceOperation:orderService#archive" })
+    }
+
+    @Test
+    fun aDataObjectTaskUsesTheOperationItRuns() {
+        // a search is not one of the operations the engine calls by itself — something has to name it
+        @Suppress("UNCHECKED_CAST")
+        val usedBy = (node("serviceOperation:orderService#searchOpen")["data"] as Map<String, Any?>)["usedBy"] as List<*>
+        assertTrue(usedBy.toString(), "process:DEMO-p" in usedBy)
+        assertFalse(findings().any { it["check"] == "unusedOps" && it["node"] == "serviceOperation:orderService#searchOpen" })
     }
 
     @Test

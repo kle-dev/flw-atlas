@@ -34,7 +34,7 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
 - **A service or agent task configured by fields calls its model.** A service-registry task whose service
   and operation are field injections (`serviceKey`, `operationKey`) — or an agent task naming its
   `agentModelKey` that way — was linked to nothing, so its operation was reported unused. It is linked like
-  a task with a mapping element now. And a task's `in` into a service or agent names the callee's
+  a task with a mapping element now, and a data-object task's operation counts as used too. And a task's `in` into a service or agent names the callee's
   parameter, an `out` its result field: neither is a variable of any scope, so neither is reported as an
   input the callee never reads.
 - **Relations take a row per relation.** Under the drawing, a relation lists its neighbours as chips on one
