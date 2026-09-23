@@ -142,6 +142,65 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.26.1</h3>
+        <ul>
+          <li><b>A condition written on its own line is read.</b> Design indents a sequence flow's
+              condition, a script and a decision entry onto their own line inside a CDATA section, and only
+              the first piece of text after the tag was read, which was the indentation. The flow lost its
+              condition, the gateway was reported as an implicit parallel split instead of a missing
+              default, and a script body came back empty.</li>
+          <li><b>The model index follows whole folders, and only this project's.</b> A folder created,
+              deleted or moved (a checkout adding <code>process-models/</code>, an unzipped export) arrives
+              as one file event for the folder, and the index did not notice it until a Rebuild. A zip
+              landing in <code>~/Downloads</code> or a model saved in another open project, on the other
+              hand, dropped the index and rescanned every archive. A project that itself lives under a
+              folder named <code>build</code>, <code>out</code>, <code>bin</code> or <code>target</code> (a
+              CI agent's workspace, a dev container) had every file excluded and an empty index.</li>
+          <li><b>Forms inside a Design export are models without a setting.</b> An app export keeps its
+              forms, pages, actions and data objects only as <code>form-models/X.json</code> and the like.
+              The command line always read them; the IDE did only with <i>Also index raw Flowable Design
+              workspace sources</i> on, so with the default setting those forms had no key, no wireframe, no
+              outline and no icon, and code naming them was flagged as broken.</li>
+          <li><b>Generation does what it says.</b> It saves open edits first. <i>Cancel</i> stops it, and
+              nothing is overwritten, where the run used to finish and write regardless. The written files
+              are refreshed in one go off the UI thread, not one by one on it. <i>Regenerate</i> re-analyses
+              the folder each page was made from, once per report, where it analysed whichever sub-project
+              was active for every page it found, all at once.</li>
+          <li><b>The "keys removed by this pull" warning fires.</b> The pull took its before-snapshot after
+              the refresh that had already dropped the index, so the snapshot was always empty.</li>
+          <li><b>No more blank explorer.</b> A control character in a model string (a vertical tab pasted
+              from Word into a description) or a commented-out <code>&lt;script&gt;</code> tag in an HTML
+              component broke the page's data island, and the page showed nothing. <code>graph.json</code>
+              was invalid JSON for the same reason.</li>
+          <li><b>Java behind a <code>"/api/**"</code> or <code>"http://…"</code> string is read.</b> The
+              <code>/*</code> inside a mapping or a URL opened a comment that swallowed the endpoints, beans
+              and key literals after it.</li>
+          <li><b>The explorer opens Java where it is.</b> A class opens at its declaration's line, a method
+              page opens the method (it had no file at all), and the dashboard's "+ N more" entry points
+              expand in place.</li>
+          <li><b>Fewer freezes.</b> A gutter click on a Java symbol or an endpoint, and the rename warning,
+              held the read lock for the whole model scan, so typing stopped until it finished. Project
+              custom functions were read inside the highlighting pass; they are now read in the background,
+              honour the custom-function settings and are read again when a
+              <code>.js</code>/<code>.ts</code> source changes, so a new function is known without a
+              restart. A call argument in Java is resolved only when its method name is a Flowable API, Go
+              to Symbol no longer repeats its searches for every matching name, the Hub no longer walks the
+              project for explorer pages on every refresh, and opening a result reads the model off the UI
+              thread.</li>
+          <li><b>Large files and odd input no longer take the run down.</b> A multi-megabyte form, a
+              database dump in the repository or an image inside a nested archive was read whole before its
+              size was checked, and one of them could exhaust memory. A symlink back to a parent folder
+              looped the walk. An entity past U+10FFFF dropped its model, and a broken <code>\u</code>
+              escape or JSON nested thousands deep failed with an error nothing caught.</li>
+          <li><b>Smaller fixes.</b> A qualified <code>flowable:class</code> that matched only a project
+              class of the same simple name is marked uncertain. A waiver whose <code>until</code> date
+              cannot be read is reported instead of never expiring. Two models whose keys clash (or differ
+              only in case) each keep their diagram file. A decision rule's annotation is the rule's own. A
+              form's <code>"visible": "true"</code> is the literal it says. A model in a folder whose name
+              holds <code>!</code> is found. The recent-models list is safe to read during a tab switch, a
+              failed Rebuild says so in a balloon instead of an IDE error, and a page's <code>{{…}}</code>
+              bindings get the expression support a form's have.</li>
+        </ul>
         <h3>0.26.0</h3>
         <ul>
           <li><b>A <code>.zip</code> or <code>.bar</code> in the Project view opens up.</b> A Design export
@@ -501,62 +560,6 @@
               Boot's <code>jacksonObjectMapper</code> and the actuator's <code>environmentEndpoint</code>.
               None of them appear under <i>Review — unresolved in project</i> any more, and the KDoc names
               the source files so the list can be regenerated instead of grown by complaint.</li>
-          <li><b>A method call on a variable is a read of the variable, not a bean.</b>
-              <code>${issue.asText()}</code>, <code>${attachments.size()}</code>,
-              <code>${requesterData.getName()}</code> read like bean calls to the harvest, and every such
-              root became a bean: on four real projects 25 variables vanished from the variable graph, stood
-              under <i>Review — unresolved in project</i> as beans nobody could find, and 15 service tasks
-              that read a variable were "calls out of the engine with no error path". A root is a bean only
-              when something says so — the platform declares it, Java declares it, a delegate expression
-              names it bare, or it is named the way Spring beans are named (<code>orderService</code>,
-              <code>pdfGeneratorTask</code>); everything else is the variable it always was, with the call
-              recorded as its read. A service task's <code>expression</code> and its
-              <code>delegateExpression</code> now carry different relations
-              (<code>serviceTask-expression</code>, <code>serviceTask-delegate</code>), and
-              <code>${true}</code> on a service task is a literal, not a bean called <code>true</code>.</li>
-          <li><b>A key names a model only together with its type.</b> A case and its start form both called
-              <code>DRA-C001</code>, a data object and the service Design generated for it: two models of
-              different types sharing one key is common — 23 times across three real projects — and
-              everything Atlas harvested from a file (its <code>${…}</code> and <code>{{…}}</code>, its
-              variables, the operations it calls, the scripts that touch a name) was credited to whichever
-              model of that key it had registered first. Measured: 34 bindings and 69 expressions of a start
-              form on the case's page, none on the form's. Every such record now carries the model's type,
-              so the form's bindings are the form's. The shared key is still recorded in
-              <code>diagnostics</code>, but it stopped being a <i>parse issue</i>: nothing failed to parse,
-              and the summary no longer says "17 files could not be fully analyzed" about 16 shared keys.
-              Only a Java string literal that names the bare key stays ambiguous, and that edge was already
-              marked suspect.</li>
-          <li><b>A Design-workspace export is read in full.</b> The legacy editor stores a form or page body
-              as a tree of <code>childShapes</code> with hyphenated properties (<code>form-ref</code>,
-              <code>rest-button-url</code>, <code>actiondefinitionkey</code>), and Atlas registered such a
-              model by key with no fields: 47 forms across the measured projects were empty shells — blank
-              pages in the explorer, at least 25 false "unused form" findings because the subform that
-              embedded them was never read, and ~1 000 references that never reached the graph. The old
-              shape is rewritten into the one the current Design writes — stencil to type as real exports
-              pair them, property to setting by spelling — and parsed by the same reader, so fields,
-              subforms, data-object and service references, action buttons, REST calls and payload mappings
-              come out as from a current export.</li>
-          <li><b>A data object typed by a dictionary type has the type's properties.</b> A service-registry
-              data object names its type — <code>referencedDataDictionaryModelKey</code> plus
-              <code>dataDictionaryTypeName</code> — and its own <code>fieldMappings</code> say only what
-              needs saying about a field: the lookup id, a label. Atlas read the mappings alone, so a
-              twelve-property object had one field, its page listed one property, and eleven columns the
-              service maps were "used by no data object" — 15 of the 16 <code>schemaGaps</code> findings on
-              two real projects. The type's properties are the object's fields now, labels and lookup flags
-              merged from the mappings, and <code>dictionaryType</code> sits on the data object in
-              <code>graph.json</code>.</li>
-          <li><b>A data table names its operations, and a data object uses its service's.</b> A form select
-              carries <code>searchOperationKey</code> (its options) and <code>lookupOperationKey</code> (the
-              stored id back to a row), a data-object table its
-              <code>dataObjectDataTable{Create,Edit,Delete}OperationKey</code>; Atlas recorded only the
-              table's main operation and the four form keys, so 75 such keys across the real projects were
-              "called by no model or code". And the engine calls a bound service's <code>lookup</code>,
-              <code>create</code>, <code>update</code> and <code>delete</code> for every data-object
-              instance, which nothing in a model names: <code>unusedOps</code> listed every generated CRUD
-              operation — 74 of 74 on one real project, 41 of 64 on another. Both are followed now (the
-              operation's <code>type</code> travels with it in <code>graph.json</code>); a
-              <code>search</code> operation is still only used when something names it, which now something
-              can.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

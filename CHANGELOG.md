@@ -12,6 +12,57 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.26.1
+
+- **A condition written on its own line is read.** Design indents a sequence flow's condition, a
+  script and a decision entry onto their own line inside a CDATA section, and only the first piece of
+  text after the tag was read, which was the indentation. The flow lost its condition, the gateway was
+  reported as an implicit parallel split instead of a missing default, and a script body came back
+  empty.
+- **The model index follows whole folders, and only this project's.** A folder created, deleted or moved
+  (a checkout adding `process-models/`, an unzipped export) arrives as one file event for the folder, and
+  the index did not notice it until a Rebuild. A zip landing in `~/Downloads` or a model saved in another
+  open project, on the other hand, dropped the index and rescanned every archive. A project that itself
+  lives under a folder named `build`, `out`, `bin` or `target` (a CI agent's workspace, a dev container)
+  had every file excluded and an empty index.
+- **Forms inside a Design export are models without a setting.** An app export keeps its forms, pages,
+  actions and data objects only as `form-models/X.json` and the like. The command line always read them;
+  the IDE did only with *Also index raw Flowable Design workspace sources* on, so with the default setting
+  those forms had no key, no wireframe, no outline and no icon, and code naming them was flagged as
+  broken.
+- **Generation does what it says.** It saves open edits first. *Cancel* stops it, and nothing is
+  overwritten, where the run used to finish and write regardless. The written files are refreshed in one
+  go off the UI thread, not one by one on it. *Regenerate* re-analyses the folder each page was made from,
+  once per report, where it analysed whichever sub-project was active for every page it found, all at once.
+- **The "keys removed by this pull" warning fires.** The pull took its before-snapshot after the refresh
+  that had already dropped the index, so the snapshot was always empty.
+- **No more blank explorer.** A control character in a model string (a vertical tab pasted from Word
+  into a description) or a commented-out `<script>` tag in an HTML component broke the page's data
+  island, and the page showed nothing. `graph.json` was invalid JSON for the same reason.
+- **Java behind a `"/api/**"` or `"http://…"` string is read.** The `/*` inside a mapping or a URL
+  opened a comment that swallowed the endpoints, beans and key literals after it.
+- **The explorer opens Java where it is.** A class opens at its declaration's line, a method page opens
+  the method (it had no file at all), and the dashboard's "+ N more" entry points expand in place.
+- **Fewer freezes.** A gutter click on a Java symbol or an endpoint, and the rename warning, held the read
+  lock for the whole model scan, so typing stopped until it finished. Project custom functions were read
+  inside the highlighting pass; they are now read in the background, honour the custom-function settings
+  and are read again when a `.js`/`.ts` source changes, so a new function is known without a restart.
+  A call argument in Java is resolved only when its method name is a Flowable API, Go to Symbol no longer
+  repeats its searches for every matching name, the Hub no longer walks the project for explorer pages on
+  every refresh, and opening a result reads the model off the UI thread.
+- **Large files and odd input no longer take the run down.** A multi-megabyte form, a database dump in
+  the repository or an image inside a nested archive was read whole before its size was checked, and one
+  of them could exhaust memory. A symlink back to a parent folder looped the walk. An entity past
+  U+10FFFF dropped its model, and a broken `\u` escape or JSON nested thousands deep failed with an error
+  nothing caught.
+- **Smaller fixes.** A qualified `flowable:class` that matched only a project class of the same simple
+  name is marked uncertain. A waiver whose `until` date cannot be read is reported instead of never
+  expiring. Two models whose keys clash (or differ only in case) each keep their diagram file. A decision
+  rule's annotation is the rule's own. A form's `"visible": "true"` is the literal it says. A model in a
+  folder whose name holds `!` is found. The recent-models list is safe to read during a tab switch, a
+  failed Rebuild says so in a balloon instead of an IDE error, and a page's `{{…}}` bindings get the
+  expression support a form's have.
+
 ## 0.26.0
 
 - **A `.zip` or `.bar` in the Project view opens up.** A Design export in the repository could be searched
