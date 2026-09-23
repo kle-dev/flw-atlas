@@ -1,6 +1,7 @@
 package com.flowable.atlas.navigation
 
 import com.flowable.atlas.icons.AtlasIcons
+import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
 import com.flowable.atlas.usage.BotPsi
@@ -18,9 +19,13 @@ import com.intellij.psi.PsiManager
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.PsiShortNamesCache
 import com.intellij.psi.search.searches.ClassInheritorsSearch
+import com.intellij.psi.util.CachedValueProvider
+import com.intellij.psi.util.CachedValuesManager
+import com.intellij.psi.util.PsiModificationTracker
 import com.intellij.util.Processor
 import com.intellij.util.indexing.FindSymbolParameters
 import com.intellij.util.indexing.IdFilter
+import java.util.concurrent.ConcurrentHashMap
 import javax.swing.Icon
 
 /**
@@ -71,15 +76,13 @@ class FlowableKeyGotoSymbolContributor : ChooseByNameContributorEx {
             }
 
             // An element id → its model, at the element's declaration.
-            for (entry in index.allDistinct()) {
-                for (element in ModelElements.of(entry)) {
-                    if (element.id != name) continue
-                    val psiFile = psiManager.findFile(entry.file) ?: continue
-                    // a leaf token is not navigable by itself; a descriptor at the declaration's offset is
-                    val target: Navigatable = ModelElements.declarationOffset(psiFile.text, name)
-                        ?.let { OpenFileDescriptor(project, entry.file, it) } ?: psiFile
-                    processor.process(KeySymbol(name, element.location, element.kind.icon, target))
-                }
+            for (element in elementsById(index)[name].orEmpty()) {
+                val entry = element.owner
+                val psiFile = psiManager.findFile(entry.file) ?: continue
+                // a leaf token is not navigable by itself; a descriptor at the declaration's offset is
+                val target: Navigatable = ModelElements.declarationOffset(psiFile.text, name)
+                    ?.let { OpenFileDescriptor(project, entry.file, it) } ?: psiFile
+                processor.process(KeySymbol(name, element.location, element.kind.icon, target))
             }
 
             // A bot key → the Java BotService class(es) that declare it.
@@ -95,8 +98,30 @@ class FlowableKeyGotoSymbolContributor : ChooseByNameContributorEx {
         }
     }
 
-    /** botKey → the project's `BotService` implementors declaring it. Call inside a read action. */
-    private fun botClasses(project: Project, scope: GlobalSearchScope): Map<String, List<PsiClass>> {
+    /**
+     * Every element of every model, by id — once per index snapshot. Go to Symbol asks for each name that
+     * matched the typed prefix, and each ask used to walk every element of every model again.
+     */
+    private fun elementsById(index: FlowableIndex): Map<String, List<ModelElements.Element>> {
+        elementsMemo?.let { (of, byId) -> if (of === index) return byId }
+        val byId = index.allDistinct().flatMap { ModelElements.of(it) }.groupBy { it.id }
+        elementsMemo = index to byId
+        return byId
+    }
+
+    @Volatile private var elementsMemo: Pair<FlowableIndex, Map<String, List<ModelElements.Element>>>? = null
+
+    /**
+     * botKey → the project's `BotService` implementors declaring it, kept until PSI changes. An
+     * inheritor search ran on every keystroke of Go to Symbol and again for every matched name.
+     * Call inside a read action.
+     */
+    private fun botClasses(project: Project, scope: GlobalSearchScope): Map<String, List<PsiClass>> =
+        CachedValuesManager.getManager(project).getCachedValue(project) {
+            CachedValueProvider.Result.create(ConcurrentHashMap<GlobalSearchScope, Map<String, List<PsiClass>>>(), PsiModificationTracker.MODIFICATION_COUNT)
+        }.getOrPut(scope) { findBotClasses(project, scope) }
+
+    private fun findBotClasses(project: Project, scope: GlobalSearchScope): Map<String, List<PsiClass>> {
         val cache = PsiShortNamesCache.getInstance(project) ?: return emptyMap()
         val result = LinkedHashMap<String, MutableList<PsiClass>>()
         for (iface in cache.getClassesByName("BotService", GlobalSearchScope.allScope(project))) {
