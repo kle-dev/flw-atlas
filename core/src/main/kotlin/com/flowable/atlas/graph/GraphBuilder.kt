@@ -413,10 +413,14 @@ object GraphBuilder {
             val v = f["variable"] as? String ?: continue
             val model = f["model"]
             addUsage(v, model, paramSnippet(f))
-            varParams.getOrPut(v) { ArrayList() }.add(linkedMapOf(
+            // `side` says which end of the mapping this variable is — `orderId → orderId` binds it twice,
+            // once read to hand over, once written in the callee — and the callee says where it went
+            varParams.getOrPut(v) { ArrayList() }.add(linkedMapOf<String, Any?>(
                 "model" to model, "element" to f["element"], "dir" to f["dir"],
                 "source" to f["source"], "target" to f["target"],
-            ))
+            ).apply {
+                for (k in listOf("kind", "side", "calleeKind", "calleeKey", "calleeOp")) f[k]?.let { put(k, it) }
+            })
         }
         for (o in bucketList("apps")) {
             val am = o as Map<String, Any?>

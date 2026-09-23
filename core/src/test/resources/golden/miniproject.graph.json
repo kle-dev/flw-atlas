@@ -3858,25 +3858,37 @@
         "data": {
           "ioParams": [
             {
+              "calleeKey": "fulfilmentProcess",
+              "calleeKind": "process",
               "dir": "in",
               "element": "callSub",
+              "kind": "in",
               "model": "process:orderProcess",
+              "side": "source",
               "source": "orderId",
               "target": "orderId"
             },
             {
+              "calleeKey": "fulfilmentProcess",
+              "calleeKind": "process",
               "dir": "in",
               "element": "callSub",
+              "kind": "in",
               "model": "process:orderProcess",
-              "source": "orderId",
-              "target": "orderId"
-            },
-            {
-              "dir": "in",
-              "element": "callSub",
-              "model": "process:orderProcess",
+              "side": "source",
               "source": "orderId",
               "target": "subOrderId"
+            },
+            {
+              "calleeKey": "fulfilmentProcess",
+              "calleeKind": "process",
+              "dir": "in",
+              "element": "callSub",
+              "kind": "in",
+              "model": "process:orderProcess",
+              "side": "target",
+              "source": "orderId",
+              "target": "orderId"
             }
           ],
           "readCount": 6,
@@ -4004,9 +4016,13 @@
         "data": {
           "ioParams": [
             {
+              "calleeKey": "fulfilmentProcess",
+              "calleeKind": "process",
               "dir": "in",
               "element": "callSub",
+              "kind": "in",
               "model": "process:orderProcess",
+              "side": "target",
               "source": "orderId",
               "target": "subOrderId"
             }
@@ -4050,222 +4066,102 @@
         "data": {
           "ioParams": [
             {
-              "dir": "in",
-              "element": "script-evaluation-bot",
-              "model": "action:notifyCustomerAction",
-              "source": null,
-              "target": "customerEmail"
+              "calleeKey": "fulfilmentProcess",
+              "calleeKind": "process",
+              "dir": "out",
+              "element": "callSub",
+              "kind": "out",
+              "model": "process:orderProcess",
+              "side": "source",
+              "source": "subTotal",
+              "target": "total"
             }
           ],
           "readCount": 2,
           "reads": [
             {
-              "element": "script-evaluation-bot",
-              "elementName": "Notify customer",
-              "elementType": "actionBot",
-              "model": "action:notifyCustomerAction",
-              "via": "flwPayload"
+              "element": "callSub",
+              "elementName": "Fulfil",
+              "elementType": "callActivity",
+              "model": "process:orderProcess",
+              "scope": "process:fulfilmentProcess",
+              "via": "outParameterSource"
             },
             {
-              "model": "action:notifyCustomerAction",
-              "via": "scriptApi"
+              "model": "process:fulfilmentProcess",
+              "via": "expression"
             }
           ],
           "scopes": [
-            "action"
-          ],
-          "scriptSites": [
-            {
-              "api": true,
-              "element": null,
-              "elementName": null,
-              "elementType": null,
-              "model": "action:notifyCustomerAction"
-            }
-          ],
-          "usages": [
-            {
-              "model": "action:notifyCustomerAction",
-              "snippets": [
-                "(in parameter on script-evaluation-bot) customerEmail",
-                "(script)"
-              ]
-            }
-          ],
-          "usedBy": [
-            "action:notifyCustomerAction"
-          ],
-          "writeCount": 0
-        },
-        "file": null,
-        "id": "variable:customerEmail",
-        "key": "customerEmail",
-        "label": "customerEmail",
-        "type": "variable"
-      },
-      {
-        "data": {
-          "ioParams": [
-            {
-              "dir": "in",
-              "element": "script-evaluation-bot",
-              "model": "action:notifyCustomerAction",
-              "source": null,
-              "target": "notified"
-            }
-          ],
-          "readCount": 1,
-          "reads": [
-            {
-              "element": "script-evaluation-bot",
-              "elementName": "Notify customer",
-              "elementType": "actionBot",
-              "model": "action:notifyCustomerAction",
-              "via": "signalVariable"
-            }
-          ],
-          "scopes": [
-            "action",
             "process"
           ],
           "scriptSites": [
             {
               "api": true,
-              "element": "notifyTask",
-              "elementName": "Notify",
-              "elementType": "executionListener",
-              "model": "process:orderProcess"
+              "element": "packTask",
+              "elementName": "Pack shipment",
+              "elementType": "scriptTask",
+              "model": "process:fulfilmentProcess"
             }
           ],
           "usages": [
             {
-              "model": "action:notifyCustomerAction",
+              "model": "process:fulfilmentProcess",
               "snippets": [
-                "(in parameter on script-evaluation-bot) notified"
+                "${subTotal > 5}",
+                "(script · Pack shipment)"
               ]
             },
             {
               "model": "process:orderProcess",
               "snippets": [
-                "(script · Notify)"
+                "(declared / mapped)",
+                "(out parameter on callSub) subTotal → total"
               ]
             }
           ],
           "usedBy": [
-            "action:notifyCustomerAction",
+            "process:fulfilmentProcess",
             "process:orderProcess"
           ],
           "writeCount": 1,
           "writes": [
             {
-              "element": "notifyTask",
-              "elementName": "Notify",
-              "elementType": "executionListener",
-              "model": "process:orderProcess",
+              "element": "packTask",
+              "elementName": "Pack shipment",
+              "elementType": "scriptTask",
+              "model": "process:fulfilmentProcess",
               "via": "scriptApi"
             }
           ]
         },
         "file": null,
-        "id": "variable:notified",
-        "key": "notified",
-        "label": "notified",
+        "id": "variable:subTotal",
+        "key": "subTotal",
+        "label": "subTotal",
         "type": "variable"
       },
       {
         "data": {
           "ioParams": [
             {
-              "dir": "in",
-              "element": "script-evaluation-bot",
-              "model": "action:notifyCustomerAction",
-              "source": null,
-              "target": "orderTotal"
-            }
-          ],
-          "readCount": 3,
-          "reads": [
-            {
-              "element": "script-evaluation-bot",
-              "elementName": "Notify customer",
-              "elementType": "actionBot",
-              "model": "action:notifyCustomerAction",
-              "via": "flwPayload"
-            },
-            {
-              "model": "action:notifyCustomerAction",
-              "via": "scriptApi"
-            },
-            {
-              "model": "form:orderForm",
-              "via": "binding"
-            }
-          ],
-          "scopes": [
-            "action",
-            "form"
-          ],
-          "scriptSites": [
-            {
-              "api": true,
-              "element": null,
-              "elementName": null,
-              "elementType": null,
-              "model": "action:notifyCustomerAction"
-            }
-          ],
-          "usages": [
-            {
-              "model": "action:notifyCustomerAction",
-              "snippets": [
-                "(in parameter on script-evaluation-bot) orderTotal",
-                "(script)"
-              ]
-            },
-            {
-              "model": "form:orderForm",
-              "snippets": [
-                "(form field)",
-                "{{orderTotal}}"
-              ]
-            }
-          ],
-          "usedBy": [
-            "action:notifyCustomerAction",
-            "form:orderForm"
-          ],
-          "writeCount": 1,
-          "writes": [
-            {
-              "element": "orderTotal",
-              "elementName": "Recalculate",
-              "elementType": "scriptButton",
-              "model": "form:orderForm",
-              "via": "scriptButton"
-            }
-          ]
-        },
-        "file": null,
-        "id": "variable:orderTotal",
-        "key": "orderTotal",
-        "label": "orderTotal",
-        "type": "variable"
-      },
-      {
-        "data": {
-          "ioParams": [
-            {
+              "calleeKey": "fulfilmentProcess",
+              "calleeKind": "process",
               "dir": "out",
-              "element": "calcTask",
+              "element": "callSub",
+              "kind": "out",
               "model": "process:orderProcess",
-              "source": null,
+              "side": "target",
+              "source": "subTotal",
               "target": "total"
             },
             {
               "dir": "out",
-              "element": "callSub",
+              "element": "calcTask",
+              "kind": "resultVariable",
               "model": "process:orderProcess",
-              "source": "subTotal",
+              "side": "target",
+              "source": null,
               "target": "total"
             }
           ],
@@ -4349,84 +4245,230 @@
         "data": {
           "ioParams": [
             {
-              "dir": "out",
-              "element": "callSub",
-              "model": "process:orderProcess",
-              "source": "subTotal",
-              "target": "total"
+              "calleeKey": "script-evaluation-bot",
+              "calleeKind": "bot",
+              "dir": "in",
+              "element": "script-evaluation-bot",
+              "kind": "flwScript",
+              "model": "action:notifyCustomerAction",
+              "side": "target",
+              "source": null,
+              "target": "customerEmail"
             }
           ],
           "readCount": 2,
           "reads": [
             {
-              "element": "callSub",
-              "elementName": "Fulfil",
-              "elementType": "callActivity",
-              "model": "process:orderProcess",
-              "scope": "process:fulfilmentProcess",
-              "via": "outParameterSource"
+              "element": "script-evaluation-bot",
+              "elementName": "Notify customer",
+              "elementType": "actionBot",
+              "model": "action:notifyCustomerAction",
+              "via": "flwPayload"
             },
             {
-              "model": "process:fulfilmentProcess",
-              "via": "expression"
+              "model": "action:notifyCustomerAction",
+              "via": "scriptApi"
             }
           ],
           "scopes": [
-            "process"
+            "action"
           ],
           "scriptSites": [
             {
               "api": true,
-              "element": "packTask",
-              "elementName": "Pack shipment",
-              "elementType": "scriptTask",
-              "model": "process:fulfilmentProcess"
+              "element": null,
+              "elementName": null,
+              "elementType": null,
+              "model": "action:notifyCustomerAction"
             }
           ],
           "usages": [
             {
-              "model": "process:fulfilmentProcess",
+              "model": "action:notifyCustomerAction",
               "snippets": [
-                "${subTotal > 5}",
-                "(script · Pack shipment)"
-              ]
-            },
-            {
-              "model": "process:orderProcess",
-              "snippets": [
-                "(declared / mapped)",
-                "(out parameter on callSub) subTotal → total"
+                "(in parameter on script-evaluation-bot) customerEmail",
+                "(script)"
               ]
             }
           ],
           "usedBy": [
-            "process:fulfilmentProcess",
-            "process:orderProcess"
+            "action:notifyCustomerAction"
           ],
-          "writeCount": 1,
-          "writes": [
-            {
-              "element": "packTask",
-              "elementName": "Pack shipment",
-              "elementType": "scriptTask",
-              "model": "process:fulfilmentProcess",
-              "via": "scriptApi"
-            }
-          ]
+          "writeCount": 0
         },
         "file": null,
-        "id": "variable:subTotal",
-        "key": "subTotal",
-        "label": "subTotal",
+        "id": "variable:customerEmail",
+        "key": "customerEmail",
+        "label": "customerEmail",
         "type": "variable"
       },
       {
         "data": {
           "ioParams": [
             {
+              "calleeKey": "script-evaluation-bot",
+              "calleeKind": "bot",
+              "dir": "in",
+              "element": "script-evaluation-bot",
+              "kind": "flwScript",
+              "model": "action:notifyCustomerAction",
+              "side": "target",
+              "source": null,
+              "target": "orderTotal"
+            }
+          ],
+          "readCount": 3,
+          "reads": [
+            {
+              "element": "script-evaluation-bot",
+              "elementName": "Notify customer",
+              "elementType": "actionBot",
+              "model": "action:notifyCustomerAction",
+              "via": "flwPayload"
+            },
+            {
+              "model": "action:notifyCustomerAction",
+              "via": "scriptApi"
+            },
+            {
+              "model": "form:orderForm",
+              "via": "binding"
+            }
+          ],
+          "scopes": [
+            "action",
+            "form"
+          ],
+          "scriptSites": [
+            {
+              "api": true,
+              "element": null,
+              "elementName": null,
+              "elementType": null,
+              "model": "action:notifyCustomerAction"
+            }
+          ],
+          "usages": [
+            {
+              "model": "action:notifyCustomerAction",
+              "snippets": [
+                "(in parameter on script-evaluation-bot) orderTotal",
+                "(script)"
+              ]
+            },
+            {
+              "model": "form:orderForm",
+              "snippets": [
+                "(form field)",
+                "{{orderTotal}}"
+              ]
+            }
+          ],
+          "usedBy": [
+            "action:notifyCustomerAction",
+            "form:orderForm"
+          ],
+          "writeCount": 1,
+          "writes": [
+            {
+              "element": "orderTotal",
+              "elementName": "Recalculate",
+              "elementType": "scriptButton",
+              "model": "form:orderForm",
+              "via": "scriptButton"
+            }
+          ]
+        },
+        "file": null,
+        "id": "variable:orderTotal",
+        "key": "orderTotal",
+        "label": "orderTotal",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "ioParams": [
+            {
+              "calleeKey": "script-evaluation-bot",
+              "calleeKind": "bot",
+              "dir": "in",
+              "element": "script-evaluation-bot",
+              "kind": "signalVariable",
+              "model": "action:notifyCustomerAction",
+              "side": "target",
+              "source": null,
+              "target": "notified"
+            }
+          ],
+          "readCount": 1,
+          "reads": [
+            {
+              "element": "script-evaluation-bot",
+              "elementName": "Notify customer",
+              "elementType": "actionBot",
+              "model": "action:notifyCustomerAction",
+              "via": "signalVariable"
+            }
+          ],
+          "scopes": [
+            "action",
+            "process"
+          ],
+          "scriptSites": [
+            {
+              "api": true,
+              "element": "notifyTask",
+              "elementName": "Notify",
+              "elementType": "executionListener",
+              "model": "process:orderProcess"
+            }
+          ],
+          "usages": [
+            {
+              "model": "action:notifyCustomerAction",
+              "snippets": [
+                "(in parameter on script-evaluation-bot) notified"
+              ]
+            },
+            {
+              "model": "process:orderProcess",
+              "snippets": [
+                "(script · Notify)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "action:notifyCustomerAction",
+            "process:orderProcess"
+          ],
+          "writeCount": 1,
+          "writes": [
+            {
+              "element": "notifyTask",
+              "elementName": "Notify",
+              "elementType": "executionListener",
+              "model": "process:orderProcess",
+              "via": "scriptApi"
+            }
+          ]
+        },
+        "file": null,
+        "id": "variable:notified",
+        "key": "notified",
+        "label": "notified",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "ioParams": [
+            {
+              "calleeKey": "script-evaluation-bot",
+              "calleeKind": "bot",
               "dir": "out",
               "element": "script-evaluation-bot",
+              "kind": "flwScript",
               "model": "action:notifyCustomerAction",
+              "side": "target",
               "source": null,
               "target": "sent"
             }
