@@ -536,6 +536,10 @@ const probe = `<script>
     const mk=det.querySelector('[data-sect^="fit-"] .gm');
     ok('a mark says what it means in its tooltip', !!mk && /fits|missing|looks wrong|cannot tell|expected|note/.test(mk.getAttribute('data-tip')||''), mk?mk.getAttribute('data-tip'):'(no mark)');
     ok('no pane is empty', panes.every(p=>p.children.length>0), panes.filter(p=>!p.children.length).map(p=>p.dataset.pane).join());
+    const pdoc=(byId.get('process:orderProcess').data||{}).documentation;
+    ok("a process's documentation is prose on Overview, not a fact",
+       ![...det.querySelectorAll('#pane-overview .facts dt')].some(t=>/^Documentation$/i.test(t.textContent)) &&
+       (!pdoc || [...det.querySelectorAll('#pane-overview > .ddesc')].some(p=>p.textContent===pdoc)));
     const t=tabs.find(x=>x.dataset.pane==='details');
     const d=det.querySelector('details.sect[data-sect="elements"]');
     if(d) d.open=false;

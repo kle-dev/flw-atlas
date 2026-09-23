@@ -4638,15 +4638,16 @@ function fsetValue(k,v){
  * The facts under the title — one entry per node type, each pushing [label, value] rows through the
  * helpers in `x`: `add` (a plain value, copyable), `mono` (an identifier, expression or path), `addCount`
  * (a count with no section of its own — a count a section already carries belongs in that section's
- * heading, not here), `addStarters`, `varList`. Design's `description` is the hero's prose, not a fact.
+ * heading, not here), `addStarters`, `varList`. Design's `description` and a model's `documentation` are
+ * prose at the top of Overview, not facts.
  * `page` reads like a form and a `binding` like an expression; `_` renders whatever scalars an untyped
  * node carries. The rows are rendered by props() in the hero.
  */
 const FACTS={
-  process(n,d,x){ x.addStarters(d.candidateStarterGroups); x.add('Documentation',d.documentation); },
+  // a process's or case's documentation is prose, with the description, at the top of Overview
+  process(n,d,x){ x.addStarters(d.candidateStarterGroups); },
   case(n,d,x){ x.addStarters(d.candidateStarterGroups);
-    if(d.initiatorVariableName) x.rows.push(['Initiator var',{html:vlink('variable:'+d.initiatorVariableName, d.initiatorVariableName)}]);
-    x.add('Documentation',d.documentation); },
+    if(d.initiatorVariableName) x.rows.push(['Initiator var',{html:vlink('variable:'+d.initiatorVariableName, d.initiatorVariableName)}]); },
   decision(n,d,x){ if(d.decisionService) x.add('Kind','Decision service');
     // a decision service's members, each a decision of its own
     if(d.decisionService&&(d.decisions||[]).length)
@@ -4709,7 +4710,8 @@ const FACTS={
     // the names an expression reaches the class by — ${orderDelegate} — each a link to where it is used
     const bn=(d.beanNames||[]).filter(Boolean);
     if(bn.length) x.rows.push(['Bean names',{html:bn.map(b=>'<span class="mono">'+esc(b)+'</span>').join(', '), copy:bn.join(', ')}]); },
-  endpoint(n,d,x){ x.mono('Method',d.http); x.mono('Path',d.path);
+  // the verb is the title's first word; the path stays, as the one thing to copy on its own
+  endpoint(n,d,x){ if(!String(n.label||'').startsWith(String(d.http||'')+' ')) x.mono('Method',d.http); x.mono('Path',d.path);
     if(d.controller||d.handler) x.rows.push(['Handler',{html:vlink(incFrom(n.id,'serves'), [d.controller,d.handler].filter(Boolean).join('#')), copy:d.controller||undefined}]); },  // FQN for 'Go to Class'
   masterData(n,d,x){
     const kind=[d.type,d.subType].filter(Boolean).join(' / '), dot=d.dataObjectType;   // both read: one says what the other would
@@ -4737,7 +4739,9 @@ const FACTS={
     x.add('Parameters',(d.parameters||[]).map(p=>(p&&typeof p==='object')?p.name:p).filter(Boolean).join(', '));
     x.mono('Sort by',(d.sortParameters||[]).join(', '));
     x.mono('Aggregations',(d.aggregations||[]).join(', '));
-    x.add('Filters by groups',(d.groups||[]).length); },
+    // the groups its template filters by, by name — a count said "0" on every query that filters by none
+    const gs=(d.groups||[]).filter(Boolean).map(String);
+    if(gs.length) x.rows.push(['Filters by groups',{html:gs.map(g=>byId.get('group:'+g)?vlink('group:'+g,g):'<span class="mono">'+esc(g)+'</span>').join(', '), copy:gs.join(', ')}]); },
   sla(n,d,x){ x.add('Type',d.slaType||d.scopeType); x.mono('Calendar',d.businessCalendarType);
     if(d.completionDueDateValue!=null) x.add('Completion due',d.completionDueDateValue+' '+(d.completionDueDateTimeUnit||''));
     else x.add('Completion due',d.completionDueDateExpression);
@@ -6119,7 +6123,9 @@ function renderDetail(){
   // the tab bar what rendered at all. The order is the one the page used to read top to bottom.
   // Overview — the description as prose and the facts, then the picture: the drawing, or the table that
   // IS the model (a service's operations, an event's payload).
-  const intro=(rn.data.description?'<p class="ddesc">'+esc(String(rn.data.description))+'</p>':'')+props(facts,{cls:'facts'});
+  const prose=[rn.data.description, rn.data.documentation].filter(t=>t!=null&&String(t).trim()).map(String)
+    .filter((t,i,a)=>a.indexOf(t)===i);
+  const intro=prose.map(t=>'<p class="ddesc">'+esc(t)+'</p>').join('')+props(facts,{cls:'facts'});
   const pic=diagramView(rn)+renderSections(rn, ctx, 'pic');
   // Connections — whether it fits what it meets (the schema coverage and every contract table), then the
   // relations.
