@@ -55,6 +55,8 @@ class KotlinAndFactoryBeanTest {
                     <serviceTask id="b" flowable:delegateExpression="${'$'}{scoreService}"/>
                     <serviceTask id="c" flowable:expression="${'$'}{scoreService.compute()}"/>
                     <serviceTask id="d" flowable:delegateExpression="${'$'}{dup}"/>
+                    <serviceTask id="e" flowable:class="com.acme.DupOne"/>
+                    <serviceTask id="f" flowable:class="org.flowable.lib.DupTwo"/>
                   </process>
                 </definitions>
             """)
@@ -99,5 +101,17 @@ class KotlinAndFactoryBeanTest {
         val r = resolved("dup")
         assertNotNull(r)
         assertEquals(true, r!!["suspect"])
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun resolvedClass(value: String): Map<String, Any?>? =
+        (result["resolvedRefs"] as List<Map<String, Any?>>).firstOrNull { it["kind"] == "class" && it["value"] == value }
+
+    @Test
+    fun aQualifiedClassFromAnotherPackageResolvesOnlyAsSuspect() {
+        assertEquals(null, resolvedClass("com.acme.DupOne")!!["suspect"])
+        val lib = resolvedClass("org.flowable.lib.DupTwo")
+        assertEquals("com.acme.DupTwo", lib!!["targetFqn"])
+        assertEquals(true, lib["suspect"])
     }
 }
