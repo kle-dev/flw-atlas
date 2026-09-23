@@ -48,8 +48,6 @@ object JavaParser {
     private val JAVA_EL_RE = Regex("""[#$]\{([^}"]*)}""")
     private val EL_ROOT_RE = Regex("""(?<![\w.$'"])([A-Za-z_]\w*)(?!\s*[(\w:])""")
     private val JAVA_STR_RE = Regex("""\"([^"\\\n]{2,80})\"""")
-    private val COMMENT_RE = Regex("""/\*.*?\*/|//[^\n]*""", RegexOption.DOT_MATCHES_ALL)
-    private val NON_NEWLINE = Regex("""[^\n]""")
     private val REQUEST_METHOD_RE = Regex("""RequestMethod\.(\w+)""")
     private val VALUE_PATH_RE = Regex("""(?:value|path)\s*=\s*"([^"]*)"""")
     private val ANY_STR_RE = Regex("""\"([^"]*)\"""")
@@ -103,9 +101,44 @@ object JavaParser {
 
     private fun decap(name: String): String = if (name.isEmpty()) name else name[0].lowercaseChar() + name.substring(1)
 
-    /** Replace comment bodies with spaces (newlines preserved) so scans skip commented-out code. */
-    private fun blankComments(text: String): String =
-        COMMENT_RE.replace(text) { m -> NON_NEWLINE.replace(m.value, " ") }
+    /**
+     * Replace comment bodies with spaces (newlines preserved) so scans skip commented-out code.
+     *
+     * A scanner, not a regex: string and character literals are stepped over, so the block-comment
+     * opener inside a mapping like `"/files/` + `**"` or the `//` in `"http://svc"` does not open a
+     * comment that swallows the mappings, beans and key literals after them. Text blocks and Kotlin raw strings (`"""…"""`) have no
+     * escapes; a Kotlin `${…}` template holding a quote is rare enough to read as a plain string.
+     */
+    internal fun blankComments(text: String): String {
+        val out = StringBuilder(text)
+        val n = text.length
+        var i = 0
+        fun blank(from: Int, to: Int) { for (k in from until to) if (text[k] != '\n') out.setCharAt(k, ' ') }
+        while (i < n) {
+            val c = text[i]
+            when {
+                c == '/' && i + 1 < n && text[i + 1] == '/' -> {
+                    val end = text.indexOf('\n', i).let { if (it < 0) n else it }
+                    blank(i, end); i = end
+                }
+                c == '/' && i + 1 < n && text[i + 1] == '*' -> {
+                    val end = text.indexOf("*/", i + 2).let { if (it < 0) n else it + 2 }
+                    blank(i, end); i = end
+                }
+                c == '"' && text.startsWith("\"\"\"", i) -> {
+                    val end = text.indexOf("\"\"\"", i + 3)
+                    i = if (end < 0) n else end + 3
+                }
+                c == '"' || c == '\'' -> {
+                    var k = i + 1
+                    while (k < n && text[k] != c && text[k] != '\n') k += if (text[k] == '\\') 2 else 1
+                    i = k + 1
+                }
+                else -> i++
+            }
+        }
+        return out.toString()
+    }
 
     private fun mappingPath(args: String?): String {
         if (args.isNullOrEmpty()) return ""

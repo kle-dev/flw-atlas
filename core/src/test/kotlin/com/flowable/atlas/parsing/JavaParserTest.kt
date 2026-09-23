@@ -151,6 +151,36 @@ class JavaParserTest {
     }
 
     @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aCommentOpenerInsideAStringDoesNotSwallowTheCodeAfterIt() {
+        val src = """package com.x;
+            @RestController
+            public class Files {
+                private static final String BASE = "http://svc/x"; String k = "orderProcess";
+                @GetMapping("/files/**")
+                public String all() { return ""; }
+                /** Lists one file. */
+                @GetMapping("/file/{id}")
+                public String one() { return ""; }
+            }"""
+        val jc = JavaParser.parseJava(src, "Files.java")
+        val eps = (jc["endpoints"] as List<Map<String, Any?>>).map { it["path"] }
+        assertEquals(listOf("/files/**", "/file/{id}"), eps)
+        assertTrue((jc["strings"] as Collection<*>).contains("orderProcess"))
+    }
+
+    @Test
+    fun blankCommentsKeepsLiteralsAndLineBreaks() {
+        val src = "a = \"/*\"; // x\nb = '\\''; /* y\n z */ c = \"\"\"//\"\"\""
+        val out = JavaParser.blankComments(src)
+        assertEquals(src.length, out.length)
+        assertEquals(src.count { it == '\n' }, out.count { it == '\n' })
+        assertTrue(out.contains("\"/*\""))
+        assertFalse(out.contains("x") || out.contains("y") || out.contains("z"))
+        assertTrue(out.contains("c = \"\"\"//\"\"\""))
+    }
+
+    @Test
     fun stringConstants() {
         val src = """package com.x;
             public class Keys {
