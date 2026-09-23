@@ -3,7 +3,6 @@ package com.flowable.atlas.usage
 import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.parsing.JavaParser
 import com.flowable.atlas.parsing.RestCallScanner
-import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 
@@ -48,8 +47,8 @@ object EndpointModelScan {
             .map { it.range }
 
     /**
-     * Model files (and archive entries) calling one of [endpoints]. Runs its own read action, so it must
-     * be called off the EDT. Returns empty for an empty endpoint list.
+     * Model files (and archive entries) calling one of [endpoints]. Takes the read lock only to list the
+     * files, and must be called off the EDT. Returns empty for an empty endpoint list.
      */
     fun affectedModelFiles(project: Project, endpoints: List<EndpointPsi.Endpoint>): List<VirtualFile> =
         affectedModelUsages(project, endpoints).keys.toList()
@@ -57,14 +56,11 @@ object EndpointModelScan {
     /** The same files, each with the offset of its first calling URL — what the gutter click opens at. */
     fun affectedModelUsages(project: Project, endpoints: List<EndpointPsi.Endpoint>): Map<VirtualFile, Int> {
         if (endpoints.none { meaningful(it) }) return emptyMap()
-        return ReadAction.computeBlocking<Map<VirtualFile, Int>, RuntimeException> {
-            if (project.isDisposed) return@computeBlocking emptyMap()
-            val found = LinkedHashMap<VirtualFile, Int>()
-            ModelReferenceScan.forEachModelText(project) { vf, text ->
-                val first = usageRanges(text, endpoints).minOfOrNull { it.first } ?: return@forEachModelText
-                found.putIfAbsent(vf, first)
-            }
-            found
+        val found = LinkedHashMap<VirtualFile, Int>()
+        ModelReferenceScan.forEachModelTextUnlocked(project) { vf, text ->
+            val first = usageRanges(text, endpoints).minOfOrNull { it.first } ?: return@forEachModelTextUnlocked
+            found.putIfAbsent(vf, first)
         }
+        return found
     }
 }
