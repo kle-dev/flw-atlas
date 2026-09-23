@@ -1207,6 +1207,16 @@ const probe = `<script>
     const s=document.querySelector('#detail [data-sect="coverage"]');
     window.__covRows=s?s.querySelectorAll('.tbl .tr').length:0;
     ok('the service shows its schema coverage', window.__covRows>0);
+    // the coverage table is a gap table: its gap rows are marked, and "only gaps" hides the rest
+    const gapRows=s?s.querySelectorAll('.tbl .tr[data-gapf]').length:0;
+    ok('a column that does not map through is marked as a gap', gapRows>0 && !!s.querySelector('.tbl .tr.cov-bad[data-gap="bad"]'));
+    const og=s&&s.querySelector('.fbar .pchip[data-fk="gapf"][data-fv="1"]');
+    ok('the coverage table offers "only gaps"', !!og);
+    if(og){ click(og);
+      const vis=[...s.querySelectorAll('.tbl .tr')].filter(r=>!r.hidden);
+      ok('"only gaps" keeps exactly the gap rows', vis.length===gapRows && vis.every(r=>r.dataset.gapf==='1'), vis.length+' vs '+gapRows);
+      click(s.querySelector('.fbar .pchip[data-fk="gapf"][data-fv="all"]'));
+      ok('"all" brings the fine rows back', [...s.querySelectorAll('.tbl .tr')].every(r=>!r.hidden)); }
     location.hash=enc('dataObject:customerDO');
   });
   steps.push(()=>{

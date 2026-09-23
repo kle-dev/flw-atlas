@@ -991,6 +991,17 @@
   .tbl>.tr.cov-bad{background:var(--status-bad-bg);box-shadow:inset 3px 0 0 var(--cov-bad)}
   .tbl>.tr.cov-warn{background:var(--status-warn-bg);box-shadow:inset 3px 0 0 var(--cov-warn)}
   .tbl>.tr.cov-info{background:var(--status-info-bg)}
+  /* gap tables: the same grammar for every "does it fit" question (gapTable / gm in explorer.js) */
+  .gapblk+.gapblk,.fitblk+.fitblk{border-top:1px solid var(--line);margin-top:var(--space-3);padding-top:var(--space-2)}
+  .fitblk>.sublab:first-child{margin-top:0}
+  .gm{white-space:nowrap;font-size:var(--text-xs)}
+  .gm-ok{color:var(--ok-text)}
+  .gm-impl{color:var(--ok-text);opacity:.65}
+  .gm-miss{color:var(--bad-text)}
+  .gm-warn{color:var(--warn-text)}
+  .gm-unk{color:var(--ink-faint);cursor:help;text-decoration:underline dotted var(--line2);text-underline-offset:2px}
+  .gm-none,.gm-info{color:var(--ink-faint)}
+  .covlegend .gm{font-size:inherit}
 
   /* a term that carries an explanation: the dotted underline is the affordance for "hover me" */
   .term[title]{text-decoration:underline dotted var(--line2);text-underline-offset:2px;cursor:help}

@@ -144,6 +144,11 @@
     <change-notes><![CDATA[
         <h3>0.27.0</h3>
         <ul>
+          <li><b>Detail pages ask whether a model fits.</b> Every gap table is drawn one way, the schema
+              coverage table first: a row per thing that should line up, tinted by how badly it does not, a
+              pill per kind of gap and <i>only gaps</i> to hide the rows that are fine. A cell says ✓ it
+              fits, ✗ it is missing, ⚠ it looks wrong, or ? Atlas cannot tell — and then why, in its
+              tooltip.</li>
           <li><b>Operations Java calls through the service registry are used.</b> A service-registry
               invocation — <code>.serviceKey(…).operationKey(…)</code> — was invisible, so an operation only
               Java called was reported unused and nothing linked it to the code. The call is rarely one
@@ -561,11 +566,6 @@
               where half the health list used to say what it had examined and half did not. Unused decision
               tables get a review list of their own beside the unused forms and operations, and a review
               list is named exactly like its check.</li>
-          <li><b>Identical findings fold into one row.</b> The same <code>22 "hours"</code> missing its
-              comma, copied across 22 forms, was 22 rows of the Checks page; 66 mail tasks with the same
-              missing error path were 66. Three or more findings with one message shape — names and numbers
-              aside — read <i>22 ×</i> on one row now, the members and their accept controls a chevron away,
-              so the page has as many rows as it has causes. A model's own page keeps every row.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

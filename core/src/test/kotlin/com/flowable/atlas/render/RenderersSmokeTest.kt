@@ -290,6 +290,9 @@ class RenderersSmokeTest {
             html.contains("Accepting one keeps it in the report"))
         assertFalse("the old operation card styling is gone", html.contains("details.op>summary"))
         assertFalse("the old row list styling is gone", html.contains(".oplist{"))
+        // Every "does it fit" question — the schema coverage first — is one gap table with one set of marks.
+        assertTrue("expected the gap table from explorer.js", html.contains("function gapTable(") && html.contains("function gm("))
+        assertTrue("expected the gap marks from explorer.css", html.contains(".gm-miss{"))
 
 
     }

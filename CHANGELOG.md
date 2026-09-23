@@ -14,6 +14,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
 
 ## 0.27.0
 
+- **Detail pages ask whether a model fits.** Every gap table is drawn one way, the schema coverage table
+  first: a row per thing that should line up, tinted by how badly it does not, a pill per kind of gap and
+  *only gaps* to hide the rows that are fine. A cell says ✓ it fits, ✗ it is missing, ⚠ it looks wrong, or
+  ? Atlas cannot tell — and then why, in its tooltip.
+
 - **Operations Java calls through the service registry are used.** A service-registry invocation —
   `.serviceKey(…).operationKey(…)` — was invisible, so an operation only Java called was reported unused and
   nothing linked it to the code. The call is rarely one statement — a helper sets the service key and a

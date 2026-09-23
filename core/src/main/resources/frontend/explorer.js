@@ -1355,46 +1355,39 @@ function crossedIndex(list){
   });
   return m;
 }
-function schemaCoverageHtml(sc, onlyGaps, leadChipId, crossed){
+function schemaCoverageHtml(sc, onlyGaps, leadChipId, crossed, sect){
   const crossIdx=crossedIndex(crossed);
   const crossOf=r=>crossIdx.get(looseCol(r.service||''));
   const ct=sc.counts||{};
-  let b='';
   // owning service / source changelog / backing data objects (clickable)
   let meta=leadChipId?nodeChip(leadChipId):'';
   if(sc.liquibase){ const lc=nodeChip('liquibase:'+sc.liquibase); if(lc) meta+='<span class="muted">changelog</span>'+lc; }
   (sc.dataObjects||[]).forEach(k=>{ const dc=nodeChip('dataObject:'+k); if(dc) meta+=dc; });
-  if(meta) b+='<div class="covmeta">'+meta+'</div>';
-  // gap summary
-  let badges='';
-  if(ct.noService) badges+='<span class="cov-badge cov-bad">'+ct.noService+' not mapped in service</span>';
-  if(ct.noDataObject) badges+='<span class="cov-badge cov-warn">'+ct.noDataObject+' not in data object</span>';
-  if(ct.extra) badges+='<span class="cov-badge cov-info">'+ct.extra+' not in Liquibase</span>';
-  if(ct.ok) badges+='<span class="cov-badge cov-good">'+ct.ok+' mapped through</span>';
+  // gap summary — from the counts :core computed, in the order and words the #/schema page has always used
+  let pills='';
+  if(ct.noService) pills+='<span class="cov-badge cov-bad">'+ct.noService+' not mapped in service</span>';
+  if(ct.noDataObject) pills+='<span class="cov-badge cov-warn">'+ct.noDataObject+' not in data object</span>';
+  if(ct.extra) pills+='<span class="cov-badge cov-info">'+ct.extra+' not in Liquibase</span>';
+  if(ct.ok) pills+='<span class="cov-badge cov-good">'+ct.ok+' mapped through</span>';
   const nCross=(sc.rows||[]).filter(crossOf).length;
-  if(nCross) badges+='<span class="cov-badge cov-bad">'+nCross+' look'+(nCross>1?'':'s')+' crossed</span>';
-  if(badges) b+='<div class="covbadges">'+badges+'</div>';
-  const rowCls={'no-service':'cov-bad','no-dataobject':'cov-warn','extra-service':'cov-info','ok':''};
-  const miss='<span class="miss">✗ not mapped</span>';
-  const rows=onlyGaps?(sc.rows||[]).filter(r=>r.status!=='ok'||crossOf(r)):(sc.rows||[]);
-  if(rows.length){
-    // the service column wraps: its ⇄ crossed marker sits last, and a clipped cell cut exactly that off
-    b+=tbl([{k:'lb',label:'Liquibase column',w:'minmax(14ch,1.4fr)',mono:true},{k:'sv',label:'Service mapping',w:'minmax(14ch,1.4fr)',mono:true,cls:'wrap'},{k:'do',label:'Data object field',w:'minmax(12ch,1.2fr)',mono:true}],
-      rows.map(r=>{
-        const lb = r.inLiquibase ? esc(r.sql)+(r.sqlType?' <span class="muted">'+esc(r.sqlType)+'</span>':'') : '<span class="miss">— not in changelog</span>';
-        const cr = crossOf(r);
-        const sv = r.inService ? esc(r.service||r.serviceCol||'')+
-            (r.serviceCol&&looseCol(r.serviceCol)!==looseCol(r.service||'')?' <span class="muted">'+esc(r.serviceCol)+'</span>':'')+
-            (r.serviceType?' <span class="muted">'+esc(r.serviceType)+'</span>':'')+
-            (cr?' <span class="tag sev-bad" data-tip="'+esc(cr)+'">⇄ crossed</span>':'') : miss;
-        const dob = (r.dataObjects&&r.dataObjects.length)
-          ? r.dataObjects.map(x=>esc(x.field)+((sc.dataObjects||[]).length>1?' <span class="muted">'+esc(x.do)+'</span>':'')).join(', ')
-          : (r.inLiquibase||r.inService?miss:'');
-        return {cls:cr?'cov-bad':(rowCls[r.status]||''), hay:elHay(r.sql,r.service,r.serviceCol,(r.dataObjects||[]).map(x=>x.field).join(' ')), cells:{lb, sv, do:dob}};
-      }), {placeholder:'filter columns…'});
-  }
-  if(onlyGaps&&ct.ok) b+='<div class="tbl-more muted">+ '+ct.ok+' column'+(ct.ok>1?'s':'')+' mapped through cleanly — full table on the service page</div>';
-  return b;
+  if(nCross) pills+='<span class="cov-badge cov-bad">'+nCross+' look'+(nCross>1?'':'s')+' crossed</span>';
+  const gapOf={'no-service':'bad','no-dataobject':'warn','extra-service':'info','ok':''};
+  const miss=gm('miss','not mapped');
+  // the service column wraps: its ⇄ crossed marker sits last, and a clipped cell cut exactly that off
+  return gapTable([{k:'lb',label:'Liquibase column',w:'minmax(14ch,1.4fr)',mono:true},{k:'sv',label:'Service mapping',w:'minmax(14ch,1.4fr)',mono:true,cls:'wrap'},{k:'do',label:'Data object field',w:'minmax(12ch,1.2fr)',mono:true}],
+    (sc.rows||[]).map(r=>{
+      const lb = r.inLiquibase ? esc(r.sql)+(r.sqlType?' <span class="muted">'+esc(r.sqlType)+'</span>':'') : '<span class="miss">— not in changelog</span>';
+      const cr = crossOf(r);
+      const sv = r.inService ? esc(r.service||r.serviceCol||'')+
+          (r.serviceCol&&looseCol(r.serviceCol)!==looseCol(r.service||'')?' <span class="muted">'+esc(r.serviceCol)+'</span>':'')+
+          (r.serviceType?' <span class="muted">'+esc(r.serviceType)+'</span>':'')+
+          (cr?' <span class="tag sev-bad" data-tip="'+esc(cr)+'">⇄ crossed</span>':'') : miss;
+      const dob = (r.dataObjects&&r.dataObjects.length)
+        ? r.dataObjects.map(x=>esc(x.field)+((sc.dataObjects||[]).length>1?' <span class="muted">'+esc(x.do)+'</span>':'')).join(', ')
+        : (r.inLiquibase||r.inService?miss:'');
+      return {gap:cr?'bad':(gapOf[r.status]||''), hay:elHay(r.sql,r.service,r.serviceCol,(r.dataObjects||[]).map(x=>x.field).join(' ')), cells:{lb, sv, do:dob}};
+    }), {meta, pills, onlyGaps, sect:sect||'coverage', placeholder:'filter columns…',
+      okMore:n=>'+ '+n+' column'+(n>1?'s':'')+' mapped through cleanly — full table on the service page'});
 }
 
 // ---------- schema-gaps tab (#/schema) ----------
@@ -3338,6 +3331,69 @@ function codeblk(src, lang, problems, o){
     '<span class="code-sp"></span>'+copyBtn(String(src),'code')+'</div>'+
     scriptProblemsHtml(pr)+codeBoxHtml(src, lang, pr)+'</div>';
 }
+// ---------- gap tables: every "does it fit" question in one shape ----------
+// The schema coverage table (Liquibase column ↔ service mapping ↔ data-object field) is the model: one row
+// per thing that should line up, the row tinted by how badly it does not, a pill per kind of gap on top and
+// "only gaps" to hide the rows that are fine. Every contract table on a detail page — an operation and its
+// callers, a decision and the process that runs it, an app and what its models reach — is drawn by
+// gapTable(), so they read alike and the hero's health strip can add their gaps up.
+//
+// A cell says how one side meets the other with gm(): ✓ it does, a faint ✓ it does implicitly (by name, a
+// full payload), ✗ it is missing, ⚠ it looks wrong, ? Atlas cannot tell — always with the reason in the
+// tooltip, because a question mark without one reads like a gap — and — nothing is expected.
+const GM={ok:'✓', impl:'✓', miss:'✗', warn:'⚠', unk:'?', none:'—', info:'·'};
+const GM_LABEL={ok:'fits', impl:'fits by name', miss:'missing', warn:'looks wrong', unk:'Atlas cannot tell', none:'not expected', info:'note'};
+function gm(kind, text, tip){
+  return '<span class="gm gm-'+kind+'"'+(tip?' data-tip="'+esc(tip)+'"':'')+'>'+GM[kind]+
+    (text!=null&&text!==''?' '+esc(String(text)):'')+'</span>';
+}
+// Set while a detail page renders (like _sectReg): every gap table adds its tally, which the health strip
+// under the title reads. Null elsewhere, so a report page's tables count nothing.
+let _gapReg=null;
+const GAP_TONES=['bad','warn','info'];
+/**
+ * cols as tbl(); rows as tbl() rows plus `gap` — 'bad' | 'warn' | 'info' | '' (fine). A row with a gap is
+ * tinted (`cov-<gap>`) and carries `data-gapf`, which the "only gaps" chip keeps.
+ * o: `meta` (html chips above the pills), `pills` (html, replaces the derived ones), `kinds`
+ * ({key:{tone,label:n=>…}} — a row's `kind` picks the pill it counts towards), `okLabel` (n=>… for the fine
+ * rows' pill), `legend` (gm kinds to explain under the pills), `onlyGaps` (drop the fine rows), `okMore`
+ * (the line that says how many were dropped), `sect` (the section id the health strip jumps to),
+ * `placeholder`, `empty`, `cls`, `count:false` (keep this table out of the tally).
+ */
+function gapTable(cols, rows, o){
+  o=o||{};
+  rows=(rows||[]).filter(Boolean);
+  if(!rows.length) return o.empty?'<div class="muted tbl-empty">'+esc(o.empty)+'</div>':'';
+  const isGap=r=>GAP_TONES.indexOf(r.gap||'')>=0;
+  const gaps=rows.filter(isGap), fine=rows.length-gaps.length;
+  const tally={sect:o.sect||'fit', bad:0, warn:0, info:0, rows:rows.length};
+  gaps.forEach(r=>{ tally[r.gap]++; });
+  if(_gapReg && o.count!==false) _gapReg.push(tally);
+  let pills=o.pills;
+  if(pills==null){
+    pills='';
+    if(o.kinds){
+      const per={}; gaps.forEach(r=>{ if(r.kind) per[r.kind]=(per[r.kind]||0)+1; });
+      Object.keys(o.kinds).forEach(k=>{ const kd=o.kinds[k], n=per[k]; if(n) pills+='<span class="cov-badge cov-'+kd.tone+'">'+esc(kd.label(n))+'</span>'; });
+    } else {
+      GAP_TONES.forEach(t=>{ if(tally[t]) pills+='<span class="cov-badge cov-'+t+'">'+tally[t]+' '+(t==='bad'?'missing':t==='warn'?'doubtful':'to note')+'</span>'; });
+    }
+    if(fine) pills+='<span class="cov-badge cov-good">'+esc(o.okLabel?o.okLabel(fine):fine+' fit')+'</span>';
+  }
+  const legend=(o.legend||[]).length
+    ? '<div class="covlegend">'+o.legend.map(k=>'<span>'+gm(k)+' '+esc(GM_LABEL[k]||k)+'</span>').join('')+'</div>' : '';
+  const shown=(o.onlyGaps?gaps:rows).map(r=>Object.assign({}, r, {
+    cls:[r.cls||'', r.gap&&!/\bcov-/.test(r.cls||'')?'cov-'+r.gap:''].filter(Boolean).join(' '),
+    attrs:(r.attrs||'')+(isGap(r)?' data-gap="'+r.gap+'" data-gapf="1"':'')}));
+  // "only gaps" earns a chip once there is something to hide and enough rows that hiding helps
+  const chip=!o.onlyGaps && gaps.length && fine && rows.length>=5;
+  const t=tbl(cols, shown, {placeholder:o.placeholder||'filter rows…', cls:o.cls,
+    filter:chip?1:(rows.length>=TBL_FILTER_FROM?TBL_FILTER_FROM:false),
+    chips:chip?[{fk:'gapf',fv:'all',label:'all',n:rows.length},{fk:'gapf',fv:'1',label:'only gaps',n:gaps.length}]:undefined});
+  return '<div class="gapblk" data-fscope>'+(o.meta?'<div class="covmeta">'+o.meta+'</div>':'')+
+    (pills?'<div class="covbadges">'+pills+'</div>':'')+legend+t+
+    (o.onlyGaps&&fine&&o.okMore?'<div class="tbl-more muted">'+esc(o.okMore(fine))+'</div>':'')+'</div>';
+}
 /**
  * A text box plus optional chips over the rows that follow it in the same section body. Chips are
  * single-select: `{fk, fv, label, n}` keeps only rows whose `data-<fk>` equals `fv` (`fv:'all'` keeps
@@ -4265,7 +4321,7 @@ S.ops={id:'ops', title:'Operations', hint:'what the service offers, and what eac
         body:rows.length?tbl(OP_PARAM_COLS, rows, {filter:false}):''}; })); }};
 S.coverage={id:'coverage', title:'Schema coverage', hint:'Liquibase → service → data object: every column, and where the chain breaks',
   build:(n,c)=>{ const sc=c.d.schemaCoverage;
-    return (sc&&(sc.rows||[]).length)?schemaCoverageHtml(sc, false, null, c.d.crossedColumns):''; }};
+    return (sc&&(sc.rows||[]).length)?schemaCoverageHtml(sc, false, null, c.d.crossedColumns, 'coverage'):''; }};
 /** The same coverage table on the other two links of the chain: a data object's page and a changelog's
  *  page show the table of every service whose coverage names them — the service is where Atlas compares
  *  the three, and the table used to be only there, one hop away from where a reader stood. Found through
@@ -4278,7 +4334,7 @@ function coverageServicesFor(n){
 }
 S.coverageOf={raw:true, build:(n,c)=>{
   const svcs=coverageServicesFor(n); if(!svcs.length) return '';
-  const body=svcs.map(sv=>'<div class="covblk">'+schemaCoverageHtml(sv.data.schemaCoverage, false, sv.id, sv.data.crossedColumns)+'</div>').join('');
+  const body=svcs.map(sv=>'<div class="covblk" data-fscope>'+schemaCoverageHtml(sv.data.schemaCoverage, false, sv.id, sv.data.crossedColumns, 'coverage')+'</div>').join('');
   const who=svcs.length>1?svcs.length+' services':'the service '+svcs[0].label;
   return section('coverage','Schema coverage', body, {hint:'Liquibase → service → data object, as '+who+' maps '+
     (n.type==='dataObject'?'this data object':'this changelog')});
