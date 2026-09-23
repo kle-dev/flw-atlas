@@ -164,6 +164,13 @@
               handlers. A call now reaches the handler for its verb, and of those the one that spells out
               most of the path, as Spring routes it; a verb no handler serves is a suspect link that says
               <i>verb differs</i>. The IDE's endpoint gutter and Find Usages use the same rule.</li>
+          <li><b>A service or agent task configured by fields calls its model.</b> A service-registry task
+              whose service and operation are field injections (<code>serviceKey</code>,
+              <code>operationKey</code>) — or an agent task naming its <code>agentModelKey</code> that way —
+              was linked to nothing, so its operation was reported unused. It is linked like a task with a
+              mapping element now. And a task's <code>in</code> into a service or agent names the callee's
+              parameter, an <code>out</code> its result field: neither is a variable of any scope, so
+              neither is reported as an input the callee never reads.</li>
           <li><b>Relations take a row per relation.</b> Under the drawing, a relation lists its neighbours
               as chips on one row — <i>App contains</i> five models is one row, not five — and unfolds only
               where a neighbour has more to say: a caller's parameter mappings, every REST call with its
@@ -555,13 +562,6 @@
               check carries the check's open count — so accepting the three unused forms empties the list
               instead of leaving <i>Unused forms 3</i> in the sidebar — and a model whose every finding was
               accepted wears a small ✓ in lists and in the tree.</li>
-          <li><b>Findings explain themselves.</b> Every check is described once, in
-              <code>CheckCatalog</code>: what it is, its severity, why a finding matters, what to do about
-              it — accepting included — and where the docs are. The summary, the overview, the agent primer,
-              the CLI's <code>--fail-on</code> vocabulary and the explorer all read it, where until now a
-              check was a string id in one place, a label in a second, a second label in a third and a
-              severity stated only on the documentation page. A renamed docs heading is now a red build
-              rather than a dead link.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

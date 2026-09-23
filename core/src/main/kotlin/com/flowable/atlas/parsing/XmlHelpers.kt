@@ -1,5 +1,6 @@
 package com.flowable.atlas.parsing
 
+import com.flowable.atlas.graph.Callee
 import com.flowable.atlas.graph.Ctx
 import com.flowable.atlas.parsing.AtlasXml.El
 import com.flowable.atlas.script.ScriptContext
@@ -161,41 +162,65 @@ object XmlHelpers {
     }
 
     /**
-     * The model this element calls, as `(kind, key)` — what its in/out parameters are actually mapped onto.
+     * The model this element calls — what its in/out parameters are actually mapped onto — and, for a
+     * service, agent or data object, the operation they feed.
      *
      * A parameter list without its callee is half a story: "3 params on Lookup" says nothing about *which*
      * service the values go to. Stamped onto every record by the parsers so both the element's own detail
      * view and the callee's "Called with" view can name (and link) the other side.
      */
-    fun calleeOf(el: El): Pair<String, String>? {
+    fun callee(el: El): Callee? {
         val ext = extEl(el)
         if (ext != null) {
-            ext.findChild("serviceMapping")?.attr("serviceModelKey").nonEmpty()?.let { return "service" to it }
-            ext.findChild("agentMapping")?.attr("agentModelKey").nonEmpty()?.let { return "agent" to it }
-            ext.findChild("dataObjectMapping")?.attr("definitionKey").nonEmpty()?.let { return "dataObject" to it }
+            ext.findChild("serviceMapping")?.let { sm ->
+                sm.attr("serviceModelKey").nonEmpty()?.let { return Callee("service", it, sm.attr("operationKey").nonEmpty()) } }
+            ext.findChild("agentMapping")?.let { am ->
+                am.attr("agentModelKey").nonEmpty()?.let { return Callee("agent", it, am.attr("operationKey").nonEmpty()) } }
+            ext.findChild("dataObjectMapping")?.let { dom ->
+                dom.attr("definitionKey").nonEmpty()?.let { return Callee("dataObject", it, dom.attr("operationKey").nonEmpty()) } }
+            fieldCallee(el)?.let { return it }
         }
         when (el.tag) {
-            "callActivity" -> el.attr("calledElement").nonEmpty()?.let { return "process" to it }
+            "callActivity" -> el.attr("calledElement").nonEmpty()?.let { return Callee("process", it) }
             "processTask" ->
                 (el.textOfDescendant("processRefExpression") ?: el.attr("processRef")).nonEmpty()
-                    ?.let { return "process" to it }
+                    ?.let { return Callee("process", it) }
             "caseTask" ->
                 (el.textOfDescendant("caseRefExpression") ?: el.attr("caseRef")).nonEmpty()
-                    ?.let { return "case" to it }
+                    ?.let { return Callee("case", it) }
         }
         // a BPMN "case" service task starts a case by definition key (attribute, or an older field injection)
         if (el.attr("type") == "case") {
             (el.attr("caseDefinitionKey") ?: readFields(el)["caseDefinitionKey"] as? String).nonEmpty()
-                ?.let { return "case" to it }
+                ?.let { return Callee("case", it) }
         }
         // send/receive-event tasks and event-registry events map their payload onto an event model
-        ext?.childText("eventType").nonEmpty()?.let { return "event" to it }
+        ext?.childText("eventType").nonEmpty()?.let { return Callee("event", it) }
         // an HTTP task's callee is a URL rather than a model — still worth naming, just not linkable
         if (el.attr("type") == "http") {
-            (readFields(el)["requestUrl"] as? String).nonEmpty()?.let { return "rest" to it }
+            (readFields(el)["requestUrl"] as? String).nonEmpty()?.let { return Callee("rest", it) }
         }
         return null
     }
+
+    /**
+     * A service-registry or agent task configured by field injection — `<flowable:field name="serviceKey">`
+     * and `operationKey`, or `agentModelKey` — instead of by a `serviceMapping` / `agentMapping` element.
+     * Only a task whose type says it is one: a plain delegate with a field called `operationKey` is not a
+     * service call.
+     */
+    private fun fieldCallee(el: El): Callee? {
+        val type = taskType(el) ?: return null
+        if (type != "service-registry" && type != "agent") return null
+        val f = readFields(el)
+        fun str(vararg names: String) = names.firstNotNullOfOrNull { (f[it] as? String).nonEmpty() }
+        return if (type == "service-registry") str("serviceModelKey", "serviceKey")?.let { Callee("service", it, str("operationKey")) }
+        else str("agentModelKey", "agentKey")?.let { Callee("agent", it, str("agentOperationKey", "operationKey")) }
+    }
+
+    /** `flowable:type` on a BPMN service task; the `serviceTaskType` extension on a CMMN task. */
+    private fun taskType(el: El): String? =
+        el.attr("type").nonEmpty() ?: extEl(el)?.childText("serviceTaskType").nonEmpty() ?: el.childText("serviceTaskType").nonEmpty()
 
     private fun String?.nonEmpty(): String? = this?.trim()?.ifEmpty { null }
 
@@ -266,6 +291,20 @@ object XmlHelpers {
             info["agentModelKey"] = am.attr("agentModelKey")
             am.attr("operationKey")?.ifEmpty { null }?.let { info["agentOperationKey"] = it }
             ctx.addRef(frm, ftype, ffile, "agentMapping", "agent", am.attr("agentModelKey"))
+        }
+        // the same call configured by field injection: recorded under the same relations, so a reader —
+        // and the operation's "unused" verdict — cannot tell the two spellings apart
+        if (info["serviceModelKey"] == null && info["agentModelKey"] == null) fieldCallee(el)?.let { c ->
+            if (c.kind == "service") {
+                info["serviceModelKey"] = c.key
+                c.op?.let { info["operationKey"] = it }
+                ctx.addRef(frm, ftype, ffile, "serviceMapping", "service", c.key)
+                ctx.addOpUse(frm, "service", c.key, c.op)
+            } else {
+                info["agentModelKey"] = c.key
+                c.op?.let { info["agentOperationKey"] = it }
+                ctx.addRef(frm, ftype, ffile, "agentMapping", "agent", c.key)
+            }
         }
         return info
     }

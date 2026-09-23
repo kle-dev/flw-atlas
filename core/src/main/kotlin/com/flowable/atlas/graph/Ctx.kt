@@ -4,6 +4,12 @@ import com.flowable.atlas.parsing.Constants
 import com.flowable.atlas.parsing.ModelKinds
 
 /**
+ * The model an element's in/out mappings are handed to — a process, case, service, agent, data object,
+ * event, bot, or a URL (`rest`) — and, for a service, agent or data object, the operation they feed.
+ */
+data class Callee(val kind: String, val key: String, val op: String? = null)
+
+/**
  * The mutable extraction context threaded through every parser — a port of the `ctx` dict in
  * `flowable_atlas.py` `extract` (~line 1273) and its mutators `add_ref` / `add_access` / `add_var`
  * (~lines 236-288). Parsers record cross-model references, REST calls, access entries and variable
@@ -161,7 +167,7 @@ class Ctx {
         elementType: String,
         params: List<Map<String, Any?>>,
         elementSubType: String? = null,
-        callee: Pair<String, String>? = null,
+        callee: Callee? = null,
     ) {
         for (p in params) {
             val rec = linkedMapOf<String, Any?>(
@@ -173,8 +179,8 @@ class Ctx {
             // which model the values travel to/from; `p` may carry its own (a form button resolves it from
             // extraSettings), so the explicit argument only fills a gap
             if (callee != null && p["refKey"] == null) {
-                rec["refKind"] = callee.first
-                rec["refKey"] = callee.second
+                rec["refKind"] = callee.kind
+                rec["refKey"] = callee.key
             }
             rec.putAll(p)
             rollup.add(rec)
@@ -187,8 +193,8 @@ class Ctx {
             // The callee this mapping feeds: `p` may carry its own (a form button resolves it from
             // extraSettings), else the element-level one. It is what makes an `in` target checkable —
             // the variable it declares belongs to that model, not to this one.
-            val calleeKind = p["refKind"] as? String ?: callee?.first
-            val calleeKey = p["refKey"] as? String ?: callee?.second
+            val calleeKind = p["refKind"] as? String ?: callee?.kind
+            val calleeKey = p["refKey"] as? String ?: callee?.key
             // An Init-Variables mapping's `value` is bare EL — `root.chaserList.add(chaserInfo)`, with no
             // `${…}` wrapper for the expression harvester to find. Every name in it is read at runtime,
             // and Atlas has no parser for this position, so they are recorded as names whose readers it
@@ -207,10 +213,15 @@ class Ctx {
                 model, variable, dir, kind, side, elementId, elementName, elementType,
                 p["source"], p["target"], calleeKind, calleeKey,
             )
-            if ((kind in SOURCE_BINDS_VARIABLE || kind in SOURCE_ONLY_BINDS_VARIABLE) && p["expression"] != true) {
+            // Into a service, agent, data object, event or URL, an `in` names the callee's *parameter* and an
+            // `out` reads its *result field* — neither is a variable of any scope. Recording them as writes
+            // into the callee's scope made every such call an unread input, since those models read nothing.
+            val contract = calleeKind in CONTRACT_CALLEES
+            if ((kind in SOURCE_BINDS_VARIABLE || kind in SOURCE_ONLY_BINDS_VARIABLE) && p["expression"] != true &&
+                !(contract && kind == "out")) {
                 bind("source", p["source"])
             }
-            if (kind !in TARGET_IS_CONTRACT) bind("target", p["target"])
+            if (kind !in TARGET_IS_CONTRACT && !(contract && kind == "in")) bind("target", p["target"])
         }
     }
 
@@ -408,6 +419,9 @@ class Ctx {
          * either way; that is what makes it findable.
          */
         private val SOURCE_BINDS_VARIABLE = setOf("in", "out")
+
+        /** Callee kinds with a declared contract (parameters, payload fields) rather than a variable scope. */
+        private val CONTRACT_CALLEES = setOf("service", "agent", "dataObject", "event", "rest")
 
         /**
          * Mapping kinds whose *target* is a callee-side contract name — a service input parameter, an

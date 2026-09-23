@@ -31,6 +31,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   linked each call to both handlers. A call now reaches the handler for its verb, and of those the one
   that spells out most of the path, as Spring routes it; a verb no handler serves is a suspect link that
   says *verb differs*. The IDE's endpoint gutter and Find Usages use the same rule.
+- **A service or agent task configured by fields calls its model.** A service-registry task whose service
+  and operation are field injections (`serviceKey`, `operationKey`) — or an agent task naming its
+  `agentModelKey` that way — was linked to nothing, so its operation was reported unused. It is linked like
+  a task with a mapping element now. And a task's `in` into a service or agent names the callee's
+  parameter, an `out` its result field: neither is a variable of any scope, so neither is reported as an
+  input the callee never reads.
 - **Relations take a row per relation.** Under the drawing, a relation lists its neighbours as chips on one
   row — *App contains* five models is one row, not five — and unfolds only where a neighbour has more to
   say: a caller's parameter mappings, every REST call with its verb. An operation's page is related to its

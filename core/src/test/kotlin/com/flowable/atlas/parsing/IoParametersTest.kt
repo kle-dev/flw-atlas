@@ -128,6 +128,120 @@ class IoParametersTest {
     }
 
     @Test
+    fun fieldInjectedServiceRegistryTaskNamesItsServiceAndOperation() {
+        // the same call as a serviceMapping, configured through field injections instead
+        val (p, ctx) = bpmn(
+            """<serviceTask id="lookupOrder" name="Look up order" flowable:type="service-registry">
+                 <extensionElements>
+                   <flowable:field name="serviceKey"><flowable:string>orderService</flowable:string></flowable:field>
+                   <flowable:field name="operationKey"><flowable:string>findByNumber</flowable:string></flowable:field>
+                   <flowable:in source="orderNumber" target="orderNumber"/>
+                   <flowable:out source="companyName" target="companyName"/>
+                 </extensionElements>
+               </serviceTask>"""
+        )
+        @Suppress("UNCHECKED_CAST")
+        val task = (p["serviceTasks"] as List<Map<String, Any?>>).single()
+        assertEquals("orderService", task["serviceModelKey"])
+        assertEquals("findByNumber", task["operationKey"])
+        assertTrue(ctx.refs.any { it["rel"] == "serviceMapping" && it["value"] == "orderService" })
+        assertTrue(ctx.opUse.any { it["targetKey"] == "orderService" && it["op"] == "findByNumber" })
+        assertEquals(setOf("service"), params(p).map { it["refKind"] }.toSet())
+        assertEquals(setOf("orderService"), params(p).map { it["refKey"] }.toSet())
+    }
+
+    @Test
+    fun fieldInjectedAgentTaskNamesItsAgent() {
+        val (p, ctx) = bpmn(
+            """<serviceTask id="askAssistant" flowable:type="agent">
+                 <extensionElements>
+                   <flowable:field name="agentModelKey"><flowable:string>supportAgent</flowable:string></flowable:field>
+                   <flowable:in source="companyName" target="question"/>
+                 </extensionElements>
+               </serviceTask>"""
+        )
+        @Suppress("UNCHECKED_CAST")
+        val task = (p["serviceTasks"] as List<Map<String, Any?>>).single()
+        assertEquals("supportAgent", task["agentModelKey"])
+        assertTrue(ctx.refs.any { it["rel"] == "agentMapping" && it["value"] == "supportAgent" })
+        assertEquals("agent", params(p).single()["refKind"])
+    }
+
+    @Test
+    fun aCmmnTaskConfiguredByFieldsCallsItsService() {
+        val xml = """<?xml version="1.0" encoding="UTF-8"?>
+            <definitions xmlns="http://www.omg.org/spec/CMMN/20151109/MODEL"
+                         xmlns:flowable="http://flowable.org/cmmn">
+              <case id="c" name="C">
+                <casePlanModel id="plan">
+                  <planItem id="pi1" definitionRef="lookup"/>
+                  <task id="lookup" name="Lookup" flowable:type="service-registry">
+                    <extensionElements>
+                      <flowable:field name="serviceKey"><flowable:string>custSvc</flowable:string></flowable:field>
+                      <flowable:field name="operationKey"><flowable:string>findAll</flowable:string></flowable:field>
+                      <flowable:outputParameter name="id" value="custId"/>
+                    </extensionElements>
+                  </task>
+                </casePlanModel>
+              </case>
+            </definitions>"""
+        val ctx = Ctx()
+        val case = BackendModelParsers.parseCmmn(xml.toByteArray(), ctx, "c.cmmn")[0]
+        assertTrue(ctx.opUse.any { it["targetKey"] == "custSvc" && it["op"] == "findAll" })
+        assertEquals("custSvc", params(case).single()["refKey"])
+    }
+
+    @Test
+    fun aDelegateWithAnOperationKeyFieldIsNoServiceCall() {
+        // a plain Java delegate may well have a field called operationKey — its type says it is no
+        // service-registry task, so no service is named and no operation is credited
+        val (p, ctx) = bpmn(
+            """<serviceTask id="d" flowable:class="com.example.Worker">
+                 <extensionElements>
+                   <flowable:field name="serviceKey"><flowable:string>orderService</flowable:string></flowable:field>
+                   <flowable:field name="operationKey"><flowable:string>archive</flowable:string></flowable:field>
+                 </extensionElements>
+               </serviceTask>"""
+        )
+        @Suppress("UNCHECKED_CAST")
+        val task = (p["serviceTasks"] as List<Map<String, Any?>>).single()
+        assertEquals(null, task["serviceModelKey"])
+        assertTrue(ctx.opUse.isEmpty())
+        assertTrue(ctx.refs.none { it["rel"] == "serviceMapping" })
+    }
+
+    @Test
+    fun anInOrOutIntoAServiceOrAgentNamesAParameterNotAVariable() {
+        // `<flowable:in target="question">` into an agent names the agent's input, and `<flowable:out
+        // source="companyName">` from a service reads its result field — neither lives in any variable
+        // scope. Recorded as writes into the callee's scope they made every such call an unread input.
+        val (_, ctx) = bpmn(
+            """<serviceTask id="lookupOrder" flowable:type="service-registry">
+                 <extensionElements>
+                   <flowable:serviceMapping serviceModelKey="orderService" operationKey="findByNumber"/>
+                   <flowable:in source="orderNumber" target="orderNumber"/>
+                   <flowable:out source="companyName" target="companyName"/>
+                 </extensionElements>
+               </serviceTask>
+               <serviceTask id="askAssistant" flowable:type="agent">
+                 <extensionElements>
+                   <flowable:agentMapping agentModelKey="supportAgent"/>
+                   <flowable:in source="companyName" target="question"/>
+                 </extensionElements>
+               </serviceTask>"""
+        )
+        assertEquals(
+            listOf(
+                "orderNumber|read|inParameterSource",
+                "companyName|write|outParameter",
+                "companyName|read|inParameterSource",
+            ),
+            ctx.varSites.map { siteSig(it) },
+        )
+        assertTrue(ctx.varSites.none { it["scope"] != null })
+    }
+
+    @Test
     fun eventVariableMappingAndResultVariableFlavours() {
         val (p, _) = bpmn(
             """<startEvent id="evStart">

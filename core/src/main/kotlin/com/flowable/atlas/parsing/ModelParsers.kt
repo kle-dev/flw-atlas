@@ -1,5 +1,6 @@
 package com.flowable.atlas.parsing
 
+import com.flowable.atlas.graph.Callee
 import com.flowable.atlas.graph.Ctx
 import com.flowable.atlas.model.MiniJson
 import com.flowable.atlas.script.ScriptContext
@@ -1019,7 +1020,7 @@ object ModelParsers {
         val out = ArrayList<Map<String, Any?>>()
         val bot = doc["botKey"]
         // the bot is this action's callee — the thing the values are actually handed to
-        val callee = (bot as? String)?.ifEmpty { null }?.let { "bot" to it }
+        val callee = (bot as? String)?.ifEmpty { null }?.let { Callee("bot", it) }
         fun add(dir: String, kind: String, source: Any?, target: Any?) = ctx.addParams(
             out, key, bot, doc["name"], "actionBot",
             listOf(linkedMapOf("dir" to dir, "kind" to kind, "source" to source, "target" to target)),

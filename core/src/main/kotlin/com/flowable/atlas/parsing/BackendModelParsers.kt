@@ -187,7 +187,7 @@ object BackendModelParsers {
                 val elParams = XmlHelpers.readIoParams(el)
                 if (elParams.isNotEmpty()) {
                     ctx.addParams(ioParameters, pkey, eid, ename, tag, elParams, el.attr("type"),
-                        XmlHelpers.calleeOf(el))
+                        XmlHelpers.callee(el))
                     // a form key can also arrive as the target of an in-mapping (parity with CMMN, which
                     // checks this on every plan-item definition)
                     for (fk in XmlHelpers.inoutFormKeys(elParams)) {
@@ -302,7 +302,7 @@ object BackendModelParsers {
                             ?.let { st["secretFields"] = it }
                         XmlHelpers.resultVariableParam("resultVariable", st["resultVariable"] as? String)
                             ?.let { ctx.addParams(ioParameters, pkey, eid, ename, tag, listOf(it), type,
-                                XmlHelpers.calleeOf(el)) }
+                                XmlHelpers.callee(el)) }
                     }
                     tag == "scriptTask" -> {
                         val body = el.childText("script")
@@ -697,7 +697,7 @@ object BackendModelParsers {
                         ctx.addParams(
                             ioParameters, ckey, el.attr("id"), el.attr("name"), el.tag, elParams,
                             pyOr(el.attr("type"), el.childText("serviceTaskType")) as? String,
-                            XmlHelpers.calleeOf(el),
+                            XmlHelpers.callee(el),
                         )
                     }
                     when {
