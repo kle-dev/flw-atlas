@@ -721,12 +721,18 @@ const probe = `<script>
     ok('the declared data objects are a group of the elements', !document.querySelector('#detail details.sect[data-sect="declaredvars"]'));
   });
 
-  // --- relations: one section — the drawing, then every relation as a table; remembered; its rows are links ---
+  // --- relations: one section — every relation as a row, the drawing on request; remembered; its rows are links ---
   steps.push(()=>{ closeOtherTabs(); location.hash=enc('process:orderProcess'); });
   steps.push(()=>{
     const det=document.getElementById('detail'), s=det.querySelector('details.sect[data-sect="relations"]');
     ok('the relations are one section, open by default', !!s && s.open);
+    try{ localStorage.removeItem('atlas-relgraph'); }catch(e){}
+    const gb=s&&s.querySelector('.relgbtn'), nbh=s&&s.querySelector('.nbh');
+    ok('the drawing waits behind its switch', !!gb && gb.getAttribute('aria-pressed')==='false' && !!nbh && nbh.hidden);
+    if(gb) click(gb);
+    ok('which draws it', !!nbh && !nbh.hidden && gb.getAttribute('aria-pressed')==='true' && localStorage.getItem('atlas-relgraph')==='1');
     ok('its drawing reads uses on the left, used by on the right', !!s && s.querySelectorAll('.nb-head').length===2 && s.querySelectorAll('.gn[data-id]').length>0);
+    ok('the list has no column headers and no gesture line', !!s && !s.querySelector('.relhint') && [...s.querySelectorAll('.reltbl .th')].every(h=>getComputedStyle(h).display==='none'));
     ok('the relations are told once', ['neighborhood','rels-out','rels-in','called-with','usedby','uses'].every(id=>!det.querySelector('[data-sect="'+id+'"]')));
     // never filter silently: a row per direction and relation, a chip per neighbour the graph holds
     const n=byId.get('process:orderProcess'), R=relationsOf(n, n.data||{});
@@ -752,6 +758,10 @@ const probe = `<script>
   });
   steps.push(()=>{
     ok('a neighbour in the drawing is a link', !!state.sel && state.sel!==window.__nbFrom, 'sel='+state.sel);
+    const nb=document.querySelector('#detail .nbh');
+    ok('and the next page keeps the drawing on', !nb || !nb.hidden);
+    const gb=document.querySelector('#detail .relgbtn'); if(gb) click(gb);
+    ok('until it is switched off again', !localStorage.getItem('atlas-relgraph'));
     location.hash=enc('process:fulfilmentProcess');
   });
   steps.push(()=>{

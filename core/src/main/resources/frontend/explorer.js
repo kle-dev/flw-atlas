@@ -122,6 +122,7 @@ const UI_ICONS={
   link:'<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
   chevron:'<path d="m6 9 6 6 6-6"/>',
   info:'<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+  graph:'<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>',
   check:'<path d="M20 6 9 17l-5-5"/>',
   alert:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   error:'<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
@@ -5861,6 +5862,17 @@ const REL_COLS=[
   {k:'rel', label:'Relation', w:'minmax(12ch,1fr)', cls:'rel'},
   {k:'nbs', label:'Nodes', w:'minmax(20ch,3.5fr)', cls:'rnbs'},
 ];
+// The drawing is on request: the list under it says the same and more (the mappings, the verbs), and a
+// picture of one neighbour was a strip of empty canvas. Whether a reader wants it is theirs to keep.
+const REL_GRAPH_STORE='atlas-relgraph';
+function relGraphOn(){ try{ return localStorage.getItem(REL_GRAPH_STORE)==='1'; }catch(e){ return false; } }
+document.addEventListener('click', e=>{
+  const b=e.target.closest&&e.target.closest('.relgbtn'); if(!b) return;
+  const on=b.getAttribute('aria-pressed')!=='true';
+  try{ if(on) localStorage.setItem(REL_GRAPH_STORE, '1'); else localStorage.removeItem(REL_GRAPH_STORE); }catch(err){}
+  document.querySelectorAll('#detail .relgbtn').forEach(x=>x.setAttribute('aria-pressed', String(on)));
+  document.querySelectorAll('#detail .nbh').forEach(g=>{ g.hidden=!on; });
+});
 document.addEventListener('click', e=>{
   const b=e.target.closest&&e.target.closest('.rnb-all'); if(!b) return;
   e.preventDefault(); e.stopPropagation();          // inside a <summary> it must not fold the row
@@ -5919,13 +5931,16 @@ function relationsSection(n, c, R){
   const loose=[];
   (d.subforms||[]).forEach(k=>{ if(!byId.get('form:'+k)) loose.push('subform '+k); });
   (d.tools||[]).forEach(t=>{ if(!byId.get((t.type||'service')+':'+(t.key||''))) loose.push((t.type||'tool')+' '+(t.key||'')); });
-  const body='<div class="nbh">'+relGraphSvg(n, R)+'</div>'+
-    '<div class="relhint">click follows · <b>'+MODK+'-click</b> or middle-click opens a tab</div>'+tools+
+  const graph=relGraphSvg(n, R), gOn=relGraphOn();
+  const gbtn=graph?'<button type="button" class="dgbtn relgbtn" aria-pressed="'+gOn+'" data-tip="Draw the relations as a graph above the list">'+
+    uiIcon('graph')+'graph</button>':'';
+  const body='<div class="reltools">'+tools+gbtn+'</div>'+
+    (graph?'<div class="nbh"'+(gOn?'':' hidden')+'>'+graph+'</div>':'')+
     set('out', rowsOut, 'Uses', '→ what this points at')+
     set('in', rowsIn, 'Used by', '← what points at this')+
     (loose.length?'<div class="muted tbl-more">Not in this report: '+loose.map(esc).join(', ')+'</div>':'');
   return section('relations','Relations', body, {count:total, meta:unc?unc+' uncertain':'',
-    hint:'What it points at on the left, what points at it on the right — every edge of the graph, one row per relation'});
+    hint:'What it points at (Uses) and what points at it (Used by), one row per relation — a chip opens the model, '+MODK+'-click or middle-click in a new tab'});
 }
 
 // Resolve a service-task implementation to a clickable Java node chip + method.
@@ -8775,6 +8790,7 @@ const SHORTCUTS=[
   ]],
   ['On a node', [
     [['1…4'], 'Its Overview, Findings, Connections or Details tab — the ones it has, in order'],
+    [['Mod+click'], 'A chip or a link: open it in a new tab — a middle-click does the same'],
     [['c'], 'Copy its key'],
     [['o'], 'Open its file in the IDE', {ide:true}],
   ]],
