@@ -639,9 +639,15 @@ object GraphBuilder {
             val (fqn, mname, callers) = info
             val cls = "java:$fqn"
             val label = fqn.substringAfterLast(".") + "." + mname + "()"
+            // Where the method is declared, so its page opens it: the parser knows each method's line.
+            val jc = allJava[fqn]
+            val line = (jc?.get("methods") as? List<*>)?.firstNotNullOfOrNull { m ->
+                (m as? Map<*, *>)?.takeIf { it["name"] == mname }?.get("line")
+            } ?: (jc?.get("beanMethods") as? Map<*, *>)?.get(mname)
             addNode(
-                "method", mid.substringAfter(":"), label, null,
-                linkedMapOf("name" to mname, "class" to fqn, "declaredIn" to (if (cls in nodes) cls else null)),
+                "method", mid.substringAfter(":"), label, if (line != null) jc?.get("file") else null,
+                linkedMapOf<String, Any?>("name" to mname, "class" to fqn, "declaredIn" to (if (cls in nodes) cls else null))
+                    .apply { if (line != null) put("line", line) },
             )
             for (c in callers) addEdge(c, mid, "calls")
             if (cls in nodes) addEdge(mid, cls, "declared-in")

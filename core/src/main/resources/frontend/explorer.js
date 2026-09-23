@@ -1194,18 +1194,21 @@ function renderDashboard(){
   }
   // entry points — who can start what
   if(INSIGHTS.entryPoints.length){
-    const eps=INSIGHTS.entryPoints.slice(0,50);
+    // The first fifty, and the rest one click away — the "+ N more" used to be text that led nowhere.
+    const EP_SHOWN=50, eps=INSIGHTS.entryPoints;
     h+='<div class="dash-col"><div class="seclabel">Entry points — who can start what</div><div class="dashrows">';
-    eps.forEach(ep=>{
-      h+='<div class="dashrow">'+nodeChip(ep.group)+'<span class="sep">can start</span>'+nodeChip(ep.model)+'</div>';
+    eps.forEach((ep,i)=>{
+      h+='<div class="dashrow"'+(i>=EP_SHOWN?' data-ep-more hidden':'')+'>'+nodeChip(ep.group)+'<span class="sep">can start</span>'+nodeChip(ep.model)+'</div>';
     });
-    if(INSIGHTS.entryPoints.length>eps.length)
-      h+='<div class="dashrow muted">+ '+(INSIGHTS.entryPoints.length-eps.length)+' more</div>';
+    if(eps.length>EP_SHOWN)
+      h+='<button type="button" class="dgbtn dash-more" data-ep-toggle>show '+(eps.length-EP_SHOWN)+' more</button>';
     h+='</div></div>';
   }
   h+='</div></div>';
   v.innerHTML=h;
   wireNodeLinks(v, '[data-id]', {first:reportNav});
+  const epMore=v.querySelector('[data-ep-toggle]');
+  if(epMore) epMore.onclick=()=>{ v.querySelectorAll('[data-ep-more]').forEach(r=>r.hidden=false); epMore.remove(); };
 }
 // One chip per node type present — the icon, the count, Design's name — in sidebar order; a chip opens the
 // type's browse list. The four metric cards this replaces (models / Java / endpoints / groups) were four
@@ -3088,7 +3091,7 @@ function identLine(n){
     '<span class="dkindw"'+(hint?' data-tip="'+esc(hint)+'"':'')+'>'+esc(nodeKind(n))+'</span>'+
     '<span class="dsep" aria-hidden="true">·</span><span class="dkey mono">'+esc(n.key)+copyBtn(n.key,'key')+'</span>'+
     (n.file?'<span class="dsep" aria-hidden="true">·</span><span class="dfile" data-tip="Click to copy the path" data-copy="'+enc(n.file)+
-      '"><span class="fp">'+esc(n.file)+'</span>'+copyBtn(n.file,'path')+openBtn(n.file)+'</span>':'')+
+      '"><span class="fp">'+esc(n.file)+'</span>'+copyBtn(n.file,'path')+openBtn(n.file,(n.data||{}).line)+'</span>':'')+
     '</div>';
 }
 /** Icon tile, title, identity line, Design's description as prose, and the facts strip. The tile's

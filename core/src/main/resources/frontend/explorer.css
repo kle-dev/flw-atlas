@@ -690,6 +690,7 @@
     white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
   .dtitle.dtitle-code.open{display:block;-webkit-line-clamp:unset;max-height:40vh;overflow:auto}
   .dtitle-more{margin:var(--space-1) 0 0}
+  .dash-more{align-self:flex-start;margin-top:var(--space-1)}
   .dident{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-05) var(--space-15);margin-top:var(--space-1);
     font-size:var(--text-sm);color:var(--ink-dim);min-width:0}
   .dkindw{font-weight:500}

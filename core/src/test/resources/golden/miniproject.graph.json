@@ -3463,9 +3463,10 @@
         "data": {
           "class": "com.example.DemoBean",
           "declaredIn": "java:com.example.DemoBean",
+          "line": 8,
           "name": "run"
         },
-        "file": null,
+        "file": "src/main/java/com/example/DemoBean.java",
         "id": "method:com.example.DemoBean#run",
         "key": "com.example.DemoBean#run",
         "label": "DemoBean.run()",
