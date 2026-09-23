@@ -58,6 +58,10 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   that hides tabs, scrolls with the wheel, and lists the hidden tabs behind a **+N** button. The browse
   list is narrower there and folds away from a button in its head — or by dragging its edge shut — to give
   the page the whole width; a long name no longer pushes its findings pill out of sight.
+- **Every shortcut behind `?`.** `?` — or the new **?** button in the top bar — opens a sheet of every
+  keyboard shortcut, grouped by where it works and generated from one table. It replaces the sentence in
+  the empty detail pane, which only someone with nothing selected ever saw, and which said tabs switch
+  with Alt+←→ (that is history; tabs are Alt+[ and Alt+]).
 - **Smaller things in the explorer.** A list row's findings pill carries its tone's icon and says what it
   counts, the reference count beside it carries a link icon and says so too, and a key that only repeats
   the name is shown once. What accepting a finding does is said on the *accept…* button and in its form,

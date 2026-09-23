@@ -304,9 +304,13 @@ the category you are in, with a button to widen the search.
 
 ## Keyboard
 
+Press `?` anywhere outside a text field — or the **?** button in the top bar — for this list inside the
+page, grouped by where each key works.
+
 | Keys | Where | Action |
 |---|---|---|
 | `⌘K` / `Ctrl+K`, or `/` | anywhere | Open the search palette |
+| `?` | anywhere | Every shortcut, in a sheet over the page |
 | `Tab` / `⇧Tab` | palette | Cycle the dialog's controls — facet chips, ×, "Show more", "Did you mean" |
 | `↑` `↓` | palette, list | Move |
 | `⇧↑` `⇧↓` | palette, list | Extend the marked range |

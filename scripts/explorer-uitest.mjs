@@ -1082,6 +1082,23 @@ const probe = `<script>
     try{ localStorage.removeItem('atlas-dgmarks'); }catch(e){}
   });
 
+  // --- every shortcut behind ? ---
+  steps.push(()=>{
+    document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'?', bubbles:true}));
+    const ks=document.getElementById('keysheet');
+    ok('? opens the keyboard sheet', !!ks && !ks.hidden);
+    ok('the page behind it is inert', document.querySelector('.shell').inert===true);
+    const rows=[...ks.querySelectorAll('.keys-r')];
+    ok('the sheet lists the shortcuts, every row with a key', rows.length>=20 && rows.every(r=>r.querySelector('dt kbd') && (r.querySelector('dd').textContent||'').length>2), rows.length+' rows');
+    ok('tabs switch with Alt+[ / Alt+], as the page does', ks.textContent.indexOf('Previous / next tab')>=0 && !/switch with/.test(ks.textContent));
+    ok('the IDE-only row stays out of a browser', !/Open its file in the IDE/.test(ks.textContent) || !!window.__atlasOpen);
+    document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
+    ok('Escape closes it', ks.hidden && document.querySelector('.shell').inert===false);
+    const kb=document.getElementById('keysbtn'); if(kb) click(kb);
+    ok('the top bar ? button opens it too', !ks.hidden);
+    document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
+  });
+
   // --- list badges explain themselves; a key that repeats the name is shown once ---
   steps.push(()=>{ location.hash='/browse/endpoint'; });
   steps.push(()=>{
@@ -1247,9 +1264,10 @@ function runProbe(probeHtml, windowSize, label) {
       // Chrome's default viewport is 800x600 — exactly the stacked (<=800px) layout. The desktop shell
       // with its sidebar is what most steps mean to exercise, so the main run asks for one.
       '--window-size=' + windowSize,
-      // ~80 steps at 300ms each: the budget is virtual time the page may consume, so it only needs to outlast the run
-      '--virtual-time-budget=60000', '--dump-dom', 'file://' + tmp,
-    ], { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024, timeout: 120000 });
+      // ~150 steps at 300ms each: the budget is virtual time the page may consume, so it only needs to outlast
+      // the run — too small, and the probe "never finishes", which reads like a boot failure
+      '--virtual-time-budget=120000', '--dump-dom', 'file://' + tmp,
+    ], { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024, timeout: 240000 });
   } catch (e) {
     console.error(`explorer-uitest (${label}): Chrome failed to run —`, e.message);
     process.exit(1);

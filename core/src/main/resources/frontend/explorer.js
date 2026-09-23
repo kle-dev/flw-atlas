@@ -4517,14 +4517,9 @@ function renderDetail(){
   // showing an element of the model we are navigating away from.
   hideDgCard();
   if(!state.sel || !byId.get(state.sel)){
-    const alt=IS_MAC?'⌥':'Alt+';
-    det.innerHTML='<div class="estate"><div class="estate-ic" aria-hidden="true">'+uiIcon('search')+'</div>'+
-      '<div class="et">'+(state.cat?'Nothing selected':'Flowable Atlas')+'</div>'+
-      '<div class="eh">Pick an item from the list — click any relationship to travel the graph.<br>'+
-      'Search everything with <b>/</b> or <b>'+MODK+'K</b> · '+
-      'mark several with <b>⇧↑↓</b> or <b>'+MODK+'-click</b> and press <b>Enter</b> to open them as tabs · '+
-      'switch with <b>'+alt+'1…9</b> or <b>'+alt+'←→</b> · close with <b>'+alt+'W</b> · '+
-      'on a node, <b>c</b> copies its key'+(window.__atlasOpen?' and <b>o</b> opens its file in the IDE':'')+'.</div></div>';
+    det.innerHTML=estateHtml({icon:uiIcon('search'), title:state.cat?'Nothing selected':'Flowable Atlas',
+      hint:'Pick an item from the list — click any relationship to travel the graph. Search everything with <b>/</b> or <b>'+
+        MODK+'K</b>; press <b>?</b> for every shortcut.'});
     return;
   }
   const n=byId.get(state.sel);
@@ -7095,6 +7090,101 @@ function wireViewMenu(){
   document.addEventListener('mousedown', e=>{ if(!pop.hidden && !menu.contains(e.target)) close(false); });
 }
 
+// ---------- keyboard shortcuts (?) ----------
+// One table, rendered on demand: the cheat sheet it replaced lived as a sentence in the empty detail pane,
+// drifted (it said Alt+←→ switches tabs; that is history — tabs are Alt+[ / Alt+]), and was only ever seen
+// by someone who had nothing selected. `Mod` renders as ⌘ or Ctrl, `Alt` as ⌥ or Alt; alternatives are
+// separate strings, keys within one are joined with `+`. `ide` rows show only inside the IDE.
+const SHORTCUTS=[
+  ['Anywhere', [
+    [['Mod+K','/'], 'Search everything'],
+    [['?'], 'This list'],
+    [['Alt+←','Alt+→'], 'Back / forward in the page’s history'],
+  ]],
+  ['Lists, the category table and search', [
+    [['↑','↓'], 'Move'],
+    [['Shift+↑','Shift+↓'], 'Extend the marked range'],
+    [['Enter'], 'Open — or open everything marked, as tabs'],
+    [['Mod+Enter'], 'Open in a background tab'],
+    [['Space'], 'Mark or unmark the row'],
+    [['Mod+A'], 'Mark every rendered row'],
+    [['Home','End'], 'First / last row'],
+    [['Escape'], 'Drop the marks, then close'],
+  ]],
+  ['Tabs', [
+    [['Alt+1…9'], 'Activate that tab'],
+    [['Alt+[','Alt+]'], 'Previous / next tab'],
+    [['Alt+W'], 'Close the active tab'],
+  ]],
+  ['On a node', [
+    [['c'], 'Copy its key'],
+    [['o'], 'Open its file in the IDE', {ide:true}],
+  ]],
+  ['Sidebar', [
+    [['↑','↓','Home','End'], 'Move between headers and entries'],
+    [['←','→'], 'Fold the group you are in / unfold a folded header'],
+    [['Enter','Space'], 'On a header: fold or unfold'],
+  ]],
+  ['Reference tree', [
+    [['↑','↓'], 'Move between visible rows'],
+    [['→','←'], 'Expand, then go to the first child / collapse, then go to the parent'],
+    [['Space'], 'Expand or collapse'],
+    [['Enter'], 'Open the node the row names'],
+  ]],
+  ['Diagram', [
+    [['Tab','Shift+Tab'], 'Move between elements'],
+    [['Enter','Space'], 'Open the element’s card'],
+    [['+','-','0'], 'Zoom in, out, fit (full screen)'],
+    [['Escape'], 'Close the card or full screen'],
+  ]],
+  ['View menu', [
+    [['↓'], 'On the View button: open the menu'],
+    [['Space','Enter'], 'Flip a switch, keeping the menu open / and close it'],
+    [['Escape'], 'Close'],
+  ]],
+];
+function keyHtml(alt){
+  return alt.split(/\+(?=.)/).map(k=>'<kbd class="kbd">'+esc(k==='Mod'?MODK:k==='Alt'?(IS_MAC?'⌥':'Alt'):k==='Shift'?'⇧':k)+'</kbd>').join('');
+}
+function renderKeysheet(){
+  const body=document.getElementById('keysbody'); if(!body) return;
+  body.innerHTML=SHORTCUTS.map(g=>{
+    const rows=g[1].filter(r=>!(r[2]&&r[2].ide)||window.__atlasOpen);
+    return '<section class="keys-g"><h3>'+esc(g[0])+'</h3><dl>'+rows.map(r=>
+      '<div class="keys-r"><dt>'+r[0].map(keyHtml).join('<span class="keys-or">/</span>')+'</dt><dd>'+esc(r[1])+'</dd></div>').join('')+
+      '</dl></section>';
+  }).join('');
+}
+let _keysPrevFocus=null;
+function openKeysheet(){
+  const ks=document.getElementById('keysheet'); if(!ks||!ks.hidden) return;
+  renderKeysheet();
+  _keysPrevFocus=document.activeElement;
+  ks.hidden=false;
+  try{ document.querySelector('.shell').inert=true; }catch(e){}
+  const p=ks.querySelector('.keys-panel'); if(p) p.focus();
+}
+function closeKeysheet(){
+  const ks=document.getElementById('keysheet'); if(!ks||ks.hidden) return;
+  ks.hidden=true;
+  try{ document.querySelector('.shell').inert=false; }catch(e){}
+  try{ if(_keysPrevFocus && document.contains(_keysPrevFocus)) _keysPrevFocus.focus(); }catch(e){}
+  _keysPrevFocus=null;
+}
+function wireKeysheet(){
+  const ks=document.getElementById('keysheet'), b=document.getElementById('keysbtn');
+  if(b) b.onclick=()=>openKeysheet();
+  if(ks) ks.addEventListener('mousedown', e=>{ if(e.target.closest('[data-close]')) closeKeysheet(); });
+  document.addEventListener('keydown', e=>{
+    const open=ks&&!ks.hidden;
+    if(open && e.key==='Escape'){ e.preventDefault(); e.stopImmediatePropagation(); closeKeysheet(); return; }
+    if(e.key==='?' && !e.metaKey && !e.ctrlKey && !e.altKey && pal.hidden && (!dgmodal || dgmodal.hidden)
+       && !e.target.closest('input,textarea,select,[contenteditable]')){
+      e.preventDefault(); if(open) closeKeysheet(); else openKeysheet();
+    }
+  }, true);
+}
+
 // ---------- utils ----------
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function enc(s){ return encodeURIComponent(s); }
@@ -7515,6 +7605,7 @@ wireSearchTrigger();
 stampProvenance();
 wirePaletteResize();
 wireViewMenu();
+wireKeysheet();
 tabsRestore();                  // before route(): a permalink then ADDS to the restored set
 window.addEventListener('hashchange',route);
 route();

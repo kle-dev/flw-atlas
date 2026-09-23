@@ -499,6 +499,20 @@
   .dgpan{transform-origin:0 0;will-change:transform}
   .dgpan>svg{display:block}
   /* full screen reuses the palette's overlay; the panel is just far bigger */
+  /* the keyboard-shortcut sheet: the palette's modal layer, a panel of its own (no resize, no search) */
+  .keys-panel{position:relative;width:min(760px,94vw);max-height:84vh;margin:8vh auto 0;display:flex;flex-direction:column;
+    background:var(--panel);border:1px solid var(--line2);border-radius:var(--radius-xl);box-shadow:var(--shadow);overflow:hidden;outline:none}
+  .keys-h{display:flex;align-items:center;justify-content:space-between;padding:var(--space-25) var(--space-4);
+    border-bottom:1px solid var(--line);font-weight:600;font-size:var(--text-md)}
+  .keys-x{cursor:pointer}
+  .keys-body{overflow:auto;padding:var(--space-2) var(--space-4) var(--space-4);columns:2 300px;column-gap:var(--space-6)}
+  .keys-g{break-inside:avoid;margin:var(--space-25) 0 0}
+  .keys-g h3{margin:0 0 var(--space-15);font-size:var(--text-2xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)}
+  .keys-g dl{margin:0}
+  .keys-r{display:grid;grid-template-columns:minmax(0,11ch) minmax(0,1fr);gap:var(--space-2);padding:var(--space-05) 0;align-items:baseline}
+  .keys-r dt{display:flex;flex-wrap:wrap;gap:3px;align-items:center}
+  .keys-r dd{margin:0;font-size:var(--text-sm);color:var(--ink-dim)}
+  .keys-or{color:var(--ink-faint);font-size:var(--text-2xs);margin:0 1px}
   .dg-panel{position:relative;width:min(96vw,1600px);height:90vh;margin:5vh auto 0;display:flex;
     flex-direction:column;background:var(--panel);border-radius:var(--radius-xl);
     box-shadow:0 25px 50px -12px rgba(0,0,0,.25),0 0 0 1px var(--line);overflow:hidden}
