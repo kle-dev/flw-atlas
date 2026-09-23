@@ -1,6 +1,7 @@
 package com.flowable.atlas.navigation
 
 import com.flowable.atlas.index.ModelEntry
+import com.flowable.atlas.model.ModelElementDeclaration
 import com.intellij.icons.AllIcons
 import javax.swing.Icon
 
@@ -52,14 +53,8 @@ object ModelElements {
     }
 
     /**
-     * Where [id] is declared in its model's [text]: the first quoted occurrence — `id="approve"` in XML,
-     * `"id": "approve"` or `"name": "approve"` in JSON — or null when the text does not spell it so.
+     * Where [id] is declared in its model's [text] — the id attribute or member, not a flow or a JSON key
+     * that happens to mention it first; see [ModelElementDeclaration].
      */
-    fun declarationOffset(text: String, id: String): Int? {
-        for (quote in charArrayOf('"', '\'')) {
-            val at = text.indexOf("$quote$id$quote")
-            if (at >= 0) return at + 1
-        }
-        return null
-    }
+    fun declarationOffset(text: String, id: String): Int? = ModelElementDeclaration.offsetOf(text, id)
 }

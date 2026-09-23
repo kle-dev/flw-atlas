@@ -80,6 +80,24 @@ class FlowableModelPreviewEditorProviderTest : BasePlatformTestCase() {
         }
     }
 
+    fun testAClickOnAWireframeCellFindsTheField() {
+        // a field called "name" is spelled like a JSON key long before its declaration
+        val text = """{"name":"DEMO-F003","rows":[{"cols":[{"id":"name","type":"text","label":"Name","size":6},{"id":"amount","type":"number","size":6}]}]}"""
+        val file = myFixture.addFileToProject("models/DEMO-F003.form", text).virtualFile
+        val editor = provider.createEditor(project, file) as FlowableModelPreviewEditorProvider.ModelEditor
+        try {
+            editor.component
+            val preview = editor.previewEditor as FlowableModelPreview
+            PlatformTestUtil.waitWithEventsDispatching("the wireframe never arrived", { preview.document != null }, 10)
+            val cell = com.flowable.atlas.diagram.FormSvgRenderer.picture(text.toByteArray())!!.hotspots.single { it.id == "name" }
+            val offset = preview.offsetAt(java.awt.geom.Point2D.Double(cell.x + cell.width / 2, cell.y + cell.height / 2), text)!!
+            assertEquals("name", text.substring(offset, offset + 4))
+            assertEquals("the declaration, not the model's name key", "\"id\":\"", text.substring(offset - 6, offset))
+        } finally {
+            Disposer.dispose(editor)
+        }
+    }
+
     private companion object {
         const val FORM = """{"metadata":{"name":"Claim"},"rows":[{"cols":[{"id":"amount","type":"number","label":"Amount","size":12}]}]}"""
     }

@@ -51,7 +51,8 @@ import javax.swing.SwingConstants
  * The picture half of a model's editor: its diagram, decision table or form wireframe, as
  * [DiagramSvgCache] renders it, painted by [SvgCanvas]. Rendering runs off the EDT; a loose model file
  * that changes on disk (a pull, a checkout) or in its editor is drawn again. Archive entries do not
- * change in place. A click on a process, case or decision element puts the text editor's caret on it.
+ * change in place. A click on an element — a task, a plan item, a decision rule, a form component — puts
+ * the text editor's caret on its declaration.
  */
 internal class FlowableModelPreview(
     private val project: Project,
@@ -128,23 +129,30 @@ internal class FlowableModelPreview(
             if (fdm.isFileModified(file)) fdm.getCachedDocument(file)?.text else null
         }
         val bytes = unsaved?.toByteArray(Charsets.UTF_8)
-        val svgText = if (bytes != null) cache.renderSvg(bytes, file.name, type)
-            else cache.resolveDiagram(file, type)?.let { String(it.contentsToByteArray(), Charsets.UTF_8) }
-        if (svgText == null) { hitMap = null; return null }
-        // A bundled export SVG is drawn in its own coordinates, not the layout's: no mapping for that one.
-        hitMap = if (bytes == null && FlowableDiagram.siblingSvg(file) != null) null
-            else HitMap.of(svgText, bytes ?: runCatching { file.contentsToByteArray() }.getOrNull(), file.name, type)
+        // A bundled export SVG is drawn in its own coordinates and knows no elements: shown, not clickable.
+        val sibling = if (bytes == null) FlowableDiagram.siblingSvg(file) else null
+        val picture = when {
+            bytes != null -> cache.picture(bytes, file.name, type)
+            sibling != null -> null
+            else -> cache.resolvePicture(file, type)
+        }
+        val svgText = picture?.svg ?: sibling?.let { String(it.contentsToByteArray(), Charsets.UTF_8) }
+        hitMap = HitMap.of(picture)
+        if (svgText == null) return null
         val text = SvgFonts.resolvable(svgText)
         return text.byteInputStream().use { SVGLoader().load(it, null, LoaderContext.createDefault()) }
     }
 
     /** A click on the picture: put the text editor's caret on the element under it. */
     private fun select(at: Point2D.Double) {
-        val id = hitMap?.elementAt(at) ?: return
         val text = FileDocumentManager.getInstance().getDocument(file)?.text ?: return
-        val offset = ModelElements.declarationOffset(text, id) ?: return
+        val offset = offsetAt(at, text) ?: return
         OpenFileDescriptor(project, file, offset).navigate(true)
     }
+
+    /** Where in [text] the element under [at] — a point in the SVG document's coordinates — is declared. */
+    internal fun offsetAt(at: Point2D.Double, text: String): Int? =
+        hitMap?.elementAt(at)?.let { ModelElements.declarationOffset(text, it) }
 
     private fun show(text: String) {
         message.text = text

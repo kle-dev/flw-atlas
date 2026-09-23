@@ -1,5 +1,6 @@
 package com.flowable.atlas.usage
 
+import com.flowable.atlas.diagram.ModelPicture
 import com.flowable.atlas.model.ModelType
 import com.intellij.openapi.vfs.VirtualFile
 
@@ -10,16 +11,14 @@ import com.intellij.openapi.vfs.VirtualFile
  * (`bpmn-models/onboarding.bpmn` → `bpmn-models/onboarding.svg`); [siblingSvg] finds that bundled
  * render and is still the preferred, best-fidelity source. Newer Design exports no longer bundle it,
  * so when there is no sibling `.svg` Atlas renders the diagram itself from the model's diagram-
- * interchange layout — see [DiagramSvgCache], which uses the shared `:core`
- * [com.flowable.atlas.diagram.DiagramRenderer]; a form or page is drawn as a wireframe of its grid
- * ([com.flowable.atlas.diagram.FormSvgRenderer]). Any other model type yields nothing, keeping the
+ * interchange layout — see [DiagramSvgCache], which uses the shared `:core` [ModelPicture]; a form or
+ * page is drawn as a wireframe of its grid. Any other model type yields nothing, keeping the
  * diagram gutter marker self-limiting.
  */
 object FlowableDiagram {
 
     /** Model types Atlas can draw: process/case/decision from their BPMN/CMMN/DMN layout, form/page from their grid. */
-    val DIAGRAM_TYPES: Set<ModelType> =
-        setOf(ModelType.PROCESS, ModelType.CASE, ModelType.DECISION, ModelType.FORM, ModelType.PAGE)
+    val DIAGRAM_TYPES: Set<ModelType> = ModelPicture.TYPES
 
     /** True if a diagram could be rendered from this model type's layout (no parsing done here). */
     fun canRender(type: ModelType): Boolean = type in DIAGRAM_TYPES

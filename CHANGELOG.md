@@ -172,8 +172,10 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   with a reason, to the `waivers.json` the explorer's Save writes, so the page, the CLI gate and this list
   agree. It is Swing, so it works under Remote Development and in an IDE without JCEF, where the explorer
   was the only place to see or accept a finding.
-- **The model preview is interactive.** A click on a process, case or decision element puts the caret on
-  its declaration beside it, Ctrl/⌘ + wheel zooms about the pointer, a drag pans, and Ctrl/⌘ + `=` `-` `0`
+- **The model preview is interactive.** A click on a process, case or decision element — and on a form
+  component or a decision table's rule — puts the caret on its declaration beside it, the id itself
+  rather than a flow or a JSON key that mentions it first (Go to Symbol and Search Everywhere land there
+  too), Ctrl/⌘ + wheel zooms about the pointer, a drag pans, and Ctrl/⌘ + `=` `-` `0`
   zoom in, out and fit. The picture follows the editor's unsaved text, and a renderer that fails says so
   instead of claiming the model has no layout.
 - **Smaller things in the IDE.** The Hub's *archives could not be read* line shows which archive and why
