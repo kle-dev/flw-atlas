@@ -212,13 +212,16 @@ class JavaParserTest {
                     q.definitionKey("do-item").operation("findById");
                     builder.definitionKey("do-item").operation();
                     String op = "findAll"; q2.operation("findAll");
+                    q3.definitionKey("do-item").operation(Ops.FIND_OPEN);
                 }
             }"""
+        // both kept as written — a quoted literal or a constant — for the resolver
         val calls = JavaParser.dataObjectOpCalls(src).map { it["def"] to it["op"] }
-        assertTrue("Keys.ORDER_DO" to "findByStatus" in calls)
-        assertTrue("\"do-item\"" to "findById" in calls)
+        assertTrue("Keys.ORDER_DO" to "\"findByStatus\"" in calls)
+        assertTrue("\"do-item\"" to "\"findById\"" in calls)
+        assertTrue("\"do-item\"" to "Ops.FIND_OPEN" in calls)
         // the trailing `.operation("findAll")` has no definitionKey before it in its statement
-        assertFalse(calls.any { it.second == "findAll" })
+        assertFalse(calls.any { it.second == "\"findAll\"" })
     }
 
     @Test

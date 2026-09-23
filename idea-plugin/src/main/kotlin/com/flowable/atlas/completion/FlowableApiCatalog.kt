@@ -225,6 +225,8 @@ object FlowableApiCatalog {
         value(doMod, "value", keyMethod = "definitionKey", operationMethod = "operation")
         value(doMod, "originalValue", keyMethod = "definitionKey", operationMethod = "operation")
         value(doDel, "value", keyMethod = "definitionKey", operationMethod = "operation")
+        // A service-registry invocation's input: `.serviceKey("s").operationKey("op").serviceData("in", v)`.
+        value(svcInvoke, "serviceData", keyMethod = "serviceKey", operationMethod = "operationKey", keyIsService = true)
 
         // ---------------------------------------------------------------- MESSAGE / SIGNAL names
         val runtime = "org.flowable.engine.RuntimeService"

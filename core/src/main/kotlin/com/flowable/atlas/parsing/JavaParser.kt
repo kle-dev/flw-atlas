@@ -83,7 +83,11 @@ object JavaParser {
     )
     // Flowable data-object runtime builder chain: `.definitionKey(<expr>) … .operation("<literal>")`.
     private val DEFINITION_KEY_RE = Regex("""\.definitionKey\(\s*([^)]+?)\s*\)""")
-    private val OPERATION_CALL_RE = Regex("""\.operation\(\s*"([^"]+)"\s*\)""")
+    // The operation as written — a literal or a constant (`.operation(Ops.FIND_ALL)`), resolved by the caller.
+    private val OPERATION_CALL_RE = Regex("""\.operation\(\s*("[^"]+"|(?:\w+\.)*[A-Z][A-Z0-9_]*)\s*\)""")
+    // Service-registry invocations: `createServiceInvocationBuilder().serviceKey(<expr>).operationKey("op")`.
+    private val SERVICE_KEY_CALL_RE = Regex("""\.serviceKey\(\s*([^)]+?)\s*\)""")
+    private val OPERATION_KEY_CALL_RE = Regex("""\.operationKey\(\s*("[^"]+"|(?:\w+\.)*[A-Z][A-Z0-9_]*)\s*\)""")
     // External-worker subscriptions/queries: `.topic("orders")` — links the class to the topic node.
     private val TOPIC_CALL_RE = Regex("""\.topic\(\s*"([^"]+)"\s*\)""")
 
@@ -309,10 +313,10 @@ object JavaParser {
         return out
     }
 
-    /** Flowable data-object operation invocations: each `.operation("op")` paired with the nearest
-     *  preceding `.definitionKey(expr)` in the same statement (no `;` between). `def` is kept raw — a
-     *  quoted literal or a constant reference (e.g. a generated model-keys class field) — for the caller
-     *  to resolve to a model key. Returns `{def, op}` maps. */
+    /** Flowable data-object operation invocations: each `.operation(op)` paired with the nearest
+     *  preceding `.definitionKey(expr)` in the same statement (no `;` between). `def` and `op` are kept
+     *  raw — a quoted literal or a constant reference (e.g. a generated model-keys class field) — for the
+     *  caller to resolve. Returns `{def, op}` maps. */
     fun dataObjectOpCalls(rawText: String): List<Map<String, String>> {
         val text = blankComments(rawText)
         val defKeys = DEFINITION_KEY_RE.findAll(text).map { it.range.first to it.groupValues[1].trim() }.toList()
@@ -323,6 +327,19 @@ object JavaParser {
             out.add(linkedMapOf("def" to def.second, "op" to m.groupValues[1]))
         }
         return out
+    }
+
+    /**
+     * Service-registry invocations in the source: every `.serviceKey(expr)` and `.operationKey(expr)`
+     * argument, raw — a quoted literal or a constant, for the caller to resolve. Per class, not per
+     * statement: a helper usually builds the invocation with its service key and a lambda elsewhere in the
+     * class names the operation — `request(SERVICE_KEY, b -> b.operationKey("getContact"))`.
+     */
+    fun serviceInvocations(rawText: String): Pair<List<String>, List<String>> {
+        val text = blankComments(rawText)
+        val keys = SERVICE_KEY_CALL_RE.findAll(text).map { it.groupValues[1].trim() }.distinct().toList()
+        val ops = OPERATION_KEY_CALL_RE.findAll(text).map { it.groupValues[1] }.distinct().toList()
+        return keys to ops
     }
 
     private val SCHEME_HOST_RE = Regex("""^[a-z]+://[^/]+""")

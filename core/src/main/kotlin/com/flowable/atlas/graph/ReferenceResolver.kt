@@ -112,6 +112,8 @@ object ReferenceResolver {
         // A simple name two classes give different values: resolving through it would be a guess.
         val ambiguousConstants = HashSet<String>()
         val javaOpCalls = LinkedHashMap<String, List<Map<String, String>>>()
+        // fqn → (service keys it names, raw; operation keys it names; its own string-constant values)
+        val javaServiceCalls = LinkedHashMap<String, Triple<List<String>, List<String>, Collection<String>>>()
         // Simple class names shared by more than one class — resolving through them is a guess
         // (first-wins), so any ref that falls back to such a name is flagged `suspect`. The same for a
         // bean name two classes both claim (`@Component("x")` twice, or a factory method of that name).
@@ -146,12 +148,15 @@ object ReferenceResolver {
             for (role in jc["roles"] as Collection<String>) {
                 javaByRole.getOrPut(role) { ArrayList() }.add(jc)
             }
-            for ((n, v) in JavaParser.stringConstants(srcText)) {
+            val ownConstants = JavaParser.stringConstants(srcText)
+            for ((n, v) in ownConstants) {
                 val prev = javaConstants.putIfAbsent(n, v)
                 if (prev != null && prev != v) ambiguousConstants.add(n)
             }
             val ops = JavaParser.dataObjectOpCalls(srcText)
             if (ops.isNotEmpty()) javaOpCalls[fqn] = ops
+            val (svcKeys, svcOps) = JavaParser.serviceInvocations(srcText)
+            if (svcOps.isNotEmpty()) javaServiceCalls[fqn] = Triple(svcKeys, svcOps, ownConstants.values)
         }
 
         // ---- Constants at key positions: `.caseDefinitionKey(ModelConstants.MAIN_CASE)` names the model the
@@ -184,7 +189,28 @@ object ReferenceResolver {
         for ((fqn, calls) in javaOpCalls) {
             for (call in calls) {
                 val key = resolveDefKey(call["def"] ?: continue) ?: continue
-                ctx.addOpUse(fqn, "dataObject", key, call["op"])
+                ctx.addOpUse(fqn, "dataObject", key, resolveDefKey(call["op"] ?: continue) ?: continue)
+            }
+        }
+
+        // ---- Java service-registry invocations (…createServiceInvocationBuilder().serviceKey(s).operationKey("op")) ----
+        // The operation belongs to the class's service: the one its `.serviceKey(…)` names, or else the one
+        // a string constant of the class holds (a helper taking `SERVICE_KEY`). A class naming several
+        // services credits each operation to the one service that defines it, and to none when that is
+        // not decidable. Without this, an operation only Java calls was reported unused.
+        val serviceOps = HashMap<String, Set<String>>()
+        for (o in bucketList("services")) {
+            val svc = o as? Map<*, *> ?: continue
+            val key = svc["key"] as? String ?: continue
+            serviceOps[key] = (svc["operations"] as? List<*>).orEmpty().mapNotNullTo(HashSet()) { (it as? Map<*, *>)?.get("key") as? String }
+        }
+        for ((fqn, call) in javaServiceCalls) {
+            val (rawKeys, rawOps, ownConstants) = call
+            val named = rawKeys.mapNotNull(::resolveDefKey).filter { it in serviceOps }.distinct()
+            val candidates = named.ifEmpty { ownConstants.filter { it in serviceOps }.distinct() }
+            for (op in rawOps.mapNotNull(::resolveDefKey).distinct()) {
+                val target = candidates.filter { op in serviceOps.getValue(it) }.singleOrNull() ?: continue
+                ctx.addOpUse(fqn, "service", target, op)
             }
         }
 
