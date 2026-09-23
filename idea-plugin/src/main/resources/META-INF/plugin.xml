@@ -155,6 +155,19 @@
               and its explanation behind an ⓘ, and every section starts open but <i>Other attributes</i>. On
               a model's own page a finding drops the model, the file and a severity its check's head already
               says.</li>
+          <li><b>Nothing cut off is out of reach.</b> Text cut to fit — a table cell, a chip, a tag, a
+              card's title, a name in the list — says itself in full on hover and on keyboard focus. In a
+              narrow panel a table keeps every column it cannot do without on the row: a table with three of
+              them put the third into a 1em track, a Liquibase column's type reading "v…" and a finding's
+              message one letter per line.</li>
+          <li><b>⌖ always lands.</b> From any tab, a <i>Show on diagram</i> button brings the drawing up on
+              Overview with the element selected and in view below the tab bar; a form's field rows have one
+              too. An element the drawing does not show keeps a faint ⌖ that says so, and a page with no
+              drawing offers none — both used to be buttons that did nothing.</li>
+          <li><b>Zooming a drawing on a trackpad.</b> ⌘/Ctrl + scroll zooms by how far the wheel turns
+              instead of a fixed step per event, so a trackpad no longer jumps; a pinch zooms too. Inside
+              IntelliJ, whose browser rounds a trackpad's steps and delivers many as zero, every zero step
+              zoomed <i>out</i> — zooming in barely worked there. A zero step is no step now.</li>
           <li><b>A leftover TODO says where it is.</b> In a JSON model the finding names the element that
               carries the marker and quotes it — <i>TODO in the label: "Current Pod (TODO)"</i> on the
               field, which ⌖ finds — instead of a path like <code>rows[1].cols[0].label</code> and "TODO
@@ -543,15 +556,6 @@
               now also comes up on a <code>.json</code>, the one file the comparison is most wanted on and
               the one it was hidden from — and in the editor's, which is how an entry opened by <i>Go to
               Model</i> is reached.</li>
-          <li><b>Both sides are laid out before they are compared.</b> A Design export is minified: one long
-              line per model, and the same goes for every <code>.form</code> in a deployment archive. Held
-              against a file that some generator or formatter wrote out over hundreds of lines,
-              <i>everything</i> differs and the viewer has nothing to say — so without this the comparison
-              would have been an answer nobody can read. Both sides are re-indented first, whitespace only
-              and never a value, so a number still reads the way its own file spells it; the pair is then
-              read-only, because neither side is the file on disk any more. <i>Show Raw Files</i> in the
-              diff toolbar gives the two files themselves, where the project side stays editable. Processes,
-              cases and decisions are exported formatted already and are always shown as they are.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

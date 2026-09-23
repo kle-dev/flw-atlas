@@ -574,6 +574,8 @@ const probe = `<script>
     const fb=det.querySelector('.dhealth .hs[data-jump-sect="findings"]');
     if(fb) click(fb);
     ok('a health item brings up the tab its section is on', !!fb && !det.querySelector('#pane-findings').hidden);
+    // (miniproject draws no process) a ⌖ promises a place on a drawing — a page without one offers none
+    ok('a model without a drawing offers no locate button', !det.querySelector('.dgloc'));
     click(det.querySelector('.ptab[data-pane="details"]'));
   });
   steps.push(()=>{
@@ -943,10 +945,34 @@ const probe = `<script>
     const zoom=new WheelEvent('wheel', {deltaY:-40, metaKey:true, bubbles:true, cancelable:true});
     view.dispatchEvent(zoom);
     ok('with the modifier held, the wheel zooms the drawing', zoom.defaultPrevented && view._z.scale>before, before+' -> '+view._z.scale);
+    // a trackpad sends many small deltas: the zoom follows how far they add up to, not how many there are
+    const s0=view._z.scale;
+    for(let i=0;i<20;i++) view.dispatchEvent(new WheelEvent('wheel', {deltaY:-5, metaKey:true, bubbles:true, cancelable:true}));
+    const tr=view._z.scale/s0;
+    ok('twenty small trackpad steps zoom gently', tr>1.05 && tr<1.5, 'x'+tr.toFixed(2));
+    const s1=view._z.scale;
+    view.dispatchEvent(new WheelEvent('wheel', {deltaY:-100, metaKey:true, bubbles:true, cancelable:true}));
+    const nr=view._z.scale/s1;
+    ok('a mouse notch is one step', nr>1.08 && nr<1.25, 'x'+nr.toFixed(2));
+    // IntelliJ's browser rounds trackpad steps: a 0 is no direction, and ±1 steps still zoom in
+    const s3=view._z.scale;
+    for(let i=0;i<10;i++) view.dispatchEvent(new WheelEvent('wheel', {deltaY:0, deltaX:3, metaKey:true, bubbles:true, cancelable:true}));
+    ok('a step with no vertical delta does not zoom out', view._z.scale===s3, s3+' -> '+view._z.scale);
+    for(let i=0;i<30;i++) view.dispatchEvent(new WheelEvent('wheel', {deltaY:-1, metaKey:true, bubbles:true, cancelable:true}));
+    const ir=view._z.scale/s3;
+    ok('rounded ±1 steps still zoom in, gently', ir>1.2 && ir<2.5, 'x'+ir.toFixed(2));
     window.dispatchEvent(new KeyboardEvent('keyup', {key:'Meta'}));
     const after=new WheelEvent('wheel', {deltaY:40, bubbles:true, cancelable:true});
     view.dispatchEvent(after);
     ok('and lets go of it when the modifier is released', !after.defaultPrevented);
+    // a trackpad pinch is ctrl+wheel with no key pressed — the page never sees a keydown for it
+    const s2=view._z.scale;
+    view.dispatchEvent(new WheelEvent('wheel', {deltaY:-4, ctrlKey:true, bubbles:true, cancelable:true}));
+    ok('a pinch zooms without a key held', view._z.scale>s2, s2+' -> '+view._z.scale);
+    const pinch2=new WheelEvent('wheel', {deltaY:-4, ctrlKey:true, bubbles:true, cancelable:true});
+    view.dispatchEvent(pinch2);
+    ok("and the rest of the pinch is the drawing's, not the page's", pinch2.defaultPrevented);
+    window.__pinchView=view;
     ok('the layout says it is a wireframe', view.dataset.kind==='wireframe');
     const sel=view.querySelector('g[data-el].dgsel');
     ok('the selected cell is outlined, not blurred', !!sel && getComputedStyle(sel).filter==='none' && !!sel.querySelector('rect') &&
@@ -957,11 +983,43 @@ const probe = `<script>
     ok('clicking it opens its card, with the action it calls', !!card && !!card.querySelector('.nc[data-id="'+enc('action:notifyCustomerAction')+'"]'),
        card?card.textContent.slice(0,200):'(no card)');
     document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
+    location.hash=enc('form:orderForm')+'&p=details';
+  });
+  steps.push(()=>{
+    // landing on Details: the layout was never laid out, and its ⌖ still finds the field
+    const det=document.getElementById('detail');
+    const b=det.querySelector('#pane-details [data-sect="formfields"] .dgloc[data-el-ref="amount"]');
+    ok('a field row has its own locate button', !!b);
+    if(b) click(b);
+    const view=det.querySelector('[data-sect="diagram"] .dgview'), sel=view&&view.querySelector('.dgsel');
+    ok('and it brings the layout up with the field selected', !det.querySelector('#pane-overview').hidden && !!sel && sel.getAttribute('data-el')==='amount',
+       sel?sel.getAttribute('data-el'):'(nothing selected)');
+    const bar=det.querySelector('.dbody>.dhead').getBoundingClientRect(), vr=view.getBoundingClientRect();
+    ok('the layout lands below the sticky tab bar', vr.top>=bar.bottom-1, Math.round(vr.top)+' < '+Math.round(bar.bottom));
+    // text cut to fit is readable in full: every cut text on every tab of this page, and on the list
+    det.querySelectorAll('.dpane').forEach(p=>p.hidden=false); det.querySelectorAll('details').forEach(d=>d.open=true);
+    const norm=v=>String(v||'').replace(/\\s+/g,' ').trim();
+    const cut=[...document.querySelectorAll('#detail *, .listcol *')].filter(el=>el.getClientRects().length && isClipped(el));
+    const unread=cut.filter(el=>{ const a=tipAnchor(el), own=norm(readText(el)); return own && (!a || norm(a.text()).indexOf(own.slice(0,200))<0); });
+    ok('this narrow page cuts some text', cut.length>0, 'nothing cut at this width');
+    ok('and every cut text says itself in full on hover', !unread.length, unread.slice(0,3).map(el=>norm(readText(el)).slice(0,60)).join(' | '));
+    window.__cutEl=cut.find(el=>!tipTarget(el));
+  });
+  // (a step later: opening every section above re-anchors the scroll, and a scroll hides a pending bubble)
+  steps.push(()=>{ if(window.__cutEl) window.__cutEl.dispatchEvent(new MouseEvent('mouseover', {bubbles:true})); });
+  steps.push(()=>{});
+  steps.push(()=>{
+    // (the bubble is in the page once shown; its fade-in class waits for a frame this harness never paints)
+    const tip=document.querySelector('.atlas-tip'), el=window.__cutEl;
+    ok('a real hover shows the bubble with the whole text', !el || (!!tip && tip.textContent.replace(/\\s+/g,' ').indexOf(readText(el).slice(0,60))>=0),
+       tip?tip.textContent.slice(0,80):'(no bubble)');
+    location.hash=enc('form:orderForm');
   });
 
   // --- a subform: drawn with the form it embeds, named on its card and its row, opened by a double click ---
   steps.push(()=>{ location.hash=enc('form:DEMO-LF001'); });
   steps.push(()=>{
+    ok('a pinch lets go of the wheel once it ends', !!window.__pinchView && !window.__pinchView._zoomOn);
     const s=document.querySelector('#detail details.sect[data-sect="diagram"]');
     if(s) s.open=true;
     const row=document.querySelector('#detail [data-sect="formfields"] [data-el="orderSub"]');
@@ -1358,7 +1416,8 @@ const probe = `<script>
     const sect=det.querySelector('details.sect[data-sect="findings"]');
     ok('a model page lists its findings, open', !!sect && sect.open);
     ok('with the check named and an accept control on each row', !!sect && !!sect.querySelector('.chk-title') && !!sect.querySelector('.wv-acc'));
-    ok('and the element as a locate-on-diagram button where there is one', !sect || !DATA.findings[wvFi].element || !!sect.querySelector('.dgloc'));
+    ok('and the element as a locate-on-diagram button where there is a drawing', !sect || !DATA.findings[wvFi].element ||
+       (det.querySelector('.dgview') ? !!sect.querySelector('.dgloc') : !sect.querySelector('.dgloc')));
     ok('what accepting does is said on the button, not in a paragraph over every model', !!sect && !sect.querySelector('.sb > p.ddesc') &&
        [...sect.querySelectorAll('.wv-acc')].every(b=>/stays in the report/.test(b.dataset.tip||'')));
     try{ localStorage.removeItem(WAIVER_KEY); }catch(e){}

@@ -244,9 +244,10 @@ into the model it invokes, the payload it sends and stores, its settings and its
 task into its code with line numbers and the validator's findings; a service task into its
 implementation, the operation it calls and its field injections. A long table gets a filter of its own,
 and past a hundred rows it shows the first ones and a *show all* button — the filter still searches
-every row. In a narrow panel — an IntelliJ tool window — a table keeps its subject and its verdict on the
-row, drops the other columns under it, and a matrix cell that drops says whose it is; nothing scrolls
-sideways.
+every row. In a narrow panel — an IntelliJ tool window — a table keeps the columns it cannot do without on
+the row, drops the others under it, and a matrix cell that drops says whose it is; nothing scrolls
+sideways. Text cut to fit — a cell, a chip, a tag, a card's title, a name in the list — says itself in
+full when you hover it or tab to it, beside whatever tooltip the element already had.
 
 On a form or page, a row in **Fields** expands when the component does something: the model a button
 invokes (as a chip you can follow), the payload it sends and stores back, the `{{binding}}` its result is
@@ -294,10 +295,16 @@ id — the same picture the IDE's model preview and the generated diagrams folde
 downloaded and no Design instance is contacted. A page keeps its drawings within a budget, so a project
 with hundreds of forms does not double in size; a form left out says so, and the IDE still draws it.
 
-Drag to pan, ⌘/Ctrl-scroll to zoom, `−` `fit` `+` to step, `⤢` for full screen. On a touch screen a
-vertical swipe over an inline diagram scrolls the page, a sideways drag pans, and two fingers zoom. Clicking an element
-opens a draggable, resizable info card — and the `⌖` buttons in the detail panel work the other way
-round, locating an element on the diagram from its row in a list. Every shape is a keyboard stop:
+Drag to pan, ⌘/Ctrl-scroll or a trackpad pinch to zoom, `−` `fit` `+` to step, `⤢` for full screen.
+The zoom follows how far the wheel turns, so a trackpad's many small steps zoom smoothly, a mouse notch is
+one step, and a step with no vertical movement does nothing — inside IntelliJ, whose browser rounds a
+trackpad's steps, many arrive as zero. On a touch screen a vertical swipe over an inline diagram scrolls
+the page, a sideways drag pans, and two fingers zoom. Clicking an element opens a draggable, resizable
+info card — and the `⌖` buttons in the detail panel work the other way round, locating an element on the
+diagram from its row in a list, a form's field rows included, from whichever tab they are on: the
+drawing comes up on Overview with the element selected, below the tab bar. An element the drawing does
+not show — a sentry, an element without layout — keeps a faint `⌖` that says so, and a page without a
+drawing offers none. Every shape is a keyboard stop:
 Tab through them, Enter or Space opens the card. The selection joins the link (`#<node>&e=<element>`),
 so a copied link or a reload lands on the element, on the canvas as well as in its rows; and the
 drawing re-fits itself when the panel changes width — a splitter, a narrower IDE tool window — unless

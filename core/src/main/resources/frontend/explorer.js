@@ -2251,7 +2251,9 @@ function findingTable(rows, o){
   // 66 mail tasks with the same missing error path: one row each, with the members a chevron away, so
   // the list has as many rows as it has causes. Not on a model's own page — its findings are few, and
   // the reader is there for the elements.
-  if(o.onNode || rows.length<FIND_GROUP_FROM) return tbl(cols, rows.map(f=>findingRow(f,o)), {filter:false, more:o.more, cls:'fndtbl'});
+  // the narrow layout pins severity · message · accept to the row; without a severity column it has one track less
+  const tcls='fndtbl'+(cols.some(c=>c.k==='sev')?'':' nosev');
+  if(o.onNode || rows.length<FIND_GROUP_FROM) return tbl(cols, rows.map(f=>findingRow(f,o)), {filter:false, more:o.more, cls:tcls});
   const groups=new Map();
   rows.forEach(f=>{ const k=findingShape(f); if(!groups.has(k)) groups.set(k, []); groups.get(k).push(f); });
   const out=[];
@@ -3325,6 +3327,10 @@ function tbl(cols, rows, o){
   // A column empty in every row is a header over nothing — dropped, unless it holds the row's controls.
   if(!o.keepCols) cols=cols.filter(c=>c.k==='act'||rows.some(r=>{ const v=r.cells[c.k]; return v!=null&&v!==''; }));
   const tracks='1.1em '+cols.map(c=>c.w||'minmax(0,1fr)').join(' ');
+  // In a narrow panel the optional columns drop under the row and the others keep their tracks. A fixed
+  // three-track grid (chevron · first · last) assumed every middle column was optional: a table with a
+  // third one put it into the chevron's 1em track, a Liquibase column's type reading "v…".
+  const narrow='1.1em '+cols.filter(c=>!c.opt).map(c=>c.w||'minmax(0,1fr)').join(' ');
   const sorted=o.sort!=null, cur=String(o.sort||'').replace(/^-/,''), desc=/^-/.test(String(o.sort||''));
   const headCell=c=>{
     const lbl=c.labelHtml!=null?c.labelHtml:esc(c.label||'');
@@ -3339,7 +3345,7 @@ function tbl(cols, rows, o){
   const body=rows.map((r,i)=>tblRowHtml(cols, r, i, cap)).join('');
   const filt=(!_tblFilterOff && o.filter!==false && rows.length>=(typeof o.filter==='number'?o.filter:TBL_FILTER_FROM))
     ? filterBar({placeholder:o.placeholder||'filter rows…', total:rows.length, chips:o.chips}) : '';
-  return filt+'<div class="tbl'+(o.cls?' '+o.cls:'')+'" style="--cols:'+tracks+'">'+head+body+'</div>'+
+  return filt+'<div class="tbl'+(o.cls?' '+o.cls:'')+'" style="--cols:'+tracks+';--ncols:'+narrow+'">'+head+body+'</div>'+
     (rows.length>cap?'<button type="button" class="dgbtn tbl-all">show all '+rows.length+'</button>':'')+
     (o.more?'<div class="tbl-more muted">'+esc(o.more)+'</div>':'');
 }
@@ -5681,7 +5687,7 @@ function fieldRow(f, d){
   const req=(f.required===true||f.required==='true')?'<span class="tag" data-tip="Required field">required</span>':'';
   const hay=[id, f.label, f.type, f.value, callee&&callee.key, f.subform, f.description].filter(Boolean).join(' ');
   return {el:f.id, hay, body:b, cls:b?'fldrow':'', bodyCls:'fldbody', cells:{
-    id:fieldLink(f.id), label:esc(f.label==null?'':String(f.label)), type:ty,
+    id:(d.diagram&&id?locateBtn(id, f.label)+' ':'')+fieldLink(f.id), label:esc(f.label==null?'':String(f.label)), type:ty,
     value:(cid?'<span class="opref">→ '+esc(String(callee.key))+'</span> ':'')+
       (f.subform?'<span class="opref" data-tip="The form this subform embeds">↳ '+vlink('form:'+f.subform, String(f.subform))+'</span> ':'')+val,
     flags:(ps.length?tag(paramSummary(ps)):'')+req+gates}};
@@ -6239,6 +6245,7 @@ function renderDetail(){
   det.querySelectorAll('details.elgrp').forEach(g=>g.querySelectorAll('[data-hay]').forEach(r=>{ r.dataset.eg=g.dataset.eg; }));
   wireSectionFilter(det);
   wireDiagram(det);
+  wireLocateButtons(det);
   applyFocus(det);
 }
 
@@ -6302,21 +6309,49 @@ function zoomable(view, opts){
     }
     z.scale=next; z.apply();
   };
+  // One wheel event as a zoom factor proportional to how far it turned: a mouse notch (~100px) is ~1.15×.
+  // A fixed step per event made a trackpad — dozens of small deltas per gesture — jump several times
+  // over; a pinch arrives as ctrl+wheel with small fractional deltas, so it gets more per pixel (a mouse
+  // notch held with Ctrl is large, and keeps the mouse's rate). Each step is capped.
+  //
+  // IntelliJ's embedded browser rounds a trackpad's fractional steps to whole ones on the way in
+  // (JBCefOsrComponent: Math.round(preciseWheelRotation × factor)), so many events arrive with deltaY 0 and
+  // the rest as ±1. A 0 is no direction — the old `deltaY<0 ? in : out` read every one as "out", which is
+  // why zooming out worked there and zooming in did not — and a ±1 still gets a small step of its own.
+  const wheelFactor=e=>{
+    const px=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?(view.clientHeight||600):1);
+    if(!px) return 1;
+    const pinch=e.ctrlKey && !e.metaKey && Math.abs(px)<50;
+    const mag=Math.min(0.35, Math.max(0.02, Math.abs(px)*0.002*(pinch?10:1)));
+    return Math.pow(2, px<0?mag:-mag);
+  };
   const zoomWheel=e=>{
     if(opts.modWheel && !e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
+    if(opts.modWheel && !dgModHeld) dgZoomFor(view);   // a gesture the keys did not announce: keep taking it
     const r=view.getBoundingClientRect();
-    z.zoom(e.deltaY<0?1.12:1/1.12, e.clientX-r.left, e.clientY-r.top);
+    z.zoom(wheelFactor(e), e.clientX-r.left, e.clientY-r.top);
   };
   if(opts.modWheel){
     // Inline, a plain wheel scrolls the page. A non-passive wheel listener would make every scroll step
     // over the drawing wait for this script first — in the IDE's off-screen-rendered browser that is a
     // stutter each time the pointer rests on a diagram or a form's layout. So the drawing listens
-    // passively (only to teach the modifier) and takes the wheel for zooming only while ⌘/Ctrl is held.
-    view.addEventListener('wheel', e=>{ if(!e.ctrlKey && !e.metaKey) wheelHint(view); }, {passive:true});
-    dgZoomViews.add(view);
+    // passively and takes the wheel for zooming only while ⌘/Ctrl is held — known from the keys, or, for a
+    // pinch (ctrl+wheel with no key pressed) and a ⌘ the page never saw go down (the IDE's browser without
+    // focus), from the wheel event itself: this passive listener zooms that first event and hands the
+    // rest of the gesture to the one that can keep the page from scrolling.
     z.zoomWheel=zoomWheel;
-    if(dgModHeld) view.addEventListener('wheel', zoomWheel, {passive:false});
+    view.addEventListener('wheel', e=>{
+      if(!e.ctrlKey && !e.metaKey){ wheelHint(view); return; }
+      if(view._zoomOn) return;                      // the real listener has this one
+      const r=view.getBoundingClientRect();
+      z.zoom(wheelFactor(e), e.clientX-r.left, e.clientY-r.top);
+      dgZoomFor(view);
+    }, {passive:true});
+    // ⌘ held while the pointer moves in: take the wheel before it turns
+    view.addEventListener('mousemove', e=>{ if((e.metaKey||e.ctrlKey) && !view._zoomOn) dgZoomFor(view); }, {passive:true});
+    dgZoomViews.add(view);
+    dgZoomAttach(view, dgModHeld);
   } else view.addEventListener('wheel', zoomWheel, {passive:false});
   // Touch: inline, a vertical swipe scrolls the page (a finger on a 60vh diagram used to trap the page,
   // since the view took every gesture); a sideways drag still pans. Two fingers pinch-zoom, in both views.
@@ -6366,13 +6401,27 @@ function zoomable(view, opts){
 // down and detached when it is released (or the window loses focus with it held).
 const dgZoomViews=new Set();
 let dgModHeld=false;
+/** Attach or detach one inline drawing's zooming (non-passive) wheel listener; `_zoomOn` says which. */
+function dgZoomAttach(v, on){
+  const z=v._z; if(!z||!z.zoomWheel||!!v._zoomOn===on) return;
+  v._zoomOn=on;
+  if(on) v.addEventListener('wheel', z.zoomWheel, {passive:false}); else v.removeEventListener('wheel', z.zoomWheel);
+}
+/** Take the wheel on one drawing for the rest of a gesture — a pinch, or ⌘ with no keydown seen — and let
+ *  go shortly after its last event, so a plain scroll afterwards does not wait on the script again. */
+const DG_GESTURE_MS=600;
+function dgZoomFor(v){
+  dgZoomAttach(v, true);
+  clearTimeout(v._zoomT);
+  v._zoomT=setTimeout(()=>{ v._zoomT=null; if(!dgModHeld) dgZoomAttach(v, false); }, DG_GESTURE_MS);
+}
 function setDgModHeld(held){
   if(held===dgModHeld) return;
   dgModHeld=held;
   dgZoomViews.forEach(v=>{
     if(!v.isConnected){ dgZoomViews.delete(v); return; }
-    const z=v._z; if(!z||!z.zoomWheel) return;
-    if(held) v.addEventListener('wheel', z.zoomWheel, {passive:false}); else v.removeEventListener('wheel', z.zoomWheel);
+    if(!held){ clearTimeout(v._zoomT); v._zoomT=null; }
+    dgZoomAttach(v, held);
   });
 }
 window.addEventListener('keydown', e=>{ if(e.key==='Meta'||e.key==='Control') setDgModHeld(true); });
@@ -6640,18 +6689,35 @@ function dgFind(view, elId, name){
 }
 // ⌖ on a detail row: open the diagram section, highlight the element and pan to it.
 function locateOnDiagram(det, elId, name){
-  const sect=det.querySelector('details.sect[data-sect="diagram"]');
-  if(!sect) return;
+  const sect=det.querySelector('details.sect[data-sect="diagram"]'), view0=sect&&sect.querySelector('.dgview');
+  // wireLocateButtons() leaves no ⌖ where this would find nothing; a stray one says why instead of nothing
+  if(!view0 || !dgFind(view0, elId, name)){ toast((name||elId)+' is not drawn on '+(view0?'the drawing':'this page')); return; }
   showPaneOf(det, sect);                // a ⌖ in Findings or Details goes to the drawing on Overview
   sect.open=true;
-  const view=sect.querySelector('.dgview'), z=view&&view._z;
+  const view=view0, z=view._z;
   if(!z) return;
   if(!z._fitted && view.clientWidth>0){ z.fit(); z._fitted=true; }   // first reveal of a kept-closed section
   const g=dgFind(view, elId, name);
-  if(!g) return;
   dgSelect(view, g);
   dgCenter(z, g);
-  sect.scrollIntoView({block:'nearest'});
+  // the whole drawing below the sticky tab bar — `nearest` left its top under the bar, or the page where
+  // it was when the ⌖ sat far down a long tab
+  const bar=det.querySelector('.dbody>.dhead'), top=view.getBoundingClientRect().top-det.getBoundingClientRect().top;
+  const barH=bar?bar.getBoundingClientRect().height:0, bottom=top+view.getBoundingClientRect().height;
+  if(top<barH+8 || bottom>det.clientHeight) det.scrollTop+=top-barH-8;
+}
+/** A ⌖ promises a place on the drawing: where the page has no drawing — a service's findings, a form whose
+ *  wireframe is over the page's budget — it goes, and where the element is not drawn (a sentry, an element
+ *  without layout) it stays, disabled, saying so. Both used to be buttons that did nothing. */
+function wireLocateButtons(det){
+  const view=det.querySelector('details.sect[data-sect="diagram"] .dgview');
+  const what=view&&view.dataset.kind==='wireframe'?'the layout':'the diagram';
+  det.querySelectorAll('.dgloc').forEach(b=>{
+    if(!view){ b.remove(); return; }
+    if(dgFind(view, b.dataset.elRef, b.dataset.elName)) return;
+    b.setAttribute('aria-disabled','true'); b.classList.add('dgloc-off');   // not `disabled`: that swallows the hover its tooltip needs; a click says it in a toast
+    b.setAttribute('data-tip', 'Not drawn on '+what); b.setAttribute('aria-label', 'Not drawn on '+what);
+  });
 }
 // The other direction: open every detail row/group attributed to this element and flash it.
 // `scope` (a selector) narrows the search to one section: the "N parameter mappings ↓" button on a
@@ -9086,8 +9152,47 @@ function liftTitle(el){
   return el;
 }
 function tipTarget(t){ return t && t.closest ? t.closest('[data-tip],[title]') : null; }
-function showTip(el){
-  const t=el.getAttribute('data-tip'); if(!t){ hideTip(); return; }
+// Text cut to fit — an ellipsis, a line clamp — is readable in full on hover or focus, wherever it is: a
+// table cell, a chip, a tag, a card's title, a list row. Per-site tooltips had covered some of them and
+// left a mapping, a handler or a long expression cut with nothing to show the rest. Only what is cut
+// *now* gets one, so a wide panel adds no bubbles, and an element's own tooltip is kept beside it.
+const TIP_CLIP_MAX=1200;              // a 3 000-character binding still fits the bubble; the title has "show all"
+function isClipped(el){
+  if(!el || el.nodeType!==1 || !el.clientWidth) return false;
+  const cs=getComputedStyle(el), clamp=cs.webkitLineClamp && cs.webkitLineClamp!=='none';
+  if(cs.textOverflow!=='ellipsis' && !clamp) return false;
+  return el.scrollWidth>el.clientWidth+1 || (clamp && el.scrollHeight>el.clientHeight+1);
+}
+/** An element's text as it reads: its pieces joined by spaces (a name and its id are two spans, which
+ *  textContent runs together), without icons, copy buttons or screen-reader-only labels. */
+function readText(el){
+  const out=[], w=document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {acceptNode:x=>
+    x.parentElement.closest('svg, .cpy, .opn, .vh, [aria-hidden="true"]') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT});
+  for(let x; (x=w.nextNode());) out.push(x.nodeValue);
+  const t=out.join(' ').replace(/\s+/g,' ').trim();
+  return t.length>TIP_CLIP_MAX ? t.slice(0,TIP_CLIP_MAX)+'…' : t;
+}
+/** What hovering `t` explains: the nearest element that is cut off (within a few levels) and the nearest
+ *  one with a tooltip. `el` is where the bubble anchors, `text()` what it says — read at show time, so a
+ *  tooltip that changed meanwhile is current. */
+function tipAnchor(t){
+  const T=tipTarget(t);
+  let C=null;
+  for(let x=t, i=0; x && x.nodeType===1 && i<6 && x!==document.body; x=x.parentElement, i++){ if(isClipped(x)){ C=x; break; } }
+  if(!C && !T) return null;
+  const el=C||T;
+  return {el, text:()=>{
+    const tip=T?(liftTitle(T), T.getAttribute('data-tip')||''):'';
+    if(!C) return tip;
+    const full=readText(C), norm=v=>v.replace(/\s+/g,' ').trim();
+    if(!full || (tip && norm(tip).indexOf(norm(full))>=0)) return tip||full;
+    if(!tip) return full;
+    // the one nearer the pointer first: a ✓ inside a cut cell says what it means, then the cell's text
+    return C.contains(T) && C!==T ? tip+'\n'+full : full+'\n'+tip;
+  }};
+}
+function showTip(el, text){
+  const t=text!=null?text:el.getAttribute('data-tip'); if(!t){ hideTip(); return; }
   _tipFor=el; _tip.textContent=t;
   if(!_tip.parentNode) document.body.appendChild(_tip);
   const r=el.getBoundingClientRect(), tr=_tip.getBoundingClientRect();
@@ -9098,27 +9203,35 @@ function showTip(el){
   requestAnimationFrame(()=>_tip.classList.add('show'));
 }
 function hideTip(){
-  clearTimeout(_tipT); _tipT=null;
+  clearTimeout(_tipT); _tipT=null; _tipPend=null;
   _tipFor=null; _tip.classList.remove('show'); if(_tip.parentNode) _tip.parentNode.removeChild(_tip);
 }
 // Hover tooltips wait — a bubble that appears the instant the cursor passes over something turns every
 // mouse movement across a list into a flicker. Keyboard focus shows it immediately: there the tooltip
 // is the answer to a deliberate question.
 const TIP_DELAY=450;
-let _tipT=null;
+let _tipT=null, _tipPend=null;
 document.addEventListener('mouseover',e=>{
-  let el=tipTarget(e.target);
-  if(!el){ if(_tipFor||_tipT) hideTip(); return; }
-  if(el===_tipFor) return;
-  clearTimeout(_tipT);
-  _tipT=setTimeout(()=>{ _tipT=null; showTip(liftTitle(el)); }, TIP_DELAY);
+  const a=tipAnchor(e.target);
+  if(!a){ if(_tipFor||_tipT) hideTip(); return; }
+  if(a.el===_tipFor || a.el===_tipPend) return;
+  clearTimeout(_tipT); _tipPend=a.el;
+  _tipT=setTimeout(()=>{ _tipT=null; _tipPend=null; showTip(a.el, a.text()); }, TIP_DELAY);
 });
 document.addEventListener('mouseout',e=>{
-  const el=tipTarget(e.target);
-  if(_tipT && el && !el.contains(e.relatedTarget)){ clearTimeout(_tipT); _tipT=null; }
-  if(_tipFor && el===_tipFor && !_tipFor.contains(e.relatedTarget)) hideTip();
+  if(_tipT && _tipPend && !_tipPend.contains(e.relatedTarget)){ clearTimeout(_tipT); _tipT=null; _tipPend=null; }
+  if(_tipFor && _tipFor.contains(e.target) && !_tipFor.contains(e.relatedTarget)) hideTip();
 });
-document.addEventListener('focusin',e=>{ let el=tipTarget(e.target); if(el){ el=liftTitle(el); showTip(el); } else if(_tipFor) hideTip(); });
+// Focus explains at once. A focused chip or row whose own text is cut says it in full too — the cut part
+// sits inside the focused element, not around it.
+document.addEventListener('focusin',e=>{
+  let a=tipAnchor(e.target);
+  if(e.target.querySelectorAll && (!a || a.el===tipTarget(e.target))){
+    const inner=[...e.target.querySelectorAll('*')].slice(0,40).find(isClipped);
+    if(inner){ const b=tipAnchor(inner); if(b) a=b; }
+  }
+  if(a){ const t=a.text(); if(t) showTip(a.el, t); else hideTip(); } else if(_tipFor) hideTip();
+});
 window.addEventListener('scroll',()=>{ if(_tipFor||_tipT) hideTip(); }, true);
 
 // ---------- sidebar resize (IntelliJ-style drag handle) ----------

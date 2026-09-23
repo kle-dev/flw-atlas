@@ -23,6 +23,18 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   and `1`–`4` pick one. A section is a heading with its count and its explanation behind an ⓘ, and every
   section starts open but *Other attributes*. On a model's own page a finding drops the model, the file
   and a severity its check's head already says.
+- **Nothing cut off is out of reach.** Text cut to fit — a table cell, a chip, a tag, a card's title, a
+  name in the list — says itself in full on hover and on keyboard focus. In a narrow panel a table keeps
+  every column it cannot do without on the row: a table with three of them put the third into a 1em
+  track, a Liquibase column's type reading "v…" and a finding's message one letter per line.
+- **⌖ always lands.** From any tab, a *Show on diagram* button brings the drawing up on Overview with the
+  element selected and in view below the tab bar; a form's field rows have one too. An element the
+  drawing does not show keeps a faint ⌖ that says so, and a page with no drawing offers none — both used
+  to be buttons that did nothing.
+- **Zooming a drawing on a trackpad.** ⌘/Ctrl + scroll zooms by how far the wheel turns instead of a fixed
+  step per event, so a trackpad no longer jumps; a pinch zooms too. Inside IntelliJ, whose browser rounds a
+  trackpad's steps and delivers many as zero, every zero step zoomed *out* — zooming in barely worked
+  there. A zero step is no step now.
 - **A leftover TODO says where it is.** In a JSON model the finding names the element that carries the
   marker and quotes it — *TODO in the label: "Current Pod (TODO)"* on the field, which ⌖ finds — instead
   of a path like `rows[1].cols[0].label` and "TODO left in the model". The same form as an app's `.form`

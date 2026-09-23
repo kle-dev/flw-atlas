@@ -179,7 +179,9 @@
      title= tooltips don't render in the embedded JCEF viewer (off-screen rendering, esp. over Remote
      Dev), so an in-page bubble driven by [data-tip] shows the same text in the IDE and a plain
      browser alike. Inverted (ink bg / panel text) so it reads in both themes. */
-  .atlas-tip{position:fixed;z-index:200;max-width:min(320px,80vw);pointer-events:none;
+  /* pre-line: a cut text's bubble puts its full text and the element's own tooltip on lines of their own;
+     anywhere: a long expression or URL has no space to wrap at */
+  .atlas-tip{position:fixed;z-index:200;max-width:min(320px,80vw);pointer-events:none;white-space:pre-line;overflow-wrap:anywhere;
     background:var(--ink);color:var(--panel);font-family:var(--sans);font-size:var(--text-xs);
     line-height:1.4;padding:var(--space-1) var(--space-2);border-radius:var(--radius-sm);
     box-shadow:var(--shadow);opacity:0;transform:translateY(2px);transition:opacity .12s,transform .12s}
@@ -620,6 +622,9 @@
   .dgloc{flex:none;display:inline-flex;align-items:center;background:none;border:none;padding:1px 2px;
     color:var(--ink-faint);cursor:pointer;border-radius:var(--radius-sm)}
   .dgloc:hover{color:var(--accent)}
+  /* an element the drawing does not show: the ⌖ stays, faint, and its tooltip says why */
+  .dgloc.dgloc-off{opacity:.35;cursor:default}
+  .dgloc.dgloc-off:hover{color:inherit}
   .dgloc svg{display:block}
   .cflow .pa{color:var(--ink-faint)}
   /* schema-gaps tab: one coverage block per service */
@@ -847,6 +852,8 @@
   .sinfo .ui{width:13px;height:13px}
   .sinfo:hover{color:var(--ink-dim)}
   .dpane .sb{padding:var(--space-1) 0 0}
+  /* a jump to a section (the health strip, a ⌖) lands below the sticky tab bar, not under it */
+  .dpane details.sect,.dpane details.elgrp{scroll-margin-top:52px}
   .ui{flex:none;width:12px;height:12px;display:inline-block;vertical-align:-.1em}
   .dbody{padding:0 var(--space-6) var(--space-8);max-width:1000px}
   .chip{display:inline-flex;align-items:center;gap:var(--space-15);font-size:var(--text-xs);font-weight:500;
@@ -1211,7 +1218,7 @@
   /* a narrow panel (an IDE tool window): the first and the last column stay on the row, every column
      marked optional drops to its own line under them — nothing is clipped, nothing scrolls sideways */
   @container (max-width:560px){
-    .tbl .th,.tbl>div.tr,.tbl .trs{grid-template-columns:1.1em minmax(0,1fr) auto}
+    .tbl .th,.tbl>div.tr,.tbl .trs{grid-template-columns:var(--ncols, 1.1em minmax(0,1fr) auto)}
     .tbl .td.opt{grid-column:2/-1;font-size:var(--text-2xs);color:var(--ink-faint);white-space:normal}
     .tbl .th .td.opt{display:none}
     /* findings: severity, message and the accept control share the row; the model, element and file
@@ -1219,6 +1226,12 @@
     .fndtbl .th,.fndtbl>div.tr,.fndtbl .trs{grid-template-columns:1.1em auto minmax(0,1fr) auto}
     .fndtbl .td.fmodel{grid-column:2/-1}
     .fndtbl .th .td.fmodel{display:none}
+    /* a model's own findings drop the severity column its check's head already says: message and accept */
+    .fndtbl.nosev .th,.fndtbl.nosev>div.tr,.fndtbl.nosev .trs{grid-template-columns:1.1em minmax(0,1fr) auto}
+    /* …pinned to the first line: auto-placed, the element (which comes first) took it, and dense packing
+       put the message into the chevron's 1em track — one letter per line */
+    .fndtbl.nosev .td.wrap{grid-row:1;grid-column:2}
+    .fndtbl.nosev .td.wv-cell{grid-row:1;grid-column:3}
     /* a matrix cell that dropped under its row says whose it is */
     .tbl .td.opt .nl{display:inline;margin-right:var(--space-15);color:var(--ink-dim)}
     /* relations: the relation on a line of its own, its chips on the next */
