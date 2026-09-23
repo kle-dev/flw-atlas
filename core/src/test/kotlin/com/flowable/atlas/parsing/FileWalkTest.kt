@@ -77,4 +77,13 @@ class FileWalkTest {
         }
         assertTrue("fixture yielded no models — is the resource still there?", d.models.isNotEmpty())
     }
+
+    @Test
+    fun aSymlinkBackToAnAncestorIsNotWalkedAgain() {
+        val sub = tmp.newFolder("models")
+        File(sub, "a.bpmn").writeText("<definitions/>")
+        java.nio.file.Files.createSymbolicLink(File(sub, "loop").toPath(), tmp.root.toPath())
+        val names = FileWalk.files(tmp.root).map { it.name }.toList()
+        assertEquals(listOf("a.bpmn"), names)
+    }
 }

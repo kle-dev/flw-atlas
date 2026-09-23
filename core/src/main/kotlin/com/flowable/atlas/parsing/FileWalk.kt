@@ -29,16 +29,20 @@ object FileWalk {
      */
     fun files(root: File, enterDir: (File) -> Boolean = { true }): Sequence<File> = sequence {
         if (root.isDirectory && !enterDir(root)) return@sequence
-        if (root.isFile) yield(root) else yieldAll(descend(root, enterDir))
+        if (root.isFile) yield(root) else yieldAll(descend(root, enterDir, HashSet()))
     }
 
-    private fun descend(dir: File, enterDir: (File) -> Boolean): Sequence<File> = sequence {
+    private fun descend(dir: File, enterDir: (File) -> Boolean, visited: MutableSet<String>): Sequence<File> = sequence {
+        // `isDirectory` follows symlinks, so a link to an ancestor would re-walk the tree until the path
+        // grew too long (and two such links, exponentially). Each real directory is entered once.
+        val real = runCatching { dir.canonicalPath }.getOrElse { dir.absolutePath }
+        if (!visited.add(real)) return@sequence
         // listFiles() returns null for an unreadable directory (permissions, or it vanished mid-walk);
         // skipping it matches walkTopDown's default behaviour of not failing the traversal.
         val children = dir.listFiles()?.sortedBy { it.name } ?: return@sequence
         for (child in children) {
             if (child.isDirectory) {
-                if (enterDir(child)) yieldAll(descend(child, enterDir))
+                if (enterDir(child)) yieldAll(descend(child, enterDir, visited))
             } else {
                 yield(child)
             }
