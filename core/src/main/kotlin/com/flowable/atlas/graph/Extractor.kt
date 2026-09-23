@@ -237,6 +237,9 @@ object Atlas {
                 }
                 VarHarvest.collectDeclaredVars(ctx, text, ks)
                 VarHarvest.collectDirectedVars(ctx, text, ks)
+                // `templateService….variableContainer(execution)…process()` renders a template against the
+                // whole scope: every variable the model holds may be read, as by `getVariables()`.
+                if (Constants.WHOLE_CONTAINER_RE.containsMatchIn(text)) for (k in ks) ctx.varScopeReadsAll.add(k.toString())
                 // A Spring property the model reads: correlated by its key, like a signal by its name.
                 for (pm in Constants.PROPERTY_READ_RE.findAll(Constants.htmlUnescape(text))) {
                     for (k in ks) ctx.addRef(k, mtype, label, "reads-property", "property", pm.groupValues[1])

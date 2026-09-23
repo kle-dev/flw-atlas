@@ -129,6 +129,9 @@ object Constants {
     // it used to be validated like one and could only ever come out wrong.
     val EXPR_RE = Regex("(?<!\\\\)[#$]\\{[^}]*\\}")
     val MUSTACHE_RE = Regex("\\{\\{[^}]*\\}\\}")
+    /** A template or document rendered against a model's whole variable container. */
+    val WHOLE_CONTAINER_RE = Regex("""\.\s*variableContainer\s*\(""")
+
     /** `environment.getProperty('crm.endpoint', '')` / `propertyConfigurationService.getProperty("k")` in a
      *  model's expression — a Spring property the model reads. The quote may be JSON-escaped. */
     val PROPERTY_READ_RE = Regex("""\b(?:environment|propertyConfigurationService)\s*\.\s*getProperty\(\s*\\?["']([A-Za-z0-9_.\-\[\]]+)\\?["']""")

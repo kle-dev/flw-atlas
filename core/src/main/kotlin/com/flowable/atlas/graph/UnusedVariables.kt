@@ -46,7 +46,8 @@ object UnusedVariables {
         "a bare-EL Init-Variables value, which Atlas has no parser for in that position",
         "a name the `{{…}}` harvester deliberately ignores, so its frontend reads were never collected",
         "a name passed as a string literal somewhere, which may be a variable lookup Atlas cannot parse",
-        "any scope whose script or Java code reads the whole variable map at once",
+        "any scope whose script or Java code reads the whole variable map at once, or that renders a " +
+            "template against its whole variable container",
         "a mapping into a called model that is not part of this project",
     )
 

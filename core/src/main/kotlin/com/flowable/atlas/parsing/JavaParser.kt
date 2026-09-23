@@ -36,6 +36,13 @@ object JavaParser {
     // nothing.
     private val JAVA_VAR_RE = Regex("""\b(set|get|has|remove)Variable(?:Local)?\s*\(\s*(?:[^,"]+,\s*)?"([A-Za-z_]\w*)"""")
 
+    // A map the code hands to the engine as variables: `startProcessInstanceByKey(k, vars)`,
+    // `.variables(vars)`, `taskService.complete(id, vars)`, `setVariables(vars)`. Its `vars.put("x", …)`
+    // writes `x` exactly as `setVariable("x", …)` does, and was invisible — every such name looked
+    // written by nobody (the models read it) or read by nobody.
+    private val VARS_HANDOFF_RE = Regex("""\b(?:startProcessInstanceBy\w*|complete|setVariables(?:Local)?|variables|transientVariables|trigger)\s*\(([^;{}]*)\)""")
+    private val IDENT_ARG_RE = Regex("""(?<![\w."])([a-z]\w*)(?=\s*(?:,|$))""")
+
     /** `execution.getVariables()` — a read of the whole map, so no variable of a scope this class
      *  touches can be proven unread. Only the no-argument forms; the name-collection overloads are
      *  already covered name-by-name by [JAVA_VAR_RE]. */
@@ -75,7 +82,8 @@ object JavaParser {
         "decisionKey", "formDefinitionKey", "getFormModelByKey", "getFormModelWithVariablesByKey",
         "getFormInstanceModelByKey", "definitionKey", "dataObjectDefinitionKey",
         "eventDefinitionKey", "channelDefinitionKey", "getEventModelByKey", "getChannelModelByKey",
-        "serviceKey", "operationKey", "actionDefinitionKey", "templateKey", "processTemplate",
+        "serviceKey", "operationKey", "actionDefinitionKey", "templateKey", "processTemplate", "mainContentTemplate",
+        "userDefinitionKey",
         "agentDefinitionKey", "getServiceDefinitionModelByKey", "getServiceDefinitionByKey",
         "getActionDefinitionModelByKey", "getActionDefinitionByKey", "getPolicyModelByKey",
         "taskFormKey", "formKey", "key", "operation", "messageName", "signalEventReceived",
@@ -273,6 +281,11 @@ object JavaParser {
                 else -> varsUndecided
             }
             bucket.add(m.groupValues[2])
+        }
+        val handedOff = VARS_HANDOFF_RE.findAll(text)
+            .flatMap { h -> IDENT_ARG_RE.findAll(h.groupValues[1].trim()).map { it.groupValues[1] } }.toSet()
+        for (map in handedOff) {
+            for (m in Regex("""\b${Regex.escape(map)}\s*\.\s*put\(\s*"([A-Za-z_]\w*)"""").findAll(text)) varWrites.add(m.groupValues[1])
         }
         // Names an embedded EL expression reads. `${vars:get(flagReturn)}` names its variable as a bare
         // identifier, not as a quoted argument, so nothing else picks it up.

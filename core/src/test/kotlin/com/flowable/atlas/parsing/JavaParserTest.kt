@@ -181,6 +181,28 @@ class JavaParserTest {
     }
 
     @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aMapHandedToTheEngineWritesTheNamesPutIntoIt() {
+        val src = """package com.x;
+            public class Starter {
+                void start(String key) {
+                    Map<String, Object> vars = new HashMap<>();
+                    vars.put("assigneeName", name);
+                    vars.put("assigneeId", id);
+                    runtimeService.startProcessInstanceByKey("DEMO-P001", vars);
+                    Map<String, Object> other = new HashMap<>();
+                    other.put("notAVariable", 1);
+                    log.info(other);
+                    Map<String, Object> done = Map.of();
+                    done.put("outcome", "ok");
+                    taskService.complete(taskId, done);
+                }
+            }"""
+        val writes = JavaParser.parseJava(src, "Starter.java")["varWrites"] as List<String>
+        assertEquals(listOf("assigneeId", "assigneeName", "outcome"), writes)
+    }
+
+    @Test
     fun stringConstants() {
         val src = """package com.x;
             public class Keys {

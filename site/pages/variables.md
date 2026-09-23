@@ -90,7 +90,7 @@ what makes the names it does report worth acting on.
 4. A bare-EL Init-Variables value, which Atlas has no parser for in that position.
 5. A name the `{{…}}` harvester deliberately ignores, so its frontend reads were never collected.
 6. A name passed as a string literal somewhere, which may be a variable lookup Atlas cannot parse.
-7. Any scope whose script or Java code reads the whole variable map at once.
+7. Any scope whose script or Java code reads the whole variable map at once, or that renders a template against its whole variable container.
 8. A mapping into a called model that is not part of this project.
 
 Rule 7 is the broadest and the most important: one `execution.getVariables()` in a delegate, or one
