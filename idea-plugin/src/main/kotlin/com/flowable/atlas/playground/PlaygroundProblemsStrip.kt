@@ -3,11 +3,13 @@ package com.flowable.atlas.playground
 import com.flowable.atlas.expr.ExprProblem
 import com.flowable.atlas.expr.ExprSeverity
 import com.intellij.icons.AllIcons
+import com.intellij.openapi.util.text.StringUtil.escapeXmlEntities as escapeXml
 import com.intellij.ui.HyperlinkLabel
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
 import com.intellij.util.ui.JBUI
 import java.awt.Cursor
+import java.awt.Dimension
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.Box
@@ -25,7 +27,18 @@ import javax.swing.SwingConstants
  */
 class PlaygroundProblemsStrip : JPanel() {
 
-    private companion object { const val MAX_ROWS = 3 }
+    private companion object {
+        const val MAX_ROWS = 3
+        const val MAX_SUB_ROWS = 8
+    }
+
+    /**
+     * No wider than a sliver, whatever its rows say. A label's minimum width is its whole text, and the
+     * splitters around the playground honour minimum sizes — so one long message or sub-expression row
+     * pinned the divider, and the payload pane could no longer be dragged bigger or smaller. A row that
+     * does not fit is clipped; its full text is the tooltip.
+     */
+    override fun getMinimumSize(): Dimension = super.getMinimumSize().let { Dimension(JBUI.scale(40), it.height) }
 
     /** One strip row, stripped of the problem type — lets the Script Playground reuse the strip. */
     data class Row(val isError: Boolean, val message: String, val offset: Int)
@@ -81,11 +94,17 @@ class PlaygroundProblemsStrip : JPanel() {
                 toolTipText = rows.drop(MAX_ROWS).joinToString("<br>", "<html>", "</html>") { it.message }
             })
         }
-        for (row in subEvaluations) {
+        for (row in subEvaluations.take(MAX_SUB_ROWS)) {
             add(JBLabel(row, AllIcons.General.InspectionsEye, SwingConstants.LEADING).apply {
                 foreground = JBColor.GRAY
                 toolTipText = row                 // full text on hover — the strip may be narrower than the row
                 border = JBUI.Borders.emptyBottom(2)
+            })
+        }
+        if (subEvaluations.size > MAX_SUB_ROWS) {
+            add(JBLabel("+${subEvaluations.size - MAX_SUB_ROWS} more sub-expressions").apply {
+                foreground = JBColor.GRAY
+                toolTipText = subEvaluations.drop(MAX_SUB_ROWS).joinToString("<br>", "<html>", "</html>") { escapeXml(it) }
             })
         }
         isVisible = componentCount > 0
@@ -102,6 +121,7 @@ class PlaygroundProblemsStrip : JPanel() {
         val severityIcon = if (r.isError) AllIcons.General.Error else AllIcons.General.Warning
         val link = HyperlinkLabel(r.message).apply {
             addHyperlinkListener { navigate(r.offset) }
+            toolTipText = r.message               // clipped in a narrow strip — the whole message on hover
         }
         val jump = JBLabel(AllIcons.Actions.EditSource).apply {
             toolTipText = "Jump to the problem"
