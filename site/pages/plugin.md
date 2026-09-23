@@ -201,8 +201,8 @@ Design.
 
 <figure class="fig mock">
   <div class="body">{{mockup:model-structure}}</div>
-  <figcaption><b>Model structure sections</b> appear for whatever that model actually has: fields,
-  tasks, criteria, permissions, agent tools.</figcaption>
+  <figcaption><b>Model structure</b> appears for whatever that model actually has: fields, tasks,
+  criteria, permissions, agent tools — a process's or a case's elements as the groups of one section.</figcaption>
 </figure>
 
 <figure class="fig mock">

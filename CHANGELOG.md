@@ -67,6 +67,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   *with mappings*. An expression, a binding, a function and a service operation get the same section from
   their own lists. The section listing the variables and expressions a model touches is called
   *Variables & expressions* now; as *Uses* it collided with the drawing's USES column.
+- **A process's elements in one section.** User tasks, service tasks, script tasks, call activities,
+  events, gateways, sequence flows, lanes, listeners and documentation — for a case its plan model,
+  sentries and event listeners — were a section each, and a big process's navigator ran to seventeen
+  chips in three rows. They are the groups of one *Elements* section now, each keeping its own table, with
+  a chip per kind that keeps only that kind and one filter over all of them; the navigator fits one line.
 - **The overview summarises instead of repeating.** Its health block was the Checks page's list and its
   inventory the sidebar's entries as ungrouped chips. Health is now two numbers — the open defects and
   advice, each split by tier (broken, runtime risk, unfinished, noise) — the five checks with the most

@@ -518,8 +518,9 @@ const probe = `<script>
     // --- "N parameter mappings ↓" on a service task lands on that task's group in the Parameters section,
     // not on the card it sits in (also a row of the same element, and first in the document)
     const det=document.getElementById('detail');
-    const card=det.querySelector('details.sect[data-sect="svctasks"] details.card[data-el="calcTask"]');
+    const card=det.querySelector('details.elgrp[data-eg="svctasks"] details.card[data-el="calcTask"]');
     ok('the service task with mappings is a card', !!card);
+    if(card) card.closest('details.elgrp').open=true;
     if(card) card.open=true;
     const params=det.querySelector('details.sect[data-sect="params"]');
     if(params){ params.open=false; }
@@ -616,6 +617,35 @@ const probe = `<script>
   steps.push(()=>{
     ok('following a node in that category keeps its list context in the link',
        decodeURIComponent(location.hash).indexOf('&f=zzz-none')>0, 'hash='+location.hash);
+  });
+
+  // --- elements: what a process is made of, one section with a group and a chip per kind ---
+  steps.push(()=>{ closeOtherTabs(); location.hash=enc('process:orderProcess'); });
+  steps.push(()=>{
+    const det=document.getElementById('detail'), s=det.querySelector('details.sect[data-sect="elements"]');
+    ok('a process lists its elements in one section, open by default', !!s && s.open);
+    ok('each kind is a group of it, not a section of its own', !!s && s.querySelectorAll('details.elgrp').length>=3 &&
+       ['usertasks','svctasks','events','gateways','flows'].every(id=>!det.querySelector('details.sect[data-sect="'+id+'"]')));
+    const chips=[...det.querySelectorAll('[data-sect="elements"] .fbar .pchip[data-fk="eg"]')];
+    ok('a chip per kind, and one for all', chips.length===s.querySelectorAll('details.elgrp').length+1);
+    const flows=chips.find(ch=>ch.dataset.fv==='flows');
+    if(flows) click(flows);
+    window.__elSect=s;
+  });
+  steps.push(()=>{
+    const s=window.__elSect;
+    const vis=[...s.querySelectorAll('details.elgrp')].filter(g=>!g.hidden).map(g=>g.dataset.eg);
+    ok('a kind chip keeps only its group', vis.length===1 && vis[0]==='flows', vis.join());
+    click(s.querySelector('.fbar .pchip[data-fv="all"]'));
+    const g=[...s.querySelectorAll('details.elgrp')].find(x=>x.dataset.eg!=='flows'); window.__gwId=g&&g.dataset.eg;
+    if(g) g.open=!g.open; window.__gwOpen=!!(g&&g.open);
+  });
+  steps.push(()=>{
+    let st=null; try{ st=JSON.parse(localStorage.getItem('atlas-sect')); }catch(e){}
+    ok('a group remembers its fold under its old section id', !!window.__gwId && !!st && st[window.__gwId]===window.__gwOpen, window.__gwId+' '+JSON.stringify(st));
+    if(st&&window.__gwId){ delete st[window.__gwId]; delete st.flows; try{ localStorage.setItem('atlas-sect', JSON.stringify(st)); }catch(e){} }
+    const nav=[...document.querySelectorAll('#detail .secnav .snc')].map(c=>c.dataset.jumpSect);
+    ok('the navigator is short again', nav.length<=9, nav.join());
   });
 
   // --- relations: one section — the drawing, then every relation as a table; remembered; its rows are links ---

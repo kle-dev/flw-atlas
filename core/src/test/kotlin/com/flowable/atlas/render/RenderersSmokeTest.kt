@@ -249,6 +249,7 @@ class RenderersSmokeTest {
         // The relations are one remembered section — the bipartite drawing, then one table per relation.
         assertTrue("expected the relations section id from explorer.js", html.contains("section('relations'"))
         assertTrue("expected the relations model from explorer.js", html.contains("function relationsOf(") && html.contains("function relGraphSvg("))
+        assertTrue("expected the Elements section from explorer.js", html.contains("function elementsSection(") && html.contains("S.elements="))
         assertTrue("expected the neighborhood styling from explorer.css", html.contains(".nb-label{"))
         assertFalse("the radial star's legend is gone", html.contains("Neighborhood — solid: uses"))
         // The IDE palette bridge: the page takes nine LaF colours from the URL and the live push.

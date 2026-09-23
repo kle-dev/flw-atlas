@@ -112,8 +112,9 @@ decision table's hit policy, a service's base URL). Counts are not facts here �
 its own count in its heading. A sticky bar keeps the kind and the page actions (*back*, *expand all*,
 *copy link*) in reach while the page scrolls.
 
-Then a row of **chips, one per section**, each with the section's count. A process has twenty
-sections; the chips are its map — click one and the section opens and scrolls into view.
+Then a row of **chips, one per section**, each with the section's count — the page's map: click one and
+the section opens and scrolls into view. A big process fits it on one line: Diagram, Relations, Findings,
+Elements, Parameters, Variables & expressions.
 
 <figure class="fig">
   <div class="body"><img class="only-light" src="../assets/img/detail-form.png" alt="A form's detail page: the header with icon tile, title and identity line, the section chips, and the Fields table with column headers" width="1400" height="1000"><img class="only-dark" src="../assets/img/detail-form-dark.png" alt="A form's detail page: the header with icon tile, title and identity line, the section chips, and the Fields table with column headers" width="1400" height="1000"></div>
@@ -123,11 +124,14 @@ sections; the chips are its map — click one and the section opens and scrolls 
 </figure>
 
 The sections come in reading order, not parser order, and each node type has its own list: what the
-model *is* first (a form's fields, a data object's properties, a process's user, service and script
-tasks, a decision table's inputs, outputs and rules, a service's operations), then how it behaves
-(events, gateways, sequence flows with their conditions, lanes, multi-instance, listeners,
-documentation), then what flows through it (**Parameters** — every in/out mapping, grouped by the
-element that declares it) and the **Variables & expressions** it touches.
+model *is* first (a form's fields, a data object's properties, a decision table's inputs, outputs and
+rules, a service's operations), then what flows through it (**Parameters** — every in/out mapping,
+grouped by the element that declares it) and the **Variables & expressions** it touches. A process or a
+case lists what it is made of in one **Elements** section: a group per kind — user, service, script and
+decision tasks, call activities, events, gateways, sequence flows with their conditions, lanes,
+multi-instance, listeners and documentation; for a case its plan model, sentries and event listeners —
+each group with its own table and columns, a chip per kind that keeps only that kind, and one filter over
+all of them. A group remembers whether you left it open, like a section.
 
 Right under the diagram sits the section that is the point of the whole thing — **Relations**, both
 directions, always, for every node type, in one place. Its drawing reads left to right: what the node

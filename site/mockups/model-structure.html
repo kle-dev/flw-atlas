@@ -1,4 +1,4 @@
-<div class="mockfit ide" data-w="1010" data-h="812" style="width:1010px;height:812px">
+<div class="mockfit ide" data-w="1010" data-h="831" style="width:1010px;height:831px">
    <div class="title">
      <span class="tl"><i class="r"></i><i class="y"></i><i class="g"></i></span>
      <span class="proj">flowable-demo — <b>Atlas Explorer</b></span>
@@ -18,10 +18,12 @@
              <span class="xall">⇕ collapse all</span>
            </div>
            <dl class="xfacts"><div><dt>Starter groups</dt><dd class="lk">sales</dd></div><div><dt>SLA</dt><dd class="lk">order-sla</dd></div></dl>
-           <div class="xchips"><span class="xchip">Diagram</span><span class="xchip">Relations <b>9</b></span><span class="xchip">User tasks <b>2</b></span><span class="xchip">Service tasks <b>2</b></span><span class="xchip">Script tasks <b>1</b></span><span class="xchip">Events <b>3</b></span><span class="xchip">Sequence flows <b>6</b></span><span class="xchip">Execution listeners <b>1</b></span><span class="xchip">Parameters <b>8</b></span></div>
+           <div class="xchips"><span class="xchip">Diagram</span><span class="xchip">Relations <b>9</b></span><span class="xchip">Elements <b>15</b></span><span class="xchip">Parameters <b>8</b></span></div>
 
            <div class="xsec">
-             <div class="xsech"><span class="tri">▾</span>User tasks <span class="cnt">2</span><span class="hint">who works on what, with which form</span></div>
+             <div class="xsech"><span class="tri">▾</span>Elements <span class="cnt">15</span><span class="hint">6 kinds — user tasks, service tasks, script tasks …</span></div>
+             <div class="chips" style="margin-top:7px"><span class="filt">filter elements…</span><span class="xchip" style="border-color:#0f55d6;color:#1d4ed8;background:#eff6ff">all <b>15</b></span><span class="xchip">User tasks <b>2</b></span><span class="xchip">Service tasks <b>2</b></span><span class="xchip">Script tasks <b>1</b></span><span class="xchip">Events <b>3</b></span><span class="xchip">Sequence flows <b>6</b></span><span class="xchip">Execution listeners <b>1</b></span></div>
+             <div class="xgrph"><span class="tri">▾</span>User tasks <span class="cnt">2</span><span class="hint">who works on what, with which form</span></div>
              <table class="xtbl">
                <thead><tr><th></th><th>Task</th><th>Form</th><th>Candidate groups</th><th>Assignee</th><th></th></tr></thead>
                <tbody>
@@ -29,10 +31,8 @@
                  <tr><td></td><td>Fix address <span class="loc">⌖</span></td><td class="mono lk">address.form</td><td class="lk">support</td><td class="mono dim">—</td><td></td></tr>
                </tbody>
              </table>
-           </div>
 
-           <div class="xsec">
-             <div class="xsech"><span class="tri">▾</span>Script tasks <span class="cnt">1</span><span class="hint">the code the process runs inline, with what it writes</span></div>
+             <div class="xgrph"><span class="tri">▾</span>Script tasks <span class="cnt">1</span><span class="hint">the code the process runs inline, with what it writes</span></div>
              <div class="xcard">
                <div class="xcardh open"><span class="tri">⌄</span>Auto-approve <span class="loc">⌖</span><span class="xid">autoApprove</span><span class="xtag">groovy</span><span class="xdir o">out</span> <span class="mono lk" style="font-weight:400">approved</span></div>
                <div class="xcodeh"><span class="xtag">groovy</span><span>4 lines</span></div>
@@ -41,10 +41,8 @@
 <span class="ln">3</span>    execution.setVariable('approvedBy', 'auto')
 <span class="ln">4</span>}</div>
              </div>
-           </div>
 
-           <div class="xsec">
-             <div class="xsech"><span class="tri">▾</span>Sequence flows <span class="cnt">6</span><span class="hint">what runs after what; a condition makes a flow optional</span></div>
+             <div class="xgrph"><span class="tri">▾</span>Sequence flows <span class="cnt">6</span><span class="hint">what runs after what; a condition makes a flow optional</span></div>
              <table class="xtbl">
                <thead><tr><th></th><th>From → to</th><th>Name</th><th>Condition</th><th></th></tr></thead>
                <tbody>
@@ -55,8 +53,9 @@
              </table>
            </div>
 
-           <div class="xsec"><div class="xsech"><span class="tri">▸</span>Events <span class="cnt">3</span></div></div>
-           <div class="xsec"><div class="xsech"><span class="tri">▸</span>Execution listeners <span class="cnt">1</span></div></div>
+             <div class="xgrph"><span class="tri">▸</span>Events <span class="cnt">3</span></div>
+             <div class="xgrph"><span class="tri">▸</span>Execution listeners <span class="cnt">1</span></div>
+           </div>
          </div>
        </div>
        <div class="status"><span>⎇ main</span><span>Atlas 0.22.0</span><span class="rt">🔗 copy link</span></div>

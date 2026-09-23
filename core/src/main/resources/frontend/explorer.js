@@ -3182,7 +3182,7 @@ const incFrom= (id,rel)=>{ const e=(incM.get(id)||[]).find(x=>x.rel===rel); retu
 // you walk the graph. Everything defaults to closed except the diagram and the relations — and the
 // one section that IS the model (a form's fields, a service's operations) — see DEFAULT_OPEN_SECTIONS.
 const SECT_STORE='atlas-sect';
-const DEFAULT_OPEN_SECTIONS={diagram:true, relations:true, findings:true, formfields:true, columns:true, usertasks:true, svctasks:true, scripttasks:true,
+const DEFAULT_OPEN_SECTIONS={diagram:true, relations:true, elements:true, findings:true, formfields:true, columns:true, usertasks:true, svctasks:true, scripttasks:true,
   plan:true, ops:true, dmnio:true, dmnrules:true, permissions:true, escalations:true, rw:true, payload:true, dicttypes:true, agentops:true,
   endpoints:true, script:true, templatebody:true, extractors:true, coverage:true, problems:true, opparams:true};
 function sectAll(){ try{ return JSON.parse(localStorage.getItem(SECT_STORE)||'{}')||{}; }catch(e){ return {}; } }
@@ -3244,6 +3244,9 @@ document.addEventListener('click', e=>{
 });
 const hayAttr=h=>(h==null||h==='')?'':' data-hay="'+esc(String(h).toLowerCase())+'"';
 const tdCls=c=>'td'+(c.cls?' '+c.cls:'')+(c.mono?' mono':'')+(c.opt?' opt':'');
+// Set while the Elements section builds its groups: one filter bar there covers every group, so the
+// tables inside it do not grow bars of their own.
+let _tblFilterOff=false;
 /** One table row. Split out of tbl() so a caller that appends rows later (the category table's "show
  *  more") draws exactly the markup the first chunk had. */
 function tblRowHtml(cols, r, i, cap){
@@ -3283,7 +3286,7 @@ function tbl(cols, rows, o){
   const head='<div class="th"'+(sorted?'':' aria-hidden="true"')+'><span class="td tdc"></span>'+cols.map(headCell).join('')+'</div>';
   const cap=o.cap||TBL_CAP;
   const body=rows.map((r,i)=>tblRowHtml(cols, r, i, cap)).join('');
-  const filt=(o.filter!==false && rows.length>=(typeof o.filter==='number'?o.filter:TBL_FILTER_FROM))
+  const filt=(!_tblFilterOff && o.filter!==false && rows.length>=(typeof o.filter==='number'?o.filter:TBL_FILTER_FROM))
     ? filterBar({placeholder:o.placeholder||'filter rows…', total:rows.length, chips:o.chips}) : '';
   return filt+'<div class="tbl'+(o.cls?' '+o.cls:'')+'" style="--cols:'+tracks+'">'+head+body+'</div>'+
     (rows.length>cap?'<button type="button" class="dgbtn tbl-all">show all '+rows.length+'</button>':'')+
@@ -3356,7 +3359,7 @@ function filterBar(o){
  */
 function wireSectionFilter(root){
   root.querySelectorAll('.fbar').forEach(bar=>{
-    const scope=bar.closest('.sb')||bar.closest('[data-fscope]')||bar.parentElement;
+    const scope=bar.closest('.sb, [data-fscope]')||bar.parentElement;
     const input=bar.querySelector('.pf'), chips=[...bar.querySelectorAll('.pchip[data-fv]')], count=bar.querySelector('.pcount');
     const all=[...scope.querySelectorAll('[data-hay]')].filter(el=>!el.closest('.fbar'));
     const leaves=all.filter(el=>!el.querySelector('[data-hay]'));
@@ -4008,9 +4011,9 @@ S.declaredVars={id:'declaredvars', title:'Declared data objects', hint:'the proc
       os.map(o=>{ const nm=o.name||o.id||''; return {el:o.id, hay:elHay(nm,o.type,o.default), cells:{
         v:vlink('variable:'+nm, nm), type:tag(o.type?String(o.type).replace(/^xsd:/,''):''), def:o.default!=null&&o.default!==''?esc(String(o.default)):''}}; })); }};
 
-/** Design keeps execution, task and lifecycle listeners in separate property groups — one section each,
+/** Design keeps execution, task and lifecycle listeners in separate property groups — one group each,
  *  named the way Design names them. A script listener expands into its code. */
-S.listeners={raw:true, build:(n,c)=>{
+S.listeners={groups:(n,c)=>{
   const d=c.d, recs=elementRecords(n);
   const ls=[].concat((d.listeners||[]).map(l=>({owner:null, l})), ...recs.map(r=>(r.listeners||[]).map(l=>({owner:r, l}))))
     .filter(x=>x.l&&(x.l.class||x.l.expression||x.l.delegateExpression||x.l.script));
@@ -4018,22 +4021,50 @@ S.listeners={raw:true, build:(n,c)=>{
   ls.forEach(x=>{ const k=x.l.kind||'listener'; if(!byKind.has(k)) byKind.set(k,[]); byKind.get(k).push(x); });
   return [...byKind.keys()].sort().map(kind=>{
     const items=byKind.get(kind), title=plural(term('el',kind).label);
-    return section('listeners-'+kind, esc(title),
+    return {id:'listeners-'+kind, title, hint:term('el',kind).hint, count:items.length, body:
       tbl([{k:'where',label:'On',w:'minmax(12ch,1.4fr)'},{k:'event',label:'Event',w:'minmax(7ch,.6fr)',cls:'tags'},{k:'impl',label:'Implementation',w:'minmax(16ch,2.4fr)',mono:true,cls:'wrap'}],
         items.map(({owner:o, l})=>{
           const impl=l.class?vlink('java:'+l.class, l.class):esc(l.expression||l.delegateExpression||(l.script?'(script)':''));
           return {el:o?o.id:null, hay:elHay(o&&o.name,o&&o.id,l.event,l.class,l.expression,l.delegateExpression), cells:{
             where:o?elCell(c,o):'<span class="muted">'+esc(nodeKind(n))+'</span>', event:tag(l.event),
             impl:impl+(l.class?implLink({class:l.class}):'')},
-            body:l.script?codeblk(l.script, l.scriptFormat, l.problems):''}; })),
-      {count:items.length, hint:term('el',kind).hint});
-  }).join('');
+            body:l.script?codeblk(l.script, l.scriptFormat, l.problems):''}; }))};
+  });
 }};
 S.eldocs={id:'eldocs', title:'Documentation', hint:'what the modeller wrote about each element',
   count:(n,c)=>elementRecords(n).filter(r=>r.documentation).length,
   build:(n,c)=>{ const docs=elementRecords(n).filter(r=>r.documentation); if(!docs.length) return '';
     return tbl([{k:'el',label:'Element',w:'minmax(12ch,1fr)'},{k:'text',label:'Text',w:'minmax(20ch,3fr)',cls:'wrap dim'}],
       docs.map(r=>({el:r.id, hay:elHay(r.name,r.id,r.documentation), cells:{el:elCell(c,r), text:esc(r.documentation)}}))); }};
+// --- the Elements section: what a process or case is made of, one group per kind ---
+// Each kind used to be a section of its own — user tasks, service tasks, script tasks, events, gateways,
+// flows, lanes, listeners, documentation … — which made a big process's section navigator seventeen chips
+// in three rows. They are groups of one section now, each keeping its own table and columns, with a chip
+// per kind that keeps only that kind and one text filter over all of them. A group remembers whether it
+// was left open under the id its section had.
+function elementsSection(n, c, list){
+  const groups=[];
+  _tblFilterOff=true;
+  try{
+    list.forEach(sp=>{
+      if(sp.groups){ sp.groups(n,c).forEach(g=>groups.push(g)); return; }
+      const body=sp.build(n,c); if(!body) return;
+      groups.push({id:sp.id, title:sp.title, hint:sp.hint, count:sp.count?sp.count(n,c):null, body});
+    });
+  } finally { _tblFilterOff=false; }
+  if(!groups.length) return '';
+  const total=groups.reduce((a,g)=>a+(g.count||0),0);
+  const bar=groups.length>1 ? filterBar({placeholder:'filter elements — a name, an id, a condition…', label:'Filter elements',
+    chips:[{fk:'eg',fv:'all',label:'all',n:total||null}].concat(groups.map(g=>({fk:'eg',fv:g.id,label:g.title,n:g.count})))})
+    : '';
+  const body=groups.map(g=>'<details class="fgroup elgrp" data-eg="'+esc(g.id)+'" id="el-'+esc(g.id)+'"'+(sectIsOpen(g.id)?' open':'')+'>'+
+    '<summary class="elgrp-h"><span class="elgrp-t">'+esc(g.title)+'</span>'+(g.count!=null?'<span class="scount">'+g.count+'</span>':'')+
+    (g.hint?'<span class="shint">'+esc(g.hint)+'</span>':'')+'</summary><div class="elgrp-b">'+g.body+'</div></details>').join('');
+  return section('elements','Elements', body, {count:total||null, tools:bar,
+    hint:groups.length+' kind'+(groups.length>1?'s':'')+' — '+groups.slice(0,3).map(g=>g.title.toLowerCase()).join(', ')+(groups.length>3?' …':'')});
+}
+const ELEMENT_GROUPS={};   // filled below, once every group's builder exists
+S.elements={raw:true, build:(n,c)=>elementsSection(n, c, ELEMENT_GROUPS[n.type]||[])};
 // --- case: the plan tree, its sentries and listeners ---
 const PLAN_ITEM_COLS=[{k:'item',label:'Plan item',w:'minmax(14ch,1.6fr)'},{k:'kind',label:'Kind',w:'minmax(10ch,1fr)',cls:'tags'},
   {k:'refs',label:'Refers to',w:'minmax(12ch,1.4fr)',opt:true},{k:'rules',label:'',w:'minmax(8ch,.8fr)',cls:'tags',opt:true},
@@ -4348,10 +4379,12 @@ S.testedBy={id:'tests', title:'Deployed by tests', hint:'test classes whose @Dep
       at.map(s=>{ const i=String(s).lastIndexOf(':'), f=s.slice(0,i), l=s.slice(i+1);
         return {hay:elHay(f), cells:{f:esc(f.split('/').pop())+openBtn(f,l), line:lineRef(f,l)}}; })); }};
 const PAGE_TAIL=[S.params, S.varExpr, S.testedBy];
+ELEMENT_GROUPS.process=[S.userTasks, S.serviceTasks, S.scriptTasks, S.decisionTasks, S.callActivities, S.otherTasks, S.events,
+  S.gateways, S.flows, S.lanes, S.multiInstance, S.listeners, S.eldocs];
+ELEMENT_GROUPS.case=[S.plan, S.sentries, S.eventListeners, S.caseScripts, S.listeners, S.eldocs];
 const PAGES={
-  process:[S.userTasks, S.serviceTasks, S.scriptTasks, S.decisionTasks, S.callActivities, S.otherTasks, S.events, S.gateways,
-           S.flows, S.lanes, S.multiInstance, S.declaredVars, S.listeners, S.eldocs],
-  case:[S.plan, S.sentries, S.eventListeners, S.caseScripts, S.listeners, S.eldocs],
+  process:[S.elements, S.declaredVars],
+  case:[S.elements],
   form:[S.fields, S.outcomes, S.dataSources, S.restCalls],
   page:'form',
   dataObject:[S.properties],
@@ -4812,9 +4845,11 @@ function renderDetail(){
   det.querySelectorAll('.dtitle-more').forEach(m=>{ m.onclick=()=>{
     const t=m.previousElementSibling; const open=t.classList.toggle('open');
     m.textContent=open?'show less':'show all'; m.setAttribute('aria-expanded', String(open)); }; });
-  // Remember every section's open state, and offer one control to flip them all at once.
-  const sects=[...det.querySelectorAll('details.sect')];
-  sects.forEach(s=>s.addEventListener('toggle',()=>sectRemember(dec(s.dataset.sect), s.open)));
+  // Remember every section's open state, and offer one control to flip them all at once — the Elements
+  // groups included, each under the id its section used to have.
+  det.querySelectorAll('details.elgrp').forEach(g=>g.addEventListener('toggle',()=>sectRemember(g.dataset.eg, g.open)));
+  const sects=[...det.querySelectorAll('details.sect, details.elgrp')];
+  det.querySelectorAll('details.sect').forEach(s=>s.addEventListener('toggle',()=>sectRemember(dec(s.dataset.sect), s.open)));
   const sa=document.getElementById('sectall');
   if(sa){
     const lbl=sa.querySelector('.lbl');
@@ -4822,7 +4857,7 @@ function renderDetail(){
     sync();
     sects.forEach(s=>s.addEventListener('toggle',sync));
     sa.onclick=()=>{ const open=!sects.every(s=>s.open);
-      sects.forEach(s=>{ s.open=open; sectRemember(dec(s.dataset.sect), open); }); sync(); };
+      sects.forEach(s=>{ s.open=open; sectRemember(s.dataset.eg||dec(s.dataset.sect), open); }); sync(); };
     if(!sects.length) sa.hidden=true;
   }
   const pl=document.getElementById('permalink');
@@ -4877,6 +4912,8 @@ function renderDetail(){
     b.onclick=e=>{ e.stopPropagation(); open(); };
     b.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } };
   });
+  // a kind chip keeps its group's rows: every row of a group carries the group's id for the filter
+  det.querySelectorAll('details.elgrp').forEach(g=>g.querySelectorAll('[data-hay]').forEach(r=>{ r.dataset.eg=g.dataset.eg; }));
   wireSectionFilter(det);
   wireDiagram(det);
   applyFocus(det);
@@ -5253,7 +5290,7 @@ function revealByEl(det, elId, scope){
   if(!rows.length) return false;
   det.querySelectorAll('.hit').forEach(x=>x.classList.remove('hit'));
   rows.forEach(el=>{
-    for(let p=el.parentElement; p&&p!==det; p=p.parentElement){ if(p.tagName==='DETAILS') p.open=true; }
+    for(let p=el.parentElement; p&&p!==det; p=p.parentElement){ if(p.tagName==='DETAILS') p.open=true; if(p.hidden) p.hidden=false; }
     if(el.tagName==='DETAILS') el.open=true;
     el.hidden=false;                    // a row a section filter had hidden is shown again
     el.classList.add('hit','flash');
