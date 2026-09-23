@@ -316,6 +316,9 @@ object ReferenceResolver {
                     ref2["targetType"] = "class"
                     ref2["targetFqn"] = jc?.get("fqn")
                     if (jc != null && fqnIndex[value] == null && simple in ambiguousSimple) ref2["suspect"] = true
+                    // A qualified name that matched only by its simple name names a class in another
+                    // package — `org.flowable….Foo` from a library bound to the project's own `com.acme.Foo`.
+                    if (jc != null && fqnIndex[value] == null && '.' in value) ref2["suspect"] = true
                 }
                 else -> {
                     ref2["target"] = null
