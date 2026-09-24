@@ -183,6 +183,22 @@
               table — for a data object through its service, the live definition first. Each is a link with
               its key to copy. A copy button shows the ordinary pointer now, not the copy cursor with its
               plus badge.</li>
+          <li><b>The Atlas Hub fits a side stripe.</b> It was laid out at the width its widest row asked for
+              — 567 px with an ordinary environment name — so the stripe had to be dragged half across the
+              screen before nothing was cut off. Every row now fits 280 px and a wider stripe only gives the
+              names more room: the project picker has the first row to itself, the model count and
+              <i>Rebuild</i> the second, the attention line wraps, the buttons under a block's title say
+              <i>Generate…</i> and <i>Open</i> (the full names are their tooltips), the <i>Pull</i> button
+              spans the block, and a name too long for its row ends in <code>…</code> with the whole of it
+              in the tooltip. Each block folds at its title and stays folded. Dragging the stripe narrow
+              again after it had been wide now works too — the platform's foldable group reported its last
+              width as its minimum.</li>
+          <li><b>The Hub says what it could not do, where it could not do it.</b> A Design workspace list
+              that cannot be read shows the reason under the workspace picker with <i>Retry</i>, instead of
+              a balloon that was gone by the time anyone looked; the picker says <i>loading workspaces…</i>
+              while it asks. The model count's row says <i>scanning…</i> or <i>index failed</i> while there
+              is no index — it used to go blank, because a disabled link hides itself. A removed environment
+              is said once, in the attention line and in the picker, not also in a red note beside it.</li>
           <li><b>One name for every Atlas surface, one verb for opening it.</b> The tool windows are
               <i>Atlas Hub</i>, <i>Atlas Findings</i> and <i>Atlas Playground</i> — the playground used to
               be called <i>Expression Playground</i> although half of it is scripts — and every entry that
@@ -532,25 +548,6 @@
               the first piece of text after the tag was read, which was the indentation. The flow lost its
               condition, the gateway was reported as an implicit parallel split instead of a missing
               default, and a script body came back empty.</li>
-          <li><b>The model index follows whole folders, and only this project's.</b> A folder created,
-              deleted or moved (a checkout adding <code>process-models/</code>, an unzipped export) arrives
-              as one file event for the folder, and the index did not notice it until a Rebuild. A zip
-              landing in <code>~/Downloads</code> or a model saved in another open project, on the other
-              hand, dropped the index and rescanned every archive. A project that itself lives under a
-              folder named <code>build</code>, <code>out</code>, <code>bin</code> or <code>target</code> (a
-              CI agent's workspace, a dev container) had every file excluded and an empty index.</li>
-          <li><b>Forms inside a Design export are models without a setting.</b> An app export keeps its
-              forms, pages, actions and data objects only as <code>form-models/X.json</code> and the like.
-              The command line always read them; the IDE did only with <i>Also index raw Flowable Design
-              workspace sources</i> on, so with the default setting those forms had no key, no wireframe, no
-              outline and no icon, and code naming them was flagged as broken.</li>
-          <li><b>Generation does what it says.</b> It saves open edits first. <i>Cancel</i> stops it, and
-              nothing is overwritten, where the run used to finish and write regardless. The written files
-              are refreshed in one go off the UI thread, not one by one on it. <i>Regenerate</i> re-analyses
-              the folder each page was made from, once per report, where it analysed whichever sub-project
-              was active for every page it found, all at once.</li>
-          <li><b>The "keys removed by this pull" warning fires.</b> The pull took its before-snapshot after
-              the refresh that had already dropped the index, so the snapshot was always empty.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

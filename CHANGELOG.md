@@ -49,6 +49,20 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   changelog that creates the table — for a data object through its service, the live definition first.
   Each is a link with its key to copy. A copy button shows the ordinary pointer now, not the copy cursor
   with its plus badge.
+- **The Atlas Hub fits a side stripe.** It was laid out at the width its widest row asked for — 567 px
+  with an ordinary environment name — so the stripe had to be dragged half across the screen before nothing
+  was cut off. Every row now fits 280 px and a wider stripe only gives the names more room: the project
+  picker has the first row to itself, the model count and *Rebuild* the second, the attention line wraps,
+  the buttons under a block's title say *Generate…* and *Open* (the full names are their tooltips), the
+  *Pull* button spans the block, and a name too long for its row ends in `…` with the whole of it in the
+  tooltip. Each block folds at its title and stays folded. Dragging the stripe narrow again after it had
+  been wide now works too — the platform's foldable group reported its last width as its minimum.
+- **The Hub says what it could not do, where it could not do it.** A Design workspace list that cannot be
+  read shows the reason under the workspace picker with *Retry*, instead of a balloon that was gone by the
+  time anyone looked; the picker says *loading workspaces…* while it asks. The model count's row says
+  *scanning…* or *index failed* while there is no index — it used to go blank, because a disabled link
+  hides itself. A removed environment is said once, in the attention line and in the picker, not also in a
+  red note beside it.
 - **One name for every Atlas surface, one verb for opening it.** The tool windows are *Atlas Hub*, *Atlas
   Findings* and *Atlas Playground* — the playground used to be called *Expression Playground* although half
   of it is scripts — and every entry that opens one reads *Open Atlas …*. Under *Generate* the entries no

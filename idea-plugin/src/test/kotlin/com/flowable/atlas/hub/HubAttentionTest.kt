@@ -21,7 +21,8 @@ class HubAttentionTest {
         subProjects = emptyList(), activeSubProject = "", projectsAwaitingChoice = awaiting,
         modelCount = if (failed == null) 3 else null, indexFailure = failed, typeCounts = emptyList(), scopeLabel = null, builtAtMillis = 1L,
         skippedArchives = skipped, artifacts = emptyList(), recentModels = emptyList(), explorerStale = stale, changedModels = if (stale) listOf("DEMO-P001") else emptyList(), browserAvailable = false,
-        designResolution = design, workResolution = work, hasAnyEnvironment = false,
+        designResolution = design, workResolution = work, designConnections = emptyList(), workConnections = emptyList(),
+        hasAnyEnvironment = false,
         pullSelection = DesignPullSelection.EMPTY, lastPullMillis = null, searchedIn = "atlas-output/",
     )
 

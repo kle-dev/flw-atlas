@@ -15,8 +15,14 @@ internal interface HubHost {
     fun requestRefresh()
 }
 
-/** One task block of the Hub: built once into the panel, re-applied from every snapshot. */
+/**
+ * One task block of the Hub: built once into the panel, re-applied from every snapshot. The panel puts
+ * each under a foldable [title]; [id] is the key its folded state is remembered by.
+ */
 internal interface HubSection {
+    val id: String
+    val title: String
+    /** The block's rows, without its title — the panel owns the fold. */
     fun build(panel: Panel)
     fun apply(s: HubSnapshot)
 }

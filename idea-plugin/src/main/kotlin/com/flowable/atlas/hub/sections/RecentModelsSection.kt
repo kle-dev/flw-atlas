@@ -3,7 +3,10 @@ package com.flowable.atlas.hub.sections
 import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.action.CopyModelKeyAction
 import com.flowable.atlas.action.FlowableActionIds
+import com.flowable.atlas.hub.HubLayout
 import com.flowable.atlas.hub.HubLists
+import com.flowable.atlas.hub.HubText
+import com.flowable.atlas.hub.NameMetaRow
 import com.flowable.atlas.hub.HubSnapshot
 import com.flowable.atlas.hub.RecentModel
 import com.flowable.atlas.hub.RecentModelsService
@@ -19,23 +22,11 @@ import com.intellij.openapi.actionSystem.Separator
 import com.intellij.openapi.project.DumbAware
 import com.intellij.ui.CollectionListModel
 import com.intellij.ui.PopupHandler
-import com.intellij.ui.SimpleColoredComponent
-import com.intellij.ui.SimpleTextAttributes
-import com.intellij.ui.components.JBLabel
-import com.intellij.ui.components.JBList
-import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.Panel
 import com.intellij.ui.dsl.builder.Row
-import com.intellij.util.ui.JBUI
-import com.intellij.util.ui.UIUtil
-import java.awt.BorderLayout
-import java.awt.Component
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
-import javax.swing.JList
-import javax.swing.JPanel
-import javax.swing.ListCellRenderer
 
 /**
  * The models opened most recently, newest first — the way back to the process you were reading before
@@ -44,10 +35,23 @@ import javax.swing.ListCellRenderer
  */
 internal class RecentModelsSection(private val host: HubHost) : HubSection {
 
+    override val id = "recent"
+    override val title: String get() = message("hub.section.recent")
+
     private val model = CollectionListModel<RecentModel>()
-    private val list = JBList(model).apply {
+    private val list = HubLayout.list(model).apply {
         visibleRowCount = 1
-        cellRenderer = RecentRow()
+        // Type icon · key on the left, the file on the right — the Search Everywhere row's shape. The
+        // file gives way first when the stripe is narrow; the tooltip has type, name and path whole.
+        cellRenderer = NameMetaRow<RecentModel> { r ->
+            NameMetaRow.Parts(
+                r.type?.let(AtlasIcons::forType) ?: AtlasIcons.Model,
+                r.key,
+                r.file.name,
+                listOf(r.type?.display, r.name.takeIf { it.isNotBlank() && it != r.key }, ArchivePaths.displayPath(r.file))
+                    .filterNotNull().joinToString(" · "),
+            )
+        }
         addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
                 if (e.clickCount == 2) selectedValue?.let(::open)
@@ -57,16 +61,14 @@ internal class RecentModelsSection(private val host: HubHost) : HubSection {
             copyKeyAction(), openInExplorerAction(), Separator.getInstance(), removeAction(), clearAction(),
         ), "AtlasHubRecent")
     }
-    private val scroll = JBScrollPane(list)
-    private val hint = JBLabel(message("hub.recent.empty")).apply { foreground = UIUtil.getContextHelpForeground() }
+    private val scroll = HubLayout.listScroll(list)
+    private val hint = HubText().apply { text = message("hub.recent.empty") }
     private var listRow: Row? = null
     private var hintRow: Row? = null
 
     override fun build(panel: Panel) {
-        panel.group(message("hub.section.recent")) {
-            listRow = row { cell(scroll).align(AlignX.FILL) }.visible(false)
-            hintRow = row { cell(hint) }
-        }
+        listRow = panel.row { cell(scroll).align(AlignX.FILL) }.visible(false)
+        hintRow = panel.row { hint.place(this).align(AlignX.FILL) }
     }
 
     override fun apply(s: HubSnapshot) {
@@ -117,33 +119,4 @@ internal class RecentModelsSection(private val host: HubHost) : HubSection {
 
     /** For tests: the keys in the order shown. */
     val keys: List<String> get() = model.items.map { it.key }
-
-    /** Type icon · key on the left, the file on the right — the Search Everywhere row's shape. */
-    private class RecentRow : JPanel(BorderLayout()), ListCellRenderer<RecentModel> {
-        private val key = SimpleColoredComponent()
-        private val where = SimpleColoredComponent().apply { ipad = JBUI.insetsRight(8) }
-
-        init {
-            add(key, BorderLayout.CENTER)
-            add(where, BorderLayout.EAST)
-            isOpaque = true
-        }
-
-        override fun getListCellRendererComponent(
-            list: JList<out RecentModel>, value: RecentModel, index: Int, selected: Boolean, focus: Boolean,
-        ): Component {
-            key.clear()
-            where.clear()
-            key.icon = value.type?.let(AtlasIcons::forType) ?: AtlasIcons.Model
-            key.append(value.key, SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES)
-            where.append(value.file.name, SimpleTextAttributes.GRAYED_ATTRIBUTES)
-            val bg = if (selected) list.selectionBackground else list.background
-            val fg = if (selected) list.selectionForeground else list.foreground
-            background = bg
-            for (c in listOf(key, where)) { c.background = bg; c.foreground = fg }
-            toolTipText = listOf(value.type?.display, value.name.takeIf { it.isNotBlank() && it != value.key }, ArchivePaths.displayPath(value.file))
-                .filterNotNull().joinToString(" · ")
-            return this
-        }
-    }
 }

@@ -1,5 +1,6 @@
 package com.flowable.atlas.hub
 
+import com.flowable.atlas.FlowableAtlasBundle.message
 import com.intellij.util.text.DateFormatUtil
 import java.time.Instant
 import java.time.ZoneId
@@ -28,12 +29,12 @@ internal object HubAge {
     ): String {
         val delta = now - millis
         return when {
-            delta < MINUTE -> "just now"
-            delta < HOUR -> "${delta / MINUTE} min ago"
-            sameDay(millis, now, zone) -> "today ${time(millis)}"
-            sameDay(millis + DAY, now, zone) -> "yesterday ${time(millis)}"
-            delta < WEEK -> "${delta / DAY}d ago"
-            delta < 5 * WEEK -> "${delta / WEEK}w ago"
+            delta < MINUTE -> message("hub.age.now")
+            delta < HOUR -> message("hub.age.minutes", delta / MINUTE)
+            sameDay(millis, now, zone) -> message("hub.age.today", time(millis))
+            sameDay(millis + DAY, now, zone) -> message("hub.age.yesterday", time(millis))
+            delta < WEEK -> message("hub.age.days", delta / DAY)
+            delta < 5 * WEEK -> message("hub.age.weeks", delta / WEEK)
             else -> date(millis)
         }
     }

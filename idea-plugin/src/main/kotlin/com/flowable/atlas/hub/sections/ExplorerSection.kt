@@ -17,42 +17,49 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ModalityState
 import com.intellij.ui.CollectionListModel
 import com.intellij.ui.PopupHandler
-import com.intellij.ui.SimpleColoredComponent
-import com.intellij.ui.SimpleTextAttributes
-import com.intellij.ui.components.JBLabel
-import com.intellij.ui.components.JBList
-import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.Panel
 import com.intellij.ui.dsl.builder.Row
 import com.flowable.atlas.explorer.JcefSupport
+import com.flowable.atlas.hub.HubLayout
+import com.flowable.atlas.hub.HubText
+import com.flowable.atlas.hub.NameMetaRow
 import com.intellij.util.text.DateFormatUtil
-import com.intellij.util.ui.JBUI
-import com.intellij.util.ui.UIUtil
-import java.awt.BorderLayout
-import java.awt.Component
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.JButton
-import javax.swing.JList
-import javax.swing.JPanel
-import javax.swing.ListCellRenderer
 
 /**
  * The generated explorer pages and the two things one does with them: generate, open.
  *
  * Exactly one row of state — the list, or one grey line saying where it looked — and one row of
- * buttons, so the section is the same height with zero pages and with one. *Open in Browser* moved into
- * the list's context menu: it is the rare gesture, and a third button made the row wrap in a narrow stripe.
+ * buttons, so the section is the same height with zero pages and with one. *Open in Browser* lives in the
+ * list's context menu: it is the rare gesture. The buttons say *Generate…* and *Open*: the section is
+ * called *Explorer*, and the full names made the pair 340 px wide in a stripe that has 280.
  */
 internal class ExplorerSection(private val host: HubHost) : HubSection {
 
+    override val id = "explorer"
+    override val title: String get() = message("hub.section.explorer")
+
     private val model = CollectionListModel<ExplorerArtifact>()
-    private val list = JBList(model).apply {
+    private val list = HubLayout.list(model).apply {
         visibleRowCount = 1
-        cellRenderer = ArtifactRow()
+        cellRenderer = NameMetaRow<ExplorerArtifact> { a ->
+            // Name on the left, age on the right, one fact per column — folder and full timestamp in the
+            // tooltip, which is where a detail nobody scans for belongs.
+            val where = a.relative.ifEmpty { "." }
+            NameMetaRow.Parts(
+                AtlasIcons.Explorer,
+                a.path.fileName.toString(),
+                if (a.modified > 0) HubAge.relative(a.modified) else "",
+                if (a.modified > 0) message("hub.explorer.row.tooltip", where, DateFormatUtil.formatPrettyDateTime(a.modified)) else where,
+            )
+        }
         addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
                 if (e.clickCount == 2) selectedValue?.let(::open)
@@ -60,28 +67,26 @@ internal class ExplorerSection(private val host: HubHost) : HubSection {
         })
         PopupHandler.installPopupMenu(this, DefaultActionGroup(openInBrowserAction()), "AtlasHubExplorer")
     }
-    private val scroll = JBScrollPane(list)
-    private val hint = JBLabel().apply { foreground = UIUtil.getContextHelpForeground() }
+    private val scroll = HubLayout.listScroll(list)
+    private val hint = HubText()
     private var listRow: Row? = null
     private var hintRow: Row? = null
     private lateinit var openButton: JButton
     private var browserAvailable = false
 
     override fun build(panel: Panel) {
-        panel.group(message("hub.section.explorer")) {
-            listRow = row { cell(scroll).align(AlignX.FILL) }.visible(false)
-            hintRow = row { cell(hint) }
-            row {
-                button(FlowableActionIds.text(FlowableActionIds.GENERATE_ATLAS_EXPLORER)) {
-                    host.invokeAction(FlowableActionIds.GENERATE_ATLAS_EXPLORER)
-                }
-                // Selected entry, or the newest one when nothing is selected (the list is sorted
-                // most-recently-modified first). Disabled while there is nothing to open — it used to
-                // fall through to the generate dialog, which is not what a button called Open does.
-                openButton = button(FlowableActionIds.text(FlowableActionIds.OPEN_ATLAS_EXPLORER)) {
-                    (list.selectedValue ?: model.items.firstOrNull())?.let(::open)
-                }.component
-            }
+        listRow = panel.row { cell(scroll).align(AlignX.FILL) }.visible(false)
+        hintRow = panel.row { hint.place(this).align(AlignX.FILL) }
+        panel.row {
+            button(FlowableActionIds.text(FlowableActionIds.GENERATE_ATLAS_EXPLORER, FlowableActionIds.HUB_SECTION)) {
+                host.invokeAction(FlowableActionIds.GENERATE_ATLAS_EXPLORER)
+            }.applyToComponent { toolTipText = FlowableActionIds.text(FlowableActionIds.GENERATE_ATLAS_EXPLORER) }
+            // Selected entry, or the newest one when nothing is selected (the list is sorted
+            // most-recently-modified first). Disabled while there is nothing to open — it used to
+            // fall through to the generate dialog, which is not what a button called Open does.
+            openButton = button(FlowableActionIds.text(FlowableActionIds.OPEN_ATLAS_EXPLORER, FlowableActionIds.HUB_SECTION)) {
+                (list.selectedValue ?: model.items.firstOrNull())?.let(::open)
+            }.applyToComponent { toolTipText = FlowableActionIds.text(FlowableActionIds.OPEN_ATLAS_EXPLORER) }.component
         }
     }
 
@@ -98,23 +103,30 @@ internal class ExplorerSection(private val host: HubHost) : HubSection {
         // Not "nothing has been generated" — this panel cannot know that. *Generate…* writes wherever
         // you point it, and the search is scoped to the active Flowable project's output folder, so a
         // page saved elsewhere is invisible here. Naming the folder turns a wrong claim into a findable
-        // mismatch. Plain text: the value is a user-typed folder name.
+        // mismatch.
         hint.text = message("hub.explorer.empty", s.searchedIn)
-        hint.toolTipText = message("hub.explorer.empty.tooltip")
+        hint.component.toolTipText = message("hub.explorer.empty.tooltip")
     }
 
+    /** Resolves the file off the EDT — a refresh of a folder the IDE never saw can take a moment. */
     private fun open(artifact: ExplorerArtifact) {
-        val vf = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(artifact.path)
-        when {
-            vf != null && JcefSupport.isAvailable() -> AtlasExplorerOpener.openInIde(host.project, vf)
-            AtlasBrowser.canOpenFiles() -> AtlasBrowser.open(artifact.path)   // JCEF unavailable → external browser
-            else -> AtlasNotifications.group()
-                .createNotification(
-                    message("hub.explorer.cannotOpen.title"),
-                    message("hub.explorer.cannotOpen", artifact.path.fileName.toString()),
-                    NotificationType.WARNING,
-                )
-                .notify(host.project)
+        val project = host.project
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val vf = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(artifact.path)
+            ApplicationManager.getApplication().invokeLater({
+                if (project.isDisposed) return@invokeLater
+                when {
+                    vf != null && JcefSupport.isAvailable() -> AtlasExplorerOpener.openInIde(project, vf)
+                    AtlasBrowser.canOpenFiles() -> AtlasBrowser.open(artifact.path)   // JCEF unavailable → external browser
+                    else -> AtlasNotifications.group()
+                        .createNotification(
+                            message("hub.explorer.cannotOpen.title"),
+                            message("hub.explorer.cannotOpen", artifact.path.fileName.toString()),
+                            NotificationType.WARNING,
+                        )
+                        .notify(project)
+                }
+            }, ModalityState.any())
         }
     }
 
@@ -136,37 +148,4 @@ internal class ExplorerSection(private val host: HubHost) : HubSection {
 
     /** For tests: how many rows the list reserves. */
     val rows: Int get() = list.visibleRowCount
-
-    /**
-     * Name on the left, age on the right, one fact per column — folder and full timestamp in the tooltip,
-     * which is where a detail nobody scans for belongs. Two components in a BorderLayout, like the Search
-     * Everywhere row, so the ages line up down the list.
-     */
-    private class ArtifactRow : JPanel(BorderLayout()), ListCellRenderer<ExplorerArtifact> {
-        private val name = SimpleColoredComponent()
-        private val age = SimpleColoredComponent().apply { ipad = JBUI.insetsRight(8) }
-
-        init {
-            add(name, BorderLayout.CENTER)
-            add(age, BorderLayout.EAST)
-            isOpaque = true
-        }
-
-        override fun getListCellRendererComponent(
-            list: JList<out ExplorerArtifact>, value: ExplorerArtifact, index: Int, selected: Boolean, focus: Boolean,
-        ): Component {
-            name.clear()
-            age.clear()
-            name.icon = AtlasIcons.Explorer
-            name.append(value.path.fileName.toString(), SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES)
-            if (value.modified > 0) age.append(HubAge.relative(value.modified), SimpleTextAttributes.GRAYED_ATTRIBUTES)
-            val bg = if (selected) list.selectionBackground else list.background
-            val fg = if (selected) list.selectionForeground else list.foreground
-            background = bg
-            for (c in listOf(name, age)) { c.background = bg; c.foreground = fg }
-            val where = value.relative.ifEmpty { "." }
-            toolTipText = if (value.modified > 0) "$where, generated ${DateFormatUtil.formatPrettyDateTime(value.modified)}" else where
-            return this
-        }
-    }
 }

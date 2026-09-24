@@ -4,7 +4,6 @@ import com.flowable.atlas.AtlasBuildInfo
 import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.action.FlowableActionIds
 import com.flowable.atlas.hub.sections.HubHost
-import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.project.AtlasProjectRootService
 import com.intellij.icons.AllIcons
 import com.intellij.ide.plugins.PluginManagerCore
@@ -12,7 +11,9 @@ import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.ui.components.ActionLink
 import com.intellij.ui.components.JBLabel
+import com.intellij.openapi.util.text.HtmlBuilder
 import com.intellij.ui.dsl.builder.AlignX
+import com.intellij.ui.dsl.builder.AlignY
 import com.intellij.ui.dsl.builder.Panel
 import com.intellij.ui.dsl.builder.RightGap
 import com.intellij.ui.dsl.builder.Row
@@ -28,12 +29,17 @@ import javax.swing.DefaultComboBoxModel
  * The scope picker is a combo for the same reason the environment rows are: a line reading *Whole
  * project* with no control beside it answers "what is this?" but not "is this mine to change?", and in a
  * repository holding several apps that second question is the whole point of the row.
+ *
+ * Three rows where there used to be one: the picker on its own, as wide as the panel; the index's count,
+ * age and Rebuild under it; the attention line wrapping, with its action on a row of its own. Side by
+ * side they asked for 570 px — the reason the Hub had to be dragged half across the screen. The Hub's
+ * own glyph left the row too: the tool window's title already carries it.
  */
 internal class HubHeader(private val host: HubHost, private val onAttention: (HubAttention) -> Unit) {
 
     private var populating = false
 
-    val projectCombo = ComboBox<String?>().apply {
+    val projectCombo = HubLayout.narrow(ComboBox<String?>()).apply {
         renderer = textListCellRenderer { if (it.isNullOrBlank()) message("hub.project.whole") else it }
         addActionListener { if (!populating) chooseSubProject(selectedItem as? String) }
     }
@@ -41,30 +47,38 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
     // beside it instead of two levels down in ⋮; the age stays plain text.
     private val status = ActionLink("") { host.invokeAction(FlowableActionIds.GO_TO_MODEL) }.apply {
         toolTipText = FlowableActionIds.text(FlowableActionIds.GO_TO_MODEL)
+        // Disabled while there is no index to search — and an ActionLink hides itself when disabled, which
+        // is how "scanning…" and "index failed" never showed: the row said nothing at the one time it had
+        // something to say.
+        autoHideOnDisable = false
     }
     private val age = JBLabel().apply { foreground = UIUtil.getContextHelpForeground() }
     private val rebuild = ActionLink("") { host.invokeAction(FlowableActionIds.REBUILD_MODEL_INDEX) }.apply {
         icon = AllIcons.Actions.ForceRefresh
         toolTipText = FlowableActionIds.text(FlowableActionIds.REBUILD_MODEL_INDEX)
     }
-    private val attentionLabel = JBLabel()
+    private val attentionIcon = JBLabel()
+    private val attentionText = HubText(comment = false)
     private var current: HubAttention? = null
     private val attentionLink = ActionLink("") { current?.let(onAttention) }
     private var attentionRow: Row? = null
+    private var attentionLinkRow: Row? = null
 
     fun build(panel: Panel) {
         panel.row {
-            icon(AtlasIcons.Hub).gap(RightGap.SMALL)
             cell(projectCombo).align(AlignX.FILL).resizableColumn()
-            cell(status).gap(RightGap.SMALL)
-            cell(age).gap(RightGap.SMALL)
-            cell(rebuild)
         }
-        // The only row in the panel whose presence changes: everything below keeps its place.
+        panel.row {
+            cell(status).gap(RightGap.SMALL)
+            cell(age).resizableColumn()
+            cell(rebuild).align(AlignX.RIGHT)
+        }
+        // The only rows in the panel whose presence changes: everything below keeps its place.
         attentionRow = panel.row {
-            cell(attentionLabel).resizableColumn()
-            cell(attentionLink)
+            cell(attentionIcon).align(AlignY.TOP).gap(RightGap.SMALL)
+            attentionText.place(this).align(AlignX.FILL).resizableColumn()
         }.visible(false)
+        attentionLinkRow = panel.row { cell(attentionLink) }.visible(false)
     }
 
     fun apply(s: HubSnapshot, attention: HubAttention?) {
@@ -72,9 +86,10 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
         applyStatus(s)
         current = attention
         attentionRow?.visible(attention != null)
+        attentionLinkRow?.visible(attention != null)
         if (attention == null) return
-        attentionLabel.icon = if (attention is HubAttention.ChooseProject) AllIcons.General.Information else AllIcons.General.Warning
-        attentionLabel.text = when (attention) {
+        attentionIcon.icon = if (attention is HubAttention.ChooseProject) AllIcons.General.Information else AllIcons.General.Warning
+        attentionText.text = when (attention) {
             is HubAttention.RemovedEnvironment -> message("hub.attention.removed", attention.kind.display)
             is HubAttention.ChooseProject -> message("hub.attention.chooseProject", attention.count)
             is HubAttention.IndexFailed -> message("hub.attention.indexFailed", attention.reason)
@@ -126,17 +141,17 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
         status.isEnabled = true
         age.text = s.builtAtMillis.takeIf { it > 0 }?.let { "· " + HubAge.relative(it) } ?: ""
         status.text = message("hub.status.models", count)
-        status.toolTipText = buildString {
-            append("<html>Flowable Atlas ").append(atlasVersion())
-            s.builtAtMillis.takeIf { it > 0 }?.let {
-                append("<br>").append(message("hub.status.tooltip.scanned", DateFormatUtil.formatPrettyDateTime(it)))
-                s.scopeLabel?.let { scope -> append(' ').append(message("hub.status.tooltip.scope", scope)) }
-            }
-            if (s.typeCounts.isNotEmpty()) {
-                append("<br>").append(s.typeCounts.joinToString(" · ") { (type, n) -> "$n ${type.display}" })
-            }
-            append("</html>")
-        }
+        // The version is not repeated here: the panel's footer names it, in plain sight.
+        status.toolTipText = HtmlBuilder().apply {
+            val lines = listOfNotNull(
+                s.builtAtMillis.takeIf { it > 0 }?.let {
+                    message("hub.status.tooltip.scanned", DateFormatUtil.formatPrettyDateTime(it)) +
+                        (s.scopeLabel?.let { scope -> " " + message("hub.status.tooltip.scope", scope) } ?: "")
+                },
+                s.typeCounts.takeIf { it.isNotEmpty() }?.joinToString(" · ") { (type, n) -> "$n ${type.display}" },
+            )
+            lines.forEachIndexed { i, line -> if (i > 0) br(); append(line) }
+        }.wrapWithHtmlBody().toString()
     }
 
     /** For tests: the count link's text. */
@@ -162,5 +177,5 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
     // -- for tests -------------------------------------------------------------------------------
 
     val projectItems: List<String> get() = (0 until projectCombo.itemCount).map { projectCombo.getItemAt(it).orEmpty() }
-    val attentionText: String? get() = if (attentionRow?.let { current } != null) attentionLabel.text else null
+    val attention: String? get() = if (current != null) attentionText.text else null
 }

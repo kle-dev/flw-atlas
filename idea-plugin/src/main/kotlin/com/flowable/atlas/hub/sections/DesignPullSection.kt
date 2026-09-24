@@ -1,37 +1,34 @@
 package com.flowable.atlas.hub.sections
 
-import com.flowable.atlas.AtlasNotifications
 import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.action.FlowableActionIds
 import com.flowable.atlas.design.DesignAppListUi
 import com.flowable.atlas.design.DesignClient
 import com.flowable.atlas.design.DesignPullSelection
 import com.flowable.atlas.design.DesignPullService
-import com.flowable.atlas.environment.AtlasCatalog
 import com.flowable.atlas.environment.AtlasConnectionSelection
 import com.flowable.atlas.environment.AtlasDesignTarget
 import com.flowable.atlas.environment.ConnectionKind
 import com.flowable.atlas.environment.auth.AtlasCredentials
 import com.flowable.atlas.hub.EnvironmentPicker
 import com.flowable.atlas.hub.HubAge
+import com.flowable.atlas.hub.HubLayout
 import com.flowable.atlas.hub.HubLists
+import com.flowable.atlas.hub.HubText
 import com.flowable.atlas.hub.HubSnapshot
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
-import com.intellij.notification.NotificationAction
-import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.components.service
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.ui.CheckBoxList
-import com.intellij.ui.components.ActionLink
 import com.intellij.ui.components.JBLabel
-import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.Panel
 import com.intellij.ui.dsl.builder.Row
 import com.intellij.ui.dsl.listCellRenderer.listCellRenderer
+import com.intellij.util.ui.NamedColorUtil
 import com.intellij.util.ui.UIUtil
 import java.awt.event.MouseEvent
 import javax.swing.DefaultComboBoxModel
@@ -49,9 +46,17 @@ import javax.swing.event.PopupMenuListener
  * Fetching is on demand and never on a plain render: the workspace list when the picker is opened or the
  * environment switched, the app list when the workspace changes. The toolbar's *Refresh* calls
  * [invalidate], which makes the next pass re-fetch both; the section's own reload button, which shared
- * the toolbar's icon and meant something else, is gone.
+ * the toolbar's icon and meant something else, is gone. A fetch that fails says so under the workspace
+ * picker, with *Retry* beside it — it used to be only a balloon, gone by the time anyone looked at the
+ * combo that had not filled.
+ *
+ * One control per row, and the *Pull* button as wide as the section: it names its target, and an
+ * environment called *DEMO-ACCEPTANCE-EU-WEST* made a button-and-date row wider than the stripe.
  */
 internal class DesignPullSection(private val host: HubHost) : HubSection {
+
+    override val id = "design"
+    override val title: String get() = message("hub.section.design")
 
     private val project get() = host.project
     val environment = EnvironmentPicker(project, ConnectionKind.DESIGN)
@@ -62,7 +67,7 @@ internal class DesignPullSection(private val host: HubHost) : HubSection {
      * placeholder and fetches the real list the first time it is opened — the panel still never calls
      * Design just because it was rendered.
      */
-    private val workspaceCombo = ComboBox<DesignClient.Workspace>().apply {
+    private val workspaceCombo = HubLayout.narrow(ComboBox<DesignClient.Workspace>()).apply {
         renderer = listCellRenderer<DesignClient.Workspace?> {
             text(value?.let { DesignAppListUi.workspaceLabel(it) } ?: workspacePlaceholder)
         }
@@ -83,15 +88,21 @@ internal class DesignPullSection(private val host: HubHost) : HubSection {
             val i = locationToIndex(e.point)
             return if (i >= 0) getItemAt(i)?.let(DesignAppListUi::appTooltip) else null
         }
+        // As wide as the section, not as its longest app name (see HubLayout.list).
+        override fun getScrollableTracksViewportWidth(): Boolean = true
     }.apply {
         setCheckBoxListListener { _, _ -> if (!populatingApps) onSelectionEdited() }
         visibleRowCount = 1
     }
-    private val appsScroll = JBScrollPane(appList)
+    private val appsScroll = HubLayout.listScroll(appList)
     /** Stands in for the app list while that list is empty — never an empty list box. */
-    private val appsHint = JBLabel().apply { foreground = UIUtil.getContextHelpForeground() }
+    private val appsHint = HubText()
+    /** Why the last list fetch failed, under the picker it failed for; hidden while there is nothing to say. */
+    private val problem = HubText()
     private val lastPull = JBLabel().apply { foreground = UIUtil.getContextHelpForeground() }
-    private var manageLink: ActionLink? = null
+    private var manageRow: Row? = null
+    private var problemRow: Row? = null
+    private var problemLinksRow: Row? = null
     private var appsListRow: Row? = null
     private var appsHintRow: Row? = null
     private lateinit var pullButton: JButton
@@ -106,6 +117,8 @@ internal class DesignPullSection(private val host: HubHost) : HubSection {
     private var loadingApps = false
     /** The picker's workspace list, fetched on first use and kept until invalidated. EDT only. */
     private var fetchedWorkspaces: List<DesignClient.Workspace>? = null
+    /** Whether a workspace fetch is in flight, so the combo can say "loading" rather than "none". EDT only. */
+    private var loadingWorkspaces = false
 
     /**
      * Set by a listener on whatever thread published, honoured later on the EDT. The topic's contract is
@@ -123,34 +136,46 @@ internal class DesignPullSection(private val host: HubHost) : HubSection {
     }
 
     override fun build(panel: Panel) {
-        panel.group(message("hub.section.design")) {
-            row(message("hub.design.environment")) {
-                environment.placeIn(this)
-                manageLink = link(FlowableActionIds.text(FlowableActionIds.MANAGE_ENVIRONMENTS)) {
-                    host.invokeAction(FlowableActionIds.MANAGE_ENVIRONMENTS)
-                }.visible(false).component
-            }
-            row(message("hub.design.workspace")) {
-                cell(workspaceCombo).align(AlignX.FILL).resizableColumn()
-            }
-            appsListRow = row { cell(appsScroll).align(AlignX.FILL) }.visible(false)
-            appsHintRow = row { cell(appsHint) }
-            row {
-                // Pulls exactly what is ticked above — the Tools-menu action resolves to the same
-                // effective selection, so the two can never disagree. The button names its target, so
-                // "which server is this about to hit?" is answered without opening anything.
-                pullButton = button("") { pullSelected() }.component
-                cell(lastPull).align(AlignX.RIGHT)
-            }
+        panel.row(message("hub.design.environment")) {
+            environment.placeIn(this)
         }
+        manageRow = panel.row {
+            link(FlowableActionIds.text(FlowableActionIds.MANAGE_ENVIRONMENTS)) {
+                host.invokeAction(FlowableActionIds.MANAGE_ENVIRONMENTS)
+            }
+        }.visible(false)
+        panel.row(message("hub.design.workspace")) {
+            cell(workspaceCombo).align(AlignX.FILL).resizableColumn()
+        }
+        problemRow = panel.row {
+            problem.place(this).align(AlignX.FILL).applyToComponent { foreground = NamedColorUtil.getErrorForeground() }
+        }.visible(false)
+        problemLinksRow = panel.row {
+            link(message("hub.design.retry")) { retry() }
+            link(FlowableActionIds.text(FlowableActionIds.MANAGE_ENVIRONMENTS)) {
+                host.invokeAction(FlowableActionIds.MANAGE_ENVIRONMENTS)
+            }
+        }.visible(false)
+        appsListRow = panel.row { cell(appsScroll).align(AlignX.FILL) }.visible(false)
+        appsHintRow = panel.row { appsHint.place(this).align(AlignX.FILL) }
+        panel.row {
+            // Pulls exactly what is ticked above — the Tools-menu action resolves to the same
+            // effective selection, so the two can never disagree. The button names its target, so
+            // "which server is this about to hit?" is answered without opening anything; a name too long
+            // for the stripe ends in "…", and the tooltip has it whole.
+            pullButton = button("") { pullSelected() }.align(AlignX.FILL).component
+            HubLayout.narrow(pullButton)
+        }
+        panel.row { cell(lastPull) }
     }
 
     override fun apply(s: HubSnapshot) {
-        environment.fill(AtlasCatalog.connections(project, ConnectionKind.DESIGN), s.designResolution, s.hasAnyEnvironment)
-        manageLink?.isVisible = !s.hasAnyEnvironment
+        environment.fill(s.designConnections, s.designResolution, s.hasAnyEnvironment)
+        manageRow?.visible(!s.hasAnyEnvironment)
         applyPullSelection(s)
         pullButton.text = s.designConnection?.let { message("hub.pull.from", it.environmentName) }
             ?: FlowableActionIds.text(FlowableActionIds.PULL_FROM_DESIGN)
+        pullButton.toolTipText = pullButton.text
         pullButton.isEnabled = s.designServerSet
         lastPull.text = if (s.designServerSet) {
             message("hub.design.lastPull", s.lastPullMillis?.let { HubAge.relative(it) } ?: message("hub.design.lastPull.never"))
@@ -170,6 +195,7 @@ internal class DesignPullSection(private val host: HubHost) : HubSection {
             cachesStale = false
             fetchedWorkspaces = null
             fetchedAppsWorkspace = null
+            showProblem(null)
         }
         workspaceCombo.isEnabled = s.designServerSet
         workspacePlaceholder =
@@ -178,6 +204,7 @@ internal class DesignPullSection(private val host: HubHost) : HubSection {
             // "not set" is a state, not a pause: leaving the previous environment's workspace and apps in
             // the controls means the next time they are enabled, they are shown wrong.
             fetchedAppsWorkspace = null
+            showProblem(null)
             fillWorkspaces("")
             populateApps(emptyList(), emptySet())
             applyAppsRows("", noEnvironment = true)
@@ -278,6 +305,7 @@ internal class DesignPullSection(private val host: HubHost) : HubSection {
             selectedKey.isBlank() -> emptyList()
             else -> listOf(DesignClient.Workspace(selectedKey, selectedKey))
         }
+        if (loadingWorkspaces && fetched == null) workspacePlaceholder = message("hub.design.workspace.loading")
         populatingCombos = true
         try {
             workspaceCombo.model = DefaultComboBoxModel<DesignClient.Workspace>().apply { items.forEach { addElement(it) } }
@@ -299,23 +327,31 @@ internal class DesignPullSection(private val host: HubHost) : HubSection {
     private fun loadWorkspaces(force: Boolean, reveal: Boolean) {
         if (!force && fetchedWorkspaces != null) return
         val selected = AtlasConnectionSelection.selected(project, ConnectionKind.DESIGN) ?: return
+        loadingWorkspaces = true
+        if (fetchedWorkspaces == null) fillWorkspaces(currentSelection().workspaceKey)
         ApplicationManager.getApplication().executeOnPooledThread {
             if (project.isDisposed) return@executeOnPooledThread
             val result = designConnection()?.let { DesignClient.listWorkspaces(it) }
             ApplicationManager.getApplication().invokeLater({
                 if (project.isDisposed) return@invokeLater
+                loadingWorkspaces = false
+                workspacePlaceholder = message("hub.design.workspace.none")
                 when {
                     // An unreadable keychain entry and a server error need different fixes.
-                    result == null -> notifyDesignProblem(message("hub.design.problem.noCredentials", selected.baseUrl))
-                    result is DesignClient.Result.Failed -> notifyDesignProblem(result.message)
+                    result == null -> showProblem(message("hub.design.problem.noCredentials", selected.baseUrl))
+                    result is DesignClient.Result.Failed -> showProblem(result.message)
                     result is DesignClient.Result.Success && result.value.isEmpty() ->
-                        notifyDesignProblem(message("hub.design.problem.noWorkspaces"))
+                        showProblem(message("hub.design.problem.noWorkspaces"))
                     result is DesignClient.Result.Success -> {
+                        showProblem(null)
                         fetchedWorkspaces = result.value
-                        fillWorkspaces(currentSelection().workspaceKey)
-                        if (reveal && !workspaceCombo.isPopupVisible) workspaceCombo.showPopup()
+                        if (reveal && !workspaceCombo.isPopupVisible) {
+                            fillWorkspaces(currentSelection().workspaceKey)
+                            workspaceCombo.showPopup()
+                        }
                     }
                 }
+                fillWorkspaces(currentSelection().workspaceKey)
             }, ModalityState.any())
         }
     }
@@ -342,15 +378,18 @@ internal class DesignPullSection(private val host: HubHost) : HubSection {
         host.requestRefresh()
     }
 
-    /** The Hub is a status panel, not a dialog, so a failed list fetch has no inline place to land — it
-     *  surfaces as the plugin's usual balloon, with the fix one click away. */
-    private fun notifyDesignProblem(text: String) {
-        AtlasNotifications.group()
-            .createNotification(message("hub.design.problem.title"), text, NotificationType.WARNING)
-            .addAction(NotificationAction.createSimple(message("hub.design.problem.configure")) {
-                host.invokeAction(FlowableActionIds.MANAGE_ENVIRONMENTS)
-            })
-            .notify(project)
+    /** Why the lists could not be read, under the picker that stayed empty — or nothing, with [text] null. */
+    private fun showProblem(text: String?) {
+        problem.text = text.orEmpty()
+        problemRow?.visible(text != null)
+        problemLinksRow?.visible(text != null)
+    }
+
+    /** The problem row's *Retry*: both lists again, as if the environment had just been picked. */
+    private fun retry() {
+        showProblem(null)
+        loadWorkspaces(force = true, reveal = false)
+        loadApps(force = true)
     }
 
     private fun pullSelected() {
@@ -367,6 +406,7 @@ internal class DesignPullSection(private val host: HubHost) : HubSection {
     // -- for tests -------------------------------------------------------------------------------
 
     val pullText: String get() = pullButton.text
+    val problemText: String? get() = problem.text.ifEmpty { null }
     val workspaceKey: String? get() = (workspaceCombo.selectedItem as? DesignClient.Workspace)?.key
     val appKeys: List<String> get() = (0 until appList.model.size).mapNotNull { appList.getItemAt(it)?.key }
     val appRows: Int get() = appList.visibleRowCount

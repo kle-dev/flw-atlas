@@ -27,7 +27,10 @@ import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.SimpleToolWindowPanel
 import com.intellij.openapi.ui.popup.JBPopupFactory
-import com.intellij.ui.components.JBScrollPane
+import com.intellij.ui.dsl.builder.AlignX
+import com.intellij.ui.dsl.builder.RowsRange
+import com.intellij.ui.dsl.builder.TopGap
+import com.intellij.util.ui.JBUI
 import com.intellij.ui.dsl.builder.panel
 import com.intellij.util.SingleAlarm
 import java.nio.file.Path
@@ -35,8 +38,10 @@ import javax.swing.JComponent
 
 /**
  * Content of the Atlas Hub tool window: a status header (which Flowable project, how many models, how
- * fresh, and one attention line when something needs a hand) over three task blocks — the generated
- * explorer, the Flowable Design pull, the playground's runtime — each with its actions beside its state.
+ * fresh, and one attention line when something needs a hand) over four foldable blocks — the generated
+ * explorer, the models opened last, the Flowable Design pull, the playground's runtime — each with its
+ * actions beside its state. The panel is as wide as its stripe and every row fits 280 px ([HubLayout]);
+ * a folded block stays folded, per project.
  *
  * Data is gathered on a pooled thread ([HubSnapshot.gather]) and applied on the EDT; the panel never
  * triggers a blocking index build itself. It refreshes via [AtlasEvents] with a debounce, so it reflects
@@ -51,6 +56,7 @@ class AtlasHubPanel(override val project: Project) : SimpleToolWindowPanel(true,
     private val playground = PlaygroundSection(this)
     private val sections = listOf(explorer, recent, design, playground)
 
+    private val folds = LinkedHashMap<String, FoldHeader>()
     private val refreshAlarm = SingleAlarm(::refreshNow, 300, this)
     private var last: HubSnapshot? = null
 
@@ -62,14 +68,24 @@ class AtlasHubPanel(override val project: Project) : SimpleToolWindowPanel(true,
             .also { it.targetComponent = this }
             .component
 
-        setContent(JBScrollPane(panel {
+        setContent(HubLayout.scroll(panel {
             header.build(this)
-            separator()
-            sections.forEach { it.build(this) }
+            sections.forEach { section ->
+                // No indent: in a 280 px stripe the fold's chevron is all the hierarchy a block needs.
+                lateinit var rows: RowsRange
+                val header = FoldHeader(section.title, HubLayout.expanded(project, section.id)) { open ->
+                    rows.visible(open)
+                    HubLayout.rememberExpanded(project, section.id, open)
+                }
+                row { cell(header).align(AlignX.FILL) }.topGap(TopGap.MEDIUM)
+                rows = rowsRange { section.build(this) }
+                rows.visible(header.expanded)
+                folds[section.id] = header
+            }
             // The running version, in plain sight: the one line of the old footer that people read.
             separator()
-            row { comment("Flowable Atlas ${HubHeader.atlasVersion()}") }
-        }))
+            row { comment(message("hub.footer.version", HubHeader.atlasVersion())) }
+        }.withBorder(JBUI.Borders.empty(4, 10, 8, 10))))
 
         project.messageBus.connect(this).subscribe(AtlasEvents.TOPIC, object : AtlasEventsListener {
             override fun modelIndexUpdated() = refreshAlarm.cancelAndRequest()
@@ -179,9 +195,16 @@ class AtlasHubPanel(override val project: Project) : SimpleToolWindowPanel(true,
         statusText = header.statusText,
         recentKeys = recent.keys,
         listRows = explorer.rows to design.appRows,
-        attention = header.attentionText,
+        attention = header.attention,
         hasEnvironments = last?.hasAnyEnvironment ?: false,
+        foldedSections = folds.filterValues { !it.expanded }.keys.toList(),
+        designProblem = design.problemText,
     )
+
+    /** Fold or unfold a block the way a click on its title does — for tests, which have no mouse. */
+    internal fun foldForTest(id: String, expanded: Boolean) {
+        folds.getValue(id).expanded = expanded
+    }
 }
 
 /** The rendered Hub, for tests: strings and sizes, never components. */
@@ -199,4 +222,8 @@ internal data class HubView(
     val listRows: Pair<Int, Int>,
     val attention: String?,
     val hasEnvironments: Boolean,
+    /** Ids of the blocks folded shut. */
+    val foldedSections: List<String>,
+    /** Why the Design lists could not be read, when they could not. */
+    val designProblem: String?,
 )

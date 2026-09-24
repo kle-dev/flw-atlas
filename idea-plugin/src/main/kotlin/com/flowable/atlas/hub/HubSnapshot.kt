@@ -60,6 +60,9 @@ internal data class HubSnapshot(
     val browserAvailable: Boolean,
     val designResolution: Resolution,
     val workResolution: Resolution,
+    /** What each environment picker offers — read here, off the EDT, not by the sections while painting. */
+    val designConnections: List<AtlasConnection>,
+    val workConnections: List<AtlasConnection>,
     /** False only before anything at all has been defined — the one state worth its own wording. */
     val hasAnyEnvironment: Boolean,
     /** What a pull would fetch right now. */
@@ -135,6 +138,8 @@ internal data class HubSnapshot(
                 browserAvailable = AtlasBrowser.canOpenFiles(),
                 designResolution = designResolution,
                 workResolution = workResolution,
+                designConnections = AtlasCatalog.connections(project, ConnectionKind.DESIGN),
+                workConnections = AtlasCatalog.connections(project, ConnectionKind.WORK),
                 hasAnyEnvironment = AtlasCatalog.environments(project).isNotEmpty(),
                 pullSelection = pullSelection,
                 lastPullMillis = DesignPullService.lastPullMillis(project),

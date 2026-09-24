@@ -23,17 +23,25 @@ A single panel on the right stripe: what Atlas currently knows about your projec
 needs a hand, the models you opened last, and the three things you do with models from the IDE — each
 with its actions beside its state, so nothing needs a menu.
 
+It is built for a side stripe: every row fits **280 px**, and a wider stripe only gives the names more
+room. It used to be laid out at the width its widest row asked for — a header, a pair of buttons and an
+environment row that each wanted 450–570 px — so the stripe had to be dragged half across the screen
+before nothing was cut off. Now one control stands in a row where two competed, a name too long for the
+row ends in `…` with the whole of it in the tooltip, and a sentence wraps. Each block folds at its
+title, and stays folded, per project, the next time the IDE starts.
+
 <figure class="fig mock">
   <div class="body">{{mockup:atlas-hub}}</div>
-  <figcaption><b>Atlas Hub.</b> A status header over four task blocks. The header answers the question
-  that matters day to day — is what I am looking at still up to date? — and says so in one line when it
-  is not.</figcaption>
+  <figcaption><b>Atlas Hub.</b> A status header over four foldable blocks, at the width of a side
+  stripe. The header answers the question that matters day to day — is what I am looking at still up to
+  date? — and says so in one line when it is not.</figcaption>
 </figure>
 
-**The header** names the Flowable project Atlas is about, how many models it knows and how long ago it
-looked — *142 models · 2 min ago*; the per-type counts and the scope are in the tooltip. The count is a
-link into the index (Search Everywhere's *Flowable Model* tab), and *Rebuild Model Index* sits beside
-it — the two things one does with the index, where the index is described. In a monorepo the project is a switcher: pick the sub-project Atlas operates on, and the
+**The header** names the Flowable project Atlas is about, and under it how many models it knows and
+how long ago it looked — *142 models · 2 min ago*; the per-type counts and the scope are in the tooltip.
+The count is a link into the index (Search Everywhere's *Flowable Model* tab), and *Rebuild Model Index*
+sits at the end of that row — the two things one does with the index, where the index is described.
+While there is no index yet the row says *scanning…*, or *index failed*. In a monorepo the project is a switcher: pick the sub-project Atlas operates on, and the
 index, the output folder and the Design target follow. It is a drop-down like the environment pickers
 below it, always offering the whole repository, so "is this mine to change?" is answered by the control
 rather than by trying it.
@@ -54,27 +62,32 @@ DEMO-P001, DEMO-F002, DEMO-P007*), the banner above an open explorer tab the fir
 with *Regenerate Atlas Explorer* on it, so a stale page says what changed where you are reading it. Regenerate is one registered action, and every place that offers it uses its name.
 
 **Explorer** lists the generated pages — name on the left, age on the right, folder and full timestamp
-in the tooltip — with *Generate Atlas Explorer…* and *Open Atlas Explorer* under them. Open takes the
+in the tooltip — with **Generate…** and **Open** under them: the block's title says what they generate
+and open, and their tooltips carry the full names (*Generate Atlas Explorer…*, *Open Atlas Explorer*). Open takes the
 selected page, or the newest; *Open in Browser* is in the list's context menu, where a browser can be
 launched. With no page yet the list is one grey line naming the folder it searched, so a page saved
 elsewhere is a findable mismatch rather than a wrong claim.
 
-**Recent Models** lists the models opened last, newest first — the way back to the process you were
-reading before a Ctrl+click took you three files away. Every route to a model ends in an editor tab, so
+**Recent Models** lists the models opened last, newest first — the key on the left, the file on the
+right, which gives way first when the stripe is narrow — the way back to the process you were reading
+before a Ctrl+click took you three files away. Every route to a model ends in an editor tab, so
 the list follows the editor; double-click opens the model at its key, and the context menu copies the
 key or opens the model's explorer page. *Copy Model Key* is also in the editor's context menu, on a
 key in Java or in a model file: the bare key, without quotes or the constant's name.
 
 **Design Pull** is the whole pull, top to bottom, in the order the work is done: pick the
-**environment**, pick the **workspace** in it, tick the **apps**, press **Pull from DEV1** — the button
-names its target, so what is about to happen is readable without opening anything, and *last pull: today
-08:52* sits beside it. The block is always the same four rows: with nothing defined yet the environment
+**environment**, pick the **workspace** in it, tick the **apps**, press **Pull from DEV1** — the button,
+as wide as the block, names its target, so what is about to happen is readable without opening anything,
+and *last pull: today 08:52* sits under it. The block is always the same four rows: with nothing defined yet the environment
 combo says *no environments yet* beside a *Manage Environments…* link, with no environment chosen the
 workspace combo is disabled, and an app list with nothing in it is one grey line — so switching state
 moves nothing below it. Both pickers are ordinary drop-downs, because switching is a choice made while
 working and should look like one; the environment list is held in memory, and the workspace list is
-fetched the first time you open it rather than every time the panel is drawn. An app row shows the app's
-name; its key and version are in the tooltip.
+fetched the first time you open it rather than every time the panel is drawn — the combo says *loading
+workspaces…* while it is. When a list cannot be read — no credentials, a server error, no workspace
+visible to you — the reason appears under the workspace picker with **Retry** and *Manage
+Environments…* beside it; it used to be a balloon, gone by the time anyone looked at the picker that had
+not filled. An app row shows the app's name; its key and version are in the tooltip.
 
 What you pick there **is** the project's setting — there is no second copy of it in a settings page.
 An earlier cut had a shared default in Settings and a personal override in the Hub, and the pair could
@@ -83,7 +96,7 @@ that had drifted made every edit to the default look as if it had done nothing. 
 are stored per environment, because a workspace key belongs to one server and cannot mean the same
 thing on the next.
 
-**Playground** carries the runtime environment the Atlas Playground evaluates against, and the
+**Playground** carries the runtime environment the Atlas Playground evaluates against, and under it the
 button that opens it. The two environments are independent on purpose: a runtime on QA while models
 still come from DEV1 is a normal way to work, not a mistake to warn about.
 

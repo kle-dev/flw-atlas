@@ -60,15 +60,24 @@ class UiShotsTest : BasePlatformTestCase() {
         val dir = out ?: return
         val catalog = AtlasEnvironments.getInstance()
         val env = catalog.addEnvironment("DEMO-ACCEPTANCE-EU-WEST")
+        val gone = catalog.addEnvironment("DEMO-GONE")
         try {
-            val design = catalog.addConnection(env, ConnectionKind.DESIGN, "https://design.acceptance.example.com")!!
             val work = catalog.addConnection(env, ConnectionKind.WORK, "https://work.acceptance.example.com")!!
+            val design = catalog.addConnection(env, ConnectionKind.DESIGN, "https://design.acceptance.example.com")!!
             AtlasConnectionSelection.select(project, ConnectionKind.DESIGN, design)
             AtlasConnectionSelection.select(project, ConnectionKind.WORK, work)
             val panel = AtlasHubPanel(project)
             try {
                 panel.refreshForTest()
                 for (w in listOf(280, 360, 480)) shoot(dir, "hub-$w", panel, w, 760)
+                // Narrowed again after being wide: what dragging the stripe back does.
+                shoot(dir, "hub-280-again", panel, 280, 760)
+                // …and with the attention line up: a removed environment is the first thing it says.
+                val doomed = catalog.addConnection(gone, ConnectionKind.DESIGN, "https://design.gone.example.com")!!
+                AtlasConnectionSelection.select(project, ConnectionKind.DESIGN, doomed)
+                catalog.removeEnvironment(gone)
+                panel.refreshForTest()
+                shoot(dir, "hub-280-attention", panel, 280, 760)
             } finally {
                 panel.dispose()
             }
@@ -152,10 +161,27 @@ class UiShotsTest : BasePlatformTestCase() {
             .mapNotNull { it.viewport?.view?.preferredSize?.width }
             .maxOrNull() ?: c.preferredSize.width
         println("UISHOT $name: ${w}px given, content wants ${wanted}px" + if (wanted > w) "  <-- overflows" else "")
+        if (wanted > w) UIUtil.findComponentsOfType(c, JComponent::class.java)
+            .filter { it.isVisible && it.preferredSize.width > w - 20 }
+            .forEach { println("UISHOT   wide: ${it.javaClass.name} pref=${it.preferredSize} min=${it.minimumSize}") }
+        if (wanted > w) UIUtil.findComponentsOfType(c, com.intellij.openapi.ui.DialogPanel::class.java).forEach { dp ->
+            dp.components.forEach { ch -> println("UISHOT   child ${ch.javaClass.simpleName} vis=${ch.isVisible} pref=${ch.preferredSize.width} min=${ch.minimumSize.width} w=${ch.width}" + ((ch as? javax.swing.JLabel)?.text?.let { " '" + it + "'" } ?: "")) }
+        }
     }
 
+    /** What a resize does: every cached size is dropped, then the tree is laid out again, top down. */
     private fun layout(c: Component) {
+        invalidateTree(c)
+        layoutTree(c)
+    }
+
+    private fun invalidateTree(c: Component) {
+        c.invalidate()
+        if (c is Container) c.components.forEach(::invalidateTree)
+    }
+
+    private fun layoutTree(c: Component) {
         c.doLayout()
-        if (c is Container) c.components.forEach(::layout)
+        if (c is Container) c.components.forEach(::layoutTree)
     }
 }
