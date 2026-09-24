@@ -40,7 +40,7 @@ class HubActionsTest : BasePlatformTestCase() {
         assertEquals(
             listOf(
                 FlowableActionIds.OPEN_ATLAS_EXPLORER,
-                FlowableActionIds.OPEN_EXPRESSION_PLAYGROUND,
+                FlowableActionIds.OPEN_ATLAS_PLAYGROUND,
                 FlowableActionIds.GO_TO_MODEL,
             ),
             children.subList(3, 6).map { idOf(it) },
@@ -105,7 +105,7 @@ class HubActionsTest : BasePlatformTestCase() {
         val am = ActionManager.getInstance()
         listOf(
             FlowableActionIds.OPEN_ATLAS_EXPLORER,
-            FlowableActionIds.OPEN_EXPRESSION_PLAYGROUND,
+            FlowableActionIds.OPEN_ATLAS_PLAYGROUND,
             FlowableActionIds.GO_TO_MODEL,
         ).forEach { id ->
             assertTrue("$id is on the toolbar while the index builds, so it must be DumbAware",

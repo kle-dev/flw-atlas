@@ -58,7 +58,7 @@ internal object HubActions {
         // menu entry is only visible while the menu is open.
         registered(
             FlowableActionIds.OPEN_ATLAS_EXPLORER,
-            FlowableActionIds.OPEN_EXPRESSION_PLAYGROUND,
+            FlowableActionIds.OPEN_ATLAS_PLAYGROUND,
             FlowableActionIds.GO_TO_MODEL,
         ).forEach(::add)
         add(MenuMirror())

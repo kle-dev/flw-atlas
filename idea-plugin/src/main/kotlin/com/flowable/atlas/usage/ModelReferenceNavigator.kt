@@ -1,5 +1,7 @@
 package com.flowable.atlas.usage
 
+import com.flowable.atlas.AtlasNotifications
+import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelFiles
@@ -9,6 +11,8 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.MessageType
+import com.intellij.openapi.ui.popup.Balloon
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.ColoredListCellRenderer
@@ -39,7 +43,9 @@ object ModelReferenceNavigator {
         if (project.isDisposed) return
         val rows = rows(project, usages)
         when (rows.size) {
-            0 -> {}
+            // The mark came from the cached index, the list from reading the files now: they disagree
+            // when a model changed since. A click that does nothing reads as a broken mark, so say it.
+            0 -> nothingFound(project, at)
             1 -> open(project, rows[0])
             else -> {
                 val popup = JBPopupFactory.getInstance()
@@ -52,6 +58,18 @@ object ModelReferenceNavigator {
                 if (at != null) popup.show(at) else popup.showInFocusCenter()
             }
         }
+    }
+
+    private fun nothingFound(project: Project, at: RelativePoint?) {
+        if (at == null) {
+            AtlasNotifications.info(project, message("linemarker.none"))
+            return
+        }
+        JBPopupFactory.getInstance()
+            .createHtmlTextBalloonBuilder(message("linemarker.none"), MessageType.INFO, null)
+            .setFadeoutTime(6000)
+            .createBalloon()
+            .show(at, Balloon.Position.above)
     }
 
     internal fun rows(project: Project, files: List<VirtualFile>): List<Row> = rows(project, files.associateWith { null })

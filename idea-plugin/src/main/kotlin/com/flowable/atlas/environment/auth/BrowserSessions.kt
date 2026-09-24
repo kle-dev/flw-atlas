@@ -6,7 +6,7 @@ import java.util.concurrent.ConcurrentHashMap
  * The auth headers captured from the user's own browser session, kept **in memory for this IDE
  * session** and keyed by base URL — for any Flowable server behind an identity provider.
  *
- * This was `InspectSession`, and it served only the Expression Playground, which is why a Design
+ * This was `InspectSession`, and it served only the Atlas Playground, which is why a Design
  * server behind OAuth2 could not be reached at all: the capture existed, the client that needed it did
  * not know about it. Nothing here was ever Work-specific — a cookie for a host is a cookie for a host —
  * so it lives beside the rest of the auth machinery now and both clients read it.

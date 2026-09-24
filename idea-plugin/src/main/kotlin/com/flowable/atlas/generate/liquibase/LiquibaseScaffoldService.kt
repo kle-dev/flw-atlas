@@ -1,7 +1,6 @@
 package com.flowable.atlas.generate.liquibase
 
 import com.flowable.atlas.AtlasNotifications
-import com.flowable.atlas.AtlasNotifications.GROUP_ID
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.liquibase.LiquibaseChangelog
 import com.flowable.atlas.model.ModelPaths
@@ -11,7 +10,6 @@ import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.flowable.atlas.settings.GenerationLiquibaseConfigurable
 import com.intellij.notification.NotificationAction
-import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
@@ -290,8 +288,7 @@ class LiquibaseScaffoldService(private val project: Project) {
 
     private fun notify(title: String, message: String, type: NotificationType) {
         if (project.isDisposed) return
-        NotificationGroupManager.getInstance()
-            .getNotificationGroup(GROUP_ID)
+        AtlasNotifications.groupFor(type)
             .createNotification(title, message, type)
             .notify(project)
     }

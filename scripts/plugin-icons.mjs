@@ -93,6 +93,7 @@ const EXTRA = {
 const MANIFEST = [
   { name: 'explorer', body: 'extra:compass', colour: 'chrome', size: 16 },  // the Atlas Explorer artifact / actions
   { name: 'model', body: 'extra:shapes', colour: 'chrome', size: 16 },      // "a Flowable model", type unknown
+  { name: 'findings', body: 'type:checks', colour: 'chrome', size: 16 },    // Atlas Findings — the explorer's Checks glyph
   { name: 'bot', body: 'type:bot', colour: 'chrome', size: 16 },            // a BotService class (Go to Symbol)
   { name: 'endpoint', body: 'type:endpoint', colour: 'chrome', size: 16 },  // a REST handler models call
   { name: 'archive', body: 'type:external', colour: 'c:app', size: 16 },    // a .bar deployment archive

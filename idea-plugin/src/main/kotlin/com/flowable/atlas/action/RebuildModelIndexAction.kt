@@ -1,6 +1,8 @@
 package com.flowable.atlas.action
 
+import com.flowable.atlas.AtlasDetails
 import com.flowable.atlas.AtlasNotifications
+import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
@@ -16,7 +18,6 @@ import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Messages
 
 /**
  * Tools → Flowable Atlas → "Rebuild Model Index": rescans the project's Flowable models in the
@@ -65,8 +66,8 @@ class RebuildModelIndexAction : AnAction(), DumbAware {
                     "${index.distinctCount()} models indexed",
                     NotificationType.INFORMATION,
                 )
-                .addAction(NotificationAction.createSimple("Show details") {
-                    Messages.showMessageDialog(project, render(index), "Model Index", Messages.getInformationIcon())
+                .addAction(NotificationAction.createSimple(message("details.show")) {
+                    AtlasDetails.show(project, message("details.index"), render(index))
                 })
                 .notify(project)
         }

@@ -17,15 +17,15 @@ import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiFile
 
 /**
- * Alt+Enter on an injected `${…}` / `{{…}}` fragment → open it in the Expression Playground,
+ * Alt+Enter on an injected `${…}` / `{{…}}` fragment → open it in the Atlas Playground,
  * pre-filled with the fragment text, the right dialect, and — when the host file is an indexed
  * model — the model scope. Only offered on injected fragments (in the playground's own field it
  * would be a no-op).
  */
 class OpenInExpressionPlaygroundIntention : IntentionAction, DumbAware {
 
-    override fun getText(): String = "Open in Expression Playground"
-    override fun getFamilyName(): String = "Open in Expression Playground"
+    override fun getText(): String = "Open in Atlas Playground"
+    override fun getFamilyName(): String = "Open in Atlas Playground"
     override fun startInWriteAction(): Boolean = false
 
     override fun isAvailable(project: Project, editor: Editor?, file: PsiFile?): Boolean =
@@ -58,5 +58,5 @@ class OpenInExpressionPlaygroundIntention : IntentionAction, DumbAware {
 
     // Opens a tool window, mutates no file — the default preview would render an empty diff.
     override fun generatePreview(project: Project, editor: Editor, file: PsiFile): IntentionPreviewInfo =
-        IntentionPreviewInfo.Html("Opens this expression in the Expression Playground, scoped to the enclosing model. The playground's previous expression for this dialect is replaced (Ctrl+Z there brings it back).")
+        IntentionPreviewInfo.Html("Opens this expression in the Atlas Playground, scoped to the enclosing model. The playground's previous expression for this dialect is replaced (Ctrl+Z there brings it back).")
 }

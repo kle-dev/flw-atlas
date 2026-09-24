@@ -5,13 +5,14 @@ import com.flowable.atlas.generate.dto.DtoSource
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.project.DumbAware
 
 /**
  * Tools → Flowable Atlas → Generate → Data-Object DTOs → "From Data Object…": open the "Generate
  * Data-Object DTOs" dialog on the data-object source — every indexed data object listed, nothing
  * preselected, so the user picks exactly the ones to generate a typed Java DTO for.
  */
-class GenerateDtoFromDataObjectAction : AnAction() {
+class GenerateDtoFromDataObjectAction : AnAction(), DumbAware {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return

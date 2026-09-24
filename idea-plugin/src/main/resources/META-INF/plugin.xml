@@ -82,11 +82,11 @@
           <li><b>Flowable environments</b> — define your DEV/QA/UAT/PROD servers once for the whole IDE
               instead of once per repository, and pick them from a list. Each environment holds a Flowable
               Design connection, a Flowable Work connection, or just one of the two; the Design pull and the
-              Expression Playground point independently, so running against QA while models still come from
+              Atlas Playground point independently, so running against QA while models still come from
               DEV1 is an ordinary way to work. Mark an environment <i>Protected</i> and Atlas asks before
               pulling from it or evaluating against it. Passwords and tokens stay in the IDE password
               safe.</li>
-          <li><b>Expression Playground</b> (a tool window) — type an
+          <li><b>Atlas Playground</b> (a tool window) — type an
               expression, pick backend or frontend, and get instant validation and completion; scope
               completion to one model; evaluate a frontend expression live against a pasted JSON payload;
               or evaluate a backend expression against a running app through the Flowable Inspect REST API.
@@ -120,7 +120,7 @@
               project's expression allowlist.</li>
           <li><b>IDE-native viewing</b> — the embedded explorer follows the IDE light/dark theme
               (switching restyles live) and carries a toolbar with <i>Regenerate Atlas Explorer</i>,
-              <i>Reload</i>, <i>Open Expression Playground</i> and <i>Open in Browser</i>.</li>
+              <i>Reload</i>, <i>Open Atlas Playground</i> and <i>Open in Browser</i>.</li>
           <li><b>Reopen without regenerating</b> — <i>Open Atlas Explorer</i> (Atlas Hub, or Tools →
               Flowable Atlas) opens an already-generated <code>*.explorer.html</code> — including
               one written by the standalone <code>atlas</code> CLI into the configured output folder — as a
@@ -142,6 +142,35 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.27.0</h3>
+        <ul>
+          <li><b>One name for every Atlas surface, one verb for opening it.</b> The tool windows are
+              <i>Atlas Hub</i>, <i>Atlas Findings</i> and <i>Atlas Playground</i> — the playground used to
+              be called <i>Expression Playground</i> although half of it is scripts — and every entry that
+              opens one reads <i>Open Atlas …</i>. Under <i>Generate</i> the entries no longer repeat the
+              submenu's verb (<i>Atlas Explorer…</i>, <i>Model Constants</i>, <i>Liquibase Changelogs → From
+              Data Object…</i>), while <i>Find Action</i> shows the whole sentence, so the two <i>From Data
+              Object…</i> entries are no longer lookalikes there. <i>Generate Model Constants</i> lost an
+              ellipsis it never earned: it asks for nothing.</li>
+          <li><b>Atlas Findings wears the explorer's Checks glyph</b> instead of the IDE's own Problems
+              icon, and <i>Regenerate Atlas Explorer</i> wears the platform's build hammer, so it can be
+              told from <i>Reload</i> beside it.</li>
+          <li><b>Every gutter mark can be switched off.</b> The four marks are listed under <i>Settings →
+              Editor → General → Gutter Icons</i> by name — <i>Flowable: Java referenced by models</i>,
+              <i>bot used by actions</i>, <i>REST handler called by models</i>, <i>model picture</i> — and a
+              click on a mark that finds no model any more says so instead of doing nothing.</li>
+          <li><b>Balloons instead of dialogs.</b> <i>Open Atlas Explorer</i> with nothing to open, the
+              Open-in-Explorer intention in the same situation, and an explorer file that went missing say
+              so in a balloon with the fix on it (<i>Generate Atlas Explorer…</i>, <i>Regenerate Atlas
+              Explorer</i>) instead of a modal question. <i>Show Details</i> opens a read-only editor tab
+              whatever the text's length; it used to be a dialog when short. The two notification groups are
+              listed as <i>Flowable Atlas: needs attention</i> and <i>Flowable Atlas: finished jobs</i>, and
+              every balloon now lands in the group its kind belongs to.</li>
+          <li><b>Context menus about what was right-clicked.</b> A model file in the Project view offers
+              <i>Open in Atlas Explorer</i>; <i>Go to Model…</i>, which ignores the selection, left that
+              menu. In the editor, <i>Copy Model Key</i> and <i>Compare Model with Archive</i> sit together
+              behind one separator. The generate actions stay available while the IDE indexes.</li>
+        </ul>
         <h3>0.26.0</h3>
         <ul>
           <li><b>A <code>.zip</code> or <code>.bar</code> in the Project view opens up.</b> A Design export
@@ -516,41 +545,6 @@
               failed Rebuild says so in a balloon instead of an IDE error, and a page's <code>{{…}}</code>
               bindings get the expression support a form's have.</li>
         </ul>
-        <h3>0.25.1</h3>
-        <ul>
-          <li><b>A pull that cannot run no longer traps the IDE.</b> <i>Pull from Flowable Design</i>
-              answers missing configuration by opening the environment editor and running again once that
-              closes, and the check in front of the second attempt asked whether a workspace and some apps
-              were selected — which a missing password does not change. So a connection with nothing signed
-              in reopened the page every single time it was closed, with nothing to break the loop but
-              closing the project. Two ordinary routes led straight into it: the action opens the editor
-              itself when no environment exists yet and pulls the moment one does, and a connection created
-              in that dialog has no secret stored yet; and <i>Sign out &amp; retry</i> on a failed pull
-              clears the secret before doing exactly the same thing. The editor is now offered once per
-              pull, and the attempt that follows it reports instead of reopening anything — <code>Not signed
-              in to &lt;server&gt;</code>, <code>No Flowable Design environment is selected</code>,
-              <code>This project has no folder on disk to pull into</code>, each on the usual balloon with
-              its <i>Configure…</i> action for a second try that the reader asks for.</li>
-        </ul>
-        <h3>0.25.0</h3>
-        <ul>
-          <li><b>A model in the project, compared against the model in the app.</b> Models are increasingly
-              generated rather than modelled — a form written by an LLM, say — and the file lands in the
-              project folder, not in the app export. The question that follows is "what does this change
-              against the app we have?", and that is a diff the IDE can draw, except that one of its two
-              sides lives inside <code>&lt;App&gt;.zip</code> and nothing offered that pairing: the route
-              was to unzip by hand into a temp folder. <i>Compare Model with Archive</i> is that pairing, in
-              the platform's own diff viewer, from either end — a file in the project is matched against the
-              model entries of every <code>.bar</code>/<code>.zip</code> in scope, an entry inside an
-              archive against the project's own model files. The counterpart is found by file name, by the
-              name behind the <code>&lt;kind&gt;-</code> prefix a deployment archive gives its entries, and
-              failing both by the model key inside the file, because a generator rarely names a file the way
-              Design does. One match opens straight away; several, or none, offer the archive's model
-              entries in a list that filters as you type. It is in the Project view's context menu — which
-              now also comes up on a <code>.json</code>, the one file the comparison is most wanted on and
-              the one it was hidden from — and in the editor's, which is how an entry opened by <i>Go to
-              Model</i> is reached.</li>
-        </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>
 
@@ -729,8 +723,8 @@
                 language="JAVA"
                 implementationClass="com.flowable.atlas.usage.FlowableEndpointUsageLineMarkerProvider"/>
         <!-- Gutter icon on a model-key expression — a literal or a constant/local reference at a key
-             call site — whose model has a diagram (bundled Design .svg, rendered from its DI layout, or a
-             form/page drawn as its grid) → open it in the IDE's built-in image/SVG viewer. No diagram
+             call site — whose model has a picture (a diagram rendered from its DI layout, a decision
+             table, or a form/page drawn as its grid) → open the model beside its picture. No picture
              (e.g. an action) → no marker. -->
         <codeInsight.lineMarkerProvider
                 language="JAVA"
@@ -784,11 +778,14 @@
         <!-- Warn when renaming a Java symbol referenced by Flowable model expressions (text, not auto-updated). -->
         <refactoring.elementListenerProvider
                 implementation="com.flowable.atlas.usage.FlowableRenameWarningProvider"/>
-        <!-- Balloon shown after generating the Atlas explorer (open in browser / open in IDE). -->
-        <notificationGroup id="Flowable Atlas" displayType="BALLOON"/>
+        <!-- What asks for attention: a failed pull, a rename not applied to the models, a sentence
+             explaining why nothing happened. See AtlasNotifications. -->
+        <notificationGroup id="Flowable Atlas" displayType="BALLOON"
+                           bundle="messages.FlowableAtlasBundle" key="notification.group.attention"/>
         <!-- "It worked": the index was rebuilt, artifacts were generated, waivers were saved — its own
              group, so it can be silenced in Settings → Notifications without silencing the warnings. -->
-        <notificationGroup id="Flowable Atlas Results" displayType="BALLOON"/>
+        <notificationGroup id="Flowable Atlas Results" displayType="BALLOON"
+                           bundle="messages.FlowableAtlasBundle" key="notification.group.results"/>
         <!-- The embedded "Atlas Explorer" editor tab is registered in flowable-atlas-jcef.xml: it needs
              the bundled JCEF plugin, and a provider named here would be asked on every file open
              whether or not that plugin is loaded. -->
@@ -955,8 +952,8 @@
              from this same extension point. See FlowableModelVisualFormattingGuard. -->
         <readerModeProvider implementation="com.flowable.atlas.model.FlowableModelVisualFormattingGuard"
                             order="last"/>
-        <!-- The Expression Playground: type an expression, get validation + completion. -->
-        <toolWindow id="Expression Playground"
+        <!-- The Atlas Playground: expressions and scripts, validated, completed and evaluated. -->
+        <toolWindow id="Atlas Playground"
                     anchor="bottom"
                     secondary="true"
                     icon="/icons/atlas/playground.svg"
@@ -967,7 +964,7 @@
         <!-- The explorer's findings in Swing: works under Remote Development and without JCEF. -->
         <toolWindow id="Atlas Findings"
                     anchor="bottom"
-                    icon="AllIcons.Toolwindows.ToolWindowProblems"
+                    icon="/icons/atlas/findings.svg"
                     factoryClass="com.flowable.atlas.findings.AtlasFindingsToolWindowFactory"/>
         <toolWindow id="Atlas Hub"
                     anchor="right"
@@ -1005,6 +1002,7 @@
             <add-to-group group-id="ToolsMenu" anchor="last"/>
 
             <!-- Open -->
+            <!-- Every opener is "Open Atlas …": the texts double as the Hub's button labels, which are verbs. -->
             <action id="Flowable.OpenAtlasHub"
                     class="com.flowable.atlas.action.OpenAtlasHubAction"
                     icon="/icons/atlas/hub.svg"/>
@@ -1013,13 +1011,18 @@
                  plugin's visible surface, everything else stays in the menu. -->
             <action id="Flowable.OpenAtlasFindings"
                     class="com.flowable.atlas.action.OpenAtlasFindingsAction"
-                    icon="AllIcons.Toolwindows.ToolWindowProblems"/>
+                    icon="/icons/atlas/findings.svg"/>
             <action id="Flowable.OpenAtlasExplorer"
                     class="com.flowable.atlas.action.OpenAtlasExplorerAction"
-                    icon="/icons/atlas/explorer.svg"/>
-            <action id="Flowable.OpenExpressionPlayground"
-                    class="com.flowable.atlas.action.OpenExpressionPlaygroundAction"
-                    icon="/icons/atlas/playground.svg"/>
+                    icon="/icons/atlas/explorer.svg">
+                <override-text place="AtlasHubSection"/>
+            </action>
+            <action id="Flowable.OpenAtlasPlayground"
+                    class="com.flowable.atlas.action.OpenAtlasPlaygroundAction"
+                    icon="/icons/atlas/playground.svg">
+                <!-- A Hub section's button: the section title already says what opens (FlowableActionIds.HUB_SECTION). -->
+                <override-text place="AtlasHubSection"/>
+            </action>
             <!-- Opens Search Everywhere on the "Flowable Model" tab — otherwise reachable only by
                  pressing Shift twice and tabbing across to it, which nobody discovers unaided. -->
             <action id="Flowable.GoToModel"
@@ -1041,41 +1044,63 @@
                  the file's own key in a model file — onto the clipboard. Also in the editor's context menu. -->
             <action id="Flowable.CopyModelKey"
                     class="com.flowable.atlas.action.CopyModelKeyAction"
-                    icon="AllIcons.Actions.Copy">
-                <add-to-group group-id="EditorPopupMenu" anchor="last"/>
-            </action>
+                    icon="AllIcons.Actions.Copy"/>
             <!-- The same model in two places: the entry inside an app export .bar/.zip and the file
                  sitting in the project. Both directions, whichever end is selected. Also in the editor's
                  context menu, which is how an entry opened by Go to Model is reached. -->
             <action id="Flowable.CompareModelWithArchive"
                     class="com.flowable.atlas.action.CompareModelWithArchiveAction"
-                    icon="AllIcons.Actions.Diff">
-                <add-to-group group-id="EditorPopupMenu" anchor="last"/>
-            </action>
+                    icon="AllIcons.Actions.Diff"/>
             <separator/>
 
-            <!-- Generate (submenu, with a nested Liquibase submenu) -->
+            <!-- Generate (submenu, with nested Liquibase and DTO submenus). Each action's own text is the
+                 whole sentence — what Find Action, a balloon and a Hub button show — and the menus, where
+                 the submenu already says "Generate", show the short one: <override-text> reads
+                 action.<id>.MainMenu.text. The Hub's ⋮ renders this same group ("popup@AtlasHub") and
+                 borrows the menu's text. -->
             <group id="Flowable.Generate" popup="true">
                 <action id="Flowable.GenerateAtlasExplorer"
                         class="com.flowable.atlas.action.GenerateAtlasExplorerAction"
-                        icon="/icons/atlas/explorer.svg"/>
+                        icon="/icons/atlas/explorer.svg">
+                    <override-text place="MainMenu"/>
+                    <override-text place="popup@AtlasHub" use-text-of-place="MainMenu"/>
+                    <override-text place="AtlasHubSection"/>
+                </action>
                 <!-- No ellipsis: it re-runs the existing page(s) with the settings as they are. Its text is
-                     what the Hub, the explorer banner and the post-pull balloon show (FlowableActionIds.text). -->
+                     what the Hub, the explorer banner and the post-pull balloon show (FlowableActionIds.text).
+                     The hammer is the platform's "build": a regenerated page is rebuilt, and Reload's arrows
+                     beside it on the explorer toolbar mean something else. -->
                 <action id="Flowable.RegenerateAtlasExplorer"
-                        class="com.flowable.atlas.action.RegenerateAtlasExplorerAction"/>
+                        class="com.flowable.atlas.action.RegenerateAtlasExplorerAction"
+                        icon="AllIcons.Actions.Compile"/>
                 <action id="Flowable.GenerateModelConstants"
-                        class="com.flowable.atlas.action.GenerateModelConstantsAction"/>
+                        class="com.flowable.atlas.action.GenerateModelConstantsAction">
+                    <override-text place="MainMenu"/>
+                    <override-text place="popup@AtlasHub" use-text-of-place="MainMenu"/>
+                </action>
                 <group id="Flowable.GenerateLiquibase" popup="true">
                     <action id="Flowable.GenerateLiquibaseFromDataObject"
-                            class="com.flowable.atlas.action.GenerateLiquibaseFromDataObjectAction"/>
+                            class="com.flowable.atlas.action.GenerateLiquibaseFromDataObjectAction">
+                        <override-text place="MainMenu"/>
+                        <override-text place="popup@AtlasHub" use-text-of-place="MainMenu"/>
+                    </action>
                     <action id="Flowable.GenerateLiquibaseFromApps"
-                            class="com.flowable.atlas.action.GenerateLiquibaseFromAppsAction"/>
+                            class="com.flowable.atlas.action.GenerateLiquibaseFromAppsAction">
+                        <override-text place="MainMenu"/>
+                        <override-text place="popup@AtlasHub" use-text-of-place="MainMenu"/>
+                    </action>
                 </group>
                 <group id="Flowable.GenerateDto" popup="true">
                     <action id="Flowable.GenerateDtoFromDataObject"
-                            class="com.flowable.atlas.action.GenerateDtoFromDataObjectAction"/>
+                            class="com.flowable.atlas.action.GenerateDtoFromDataObjectAction">
+                        <override-text place="MainMenu"/>
+                        <override-text place="popup@AtlasHub" use-text-of-place="MainMenu"/>
+                    </action>
                     <action id="Flowable.GenerateDtoFromApps"
-                            class="com.flowable.atlas.action.GenerateDtoFromAppsAction"/>
+                            class="com.flowable.atlas.action.GenerateDtoFromAppsAction">
+                        <override-text place="MainMenu"/>
+                        <override-text place="popup@AtlasHub" use-text-of-place="MainMenu"/>
+                    </action>
                 </group>
             </group>
             <separator/>
@@ -1100,7 +1125,8 @@
 
             <!-- Maintenance -->
             <action id="Flowable.RebuildModelIndex"
-                    class="com.flowable.atlas.action.RebuildModelIndexAction"/>
+                    class="com.flowable.atlas.action.RebuildModelIndexAction"
+                    icon="AllIcons.Actions.ForceRefresh"/>
             <!-- Debug helper; visible only with idea.is.internal=true. -->
             <action id="Flowable.DumpKeyIndex" internal="true"
                     class="com.flowable.atlas.action.DumpFlowableIndexAction"/>
@@ -1110,10 +1136,23 @@
              actions that are about the thing under the cursor. Hidden elsewhere (FlowableProjectViewGroup). -->
         <group id="Flowable.ProjectViewPopup" class="com.flowable.atlas.action.FlowableProjectViewGroup" popup="false">
             <separator/>
-            <reference ref="Flowable.GenerateAtlasExplorer"/>
-            <reference ref="Flowable.GoToModel"/>
+            <!-- A model file → its page. Not in Tools: it acts on the selected file and has no meaning
+                 without one; the editor has the intention for the same step. -->
+            <action id="Flowable.OpenModelInAtlasExplorer"
+                    class="com.flowable.atlas.action.OpenModelInAtlasExplorerAction"
+                    icon="/icons/atlas/explorer.svg"/>
             <reference ref="Flowable.CompareModelWithArchive"/>
+            <reference ref="Flowable.GenerateAtlasExplorer"/>
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </group>
+
+        <!-- The editor's context menu: the two actions about the key or model under the caret, as one
+             block behind a separator rather than two loose entries at the bottom. -->
+        <group id="Flowable.EditorPopup" popup="false">
+            <separator/>
+            <reference ref="Flowable.CopyModelKey"/>
+            <reference ref="Flowable.CompareModelWithArchive"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </group>
     </actions>
 </idea-plugin>

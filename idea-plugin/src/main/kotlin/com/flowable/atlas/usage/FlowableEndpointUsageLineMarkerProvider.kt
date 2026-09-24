@@ -4,7 +4,7 @@ import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.intellij.codeInsight.daemon.LineMarkerInfo
-import com.intellij.codeInsight.daemon.LineMarkerProvider
+import com.intellij.codeInsight.daemon.LineMarkerProviderDescriptor
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.markup.GutterIconRenderer
@@ -26,7 +26,13 @@ import javax.swing.Icon
  * lookups (endpoint path vs. the indexed URL set), the (potentially slow) file scan that
  * resolves the exact model files is deferred to the click.
  */
-class FlowableEndpointUsageLineMarkerProvider : LineMarkerProvider {
+class FlowableEndpointUsageLineMarkerProvider : LineMarkerProviderDescriptor() {
+
+    // A descriptor, not a bare provider: Settings → Editor → General → Gutter Icons lists it by this
+    // name with its icon, so a team that finds one kind of mark noisy can switch that one off.
+    override fun getName(): String = message("linemarker.endpoint.name")
+    override fun getIcon(): Icon = AtlasIcons.GutterEndpoint
+
 
     override fun getLineMarkerInfo(element: PsiElement): LineMarkerInfo<*>? = null
 

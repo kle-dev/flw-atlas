@@ -1,11 +1,6 @@
 package com.flowable.atlas.explorer
 
 import com.intellij.openapi.progress.ProgressManager
-import com.intellij.openapi.actionSystem.ActionManager
-import com.intellij.notification.NotificationType
-import com.intellij.notification.NotificationAction
-import com.flowable.atlas.action.FlowableActionIds
-import com.flowable.atlas.AtlasNotifications
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
@@ -95,17 +90,7 @@ object AtlasGenerationRunner {
                             .forEach { (key, pages) -> generateExplorers(project, key.first, pages) }
                     // "Regenerate" promises to refresh what exists; with no page on disk the honest answer
                     // is to say so and offer the generator's dialog, not to write the whole artifact set.
-                    existing.isEmpty() -> AtlasNotifications.group()
-                        .createNotification(
-                            "Nothing to regenerate",
-                            "No generated Atlas explorer (a *.explorer.html) was found under ${settings.atlasOutputDir}/ or in the project.",
-                            NotificationType.INFORMATION,
-                        )
-                        .addAction(NotificationAction.createSimpleExpiring("Generate Atlas Explorer…") {
-                            ActionManager.getInstance().getAction(FlowableActionIds.GENERATE_ATLAS_EXPLORER)
-                                ?.let { ActionManager.getInstance().tryToExecute(it, null, null, "AtlasRegenerate", true) }
-                        })
-                        .notify(project)
+                    existing.isEmpty() -> AtlasExplorerNotifier.notifyNoExplorer(project, settings.atlasOutputDir)
                     else -> generateAll(project, projectDir.resolve(settings.atlasOutputDir))
                 }
             }

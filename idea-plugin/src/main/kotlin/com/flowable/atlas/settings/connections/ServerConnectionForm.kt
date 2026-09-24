@@ -294,7 +294,7 @@ class ServerConnectionForm(private val project: Project, private val kind: Conne
                 "personal access token — and, for a server behind an identity provider, with your " +
                 "browser session. Credentials go to the IDE password safe, never into a file."
         else ->
-            "A running Flowable app the Expression Playground evaluates backend expressions against " +
+            "A running Flowable app the Atlas Playground evaluates backend expressions against " +
                 "(\"Evaluate Against App\", through the Inspect REST API). Authenticate with a username " +
                 "and password or an access token — and, behind an identity provider, with your browser " +
                 "session. Credentials go to the IDE password safe, never into a file."

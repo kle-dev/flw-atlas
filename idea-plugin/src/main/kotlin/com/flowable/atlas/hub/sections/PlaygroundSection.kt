@@ -9,7 +9,7 @@ import com.flowable.atlas.hub.HubSnapshot
 import com.intellij.ui.dsl.builder.Panel
 
 /**
- * The runtime the Expression Playground evaluates against, beside the button that opens it. Independent
+ * The runtime the Atlas Playground evaluates against, beside the button that opens it. Independent
  * of the Design pull's environment on purpose: a runtime on QA while models come from DEV1 is a normal
  * way to work, not a mistake to warn about.
  */
@@ -21,8 +21,8 @@ internal class PlaygroundSection(private val host: HubHost) : HubSection {
         panel.group(message("hub.section.playground")) {
             row(message("hub.playground.environment")) {
                 environment.placeIn(this)
-                button(FlowableActionIds.text(FlowableActionIds.OPEN_EXPRESSION_PLAYGROUND)) {
-                    host.invokeAction(FlowableActionIds.OPEN_EXPRESSION_PLAYGROUND)
+                button(FlowableActionIds.text(FlowableActionIds.OPEN_ATLAS_PLAYGROUND)) {
+                    host.invokeAction(FlowableActionIds.OPEN_ATLAS_PLAYGROUND)
                 }
             }
         }

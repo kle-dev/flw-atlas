@@ -16,7 +16,6 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.Separator
 import com.intellij.notification.NotificationAction
-import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.logger
@@ -311,12 +310,16 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
         if (project.isDisposed) return
         val vf = resolveLabel(label)
         if (vf == null) {
-            NotificationGroupManager.getInstance().getNotificationGroup(AtlasNotifications.GROUP_ID)
+            // A dead end said so before; now the fix is one click, on the balloon that says what broke.
+            AtlasNotifications.group()
                 .createNotification(
                     "File not found",
-                    "$label is not under the analysed project folder any more — regenerate the explorer.",
+                    "$label is not under the analysed project folder any more — the page is older than the files.",
                     NotificationType.WARNING,
                 )
+                .addAction(NotificationAction.createSimpleExpiring(FlowableActionIds.text(FlowableActionIds.REGENERATE_ATLAS_EXPLORER)) {
+                    if (!project.isDisposed) regenerate()
+                })
                 .notify(project)
             return
         }
@@ -371,7 +374,7 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
         Separator.getInstance(),
         // The playground used to be a second editor tab on every explorer file — a whole second panel,
         // with its own alarms and listeners, per open page. One tool window, one click away.
-        ActionManager.getInstance().getAction(FlowableActionIds.OPEN_EXPRESSION_PLAYGROUND),
+        ActionManager.getInstance().getAction(FlowableActionIds.OPEN_ATLAS_PLAYGROUND),
         object : AnAction("Open in Browser", "Open this explorer in the external browser", AllIcons.General.Web), DumbAware {
             override fun actionPerformed(e: AnActionEvent) {
                 AtlasBrowser.open(file.toNioPath())

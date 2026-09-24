@@ -16,7 +16,7 @@ import com.intellij.openapi.project.DumbAware
 import javax.swing.JComponent
 
 /**
- * Toolbar actions of the Expression Playground. All read only cheap panel/Swing state, hence
+ * Toolbar actions of the Atlas Playground. All read only cheap panel/Swing state, hence
  * [ActionUpdateThread.EDT]. Two [DialectToggleAction]s are the mode switch — toggle buttons in a tool
  * window toolbar are the platform's own idiom for it; the scope picker is a [ComboBoxAction] whose items
  * the panel pre-loads off the EDT — [ComboBoxAction.update] must never compute them.

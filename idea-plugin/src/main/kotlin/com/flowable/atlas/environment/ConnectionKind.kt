@@ -22,7 +22,7 @@ enum class ConnectionKind(val display: String, val linkOnly: Boolean) {
     DESIGN("Design", linkOnly = false),
 
     /**
-     * A running Flowable app — the Expression Playground evaluates against it. Called *Work* in the
+     * A running Flowable app — the Atlas Playground evaluates against it. Called *Work* in the
      * UI: it pairs with "Flowable Design", it is the product name the user already says, and the
      * codebase says it too (`WorkUrlParser`, "Paste a Work URL"). *Inspect* stays where it belongs —
      * naming the REST API, in the detail form's comment.

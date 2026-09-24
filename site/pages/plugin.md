@@ -83,7 +83,7 @@ that had drifted made every edit to the default look as if it had done nothing. 
 are stored per environment, because a workspace key belongs to one server and cannot mean the same
 thing on the next.
 
-**Playground** carries the runtime environment the Expression Playground evaluates against, and the
+**Playground** carries the runtime environment the Atlas Playground evaluates against, and the
 button that opens it. The two environments are independent on purpose: a runtime on QA while models
 still come from DEV1 is a normal way to work, not a mistake to warn about.
 
@@ -101,7 +101,7 @@ reopening Settings.
 The toolbar reads left to right as what acts on the panel, then where the plugin takes you.
 **Refresh** re-reads everything on the panel — the index status, the generated pages and the Flowable
 Design workspace and app lists; there is no second reload button. **Settings** opens the Atlas pages.
-Then, past a separator, the three destinations: **Open Atlas Explorer**, **Open Expression Playground**
+Then, past a separator, the three destinations: **Open Atlas Explorer**, **Open Atlas Playground**
 and **Go to Model…**, each one click rather than two. They stay reachable where they always were —
 the Explorer and Playground blocks have their own buttons, the model count in the header is still a
 link to the search — because a panel that offers a thing twice costs nothing, and a panel that hides
@@ -130,7 +130,7 @@ once left the Hub listing artifacts from the old one. Its footer names the runni
 nothing else: the platform range Atlas was verified against is a fact about the release, and it belongs
 [in the reference](../plugin/reference/) and in a bug report — not in a panel that stays open all day.
 
-Reach it from the right stripe, or **Tools → Flowable Atlas → Atlas Hub**.
+Reach it from the right stripe, or **Tools → Flowable Atlas → Open Atlas Hub**.
 
 ### The Atlas Explorer, inside the IDE
 
@@ -167,7 +167,7 @@ small stand-in page instead, which pulls the report through the IDE bridge in a 
 hash, so reopening the tab transfers nothing and a regenerated report is fetched once. On a local IDE
 nothing changes: the file is read from disk.
 
-Generate it from **Tools → Flowable Atlas → Generate → Generate Atlas Explorer…** — the page opens as a
+Generate it from **Tools → Flowable Atlas → Generate → Atlas Explorer…** — the page opens as a
 tab the moment it is written — reopen it later with **Open Atlas Explorer**, and choose which artifacts a
 run produces in *Settings → Tools → Flowable Atlas → Generation*. Full detail:
 [The Atlas explorer](../explorer/).
@@ -461,7 +461,7 @@ actually running.
 
 <figure class="fig mock">
   <div class="body">{{mockup:playground}}</div>
-  <figcaption><b>Expression Playground.</b> The code on one side, what it runs against and what came out
+  <figcaption><b>Atlas Playground.</b> The code on one side, what it runs against and what came out
   on the other. Sub-expression values inline turn “it returns nothing” into “the third argument is null,
   here”.</figcaption>
 </figure>
@@ -522,7 +522,7 @@ replacing it, because an SSO-fronted Flowable often wants both and its security 
 honours. Captured headers stay in memory for the IDE session only; passwords and tokens go to the OS
 keychain, keyed by URL — so a Design server and an app are separate logins, as they always were.
 
-Reach it from the bottom stripe, from **Tools → Flowable Atlas → Open Expression Playground**, from the
+Reach it from the bottom stripe, from **Tools → Flowable Atlas → Open Atlas Playground**, from the
 toolbar of an open explorer tab, or with Alt-Enter on any expression in a model — which also presets the
 instance kind from the model, a process instance for BPMN and a case instance for CMMN.
 

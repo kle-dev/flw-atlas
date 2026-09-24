@@ -23,8 +23,11 @@ import javax.swing.Icon
 object AtlasIcons {
     /** The Atlas Hub tool window and the action that opens it. */
     @JvmField val Hub: Icon = load("hub")
-    /** The Expression Playground tool window (the playground) and the action that opens it. */
+    /** The Atlas Playground tool window and the action that opens it. */
     @JvmField val Playground: Icon = load("playground")
+    /** The Atlas Findings tool window and the action that opens it — the explorer's Checks glyph, so the
+     *  window and the page it mirrors look like one thing. */
+    @JvmField val Findings: Icon = load("findings")
     /** A generated Atlas Explorer — the artifact rows in the Hub, the open/generate actions. */
     @JvmField val Explorer: Icon = load("explorer")
     /** A Flowable model whose type is not known or not relevant (the Tools menu group). */
@@ -56,7 +59,7 @@ object AtlasIcons {
 
     /** Every name this object loads — the test walks them so a renamed file cannot go unnoticed. */
     internal val names: List<String> =
-        listOf("hub", "playground", "explorer", "model", "bot", "endpoint", "archive",
+        listOf("hub", "playground", "findings", "explorer", "model", "bot", "endpoint", "archive",
             "gutter-reference", "gutter-bot", "gutter-endpoint", "gutter-diagram") +
             ModelType.entries.map { "type-${it.id}" }
 

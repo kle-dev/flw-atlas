@@ -19,7 +19,7 @@ import com.intellij.ui.LanguageTextField
 import com.intellij.util.ui.UIUtil
 
 /**
- * Layout regression gate for the Expression Playground tool window: both tabs exist, the frontend
+ * Layout regression gate for the Atlas Playground tool window: both tabs exist, the frontend
  * evaluator (payload editor + the one result pane) is wired inside the Expressions tab, and the shared
  * shell survives a dialect switch.
  */

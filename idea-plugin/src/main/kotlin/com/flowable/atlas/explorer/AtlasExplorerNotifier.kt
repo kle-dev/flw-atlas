@@ -1,15 +1,14 @@
 package com.flowable.atlas.explorer
 
+import com.flowable.atlas.AtlasDetails
 import com.flowable.atlas.AtlasNotifications
-import com.flowable.atlas.AtlasNotifications.GROUP_ID
+import com.flowable.atlas.FlowableAtlasBundle.message
+import com.flowable.atlas.action.FlowableActionIds
 import com.intellij.notification.NotificationAction
-import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
-import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.testFramework.LightVirtualFile
 import java.nio.file.Path
 
 /**
@@ -24,9 +23,6 @@ object AtlasExplorerNotifier {
     private const val TITLE_EXPLORER_GENERATED = "Atlas explorer generated"
     private const val TITLE_ARTIFACTS_GENERATED = "Atlas artifacts generated"
     private const val TITLE_GENERATION_FAILED = "Atlas generation failed"
-
-    /** Logs longer than this open as an editor tab instead of an info dialog. */
-    private const val INLINE_LOG_LIMIT = 2000
 
     /**
      * @param explorerHtml the generated `.explorer.html` to open, or null if none was produced
@@ -46,10 +42,10 @@ object AtlasExplorerNotifier {
         if (written.isEmpty()) {
             // Not a success: nothing was written. (The artifact setter keeps the selection non-empty,
             // so this is a guard, not a path anyone should reach.)
-            NotificationGroupManager.getInstance().getNotificationGroup(GROUP_ID)
+            AtlasNotifications.group()
                 .createNotification(
                     "Nothing generated",
-                    "No Atlas artifacts are selected — choose at least one in Settings → Flowable Atlas → Generation.",
+                    "No Atlas artifacts are selected — choose at least one in Settings → Tools → Flowable Atlas → Generation.",
                     NotificationType.WARNING,
                 )
                 .notify(project)
@@ -78,27 +74,28 @@ object AtlasExplorerNotifier {
     }
 
     fun notifyFailure(project: Project, message: String, log: String) {
-        val notification = NotificationGroupManager.getInstance()
-            .getNotificationGroup(GROUP_ID)
+        val notification = AtlasNotifications.group()
             .createNotification(TITLE_GENERATION_FAILED, message, NotificationType.ERROR)
-
-        when {
-            log.isBlank() -> {}
-            log.length <= INLINE_LOG_LIMIT ->
-                notification.addAction(NotificationAction.createSimple("Show details") {
-                    Messages.showInfoMessage(project, log, "Generator Output")
-                })
-            else ->
-                notification.addAction(NotificationAction.createSimple("Open log") {
-                    openLogInEditor(project, log)
-                })
+        if (log.isNotBlank()) {
+            notification.addAction(NotificationAction.createSimple(message("details.show")) {
+                AtlasDetails.show(project, message("details.generation"), log)
+            })
         }
         notification.notify(project)
     }
 
-    /** Opens the full [log] as an in-memory editor tab (no truncation, no temp file written on the EDT). */
-    private fun openLogInEditor(project: Project, log: String) {
-        val file = LightVirtualFile("flowable-atlas-generation.log", log)
-        FileEditorManager.getInstance(project).openFile(file, true)
+    /**
+     * No page to open, with the action that makes one. It was a Yes/No dialog in two places (the Open
+     * action, the Open-in-Explorer intention) and a balloon in a third; a question nobody has to answer
+     * before they can go on is a balloon.
+     */
+    fun notifyNoExplorer(project: Project, outputDir: String) {
+        AtlasNotifications.group()
+            .createNotification(message("explorer.none.title"), message("explorer.none", outputDir), NotificationType.INFORMATION)
+            .addAction(NotificationAction.createSimpleExpiring(FlowableActionIds.text(FlowableActionIds.GENERATE_ATLAS_EXPLORER)) {
+                val action = ActionManager.getInstance().getAction(FlowableActionIds.GENERATE_ATLAS_EXPLORER) ?: return@createSimpleExpiring
+                ActionManager.getInstance().tryToExecute(action, null, null, null, true)
+            })
+            .notify(project)
     }
 }

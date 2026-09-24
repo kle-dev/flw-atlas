@@ -5,6 +5,7 @@ import com.flowable.atlas.generate.liquibase.LiquibaseSource
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.project.DumbAware
 
 /**
  * Tools → Flowable Atlas → Generate → Liquibase → "From Data Object…": open the "Generate Liquibase
@@ -12,7 +13,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent
  * changelog (extracted from the bundling app export, or synthesized from its fields) with the output
  * folder and file-name pattern configurable before anything is written.
  */
-class GenerateLiquibaseFromDataObjectAction : AnAction() {
+class GenerateLiquibaseFromDataObjectAction : AnAction(), DumbAware {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return

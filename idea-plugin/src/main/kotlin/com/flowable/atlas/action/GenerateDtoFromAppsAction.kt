@@ -5,13 +5,14 @@ import com.flowable.atlas.generate.dto.DtoSource
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.project.DumbAware
 
 /**
  * Tools → Flowable Atlas → Generate → Data-Object DTOs → "From App(s)…": open the "Generate
  * Data-Object DTOs" dialog on the app source — every data object an app declares, preselected, with
  * the target source root, package and per-app nesting configurable before anything is written.
  */
-class GenerateDtoFromAppsAction : AnAction() {
+class GenerateDtoFromAppsAction : AnAction(), DumbAware {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return

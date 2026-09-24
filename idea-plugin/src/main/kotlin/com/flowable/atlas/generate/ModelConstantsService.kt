@@ -5,7 +5,6 @@ import com.flowable.atlas.action.GenerateModelConstantsAction
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.notification.NotificationAction
-import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
@@ -72,7 +71,7 @@ class ModelConstantsService(private val project: Project) {
         val state = ModelConstantsSettings.getInstance(project).state
         val root = VirtualFileManager.getInstance().findFileByUrl(state.sourceRootUrl) ?: return
         val old = resolveTargetFile(oldFqcn, root) ?: return
-        NotificationGroupManager.getInstance().getNotificationGroup(AtlasNotifications.GROUP_ID)
+        AtlasNotifications.group()
             .createNotification(
                 "Model constants class renamed",
                 "${old.name} was generated as $oldFqcn and stays where it is, no longer kept in sync. " +

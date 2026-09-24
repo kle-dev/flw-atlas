@@ -1,6 +1,6 @@
 package com.flowable.atlas.design
 
-import com.flowable.atlas.AtlasNotifications.GROUP_ID
+import com.flowable.atlas.AtlasNotifications
 import com.flowable.atlas.action.FlowableActionIds
 import com.flowable.atlas.environment.AtlasConnectionSelection
 import com.flowable.atlas.environment.auth.AtlasCredentials
@@ -19,7 +19,6 @@ import com.flowable.atlas.settings.connections.EnvironmentsTreePanel
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.notification.NotificationAction
-import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
@@ -406,9 +405,7 @@ class DesignPullService(private val project: Project) {
                 "$shown$more<br>Code or models referencing them may now be broken."
         }
         val type = if (outsideContent || failed.isNotEmpty() || removedKeys.isNotEmpty()) NotificationType.WARNING else NotificationType.INFORMATION
-        val notification = NotificationGroupManager.getInstance()
-            .getNotificationGroup(GROUP_ID)
-            .createNotification(title, body, type)
+        val notification = AtlasNotifications.groupFor(type).createNotification(title, body, type)
         // The index was already rebuilt above, but any generated Atlas Explorer is now out of date —
         // offer a one-click regenerate when such artifacts exist.
         val outputDir = FlowableAtlasProjectSettings.getInstance(project).atlasOutputDir
@@ -423,8 +420,7 @@ class DesignPullService(private val project: Project) {
     }
 
     private fun notifyFailure(message: String) {
-        val notification = NotificationGroupManager.getInstance()
-            .getNotificationGroup(GROUP_ID)
+        val notification = AtlasNotifications.group()
             .createNotification("Pull from Flowable Design failed", message, NotificationType.ERROR)
             .addAction(NotificationAction.createSimple("Configure…") { openEnvironmentsThenRetry() })
         if (isUnauthorized(message)) addSignOutAndRetry(notification)

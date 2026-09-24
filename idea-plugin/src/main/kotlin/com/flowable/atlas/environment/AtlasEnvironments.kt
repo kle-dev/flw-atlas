@@ -41,7 +41,7 @@ import com.intellij.openapi.components.service
  *
  * This class knows nothing about which connection a project uses — that is `AtlasConnectionSelection`,
  * per project, per Flowable sub-project and per kind. There is deliberately **no** "active
- * environment" anywhere: the Design pull and the Expression Playground hold independent pointers,
+ * environment" anywhere: the Design pull and the Atlas Playground hold independent pointers,
  * which is what makes "QA is my runtime, and I still pull models from DEV1" the normal case rather
  * than a special one.
  *

@@ -12,6 +12,31 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.27.0
+
+- **One name for every Atlas surface, one verb for opening it.** The tool windows are *Atlas Hub*, *Atlas
+  Findings* and *Atlas Playground* — the playground used to be called *Expression Playground* although half
+  of it is scripts — and every entry that opens one reads *Open Atlas …*. Under *Generate* the entries no
+  longer repeat the submenu's verb (*Atlas Explorer…*, *Model Constants*, *Liquibase Changelogs → From Data
+  Object…*), while *Find Action* shows the whole sentence, so the two *From Data Object…* entries are no
+  longer lookalikes there. *Generate Model Constants* lost an ellipsis it never earned: it asks for nothing.
+- **Atlas Findings wears the explorer's Checks glyph** instead of the IDE's own Problems icon, and
+  *Regenerate Atlas Explorer* wears the platform's build hammer, so it can be told from *Reload* beside it.
+- **Every gutter mark can be switched off.** The four marks are listed under *Settings → Editor → General →
+  Gutter Icons* by name — *Flowable: Java referenced by models*, *bot used by actions*, *REST handler called
+  by models*, *model picture* — and a click on a mark that finds no model any more says so instead of doing
+  nothing.
+- **Balloons instead of dialogs.** *Open Atlas Explorer* with nothing to open, the Open-in-Explorer intention
+  in the same situation, and an explorer file that went missing say so in a balloon with the fix on it
+  (*Generate Atlas Explorer…*, *Regenerate Atlas Explorer*) instead of a modal question. *Show Details* opens
+  a read-only editor tab whatever the text's length; it used to be a dialog when short. The two notification
+  groups are listed as *Flowable Atlas: needs attention* and *Flowable Atlas: finished jobs*, and every
+  balloon now lands in the group its kind belongs to.
+- **Context menus about what was right-clicked.** A model file in the Project view offers *Open in Atlas
+  Explorer*; *Go to Model…*, which ignores the selection, left that menu. In the editor, *Copy Model Key* and
+  *Compare Model with Archive* sit together behind one separator. The generate actions stay available while
+  the IDE indexes.
+
 ## 0.26.0
 
 - **A `.zip` or `.bar` in the Project view opens up.** A Design export in the repository could be searched

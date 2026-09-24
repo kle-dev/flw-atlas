@@ -1,5 +1,7 @@
 package com.flowable.atlas.action
 
+import com.flowable.atlas.AtlasNotifications
+import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.explorer.AtlasArtifact
 import com.flowable.atlas.explorer.AtlasExplorerOpener
 import com.flowable.atlas.explorer.AtlasGenerationRunner
@@ -14,7 +16,6 @@ import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.fileChooser.FileChooserFactory
 import com.intellij.openapi.fileChooser.FileSaverDescriptor
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import java.nio.file.Path
@@ -34,7 +35,7 @@ class GenerateAtlasExplorerAction : AnAction(), DumbAware {
         val project = e.project ?: return
         val projectDir = AtlasProjectRootService.getInstance(project).activeProjectDir()
         if (projectDir == null) {
-            Messages.showErrorDialog(project, "This action needs a project directory on disk.", "Flowable Atlas")
+            AtlasNotifications.info(project, message("explorer.noProjectDir"))
             return
         }
 

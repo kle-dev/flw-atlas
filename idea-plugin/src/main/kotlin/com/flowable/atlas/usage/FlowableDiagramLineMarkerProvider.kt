@@ -18,7 +18,7 @@ import com.intellij.psi.xml.XmlText
 import com.intellij.psi.xml.XmlToken
 import com.intellij.psi.xml.XmlTokenType
 import com.intellij.codeInsight.daemon.LineMarkerInfo
-import com.intellij.codeInsight.daemon.LineMarkerProvider
+import com.intellij.codeInsight.daemon.LineMarkerProviderDescriptor
 import com.intellij.codeInsight.hint.HintManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.markup.GutterIconRenderer
@@ -50,7 +50,13 @@ import javax.swing.Icon
  * Mirrors [FlowableModelReferenceLineMarkerProvider]: the highlight pass does only cheap cached-index
  * lookups (never builds the index) plus a sibling-file check; opening the editor is done on the click.
  */
-class FlowableDiagramLineMarkerProvider : LineMarkerProvider {
+class FlowableDiagramLineMarkerProvider : LineMarkerProviderDescriptor() {
+
+    // A descriptor, not a bare provider: Settings → Editor → General → Gutter Icons lists it by this
+    // name with its icon, so a team that finds one kind of mark noisy can switch that one off.
+    override fun getName(): String = FlowableAtlasBundle.message("linemarker.diagram.name")
+    override fun getIcon(): Icon = AtlasIcons.GutterDiagram
+
 
     override fun getLineMarkerInfo(element: PsiElement): LineMarkerInfo<*>? = null
 

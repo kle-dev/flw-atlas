@@ -9,7 +9,7 @@ import com.intellij.openapi.project.Project
 /**
  * Which connection *this project* uses, per [ConnectionKind] and per active Flowable sub-project.
  *
- * Two pointers, never one: "Pull from Design" and the Expression Playground choose independently, so
+ * Two pointers, never one: "Pull from Design" and the Atlas Playground choose independently, so
  * running against QA while still pulling models from DEV1 is the ordinary case rather than a
  * workaround. There is deliberately no "active environment" that both would follow.
  *

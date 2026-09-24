@@ -27,29 +27,36 @@ popup switches from the first to the second without retyping.
 
 **Go to Model…** is `Ctrl+Alt+Shift+M` (`⌥⇧⌘M` on macOS), because it is the one action that competes
 with Shift-Shift for the hand; rebind it under *Settings → Keymap → Plugins → Flowable Atlas*. A
-right-click on a **folder, a model file, an archive or a `.json`** in the Project view offers *Generate
-Atlas Explorer…*, *Go to Model…* and *Compare Model with Archive* — the actions that are about the thing
-under the cursor — and nothing on any other file. The `.json` is in that list for the comparison: a model
+right-click on a **folder, a model file, an archive or a `.json`** in the Project view offers *Open in
+Atlas Explorer* (on a model), *Compare Model with Archive* and *Generate Atlas Explorer…* — the actions
+that are about the thing under the cursor — and nothing on any other file. In the editor, *Copy Model Key*
+and *Compare Model with Archive* sit together at the bottom of the context menu, behind one separator. The `.json` is in that list for the comparison: a model
 generated into the project folder is a `.json` that counts as a model only inside a Design `*-models/`
 folder, which is precisely the file the comparison is wanted on.
 
+Every action's own text is the whole sentence — what *Find Action*, a balloon and a Hub button say. Where
+the context already says half of it, the entry is shorter: under **Generate** the entries read *Atlas
+Explorer…*, *Model Constants*, *Liquibase Changelogs → From Data Object…*, and in a Hub block whose title
+is *Explorer* the buttons read *Generate…* and *Open*. Every tool-window opener is **Open Atlas …**.
+
 | Action | Also in |
 |---|---|
-| Atlas Hub | — |
-| Atlas Findings | — |
+| Open Atlas Hub | — |
+| Open Atlas Findings | — |
 | Open Atlas Explorer | Atlas Hub toolbar and its *Explorer* block |
-| Open Expression Playground | Atlas Hub toolbar and its *Playground* block |
-| Go to Model… | Atlas Hub toolbar and the model count in its header; Project view context menu; `Ctrl+Alt+Shift+M`. Under Remote Development it opens the *Find in Models…* list, because Search Everywhere has no Flowable tab there |
+| Open Atlas Playground | Atlas Hub toolbar and its *Playground* block |
+| Go to Model… | Atlas Hub toolbar and the model count in its header; `Ctrl+Alt+Shift+M`. Under Remote Development it opens the *Find in Models…* list, because Search Everywhere has no Flowable tab there |
 | Find in Models… | The *Go to Model…* popup, with `⇧⏎` on any row |
 | Copy Model Key | Editor context menu, on a key — a literal or constant at a Flowable API site in Java, a cross-reference or the file's own key in a model file; the Atlas Hub's *Recent Models* context menu |
 | Compare Model with Archive | Project view context menu, on a model file or a `.json`; editor context menu, which is how an entry inside a `.bar`/`.zip` is reached. Its text names the direction it is about to take — *Compare with Model in Archive* on a file in the project, *Compare with Model in Project* on an entry in an archive |
-| Generate → Generate Atlas Explorer… | Atlas Hub, *Explorer* block; Project view context menu |
-| Generate → Regenerate Atlas Explorer | Atlas Hub attention line, when models changed since the last generation; the explorer tab's banner and toolbar; the balloon after a Design pull |
-| Generate → Generate Model Constants… | Atlas Hub ⋮ menu |
-| Generate → Liquibase → From Data Object… | — |
-| Generate → Liquibase → From App(s)… | — |
-| Generate → Data-Object DTOs → From Data Object… | — |
-| Generate → Data-Object DTOs → From App(s)… | — |
+| Open in Atlas Explorer | Project view context menu, on a model file — the model's page in the newest generated explorer. The editor offers the same step as an intention on a key |
+| Generate Atlas Explorer… | Atlas Hub, *Explorer* block; Project view context menu |
+| Regenerate Atlas Explorer | Atlas Hub attention line, when models changed since the last generation; the explorer tab's banner and toolbar; the balloon after a Design pull. Its icon is the platform's *build* hammer, so it cannot be mistaken for the explorer tab's *Reload* beside it |
+| Generate Model Constants | Atlas Hub ⋮ menu |
+| Generate Liquibase Changelog from Data Object… | — |
+| Generate Liquibase Changelogs from Apps… | — |
+| Generate DTOs from Data Object… | — |
+| Generate DTOs from Apps… | — |
 | Switch Design Environment… | Atlas Hub, *Design Pull* block |
 | Pull from Flowable Design | Atlas Hub, *Design Pull* block — the button names the environment |
 | Switch Work Environment… | Atlas Hub, *Playground* block; the playground itself |
@@ -57,9 +64,17 @@ folder, which is precisely the file the comparison is wanted on.
 | Rebuild Model Index | Atlas Hub ⋮ menu, and beside the model count in its header |
 | Dump Key Index (Internal) | Only visible in an internal-mode IDE |
 
+A question nobody has to answer before they can go on is a balloon, not a dialog: *Open Atlas Explorer*
+with no page to open says so and offers *Generate Atlas Explorer…*, and every *Show Details* — a
+generator log, the index's per-type breakdown — opens as a read-only editor tab, whatever its length.
+The balloons come in two groups under *Settings → Appearance & Behavior → Notifications*, so one can be
+silenced without the other: **Flowable Atlas: finished jobs** (the index was rebuilt, artifacts were
+generated, waivers were saved) and **Flowable Atlas: needs attention** (a warning, a failure, or why
+nothing happened).
+
 Panel toolbars carry a few more that are not registered actions, so they do not appear in *Find
 Action*: the Hub's *Refresh* (which also re-reads the Flowable Design workspace and app lists) and *Settings*; the Environments page's *Test Connection*; the explorer tab's *Back*, *Forward*, *Reload* and *Open in Browser*; the
-Expression Playground's dialect toggles, scope selector, *Evaluate Against App* (Ctrl+Enter), *Show
+Atlas Playground's dialect toggles, scope selector, *Evaluate Against App* (Ctrl+Enter), *Show
 Sub-Expression Values* and its gear menu with *Stack Panels*, *Expression Settings…* and *Environment
 Settings…*; and the Script Playground's language and context selectors with *Load Script from Model…*,
 *Load Example…* and the same gear.
@@ -70,10 +85,10 @@ Settings…*; and the Script Playground's language and context selectors with *L
 |---|---|---|
 | **Atlas Hub** | Right stripe | A status header — Flowable project · model count (a link to *Go to Model…*, *Rebuild* beside it) · index age · one attention line when something needs a hand — over four blocks: Explorer · Recent Models (the models opened last, newest first; double-click opens at the key, the context menu copies the key, opens the explorer page, or removes one entry or all) · Design Pull (environment · workspace · apps · pull) · Playground. See [the Hub](../#the-atlas-hub) |
 | **Atlas Findings** | Bottom stripe | Every finding of the project from the same in-process analysis the explorer is built from, as a tree: *Defects*, then — when asked for — *Advice* and *Accepted*, each by check; an advice finding wears the information icon rather than a warning. Double-click or Enter opens the finding's file at its line; *Accept…* asks for a reason and writes one rule per selected finding to the output folder's `waivers.json`, the file the explorer's Save writes, then analyses again. Swing, so it works under Remote Development and without JCEF |
-| **Expression Playground** | Bottom stripe (secondary) | Two tabs on one shell — editor and problems · context · result: *Expressions* (Backend / Frontend) and *Scripts*. See [the playgrounds](../#the-playgrounds) |
+| **Atlas Playground** | Bottom stripe (secondary) | Two tabs on one shell — editor and problems · context · result: *Expressions* (Backend / Frontend) and *Scripts*. See [the playgrounds](../#the-playgrounds) |
 
 The generated explorer opens as an editor tab, **Atlas Explorer** (the page, in the embedded browser);
-its toolbar opens the Expression Playground. Inside the IDE the page can also write back: when
+its toolbar opens the Atlas Playground. Inside the IDE the page can also write back: when
 you [accept a finding](../../explorer/#accepting-a-finding), **Save to waivers.json** writes it beside the
 report through the IDE's own file system, so it shows up in the Git tool window like any other edit, and
 then regenerates the explorer so the counts, badges and the CI gate follow the decision. A balloon names
@@ -107,17 +122,20 @@ engine rather than from the file.
 ## Gutter icons
 
 Four, each with a mark of its own so the gutter says which relationship it is — three on Java code, the
-fourth on Java code and inside model files:
+fourth on Java code and inside model files. Each is its own switch under *Settings → Editor → General →
+Gutter Icons*, named *Flowable: Java referenced by models*, *Flowable: bot used by actions*, *Flowable:
+REST handler called by models* and *Flowable: model picture*:
 
 | Icon | On | Goes to |
 |---|---|---|
 | a link | A class or method referenced by a model | The models that reference it ("Flowable Models"), each opened at the reference itself — the `${bean…}` in a deployment XML, not its first line |
 | a bot | A `BotService` implementation | The `.action` models that use that bot, each opened at its `botKey` |
 | a globe | A Spring REST handler | The models that call that endpoint, each opened at the calling URL |
-| a route | A model-key literal or resolvable constant in Java; inside a model file, the file's own key and every reference to a process, case or decision (`calledElement`, `caseRef`, `processRef`, a form's `processReference`, …) | That model's diagram, in the Images viewer — shown only when a diagram actually exists |
+| a route | A model-key literal or resolvable constant in Java; inside a model file, the file's own key and every reference to a process, case, decision or form (`calledElement`, `caseRef`, `processRef`, a form's `processReference`, `flowable:formKey`, …) | That model, opened beside its picture — shown only when a picture actually exists |
 
 The tooltip says what the mark knows: how many actions use the bot, which verbs and paths the models call,
-which model's diagram opens (*Process diagram: DEMO-P001*). When several models sit behind a mark, a chooser
+which model's diagram opens (*Process diagram: DEMO-P001*). A click that finds no model any more — one
+changed since the index was built — says so beside the mark instead of doing nothing. When several models sit behind a mark, a chooser
 lists each with its type's icon, its key and its file — `app.zip → processes/x.bpmn` for a packed model — and
 typing filters by key or name.
 
@@ -185,7 +203,7 @@ covers every service that extends it.
 *Alt-Enter*, category **Flowable**:
 
 - **Generate Java DTO for this Flowable data object** — on a data-object key.
-- **Open in Expression Playground** — on any injected expression, pre-filled with its dialect, its
+- **Open in Atlas Playground** — on any injected expression, pre-filled with its dialect, its
   model's scope and the instance kind the model implies (process for BPMN, case for CMMN).
 - **Open in Atlas Explorer** — on a model key in Java (a literal or a constant at a Flowable API site;
   any literal equal to a known key with *Recognize model keys anywhere in code*), and inside a model file
@@ -285,7 +303,7 @@ login.
 
 There is no page for "which environment this project uses". The Design environment, its workspace and
 its apps are picked in the Atlas Hub, beside the models they fetch; the runtime environment is picked in
-the Expression Playground, beside the expression it evaluates. That is deliberate: a settings page
+the Atlas Playground, beside the expression it evaluates. That is deliberate: a settings page
 holding a second copy of those choices could not be told apart from the Hub's, and the pair drifting was
 the whole reason the feature was rebuilt.
 
@@ -328,7 +346,7 @@ archive icon. The icon is decided from the file name alone, so the Project view 
 | `.bar`, `.zip` | Archive | Entries are indexed, navigable, searchable by path and content, and can render diagrams — without unpacking |
 | Liquibase changelog XML | XML | Column, table and type completion; the coverage inspection |
 | Design workspace `*-models/*.json` | JSON | Inside a `.bar` / `.zip`, the forms, pages, actions and data objects are always models. Loose in the repository, indexed **only** with *Also index raw Flowable Design workspace sources* enabled |
-| `*.explorer.html` | — | Opens as the Atlas Explorer tab; its toolbar opens the Expression Playground |
+| `*.explorer.html` | — | Opens as the Atlas Explorer tab; its toolbar opens the Atlas Playground |
 
 ## Notifications
 

@@ -5,7 +5,7 @@ import com.flowable.atlas.icons.AtlasIcons
 import com.flowable.atlas.index.FlowableIndex
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.intellij.codeInsight.daemon.LineMarkerInfo
-import com.intellij.codeInsight.daemon.LineMarkerProvider
+import com.intellij.codeInsight.daemon.LineMarkerProviderDescriptor
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.markup.GutterIconRenderer
@@ -26,7 +26,13 @@ import javax.swing.Icon
  * files that use the symbol. The reference set comes from the (already cached) model index — the
  * highlight pass does only O(1) set lookups; the (potentially slow) file scan is deferred to the click.
  */
-class FlowableModelReferenceLineMarkerProvider : LineMarkerProvider {
+class FlowableModelReferenceLineMarkerProvider : LineMarkerProviderDescriptor() {
+
+    // A descriptor, not a bare provider: Settings → Editor → General → Gutter Icons lists it by this
+    // name with its icon, so a team that finds one kind of mark noisy can switch that one off.
+    override fun getName(): String = message("linemarker.reference.name")
+    override fun getIcon(): Icon = AtlasIcons.GutterReference
+
 
     // The fast per-element pass contributes nothing; everything is done in the slow batch pass so the
     // index lookups never delay the first highlighting pass.

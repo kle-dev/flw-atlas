@@ -1,9 +1,9 @@
 package com.flowable.atlas.intention
 
-import com.flowable.atlas.action.FlowableActionIds
 import com.flowable.atlas.completion.SiteMatching
 import com.flowable.atlas.completion.ValueKeyMatching
 import com.flowable.atlas.explorer.AtlasExplorerFiles
+import com.flowable.atlas.explorer.AtlasExplorerNotifier
 import com.flowable.atlas.explorer.AtlasExplorerOpener
 import com.flowable.atlas.explorer.ExplorerRoutes
 import com.flowable.atlas.index.FlowableModelIndexService
@@ -15,7 +15,6 @@ import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.codeInsight.intention.IntentionAction
 import com.intellij.codeInsight.intention.preview.IntentionPreviewInfo
-import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.progress.ProgressIndicator
@@ -23,7 +22,6 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
@@ -58,19 +56,6 @@ class OpenInAtlasExplorerIntention : IntentionAction, DumbAware {
         openPage(project, entry)
     }
 
-    private fun offerToGenerate(project: Project, outputDir: String) {
-        val choice = Messages.showYesNoDialog(
-            project,
-            "No generated Atlas explorer (a *.explorer.html) was found under $outputDir/ or in the project.\n\n" +
-                "Generate one now? Then run this action again to open the model's page.",
-            "Flowable Atlas", "Generate…", "Cancel", Messages.getQuestionIcon(),
-        )
-        if (choice == Messages.YES) {
-            ActionManager.getInstance().getAction(FlowableActionIds.GENERATE_ATLAS_EXPLORER)
-                ?.let { ActionManager.getInstance().tryToExecute(it, null, null, null, true) }
-        }
-    }
-
     // Opens a tab, edits nothing — the default preview would render an empty diff.
     override fun generatePreview(project: Project, editor: Editor, file: PsiFile): IntentionPreviewInfo =
         IntentionPreviewInfo.Html("Opens this model's page in the Atlas Explorer: who references it, what it uses, its findings and its diagram.")
@@ -89,7 +74,7 @@ class OpenInAtlasExplorerIntention : IntentionAction, DumbAware {
                 override fun run(indicator: ProgressIndicator) { files = AtlasExplorerFiles.find(base, outputDir) }
                 override fun onSuccess() {
                     if (project.isDisposed) return
-                    val newest = files.firstOrNull() ?: return OpenInAtlasExplorerIntention().offerToGenerate(project, outputDir)
+                    val newest = files.firstOrNull() ?: return AtlasExplorerNotifier.notifyNoExplorer(project, outputDir)
                     val vf = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(newest) ?: return
                     AtlasExplorerOpener.openInIde(project, vf, hash)
                 }

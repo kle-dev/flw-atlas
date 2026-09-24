@@ -5,6 +5,7 @@ import com.flowable.atlas.generate.liquibase.LiquibaseSource
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.project.DumbAware
 
 /**
  * Tools → Flowable Atlas → Generate → Liquibase → "From App(s)…": open the "Generate Liquibase
@@ -12,7 +13,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent
  * changelog found in the project's Design-export zips, with the output folder and file-name pattern
  * configurable before anything is written.
  */
-class GenerateLiquibaseFromAppsAction : AnAction() {
+class GenerateLiquibaseFromAppsAction : AnAction(), DumbAware {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return

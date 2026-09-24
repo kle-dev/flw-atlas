@@ -53,7 +53,7 @@ object DesignClient {
 
     /**
      * A server and how to authenticate to it. [auth] is the plugin-wide [AuthContext] — the same type
-     * the Expression Playground sends — so a Design behind an identity provider can be reached with a
+     * the Atlas Playground sends — so a Design behind an identity provider can be reached with a
      * captured browser session, which used to be impossible here: this client set exactly one
      * `Authorization` header and had no way to carry a cookie.
      */

@@ -82,7 +82,7 @@ import javax.swing.JComponent
 import javax.swing.JPanel
 
 /**
- * The Expression Playground on the shared [PlaygroundShell]: the expression on one side — with the
+ * The Atlas Playground on the shared [PlaygroundShell]: the expression on one side — with the
  * problems under it — and, on the other, *what it runs against* ([ContextPanel]: the payload and its
  * node for the frontend dialect, the environment and the live instance for the backend one) over *what
  * came out* ([PlaygroundResultPane]). Switching the dialect swaps the editor's language and the
@@ -798,7 +798,6 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
     )
 
     companion object {
-        const val TOOL_WINDOW_ID = "Expression Playground"
         private const val ALL_VARIABLES_LABEL = "All variables"
         private const val FRONTEND_EMPTY_HINT = "Type an expression to evaluate"
         private const val BACKEND_EMPTY_HINT = "Choose an environment and a live instance id, then press Evaluate (Ctrl+Enter)"
@@ -811,7 +810,7 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
 
         /** Activate the playground tool window and pre-fill it — the intention's and the explorer's entry point. */
         fun open(project: Project, request: OpenRequest) {
-            val toolWindow = ToolWindowManager.getInstance(project).getToolWindow(TOOL_WINDOW_ID) ?: return
+            val toolWindow = ToolWindowManager.getInstance(project).getToolWindow(FlowableExpressionToolWindowFactory.ID) ?: return
             toolWindow.activate({
                 // the tool window also hosts the Scripts tab — make sure the Expressions one shows
                 val cm = toolWindow.contentManager

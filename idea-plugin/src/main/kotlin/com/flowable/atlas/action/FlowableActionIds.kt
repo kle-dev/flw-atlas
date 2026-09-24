@@ -1,6 +1,7 @@
 package com.flowable.atlas.action
 
 import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.actionSystem.Presentation
 
 /** Action IDs registered in plugin.xml — referenced from code (hub toolbar, cross-invocation). */
 object FlowableActionIds {
@@ -8,8 +9,10 @@ object FlowableActionIds {
     const val MENU = "Flowable.Menu"
 
     const val OPEN_ATLAS_HUB = "Flowable.OpenAtlasHub"
+    const val OPEN_ATLAS_FINDINGS = "Flowable.OpenAtlasFindings"
     const val OPEN_ATLAS_EXPLORER = "Flowable.OpenAtlasExplorer"
-    const val OPEN_EXPRESSION_PLAYGROUND = "Flowable.OpenExpressionPlayground"
+    const val OPEN_ATLAS_PLAYGROUND = "Flowable.OpenAtlasPlayground"
+    const val OPEN_MODEL_IN_ATLAS_EXPLORER = "Flowable.OpenModelInAtlasExplorer"
     const val GO_TO_MODEL = "Flowable.GoToModel"
     const val FIND_IN_MODELS = "Flowable.FindInModels"
     const val GENERATE_ATLAS_EXPLORER = "Flowable.GenerateAtlasExplorer"
@@ -33,4 +36,23 @@ object FlowableActionIds {
      * action means the bundle is the only place it is written.
      */
     fun text(id: String): String = ActionManager.getInstance().getAction(id)?.templateText ?: id
+
+    /**
+     * The place a button inside an Atlas Hub section reads its text for. No toolbar or menu renders at
+     * it: it exists so a button under the *Explorer* title can say *Open* while the menu, Find Action
+     * and the Hub toolbar's tooltip say *Open Atlas Explorer*. Not the toolbar's own place — that one
+     * shows tooltips, where *Open* alone would not say what opens.
+     */
+    const val HUB_SECTION = "AtlasHubSection"
+
+    /**
+     * The action's text at [place] — its `<override-text place="…">` when the descriptor declares one,
+     * its own text otherwise. Still one string per place in the bundle, still read from the action.
+     */
+    fun text(id: String, place: String): String {
+        val action = ActionManager.getInstance().getAction(id) ?: return id
+        val presentation = Presentation().apply { copyFrom(action.templatePresentation) }
+        action.applyTextOverride(place, presentation)
+        return presentation.text ?: action.templateText ?: id
+    }
 }

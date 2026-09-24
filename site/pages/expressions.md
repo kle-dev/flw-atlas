@@ -122,7 +122,7 @@ root objects Flowable actually binds in that context.
 
 ## In the IDE
 
-Two playgrounds, both in the *Expression Playground* tool window:
+Two playgrounds, both in the *Atlas Playground* tool window:
 
 - **Expressions** — type an expression in either dialect and see it validated as you type. Frontend
   expressions evaluate live against a JSON payload you paste, with each sub-expression's value shown

@@ -1,9 +1,8 @@
 package com.flowable.atlas.usage
 
-import com.flowable.atlas.AtlasNotifications.GROUP_ID
+import com.flowable.atlas.AtlasNotifications
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.intellij.notification.NotificationAction
-import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
@@ -72,8 +71,7 @@ class FlowableRenameWarningProvider : RefactoringElementListenerProvider {
             1 -> "1 Flowable model"
             else -> "${files.size} Flowable models"
         }
-        val notification = NotificationGroupManager.getInstance()
-            .getNotificationGroup(GROUP_ID)
+        val notification = AtlasNotifications.group()
             .createNotification(
                 "Rename not applied to Flowable models",
                 "'$displayName' is used by $where as expression text (e.g. \${bean.$displayName()}). " +

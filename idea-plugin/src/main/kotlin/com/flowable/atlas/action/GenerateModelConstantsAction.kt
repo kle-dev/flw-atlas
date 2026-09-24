@@ -11,6 +11,7 @@ import com.intellij.notification.NotificationType
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.options.ShowSettingsUtil
@@ -18,17 +19,17 @@ import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 
 /**
- * Tools → Flowable Atlas → "Generate Model Constants…" (and the Atlas Hub "Generate Constants…" link):
+ * Tools → Flowable Atlas → Generate → "Model Constants" (and the Atlas Hub "Generate Constants…" link):
  * generates a Java class holding every project model key as a constant. After generation the class is
  * kept in sync automatically when models are added/removed (see ModelConstantsAutoRefresher).
  *
- * The class name comes from Settings → Flowable Atlas → Generation (default [DEFAULT_FQCN]); no modal
+ * The class name comes from Settings → Tools → Flowable Atlas → Generation (default [DEFAULT_FQCN]); no modal
  * prompt is shown, which is what makes the action reliable under JetBrains Remote Dev — a modal input
  * dialog raised from a backend menu action can silently fail to surface on the thin client ("nothing
  * happens on click"). Every failure now surfaces as a balloon, and a project without a Java source
  * root falls back to a folder chooser / the project root instead of dead-ending.
  */
-class GenerateModelConstantsAction : AnAction() {
+class GenerateModelConstantsAction : AnAction(), DumbAware {
 
     override fun actionPerformed(e: AnActionEvent) {
         e.project?.let { generate(it) }
@@ -52,7 +53,7 @@ class GenerateModelConstantsAction : AnAction() {
                 if (fqcn.endsWith(".") || fqcn.substringAfterLast('.').isBlank()) {
                     notify(
                         project, "Invalid class name '$fqcn'",
-                        "Fix the class name in Settings → Flowable Atlas → Generation → Model Constants.",
+                        "Fix the class name in Settings → Tools → Flowable Atlas → Generation → Model Constants.",
                         NotificationType.ERROR, withSettings = true,
                     )
                     return
@@ -80,7 +81,7 @@ class GenerateModelConstantsAction : AnAction() {
                 if (usedDefault) {
                     notify(
                         project, "Generated $fqcn",
-                        "Change the class name any time in Settings → Flowable Atlas → Generation → Model Constants.",
+                        "Change the class name any time in Settings → Tools → Flowable Atlas → Generation → Model Constants.",
                         NotificationType.INFORMATION, withSettings = true,
                     )
                 }
