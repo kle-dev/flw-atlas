@@ -1,5 +1,6 @@
 package com.flowable.atlas.playground
 
+import com.flowable.atlas.FlowableAtlasBundle
 import com.intellij.icons.AllIcons
 import com.intellij.ui.AnimatedIcon
 import com.intellij.ui.JBColor
@@ -25,7 +26,8 @@ class PlaygroundResultPane(private var emptyHint: String) : JPanel(BorderLayout(
     sealed interface ResultState {
         data class Empty(val hint: String) : ResultState
         data class Loading(val label: String) : ResultState
-        data class Ok(val value: String) : ResultState
+        /** [type] — `string`, `number` — is shown beside the caption, not padded onto the value. */
+        data class Ok(val value: String, val type: String? = null) : ResultState
         data class Error(val message: String) : ResultState
         data class Info(val message: String) : ResultState
     }
@@ -33,7 +35,8 @@ class PlaygroundResultPane(private var emptyHint: String) : JPanel(BorderLayout(
     var state: ResultState = ResultState.Empty(emptyHint)
         private set
 
-    private val caption = JBLabel("Result").apply {
+    private val captionText = FlowableAtlasBundle.message("playground.result")
+    private val caption = JBLabel(captionText).apply {
         font = JBUI.Fonts.smallFont()
         foreground = UIUtil.getContextHelpForeground()
         border = JBUI.Borders.empty(0, 2, 3, 0)
@@ -68,10 +71,10 @@ class PlaygroundResultPane(private var emptyHint: String) : JPanel(BorderLayout(
         if (state is ResultState.Empty) showEmpty()
     }
 
-    fun showOk(value: String) = show(ResultState.Ok(value))
+    fun showOk(value: String, type: String? = null) = show(ResultState.Ok(value, type))
     fun showError(message: String) = show(ResultState.Error(message))
     fun showInfo(message: String) = show(ResultState.Info(message))
-    fun showLoading(label: String = "Evaluating…") = show(ResultState.Loading(label))
+    fun showLoading(label: String = FlowableAtlasBundle.message("playground.evaluating")) = show(ResultState.Loading(label))
     fun showEmpty() = show(ResultState.Empty(emptyHint))
 
     fun show(next: ResultState) {
@@ -85,6 +88,7 @@ class PlaygroundResultPane(private var emptyHint: String) : JPanel(BorderLayout(
             is ResultState.Empty -> Triple(null, next.hint, grey)
         }
         icon.icon = i
+        caption.text = (next as? ResultState.Ok)?.type?.let { "$captionText · $it" } ?: captionText
         text.foreground = color
         text.text = message
         text.caretPosition = 0

@@ -1,5 +1,7 @@
 package com.flowable.atlas.expr.toolwindow
 
+import com.flowable.atlas.action.FlowableActionIds
+import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.environment.AtlasCatalog
 import com.flowable.atlas.environment.AtlasConnection
 import com.flowable.atlas.environment.AtlasProtection
@@ -89,7 +91,7 @@ import javax.swing.JPanel
  * context's controls; the layout never moves.
  *
  * Validation and the frontend's live evaluation run in [PlaygroundDiagnostics]; the backend's *Evaluate
- * Against App* (Ctrl+Enter) posts to a running app via the Flowable Inspect REST API. What the backend
+ * Against Work* (Ctrl+Enter) posts to a running Flowable Work via the Flowable Inspect REST API. What the backend
  * card is pointed at is [PlaygroundTargets]. State persists per user in workspace.xml
  * ([FlowableExprPlaygroundState]); credentials come from the connection and the PasswordSafe.
  */
@@ -224,7 +226,7 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
 
     private val contextCards = JPanel(CardLayout())
     private val context = ContextPanel("Against", state.contextExpanded) { state.contextExpanded = it }
-    private val resultPane = PlaygroundResultPane(FRONTEND_EMPTY_HINT)
+    private val resultPane = PlaygroundResultPane(message("playground.empty.frontend"))
 
     var isEvaluating: Boolean = false
         private set
@@ -344,10 +346,14 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
 
     /** Everything that reads the dialect: the hint, the context card, the result's empty state. */
     private fun applyDialect() {
-        wrapperHint.text = "Evaluated as ${dialect.open} <expression> ${dialect.close} — the ${dialect.open}${dialect.close} delimiters are optional here"
+        wrapperHint.text = message("playground.wrapperHint", dialect.open, dialect.close)
         (contextCards.layout as CardLayout).show(contextCards, dialect.name)
-        context.setCaption(if (dialect == ExpressionDialect.FRONTEND) "Payload" else "Against")
-        resultPane.setEmptyHint(if (dialect == ExpressionDialect.FRONTEND) FRONTEND_EMPTY_HINT else BACKEND_EMPTY_HINT)
+        context.setCaption(message(if (dialect == ExpressionDialect.FRONTEND) "playground.caption.payload" else "playground.caption.against"))
+        context.setNote(null)
+        resultPane.setEmptyHint(
+            if (dialect == ExpressionDialect.FRONTEND) message("playground.empty.frontend")
+            else message("playground.empty.backend", evaluateShortcutText()),
+        )
         resultPane.showEmpty()
         updateContextSummary()
     }
@@ -404,7 +410,7 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
     private fun onFrontendResult(result: EvalResult?) {
         when (result) {
             null -> resultPane.showEmpty()
-            is EvalResult.Ok -> resultPane.showOk(renderValue(result.value))
+            is EvalResult.Ok -> resultPane.showOk(renderValue(result.value), typeOf(result.value))
             is EvalResult.Err -> resultPane.showError(result.message)
             // valid, just not previewable statically — neutral, never reads as an invalid expression
             is EvalResult.Unavailable -> resultPane.showInfo(result.message)
@@ -413,11 +419,20 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
 
     private fun renderValue(value: Any?): String = when (value) {
         null -> "null"
-        is String -> "\"$value\"   (string)"
-        is Double -> MiniJson.stringify(value) + "   (number)"
-        is Boolean -> "$value   (boolean)"
+        is String -> "\"$value\""
+        is Double -> MiniJson.stringify(value)
         is Map<*, *>, is List<*> -> MiniJson.stringify(value, 2)
         else -> value.toString()
+    }
+
+    /** The value's JSON type, shown beside the result's caption rather than padded onto the value. */
+    private fun typeOf(value: Any?): String? = when (value) {
+        is String -> "string"
+        is Double -> "number"
+        is Boolean -> "boolean"
+        is Map<*, *> -> "object"
+        is List<*> -> "array"
+        else -> null
     }
 
     // ---- context cards --------------------------------------------------------------------------------
@@ -435,14 +450,14 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
     }
 
     private fun backendContext(): JComponent = panel {
-        row("Environment:") {
+        row(message("playground.environment")) {
             cell(connectionCombo).align(AlignX.FILL).resizableColumn()
                 .applyToComponent { connectionAnchor = this }
-            button("Paste Work URL…") { pasteWorkUrl() }
-            // What can be done *to* a pasted target — name it, or forget it — rather than to the
-            // environments. Disabled until there is one, so the row keeps its shape.
+            // The fastest way to switch stays a button; everything else about targets is behind one ⋮ —
+            // naming or forgetting a pasted one, and the environments themselves. The row used to carry a
+            // picker, a button, a menu and a link, and did not fit a side dock.
+            button(message("playground.pasteWorkUrl")) { pasteWorkUrl() }
             actionButton(sessionTargetsAction()).applyToComponent { sessionTargetsButton = this }
-            link("Manage Environments…") { manageEnvironments() }
         }
         row("Instance:") {
             cell(scopeTypeCombo)
@@ -455,7 +470,7 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
     private fun setScopeFromCaret() {
         val editor = payloadEditor?.takeUnless { it.isDisposed }
         if (editor == null) {
-            resultPane.showInfo("Place the caret on a node in the payload JSON first, then use “From Cursor”.")
+            context.setNote(message("playground.fromCursor.hint"))
             return
         }
         // a plain Swing button callback holds no write-intent lock, and committing a document needs one
@@ -466,7 +481,7 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
                 ?.let { PayloadJsonPaths.pathAt(it, editor.caretModel.offset) }
         }
         if (path == null) {
-            resultPane.showInfo("Place the caret on a node in the payload JSON first, then use “From Cursor”.")
+            context.setNote(message("playground.fromCursor.hint"))
             return
         }
         payloadScopeField.text = path.format()   // the field's document listener re-evaluates
@@ -585,10 +600,6 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
         updateContextSummary()
     }
 
-    private fun manageEnvironments() {
-        ShowSettingsUtil.getInstance().showSettingsDialog(project, EnvironmentsConfigurable::class.java)
-    }
-
     /**
      * One gesture, one dialog: paste a Work link and it resolves the app, the scope and the instance —
      * checking the credentials for it when it is not one of your environments yet.
@@ -610,9 +621,8 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
         updateConnectionStatus()
         // Said out loud, because the picker gaining no row looks like the paste having been ignored.
         // An app is the address a request goes to; `#/work` and `#/work2` are two screens inside one.
-        val repeated = if (pasted.repeated) "\nAlready a target — what identifies an app is the address " +
-            "before “#”, so another route in the same one is the same target." else ""
-        resultPane.showInfo("Using ${pasted.where}" + (result.parsed.scopeId?.let { " · $it" } ?: "") + repeated)
+        val using = message("playground.using", pasted.where + (result.parsed.scopeId?.let { " · $it" } ?: ""))
+        context.setNote(if (pasted.repeated) using + " — " + message("playground.using.repeated") else using)
     }
 
     /**
@@ -620,20 +630,11 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
      * that already carries a picker, a button and a link.
      */
     private fun sessionTargetsAction(): AnAction =
-        object : AnAction("Session Targets", "Save a pasted Work URL as an environment, or forget it", AllIcons.Actions.More), DumbAware {
+        object : AnAction(message("playground.targets"), message("playground.targets.description"), AllIcons.Actions.More), DumbAware {
             override fun actionPerformed(e: AnActionEvent) {
                 JBPopupFactory.getInstance()
-                    .createActionGroupPopup("Session Targets", sessionTargetActions(), e.dataContext, JBPopupFactory.ActionSelectionAid.SPEEDSEARCH, true)
-                    .showUnderneathOf(connectionAnchor ?: this@FlowableExpressionPanel)
-            }
-
-            override fun update(e: AnActionEvent) {
-                val any = InspectSessionTargets.all().isNotEmpty()
-                e.presentation.isEnabled = any
-                // A disabled button that says why beats one that vanishes.
-                e.presentation.description =
-                    if (any) "Save a pasted Work URL as an environment, or forget it"
-                    else "Paste a Work URL to get a target you can name or forget"
+                    .createActionGroupPopup(message("playground.targets"), sessionTargetActions(), e.dataContext, JBPopupFactory.ActionSelectionAid.SPEEDSEARCH, true)
+                    .showUnderneathOf(sessionTargetsButton ?: connectionAnchor ?: this@FlowableExpressionPanel)
             }
 
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
@@ -649,8 +650,11 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
         all.forEach { url -> group.add(simpleAction("Forget “${shortTarget(url)}”") { forgetSessionTarget(url) }) }
         if (all.size > 1) group.add(simpleAction("Forget All (${all.size})") { all.forEach(::forgetSessionTarget) })
         if (all.isEmpty()) {
-            group.add(simpleAction("Paste a Work URL to get a target you can name or forget") {}.apply { templatePresentation.isEnabled = false })
+            group.add(simpleAction(message("playground.targets.none")) {}.apply { templatePresentation.isEnabled = false })
         }
+        // The environments themselves, under the one name that action has everywhere.
+        group.addSeparator()
+        ActionManager.getInstance().getAction(FlowableActionIds.MANAGE_ENVIRONMENTS)?.let(group::add)
         return group
     }
 
@@ -665,7 +669,7 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
     private fun forgetSessionTarget(baseUrl: String) {
         targets.forget(baseUrl)
         updateConnectionStatus()
-        if (targets.current() == Target.None) resultPane.showInfo("Choose an environment, or paste a Work URL.")
+        if (targets.current() == Target.None) context.setNote(message("playground.chooseTarget"))
     }
 
     private fun saveSessionTarget(baseUrl: String) {
@@ -676,8 +680,8 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
 
     private fun saveSessionTargetAs(baseUrl: String, name: String, protected: Boolean) {
         when (val saved = targets.saveAs(baseUrl, name, protected)) {
-            is PlaygroundTargets.Saved.Ok -> { updateConnectionStatus(); resultPane.showInfo("Saved as ${saved.name}") }
-            is PlaygroundTargets.Saved.AlreadyHasApp -> resultPane.showError("“${saved.name}” already has an app connection.")
+            is PlaygroundTargets.Saved.Ok -> { updateConnectionStatus(); context.setNote(message("playground.savedAs", saved.name)) }
+            is PlaygroundTargets.Saved.AlreadyHasApp -> context.setNote(message("playground.alreadyHasWork", saved.name))
         }
     }
 
@@ -701,7 +705,7 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
         if (isEvaluating) return
         val baseUrl = targets.baseUrl().trim()
         if (baseUrl.isBlank()) {
-            resultPane.showInfo("Choose an environment, or paste a Work URL.")
+            context.setNote(message("playground.chooseTarget"))
             return
         }
         val protecting = AtlasProtection.protecting(baseUrl, ConnectionKind.WORK, AtlasCatalog.connections(project))
@@ -717,7 +721,8 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
         val exprBody = expressionText().trim()
         val expr = if (exprBody.startsWith("\${") || exprBody.startsWith("#{")) exprBody else "\${$exprBody}"
         isEvaluating = true
-        resultPane.showLoading("Evaluating against ${connection?.environmentName ?: shortTarget(baseUrl)}…")
+        context.setNote(null)
+        resultPane.showLoading(message("playground.evaluatingAgainst", connection?.environmentName ?: shortTarget(baseUrl)))
         ApplicationManager.getApplication().executeOnPooledThread {
             // The keychain can block, so the credential read happens here rather than on the EDT.
             val auth = runCatching {
@@ -740,7 +745,7 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
                 when (outcome) {
                     is InspectClient.Outcome.Evaluated -> {
                         val r = outcome.response
-                        if (r.valid) resultPane.showOk("${MiniJson.stringify(r.value)}   (${r.valueType ?: "?"})")
+                        if (r.valid) resultPane.showOk(MiniJson.stringify(r.value), r.valueType)
                         else resultPane.showError(r.exception ?: "Invalid expression")
                     }
                     is InspectClient.Outcome.Failed -> resultPane.showError(outcome.message)
@@ -787,6 +792,7 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
     internal fun selectSessionTargetForTest(baseUrl: String) { targets.choose(Target.Session(baseUrl)); updateConnectionStatus() }
     internal fun saveSessionTargetForTest(baseUrl: String, name: String, protected: Boolean) = saveSessionTargetAs(baseUrl, name, protected)
     internal val contextSummaryForTest: String get() = context.summaryText
+    internal val contextNoteForTest: String? get() = context.noteText
     internal val resultStateForTest: PlaygroundResultPane.ResultState get() = resultPane.state
 
     /** What a caller wants the playground opened with: the text, its dialect, and — when known — the model and the instance kind. */
@@ -799,8 +805,6 @@ class FlowableExpressionPanel(val project: Project, stackedByDefault: Boolean = 
 
     companion object {
         private const val ALL_VARIABLES_LABEL = "All variables"
-        private const val FRONTEND_EMPTY_HINT = "Type an expression to evaluate"
-        private const val BACKEND_EMPTY_HINT = "Choose an environment and a live instance id, then press Evaluate (Ctrl+Enter)"
 
         fun scopeTypeLabel(type: InspectClient.ScopeType): String = when (type) {
             InspectClient.ScopeType.BPMN -> "Process instance"

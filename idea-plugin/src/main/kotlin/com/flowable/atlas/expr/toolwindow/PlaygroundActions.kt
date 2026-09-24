@@ -1,7 +1,11 @@
 package com.flowable.atlas.expr.toolwindow
 
+import com.intellij.openapi.keymap.KeymapUtil
+import com.intellij.openapi.actionSystem.CommonShortcuts
+import com.intellij.openapi.actionSystem.ActionManager
+import com.flowable.atlas.action.FlowableActionIds
+import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.expr.ExpressionDialect
-import com.flowable.atlas.settings.EnvironmentsConfigurable
 import com.flowable.atlas.settings.ExpressionsConfigurable
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.ActionUpdateThread
@@ -28,12 +32,12 @@ internal class DialectToggleAction(
 ) : ToggleAction(), DumbAware {
 
     init {
-        templatePresentation.text = if (dialect == ExpressionDialect.BACKEND) "Backend" else "Frontend"
+        templatePresentation.text = message(if (dialect == ExpressionDialect.BACKEND) "playground.backend" else "playground.frontend")
         // Frontend gets the form icon, not a globe: next to a server glyph a globe reads as "web vs.
         // server", which is not the distinction — a form is what a frontend expression sits in.
         templatePresentation.icon =
             if (dialect == ExpressionDialect.BACKEND) AllIcons.Webreferences.Server else AllIcons.FileTypes.UiForm
-        templatePresentation.description = "Validate and evaluate as ${dialect.display}"
+        templatePresentation.description = message("playground.dialect.description", dialect.display)
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
@@ -49,7 +53,7 @@ internal class ScopeComboBoxAction(private val panel: FlowableExpressionPanel) :
 
     override fun update(e: AnActionEvent) {
         e.presentation.setText(panel.currentScopeLabel(), false)
-        e.presentation.description = "Scope variable/field completion to one model"
+        e.presentation.description = message("playground.scope.description")
     }
 
     override fun createPopupActionGroup(button: JComponent, dataContext: DataContext): DefaultActionGroup {
@@ -65,33 +69,40 @@ internal class ScopeComboBoxAction(private val panel: FlowableExpressionPanel) :
     }
 }
 
+/**
+ * Evaluates against Flowable Work. Always on the toolbar — disabled in the frontend dialect, saying why —
+ * so switching the dialect does not move the buttons beside it; the two dialect-bound actions used to
+ * appear and vanish, and the toolbar changed shape under the pointer.
+ */
 internal class EvaluateAgainstAppAction(private val panel: FlowableExpressionPanel) : AnAction(
-    "Evaluate Against App",
-    "Evaluate the expression against the running app via the Flowable Inspect REST API (Ctrl+Enter)",
-    AllIcons.Actions.Execute,
+    message("playground.evaluate"), null, AllIcons.Actions.Execute,
 ), DumbAware {
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 
     override fun update(e: AnActionEvent) {
-        e.presentation.isVisible = panel.dialect == ExpressionDialect.BACKEND
-        e.presentation.isEnabled = panel.canEvaluateAgainstApp && !panel.isEvaluating
+        val backend = panel.dialect == ExpressionDialect.BACKEND
+        e.presentation.isEnabled = backend && panel.canEvaluateAgainstApp && !panel.isEvaluating
+        e.presentation.description =
+            if (backend) message("playground.evaluate.description", evaluateShortcutText())
+            else message("playground.evaluate.backendOnly")
     }
 
     override fun actionPerformed(e: AnActionEvent) = panel.evaluateAgainstApp()
 }
 
+/** Frontend only, and — like Evaluate — disabled rather than hidden in the other dialect. */
 internal class ShowSubEvaluationsToggle(private val panel: FlowableExpressionPanel) : ToggleAction(
-    "Show Sub-Expression Values",
-    "Show what each sub-expression evaluates to, inline after it",
-    AllIcons.General.InspectionsEye,
+    message("playground.subValues"), null, AllIcons.General.InspectionsEye,
 ), DumbAware {
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 
     override fun update(e: AnActionEvent) {
         super.update(e)
-        e.presentation.isVisible = panel.dialect == ExpressionDialect.FRONTEND
+        val frontend = panel.dialect == ExpressionDialect.FRONTEND
+        e.presentation.isEnabled = frontend
+        e.presentation.description = message(if (frontend) "playground.subValues.description" else "playground.subValues.frontendOnly")
     }
 
     override fun isSelected(e: AnActionEvent): Boolean = panel.showSubEvaluations
@@ -102,8 +113,8 @@ internal class ShowSubEvaluationsToggle(private val panel: FlowableExpressionPan
 
 /** Editor over context and result, or beside them — remembered per tab (see `PlaygroundShell`). */
 internal class StackPanelsToggle(private val isStacked: () -> Boolean, private val setStacked: (Boolean) -> Unit) : ToggleAction(
-    "Stack Panels",
-    "Put the context and result panels under the editor instead of beside it",
+    message("playground.stack"),
+    message("playground.stack.description"),
     AllIcons.Actions.SplitHorizontally,
 ), DumbAware {
 
@@ -112,7 +123,12 @@ internal class StackPanelsToggle(private val isStacked: () -> Boolean, private v
     override fun setSelected(e: AnActionEvent, state: Boolean) = setStacked(state)
 }
 
-/** The gear: layout, then the two settings pages a playground reader reaches for. */
+/**
+ * The gear: layout, then the settings a playground reader reaches for. The Expressions tab gets the
+ * expression settings and *Manage Environments…* — the registered action, so it has the name it has
+ * everywhere else (it was *Environment Settings…* here and *Manage Environments…* one row below). The
+ * Scripts tab has no environment, so it gets neither.
+ */
 internal class PlaygroundSettingsGroup(
     project: com.intellij.openapi.project.Project,
     stackPanels: AnAction,
@@ -120,24 +136,24 @@ internal class PlaygroundSettingsGroup(
 ) : DefaultActionGroup(), DumbAware {
 
     init {
-        templatePresentation.text = "Settings"
+        templatePresentation.text = message("playground.settings")
         templatePresentation.icon = AllIcons.General.Settings
         isPopup = true
         add(stackPanels)
-        addSeparator()
         if (expressionSettings) {
-            add(object : AnAction("Expression Settings…"), DumbAware {
+            addSeparator()
+            add(object : AnAction(message("playground.settings.expressions")), DumbAware {
                 override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
                 override fun actionPerformed(e: AnActionEvent) =
                     ShowSettingsUtil.getInstance().showSettingsDialog(project, ExpressionsConfigurable::class.java)
             })
+            ActionManager.getInstance().getAction(FlowableActionIds.MANAGE_ENVIRONMENTS)?.let(::add)
         }
-        add(object : AnAction("Environment Settings…"), DumbAware {
-            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
-            override fun actionPerformed(e: AnActionEvent) =
-                ShowSettingsUtil.getInstance().showSettingsDialog(project, EnvironmentsConfigurable::class.java)
-        })
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 }
+
+/** Ctrl+Enter as this keymap spells it — ⌘⏎ on a Mac — instead of a literal that was wrong on half the machines. */
+internal fun evaluateShortcutText(): String =
+    KeymapUtil.getFirstKeyboardShortcutText(CommonShortcuts.getCtrlEnter()).ifEmpty { "Ctrl+Enter" }

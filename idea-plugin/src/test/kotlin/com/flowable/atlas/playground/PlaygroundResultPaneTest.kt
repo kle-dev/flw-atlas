@@ -10,8 +10,9 @@ class PlaygroundResultPaneTest : BasePlatformTestCase() {
         val pane = PlaygroundResultPane("Type an expression to evaluate")
         assertEquals(ResultState.Empty("Type an expression to evaluate"), pane.state)
 
-        pane.showOk("42   (number)")
-        assertEquals(ResultState.Ok("42   (number)"), pane.state)
+        // The type sits beside the caption, not padded onto the value with spaces.
+        pane.showOk("42", "number")
+        assertEquals(ResultState.Ok("42", "number"), pane.state)
         pane.showLoading("Evaluating against QA…")
         assertEquals(ResultState.Loading("Evaluating against QA…"), pane.state)
         pane.showError("Unknown property 'amout'")

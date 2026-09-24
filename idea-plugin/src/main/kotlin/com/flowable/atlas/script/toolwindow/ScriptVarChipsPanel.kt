@@ -1,8 +1,9 @@
 package com.flowable.atlas.script.toolwindow
 
+import com.intellij.util.ui.UIUtil
+import com.flowable.atlas.FlowableAtlasBundle
 import com.flowable.atlas.parsing.ScriptVarUse
 import com.intellij.ui.ColorUtil
-import com.intellij.ui.JBColor
 import com.intellij.ui.components.ActionLink
 import com.intellij.ui.components.JBLabel
 import com.intellij.util.ui.JBUI
@@ -37,7 +38,17 @@ internal class ScriptVarChipsPanel(
     private val showUsage: Boolean = true,
     /** What the context provides — the bound root objects and the platform beans. */
     private val showContext: Boolean = true,
+    /** Said in place of the chips while there are none — the panel used to hide itself, leaving a hole. */
+    private val emptyText: String? = null,
 ) : JPanel(GridBagLayout()) {
+
+    /** Told after [setVars] changed what is shown — the panel's summary line counts the chips. */
+    var onChange: (() -> Unit)? = null
+
+    var bindingCount: Int = 0
+        private set
+    var beanCount: Int = 0
+        private set
 
     private companion object {
         const val COLLAPSED_CHIP_COUNT = 12
@@ -65,6 +76,8 @@ internal class ScriptVarChipsPanel(
         addComponentListener(object : ComponentAdapter() {
             override fun componentResized(e: ComponentEvent) { revalidate() }
         })
+        // The empty line is there from the start, not only after the first validation pass.
+        rebuild()
     }
 
     /** EDT-only, called from the diagnostics apply pass so chips and squiggles never drift apart.
@@ -82,10 +95,13 @@ internal class ScriptVarChipsPanel(
         if (showContext && beans.isNotEmpty()) next += Row("Beans", beans, BEAN_BG, "", false,
             "Flowable Work platform service — scripts resolve any Spring bean by name " +
                 "(unavailable under sandbox strict-mode)")
-        if (next == rows) return
+        bindingCount = if (showContext) bindings.size else 0
+        beanCount = if (showContext) beans.size else 0
+        if (next == rows && componentCount > 0) return
         rows = next
         expanded.retainAll(next.map { it.label }.toSet())
         rebuild()
+        onChange?.invoke()
     }
 
     private fun rebuild() {
@@ -93,7 +109,7 @@ internal class ScriptVarChipsPanel(
         for ((index, row) in rows.withIndex()) {
             val label = JBLabel(row.label, SwingConstants.RIGHT).apply {
                 font = JBUI.Fonts.smallFont()
-                foreground = JBColor.GRAY
+                foreground = UIUtil.getContextHelpForeground()
             }
             add(label, GridBagConstraints().apply {
                 gridx = 0; gridy = index
@@ -105,6 +121,16 @@ internal class ScriptVarChipsPanel(
                 weightx = 1.0
                 fill = GridBagConstraints.HORIZONTAL
                 anchor = GridBagConstraints.FIRST_LINE_START
+            })
+        }
+        if (rows.isEmpty() && emptyText != null) {
+            add(JBLabel(emptyText).apply {
+                font = JBUI.Fonts.smallFont()
+                foreground = UIUtil.getContextHelpForeground()
+            }, GridBagConstraints().apply {
+                gridx = 0; gridy = 0; weightx = 1.0
+                anchor = GridBagConstraints.FIRST_LINE_START
+                insets = JBUI.insets(5, 2, 0, 0)
             })
         }
         isVisible = componentCount > 0
@@ -121,7 +147,7 @@ internal class ScriptVarChipsPanel(
         }
         val hiddenCount = row.names.size - visible.size
         if (hiddenCount > 0 || showAll && row.names.size > COLLAPSED_CHIP_COUNT) {
-            add(ActionLink(if (showAll) "show less" else "+$hiddenCount more") {
+            add(ActionLink(if (showAll) FlowableAtlasBundle.message("playground.chips.less") else FlowableAtlasBundle.message("playground.chips.more", hiddenCount)) {
                 if (!expanded.remove(row.label)) expanded.add(row.label)
                 rebuild()
             }.apply { font = JBUI.Fonts.smallFont() })
@@ -137,7 +163,7 @@ internal class ScriptVarChipsPanel(
             font = JBUI.Fonts.smallFont()
             border = JBUI.Borders.empty(2, 8)
             toolTipText = if (onClick != null) "$tip — click to insert into the script" else tip
-            if (muted) foreground = JBColor.GRAY
+            if (muted) foreground = UIUtil.getContextHelpForeground()
             if (onClick != null) {
                 cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
                 addMouseListener(object : MouseAdapter() {

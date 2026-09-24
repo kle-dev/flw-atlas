@@ -74,10 +74,10 @@ nothing happened).
 
 Panel toolbars carry a few more that are not registered actions, so they do not appear in *Find
 Action*: the Hub's *Refresh* (which also re-reads the Flowable Design workspace and app lists) and *Settings*; the Environments page's *Test Connection*; the explorer tab's *Back*, *Forward*, *Reload* and *Open in Browser*; the
-Atlas Playground's dialect toggles, scope selector, *Evaluate Against App* (Ctrl+Enter), *Show
-Sub-Expression Values* and its gear menu with *Stack Panels*, *Expression Settings…* and *Environment
-Settings…*; and the Script Playground's language and context selectors with *Load Script from Model…*,
-*Load Example…* and the same gear.
+Atlas Playground's dialect toggles, scope selector, *Evaluate Against Work* (Ctrl+Enter) and *Show
+Sub-Expression Values* — each disabled, not hidden, in the other dialect — and its gear menu with *Stack
+Panels*, *Expression Settings…* and *Manage Environments…*; and the Script Playground's language and
+context selectors with *Load Script from Model…*, *Load Example…* and a gear holding *Stack Panels*.
 
 ## Tool windows
 

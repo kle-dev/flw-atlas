@@ -5,9 +5,9 @@ import com.flowable.atlas.expr.ExprSeverity
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.util.text.StringUtil.escapeXmlEntities as escapeXml
 import com.intellij.ui.HyperlinkLabel
-import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
 import com.intellij.util.ui.JBUI
+import com.intellij.util.ui.UIUtil
 import java.awt.Cursor
 import java.awt.Dimension
 import java.awt.event.MouseAdapter
@@ -90,20 +90,20 @@ class PlaygroundProblemsStrip : JPanel() {
         for (r in rows.take(MAX_ROWS)) add(problemRow(r))
         if (rows.size > MAX_ROWS) {
             add(JBLabel("+${rows.size - MAX_ROWS} more").apply {
-                foreground = JBColor.GRAY
+                foreground = UIUtil.getContextHelpForeground()
                 toolTipText = rows.drop(MAX_ROWS).joinToString("<br>", "<html>", "</html>") { it.message }
             })
         }
         for (row in subEvaluations.take(MAX_SUB_ROWS)) {
             add(JBLabel(row, AllIcons.General.InspectionsEye, SwingConstants.LEADING).apply {
-                foreground = JBColor.GRAY
+                foreground = UIUtil.getContextHelpForeground()
                 toolTipText = row                 // full text on hover — the strip may be narrower than the row
                 border = JBUI.Borders.emptyBottom(2)
             })
         }
         if (subEvaluations.size > MAX_SUB_ROWS) {
             add(JBLabel("+${subEvaluations.size - MAX_SUB_ROWS} more sub-expressions").apply {
-                foreground = JBColor.GRAY
+                foreground = UIUtil.getContextHelpForeground()
                 toolTipText = subEvaluations.drop(MAX_SUB_ROWS).joinToString("<br>", "<html>", "</html>") { escapeXml(it) }
             })
         }

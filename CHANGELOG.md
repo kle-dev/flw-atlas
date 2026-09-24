@@ -49,6 +49,18 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   changelog that creates the table — for a data object through its service, the live definition first.
   Each is a link with its key to copy. A copy button shows the ordinary pointer now, not the copy cursor
   with its plus badge.
+- **The playground's panes each say one thing.** What just happened to the context — *Using QA · CAS-4711*
+  after a paste, *Saved as QA* — is said on a line under the context's summary instead of being written
+  over the last result, and a value's type sits beside the result's caption (*Result · string*) instead of
+  being padded onto the value. *Evaluate Against App* is *Evaluate Against Work*, its shortcut is spelled
+  the way your keymap spells it, and it — like *Show Sub-Expression Values* — stays on the toolbar, disabled
+  with a reason, in the dialect it does not apply to, so switching the dialect no longer moves the buttons.
+  The backend row keeps *Paste Work URL…* and puts naming or forgetting targets and *Manage Environments…*
+  behind one ⋮; the gear's *Environment Settings…* became that same *Manage Environments…*, and the Scripts
+  tab, which has no environment, lost it. The Scripts tab's context says how much it holds (*5 bindings · 34
+  beans*) rather than repeating the toolbar, remembers whether it is folded, says so when nothing is bound or
+  touched, opens its pickers under their buttons, and tells a failed model scan apart from a project without
+  scripts.
 - **The model picture is a sheet you can point at.** The drawing stays white in every theme, as in the
   explorer, but now sits on the panel as a framed sheet rather than a white block with no edge in a dark
   IDE. The element under the pointer is outlined, the pointer turns into a hand and the tooltip names the

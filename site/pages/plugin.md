@@ -535,7 +535,9 @@ when the window is docked at the side — the **context** the code runs against 
 context has one summary line that is always there — *QA (project) · Case instance CAS-4711*, or
 *payload, 14 lines, at orders[1].items[0]* — and the controls behind it fold away once they are set.
 Switching **Backend** and **Frontend** changes the editor's language and the context's controls; the
-layout never moves. The splitter is yours to drag and is remembered; *Stack Panels* in the gear menu
+layout never moves — the toolbar included: an action that belongs to the other dialect stays where it is,
+disabled, and its tooltip says why. What just happened to the context — *Using QA · CAS-4711* after a
+paste, *Saved as QA* — is said on a line under the summary, not written over the last result. The splitter is yours to drag and is remembered; *Stack Panels* in the gear menu
 overrides what the dock suggested. Findings are painted with the editor colour scheme's own error and
 warning attributes, in the editor's own font — the same wave a Java file gets, and the same colours
 you tuned under *Errors and Warnings*.
@@ -543,16 +545,20 @@ you tuned under *Errors and Warnings*.
 In the **Frontend** dialect the context is the payload — JSON, optional — and the node the expression is
 evaluated *at*, picked by path or *From Cursor* and tinted in the JSON itself; the result updates as you
 type, and *Show Sub-Expression Values* puts `= 47.7` after every argument. In the **Backend** dialect
-the context is the environment and the live instance, and **Evaluate Against App** (Ctrl+Enter) posts
-the expression to the running app through the Flowable Inspect REST API. One result pane serves both:
-it says *Evaluating against QA…* while it waits, and a value that cannot be previewed statically reads
-as information, never as a failure.
+the context is the environment and the live instance, and **Evaluate Against Work** (Ctrl+Enter — the
+hints spell it the way your keymap does, ⌘⏎ on a Mac) posts the expression to Flowable Work through the
+Flowable Inspect REST API. One result pane serves both: it says *Evaluating against QA…* while it waits,
+shows the value's type beside its caption (*Result · string*), and a value that cannot be previewed
+statically reads as information, never as a failure.
 
 A second **Scripts** tab does the same for script bodies on the same shell: the context is what the
 selected script context *provides* — its bound root objects and the platform beans, as clickable chips
 that insert at the caret — and the result is what the script *does*, the variables it writes through the
-API and the ones it likely reads. *Load Script from Model…* pulls a real script out of an indexed model;
-*Load Example…* is the other direction — a library of complete, working scripts, at least one per
+API and the ones it likely reads. The folded context says how much it holds — *5 bindings · 34 beans* —
+and an empty side says so in words (*The script reads and writes no variables yet*) instead of leaving a
+hole. *Load Script from Model…* pulls a real script out of an indexed model, in a list under its button;
+a scan that fails says that it failed, rather than that there are no scripts. *Load Example…* is the
+other direction — a library of complete, working scripts, at least one per
 context and per language, each commented with the decision it demonstrates.
 
 Which app it evaluates against is a choice, not a form: the card names the environment in a drop-down,
@@ -566,7 +572,8 @@ from a colleague should not leave an environment behind, and being made to name 
 the common case. Environments are something you decide to have, in *Settings → Environments*.
 
 Every pasted link keeps its own entry, so comparing two apps does not mean re-pasting the first one. The
-button beside the picker is where those entries are managed: **Forget** one, forget all of them, or —
+⋮ beside the picker is where those entries are managed — and where *Manage Environments…* is, under the
+name that action has everywhere: **Forget** one, forget all of them, or —
 for the one that turns out to be somewhere you keep coming back to — **Save as an Environment…**, which
 asks for the single thing that was missing. Give it a name that already exists and it joins that
 environment instead of making a second one with the same label; credentials typed in the paste dialog go

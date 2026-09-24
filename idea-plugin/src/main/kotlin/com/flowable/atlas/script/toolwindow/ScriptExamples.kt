@@ -324,14 +324,13 @@ internal object ScriptExamples {
      */
     fun orderedFor(context: ScriptContext): List<Example> = ALL.sortedByDescending { it.context == context }
 
-    fun show(panel: FlowableScriptPanel) {
-        JBPopupFactory.getInstance()
+    fun show(panel: FlowableScriptPanel, anchor: java.awt.Component? = null) {
+        ScriptPicker.place(JBPopupFactory.getInstance()
             .createPopupChooserBuilder(orderedFor(panel.scriptContext))
-            .setTitle("Load Example Script")
+            .setTitle(com.flowable.atlas.FlowableAtlasBundle.message("playground.scripts.example.title"))
             .setRenderer(textListCellRenderer("") { it.label })
             .setNamerForFiltering { it.label }
             .setItemChosenCallback { example -> panel.loadScript(example.body, example.format, example.context) }
-            .createPopup()
-            .showCenteredInCurrentWindow(panel.project)
+            .createPopup(), panel, anchor)
     }
 }

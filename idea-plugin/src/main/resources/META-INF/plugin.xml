@@ -183,6 +183,20 @@
               table — for a data object through its service, the live definition first. Each is a link with
               its key to copy. A copy button shows the ordinary pointer now, not the copy cursor with its
               plus badge.</li>
+          <li><b>The playground's panes each say one thing.</b> What just happened to the context — <i>Using
+              QA · CAS-4711</i> after a paste, <i>Saved as QA</i> — is said on a line under the context's
+              summary instead of being written over the last result, and a value's type sits beside the
+              result's caption (<i>Result · string</i>) instead of being padded onto the value. <i>Evaluate
+              Against App</i> is <i>Evaluate Against Work</i>, its shortcut is spelled the way your keymap
+              spells it, and it — like <i>Show Sub-Expression Values</i> — stays on the toolbar, disabled
+              with a reason, in the dialect it does not apply to, so switching the dialect no longer moves
+              the buttons. The backend row keeps <i>Paste Work URL…</i> and puts naming or forgetting
+              targets and <i>Manage Environments…</i> behind one ⋮; the gear's <i>Environment Settings…</i>
+              became that same <i>Manage Environments…</i>, and the Scripts tab, which has no environment,
+              lost it. The Scripts tab's context says how much it holds (<i>5 bindings · 34 beans</i>)
+              rather than repeating the toolbar, remembers whether it is folded, says so when nothing is
+              bound or touched, opens its pickers under their buttons, and tells a failed model scan apart
+              from a project without scripts.</li>
           <li><b>The model picture is a sheet you can point at.</b> The drawing stays white in every theme,
               as in the explorer, but now sits on the panel as a framed sheet rather than a white block with
               no edge in a dark IDE. The element under the pointer is outlined, the pointer turns into a
@@ -533,21 +547,6 @@
               generated from one table. It replaces the sentence in the empty detail pane, which only
               someone with nothing selected ever saw, and which said tabs switch with Alt+←→ (that is
               history; tabs are Alt+[ and Alt+]).</li>
-          <li><b>The schema coverage table on every link of the chain.</b> A data object's page and a
-              Liquibase changelog's page show the same <i>Schema coverage</i> table the service page has —
-              every column from the changelog through the service mapping to the data object field — for
-              each service whose coverage names them, so the table no longer has to be looked for one hop
-              away. Its <code>⇄ crossed</code> marker wraps instead of being cut off in a narrow
-              column.</li>
-          <li><b>Smaller things in the explorer.</b> A list row's findings pill carries its tone's icon and
-              says what it counts, the reference count beside it carries a link icon and says so too, and a
-              key that only repeats the name is shown once. What accepting a finding does is said on the
-              <i>accept…</i> button and in its form, instead of in a paragraph above every model's findings.
-              Empty states draw their icon instead of a glyph the embedded font did not have, the Checks
-              page's subtitle states its numbers and leaves the explanation to its two headings, and an
-              accept button's focus ring is no longer clipped by its cell. A check's block opens with one
-              line — what it means, then its buttons and <i>why · what to do</i> — where it had four, and no
-              longer repeats its rows' severities as a row of chips.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

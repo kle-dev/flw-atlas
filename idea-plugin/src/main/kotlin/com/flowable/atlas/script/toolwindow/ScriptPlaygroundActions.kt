@@ -1,5 +1,6 @@
 package com.flowable.atlas.script.toolwindow
 
+import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.script.ScriptContext
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.ActionUpdateThread
@@ -45,8 +46,7 @@ internal class ScriptContextComboBoxAction(private val panel: FlowableScriptPane
 
     override fun update(e: AnActionEvent) {
         e.presentation.setText(panel.scriptContext.display, false)
-        e.presentation.description =
-            "Script context — decides which root objects (execution, task, planItemInstance, flw, …) validation knows"
+        e.presentation.description = message("playground.scripts.context.description")
     }
 
     override fun createPopupActionGroup(button: JComponent, dataContext: DataContext): DefaultActionGroup {
@@ -63,23 +63,20 @@ internal class ScriptContextComboBoxAction(private val panel: FlowableScriptPane
 }
 
 internal class LoadScriptFromModelAction(private val panel: FlowableScriptPanel) : AnAction(
-    "Load Script from Model…",
-    "Pick a script from the project's models — script tasks, listener scripts, action bots",
-    AllIcons.Actions.MenuOpen,
+    message("playground.scripts.load"), message("playground.scripts.load.description"), AllIcons.Actions.MenuOpen,
 ), DumbAware {
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 
-    override fun actionPerformed(e: AnActionEvent) = ScriptPicker.show(panel)
+    // Under the button that asked for it, not in the middle of the window.
+    override fun actionPerformed(e: AnActionEvent) = ScriptPicker.show(panel, e.inputEvent?.component)
 }
 
 internal class LoadExampleScriptAction(private val panel: FlowableScriptPanel) : AnAction(
-    "Load Example…",
-    "Load a worked Flowable script example — one per context and language, ready to edit",
-    AllIcons.Nodes.Template,
+    message("playground.scripts.example"), message("playground.scripts.example.description"), AllIcons.Nodes.Template,
 ), DumbAware {
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 
-    override fun actionPerformed(e: AnActionEvent) = ScriptExamples.show(panel)
+    override fun actionPerformed(e: AnActionEvent) = ScriptExamples.show(panel, e.inputEvent?.component)
 }

@@ -1,5 +1,6 @@
 package com.flowable.atlas.script.toolwindow
 
+import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.expr.toolwindow.PlaygroundSettingsGroup
 import com.flowable.atlas.expr.toolwindow.StackPanelsToggle
 import com.flowable.atlas.playground.ContextPanel
@@ -58,9 +59,11 @@ class FlowableScriptPanel(val project: Project, stackedByDefault: Boolean = true
     )
 
     private val strip = PlaygroundProblemsStrip()
-    private val provided = ScriptVarChipsPanel(onPick = ::insertAtCaret, showUsage = false, showContext = true)
-    private val touched = ScriptVarChipsPanel(onPick = ::insertAtCaret, showUsage = true, showContext = false)
-    private val context = ContextPanel("Context", expandedInitially = true) {}
+    private val provided = ScriptVarChipsPanel(onPick = ::insertAtCaret, showUsage = false, showContext = true,
+        emptyText = message("playground.scripts.noBindings"))
+    private val touched = ScriptVarChipsPanel(onPick = ::insertAtCaret, showUsage = true, showContext = false,
+        emptyText = message("playground.scripts.noVariables"))
+    private val context = ContextPanel(message("playground.scripts.context"), state.contextExpanded) { state.contextExpanded = it }
     private val diagnostics = ScriptPlaygroundDiagnostics(
         project, field, strip, listOf(provided, touched),
         object : ScriptPlaygroundDiagnostics.Host {
@@ -89,7 +92,7 @@ class FlowableScriptPanel(val project: Project, stackedByDefault: Boolean = true
         shell.setResult(JPanel(BorderLayout()).apply {
             isOpaque = false
             border = JBUI.Borders.empty(4, 6, 6, 6)
-            add(JBLabel("What the script touches").apply {
+            add(JBLabel(message("playground.scripts.touches")).apply {
                 font = JBUI.Fonts.smallFont()
                 foreground = UIUtil.getContextHelpForeground()
                 border = JBUI.Borders.empty(0, 2, 3, 0)
@@ -97,6 +100,7 @@ class FlowableScriptPanel(val project: Project, stackedByDefault: Boolean = true
             add(touched, BorderLayout.CENTER)
         })
         add(shell, BorderLayout.CENTER)
+        provided.onChange = ::updateSummary
         applyContextStamp()
         updateSummary()
         diagnostics.scheduleRevalidate()
@@ -155,9 +159,15 @@ class FlowableScriptPanel(val project: Project, stackedByDefault: Boolean = true
         diagnostics.scheduleRevalidate()
     }
 
-    /** `Script task (BPMN) · Groovy` — what the chips below are about. */
+    /**
+     * `5 bindings · 34 beans` — what the folded chips hold. It used to repeat the two combos right above
+     * it (*Script task (BPMN) · Groovy*), which said nothing the toolbar did not.
+     */
     private fun updateSummary() {
-        context.setSummary("${scriptContext.display} · ${language.display}")
+        context.setSummary(
+            if (provided.bindingCount + provided.beanCount == 0) message("playground.scripts.summary.none")
+            else message("playground.scripts.summary", provided.bindingCount, provided.beanCount),
+        )
     }
 
     /** A chip click drops the picked name into the script at the caret (undoable command). */

@@ -145,6 +145,9 @@ class ExpressionToolWindowLayoutTest : BasePlatformTestCase() {
                 ),
             )
             assertEquals("http://localhost:9914", panel.inspectBaseUrlText)
+            // What the paste did is said beside the context it changed — not written over the result.
+            assertTrue(panel.contextNoteForTest.orEmpty(), panel.contextNoteForTest.orEmpty().startsWith("Using "))
+            assertTrue(panel.resultStateForTest is com.flowable.atlas.playground.PlaygroundResultPane.ResultState.Empty)
             assertTrue(
                 "the picker must name the one-off target, not read as if nothing were selected",
                 panel.connectionComboLabelForTest().contains("localhost"),
@@ -357,4 +360,30 @@ class ExpressionToolWindowLayoutTest : BasePlatformTestCase() {
         }
     }
 
+
+    /**
+     * The toolbar keeps its shape across the dialects: an action that does not apply is disabled and says
+     * why, rather than vanishing and moving its neighbours under the pointer.
+     */
+    fun testTheToolbarKeepsItsShapeAcrossDialects() {
+        val toolWindow = ToolWindowHeadlessManagerImpl.MockToolWindow(project)
+        FlowableExpressionToolWindowFactory().createToolWindowContent(project, toolWindow)
+        val panel = toolWindow.contentManager.contents[0].component as FlowableExpressionPanel
+        val evaluate = EvaluateAgainstAppAction(panel)
+        val subValues = ShowSubEvaluationsToggle(panel)
+        for (dialect in ExpressionDialect.entries) {
+            panel.switchDialect(dialect)
+            for (action in listOf(evaluate, subValues)) {
+                val event = com.intellij.testFramework.TestActionEvent.createTestEvent(action)
+                action.update(event)
+                assertTrue("${action.templateText} stays on the toolbar in $dialect", event.presentation.isVisible)
+            }
+        }
+        panel.switchDialect(ExpressionDialect.FRONTEND)
+        val event = com.intellij.testFramework.TestActionEvent.createTestEvent(evaluate)
+        evaluate.update(event)
+        assertFalse(event.presentation.isEnabled)
+        assertTrue(event.presentation.description, event.presentation.description.startsWith("Backend expressions only"))
+        assertEquals("Evaluate Against Work", evaluate.templateText)
+    }
 }
