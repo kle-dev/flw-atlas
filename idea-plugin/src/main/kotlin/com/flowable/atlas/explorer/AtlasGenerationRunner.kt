@@ -1,5 +1,6 @@
 package com.flowable.atlas.explorer
 
+import com.flowable.atlas.findings.AtlasFindingsService
 import com.intellij.openapi.progress.ProgressManager
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.project.AtlasProjectRootService
@@ -130,6 +131,7 @@ object AtlasGenerationRunner {
                     if (project.isDisposed) return@invokeLater
                     when (outcome) {
                         is AtlasGeneratorService.Outcome.Success -> {
+                            outcome.outputDir?.let { AtlasFindingsService.getInstance(project).adopt(projectDir, it, outcome.findings) }
                             project.messageBus.syncPublisher(AtlasEvents.TOPIC)
                                 .artifactsGenerated(outcome.explorerHtml, outcome.written)
                             AtlasExplorerNotifier.notifySuccess(

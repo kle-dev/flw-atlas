@@ -1,5 +1,6 @@
 package com.flowable.atlas.findings
 
+import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.graph.CheckCatalog
 import javax.swing.tree.DefaultMutableTreeNode
 
@@ -39,9 +40,9 @@ internal object FindingsTree {
             }
             root.add(g)
         }
-        group("Defects", open.filter { CheckCatalog.kind(it["check"]?.toString().orEmpty()) != CheckCatalog.ADVICE })
-        if (showAdvice) group("Advice", open.filter { CheckCatalog.kind(it["check"]?.toString().orEmpty()) == CheckCatalog.ADVICE })
-        if (showAccepted) group("Accepted", findings.filter { it["waived"] != null })
+        group(message("findings.group.defects"), open.filter { CheckCatalog.kind(it["check"]?.toString().orEmpty()) != CheckCatalog.ADVICE })
+        if (showAdvice) group(message("findings.group.advice"), open.filter { CheckCatalog.kind(it["check"]?.toString().orEmpty()) == CheckCatalog.ADVICE })
+        if (showAccepted) group(message("findings.group.accepted"), findings.filter { it["waived"] != null })
         return root
     }
 }

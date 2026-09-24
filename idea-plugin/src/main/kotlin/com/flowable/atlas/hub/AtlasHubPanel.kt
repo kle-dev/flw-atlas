@@ -97,6 +97,8 @@ class AtlasHubPanel(override val project: Project) : SimpleToolWindowPanel(true,
             override fun environmentsChanged() = refreshEverything()
             override fun connectionSelectionChanged(kind: ConnectionKind) = refreshEverything()
         })
+        // The findings' counts change when an analysis lands, which is not a bus event of its own.
+        com.flowable.atlas.findings.AtlasFindingsService.getInstance(project).addListener(this) { refreshAlarm.cancelAndRequest() }
         refreshAlarm.request()
     }
 
@@ -198,6 +200,7 @@ class AtlasHubPanel(override val project: Project) : SimpleToolWindowPanel(true,
         attention = header.attention,
         hasEnvironments = last?.hasAnyEnvironment ?: false,
         foldedSections = folds.filterValues { !it.expanded }.keys.toList(),
+        health = header.healthText,
         designProblem = design.problemText,
     )
 
@@ -224,6 +227,8 @@ internal data class HubView(
     val hasEnvironments: Boolean,
     /** Ids of the blocks folded shut. */
     val foldedSections: List<String>,
+    /** `3 defects · 41 advice`, `Analyze findings`, `analyzing…` — the health row as it reads. */
+    val health: String,
     /** Why the Design lists could not be read, when they could not. */
     val designProblem: String?,
 )

@@ -64,10 +64,12 @@ class OpenInAtlasExplorerIntention : IntentionAction, DumbAware {
         const val TEXT = "Open in Atlas Explorer"
 
         /** The model's page in the newest generated explorer, inside the IDE — the Hub's *Recent Models* list uses it too. */
-        fun openPage(project: Project, entry: ModelEntry) {
+        fun openPage(project: Project, entry: ModelEntry) = openRoute(project, ExplorerRoutes.node(entry.type, entry.key))
+
+        /** Any page of the newest generated explorer, by its route — a model's, a report's (Atlas Findings uses it). */
+        fun openRoute(project: Project, hash: String) {
             val base = AtlasProjectRootService.getInstance(project).activeProjectDir() ?: return
             val outputDir = FlowableAtlasProjectSettings.getInstance(project).atlasOutputDir
-            val hash = ExplorerRoutes.node(entry.type, entry.key)
             // The search walks the project when the output folder is empty — off the EDT, like the Open action.
             ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Looking for Atlas explorer files", true) {
                 private var files: List<Path> = emptyList()

@@ -49,6 +49,15 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   changelog that creates the table — for a data object through its service, the live definition first.
   Each is a link with its key to copy. A copy button shows the ordinary pointer now, not the copy cursor
   with its plus badge.
+- **Atlas Findings says why, and stays current.** A pane beside the tree explains the selected check the
+  way the explorer's Checks page does — the kind of finding, why it matters, what to do, a link to the
+  checks page — and opens the finding's model in the explorer. A status line says how current the analysis
+  is (*17 defects · 24 advice · analyzed 2 min ago*) and, once a model changed since, how many and *Analyze
+  Again*. Generating the explorer brings the window up to date without a second analysis; it used to
+  analyse only when opened and after an accept. *Accept…* asks in a dialog that refuses an empty reason, the
+  two filters sit behind the Problems view's eye instead of drawing as text buttons, and the tree expands and
+  collapses from the toolbar. The Hub shows the counts in a health row of its own — a link into the window,
+  or *Analyze findings* before any analysis.
 - **The Atlas Hub fits a side stripe.** It was laid out at the width its widest row asked for — 567 px
   with an ordinary environment name — so the stripe had to be dragged half across the screen before nothing
   was cut off. Every row now fits 280 px and a wider stripe only gives the names more room: the project

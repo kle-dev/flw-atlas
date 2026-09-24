@@ -3,12 +3,14 @@ package com.flowable.atlas.hub
 import com.flowable.atlas.AtlasBuildInfo
 import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.action.FlowableActionIds
+import com.flowable.atlas.findings.AtlasFindingsService
 import com.flowable.atlas.hub.sections.HubHost
 import com.flowable.atlas.project.AtlasProjectRootService
 import com.intellij.icons.AllIcons
 import com.intellij.ide.plugins.PluginManagerCore
 import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.ui.ComboBox
+import com.intellij.ui.AnimatedIcon
 import com.intellij.ui.components.ActionLink
 import com.intellij.ui.components.JBLabel
 import com.intellij.openapi.util.text.HtmlBuilder
@@ -57,6 +59,18 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
         icon = AllIcons.Actions.ForceRefresh
         toolTipText = FlowableActionIds.text(FlowableActionIds.REBUILD_MODEL_INDEX)
     }
+    // Health: the last analysis's counts, a way into Atlas Findings. Its own row, always there, so the
+    // header keeps its height whether or not anything has been analyzed.
+    private val healthIcon = JBLabel()
+    // Stretches and gives way first: four-digit counts beside *Analyze Again* are wider than the stripe,
+    // and the counts end in "…" before the action does — the tooltip has them whole.
+    private val health = HubLayout.narrow(ActionLink("") { host.invokeAction(FlowableActionIds.OPEN_ATLAS_FINDINGS) }).apply {
+        autoHideOnDisable = false
+        horizontalAlignment = javax.swing.SwingConstants.LEFT
+    }
+    private val analyzeAgain = ActionLink(message("findings.analyzeAgain")) {
+        AtlasFindingsService.getInstance(host.project).refresh()
+    }
     private val attentionIcon = JBLabel()
     private val attentionText = HubText(comment = false)
     private var current: HubAttention? = null
@@ -73,6 +87,11 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
             cell(age).resizableColumn()
             cell(rebuild).align(AlignX.RIGHT)
         }
+        panel.row {
+            cell(healthIcon).gap(RightGap.SMALL)
+            cell(health).align(AlignX.FILL).resizableColumn()
+            cell(analyzeAgain).align(AlignX.RIGHT)
+        }
         // The only rows in the panel whose presence changes: everything below keeps its place.
         attentionRow = panel.row {
             cell(attentionIcon).align(AlignY.TOP).gap(RightGap.SMALL)
@@ -84,6 +103,7 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
     fun apply(s: HubSnapshot, attention: HubAttention?) {
         applyProject(s)
         applyStatus(s)
+        applyHealth(s.findings)
         current = attention
         attentionRow?.visible(attention != null)
         attentionLinkRow?.visible(attention != null)
@@ -153,6 +173,34 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
             lines.forEachIndexed { i, line -> if (i > 0) br(); append(line) }
         }.wrapWithHtmlBody().toString()
     }
+
+    /**
+     * `3 defects · 41 advice` — a link into Atlas Findings, with *Analyze Again* beside it once a model
+     * changed since. Before any analysis the link says *Analyze findings*: opening the window runs one.
+     * The Hub never starts the analysis on its own; it is a full extract.
+     */
+    private fun applyHealth(f: FindingsHealth) {
+        health.isEnabled = !f.running
+        analyzeAgain.isVisible = !f.running && f.defects != null && f.stale
+        when {
+            f.running -> {
+                healthIcon.icon = AnimatedIcon.Default.INSTANCE
+                health.text = message("hub.health.running")
+            }
+            f.defects == null -> {
+                healthIcon.icon = AllIcons.General.Information
+                health.text = message("hub.health.none")
+            }
+            else -> {
+                healthIcon.icon = if (f.defects > 0) AllIcons.General.Error else AllIcons.General.InspectionsOK
+                health.text = message("findings.status.counts", f.defects, f.advice ?: 0)
+            }
+        }
+        health.toolTipText = message("hub.health.tooltip", health.text, FlowableActionIds.text(FlowableActionIds.OPEN_ATLAS_FINDINGS))
+    }
+
+    /** For tests: the health row as it reads. */
+    val healthText: String get() = health.text + if (analyzeAgain.isVisible) " · " + analyzeAgain.text else ""
 
     /** For tests: the count link's text. */
     val statusText: String get() = status.text

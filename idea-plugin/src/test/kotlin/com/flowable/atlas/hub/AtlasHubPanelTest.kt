@@ -404,4 +404,27 @@ class AtlasHubPanelTest : BasePlatformTestCase() {
             panel.dispose()
         }
     }
+
+    /**
+     * The health row: the last analysis's counts as a way into Atlas Findings — and, before any analysis,
+     * the offer to run one. The Hub itself never starts it.
+     */
+    fun testTheHealthRowReadsTheLastAnalysis() {
+        val service = com.flowable.atlas.findings.AtlasFindingsService.getInstance(project)
+        val panel = AtlasHubPanel(project)
+        try {
+            panel.refreshForTest()
+            assertEquals("Analyze findings", panel.viewForTest().health)
+            val root = java.io.File(project.basePath!!).toPath()
+            service.seedForTest(com.flowable.atlas.findings.AtlasFindingsService.Analysis(root, root, listOf(
+                mapOf("check" to "missingRefs", "severity" to "error", "node" to "process:DEMO-P1"),
+                mapOf("check" to "unusedForms", "severity" to "warning", "node" to "form:DEMO-F1"),
+            ), atMillis = Long.MAX_VALUE))
+            panel.refreshForTest()
+            assertEquals("1 defect · 1 advice", panel.viewForTest().health)
+        } finally {
+            service.seedForTest(null)
+            panel.dispose()
+        }
+    }
 }

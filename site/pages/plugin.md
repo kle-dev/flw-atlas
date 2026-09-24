@@ -41,7 +41,10 @@ title, and stays folded, per project, the next time the IDE starts.
 how long ago it looked — *142 models · 2 min ago*; the per-type counts and the scope are in the tooltip.
 The count is a link into the index (Search Everywhere's *Flowable Model* tab), and *Rebuild Model Index*
 sits at the end of that row — the two things one does with the index, where the index is described.
-While there is no index yet the row says *scanning…*, or *index failed*. In a monorepo the project is a switcher: pick the sub-project Atlas operates on, and the
+While there is no index yet the row says *scanning…*, or *index failed*. The row under it is the
+project's **health** — *3 defects · 41 advice*, a link into [Atlas Findings](#atlas-findings) — with
+*Analyze Again* beside it once a model changed since the analysis. Before any analysis it offers *Analyze
+findings*; the Hub never starts one on its own, because it is a full analysis of the project. In a monorepo the project is a switcher: pick the sub-project Atlas operates on, and the
 index, the output folder and the Design target follow. It is a drop-down like the environment pickers
 below it, always offering the whole repository, so "is this mine to change?" is answered by the control
 rather than by trying it.
@@ -144,6 +147,31 @@ nothing else: the platform range Atlas was verified against is a fact about the 
 [in the reference](../plugin/reference/) and in a bug report — not in a panel that stays open all day.
 
 Reach it from the right stripe, or **Tools → Flowable Atlas → Open Atlas Hub**.
+
+### Atlas Findings
+
+Every finding of the project — the explorer's [Checks page](../checks/) in a tool window on the bottom
+stripe, in Swing, so it works under Remote Development and without JCEF. The tree reads **Defects** first
+— what is wrong now — then, when asked for, **Advice** and **Accepted**, each by check in the checks
+page's order; a double-click or Enter opens the finding's file at its line.
+
+Beside the tree, the **detail pane** says what the page says about the selected check: which kind of
+finding it is (*Defect · broken*, *Advice · noise*), the finding's own sentence and where it is, **why it
+matters** and **what to do** — including when accepting it is the right answer — with *Read on the checks
+page*, *Open in Atlas Explorer* (the finding's model page, or the check on the Checks page) and
+*Accept…*. Accepting asks why, in a dialog that refuses an empty reason, and writes one rule per finding
+to the output folder's `waivers.json` — the file the explorer's Save writes, so a rule accepted here is
+accepted on the page and in the CLI's gate as well.
+
+A **status line** over the tree says how current all this is — *17 defects · 24 advice · analyzed 2 min
+ago* — and, once a model changed since, *3 models changed since* with **Analyze Again**. The analysis is
+the explorer's own, so generating the explorer brings the window up to date without running it a second
+time; nothing else re-runs it behind your back. The toolbar is the Problems view's: *Analyze Again*,
+*Accept…*, expand and collapse, the eye with *Show Advice* and *Show Accepted*, and *Open in Atlas
+Explorer*.
+
+Reach it from the bottom stripe, the Hub's health row, or **Tools → Flowable Atlas → Open Atlas
+Findings**.
 
 ### The Atlas Explorer, inside the IDE
 

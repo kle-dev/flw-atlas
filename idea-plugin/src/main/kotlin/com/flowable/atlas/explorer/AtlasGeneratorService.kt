@@ -33,8 +33,18 @@ class AtlasGeneratorService(private val project: Project) {
     private val LOG = logger<AtlasGeneratorService>()
 
     sealed interface Outcome {
-        /** [explorerHtml] is the `.explorer.html` produced (if any); [written] lists all files written. */
-        data class Success(val explorerHtml: Path?, val written: List<Path>, val log: String) : Outcome
+        /**
+         * [explorerHtml] is the `.explorer.html` produced (if any); [written] lists all files written.
+         * [findings] are the analysis's, beside the `waivers.json` in [outputDir] — handed to the Findings
+         * window, which would otherwise run the very same analysis again.
+         */
+        data class Success(
+            val explorerHtml: Path?,
+            val written: List<Path>,
+            val log: String,
+            val outputDir: Path? = null,
+            val findings: List<Map<String, Any?>> = emptyList(),
+        ) : Outcome
         data class Failure(val message: String, val log: String) : Outcome
     }
 
@@ -59,7 +69,7 @@ class AtlasGeneratorService(private val project: Project) {
             indicator.checkCanceled()
             for (out in outputs) out.toFile().writeText(html, Charsets.UTF_8)
 
-            Outcome.Success(outputs.first(), outputs, summaryLog(result))
+            Outcome.Success(outputs.first(), outputs, summaryLog(result), outputs.first().parent, findingsOf(result))
         } catch (pce: ProcessCanceledException) {
             throw pce                      // a cancelled action is not a failure
         } catch (e: Exception) {
@@ -124,13 +134,17 @@ class AtlasGeneratorService(private val project: Project) {
                 }
             }
             val explorer = written.firstOrNull { it.fileName.toString().endsWith(".explorer.html") }
-            Outcome.Success(explorer, written, summaryLog(result))
+            Outcome.Success(explorer, written, summaryLog(result), outputDir, findingsOf(result))
         } catch (pce: ProcessCanceledException) {
             throw pce                      // a cancelled action is not a failure
         } catch (e: Exception) {
             LOG.warn("Atlas artifact generation failed", e)
             Outcome.Failure("Failed to generate the Atlas artifacts: ${e.message}", e.stackTraceToString())
         }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun findingsOf(result: Map<String, Any?>): List<Map<String, Any?>> =
+        (result["findings"] as? List<Map<String, Any?>>).orEmpty()
 
     /** `waivers.json` beside the artifacts in [outputDir] — the file the explorer's Save writes. */
     internal fun waiverFile(outputDir: Path?): File? = outputDir?.resolve(Waivers.FILE_NAME)?.toFile()

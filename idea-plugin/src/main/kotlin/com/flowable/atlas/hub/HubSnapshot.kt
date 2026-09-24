@@ -11,6 +11,7 @@ import com.flowable.atlas.environment.ConnectionKind
 import com.flowable.atlas.explorer.AtlasBrowser
 import com.flowable.atlas.explorer.AtlasExplorerFiles
 import com.flowable.atlas.explorer.AtlasExplorerStaleness
+import com.flowable.atlas.findings.AtlasFindingsService
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.index.ProjectModelScope
 import com.flowable.atlas.model.ModelType
@@ -23,6 +24,9 @@ import java.nio.file.Path
 
 /** A generated explorer page: where it is, project-relative, and when it was written. */
 internal data class ExplorerArtifact(val path: Path, val relative: String, val modified: Long)
+
+/** The last analysis's counts, for the Hub's health row — null fields before there is one. */
+internal data class FindingsHealth(val running: Boolean, val defects: Int?, val advice: Int?, val stale: Boolean)
 
 /**
  * Everything the Atlas Hub shows, read in one pass on a pooled thread and applied on the EDT.
@@ -70,6 +74,7 @@ internal data class HubSnapshot(
     val lastPullMillis: Long?,
     /** Where the explorer search looked — what the empty state has to name to be believable. */
     val searchedIn: String,
+    val findings: FindingsHealth = FindingsHealth(running = false, defects = null, advice = null, stale = false),
 ) {
     val designConnection: AtlasConnection?
         get() = (designResolution as? Resolution.Selected)?.connection
@@ -144,6 +149,10 @@ internal data class HubSnapshot(
                 pullSelection = pullSelection,
                 lastPullMillis = DesignPullService.lastPullMillis(project),
                 searchedIn = listOfNotNull(active.ifBlank { null }, settings.atlasOutputDir).joinToString("/") + "/",
+                findings = AtlasFindingsService.getInstance(project).let { f ->
+                    val last = f.last
+                    FindingsHealth(f.running, last?.defects, last?.advice, f.stale)
+                },
             )
         }
     }

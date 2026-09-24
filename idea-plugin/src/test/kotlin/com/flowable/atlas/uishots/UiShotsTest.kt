@@ -94,13 +94,20 @@ class UiShotsTest : BasePlatformTestCase() {
         @Suppress("UNCHECKED_CAST")
         val findings = (Atlas.extract(demo)["findings"] as? List<Map<String, Any?>>).orEmpty()
         val service = AtlasFindingsService.getInstance(project)
-        val field = AtlasFindingsService::class.java.getDeclaredField("last").apply { isAccessible = true }
-        field.set(service, AtlasFindingsService.Analysis(demo.toPath(), demo.toPath().resolve("atlas-output"), findings))
+        service.seedForTest(AtlasFindingsService.Analysis(demo.toPath(), demo.toPath().resolve("atlas-output"), findings))
         val panel = AtlasFindingsPanel(project)
         try {
-            shoot(dir, "findings-1100", panel, 1100, 320)
+            shoot(dir, "findings-1100", panel, 1100, 360)
+            // A finding selected: the pane beside the tree explains its check.
+            val tree = panel.tree
+            com.intellij.util.ui.tree.TreeUtil.expandAll(tree)
+            (0 until tree.rowCount).map { tree.getPathForRow(it) }
+                .firstOrNull { (it.lastPathComponent as javax.swing.tree.DefaultMutableTreeNode).userObject is com.flowable.atlas.findings.FindingsTree.FindingItem }
+                ?.let { tree.selectionPath = it }
+            shoot(dir, "findings-1100-selected", panel, 1100, 360)
         } finally {
             Disposer.dispose(panel)
+            service.seedForTest(null)
         }
     }
 
@@ -171,8 +178,12 @@ class UiShotsTest : BasePlatformTestCase() {
 
     /** What a resize does: every cached size is dropped, then the tree is laid out again, top down. */
     private fun layout(c: Component) {
-        invalidateTree(c)
-        layoutTree(c)
+        // Twice: a wrapping text learns its width in the first pass and asks for its height in the second,
+        // which is what the revalidation after a real resize does.
+        repeat(2) {
+            invalidateTree(c)
+            layoutTree(c)
+        }
     }
 
     private fun invalidateTree(c: Component) {

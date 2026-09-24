@@ -59,8 +59,7 @@ class AtlasFindingsTest : BasePlatformTestCase() {
             assertTrue("expected a missingRefs finding: ${first.findings}", missing.isNotEmpty())
 
             // accept() works on the last analysis; seed it the way refresh() would
-            val field = AtlasFindingsService::class.java.getDeclaredField("last").apply { isAccessible = true }
-            field.set(service, first)
+            service.seedForTest(first)
             service.accept(missing, "the callee lives in another app")
             val written = Waivers.load(File(dir, "atlas-output/${Waivers.FILE_NAME}"))
             assertEquals(listOf("the callee lives in another app"), written.waivers.map { it.reason }.distinct())
@@ -74,8 +73,7 @@ class AtlasFindingsTest : BasePlatformTestCase() {
 
     fun testThePanelShowsTheLastAnalysis() {
         val service = AtlasFindingsService.getInstance(project)
-        val field = AtlasFindingsService::class.java.getDeclaredField("last").apply { isAccessible = true }
-        field.set(service, AtlasFindingsService.Analysis(
+        service.seedForTest(AtlasFindingsService.Analysis(
             File(project.basePath!!).toPath(), File(project.basePath!!, "atlas-output").toPath(),
             listOf(finding("missingRefs", "process:DEMO-P1")),
         ))
@@ -83,8 +81,78 @@ class AtlasFindingsTest : BasePlatformTestCase() {
         try {
             val root = panel.tree.model.root as DefaultMutableTreeNode
             assertEquals(listOf("Defects 1"), titles(root))
+            // The status line says how current it is, in the counts the Hub's health row uses.
+            assertTrue(panel.statusForTest, panel.statusForTest.startsWith("1 defect · 0 advice · analyzed "))
         } finally {
             com.intellij.openapi.util.Disposer.dispose(panel)
+            service.seedForTest(null)
+        }
+    }
+
+    /**
+     * A generation runs the very analysis the window shows, so its findings are taken over — for the
+     * project the window is about, and for no other folder.
+     */
+    fun testAGenerationHandsItsFindingsOver() {
+        val service = AtlasFindingsService.getInstance(project)
+        val root = File(project.basePath!!).toPath()
+        try {
+            service.adopt(root.resolve("elsewhere"), root.resolve("atlas-output"), listOf(finding("missingRefs", "process:DEMO-P1")))
+            assertNull("another folder's analysis is not this project's", service.last)
+            service.adopt(root, root.resolve("atlas-output"), listOf(finding("missingRefs", "process:DEMO-P1")))
+            assertEquals(1, service.last?.defects)
+        } finally {
+            service.seedForTest(null)
+        }
+    }
+
+    /** A model newer than the analysis makes it stale — said by the service, not re-run behind anyone's back. */
+    fun testAModelNewerThanTheAnalysisMakesItStale() {
+        myFixture.addFileToProject("models/DEMO-P001.bpmn", """<definitions><process id="DEMO-P001"/></definitions>""")
+        project.getService(com.flowable.atlas.index.FlowableModelIndexService::class.java).index()
+        val service = AtlasFindingsService.getInstance(project)
+        val root = File(project.basePath!!).toPath()
+        try {
+            service.seedForTest(AtlasFindingsService.Analysis(root, root, emptyList(), atMillis = 1L))
+            assertTrue(service.stale)
+            service.seedForTest(AtlasFindingsService.Analysis(root, root, emptyList(), atMillis = Long.MAX_VALUE))
+            assertFalse(service.stale)
+        } finally {
+            service.seedForTest(null)
+        }
+    }
+
+    /** The detail pane says what the explorer's Checks page says: why, what to do, and where to read on. */
+    fun testTheDetailOfAFindingExplainsItsCheck() {
+        val d = FindingsDetail.of(FindingItem(finding("missingRefs", "process:DEMO-P1")), openUnder = 1)
+        assertEquals("Missing model refs", d.title)
+        assertTrue(d.kind!!, d.kind!!.startsWith("Defect · "))
+        assertEquals("DEMO-P1 — m", d.finding)
+        assertEquals("models/x.bpmn" to 3, d.file to d.line)
+        assertEquals("the model's page", "process%3ADEMO-P1", d.route)
+        assertFalse(d.why.isNullOrBlank())
+        assertFalse(d.fix.isNullOrBlank())
+        assertTrue(d.docsUrl!!.contains("/checks/#"))
+        assertEquals(1, d.acceptable)
+
+        val check = FindingsDetail.of(CheckItem("missingRefs", "Missing model refs", 2), openUnder = 2)
+        assertEquals("the check on the Checks page", "/checks&f=Missing%20model%20refs", check.route)
+        assertEquals(2, check.acceptable)
+
+        val accepted = FindingsDetail.of(FindingItem(finding("missingRefs", "process:DEMO-P2", waived = true)), openUnder = 0)
+        assertEquals(0, accepted.acceptable)
+        assertEquals("ok", accepted.accepted)
+    }
+
+    /** Accept asks why, and does not close on an empty answer — the old input dialog took that for Cancel. */
+    fun testAcceptRefusesAnEmptyReason() {
+        val dialog = AcceptFindingsDialog(project, 2)
+        try {
+            assertNotNull(dialog.validateWith("   "))
+            assertNull(dialog.validateWith("the callee lives in another app"))
+            assertEquals("the callee lives in another app", dialog.reason)
+        } finally {
+            com.intellij.openapi.util.Disposer.dispose(dialog.disposable)
         }
     }
 }

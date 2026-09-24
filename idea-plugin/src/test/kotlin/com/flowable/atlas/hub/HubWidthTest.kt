@@ -41,8 +41,17 @@ class HubWidthTest : BasePlatformTestCase() {
             AtlasConnectionSelection.select(project, ConnectionKind.WORK, work)
             // A removed environment puts the attention line up — the one row that comes and goes.
             catalog.removeEnvironment(gone)
+            // The health row at its longest: four-digit counts, and stale, so *Analyze Again* is beside them.
+            myFixture.addFileToProject("models/DEMO-P001.bpmn", """<definitions><process id="DEMO-P001"/></definitions>""")
+            project.getService(com.flowable.atlas.index.FlowableModelIndexService::class.java).index()
+            fun f(check: String, i: Int) = mapOf<String, Any?>("check" to check, "severity" to "warning", "node" to "process:DEMO-$i")
+            val findings = (1..1280).map { f("missingRefs", it) } + (1..1041).map { f("unusedForms", it) }
+            val root = java.io.File(project.basePath!!).toPath()
+            com.flowable.atlas.findings.AtlasFindingsService.getInstance(project)
+                .seedForTest(com.flowable.atlas.findings.AtlasFindingsService.Analysis(root, root, findings, atMillis = 1L))
             panel.refreshForTest()
             assertNotNull("the attention line is part of what has to fit", panel.viewForTest().attention)
+            assertEquals("1,280 defects · 1,041 advice · Analyze Again", panel.viewForTest().health)
 
             val width = JBUI.scale(HubLayout.MIN_WIDTH)
             panel.setSize(width, JBUI.scale(900))
@@ -69,6 +78,7 @@ class HubWidthTest : BasePlatformTestCase() {
                 .map(::describe)
             assertEquals("texts cut short with nothing to hover for the rest", emptyList<String>(), cutWithoutTooltip)
         } finally {
+            com.flowable.atlas.findings.AtlasFindingsService.getInstance(project).seedForTest(null)
             roots.setActiveSubProject("")
             AtlasConnectionSelection.clear(project, ConnectionKind.DESIGN)
             AtlasConnectionSelection.clear(project, ConnectionKind.WORK)
