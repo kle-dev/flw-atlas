@@ -76,6 +76,24 @@ finding is a real defect or a template file full of `$MODEL_KEY` placeholders. R
 anything under `idea-plugin/src/main/resources/schemas/`, and again after — see `idea-plugin/README.md`
 for what may be changed in them and why.
 
+### Pictures of the plugin's panels
+
+A Swing layout is easy to break and slow to look at: every check used to mean starting an IDE and
+dragging a tool window to three widths. The plugin's panels can be painted without one:
+
+```bash
+./gradlew :idea-plugin:test --tests "*UiShotsTest*" -Patlas.uiShots=build/ui-shots
+```
+
+It builds the real Atlas Hub, Atlas Findings, both playground tabs and every settings page, lays them out
+at the widths they are used at — the Hub at 280, 360 and 480 px, the playground docked at the bottom and
+at the side — and writes one PNG each. Every picture also prints how wide its content *wants* to be,
+and flags it when that is more than it was given: the number that says whether a narrow tool window
+cuts something off. The pictures are laid out by the real UI DSL but painted under Darcula, because the
+test application has no themes installed to switch between, so they are for layout, not for colour. The
+New UI chrome and a light theme still need a look in `runIdeLocal`. Without the property the test does
+nothing, so `./gradlew build` never writes images.
+
 ### The compatibility gate
 
 ```bash

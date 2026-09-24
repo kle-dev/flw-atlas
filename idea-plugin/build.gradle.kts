@@ -285,7 +285,16 @@ gradle.taskGraph.whenReady {
 //
 // Nothing to configure without it, and it can never run in CI: a real corpus is customer work and must
 // not be copied into this public repository. See site/pages/develop.md.
+//
+// And paints the plugin's Swing panels into PNGs, on demand (UiShotsTest; see site/pages/develop.md):
+//
+//     ./gradlew :idea-plugin:test --tests "*UiShotsTest*" -Patlas.uiShots=build/ui-shots
 tasks.named<Test>("test") {
+    providers.gradleProperty("atlas.uiShots").orNull?.let {
+        systemProperty("atlas.uiShots", file(it).absolutePath)
+        testLogging { showStandardStreams = true }
+        outputs.upToDateWhen { false }
+    }
     providers.gradleProperty("atlas.corpus").orNull?.let {
         systemProperty("atlas.corpus", it)
         testLogging { showStandardStreams = true }
