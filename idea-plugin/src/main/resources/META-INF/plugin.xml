@@ -177,6 +177,12 @@
               has opened a node. Only a touch screen still stacks. The breadcrumb no longer runs into itself
               when squeezed: the path above the page gives way first, and in a bar too narrow for a path it
               shows the page's own name alone.</li>
+          <li><b>Services, data objects and changelogs name each other in their tables.</b> The
+              <i>Services</i> table gains a <i>Data objects</i> column, the <i>Data objects</i> table a
+              <i>Service</i> column, and both a <i>Liquibase</i> column with the changelog that creates the
+              table — for a data object through its service, the live definition first. Each is a link with
+              its key to copy. A copy button shows the ordinary pointer now, not the copy cursor with its
+              plus badge.</li>
           <li><b>One name for every Atlas surface, one verb for opening it.</b> The tool windows are
               <i>Atlas Hub</i>, <i>Atlas Findings</i> and <i>Atlas Playground</i> — the playground used to
               be called <i>Expression Playground</i> although half of it is scripts — and every entry that
@@ -545,13 +551,6 @@
               was active for every page it found, all at once.</li>
           <li><b>The "keys removed by this pull" warning fires.</b> The pull took its before-snapshot after
               the refresh that had already dropped the index, so the snapshot was always empty.</li>
-          <li><b>No more blank explorer.</b> A control character in a model string (a vertical tab pasted
-              from Word into a description) or a commented-out <code>&lt;script&gt;</code> tag in an HTML
-              component broke the page's data island, and the page showed nothing. <code>graph.json</code>
-              was invalid JSON for the same reason.</li>
-          <li><b>Java behind a <code>"/api/**"</code> or <code>"http://…"</code> string is read.</b> The
-              <code>/*</code> inside a mapping or a URL opened a comment that swallowed the endpoints, beans
-              and key literals after it.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

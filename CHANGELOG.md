@@ -44,6 +44,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   list becomes a drawer over the page that closes once it has opened a node. Only a touch screen still
   stacks. The breadcrumb no longer runs into itself when squeezed: the path above the page gives way first,
   and in a bar too narrow for a path it shows the page's own name alone.
+- **Services, data objects and changelogs name each other in their tables.** The *Services* table gains a
+  *Data objects* column, the *Data objects* table a *Service* column, and both a *Liquibase* column with the
+  changelog that creates the table — for a data object through its service, the live definition first.
+  Each is a link with its key to copy. A copy button shows the ordinary pointer now, not the copy cursor
+  with its plus badge.
 - **One name for every Atlas surface, one verb for opening it.** The tool windows are *Atlas Hub*, *Atlas
   Findings* and *Atlas Playground* — the playground used to be called *Expression Playground* although half
   of it is scripts — and every entry that opens one reads *Open Atlas …*. Under *Generate* the entries no

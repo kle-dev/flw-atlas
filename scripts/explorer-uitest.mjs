@@ -683,6 +683,32 @@ const probe = `<script>
        decodeURIComponent(location.hash).indexOf('&f=zzz-none')>0, 'hash='+location.hash);
   });
 
+  // --- a service, its data objects and its changelog name each other in their tables ---
+  steps.push(()=>{ closeOtherTabs(); state.filter=''; state.sort='name'; location.hash='/browse/'+enc('service'); });
+  steps.push(()=>{
+    const row=document.querySelector('#catrows .tr[data-id="service:customerService"]');
+    const dob=row&&row.querySelector('.vlink[data-id="'+enc('dataObject:customerDO')+'"]');
+    ok('a service row names the data object stored through it', !!dob, row&&row.textContent);
+    const lb=row&&row.querySelector('.vlink[data-id="'+enc('liquibase:001-customer')+'"]');
+    ok('and the changelog that creates its table', !!lb);
+    const cp=lb&&lb.parentNode.querySelector('.cpy');
+    ok('the changelog copies its key', !!cp && decodeURIComponent(cp.dataset.copy)==='001-customer', cp&&cp.dataset.copy);
+    // a copy button is a button: the pointer cursor, not the "copy" one with its plus badge
+    ok('a copy button shows the plain pointer', !!cp && getComputedStyle(cp).cursor==='pointer', cp&&getComputedStyle(cp).cursor);
+    location.hash='/browse/'+enc('dataObject');
+  });
+  steps.push(()=>{
+    const row=document.querySelector('#catrows .tr[data-id="dataObject:customerDO"]');
+    const sv=row&&row.querySelector('.vlink[data-id="'+enc('service:customerService')+'"]');
+    ok('a data object row names its service', !!sv, row&&row.textContent);
+    // its changelog is reached through the service that stores it
+    ok('and the changelog behind that service', !!(row&&row.querySelector('.vlink[data-id="'+enc('liquibase:001-customer')+'"]')));
+    if(sv) click(sv);
+  });
+  steps.push(()=>{
+    ok('the service link opens the service', state.sel==='service:customerService', 'sel='+state.sel);
+  });
+
   // --- an action's table names its bot, a bot's table its actions — each a link of its own ---
   steps.push(()=>{ closeOtherTabs(); state.filter=''; state.sort='name'; location.hash='/browse/'+enc('action'); });
   steps.push(()=>{

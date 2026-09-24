@@ -3057,6 +3057,14 @@ function catExtraCols(cat){
     const apps=(incM.get(n.id)||[]).filter(e=>e.rel==='contains').map(e=>byId.get(e.id)).filter(Boolean);
     return apps.map(a=>esc(a.label)).join(', '); }});
   if(t==='service') ex.push({k:'table', label:'Table', w:'minmax(10ch,1fr)', mono:true, opt:true, get:n=>esc((n.data||{}).tableName||'')});
+  // A service, the data objects stored through it and the changelog that creates its table are one thing
+  // told in three models; each table names the other two, so none of the three has to be opened to find them.
+  if(t==='service') ex.push({k:'dos', label:'Data objects', w:'minmax(12ch,1.2fr)', opt:true,
+    get:n=>linksCell(neighbours(n.id, 'in', 'backed-by-service'), 'data object key')});
+  if(t==='dataObject') ex.push({k:'svc', label:'Service', w:'minmax(12ch,1.2fr)', opt:true,
+    get:n=>linksCell(neighbours(n.id, 'out', 'backed-by-service'), 'service key')});
+  if(t==='service'||t==='dataObject') ex.push({k:'lb', label:'Liquibase', w:'minmax(12ch,1.2fr)', opt:true,
+    get:n=>linksCell(changelogsOf(n), 'changelog key')});
   if(t==='decision') ex.push({k:'hit', label:'Hit policy', w:'minmax(8ch,.8fr)', opt:true, get:n=>esc((n.data||{}).hitPolicy||'')});
   if(t==='java') ex.push({k:'pkg', label:'Package', w:'minmax(12ch,1.2fr)', mono:true, opt:true,
     get:n=>{ const k=String(n.key||''), i=k.lastIndexOf('.'); return i>0?esc(k.slice(0,i)):''; }});
@@ -3080,11 +3088,27 @@ function botCell(n){
 }
 /** The actions that reach a bot — the first three, then `+N` with the rest in its tip. No open button: the
  *  action is a model, and its page is one click away. */
-function botActionsCell(n){
-  const as=(incM.get(n.id)||[]).filter(e=>e.rel==='bot').map(e=>byId.get(e.id)).filter(Boolean);
-  if(!as.length) return '';
-  return as.slice(0,3).map(a=>'<span class="cellx">'+vlink(a.id, a.label)+copyBtn(a.key,'action key')+'</span>').join('<span class="csep">,</span>')+
-    (as.length>3?'<span class="cmore" data-tip="'+esc(as.slice(3).map(a=>a.label).join(', '))+'">+'+(as.length-3)+'</span>':'');
+function botActionsCell(n){ return linksCell(neighbours(n.id, 'in', 'bot'), 'action key'); }
+/** The nodes one relation reaches from `id`, each once, in the graph's order. */
+function neighbours(id, dir, rel){
+  const seen=new Set();
+  return ((dir==='in'?incM:outM).get(id)||[]).filter(e=>e.rel===rel).map(e=>byId.get(e.id))
+    .filter(x=>x && !seen.has(x.id) && seen.add(x.id));
+}
+/** The changelogs behind a service or a data object. A data object is usually tied to its changelog through
+ *  the service that stores it, not by a key of its own, so it takes both: its own schema links and its
+ *  services'. The live definition of a table comes before a superseded revision of it. */
+function changelogsOf(n){
+  const via=n.type==='dataObject' ? neighbours(n.id, 'out', 'backed-by-service') : [];
+  const seen=new Set(), rank=c=>{ const st=((c.data||{}).authority||{}).status; return st==='live'?0:st==='superseded'?2:1; };
+  return [n].concat(via).flatMap(x=>neighbours(x.id, 'out', 'schema'))
+    .filter(c=>!seen.has(c.id) && seen.add(c.id)).sort((a,b)=>rank(a)-rank(b));
+}
+/** Nodes as links in one cell — the first three, each with its key to copy, then `+N` with the rest in its tip. */
+function linksCell(ns, what){
+  if(!ns.length) return '';
+  return ns.slice(0,3).map(a=>'<span class="cellx">'+vlink(a.id, a.label)+copyBtn(a.key, what)+'</span>').join('<span class="csep">,</span>')+
+    (ns.length>3?'<span class="cmore" data-tip="'+esc(ns.slice(3).map(a=>a.label).join(', '))+'">+'+(ns.length-3)+'</span>':'');
 }
 /** A link inside a category row opens its own target, not the row's: plain → there, ⌘/Ctrl or middle →
  *  a background tab. Stopped here, so the #detail handler a detail page left behind cannot open it twice. */

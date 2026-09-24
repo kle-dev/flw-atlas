@@ -909,7 +909,7 @@
   .dkindw{font-weight:500}
   .dsep{color:var(--ink-faint)}
   .dkey{font-family:var(--mono);color:var(--accent)}
-  .dfile{font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-faint);cursor:copy;min-width:0;
+  .dfile{font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-faint);cursor:pointer;min-width:0;
     display:inline-flex;align-items:center;gap:var(--space-05)}
   .dfile .fp{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .dfile:hover{color:var(--ink-dim)}
@@ -958,7 +958,7 @@
   /* ---- copy-to-clipboard icon button (keys, values, "used by" badges) ---- */
   .cpy{display:inline-flex;align-items:center;justify-content:center;flex:none;width:20px;height:20px;padding:0;
     margin-left:var(--space-1);vertical-align:middle;line-height:0;background:transparent;
-    border:1px solid transparent;border-radius:var(--radius-sm);color:var(--ink-faint);cursor:copy}
+    border:1px solid transparent;border-radius:var(--radius-sm);color:var(--ink-faint);cursor:pointer}
   .cpy:hover{color:var(--accent);border-color:var(--line2);background:var(--panel)}
   .cpy:focus-visible{outline:2px solid var(--accent);outline-offset:1px;color:var(--accent)}
   .cpy.ok{color:var(--cov-good,#2e7d32);border-color:transparent;background:transparent}
