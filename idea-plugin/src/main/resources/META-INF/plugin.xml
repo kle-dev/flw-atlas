@@ -183,6 +183,17 @@
               table — for a data object through its service, the live definition first. Each is a link with
               its key to copy. A copy button shows the ordinary pointer now, not the copy cursor with its
               plus badge.</li>
+          <li><b>Settings say whose they are.</b> Every project settings page names the Flowable project its
+              values belong to when that is a question — a sub-project is chosen, or the repository holds
+              several — since the choice is made elsewhere, in the Atlas Hub. <i>Apply</i> on the
+              Environments page with something missing selects the environment or connection it is about.
+              The model-constants identifier and format read as choices with an example (<i>Name and key —
+              ORDER_FULFILMENT_P_0001</i>) instead of enum names, the custom-functions source is only
+              editable while discovery is on, the copy button is disabled on a connection, and <i>Share with
+              Project</i> wears a share icon rather than a save icon. The sign-in form lost two paragraphs
+              to help marks, the Work connection reads <i>Server URL</i> like the Design one and is called
+              Work wherever it was called "app", and settings paths read <i>Settings → Tools → Flowable
+              Atlas → …</i>.</li>
           <li><b>The playground's panes each say one thing.</b> What just happened to the context — <i>Using
               QA · CAS-4711</i> after a paste, <i>Saved as QA</i> — is said on a line under the context's
               summary instead of being written over the last result, and a value's type sits beside the
@@ -535,18 +546,6 @@
               Checks page; the inventory lists the sidebar's entries grouped as the sidebar groups them. The
               two-column layout follows the overview's own width, so an editor tab stacks it where the room
               runs out.</li>
-          <li><b>A category opens as a table.</b> Picking a category no longer shows its list beside an
-              empty page: the page is a sortable table of the category — name, key, file, references in and
-              out, open findings, and a column the type is worth more with (a model's app, a service's
-              table, a Java class's package, a review list's finding). A header sorts, a second click
-              reverses; the filter is the search engine's; marking, the keyboard and middle-click work as in
-              the list, which steps aside and comes back beside the node a row opens. The sort travels in
-              the link, now also by key, out-degree and findings.</li>
-          <li><b>Every shortcut behind <code>?</code>.</b> <code>?</code> — or the new <b>?</b> button in
-              the top bar — opens a sheet of every keyboard shortcut, grouped by where it works and
-              generated from one table. It replaces the sentence in the empty detail pane, which only
-              someone with nothing selected ever saw, and which said tabs switch with Alt+←→ (that is
-              history; tabs are Alt+[ and Alt+]).</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

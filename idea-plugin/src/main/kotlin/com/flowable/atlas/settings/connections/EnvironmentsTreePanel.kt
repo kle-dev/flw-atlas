@@ -139,9 +139,14 @@ class EnvironmentsTreePanel(private val project: Project) : Disposable {
     }
 
     /** The first validation problem, or null — the page turns this into a `ConfigurationException`. */
+    /** The first problem, with its node selected — Apply used to name it in a message and leave the
+     *  reader to find the environment among the others. */
     fun validate(): String? {
         flushCurrentForm()
-        return draft.validate()
+        val problem = draft.firstProblem() ?: return null
+        problem.connectionId?.let { select(SelectionTarget.Connection(it)) }
+            ?: problem.environmentId?.let { select(SelectionTarget.Environment(it)) }
+        return problem.message
     }
 
     fun apply() {
@@ -398,13 +403,10 @@ class EnvironmentsTreePanel(private val project: Project) : Disposable {
     }
 
     private fun copyAction(): AnAction =
-        simpleAction("Copy Environment", AllIcons.Actions.Copy) {
-            val node = selectedNode()
-            val environmentId = when (node) {
-                is Node.Env -> node.id
-                is Node.Conn -> draft.connection(node.id)?.environmentId
-                null -> null
-            } ?: return@simpleAction
+        simpleAction("Copy Environment", AllIcons.Actions.Copy, enabled = { selectedNode() is Node.Env }) {
+            // An environment copies; on a connection the entry would copy something other than what is
+            // selected, so it is disabled there.
+            val environmentId = (selectedNode() as? Node.Env)?.id ?: return@simpleAction
             flushCurrentForm()
             // "Define once, clone for the next stage": copy QA, rename it UAT, change two URLs.
             draft.copyEnvironment(environmentId)?.let { rebuildTree(select = Node.Env(it.id)) }
@@ -420,7 +422,7 @@ class EnvironmentsTreePanel(private val project: Project) : Disposable {
      * a shared login is one audit trail with everyone's name missing from it.
      */
     private fun shareAction(): AnAction =
-        object : AnAction("Share with Project", null, AllIcons.Actions.MenuSaveall) {
+        object : AnAction("Share with Project", null, AllIcons.Actions.Share) {
             override fun actionPerformed(e: AnActionEvent) {
                 val env = selectedEnvironmentId()?.let { draft.environment(it) } ?: return
                 flushCurrentForm()
@@ -438,6 +440,7 @@ class EnvironmentsTreePanel(private val project: Project) : Disposable {
             override fun update(e: AnActionEvent) {
                 val env = selectedEnvironmentId()?.let { draft.environment(it) }
                 e.presentation.isEnabled = env != null
+                e.presentation.icon = if (env?.shared == true || env != null && draft.sharedExports.contains(env.id)) AllIcons.Actions.Unshare else AllIcons.Actions.Share
                 e.presentation.text = when {
                     env == null -> "Share with Project"
                     env.shared -> "Stop Sharing with Project"
@@ -460,9 +463,13 @@ class EnvironmentsTreePanel(private val project: Project) : Disposable {
         null -> false
     }
 
-    private fun simpleAction(text: String, icon: javax.swing.Icon?, run: () -> Unit): AnAction =
+    private fun simpleAction(text: String, icon: javax.swing.Icon?, enabled: (() -> Boolean)? = null, run: () -> Unit): AnAction =
         object : AnAction(text, null, icon) {
             override fun actionPerformed(e: AnActionEvent) = run()
+
+            override fun update(e: AnActionEvent) {
+                enabled?.let { e.presentation.isEnabled = it() }
+            }
 
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
         }

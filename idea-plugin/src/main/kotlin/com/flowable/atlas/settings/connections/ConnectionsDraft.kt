@@ -148,17 +148,22 @@ class ConnectionsDraft private constructor(
     // ---- validation ---------------------------------------------------------------------------
 
     /** The first problem a human should fix, or null. Wording is the dialog's message. */
-    fun validate(): String? {
+    fun validate(): String? = firstProblem()?.message
+
+    /** A problem, and where it is — the page selects that node, so the message points at something. */
+    data class Problem(val message: String, val environmentId: String? = null, val connectionId: String? = null)
+
+    fun firstProblem(): Problem? {
         // Only what this page can actually fix. A shared entry comes from a committed file: holding
         // Apply hostage to a colleague's typo would block the user from saving their own work, and the
         // reader of that file is git, not this dialog.
         val own = environments.filterNot { it.shared }
-        own.firstOrNull { it.name.isBlank() }?.let { return "An environment needs a name." }
+        own.firstOrNull { it.name.isBlank() }?.let { return Problem("An environment needs a name.", environmentId = it.id) }
         val seenNames = HashSet<String>()
         own.firstOrNull { !seenNames.add(it.name.lowercase()) }
-            ?.let { return "There is already an environment called \"${it.name}\"." }
+            ?.let { return Problem("There is already an environment called \"${it.name}\".", environmentId = it.id) }
         connections.filterNot { it.shared }.firstOrNull { it.baseUrl.isBlank() }?.let {
-            return "The ${it.kind.display} connection of \"${environment(it.environmentId)?.name}\" needs a URL."
+            return Problem("The ${it.kind.display} connection of \"${environment(it.environmentId)?.name}\" needs a URL.", connectionId = it.id)
         }
         // Two environments on one URL are deliberately allowed. They share the one PasswordSafe record
         // that URL has — which is the right answer, because it is the same server and the same login.

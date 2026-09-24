@@ -1,5 +1,7 @@
 package com.flowable.atlas.settings
 
+import com.intellij.ui.dsl.listCellRenderer.textListCellRenderer
+import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.FlowableAtlasBundle
 import com.flowable.atlas.generate.ConstantFormat
 import com.flowable.atlas.generate.ConstantNaming
@@ -29,6 +31,8 @@ class GenerationConstantsConfigurable(project: Project) : AtlasProjectConfigurab
         val settings = FlowableAtlasProjectSettings.getInstance(project)
         val constants = ModelConstantsSettings.getInstance(project).state
         return panel {
+            // The class name and auto-refresh are stored once per repository; only the naming is per project.
+            scopeLine(project, shared = message("settings.scope.constantsShared"))
             row("Class name (FQCN):") {
                 textField()
                     .align(AlignX.FILL)
@@ -55,15 +59,17 @@ class GenerationConstantsConfigurable(project: Project) : AtlasProjectConfigurab
                     .comment("Regenerate automatically when models are added, renamed or removed.")
                     .bindSelected({ constants.autoRefresh }, { constants.autoRefresh = it })
             }
+            // Readable choices with an example each — the combos used to show the enum names themselves.
             row("Identifier:") {
-                comboBox(ConstantNaming.entries)
+                comboBox(ConstantNaming.entries, textListCellRenderer { it?.let(::namingLabel) })
+                    .comment(message("settings.constants.naming.comment"))
                     .bindItem(
                         { settings.constantNaming },
                         { settings.constantNaming = it ?: ConstantNaming.NAME_AND_KEY },
                     )
             }
             row("Format:") {
-                comboBox(ConstantFormat.entries)
+                comboBox(ConstantFormat.entries, textListCellRenderer { it?.let(::formatLabel) })
                     .bindItem(
                         { settings.constantFormat },
                         { settings.constantFormat = it ?: ConstantFormat.CLASS },
@@ -71,4 +77,19 @@ class GenerationConstantsConfigurable(project: Project) : AtlasProjectConfigurab
             }
         }
     }
+
+    private fun namingLabel(n: ConstantNaming): String = message(
+        when (n) {
+            ConstantNaming.KEY -> "settings.constants.naming.key"
+            ConstantNaming.NAME -> "settings.constants.naming.name"
+            ConstantNaming.NAME_AND_KEY -> "settings.constants.naming.nameAndKey"
+        },
+    )
+
+    private fun formatLabel(f: ConstantFormat): String = message(
+        when (f) {
+            ConstantFormat.CLASS -> "settings.constants.format.class"
+            ConstantFormat.ENUM -> "settings.constants.format.enum"
+        },
+    )
 }

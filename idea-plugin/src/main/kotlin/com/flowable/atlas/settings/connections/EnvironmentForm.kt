@@ -1,5 +1,7 @@
 package com.flowable.atlas.settings.connections
 
+import com.intellij.util.ui.NamedColorUtil
+import com.intellij.util.ui.UIUtil
 import com.flowable.atlas.environment.ConnectionKind
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
@@ -99,7 +101,7 @@ class EnvironmentForm(
         add: JComponent,
     ) {
         summary.text = connection?.baseUrl?.ifBlank { "(no URL yet)" } ?: "not configured"
-        summary.foreground = if (connection == null) JBColor.GRAY else JBColor.foreground()
+        summary.foreground = if (connection == null) UIUtil.getContextHelpForeground() else JBColor.foreground()
         summary.toolTipText = when {
             connection != null -> null
             kind.linkOnly -> "This environment has no ${kind.display} address to open"

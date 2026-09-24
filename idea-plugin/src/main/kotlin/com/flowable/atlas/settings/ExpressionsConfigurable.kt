@@ -1,5 +1,6 @@
 package com.flowable.atlas.settings
 
+import com.intellij.ui.dsl.builder.selected
 import com.flowable.atlas.FlowableAtlasBundle
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
@@ -27,6 +28,7 @@ class ExpressionsConfigurable(project: Project) : AtlasProjectConfigurable(
         val app = FlowableAtlasSettings.getInstance()
         val settings = FlowableAtlasProjectSettings.getInstance(project)
         return panel {
+            scopeLine(project)
             group("Validation") {
                 row {
                     checkBox("Validate expression syntax")
@@ -75,8 +77,9 @@ class ExpressionsConfigurable(project: Project) : AtlasProjectConfigurable(
                 }
             }
             group("Custom functions") {
+                lateinit var discover: com.intellij.ui.dsl.builder.Cell<javax.swing.JCheckBox>
                 row {
-                    checkBox("Discover project custom functions")
+                    discover = checkBox("Discover project custom functions")
                         .comment("Read externals.additionalData functions from the project's frontend customization during Atlas generation (the CLI's default too).")
                         .bindSelected(settings::customFunctionsEnabled)
                 }
@@ -90,6 +93,8 @@ class ExpressionsConfigurable(project: Project) : AtlasProjectConfigurable(
                         .align(AlignX.FILL)
                         .comment("Optional: a specific file or folder to read custom functions from (project-relative); leave empty for auto-discovery.")
                         .bindText(settings::customFunctionsPath)
+                        // A source for a discovery that is switched off is a field that does nothing.
+                        .enabledIf(discover.selected)
                 }
             }
         }

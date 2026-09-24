@@ -87,6 +87,16 @@ class ConnectionsDraftTest {
         val problem = d.validate()!!
         assertTrue(problem.contains("Design"))
         assertTrue(problem.contains("DEV"))
+        // …and where it is, so the page can select that connection instead of leaving the reader to look.
+        val conn = d.connectionsOf(dev.id).single()
+        assertEquals(conn.id, d.firstProblem()!!.connectionId)
+    }
+
+    @Test
+    fun `a nameless environment is pointed at`() {
+        val d = draft()
+        val env = d.addEnvironment("QA").also { it.name = "" }
+        assertEquals(env.id, d.firstProblem()!!.environmentId)
     }
 
     @Test

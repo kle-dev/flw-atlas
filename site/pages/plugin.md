@@ -718,7 +718,10 @@ in a colleague's; what a project pulls *from* an environment is committed like e
 setting.
 
 Monorepo scoping means the one repository holding four Flowable apps does not need four IDE profiles:
-**every project setting is stored per sub-project**, and the Hub switches between them. Older flat
+**every project setting is stored per sub-project**, and the Hub switches between them. Each project
+settings page says whose values it shows, at its top — *These settings are for the Flowable project
+orders* — whenever a sub-project is chosen or the repository holds several, so nobody configures `orders`
+believing they are configuring the repository. Older flat
 settings files still load without a migration step, so upgrading never asks anyone to reconfigure
 anything. The chosen scope is the scope of *everything* — the model index, the Search Everywhere tab's
 full-text half, Find Usages into models, the REST-endpoint gutter — and the Hub's index line names it

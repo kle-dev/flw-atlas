@@ -68,7 +68,7 @@ class SaveWorkTargetDialog(project: Project, private val baseUrl: String) : Dial
             cell(nameField).align(AlignX.FILL).resizableColumn()
                 .comment("What every picker will call it — the stage, not the host: DEV1, QA, PROD.")
         }
-        row("App URL:") { label(baseUrl) }
+        row("Work URL:") { label(baseUrl) }
         row("") { cell(protectedBox) }
         row("") { cell(effect) }
     }
@@ -82,7 +82,7 @@ class SaveWorkTargetDialog(project: Project, private val baseUrl: String) : Dial
         // Caught here rather than after the dialog closes: the slot being taken is the one thing the
         // user can still do something about, and the fix is to type a different name.
         if (catalog.connection(hit.id, ConnectionKind.WORK) != null) {
-            return ValidationInfo("“${hit.name}” already has an app connection", nameField)
+            return ValidationInfo("“${hit.name}” already has a Work connection", nameField)
         }
         return null
     }

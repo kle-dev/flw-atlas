@@ -1,5 +1,11 @@
 package com.flowable.atlas.settings
 
+import com.intellij.ui.dsl.builder.RightGap
+import com.intellij.ui.dsl.builder.Panel
+import com.intellij.ui.dsl.builder.BottomGap
+import com.intellij.openapi.util.text.StringUtil
+import com.intellij.icons.AllIcons
+import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.project.AtlasProjectRootService
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
@@ -97,6 +103,32 @@ abstract class AtlasApplicationConfigurable(
 
     /** Page-specific work, run after the DSL bindings and before the notification. */
     protected open fun doApply() {}
+}
+
+/**
+ * Which Flowable project a page's values belong to, said at the top of the page — only when there is a
+ * choice to be aware of. Every project page reads and writes the active sub-project's values, and that
+ * scope is chosen in the Atlas Hub's header; a page that did not say so let someone configure `orders`
+ * believing they were configuring the repository, and the next switch made their change look lost.
+ */
+internal fun Panel.scopeLine(project: Project, shared: String? = null) {
+    val text = scopeLineText(project)?.let { if (shared != null) "$it $shared" else it } ?: return
+    row {
+        icon(AllIcons.General.Information).gap(RightGap.SMALL)
+        comment(StringUtil.escapeXmlEntities(text))
+    }.bottomGap(BottomGap.SMALL)
+}
+
+/** The scope line's words, or null when the repository holds one Flowable project and nothing is chosen. */
+internal fun scopeLineText(project: Project): String? {
+    val roots = AtlasProjectRootService.getInstance(project)
+    val active = roots.activeSubProject()
+    val detected = roots.detectedOrNull()?.size ?: 0
+    return when {
+        active.isNotBlank() -> message("settings.scope.sub", active)
+        detected >= 2 -> message("settings.scope.whole", detected)
+        else -> null
+    }
 }
 
 /**

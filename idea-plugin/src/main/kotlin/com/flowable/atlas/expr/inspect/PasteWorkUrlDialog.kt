@@ -1,5 +1,7 @@
 package com.flowable.atlas.expr.inspect
 
+import com.intellij.util.ui.NamedColorUtil
+import com.intellij.util.ui.UIUtil
 import com.flowable.atlas.FlowableAtlasBundle
 import com.flowable.atlas.environment.AtlasCatalog
 import com.flowable.atlas.environment.AtlasConnection
@@ -64,7 +66,7 @@ class PasteWorkUrlDialog(private val project: Project) : DialogWrapper(project) 
     private val passwordField = JBPasswordField()
     private val testButton = JButton("Test Connection")
     private val testStatus = JBLabel()
-    private val sessionStatus = JBLabel().apply { foreground = JBColor.GRAY }
+    private val sessionStatus = JBLabel().apply { foreground = UIUtil.getContextHelpForeground() }
 
     private lateinit var credentialRows: com.intellij.ui.dsl.builder.RowsRange
     private lateinit var recognisedRow: Row
@@ -207,7 +209,7 @@ class PasteWorkUrlDialog(private val project: Project) : DialogWrapper(project) 
     private fun signIn() {
         val baseUrl = parsed.baseUrl ?: return
         if (!JcefSupport.isAvailable()) {
-            testStatus.foreground = JBColor.RED
+            testStatus.foreground = NamedColorUtil.getErrorForeground()
             testStatus.text = "The embedded browser (JCEF) isn't available in this IDE."
             return
         }
@@ -215,7 +217,7 @@ class PasteWorkUrlDialog(private val project: Project) : DialogWrapper(project) 
         if (!dialog.showAndGet()) return
         val cookie = dialog.harvestedCookie
         if (cookie.isNullOrBlank()) {
-            testStatus.foreground = JBColor.RED
+            testStatus.foreground = NamedColorUtil.getErrorForeground()
             testStatus.text = "No session cookie was captured — make sure the login completed."
         } else {
             BrowserSessions.set(baseUrl, mapOf("Cookie" to cookie))
@@ -230,7 +232,7 @@ class PasteWorkUrlDialog(private val project: Project) : DialogWrapper(project) 
         if (!dialog.showAndGet()) return
         val captured = dialog.parsed
         if (!captured.hasAny) {
-            testStatus.foreground = JBColor.RED
+            testStatus.foreground = NamedColorUtil.getErrorForeground()
             testStatus.text = "No session headers found in the pasted text."
             return
         }
@@ -269,7 +271,7 @@ class PasteWorkUrlDialog(private val project: Project) : DialogWrapper(project) 
                         testStatus.text = "Reachable — the app answered"
                     }
                     is InspectClient.Outcome.Failed -> {
-                        testStatus.foreground = JBColor.RED
+                        testStatus.foreground = NamedColorUtil.getErrorForeground()
                         testStatus.text = outcome.message
                     }
                 }

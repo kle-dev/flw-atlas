@@ -49,6 +49,15 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   changelog that creates the table — for a data object through its service, the live definition first.
   Each is a link with its key to copy. A copy button shows the ordinary pointer now, not the copy cursor
   with its plus badge.
+- **Settings say whose they are.** Every project settings page names the Flowable project its values
+  belong to when that is a question — a sub-project is chosen, or the repository holds several — since the
+  choice is made elsewhere, in the Atlas Hub. *Apply* on the Environments page with something missing
+  selects the environment or connection it is about. The model-constants identifier and format read as
+  choices with an example (*Name and key — ORDER_FULFILMENT_P_0001*) instead of enum names, the
+  custom-functions source is only editable while discovery is on, the copy button is disabled on a
+  connection, and *Share with Project* wears a share icon rather than a save icon. The sign-in form lost two
+  paragraphs to help marks, the Work connection reads *Server URL* like the Design one and is called Work
+  wherever it was called "app", and settings paths read *Settings → Tools → Flowable Atlas → …*.
 - **The playground's panes each say one thing.** What just happened to the context — *Using QA · CAS-4711*
   after a paste, *Saved as QA* — is said on a line under the context's summary instead of being written
   over the last result, and a value's type sits beside the result's caption (*Result · string*) instead of

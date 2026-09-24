@@ -231,7 +231,7 @@ Applies to every project.
 | Treat `${…}` / `#{…}` in Java string literals as Flowable expressions | **off** |
 | Project allowlist — a table of entries typed *Namespace*, *Function* or *Grounding root* | empty |
 | Discover project custom functions | on |
-| Customisation source (file or folder) | empty = auto-discover |
+| Customisation source (file or folder) — only while discovery is on | empty = auto-discover |
 
 The allowlist is the same store the Alt-Enter quick fix writes to. See
 [the allowlist](../../expressions/#the-allowlist).
@@ -259,8 +259,11 @@ everything except `waivers.json` out of the repository — the same file the CLI
 |---|---|
 | Model constants class (FQCN) — validated as you type; renaming it leaves the file generated under the old name where it is, no longer kept in sync, and says so | blank → `flowable.FlowableModelKeys` |
 | Keep the generated class in sync | on |
-| Constant identifier: key / name / name and key | name and key |
-| Constant format: class of `String`s, or enum | class |
+| Constant identifier: *The key — P_0001* / *The name — ORDER_FULFILMENT* / *Name and key — ORDER_FULFILMENT_P_0001* | name and key |
+| Constant format: *A class of String constants per model type* / *An enum per model type* | class |
+
+The identifier and the format are stored per Flowable project; the class name and keeping it in sync are
+shared by the whole repository, and the page's scope line says so.
 
 #### → Generation → Liquibase
 
@@ -284,14 +287,19 @@ everything except `waivers.json` out of the repository — the same file the CLI
 
 The DEV/QA/UAT/PROD list, **shared by every project in this IDE**. A tree of environments on the left,
 the selected node's form on the right; `+` adds an environment or a connection, the copy button clones
-an environment with its connections, and the arrows reorder — the list is a pipeline, and alphabetical
-would put PROD second.
+the selected environment with its connections (it is disabled on a connection), the share button puts an
+environment into — or takes it out of — the project's committed file, and the arrows reorder — the list is
+a pipeline, and alphabetical would put PROD second. *Apply* with something missing — a name, a URL —
+selects the environment or connection it is about, beside the message saying what is missing.
 
 | Node | Fields |
 |---|---|
 | Environment | Name · *Ask before pulling from or evaluating against this environment* (**Protected**) |
 | Flowable Design | Server URL · authentication (username and password *or* an access token, with a *Create Token…* dialog and a link to Design's own token page) · *Test Connection* |
-| Flowable Work | App base URL · *Detect from Project* · username · password · browser session (*Sign in via Browser…*, *Paste Session…*) · *Test Connection* |
+| Flowable Work | Server URL · *Detect from Project* · username · password · browser session (*Sign in via Browser…*, *Paste Session…*) · *Test Connection* |
+
+The explanations that used to stand under the sign-in buttons as paragraphs — why *Create Token…* fails
+behind SSO, when a browser session is what gets you in — are help marks beside those buttons now.
 
 An environment holds **at most one connection of each kind, and may hold only one of the two** — a QA
 stage with a running app and no Design server is an ordinary thing, shown without any warning. Two

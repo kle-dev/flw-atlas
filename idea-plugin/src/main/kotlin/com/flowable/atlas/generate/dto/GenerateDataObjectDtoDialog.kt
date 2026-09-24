@@ -68,7 +68,7 @@ class GenerateDataObjectDtoDialog(
 
     private val settings = FlowableAtlasProjectSettings.getInstance(project)
 
-    /** What the `{suffix}` token renders; configured in Settings → Generation, not in this dialog. */
+    /** What the `{suffix}` token renders; configured on the Data-Object DTOs settings page, not in this dialog. */
     private val classSuffix = settings.dtoClassSuffix
 
     private val appCombo = ComboBox<AppOption>()
@@ -169,7 +169,7 @@ class GenerateDataObjectDtoDialog(
                         "PascalCase, <b>{shortName} the same without the leading model key</b> " +
                         "(<code>DEMO-D009 Pod Member</code> → <code>PodMember</code>, not " +
                         "<code>DEMOD009PodMember</code>), {suffix} the class-name suffix from Settings → " +
-                        "Flowable Atlas → Generation. Type a class name in the table to override the pattern " +
+                        "Tools → Flowable Atlas → Generation → Data-Object DTOs. Type a class name in the table to override the pattern " +
                         "for that row.",
                 )
             }

@@ -21,6 +21,7 @@ class GenerationDtoConfigurable(project: Project) : AtlasProjectConfigurable(
     override fun createPanel(): DialogPanel {
         val settings = FlowableAtlasProjectSettings.getInstance(project)
         return panel {
+            scopeLine(project)
             row("Package:") {
                 textField()
                     .align(AlignX.FILL)

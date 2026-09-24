@@ -33,6 +33,7 @@ class GenerationConfigurable(project: Project) : AtlasProjectConfigurable(
     override fun createPanel(): DialogPanel {
         val settings = FlowableAtlasProjectSettings.getInstance(project)
         return panel {
+            scopeLine(project)
             group("Atlas Artifacts") {
                 row("Output folder:") {
                     textFieldWithBrowseButton(

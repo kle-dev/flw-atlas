@@ -21,6 +21,7 @@ class GenerationLiquibaseConfigurable(project: Project) : AtlasProjectConfigurab
     override fun createPanel(): DialogPanel {
         val settings = FlowableAtlasProjectSettings.getInstance(project)
         return panel {
+            scopeLine(project)
             row("Output folder:") {
                 textFieldWithBrowseButton(
                     FileChooserDescriptorFactory.createSingleFolderDescriptor()

@@ -69,7 +69,8 @@ class LinkConnectionForm(private val project: Project) {
 
     private companion object {
         const val COMMENT =
-            "An address Atlas opens in your browser from the Atlas Hub — nothing is called and nothing " +
-                "is signed in to, so there is no password to store."
+            "An address Atlas opens in your browser — from the Atlas Hub tool window's ⋮, Open Environment in " +
+                "Browser — and nothing else: nothing is called and nothing is signed in to, so there is no " +
+                "password to store."
     }
 }

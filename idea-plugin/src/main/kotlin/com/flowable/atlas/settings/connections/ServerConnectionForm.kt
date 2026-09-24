@@ -1,5 +1,7 @@
 package com.flowable.atlas.settings.connections
 
+import com.intellij.util.ui.NamedColorUtil
+import com.intellij.util.ui.UIUtil
 import com.flowable.atlas.design.DesignClient
 import com.flowable.atlas.design.DesignCreateTokenDialog
 import com.flowable.atlas.environment.BaseUrls
@@ -88,13 +90,13 @@ class ServerConnectionForm(private val project: Project, private val kind: Conne
     private val tokenField = JBPasswordField()
     private val detectButton = JButton("Detect from Project")
     private val testButton = JButton("Test Connection")
-    private val sessionStatus = JBLabel().apply { foreground = JBColor.GRAY }
+    private val sessionStatus = JBLabel().apply { foreground = UIUtil.getContextHelpForeground() }
     private val status = JBLabel()
     private val saveAnywayHint = JBLabel(FormStatus.html("A failed test does not stop you saving.")).apply {
-        foreground = JBColor.GRAY
+        foreground = UIUtil.getContextHelpForeground()
         isVisible = false
     }
-    private val sharedNote = JBLabel(FormStatus.html(SHARED_NOTE)).apply { foreground = JBColor.GRAY }
+    private val sharedNote = JBLabel(FormStatus.html(SHARED_NOTE)).apply { foreground = UIUtil.getContextHelpForeground() }
 
     private lateinit var sharedRow: Row
     private lateinit var basicRows: RowsRange
@@ -147,12 +149,11 @@ class ServerConnectionForm(private val project: Project, private val kind: Conne
                 row("") {
                     button("Create Token…") { createToken() }
                     link("Manage in Design…") { openTokenManagement() }
-                }
-                row("") {
-                    // Said here because the button cannot say it by failing: minting a token is itself a
-                    // basic-auth call, so on the very server where a token is the only way in, this is
-                    // the one route that does not work.
-                    comment(
+                    // Said beside the button because the button cannot say it by failing: minting a token
+                    // is itself a basic-auth call, so on the very server where a token is the only way in,
+                    // this is the one route that does not work. A help mark, not a paragraph: the form
+                    // was twelve rows and four paragraphs tall.
+                    contextHelp(
                         "Creating a token signs in with the username and password above. A server behind " +
                             "SSO has those switched off — create the token in Design, or sign in via the " +
                             "browser below.",
@@ -166,16 +167,14 @@ class ServerConnectionForm(private val project: Project, private val kind: Conne
             cell(testButton)
             link("Sign in via Browser…") { signIn() }
             link("Paste Session…") { pasteSession() }
-        }
-        row("") { cell(sessionStatus) }
-        row("") {
-            comment(
+            contextHelp(
                 "For SSO/OAuth2-fronted servers, where a username and password cannot pass the login. " +
                     "Both reuse your browser session, for this IDE session only. If the embedded sign-in " +
                     "is blocked by your IdP, use \"Paste Session\" (DevTools → Copy as cURL). Combine it " +
                     "with the credentials above when Flowable also wants them behind the SSO layer.",
             )
         }
+        row("") { cell(sessionStatus) }
         // The status gets a row of its own: sharing one with the button let a long message drive the
         // column's width, which pushed every field past the edge of the dialog.
         row("") { cell(status) }
@@ -294,8 +293,8 @@ class ServerConnectionForm(private val project: Project, private val kind: Conne
                 "personal access token — and, for a server behind an identity provider, with your " +
                 "browser session. Credentials go to the IDE password safe, never into a file."
         else ->
-            "A running Flowable app the Atlas Playground evaluates backend expressions against " +
-                "(\"Evaluate Against App\", through the Inspect REST API). Authenticate with a username " +
+            "The Flowable Work the Atlas Playground evaluates backend expressions against " +
+                "(\"Evaluate Against Work\", through the Flowable Inspect REST API). Authenticate with a username " +
                 "and password or an access token — and, behind an identity provider, with your browser " +
                 "session. Credentials go to the IDE password safe, never into a file."
     }
@@ -560,7 +559,7 @@ class ServerConnectionForm(private val project: Project, private val kind: Conne
      * starts would be absurd. The hint says so, because a red line reads like a block.
      */
     private fun showError(message: String) {
-        status.foreground = JBColor.RED
+        status.foreground = NamedColorUtil.getErrorForeground()
         status.text = FormStatus.html(message)
         saveAnywayHint.isVisible = true
     }
