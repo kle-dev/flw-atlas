@@ -160,6 +160,11 @@
               bot's source. The <i>Bots</i> and <i>Java · bot</i> tables answer the other way round with an
               <i>Actions</i> column. A link inside a category row now opens its own target; it used to open
               the row, or, after a detail page had been shown, both.</li>
+          <li><b>The identifier in a table row copies out of it.</b> A category table copies each node's key
+              — a Java class's full name — and the tables on a model's page copy the element id, the key of
+              the form, decision or process a row points at, a field id, a property or parameter name. The
+              button shows on the row under the pointer or the keyboard. The copy buttons on the overview's
+              chips were never wired, so a click on one opened the chip's node; they copy now.</li>
           <li><b>One name for every Atlas surface, one verb for opening it.</b> The tool windows are
               <i>Atlas Hub</i>, <i>Atlas Findings</i> and <i>Atlas Playground</i> — the playground used to
               be called <i>Expression Playground</i> although half of it is scripts — and every entry that
@@ -547,11 +552,6 @@
               to Symbol no longer repeats its searches for every matching name, the Hub no longer walks the
               project for explorer pages on every refresh, and opening a result reads the model off the UI
               thread.</li>
-          <li><b>Large files and odd input no longer take the run down.</b> A multi-megabyte form, a
-              database dump in the repository or an image inside a nested archive was read whole before its
-              size was checked, and one of them could exhaust memory. A symlink back to a parent folder
-              looped the walk. An entity past U+10FFFF dropped its model, and a broken <code>\u</code>
-              escape or JSON nested thousands deep failed with an error nothing caught.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

@@ -28,6 +28,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   key and, inside the IDE, a button that opens the Java bot's source. The *Bots* and *Java · bot* tables
   answer the other way round with an *Actions* column. A link inside a category row now opens its own
   target; it used to open the row, or, after a detail page had been shown, both.
+- **The identifier in a table row copies out of it.** A category table copies each node's key — a Java
+  class's full name — and the tables on a model's page copy the element id, the key of the form, decision
+  or process a row points at, a field id, a property or parameter name. The button shows on the row under
+  the pointer or the keyboard. The copy buttons on the overview's chips were never wired, so a click on one
+  opened the chip's node; they copy now.
 - **One name for every Atlas surface, one verb for opening it.** The tool windows are *Atlas Hub*, *Atlas
   Findings* and *Atlas Playground* — the playground used to be called *Expression Playground* although half
   of it is scripts — and every entry that opens one reads *Open Atlas …*. Under *Generate* the entries no

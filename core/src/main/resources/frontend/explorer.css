@@ -718,8 +718,18 @@
   .cattbl .td .ti{vertical-align:-3px;margin-right:var(--space-15)}
   /* a link with its buttons in one table cell: the name is cut, the buttons never pushed out of the cell */
   .tbl .td .cellx{display:inline-flex;align-items:center;max-width:100%;min-width:0;vertical-align:middle}
-  .cellx>.vlink,.cellx>.mono{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .cellx>.cpy{flex:none}
+  .cellx>*{flex:none}
+  .cellx>.vlink,.cellx>.mono,.cellx>.cxn,.cellx>.opref{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* A table's copy buttons show on the row under the pointer or the keyboard, as they do in chips and facts:
+     two hundred rows with an icon each, all showing, is noise around the one identifier being looked for.
+     The open-in-IDE button stays — in the IDE it is why the cell has buttons at all. A chip in a row keeps
+     its own rule, so a row of chips does not light up all at once. */
+  /* an id beside its name: both give way before the buttons do (its own 30% cap measured the cell, not this box) */
+  .cellx>.card-id{flex:0 1 auto;min-width:0;max-width:none}
+  .tbl .tr .cpy:not(.opn),.card-h .cpy:not(.opn){opacity:0;transition:opacity .1s ease}
+  .card-h:hover>.cpy,.card-h:focus-within>.cpy,.card-h .cpy:focus-visible,.card-h .cpy.ok{opacity:1}
+  .tbl .tr:hover .cpy:not(.nc .cpy),.tbl .tr:focus-within .cpy:not(.nc .cpy),.tbl .cpy:focus-visible,.tbl .cpy.ok,
+  .tbl .tr .nc:hover .cpy,.tbl .tr .nc:focus-within .cpy{opacity:1}
   .tbl .td .csep{margin-right:var(--space-1);color:var(--ink-faint)}
   .tbl .td .cmore{margin-left:var(--space-1);color:var(--ink-faint);font-size:var(--text-xs)}
   .cat-why{display:block;font-size:var(--text-2xs);color:var(--ink-faint);overflow:hidden;text-overflow:ellipsis}

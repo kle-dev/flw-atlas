@@ -255,6 +255,11 @@ the row, drops the others under it, and a matrix cell that drops says whose it i
 sideways. Text cut to fit — a cell, a chip, a tag, a card's title, a name in the list — says itself in
 full when you hover it or tab to it, beside whatever tooltip the element already had.
 
+The identifier in a row copies out of it: a node's key or a Java class's full name in a category table, an
+element id, the key of the form, decision or process a row points at, a field id, a property or parameter
+name. The copy button shows on the row under the pointer or the keyboard, so a long table is not a column
+of icons.
+
 On a form or page, a row in **Fields** expands when the component does something: the model a button
 invokes (as a chip you can follow), the payload it sends and stores back, the `{{binding}}` its result is
 stored in, a REST button's endpoint with its verb and response path, an expression button's expression and

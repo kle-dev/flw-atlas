@@ -1282,6 +1282,7 @@ function renderDashboard(){
   }
   h+='</div></div>';
   v.innerHTML=h;
+  wireCopyButtons(v);                    // the chips' copy buttons: unwired, a click fell through to the chip's link
   wireNodeLinks(v, '[data-id]', {first:reportNav});
   const epMore=v.querySelector('[data-ep-toggle]');
   if(epMore) epMore.onclick=()=>{ v.querySelectorAll('[data-ep-more]').forEach(r=>r.hidden=false); epMore.remove(); };
@@ -2143,7 +2144,7 @@ function waivedBlockHtml(){
         cells:{check:tag(r.check),
           model:(byId.get(r.node)?nodeChip(r.node):'<span class="mono">'+esc(r.node)+'</span>')+
                 (known?'':' <span class="pill pill-bad">missing</span>'),
-          scope:[r.element, r.subject].filter(Boolean).map(esc).join(' · ')||'<span class="muted">whole model</span>',
+          scope:cpyCell([r.element, r.subject].filter(Boolean).map(esc).join(' · '), r.element, 'element id')||'<span class="muted">whole model</span>',
           why:r.reason?esc(r.reason):'<i class="muted">no reason given</i>',
           who:[r.by?esc(r.by):'', r.at?esc(r.at):'', r.until?'until '+esc(r.until):''].filter(Boolean).join(' · '),
           state:states.join(' ')+(hits?'<span class="muted"> '+hits+' finding'+(hits>1?'s':'')+'</span>':''),
@@ -2177,7 +2178,7 @@ function waivedBlockHtml(){
            {k:'who',label:'By · when',w:'minmax(10ch,1fr)',opt:true}],
         notes.map(n=>({hay:elHay(n.node, n.text, n.check, n.by), cells:{
           model:byId.get(n.node)?nodeChip(n.node):'<span class="mono">'+esc(n.node)+'</span>', imp:imp(n), text:esc(n.text),
-          scope:[n.check, n.element, n.subject].filter(Boolean).map(esc).join(' · '),
+          scope:cpyCell([n.check, n.element, n.subject].filter(Boolean).map(esc).join(' · '), n.element, 'element id'),
           who:[n.by, n.at].filter(Boolean).map(esc).join(' · ')}})), {filter:false}),
       {count:notes.length, attrs:' id="chk-waiver-notes"', hint:'remarks that change no count, kept with the project so the next reader finds them'});
   }
@@ -2218,8 +2219,8 @@ function findingRow(f, o){
   const elLabel=(el&&el.name)||f.element||'';
   const elCell=!f.element ? ((f.subject&&f.check!=='invalidExpr'&&f.check!=='suspectExpr')?'<span class="mono muted">'+esc(f.subject)+'</span>':'')
     : !n ? '<span class="mono">'+esc(f.element)+'</span>'
-    : o.onNode ? locateBtn(f.element, elLabel)+' '+esc(elLabel)
-    : elJumpHtml(f.node, f.element, elLabel, 'Open this element in its model');
+    : o.onNode ? cpyCell(locateBtn(f.element, elLabel)+' '+esc(elLabel), f.element, 'element id')
+    : '<span class="cellx">'+elJumpHtml(f.node, f.element, elLabel, 'Open this element in its model')+copyBtn(f.element,'element id')+'</span>';
   const tone=findTone(f);
   return {hay:elHay(f.label, f.message, f.element, elLabel, f.subject, f.check, tone, n?nodeKind(n):'', f.file),
     attrs:' data-sev="'+tone+'" data-fi="'+f.fi+'"', cls:rule?'wv-done':'',
@@ -3161,11 +3162,13 @@ function paintCatRows(reset){
   const shown=items.slice(0,_catShown);
   const rows=shown.map((n,i)=>{
     const w=parsed.empty?null:matchWhere(n, parsed); if(w) _catWhere.set(n.id, w);
+    // the identifier worth copying out of a row: a Java class's full name, any other node's key
+    const keyIsName=sameText(n.key, n.label), keyWhat=n.type==='java'?'class name':'key';
     const mk=listMarks.has(n.id), cells={
-      name:nodeIcon(n)+'<span class="nm">'+hlHtml(n.label, parsed)+'</span>'+authBadge(n)+
+      name:nodeIcon(n)+'<span class="nm">'+hlHtml(n.label, parsed)+'</span>'+(keyIsName?copyBtn(n.key, keyWhat):'')+authBadge(n)+
         (w&&w.hint?'<span class="cat-why">'+hlHtml(w.hint, parsed)+'</span>':''),
-      key:sameText(n.key, n.label)?'':hlHtml(n.key||'', parsed),
-      file:n.file?'<span class="fp" data-tip="'+esc(n.file)+'">'+esc(fileBase(n.file))+'</span>'+openBtn(n.file,(n.data||{}).line):'',
+      key:keyIsName?'':cpyCell(hlHtml(n.key||'', parsed), n.key, keyWhat),
+      file:n.file?'<span class="cellx"><span class="fp cxn" data-tip="'+esc(n.file)+'">'+esc(fileBase(n.file))+'</span>'+openBtn(n.file,(n.data||{}).line)+'</span>':'',
       in:String(INSIGHTS.indeg.get(n.id)||''), out:String(INSIGHTS.outdeg.get(n.id)||''),
       find:findPillHtml(n.id)};
     extra.forEach(c=>{ cells[c.k]=c.get(n); });
@@ -3231,6 +3234,17 @@ function vlink(id, text, title){
     ? '<span class="vlink" data-id="'+enc(id)+'"'+(title?' title="'+esc(title)+'"':'')+
       ' tabindex="0" role="link">'+esc(text)+'</span>'
     : esc(text==null?'':text);
+}
+/** A model reference in a table cell: the link, then a copy of the referenced node's key — the identifier a
+ *  reader pastes into code or a search. `what` names it in the button's label. */
+function vlinkCopy(id, text, what){
+  const n=byId.get(id);
+  return '<span class="cellx">'+vlink(id, text)+copyBtn(n?n.key:text, what||'key')+'</span>';
+}
+/** Cell content followed by a copy of `text`, cut before the button is — for identifiers that are not links. */
+function cpyCell(html, text, what){
+  if(text==null||text==='') return html;
+  return '<span class="cellx"><span class="cxn">'+html+'</span>'+copyBtn(text, what)+'</span>';
 }
 // first neighbor id reachable from `id` over relation `rel` (outgoing / incoming) — used when a
 // value can't be turned into a node id directly but the resolver already computed the edge.
@@ -3394,7 +3408,7 @@ function cards(items, o){
     const attrs=dataEl(it.el)+hayAttr(it.hay)+(it.attrs||'');
     const badges=(it.badges||[]).filter(Boolean);
     const head='<span class="card-n">'+(it.name||'')+'</span>'+
-      (it.id!=null&&it.id!==''?'<span class="card-id mono">'+esc(String(it.id))+'</span>':'')+
+      (it.id!=null&&it.id!==''?'<span class="card-id mono">'+esc(String(it.id))+'</span>'+copyBtn(it.id,'id'):'')+
       (badges.length?'<span class="card-b">'+badges.join('')+'</span>':'')+
       (it.right?'<span class="card-r">'+it.right+'</span>':'');
     if(!it.body) return '<div class="card flat'+(it.cls?' '+it.cls:'')+'"'+attrs+'><div class="card-h"><span class="tdc"></span>'+head+'</div></div>';
@@ -4976,9 +4990,9 @@ S.properties={id:'columns', title:'Properties', hint:'the fields of the object, 
                 {k:'col',label:'Service column',w:'minmax(10ch,1.1fr)',mono:true,opt:true},{k:'used',label:'Shown in',w:'minmax(10ch,1.2fr)',opt:true}],
       cs.map(col=>{ const k=looseCol(col.name), sc=svcCols.get(k), used=[...(binders.get(k)||[])];
         return {hay:(col.name||'')+' '+(col.label||'')+' '+(col.type||'')+' '+(col.refDataObject||''), cells:{
-        name:esc(col.name||''), label:esc(col.label||''),
+        name:cpyCell(esc(col.name||''), col.name, 'property name'), label:esc(col.label||''),
         type:/dictionary/i.test(col.type||'')&&dict&&byId.get('dataDictionary:'+dict)?'<span class="tag">'+vlink('dataDictionary:'+dict, col.type)+'</span>':tag(col.type),
-        ref:col.refDataObject?vlink('dataObject:'+col.refDataObject, '→ '+col.refDataObject)+(col.relationship?' <span class="muted">'+esc(col.relationship)+'</span>':''):'',
+        ref:col.refDataObject?vlinkCopy('dataObject:'+col.refDataObject, '→ '+col.refDataObject, 'data object key')+(col.relationship?' <span class="muted">'+esc(col.relationship)+'</span>':''):'',
         col:sc?esc(sc.columnName||sc.name):(svcCols.size?'<span class="muted">—</span>':''),
         used:used.map(id=>vlink(id, byId.get(id).label)).join(', ')}}; })); }};
 // --- process & case: the elements, in the order a reader asks about them ---
@@ -4987,8 +5001,8 @@ const kindTag=(type,sub)=>{ const t=elementTerm(type, sub); return t?'<span clas
 /** Element name with its id (when the id is not the name) and the ⌖ locate button. */
 function elCell(c, rec){
   const nm=rec.name||rec.id||'';
-  return esc(nm)+c.loc(rec.id, rec.name)+
-    (rec.id&&rec.id!==nm?'<span class="card-id mono">'+esc(String(rec.id))+'</span>':'');
+  return '<span class="cellx"><span class="cxn">'+esc(nm)+'</span>'+c.loc(rec.id, rec.name)+
+    (rec.id&&rec.id!==nm?'<span class="card-id mono">'+esc(String(rec.id))+'</span>':'')+copyBtn(rec.id,'element id')+'</span>';
 }
 /** Execution flags every flow node may carry — dropped by every section until now. */
 function elementTags(rec){
@@ -5007,7 +5021,7 @@ S.userTasks={id:'usertasks', title:'User tasks', hint:'who works on what, with w
                 {k:'groups',label:'Candidate groups',w:'minmax(10ch,1.2fr)',opt:true},{k:'assignee',label:'Assignee',w:'minmax(8ch,1fr)',mono:true,opt:true},
                 {k:'tags',label:'',w:'minmax(8ch,1fr)',cls:'tags'}],
       ts.map(t=>({el:t.id, hay:elHay(t.name,t.id,t.formKey,t.candidateGroups,t.assignee), cells:{
-        task:elCell(c,t), form:t.formKey?vlink('form:'+t.formKey, t.formKey):'', groups:groupLinksHtml(t.candidateGroups),
+        task:elCell(c,t), form:t.formKey?vlinkCopy('form:'+t.formKey, t.formKey, 'form key'):'', groups:groupLinksHtml(t.candidateGroups),
         assignee:esc(t.assignee||''),
         tags:[t.dueDate?tag('due '+t.dueDate):'', t.priority?tag('priority '+t.priority):'', t.category?tag(t.category):'', elementTags(t)].join('')}}))); }};
 /** One service task, with everything it owns folded in — implementation, callee, result variable, field
@@ -5071,7 +5085,7 @@ S.decisionTasks={id:'decisiontasks', title:'Decision tasks', hint:'business rule
   count:(n,c)=>decisionTaskRows(c.d).length,
   build:(n,c)=>{ const rs=decisionTaskRows(c.d); if(!rs.length) return '';
     return tbl([{k:'task',label:'Task',w:'minmax(14ch,1.6fr)'},{k:'dec',label:'Decision table',w:'minmax(12ch,1.4fr)',mono:true},{k:'tags',label:'',w:'minmax(6ch,.6fr)',cls:'tags'}],
-      rs.map(r=>({el:r.id, hay:elHay(r.name,r.id,r.decisionRef), cells:{task:elCell(c,r), dec:r.decisionRef?vlink('decision:'+r.decisionRef, r.decisionRef):'', tags:elementTags(r)}}))); }};
+      rs.map(r=>({el:r.id, hay:elHay(r.name,r.id,r.decisionRef), cells:{task:elCell(c,r), dec:r.decisionRef?vlinkCopy('decision:'+r.decisionRef, r.decisionRef, 'decision key'):'', tags:elementTags(r)}}))); }};
 // a decision task modelled as a service task of type dmn already has its card above
 function decisionTaskRows(d){ const st=new Set((d.serviceTasks||[]).map(s=>String(s.id))); return (d.ruleTasks||[]).filter(r=>!st.has(String(r.id))); }
 S.callActivities={id:'callactivities', title:'Call activities & sub-processes', hint:'the processes this one calls, and the parts that run inside it',
@@ -5079,7 +5093,7 @@ S.callActivities={id:'callactivities', title:'Call activities & sub-processes', 
   build:(n,c)=>{ const d=c.d, rows=[];
     (d.callActivities||[]).forEach(a=>rows.push({el:a.id, hay:elHay(a.name,a.id,a.calledElement), cells:{
       el:elCell(c,a), kind:kindTag('callActivity'),
-      calls:a.calledElement?(byId.get('process:'+a.calledElement)?vlink('process:'+a.calledElement, a.calledElement):'<span class="mono">'+esc(a.calledElement)+'</span>'):'',
+      calls:a.calledElement?(byId.get('process:'+a.calledElement)?vlinkCopy('process:'+a.calledElement, a.calledElement, 'process key'):cpyCell('<span class="mono">'+esc(a.calledElement)+'</span>', a.calledElement, 'process key')):'',
       tags:(a.calledElementType?tag(a.calledElementType):'')+elementTags(a)}}));
     (d.subProcesses||[]).forEach(s=>rows.push({el:s.id, hay:elHay(s.name,s.id,s.type), cells:{
       el:elCell(c,s), kind:kindTag(s.type||'subProcess'), calls:'', tags:elementTags(s)}}));
@@ -5212,10 +5226,10 @@ function planTreeHtml(nd, c, CRIT){
   const items=kids.filter(x=>!isStage(x)), stages=kids.filter(isStage);
   const rulesOf=x=>x.rules?Object.keys(x.rules).map(r=>({repetitionRule:'repeatable',requiredRule:'required',manualActivationRule:'manual'}[r]||r)).map(tag).join(''):'';
   const refs=x=>[
-    x.formKey?'<span class="muted">form</span> '+vlink('form:'+x.formKey, x.formKey):'',
-    x.processRef?'<span class="muted">process</span> '+vlink('process:'+x.processRef, x.processRef):'',
-    x.caseRef?'<span class="muted">case</span> '+vlink('case:'+x.caseRef, x.caseRef):'',
-    x.decisionRef?'<span class="muted">decision</span> '+vlink('decision:'+x.decisionRef, x.decisionRef):'',
+    x.formKey?'<span class="muted">form</span> '+vlinkCopy('form:'+x.formKey, x.formKey, 'form key'):'',
+    x.processRef?'<span class="muted">process</span> '+vlinkCopy('process:'+x.processRef, x.processRef, 'process key'):'',
+    x.caseRef?'<span class="muted">case</span> '+vlinkCopy('case:'+x.caseRef, x.caseRef, 'case key'):'',
+    x.decisionRef?'<span class="muted">decision</span> '+vlinkCopy('decision:'+x.decisionRef, x.decisionRef, 'decision key'):'',
     x.candidateGroups?'<span class="muted">groups</span> '+groupLinksHtml(x.candidateGroups):'',
   ].filter(Boolean).join(' · ');
   let b='';
@@ -5310,7 +5324,7 @@ S.escalations={id:'escalations', title:'Escalations', hint:'what happens, when, 
                 {k:'starts',label:'Starts',w:'minmax(10ch,1fr)',opt:true},{k:'who',label:'Assignee',w:'minmax(8ch,.8fr)',mono:true,opt:true},{k:'cond',label:'Condition',w:'minmax(12ch,1.6fr)',mono:true,cls:'wrap',opt:true}],
       es.map(e=>({hay:elHay(e.stepId,e.on,e.action,e.starts,e.assignee,e.condition), cells:{
         step:esc(String(e.stepId||e.on||'')), when:e.timeValue!=null?tag(String(e.timeValue)+' '+(e.timeUnit||'')+' '+(e.relativeType||'')):'', action:esc(String(e.action||'')),
-        starts:e.starts?vlink(byId.get('process:'+e.starts)?'process:'+e.starts:'case:'+e.starts, e.starts):'', who:esc(String(e.assignee||'')), cond:esc(String(e.condition||''))}}))); }};
+        starts:e.starts?vlinkCopy(byId.get('process:'+e.starts)?'process:'+e.starts:'case:'+e.starts, e.starts):'', who:esc(String(e.assignee||'')), cond:esc(String(e.condition||''))}}))); }};
 S.thresholds={id:'thresholds', title:'Thresholds', hint:'the targets the SLA is measured against',
   count:(n,c)=>(c.d.thresholds||[]).length,
   build:(n,c)=>{ const ts=c.d.thresholds||[]; if(!ts.length) return '';
@@ -5341,7 +5355,7 @@ S.docConfig={id:'docconfig', title:'Forms & permissions', hint:'the form each ac
   build:(n,c)=>{ const d=c.d; if(!(d.forms||(d.actionPermissions||[]).length)) return '';
     let b='';
     if(d.forms) b+=tbl([{k:'op',label:'Action',w:'minmax(8ch,.8fr)',cls:'tags'},{k:'form',label:'Form',w:'minmax(14ch,2fr)'}],
-      Object.entries(d.forms).map(([op,fk])=>({hay:elHay(op,fk), cells:{op:tag(op), form:byId.get('form:'+fk)?vlink('form:'+fk, fk):esc(String(fk))}})), {filter:false});
+      Object.entries(d.forms).map(([op,fk])=>({hay:elHay(op,fk), cells:{op:tag(op), form:byId.get('form:'+fk)?vlinkCopy('form:'+fk, fk, 'form key'):cpyCell(esc(String(fk)), fk, 'form key')}})), {filter:false});
     if((d.actionPermissions||[]).length) b+=tbl([{k:'a',label:'Action',w:'minmax(8ch,.8fr)',cls:'tags'},{k:'g',label:'Groups',w:'minmax(14ch,2fr)',cls:'wrap'}],
       d.actionPermissions.map(a=>({hay:elHay(a.action,(a.groups||[]).join(' ')), cells:{a:tag(a.action), g:(a.groups||[]).map(g=>vlink('group:'+g,g)).join(', ')}})), {filter:false});
     return b; }};
@@ -5392,7 +5406,7 @@ S.botScript={id:'script', title:'Bot script', hint:'what the action runs when it
 /** An operation's contract has two halves: what a caller must supply and what it gets back. */
 function opParamRows(o){
   return (o.params||[]).map(p=>['in',p]).concat((o.outParams||[]).map(p=>['out',p])).map(([dir,p])=>({hay:elHay(dir,p.name,p.type), cells:{
-    dir:'<span class="dir" data-dir="'+dir+'">'+dir+'</span>', name:esc(p.name||''), type:tag(p.type), req:p.required?tag('required'):'', def:p.default!=null?esc(String(p.default)):''}}));
+    dir:'<span class="dir" data-dir="'+dir+'">'+dir+'</span>', name:cpyCell(esc(p.name||''), p.name, 'parameter name'), type:tag(p.type), req:p.required?tag('required'):'', def:p.default!=null?esc(String(p.default)):''}}));
 }
 const OP_PARAM_COLS=[{k:'dir',label:'',w:'5ch',cls:'tags'},{k:'name',label:'Parameter',w:'minmax(12ch,1.6fr)',mono:true},{k:'type',label:'Type',w:'minmax(7ch,.8fr)',cls:'tags'},
   {k:'req',label:'',w:'minmax(6ch,.6fr)',cls:'tags',opt:true},{k:'def',label:'Default',w:'minmax(8ch,1fr)',mono:true,opt:true}];
@@ -5517,7 +5531,7 @@ S.rw={id:'rw', title:'Written / read', hint:'every write and every read Atlas fo
   count:(n,c)=>(c.d.writes||[]).length+(c.d.reads||[]).length,
   build:(n,c)=>{ const d=c.d, ws=d.writes||[], rs=d.reads||[]; if(!ws.length&&!rs.length) return '';
     const row=(s,verb,tone)=>({hay:elHay(verb,(byId.get(s.model)||{}).label,s.elementName,s.element,s.via), cells:{
-      verb:'<span class="sev sev-'+tone+'">'+verb+'</span>', model:vlink(s.model,(byId.get(s.model)||{}).label||s.model),
+      verb:'<span class="sev sev-'+tone+'">'+verb+'</span>', model:vlinkCopy(s.model,(byId.get(s.model)||{}).label||s.model, 'model key'),
       el:elJumpHtml(s.model, s.element, s.elementName||s.element), via:termHtml('via', s.via, 'tag'),
       scope:(s.scope?'<span class="muted">in</span> '+vlink(s.scope,(byId.get(s.scope)||{}).label||s.scope):'')+
         (s.scopeUnresolved?'<span class="tag" data-tip="The called model is not part of this project, so Atlas cannot tell whether anything there reads the variable.">callee not in project</span>':'')}});
@@ -5529,20 +5543,20 @@ S.passedAs={id:'passedas', title:'Passed as parameter', hint:'every in/out mappi
   build:(n,c)=>{ const ps=c.d.ioParams||[]; if(!ps.length) return '';
     return tbl([{k:'dir',label:'',w:'8ch',cls:'tags'},{k:'model',label:'Model',w:'minmax(12ch,1.4fr)'},{k:'el',label:'Element',w:'minmax(10ch,1fr)',mono:true,cls:'faint',opt:true},{k:'flow',label:'Mapping',w:'minmax(14ch,2fr)',mono:true}],
       ps.map(p=>({hay:elHay(p.dir,(byId.get(p.model)||{}).label,p.element,p.source,p.target), cells:{dir:'<span class="dir" data-dir="'+esc(p.dir)+'">'+esc(p.dir)+'</span>',
-        model:vlink(p.model,(byId.get(p.model)||{}).label||p.model), el:esc(p.element||''), flow:paramFlowHtml(p)}}))); }};
+        model:vlinkCopy(p.model,(byId.get(p.model)||{}).label||p.model, 'model key'), el:cpyCell(esc(p.element||''), p.element, 'element id'), flow:paramFlowHtml(p)}}))); }};
 S.inScripts={id:'inscripts', title:'In scripts', hint:'the scripts that touch this variable — each row jumps to the script',
   count:(n,c)=>(c.d.scriptSites||[]).length,
   build:(n,c)=>{ const ss=c.d.scriptSites||[]; if(!ss.length) return '';
     return tbl([{k:'verb',label:'',w:'10ch',cls:'tags'},{k:'model',label:'Model',w:'minmax(12ch,1.4fr)'},{k:'el',label:'Script',w:'minmax(10ch,1.2fr)',opt:true},{k:'kind',label:'Kind',w:'minmax(8ch,.8fr)',cls:'tags',opt:true}],
       ss.map(s=>({hay:elHay((byId.get(s.model)||{}).label,s.elementName,s.element,s.elementType), cells:{
-        verb:'<span class="sev sev-'+(s.api?'ok':'faint')+'">'+(s.api?'sets / reads':'≈ reads')+'</span>', model:vlink(s.model,(byId.get(s.model)||{}).label||s.model),
+        verb:'<span class="sev sev-'+(s.api?'ok':'faint')+'">'+(s.api?'sets / reads':'≈ reads')+'</span>', model:vlinkCopy(s.model,(byId.get(s.model)||{}).label||s.model, 'model key'),
         el:elJumpHtml(s.model, s.element, s.elementName||s.element), kind:tag(s.elementType)}}))); }};
 S.usedIn={id:'usedin', title:'Used in', hint:'every effective occurrence, per model',
   count:(n,c)=>(c.d.usages||[]).length,
   build:(n,c)=>{ const us=c.d.usages||[]; if(!us.length) return '';
     const rows=[]; us.forEach(u=>{ const lbl=(byId.get(u.model)||{}).label||u.model; const sn=(u.snippets||[]);
-      if(!sn.length) rows.push({hay:lbl, cells:{model:vlink(u.model,lbl), snip:''}});
-      sn.forEach((s,i)=>rows.push({hay:elHay(lbl,s), cells:{model:i===0?vlink(u.model,lbl):'', snip:esc(s)}})); });
+      if(!sn.length) rows.push({hay:lbl, cells:{model:vlinkCopy(u.model,lbl,'model key'), snip:''}});
+      sn.forEach((s,i)=>rows.push({hay:elHay(lbl,s), cells:{model:i===0?vlinkCopy(u.model,lbl,'model key'):'', snip:esc(s)}})); });
     return tbl([{k:'model',label:'Model',w:'minmax(12ch,1fr)'},{k:'snip',label:'Occurrence',w:'minmax(20ch,3fr)',mono:true,cls:'wrap'}], rows, {placeholder:'filter occurrences…'}); }};
 // --- shared tail: what flows through the model, and what it uses ---
 S.params={id:'params', title:'Parameters', build:(n,c)=>(c.d.ioParameters||[]).length?paramSection(c.d.ioParameters, c.hasDg):'', raw:true};
@@ -5722,7 +5736,7 @@ function fieldRow(f, d){
   const req=(f.required===true||f.required==='true')?'<span class="tag" data-tip="Required field">required</span>':'';
   const hay=[id, f.label, f.type, f.value, callee&&callee.key, f.subform, f.description].filter(Boolean).join(' ');
   return {el:f.id, hay, body:b, cls:b?'fldrow':'', bodyCls:'fldbody', cells:{
-    id:(d.diagram&&id?locateBtn(id, f.label)+' ':'')+fieldLink(f.id), label:esc(f.label==null?'':String(f.label)), type:ty,
+    id:cpyCell((d.diagram&&id?locateBtn(id, f.label)+' ':'')+fieldLink(f.id), id, 'field id'), label:esc(f.label==null?'':String(f.label)), type:ty,
     value:(cid?'<span class="opref">→ '+esc(String(callee.key))+'</span> ':'')+
       (f.subform?'<span class="opref" data-tip="The form this subform embeds">↳ '+vlink('form:'+f.subform, String(f.subform))+'</span> ':'')+val,
     flags:(ps.length?tag(paramSummary(ps)):'')+req+gates}};

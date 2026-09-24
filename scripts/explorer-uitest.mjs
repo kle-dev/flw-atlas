@@ -728,6 +728,47 @@ const probe = `<script>
        state.tabs.includes('action:notifyCustomerAction') && !state.sel, 'tabs='+state.tabs.join(',')+' sel='+state.sel);
   });
 
+  // --- the identifier of a table row copies out of it ---
+  steps.push(()=>{ closeOtherTabs(); state.filter=''; state.sort='name'; location.hash='/browse/'+enc('action'); });
+  steps.push(()=>{
+    const cp=document.querySelector('#catrows .tr[data-id="action:DEMO-A001"] .cpy[data-copy="DEMO-A001"]');
+    ok('a category row copies its key', !!cp && cp.getAttribute('aria-label')==='Copy key', cp&&cp.getAttribute('aria-label'));
+    ok('and shows the button only on the row under the pointer or the keyboard', !!cp && getComputedStyle(cp).opacity==='0');
+    location.hash='/browse/'+enc('bot');
+  });
+  steps.push(()=>{
+    // a bot's key is its name, so the Key column is dropped — the copy moves to the name
+    const cp=document.querySelector('#catrows .tr[data-id="bot:script-evaluation-bot"] .cpy[data-copy="script-evaluation-bot"]');
+    ok('a row whose key is its name copies it from the name', !!cp);
+    location.hash='/browse/'+enc('java::component');
+  });
+  steps.push(()=>{
+    const cp=document.querySelector('#catrows .tr[data-id="java:com.example.DemoBean"] .cpy[data-copy="com.example.DemoBean"]');
+    ok('a Java row copies its full class name', !!cp && cp.getAttribute('aria-label')==='Copy class name', cp&&cp.getAttribute('aria-label'));
+    location.hash=enc('process:orderProcess');
+  });
+  steps.push(()=>{
+    const det=document.getElementById('detail');
+    const cp=[...det.querySelectorAll('.tbl .tr[data-el="approveTask"] .cpy')].find(b=>b.getAttribute('aria-label')==='Copy element id');
+    ok('an element row copies its element id', !!cp && decodeURIComponent(cp.dataset.copy)==='approveTask');
+    const fk=[...det.querySelectorAll('.tbl .tr[data-el="approveTask"] .cpy')].find(b=>b.getAttribute('aria-label')==='Copy form key');
+    ok('and the form it opens copies its key', !!fk && decodeURIComponent(fk.dataset.copy)==='orderForm');
+    closeOtherTabs(); location.hash='/overview';
+  });
+  steps.push(()=>{
+    // The overview's chips carry copy buttons that were never wired: a click opened the chip's node instead.
+    const cp=document.querySelector('#view-overview .nc .cpy');
+    window.__copied=null; window.__atlasCopy=t=>{ window.__copied=t; };
+    window.__hashB=location.hash;
+    if(cp){ window.__copyWant=decodeURIComponent(cp.dataset.copy); click(cp); }
+    ok('the overview has a chip to copy from', !!cp);
+  });
+  steps.push(()=>{
+    ok('a chip’s copy button on the overview copies', !!window.__copyWant && window.__copied===window.__copyWant, 'copied='+window.__copied);
+    ok('and stays on the overview', location.hash===window.__hashB, 'hash='+location.hash);
+    delete window.__atlasCopy;
+  });
+
   // --- elements: what a process is made of, one section with a group and a chip per kind ---
   steps.push(()=>{ closeOtherTabs(); location.hash=enc('process:orderProcess'); });
   steps.push(()=>{
