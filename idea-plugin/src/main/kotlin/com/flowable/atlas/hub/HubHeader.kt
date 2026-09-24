@@ -41,7 +41,7 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
 
     private var populating = false
 
-    val projectCombo = HubLayout.narrow(ComboBox<String?>()).apply {
+    val projectCombo = HubLayout.combo<String?>().apply {
         renderer = textListCellRenderer { if (it.isNullOrBlank()) message("hub.project.whole") else it }
         addActionListener { if (!populating) chooseSubProject(selectedItem as? String) }
     }
@@ -64,7 +64,7 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
     private val healthIcon = JBLabel()
     // Stretches and gives way first: four-digit counts beside *Analyze Again* are wider than the stripe,
     // and the counts end in "…" before the action does — the tooltip has them whole.
-    private val health = HubLayout.narrow(ActionLink("") { host.invokeAction(FlowableActionIds.OPEN_ATLAS_FINDINGS) }).apply {
+    private val health = ActionLink("") { host.invokeAction(FlowableActionIds.OPEN_ATLAS_FINDINGS) }.apply {
         autoHideOnDisable = false
         horizontalAlignment = javax.swing.SwingConstants.LEFT
     }
@@ -89,7 +89,7 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
         }
         panel.row {
             cell(healthIcon).gap(RightGap.SMALL)
-            cell(health).align(AlignX.FILL).resizableColumn()
+            cell(HubLayout.narrowHolder(health)).align(AlignX.FILL).resizableColumn()
             cell(analyzeAgain).align(AlignX.RIGHT)
         }
         // The only rows in the panel whose presence changes: everything below keeps its place.

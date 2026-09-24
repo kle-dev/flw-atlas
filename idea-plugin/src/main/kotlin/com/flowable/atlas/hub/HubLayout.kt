@@ -1,5 +1,7 @@
 package com.flowable.atlas.hub
 
+import javax.swing.JButton
+import com.intellij.openapi.ui.ComboBox
 import com.intellij.icons.AllIcons
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.ui.dsl.builder.Cell
@@ -62,11 +64,37 @@ internal object HubLayout {
             viewportBorder = JBUI.Borders.empty()
         }
 
-    /** A control that stretches: it asks for little, so the row never overflows, and fills what is there. */
-    fun <T : JComponent> narrow(c: T): T = c.apply {
-        preferredSize = Dimension(JBUI.scale(NARROW), preferredSize.height)
-        minimumSize = Dimension(JBUI.scale(NARROW), minimumSize.height)
+    /*
+     * Controls that stretch: they ask for little width, so the row never overflows, and `AlignX.FILL`
+     * hands them what is there. Only the *width* is capped, and on every call: setting a preferred size
+     * instead froze the height as well, at whatever it was when the control was made — a link created
+     * without its text yet stayed zero pixels tall, and a list's scroll pane kept the one-row height it
+     * had before its list grew.
+     */
+
+    // The platform combo's size getters are final; its own width override caps the width and keeps the height.
+    fun <T> combo(): ComboBox<T> = ComboBox<T>().apply { setMinimumAndPreferredWidth(JBUI.scale(NARROW)) }
+
+    /**
+     * [c] in a holder that asks for little width and hands [c] all it gets — for a control whose own
+     * minimum size cannot be overridden (an ActionLink's is final, and is its whole text). The control
+     * then ends in "…" when the row is narrow, as a button does.
+     */
+    fun narrowHolder(c: JComponent): JComponent = object : JPanel(BorderLayout()) {
+        init {
+            isOpaque = false
+            add(c, BorderLayout.CENTER)
+        }
+        override fun getPreferredSize(): Dimension = capped(super.getPreferredSize())
+        override fun getMinimumSize(): Dimension = capped(super.getMinimumSize())
     }
+
+    fun button(onClick: () -> Unit): JButton = object : JButton() {
+        override fun getPreferredSize(): Dimension = capped(super.getPreferredSize())
+        override fun getMinimumSize(): Dimension = capped(super.getMinimumSize())
+    }.apply { addActionListener { onClick() } }
+
+    private fun capped(d: Dimension) = Dimension(minOf(d.width, JBUI.scale(NARROW)), d.height)
 
     /**
      * A list inside the Hub: as wide as the panel rather than as wide as its longest row, so a long name
@@ -76,9 +104,12 @@ internal object HubLayout {
         override fun getScrollableTracksViewportWidth(): Boolean = true
     }
 
-    fun listScroll(list: JList<*>): JBScrollPane = narrow(JBScrollPane(list).apply {
+    fun listScroll(list: JList<*>): JBScrollPane = object : JBScrollPane(list) {
+        override fun getPreferredSize(): Dimension = capped(super.getPreferredSize())
+        override fun getMinimumSize(): Dimension = capped(super.getMinimumSize())
+    }.apply {
         horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
-    })
+    }
 
     /** Whether the section called [id] is folded — remembered per project, in the workspace file. */
     fun expanded(project: Project, id: String): Boolean =

@@ -67,7 +67,7 @@ internal class DesignPullSection(private val host: HubHost) : HubSection {
      * placeholder and fetches the real list the first time it is opened — the panel still never calls
      * Design just because it was rendered.
      */
-    private val workspaceCombo = HubLayout.narrow(ComboBox<DesignClient.Workspace>()).apply {
+    private val workspaceCombo = HubLayout.combo<DesignClient.Workspace>().apply {
         renderer = listCellRenderer<DesignClient.Workspace?> {
             text(value?.let { DesignAppListUi.workspaceLabel(it) } ?: workspacePlaceholder)
         }
@@ -163,8 +163,8 @@ internal class DesignPullSection(private val host: HubHost) : HubSection {
             // effective selection, so the two can never disagree. The button names its target, so
             // "which server is this about to hit?" is answered without opening anything; a name too long
             // for the stripe ends in "…", and the tooltip has it whole.
-            pullButton = button("") { pullSelected() }.align(AlignX.FILL).component
-            HubLayout.narrow(pullButton)
+            pullButton = HubLayout.button { pullSelected() }
+            cell(pullButton).align(AlignX.FILL)
         }
         panel.row { cell(lastPull) }
     }

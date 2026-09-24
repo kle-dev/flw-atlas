@@ -30,7 +30,7 @@ internal class EnvironmentPicker(private val project: Project, private val kind:
     private var populating = false
     private var placeholder = message("hub.env.notSet")
 
-    val combo = HubLayout.narrow(ComboBox<AtlasConnection?>()).apply {
+    val combo = HubLayout.combo<AtlasConnection?>().apply {
         renderer = listCellRenderer<AtlasConnection?> {
             // A padlock, not a prompt: PROD is shown as protected so nobody picks it by mistake.
             if (value?.requiresConfirmation == true) icon(AllIcons.Nodes.Padlock)

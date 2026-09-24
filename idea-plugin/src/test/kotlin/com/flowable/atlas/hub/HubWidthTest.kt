@@ -77,6 +77,16 @@ class HubWidthTest : BasePlatformTestCase() {
                 .filter { (it as JComponent).toolTipText.isNullOrBlank() }
                 .map(::describe)
             assertEquals("texts cut short with nothing to hover for the rest", emptyList<String>(), cutWithoutTooltip)
+
+            // Narrow, not flat: capping a control's width must leave its height alone. A preferred size set
+            // once froze both, and the health link — made before it had text — was zero pixels tall.
+            val squashed = leaves(viewport.view as Container)
+                .filter { visible(it, viewport) }
+                .filter { (it as? JLabel)?.text?.isNotBlank() == true || (it as? AbstractButton)?.text?.isNotBlank() == true }
+                .filter { it.height < it.preferredSize.height - 1 || it.height == 0 }
+                .map { "${describe(it)} is ${it.height} px tall" }
+            assertEquals("texts with no room to be read", emptyList<String>(), squashed)
+            assertTrue("the health row reads", panel.viewForTest().health.isNotBlank())
         } finally {
             com.flowable.atlas.findings.AtlasFindingsService.getInstance(project).seedForTest(null)
             roots.setActiveSubProject("")
@@ -131,5 +141,15 @@ class HubWidthTest : BasePlatformTestCase() {
         is AbstractButton -> "${c.javaClass.simpleName} '${c.text}'"
         is JLabel -> "${c.javaClass.simpleName} '${c.text}'"
         else -> c.javaClass.simpleName
+    }
+
+    /** A Hub list grows with its rows, up to the cap: its scroll pane caps the width, not the height. */
+    fun testAListGrowsWithItsRows() {
+        val list = HubLayout.list(com.intellij.ui.CollectionListModel(List(5) { "DEMO-P00$it" }))
+        val scroll = HubLayout.listScroll(list)
+        list.visibleRowCount = 1
+        val one = scroll.preferredSize.height
+        list.visibleRowCount = 5
+        assertTrue("five rows are taller than one: $one → ${scroll.preferredSize.height}", scroll.preferredSize.height > one * 3)
     }
 }
