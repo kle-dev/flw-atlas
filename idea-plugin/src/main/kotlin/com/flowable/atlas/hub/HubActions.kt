@@ -72,9 +72,11 @@ internal object HubActions {
             isPopup = true
         }
 
+        // The registered group's own children, read as the descriptor declares them: ActionGroup.getChildren
+        // is override-only, and calling it on another group is what the Plugin Verifier flagged.
         override fun getChildren(e: AnActionEvent?): Array<AnAction> {
-            val menu = ActionManager.getInstance().getAction(FlowableActionIds.MENU) as? ActionGroup
-            return menu?.getChildren(e) ?: EMPTY_ARRAY
+            val menu = ActionManager.getInstance().getAction(FlowableActionIds.MENU) as? DefaultActionGroup
+            return menu?.childActionsOrStubs ?: EMPTY_ARRAY
         }
 
         override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
