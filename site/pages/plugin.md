@@ -200,6 +200,13 @@ and Java class's source path, and every `:line` on a method or REST handler, ope
 tab, a model inside a `.bar` included. That is the jump from reading a model to editing the code around
 it, and only the embedded tab offers it: the same page in a browser has nowhere to open a file.
 
+The tab says what it is doing: a spinner at the right of its toolbar while the page loads, and — if the
+embedded browser cannot load it — a panel in place of the page naming the file and the reason, with
+**Reload** and **Regenerate Atlas Explorer**, instead of a blank tab. A tab left open when the IDE closes
+comes back on the page it was left on — a model, the Checks page with its filter — rather than on the
+dashboard. *Regenerate* wears the platform's build hammer and *Reload* the arrows, so the two neighbours
+on the toolbar no longer look alike.
+
 Under **Remote Development** the tab arrives a different way, because there the embedded browser is the
 thin client's and fetches everything it shows — a local file included — from the host in 16 KB packets,
 one round trip each; a 3 MB report over a 100 ms link took half a minute to appear. The editor loads a

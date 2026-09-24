@@ -183,6 +183,13 @@
               table — for a data object through its service, the live definition first. Each is a link with
               its key to copy. A copy button shows the ordinary pointer now, not the copy cursor with its
               plus badge.</li>
+          <li><b>The explorer tab loads, fails and comes back where it was.</b> A spinner at the right of
+              its toolbar says the page is loading — the tab used to stay blank until the browser painted —
+              and a page the embedded browser cannot load is replaced by a panel naming the file and the
+              reason, with <i>Reload</i> and <i>Regenerate Atlas Explorer</i>. A tab open when the IDE
+              closes reopens on the page it was left on instead of the dashboard. A link to a file the page
+              no longer finds offers <i>Regenerate Atlas Explorer</i> on the balloon that says so, and
+              opening a file from the page no longer resolves it on the UI thread.</li>
           <li><b>Atlas Findings says why, and stays current.</b> A pane beside the tree explains the
               selected check the way the explorer's Checks page does — the kind of finding, why it matters,
               what to do, a link to the checks page — and opens the finding's model in the explorer. A
@@ -539,13 +546,6 @@
               the explorer's Save writes, so the page, the CLI gate and this list agree. It is Swing, so it
               works under Remote Development and in an IDE without JCEF, where the explorer was the only
               place to see or accept a finding.</li>
-          <li><b>The model preview is interactive.</b> A click on a process, case or decision element — and
-              on a form component or a decision table's rule — puts the caret on its declaration beside it,
-              the id itself rather than a flow or a JSON key that mentions it first (Go to Symbol and Search
-              Everywhere land there too), Ctrl/⌘ + wheel zooms about the pointer, a drag pans, and Ctrl/⌘ +
-              <code>=</code> <code>-</code> <code>0</code> zoom in, out and fit. The picture follows the
-              editor's unsaved text, and a renderer that fails says so instead of claiming the model has no
-              layout.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

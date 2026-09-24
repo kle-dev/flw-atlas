@@ -49,6 +49,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   changelog that creates the table — for a data object through its service, the live definition first.
   Each is a link with its key to copy. A copy button shows the ordinary pointer now, not the copy cursor
   with its plus badge.
+- **The explorer tab loads, fails and comes back where it was.** A spinner at the right of its toolbar says
+  the page is loading — the tab used to stay blank until the browser painted — and a page the embedded
+  browser cannot load is replaced by a panel naming the file and the reason, with *Reload* and *Regenerate
+  Atlas Explorer*. A tab open when the IDE closes reopens on the page it was left on instead of the
+  dashboard. A link to a file the page no longer finds offers *Regenerate Atlas Explorer* on the balloon
+  that says so, and opening a file from the page no longer resolves it on the UI thread.
 - **Atlas Findings says why, and stays current.** A pane beside the tree explains the selected check the
   way the explorer's Checks page does — the kind of finding, why it matters, what to do, a link to the
   checks page — and opens the finding's model in the explorer. A status line says how current the analysis

@@ -1,6 +1,7 @@
 package com.flowable.atlas.explorer
 
 import com.flowable.atlas.AtlasNotifications
+import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.action.FlowableActionIds
 import com.flowable.atlas.events.AtlasEvents
 import com.flowable.atlas.events.AtlasEventsListener
@@ -25,6 +26,15 @@ import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.fileEditor.FileEditorState
+import com.intellij.openapi.fileEditor.FileEditorStateLevel
+import com.intellij.openapi.util.text.StringUtil
+import com.intellij.ui.AnimatedIcon
+import com.intellij.ui.components.JBLabel
+import com.intellij.ui.dsl.builder.MAX_LINE_LENGTH_WORD_WRAP
+import com.intellij.ui.dsl.builder.panel
+import com.intellij.util.ui.JBUI
+import com.intellij.util.ui.UIUtil
+import javax.swing.SwingConstants
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
@@ -41,6 +51,7 @@ import com.intellij.ui.jcef.JBCefJSQuery
 import com.intellij.util.ui.update.UiNotifyConnector
 import org.cef.browser.CefBrowser
 import org.cef.browser.CefFrame
+import org.cef.handler.CefLoadHandler
 import org.cef.handler.CefLoadHandlerAdapter
 import java.awt.BorderLayout
 import java.awt.datatransfer.StringSelection
@@ -65,12 +76,24 @@ import javax.swing.JPanel
  * Under Remote Development the page is not loaded from its file: the thin client's browser would pull
  * it from the host 16 KB at a time. A stub at the page's URL fetches it through the JS bridge in one
  * round trip and caches it client-side instead — see [RemoteExplorerPage].
+ *
+ * Three states besides the page itself: *loading* (a spinner at the right of the toolbar — the browser
+ * cannot be covered, it would paint over an overlay, and cannot be hidden before its first load), a
+ * failed load (a panel saying so, with Reload and Regenerate, in place of a blank tab), and a tab
+ * reopened after a restart, which comes back on the page it was left on ([AtlasExplorerState]).
  */
 class AtlasFileEditor(private val project: Project, private val file: VirtualFile) :
     UserDataHolderBase(), FileEditor {
 
     private val browser = JBCefBrowser()
     private val wrapper = JPanel(BorderLayout())
+    /** The browser, or the panel that says the page could not be loaded — never a blank tab. */
+    private val body = JPanel(BorderLayout())
+    private val loading = JBLabel(message("explorer.loading"), AnimatedIcon.Default.INSTANCE, SwingConstants.LEFT).apply {
+        foreground = UIUtil.getContextHelpForeground()
+        border = JBUI.Borders.emptyRight(10)
+        isVisible = false
+    }
 
     // JS→Kotlin channel so the page's copy buttons work inside the JCEF file:// viewer, where
     // navigator.clipboard is blocked; the page falls back to this via window.__atlasCopy.
@@ -106,7 +129,16 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
             // Re-push after any (re)load: the query param goes stale when the IDE theme switched
             // between load and reload. The page-side `window.__atlasSetIdeTheme &&` guard makes an
             // early or racing push a harmless no-op. The bridges are (re)installed the same way.
-            if (frame.isMain) { installBridges(); pushIdeTheme(); pageLoaded = true }
+            if (frame.isMain) {
+                installBridges(); pushIdeTheme(); pageLoaded = true
+                ApplicationManager.getApplication().invokeLater({ loading.isVisible = false }, project.disposed)
+            }
+        }
+
+        override fun onLoadError(cefBrowser: CefBrowser, frame: CefFrame, errorCode: CefLoadHandler.ErrorCode, errorText: String?, failedUrl: String?) {
+            // An aborted load is a navigation that replaced it (a hash change, a reload), not a failure.
+            if (!frame.isMain || errorCode == CefLoadHandler.ErrorCode.ERR_ABORTED) return
+            ApplicationManager.getApplication().invokeLater({ showLoadError(errorText ?: errorCode.name) }, project.disposed)
         }
     }
 
@@ -165,8 +197,12 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
         val toolbar = ActionManager.getInstance()
             .createActionToolbar("AtlasExplorerEditor", buildToolbarGroup(), true)
         toolbar.targetComponent = wrapper
-        wrapper.add(toolbar.component, BorderLayout.NORTH)
-        wrapper.add(browser.component, BorderLayout.CENTER)
+        wrapper.add(JPanel(BorderLayout()).apply {
+            add(toolbar.component, BorderLayout.CENTER)
+            add(loading, BorderLayout.EAST)
+        }, BorderLayout.NORTH)
+        body.add(browser.component, BorderLayout.CENTER)
+        wrapper.add(body, BorderLayout.CENTER)
         // Load only once the browser is actually on screen. Loading eagerly here — before the editor
         // tab is ever shown (opened in the background, or restored on project reopen) — intermittently
         // left the page blank: the initial navigation is issued into a browser whose native surface
@@ -217,6 +253,8 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
     }
 
     private fun load(hash: String? = null) {
+        showPage()
+        loading.isVisible = true
         val frag = hash?.let { "#$it" } ?: ""
         val url = file.url + "?ideTheme=" + ideTheme() + "&idePal=" + paletteParam
         if (!remote) { browser.loadURL(url + frag); return }
@@ -235,6 +273,31 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
                 browser.loadHTML(page.stub, "$url&page=${page.hash.take(12)}$frag")
             }, project.disposed)
         }
+    }
+
+    /** The page could not be loaded: say so where it would have been, with the two ways to get it back. */
+    private fun showLoadError(reason: String) {
+        loading.isVisible = false
+        val failure = panel {
+            row { label(message("explorer.loadFailed.title")).bold() }
+            row { text(StringUtil.escapeXmlEntities(message("explorer.loadFailed", file.name, reason)), MAX_LINE_LENGTH_WORD_WRAP) }
+            row {
+                link(message("explorer.reload")) { load(pendingHash) }
+                link(FlowableActionIds.text(FlowableActionIds.REGENERATE_ATLAS_EXPLORER)) { regenerate() }
+            }
+        }.withBorder(JBUI.Borders.empty(24))
+        body.removeAll()
+        body.add(failure, BorderLayout.NORTH)
+        body.revalidate()
+        body.repaint()
+    }
+
+    private fun showPage() {
+        if (body.componentCount == 1 && body.getComponent(0) === browser.component) return
+        body.removeAll()
+        body.add(browser.component, BorderLayout.CENTER)
+        body.revalidate()
+        body.repaint()
     }
 
     private fun pushIdeTheme() {
@@ -305,10 +368,16 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
         }
     }
 
-    /** Resolve a report file label to a VirtualFile and open it — at [line] (1-based) when given. */
+    /** Resolve a report file label to a VirtualFile — off the EDT, it may refresh — and open it at [line]. */
     private fun openInIde(label: String, line: Int?) {
         if (project.isDisposed) return
-        val vf = resolveLabel(label)
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val vf = resolveLabel(label)
+            ApplicationManager.getApplication().invokeLater({ openResolved(label, vf, line) }, project.disposed)
+        }
+    }
+
+    private fun openResolved(label: String, vf: VirtualFile?, line: Int?) {
         if (vf == null) {
             // A dead end said so before; now the fix is one click, on the balloon that says what broke.
             AtlasNotifications.group()
@@ -337,12 +406,12 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
     private fun buildToolbarGroup() = DefaultActionGroup(
         // The browser's back/forward, which a JCEF tab has no chrome for: from a finding on the Checks
         // page to the model and back again was a dead end without them.
-        object : AnAction("Back", "Back to the previous page of this explorer", AllIcons.Actions.Back), DumbAware {
+        object : AnAction(message("explorer.back"), message("explorer.back.description"), AllIcons.Actions.Back), DumbAware {
             override fun actionPerformed(e: AnActionEvent) { browser.cefBrowser.goBack() }
             override fun update(e: AnActionEvent) { e.presentation.isEnabled = browser.cefBrowser.canGoBack() }
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
         },
-        object : AnAction("Forward", "Forward to the next page of this explorer", AllIcons.Actions.Forward), DumbAware {
+        object : AnAction(message("explorer.forward"), message("explorer.forward.description"), AllIcons.Actions.Forward), DumbAware {
             override fun actionPerformed(e: AnActionEvent) { browser.cefBrowser.goForward() }
             override fun update(e: AnActionEvent) { e.presentation.isEnabled = browser.cefBrowser.canGoForward() }
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
@@ -350,7 +419,7 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
         Separator.getInstance(),
         object : AnAction(
             FlowableActionIds.text(FlowableActionIds.REGENERATE_ATLAS_EXPLORER),
-            "Re-run the Atlas generator for this file and reload", AllIcons.Actions.ForceRefresh,
+            message("explorer.regenerate.description"), AllIcons.Actions.Compile,
         ), DumbAware {
             override fun actionPerformed(e: AnActionEvent) {
                 regenerate()
@@ -362,11 +431,13 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
 
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
         },
-        object : AnAction("Reload", "Reload the page without regenerating", AllIcons.Actions.Refresh), DumbAware {
+        object : AnAction(message("explorer.reload"), message("explorer.reload.description"), AllIcons.Actions.Refresh), DumbAware {
             override fun actionPerformed(e: AnActionEvent) {
                 // Under Remote Dev a reload re-reads the file: the stub's cache is keyed by content, so a
-                // page rewritten by the CLI would otherwise come back from the cache as it was.
-                if (remote) load() else browser.cefBrowser.reloadIgnoreCache()
+                // page rewritten by the CLI would otherwise come back from the cache as it was. After a
+                // failed load there is no page to reload: load it again.
+                if (remote || !pageLoaded || body.getComponent(0) !== browser.component) load(currentRoute())
+                else { loading.isVisible = true; browser.cefBrowser.reloadIgnoreCache() }
             }
 
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
@@ -375,7 +446,7 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
         // The playground used to be a second editor tab on every explorer file — a whole second panel,
         // with its own alarms and listeners, per open page. One tool window, one click away.
         ActionManager.getInstance().getAction(FlowableActionIds.OPEN_ATLAS_PLAYGROUND),
-        object : AnAction("Open in Browser", "Open this explorer in the external browser", AllIcons.General.Web), DumbAware {
+        object : AnAction(message("hub.explorer.openInBrowser"), message("explorer.openInBrowser.description"), AllIcons.General.Web), DumbAware {
             override fun actionPerformed(e: AnActionEvent) {
                 AtlasBrowser.open(file.toNioPath())
             }
@@ -391,9 +462,20 @@ class AtlasFileEditor(private val project: Project, private val file: VirtualFil
 
     override fun getComponent(): JComponent = wrapper
     override fun getPreferredFocusedComponent(): JComponent = browser.component
-    override fun getName(): String = "Atlas Explorer"
+    override fun getName(): String = message("explorer.editor.name")
     override fun getFile(): VirtualFile = file
-    override fun setState(state: FileEditorState) {}
+
+    /** The page's route now — its hash, or the one waiting for the first load; null on the dashboard. */
+    private fun currentRoute(): String? =
+        if (pageLoaded) browser.cefBrowser.url?.substringAfter('#', "")?.takeIf { it.isNotEmpty() } else pendingHash
+
+    // The route survives closing the IDE: the tab comes back on the page it was left on, not the dashboard.
+    override fun getState(level: FileEditorStateLevel): FileEditorState = AtlasExplorerState(currentRoute().orEmpty())
+
+    override fun setState(state: FileEditorState) {
+        val route = (state as? AtlasExplorerState)?.route?.takeIf { it.isNotEmpty() } ?: return
+        navigate(route)
+    }
     override fun isModified(): Boolean = false
     // The isDisposed guard keeps late queries (editor-history bookkeeping during IDE shutdown) from
     // touching an already-disconnected VFS, which logs a scary AlreadyDisposedException warning.

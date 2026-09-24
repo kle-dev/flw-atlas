@@ -51,6 +51,6 @@ class PostPullHintTest : BasePlatformTestCase() {
             "7 models changed since this page was generated: A, B, C, D, E +2 more",
             AtlasExplorerStaleness.changedSummary(listOf("A", "B", "C", "D", "E", "F", "G")),
         )
-        assertEquals("Models changed since this explorer was generated.", AtlasExplorerStaleness.changedSummary(emptyList()))
+        assertEquals("Models changed since this page was generated.", AtlasExplorerStaleness.changedSummary(emptyList()))
     }
 }

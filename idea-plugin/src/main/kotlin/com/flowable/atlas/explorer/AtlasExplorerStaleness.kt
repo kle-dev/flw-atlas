@@ -59,7 +59,7 @@ object AtlasExplorerStaleness {
      * [shown] names, then `+N more`; the bare *models changed* when nothing can be named.
      */
     fun changedSummary(names: List<String>, shown: Int = 5): String {
-        if (names.isEmpty()) return "Models changed since this explorer was generated."
+        if (names.isEmpty()) return "Models changed since this page was generated."
         val head = names.take(shown).joinToString(", ")
         val more = (names.size - shown).takeIf { it > 0 }?.let { " +$it more" } ?: ""
         val noun = if (names.size == 1) "model" else "models"
