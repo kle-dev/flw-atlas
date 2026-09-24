@@ -72,11 +72,16 @@ internal object HubActions {
             isPopup = true
         }
 
-        // The registered group's own children, read as the descriptor declares them: ActionGroup.getChildren
-        // is override-only, and calling it on another group is what the Plugin Verifier flagged.
+        // The registered group's children, resolved: ActionGroup.getChildren(event) is override-only, and
+        // calling it on another group is what the Plugin Verifier flagged — but its replacement must not be
+        // childActionsOrStubs, which hands back the *stubs* of actions not loaded yet. A stub is never
+        // updated, so every context action showed whatever it applied (Copy Model Key, Compare) and the
+        // environments group drew as an empty row. getChildren(ActionManager) is what getChildren(event)
+        // itself does: it swaps each stub for its action.
         override fun getChildren(e: AnActionEvent?): Array<AnAction> {
-            val menu = ActionManager.getInstance().getAction(FlowableActionIds.MENU) as? DefaultActionGroup
-            return menu?.childActionsOrStubs ?: EMPTY_ARRAY
+            val manager = e?.actionManager ?: ActionManager.getInstance()
+            val menu = manager.getAction(FlowableActionIds.MENU) as? DefaultActionGroup
+            return menu?.getChildren(manager) ?: EMPTY_ARRAY
         }
 
         override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT

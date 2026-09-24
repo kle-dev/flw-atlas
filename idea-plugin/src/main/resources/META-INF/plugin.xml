@@ -142,6 +142,15 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.27.1</h3>
+        <ul>
+          <li><b>The Atlas Hub's ⋮ menu shows the right entries again.</b> 0.27.0 handed the menu unloaded
+              placeholders of its actions instead of the actions, so none of them got to decide whether it
+              applies: the <i>Open Environment in Browser</i> submenu drew as an empty row, and <i>Copy
+              Model Key</i> and <i>Compare Model with Archive</i> showed in a panel with no key or model to
+              act on. The menu is <i>Tools → Flowable Atlas</i> again, entry for entry, with the same
+              entries hidden. <i>Dump Key Index</i> stays out of it outside internal mode.</li>
+        </ul>
         <h3>0.27.0</h3>
         <ul>
           <li><b>The Atlas Hub fits a side stripe.</b> It was laid out at the width its widest row asked for
@@ -532,17 +541,6 @@
               hidden tabs behind a <b>+N</b> button. The browse list is narrower there and folds away from a
               button in its head — or by dragging its edge shut — to give the page the whole width; a long
               name no longer pushes its findings pill out of sight.</li>
-          <li><b>A node's relations in one section.</b> A page told its relations three and four times — a
-              neighbourhood drawing, <i>Uses / references</i>, <i>Used by / referenced from</i>, and a
-              type's own copies (<i>Called by</i>, <i>Access</i>, <i>Subforms</i>, <i>Tools</i>, <i>Used
-              by</i>, <i>Called with</i>). <i>Relations</i> is one section on the Connections tab: a list
-              per direction with a row per relation and neighbour, carrying what the old sections added —
-              the element that makes a reference, a REST call's verb and URL, a tool's operation, and a
-              caller's parameter mappings in its expanded row — with chips for <i>uses</i>, <i>used by</i>,
-              <i>uncertain</i> and <i>with mappings</i>. An expression, a binding, a function and a service
-              operation get the same section from their own lists. The section listing the variables and
-              expressions a model touches is called <i>Variables &amp; expressions</i> now; as <i>Uses</i>
-              it collided with the drawing's USES column.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

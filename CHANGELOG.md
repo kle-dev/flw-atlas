@@ -12,6 +12,14 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.27.1
+
+- **The Atlas Hub's ⋮ menu shows the right entries again.** 0.27.0 handed the menu unloaded placeholders of
+  its actions instead of the actions, so none of them got to decide whether it applies: the *Open Environment
+  in Browser* submenu drew as an empty row, and *Copy Model Key* and *Compare Model with Archive* showed in a
+  panel with no key or model to act on. The menu is *Tools → Flowable Atlas* again, entry for entry, with the
+  same entries hidden. *Dump Key Index* stays out of it outside internal mode.
+
 ## 0.27.0
 
 - **The Atlas Hub fits a side stripe.** It was laid out at the width its widest row asked for — 567 px

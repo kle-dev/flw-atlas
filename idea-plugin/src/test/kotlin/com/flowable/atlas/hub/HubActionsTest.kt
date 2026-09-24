@@ -65,6 +65,28 @@ class HubActionsTest : BasePlatformTestCase() {
         assertTrue("and it is not empty — a mirror of nothing would pass the line above too", fromHub.isNotEmpty())
     }
 
+    /**
+     * The ⋮ hands the popup *actions*, not stubs. A stub has an id — so the test above passed — but it is
+     * never updated: 0.27.0 drew the environments group as an empty row and showed Copy Model Key and
+     * Compare in a panel that has no key or model to act on.
+     */
+    fun testTheOverflowMenuHoldsResolvedActionsThatUpdate() {
+        val children = childrenOf(overflow()).filter { it !is Separator }
+        val stubs = children.filter { it is com.intellij.openapi.actionSystem.ActionStubBase }.map { idOf(it) }
+        assertEquals("unresolved stubs in the Hub's ⋮", emptyList<String?>(), stubs)
+        val environments = children.single { idOf(it) == "Flowable.OpenEnvironmentInBrowser" }
+        assertFalse("the environments group has a name", environments.templateText.isNullOrBlank())
+
+        // In the Hub there is no editor and no selected file: the context actions hide themselves.
+        val context = com.intellij.openapi.actionSystem.impl.SimpleDataContext.getProjectContext(project)
+        for (id in listOf(FlowableActionIds.COPY_MODEL_KEY, FlowableActionIds.COMPARE_MODEL_WITH_ARCHIVE)) {
+            val action = children.single { idOf(it) == id }
+            val event = TestActionEvent.createTestEvent(action, context)
+            action.update(event)
+            assertFalse("$id is hidden where there is nothing to act on", event.presentation.isEnabledAndVisible)
+        }
+    }
+
     fun testBothSearchesAreReachableFromTheMenu() {
         // The pair a reader has to tell apart: one opens the popup, the other the result list. Neither
         // may be the one that is only in the other menu.
