@@ -144,6 +144,39 @@
     <change-notes><![CDATA[
         <h3>0.27.0</h3>
         <ul>
+          <li><b>The Atlas Hub fits a side stripe.</b> It was laid out at the width its widest row asked for
+              — 567 px with an ordinary environment name — so the stripe had to be dragged half across the
+              screen before nothing was cut off. Every row now fits 280 px and a wider stripe only gives the
+              names more room: the project picker has the first row to itself, the model count and
+              <i>Rebuild</i> the second, the attention line wraps, the buttons under a block's title say
+              <i>Generate…</i> and <i>Open</i> (the full names are their tooltips), the <i>Pull</i> button
+              spans the block, and a name too long for its row ends in <code>…</code> with the whole of it
+              in the tooltip. Each block folds at its title and stays folded. Dragging the stripe narrow
+              again after it had been wide now works too — the platform's foldable group reported its last
+              width as its minimum.</li>
+          <li><b>The Hub says what it could not do, where it could not do it.</b> A Design workspace list
+              that cannot be read shows the reason under the workspace picker with <i>Retry</i>, instead of
+              a balloon that was gone by the time anyone looked; the picker says <i>loading workspaces…</i>
+              while it asks. The model count's row says <i>scanning…</i> or <i>index failed</i> while there
+              is no index — it used to go blank, because a disabled link hides itself. A removed environment
+              is said once, in the attention line and in the picker, not also in a red note beside it.</li>
+          <li><b>Atlas Findings says why, and stays current.</b> A pane beside the tree explains the
+              selected check the way the explorer's Checks page does — the kind of finding, why it matters,
+              what to do, a link to the checks page — and opens the finding's model in the explorer. A
+              status line says how current the analysis is (<i>17 defects · 24 advice · analyzed 2 min
+              ago</i>) and, once a model changed since, how many and <i>Analyze Again</i>. Generating the
+              explorer brings the window up to date without a second analysis; it used to analyse only when
+              opened and after an accept. <i>Accept…</i> asks in a dialog that refuses an empty reason, the
+              two filters sit behind the Problems view's eye instead of drawing as text buttons, and the
+              tree expands and collapses from the toolbar. The Hub shows the counts in a health row of its
+              own — a link into the window, or <i>Analyze findings</i> before any analysis.</li>
+          <li><b>The explorer tab loads, fails and comes back where it was.</b> A spinner at the right of
+              its toolbar says the page is loading — the tab used to stay blank until the browser painted —
+              and a page the embedded browser cannot load is replaced by a panel naming the file and the
+              reason, with <i>Reload</i> and <i>Regenerate Atlas Explorer</i>. A tab open when the IDE
+              closes reopens on the page it was left on instead of the dashboard. A link to a file the page
+              no longer finds offers <i>Regenerate Atlas Explorer</i> on the balloon that says so, and
+              opening a file from the page no longer resolves it on the UI thread.</li>
           <li><b>The explorer opens under Remote Development whatever its size, and says how far it has
               got.</b> A 17.8 MB report sat on <i>Loading … over the IDE connection</i> and never arrived:
               it was sent uncompressed, as 35 one-megabyte answers at once. It now travels gzipped, at a
@@ -154,6 +187,76 @@
               used to be a spinner for good. The thin client keeps the compressed page, so a report of up to
               about 20 MB opens without any transfer the next time; a larger one is fetched on every open,
               and the card says so.</li>
+          <li><b>The model picture is a sheet you can point at.</b> The drawing stays white in every theme,
+              as in the explorer, but now sits on the panel as a framed sheet rather than a white block with
+              no edge in a dark IDE. The element under the pointer is outlined, the pointer turns into a
+              hand and the tooltip names the element, so what can be clicked is visible before a click. A
+              click leaves the focus on the picture, which is what the zoom keys needed — they were
+              registered on a component that never got the focus. The toolbar gains <i>Actual Size</i> and a
+              zoom readout. Half-typed text that does not parse keeps the last picture up, with a line
+              saying so, instead of flipping to "no layout" at every keystroke. Opening a subform is ⌘-click
+              on macOS, where Ctrl-click is the context click.</li>
+          <li><b>The playground's panes each say one thing.</b> What just happened to the context — <i>Using
+              QA · CAS-4711</i> after a paste, <i>Saved as QA</i> — is said on a line under the context's
+              summary instead of being written over the last result, and a value's type sits beside the
+              result's caption (<i>Result · string</i>) instead of being padded onto the value. <i>Evaluate
+              Against App</i> is <i>Evaluate Against Work</i>, its shortcut is spelled the way your keymap
+              spells it, and it — like <i>Show Sub-Expression Values</i> — stays on the toolbar, disabled
+              with a reason, in the dialect it does not apply to, so switching the dialect no longer moves
+              the buttons. The backend row keeps <i>Paste Work URL…</i> and puts naming or forgetting
+              targets and <i>Manage Environments…</i> behind one ⋮; the gear's <i>Environment Settings…</i>
+              became that same <i>Manage Environments…</i>, and the Scripts tab, which has no environment,
+              lost it. The Scripts tab's context says how much it holds (<i>5 bindings · 34 beans</i>)
+              rather than repeating the toolbar, remembers whether it is folded, says so when nothing is
+              bound or touched, opens its pickers under their buttons, and tells a failed model scan apart
+              from a project without scripts.</li>
+          <li><b>Settings say whose they are.</b> Every project settings page names the Flowable project its
+              values belong to when that is a question — a sub-project is chosen, or the repository holds
+              several — since the choice is made elsewhere, in the Atlas Hub. <i>Apply</i> on the
+              Environments page with something missing selects the environment or connection it is about.
+              The model-constants identifier and format read as choices with an example (<i>Name and key —
+              ORDER_FULFILMENT_P_0001</i>) instead of enum names, the custom-functions source is only
+              editable while discovery is on, the copy button is disabled on a connection, and <i>Share with
+              Project</i> wears a share icon rather than a save icon. The sign-in form lost two paragraphs
+              to help marks, the Work connection reads <i>Server URL</i> like the Design one and is called
+              Work wherever it was called "app", and settings paths read <i>Settings → Tools → Flowable
+              Atlas → …</i>.</li>
+          <li><b>Dialogs check before they close.</b> <i>Paste Session…</i> refuses a paste that carries no
+              session header — it used to close and report the problem afterwards, with the pasted text gone
+              — and <i>Sign In to Flowable</i> (no longer "Flowable App": Design uses it too) enables <i>Use
+              this session</i> once a session cookie has been seen. <i>Create Access Token</i> is laid out
+              in one column of labels, says where the token goes (the access-token field; Apply stores it)
+              and that a blank validity never expires. The two Generate dialogs are one column of labels
+              from the source to the footer, name their patterns as the settings pages do, and point a
+              problem with the selected rows at the table. The Liquibase dialog's <i>Browse</i> no longer
+              writes an absolute path, and an absolute folder typed in is refused — the check trimmed the
+              leading slash first, so one got through and every row read "new".</li>
+          <li><b>One name for every Atlas surface, one verb for opening it.</b> The tool windows are
+              <i>Atlas Hub</i>, <i>Atlas Findings</i> and <i>Atlas Playground</i> — the playground used to
+              be called <i>Expression Playground</i> although half of it is scripts — and every entry that
+              opens one reads <i>Open Atlas …</i>. Under <i>Generate</i> the entries no longer repeat the
+              submenu's verb (<i>Atlas Explorer…</i>, <i>Model Constants</i>, <i>Liquibase Changelogs → From
+              Data Object…</i>), while <i>Find Action</i> shows the whole sentence, so the two <i>From Data
+              Object…</i> entries are no longer lookalikes there. <i>Generate Model Constants</i> lost an
+              ellipsis it never earned: it asks for nothing.</li>
+          <li><b>Atlas Findings wears the explorer's Checks glyph</b> instead of the IDE's own Problems
+              icon, and <i>Regenerate Atlas Explorer</i> wears the platform's build hammer, so it can be
+              told from <i>Reload</i> beside it.</li>
+          <li><b>Every gutter mark can be switched off.</b> The four marks are listed under <i>Settings →
+              Editor → General → Gutter Icons</i> by name — <i>Flowable: Java referenced by models</i>,
+              <i>bot used by actions</i>, <i>REST handler called by models</i>, <i>model picture</i> — and a
+              click on a mark that finds no model any more says so instead of doing nothing.</li>
+          <li><b>Balloons instead of dialogs.</b> <i>Open Atlas Explorer</i> with nothing to open, the
+              Open-in-Explorer intention in the same situation, and an explorer file that went missing say
+              so in a balloon with the fix on it (<i>Generate Atlas Explorer…</i>, <i>Regenerate Atlas
+              Explorer</i>) instead of a modal question. <i>Show Details</i> opens a read-only editor tab
+              whatever the text's length; it used to be a dialog when short. The two notification groups are
+              listed as <i>Flowable Atlas: needs attention</i> and <i>Flowable Atlas: finished jobs</i>, and
+              every balloon now lands in the group its kind belongs to.</li>
+          <li><b>Context menus about what was right-clicked.</b> A model file in the Project view offers
+              <i>Open in Atlas Explorer</i>; <i>Go to Model…</i>, which ignores the selection, left that
+              menu. In the editor, <i>Copy Model Key</i> and <i>Compare Model with Archive</i> sit together
+              behind one separator. The generate actions stay available while the IDE indexes.</li>
           <li><b>The actions table says which bot runs each action.</b> <code>#/browse/action</code> gains a
               <i>Bot</i> column: a Java bot by its class, a platform bot by its key, as a link to the bot,
               with a copy button for the class name or key and, inside the IDE, a button that opens the Java
@@ -183,109 +286,6 @@
               table — for a data object through its service, the live definition first. Each is a link with
               its key to copy. A copy button shows the ordinary pointer now, not the copy cursor with its
               plus badge.</li>
-          <li><b>Dialogs check before they close.</b> <i>Paste Session…</i> refuses a paste that carries no
-              session header — it used to close and report the problem afterwards, with the pasted text gone
-              — and <i>Sign In to Flowable</i> (no longer "Flowable App": Design uses it too) enables <i>Use
-              this session</i> once a session cookie has been seen. <i>Create Access Token</i> is laid out
-              in one column of labels, says where the token goes (the access-token field; Apply stores it)
-              and that a blank validity never expires. The two Generate dialogs are one column of labels
-              from the source to the footer, name their patterns as the settings pages do, and point a
-              problem with the selected rows at the table. The Liquibase dialog's <i>Browse</i> no longer
-              writes an absolute path, and an absolute folder typed in is refused — the check trimmed the
-              leading slash first, so one got through and every row read "new".</li>
-          <li><b>Settings say whose they are.</b> Every project settings page names the Flowable project its
-              values belong to when that is a question — a sub-project is chosen, or the repository holds
-              several — since the choice is made elsewhere, in the Atlas Hub. <i>Apply</i> on the
-              Environments page with something missing selects the environment or connection it is about.
-              The model-constants identifier and format read as choices with an example (<i>Name and key —
-              ORDER_FULFILMENT_P_0001</i>) instead of enum names, the custom-functions source is only
-              editable while discovery is on, the copy button is disabled on a connection, and <i>Share with
-              Project</i> wears a share icon rather than a save icon. The sign-in form lost two paragraphs
-              to help marks, the Work connection reads <i>Server URL</i> like the Design one and is called
-              Work wherever it was called "app", and settings paths read <i>Settings → Tools → Flowable
-              Atlas → …</i>.</li>
-          <li><b>The playground's panes each say one thing.</b> What just happened to the context — <i>Using
-              QA · CAS-4711</i> after a paste, <i>Saved as QA</i> — is said on a line under the context's
-              summary instead of being written over the last result, and a value's type sits beside the
-              result's caption (<i>Result · string</i>) instead of being padded onto the value. <i>Evaluate
-              Against App</i> is <i>Evaluate Against Work</i>, its shortcut is spelled the way your keymap
-              spells it, and it — like <i>Show Sub-Expression Values</i> — stays on the toolbar, disabled
-              with a reason, in the dialect it does not apply to, so switching the dialect no longer moves
-              the buttons. The backend row keeps <i>Paste Work URL…</i> and puts naming or forgetting
-              targets and <i>Manage Environments…</i> behind one ⋮; the gear's <i>Environment Settings…</i>
-              became that same <i>Manage Environments…</i>, and the Scripts tab, which has no environment,
-              lost it. The Scripts tab's context says how much it holds (<i>5 bindings · 34 beans</i>)
-              rather than repeating the toolbar, remembers whether it is folded, says so when nothing is
-              bound or touched, opens its pickers under their buttons, and tells a failed model scan apart
-              from a project without scripts.</li>
-          <li><b>The model picture is a sheet you can point at.</b> The drawing stays white in every theme,
-              as in the explorer, but now sits on the panel as a framed sheet rather than a white block with
-              no edge in a dark IDE. The element under the pointer is outlined, the pointer turns into a
-              hand and the tooltip names the element, so what can be clicked is visible before a click. A
-              click leaves the focus on the picture, which is what the zoom keys needed — they were
-              registered on a component that never got the focus. The toolbar gains <i>Actual Size</i> and a
-              zoom readout. Half-typed text that does not parse keeps the last picture up, with a line
-              saying so, instead of flipping to "no layout" at every keystroke. Opening a subform is ⌘-click
-              on macOS, where Ctrl-click is the context click.</li>
-          <li><b>The explorer tab loads, fails and comes back where it was.</b> A spinner at the right of
-              its toolbar says the page is loading — the tab used to stay blank until the browser painted —
-              and a page the embedded browser cannot load is replaced by a panel naming the file and the
-              reason, with <i>Reload</i> and <i>Regenerate Atlas Explorer</i>. A tab open when the IDE
-              closes reopens on the page it was left on instead of the dashboard. A link to a file the page
-              no longer finds offers <i>Regenerate Atlas Explorer</i> on the balloon that says so, and
-              opening a file from the page no longer resolves it on the UI thread.</li>
-          <li><b>Atlas Findings says why, and stays current.</b> A pane beside the tree explains the
-              selected check the way the explorer's Checks page does — the kind of finding, why it matters,
-              what to do, a link to the checks page — and opens the finding's model in the explorer. A
-              status line says how current the analysis is (<i>17 defects · 24 advice · analyzed 2 min
-              ago</i>) and, once a model changed since, how many and <i>Analyze Again</i>. Generating the
-              explorer brings the window up to date without a second analysis; it used to analyse only when
-              opened and after an accept. <i>Accept…</i> asks in a dialog that refuses an empty reason, the
-              two filters sit behind the Problems view's eye instead of drawing as text buttons, and the
-              tree expands and collapses from the toolbar. The Hub shows the counts in a health row of its
-              own — a link into the window, or <i>Analyze findings</i> before any analysis.</li>
-          <li><b>The Atlas Hub fits a side stripe.</b> It was laid out at the width its widest row asked for
-              — 567 px with an ordinary environment name — so the stripe had to be dragged half across the
-              screen before nothing was cut off. Every row now fits 280 px and a wider stripe only gives the
-              names more room: the project picker has the first row to itself, the model count and
-              <i>Rebuild</i> the second, the attention line wraps, the buttons under a block's title say
-              <i>Generate…</i> and <i>Open</i> (the full names are their tooltips), the <i>Pull</i> button
-              spans the block, and a name too long for its row ends in <code>…</code> with the whole of it
-              in the tooltip. Each block folds at its title and stays folded. Dragging the stripe narrow
-              again after it had been wide now works too — the platform's foldable group reported its last
-              width as its minimum.</li>
-          <li><b>The Hub says what it could not do, where it could not do it.</b> A Design workspace list
-              that cannot be read shows the reason under the workspace picker with <i>Retry</i>, instead of
-              a balloon that was gone by the time anyone looked; the picker says <i>loading workspaces…</i>
-              while it asks. The model count's row says <i>scanning…</i> or <i>index failed</i> while there
-              is no index — it used to go blank, because a disabled link hides itself. A removed environment
-              is said once, in the attention line and in the picker, not also in a red note beside it.</li>
-          <li><b>One name for every Atlas surface, one verb for opening it.</b> The tool windows are
-              <i>Atlas Hub</i>, <i>Atlas Findings</i> and <i>Atlas Playground</i> — the playground used to
-              be called <i>Expression Playground</i> although half of it is scripts — and every entry that
-              opens one reads <i>Open Atlas …</i>. Under <i>Generate</i> the entries no longer repeat the
-              submenu's verb (<i>Atlas Explorer…</i>, <i>Model Constants</i>, <i>Liquibase Changelogs → From
-              Data Object…</i>), while <i>Find Action</i> shows the whole sentence, so the two <i>From Data
-              Object…</i> entries are no longer lookalikes there. <i>Generate Model Constants</i> lost an
-              ellipsis it never earned: it asks for nothing.</li>
-          <li><b>Atlas Findings wears the explorer's Checks glyph</b> instead of the IDE's own Problems
-              icon, and <i>Regenerate Atlas Explorer</i> wears the platform's build hammer, so it can be
-              told from <i>Reload</i> beside it.</li>
-          <li><b>Every gutter mark can be switched off.</b> The four marks are listed under <i>Settings →
-              Editor → General → Gutter Icons</i> by name — <i>Flowable: Java referenced by models</i>,
-              <i>bot used by actions</i>, <i>REST handler called by models</i>, <i>model picture</i> — and a
-              click on a mark that finds no model any more says so instead of doing nothing.</li>
-          <li><b>Balloons instead of dialogs.</b> <i>Open Atlas Explorer</i> with nothing to open, the
-              Open-in-Explorer intention in the same situation, and an explorer file that went missing say
-              so in a balloon with the fix on it (<i>Generate Atlas Explorer…</i>, <i>Regenerate Atlas
-              Explorer</i>) instead of a modal question. <i>Show Details</i> opens a read-only editor tab
-              whatever the text's length; it used to be a dialog when short. The two notification groups are
-              listed as <i>Flowable Atlas: needs attention</i> and <i>Flowable Atlas: finished jobs</i>, and
-              every balloon now lands in the group its kind belongs to.</li>
-          <li><b>Context menus about what was right-clicked.</b> A model file in the Project view offers
-              <i>Open in Atlas Explorer</i>; <i>Go to Model…</i>, which ignores the selection, left that
-              menu. In the editor, <i>Copy Model Key</i> and <i>Compare Model with Archive</i> sit together
-              behind one separator. The generate actions stay available while the IDE indexes.</li>
         </ul>
         <h3>0.26.0</h3>
         <ul>
