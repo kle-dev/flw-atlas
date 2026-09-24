@@ -162,10 +162,14 @@ it, and only the embedded tab offers it: the same page in a browser has nowhere 
 Under **Remote Development** the tab arrives a different way, because there the embedded browser is the
 thin client's and fetches everything it shows — a local file included — from the host in 16 KB packets,
 one round trip each; a 3 MB report over a 100 ms link took half a minute to appear. The editor loads a
-small stand-in page instead, which pulls the report through the IDE bridge in a few large parts at once
-— one round trip, whatever the size — and keeps it in the client's browser storage under its content
-hash, so reopening the tab transfers nothing and a regenerated report is fetched once. On a local IDE
-nothing changes: the file is read from disk.
+small stand-in page instead, which pulls the report through the IDE bridge gzipped — a sixth to an eighth
+of its size — in parts, a few in flight at a time, and shows how much has arrived, how much is left, the
+speed and the time remaining. The connection can lose an answer without saying so: a part missing for 30
+seconds is asked for again, and if it is still missing the card says what arrived and offers *Retry*, which
+asks only for the missing parts. The compressed page is kept in the client's
+browser storage under its content hash, so reopening the tab transfers nothing and a regenerated report is
+fetched once; a report too large for that storage (above roughly 20 MB) is fetched on every open, and the
+card says so. On a local IDE nothing changes: the file is read from disk.
 
 Generate it from **Tools → Flowable Atlas → Generate → Atlas Explorer…** — the page opens as a
 tab the moment it is written — reopen it later with **Open Atlas Explorer**, and choose which artifacts a

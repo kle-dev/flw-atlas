@@ -14,6 +14,15 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
 
 ## 0.27.0
 
+- **The explorer opens under Remote Development whatever its size, and says how far it has got.** A
+  17.8 MB report sat on *Loading … over the IDE connection* and never arrived: it was sent uncompressed, as
+  35 one-megabyte answers at once. It now travels gzipped, at a sixth to an eighth of its size, a few parts
+  at a time, and the card shows how much has arrived, how much is left, the speed and the time remaining. The
+  IDE connection can lose an answer without a word, so a part missing for 30 seconds is asked for again;
+  if it is still missing, a card says what arrived, and its *Retry* asks only for the missing parts. It
+  used to be a spinner for good. The thin client keeps the compressed
+  page, so a report of up to about 20 MB opens without any transfer the next time; a larger one is fetched
+  on every open, and the card says so.
 - **One name for every Atlas surface, one verb for opening it.** The tool windows are *Atlas Hub*, *Atlas
   Findings* and *Atlas Playground* — the playground used to be called *Expression Playground* although half
   of it is scripts — and every entry that opens one reads *Open Atlas …*. Under *Generate* the entries no

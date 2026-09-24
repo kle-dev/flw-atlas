@@ -6,11 +6,12 @@
 <!-- The IDE's stand-in for the explorer under Remote Development (RemoteExplorerPage.kt in the plugin).
      There the embedded browser is the thin client's, and every resource it shows crosses the IDE
      connection in 16 KB packets, one round trip each — so the editor loads this page instead of the
-     report. It is small enough to arrive in one packet, pulls the report through the JS bridge in a few
-     large parts fired together (one round trip, whatever the size), keeps it in the client's localStorage
-     under its content hash so the next open transfers nothing, and then replaces itself with the report
-     via document.write — URL and window intact, so ?ideTheme/?idePal still reach the page, the IDE's
-     bridges stay installed and the page's localStorage preferences are the same file:// origin's. -->
+     report. It is small enough to arrive in one packet, pulls the report through the JS bridge gzipped and
+     Base64-encoded in parts (a few in flight at a time, so the card can say how far it has got), keeps the
+     compressed page in the client's localStorage under its content hash so the next open transfers
+     nothing, and then replaces itself with the report via document.write — URL and window intact, so
+     ?ideTheme/?idePal still reach the page, the IDE's bridges stay installed and the page's localStorage
+     preferences are the same file:// origin's. -->
 <script>
 /* Same pre-paint as explorer.html: theme and the IDE's surfaces from the URL, so the card does not flash. */
 try{
@@ -35,11 +36,16 @@ html,body{margin:0;height:100%;background:var(--bg)}
   animation:boot-spin .8s linear infinite}
 .boot-title{font-weight:600;font-size:16px;color:var(--ink)}
 .boot-msg{font-size:13px;color:var(--ink-dim);max-width:26rem}
+.boot-prog{font-size:12px;color:var(--ink-dim);font-variant-numeric:tabular-nums;min-height:1.3em}
+.boot-bar{width:16rem;max-width:70vw;height:4px;border-radius:2px;background:var(--line);overflow:hidden}
+.boot-bar>i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s ease}
 .boot-fail{font-size:13px;color:var(--ink);text-align:left;max-width:40rem}
 .boot-fail pre{font:12px ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;max-height:40vh;overflow:auto;
   margin:8px 0;padding:8px;background:rgba(127,127,127,.12);border-radius:6px}
+.boot-fail button{font:inherit;margin-top:8px;padding:4px 14px;border-radius:6px;cursor:pointer;
+  border:1px solid var(--accent);background:var(--accent);color:#fff}
 @keyframes boot-spin{to{transform:rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){.boot-spinner{animation:none;opacity:.7}}
+@media (prefers-reduced-motion:reduce){.boot-spinner{animation:none;opacity:.7}.boot-bar>i{transition:none}}
 </style>
 </head>
 <body>
@@ -53,71 +59,148 @@ html,body{margin:0;height:100%;background:var(--bg)}
 <script>
 (function(){
   // Stamped by RemoteExplorerPage.kt: the report's SHA-256 (its cache key), how many parts the bridge
-  // serves it in, and its size as the card states it.
-  var HASH='__ATLAS_HASH__', PARTS=__ATLAS_PARTS__, SIZE='__ATLAS_SIZE__';
-  var msg=document.getElementById('atlas-boot-msg');
-  function say(t){ if(msg) msg.textContent=t; }
-  function fail(err){
-    var card=document.querySelector('#atlas-boot .boot-card'); if(!card) return;
-    var text=String((err&&err.stack)||err||'unknown error').replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});
-    card.innerHTML='<div class="boot-fail"><b>The explorer could not be loaded from the IDE host.</b><pre>'+text+'</pre>'+
+  // serves it in, its size as the card states it, and how many characters actually cross the connection
+  // (the gzipped report as Base64 — the figure the progress and the speed are measured on).
+  var HASH='__ATLAS_HASH__', PARTS=__ATLAS_PARTS__, SIZE='__ATLAS_SIZE__', WIRE=__ATLAS_WIRE__;
+  // A few parts in flight rather than all of them. Every answer joins one ordered queue that the whole
+  // IDE session shares, and nothing paces it: a 17.8 MB report asked for as 35 parts at once put ~37 MB
+  // of UTF-16 in that queue and never arrived. Three at a time keep the link busy, let other IDE traffic
+  // through between parts, and let the card say how far it has got.
+  var IN_FLIGHT=3;
+  var card=document.querySelector('#atlas-boot .boot-card');
+  function msg(){ return document.getElementById('atlas-boot-msg'); }
+  function say(t){ var m=msg(); if(m) m.textContent=t; }
+  function esc(s){ return String(s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
+  function mb(n){ return n>=1e6 ? (n/1e6).toFixed(1)+' MB' : Math.ceil(n/1e3)+' KB'; }
+  function fail(err, retry){
+    if(!card) return;
+    card.innerHTML='<div class="boot-fail"><b>The explorer could not be loaded from the IDE host.</b><pre>'+
+      esc((err&&err.stack)||err||'unknown error')+'</pre>'+
+      (retry?'<button type="button" id="atlas-boot-retry">Retry</button><br>':'')+
       'Use Reload in the editor toolbar. If it fails again, the text above is what to report.</div>';
+    var b=document.getElementById('atlas-boot-retry');
+    if(b) b.onclick=function(){ loading(); retry(); };
+  }
+  // The loading card, with the progress line and bar under the message (also what Retry restores).
+  function loading(){
+    if(!card) return;
+    card.innerHTML='<div class="boot-spinner"></div><div class="boot-title">Flowable Atlas</div>'+
+      '<div class="boot-msg" id="atlas-boot-msg"></div><div class="boot-bar"><i id="atlas-boot-bar"></i></div>'+
+      '<div class="boot-prog" id="atlas-boot-prog"></div>';
+    say('Loading '+SIZE+' over the IDE connection…');
+  }
+  // `got` is everything that has arrived, `round` what arrived since `t0` — the speed is this round's, so
+  // a retry after a stall is not credited with the parts the first round brought.
+  function progress(got, round, t0){
+    var p=document.getElementById('atlas-boot-prog'), bar=document.getElementById('atlas-boot-bar');
+    if(bar) bar.style.width=Math.min(100, Math.round(got/WIRE*100))+'%';
+    if(!p) return;
+    var s=(Date.now()-t0)/1000, rate=s>0.05?round/s:0, left=rate?Math.ceil((WIRE-got)/rate):0;
+    p.textContent=mb(got)+' of '+mb(WIRE)+(rate?' · '+mb(rate)+'/s · about '+(left<60?left+' s':Math.ceil(left/60)+' min')+' left':'')+
+      (WIRE>CACHE_MAX?' — too large to keep, fetched on every open':'');
   }
 
   // ---- the client-side cache: localStorage under the file:// origin, keyed by content hash ----
   // localStorage rather than IndexedDB: it is synchronous, it works for file:// pages in Chromium, and it
   // cannot hang the load — IndexedDB's open() never called back for a file:// page in headless Chromium,
   // and a cache that can stall is worse than none. The price is Chromium's 10 MiB-per-origin quota: one
-  // page at a time, none above CACHE_MAX chars (a report that large is still one round trip away — it is
-  // fetched on every open instead of the first).
-  var KEY='atlas-page:'+HASH, CACHE_MAX=4000000;
+  // page at a time, none above CACHE_MAX chars. What is kept is the compressed Base64, not the page, so the
+  // cap covers a report of roughly 20–30 MB; a larger one is fetched on every open instead of the first.
+  var KEY='atlas-pagez:'+HASH, CACHE_MAX=4000000;
   function cacheGet(){ try{ return localStorage.getItem(KEY); }catch(e){ return null; } }
-  function cachePut(html){
-    if(html.length>CACHE_MAX) return;
+  function cachePut(z){
+    if(z.length>CACHE_MAX) return;
     try{
-      for(var i=localStorage.length-1;i>=0;i--){ var k=localStorage.key(i); if(k&&k.indexOf('atlas-page:')===0&&k!==KEY) localStorage.removeItem(k); }
-      localStorage.setItem(KEY, html);
+      // `atlas-page:` is the uncompressed cache of the stubs before this one — dropped with the rest
+      for(var i=localStorage.length-1;i>=0;i--){ var k=localStorage.key(i); if(k&&k.indexOf('atlas-page')===0&&k!==KEY) localStorage.removeItem(k); }
+      localStorage.setItem(KEY, z);
     }catch(e){}
   }
 
   // ---- the IDE bridge: window.__atlasFetch(i, ok, fail) is installed by the host once this page has loaded ----
+  // Every wait has an end. The platform drops a query's answer without calling either callback in more than
+  // one place (a cancelled call, a query CEF already forgot, a failed pipe to the browser process), so a
+  // part that is never answered is not a bug to wait out. After STALL_MS without progress the missing parts
+  // are asked for once more; a second stall ends in a card that says what arrived and offers a retry.
+  var STALL_MS=30000;
   function bridge(){
     if(window.__atlasFetch) return Promise.resolve();
-    return new Promise(function(res){
-      window.addEventListener('atlas-ide-bridge', function h(){ if(window.__atlasFetch){ window.removeEventListener('atlas-ide-bridge',h); res(); } });
-    });
-  }
-  function part(i){
     return new Promise(function(res,rej){
-      window.__atlasFetch(i, res, function(code,m){ rej(new Error('part '+(i+1)+' of '+PARTS+' failed: '+(m||code))); });
+      var t=setTimeout(function(){ rej(new Error('The IDE did not connect this page within '+Math.round(STALL_MS/1000)+' s.')); }, STALL_MS);
+      window.addEventListener('atlas-ide-bridge', function h(){ if(window.__atlasFetch){ clearTimeout(t); window.removeEventListener('atlas-ide-bridge',h); res(); } });
     });
   }
+  // The parts that have arrived, across retries: a retry asks only for the ones still missing.
+  var got=new Array(PARTS), have=0, bytes=0;
   function fetchAll(){
-    var ps=[]; for(var i=0;i<PARTS;i++) ps.push(part(i));   // all in flight at once: one round trip
-    return Promise.all(ps).then(function(a){ return a.join(''); });
+    var todo=[]; for(var i=0;i<PARTS;i++) if(got[i]==null) todo.push(i);
+    return new Promise(function(res,rej){
+      var next=0, busy=0, over=false, t0=Date.now(), last=Date.now(), base=bytes;
+      function end(err){ if(over) return; over=true; clearInterval(dog); err?rej(err):res(got.join('')); }
+      var dog=setInterval(function(){
+        if(have===PARTS){ end(); return; }   // a late answer from the round before a retry completed the page
+        if(Date.now()-last<STALL_MS) return;
+        var e=new Error('No answer from the IDE host for '+Math.round(STALL_MS/1000)+' s — '+have+' of '+PARTS+' parts arrived ('+mb(bytes)+' of '+mb(WIRE)+').');
+        e.retry=true; end(e);
+      }, Math.min(500, STALL_MS));
+      function ask(i){
+        busy++;
+        window.__atlasFetch(i, function(s){
+          if(got[i]==null){ got[i]=s; have++; bytes+=s.length; }   // a late answer from an earlier round still counts
+          if(over) return;
+          busy--; last=Date.now();
+          progress(bytes, bytes-base, t0);
+          if(have===PARTS) end(); else pump();
+        }, function(code,m){ end(new Error('part '+(i+1)+' of '+PARTS+' failed: '+(m||code))); });
+      }
+      function pump(){ while(!over && busy<IN_FLIGHT && next<todo.length) ask(todo[next++]); }
+      if(!todo.length) end(); else pump();
+    });
+  }
+  // gzip + Base64 → the page. DecompressionStream is Chromium's own (80+); the thin client's JCEF is far past it.
+  function unpack(z){
+    var u;
+    if(Uint8Array.fromBase64) u=Uint8Array.fromBase64(z);
+    else { var b=atob(z); u=new Uint8Array(b.length); for(var i=0;i<b.length;i++) u[i]=b.charCodeAt(i); }
+    return new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
   }
 
   // Replace this document with the report. document.open() keeps the window — its properties, which is
   // where the IDE's bridges live, and its URL — and drops its listeners; the report's script registers
   // its own during the write, so the bridge event is raised once more for the page to notice the IDE.
-  function show(html){
-    document.open(); document.write(html); document.close();
-    setTimeout(function(){ window.dispatchEvent(new Event('atlas-ide-bridge')); }, 0);
+  function show(z){
+    say('Unpacking…');
+    return unpack(z).then(function(html){
+      say('Opening…');
+      return new Promise(function(res){ setTimeout(function(){
+        document.open(); document.write(html); document.close();
+        setTimeout(function(){ window.dispatchEvent(new Event('atlas-ide-bridge')); }, 0);
+        res();
+      }, 30); });   // long enough for "Opening…" to paint before the write takes the thread
+    });
+  }
+  function load(){
+    bridge().then(fetchAll)
+      .catch(function(e){ if(!(e&&e.retry)) throw e; say('No answer for a while — asking again…'); return fetchAll(); })
+      .then(function(z){ cachePut(z); return show(z); })
+      .catch(function(e){ fail(e, e&&e.retry?load:null); });
   }
 
-  // Deferred past the stub's own parse: a cached page is shown synchronously, and document.open() while
-  // the parser is still running aborts it — everything after this script, the IDE's own injected code
-  // included, would be dropped. A timer alone does not promise that: the parser yields on a slow load
-  // and the timer fires in the gap. DOMContentLoaded does.
+  // Deferred past the stub's own parse: a cached page is shown without waiting for the bridge, and
+  // document.open() while the parser is still running aborts it — everything after this script, the IDE's
+  // own injected code included, would be dropped. A timer alone does not promise that: the parser yields
+  // on a slow load and the timer fires in the gap. DOMContentLoaded does.
   function afterParse(fn){
     if(document.readyState!=='loading'){ setTimeout(fn, 0); return; }
     document.addEventListener('DOMContentLoaded', function(){ setTimeout(fn, 0); });
   }
   afterParse(function(){
+    if(window.__atlasStubStallMs>0) STALL_MS=window.__atlasStubStallMs;   // the test harness's short fuse
     var cached=cacheGet();
-    if(cached){ show(cached); return; }
-    say('Loading '+SIZE+' over the IDE connection…');
-    bridge().then(fetchAll).then(function(html){ cachePut(html); show(html); }).catch(fail);
+    // an entry that no longer unpacks is dropped and the page fetched afresh — a cache must never be the failure
+    if(cached){ show(cached).catch(function(){ try{ localStorage.removeItem(KEY); }catch(x){} loading(); load(); }); return; }
+    loading();
+    load();
   });
 })();
 </script>

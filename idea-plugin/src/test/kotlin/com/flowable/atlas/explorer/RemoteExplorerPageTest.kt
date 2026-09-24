@@ -1,43 +1,56 @@
 package com.flowable.atlas.explorer
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Base64
+import java.util.zip.GZIPInputStream
+import kotlin.random.Random
 
-/** The Remote-Dev hand-over of a report: parts that rejoin, a hash that keys the cache, a stub that states both. */
+/** The Remote-Dev hand-over of a report: parts that rejoin and unpack, a hash that keys the cache, a stub that states both. */
 class RemoteExplorerPageTest {
 
-    @Test fun partsRejoinToThePage() {
-        val html = "0123456789".repeat(157_293)                 // 3 × PART_CHARS + 66
-        val parts = RemoteExplorerPage.split(html)
-        assertEquals(4, parts.size)
-        assertTrue(parts.all { it.length <= RemoteExplorerPage.PART_CHARS })
-        assertEquals(html, parts.joinToString(""))
+    /** What the stub does with the parts: join, Base64-decode, gunzip. */
+    private fun unpack(parts: List<String>): ByteArray =
+        GZIPInputStream(Base64.getDecoder().decode(parts.joinToString("")).inputStream()).use { it.readBytes() }
+
+    @Test fun partsRejoinAndUnpackToThePage() {
+        // incompressible bytes, so the page needs several parts; an emoji and umlauts so UTF-8 survives too
+        val page = ("<html>🧩 Grüße " + "x").toByteArray() + Random(7).nextBytes(700_000) + "</html>".toByteArray()
+        val t = RemoteExplorerPage.prepare(page)
+        assertTrue("expected several parts, got ${t.parts.size}", t.parts.size >= 3)
+        assertTrue(t.parts.all { it.length <= RemoteExplorerPage.PART_CHARS })
+        assertEquals(t.wireChars, t.parts.sumOf { it.length })
+        assertArrayEquals(page, unpack(t.parts))
     }
 
-    @Test fun aSurrogatePairIsNeverSplit() {
-        // the emoji's high half would land exactly on the first part boundary
-        val html = "a".repeat(RemoteExplorerPage.PART_CHARS - 1) + "🧩" + "b".repeat(10)
-        val parts = RemoteExplorerPage.split(html)
-        assertEquals(RemoteExplorerPage.PART_CHARS - 1, parts[0].length)
-        assertTrue(parts[1].startsWith("🧩"))
-        assertEquals(html, parts.joinToString(""))
+    @Test fun aReportTravelsCompressed() {
+        // a report is mostly its JSON island: what crosses the connection is a fraction of the page
+        val island = (1..40_000).joinToString(",", "[", "]") { """{"id":"process:DEMO-P$it","type":"process","label":"Demo $it"}""" }
+        val page = "<html><script id=\"atlas-data\">$island</script></html>".toByteArray()
+        val t = RemoteExplorerPage.prepare(page)
+        assertTrue("wire ${t.wireChars} vs page ${page.size}", t.wireChars * 4 < page.size)
+        assertArrayEquals(page, unpack(t.parts))
     }
 
     @Test fun aSmallPageIsOnePart() {
-        assertEquals(listOf("<html></html>"), RemoteExplorerPage.split("<html></html>"))
-        assertEquals(listOf(""), RemoteExplorerPage.split(""))
+        val t = RemoteExplorerPage.prepare("<html></html>".toByteArray())
+        assertEquals(1, t.parts.size)
+        assertEquals("<html></html>", unpack(t.parts).toString(Charsets.UTF_8))
     }
 
-    @Test fun theStubCarriesHashPartsAndSize() {
+    @Test fun theStubCarriesHashPartsAndSizes() {
         val hash = "ab".repeat(32)
-        val t = RemoteExplorerPage.prepare("x".repeat(RemoteExplorerPage.PART_CHARS + 1), hash, 3_512_345)
+        val page = Random(3).nextBytes(RemoteExplorerPage.PART_CHARS)    // Base64 of it is > 1 part
+        val t = RemoteExplorerPage.prepare(page, hash)
         assertEquals(2, t.parts.size)
-        assertEquals("3.5 MB", t.sizeLabel)
+        assertEquals("263 KB", t.sizeLabel)
         assertTrue(t.stub.contains("HASH='$hash'"))
         assertTrue(t.stub.contains("PARTS=2,"))
-        assertTrue(t.stub.contains("SIZE='3.5 MB'"))
+        assertTrue(t.stub.contains("SIZE='263 KB'"))
+        assertTrue(t.stub.contains("WIRE=${t.wireChars};"))
         assertFalse("a placeholder survived", t.stub.contains("__ATLAS_"))
         assertTrue("the stub calls the bridge the editor installs", t.stub.contains("window.__atlasFetch"))
         // The whole point: the stub must cross the IDE connection in a single 16 KB resource packet.
