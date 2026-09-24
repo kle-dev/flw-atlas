@@ -165,6 +165,11 @@
               the form, decision or process a row points at, a field id, a property or parameter name. The
               button shows on the row under the pointer or the keyboard. The copy buttons on the overview's
               chips were never wired, so a click on one opened the chip's node; they copy now.</li>
+          <li><b>The explorer uses a wide window.</b> In a browser on a large screen the overview and the
+              report pages stopped at 1160px and a node's page at 1000px, which left about half of a 2560px
+              window empty beside a squeezed table. They now grow up to 2000px; descriptions keep a readable
+              line length, and a check's description on the health list hugs its words instead of stretching
+              a pill across the row. An IDE tab's width is unchanged.</li>
           <li><b>One name for every Atlas surface, one verb for opening it.</b> The tool windows are
               <i>Atlas Hub</i>, <i>Atlas Findings</i> and <i>Atlas Playground</i> — the playground used to
               be called <i>Expression Playground</i> although half of it is scripts — and every entry that
@@ -543,15 +548,6 @@
           <li><b>The explorer opens Java where it is.</b> A class opens at its declaration's line, a method
               page opens the method (it had no file at all), and the dashboard's "+ N more" entry points
               expand in place.</li>
-          <li><b>Fewer freezes.</b> A gutter click on a Java symbol or an endpoint, and the rename warning,
-              held the read lock for the whole model scan, so typing stopped until it finished. Project
-              custom functions were read inside the highlighting pass; they are now read in the background,
-              honour the custom-function settings and are read again when a
-              <code>.js</code>/<code>.ts</code> source changes, so a new function is known without a
-              restart. A call argument in Java is resolved only when its method name is a Flowable API, Go
-              to Symbol no longer repeats its searches for every matching name, the Hub no longer walks the
-              project for explorer pages on every refresh, and opening a result reads the model off the UI
-              thread.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

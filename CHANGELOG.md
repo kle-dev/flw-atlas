@@ -33,6 +33,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   or process a row points at, a field id, a property or parameter name. The button shows on the row under
   the pointer or the keyboard. The copy buttons on the overview's chips were never wired, so a click on one
   opened the chip's node; they copy now.
+- **The explorer uses a wide window.** In a browser on a large screen the overview and the report pages
+  stopped at 1160px and a node's page at 1000px, which left about half of a 2560px window empty beside a
+  squeezed table. They now grow up to 2000px; descriptions keep a readable line length, and a check's
+  description on the health list hugs its words instead of stretching a pill across the row. An IDE tab's
+  width is unchanged.
 - **One name for every Atlas surface, one verb for opening it.** The tool windows are *Atlas Hub*, *Atlas
   Findings* and *Atlas Playground* — the playground used to be called *Expression Playground* although half
   of it is scripts — and every entry that opens one reads *Open Atlas …*. Under *Generate* the entries no

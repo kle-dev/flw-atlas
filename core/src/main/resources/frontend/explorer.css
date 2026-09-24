@@ -26,6 +26,11 @@
     --text-md:calc(13px*var(--ui-scale)); --text-lg:calc(14px*var(--ui-scale)); --text-xl:calc(20px*var(--ui-scale));
     --text-2xl:calc(26px*var(--ui-scale));
     --list-w:330px;             /* live width of the browse list column (JS-set via its drag handle) */
+    /* How wide a page may grow: the overview, the report pages and a node's page. It used to be 1160 / 1000px,
+       which left half of a 2560px window empty beside a squeezed table. Prose keeps its own ch caps, so only
+       tables, grids and drawings take the room; the cap is still there so a 4K window does not stretch a row
+       until its label and its count are a screen apart. */
+    --page-max:2000px;
     --bg:#fafafa; --panel:#ffffff; --panel2:#f8fafc; --line:#e2e8f0; --line2:#d2d6da;
     --ink:#131e29; --ink-dim:#4c5b6a; --ink-faint:#79848f; --accent:#0f55d6;
     --accent-hover:#0c44ab; --accent-subtle:#eff6ff; --hover:#f1f5f9; --active:#e5f0ff; --input:#ffffff;
@@ -313,7 +318,7 @@
   /* ------------------------------------------------------------------ */
   /* Dashboard (#/overview)                                              */
   /* ------------------------------------------------------------------ */
-  .dash{padding:var(--space-5) var(--space-6) var(--space-8);max-width:1160px}
+  .dash{padding:var(--space-5) var(--space-6) var(--space-8);max-width:var(--page-max)}
   .dash-title{font-size:var(--text-xl);font-weight:600;letter-spacing:-.01em}
   .dash-sub{color:var(--ink-faint);font-size:var(--text-sm);margin-top:var(--space-05)}
   .seclabel{font-size:var(--text-xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;
@@ -385,7 +390,9 @@
   .hrow.tone-ok .hn{color:var(--ok-text)}
   .hrow .hn .ui{width:14px;height:14px}
   .hrow .hl{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .hrow .hs{color:var(--ink-faint);font-size:var(--text-xs);min-width:0}
+  /* the description is a pill: it hugs its text (a grid item stretches to its track, which on a wide page
+     drew a rounded box a thousand pixels long around a few words) */
+  .hrow .hs{color:var(--ink-faint);font-size:var(--text-xs);min-width:0;justify-self:start;max-width:100%}
   /* the severity as a word — the tone bar alone is colour, and colour alone is not a signal */
   .hrow .hsev{font-size:var(--text-2xs);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
   .hrow.tone-bad .hsev{color:var(--bad-text)}
@@ -871,7 +878,7 @@
   /* a jump to a section (the health strip, a ⌖) lands below the sticky tab bar, not under it */
   .dpane details.sect,.dpane details.elgrp{scroll-margin-top:52px}
   .ui{flex:none;width:12px;height:12px;display:inline-block;vertical-align:-.1em}
-  .dbody{padding:0 var(--space-6) var(--space-8);max-width:1000px}
+  .dbody{padding:0 var(--space-6) var(--space-8);max-width:var(--page-max)}
   .chip{display:inline-flex;align-items:center;gap:var(--space-15);font-size:var(--text-xs);font-weight:500;
     border:1px solid var(--line2);border-radius:var(--radius-full);padding:var(--space-05) var(--space-2);color:var(--ink-dim)}
   .dhero{padding:var(--space-5) 0 var(--space-3)}

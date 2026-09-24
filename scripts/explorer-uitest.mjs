@@ -1830,6 +1830,53 @@ const ideProbe = `<script>
 })();
 </script>`;
 
+// A browser window on a large screen: the pages use the room instead of stopping at an IDE tab's width.
+// They used to cap at 1160px (overview, reports) and 1000px (a node's page) — half of a 2560px window.
+const wideProbe = `<script>
+(function(){
+  const log=[], errs=[];
+  const ok=(k,cond,detail)=>log.push(k+': '+(cond?'ok':'FAIL '+(detail||'')));
+  window.addEventListener('error', e=>errs.push(e.message));
+  const noHScroll=()=>document.documentElement.scrollWidth<=window.innerWidth+1;
+  const share=(page, view)=>{ const p=document.querySelector(page), v=document.getElementById(view);
+    return p&&v ? p.getBoundingClientRect().width/v.clientWidth : 0; };
+  const steps=[];
+  steps.push(()=>{ location.hash='/overview'; });
+  steps.push(()=>{
+    const r=share('#view-overview .dash', 'view-overview');
+    ok('the overview spans the window', r>=0.85, Math.round(r*100)+'%');
+    ok('no horizontal page scroll on the overview', noHScroll());
+    location.hash='/checks';
+  });
+  steps.push(()=>{
+    const r=share('#view-checks .dash', 'view-checks');
+    ok('a report page spans the window', r>=0.85, Math.round(r*100)+'%');
+    const pill=document.querySelector('#view-checks .hrow .hs'), row=pill&&pill.closest('.hrow');
+    ok('a check’s description hugs its text', !!pill && pill.getBoundingClientRect().width<row.getBoundingClientRect().width/2,
+       pill&&Math.round(pill.getBoundingClientRect().width)+' of '+Math.round(row.getBoundingClientRect().width));
+    location.hash=encodeURIComponent('process:orderProcess');
+  });
+  steps.push(()=>{
+    const b=document.querySelector('#detail .dbody'), d=document.getElementById('detail');
+    const r=b&&d ? b.getBoundingClientRect().width/d.clientWidth : 0;
+    ok('a node page spans its column', r>=0.85, Math.round(r*100)+'%');
+    const desc=document.querySelector('#detail .ddesc');
+    // prose keeps its measure: 72ch of 13px text is well under 700px
+    ok('prose keeps a readable line length', !desc || desc.getBoundingClientRect().width<760, desc&&Math.round(desc.getBoundingClientRect().width)+'px');
+    ok('no horizontal page scroll on a node page', noHScroll());
+  });
+  let i=0;(function run(){
+    if(i>=steps.length){
+      log.push('uncaught errors: '+(errs.length?('FAIL '+errs.join(' | ')):'none'));
+      document.title='UITEST_BEGIN '+log.join(' ;; ')+' UITEST_END';
+      return;
+    }
+    try{ steps[i++](); }catch(e){ log.push('FAIL threw in step '+i+': '+e.message); }
+    setTimeout(run, 400);
+  })();
+})();
+</script>`;
+
 function runProbe(probeHtml, windowSize, label) {
   fs.writeFileSync(tmp, html.replace('</body>', probeHtml + '</body>'));
   let dom;
@@ -1863,6 +1910,7 @@ const lines = [
   ...runProbe(probe, '1400,900', 'desktop'),
   ...runProbe(narrowProbe, '800,600', 'narrow').map(l => '[800px] ' + l),
   ...runProbe(ideProbe, '1000,760', 'ide').map(l => '[1000px] ' + l),
+  ...runProbe(wideProbe, '2560,1000', 'wide').map(l => '[2560px] ' + l),
 ];
 let failed = 0;
 for (const l of lines) {

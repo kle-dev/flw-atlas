@@ -102,6 +102,10 @@ and a label cut short shows in full on hover. Dragging the edge below 140px, or 
 narrowest width, collapses it to the icon rail, which flies out on hover; a double-click on the edge, or
 `Home`, goes back to the automatic layout.
 
+On a large screen the pages take the room: the overview, the report pages and a node's page grow up to
+2000px wide, so tables, the health list and the diagram use the window rather than stopping at an IDE
+tab's width. Descriptions and other prose keep a readable line length.
+
 Each group folds — click its header, or press `←` on any of its entries — and the fold is remembered, so
 a project with forty variable scopes need not show them on every visit. A folded group whose entry is
 the one you are on says so with a dot on its header, and stays folded: the sidebar never reopens itself
