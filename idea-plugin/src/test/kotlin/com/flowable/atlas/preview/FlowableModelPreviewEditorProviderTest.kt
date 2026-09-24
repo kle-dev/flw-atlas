@@ -121,6 +121,56 @@ class FlowableModelPreviewEditorProviderTest : BasePlatformTestCase() {
         }
     }
 
+    /**
+     * Typing breaks the model for a moment at most keystrokes. The picture stays as it last parsed, with a
+     * line saying so, rather than flipping to "no layout" and back while someone types.
+     */
+    fun testAHalfTypedModelKeepsTheLastPicture() {
+        val file = myFixture.addFileToProject("models/DEMO-F006.form", FORM).virtualFile
+        val editor = provider.createEditor(project, file) as FlowableModelPreviewEditorProvider.ModelEditor
+        try {
+            editor.component
+            val preview = editor.previewEditor as FlowableModelPreview
+            PlatformTestUtil.waitWithEventsDispatching("the wireframe never arrived", { preview.document != null }, 10)
+            val drawn = preview.document
+            val document = com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().getDocument(file)!!
+            com.intellij.openapi.command.WriteCommandAction.runWriteCommandAction(project) {
+                document.setText(FORM.dropLast(12))
+            }
+            PlatformTestUtil.waitWithEventsDispatching("the stale line never came up", { preview.showsStalePicture }, 10)
+            assertSame("the last picture that parsed stays up", drawn, preview.document)
+            com.intellij.openapi.command.WriteCommandAction.runWriteCommandAction(project) { document.setText(FORM) }
+            PlatformTestUtil.waitWithEventsDispatching("the stale line never went away", { !preview.showsStalePicture }, 10)
+        } finally {
+            Disposer.dispose(editor)
+        }
+    }
+
+    /** The picture says what can be clicked before anyone clicks: an element under the pointer is outlined. */
+    fun testHoveringAnElementOutlinesItAndNamesIt() {
+        val file = myFixture.addFileToProject("models/DEMO-F007.form", FORM).virtualFile
+        val editor = provider.createEditor(project, file) as FlowableModelPreviewEditorProvider.ModelEditor
+        try {
+            editor.component
+            val preview = editor.previewEditor as FlowableModelPreview
+            PlatformTestUtil.waitWithEventsDispatching("the wireframe never arrived", { preview.document != null }, 10)
+            val cell = com.flowable.atlas.diagram.FormSvgRenderer.picture(FORM.toByteArray())!!.hotspots.single { it.id == "amount" }
+            val hover = preview.hoverForTest(java.awt.geom.Point2D.Double(cell.x + cell.width / 2, cell.y + cell.height / 2))!!
+            assertTrue(hover.tooltip, hover.tooltip.startsWith("amount"))
+            assertEquals(cell.width, hover.bounds.width)
+        } finally {
+            Disposer.dispose(editor)
+        }
+    }
+
+    fun testActualSizeIsAHundredPercent() {
+        val canvas = SvgCanvas()
+        canvas.actualSize()
+        assertEquals(100, canvas.zoomPercent())
+        canvas.zoomBy(1.25)
+        assertEquals(125, canvas.zoomPercent())
+    }
+
     private companion object {
         const val FORM = """{"metadata":{"name":"Claim"},"rows":[{"cols":[{"id":"amount","type":"number","label":"Amount","size":12}]}]}"""
     }

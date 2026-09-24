@@ -56,8 +56,11 @@ import javax.swing.SwingConstants
  * [DiagramSvgCache] renders it, painted by [SvgCanvas]. Rendering runs off the EDT; a loose model file
  * that changes on disk (a pull, a checkout) or in its editor is drawn again. Archive entries do not
  * change in place. A click on an element — a task, a plan item, a decision rule, a form component — puts
- * the text editor's caret on its declaration; a double click (or Ctrl/⌘-click) on a subform opens the
- * form it embeds.
+ * the text editor's caret on its declaration; a double click (or ⌘-click on macOS, Ctrl-click elsewhere)
+ * on a subform opens the form it embeds.
+ *
+ * While the text is being typed it will not always parse. The picture then stays as it last was, with a
+ * thin line above it saying so, instead of flipping to "no layout" at every keystroke.
  */
 internal class FlowableModelPreview(
     private val project: Project,
@@ -67,8 +70,21 @@ internal class FlowableModelPreview(
 
     private val canvas = SvgCanvas()
     private val message = JBLabel("", SwingConstants.CENTER).apply { foreground = UIUtil.getContextHelpForeground() }
+    /** "The text does not parse — the picture is the last one that did." Shown only while that is true. */
+    private val staleLine = JBLabel(FlowableAtlasBundle.message("preview.stale"), AllIcons.General.Warning, SwingConstants.LEFT).apply {
+        border = JBUI.Borders.empty(3, 8)
+        foreground = UIUtil.getContextHelpForeground()
+        isVisible = false
+    }
+    private val zoomLabel = JBLabel().apply {
+        foreground = UIUtil.getContextHelpForeground()
+        border = JBUI.Borders.emptyRight(10)
+    }
     private val cards = JPanel(CardLayout()).apply {
-        add(JBScrollPane(canvas).apply { border = JBUI.Borders.empty() }, CANVAS)
+        add(JPanel(BorderLayout()).apply {
+            add(staleLine, BorderLayout.NORTH)
+            add(JBScrollPane(canvas).apply { border = JBUI.Borders.empty() }, BorderLayout.CENTER)
+        }, CANVAS)
         add(message, MESSAGE)
     }
     private val root = JPanel(BorderLayout())
@@ -85,10 +101,15 @@ internal class FlowableModelPreview(
         val actions = zoomActions()
         val toolbar = ActionManager.getInstance().createActionToolbar("FlowableModelPreview", actions, true)
         toolbar.targetComponent = canvas
-        root.add(toolbar.component, BorderLayout.NORTH)
+        root.add(JPanel(BorderLayout()).apply {
+            add(toolbar.component, BorderLayout.CENTER)
+            add(zoomLabel, BorderLayout.EAST)
+        }, BorderLayout.NORTH)
         root.add(cards, BorderLayout.CENTER)
         canvas.onClick = ::select
         canvas.onOpen = { at -> if (!open(at)) select(at) }
+        canvas.onZoom = { zoomLabel.text = "$it %" }
+        canvas.hitTest = ::hover
         show(FlowableAtlasBundle.message("preview.rendering"))
         render()
         if (file.isInLocalFileSystem) {
@@ -107,21 +128,32 @@ internal class FlowableModelPreview(
     /** The drawing on show, null while rendering or when the model has none. */
     internal val document: SVGDocument? get() = canvas.document
 
+    /** For tests: whether the line saying the picture is the last one that parsed is up. */
+    internal val showsStalePicture: Boolean get() = staleLine.isVisible
+
+    /** For tests: what hovering at [at] would outline and say. */
+    internal fun hoverForTest(at: Point2D.Double): SvgCanvas.Hover? = hover(at)
+
     private fun render() {
         ApplicationManager.getApplication().executeOnPooledThread {
+            // Whether this pass drew the editor's unsaved text: a half-typed model is expected not to parse.
+            val typing = ReadAction.computeBlocking<Boolean, RuntimeException> { FileDocumentManager.getInstance().isFileModified(file) }
             val drawn = runCatching { load() }
-                .onFailure { LOG.warn("Could not draw the preview of ${file.path}", it) }
+                .onFailure { if (!typing) LOG.warn("Could not draw the preview of ${file.path}", it) }
             ApplicationManager.getApplication().invokeLater({
                 if (disposed) return@invokeLater
                 val doc = drawn.getOrNull()
                 when {
+                    // Mid-edit: keep the last picture that did parse, and say that it is the last one.
+                    doc == null && typing && canvas.document != null -> staleLine.isVisible = true
                     // A renderer that threw is a defect worth naming — not a model without a layout.
                     drawn.isFailure -> show(FlowableAtlasBundle.message("preview.failed",
                         drawn.exceptionOrNull()?.message ?: drawn.exceptionOrNull()?.javaClass?.simpleName ?: ""))
-                    doc == null -> show(FlowableAtlasBundle.message("linemarker.diagram.nolayout"))
+                    doc == null -> show(FlowableAtlasBundle.message("preview.nolayout"))
                     else -> {
+                        staleLine.isVisible = false
                         canvas.document = doc
-                        canvas.toolTipText = hitMap?.let {
+                        canvas.hint = hitMap?.let {
                             FlowableAtlasBundle.message(if (it.opensModels) "preview.hint.subform" else "preview.hint")
                         }
                         (cards.layout as CardLayout).show(cards, CANVAS)
@@ -129,6 +161,14 @@ internal class FlowableModelPreview(
                 }
             }, project.disposed)
         }
+    }
+
+    /** What hovering the picture at [at] outlines and says: the element's id, and what a double click opens. */
+    private fun hover(at: Point2D.Double): SvgCanvas.Hover? {
+        val hit = hitMap?.hitAt(at) ?: return null
+        val tip = hit.ref?.let { FlowableAtlasBundle.message("preview.hover.opens", hit.id, it.substringAfter(':')) }
+            ?: FlowableAtlasBundle.message("preview.hover", hit.id)
+        return SvgCanvas.Hover(hit.bounds, tip)
     }
 
     private fun load(): SVGDocument? {
@@ -156,11 +196,14 @@ internal class FlowableModelPreview(
         return text.byteInputStream().use { SVGLoader().load(it, null, LoaderContext.createDefault()) }
     }
 
-    /** A click on the picture: put the text editor's caret on the element under it. */
+    /**
+     * A click on the picture: put the text editor's caret on the element under it — without taking the
+     * focus from the picture, so the zoom keys keep working; the Structure view follows the caret anyway.
+     */
     private fun select(at: Point2D.Double) {
         val text = FileDocumentManager.getInstance().getDocument(file)?.text ?: return
         val offset = offsetAt(at, text) ?: return
-        OpenFileDescriptor(project, file, offset).navigate(true)
+        OpenFileDescriptor(project, file, offset).navigate(false)
     }
 
     /** A double click on the picture: open the model the element under it embeds — a form's subform. */
@@ -190,15 +233,18 @@ internal class FlowableModelPreview(
         zoomAction("preview.zoomIn", AllIcons.Graph.ZoomIn, KeyEvent.VK_EQUALS) { canvas.zoomBy(1.25) },
         zoomAction("preview.zoomOut", AllIcons.Graph.ZoomOut, KeyEvent.VK_MINUS) { canvas.zoomBy(0.8) },
         zoomAction("preview.fitWidth", AllIcons.General.FitContent, KeyEvent.VK_0) { canvas.fitWidth() },
+        // No key of its own: Ctrl/⌘ + 1 is the Project tool window, and a picture must not shadow it.
+        zoomAction("preview.actualSize", AllIcons.General.ActualZoom, null) { canvas.actualSize() },
     )
 
-    /** A toolbar zoom action, also on Ctrl/⌘ + [key] while the picture has the focus. */
-    private fun zoomAction(key: String, icon: javax.swing.Icon, keyCode: Int, run: () -> Unit) =
+    /** A toolbar zoom action, also on Ctrl/⌘ + [keyCode] while the picture has the focus. */
+    private fun zoomAction(key: String, icon: javax.swing.Icon, keyCode: Int?, run: () -> Unit) =
         object : DumbAwareAction(FlowableAtlasBundle.message(key), null, icon) {
             override fun actionPerformed(e: AnActionEvent) = run()
             override fun update(e: AnActionEvent) { e.presentation.isEnabled = canvas.document != null }
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
         }.also {
+            if (keyCode == null) return@also
             val mask = if (SystemInfo.isMac) InputEvent.META_DOWN_MASK else InputEvent.CTRL_DOWN_MASK
             it.registerCustomShortcutSet(CustomShortcutSet(KeyStroke.getKeyStroke(keyCode, mask)), canvas)
         }

@@ -2,6 +2,10 @@ package com.flowable.atlas.preview
 
 import com.github.weisj.jsvg.SVGDocument
 import com.github.weisj.jsvg.view.ViewBox
+import com.intellij.openapi.util.SystemInfo
+import com.intellij.ui.JBColor
+import com.intellij.util.ui.JBUI
+import java.awt.BasicStroke
 import java.awt.Cursor
 import java.awt.Dimension
 import java.awt.Graphics
@@ -13,11 +17,13 @@ import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.awt.event.MouseWheelEvent
 import java.awt.geom.Point2D
+import java.awt.geom.Rectangle2D
 import javax.swing.JComponent
 import javax.swing.JViewport
 import javax.swing.Scrollable
 import javax.swing.SwingConstants
 import javax.swing.SwingUtilities
+import kotlin.math.roundToInt
 
 /**
  * Paints an SVG document with plain Swing, through JSVG, the SVG library the platform itself draws its
@@ -26,9 +32,15 @@ import javax.swing.SwingUtilities
  * any other Swing component.
  *
  * Fits the width of the view by default (never enlarging past 100 %). [zoomBy] switches to a fixed
- * zoom, and [fitWidth] switches back. Ctrl/⌘ + wheel zooms about the pointer, a drag pans, a plain wheel
- * scrolls; a click that is not a drag reports the point in the drawing's own coordinates to [onClick] —
- * a double click or a Ctrl/⌘-click to [onOpen], when there is one.
+ * zoom, [actualSize] to 100 %, and [fitWidth] switches back. Ctrl/⌘ + wheel zooms about the pointer, a
+ * drag pans, a plain wheel scrolls; a click that is not a drag reports the point in the drawing's own
+ * coordinates to [onClick] — a double click, or ⌘-click on macOS and Ctrl-click elsewhere (a macOS
+ * Ctrl-click is the context click), to [onOpen], when there is one.
+ *
+ * The drawing is white whatever the IDE's theme, as in the explorer and in Design, so it is shown as a
+ * sheet: framed, on the panel's background, instead of a white block with no edge in a dark IDE. An
+ * element under the pointer ([hitTest]) is outlined and turns the pointer into a hand — the picture says
+ * what can be clicked before anyone clicks. A click takes the focus, so the zoom keys reach the picture.
  */
 internal class SvgCanvas : JComponent(), Scrollable {
 
@@ -45,14 +57,33 @@ internal class SvgCanvas : JComponent(), Scrollable {
     /** Told where a double click or a Ctrl/⌘-click landed, in the document's coordinates. */
     var onOpen: ((Point2D.Double) -> Unit)? = null
 
+    /** The element under a point of the document, if any: its box and what hovering it should say. */
+    var hitTest: ((Point2D.Double) -> Hover?)? = null
+
+    /** Told the zoom in percent whenever it changes — fitting the width changes it with the view's width. */
+    var onZoom: ((Int) -> Unit)? = null
+
+    /** What the canvas says when the pointer is over no element. */
+    var hint: String? = null
+        set(value) {
+            field = value
+            if (hover == null) toolTipText = value
+        }
+
+    data class Hover(val bounds: Rectangle2D.Double, val tooltip: String)
+
     private var fixedZoom: Double? = null
+    private var hover: Hover? = null
+    private var reportedZoom = -1
 
     init {
+        isFocusable = true
         val mouse = object : MouseAdapter() {
             private var pressedAt: Point? = null
             private var dragged = false
 
             override fun mousePressed(e: MouseEvent) {
+                requestFocusInWindow()
                 if (!SwingUtilities.isLeftMouseButton(e)) return
                 pressedAt = e.locationOnScreen
                 dragged = false
@@ -76,13 +107,18 @@ internal class SvgCanvas : JComponent(), Scrollable {
 
             override fun mouseReleased(e: MouseEvent) {
                 if (pressedAt != null && !dragged) toDocument(e.point)?.let { p ->
-                    val open = onOpen?.takeIf { e.clickCount >= 2 || e.isControlDown || e.isMetaDown }
+                    val modifier = if (SystemInfo.isMac) e.isMetaDown else e.isControlDown
+                    val open = onOpen?.takeIf { e.clickCount >= 2 || modifier }
                     (open ?: onClick)?.invoke(p)
                 }
                 pressedAt = null
                 dragged = false
-                cursor = Cursor.getDefaultCursor()
+                updateHover(e.point)
             }
+
+            override fun mouseMoved(e: MouseEvent) = updateHover(e.point)
+
+            override fun mouseExited(e: MouseEvent) = setHover(null)
 
             override fun mouseWheelMoved(e: MouseWheelEvent) {
                 if (e.isControlDown || e.isMetaDown) {
@@ -97,6 +133,25 @@ internal class SvgCanvas : JComponent(), Scrollable {
         addMouseListener(mouse)
         addMouseMotionListener(mouse)
         addMouseWheelListener(mouse)
+    }
+
+    private fun updateHover(p: Point) = setHover(toDocument(p)?.let { hitTest?.invoke(it) })
+
+    private fun setHover(h: Hover?) {
+        if (h == hover) return
+        hover = h
+        cursor = if (h != null) Cursor.getPredefinedCursor(Cursor.HAND_CURSOR) else Cursor.getDefaultCursor()
+        toolTipText = h?.tooltip ?: hint
+        repaint()
+    }
+
+    /** The zoom in percent, as the toolbar reads it. */
+    fun zoomPercent(): Int = (zoom() * 100).roundToInt()
+
+    fun actualSize() {
+        fixedZoom = 1.0
+        revalidate()
+        repaint()
     }
 
     fun zoomBy(factor: Double) = zoomBy(factor, null)
@@ -169,8 +224,22 @@ internal class SvgCanvas : JComponent(), Scrollable {
             g2.translate(originX(z), MARGIN.toDouble())
             g2.scale(z, z)
             doc.render(this, g2, ViewBox(0f, 0f, size.width, size.height))
+            // The sheet's edge, one device pixel whatever the zoom.
+            g2.stroke = BasicStroke((1 / z).toFloat())
+            g2.color = JBColor.border()
+            g2.draw(Rectangle2D.Double(0.0, 0.0, size.width.toDouble(), size.height.toDouble()))
+            hover?.let { h ->
+                g2.stroke = BasicStroke((2 / z).toFloat())
+                g2.color = JBUI.CurrentTheme.Focus.focusColor()
+                g2.draw(h.bounds)
+            }
         } finally {
             g2.dispose()
+        }
+        val percent = zoomPercent()
+        if (percent != reportedZoom) {
+            reportedZoom = percent
+            onZoom?.invoke(percent)
         }
     }
 
@@ -187,7 +256,7 @@ internal class SvgCanvas : JComponent(), Scrollable {
     override fun getScrollableTracksViewportHeight(): Boolean = false
 
     private companion object {
-        const val MARGIN = 12
+        const val MARGIN = 16
         const val MIN_ZOOM = 0.1
         const val MAX_ZOOM = 4.0
         const val DRAG_THRESHOLD = 4

@@ -2,6 +2,7 @@ package com.flowable.atlas.preview
 
 import com.flowable.atlas.diagram.Picture
 import java.awt.geom.Point2D
+import java.awt.geom.Rectangle2D
 
 /**
  * Which model element lies under a point of a drawn picture — a diagram shape, a form component, a
@@ -16,6 +17,13 @@ internal class HitMap private constructor(private val picture: Picture) {
 
     /** The model the element under [p] opens — `<type>:<key>`, a form's subform — or null. */
     fun refAt(p: Point2D.Double): String? = hotspotAt(p)?.ref
+
+    /** The element under [p] with its box in the document's coordinates — what the preview outlines on hover. */
+    fun hitAt(p: Point2D.Double): Hit? = hotspotAt(p)?.let {
+        Hit(it.id, Rectangle2D.Double(it.x - picture.viewBox.x, it.y - picture.viewBox.y, it.width, it.height), it.ref)
+    }
+
+    data class Hit(val id: String, val bounds: Rectangle2D.Double, val ref: String?)
 
     /** Whether some element opens another model — the preview says a double click does that. */
     val opensModels: Boolean get() = picture.hotspots.any { it.ref != null }

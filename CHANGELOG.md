@@ -49,6 +49,14 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   changelog that creates the table — for a data object through its service, the live definition first.
   Each is a link with its key to copy. A copy button shows the ordinary pointer now, not the copy cursor
   with its plus badge.
+- **The model picture is a sheet you can point at.** The drawing stays white in every theme, as in the
+  explorer, but now sits on the panel as a framed sheet rather than a white block with no edge in a dark
+  IDE. The element under the pointer is outlined, the pointer turns into a hand and the tooltip names the
+  element, so what can be clicked is visible before a click. A click leaves the focus on the picture, which
+  is what the zoom keys needed — they were registered on a component that never got the focus. The toolbar
+  gains *Actual Size* and a zoom readout. Half-typed text that does not parse keeps the last picture up,
+  with a line saying so, instead of flipping to "no layout" at every keystroke. Opening a subform is ⌘-click
+  on macOS, where Ctrl-click is the context click.
 - **The explorer tab loads, fails and comes back where it was.** A spinner at the right of its toolbar says
   the page is loading — the tab used to stay blank until the browser painted — and a page the embedded
   browser cannot load is replaced by a panel naming the file and the reason, with *Reload* and *Regenerate

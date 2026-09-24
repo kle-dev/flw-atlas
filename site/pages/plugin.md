@@ -313,12 +313,21 @@ depends on an expression is spelled out beside the id; one that is plainly off g
 It is a developer's map of the form, not a preview of the Work UI.
 
 The picture is painted in Swing on the IDE host, not in a browser panel, so it stays fast under Remote
-Development, where every resource a JCEF view loads is a round trip to the client. It fits the width,
-zooms from its toolbar, and redraws when the file changes on disk. A click on what it draws — a task, a
-plan item, a decision rule, a form component — puts the caret on that element's declaration beside it:
-the id itself, not a flow or a JSON key that happens to mention it first. It is the same picture the
-explorer shows on the model's page and the diagrams folder holds. The editor's layout toggle hides
-either half; going to a line brings the text back.
+Development, where every resource a JCEF view loads is a round trip to the client. The drawing is white
+in every theme, as in the explorer and in Design, so it sits on the panel as a framed sheet rather than a
+white block without an edge in a dark IDE. It fits the width, zooms from its toolbar — *Zoom In*, *Zoom
+Out*, *Fit Width*, *Actual Size*, with the zoom in percent beside them — and redraws when the file changes
+on disk or in the text beside it. While the text does not parse, half-typed, the picture stays as it last
+parsed with a line above it saying so, instead of flickering to "no layout" at every keystroke.
+
+The picture says what can be clicked before anyone clicks: the element under the pointer is outlined and
+the pointer becomes a hand, with the element's id in the tooltip. A click — on a task, a plan item, a
+decision rule, a form component — puts the caret on that element's declaration beside it: the id itself,
+not a flow or a JSON key that happens to mention it first. The click leaves the focus on the picture, so
+Ctrl/⌘ + `=`, `-`, `0` keep zooming. A double click on a subform — or ⌘-click on macOS, Ctrl-click
+elsewhere — opens the form it embeds. It is the same picture the explorer shows on the model's page and
+the diagrams folder holds. The editor's layout toggle hides either half; going to a line brings the text
+back.
 
 The **Structure** tool window outlines the same models: a form's or page's components as Design nests
 them, each by its caption with its id beside it, and a process's or case's elements by name, without the
