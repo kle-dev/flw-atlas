@@ -299,7 +299,10 @@ selects the environment or connection it is about, beside the message saying wha
 | Flowable Work | Server URL · *Detect from Project* · username · password · browser session (*Sign in via Browser…*, *Paste Session…*) · *Test Connection* |
 
 The explanations that used to stand under the sign-in buttons as paragraphs — why *Create Token…* fails
-behind SSO, when a browser session is what gets you in — are help marks beside those buttons now.
+behind SSO, when a browser session is what gets you in — are help marks beside those buttons now. The
+dialogs behind them refuse what cannot work before they close: *Paste Session…* a paste with no Cookie,
+Authorization or CSRF header in it, *Sign In to Flowable* until a session cookie for the server has been
+seen, and *Create Token…* a blank username (a blank validity is a token that does not expire).
 
 An environment holds **at most one connection of each kind, and may hold only one of the two** — a QA
 stage with a running app and no Design server is an ordinary thing, shown without any warning. Two

@@ -10,6 +10,7 @@ import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBRadioButton
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextField
+import com.intellij.ui.dsl.builder.Align
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.Panel
 import com.intellij.ui.dsl.builder.panel
@@ -115,18 +116,24 @@ abstract class GenerateTableDialog<S : Enum<S>, R : GenerateTableDialog.Row>(
         switchSource(initial)
     }
 
-    override fun createCenterPanel(): JComponent = JPanel(BorderLayout(0, 8)).apply {
-        add(
-            JPanel(BorderLayout()).apply {
-                // The DSL owns the radios' ButtonGroup — it refuses a pre-built radio outside buttonsGroup.
-                add(panel { buttonsGroup { row { label(message("dialog.generate.source")); radios.values.forEach { cell(it) }; headerExtras(this) } } }, BorderLayout.WEST)
-                add(panel { row { cell(selectAllLink); cell(clearLink) } }, BorderLayout.EAST)
-            },
-            BorderLayout.NORTH,
-        )
+    /**
+     * One panel, top to bottom — the source, the table, the footer's fields — so every label sits in one
+     * column. It used to be three separate panels in a border layout, and *Source:*, *Output folder:* and
+     * *File name pattern:* each started their field at a different place.
+     */
+    override fun createCenterPanel(): JComponent = panel {
+        // The DSL owns the radios' ButtonGroup — it refuses a pre-built radio outside buttonsGroup.
+        buttonsGroup {
+            row(message("dialog.generate.source")) {
+                radios.values.forEach { cell(it) }
+                headerExtras(this)
+                cell(selectAllLink).align(AlignX.RIGHT).resizableColumn()
+                cell(clearLink)
+            }
+        }
         // One size for both dialogs, in scaled units — the old Dimension constants ignored HiDPI.
-        add(JBScrollPane(table).apply { preferredSize = JBUI.size(820, 280) }, BorderLayout.CENTER)
-        add(panel { footer(this) }.apply { border = JBUI.Borders.emptyTop(4) }, BorderLayout.SOUTH)
+        row { cell(JBScrollPane(table).apply { preferredSize = JBUI.size(820, 280) }).align(Align.FILL) }.resizableRow()
+        footer(this)
     }
 
     override fun getPreferredFocusedComponent(): JComponent = table
@@ -166,10 +173,12 @@ abstract class GenerateTableDialog<S : Enum<S>, R : GenerateTableDialog.Row>(
     override fun doValidate(): ValidationInfo? {
         validateFooter()?.let { return it }
         val included = rows.filter { it.include }
-        if (included.isEmpty()) return ValidationInfo("Select at least one $itemNoun to generate.")
+        // Anchored to the table, so the message points at the rows it is about rather than floating
+        // above the buttons.
+        if (included.isEmpty()) return ValidationInfo("Select at least one $itemNoun to generate.", table)
         validateIncluded(included)?.let { return it }
         val duplicate = included.groupingBy { targetOf(it) }.eachCount().entries.firstOrNull { it.value > 1 }?.key
-        if (duplicate != null) return ValidationInfo(duplicateMessage(duplicate))
+        if (duplicate != null) return ValidationInfo(duplicateMessage(duplicate), table)
         return null
     }
 

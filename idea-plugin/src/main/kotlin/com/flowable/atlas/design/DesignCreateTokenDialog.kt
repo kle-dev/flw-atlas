@@ -1,25 +1,29 @@
 package com.flowable.atlas.design
 
+import com.intellij.ui.dsl.builder.columns
+import com.intellij.ui.dsl.builder.panel
+import com.intellij.ui.dsl.builder.COLUMNS_TINY
+import com.intellij.ui.dsl.builder.COLUMNS_MEDIUM
+import com.intellij.openapi.util.text.StringUtil
 import com.flowable.atlas.FlowableAtlasBundle
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.ValidationInfo
-import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPasswordField
 import com.intellij.ui.components.JBTextField
-import java.awt.FlowLayout
 import java.net.InetAddress
-import javax.swing.BoxLayout
 import javax.swing.JComponent
-import javax.swing.JPanel
 
 /**
  * Collects what [DesignClient.createAccessToken] needs so the user can mint a Design personal access
  * token without leaving the IDE — and, once stored, without a password in the keychain at all.
  *
- * **Input only:** the dialog performs no network or keychain access; `DesignConnectionForm` runs the
- * call on a pooled thread after OK. The username/password typed here authenticate that one request and
- * are never persisted.
+ * **Input only:** the dialog performs no network or keychain access; [com.flowable.atlas.settings.connections.ServerConnectionForm]
+ * runs the call on a pooled thread after OK and puts the token into its access-token field, which *Apply*
+ * then stores. The username/password typed here authenticate that one request and are never persisted.
+ *
+ * Laid out with the UI DSL, one field per row with the labels in a column; it was a stack of flow rows
+ * with the password beside the username, and the fields did not line up.
  */
 class DesignCreateTokenDialog(project: Project, private val baseUrl: String) : DialogWrapper(project) {
 
@@ -41,25 +45,27 @@ class DesignCreateTokenDialog(project: Project, private val baseUrl: String) : D
         init()
     }
 
-    override fun createCenterPanel(): JComponent = JPanel().apply {
-        layout = BoxLayout(this, BoxLayout.Y_AXIS)
-        add(
-            JBLabel(
-                "<html>Signs in to <b>$baseUrl</b> once with your username/password to create a personal " +
-                    "access token, then uses only the token.<br>" +
-                    "Design shows a token's value just once, so it is stored right away in the IDE " +
-                    "PasswordSafe when you click Apply.<br>" +
-                    "If this Design is behind SSO, username/password is disabled there — create the token " +
-                    "in Design itself via \"Manage in Design…\" instead.</html>",
-            ),
-        )
-        add(row(JBLabel("Username:"), usernameField, JBLabel("  Password:"), passwordField))
-        add(row(JBLabel("Token name:"), nameField))
-        add(row(JBLabel("Valid for (days):"), daysField))
+    override fun createCenterPanel(): JComponent = panel {
+        row {
+            text(
+                "Signs in to <b>${StringUtil.escapeXmlEntities(baseUrl)}</b> once with your username and password to " +
+                    "create a personal access token; from then on only the token is used. Design shows a " +
+                    "token's value just once, so it goes straight into the access-token field, and Apply " +
+                    "stores it in the IDE password safe. Behind SSO, Design switches the username and " +
+                    "password off — create the token in Design itself with <i>Manage in Design…</i> instead.",
+                maxLineLength = 70,
+            )
+        }
+        row("Username:") { cell(usernameField).columns(COLUMNS_MEDIUM) }
+        row("Password:") { cell(passwordField).columns(COLUMNS_MEDIUM) }
+        row("Token name:") { cell(nameField).columns(COLUMNS_MEDIUM) }
+        row("Valid for (days):") {
+            cell(daysField).columns(COLUMNS_TINY).comment("Leave it empty for a token that does not expire.")
+        }
     }
 
-    private fun row(vararg parts: JComponent): JPanel =
-        JPanel(FlowLayout(FlowLayout.LEFT, 6, 2)).apply { parts.forEach { add(it) } }
+    /** For tests: the form, built the way the dialog builds it. */
+    internal fun formForTest(): JComponent = createCenterPanel()
 
     override fun getPreferredFocusedComponent(): JComponent = usernameField
 

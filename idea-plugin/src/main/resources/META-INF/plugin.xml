@@ -183,6 +183,16 @@
               table — for a data object through its service, the live definition first. Each is a link with
               its key to copy. A copy button shows the ordinary pointer now, not the copy cursor with its
               plus badge.</li>
+          <li><b>Dialogs check before they close.</b> <i>Paste Session…</i> refuses a paste that carries no
+              session header — it used to close and report the problem afterwards, with the pasted text gone
+              — and <i>Sign In to Flowable</i> (no longer "Flowable App": Design uses it too) enables <i>Use
+              this session</i> once a session cookie has been seen. <i>Create Access Token</i> is laid out
+              in one column of labels, says where the token goes (the access-token field; Apply stores it)
+              and that a blank validity never expires. The two Generate dialogs are one column of labels
+              from the source to the footer, name their patterns as the settings pages do, and point a
+              problem with the selected rows at the table. The Liquibase dialog's <i>Browse</i> no longer
+              writes an absolute path, and an absolute folder typed in is refused — the check trimmed the
+              leading slash first, so one got through and every row read "new".</li>
           <li><b>Settings say whose they are.</b> Every project settings page names the Flowable project its
               values belong to when that is a question — a sub-project is chosen, or the repository holds
               several — since the choice is made elsewhere, in the Atlas Hub. <i>Apply</i> on the
@@ -533,19 +543,6 @@
               operation get the same section from their own lists. The section listing the variables and
               expressions a model touches is called <i>Variables &amp; expressions</i> now; as <i>Uses</i>
               it collided with the drawing's USES column.</li>
-          <li><b>A process's elements in one section.</b> User tasks, service tasks, script tasks, call
-              activities, events, gateways, sequence flows, lanes, listeners and documentation — for a case
-              its plan model, sentries and event listeners — were a section each, seventeen on a big
-              process. They are the groups of one <i>Elements</i> section on the Details tab now, each
-              keeping its own table, with a chip per kind that keeps only that kind and one filter over all
-              of them.</li>
-          <li><b>The overview summarises instead of repeating.</b> Its health block was the Checks page's
-              list and its inventory the sidebar's entries as ungrouped chips. Health is now two numbers —
-              the open defects and advice, each split by tier (broken, runtime risk, unfinished, noise) —
-              the five checks with the most to say and one line for the rest, every part a way into the
-              Checks page; the inventory lists the sidebar's entries grouped as the sidebar groups them. The
-              two-column layout follows the overview's own width, so an editor tab stacks it where the room
-              runs out.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

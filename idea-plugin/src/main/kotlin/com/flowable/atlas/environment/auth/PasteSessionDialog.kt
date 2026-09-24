@@ -1,5 +1,6 @@
 package com.flowable.atlas.environment.auth
 
+import com.intellij.openapi.ui.ValidationInfo
 import com.flowable.atlas.FlowableAtlasBundle
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
@@ -8,7 +9,6 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextArea
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
-import java.awt.Dimension
 import javax.swing.JComponent
 import javax.swing.JPanel
 
@@ -49,10 +49,24 @@ class PasteSessionDialog(project: Project) : DialogWrapper(project) {
             ),
             BorderLayout.NORTH,
         )
-        add(JBScrollPane(textArea).apply { preferredSize = Dimension(720, 260) }, BorderLayout.CENTER)
+        add(JBScrollPane(textArea).apply { preferredSize = JBUI.size(720, 260) }, BorderLayout.CENTER)
     }
 
     override fun getPreferredFocusedComponent(): JComponent = textArea
+
+    /**
+     * Refuses to close on a paste that carries no session: an empty box, or a request copied without its
+     * Cookie. It used to close, and the page behind it said so afterwards — with the pasted text gone.
+     */
+    override fun doValidate(): ValidationInfo? =
+        if (CurlAuthParser.parse(textArea.text).hasAny) null
+        else ValidationInfo(FlowableAtlasBundle.message("dialog.pasteSession.empty"), textArea)
+
+    /** For tests: whether [text] would be accepted. */
+    internal fun validateWith(text: String): ValidationInfo? {
+        textArea.text = text
+        return doValidate()
+    }
 
     override fun doOKAction() {
         parsed = CurlAuthParser.parse(textArea.text)

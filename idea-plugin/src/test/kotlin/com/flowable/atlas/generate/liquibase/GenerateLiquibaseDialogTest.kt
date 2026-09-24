@@ -84,4 +84,19 @@ class GenerateLiquibaseDialogTest : BasePlatformTestCase() {
             )
         }
     }
+
+    /**
+     * An absolute output folder is refused, like on the settings page. It used to pass: the check trimmed
+     * the leading slash first, so "/Users/…" looked like a folder named "Users" inside the project.
+     */
+    fun testAnAbsoluteOutputFolderIsRefused() {
+        addDataObjects()
+        withDialog(LiquibaseSource.DATA_OBJECTS) { dialog ->
+            dialog.selectAllForTesting()
+            dialog.setOutputDirForTesting("/tmp/DEMO-changelogs")
+            assertEquals("The output folder must be relative to the project directory.", dialog.validationMessageForTesting())
+            dialog.setOutputDirForTesting("src/main/resources/liquibase")
+            assertNull(dialog.validationMessageForTesting())
+        }
+    }
 }

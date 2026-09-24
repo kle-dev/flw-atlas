@@ -1,5 +1,11 @@
 package com.flowable.atlas.generate.liquibase
 
+import java.io.File
+import java.nio.file.Path
+import com.flowable.atlas.settings.relativeToProject
+import com.flowable.atlas.project.AtlasProjectRootService
+import javax.swing.JTextField
+import com.intellij.openapi.ui.TextComponentAccessor
 import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.generate.GenerateTableDialog
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
@@ -63,9 +69,19 @@ class GenerateLiquibaseDialog(
 
     init {
         outputDirField.text = settings.liquibaseOutputDir
+        // Written project-relative, like every folder field on the settings pages: the default listener
+        // wrote the absolute path, which the settings page then refused and the "exists" column could not
+        // resolve — every row read "new".
         outputDirField.addBrowseFolderListener(
             project,
             FileChooserDescriptorFactory.createSingleFolderDescriptor().withTitle("Select Liquibase Output Folder"),
+            object : TextComponentAccessor<JTextField> {
+                override fun getText(component: JTextField): String = component.text
+                override fun setText(component: JTextField, text: String) {
+                    val base = AtlasProjectRootService.getInstance(project).activeProjectDir()
+                    component.text = if (base != null) relativeToProject(base, Path.of(text)) else text
+                }
+            },
         )
         patternField.text = settings.liquibaseFileNamePattern
         renameFindField.text = settings.liquibaseRenameFind
@@ -95,7 +111,7 @@ class GenerateLiquibaseDialog(
     override fun footer(panel: Panel) {
         with(panel) {
             row("Output folder:") { cell(outputDirField).align(AlignX.FILL) }
-            row("File name:") { cell(patternField).align(AlignX.FILL) }
+            row("File name pattern:") { cell(patternField).align(AlignX.FILL) }
             row {
                 comment(
                     "Tokens: {key} {name} {service} {servicePrefix} {serviceNo} {table} — {name} is editable " +
@@ -145,7 +161,12 @@ class GenerateLiquibaseDialog(
 
     override fun validateFooter(): ValidationInfo? {
         validateRegex(renameFindField)?.let { return it }
-        val dir = FileUtil.toSystemIndependentName(outputDirField.text.trim()).trim('/')
+        val typed = outputDirField.text.trim()
+        // Before the trim below, which turns "/Users/…" into a harmless-looking "Users/…".
+        if (File(typed).isAbsolute || typed.startsWith("~")) {
+            return ValidationInfo("The output folder must be relative to the project directory.", outputDirField)
+        }
+        val dir = FileUtil.toSystemIndependentName(typed).trim('/')
         if (dir.isEmpty()) return ValidationInfo("Enter an output folder.", outputDirField)
         if (dir == ".." || dir.startsWith("../") || dir.contains("/../")) {
             return ValidationInfo("The output folder must be inside the project.", outputDirField)
@@ -171,6 +192,10 @@ class GenerateLiquibaseDialog(
     // ---- test hooks ---------------------------------------------------------------------------
 
     internal fun fileNamesForTesting(): List<Pair<String, String>> = rows.map { it.item.key to it.fileName }
+
+    internal fun setOutputDirForTesting(dir: String) {
+        outputDirField.text = dir
+    }
 
     internal fun configureForTesting(pattern: String, renameFind: String = "", renameReplace: String = "") {
         patternField.text = pattern

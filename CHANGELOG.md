@@ -49,6 +49,15 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   changelog that creates the table — for a data object through its service, the live definition first.
   Each is a link with its key to copy. A copy button shows the ordinary pointer now, not the copy cursor
   with its plus badge.
+- **Dialogs check before they close.** *Paste Session…* refuses a paste that carries no session header —
+  it used to close and report the problem afterwards, with the pasted text gone — and *Sign In to Flowable*
+  (no longer "Flowable App": Design uses it too) enables *Use this session* once a session cookie has been
+  seen. *Create Access Token* is laid out in one column of labels, says where the token goes (the
+  access-token field; Apply stores it) and that a blank validity never expires. The two Generate dialogs are
+  one column of labels from the source to the footer, name their patterns as the settings pages do, and
+  point a problem with the selected rows at the table. The Liquibase dialog's *Browse* no longer writes an
+  absolute path, and an absolute folder typed in is refused — the check trimmed the leading slash first, so
+  one got through and every row read "new".
 - **Settings say whose they are.** Every project settings page names the Flowable project its values
   belong to when that is a question — a sub-project is chosen, or the repository holds several — since the
   choice is made elsewhere, in the Atlas Hub. *Apply* on the Environments page with something missing

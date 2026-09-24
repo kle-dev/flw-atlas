@@ -615,6 +615,10 @@ change, so it cannot go stale. The DTO generator emits typed fields, a `fromCont
 fluent builder, either from one data object via Alt-Enter or in bulk for whole apps. The Liquibase
 dialog exists because the alternative is unzipping app exports by hand to find out which changelogs are
 in there; here you see the plan — including which files already exist — before anything is written.
+Both table dialogs read top to bottom in one column of labels — *Source*, the table, *Output folder*,
+*File name pattern* or *Class name pattern*, the same words the settings pages use — and a problem with the
+selected rows is pointed at the table. A folder picked with *Browse* is written relative to the project,
+and an absolute one is refused before anything is written.
 
 Every generator is a pure function from model data to a string, which is why they are all unit-tested
 and produce identical output in the IDE and on the command line. Names, packages and patterns are

@@ -162,7 +162,7 @@ class GenerateDataObjectDtoDialog(
             }
             row("Package:") { cell(packageField).align(AlignX.FILL) }
             row { comment("Leave the package empty to write straight into the source root.") }
-            row("Class name:") { cell(classPatternField).align(AlignX.FILL) }
+            row("Class name pattern:") { cell(classPatternField).align(AlignX.FILL) }
             row {
                 comment(
                     "Tokens: {name} {shortName} {key} {app} {suffix} — {name} is the model name in " +
@@ -233,7 +233,7 @@ class GenerateDataObjectDtoDialog(
             return ValidationInfo("The class name renders empty for row ${it.item.key}.", classPatternField)
         }
         included.firstOrNull { !DataObjectDtoPlanner.isValidClassName(it.className) }?.let {
-            return ValidationInfo("'${it.className}' is not a valid Java class name (row ${it.item.key}).")
+            return ValidationInfo("'${it.className}' is not a valid Java class name (row ${it.item.key}).", table)
         }
         return null
     }

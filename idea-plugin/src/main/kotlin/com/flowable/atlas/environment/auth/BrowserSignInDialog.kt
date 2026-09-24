@@ -1,5 +1,6 @@
 package com.flowable.atlas.environment.auth
 
+import com.intellij.util.ui.JBUI
 import com.flowable.atlas.FlowableAtlasBundle
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
@@ -20,7 +21,6 @@ import org.cef.network.CefCookie
 import org.cef.network.CefCookieManager
 import org.cef.network.CefRequest
 import java.awt.BorderLayout
-import java.awt.Dimension
 import java.net.URI
 import javax.swing.JComponent
 import javax.swing.JPanel
@@ -59,6 +59,8 @@ class BrowserSignInDialog(project: Project, private val baseUrl: String) : Dialo
         setOKButtonText("Use this session")
         isModal = true
         init()
+        // Nothing to use until a session cookie for the host has been seen; the status line says which.
+        isOKActionEnabled = false
         Disposer.register(disposable, browser)
         status.text = "Log in below. Once you're back on the app, click “Use this session”."
         // Best-effort: present a normal desktop-Chrome User-Agent, since some IdPs (e.g. Microsoft
@@ -86,7 +88,7 @@ class BrowserSignInDialog(project: Project, private val baseUrl: String) : Dialo
 
     override fun createCenterPanel(): JComponent = JPanel(BorderLayout(0, 6)).apply {
         add(status, BorderLayout.NORTH)
-        add(browser.component.apply { preferredSize = Dimension(960, 720) }, BorderLayout.CENTER)
+        add(browser.component.apply { preferredSize = JBUI.size(960, 720) }, BorderLayout.CENTER)
     }
 
     override fun doOKAction() {
@@ -115,6 +117,7 @@ class BrowserSignInDialog(project: Project, private val baseUrl: String) : Dialo
     private fun onCollected(header: String) {
         harvestedCookie = header.ifBlank { null }
         ApplicationManager.getApplication().invokeLater({
+            isOKActionEnabled = header.isNotBlank()
             status.text = if (header.isBlank()) {
                 "No session cookie yet for $host — finish the login."
             } else {
