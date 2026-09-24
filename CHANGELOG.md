@@ -38,6 +38,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   squeezed table. They now grow up to 2000px; descriptions keep a readable line length, and a check's
   description on the health list hugs its words instead of stretching a pill across the row. An IDE tab's
   width is unchanged.
+- **A narrow explorer keeps its navigation on the left.** An editor tab of 800px or less — the explorer
+  between two tool windows — got the phone layout: no sidebar, the whole navigation in one drop-down at the
+  top. With a mouse it now keeps the sidebar as its icon rail, which flies out on hover or focus, and the
+  list becomes a drawer over the page that closes once it has opened a node. Only a touch screen still
+  stacks. The breadcrumb no longer runs into itself when squeezed: the path above the page gives way first,
+  and in a bar too narrow for a path it shows the page's own name alone.
 - **One name for every Atlas surface, one verb for opening it.** The tool windows are *Atlas Hub*, *Atlas
   Findings* and *Atlas Playground* — the playground used to be called *Expression Playground* although half
   of it is scripts — and every entry that opens one reads *Open Atlas …*. Under *Generate* the entries no

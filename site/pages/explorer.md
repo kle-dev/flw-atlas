@@ -100,7 +100,8 @@ The sidebar's width is yours: drag its edge, or focus the edge and press `←` /
 or less — an editor tab inside the IDE — it starts **compact**: labelled, 184px wide, with denser rows,
 and a label cut short shows in full on hover. Dragging the edge below 140px, or pressing `←` at the
 narrowest width, collapses it to the icon rail, which flies out on hover; a double-click on the edge, or
-`Home`, goes back to the automatic layout.
+`Home`, goes back to the automatic layout. At 800px or less with a mouse — an editor tab between two tool
+windows — the rail is the automatic layout, so the navigation stays on the left at any width.
 
 On a large screen the pages take the room: the overview, the report pages and a node's page grow up to
 2000px wide, so tables, the health list and the diagram use the window rather than stopping at an IDE
@@ -109,8 +110,8 @@ tab's width. Descriptions and other prose keep a readable line length.
 Each group folds — click its header, or press `←` on any of its entries — and the fold is remembered, so
 a project with forty variable scopes need not show them on every visit. A folded group whose entry is
 the one you are on says so with a dot on its header, and stays folded: the sidebar never reopens itself
-behind your back. Below 800px the list gives way to a picker beside the search button, one row instead of
-fourteen rows of chips.
+behind your back. On a touch screen below 800px the page stacks instead: the list gives way to a picker
+beside the search button, one row instead of fourteen rows of chips.
 
 ## The detail panel
 
@@ -288,7 +289,9 @@ the panel is yours to move — drag the handle between them, `←`/`→` nudge i
 remembered, which matters most in a narrow IDE tool window where the list used to take half the width.
 In an editor tab the list starts at most 224px wide, and it **folds away**: the button in its head hides
 it, as does dragging the handle shut, and the button at the page's top-left corner brings it back. The
-fold is remembered too.
+fold is remembered too. At 800px or less with a mouse the list is a drawer instead: closed while a page is
+open, opened over the page by that button, and closed again by the node you pick from it or by `Escape`.
+In a bar too narrow for the whole path, the breadcrumb shows the page's own name alone.
 
 Nothing the parser extracted is invisible: whatever no specific section consumed renders at the bottom
 as a collapsed **Other attributes** key/value tree. When a new model attribute starts being parsed, it

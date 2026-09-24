@@ -19,7 +19,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { execFileSync } from 'child_process';
+import { execFileSync, spawn } from 'child_process';
 
 const args = process.argv.slice(2);
 const reportPath = args.find(a => !a.startsWith('--'));
@@ -1706,10 +1706,86 @@ const html = fs.readFileSync(reportPath, 'utf8');
 if (!html.includes('</body>')) { console.error('explorer-uitest: not an explorer report'); process.exit(2); }
 const tmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-uitest-')), 'report.html');
 
-// The stacked layout (<=800px) is a different page: the category list becomes a <select>. A second, short
-// run at Chrome's old default size covers it — the window size is a launch flag, not something a page
-// can change about itself.
+// A narrow window has two layouts. On a touch screen (<=800px, coarse pointer) the page stacks and the
+// category list becomes a <select>. With a mouse — an editor tab between two tool windows — the shell stays:
+// the sidebar is its icon rail and the list a drawer over the page, because the stacked layout hid the whole
+// navigation there. Headless Chrome has a mouse, so `narrowProbe` runs as it is; `touchProbe` runs under
+// the DevTools protocol's touch emulation (runTouchProbe below). Window sizes are launch flags — a page
+// cannot change its own.
+const probeRunner = `
+  let i=0;(function run(){
+    if(i>=steps.length){
+      log.push('uncaught errors: '+(errs.length?('FAIL '+errs.join(' | ')):'none'));
+      document.title='UITEST_BEGIN '+log.join(' ;; ')+' UITEST_END';
+      return;
+    }
+    try{ steps[i++](); }catch(e){ log.push('FAIL threw in step '+i+': '+e.message); }
+    setTimeout(run, 300);
+  })();`;
 const narrowProbe = `<script>
+(function(){
+  const log=[], errs=[];
+  const ok=(k,cond,detail)=>log.push(k+': '+(cond?'ok':'FAIL '+(detail||'')));
+  window.addEventListener('error', e=>errs.push(e.message));
+  const vis=el=>!!el && el.offsetParent!==null && el.getBoundingClientRect().width>0;
+  const noHScroll=()=>document.documentElement.scrollWidth<=window.innerWidth+1;
+  const w=el=>el?Math.round(el.getBoundingClientRect().width):0;
+  const steps=[];
+  steps.push(()=>{
+    ['atlas-sidebar','atlas-sidebar-w','atlas-list-hidden','atlas-tabs'].forEach(k=>{ try{ localStorage.removeItem(k); }catch(e){} });
+    applySidebar(); applyListPref();
+    const shell=document.querySelector('.shell'), sb=document.getElementById('sidebar');
+    ok('with a mouse the navigation stays on the left, as the icon rail', shell.classList.contains('rail') && w(sb)<=70 && vis(document.getElementById('nav')), 'sidebar='+w(sb));
+    ok('there is no category picker', !vis(document.getElementById('navpick')));
+    ok('no horizontal page scroll', noHScroll(), document.documentElement.scrollWidth+' > '+window.innerWidth);
+    const it=document.querySelector('#nav .side-item[data-cat="process"]');
+    // the fly-out is a width transition, and --virtual-time-budget does not run transitions: measure the rule
+    sb.style.transition='none';
+    if(it) it.focus();
+  });
+  steps.push(()=>{
+    ok('focusing the rail flies the sidebar out with its labels', w(document.getElementById('sidebar'))>150, 'sidebar='+w(document.getElementById('sidebar')));
+    const it=document.querySelector('#nav .side-item[data-cat="process"]');
+    if(it){ it.click(); it.blur(); }
+    document.getElementById('sidebar').style.transition='';
+  });
+  steps.push(()=>{
+    ok('a rail entry routes to its category', state.view==='browse' && state.cat==='process', location.hash);
+    location.hash=encodeURIComponent('process:orderProcess');
+  });
+  steps.push(()=>{
+    // crumbs never overlap: every visible crumb sits right of the one before it
+    const cs=[...document.querySelectorAll('#crumbs .crumb, #crumbs .crumb-sep')].filter(vis);
+    const clash=cs.some((c,i)=>i && c.getBoundingClientRect().left < cs[i-1].getBoundingClientRect().right-1);
+    ok('the breadcrumb never runs into itself', !clash && cs.length>0, cs.map(c=>c.textContent+'@'+Math.round(c.getBoundingClientRect().left)).join(' '));
+    const cur=document.querySelector('#crumbs .crumb.cur');
+    ok('and keeps the page name', vis(cur));
+  });
+  steps.push(()=>{
+    const vb=document.getElementById('view-browse'), det=document.querySelector('.detailwrap');
+    ok('a node page gets the whole width: the list starts closed', vb.classList.contains('list-off') && w(det)>=w(vb)-2, w(det)+' of '+w(vb));
+    const show=document.getElementById('listshow');
+    ok('a button opens the list', vis(show));
+    window.__detW=w(det);
+    if(show) show.click();
+  });
+  steps.push(()=>{
+    const lc=document.querySelector('.listcol'), det=document.querySelector('.detailwrap');
+    ok('the list opens as a drawer over the page', vis(lc) && getComputedStyle(lc).position==='absolute' && w(det)===window.__detW, 'list='+w(lc)+' page='+w(det));
+    ok('no horizontal page scroll with the drawer open', noHScroll());
+    const other=[...document.querySelectorAll('#list .item[data-id]')].find(x=>x.dataset.id!=='process:orderProcess');
+    window.__pick=other&&other.dataset.id;
+    if(other) other.click();
+  });
+  steps.push(()=>{
+    ok('opening a node from the drawer opens it and closes the drawer', state.sel===window.__pick && document.getElementById('view-browse').classList.contains('list-off'), 'sel='+state.sel);
+    let st=null; try{ st=localStorage.getItem('atlas-list-hidden'); }catch(e){}
+    ok('the drawer is not a stored choice', st===null, 'stored='+st);
+  });
+${probeRunner}
+})();
+</script>`;
+const touchProbe = `<script>
 (function(){
   const log=[], errs=[];
   const ok=(k,cond,detail)=>log.push(k+': '+(cond?'ok':'FAIL '+(detail||'')));
@@ -1717,6 +1793,7 @@ const narrowProbe = `<script>
   const vis=el=>!!el && el.offsetParent!==null;
   const steps=[];
   steps.push(()=>{
+    ok('the page sees a touch screen', matchMedia('(pointer:coarse)').matches);
     const pick=document.getElementById('navpick');
     ok('the category picker replaces the sidebar list', vis(pick) && !vis(document.getElementById('nav')));
     ok('the search button stays', vis(document.getElementById('searchbtn')));
@@ -1730,15 +1807,7 @@ const narrowProbe = `<script>
     ok('no horizontal page scroll', document.documentElement.scrollWidth<=window.innerWidth+1,
        document.documentElement.scrollWidth+' > '+window.innerWidth);
   });
-  let i=0;(function run(){
-    if(i>=steps.length){
-      log.push('uncaught errors: '+(errs.length?('FAIL '+errs.join(' | ')):'none'));
-      document.title='UITEST_BEGIN '+log.join(' ;; ')+' UITEST_END';
-      return;
-    }
-    try{ steps[i++](); }catch(e){ log.push('FAIL threw in step '+i+': '+e.message); }
-    setTimeout(run, 300);
-  })();
+${probeRunner}
 })();
 </script>`;
 
@@ -1906,9 +1975,53 @@ function runProbe(probeHtml, windowSize, label) {
   return m[1].split(' ;; ').map(s => s.trim()).filter(Boolean);
 }
 
+/**
+ * [runProbe] on a touch screen: headless Chrome has a mouse, and only the DevTools protocol's touch
+ * emulation gives a page `(pointer:coarse)`. Spoken to over --remote-debugging-pipe (fd 3 in, fd 4 out,
+ * NUL-terminated JSON), in real time; the probe parks its verdict in the title as it does under --dump-dom.
+ */
+async function runTouchProbe(probeHtml, windowSize, label) {
+  const page = path.join(path.dirname(tmp), 'touch.html');
+  fs.writeFileSync(page, html.replace('</body>', probeHtml + '</body>'));
+  const proc = spawn(chrome, ['--headless', '--disable-gpu', '--no-sandbox', '--hide-scrollbars', '--no-first-run',
+    '--window-size=' + windowSize, '--user-data-dir=' + fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-touch-')),
+    '--remote-debugging-pipe', 'about:blank'], { stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'] });
+  let seq = 0, buf = ''; const pending = new Map();
+  proc.stdio[4].on('data', d => {
+    buf += d; let i;
+    while ((i = buf.indexOf('\0')) >= 0) { const m = JSON.parse(buf.slice(0, i)); buf = buf.slice(i + 1); if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); } }
+  });
+  const call = (method, params = {}, sessionId) => new Promise((res, rej) => {
+    const id = ++seq, timer = setTimeout(() => rej(new Error(method + ': no answer in 20s')), 20000);
+    pending.set(id, m => { clearTimeout(timer); m.error ? rej(new Error(method + ': ' + m.error.message)) : res(m.result); });
+    proc.stdio[3].write(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }) + '\0');
+  });
+  try {
+    const target = (await call('Target.getTargets')).targetInfos.find(t => t.type === 'page');
+    const { sessionId } = await call('Target.attachToTarget', { targetId: target.targetId, flatten: true });
+    const send = (m, p) => call(m, p, sessionId);
+    await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+    await send('Page.navigate', { url: 'file://' + page });
+    for (const deadline = Date.now() + 60000; Date.now() < deadline;) {
+      const r = await send('Runtime.evaluate', { expression: 'document.title', returnByValue: true });
+      const m = String(r.result && r.result.value || '').match(/^UITEST_BEGIN([\s\S]*?)UITEST_END$/);
+      if (m) return m[1].split(' ;; ').map(x => x.trim()).filter(Boolean);
+      await new Promise(r => setTimeout(r, 200));
+    }
+    console.error(`explorer-uitest (${label}): the probe never finished within 60s`);
+    process.exit(1);
+  } finally {
+    await call('Browser.close').catch(() => {});
+    proc.kill();
+  }
+}
+
 const lines = [
   ...runProbe(probe, '1400,900', 'desktop'),
   ...runProbe(narrowProbe, '800,600', 'narrow').map(l => '[800px] ' + l),
+  // an editor tab between two tool windows, the width that reported the missing navigation
+  ...runProbe(narrowProbe, '500,700', 'narrow').map(l => '[500px] ' + l),
+  ...(await runTouchProbe(touchProbe, '800,600', 'touch')).map(l => '[800px touch] ' + l),
   ...runProbe(ideProbe, '1000,760', 'ide').map(l => '[1000px] ' + l),
   ...runProbe(wideProbe, '2560,1000', 'wide').map(l => '[2560px] ' + l),
 ];

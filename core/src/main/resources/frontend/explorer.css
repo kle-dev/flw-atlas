@@ -281,11 +281,18 @@
   .topbar{flex:none;display:flex;align-items:center;gap:var(--space-2);height:var(--topbar-h);padding:0 var(--space-4);
     background:var(--panel);border-bottom:1px solid var(--line)}
   .crumbs{display:flex;align-items:center;gap:var(--space-25);font-size:var(--text-md);min-width:0;flex:1;white-space:nowrap;overflow:hidden}
-  .crumbs .crumb{display:inline-flex;align-items:center;gap:var(--space-1);min-width:0}
+  /* In a narrow tab the path gives way before the page's own name does: the crumbs above it shrink first
+     (a large shrink factor), and every crumb cuts its text rather than letting it run into the next. */
+  .crumbs .crumb{display:inline-flex;align-items:center;gap:var(--space-1);min-width:0;overflow:hidden;flex:0 1000 auto}
+  .crumbs .crumb .ti{flex:none}
+  .crumbs .crumb>.ct{min-width:0;overflow:hidden;text-overflow:ellipsis}
+  /* Too narrow for a path at all — a tab beside two tool windows leaves it ~90px: the page's own name
+     alone, not "/ / Or…" with the ancestors squeezed to nothing between their separators. */
+  .crumbs{container-type:inline-size}
+  @container (max-width:260px){ .crumbs a.crumb,.crumbs .crumb-sep{display:none} }
   .crumbs a.crumb{color:var(--ink-dim);font-weight:500;text-decoration:none}
   .crumbs a.crumb:hover{color:var(--ink);text-decoration:underline}
   .crumbs .crumb.cur{color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;max-width:48ch;flex:0 1 auto}
-  .crumbs .crumb.cur>span:last-child{overflow:hidden;text-overflow:ellipsis;min-width:0}
   .crumb-sep{color:var(--line2);flex:none}
   .searchbtn{display:flex;align-items:center;gap:var(--space-2);width:min(320px,40vw);height:30px;padding:0 var(--space-25);
     margin-right:var(--space-15);
@@ -654,7 +661,7 @@
   .lh-hide .ui{width:14px;height:14px}
   /* the list folded away: the page takes the whole width, the show button sits at its top-left corner,
      and the tab strip makes room for it */
-  @media (min-width:801px){
+  @media not ((max-width:800px) and (pointer:coarse)){
     .view-browse.list-off{grid-template-columns:minmax(0,1fr)}
     .view-browse.list-off .listcol,.view-browse.list-off .listresize{display:none}
     .listshow{position:absolute;left:var(--space-1);top:var(--space-1);z-index:9;background:var(--panel);border-color:var(--line2)}
@@ -1305,9 +1312,11 @@
   /* ------------------------------------------------------------------ */
   /* Compact sidebar: the automatic layout of a 801–1100px window — an    */
   /* IDE editor tab. Labelled, 184px, denser rows and smaller type; the   */
-  /* rail below stays available by dragging the handle.                   */
+  /* rail below stays available by dragging the handle. Every block that  */
+  /* reads "not (≤800px and a coarse pointer)" is the desktop shell: with */
+  /* a mouse it holds at any width, only a touch screen stacks.           */
   /* ------------------------------------------------------------------ */
-  @media (min-width:801px){
+  @media not ((max-width:800px) and (pointer:coarse)){
     .shell.compact .side-logo{padding:0 var(--space-3)}
     .shell.compact .side-logo svg{height:24px}
     .shell.compact .side-nav{padding:var(--space-2) var(--space-1)}
@@ -1322,12 +1331,13 @@
   /* ------------------------------------------------------------------ */
   /* Sidebar collapse ("rail"): state-driven via .shell.rail, toggled by  */
   /* the drag handle / auto-default in explorer.js (previously a hard     */
-  /* ≤1100px media query). ≥801px only — the ≤800px block below owns the  */
-  /* stacked layout and always shows labels. Collapsed, the sidebar is a  */
-  /* 64px icon rail overlaid on the content; hovering/focusing it flies   */
-  /* the full sidebar out over the content without reflowing it.          */
+  /* ≤1100px media query) — and the automatic layout of a window of 800px */
+  /* or less with a mouse: an editor tab between two tool windows. The    */
+  /* stacked touch layout below always shows labels. Collapsed, the       */
+  /* sidebar is a 64px icon rail overlaid on the content; hovering or     */
+  /* focusing it flies the full sidebar out over the content.             */
   /* ------------------------------------------------------------------ */
-  @media (min-width:801px){
+  @media not ((max-width:800px) and (pointer:coarse)){
     .shell.rail{grid-template-columns:64px 1fr}
     /* Sidebar is position:absolute in rail mode (out of grid flow), so pin .main to  */
     /* the 1fr track — otherwise grid auto-placement drops it into the 64px column.   */
@@ -1356,8 +1366,11 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* Responsive: ≤1100px trims the topbar/content chrome; ≤800px stacks   */
-  /* everything vertically and the page scrolls.                          */
+  /* Responsive: ≤1100px trims the topbar/content chrome; ≤800px on a     */
+  /* touch screen stacks everything vertically and the page scrolls. With */
+  /* a mouse, ≤800px keeps the shell: the sidebar as its icon rail, and   */
+  /* the list as a drawer over the page — the stacked layout hid the whole */
+  /* navigation in a <select> in an editor tab between two tool windows.  */
   /* ------------------------------------------------------------------ */
   @media (max-width:1100px){
     .dbody{padding:0 var(--space-4) var(--space-8)}
@@ -1368,7 +1381,14 @@
     .searchbtn .ph{display:none}
     #viewbtn .lbl{display:none}
   }
-  @media (max-width:800px){
+  /* ≤800px with a mouse: the list is a drawer over the page, closed by default (explorer.js, applyListPref) */
+  @media (max-width:800px) and (not (pointer:coarse)){
+    .view-browse,.view-browse.list-off{grid-template-columns:minmax(0,1fr)}
+    .view-browse:not(.list-off) .listcol{position:absolute;top:0;bottom:0;left:0;z-index:25;
+      width:min(var(--list-w),320px,calc(100% - 48px));box-shadow:6px 0 24px rgba(0,0,0,.16)}
+    .listresize{display:none}
+  }
+  @media (max-width:800px) and (pointer:coarse){
     .lh-hide{display:none}             /* stacked layout: the list is a block above the page, nothing to fold */
     html,body{height:auto}
     .shell{display:flex;flex-direction:column;height:auto}

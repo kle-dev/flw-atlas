@@ -170,6 +170,13 @@
               window empty beside a squeezed table. They now grow up to 2000px; descriptions keep a readable
               line length, and a check's description on the health list hugs its words instead of stretching
               a pill across the row. An IDE tab's width is unchanged.</li>
+          <li><b>A narrow explorer keeps its navigation on the left.</b> An editor tab of 800px or less —
+              the explorer between two tool windows — got the phone layout: no sidebar, the whole navigation
+              in one drop-down at the top. With a mouse it now keeps the sidebar as its icon rail, which
+              flies out on hover or focus, and the list becomes a drawer over the page that closes once it
+              has opened a node. Only a touch screen still stacks. The breadcrumb no longer runs into itself
+              when squeezed: the path above the page gives way first, and in a bar too narrow for a path it
+              shows the page's own name alone.</li>
           <li><b>One name for every Atlas surface, one verb for opening it.</b> The tool windows are
               <i>Atlas Hub</i>, <i>Atlas Findings</i> and <i>Atlas Playground</i> — the playground used to
               be called <i>Expression Playground</i> although half of it is scripts — and every entry that
@@ -545,9 +552,6 @@
           <li><b>Java behind a <code>"/api/**"</code> or <code>"http://…"</code> string is read.</b> The
               <code>/*</code> inside a mapping or a URL opened a comment that swallowed the endpoints, beans
               and key literals after it.</li>
-          <li><b>The explorer opens Java where it is.</b> A class opens at its declaration's line, a method
-              page opens the method (it had no file at all), and the dashboard's "+ N more" entry points
-              expand in place.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

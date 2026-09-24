@@ -1186,8 +1186,9 @@ function renderSidebarActive(){
 function renderCrumbs(){
   const c=document.getElementById('crumbs');
   const sep='<span class="crumb-sep">/</span>';
-  const link=(txt,href,ic)=>'<a class="crumb" href="'+href+'">'+(ic||'')+esc(txt)+'</a>';
-  const cur=(txt,ic)=>'<span class="crumb cur">'+(ic||'')+esc(txt)+'</span>';
+  // the text in a span of its own, so a crumb squeezed by a narrow tab cuts it instead of running into the next
+  const link=(txt,href,ic)=>'<a class="crumb" href="'+href+'">'+(ic||'')+'<span class="ct">'+esc(txt)+'</span></a>';
+  const cur=(txt,ic)=>'<span class="crumb cur">'+(ic||'')+'<span class="ct">'+esc(txt)+'</span></span>';
   let h, title;
   if(state.view==='overview'){
     h=link(DATA.project,'#/overview')+sep+cur('Overview');
@@ -7243,6 +7244,7 @@ function select(id, q, el){
   const hash=encodeURIComponent(id)+(q?'&q='+encodeURIComponent(q):'')+
              (el?'&e='+encodeURIComponent(el):'')+
              (state.pane&&state.pane!=='overview'?'&p='+encodeURIComponent(state.pane):'');
+  closeListDrawer();
   if(location.hash.slice(1)===hash){ state.focus=q||''; state.focusEl=el||''; applySelection(id); return; }
   location.hash=hash;
 }
@@ -9295,6 +9297,10 @@ window.addEventListener('scroll',()=>{ if(_tipFor||_tipT) hideTip(); }, true);
 // try/catch for private-mode / file:// quirks, matching the theme prefs above.
 const SB_MIN=180, SB_MAX=480, SB_DEF=240, SB_COLLAPSE=140, SB_RAIL=64, SB_COMPACT=184;
 const _sbNarrow=matchMedia('(max-width:1100px)');
+// ≤800px with a mouse — an editor tab squeezed between two tool windows. The stacked layout that width used
+// to get (the whole navigation in one <select>) is for touch screens now; here the sidebar is its icon rail
+// and the list a drawer over the page, so the navigation stays on the left.
+const _narrowMouse=matchMedia('(max-width:800px) and (not (pointer:coarse))');
 function sbPref(){ try{ return localStorage.getItem('atlas-sidebar'); }catch(e){ return null; } }
 function sbWidth(){
   let w=NaN; try{ w=parseInt(localStorage.getItem('atlas-sidebar-w'),10); }catch(e){}
@@ -9304,8 +9310,8 @@ function sbClamp(v){ return Math.max(SB_MIN,Math.min(SB_MAX,v)); }
 function applySidebar(){
   const shell=document.querySelector('.shell'); if(!shell) return;
   const pref=sbPref();                              // 'rail' | 'wide' | null(auto)
-  const rail=pref==='rail';
-  const compact=!pref && _sbNarrow.matches;         // never stored: it follows the window
+  const rail=pref==='rail' || (!pref && _narrowMouse.matches);    // the automatic rail is never stored either
+  const compact=!pref && !rail && _sbNarrow.matches;             // never stored: it follows the window
   const w=compact?SB_COMPACT:sbWidth();
   shell.style.setProperty('--sidebar-w', w+'px');
   shell.classList.toggle('rail', rail);
@@ -9368,6 +9374,7 @@ function wireSidebarResize(){
   // Re-evaluate the auto default on viewport crossings, but only while the
   // user has not made an explicit choice.
   _sbNarrow.addEventListener('change',()=>{ if(!sbPref()) applySidebar(); });
+  _narrowMouse.addEventListener('change',()=>{ if(!sbPref()) applySidebar(); _listDrawer=false; applyListPref(); });
 }
 
 // The list/detail split. The sidebar has had a drag handle with a remembered width for a while; the
@@ -9378,16 +9385,30 @@ const LW_MIN=200, LW_MAX=640, LW_DEF=330, LW_COLLAPSE=120;
 // the tabs and the breadcrumb already say where you are. Remembered; the button at the detail's left
 // edge (or dragging the handle out again) brings it back.
 function listHidden(){ try{ return localStorage.getItem('atlas-list-hidden')==='1'; }catch(e){ return false; } }
+// ≤800px with a mouse the list is a drawer over the page: closed until asked for, closed again once it has
+// opened a node, and never stored — the fold a wide window remembers is a different choice.
+let _listDrawer=false;
 function applyListPref(){
-  const vb=document.getElementById('view-browse'), show=document.getElementById('listshow'), off=listHidden();
+  const vb=document.getElementById('view-browse'), show=document.getElementById('listshow');
+  const off=_narrowMouse.matches ? !_listDrawer : listHidden();
   if(vb) vb.classList.toggle('list-off', off);
   if(show) show.hidden=!off;
 }
 function setListHidden(off){
-  try{ if(off) localStorage.setItem('atlas-list-hidden','1'); else localStorage.removeItem('atlas-list-hidden'); }catch(e){}
+  if(_narrowMouse.matches) _listDrawer=!off;
+  else try{ if(off) localStorage.setItem('atlas-list-hidden','1'); else localStorage.removeItem('atlas-list-hidden'); }catch(e){}
   applyListPref();
   const t=document.getElementById(off?'listshow':'lf'); if(t) t.focus();
 }
+/** The drawer has done its job once a node opens from it; Escape closes it too. */
+function closeListDrawer(){
+  if(!_narrowMouse.matches || !_listDrawer) return false;
+  _listDrawer=false; applyListPref(); return true;
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape' && _listDrawer && e.target.closest && e.target.closest('.listcol') && !listMarks.size){
+    e.preventDefault(); closeListDrawer(); const b=document.getElementById('listshow'); if(b) b.focus(); }
+});
 function lwClamp(v){ return Math.max(LW_MIN, Math.min(LW_MAX, v)); }
 function listWidth(){ let w=NaN; try{ w=parseInt(localStorage.getItem('atlas-list-w'),10); }catch(e){} return (w>=LW_MIN&&w<=LW_MAX)?w:LW_DEF; }
 function setListWidth(w){
