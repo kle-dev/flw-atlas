@@ -1,6 +1,6 @@
 # Flowable project — `miniproject` (quick overview)
 
-_26 models (26 files · 1 archives) · 2 Java files · 119 nodes · 62 relationships · 3 user groups. Compact summary — full report in `miniproject.overview.md`, full graph in `miniproject.graph.json`._
+_27 models (27 files · 1 archives) · 3 Java files · 121 nodes · 63 relationships · 3 user groups. Compact summary — full report in `miniproject.overview.md`, full graph in `miniproject.graph.json`._
 
 ⚠ **2 file(s) could not be fully analyzed** (parse/read failures) — the map below may be incomplete. Details: the Findings section of `miniproject.overview.md`, or `diagnostics` in `miniproject.graph.json`.
 
@@ -8,8 +8,8 @@ _26 models (26 files · 1 archives) · 2 Java files · 119 nodes · 62 relations
 - **Demo App** (`demoApp`) — 5 models
 
 ## Inventory
-Models: 3 processes · 1 case · 1 decision table · 2 forms · 1 page · 1 data object · 1 master data · 1 data dictionary · 1 service · 1 AI agent · 1 channel · 1 event · 1 action · 1 query · 1 template · 1 sequence · 1 security policy · 1 variable extractor · 1 Liquibase changelog
-Java: 1 controller · 1 component · 1 delegate
+Models: 3 processes · 1 case · 1 decision table · 2 forms · 1 page · 1 data object · 1 master data · 1 data dictionary · 1 service · 1 AI agent · 1 channel · 1 event · 2 actions · 1 query · 1 template · 1 sequence · 1 security policy · 1 variable extractor · 1 Liquibase changelog
+Java: 1 controller · 1 component · 1 delegate · 1 bot
 Variables: 38 — scopes: form 13 · process 9 · action 4 · template 3 · page 3 · decision 2 · sla 2 · agent 2 · query 2 · variableExtractor 2 · java 1 · document 1 · app 1 · 1 inferred from scripts
 Expressions: 11 backend ${ } · 27 frontend {{ }} · 1 string literals
 
@@ -29,7 +29,8 @@ Events: orderShipped
 Agents: orderAssistant
 
 ## Java glue (wired to models)
-**Delegates (1):** DemoBean
+**Delegates (1):** DemoBean  
+**Bots (1):** DemoInvoiceBot
 
 ## Hotspots — most-referenced (central) artifacts
 - form `orderForm` — Order Form (referenced by 8)

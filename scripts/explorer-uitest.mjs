@@ -683,6 +683,51 @@ const probe = `<script>
        decodeURIComponent(location.hash).indexOf('&f=zzz-none')>0, 'hash='+location.hash);
   });
 
+  // --- an action's table names its bot, a bot's table its actions — each a link of its own ---
+  steps.push(()=>{ closeOtherTabs(); state.filter=''; state.sort='name'; location.hash='/browse/'+enc('action'); });
+  steps.push(()=>{
+    const cell=document.querySelector('#catrows .tr[data-id="action:DEMO-A001"] .vlink[data-id="'+enc('java:com.example.DemoInvoiceBot')+'"]');
+    ok('an action row names its Java bot by its class', !!cell && cell.textContent==='DemoInvoiceBot',
+       (document.querySelector('#catrows .tr[data-id="action:DEMO-A001"]')||{}).textContent);
+    const cp=cell&&cell.parentNode.querySelector('.cpy:not(.opn)');
+    ok('the bot cell copies the class name', !!cp && decodeURIComponent(cp.dataset.copy)==='com.example.DemoInvoiceBot', cp&&cp.dataset.copy);
+    const op=cell&&cell.parentNode.querySelector('.opn');
+    ok('the bot cell carries an open-in-IDE button, hidden outside the IDE', !!op && getComputedStyle(op).display==='none');
+    const pl=document.querySelector('#catrows .tr[data-id="action:notifyCustomerAction"] .vlink[data-id="'+enc('bot:script-evaluation-bot')+'"]');
+    ok('a platform bot is named by its key', !!pl && pl.textContent==='script-evaluation-bot');
+    ok('a platform bot has nothing to open', !!pl && !pl.parentNode.querySelector('.opn'));
+    window.__hc=0; window.addEventListener('hashchange', ()=>{ window.__hc++; });
+    if(cell) click(cell);
+  });
+  steps.push(()=>{
+    ok('a click on the bot opens the bot, not the action', state.sel==='java:com.example.DemoInvoiceBot', 'sel='+state.sel);
+    // a detail page rendered earlier leaves its link handler on #detail; the row's link must not fire it too
+    ok('and navigates once', window.__hc===1, 'hash changes='+window.__hc);
+    location.hash='/browse/'+enc('java::bot');
+  });
+  steps.push(()=>{
+    const a=document.querySelector('#catrows .tr[data-id="java:com.example.DemoInvoiceBot"] .vlink[data-id="'+enc('action:DEMO-A001')+'"]');
+    ok('a Java bot row lists the action that runs it', !!a && a.textContent==='Send invoice');
+    const cp=a&&a.parentNode.querySelector('.cpy');
+    ok('the action copies its key', !!cp && decodeURIComponent(cp.dataset.copy)==='DEMO-A001', cp&&cp.dataset.copy);
+    ok('and offers nothing to open', !!a && !a.parentNode.querySelector('.opn'));
+    if(a) click(a);
+  });
+  steps.push(()=>{
+    ok('a click on the action opens the action', state.sel==='action:DEMO-A001', 'sel='+state.sel);
+    closeOtherTabs(); location.hash='/browse/'+enc('bot');
+  });
+  steps.push(()=>{
+    const a=document.querySelector('#catrows .tr[data-id="bot:script-evaluation-bot"] .vlink[data-id="'+enc('action:notifyCustomerAction')+'"]');
+    ok('a platform bot row lists its action', !!a);
+    window.__tabsB=state.tabs.length;
+    if(a) a.dispatchEvent(new MouseEvent('auxclick', {bubbles:true, button:1}));
+  });
+  steps.push(()=>{
+    ok('a middle-click on a link opens that link in one background tab', state.tabs.length===window.__tabsB+1 &&
+       state.tabs.includes('action:notifyCustomerAction') && !state.sel, 'tabs='+state.tabs.join(',')+' sel='+state.sel);
+  });
+
   // --- elements: what a process is made of, one section with a group and a chip per kind ---
   steps.push(()=>{ closeOtherTabs(); location.hash=enc('process:orderProcess'); });
   steps.push(()=>{

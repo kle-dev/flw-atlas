@@ -23,6 +23,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   used to be a spinner for good. The thin client keeps the compressed
   page, so a report of up to about 20 MB opens without any transfer the next time; a larger one is fetched
   on every open, and the card says so.
+- **The actions table says which bot runs each action.** `#/browse/action` gains a *Bot* column: a Java bot
+  by its class, a platform bot by its key, as a link to the bot, with a copy button for the class name or
+  key and, inside the IDE, a button that opens the Java bot's source. The *Bots* and *Java · bot* tables
+  answer the other way round with an *Actions* column. A link inside a category row now opens its own
+  target; it used to open the row, or, after a detail page had been shown, both.
 - **One name for every Atlas surface, one verb for opening it.** The tool windows are *Atlas Hub*, *Atlas
   Findings* and *Atlas Playground* — the playground used to be called *Expression Playground* although half
   of it is scripts — and every entry that opens one reads *Open Atlas …*. Under *Generate* the entries no

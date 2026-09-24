@@ -716,6 +716,12 @@
   .cattbl .tr.mark .ck{visibility:visible;background:var(--accent);border-color:var(--accent)}
   .cattbl .td .nm{font-weight:500}
   .cattbl .td .ti{vertical-align:-3px;margin-right:var(--space-15)}
+  /* a link with its buttons in one table cell: the name is cut, the buttons never pushed out of the cell */
+  .tbl .td .cellx{display:inline-flex;align-items:center;max-width:100%;min-width:0;vertical-align:middle}
+  .cellx>.vlink,.cellx>.mono{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cellx>.cpy{flex:none}
+  .tbl .td .csep{margin-right:var(--space-1);color:var(--ink-faint)}
+  .tbl .td .cmore{margin-left:var(--space-1);color:var(--ink-faint);font-size:var(--text-xs)}
   .cat-why{display:block;font-size:var(--text-2xs);color:var(--ink-faint);overflow:hidden;text-overflow:ellipsis}
   #catmore{margin-top:var(--space-2)}
   /* a sortable header is a row of buttons that look like the plain header */

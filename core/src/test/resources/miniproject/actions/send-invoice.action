@@ -1,0 +1,6 @@
+{
+  "key": "DEMO-A001",
+  "name": "Send invoice",
+  "botKey": "DEMO-invoice-bot",
+  "scopeType": "bpmn"
+}

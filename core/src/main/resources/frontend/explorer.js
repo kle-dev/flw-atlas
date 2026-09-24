@@ -3046,6 +3046,10 @@ let _catShown=CAT_ROWS;
 /** One or two columns a category is worth more with — cheap to compute, dropped when every row is empty. */
 function catExtraCols(cat){
   const t=cat.id.split('::')[0], ex=[];
+  // An action and its bot, both ways: which bot runs it is the first thing a reader of the actions wants,
+  // and which actions reach a bot the first thing a reader of the bots wants.
+  if(t==='action') ex.push({k:'bot', label:'Bot', w:'minmax(12ch,1.2fr)', opt:true, get:botCell});
+  if(t==='bot' || cat.id==='java::bot') ex.push({k:'acts', label:'Actions', w:'minmax(14ch,1.4fr)', opt:true, get:botActionsCell});
   const models=new Set(['process','case','form','page','decision','dataObject','service','query','agent','action','channel','event']);
   if(models.has(t)) ex.push({k:'app', label:'App', w:'minmax(10ch,1fr)', opt:true, get:n=>{
     const apps=(incM.get(n.id)||[]).filter(e=>e.rel==='contains').map(e=>byId.get(e.id)).filter(Boolean);
@@ -3061,6 +3065,34 @@ function catExtraCols(cat){
   if(chk) ex.push({k:'why', label:'Finding', w:'minmax(18ch,2fr)', cls:'wrap', get:n=>{
     const f=(FIND_BY_NODE.get(n.id)||[]).find(x=>x.check===chk && !waiverFor(x)); return f?esc(f.message||''):''; }});
   return ex;
+}
+/** The bot an action runs, by the name a reader knows it by — a Java bot's class, a platform bot's key — with
+ *  its identifier to copy and, in the IDE, the class to open. The action's own botKey rides in the tip when
+ *  the name differs; a bot the graph could not resolve stays its key. */
+function botCell(n){
+  const e=(outM.get(n.id)||[]).find(x=>x.rel==='bot'), b=e&&byId.get(e.id), bk=(n.data||{}).botKey;
+  if(!b) return bk?'<span class="cellx"><span class="mono">'+esc(bk)+'</span>'+copyBtn(bk,'bot key')+'</span>':'';
+  const java=b.type==='java';
+  return '<span class="cellx">'+vlink(b.id, b.label, bk&&bk!==b.label?'bot key '+bk:'')+
+    copyBtn(b.key, java?'class name':'bot key')+(java?openBtn(b.file,(b.data||{}).line):'')+'</span>';
+}
+/** The actions that reach a bot — the first three, then `+N` with the rest in its tip. No open button: the
+ *  action is a model, and its page is one click away. */
+function botActionsCell(n){
+  const as=(incM.get(n.id)||[]).filter(e=>e.rel==='bot').map(e=>byId.get(e.id)).filter(Boolean);
+  if(!as.length) return '';
+  return as.slice(0,3).map(a=>'<span class="cellx">'+vlink(a.id, a.label)+copyBtn(a.key,'action key')+'</span>').join('<span class="csep">,</span>')+
+    (as.length>3?'<span class="cmore" data-tip="'+esc(as.slice(3).map(a=>a.label).join(', '))+'">+'+(as.length-3)+'</span>':'');
+}
+/** A link inside a category row opens its own target, not the row's: plain → there, ⌘/Ctrl or middle →
+ *  a background tab. Stopped here, so the #detail handler a detail page left behind cannot open it twice. */
+function catRowLink(e, bg){
+  const lk=e.target.closest&&e.target.closest('#catrows .vlink[data-id]');
+  if(!lk) return false;
+  e.preventDefault(); e.stopPropagation();
+  const id=dec(lk.dataset.id);
+  if(byId.get(id)){ if(bg) openTabs([id], {background:true}); else select(id); }
+  return true;
 }
 function renderCatLanding(){
   const det=document.getElementById('detail'), vb=document.getElementById('view-browse');
@@ -3085,8 +3117,10 @@ function renderCatLanding(){
   const cc=document.getElementById('catcheck');
   if(cc) cc.onclick=()=>{ _checkJump='chk-'+chk; location.hash='/checks'; };
   const box=document.getElementById('catrows');
-  box.onkeydown=rowKeys(box, '.tr[data-id]');
+  const keys=rowKeys(box, '.tr[data-id]');
+  box.onkeydown=e=>{ if((e.key==='Enter'||e.key===' ') && catRowLink(e, modKey(e))) return; keys(e); };
   box.onclick=e=>{
+    if(catRowLink(e, modKey(e))) return;
     const s=e.target.closest('.th-s');
     if(s){ const k=s.dataset.sort, cur=String(state.sort||'name');
       state.sort=cur===k?'-'+k:k; paintCatRows(true); syncHashContext();
@@ -3097,7 +3131,8 @@ function renderCatLanding(){
     activateRow(e, tr.dataset.id, {q:state.filter||undefined, el:(w&&w.el)||undefined});
   };
   box.onmousedown=e=>{ if(e.button===1 && e.target.closest('.tr[data-id]')) e.preventDefault(); };
-  box.onauxclick=e=>{ const tr=e.button===1&&e.target.closest('.tr[data-id]'); if(tr){ e.preventDefault(); openTabs([tr.dataset.id], {background:true}); } };
+  box.onauxclick=e=>{ if(e.button===1 && catRowLink(e, true)) return;
+    const tr=e.button===1&&e.target.closest('.tr[data-id]'); if(tr){ e.preventDefault(); openTabs([tr.dataset.id], {background:true}); } };
   paintCatRows(true);
   renderListMarkBar();
 }

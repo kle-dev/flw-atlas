@@ -30,7 +30,7 @@ view you are looking at can be copied as a link.
 | `#/variables` | The [unused-variable](../variables/) report and what Atlas could not judge |
 | `#/scripts` | Every script body in the project |
 | `#/schema` | Schema gaps: Liquibase → service → data object, per column |
-| `#/browse/<category>` | A category — one per node type, Java role, variable scope and review list — as a sortable table: name, key, file, references in and out, open findings, and a column or two the type is worth more with (the app a model belongs to, a service's table, a review list's finding). Opening a row brings the list back beside the node |
+| `#/browse/<category>` | A category — one per node type, Java role, variable scope and review list — as a sortable table: name, key, file, references in and out, open findings, and a column or two the type is worth more with (the bot an action runs and the actions that reach a bot, the app a model belongs to, a service's table, a review list's finding). Opening a row brings the list back beside the node |
 | `#<nodeId>` | Browse with that node selected. This is the permalink form |
 | `#<nodeId>&q=<term>` | …with the search term that led there highlighted |
 | `#<nodeId>&e=<elementId>` | …with a specific model element opened — and selected on the diagram |
@@ -71,7 +71,13 @@ category opens as a **table** of its nodes, sorted by any column header (a secon
 filtered with the same engine as the search; rows are marked, walked and opened exactly like the list —
 a click opens, `⌘/Ctrl`-click or `⇧`-click marks, a middle-click opens a background tab. The list column
 steps aside while the table shows the same rows, and comes back beside the node a row opens, with the
-filter and the sort. The categories are:
+filter and the sort.
+
+The **Actions** table names the bot each action runs: a Java bot by its class, a bot the platform ships by
+its key. The name is a link to the bot, with a copy button for its class name or key, and inside the IDE a
+button that opens the Java bot's source. The **Bots** and **Java · bot** tables answer the other way round:
+an *Actions* column links each bot to the actions that reach it. A link in a row opens its own target, not
+the row; `⌘/Ctrl`-click or a middle-click opens it in a background tab. The categories are:
 
 - one per **node type** present — process, case, decision, form, page, data object, service, agent,
   channel, event, action, bot, query, template, sequence, security policy, endpoint, method, Liquibase
