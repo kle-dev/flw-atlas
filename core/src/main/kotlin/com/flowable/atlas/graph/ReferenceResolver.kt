@@ -221,11 +221,15 @@ object ReferenceResolver {
             for (it in items) if (seen.add(keyfn(it))) out.add(it)
             return out
         }
-        fun refKey(r: Map<String, Any?>) = listOf(r["from"], r["rel"], r["kind"], r["value"])
+        // The source's type is part of the identity: a case and its start form share a key, and the same
+        // reference from both is two references — collapsed, the form's one was credited to the case.
+        fun refKey(r: Map<String, Any?>) = listOf(
+            (r["fromType"] as? String)?.let { ModelKinds.NORMALIZE_TYPE[it] ?: it }, r["from"], r["rel"], r["kind"], r["value"],
+        )
 
         replaceInPlace(ctx.refs, dedupe(ctx.refs, ::refKey))
         replaceInPlace(ctx.dynamicRefs, dedupe(ctx.dynamicRefs, ::refKey))
-        replaceInPlace(ctx.restCalls, dedupe(ctx.restCalls) { rc -> listOf(rc["source"], rc["where"], rc["url"]) })
+        replaceInPlace(ctx.restCalls, dedupe(ctx.restCalls) { rc -> listOf(rc["sourceId"] ?: rc["source"], rc["where"], rc["url"]) })
         for (bucket in ModelKinds.MODEL_BUCKETS) {
             val cur = bucketList(bucket)
             // Identity is (type, key), never the key alone: a form and a page, or a query and a
@@ -246,13 +250,14 @@ object ReferenceResolver {
             val url = (rc["url"] as? String) ?: ""
             val source = rc["source"]
             val sourceFile = (rc["sourceFile"] as? String) ?: ""
-            // The originating model type follows the call's kind — an http-task URL comes from a
-            // process, a service-op URL from a service model, everything else from a form/page.
-            val srcType = when (rc["kind"]) {
-                "service-op" -> "service"
-                "http-task" -> "process"
-                else -> "form"
-            }
+            // The originating model type is the one the call was recorded under; the kind is only the
+            // fallback for a record without it (a page's call is not a form's).
+            val srcType = (rc["sourceId"] as? String)?.substringBefore(':', "")?.takeIf { it.isNotEmpty() }
+                ?: when (rc["kind"]) {
+                    "service-op" -> "service"
+                    "http-task" -> "process"
+                    else -> "form"
+                }
             for (m in DATA_OBJ_KEY_RE.findAll(url)) {
                 ctx.addRef(source, srcType, sourceFile, "queries-dataObject", "dataObject", m.groupValues[1])
             }
@@ -388,10 +393,9 @@ object ReferenceResolver {
             fun describe(m: Map<String, Any?>) =
                 "${m["http"]} ${m["path"]} -> ${m["controller"]}#${m["handler"]} (${m["file"]}:${m["line"]})" +
                     (if (m["methodMismatch"] == true) " (verb differs)" else "")
-            // Clean (segment-suffix) and loose (shared-last-literal-segment) hits are kept apart: a loose
-            // hit is a guess, and reporting it as "served by" states something untrue — e.g. a call to
-            // `…/customers/{{id}}/canEdit` loosely matches `GET /api/customers` on the shared `customers`
-            // segment. [JavaParser.matchRest] annotates them; only the graph honoured that until now.
+            // A path hit whose handler serves another verb is kept apart from the real matches: the call
+            // does reach that path, but reporting it as "served by" states something untrue.
+            // [JavaParser.matchRest] marks it `loose`.
             val (loose, clean) = matchEps.partition { it["loose"] == true }
             rc["matches"] = clean.map(::describe)
             rc["looseMatches"] = loose.map(::describe)

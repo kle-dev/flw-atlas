@@ -355,67 +355,127 @@ object JavaParser {
         return keys to ops
     }
 
-    private val SCHEME_HOST_RE = Regex("""^[a-z]+://[^/]+""")
+    private val SCHEME_HOST_RE = Regex("""^[a-zA-Z][a-zA-Z0-9+.-]*://([^/?#]*)""")
     private val PLACEHOLDER_RE = Regex("""[#$]\{[^}]*\}|\{\{[^}]*\}\}|\{[^}]*\}""")
-
-    private fun normPath(url: String?): List<String> {
-        var p = SCHEME_HOST_RE.replace(url ?: "", "")
-        p = p.substringBefore("?")
-        p = PLACEHOLDER_RE.replace(p, "*")
-        return p.lowercase().split("/").filter { it.isNotEmpty() }
-    }
+    private val PLATFORM_ENDPOINT_RE = Regex("""\{\{\s*endpoints\.([A-Za-z0-9_$]+)\s*\}\}/*""")
+    private val LOCAL_HOST_RE = Regex("""(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1])(?::\d+)?""", RegexOption.IGNORE_CASE)
 
     /**
-     * REST endpoints whose path matches [url]. A segment-suffix match (placeholders `*` match any segment)
-     * is a confident hit; the legacy shared-last-literal-segment rule still matches but is annotated
-     * `loose=true` so the graph flags the edge as suspect instead of presenting it clean.
+     * The REST roots Flowable Work's frontend resolves `{{endpoints.<id>}}` to — `defaultWorkEndpoints` in
+     * the platform's `flowable-work-api/endpoints.ts`. A model URL built on one of them calls Flowable's own
+     * API (`{{endpoints.idm}}/users/{{$id}}` is `idm-api/users/…`), never a controller of the project, and
+     * resolving the placeholder is what lets the matcher see that. Read as a mere placeholder it matched
+     * any project endpoint ending in a variable — 24 forms of one real project "called" five unrelated
+     * controllers through `{{endpoints.idm}}/users?…`.
+     */
+    private val PLATFORM_ENDPOINTS = mapOf(
+        "action" to "action-api", "engage" to "engage-api", "form" to "form-api", "idm" to "idm-api",
+        "report" to "platform-api/reports", "cmmn" to "cmmn-api", "core" to "core-api", "license" to "core-api",
+        "process" to "process-api", "platform" to "platform-api", "agent" to "agent-api",
+        "design" to "platform-design-api", "login" to "auth/login", "logout" to "auth/logout", "auth" to "auth",
+        "content" to "content-api", "dmn" to "dmn-api", "dataobject" to "dataobject-api", "audit" to "platform-api",
+        "actuator" to "actuator", "template" to "template-api", "tutorial" to "tutorial-api", "inspect" to "inspect-api",
+    )
+
+    /** The first path segment of every Flowable REST API — a context path never looks like one. */
+    private val PLATFORM_ROOTS = PLATFORM_ENDPOINTS.values.map { it.substringBefore('/') }.toSet() + "hub-api"
+
+    /**
+     * What a model URL calls, as path segments — a literal, or `null` for a segment a placeholder fills —
+     * plus whether a context path may precede the endpoint's own path. `null` when the URL can never reach
+     * this project: a client-side route (`#/…`), or an absolute URL on a host other than the local one.
+     * A leading run of placeholders is the base the URL is resolved against (`${serverUrl}`, a custom
+     * `{{endpoints.x}}`) and is dropped; `{{endpoints.baseUrl}}` is the application itself.
+     */
+    private class CallPath(val segs: List<String?>, val prefixAllowed: Boolean)
+
+    private fun callPath(url: String?): CallPath? {
+        var u = url?.trim().orEmpty()
+        if (u.isEmpty() || u.startsWith("#") || "#/" in u) return null
+        var prefixAllowed = u.startsWith("/")
+        SCHEME_HOST_RE.find(u)?.let { m ->
+            val host = m.groupValues[1]
+            if (!PLACEHOLDER_RE.containsMatchIn(host) && !LOCAL_HOST_RE.matches(host)) return null
+            u = u.substring(m.range.last + 1)
+            prefixAllowed = true
+        }
+        u = PLATFORM_ENDPOINT_RE.replace(u) { m ->
+            val id = m.groupValues[1]
+            when {
+                id == "baseUrl" -> ""
+                id in PLATFORM_ENDPOINTS -> PLATFORM_ENDPOINTS.getValue(id) + "/"
+                else -> m.value
+            }
+        }
+        u = u.substringBefore('?').substringBefore('#')
+        val raw = u.split('/').filter { it.isNotEmpty() }
+        val body = raw.dropWhile { PLACEHOLDER_RE.containsMatchIn(it) }
+        if (body.size < raw.size) prefixAllowed = true
+        return CallPath(body.map { if (PLACEHOLDER_RE.containsMatchIn(it)) null else it }, prefixAllowed)
+    }
+
+    /** An endpoint path as segments, `null` for a path variable (`{id}`, `{id:\d+}`, a `*` pattern). */
+    private fun endpointPath(path: String?): List<String?> =
+        path.orEmpty().substringBefore('?').split('/').filter { it.isNotEmpty() }
+            .map { if ('{' in it || '*' in it) null else it }
+
+    /**
+     * REST endpoints whose path matches [url].
      *
-     * Among the confident hits, a handler whose path spells out more of the URL's literal segments wins,
-     * as it does in Spring's routing: `/orders/archive` is served by `POST /orders/archive`, not by
-     * `GET /orders/{id}` whose variable would also take `archive`.
+     * A call reaches an endpoint when the endpoint's path is the tail of the call's path, segment by
+     * segment: an endpoint literal needs the same literal in the call, an endpoint path variable takes any
+     * one segment. What went before the tail is a context path — allowed only where the URL is rooted,
+     * absolute or built on a base placeholder, never a relative URL (`api/x` is resolved against the
+     * application itself), and never one of Flowable's own REST roots (`platform-api/audit-trail` is not
+     * the project's `/audit-trail`). At least one literal has to agree, so a URL that is nothing but
+     * placeholders matches nothing.
      *
-     * With a [method] the caller states for certain, a handler for another verb is not a match. A
-     * confident path hit with the wrong verb is dropped when a handler with the right verb also matches,
-     * and otherwise kept as loose with `methodMismatch=true` — a PUT against a POST-only handler is a
-     * suspect link worth seeing, not nothing. A loose hit with the wrong verb is dropped. The method is
-     * unknown when it is null, blank, `?` or an expression; a handler mapped to `ANY` takes every verb.
+     * A placeholder in the call is not evidence for an endpoint literal: `/api/orders/{{n}}` is not
+     * `POST /api/orders/archive`, though `n` might be `archive` at run time. Treating it as a wildcard
+     * turned `{{base}}/{{x}}` into a clean match of every endpoint with two segments, and a `#/…/case/{{id}}`
+     * route into a call of every one-segment endpoint. The shared-last-literal-segment fallback is gone for
+     * the same reason: on the real projects it only ever linked a call to the wrong endpoint.
+     *
+     * Among the hits, a handler whose path spells out more of the URL's literal segments wins, as it does
+     * in Spring's routing: `/orders/archive` is served by `POST /orders/archive`, not by `GET /orders/{id}`
+     * whose variable would also take `archive`.
+     *
+     * With a [method] the caller states for certain, a handler for another verb is not a match. A path hit
+     * with the wrong verb is dropped when a handler with the right verb also matches, and otherwise kept
+     * with `loose=true, methodMismatch=true` — the call does reach that path, and a PUT against a POST-only
+     * handler is a defect worth seeing. The method is unknown when it is null, blank, `?` or an expression;
+     * a handler mapped to `ANY` takes every verb.
      */
     fun matchRest(url: String?, codeEndpoints: List<Map<String, Any?>>, method: String? = null): List<Map<String, Any?>> {
-        val target = normPath(url)
-        if (target.isEmpty()) return emptyList()
-        fun segsMatch(ep: List<String>, tail: List<String>): Boolean =
-            ep.size == tail.size && ep.indices.all { ep[it] == "*" || tail[it] == "*" || ep[it] == tail[it] }
-        fun literals(ep: List<String>, tail: List<String>): Int = ep.indices.count { ep[it] != "*" && ep[it] == tail[it] }
-        val clean = ArrayList<Pair<Map<String, Any?>, Int>>()
-        val loose = ArrayList<Map<String, Any?>>()
+        val call = callPath(url) ?: return emptyList()
+        if (call.segs.isEmpty()) return emptyList()
+        val hits = ArrayList<Pair<Map<String, Any?>, Int>>()
         for (ep in codeEndpoints) {
-            val epSegs = normPath(ep["path"] as? String)
-            if (epSegs.isEmpty()) continue
-            val suffix = target.size >= epSegs.size &&
-                segsMatch(epSegs, target.subList(target.size - epSegs.size, target.size))
-            // A model URL that begins with a variable segment (`${base}`/`{{base}}` → "*") may stand for
-            // a multi-segment base, so the endpoint's trailing segments still identify it even when the
-            // model path is shorter than the endpoint path (the leading "*" absorbs the extra base segs).
-            val varBase = !suffix && target.first() == "*" && target.size in 2..epSegs.size &&
-                segsMatch(epSegs.subList(epSegs.size - (target.size - 1), epSegs.size), target.subList(1, target.size))
-            val lits = epSegs.filter { it != "*" }
-            when {
-                suffix -> clean.add(ep to literals(epSegs, target.subList(target.size - epSegs.size, target.size)))
-                varBase -> clean.add(ep to literals(epSegs.subList(epSegs.size - (target.size - 1), epSegs.size), target.subList(1, target.size)))
-                lits.isNotEmpty() && lits.last() in target -> loose.add(ep + mapOf("loose" to true))
+            val e = endpointPath(ep["path"] as? String)
+            if (e.isEmpty() || e.size > call.segs.size) continue
+            val prefix = call.segs.subList(0, call.segs.size - e.size)
+            if (prefix.isNotEmpty() && (!call.prefixAllowed || prefix.any { it == null || it in PLATFORM_ROOTS })) continue
+            val tail = call.segs.subList(call.segs.size - e.size, call.segs.size)
+            var literals = 0
+            val fits = e.indices.all { i ->
+                val want = e[i]
+                when {
+                    want == null -> true
+                    tail[i] == want -> { literals++; true }
+                    else -> false
+                }
             }
+            if (fits && literals > 0) hits.add(ep to literals)
         }
         val verb = knownVerb(method)
         fun fits(ep: Map<String, Any?>): Boolean { val hv = knownVerb(ep["http"] as? String); return verb == null || hv == null || hv == verb }
         // the verb first — a GET call is not answered by the POST handler that happens to spell more of the
         // path — then, among the handlers for the right verb, the most literal path
-        val cleanFit = clean.filter { fits(it.first) }
-        val best = cleanFit.maxOfOrNull { it.second }
-        val matches = ArrayList<Map<String, Any?>>()
-        cleanFit.filter { it.second == best }.forEach { matches.add(it.first) }
-        if (cleanFit.isEmpty()) clean.forEach { matches.add(it.first + mapOf("loose" to true, "methodMismatch" to true)) }
-        loose.filter(::fits).forEach(matches::add)
-        return matches
+        val right = hits.filter { fits(it.first) }
+        val best = right.maxOfOrNull { it.second }
+        if (right.isNotEmpty()) return right.filter { it.second == best }.map { it.first }
+        val bestOther = hits.maxOfOrNull { it.second }
+        return hits.filter { it.second == bestOther }.map { it.first + mapOf("loose" to true, "methodMismatch" to true) }
     }
 
     /** An HTTP verb stated for certain, upper-cased — null for none, `?`, `ANY` or an expression. */

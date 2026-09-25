@@ -337,10 +337,7 @@ object ModelParsers {
             // graph edge to draw, and a null `url` would violate the invariant every other restCalls
             // producer upholds (and break GraphBuilder's non-null cast).
             if (full != null) {
-                ctx.restCalls.add(linkedMapOf(
-                    "source" to doc["key"], "sourceFile" to ffile, "where" to op["key"],
-                    "method" to (oc["method"] ?: "?"), "url" to full, "kind" to "service-op",
-                ))
+                ctx.addRestCall(doc["key"], ffile, op["key"], oc["method"] ?: "?", full, "service-op")
             }
         }
         return info
@@ -558,7 +555,7 @@ object ModelParsers {
                 for (uk in listOf("queryUrl", "lookupUrl")) {
                     if (!truthy(es[uk])) continue
                     dataSources.add(linkedMapOf("kind" to "rest", "url" to es[uk]))
-                    ctx.restCalls.add(linkedMapOf("source" to key, "sourceFile" to ffile, "where" to n["id"], "method" to "GET", "url" to es[uk], "kind" to "form-query"))
+                    ctx.addRestCall(key, ffile, n["id"], "GET", es[uk], "form-query")
                 }
                 val sm = objOf(es["serviceModel"])
                 if (sm != null && truthy(sm["serviceModelKey"])) {
@@ -656,7 +653,7 @@ object ModelParsers {
                 restCalls.add(linkedMapOf(
                     "where" to n["id"], "method" to method, "url" to url, "path" to es?.get("path"),
                 ))
-                ctx.restCalls.add(linkedMapOf("source" to key, "sourceFile" to ffile, "where" to n["id"], "method" to method, "url" to url, "kind" to "form-button"))
+                ctx.addRestCall(key, ffile, n["id"], method, url, "form-button")
                 recordUrlOpUses(url, key, mtype, ffile, ctx)
             }
             // Link components carry their target URL in `value`.

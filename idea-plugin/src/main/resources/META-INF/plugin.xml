@@ -150,6 +150,25 @@
               Model Key</i> and <i>Compare Model with Archive</i> showed in a panel with no key or model to
               act on. The menu is <i>Tools → Flowable Atlas</i> again, entry for entry, with the same
               entries hidden. <i>Dump Key Index</i> stays out of it outside internal mode.</li>
+          <li><b>A REST call links only to an endpoint its URL names.</b> A placeholder counted as whatever
+              segment an endpoint needed, so a URL made mostly of placeholders was a call of every endpoint
+              of its length: on one real project 24 forms "called" five unrelated controllers through
+              <code>{{endpoints.idm}}/users?…</code>, and every <code>#/…/case/{{$item.id}}</code>
+              navigation link called the project's one single-segment endpoint. A call now reaches an
+              endpoint only where its URL ends in that endpoint's path. A placeholder only fills a path
+              variable. <code>{{endpoints.idm}}</code> and the other platform bases read as the Flowable API
+              they stand for (<code>idm-api</code>, <code>platform-api</code>, …). A client-side route,
+              another host, and a URL of nothing but placeholders reach no endpoint at all. The fallback
+              that linked a call to any endpoint sharing its last path segment is gone — on nine real
+              projects it never once found the right one. A call whose verb the handler does not serve is
+              still a suspect link that says <i>verb differs</i>. The explorer's form, service and endpoint
+              pages no longer run a matcher of their own: each rest-call edge carries the URLs that reach it
+              (<code>via</code>), so the pages name exactly the endpoints the graph links. The IDE's
+              endpoint gutter and Find Usages use the same rule.</li>
+          <li><b>A REST call belongs to the model that makes it.</b> Calls were credited by key alone, to
+              whichever model Atlas listed first under that key: a service's operation calls showed up on a
+              form or page with the same key, and the service showed none. Each call now carries the node it
+              came from (<code>sourceId</code>).</li>
         </ul>
         <h3>0.27.0</h3>
         <ul>
@@ -528,19 +547,6 @@
               summary and <code>--fail-on</code> keep the severity; a saved
               <code>#/checks&amp;c=warning</code> link now keeps a defect's warnings only, and the sidebar's
               <i>Checks</i> badge is grey while only advice is open.</li>
-          <li><b>A View menu in the explorer's top bar.</b> The two switches that sat there as bare glyphs —
-              <code>≈</code> for uncertain links and a flag for the finding badges on diagrams — are
-              labelled items of one <i>View</i> menu, each with a line saying what it shows, and the button
-              carries a dot while something is hidden. It is keyboard-driven like a menu: <code>↓</code>
-              opens it, <code>Space</code> flips a switch, <code>Escape</code> closes it.</li>
-          <li><b>The explorer fits an editor tab.</b> A window of 1100px or less — the IDE editor tab the
-              page is mostly read in — gets a compact, labelled sidebar instead of the rail of 27 unlabelled
-              icons; the rail is still there by dragging the sidebar's edge below 140px, and a double-click
-              on the edge goes back to the automatic layout instead of pinning 240px. A tab strip holding
-              more than it can show fades the edge that hides tabs, scrolls with the wheel, and lists the
-              hidden tabs behind a <b>+N</b> button. The browse list is narrower there and folds away from a
-              button in its head — or by dragging its edge shut — to give the page the whole width; a long
-              name no longer pushes its findings pill out of sight.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

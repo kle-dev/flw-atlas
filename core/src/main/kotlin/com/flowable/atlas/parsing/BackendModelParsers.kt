@@ -259,11 +259,7 @@ object BackendModelParsers {
                         if (type == "http") {
                             val f = XmlHelpers.readFields(el)
                             if (truthy(f["requestUrl"])) {
-                                ctx.restCalls.add(linkedMapOf(
-                                    "source" to pkey, "sourceFile" to ffile, "where" to eid,
-                                    "method" to pyOr(f["requestMethod"], "GET"),
-                                    "url" to f["requestUrl"], "kind" to "http-task",
-                                ))
+                                ctx.addRestCall(pkey, ffile, eid, pyOr(f["requestMethod"], "GET"), f["requestUrl"], "http-task")
                             }
                         } else if (type == "send-event" || type == "sendEvent") {
                             ctx.addRef(pkey, "bpmn", ffile, "sends-event", "event", XmlHelpers.readFields(el)["eventType"])

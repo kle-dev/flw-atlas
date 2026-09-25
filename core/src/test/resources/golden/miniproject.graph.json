@@ -1464,12 +1464,23 @@
       {
         "rel": "rest-call",
         "s": "form:orderForm",
-        "t": "endpoint:GET /api/customers"
+        "t": "endpoint:GET /api/customers",
+        "via": [
+          "/api/customers"
+        ]
       },
       {
         "rel": "rest-call",
         "s": "form:orderForm",
-        "t": "endpoint:GET /api/customers/{id}/canEdit"
+        "t": "endpoint:GET /api/customers/{id}/canEdit",
+        "via": [
+          "{{endpoints.baseUrl}}/api/customers/{{customer}}/canEdit"
+        ]
+      },
+      {
+        "rel": "rest-call",
+        "s": "form:orderForm",
+        "t": "external:/api/customers/{{customer}}/score"
       },
       {
         "rel": "rest-call",
@@ -1479,7 +1490,10 @@
       {
         "rel": "rest-call",
         "s": "service:customerService",
-        "t": "endpoint:GET /api/customers"
+        "t": "endpoint:GET /api/customers",
+        "via": [
+          "/api/customers"
+        ]
       },
       {
         "rel": "ruleTask-decision",
@@ -3804,6 +3818,17 @@
         "key": "orderTypes",
         "label": "Order types",
         "type": "dataDictionary"
+      },
+      {
+        "data": {
+          "external_url": true,
+          "method": "GET"
+        },
+        "file": null,
+        "id": "external:/api/customers/{{customer}}/score",
+        "key": "/api/customers/{{customer}}/score",
+        "label": "/api/customers/{{customer}}/score",
+        "type": "external"
       },
       {
         "data": {
@@ -7768,29 +7793,16 @@
   "restCalls": [
     {
       "kind": "form-button",
-      "looseMatches": [
-        "GET /api/customers -> CustomerController#customers (src/main/java/com/example/CustomerController.java:10)"
-      ],
+      "looseMatches": [],
       "matches": [
         "GET /api/customers/{id}/canEdit -> CustomerController#canEdit (src/main/java/com/example/CustomerController.java:15)"
       ],
       "method": "GET",
       "source": "orderForm",
       "sourceFile": "forms/order-form.form",
+      "sourceId": "form:orderForm",
       "url": "{{endpoints.baseUrl}}/api/customers/{{customer}}/canEdit",
       "where": "canEditButton"
-    },
-    {
-      "kind": "form-button",
-      "looseMatches": [
-        "GET /api/customers -> CustomerController#customers (src/main/java/com/example/CustomerController.java:10)"
-      ],
-      "matches": [],
-      "method": "GET",
-      "source": "orderForm",
-      "sourceFile": "forms/order-form.form",
-      "url": "/api/customers/{{customer}}/score",
-      "where": "creditScore"
     },
     {
       "kind": "form-button",
@@ -7799,6 +7811,7 @@
       "method": "GET",
       "source": "DEMO-LF001",
       "sourceFile": "form-models/DEMO-LF001.json",
+      "sourceId": "form:DEMO-LF001",
       "url": "/api/orders/{{legacyOrderId}}",
       "where": "loadOrder"
     },
@@ -7809,6 +7822,18 @@
       "method": "GET",
       "source": "orderForm",
       "sourceFile": "forms/order-form.form",
+      "sourceId": "form:orderForm",
+      "url": "/api/customers/{{customer}}/score",
+      "where": "creditScore"
+    },
+    {
+      "kind": "form-button",
+      "looseMatches": [],
+      "matches": [],
+      "method": "GET",
+      "source": "orderForm",
+      "sourceFile": "forms/order-form.form",
+      "sourceId": "form:orderForm",
       "url": "https://portal.example.com/{{customer}}",
       "where": "customerPortal"
     },
@@ -7821,6 +7846,7 @@
       "method": "GET",
       "source": "orderForm",
       "sourceFile": "forms/order-form.form",
+      "sourceId": "form:orderForm",
       "url": "/api/customers",
       "where": "customer"
     },
@@ -7831,6 +7857,7 @@
       "method": "GET",
       "source": "DEMO-LF001",
       "sourceFile": "form-models/DEMO-LF001.json",
+      "sourceId": "form:DEMO-LF001",
       "url": "/api/orders?customer={{customerPick}}",
       "where": "orderRows"
     },
@@ -7843,6 +7870,7 @@
       "method": "GET",
       "source": "customerService",
       "sourceFile": "services/customer.service",
+      "sourceId": "service:customerService",
       "url": "/api/customers",
       "where": "findAll"
     }
@@ -8014,14 +8042,14 @@
     "archives": 1,
     "defects": 9,
     "dynamicEdges": 0,
-    "edges": 63,
+    "edges": 64,
     "endpoints": 2,
     "exprSkippedNested": 0,
     "groups": 3,
     "java": 3,
     "modelCount": 27,
     "models": 27,
-    "nodes": 121,
+    "nodes": 122,
     "scriptIssues": 2,
     "suspectEdges": 0
   },

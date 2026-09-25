@@ -19,6 +19,21 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   in Browser* submenu drew as an empty row, and *Copy Model Key* and *Compare Model with Archive* showed in a
   panel with no key or model to act on. The menu is *Tools → Flowable Atlas* again, entry for entry, with the
   same entries hidden. *Dump Key Index* stays out of it outside internal mode.
+- **A REST call links only to an endpoint its URL names.** A placeholder counted as whatever segment an
+  endpoint needed, so a URL made mostly of placeholders was a call of every endpoint of its length: on one
+  real project 24 forms "called" five unrelated controllers through `{{endpoints.idm}}/users?…`, and every
+  `#/…/case/{{$item.id}}` navigation link called the project's one single-segment endpoint. A call now
+  reaches an endpoint only where its URL ends in that endpoint's path. A placeholder only fills a path
+  variable. `{{endpoints.idm}}` and the other platform bases read as the Flowable API they stand for
+  (`idm-api`, `platform-api`, …). A client-side route, another host, and a URL of nothing but placeholders
+  reach no endpoint at all. The fallback that linked a call to any endpoint sharing its last path segment
+  is gone — on nine real projects it never once found the right one. A call whose verb the handler does not
+  serve is still a suspect link that says *verb differs*. The explorer's form, service and endpoint pages no
+  longer run a matcher of their own: each rest-call edge carries the URLs that reach it (`via`), so the pages
+  name exactly the endpoints the graph links. The IDE's endpoint gutter and Find Usages use the same rule.
+- **A REST call belongs to the model that makes it.** Calls were credited by key alone, to whichever model
+  Atlas listed first under that key: a service's operation calls showed up on a form or page with the same
+  key, and the service showed none. Each call now carries the node it came from (`sourceId`).
 
 ## 0.27.0
 

@@ -13,7 +13,7 @@ import com.intellij.openapi.vfs.VirtualFile
  *
  * Matching is the exact, tested `:core` [JavaParser.matchRest] used by the Atlas graph — path and verb —
  * so the IDE navigation and the generated explorer agree on what "a model calls this endpoint" means.
- * Only clean (segment-suffix, same verb) matches count; loose shared-last-segment matches and wrong-verb
+ * Only clean (the endpoint's path spelled out at the end of the URL, same verb) matches count; wrong-verb
  * hits are dropped to keep gutter navigation free of false links. A verb that is unknown on either side
  * (no `requestMethod`, an expression, a handler mapped to `ANY`) falls back to a path-only match.
  */

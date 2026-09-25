@@ -125,6 +125,19 @@ class Ctx {
         target.add(entry)
     }
 
+    /**
+     * Record an outbound REST call of the model being parsed. `source` stays the bare key the JSON has
+     * always carried; `sourceId` is the node the call belongs to. Resolving the bare key instead handed a
+     * service's operation calls to a form with the same key — the form's page then listed endpoints the
+     * form never calls, while the service's own page had none.
+     */
+    fun addRestCall(source: Any?, sourceFile: String, where: Any?, method: Any?, url: Any?, kind: String) {
+        restCalls.add(linkedMapOf(
+            "source" to source, "sourceId" to modelId(source), "sourceFile" to sourceFile, "where" to where,
+            "method" to method, "url" to url, "kind" to kind,
+        ))
+    }
+
     /** Record that [consumer] invokes operation [opKey] on a service ([targetKind] = "service") or a
      *  data object ([targetKind] = "dataObject", resolved to its backing service later). Dynamic
      *  (`${…}`/`{{…}}`) target/operation keys are skipped — they can't be tied to one operation. */

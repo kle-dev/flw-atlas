@@ -28,10 +28,27 @@ class SharedKeyGraphTest {
             // points at the page, and only a type-aware lookup reaches the form.
             File(dir, "a-shared.page").writeText(
                 """{"metadata":{"key":"shared","name":"Shared page","modelType":"page"},
-                    "rows":[{"cols":[{"id":"pageField","type":"text","value":"{{pageOnly}}"}]}]}""")
+                    "rows":[{"cols":[{"id":"pageField","type":"text","value":"{{pageOnly}}"},
+                      {"id":"pageButton","type":"restButton","extraSettings":{"url":"api/page-things"}}]}]}""")
             File(dir, "z-shared.form").writeText(
                 """{"metadata":{"key":"shared","name":"Shared form","modelType":"form"},
                     "rows":[{"cols":[{"id":"formField","type":"text","value":"{{formOnly}}"}]}]}""")
+            // A service of the same key, registered after both: the key-only map never points at it.
+            File(dir, "shared.service").writeText(
+                """{"key":"shared","name":"Shared service","type":"rest","operations":[
+                    {"key":"get","name":"Get","config":{"method":"GET","url":"/api/shared-things/{id}"}}]}""")
+            File(dir, "src/main/java/com/example").mkdirs()
+            File(dir, "src/main/java/com/example/ThingController.java").writeText(
+                """package com.example;
+                  |import org.springframework.web.bind.annotation.*;
+                  |@RestController
+                  |public class ThingController {
+                  |    @GetMapping("/api/shared-things/{id}")
+                  |    public String shared(@PathVariable String id) { return "{}"; }
+                  |    @GetMapping("/api/page-things")
+                  |    public String page() { return "[]"; }
+                  |}
+                  |""".trimMargin())
             File(dir, "p.bpmn").writeText(
                 """<definitions xmlns:flowable="http://flowable.org/bpmn">
                      <process id="p"><userTask id="t" flowable:formKey="shared"/></process>
@@ -66,10 +83,11 @@ class SharedKeyGraphTest {
 
     @Test
     @Suppress("UNCHECKED_CAST")
-    fun theSharedKeyIsSaidOnceAndIsNotAFinding() {
+    fun theSharedKeyIsSaidOncePerTypeAndIsNotAFinding() {
         val conflicts = (result["diagnostics"] as List<Map<String, Any?>>).filter { it["kind"] == "conflict" }
-        assertEquals("one shared key, one diagnostic", 1, conflicts.size)
-        assertTrue(conflicts.single()["message"].toString().contains("'shared'"))
+        // one per type that joins the key: the form and the service after the page
+        assertEquals("one shared key, one diagnostic per further type", 2, conflicts.size)
+        assertTrue(conflicts.all { it["message"].toString().contains("'shared'") })
         // Nothing failed to parse, and nothing harvested is mis-credited any more: not a parse issue.
         val parse = (result["findings"] as List<Map<String, Any?>>).filter { it["check"] == "parseIssues" }
         assertTrue("a shared key is information, not a finding: $parse", parse.isEmpty())
@@ -85,5 +103,22 @@ class SharedKeyGraphTest {
         assertEquals(listOf("page:shared"), usedBy("binding:{{pageOnly}}"))
         val formOnly = graph("nodes").single { it["id"] == "variable:formOnly" }["data"] as Map<String, Any?>
         assertEquals(listOf("form:shared"), formOnly["usedBy"])
+    }
+
+    @Test
+    fun aRestCallStaysWithTheModelThatMakesIt() {
+        // Resolved by key alone, the service's operation call landed on the page (registered first), and
+        // the page's own page listed an endpoint it never calls.
+        val calls = graph("edges").filter { it["rel"] == "rest-call" }.associate { it["s"] to it["t"] }
+        assertEquals(mapOf(
+            "service:shared" to "endpoint:GET /api/shared-things/{id}",
+            "page:shared" to "endpoint:GET /api/page-things",
+        ), calls)
+    }
+
+    @Test
+    fun aRestCallEdgeNamesTheUrlsThatReachIt() {
+        val edge = graph("edges").single { it["rel"] == "rest-call" && it["s"] == "service:shared" }
+        assertEquals(listOf("/api/shared-things/{id}"), edge["via"])
     }
 }

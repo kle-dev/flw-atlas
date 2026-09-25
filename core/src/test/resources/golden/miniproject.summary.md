@@ -1,6 +1,6 @@
 # Flowable project — `miniproject` (quick overview)
 
-_27 models (27 files · 1 archives) · 3 Java files · 121 nodes · 63 relationships · 3 user groups. Compact summary — full report in `miniproject.overview.md`, full graph in `miniproject.graph.json`._
+_27 models (27 files · 1 archives) · 3 Java files · 122 nodes · 64 relationships · 3 user groups. Compact summary — full report in `miniproject.overview.md`, full graph in `miniproject.graph.json`._
 
 ⚠ **2 file(s) could not be fully analyzed** (parse/read failures) — the map below may be incomplete. Details: the Findings section of `miniproject.overview.md`, or `diagnostics` in `miniproject.graph.json`.
 
@@ -47,7 +47,7 @@ Agents: orderAssistant
 - app `demoApp` — Demo App (referenced by 2)
 
 ## External surface
-- External REST URLs called: 3
+- External REST URLs called: 4
 - Review (unresolved in project — likely missing/external): bean:notifierBean, process:courierProcess
 
 ## Health — 9 defects · 8 advice

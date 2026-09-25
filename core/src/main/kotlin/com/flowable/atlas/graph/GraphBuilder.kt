@@ -607,12 +607,13 @@ object GraphBuilder {
         // ------------------------------------------------------------------ edges
         val edges = ArrayList<LinkedHashMap<String, Any?>>()
         fun addEdge(s: String?, t: String?, rel: String, suspect: Boolean = false, dynamic: Boolean = false,
-                    colocated: Boolean = false) {
+                    colocated: Boolean = false, via: String? = null) {
             if (!s.isNullOrEmpty() && !t.isNullOrEmpty() && s != t) {
                 val e = linkedMapOf<String, Any?>("s" to s, "t" to t, "rel" to rel)
                 if (suspect) e["suspect"] = true
                 if (dynamic) e["dynamic"] = true
                 if (colocated) e["colocated"] = true
+                if (via != null) e["via"] = listOf(via)
                 edges.add(e)
             }
         }
@@ -749,13 +750,16 @@ object GraphBuilder {
             addEdge(s, nid, rel, dynamic = true)
         }
 
-        // rest calls -> endpoint (matched) or external url
+        // rest calls -> endpoint (matched) or external url. The edge carries the URLs that reach it as
+        // written (`via`), so the page can tell which of a model's calls an endpoint answers without a
+        // matcher of its own — a second copy of the rules is a second set of answers.
         for (rc in ctx.restCalls) {
-            val s = kn(rc["source"])
+            val s = kn(rc["sourceId"] ?: rc["source"])
             val matchEps = rc["_matchEps"] as? List<Map<String, Any?>>
             if (!matchEps.isNullOrEmpty()) {
                 for (ep in matchEps) {
-                    addEdge(s, "endpoint:${ep["http"]} ${ep["path"]}", "rest-call", suspect = ep["loose"] == true)
+                    addEdge(s, "endpoint:${ep["http"]} ${ep["path"]}", "rest-call", suspect = ep["loose"] == true,
+                        via = rc["url"] as? String)
                 }
                 continue
             }
@@ -978,6 +982,9 @@ object GraphBuilder {
                 if (prev["dynamic"] == true && e["dynamic"] != true) prev.remove("dynamic")
                 // declared in the app definition as well as sitting beside it: a declared member
                 if (prev["colocated"] == true && e["colocated"] != true) prev.remove("colocated")
+                (e["via"] as? List<*>)?.let { more ->
+                    prev["via"] = ((prev["via"] as? List<*>).orEmpty() + more).distinct()
+                }
             }
         }
         val uniq = ArrayList<Map<String, Any?>>(edgeByKey.values)

@@ -507,8 +507,8 @@ function rebuildAdj(){
   outM.clear(); incM.clear();
   edges.forEach(e=>{
     if(hideUncertain && (e.suspect||e.dynamic)) return;
-    push(outM,e.s,{rel:e.rel,id:e.t,sus:!!e.suspect,dyn:!!e.dynamic});
-    push(incM,e.t,{rel:e.rel,id:e.s,sus:!!e.suspect,dyn:!!e.dynamic});
+    push(outM,e.s,{rel:e.rel,id:e.t,sus:!!e.suspect,dyn:!!e.dynamic,via:e.via});
+    push(incM,e.t,{rel:e.rel,id:e.s,sus:!!e.suspect,dyn:!!e.dynamic,via:e.via});
   });
 }
 rebuildAdj();
@@ -4969,27 +4969,21 @@ S.fields={id:'formfields', title:'Fields', hint:'every component, what it is bou
   count:(n,c)=>(c.d.fields||[]).length,
   build:(n,c)=>{ const fs=c.d.fields||[]; if(!fs.length) return '';
     return tbl(FIELD_COLS, fs.map(f=>fieldRow(f,c.d)), {placeholder:'filter fields — id, caption, type…'}); }};
-/** A URL's path as segments, placeholders as `*` — the same normal form :core matches endpoints with. */
-function epPathSegs(p){ return String(p||'').replace(/^[a-z]+:\/\/[^/]+/,'').split('?')[0]
-  .replace(/[#$]\{[^}]*\}|\{\{[^}]*\}\}|\{[^}]*\}/g,'*').toLowerCase().split('/').filter(Boolean); }
 /** An HTTP verb a caller or a handler states for certain — '' for none, `?`, `ANY` or an expression. */
 const knownVerb=m=>{ const v=String(m==null?'':m).trim().toUpperCase(); return /^[A-Z]+$/.test(v)&&v!=='ANY'?v:''; };
 /**
- * The project endpoints a URL called from `srcId` reaches, among that node's rest-call edges. With a
- * `method`, a handler for another verb is not one of them; and a path segment the handler spells out
- * beats one it takes as a variable — `/orders/archive` is `POST /orders/archive`, not `GET /orders/{n}`.
+ * The project endpoints a URL called from `srcId` reaches: that node's rest-call edges whose `via` lists
+ * the URL. The generator did the matching; a second matcher here used to answer differently (a
+ * placeholder took any literal), and a page then named an endpoint the graph never linked. With a
+ * `method`, a handler for another verb is not one of them.
  */
 function endpointsFor(srcId, url, method){
   if(!url) return [];
-  const u=epPathSegs(url), verb=knownVerb(method);
-  const lit=ep=>{ const p=epPathSegs((ep.data||{}).path), tail=u.slice(u.length-p.length); return p.filter((s,i)=>s!=='*'&&s===tail[i]).length; };
-  const hits=(outM.get(srcId)||[]).filter(e=>e.rel==='rest-call').map(e=>byId.get(e.id))
-    .filter(ep=>{ if(!ep||ep.type!=='endpoint') return false;
-      const p=epPathSegs((ep.data||{}).path); if(!p.length||p.length>u.length) return false;
-      const tail=u.slice(u.length-p.length); return p.every((s,i)=>s==='*'||tail[i]==='*'||s===tail[i]); })
+  const u=String(url).trim(), verb=knownVerb(method);
+  const hits=(outM.get(srcId)||[]).filter(e=>e.rel==='rest-call'&&(e.via||[]).some(v=>String(v).trim()===u))
+    .map(e=>byId.get(e.id)).filter(ep=>ep&&ep.type==='endpoint')
     .filter(ep=>{ const hv=knownVerb((ep.data||{}).http); return !verb||!hv||hv===verb; });
-  const best=Math.max(0, ...hits.map(lit));
-  return [...new Set(hits)].filter(ep=>lit(ep)===best);
+  return [...new Set(hits)];
 }
 /** The URL, linked to the project endpoint it calls when there is one. */
 function urlCell(srcId, url, method){

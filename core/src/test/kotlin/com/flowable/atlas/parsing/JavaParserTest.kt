@@ -253,8 +253,43 @@ class JavaParserTest {
                 "handler" to "list", "file" to "Ctl.java", "line" to 3),
         )
         assertTrue(JavaParser.matchRest("/api/things", eps).isNotEmpty())
-        assertTrue(JavaParser.matchRest("http://host:8080/api/things?x=1", eps).isNotEmpty())
+        assertTrue(JavaParser.matchRest("http://localhost:8080/api/things?x=1", eps).isNotEmpty())
         assertTrue(JavaParser.matchRest("/api/other", eps).isEmpty())
+    }
+
+    /** The URL shapes that linked models to endpoints they never call, on real projects. */
+    @Test
+    fun matchRestClaimsNoEndpointWithoutEvidence() {
+        val eps = listOf(
+            mapOf<String, Any?>("http" to "GET", "path" to "/calculate", "handler" to "one"),
+            mapOf<String, Any?>("http" to "GET", "path" to "/api/customers/{id}", "handler" to "customer"),
+            mapOf<String, Any?>("http" to "GET", "path" to "/api/teams/{teamId}/users", "handler" to "teamUsers"),
+            mapOf<String, Any?>("http" to "GET", "path" to "/audit-trail", "handler" to "audit"),
+        )
+        fun handlers(url: String) = JavaParser.matchRest(url, eps, "GET").map { it["handler"] }
+        // a client-side route is navigation, whatever its last segment
+        assertEquals(emptyList<Any?>(), handlers("#/{{\$route.currentAppId}}/case/{{\$item.id}}"))
+        assertEquals(emptyList<Any?>(), handlers("https://portal.example.com/#/customers/{{id}}"))
+        // nothing but placeholders is no evidence for any endpoint
+        assertEquals(emptyList<Any?>(), handlers("{{selected.url}}"))
+        assertEquals(emptyList<Any?>(), handlers("{{endpoints.api}}/{{\$temp.resource}}"))
+        assertEquals(emptyList<Any?>(), handlers("\${environment.getProperty('crm.url')}/v1/{{x}}"))
+        // a placeholder is not the literal an endpoint spells out
+        assertEquals(emptyList<Any?>(), handlers("api/customers/{{id}}/{{what}}"))
+        // Flowable's own REST API is not the project's
+        assertEquals(emptyList<Any?>(), handlers("{{endpoints.idm}}/users/{{\$id}}"))
+        assertEquals(emptyList<Any?>(), handlers("{{endpoints.platform}}/audit-trail?scopeId={{id}}"))
+        assertEquals(emptyList<Any?>(), handlers("platform-api/audit-trail"))
+        // another host is another server, however similar its path
+        assertEquals(emptyList<Any?>(), handlers("https://api.example.com/api/customers/42"))
+        // a relative URL is resolved against the application: no context path goes in front of it
+        assertEquals(emptyList<Any?>(), handlers("other/api/customers/42"))
+        // the real calls still land
+        assertEquals(listOf<Any?>("customer"), handlers("api/customers/{{\$id}}"))
+        assertEquals(listOf<Any?>("customer"), handlers("{{endpoints.baseUrl}}api/customers/{{id}}"))
+        assertEquals(listOf<Any?>("customer"), handlers("http://localhost:8080/work/api/customers/\${id}"))
+        assertEquals(listOf<Any?>("customer"), handlers("\${serverUrl}/api/customers/\${id}"))
+        assertEquals(listOf<Any?>("teamUsers"), handlers("api/teams/{{team}}/users"))
     }
 
     @Test
@@ -273,9 +308,11 @@ class JavaParserTest {
         assertFalse("the loose GET list is not a POST's match", hits("/api/orders/archive", "POST").any { it["handler"] == "orders" })
         // a literal segment beats a variable even when the verb is unknown — Spring routes it that way
         assertEquals(listOf("archive"), clean("/api/orders/archive", null))
-        // an unknown verb matches by path: null, blank, "?", an expression
+        // an unknown verb matches by path: null, blank, "?", an expression — and a placeholder takes the
+        // handler's variable, not the literal `archive` another handler spells out
         for (unknown in listOf(null, "", "?", "\${method}", "{{verb}}")) {
-            assertEquals("verb '$unknown'", setOf("byNumber", "archive"), clean("/api/orders/{{n}}", unknown).toSet())
+            assertEquals("verb '$unknown'", listOf("byNumber"), clean("/api/orders/{{n}}", unknown))
+            assertEquals("verb '$unknown'", listOf("archive"), clean("/api/orders/archive", unknown))
         }
         // no handler for the verb: the path hit is kept, demoted to loose and marked
         val put = hits("/api/orders/archive", "PUT").single { it["handler"] == "archive" }
@@ -287,13 +324,14 @@ class JavaParserTest {
     }
 
     @Test
-    fun matchRestVariableMultiSegmentBase() {
-        // The endpoint carries a multi-segment base; the model expresses that base as a single variable
-        // segment, so the model path is shorter — the leading wildcard must absorb the extra base segs.
+    fun matchRestBasePlaceholder() {
+        // A leading placeholder is the base the URL is resolved against: a context path may sit between it
+        // and the endpoint's own path, but it does not stand in for segments the endpoint spells out — a
+        // `{{base}}/customers/99` is as likely another system's `/customers` as this one's `/app-api/v1/…`.
         val eps = listOf(mapOf<String, Any?>("path" to "/app-api/v1/customers/{id}"))
-        assertTrue(JavaParser.matchRest("{{endpoints.baseUrl}}/customers/{id}", eps).isNotEmpty())
-        assertTrue(JavaParser.matchRest("{{base}}/customers/99", eps).isNotEmpty())
-        // a different trailing resource must still not match
+        assertTrue(JavaParser.matchRest("{{base}}/app-api/v1/customers/99", eps).isNotEmpty())
+        assertTrue(JavaParser.matchRest("{{base}}/work/app-api/v1/customers/99", eps).isNotEmpty())
+        assertTrue(JavaParser.matchRest("{{base}}/customers/99", eps).isEmpty())
         assertTrue(JavaParser.matchRest("{{base}}/orders/{id}", eps).isEmpty())
     }
 }
