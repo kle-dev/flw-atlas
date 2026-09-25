@@ -280,6 +280,7 @@
     }
   ],
   "beanIndex": [
+    "customerController",
     "demoBean"
   ],
   "beans": [
@@ -3127,8 +3128,7 @@
           ],
           "package": "com.example",
           "roles": [
-            "component",
-            "delegate"
+            "component"
           ]
         },
         "file": "src/main/java/com/example/DemoBean.java",
@@ -3369,42 +3369,9 @@
       },
       {
         "data": {
-          "beanNames": [],
-          "botKey": "DEMO-invoice-bot",
-          "calledMethods": [],
-          "endpoints": [],
-          "file": "src/main/java/com/example/DemoInvoiceBot.java",
-          "fqn": "com.example.DemoInvoiceBot",
-          "interfaces": [
-            "BotService"
+          "beanNames": [
+            "customerController"
           ],
-          "line": 7,
-          "methods": [
-            {
-              "line": 10,
-              "name": "getKey",
-              "params": 0
-            },
-            {
-              "line": 14,
-              "name": "invoke",
-              "params": 1
-            }
-          ],
-          "package": "com.example",
-          "roles": [
-            "bot"
-          ]
-        },
-        "file": "src/main/java/com/example/DemoInvoiceBot.java",
-        "id": "java:com.example.DemoInvoiceBot",
-        "key": "com.example.DemoInvoiceBot",
-        "label": "DemoInvoiceBot",
-        "type": "java"
-      },
-      {
-        "data": {
-          "beanNames": [],
           "botKey": null,
           "calledMethods": [],
           "endpoints": [
@@ -3448,6 +3415,41 @@
         "id": "java:com.example.CustomerController",
         "key": "com.example.CustomerController",
         "label": "CustomerController",
+        "type": "java"
+      },
+      {
+        "data": {
+          "beanNames": [],
+          "botKey": "DEMO-invoice-bot",
+          "calledMethods": [],
+          "endpoints": [],
+          "file": "src/main/java/com/example/DemoInvoiceBot.java",
+          "fqn": "com.example.DemoInvoiceBot",
+          "interfaces": [
+            "BotService"
+          ],
+          "line": 7,
+          "methods": [
+            {
+              "line": 10,
+              "name": "getKey",
+              "params": 0
+            },
+            {
+              "line": 14,
+              "name": "invoke",
+              "params": 1
+            }
+          ],
+          "package": "com.example",
+          "roles": [
+            "bot"
+          ]
+        },
+        "file": "src/main/java/com/example/DemoInvoiceBot.java",
+        "id": "java:com.example.DemoInvoiceBot",
+        "key": "com.example.DemoInvoiceBot",
+        "label": "DemoInvoiceBot",
         "type": "java"
       },
       {
@@ -6288,6 +6290,8 @@
         "keyedKinds": {},
         "keyedStrings": [],
         "line": 7,
+        "literalCalls": {},
+        "literalFacts": [],
         "methods": [
           {
             "line": 10,
@@ -6329,6 +6333,9 @@
         "endpoints": [],
         "file": "src/main/java/com/example/DemoBean.java",
         "fqn": "com.example.DemoBean",
+        "imports": {
+          "Component": "org.springframework.stereotype.Component"
+        },
         "interfaces": [],
         "isController": false,
         "isGlue": false,
@@ -6337,6 +6344,15 @@
         "keyedKinds": {},
         "keyedStrings": [],
         "line": 6,
+        "literalCalls": {
+          "demoBean": [
+            "Component"
+          ],
+          "total": [
+            "setVariable"
+          ]
+        },
+        "literalFacts": [],
         "methods": [
           {
             "line": 12,
@@ -6375,7 +6391,9 @@
     ],
     "controller": [
       {
-        "beanNames": [],
+        "beanNames": [
+          "customerController"
+        ],
         "botKey": null,
         "deps": [],
         "endpoints": [
@@ -6396,6 +6414,11 @@
         ],
         "file": "src/main/java/com/example/CustomerController.java",
         "fqn": "com.example.CustomerController",
+        "imports": {
+          "GetMapping": "org.springframework.web.bind.annotation.GetMapping",
+          "PathVariable": "org.springframework.web.bind.annotation.PathVariable",
+          "RestController": "org.springframework.web.bind.annotation.RestController"
+        },
         "interfaces": [],
         "isController": true,
         "isGlue": false,
@@ -6404,6 +6427,15 @@
         "keyedKinds": {},
         "keyedStrings": [],
         "line": 8,
+        "literalCalls": {
+          "/api/customers": [
+            "GetMapping"
+          ],
+          "/api/customers/{id}/canEdit": [
+            "GetMapping"
+          ]
+        },
+        "literalFacts": [],
         "methods": [
           {
             "line": 11,
@@ -6441,7 +6473,9 @@
   },
   "javaControllers": [
     {
-      "beanNames": [],
+      "beanNames": [
+        "customerController"
+      ],
       "botKey": null,
       "deps": [],
       "endpoints": [
@@ -6462,6 +6496,11 @@
       ],
       "file": "src/main/java/com/example/CustomerController.java",
       "fqn": "com.example.CustomerController",
+      "imports": {
+        "GetMapping": "org.springframework.web.bind.annotation.GetMapping",
+        "PathVariable": "org.springframework.web.bind.annotation.PathVariable",
+        "RestController": "org.springframework.web.bind.annotation.RestController"
+      },
       "interfaces": [],
       "isController": true,
       "isGlue": false,
@@ -6470,6 +6509,15 @@
       "keyedKinds": {},
       "keyedStrings": [],
       "line": 8,
+      "literalCalls": {
+        "/api/customers": [
+          "GetMapping"
+        ],
+        "/api/customers/{id}/canEdit": [
+          "GetMapping"
+        ]
+      },
+      "literalFacts": [],
       "methods": [
         {
           "line": 11,

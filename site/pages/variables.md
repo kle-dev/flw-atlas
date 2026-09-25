@@ -44,9 +44,11 @@ Three kinds of name are dropped before they ever become a site: beans, Flowable'
 and Java string literals. That last one matters specifically so a Java `setVariable("…", …)` does not
 get reported as a write nothing reads, when the reader is the engine.
 
-A name is a bean only when something says so: the platform declares it, Java declares it, a delegate
-expression names it bare (`${notifier}`), or it is named the way Spring beans are named — `orderService`,
-`pdfGeneratorTask`, `flwTimeUtils`. A method call on any other name is a **read of that variable**:
+A name is a bean only when something says so: the platform declares it, Java declares it — a stereotype
+on a class (`@Service`, `@Component`, `@Configuration`, …), a `@Bean` method, a Spring Data repository —
+a delegate expression names it bare (`${notifier}`), or it is named the way Spring beans are named —
+`orderService`, `pdfGeneratorTask`, `flwTimeUtils`. A class that merely shares the name does not make one:
+`${customer.getName()}` beside a plain `Customer` class reads the variable `customer`. A method call on any other name is a **read of that variable**:
 `${issue.asText()}`, `${attachments.size()}`, `${requesterData.getName()}` read `issue`, `attachments`
 and `requesterData`. Before this rule every `${x.method()}` root was a bean, which took 25 variables on
 four real projects out of the variable graph and listed them as beans nobody could find.

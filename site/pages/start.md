@@ -116,7 +116,7 @@ and Liquibase changelogs. Then it resolves the relationships between them:
 
 - app → its models; process or case → the process, case, decision or form it calls;
 - `${bean.method()}`, `delegateExpression` and listeners → the **Java or Kotlin class and method**, a
-  `@Bean` factory method included, with `file:line`;
+  `@Bean` factory method included (the bean is the class the method returns), with `file:line`;
 - form or process → **REST endpoint** → the controller that serves it, where the URL spells out the
   handler's path — a `#/…` route, another host, a base the model does not name (`${crmUrl}/…`), Flowable's
   own API (`{{endpoints.idm}}` is `idm-api`) or a URL of nothing but placeholders reaches no endpoint of the

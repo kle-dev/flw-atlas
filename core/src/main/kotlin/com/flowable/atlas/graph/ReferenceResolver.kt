@@ -118,6 +118,9 @@ object ReferenceResolver {
         // Global `static final String` constants (simple name → value) and per-class data-object
         // operation calls, collected during the java pass and resolved into op-uses just below.
         val javaConstants = LinkedHashMap<String, String>()
+        val constantsByFile = HashMap<String, Map<String, String>>()
+        val constantsByType = HashMap<String, Map<String, String>>()
+        val ambiguousTypes = HashSet<String>()
         // A simple name two classes give different values: resolving through it would be a guess.
         val ambiguousConstants = HashSet<String>()
         val javaOpCalls = LinkedHashMap<String, List<Map<String, String>>>()
@@ -164,10 +167,46 @@ object ReferenceResolver {
                 val prev = javaConstants.putIfAbsent(n, v)
                 if (prev != null && prev != v) ambiguousConstants.add(n)
             }
+            constantsByFile[fqn] = ownConstants
+            // every type the file declares may hold them — a text scan cannot tell a nested holder apart
+            for (t in (jc["types"] as? List<*>).orEmpty()) {
+                val t2 = t as? String ?: continue
+                if (constantsByType.containsKey(t2) && constantsByType[t2] != ownConstants) ambiguousTypes.add(t2)
+                constantsByType.putIfAbsent(t2, ownConstants)
+            }
             val ops = JavaParser.dataObjectOpCalls(srcText)
             if (ops.isNotEmpty()) javaOpCalls[fqn] = ops
             val (svcKeys, svcOps) = JavaParser.serviceInvocations(srcText)
             if (svcOps.isNotEmpty()) javaServiceCalls[fqn] = Triple(svcKeys, svcOps, ownConstants.values)
+        }
+
+        /**
+         * The value of a string constant as the class [fromFqn] writes it: a literal is itself; `Owner.NAME`
+         * is `Owner`'s constant, and nothing when the project declares no `Owner` — a library's key class is
+         * not the project's namesake; a bare `NAME` is the class's own, a statically imported one, or the
+         * one constant of that name in the project. A name two classes define differently stays unresolved.
+         */
+        fun resolveConst(ref: String, fromFqn: String?): String? {
+            val r = ref.trim()
+            if (r.length >= 2 && r.startsWith('"') && r.endsWith('"')) return r.substring(1, r.length - 1)
+            val name = r.substringAfterLast('.')
+            if (!IDENT_RE.matches(name)) return null
+            if ('.' in r) {
+                val owner = r.substringBeforeLast('.').substringAfterLast('.')
+                if (owner in ambiguousTypes) return null
+                return constantsByType[owner]?.get(name)
+            }
+            fromFqn?.let { constantsByFile[it]?.get(name) }?.let { return it }
+            for (si in (fromFqn?.let { fqnIndex[it] }?.get("staticImports") as? List<*>).orEmpty()) {
+                val imp = si as? String ?: continue
+                val owner = when {
+                    imp.endsWith(".$name") -> imp.substringBeforeLast('.')
+                    imp.endsWith(".*") -> imp.removeSuffix(".*")
+                    else -> continue
+                }.substringAfterLast('.')
+                constantsByType[owner]?.get(name)?.let { return if (owner in ambiguousTypes) null else it }
+            }
+            return if (name in ambiguousConstants) null else javaConstants[name]
         }
 
         // ---- Constants in mapping paths: `@RequestMapping(ApiPaths.BASE)` with the constant in another file.
@@ -179,7 +218,7 @@ object ReferenceResolver {
             if (JavaParser.PATH_CONST in path) {
                 path = Regex("${JavaParser.PATH_CONST}([^${JavaParser.PATH_CONST}]*)${JavaParser.PATH_CONST}").replace(path) { m ->
                     val n = m.groupValues[1]
-                    (if (n in ambiguousConstants) null else javaConstants[n]) ?: ("\${" + n + "}")
+                    resolveConst(n, e["controllerFqn"] as? String) ?: ("\${" + n + "}")
                 }
                 e["path"] = "/" + path.split("/").filter { it.isNotEmpty() }.joinToString("/")
             }
@@ -198,8 +237,7 @@ object ReferenceResolver {
             val identKinds = jc["keyedIdentKinds"] as? Map<String, Set<String>>
             for (id in idents) {
                 val n = id as? String ?: continue
-                if (n in ambiguousConstants) continue
-                val v = javaConstants[n] ?: continue
+                val v = resolveConst(n, jc["fqn"] as? String) ?: continue
                 keyed.add(v); strings.add(v)
                 kinds?.getOrPut(v) { sortedSetOf() }?.addAll(identKinds?.get(n).orEmpty())
             }
@@ -210,16 +248,10 @@ object ReferenceResolver {
         // reference (a generated model-keys class field) — to a model key, then record it as an op-use so
         // the Java class shows up in the operation's "Used by" list (data objects resolve to their
         // backing service in the graph builder, exactly like the form/page data-source usages).
-        fun resolveDefKey(expr: String): String? {
-            val e = expr.trim()
-            if (e.length >= 2 && e.startsWith('"') && e.endsWith('"')) return e.substring(1, e.length - 1)
-            val simple = e.substringAfterLast('.')
-            return if (IDENT_RE.matches(simple)) javaConstants[simple] else null
-        }
         for ((fqn, calls) in javaOpCalls) {
             for (call in calls) {
-                val key = resolveDefKey(call["def"] ?: continue) ?: continue
-                ctx.addOpUse(fqn, "dataObject", key, resolveDefKey(call["op"] ?: continue) ?: continue)
+                val key = resolveConst(call["def"] ?: continue, fqn) ?: continue
+                ctx.addOpUse(fqn, "dataObject", key, resolveConst(call["op"] ?: continue, fqn) ?: continue)
             }
         }
 
@@ -236,9 +268,9 @@ object ReferenceResolver {
         }
         for ((fqn, call) in javaServiceCalls) {
             val (rawKeys, rawOps, ownConstants) = call
-            val named = rawKeys.mapNotNull(::resolveDefKey).filter { it in serviceOps }.distinct()
+            val named = rawKeys.mapNotNull { resolveConst(it, fqn) }.filter { it in serviceOps }.distinct()
             val candidates = named.ifEmpty { ownConstants.filter { it in serviceOps }.distinct() }
-            for (op in rawOps.mapNotNull(::resolveDefKey).distinct()) {
+            for (op in rawOps.mapNotNull { resolveConst(it, fqn) }.distinct()) {
                 val target = candidates.filter { op in serviceOps.getValue(it) }.singleOrNull() ?: continue
                 ctx.addOpUse(fqn, "service", target, op)
             }
@@ -309,11 +341,12 @@ object ReferenceResolver {
         val declaredBeans = ctx.refs.asSequence()
             .filter { it["kind"] == "bean" && !isCallRel(it["rel"] as String) }
             .map { it["value"] as String }.toSet()
-        fun isBean(name: String): Boolean {
-            if (name in Constants.FLOWABLE_PLATFORM_BEANS || name in beanIndex || name in declaredBeans) return true
-            val cap = if (name.isNotEmpty()) name[0].uppercaseChar() + name.substring(1) else name
-            return cap in classIndex || Constants.looksLikeBeanName(name)
-        }
+        // A class named like the root is no bean by that fact: Spring names a bean only what a stereotype,
+        // a `@Bean` method or Spring Data declares — all in [beanIndex]. `${order.getTotal()}` with a POJO
+        // `Order` in the project read `order` as a bean call and lost the variable.
+        fun isBean(name: String): Boolean =
+            name in Constants.FLOWABLE_PLATFORM_BEANS || name in beanIndex || name in declaredBeans ||
+                Constants.looksLikeBeanName(name)
 
         // ---- Resolve references ----
         val resolved = ArrayList<Map<String, Any?>>()
@@ -355,17 +388,24 @@ object ReferenceResolver {
                     }
                 }
                 kind == "bean" -> {
-                    val cap = if (value.isNotEmpty()) value[0].uppercaseChar() + value.substring(1) else value
-                    val jc = beanIndex[value] ?: classIndex[cap]
-                    // A factory bean points at its @Bean method, not at the configuration class's header.
+                    // Only a declared bean name: a class that merely has the name's shape declares none,
+                    // and one with an explicit name (`@Service("other")`) answers to that name only.
+                    val jc = beanIndex[value]
+                    // A factory bean points at its @Bean method, not at the configuration class's header —
+                    // and *is* the type that method returns, when that is a project class: the configuration
+                    // class declares none of the methods a model calls on it. A bean of a library type (a
+                    // `JavaDelegate` lambda) stays with the class whose factory defines it, marked `factory`
+                    // so no method of it is credited to that class.
+                    val factoryType = (jc?.get("beanTypes") as? Map<*, *>)?.get(value) as? String
+                    val beanType = factoryType?.let { JavaTypes.resolve(it, jc, fqnIndex.keys) }
+                    val targetFqn = beanType ?: jc?.get("fqn")
                     val line = (jc?.get("beanMethods") as? Map<*, *>)?.get(value) ?: jc?.get("line")
-                    target = if (jc != null) "${jc["file"]}:$line (${jc["fqn"]})" else null
+                    target = if (jc != null) "${jc["file"]}:$line ($targetFqn)" else null
                     ref2["target"] = target
                     ref2["targetType"] = "bean"
-                    ref2["targetFqn"] = jc?.get("fqn")
-                    // Resolved through a shared simple name or a bean name two classes claim — a
-                    // first-wins guess either way, so keep it flagged.
-                    if (jc != null && beanIndex[value] == null && cap in ambiguousSimple) ref2["suspect"] = true
+                    ref2["targetFqn"] = targetFqn
+                    if (jc != null && (jc["beanMethods"] as? Map<*, *>)?.containsKey(value) == true && beanType == null) ref2["factory"] = true
+                    // a bean name two classes claim — a first-wins guess, so keep it flagged
                     if (jc != null && value in ambiguousBeans) ref2["suspect"] = true
                 }
                 kind == "class" -> {

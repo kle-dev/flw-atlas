@@ -66,6 +66,13 @@ object GraphBuilder {
      *  message/error/escalation — and external-worker topics — meet in one shared node. */
     private val NAMED_REF_KINDS = setOf("signal", "message", "error", "escalation", "topic", "property")
 
+    /** Method names too generic to say anything about their first argument. */
+    private val GENERIC_METHOD_NAMES = setOf(
+        "get", "put", "set", "add", "remove", "contains", "containsKey", "getOrDefault", "equals", "of", "format",
+        "append", "info", "debug", "warn", "error", "trace", "log", "println", "print",
+    )
+    private val ENUM_ENTRY_RE = Regex("[A-Z][A-Z0-9_]*")
+
     /** Model types one record may mean interchangeably: a `.form` can hold a page, a `.data` master data. */
     private val TYPE_FAMILY = mapOf(
         "form" to listOf("page"), "page" to listOf("form"),
@@ -190,6 +197,20 @@ object GraphBuilder {
             }
         }
 
+        // The methods the project declares — a literal handed to one of them (`startReview("DEMO-R1")`) may be
+        // a key passed on to the engine. Collection and logging names are left out: a project's own `get`
+        // does not make `map.get("customer")` a reference.
+        val projectMethods = allJava.values.flatMap { jc ->
+            (jc["methods"] as? List<*>).orEmpty().mapNotNull { (it as? Map<*, *>)?.get("name") as? String }
+        }.toSet() - GENERIC_METHOD_NAMES
+        /** Whether anything in [jc]'s source says the literal [s] might name a model: a constant or a
+         *  comparison holds it, or it is an enum entry's or a project method's first argument. */
+        fun literalNamesAModel(jc: Map<String, Any?>, s: String): Boolean {
+            if (s in (jc["literalFacts"] as? List<*>).orEmpty()) return true
+            val calls = ((jc["literalCalls"] as? Map<*, *>)?.get(s) as? List<*>).orEmpty().filterIsInstance<String>()
+            return calls.any { it in projectMethods || ENUM_ENTRY_RE.matches(it) }
+        }
+
         // every model node by key, in registration order — a key two types share has two owners
         val modelNodesByKey = LinkedHashMap<String, MutableList<String>>()
         for (n in nodes.values) {
@@ -207,19 +228,29 @@ object GraphBuilder {
             if (fqn.isEmpty()) continue
             referencedJava.add(fqn)
             val rel = r["rel"] as String
-            if (rel == "serviceTask-delegate" || rel == "task-delegate" ||
-                rel == "serviceTask-expression" || rel == "task-expression") delegateFqns.add(fqn)
+            // A delegate is what `class` or `delegateExpression` hands the task to. `expression` calls a
+            // method on a bean, which makes the bean no delegate — six plain services carried the role.
+            if ((rel == "serviceTask-delegate" || rel == "task-delegate") && r["factory"] != true) delegateFqns.add(fqn)
             else if (rel.startsWith("executionListener") || rel.startsWith("taskListener") ||
                 rel.startsWith("planItemLifecycleListener")
             ) listenerFqns.add(fqn)
         }
 
+        // A `@Bean` method's bean is the type it returns: its called methods are that class's, not those of
+        // the configuration class that declares the factory.
+        val factoryBeansOf = LinkedHashMap<String, MutableSet<String>>()
+        for (jc in allJava.values) {
+            for ((b, t) in (jc["beanTypes"] as? Map<*, *>).orEmpty()) {
+                val fqn = JavaTypes.resolve(t as String, jc, allJava.keys) ?: continue
+                factoryBeansOf.getOrPut(fqn) { LinkedHashSet() }.add(b as String)
+            }
+        }
         fun calledMethodsFor(jc: Map<String, Any?>): List<String> {
             val out = LinkedHashSet<String>()
+            val factories = (jc["beanTypes"] as? Map<*, *>)?.keys.orEmpty()
             val bset = LinkedHashSet<String>()
-            bset.addAll(jc["beanNames"] as Collection<String>)
-            val primary = jc["primary"] as String
-            bset.add(primary.replaceFirstChar { it.lowercase() })
+            (jc["beanNames"] as Collection<String>).filterTo(bset) { it !in factories }
+            bset.addAll(factoryBeansOf[jc["fqn"] as String].orEmpty())
             for (b in bset) out.addAll(beanMethods[b] ?: emptySet())
             return out.sorted()
         }
@@ -251,14 +282,6 @@ object GraphBuilder {
             if (roles.any { it != "other" } || fqn in referencedJava || vars.isNotEmpty() ||
                 strings.any { it in modelKeys } || fqn in opUseConsumers || topics.isNotEmpty()
             ) javaNode(jc)
-        }
-
-        // index java simple-name -> fqn for dependency (DI) edges; names shared by several classes
-        // resolve first-wins, so edges through them are flagged `suspect`.
-        val simpleToFqn = LinkedHashMap<String, String>()
-        val ambiguousSimple = HashSet<String>()
-        for ((fqn, jc) in allJava) {
-            if (simpleToFqn.putIfAbsent(jc["primary"] as String, fqn) != null) ambiguousSimple.add(jc["primary"] as String)
         }
 
         // --- endpoint nodes ---
@@ -310,13 +333,11 @@ object GraphBuilder {
         // --- variable nodes ---
         // What the resolver decided is a bean (platform, Java, declared bare, or named like one) — every
         // other `${x.method()}` root is a variable and gets its node and its read below.
+        // A class's decapitalised name is a bean only where a stereotype declares it (then it is among its
+        // `beanNames`): a variable `customer` beside a plain `Customer` class used to lose its node.
         val beans = LinkedHashSet<String>(knownBeans)
         beans.addAll(beanMethods.keys)
-        for (jc in allJava.values) {
-            beans.addAll((jc["beanNames"] as? Collection<String>) ?: emptyList())
-            val primary = jc["primary"] as? String
-            if (!primary.isNullOrEmpty()) beans.add(primary.replaceFirstChar { it.lowercase() })
-        }
+        for (jc in allJava.values) beans.addAll((jc["beanNames"] as? Collection<String>) ?: emptyList())
 
         val varUsages = LinkedHashMap<String, LinkedHashMap<String, LinkedHashSet<String>>>()
         // Variables backed by something stronger than a script's bare-identifier read. Everything a
@@ -656,7 +677,8 @@ object GraphBuilder {
         for (r in resolved) {
             val rel = r["rel"] as String
             val fqn = r["targetFqn"] as? String
-            if (rel.startsWith("calls ") && !fqn.isNullOrEmpty()) {
+            // a method called on a factory bean of a library type is that type's, not the factory's class
+            if (rel.startsWith("calls ") && !fqn.isNullOrEmpty() && r["factory"] != true) {
                 val mname = rel.substring(6).trim().trimEnd('(', ')')
                 val mid = "method:$fqn#$mname"
                 val info = methodsCalled.getOrPut(mid) { Triple(fqn, mname, LinkedHashSet()) }
@@ -669,28 +691,31 @@ object GraphBuilder {
             val label = fqn.substringAfterLast(".") + "." + mname + "()"
             // Where the method is declared, so its page opens it: the parser knows each method's line.
             val jc = allJava[fqn]
+            // declared in the class only where the class declares it — an inherited method is not
             val line = (jc?.get("methods") as? List<*>)?.firstNotNullOfOrNull { m ->
                 (m as? Map<*, *>)?.takeIf { it["name"] == mname }?.get("line")
-            } ?: (jc?.get("beanMethods") as? Map<*, *>)?.get(mname)
+            }
+            val declared = line != null && cls in nodes
             addNode(
                 "method", mid.substringAfter(":"), label, if (line != null) jc?.get("file") else null,
-                linkedMapOf<String, Any?>("name" to mname, "class" to fqn, "declaredIn" to (if (cls in nodes) cls else null))
+                linkedMapOf<String, Any?>("name" to mname, "class" to fqn, "declaredIn" to (if (declared) cls else null))
                     .apply { if (line != null) put("line", line) },
             )
             for (c in callers) addEdge(c, mid, "calls")
-            if (cls in nodes) addEdge(mid, cls, "declared-in")
+            if (declared) addEdge(mid, cls, "declared-in")
         }
 
         // expression --calls--> method / java class
         val beanFqn = LinkedHashMap<String, String>()
         for (r in resolved) {
             val fqn = r["targetFqn"] as? String
-            if (r["kind"] == "bean" && !fqn.isNullOrEmpty()) beanFqn[r["value"] as String] = fqn
+            if (r["kind"] == "bean" && !fqn.isNullOrEmpty() && r["factory"] != true) beanFqn[r["value"] as String] = fqn
         }
         for (expr in ctx.exprUse.keys) {
             val enode = "expression:$expr"
             if (enode !in nodes) continue
-            val body = EXPR_STRIP_RE.replace(expr, "")
+            // a call spelled inside a string literal — `${auditLog.log('orderService.cancel()')}` — is text
+            val body = STR_IN_EXPR_RE.replace(EXPR_STRIP_RE.replace(expr, ""), " ")
             for (cm in Constants.METHOD_CALL_FULL_RE.findAll(body)) {
                 val fqn = beanFqn[cm.groupValues[1]] ?: continue
                 val mid = "method:$fqn#${cm.groupValues[2]}"
@@ -846,11 +871,11 @@ object GraphBuilder {
         for ((fqn, jc) in allJava) {
             val snode = "java:$fqn"
             if (snode !in nodes) continue
+            // the type a field or constructor parameter names, as the source's imports and package say —
+            // `import org.flowable.task.api.Task` is not the project's own `Task`
             for (dep in (jc["deps"] as? Collection<String> ?: emptyList())) {
-                val dfqn = simpleToFqn[dep]
-                if (dfqn != null && dfqn != fqn && "java:$dfqn" in nodes) {
-                    addEdge(snode, "java:$dfqn", "uses", suspect = dep in ambiguousSimple)
-                }
+                val dfqn = JavaTypes.resolve(dep, jc, allJava.keys)
+                if (dfqn != null && dfqn != fqn && "java:$dfqn" in nodes) addEdge(snode, "java:$dfqn", "uses")
             }
             // A literal passed to a known key-taking API is a confident reference to a model of the type
             // that API takes — `caseDefinitionKey("X")` is the case X, whatever else is called X. A literal
@@ -867,6 +892,7 @@ object GraphBuilder {
                 }
                 val owners = modelNodesByKey[s].orEmpty()
                 val t = owners.firstOrNull() ?: continue
+                if (s !in keyed && !literalNamesAModel(jc, s as String)) continue
                 addEdge(snode, t, "references", suspect = s !in keyed || owners.size > 1)
             }
             // external-worker subscriptions: the class polls a topic — meets the BPMN/CMMN

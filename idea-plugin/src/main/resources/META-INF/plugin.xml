@@ -202,6 +202,32 @@
               create, edit, view and delete actions count only while they are not switched off, and a
               create-instance button starts the process or the case its <code>instanceType</code> names, not
               both.</li>
+          <li><b>A bean from a <code>@Bean</code> method is the class the method returns.</b> It resolved to
+              the configuration class, which then "declared" every method a model called on the bean and was
+              labelled a delegate: on five real projects 84 links went to nine configuration classes, and 53
+              methods were credited to a class that does not have them. A bean of a library type (a
+              <code>JavaDelegate</code> lambda) stays with the class whose factory defines it, and no method
+              of it is credited there.</li>
+          <li><b>A Java class is linked only by what the code says.</b> - A bean name comes from a
+              stereotype on a <i>type</i>, a <code>@Bean</code> method or a Spring Data repository.
+              MapStruct's <code>@Named</code> on a method, a JSR-330 qualifier on a parameter and
+              <code>@NamedQuery</code> made bean names; and a class that merely shares a name no longer
+              makes it a bean — <code>${customer.getName()}</code> beside a plain <code>Customer</code>
+              class reads the variable <code>customer</code> again, which also brought back one true
+              <i>written but never read</i> on a real project. - A field or constructor parameter's type is
+              the class its imports name: <code>import org.flowable.task.api.Task</code> is not the
+              project's own <code>Task</code>. - A constant is its owner's: <code>LibKeys.MAIN</code> from
+              an imported library is not the project's <code>AKeys.MAIN</code>, and a bare name is the
+              class's own, a statically imported one, or the project's only one. - A string literal that
+              equals a model key counts only where the code does something with it — a constant holds it, a
+              comparison tests it, or it is handed to a project method or an enum entry. A log line, a map
+              key or a <code>@JsonProperty</code> of that name is no reference. -
+              <code>${auditLog.log('orderService.cancel()')}</code> calls <code>log</code>, not
+              <code>cancel</code>; a method is declared in a class only where the class declares it; an
+              expression's bean is no delegate (only <code>class</code> and <code>delegateExpression</code>
+              make one) and a Spring <code>ApplicationListener</code> no listener; and a class is an
+              external worker only for <code>topic(name, lockDuration)</code> or <code>@FlowableWorker(topic
+              = …)</code>, not any builder's <code>.topic(…)</code>.</li>
           <li><b>A setting is a reference only where Flowable reads it as one.</b> An action's
               <code>signalName</code> triggered a signal whatever its bot was; only the platform signal bot
               sends one — the start bots and the dynamic sub-process bot read a definition key, and any
@@ -520,34 +546,6 @@
               name the models that call them, and its bean names the expressions that use them. An agent's
               page holds its tools against the models and operations they name, and its callers against the
               operations it has.</li>
-          <li><b>A form's page opens with its layout.</b> The wireframe the IDE's model preview draws — the
-              twelve-column grid, panels and tabs, every component with its caption and id — is the picture
-              of a form or page in the explorer, clickable like a diagram: a component opens its card (what
-              it is bound to, what it calls, its parameters) and <i>Show in details</i> lands on its row;
-              finding badges sit on it. The explorer, the IDE and the diagrams folder draw every model
-              through one renderer, so the diagrams folder now holds forms, pages and layout-less decision
-              tables too. A page keeps its drawings within a budget, so a project with hundreds of forms
-              does not double in size; a form left out says so.</li>
-          <li><b>What a model's variables are for.</b> <i>Variables &amp; expressions</i> lists a model's
-              variables as a table — how this model writes and reads each one, which other models share it,
-              and the unused-variable verdict — before the expressions, bindings and functions it uses. An
-              SLA checks that the task it watches exists in each model it governs, a query that some queried
-              model writes the variable behind each column, and a template that the models rendering it
-              provide every variable it prints.</li>
-          <li><b>A REST call links to the handler for its verb.</b> <code>GET
-              /api/orders/{orderNumber}</code> and <code>POST /api/orders/archive</code> share a path shape
-              — the variable takes <code>archive</code> — and path-only matching linked each call to both
-              handlers. A call now reaches the handler for its verb, and of those the one that spells out
-              most of the path, as Spring routes it; a verb no handler serves is a suspect link that says
-              <i>verb differs</i>. The IDE's endpoint gutter and Find Usages use the same rule.</li>
-          <li><b>A service or agent task configured by fields calls its model.</b> A service-registry task
-              whose service and operation are field injections (<code>serviceKey</code>,
-              <code>operationKey</code>) — or an agent task naming its <code>agentModelKey</code> that way —
-              was linked to nothing, so its operation was reported unused. It is linked like a task with a
-              mapping element now, and a data-object task's operation counts as used too. And a task's
-              <code>in</code> into a service or agent names the callee's parameter, an <code>out</code> its
-              result field: neither is a variable of any scope, so neither is reported as an input the
-              callee never reads.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

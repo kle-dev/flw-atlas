@@ -13,8 +13,20 @@ object JavaParser {
     // same, so the regexes only have to tolerate Kotlin's spellings of the surrounding syntax — no `;`
     // after the package, `object`/`enum class`, a supertype list after the primary constructor, `fun`.
     private val PKG_RE = Regex("""^\s*package\s+([\w.]+)\s*;?""", RegexOption.MULTILINE)
+    // `import a.b.C;`, `import a.b.*;`, Kotlin's `import a.b.C as D` — static imports are members, not types
+    private val IMPORT_RE = Regex("""^\s*import\s+(static\s+)?([\w.]+?)(\.\*)?(?:\s+as\s+(\w+))?\s*;?\s*$""", RegexOption.MULTILINE)
+    // a factory method's return type: Java `Type name(`, Kotlin `fun name(…): Type`
+    private val JAVA_RETURN_RE = Regex("""([\w.]+)(?:<[^(){};]*>)?(?:\[])?\s+(\w+)\s*\(""")
+    private val KT_RETURN_RE = Regex("""\bfun\s+(\w+)\s*\([^)]*\)\s*:\s*([\w.]+)""")
     private val TYPE_RE = Regex("""\b(?:(?:public|final|abstract|open|data|internal|sealed|private)\s+)*(class|interface|enum\s+class|enum|object)\s+(\w+)""")
-    private val BEAN_ANN_RE = Regex("""@(Component|Service|Repository|Named)\s*(?:\(\s*(?:value\s*=\s*)?"([^"]+)"\s*\))?""")
+    // A stereotype on a *type* makes it a bean, named explicitly or after the type. The same annotation on a
+    // method or a parameter (MapStruct's `@Named`, a JSR-330 qualifier) makes nothing, and `@NamedQuery` or
+    // `@ServiceActivator` are other annotations altogether — both used to register bean names.
+    private val BEAN_ANN_RE = Regex("""@(Component|Service|Repository|Named|Configuration|Controller|RestController)\b\s*(?:\(([^)]*)\))?""")
+    private val BEAN_NAME_ARG_RE = Regex("""^\s*(?:value\s*=\s*)?"([^"]+)"""")
+    private val TYPE_DECL_START_RE = Regex("""^(?:(?:public|protected|private|final|abstract|open|data|internal|sealed|static)\s+)*(?:class|interface|enum|object|record)\s+(\w+)""")
+    // Spring Data makes a bean of every repository interface, named after it
+    private val REPOSITORY_RE = Regex("""\binterface\s+(\w+)[^{;]*\b(?:extends|:)\s*[^{;]*Repository\b""")
     // `@Bean` / `@Bean("name")` / `@Bean(name = "name")` on a factory method: the bean is what the method
     // returns, named after the method unless the annotation says otherwise. Beans declared this way —
     // in a @Configuration class, for a delegate one does not own — were invisible: every model that
@@ -68,6 +80,9 @@ object JavaParser {
     // literal's call context is known. Literals passed to a known key-taking Flowable API produce a
     // confident CODE→MODEL edge; any other literal that happens to equal a model key only a suspect one.
     private val STR_CTX_RE = Regex("""\b(\w+)\s*\(\s*"([^"\\\n]{2,80})"""")
+    // A literal compared with something — `"X".equals(k)`, `k.equals("X")`, `case "X":`, Kotlin's `"X" ->`
+    private val EQUALS_LIT_RE = Regex(""""([^"\\\n]{2,80})"\s*\.\s*equals(?:IgnoreCase)?\s*\(|\.equals(?:IgnoreCase)?\s*\(\s*"([^"\\\n]{2,80})"\s*\)""")
+    private val CASE_LIT_RE = Regex("""\bcase\s+"([^"\\\n]{2,80})"\s*[:,-]|^\s*"([^"\\\n]{2,80})"\s*(?:,\s*"[^"\n]*"\s*)*->""", RegexOption.MULTILINE)
     // The same position holding a constant instead of a literal — `startProcessInstanceByKey(MAIN_CASE)`,
     // `.caseDefinitionKey(ModelConstants.MAIN_CASE)`: an UPPER_SNAKE name, optionally qualified. Resolved
     // against the project's `static final String` constants once every source is read (a generated
@@ -109,8 +124,18 @@ object JavaParser {
     private val SERVICE_KEY_CALL_RE = Regex("""\.serviceKey\(\s*([^)]+?)\s*\)""")
     private val OPERATION_KEY_CALL_RE = Regex("""\.operationKey\(\s*("[^"]+"|(?:\w+\.)*[A-Z][A-Z0-9_]*)\s*\)""")
     // External-worker subscriptions/queries: `.topic("orders")` — links the class to the topic node.
-    private val TOPIC_CALL_RE = Regex("""\.topic\(\s*"([^"]+)"\s*\)""")
+    // An external worker's topic: the job acquire builder's `topic(name, lockDuration)` or the Spring
+    // client's `@FlowableWorker(topic = …)`. A one-argument `.topic("x")` is any other builder's — a Kafka
+    // channel's — and made that class the external worker of the BPMN task with that topic.
+    private val TOPIC_CALL_RE = Regex("""\.topic\(\s*"([^"]+)"\s*,""")
+    private val WORKER_ANN_RE = Regex("""@FlowableWorker\s*\([^)]*?\btopic\s*=\s*"([^"]+)"""")
 
+    private val FLOWABLE_LISTENER_INTERFACES = setOf(
+        "ExecutionListener", "TaskListener", "TransactionDependentExecutionListener",
+        "TransactionDependentTaskListener", "PlanItemInstanceLifecycleListener", "CaseInstanceLifecycleListener",
+        "FlowableEventListener", "AbstractFlowableEventListener", "AbstractFlowableEngineEventListener",
+        "FlowableEngineEventListener",
+    )
     private val CONTROL_KEYWORDS = setOf("if", "for", "while", "switch", "catch", "synchronized", "return", "new")
     private val DELEGATE_INTERFACES = setOf(
         "JavaDelegate", "PlanItemJavaDelegate", "JavaDelegatePlanItem",
@@ -174,7 +199,7 @@ object JavaParser {
      * declares is resolved here; another file's is left marked ([PATH_CONST]). `produces = "…"` and the other
      * attributes name no path — reading the first string of the arguments made one `/application/json`.
      */
-    private fun mappingPaths(args: String?, consts: Map<String, String>): List<String> {
+    private fun mappingPaths(args: String?, consts: Map<String, String>, ownTypes: Collection<String>): List<String> {
         if (args.isNullOrBlank()) return listOf("")
         val parts = topLevel(args, ',')
         val expr = parts.firstNotNullOfOrNull { p -> PATH_ATTR_RE.matchEntire(p.trim())?.groupValues?.get(1) }
@@ -189,7 +214,10 @@ object JavaParser {
                 val t = piece.trim()
                 when {
                     t.length >= 2 && t.first() == '"' && t.last() == '"' -> t.substring(1, t.length - 1)
-                    CONST_REF_RE.matches(t) -> t.substringAfterLast('.').let { n -> consts[n] ?: "$PATH_CONST$n$PATH_CONST" }
+                    // the file's own constant by its bare name; anything qualified is for the resolver, which
+                    // knows which class the qualifier is
+                    CONST_REF_RE.matches(t) -> (if ('.' !in t || t.substringBeforeLast('.').substringAfterLast('.') in ownTypes)
+                        consts[t.substringAfterLast('.')] else null) ?: "$PATH_CONST$t$PATH_CONST"
                     else -> "${PATH_CONST}?$PATH_CONST"
                 }
             }
@@ -243,17 +271,39 @@ object JavaParser {
 
         val beanNames = LinkedHashSet<String>()
         for (m in BEAN_ANN_RE.findAll(text)) {
-            beanNames.add(m.groupValues[2].ifEmpty { decap(primary) })
+            val after = ANNOTATION_RE.replace(text.substring(m.range.last + 1, minOf(m.range.last + 1 + 300, text.length)), " ").trimStart()
+            // the type it annotates — which need not be the file's first (a nested component)
+            val type = TYPE_DECL_START_RE.find(after)?.groupValues?.get(1) ?: continue
+            beanNames.add(BEAN_NAME_ARG_RE.find(m.groupValues[2])?.groupValues?.get(1) ?: decap(type))
         }
-        // Factory beans: the method after the annotation (other annotations in between skipped).
+        for (m in REPOSITORY_RE.findAll(text)) beanNames.add(decap(m.groupValues[1]))
+        // Factory beans: the method after the annotation (other annotations in between skipped), and the
+        // type it returns — the bean *is* that type. Without it the bean resolved to the configuration
+        // class, which then "declared" every method a model called on the bean (53 phantom methods on the
+        // real projects) and was labelled a delegate.
         val beanMethods = LinkedHashMap<String, Int>()
+        val beanTypes = LinkedHashMap<String, String>()
         for (m in BEAN_METHOD_ANN_RE.findAll(text)) {
-            val tail = text.substring(m.range.last + 1, minOf(m.range.last + 1 + 400, text.length))
-            val method = FIRST_CALLABLE_RE.find(ANNOTATION_RE.replace(tail, " "))?.groupValues?.get(1)
+            val tail = ANNOTATION_RE.replace(text.substring(m.range.last + 1, minOf(m.range.last + 1 + 400, text.length)), " ")
+            val method = FIRST_CALLABLE_RE.find(tail)?.groupValues?.get(1)
                 ?.takeIf { it !in CONTROL_KEYWORDS } ?: continue
             val name = m.groupValues[1].ifEmpty { method }
             beanNames.add(name)
             beanMethods.putIfAbsent(name, lineOf(m.range.first))
+            val type = (if (kotlin) KT_RETURN_RE.find(tail)?.takeIf { it.groupValues[1] == method }?.groupValues?.get(2)
+                        else JAVA_RETURN_RE.find(tail)?.takeIf { it.groupValues[2] == method }?.groupValues?.get(1))
+            type?.takeIf { it != "void" }?.let { beanTypes.putIfAbsent(name, it) }
+        }
+        // what a simple type name in this file means: an explicit import, else a wildcard's package
+        val imports = LinkedHashMap<String, String>()
+        val wildcardImports = ArrayList<String>()
+        val staticImports = ArrayList<String>()
+        for (m in IMPORT_RE.findAll(text)) {
+            val target = m.groupValues[2]
+            // `import static a.b.Keys.MAIN` / `a.b.Keys.*` — where a bare constant name comes from
+            if (m.groups[1] != null) { staticImports.add(target + (m.groups[3]?.value ?: "")); continue }
+            if (m.groups[3] != null) wildcardImports.add(target)
+            else imports[m.groups[4]?.value ?: target.substringAfterLast('.')] = target
         }
         val interfaces = LinkedHashSet<String>()
         val supertypeLists = IMPLEMENTS_RE.findAll(text).map { it.groupValues[1] } +
@@ -277,7 +327,7 @@ object JavaParser {
             val consts = stringConstants(rawText)
             val bases = MAPPING_RE.findAll(text.substring(ctlAnn.range.first, ctlDecl.range.first))
                 .firstOrNull { it.groupValues[1] == "Request" }
-                ?.let { mappingPaths(it.groups[2]?.value, consts) } ?: listOf("")
+                ?.let { mappingPaths(it.groups[2]?.value, consts, types) } ?: listOf("")
             val open = text.indexOf('{', ctlDecl.range.last + 1)
             val close = if (open < 0) text.length else closingBrace(text, open)
             for (m in MAPPING_RE.findAll(text)) {
@@ -292,7 +342,7 @@ object JavaParser {
                 val tail = text.substring(m.range.last + 1, minOf(m.range.last + 1 + 400, text.length))
                 val handler = HANDLER_RE.findAll(ANNOTATION_RE.replace(tail, " ")).map { it.groupValues[1] }
                     .firstOrNull { it !in CONTROL_KEYWORDS } ?: "?"
-                for (base in bases) for (path in mappingPaths(args, consts)) {
+                for (base in bases) for (path in mappingPaths(args, consts, types)) {
                     val full = "/" + (base + "/" + path).split("/").filter { it.isNotEmpty() }.joinToString("/")
                     endpoints.add(linkedMapOf("http" to http, "path" to full, "handler" to handler,
                         "line" to lineOf(m.range.first), "controller" to ctlDecl.groupValues[2]))
@@ -332,7 +382,8 @@ object JavaParser {
         if (Regex("""@Configuration\b""").containsMatchIn(text)) roles.add("configuration")
         if (Regex("""@Component\b""").containsMatchIn(text)) roles.add("component")
         if (interfaces.any { it in DELEGATE_INTERFACES }) roles.add("delegate")
-        if (interfaces.any { it.endsWith("Listener") }) roles.add("listener")
+        // Flowable's listener interfaces only — a Spring `ApplicationListener` listens to something else
+        if (interfaces.any { it in FLOWABLE_LISTENER_INTERFACES }) roles.add("listener")
         var botKey: String? = null
         if (interfaces.any { it == "BotService" || it.endsWith("Bot") || it.endsWith("BotService") }) {
             roles.add("bot")
@@ -355,7 +406,8 @@ object JavaParser {
         val keyedIdentKinds = LinkedHashMap<String, MutableSet<String>>()
         for (m in IDENT_CTX_RE.findAll(text)) {
             val kinds = KEY_API_KINDS[m.groupValues[1]] ?: continue
-            val ident = m.groupValues[2].substringAfterLast('.')
+            // as written — `LibKeys.MAIN` is `LibKeys`'s constant, not whatever the project calls `MAIN`
+            val ident = m.groupValues[2]
             keyedIdents.add(ident)
             keyedIdentKinds.getOrPut(ident) { sortedSetOf() }.addAll(kinds)
         }
@@ -400,15 +452,27 @@ object JavaParser {
             "varsUndecided" to varsUndecided.toList(),
             "readsAllVariables" to JAVA_VARS_ALL_RE.containsMatchIn(text),
             "strings" to JAVA_STR_RE.findAll(text).map { it.groupValues[1] }.toCollection(LinkedHashSet()),
+            // What says a literal might name a model: the methods it is the first argument of, and whether a
+            // constant holds it or a comparison tests it. A log line, a map key or an annotation value that
+            // happens to equal a model key says nothing, and used to draw a (suspect) reference all the same.
+            "literalCalls" to STR_CTX_RE.findAll(text).groupBy({ it.groupValues[2] }, { it.groupValues[1] })
+                .mapValues { (_, v) -> v.toSortedSet().toList() },
+            "literalFacts" to (STRING_CONST_RE.findAll(text).map { it.groupValues[2] } +
+                EQUALS_LIT_RE.findAll(text).map { it.groupValues[1].ifEmpty { it.groupValues[2] } } +
+                CASE_LIT_RE.findAll(text).map { it.groupValues[1].ifEmpty { it.groupValues[2] } }).toSortedSet().toList(),
             "keyedStrings" to keyedStrings,
             "keyedKinds" to keyedKinds,
             "keyedIdents" to keyedIdents,
             "keyedIdentKinds" to keyedIdentKinds,
-            "topics" to TOPIC_CALL_RE.findAll(text).map { it.groupValues[1] }.toSortedSet().toList(),
+            "topics" to (TOPIC_CALL_RE.findAll(text) + WORKER_ANN_RE.findAll(text)).map { it.groupValues[1] }.toSortedSet().toList(),
             "line" to text.indexOf("class ").let { if (it != -1) lineOf(it) else 1 },
         )
         // bean name → line of its @Bean factory method, so a reference lands on the method, not the class
         if (beanMethods.isNotEmpty()) out["beanMethods"] = beanMethods
+        if (beanTypes.isNotEmpty()) out["beanTypes"] = beanTypes
+        if (imports.isNotEmpty()) out["imports"] = imports
+        if (wildcardImports.isNotEmpty()) out["wildcardImports"] = wildcardImports
+        if (staticImports.isNotEmpty()) out["staticImports"] = staticImports
         return out
     }
 

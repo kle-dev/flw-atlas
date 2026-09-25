@@ -71,6 +71,7 @@ object Atlas {
     private val XML_MODEL_TYPES = setOf("bpmn", "cmmn", "dmn")
 
     /** A `.data` model that is a master-data list, by the one attribute that says so. */
+    private val STRING_LITERAL_RE = Regex("'[^']*'|\"[^\"]*\"")
     private val MASTER_DATA_RE = Regex("\"dataObjectType\"\\s*:\\s*\"masterData\"")
 
     private fun looksLikeJson(raw: String): Boolean {
@@ -259,7 +260,8 @@ object Atlas {
                     // Make ${bean.method()} references in this model visible (model → bean, labelled).
                     val calls = LinkedHashSet<Pair<String, String>>()
                     for (em in Constants.EXPR_RE.findAll(text)) {
-                        for (cm in Constants.METHOD_CALL_FULL_RE.findAll(em.value)) {
+                        // a call spelled inside a string literal of the expression is text, not a call
+                        for (cm in Constants.METHOD_CALL_FULL_RE.findAll(STRING_LITERAL_RE.replace(Constants.htmlUnescape(em.value), " "))) {
                             val b = cm.groupValues[1]
                             val meth = cm.groupValues[2]
                             if (b !in Constants.FLOWABLE_CONTEXT && b !in Constants.JAVA_LITERALS) calls.add(b to meth)

@@ -61,6 +61,28 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   whatever it says. A data table's create, edit, view and delete actions count only while they are not
   switched off, and a create-instance button starts the process or the case its `instanceType` names, not
   both.
+- **A bean from a `@Bean` method is the class the method returns.** It resolved to the configuration class,
+  which then "declared" every method a model called on the bean and was labelled a delegate: on five real
+  projects 84 links went to nine configuration classes, and 53 methods were credited to a class that does
+  not have them. A bean of a library type (a `JavaDelegate` lambda) stays with the class whose factory
+  defines it, and no method of it is credited there.
+- **A Java class is linked only by what the code says.**
+  - A bean name comes from a stereotype on a *type*, a `@Bean` method or a Spring Data repository. MapStruct's
+    `@Named` on a method, a JSR-330 qualifier on a parameter and `@NamedQuery` made bean names; and a class
+    that merely shares a name no longer makes it a bean — `${customer.getName()}` beside a plain `Customer`
+    class reads the variable `customer` again, which also brought back one true *written but never read*
+    on a real project.
+  - A field or constructor parameter's type is the class its imports name: `import org.flowable.task.api.Task`
+    is not the project's own `Task`.
+  - A constant is its owner's: `LibKeys.MAIN` from an imported library is not the project's `AKeys.MAIN`,
+    and a bare name is the class's own, a statically imported one, or the project's only one.
+  - A string literal that equals a model key counts only where the code does something with it — a
+    constant holds it, a comparison tests it, or it is handed to a project method or an enum entry. A log
+    line, a map key or a `@JsonProperty` of that name is no reference.
+  - `${auditLog.log('orderService.cancel()')}` calls `log`, not `cancel`; a method is declared in a class
+    only where the class declares it; an expression's bean is no delegate (only `class` and
+    `delegateExpression` make one) and a Spring `ApplicationListener` no listener; and a class is an external
+    worker only for `topic(name, lockDuration)` or `@FlowableWorker(topic = …)`, not any builder's `.topic(…)`.
 - **A setting is a reference only where Flowable reads it as one.** An action's `signalName` triggered a
   signal whatever its bot was; only the platform signal bot sends one — the start bots and the dynamic
   sub-process bot read a definition key, and any other bot reads the field as it likes (five actions on

@@ -46,7 +46,8 @@ class JavaParserTest {
             }"""
         val jc = JavaParser.parseJava(src, "Delegates.java")
         val beans = jc["beanNames"] as Set<String>
-        assertEquals(setOf("approveOrder", "legacyNotifier", "auditHook"), beans)
+        // the configuration class is a bean itself, named after it
+        assertEquals(setOf("delegates", "approveOrder", "legacyNotifier", "auditHook"), beans)
         val lines = jc["beanMethods"] as Map<String, Int>
         assertEquals(4, lines["approveOrder"])
         assertEquals(7, lines["legacyNotifier"])
@@ -84,7 +85,8 @@ class JavaParserTest {
         assertTrue("score" in (jc["varWrites"] as List<String>))
         assertTrue("scoreProcess" in (jc["keyedStrings"] as Set<String>))
         // constants at the same positions are kept by simple name for the resolver
-        assertEquals(setOf("SCORE_CASE", "SCORE_RULES"), jc["keyedIdents"] as Set<String>)
+        // as written: the qualifier says whose constant it is
+        assertEquals(setOf("ModelConstants.SCORE_CASE", "SCORE_RULES"), jc["keyedIdents"] as Set<String>)
         assertEquals(mapOf("SCORE_PROCESS" to "scoreProcess"), JavaParser.stringConstants(src))
     }
 
