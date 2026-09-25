@@ -48,7 +48,10 @@ object LiquibaseReplay {
     /** A change set of a file — where a column came from, or what removed it. */
     data class Ref(val file: String, val changeSet: String, val line: Int)
 
-    class Column(var name: String, var type: String?, var table: String, val from: Ref)
+    class Column(var name: String, var type: String?, var table: String, val from: Ref) {
+        /** Part of the table's primary key: declared so, or named by a later `addPrimaryKey`. A rename keeps it. */
+        var pk: Boolean = false
+    }
 
     /** A column no longer in its table: dropped, or renamed to [renamedTo]. */
     class Removed(val name: String, val type: String?, val table: String, val from: Ref?, val by: Ref, val renamedTo: String?)
@@ -261,6 +264,8 @@ object LiquibaseReplay {
             is LbChange.ModifyDataType -> "modifyDataType ${sub(c.table)}.${sub(c.column)}: ${c.type?.let(::sub) ?: "?"}"
             is LbChange.RenameTable -> "renameTable ${sub(c.oldName)} → ${sub(c.newName)}"
             is LbChange.DropTable -> "dropTable ${sub(c.table)}"
+            is LbChange.PrimaryKey -> "addPrimaryKey ${sub(c.table)}: " + c.columns.joinToString(", ", transform = ::sub)
+            is LbChange.DropPrimaryKey -> "dropPrimaryKey ${sub(c.table)}"
             is LbChange.SqlFile -> "sqlFile ${c.path}"
             is LbChange.Unread -> c.what
         }
@@ -280,9 +285,10 @@ object LiquibaseReplay {
                 val existing = t.columns[k]
                 if (existing != null) {
                     if (type != null) existing.type = type
+                    if (c.pk) existing.pk = true
                     continue
                 }
-                t.columns[k] = Column(name, type, t.name, ref)
+                t.columns[k] = Column(name, type, t.name, ref).also { it.pk = c.pk }
                 // back in the table: no longer one it lost
                 t.removed.removeAll { it.name.uppercase() == k }
             }
@@ -338,6 +344,13 @@ object LiquibaseReplay {
                     val key = schema.resolve(sub(c.table))
                     if (schema.tables.remove(key) != null) schema.droppedTables[key] = ref
                 }
+                is LbChange.PrimaryKey -> {
+                    // a table has one primary key: the one named here replaces whatever was declared before
+                    val t = schema.table(sub(c.table)) ?: return
+                    val key = c.columns.map { sub(it).uppercase() }.toSet()
+                    t.columns.forEach { (k, col) -> col.pk = k in key }
+                }
+                is LbChange.DropPrimaryKey -> schema.table(sub(c.table))?.columns?.values?.forEach { it.pk = false }
                 is LbChange.SqlFile -> {
                     val text = index.sqlFile(f, c.path, c.relative)
                     if (text == null) notes.add("sqlFile ${c.path} is not in the project") else SqlDdl.parse(text).forEach { apply(f, it, ref, notes) }

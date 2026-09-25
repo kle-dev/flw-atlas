@@ -124,7 +124,10 @@ object SqlDdl {
             return
         }
         val close = matching(t, i)
-        out.add(LbChange.CreateTable(name, split(t, i + 1, close).mapNotNull(::columnDef)))
+        val defs = split(t, i + 1, close)
+        out.add(LbChange.CreateTable(name, defs.mapNotNull(::columnDef)))
+        // `PRIMARY KEY (a, b)` among the definitions: a key over columns declared before it
+        defs.firstNotNullOfOrNull(::primaryKeyOf)?.let { out.add(LbChange.PrimaryKey(name, it)) }
     }
 
     private fun alterTable(t: List<Tok>, out: MutableList<LbChange>) {
@@ -143,7 +146,11 @@ object SqlDdl {
                 "ADD" -> {
                     var j = if (a[0].up == "COLUMN") 1 else 0
                     j = skipIf(a, j, "IF", "NOT", "EXISTS")
-                    if (j >= a.size || a[j].up in TABLE_CONSTRAINTS) continue
+                    if (j < a.size && a[j].up in TABLE_CONSTRAINTS) {
+                        primaryKeyOf(a.subList(j, a.size))?.let { out.add(LbChange.PrimaryKey(table, it)) }
+                        continue
+                    }
+                    if (j >= a.size) continue
                     val cols = if (a[j].text == "(") split(a, j + 1, matching(a, j)).mapNotNull(::columnDef)
                     else listOfNotNull(columnDef(a.subList(j, a.size)))
                     if (cols.isNotEmpty()) out.add(LbChange.AddColumn(table, cols))
@@ -151,6 +158,8 @@ object SqlDdl {
                 "DROP" -> {
                     var j = if (a[0].up == "COLUMN") 1 else 0
                     j = skipIf(a, j, "IF", "EXISTS")
+                    // MySQL `DROP PRIMARY KEY`; a `DROP CONSTRAINT pk_x` cannot be told from any other constraint
+                    if (j == 0 && a.getOrNull(0)?.up == "PRIMARY" && a.getOrNull(1)?.up == "KEY") { out.add(LbChange.DropPrimaryKey(table)); continue }
                     if (j >= a.size || (a[j].up in TABLE_CONSTRAINTS && j == 0) || a[j].up == "DEFAULT") continue
                     val names = if (a[j].text == "(") split(a, j + 1, matching(a, j)).mapNotNull { it.firstOrNull()?.text }
                     else listOf(a[j].text)
@@ -222,7 +231,28 @@ object SqlDdl {
     /** One column definition — `NAME type [constraints]` — or null for a table constraint. */
     private fun columnDef(d: List<Tok>): LbColumn? {
         if (d.isEmpty() || d[0].up in TABLE_CONSTRAINTS) return null
-        return LbColumn(d[0].text, typeOf(d, 1))
+        return LbColumn(d[0].text, typeOf(d, 1), inlinePrimaryKey(d))
+    }
+
+    /** `id VARCHAR(64) NOT NULL PRIMARY KEY` — the key word pair outside the type's parentheses. */
+    private fun inlinePrimaryKey(d: List<Tok>): Boolean {
+        var depth = 0
+        for (k in 1 until d.size - 1) {
+            when (d[k].text) { "(" -> depth++; ")" -> depth-- }
+            if (depth == 0 && d[k].up == "PRIMARY" && d[k + 1].up == "KEY") return true
+        }
+        return false
+    }
+
+    /** The columns of a table constraint `[CONSTRAINT name] PRIMARY KEY [CLUSTERED] (a, b)`, or null for any other. */
+    private fun primaryKeyOf(d: List<Tok>): List<String>? {
+        var k = 0
+        if (d.getOrNull(k)?.up == "CONSTRAINT") k += 2
+        if (d.getOrNull(k)?.up != "PRIMARY" || d.getOrNull(k + 1)?.up != "KEY") return null
+        k += 2
+        while (k < d.size && d[k].text != "(") k++
+        if (k >= d.size) return null
+        return split(d, k + 1, matching(d, k)).mapNotNull { it.firstOrNull()?.text }.ifEmpty { null }
     }
 
     /** The type starting at [from]: tokens up to the first constraint word outside parentheses. */

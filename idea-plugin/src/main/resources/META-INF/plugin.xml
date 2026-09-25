@@ -176,6 +176,12 @@
               A diagram refers to tables by name, so it follows the schema: a dropped column leaves its
               card, a new one joins, and a table the project no longer has is drawn dashed from the
               diagram's own snapshot.</li>
+          <li><b>A changelog's primary key is known.</b> Atlas reads which columns are a table's primary key
+              — an inline <code>&lt;constraints primaryKey="true"/&gt;</code>,
+              <code>&lt;addPrimaryKey&gt;</code>, <code>PRIMARY KEY</code> in formatted SQL or an
+              <code>&lt;sql&gt;</code> block — and keeps it through a rename and drops it with
+              <code>&lt;dropPrimaryKey&gt;</code>. A changelog's page tags those columns <b>PK</b>, and the
+              ER diagram designer marks them with a key and lists them first on a card.</li>
           <li><b>The plugin chooses the explorer's extensions per project.</b> <i>Settings → Tools →
               Flowable Atlas → Generation → Explorer extensions</i> has a checkbox per extension, stored
               with the project's other generation settings. Changing it regenerates the explorer, so the
@@ -546,11 +552,6 @@
               bot's source. The <i>Bots</i> and <i>Java · bot</i> tables answer the other way round with an
               <i>Actions</i> column. A link inside a category row now opens its own target; it used to open
               the row, or, after a detail page had been shown, both.</li>
-          <li><b>The identifier in a table row copies out of it.</b> A category table copies each node's key
-              — a Java class's full name — and the tables on a model's page copy the element id, the key of
-              the form, decision or process a row points at, a field id, a property or parameter name. The
-              button shows on the row under the pointer or the keyboard. The copy buttons on the overview's
-              chips were never wired, so a click on one opened the chip's node; they copy now.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

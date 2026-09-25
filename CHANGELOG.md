@@ -35,6 +35,10 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   import; what someone changes there stays in their browser, marked *changed here*, until they export it
   again. A diagram refers to tables by name, so it follows the schema: a dropped column leaves its card, a
   new one joins, and a table the project no longer has is drawn dashed from the diagram's own snapshot.
+- **A changelog's primary key is known.** Atlas reads which columns are a table's primary key — an inline
+  `<constraints primaryKey="true"/>`, `<addPrimaryKey>`, `PRIMARY KEY` in formatted SQL or an `<sql>` block —
+  and keeps it through a rename and drops it with `<dropPrimaryKey>`. A changelog's page tags those columns
+  **PK**, and the ER diagram designer marks them with a key and lists them first on a card.
 - **The plugin chooses the explorer's extensions per project.** *Settings → Tools → Flowable Atlas →
   Generation → Explorer extensions* has a checkbox per extension, stored with the project's other generation
   settings. Changing it regenerates the explorer, so the page on disk has the designer — or loses it — at

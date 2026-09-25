@@ -43,7 +43,8 @@ object LiquibaseChangelog {
         is LbChange.ModifyDataType -> Op.ModifyType(c.table, c.column, c.type)
         is LbChange.RenameTable -> Op.RenameTable(c.oldName, c.newName)
         is LbChange.DropTable -> Op.DropTable(c.table)
-        is LbChange.SqlFile, is LbChange.Unread -> null
+        // a key changes which columns are special, not which exist — nothing for the coverage inspection
+        is LbChange.SqlFile, is LbChange.Unread, is LbChange.PrimaryKey, is LbChange.DropPrimaryKey -> null
     }
 
     /**

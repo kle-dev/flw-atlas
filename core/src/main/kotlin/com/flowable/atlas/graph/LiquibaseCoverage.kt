@@ -176,7 +176,12 @@ object LiquibaseCoverage {
         val dropped = ArrayList<Map<String, Any?>>()
         if (schema != null) for (k in effective.keys) {
             val t = schema.tables.getValue(k)
-            for (c in t.columns.values) columns.add(linkedMapOf("name" to c.name, "type" to c.type, "table" to c.table, "from" to ref(c.from)))
+            for (c in t.columns.values) {
+                val col = linkedMapOf<String, Any?>("name" to c.name, "type" to c.type, "table" to c.table, "from" to ref(c.from))
+                // only where true: a key on every column of every table would re-sort the goldens for nothing
+                if (c.pk) col["pk"] = true
+                columns.add(col)
+            }
             for (r in t.removed) dropped.add(linkedMapOf(
                 "name" to r.name, "type" to r.type, "table" to r.table, "by" to ref(r.by), "renamedTo" to r.renamedTo,
             ))

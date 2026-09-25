@@ -367,9 +367,11 @@ IDE's explorer tab it works too, but the tab cannot download: *Export* copies in
 
 The tables are the ones Atlas already reads, not a second copy of the schema:
 
-- every table an XML **Liquibase changelog** creates, as it stands once every change set has run —
-  renames, dropped columns and changed types applied — with each column's type exactly as the changelog
-  writes it (`VARCHAR(255)`, `DECIMAL(19,2)`, `${varchar.type}(255)`) and a key mark on the primary key.
+- every table a **Liquibase changelog** creates — XML or formatted SQL — as it stands once every change set
+  has run (renames, dropped columns and changed types applied, see
+  [how changelogs are read](../checks/#how-changelogs-are-read)), with each column's type exactly as the
+  changelog writes it (`VARCHAR(255)`, `DECIMAL(19,2)`, `${varchar.type}(255)`) and a key mark on the
+  primary key, which a card lists first.
   When two changelogs define one table, the live one wins over an orphaned one, and both over a
   superseded one (see [`changelogIssues`](../checks/#changelogissues-liquibase-authority));
 - every table a **database service** names that no changelog creates. Its columns are the service's
@@ -595,7 +597,8 @@ The explorer never presents a guess as a fact:
   summary and `--fail-on` read; the page only stops printing it where it contradicted the heading.
 - Liquibase changelogs carry **live / copy / superseded / orphan**, and services carry per-column schema
   coverage badges. A changelog's page shows the columns of its tables as they stand once every change set
-  has run, with the change set that added each one and the columns and tables a later change set dropped
+  has run, with the change set that added each one, a **PK** tag on the primary key (declared inline, by
+  `addPrimaryKey` or in the SQL, and kept through a rename), and the columns and tables a later change set dropped
   or renamed away; its *Details* tab lists every change set in run order — what it changes, and whether it
   ran, was skipped by its precondition or had already run from another file (see
   [how changelogs are read](../checks/#how-changelogs-are-read)). An app's **copy** of one of the

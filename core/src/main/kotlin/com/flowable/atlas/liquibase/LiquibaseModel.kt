@@ -7,8 +7,9 @@ package com.flowable.atlas.liquibase
  * are kept in [LbChangeSet.tables] only, which is what links a changelog to the table it fills.
  */
 
-/** A column as a change declares it. [type] is the raw type, `${'$'}{varchar.type}(255)` included. */
-data class LbColumn(val name: String, val type: String?)
+/** A column as a change declares it. [type] is the raw type, `${'$'}{varchar.type}(255)` included; [pk] when
+ *  the declaration makes it (part of) the primary key — an inline constraint, not a later `addPrimaryKey`. */
+data class LbColumn(val name: String, val type: String?, val pk: Boolean = false)
 
 /** One schema change of a change set. Table and column names are as written, properties unexpanded. */
 sealed class LbChange {
@@ -19,6 +20,10 @@ sealed class LbChange {
     data class ModifyDataType(val table: String, val column: String, val type: String?) : LbChange()
     data class RenameTable(val oldName: String, val newName: String) : LbChange()
     data class DropTable(val table: String) : LbChange()
+    /** `<addPrimaryKey>` / `PRIMARY KEY (…)`: [columns] are the table's primary key from here on. */
+    data class PrimaryKey(val table: String, val columns: List<String>) : LbChange()
+    /** `<dropPrimaryKey>` / `DROP PRIMARY KEY`: the table has none any more. */
+    data class DropPrimaryKey(val table: String) : LbChange()
     /** `<sqlFile path="…">`: resolved to the SQL file when the change set runs, its DDL read like `<sql>`. */
     data class SqlFile(val path: String, val relative: Boolean) : LbChange()
     /** A change that may alter a table in a way Atlas does not read (`customChange`, `CREATE TABLE … AS SELECT`). */

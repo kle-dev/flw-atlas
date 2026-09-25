@@ -560,8 +560,8 @@ function build(root){
   if(!S.catalog.length){
     root.innerHTML='<div class="dash"><div class="erd-none"><div class="dtitle">ER diagram</div>'+
       '<p>This project defines no database tables Atlas can read: no Liquibase changelog creates one, and no database '+
-      'service names one. The designer lists the tables of XML changelogs (as they stand after every change set has '+
-      'run) and of services with a table name.</p></div></div>';
+      'service names one. The designer lists the tables of Liquibase changelogs (as they stand after every change set '+
+      'has run) and of services with a table name.</p></div></div>';
     els={root, empty:true};
     return;
   }

@@ -156,7 +156,11 @@ object LiquibaseParser {
     }
 
     private fun columns(e: AtlasXml.El): List<LbColumn> =
-        e.findChildren("column").mapNotNull { c -> c.attr("name")?.let { LbColumn(it, c.attr("type")) } }
+        e.findChildren("column").mapNotNull { c -> c.attr("name")?.let { LbColumn(it, c.attr("type"), primaryKey(c)) } }
+
+    /** `<column><constraints primaryKey="true"/></column>` — the way most changelogs declare a key. */
+    private fun primaryKey(column: AtlasXml.El) =
+        column.findChildren("constraints").any { it.attr("primaryKey")?.trim().equals("true", ignoreCase = true) }
 
     private fun change(e: AtlasXml.El, out: MutableList<LbChange>) {
         val t = e.attr("tableName")
@@ -180,6 +184,11 @@ object LiquibaseParser {
                 if (old != null && new != null) out.add(LbChange.RenameTable(old, new))
             }
             "dropTable" -> if (t != null) out.add(LbChange.DropTable(t))
+            "addPrimaryKey" -> {
+                val cols = e.attr("columnNames")?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+                if (t != null && cols.isNotEmpty()) out.add(LbChange.PrimaryKey(t, cols))
+            }
+            "dropPrimaryKey" -> if (t != null) out.add(LbChange.DropPrimaryKey(t))
             "mergeColumns" -> {
                 val a = e.attr("column1Name"); val b = e.attr("column2Name"); val f = e.attr("finalColumnName")
                 if (t != null && a != null && b != null && f != null) {
@@ -273,6 +282,8 @@ object LiquibaseParser {
         is LbChange.ModifyDataType -> listOf(c.table)
         is LbChange.RenameTable -> listOf(c.oldName, c.newName)
         is LbChange.DropTable -> listOf(c.table)
+        is LbChange.PrimaryKey -> listOf(c.table)
+        is LbChange.DropPrimaryKey -> listOf(c.table)
         is LbChange.SqlFile, is LbChange.Unread -> emptyList()
     }
 }

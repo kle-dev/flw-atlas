@@ -5657,7 +5657,9 @@ S.lqColumns={id:'columns', title:'Columns', hint:'per table, after every change 
       b+='<div class="sublab mono">'+esc(t)+'</div>'+tbl([{k:'dot',label:'',w:'1.2em',cls:'tags'},{k:'name',label:'Column',w:'minmax(12ch,1.6fr)',mono:true},{k:'type',label:'Type',w:'minmax(8ch,1fr)',mono:true,cls:'faint'},{k:'from',label:'Added by',w:'minmax(12ch,1.4fr)',cls:'faint',opt:true}],
         byT[t].map(x=>{ const st=cov?stOf(looseCol(x.name)):null;
           return {hay:elHay(x.name,x.type), cls:st==='bad'?'cov-bad':st==='warn'?'cov-warn':'', cells:{
-            dot:cov?'<span class="covdot" data-tip="'+stTitle[st]+'" style="background:'+covColor(st)+'"></span>':'', name:esc(x.name), type:esc(x.type||''), from:csRef(x.from, n.file)}}; })
+            dot:cov?'<span class="covdot" data-tip="'+stTitle[st]+'" style="background:'+covColor(st)+'"></span>':'',
+            name:esc(x.name)+(x.pk?' <span class="tag" data-tip="Primary key — declared by the changelog">PK</span>':''),
+            type:esc(x.type||''), from:csRef(x.from, n.file)}}; })
         // what the table no longer has: a column a later change set dropped, or renamed away
         .concat((goneBy[t]||[]).map(x=>({hay:elHay(x.name,x.type,x.renamedTo), cls:'faint', cells:{
             dot:'', name:'<s>'+esc(x.name)+'</s>', type:esc(x.type||''),
