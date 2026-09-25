@@ -657,6 +657,7 @@ object Findings {
         "variableMapping" to "an init-variables mapping on",
         "scriptApi" to "a script on",
         "dmnOutput" to "a decision output of",
+        "dmnResult" to "the result list of the decision",
         "formField" to "a form field",
         "formOutcome" to "the outcome variable of",
         "formProperty" to "a form property",

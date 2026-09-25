@@ -552,23 +552,14 @@ class IoParametersTest {
             params(action).map { sig(it) },
         )
         assertEquals(setOf("script-evaluation-bot"), params(action).map { it["element"] }.toSet())
-        // a config key is bot wiring, not a variable — only the real inputs/outputs become flows
-        assertEquals(setOf("approved", "amount", "result"), ctx.paramFlows.map { it["variable"] }.toSet())
+        // A config key is bot wiring, and a `flw` payload key is the action's contract with its button — what
+        // the button sends and gets back — not a variable of any scope. Only the signal variable is one.
+        assertEquals(setOf("approved"), ctx.paramFlows.map { it["variable"] }.toSet())
         assertEquals(
-            listOf(
-                // The bot script and the payload mapping it produces are two views of the same call, so
-                // each name is recorded twice — once as the `flw.*` API the script performs, once as the
-                // payload contract it declares. Both are true, and the directions agree.
-                "amount|read|flwPayload", "amount|read|scriptApi",
-                // to pass a variable into the signalled instance the action first reads it
-                "approved|read|signalVariable",
-                "result|write|flwPayload", "result|write|scriptApi",
-            ),
+            // to pass a variable into the signalled instance the action first reads it
+            listOf("approved|read|signalVariable"),
             ctx.varSites.map { siteSig(it) }.sorted(),
         )
-        // `flw.setOutput` writes a value the *caller* consumes — a form button's `{{$response…}}`, the
-        // Work UI, a REST client. Atlas cannot follow any of those, so it must never call it unread.
-        assertEquals(setOf("result"), ctx.varReadsUnknown)
     }
 
     private fun form(nodeJson: String): Pair<Map<String, Any?>, Ctx> {

@@ -15,7 +15,6 @@ object VarHarvest {
     private val COLL_RE = Regex("(?:flowable:|activiti:)?collection=\"([A-Za-z_]\\w*)\"")
     private val INOUT_RE = Regex("<(?:flowable:|activiti:)?(?:in|out)\\b([^>]*?)/?>")
     private val VARMAP_RE = Regex("<(?:flowable:|activiti:)?variableMapping\\b([^>]*?)/?>")
-    private val PARAM_RE = Regex("<(?:flowable:|activiti:)?(?:input|output)Parameter\\b([^>]*?)/?>")
     private val OUTVAR_RE = Regex("<(?:flowable:|activiti:)?outputVariableName>\\s*(?:<!\\[CDATA\\[)?([A-Za-z_]\\w*)")
     // Design's own namespace: the variable a data-import or report task writes its result to, the
     // variable a column of an import lands in, and the extra variables a task sets — `design:` elements
@@ -25,7 +24,6 @@ object VarHarvest {
     private val ADDITIONAL_VAR_RE = Regex("\\badditionalVariableName=\"([A-Za-z_]\\w*)\"")
     private val NAME_TARGET_RE = Regex("\\b(?:name|target)=\"([A-Za-z_]\\w*)\"")
     private val SRC_TARGET_RE = Regex("\\b(?:source|target)=\"([A-Za-z_]\\w*)\"")
-    private val NAME_ATTR_RE = Regex("\\bname=\"([A-Za-z_]\\w*)\"")
 
     // The directional split of DECL_VAR_RE / COLL_RE, used by `collectDirectedVars`.
     /** The current item of a multi-instance loop — normally consumed inside the loop. */
@@ -77,7 +75,8 @@ object VarHarvest {
         DESIGN_OUT_RE.findAll(raw).forEach { names.add(it.groupValues[1]) }
         INOUT_RE.findAll(raw).forEach { m -> SRC_TARGET_RE.findAll(m.groupValues[1]).forEach { names.add(it.groupValues[1]) } }
         VARMAP_RE.findAll(raw).forEach { m -> NAME_TARGET_RE.findAll(m.groupValues[1]).forEach { names.add(it.groupValues[1]) } }
-        PARAM_RE.findAll(raw).forEach { m -> NAME_ATTR_RE.findAll(m.groupValues[1]).forEach { names.add(it.groupValues[1]) } }
+        // An input/output parameter's `name` is a field of the callee's contract, not a variable of this
+        // model; its `value` side is read by the structured parser (Ctx.addParams), which knows the element.
         for (k in mkeys) for (n in names) ctx.addVar(k, n)
     }
 

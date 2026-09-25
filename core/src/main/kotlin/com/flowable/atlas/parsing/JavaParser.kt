@@ -148,6 +148,22 @@ object JavaParser {
         "AbstractServiceTask", "JavaDelegatePlanItem", "FlowableEventListener",
     )
 
+    /** Whether [at] lies in the parenthesised arguments of an annotation on the same statement. */
+    private fun insideAnnotationArgs(text: String, at: Int): Boolean {
+        var depth = 0; var i = at - 1
+        while (i >= 0) {
+            val c = text[i]
+            when (c) {
+                ')' -> depth++
+                '(' -> if (depth == 0) return ANNOTATION_HEAD_RE.containsMatchIn(text.substring(maxOf(0, i - 80), i)) else depth--
+                ';', '{', '}' -> return false
+            }
+            i--
+        }
+        return false
+    }
+    private val ANNOTATION_HEAD_RE = Regex("""@[\w.]+\s*$""")
+
     private fun decap(name: String): String = if (name.isEmpty()) name else name[0].lowercaseChar() + name.substring(1)
 
     /**
@@ -435,6 +451,9 @@ object JavaParser {
         for (m in JAVA_EL_RE.findAll(text)) {
             // `@Value("${flamingo.mail.from}")` is a property placeholder: `flamingo` is no variable
             if (Constants.isJavaConfigPlaceholder(m.groupValues[1])) continue
+            // `#{…}` in Java is Spring's SpEL, and anything inside an annotation's arguments is Spring
+            // configuration (`@Value("${timeout}")`) — neither is evaluated against a process scope
+            if (text[m.range.first] == '#' || insideAnnotationArgs(text, m.range.first)) continue
             for (r in EL_ROOT_RE.findAll(m.groupValues[1])) {
                 val name = r.groupValues[1]
                 if (name !in Constants.FLOWABLE_CONTEXT && name !in Constants.JAVA_LITERALS) varReads.add(name)

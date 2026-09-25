@@ -289,7 +289,7 @@ _component (1):_
 
 ## 13. Variables, beans & expressions
 
-**Variables (38)** — where each one lives, is set and is read:
+**Variables (32)** — where each one lives, is set and is read:
 
 - `amount` [form]
     - used in: orderForm (form field), orderForm {{amount * 1.081}}, orderForm {{amount > 0}}, orderForm {{amount}}
@@ -307,10 +307,8 @@ _component (1):_
     - used in: orderVarExtractor (declared / mapped)
 - `customer` [form]
     - used in: orderForm (form field), orderForm {{customer.email}}, orderForm {{customer}}
-- `customerEmail` [action]
-    - used in: notifyCustomerAction (script) · passed as: in on `script-evaluation-bot`: customerEmail
-- `customerName` [agent, template]
-    - used in: orderConfirmationTemplate ${customerName}, orderAssistant {{customerName}}
+- `customerName` [template]
+    - used in: orderConfirmationTemplate ${customerName}
 - `customerPick` [form]
     - used in: DEMO-LF001 (form field), DEMO-LF001 {{customerPick}}
 - `customerRecord` [form]
@@ -331,32 +329,22 @@ _component (1):_
     - used in: approvalSla ${manager}
 - `managerApproved` [sla]
     - used in: approvalSla ${!managerApproved}
-- `minTotal` [query]
-    - used in: openOrdersQuery {{minTotal}}
 - `notified` [action, process]
     - passed as: in on `script-evaluation-bot`: notified · touched by scripts: `Notify`
 - `openOrderCount` [page]
     - used in: orderPage {{openOrderCount}}
-- `openOrders` [page]
-    - used in: orderPage (form field)
-- `orderId` [agent, process, query]
-    - used in: orderAssistant {{orderId}}, openOrdersQuery {{orderId}}, orderProcess (declared / mapped) · passed as: in on `callSub`: orderId→subOrderId, in on `callSub`: orderId · touched by scripts: `Stamp order`, `Broken stamp`, `Broken API call`
+- `orderId` [process]
+    - used in: orderProcess (declared / mapped) · passed as: in on `callSub`: orderId→subOrderId, in on `callSub`: orderId · touched by scripts: `Stamp order`, `Broken stamp`, `Broken API call`
 - `orderNotes` [process]
     - used in: fulfilmentProcess (declared / mapped) · touched by scripts: `Pack shipment`
 - `orderNumber` [template]
     - used in: orderConfirmationTemplate ${orderNumber}
-- `orderRows` [form]
-    - used in: DEMO-LF001 (form field)
-- `orderSub` [form]
-    - used in: DEMO-LF001 (form field)
-- `orderTotal` [action, form]
-    - used in: orderForm (form field), orderForm {{orderTotal}}, notifyCustomerAction (script) · passed as: in on `script-evaluation-bot`: orderTotal
+- `orderTotal` [form]
+    - used in: orderForm (form field), orderForm {{orderTotal}}
 - `orderTotalIndexed` [variableExtractor]
     - used in: orderVarExtractor (declared / mapped)
 - `priority` [page]
     - used in: orderPage {{priority}}
-- `sent` [action]
-    - used in: notifyCustomerAction (script) · passed as: out on `script-evaluation-bot`: sent
 - `shippingStamp` [process]
     - touched by scripts: `Stamp order`, `Broken stamp`
 - `stockLevel` [process]

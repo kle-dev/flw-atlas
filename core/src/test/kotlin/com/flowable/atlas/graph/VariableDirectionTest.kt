@@ -120,13 +120,11 @@ class VariableDirectionTest {
     }
 
     @Test
-    fun anActionsPayloadIsReadOnTheWayInAndWrittenOnTheWayOut() {
-        // `flw.getInput('customerEmail')` reads what the caller supplied…
-        assertEquals(listOf("flwPayload", "scriptApi"), sites("customerEmail", "reads"))
-        assertNull(variable("customerEmail")["writes"])
-        // …and `flw.setOutput('sent', …)` writes a value the *caller* consumes, which Atlas cannot follow.
-        assertEquals(listOf("flwPayload", "scriptApi"), sites("sent", "writes"))
-        assertEquals(0, variable("sent")["readCount"])
+    fun anActionsPayloadIsItsContractNotAVariable() {
+        // `flw.getInput('customerEmail')` / `flw.setOutput('sent', …)` in a bot script name what the
+        // action's button sends and gets back; the action's contract says so, and no variable does.
+        assertNull(variableOrNull("customerEmail"))
+        assertNull(variableOrNull("sent"))
 
         // `signalVariableNames`: to pass a variable into the signalled instance the action reads it, so
         // the process's own `setVariable('notified', …)` is not left looking unconsumed.

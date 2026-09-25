@@ -61,6 +61,31 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   whatever it says. A data table's create, edit, view and delete actions count only while they are not
   switched off, and a create-instance button starts the process or the case its `instanceType` names, not
   both.
+- **A variable is a name that lives in a process or case scope, and only there.** Many names that live
+  somewhere else were variables, and the variable graph tied unrelated models together through them: on
+  the real projects 231 variables and some 900 of their uses went away.
+  - `{{$currentUser}}`, `{{$searchText}}`, `{{$route}}` and every other `$` root belong to the forms runtime.
+  - A `${x}` or `{{x}}` in a service, a query or an agent is a parameter of the call — the same name in
+    three unrelated models used to be one variable they shared.
+  - An input or output parameter's `name` is the callee's field, and an action bot's
+    `flw.getInput('x')` / `flw.setOutput('x')` its payload (in a script task the same calls stay reads and
+    writes of variables).
+  - The id of a component that binds no value — a data table, an HTML component, a work list — is no
+    variable, and Design's default ids (`datatable1`) no longer join unrelated forms.
+  - A form embedded only through a bound subform writes under that binding (`address.street`), so its
+    `street` is not a variable of its own.
+  - An EL function's namespace (`json:object()`), a lambda's or script's locals (arrow parameters,
+    destructuring, `def (a, b)`, `for (String x : …)`), a template's `<#list … as x>` / `<#assign x>` and its
+    `?built_ins`, a Java `@Value("${…}")` and any SpEL `#{…}` in Java or a channel are no variables either.
+  - A decision table with several results (rule order, output order, collect) writes one variable named
+    after the decision — the list of matched rows — and none of its outputs. Read as outputs, they made
+    six false *written but never read* on two real projects.
+  - The explorer's *Also in* and a form's *Read by* list only the models a flow connects; the same name in
+    a model nothing connects to is counted apart as *unrelated* — at run time it is another variable.
+- **A data object uses the operations the engine calls by key.** The data-object runtime invokes `findById`,
+  `create`, `update` and `delete`, and the service registry picks an operation by its key; every operation
+  merely *of* the lookup, update or delete type was credited to the data object, which hid six unused
+  operations on four real projects.
 - **A bean from a `@Bean` method is the class the method returns.** It resolved to the configuration class,
   which then "declared" every method a model called on the bean and was labelled a delegate: on five real
   projects 84 links went to nine configuration classes, and 53 methods were credited to a class that does

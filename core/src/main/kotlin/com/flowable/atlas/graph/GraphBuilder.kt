@@ -34,11 +34,15 @@ object GraphBuilder {
     private val ROOT_IDENT_RE = Regex("(?<![\\w.\$])([A-Za-z_][\\w]*)")
     private val EXPR_STRIP_RE = Regex("^[#$]\\{|\\}$")
     private val STR_IN_EXPR_RE = Regex("'[^']*'|\"[^\"]*\"")
-    private val MUSTACHE_HEAD_RE = Regex("^\\$?([A-Za-z_][\\w]*)")
+    // A `$` root (`$currentUser`, `$searchText`, `$route`, `$errors`, …) is the forms runtime's own — never
+    // a variable — so only an unprefixed head counts.
+    private val MUSTACHE_HEAD_RE = Regex("^([A-Za-z_][\\w]*)")
     private val DATAOBJ_QUERY_RE = Regex("dataObjectDefinitionKey=|/query/")
 
-    /** The service operations the data-object runtime invokes itself for a bound data object. */
-    private val DATA_OBJECT_ENGINE_OPS = setOf("lookup", "create", "update", "delete")
+    /** The operation keys the data-object runtime invokes itself for a bound data object
+     *  (`DataObjectOperations`). The service registry picks an operation by key, so an operation that is
+     *  merely *of* the lookup type — `findByEmail` — is not one of them. */
+    private val DATA_OBJECT_ENGINE_OPS = setOf("findById", "create", "update", "delete")
 
     /** Model types rendered as Freemarker (not JUEL) — their `${…}` must not be validated. */
     private val FREEMARKER_MODEL_TYPES = setOf("query", "template", "document")
@@ -65,6 +69,11 @@ object GraphBuilder {
     /** Ref kinds correlated by NAME (not by model key): throw side and catch side of a signal/
      *  message/error/escalation — and external-worker topics — meet in one shared node. */
     private val NAMED_REF_KINDS = setOf("signal", "message", "error", "escalation", "topic", "property")
+
+    /** Model types whose `${x}` / `{{x}}` name a parameter of the call they define, not a variable. */
+    private val CONTRACT_SCOPED_TYPES = setOf("service", "query", "agent")
+    private val NS_CALL_AFTER_RE = Regex("^:[A-Za-z_]\\w*\\s*\\(")
+    private val FTL_BUILTIN_RE = Regex("\\?\\??[A-Za-z_]\\w*")
 
     /** Method names too generic to say anything about their first argument. */
     private val GENERIC_METHOD_NAMES = setOf(
@@ -339,13 +348,32 @@ object GraphBuilder {
         beans.addAll(beanMethods.keys)
         for (jc in allJava.values) beans.addAll((jc["beanNames"] as? Collection<String>) ?: emptyList())
 
+        // A form embedded only through bound subforms (`value: "{{address}}"`) writes its fields under that
+        // binding — `street` is `address.street` — so none of its names is a variable of its own. Recorded
+        // as top-level, `street` tied the child form to every unrelated model with a `street`. A form that
+        // is also opened on its own (a task's formKey, an unbound subform) keeps its top-level names.
+        val boundEmbedding = HashMap<String, Boolean>()
+        for (n in nodes.values) {
+            if (n["type"] != "form" && n["type"] != "page") continue
+            for (f in ((n["data"] as? Map<*, *>)?.get("fields") as? List<*>).orEmpty()) {
+                val fm = f as? Map<*, *> ?: continue
+                val child = knt("form", fm["subform"] as? String) ?: continue
+                val bound = (fm["value"] as? String)?.contains("{{") == true
+                boundEmbedding[child] = (boundEmbedding[child] ?: true) && bound
+            }
+        }
+        val openedOnItsOwn = resolved.asSequence()
+            .filter { it["targetType"] == "model" && it["rel"] != "subform" && it["rel"] != "contains" }
+            .mapNotNull { knt(it["targetNodeType"], it["value"]) }.toSet()
+        val scopedSubforms = boundEmbedding.filter { it.value && it.key !in openedOnItsOwn }.keys
+
         val varUsages = LinkedHashMap<String, LinkedHashMap<String, LinkedHashSet<String>>>()
         // Variables backed by something stronger than a script's bare-identifier read. Everything a
         // parser saw literally is solid; only the [ScriptVars] read heuristic is not, and a variable
         // resting on that alone is flagged rather than silently presented as a fact.
         val solidVars = LinkedHashSet<String>()
         fun addUsage(v: String, k: Any?, snippet: String, solid: Boolean = true) {
-            if (v in beans) return
+            if (v in beans || k.toString() in scopedSubforms) return
             varUsages.getOrPut(v) { LinkedHashMap() }.getOrPut(k.toString()) { LinkedHashSet() }.add(snippet)
             if (solid) solidVars.add(v)
         }
@@ -365,7 +393,7 @@ object GraphBuilder {
             // context, so a Java `setVariable("authenticatedUserId", …)` would stand alone as a write
             // with no readers and be reported as unused.
             if (v in beans || v in Constants.FLOWABLE_CONTEXT || v in Constants.JAVA_LITERALS) return
-            if (model == null) return
+            if (model == null || model.toString() in scopedSubforms) return
             val rec = linkedMapOf<String, Any?>("model" to model.toString(), "via" to via)
             element?.let { rec["element"] = it }
             elementName?.let { rec["elementName"] = it }
@@ -396,15 +424,30 @@ object GraphBuilder {
                 }
                 .sortedBy { "${it["model"]}|${it["via"]}|${it["element"]}" }
 
+        // In a service, a query or an agent a `${x}` / `{{x}}` is a parameter of the call — an operation's
+        // input, a query's request parameter, an agent operation's input — never a process variable: the
+        // same name in three unrelated models used to be one variable they shared.
+        fun contractScoped(k: String) = k.substringBefore(':') in CONTRACT_SCOPED_TYPES
         for ((expr, keys) in ctx.exprUse) {
             if (expr in placeholders) continue
-            for (v in varsInExpr(expr, beans)) for (k in keys) {
-                addUsage(v, k, expr)
-                addSite(v, k, Ctx.READ, "expression")
+            for (k in keys) {
+                if (contractScoped(k)) continue
+                val type = k.substringBefore(':')
+                // a channel's `#{headers['x']}` is SpEL over the message, not EL over a scope
+                if (type == "channel" && expr.startsWith("#{")) continue
+                // Freemarker: `${x?upper_case}` names the built-in after `?`, and a `<#list … as x>` local is
+                // no variable of the scope the template renders against
+                val vars = if (type in FREEMARKER_MODEL_TYPES) varsInExpr(FTL_BUILTIN_RE.replace(expr, " "), beans) - ctx.freemarkerLocals[k].orEmpty()
+                           else varsInExpr(expr, beans)
+                for (v in vars) {
+                    addUsage(v, k, expr)
+                    addSite(v, k, Ctx.READ, "expression")
+                }
             }
             // `${variables:get('x')}` names its variable as a string, which the identifier scan blanks
             // out — without this a variable read only that way looked as if nothing read it.
             for (v in varFnReads(expr)) for (k in keys) {
+                if (contractScoped(k)) continue
                 addUsage(v, k, expr)
                 addSite(v, k, Ctx.READ, "variablesFn")
             }
@@ -412,6 +455,7 @@ object GraphBuilder {
         for ((ph, keys) in ctx.mustacheUse) {
             val v = varInMustache(ph) ?: continue
             for (k in keys) {
+                if (contractScoped(k)) continue
                 addUsage(v, k, ph)
                 addSite(v, k, Ctx.READ, "binding")
             }
@@ -586,7 +630,7 @@ object GraphBuilder {
                 val consumerNode = kn(u["consumer"]) ?: continue
                 opUsedBy.getOrPut("$svcKey#$op") { LinkedHashSet() }.add(consumerNode)
             }
-            // A data object bound to a service is served by that service's lookup/create/update/delete:
+            // A data object bound to a service is served by that service's findById/create/update/delete:
             // the engine calls them whenever an instance is read or written, from a data-object task, a
             // page's data table, the REST API. Nothing in a model names those operations, so without this
             // every generated CRUD operation was "unused" — 74 of 74 on one real project. A `search`
@@ -601,7 +645,7 @@ object GraphBuilder {
                 val svc = svcOps[svcKey] ?: continue
                 for (opAny in (svc["operations"] as? List<*> ?: emptyList<Any?>())) {
                     val op = opAny as? Map<String, Any?> ?: continue
-                    if (op["type"] !in DATA_OBJECT_ENGINE_OPS) continue
+                    if (op["key"] !in DATA_OBJECT_ENGINE_OPS) continue
                     val opKey = op["key"] ?: continue
                     opUsedBy.getOrPut("$svcKey#$opKey") { LinkedHashSet() }.add("dataObject:$doKey")
                 }
@@ -1146,6 +1190,8 @@ object GraphBuilder {
             val n = m.groupValues[1]
             val after = body.substring(m.range.last + 1).trimStart()
             if (after.isNotEmpty() && after[0] == '(') continue
+            // `json:object(`, `bpmn:…(`: an EL function's namespace; `x -> …`: a lambda's parameter
+            if (NS_CALL_AFTER_RE.containsMatchIn(body.substring(m.range.last + 1)) || after.startsWith("->")) continue
             if (n in Constants.FLOWABLE_CONTEXT || n in Constants.JAVA_LITERALS || n in beans) continue
             out.add(n)
         }
@@ -1192,7 +1238,7 @@ object GraphBuilder {
         val inner = ph.trim('{', '}', ' ').trim()
         val m = MUSTACHE_HEAD_RE.find(inner) ?: return null
         val root = m.groupValues[1]
-        if (root in MUSTACHE_IGNORE || root.trimStart('$') in MUSTACHE_IGNORE) return null
+        if (root in MUSTACHE_IGNORE) return null
         return root
     }
 

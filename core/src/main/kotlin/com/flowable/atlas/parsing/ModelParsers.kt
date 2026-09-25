@@ -47,9 +47,14 @@ object ModelParsers {
     private val GENERIC_KEYS = listOf("key", "name", "description", "type", "subType", "modelType")
 
     /** Form component types that render/act but never bind a variable of their own. */
+    /** Components that bind no value of their own: without a `{{…}}` value their id is no variable.
+     *  A data table's selection, an HTML component's markup, a subform's children and a service button's
+     *  result go elsewhere, and Design's default ids (`datatable1`) tied unrelated forms together. */
     private val NON_BINDING_FIELD_TYPES = setOf(
         "text", "headline", "horizontalLine", "image", "html", "link", "spacer", "expression",
         "container", "panel", "tabs", "tab", "workAction", "outcomeButton",
+        "dataTable", "htmlComponent", "cellComponent", "subform", "workInvokeService", "linkButton",
+        "workProcessList", "workCaseList", "workTaskList", "iframe", "pdfViewer", "alert",
     )
 
     /** Field-id roots that are frontend scratch space, never process/case variables. */
@@ -144,6 +149,9 @@ object ModelParsers {
     private fun listOfObjs(v: Any?): List<Map<String, Any?>> =
         (v as? List<*>).orEmpty().mapNotNull { objOf(it) }
 
+    /** Hit policies whose result is a list of rows, whatever matched. */
+    private val MULTI_HIT_POLICIES = setOf("RULE ORDER", "OUTPUT ORDER")
+
     /** How many decision-table rows are kept per decision; beyond that `rulesTruncated` records the real count. */
     private const val DMN_RULE_LIMIT = 500
 
@@ -213,7 +221,15 @@ object ModelParsers {
                     ctx.addVar(key, v)
                     ctx.addVarSite(key, v, Ctx.READ, "dmnInput", inp.attr("id"), inp.attr("label"), "dmnInput")
                 }
-                for (outp in t.findChildren("output")) {
+                // A single-result table writes each output as a variable. A multi-hit table — RULE ORDER,
+                // OUTPUT ORDER, COLLECT without an aggregation — writes one variable named after the decision,
+                // an array of the matched rows, and none of its outputs (the engine's DmnActivityBehavior).
+                val hit = (t.attr("hitPolicy") ?: "UNIQUE").uppercase()
+                val multiHit = hit in MULTI_HIT_POLICIES || (hit == "COLLECT" && t.attr("aggregation").isNullOrEmpty())
+                if (multiHit) {
+                    ctx.addVar(key, key)
+                    ctx.addVarSite(key, key, Ctx.WRITE, "dmnResult", t.attr("id"), dec.attr("name"), "dmnResult")
+                } else for (outp in t.findChildren("output")) {
                     ctx.addVar(key, outp.attr("name"))
                     ctx.addVarSite(key, outp.attr("name"), Ctx.WRITE, "dmnOutput",
                         outp.attr("id"), outp.attr("label"), "dmnOutput")
@@ -872,7 +888,9 @@ object ModelParsers {
         if (!raw.startsWith("{{") || !raw.endsWith("}}")) return null
         val inner = raw.removeSurrounding("{{", "}}").trim()
         if (inner.isEmpty() || !inner.matches(Regex("[A-Za-z_$][A-Za-z0-9_.\\[\\]$]*"))) return null
-        val root = inner.trimStart('$').substringBefore('.').substringBefore('[')
+        // `{{$temp.x}}`, `{{$currentUser…}}`: the forms runtime's own scope, never a variable
+        if (inner.startsWith("$")) return null
+        val root = inner.substringBefore('.').substringBefore('[')
         return root.takeIf { it.isNotEmpty() && it !in FIELD_ID_IGNORE }
     }
 
@@ -1082,7 +1100,11 @@ object ModelParsers {
         val config = objOf(doc["config"]) ?: emptyMap()
         val scriptInfo = objOf(config["scriptInfo"]) ?: emptyMap()
         val script = scriptInfo["script"] as? String
-        VarHarvest.collectScriptVars(ctx, script, listOf(key), scriptInfo["language"] as? String)
+        // In an action bot's script `flw.getInput('x')` / `flw.setOutput('x', …)` are the action's payload —
+        // what its button sends and gets back (see [actionParams]) — not variables: the bot's input container
+        // is the payload. (In a script task the same calls read and write the execution's variables.)
+        VarHarvest.collectScriptVars(ctx, script?.let { FLW_PAYLOAD_CALL_RE.replace(it, "flw.payload(") }, listOf(key),
+            scriptInfo["language"] as? String)
         val rec = linkedMapOf(
             "key" to key, "name" to doc["name"], "file" to ffile, "botKey" to doc["botKey"],
             "formKey" to doc["formKey"], "signalName" to doc["signalName"], "channels" to doc["channels"],
@@ -1102,6 +1124,7 @@ object ModelParsers {
     /** `flw.getInput('x')` / `flw.setOutput('y', …)` — how a script-based action bot reads its payload
      *  and returns a result (the `flw` scripting API; quotes may be single or double). */
     private val FLW_IO_RE = Regex("""flw\.(getInput|setOutput)\s*\(\s*['"]([^'"]+)['"]""")
+    private val FLW_PAYLOAD_CALL_RE = Regex("""\bflw\.(?:getInput|setOutput|setTransientOutput)\s*\(""")
 
     /**
      * The in/out parameters an action bot is given, in the same shape as a BPMN/CMMN task's mappings.

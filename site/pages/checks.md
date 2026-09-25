@@ -369,15 +369,16 @@ it is never reported as an unused table itself.
 
 A group allowed to press a button on a form is not a use of the form either: access says who may, not
 that anything opens it. A data-object data table's four form keys — view, create, edit and delete — all
-count.
+count, as long as the table's action is not switched off.
 
 A service operation a **data object** binds to is used by that data object when it is one the engine
-invokes itself — `lookup`, `create`, `update`, `delete`. Nothing in a model names those (a data-object
+invokes itself — the operations keyed `findById`, `create`, `update` and `delete` (the service registry
+picks an operation by key, so another operation of the lookup type is not one of them). Nothing in a model names those (a data-object
 task, a page's data table and the REST API all go through the data object), so until {{VERSION}} every
 generated CRUD operation was "unused": 74 of 74 on one real project. A `search` operation is different —
 something has to name it: a data table's operation key, a select's `searchOperationKey` and
-`lookupOperationKey`, a data-object table's create/edit/delete operation keys — and it is credited only
-when something does.
+`lookupOperationKey`, a data-object table's create/edit/delete operation keys while that action is on — and
+it is credited only when something does.
 
 These are the cheapest findings to act on and the easiest to ignore safely — they cost nothing at
 runtime, they just make the project bigger than it needs to be.

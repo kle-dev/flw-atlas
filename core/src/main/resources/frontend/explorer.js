@@ -433,6 +433,7 @@ const DESIGN_TERMS = {
   'via:formOutcome': ['Outcome variable', 'The form stores the chosen outcome here.'],
   'via:dmnInput': ['Decision input', 'A decision table input expression reads this variable.'],
   'via:dmnOutput': ['Decision output', 'A decision table writes its result to this variable.'],
+  'via:dmnResult': ['Decision result', 'A decision table with several results (rule order, output order, collect) writes the list of matched rows to this variable, named after the decision.'],
   'via:dataObject': ['Data object', 'A process-level variable declaration.'],
   'via:multiInstanceElement': ['Element variable', 'Each item of a multi-instance collection is written here.'],
   'via:multiInstanceCollection': ['Collection', 'The collection a multi-instance loop iterates over.'],
@@ -3848,6 +3849,21 @@ function calleeClosure(id){
     fr=nx; }
   return seen;
 }
+/**
+ * The models `id` shares variables with at run time: the ones a flow connects it to — a call, a form a task
+ * shows, a subform — in either direction, a few steps out. Variable identity is global by *name* in the
+ * graph, but a Flowable variable lives in one instance's scope: the same name in a model nothing connects
+ * to this one is another variable, and listing it as "also in" or "read by" said otherwise.
+ */
+function flowReach(id){
+  const seen=new Set([id]); let fr=[id];
+  for(let i=0;i<3;i++){ const nx=[];
+    fr.forEach(x=>[outM.get(x)||[], incM.get(x)||[]].forEach(l=>l.forEach(e=>{
+      if(e.rel==='contains'||seen.has(e.id)) return;
+      const t=byId.get(e.id); if(!t||!CT_MODEL_TYPES.has(t.type)) return; seen.add(e.id); nx.push(e.id); })));
+    fr=nx; }
+  return seen;
+}
 function ownScope(id){
   const s=new Set([id]);
   (outM.get(id)||[]).forEach(e=>{ const t=byId.get(e.id); if(t&&OWN_SCOPE_TYPES.has(t.type)) s.add(e.id); });
@@ -4292,18 +4308,20 @@ function formFieldVars(n){
     const ws=(d.writes||[]).filter(w=>w.model===n.id&&(w.via==='formField'||w.via==='restButton'||w.via==='responsePayloadMapping'||w.via==='scriptButton'));
     if(!ws.length) return;
     const readers=[...new Set((d.reads||[]).map(r=>r.model).filter(m=>m&&m!==n.id))];
-    const byOpener=readers.filter(m=>near.has(m));
+    // the readers a flow connects to this form come first; a namesake elsewhere reads another variable
+    const byOpener=readers.filter(m=>near.has(m)), reach=flowReach(n.id), related=readers.filter(m=>reach.has(m));
     let st, tip='';
     if(d.unread){ st='warn'; tip='Written here and read nowhere Atlas can see — see Variables · never read'; }
     else if(byOpener.length){ st='ok'; tip='Read by '+byOpener.map(m=>(byId.get(m)||{}).label||m).join(', '); }
-    else if(readers.length){ st='ok'; tip='Read elsewhere — not by a model that shows this form'; }
+    else if(related.length){ st='ok'; tip='Read elsewhere — not by a model that shows this form'; }
+    else if(readers.length){ st='none'; tip='Only models this form is not connected to read a variable of that name — at run time that is another variable'; }
     else if(d.readsUnknown){ st='unk'; tip=CT_SILENCE.unknown; }
     else { st='none'; tip='No reader Atlas can see'; }
     const fields=[...new Set(ws.map(w=>w.element).filter(Boolean))];
     rows.push({gap:st==='warn'?'warn':'', unk:st==='unk', kind:st==='warn'?'unread':'', hay:elHay(v.key, fields.join(' '), readers.join(' ')),
       cells:{field:fields.map(f=>fieldLink(f)).join(', '), v:vlink(v.id, v.key),
-        by:readers.slice(0,4).map(m=>vlink(m, (byId.get(m)||{}).label||m)).join(', ')+(readers.length>4?' <span class="muted">+'+(readers.length-4)+'</span>':''),
-        st:gm(st, st==='ok'&&!byOpener.length&&readers.length?'elsewhere':st==='warn'?'never read':'', tip)}});
+        by:(related.length?related:[]).slice(0,4).map(m=>vlink(m, (byId.get(m)||{}).label||m)).join(', ')+(related.length>4?' <span class="muted">+'+(related.length-4)+'</span>':''),
+        st:gm(st, st==='ok'&&!byOpener.length&&related.length?'elsewhere':st==='warn'?'never read':st==='none'?'unrelated only':'', tip)}});
   });
   if(!rows.length) return '';
   rows.sort((a,b)=>a.hay.localeCompare(b.hay));
@@ -5680,12 +5698,15 @@ function varExprSection(n){
         {k:'r',label:'Read here',w:'minmax(10ch,1.2fr)',cls:'dim',opt:true},{k:'o',label:'Also in',w:'minmax(12ch,1.4fr)',opt:true},{k:'st',label:'',w:'minmax(10ch,.9fr)',cls:'tags'}],
       vs.sort((a,b)=>a.key.localeCompare(b.key)).map(v=>{ const d=v.data||{};
         const w=(d.writes||[]).filter(x=>x.model===n.id), r=(d.reads||[]).filter(x=>x.model===n.id);
-        const others=(d.usedBy||[]).filter(id=>id!==n.id&&byId.get(id));
+        // only the models a flow connects to this one share the variable; a namesake elsewhere is counted apart
+        const reach=flowReach(n.id), all=(d.usedBy||[]).filter(id=>id!==n.id&&byId.get(id));
+        const others=all.filter(id=>reach.has(id)), unrelated=all.length-others.length;
         const st=d.unread?'<span class="pill pill-advice" data-tip="Written and never read anywhere Atlas can see">never read</span>'
           :(d.unreadIn||[]).indexOf(n.id)>=0?'<span class="pill pill-advice" data-tip="Passed into this model, which never reads it">unread here</span>'
           :d.readsUnknown?'<span class="tag" data-tip="'+esc(CT_SILENCE.unknown)+'">readers unknown</span>':'';
         return {hay:elHay(v.key, via(w), via(r)), cells:{v:vlink(v.id, v.key), w:esc(via(w)), r:esc(via(r)),
-          o:others.length?'<span>'+others.slice(0,3).map(id=>vlink(id, byId.get(id).label)).join(', ')+(others.length>3?' +'+(others.length-3):'')+'</span>':'', st}};
+          o:(others.length?'<span>'+others.slice(0,3).map(id=>vlink(id, byId.get(id).label)).join(', ')+(others.length>3?' +'+(others.length-3):'')+'</span>':'')+
+            (unrelated?' <span class="muted" data-tip="Models this one is not connected to use a variable of the same name — at run time a different variable">'+(others.length?'· ':'')+unrelated+' unrelated</span>':''), st}};
       }), {placeholder:'filter variables…'});
   }
   // the rest as chips, a group per kind

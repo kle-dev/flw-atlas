@@ -68,6 +68,9 @@ class Ctx {
      *  writes, so indexing it is what connects a form to the process/case variables it touches. */
     val formFieldUse = LinkedHashMap<String, MutableSet<String>>()
     val queryMeta = LinkedHashMap<String, MutableMap<String, Any?>>()
+    /** Names a Freemarker model binds itself — `<#list … as x>`, `<#assign x …>`, a macro's parameters —
+     *  by model id. Its `${x}` reads that local, not a variable of the scope it renders against. */
+    val freemarkerLocals = LinkedHashMap<String, MutableSet<String>>()
 
     /** Discovery counts for `result["stats"]` (Python `len(models)/len(archives)/len(javas)`),
      *  set by [com.flowable.atlas.graph.Atlas.extract] just before the graph is built. */
@@ -401,11 +404,10 @@ class Ctx {
             // `flowable:signalVariableNames`: to pass a variable into the signalled instance the action
             // must first read it out of the current scope. A read, therefore — never a write.
             kind == "signalVariable" -> ParamRole(READ, inCallee = false)
-            // `flw.getInput('x')` reads the action's own payload contract. `flw.setOutput('x')` writes a
-            // value whose consumer is a form button's `{{$response…}}`, the Work UI or a REST client —
-            // none of which Atlas can follow, so it must not call the value unread.
-            kind == "flwScript" && side == "target" && dir == "in" -> ParamRole(READ, inCallee = false)
-            kind == "flwScript" && side == "target" -> ParamRole(WRITE, inCallee = false, readsUnknown = true)
+            // `flw.getInput('x')` / `flw.setOutput('x')` name the action's payload contract — what its
+            // button sends and what it hands back — never a variable of a scope; the contract is checked
+            // as such (the action's ioParameters against its callers).
+            kind == "flwScript" -> null
             side == "target" && kind in WRITES_THE_TARGET -> ParamRole(WRITE, inCallee = false)
             else -> null
         }
@@ -465,7 +467,7 @@ class Ctx {
          * `{{…}}` binding the expression pass already indexes.
          */
         private val TARGET_IS_CONTRACT = setOf(
-            "inputParameter", "eventInParameter", "config",
+            "inputParameter", "eventInParameter", "config", "flwScript",
             "sendPayloadMapping", "dataObjectDataTableCreatePayloadMapping", "header", "eventCorrelationParameter")
 
         /** Split a comma/semicolon-separated group/user string into individual ids. */

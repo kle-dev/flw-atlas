@@ -85,6 +85,16 @@ object ScriptVars {
     private val CLOSURE_PARAMS_RE = Regex("\\{\\s*([A-Za-z_][\\w,\\s]{0,120}?)\\s*->")
     private val FOR_IN_RE = Regex("\\bfor\\s*\\(\\s*(?:def|var|let|final)?\\s*([A-Za-z_]\\w*)\\s+in\\b")
     private val CATCH_RE = Regex("\\bcatch\\s*\\(\\s*(?:[A-Za-z_][\\w.]*\\s+)?([A-Za-z_]\\w*)\\s*\\)")
+    // More ways a script declares a local, each of which read as a variable of the scope: JS arrow
+    // parameters (`(a, b) =>`, `x =>`), destructuring (`const { a, b: c } = …`), a declaration list
+    // (`var a = 1, b = 2`), Groovy's `def (a, b) = …` and a Java-style `for (String x : items)`.
+    private val ARROW_PARAMS_RE = Regex("\\(([^()]{0,200})\\)\\s*=>|\\b([A-Za-z_]\\w*)\\s*=>")
+    private val DESTRUCTURE_RE = Regex("\\b(?:var|let|const)\\s*[{\\[]([^}\\]]{0,300})[}\\]]")
+    private val DECL_LIST_RE = Regex("\\b(?:var|let|const)\\s+([^;\\n]{0,300})")
+    private val DECL_LIST_NAME_RE = Regex("(?:^|,)\\s*([A-Za-z_]\\w*)\\s*(?==|,|$)")
+    private val MULTI_DEF_RE = Regex("\\bdef\\s*\\(([^)]{0,200})\\)")
+    private val FOR_EACH_RE = Regex("\\bfor\\s*\\(\\s*(?:final\\s+)?(?:[\\w.<>\\[\\]]+\\s+)?([A-Za-z_]\\w*)\\s*:")
+    private val LAST_IDENT_RE = Regex("([A-Za-z_]\\w*)\\s*$")
     private val IDENT_RE = Regex("[A-Za-z_][A-Za-z0-9_]*")
 
     /** Script languages whose bare identifiers are scope variables. `juel` is an expression, not a script. */
@@ -180,12 +190,18 @@ object ScriptVars {
         for (m in TYPED_DECL_RE.findAll(code)) declared.add(m.groupValues[1])
         for (m in FOR_IN_RE.findAll(code)) declared.add(m.groupValues[1])
         for (m in CATCH_RE.findAll(code)) declared.add(m.groupValues[1])
-        for (re in listOf(PARAM_LIST_RE, CLOSURE_PARAMS_RE)) {
-            for (m in re.findAll(code)) {
-                for (p in m.groupValues[1].split(',')) {
-                    IDENT_RE.find(p.trim())?.let { declared.add(it.value) }
-                }
-            }
+        for (m in FOR_EACH_RE.findAll(code)) declared.add(m.groupValues[1])
+        // a parameter is the last name of its declaration — `String a = 'x'` declares `a`, not `String`
+        fun params(list: String) = list.split(',').forEach { p ->
+            LAST_IDENT_RE.find(p.substringBefore('=').trim())?.let { declared.add(it.groupValues[1]) }
+        }
+        for (re in listOf(PARAM_LIST_RE, CLOSURE_PARAMS_RE, MULTI_DEF_RE)) for (m in re.findAll(code)) params(m.groupValues[1])
+        for (m in ARROW_PARAMS_RE.findAll(code)) m.groups[1]?.value?.let(::params) ?: m.groups[2]?.value?.let { declared.add(it) }
+        for (m in DESTRUCTURE_RE.findAll(code)) params(m.groupValues[1].split(',').joinToString(",") { it.substringAfterLast(':') })
+        for (m in DECL_LIST_RE.findAll(code)) {
+            // the names of a declaration list, not the values assigned to them
+            val decl = m.groupValues[1].replace(Regex("=[^,]*"), "=")
+            DECL_LIST_NAME_RE.findAll(decl).forEach { declared.add(it.groupValues[1]) }
         }
         val out = LinkedHashSet<String>()
         for (m in IDENT_RE.findAll(code)) {
@@ -225,14 +241,15 @@ object ScriptVars {
                     while (i + 1 < s.length && !(s[i] == '*' && s[i + 1] == '/')) i++
                     i = minOf(s.length, i + 2)
                 }
-                c == '\'' || c == '"' -> {
+                c == '\'' || c == '"' || c == '`' -> {
                     val quote = c
                     sb.append(' ')
                     i++
                     while (i < s.length) {
                         if (s[i] == '\\') { i += 2; continue }
                         if (s[i] == quote) { i++; break }
-                        if (quote == '"' && s[i] == '$' && i + 1 < s.length && s[i + 1] == '{') {
+                        // a GString's or a JS template literal's `${…}` references real variables
+                        if ((quote == '"' || quote == '`') && s[i] == '$' && i + 1 < s.length && s[i + 1] == '{') {
                             i += 2
                             while (i < s.length && s[i] != '}') { sb.append(s[i]); i++ }
                             if (i < s.length) i++      // the closing brace

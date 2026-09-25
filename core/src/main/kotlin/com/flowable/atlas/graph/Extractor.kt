@@ -72,6 +72,10 @@ object Atlas {
 
     /** A `.data` model that is a master-data list, by the one attribute that says so. */
     private val STRING_LITERAL_RE = Regex("'[^']*'|\"[^\"]*\"")
+    private val FREEMARKER_TYPES = setOf("template", "document", "query")
+    // `<#list items as a, b>` / `<#items as a>`, `<#assign|local|global a …>`, `<#macro m p1 p2>`
+    private val FTL_LOCAL_RE = Regex("""<#(?:list\b[^>]*?\bas\s+([\w\s,]+?)\s*>|items\s+as\s+([\w\s,]+?)\s*>|(?:assign|local|global)\s+(\w+)|macro\s+\w+((?:\s+\w+)*))""")
+    private val IDENT_RE = Regex("[A-Za-z_]\\w*")
     private val MASTER_DATA_RE = Regex("\"dataObjectType\"\\s*:\\s*\"masterData\"")
 
     private fun looksLikeJson(raw: String): Boolean {
@@ -278,6 +282,15 @@ object Atlas {
                 for (pm in Constants.PROPERTY_READ_RE.findAll(Constants.htmlUnescape(text))) {
                     for (k in ks) ctx.addRef(k, nodeType, label, "reads-property", "property", pm.groupValues[1])
                 }
+            }
+
+            if (nodeType in FREEMARKER_TYPES) {
+                val locals = LinkedHashSet<String>()
+                for (m in FTL_LOCAL_RE.findAll(raw)) {
+                    val names = m.groups[1]?.value ?: m.groups[2]?.value ?: m.groups[3]?.value ?: ""
+                    names.split(',', ' ', '\t', '\n').map { it.trim() }.filter { IDENT_RE.matches(it) }.forEach { locals.add(it) }
+                }
+                if (locals.isNotEmpty()) for (k in mkeys.filterNotNull()) ctx.freemarkerLocals.getOrPut("$nodeType:$k") { LinkedHashSet() }.addAll(locals)
             }
 
             if (mtype == "query") {

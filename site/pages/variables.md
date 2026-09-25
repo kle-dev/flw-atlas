@@ -35,7 +35,7 @@ The sites come from everywhere a name can appear:
 | Design's data-import column mappings and additional variables (`design:variablemapping`, `design:additionalvariables`), its report and output variable names | write |
 | Response and error-response payload mappings — unless the button stores its response under its own `{{…}}` binding, in which case the mapping names are properties of that value: the binding's root is the write, and a `$temp` root is form-local | write |
 | Script API calls, with the verb that decides direction | write or read |
-| DMN inputs and outputs | read and write |
+| DMN inputs and outputs — a table with several results (rule order, output order, collect without an aggregation) writes one variable named after the decision, the list of matched rows, and no output of its own | read and write |
 | Form fields, form properties, form outcomes | write |
 | Data objects, multi-instance elements and collections, the initiator, variable extractors | write |
 | Java `setVariable` / `getVariable` calls — in production sources only; `src/test/**` and every other test source set are not scanned | write and read |
@@ -43,6 +43,26 @@ The sites come from everywhere a name can appear:
 Three kinds of name are dropped before they ever become a site: beans, Flowable's own context roots,
 and Java string literals. That last one matters specifically so a Java `setVariable("…", …)` does not
 get reported as a write nothing reads, when the reader is the engine.
+
+Neither is anything that names another scope than a process or case variable:
+
+- a `{{$…}}` root — `$currentUser`, `$searchText`, `$route`, `$errors` and the rest belong to the forms
+  runtime;
+- a `${x}` or `{{x}}` in a service, a query or an agent, which is a parameter of the call it defines —
+  an operation's input, a query's request parameter, an agent operation's input;
+- an input or output parameter's `name`, which is the callee's field (its `value` side is the variable);
+- `flw.getInput('x')` / `flw.setOutput('x', …)` in an action bot's script, the action's payload — in a
+  script task the same calls do read and write variables;
+- the id of a component that binds no value of its own — a data table, an HTML component, a work list;
+- a field of a form that is only ever embedded through a bound subform: under `{{address}}` its `street`
+  is `address.street`;
+- an EL function's namespace (`json:object()`), a lambda's parameter, a script's own locals, and in a
+  template a `<#list … as x>` or `<#assign x>` local and a `?built_in`;
+- in Java, a Spring `@Value("${…}")` placeholder and any SpEL `#{…}`, and in a channel a SpEL `#{…}`.
+
+A name several models use is only the same variable where a flow connects them. The explorer's
+*Also in* and *Read by* columns list those models; the same name in a model nothing connects to is
+counted apart as *unrelated*, because at run time it is another variable.
 
 A name is a bean only when something says so: the platform declares it, Java declares it — a stereotype
 on a class (`@Service`, `@Component`, `@Configuration`, …), a `@Bean` method, a Spring Data repository —
@@ -100,8 +120,8 @@ script that iterates the whole map, and every variable in that scope becomes unj
 correct answer — the code genuinely might read any of them — and it is better than guessing.
 
 Beyond the eight, two whole areas are out of scope by design: query, dashboard and master-data models
-are not analysed for variable references, and the Work UI (or any REST client) is outside the project
-Atlas can see.
+are not analysed for variable references (a query's `${…}` is its request parameter, see above), and the
+Work UI (or any REST client) is outside the project Atlas can see.
 
 ## Where to read it
 

@@ -106,10 +106,7 @@
     {
       "_uses": {
         "variable": [
-          "variable:customerEmail",
-          "variable:notified",
-          "variable:orderTotal",
-          "variable:sent"
+          "variable:notified"
         ]
       },
       "botKey": "script-evaluation-bot",
@@ -207,10 +204,6 @@
         ],
         "serviceOperation": [
           "serviceOperation:customerService#findAll"
-        ],
-        "variable": [
-          "variable:customerName",
-          "variable:orderId"
         ]
       },
       "aiVendor": "openai",
@@ -1058,9 +1051,7 @@
           "variable:customerPick",
           "variable:legacyAction",
           "variable:legacyMode",
-          "variable:legacyOrderId",
-          "variable:orderRows",
-          "variable:orderSub"
+          "variable:legacyOrderId"
         ]
       },
       "dataSources": [
@@ -1203,7 +1194,6 @@
         ],
         "variable": [
           "variable:openOrderCount",
-          "variable:openOrders",
           "variable:priority"
         ]
       },
@@ -1918,9 +1908,7 @@
               "variable:customerPick",
               "variable:legacyAction",
               "variable:legacyMode",
-              "variable:legacyOrderId",
-              "variable:orderRows",
-              "variable:orderSub"
+              "variable:legacyOrderId"
             ]
           },
           "dataSources": [
@@ -2070,10 +2058,6 @@
             ],
             "serviceOperation": [
               "serviceOperation:customerService#findAll"
-            ],
-            "variable": [
-              "variable:customerName",
-              "variable:orderId"
             ]
           },
           "aiVendor": "openai",
@@ -2107,10 +2091,6 @@
             "binding": [
               "binding:{{minTotal}}",
               "binding:{{orderId}}"
-            ],
-            "variable": [
-              "variable:minTotal",
-              "variable:orderId"
             ]
           },
           "description": "Work list of orders still awaiting approval.",
@@ -2155,7 +2135,6 @@
             ],
             "variable": [
               "variable:openOrderCount",
-              "variable:openOrders",
               "variable:priority"
             ]
           },
@@ -3013,10 +2992,7 @@
         "data": {
           "_uses": {
             "variable": [
-              "variable:customerEmail",
-              "variable:notified",
-              "variable:orderTotal",
-              "variable:sent"
+              "variable:notified"
             ]
           },
           "botKey": "script-evaluation-bot",
@@ -3998,7 +3974,7 @@
               "target": "orderId"
             }
           ],
-          "readCount": 6,
+          "readCount": 4,
           "reads": [
             {
               "element": "badApi",
@@ -4030,20 +4006,10 @@
               "guess": true,
               "model": "process:orderProcess",
               "via": "scriptRead"
-            },
-            {
-              "model": "agent:orderAssistant",
-              "via": "binding"
-            },
-            {
-              "model": "query:openOrdersQuery",
-              "via": "binding"
             }
           ],
           "scopes": [
-            "agent",
-            "process",
-            "query"
+            "process"
           ],
           "scriptSites": [
             {
@@ -4073,12 +4039,6 @@
           ],
           "usages": [
             {
-              "model": "agent:orderAssistant",
-              "snippets": [
-                "{{orderId}}"
-              ]
-            },
-            {
               "model": "process:orderProcess",
               "snippets": [
                 "(declared / mapped)",
@@ -4088,18 +4048,10 @@
                 "(script ≈ read · Broken stamp)",
                 "(script ≈ read · Stamp order)"
               ]
-            },
-            {
-              "model": "query:openOrdersQuery",
-              "snippets": [
-                "{{orderId}}"
-              ]
             }
           ],
           "usedBy": [
-            "agent:orderAssistant",
-            "process:orderProcess",
-            "query:openOrdersQuery"
+            "process:orderProcess"
           ],
           "writeCount": 1,
           "writes": [
@@ -4356,150 +4308,6 @@
               "calleeKind": "bot",
               "dir": "in",
               "element": "script-evaluation-bot",
-              "kind": "flwScript",
-              "model": "action:notifyCustomerAction",
-              "side": "target",
-              "source": null,
-              "target": "customerEmail"
-            }
-          ],
-          "readCount": 2,
-          "reads": [
-            {
-              "element": "script-evaluation-bot",
-              "elementName": "Notify customer",
-              "elementType": "actionBot",
-              "model": "action:notifyCustomerAction",
-              "via": "flwPayload"
-            },
-            {
-              "model": "action:notifyCustomerAction",
-              "via": "scriptApi"
-            }
-          ],
-          "scopes": [
-            "action"
-          ],
-          "scriptSites": [
-            {
-              "api": true,
-              "element": null,
-              "elementName": null,
-              "elementType": null,
-              "model": "action:notifyCustomerAction"
-            }
-          ],
-          "usages": [
-            {
-              "model": "action:notifyCustomerAction",
-              "snippets": [
-                "(in parameter on script-evaluation-bot) customerEmail",
-                "(script)"
-              ]
-            }
-          ],
-          "usedBy": [
-            "action:notifyCustomerAction"
-          ],
-          "writeCount": 0
-        },
-        "file": null,
-        "id": "variable:customerEmail",
-        "key": "customerEmail",
-        "label": "customerEmail",
-        "type": "variable"
-      },
-      {
-        "data": {
-          "ioParams": [
-            {
-              "calleeKey": "script-evaluation-bot",
-              "calleeKind": "bot",
-              "dir": "in",
-              "element": "script-evaluation-bot",
-              "kind": "flwScript",
-              "model": "action:notifyCustomerAction",
-              "side": "target",
-              "source": null,
-              "target": "orderTotal"
-            }
-          ],
-          "readCount": 3,
-          "reads": [
-            {
-              "element": "script-evaluation-bot",
-              "elementName": "Notify customer",
-              "elementType": "actionBot",
-              "model": "action:notifyCustomerAction",
-              "via": "flwPayload"
-            },
-            {
-              "model": "action:notifyCustomerAction",
-              "via": "scriptApi"
-            },
-            {
-              "model": "form:orderForm",
-              "via": "binding"
-            }
-          ],
-          "scopes": [
-            "action",
-            "form"
-          ],
-          "scriptSites": [
-            {
-              "api": true,
-              "element": null,
-              "elementName": null,
-              "elementType": null,
-              "model": "action:notifyCustomerAction"
-            }
-          ],
-          "usages": [
-            {
-              "model": "action:notifyCustomerAction",
-              "snippets": [
-                "(in parameter on script-evaluation-bot) orderTotal",
-                "(script)"
-              ]
-            },
-            {
-              "model": "form:orderForm",
-              "snippets": [
-                "(form field)",
-                "{{orderTotal}}"
-              ]
-            }
-          ],
-          "usedBy": [
-            "action:notifyCustomerAction",
-            "form:orderForm"
-          ],
-          "writeCount": 1,
-          "writes": [
-            {
-              "element": "orderTotal",
-              "elementName": "Recalculate",
-              "elementType": "scriptButton",
-              "model": "form:orderForm",
-              "via": "scriptButton"
-            }
-          ]
-        },
-        "file": null,
-        "id": "variable:orderTotal",
-        "key": "orderTotal",
-        "label": "orderTotal",
-        "type": "variable"
-      },
-      {
-        "data": {
-          "ioParams": [
-            {
-              "calleeKey": "script-evaluation-bot",
-              "calleeKind": "bot",
-              "dir": "in",
-              "element": "script-evaluation-bot",
               "kind": "signalVariable",
               "model": "action:notifyCustomerAction",
               "side": "target",
@@ -4563,68 +4371,6 @@
         "id": "variable:notified",
         "key": "notified",
         "label": "notified",
-        "type": "variable"
-      },
-      {
-        "data": {
-          "ioParams": [
-            {
-              "calleeKey": "script-evaluation-bot",
-              "calleeKind": "bot",
-              "dir": "out",
-              "element": "script-evaluation-bot",
-              "kind": "flwScript",
-              "model": "action:notifyCustomerAction",
-              "side": "target",
-              "source": null,
-              "target": "sent"
-            }
-          ],
-          "readCount": 0,
-          "readsUnknown": true,
-          "scopes": [
-            "action"
-          ],
-          "scriptSites": [
-            {
-              "api": true,
-              "element": null,
-              "elementName": null,
-              "elementType": null,
-              "model": "action:notifyCustomerAction"
-            }
-          ],
-          "usages": [
-            {
-              "model": "action:notifyCustomerAction",
-              "snippets": [
-                "(out parameter on script-evaluation-bot) sent",
-                "(script)"
-              ]
-            }
-          ],
-          "usedBy": [
-            "action:notifyCustomerAction"
-          ],
-          "writeCount": 2,
-          "writes": [
-            {
-              "element": "script-evaluation-bot",
-              "elementName": "Notify customer",
-              "elementType": "actionBot",
-              "model": "action:notifyCustomerAction",
-              "via": "flwPayload"
-            },
-            {
-              "model": "action:notifyCustomerAction",
-              "via": "scriptApi"
-            }
-          ]
-        },
-        "file": null,
-        "id": "variable:sent",
-        "key": "sent",
-        "label": "sent",
         "type": "variable"
       },
       {
@@ -5035,135 +4781,6 @@
           "readCount": 1,
           "reads": [
             {
-              "element": "openOrders",
-              "elementName": "Open orders",
-              "elementType": "workProcessList",
-              "model": "page:orderPage",
-              "via": "formField"
-            }
-          ],
-          "scopes": [
-            "page"
-          ],
-          "usages": [
-            {
-              "model": "page:orderPage",
-              "snippets": [
-                "(form field)"
-              ]
-            }
-          ],
-          "usedBy": [
-            "page:orderPage"
-          ],
-          "writeCount": 1,
-          "writes": [
-            {
-              "element": "openOrders",
-              "elementName": "Open orders",
-              "elementType": "workProcessList",
-              "model": "page:orderPage",
-              "via": "formField"
-            }
-          ]
-        },
-        "file": null,
-        "id": "variable:openOrders",
-        "key": "openOrders",
-        "label": "openOrders",
-        "type": "variable"
-      },
-      {
-        "data": {
-          "readCount": 1,
-          "reads": [
-            {
-              "element": "orderRows",
-              "elementName": "Rows",
-              "elementType": "dataTable",
-              "model": "form:DEMO-LF001",
-              "via": "formField"
-            }
-          ],
-          "scopes": [
-            "form"
-          ],
-          "usages": [
-            {
-              "model": "form:DEMO-LF001",
-              "snippets": [
-                "(form field)"
-              ]
-            }
-          ],
-          "usedBy": [
-            "form:DEMO-LF001"
-          ],
-          "writeCount": 1,
-          "writes": [
-            {
-              "element": "orderRows",
-              "elementName": "Rows",
-              "elementType": "dataTable",
-              "model": "form:DEMO-LF001",
-              "via": "formField"
-            }
-          ]
-        },
-        "file": null,
-        "id": "variable:orderRows",
-        "key": "orderRows",
-        "label": "orderRows",
-        "type": "variable"
-      },
-      {
-        "data": {
-          "readCount": 1,
-          "reads": [
-            {
-              "element": "orderSub",
-              "elementName": "Order details",
-              "elementType": "subform",
-              "model": "form:DEMO-LF001",
-              "via": "formField"
-            }
-          ],
-          "scopes": [
-            "form"
-          ],
-          "usages": [
-            {
-              "model": "form:DEMO-LF001",
-              "snippets": [
-                "(form field)"
-              ]
-            }
-          ],
-          "usedBy": [
-            "form:DEMO-LF001"
-          ],
-          "writeCount": 1,
-          "writes": [
-            {
-              "element": "orderSub",
-              "elementName": "Order details",
-              "elementType": "subform",
-              "model": "form:DEMO-LF001",
-              "via": "formField"
-            }
-          ]
-        },
-        "file": null,
-        "id": "variable:orderSub",
-        "key": "orderSub",
-        "label": "orderSub",
-        "type": "variable"
-      },
-      {
-        "data": {
-          "readCount": 1,
-          "reads": [
-            {
               "element": "packTask",
               "elementName": "Pack shipment",
               "elementType": "scriptTask",
@@ -5322,6 +4939,47 @@
             {
               "model": "form:orderForm",
               "snippets": [
+                "(form field)",
+                "{{orderTotal}}"
+              ]
+            }
+          ],
+          "usedBy": [
+            "form:orderForm"
+          ],
+          "writeCount": 1,
+          "writes": [
+            {
+              "element": "orderTotal",
+              "elementName": "Recalculate",
+              "elementType": "scriptButton",
+              "model": "form:orderForm",
+              "via": "scriptButton"
+            }
+          ]
+        },
+        "file": null,
+        "id": "variable:orderTotal",
+        "key": "orderTotal",
+        "label": "orderTotal",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 1,
+          "reads": [
+            {
+              "model": "form:orderForm",
+              "via": "binding"
+            }
+          ],
+          "scopes": [
+            "form"
+          ],
+          "usages": [
+            {
+              "model": "form:orderForm",
+              "snippets": [
                 "{{isSupervisor}}"
               ]
             }
@@ -5435,37 +5093,6 @@
           "readCount": 1,
           "reads": [
             {
-              "model": "query:openOrdersQuery",
-              "via": "binding"
-            }
-          ],
-          "scopes": [
-            "query"
-          ],
-          "usages": [
-            {
-              "model": "query:openOrdersQuery",
-              "snippets": [
-                "{{minTotal}}"
-              ]
-            }
-          ],
-          "usedBy": [
-            "query:openOrdersQuery"
-          ],
-          "writeCount": 0
-        },
-        "file": null,
-        "id": "variable:minTotal",
-        "key": "minTotal",
-        "label": "minTotal",
-        "type": "variable"
-      },
-      {
-        "data": {
-          "readCount": 1,
-          "reads": [
-            {
               "model": "sla:approvalSla",
               "via": "expression"
             }
@@ -5521,6 +5148,37 @@
         "id": "variable:manager",
         "key": "manager",
         "label": "manager",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 1,
+          "reads": [
+            {
+              "model": "template:orderConfirmationTemplate",
+              "via": "expression"
+            }
+          ],
+          "scopes": [
+            "template"
+          ],
+          "usages": [
+            {
+              "model": "template:orderConfirmationTemplate",
+              "snippets": [
+                "${customerName}"
+              ]
+            }
+          ],
+          "usedBy": [
+            "template:orderConfirmationTemplate"
+          ],
+          "writeCount": 0
+        },
+        "file": null,
+        "id": "variable:customerName",
+        "key": "customerName",
+        "label": "customerName",
         "type": "variable"
       },
       {
@@ -5730,49 +5388,6 @@
         "id": "variable:customerPick",
         "key": "customerPick",
         "label": "customerPick",
-        "type": "variable"
-      },
-      {
-        "data": {
-          "readCount": 2,
-          "reads": [
-            {
-              "model": "agent:orderAssistant",
-              "via": "binding"
-            },
-            {
-              "model": "template:orderConfirmationTemplate",
-              "via": "expression"
-            }
-          ],
-          "scopes": [
-            "agent",
-            "template"
-          ],
-          "usages": [
-            {
-              "model": "agent:orderAssistant",
-              "snippets": [
-                "{{customerName}}"
-              ]
-            },
-            {
-              "model": "template:orderConfirmationTemplate",
-              "snippets": [
-                "${customerName}"
-              ]
-            }
-          ],
-          "usedBy": [
-            "agent:orderAssistant",
-            "template:orderConfirmationTemplate"
-          ],
-          "writeCount": 0
-        },
-        "file": null,
-        "id": "variable:customerName",
-        "key": "customerName",
-        "label": "customerName",
         "type": "variable"
       },
       {
@@ -6651,10 +6266,6 @@
         "binding": [
           "binding:{{minTotal}}",
           "binding:{{orderId}}"
-        ],
-        "variable": [
-          "variable:minTotal",
-          "variable:orderId"
         ]
       },
       "description": "Work list of orders still awaiting approval.",
@@ -8107,7 +7718,7 @@
     "java": 3,
     "modelCount": 27,
     "models": 27,
-    "nodes": 122,
+    "nodes": 116,
     "scriptIssues": 2,
     "suspectEdges": 0
   },

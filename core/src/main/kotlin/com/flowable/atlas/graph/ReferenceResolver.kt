@@ -84,7 +84,8 @@ object ReferenceResolver {
     private val EXPR_STRIP_RE = Regex("^[#$]\\{|\\}$")
     private val STR_LIT_IN_EXPR_RE = Regex("'[^']*'|\"[^\"]*\"")
     private val ROOT_IDENT_RE = Regex("(?<![\\w.\$])([A-Za-z_]\\w*)")
-    private val MUSTACHE_HEAD_RE = Regex("^\\$?([A-Za-z_]\\w*)")
+    private val MUSTACHE_HEAD_RE = Regex("^([A-Za-z_]\\w*)")   // a `$` root is the forms runtime's, no variable
+    private val NS_CALL_AFTER_RE = Regex("^:[A-Za-z_]\\w*\\s*\\(")
     private val DATA_OBJ_KEY_RE = Regex("dataObjectDefinitionKey=([A-Za-z0-9_.\\-]+)")
     private val QUERY_PATH_RE = Regex("/query/([A-Za-z0-9_.\\-]+)")
     private val IDENT_RE = Regex("[A-Za-z_]\\w*")
@@ -478,6 +479,8 @@ object ReferenceResolver {
                 val n = im.groupValues[1]
                 val after = body.substring(im.range.last + 1).trimStart()
                 if ((after.isNotEmpty() && after[0] == '(') ||
+                    // an EL function's namespace (`json:object(`), a lambda's parameter (`x -> …`)
+                    NS_CALL_AFTER_RE.containsMatchIn(body.substring(im.range.last + 1)) || after.startsWith("->") ||
                     n in Constants.FLOWABLE_CONTEXT || n in Constants.JAVA_LITERALS
                 ) continue
                 variables.add(n)
