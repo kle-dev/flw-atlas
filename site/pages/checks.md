@@ -106,6 +106,11 @@ ambiguous is a Java string literal that names the key alone, outside a key-takin
 the two and is marked *suspect*. The shared key is recorded in `graph.json`'s `diagnostics` as a `conflict`
 entry so a reader knows, but it is not a finding: nothing failed.
 
+The same model — one type, one key — in several files is one model: a Design export beside its deployed
+`.bar`, a loose file beside its archive. Where those files reference different models — a test stub reusing
+a production key, the older version of a migration test — the model's page lists the others under
+*Other copies* and shows the references of every copy, and `diagnostics` records a `copy` entry.
+
 This is the one check you should never carry. A parse failure does not just cost you that file — every
 reference into and out of it disappears too, which makes the rest of the report quietly less complete.
 That is why it is reported everywhere, including a clickable **⚠ parse issues** badge in the explorer

@@ -141,10 +141,15 @@ object Atlas {
             bucketList("warnings").add("$kind $path: $message")
         }
 
+        // The first file of every (type, key), with its model, and the references each copy made: the same
+        // model twice — loose and inside a `.bar`, a Design export beside the deployed one — is one node.
+        val copies = HashMap<Pair<String, String>, Pair<String, Any?>>()
+        val copyRefs = HashMap<Pair<String, String>, Pair<String, String>>()   // (type, key|format) → (first file, refs)
         fun index(mtype: String, obj: Any?, label: String) {
             val key = (obj as? Map<*, *>)?.get("key") as? String ?: return
             val norm = ModelKinds.NORMALIZE_TYPE[mtype] ?: mtype
             modelIndex[norm to key] = label
+            copies.putIfAbsent(norm to key, label to obj)
             val known = byKey.getOrPut(key) { ArrayList() }
             // Two models of different types sharing one key is legal in Flowable and common in practice
             // — a case and its start form, a data object and its generated service. Everything a parser
@@ -188,6 +193,7 @@ object Atlas {
 
             val parser = ModelParsers.PARSERS[mtype]
             val mkeys = ArrayList<Any?>()
+            val refsBefore = ctx.refs.size
             // Everything the parser and the harvest below record about this file's models carries this
             // type (Ctx.modelId), so a key two types share cannot be mis-credited. The form parser may
             // correct it — a `.form` whose metadata says `page` is a page — and then everything after the
@@ -307,6 +313,28 @@ object Atlas {
                     val si = QUERY_SOURCE_RE.find(raw)
                     if (si != null && meta["sourceIndex"] == null) meta["sourceIndex"] = si.groupValues[1]
                 }
+            }
+            // Where copies of one model disagree on what they reference, the node shows the references of
+            // every copy while naming the first file only — so the node says so (`otherCopies`) instead of
+            // presenting another copy's links as the first one's. Copies that reference the same models
+            // (a Design export and its deployment) are the same model, whatever their format.
+            // Compared only within one format: a Design export and a deployment file are read by different
+            // readers, and a reference one of them does not reach is no difference between the copies.
+            val format = if (label.substringAfterLast('!').substringAfterLast('/').endsWith(".json")) "design" else "file"
+            for (k in mkeys.filterNotNull().map { it.toString() }) {
+                val id = nodeType to "$k|$format"
+                val sig = ctx.refs.subList(refsBefore, ctx.refs.size).asSequence()
+                    .filter { it["from"] == k }.map { "${it["rel"]}|${it["kind"]}|${it["value"]}" }.toSortedSet().joinToString(";")
+                val (prevLabel, prev) = copyRefs.putIfAbsent(id, label to sig) ?: continue
+                val first = copies[nodeType to k] ?: continue
+                if (prev == sig || prevLabel == label) continue
+                @Suppress("UNCHECKED_CAST")
+                (first.second as? MutableMap<String, Any?>)?.let { m ->
+                    val others = (m["otherCopies"] as? MutableList<String>) ?: ArrayList<String>().also { m["otherCopies"] = it }
+                    if (label !in others) others.add(label)
+                }
+                diag("copy", label, "'$k' ($nodeType) is also defined in $prevLabel, and the two reference different " +
+                    "models — one model is shown, with the references of both copies")
             }
             ctx.currentModel = null
         }

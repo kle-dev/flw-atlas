@@ -117,4 +117,33 @@ class TypedAttributionTest {
         val unused = (r["findings"] as List<Map<String, Any?>>).filter { it["check"] == "unusedVars" }
         assertTrue("the case reads its whole scope, so dumpMe is read: $unused", unused.none { it["node"] == "variable:dumpMe" })
     }
+
+    @Test
+    fun aPagesDataSourceQueryCreditsThePage() {
+        val r = extract(mapOf(
+            "processes/x.bpmn" to process.replace("DEMO-X", "DEMO-Y"),
+            "data/d.data" to """{"key":"DEMO-D","name":"D","dataObjectType":"lookup","fieldMappings":[]}""",
+            "pages/y.page" to """{"metadata":{"key":"DEMO-Y","name":"Y","modelType":"page"},"rows":[[{"id":"sel","type":"select",
+                "extraSettings":{"dataSource":"Rest","queryUrl":"{{endpoints.dataobject}}/dataobject-runtime/data-object-instances?dataObjectDefinitionKey=DEMO-D"}}]]}""",
+        ))
+        assertEquals(listOf("page:DEMO-Y" to "dataObject:DEMO-D"), r.edges("queries-dataObject"))
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aSecondCopyThatDiffersIsNamedOnTheModel() {
+        fun form(sub: String, field: String) = """{"metadata":{"key":"DEMO-F","name":"F","modelType":"form"},"rows":[[
+            {"id":"$field","type":"subform","label":"S","extraSettings":{"formRef":"$sub"}}]]}"""
+        val r = extract(mapOf(
+            "a/f.form" to form("DEMO-S1", "x"), "b/f.form" to form("DEMO-S2", "x"),
+            // a copy that references the same models is the same model, whatever else differs
+            "c/g.form" to form("DEMO-S1", "x").replace("DEMO-F", "DEMO-G"),
+            "d/g.form" to form("DEMO-S1", "y").replace("DEMO-F", "DEMO-G"),
+        ))
+        assertEquals(listOf("b/f.form"), r.node("form:DEMO-F")["otherCopies"])
+        assertEquals(null, r.node("form:DEMO-G")["otherCopies"])
+        val diags = (r["diagnostics"] as List<Map<String, Any?>>).filter { it["kind"] == "copy" }
+        assertEquals(1, diags.size)
+        assertTrue((r["findings"] as List<Map<String, Any?>>).none { it["check"] == "parseIssues" })
+    }
 }

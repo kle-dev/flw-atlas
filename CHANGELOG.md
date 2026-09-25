@@ -159,6 +159,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
     both a form.
   - A dynamic reference (`calledElement="${subProcessKey}"`) is no longer resolved through a Java
     constant of that name: the engine reads a variable there, and the constant said nothing about it.
+- **A model defined twice says so.** A test stub that reuses a production key, or an older version of a model
+  kept beside the current one, was merged into one node that named the first file and showed the other
+  file's references as its own. Where copies of a model reference different models, its page now lists the
+  others under *Other copies*, and `graph.json`'s `diagnostics` records a `copy` entry (information, not a
+  finding). A Design export and its deployment count as one copy — and a legacy form's data table now keeps
+  the buttons its columns render, which the reader dropped, so both formats report the same actions.
 - **A data object's Shown in column names only the forms that show the field.** Any form referring to the object
   counted every dotted component id's last segment as one of its fields, so `shipTo.deliveryCity` on a form
   that also lists customers "showed" the customer's `deliveryCity`. Only a component under one bound to this

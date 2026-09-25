@@ -235,6 +235,8 @@ object Findings {
             // and everything harvested from them carries its type. Only a bare Java literal is ambiguous,
             // and that edge is already marked suspect.
             if (d["kind"] == "conflict") continue
+            // Two differing copies of one model are information too: both were read, and the node says so.
+            if (d["kind"] == "copy") continue
             // A file that is not a Flowable model at all — a Helm chart's `.tpl`, a palette JSON, a manifest —
             // is recorded in `diagnostics` (and printed by `-v`) but is no finding: nothing about the project
             // is wrong, and a warning about somebody else's file taught readers to skim the list.

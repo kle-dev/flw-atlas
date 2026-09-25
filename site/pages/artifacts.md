@@ -74,8 +74,11 @@ It is designed to make that easy:
 - **`stats`** has the scale: `modelCount` is how many models were read, `models` how many loose model
   *files* and `archives` how many `.zip`/`.bar` archives held the rest — and the health headline,
   `defects` and `advice`, the open findings of each kind.
-- **`diagnostics`** lists what Atlas could not read (`parse`), what it skipped on purpose (`skip`) and
-  which keys two model types share (`conflict` — information, not a finding), and **`markers`** every
+- **`diagnostics`** lists what Atlas could not read (`parse`), what it skipped on purpose (`skip`),
+  which keys two model types share (`conflict`) and which models are defined twice by files that reference
+  different models (`copy` — a test stub or an older version with a production key; the model's node names
+  the other file under *Other copies*, and shows the references of both). The last two are information,
+  not findings. **`markers`** lists every
   `TODO`, `FIXME` or `HACK` it found in a model file, with file, line, the model it belongs to and — in a
   JSON model — the `path` of the element holding it; the raw material of two of the checks.
 - It is **minified** by default, and a model's body is stored once in a top-level bucket with its graph

@@ -65,6 +65,10 @@ object OryxFormReader {
         "data-object-data-table-create-operation" to "dataObjectDataTableCreateOperationKey",
         "data-object-data-table-create-payload-mapping" to "dataObjectDataTableCreatePayloadMapping",
         "data-object-data-table-columns" to "columns",
+        // a plain data table's columns: a column can render a component — a button group whose buttons
+        // invoke actions — which the modern body keeps in the same place, and a reader that dropped it
+        // lost those buttons' references
+        "columns" to "columns",
         "method" to "method", "upload-url" to "uploadUrl", "download-url" to "downloadUrl",
     )
 

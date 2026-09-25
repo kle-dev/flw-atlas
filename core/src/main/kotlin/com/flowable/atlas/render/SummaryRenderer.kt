@@ -49,9 +49,10 @@ object SummaryRenderer {
         L.add("_${Fmt.modelScale(st)} · ${st["java"]} Java files · ${st["nodes"] ?: 0} nodes · " +
                 "${st["edges"] ?: 0} relationships · ${st["groups"] ?: 0} user groups. " +
                 "Compact summary — full report in `$an.overview.md`, full graph in `$an.graph.json`._\n")
-        // A shared key (`conflict`) is information about a lookup, not a file Atlas failed to read.
+        // A shared key (`conflict`) and a second, differing copy of a model (`copy`) are information, not a
+        // file Atlas failed to read.
         val diags = (result["diagnostics"] as? List<*> ?: emptyList<Any?>())
-            .filter { (it as? Map<*, *>)?.get("kind") != "conflict" }
+            .filter { (it as? Map<*, *>)?.get("kind") !in setOf("conflict", "copy") }
         if (diags.isNotEmpty()) {
             L.add("⚠ **${diags.size} file(s) could not be fully analyzed** (parse/read failures) — " +
                     "the map below may be incomplete. Details: the Findings section of " +

@@ -4945,6 +4945,9 @@ function factsFor(n){
   const varList=a=>({html:(a||[]).filter(x=>x!=null&&x!=='').map(x=>vlink('variable:'+String(x).split('.')[0], x)).join(', '), mono:true});
   let f=FACTS[n.type]||FACTS._; if(typeof f==='string') f=FACTS[f];
   f(n, d, {add, mono, addCount, addStarters, varList, rows});
+  // the same model in another file, with different content: this page shows the references of every copy
+  if((d.otherCopies||[]).length) rows.push(['Other copies',{html:'<span data-tip="The same key in another file, with different content. Relations of every copy are shown here.">'+
+    d.otherCopies.map(x=>'<span class="mono">'+esc(x)+'</span>').join(', ')+'</span>'}]);
   // Model-level references a process/case declares (SLA, security policy, event, channel, dictionary,
   // sequence) — the answer to "which SLA governs this" without scanning the edge groups below.
   const MR={'sla-definition-key':['SLA','sla'],'security-policy-model':['Security policy','securityPolicy'],
