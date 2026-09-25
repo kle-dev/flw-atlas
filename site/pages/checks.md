@@ -1,6 +1,6 @@
 # Health checks
 
-Atlas runs twenty-three checks over every project it analyses. They are computed once, in `:core`, and
+Atlas runs twenty-four checks over every project it analyses. They are computed once, in `:core`, and
 every surface reads the same result — the CLI status line, the summary's *Health* block, the
 overview's *Findings* section, `graph.json`'s `findings` and `checks` keys, the generated `CLAUDE.md`
 and the explorer's *Checks* page all agree by construction.
@@ -38,7 +38,7 @@ The explorer and the IDE's findings tool window label every advice finding *advi
   <a href="../demo/explorer.html#/checks" target="_blank" rel="noopener">Open it ↗</a></figcaption>
 </figure>
 
-## The twenty-three checks
+## The twenty-four checks
 
 | Check | Kind | Severity | What it means |
 |---|---|---|---|
@@ -50,6 +50,7 @@ The explorer and the IDE's findings tool window label every advice finding *advi
 | `hardcodedSecrets` | defect | error | A password, token or API key written into a model as plain text. |
 | `unsafeQueries` | defect | warning | A query template interpolates a value without escaping it. |
 | `changelogIssues` | defect | warning | A Liquibase changelog is orphaned or superseded. |
+| `changelogDrift` | defect | warning | An app's copy of a changelog differs from the one in the code. |
 | `schemaGaps` | defect | warning | A database column and the model that should describe it disagree. |
 | `gatewayNoDefault` | defect | warning | An exclusive or inclusive gateway whose every outgoing flow is conditional, with no default. |
 | `implicitSplit` | defect | warning | An activity with several outgoing flows and no gateway — a fork nobody drew. |
@@ -258,6 +259,22 @@ is not well-formed XML is a `parseIssues` error, because Liquibase stops on it a
 The table a service maps is the one the application builds: when one of the project's own changelogs
 shapes the service's table, that changelog describes it, whichever schema definition the service model
 names. The definition is applied on request only, and the project's copy is usually the newer one.
+
+### `changelogDrift` — the app's copy differs from the code
+
+A schema definition in an app with the same `logicalFilePath` as one of the application's own changelogs is
+a copy of it (see [`changelogIssues`](#changelogissues-liquibase-authority)). The two are compared change set by
+change set — matched by id and author, compared by what they do, with whitespace, attribute order and
+comments set aside — and one finding names what differs:
+
+> `db/changelog/data-objects/customer.xml` in the code does not match the app's copy
+> `Demo-bar.zip!liquibase-customerSchema.data.changelog.xml`: change set `4` only in the code; change set `3`
+> only in the app
+
+The app deploys its copy as the table's schema definition, so where the two part ways the model describes a
+table the database does not have: applying the definition creates, or fails on, what the application never
+made. Carry the change to the other side — export the changelog from Design again after changing it in the
+code, or copy the code's change sets into the model. Copies that match are not reported.
 
 ### `schemaGaps` — the database and the models disagree
 

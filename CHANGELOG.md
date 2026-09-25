@@ -45,6 +45,12 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   defined in Flowable model* flagged a column at its declaration even when a later changelog dropped or
   renamed it, as a `v3/` folder does to a `v2/` one. It now replays the project's changelogs and leaves a
   column alone once the table no longer has it.
+- **New check: an app's copy of a changelog that differs from the code.** A schema definition that shares
+  its `logicalFilePath` with one of the application's changelogs is a copy of it. `changelogDrift` compares
+  the two change set by change set, setting whitespace, attribute order and comments aside. When they
+  differ, one sentence names both files and the change sets that are only in the code, only in the app,
+  or different. On a real project, 11 of 12 such copies differed: an index, a column or a changed type
+  that only one side had.
 - **A changelog that is not well-formed XML is reported.** Liquibase stops at startup on a changelog it
   cannot read; Atlas reported nothing and read what its regular expressions found. It is now a parse issue.
 

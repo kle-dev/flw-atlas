@@ -150,6 +150,19 @@ object CheckCatalog {
             docs = "changelogissues-liquibase-authority",
         ),
         Check(
+            id = "changelogDrift", kind = DEFECT, tier = "unfinished", severity = "warning",
+            label = "changelog copies that differ", title = "Changelog copies differ",
+            what = "an app's copy of a changelog that differs from the one in the code",
+            clean = "every app copy of a changelog matches the one in the code",
+            why = "The app deploys its copy as the table's schema definition. Where it differs from the " +
+                "changelog the application runs, the model describes a table the database does not have — " +
+                "applying the definition creates, or fails on, what the application never made.",
+            fix = "Carry the change to the other side: export the changelog from Design again after changing " +
+                "it in the code, or copy the code's change sets into the model. The finding names the change " +
+                "sets that differ.",
+            docs = "changelogdrift-the-apps-copy-differs-from-the-code",
+        ),
+        Check(
             id = "schemaGaps", kind = DEFECT, tier = "unfinished", severity = "warning",
             label = "schema gaps", title = "Schema gaps",
             what = "columns not mapped through Liquibase → service → data object",

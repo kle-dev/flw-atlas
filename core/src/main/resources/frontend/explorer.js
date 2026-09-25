@@ -793,7 +793,7 @@ function computeInsights(){
   // Denominators for the dashboard ("3 of 16 services have schema gaps"). The numerators are the
   // health counts, which come from :core — see below.
   const isExprN = n => n.type==='expression'||n.type==='binding';
-  let totalExprs=0, totalForms=0, totalChangelogs=0, totalCovServices=0, totalColServices=0, totalOps=0, totalFns=0;
+  let totalExprs=0, totalForms=0, totalChangelogs=0, totalChangelogCopies=0, totalCovServices=0, totalColServices=0, totalOps=0, totalFns=0;
   // Variables Atlas could prove a direction for, and the ones it declined to judge. The first is the
   // denominator the unused-variable counts are quoted against; the second is the report's own caveat —
   // how many names it stayed quiet about, which is what makes the ones it does name trustworthy.
@@ -808,7 +808,7 @@ function computeInsights(){
     else if(n.type==='decision' && !d.decisionService) totalDecisionTables++;
     if(isExprN(n)) totalExprs++;
     else if(n.type==='form') totalForms++;
-    else if(n.type==='liquibase') totalChangelogs++;
+    else if(n.type==='liquibase'){ totalChangelogs++; if((d.authority||{}).status==='copy') totalChangelogCopies++; }
     else if(n.type==='service'){ if((d.schemaCoverage||{}).counts) totalCovServices++;
       if((d.columns||[]).length) totalColServices++; }
     else if(n.type==='serviceOperation') totalOps++;
@@ -828,7 +828,7 @@ function computeInsights(){
   const FC = findingCounts();
   const health = healthMap();
   INSIGHTS = { indeg, outdeg, hotspots, apps, entryPoints,
-    totalExprs, totalForms, totalChangelogs, totalCovServices, totalColServices, totalOps, totalFns,
+    totalExprs, totalForms, totalChangelogs, totalChangelogCopies, totalCovServices, totalColServices, totalOps, totalFns,
     totalDirectedVars, silentVars, totalQueries, totalDecisionTables, totalSecretBearers,
     totalModels: (DATA.stats||{}).modelCount||0,
     totalScripts: scripts.length,
@@ -1476,6 +1476,7 @@ const CHECK_META={
   crossedColumns:{route:'/schema', show:()=>INSIGHTS.totalColServices>0, examined:()=>[INSIGHTS.totalColServices,'service']},
   unusedForms:{cat:'unused-form', show:()=>INSIGHTS.totalForms>0, examined:()=>[INSIGHTS.totalForms,'form']},
   changelogIssues:{cat:'changelog-issue', show:()=>INSIGHTS.totalChangelogs>0, examined:()=>[INSIGHTS.totalChangelogs,'changelog']},
+  changelogDrift:{show:()=>INSIGHTS.totalChangelogCopies>0, examined:()=>[INSIGHTS.totalChangelogCopies,'app copy']},
   guessedVars:{cat:'guessed-var'},
   unusedOps:{cat:'unused-op', show:()=>INSIGHTS.totalOps>0, examined:()=>[INSIGHTS.totalOps,'operation']},
   unusedFns:{cat:'unused-fn', show:()=>INSIGHTS.totalFns>0, examined:()=>[INSIGHTS.totalFns,'function']},
@@ -5564,9 +5565,15 @@ S.lqBanner={raw:true, build:(n,c)=>{ const d=c.d, a=d.authority||{};
   if(a.status==='orphan') return '<div class="authnote authnote-orphan">⚠ Orphan changelog — '+
     ((a.namesMissing||[]).length?'it names '+a.namesMissing.map(k=>'<span class="mono">'+esc(k)+'</span>').join(', ')+', which the project does not define, and ':'')+
     'no service or data object references it. It may be dead/legacy or referenced only at runtime.</div>';
-  if(a.status==='copy'){ const chip=nodeChip('liquibase:'+a.copyOf);
-    return '<div class="authnote">The same changelog as the application’s own <b>'+esc(a.copyOf||'')+'</b> — one <span class="mono">logicalFilePath</span>, so one Liquibase history. '+
-      'The app carries this copy; the application runs its own at startup, and a service’s table is read from that one.'+(chip?'<div class="nodechips">'+chip+'</div>':'')+'</div>'; }
+  if(a.status==='copy'){ const chip=nodeChip('liquibase:'+a.copyOf), dr=a.drift;
+    // where the copy and the code part ways, change set by change set — what the changelogDrift finding says
+    const ids=xs=>(xs||[]).map(x=>'<span class="mono">'+esc(x)+'</span>').join(', ');
+    const diff=dr?[(dr.onlyApplication||[]).length?'change set '+ids(dr.onlyApplication)+' only in the code':'',
+      (dr.onlyDefinition||[]).length?'change set '+ids(dr.onlyDefinition)+' only in this copy':'',
+      (dr.changed||[]).length?'change set '+ids(dr.changed)+' different':''].filter(Boolean).join('; '):'';
+    return '<div class="authnote'+(dr?' authnote-old':'')+'">'+(dr?'⚠ ':'')+'The same changelog as the application’s own <b>'+esc(a.copyOf||'')+'</b> — one <span class="mono">logicalFilePath</span>, so one Liquibase history. '+
+      'The app carries this copy; the application runs its own at startup, and a service’s table is read from that one.'+
+      (dr?' <b>The two differ:</b> '+diff+'.':' The two match.')+(chip?'<div class="nodechips">'+chip+'</div>':'')+'</div>'; }
   return ''; }};
 /** A changelog file by the part a reader recognises it by: an archive entry with its archive's name, a
  *  loose file with its folder — `Configuration-bar.zip!liquibase-X.data.changelog.xml`, `v3/customer.xml`. */

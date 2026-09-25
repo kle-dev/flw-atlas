@@ -107,6 +107,37 @@ class ApplicationChangelogTest {
     }
 
     @Test
+    fun anAppCopyThatDiffersFromTheCodeIsNamedChangeSetByChangeSet() {
+        val drift = project().list("findings").filter { it["check"] == "changelogDrift" }
+        assertEquals(listOf("liquibase:DEMO-D01Schema"), drift.map { it["node"] })
+        assertEquals(
+            "`src/main/resources/db/changelog/data-objects/DEMO-L1-customer.xml` in the code does not match the app's copy " +
+                "`Demo-bar.zip!liquibase-DEMO-D01Schema.data.changelog.xml`: change set `2` only in the code",
+            drift.single()["message"],
+        )
+    }
+
+    @Test
+    fun anAppCopyWrittenOutAgainIsNoDifference() {
+        // the same change sets, with other whitespace, another attribute order and a comment: Design wrote it out again
+        val same = """<!-- exported --><changeSet author="demo" id="1">
+            <createTable tableName="DEMO_CUSTOMER_"><column type="varchar(64)" name="ID_"/>
+            <column name="NAME_"   type="varchar(255)"/>
+            <column name="FAX_" type="varchar(32)"/></createTable></changeSet>
+            <changeSet id="2" author="demo"><comment>email, no fax</comment>
+              <addColumn tableName="DEMO_CUSTOMER_"><column name="EMAIL_" type="varchar(255)"/></addColumn>
+              <dropColumn tableName="DEMO_CUSTOMER_" columnName="FAX_"/>
+            </changeSet>"""
+        val r = project(mapOf("src/main/resources/apps/Demo-bar.zip" to zip(
+            "DEMO.app" to """{"key":"DEMO","name":"Demo","flowApp":true}""",
+            "service-DEMO-S1.service" to service,
+            "liquibase-DEMO-D01Schema.data.changelog.xml" to changelog("DEMO-D01Schema", same),
+        )))
+        assertEquals("copy", r.authority("DEMO-D01Schema")!!["status"])
+        assertTrue(r.list("findings").none { it["check"] == "changelogDrift" })
+    }
+
+    @Test
     fun anOlderDefinitionOfTheTableUnderAnotherNameIsSuperseded() {
         val r = project(mapOf("src/main/resources/apps/Old-bar.zip" to zip(
             "liquibase-DEMO-D01.data.changelog.xml" to changelog("DEMO-D01", createCustomer),

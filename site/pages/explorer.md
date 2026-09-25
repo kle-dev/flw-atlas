@@ -495,7 +495,8 @@ The explorer never presents a guess as a fact:
   has run, with the change set that added each one and the columns and tables a later change set dropped
   or renamed away; its *Details* tab lists every change set in run order — what it changes, and whether it
   ran, was skipped by its precondition or had already run from another file (see
-  [how changelogs are read](../checks/#how-changelogs-are-read)). The **Schema coverage** table — every column from the changelog through the service
+  [how changelogs are read](../checks/#how-changelogs-are-read)). An app's **copy** of one of the
+  application's changelogs says which of its change sets differ from the code, if any. The **Schema coverage** table — every column from the changelog through the service
   mapping to the data object field — is on all three pages of the chain: the service's, and the data
   object's and the changelog's, which show the table of every service whose coverage names them. A column
   mapping that pairs a field with another field's column is marked **`⇄ crossed`** in that table and in

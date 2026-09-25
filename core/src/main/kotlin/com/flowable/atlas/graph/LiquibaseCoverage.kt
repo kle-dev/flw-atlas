@@ -59,6 +59,8 @@ object LiquibaseCoverage {
         val map: MutableMap<String, Any?>,
         val key: String,
         val file: LiquibaseReplay.File,
+        /** Every file of the node: the one file of an application changelog, every copy of a definition. */
+        val copies: List<LiquibaseReplay.File>,
         val run: LiquibaseReplay.Run?,
         val definition: Boolean,
         /** The Liquibase identity: its `logicalFilePath`, a definition's key when it declares none. */
@@ -210,7 +212,7 @@ object LiquibaseCoverage {
         if (copies.size > 1) map["revisions"] = copies.map { it.rel }
         replay.unresolved.filter { (f, _) -> copies.any { it === f } }.map { it.second }.distinct()
             .takeIf { it.isNotEmpty() }?.let { map["includesMissing"] = it }
-        return Entry(map, key, file, run, definition, logical, effective.keys, changeSets.isNotEmpty())
+        return Entry(map, key, file, copies, run, definition, logical, effective.keys, changeSets.isNotEmpty())
     }
 
     private fun ref(r: LiquibaseReplay.Ref): Map<String, Any?> = linkedMapOf("file" to r.file, "changeSet" to r.changeSet, "line" to r.line)
@@ -474,6 +476,7 @@ object LiquibaseCoverage {
             var by: List<String> = emptyList()
             var superseded: List<String> = emptyList()
             var copyOf: String? = null
+            var drift: Map<String, Any?>? = null
             if (!e.definition) {
                 when {
                     fwd.isNotEmpty() || tblRefs.isNotEmpty() -> { status = "live"; by = (fwd + tblRefs).distinct().sorted() }
@@ -487,7 +490,7 @@ object LiquibaseCoverage {
                 val rivals = e.effective.flatMap { owners[it].orEmpty() }.filter { it !== e && it.run !== e.run }.map { it.key }.distinct().sorted()
                 when {
                     fwd.isNotEmpty() -> { status = "live"; by = fwd }
-                    copy != null -> { status = "copy"; copyOf = copy.key; by = (named + back).distinct().sorted() }
+                    copy != null -> { status = "copy"; copyOf = copy.key; by = (named + back).distinct().sorted(); drift = drift(copy, e) }
                     rivals.isNotEmpty() -> { status = "superseded"; superseded = rivals }
                     back.isNotEmpty() -> { status = "live"; by = back }
                     named.isNotEmpty() -> { status = "live"; by = named }
@@ -498,9 +501,32 @@ object LiquibaseCoverage {
             }
             val a = linkedMapOf<String, Any?>("status" to status, "referencedBy" to by, "supersededBy" to superseded)
             if (copyOf != null) a["copyOf"] = copyOf
+            if (drift != null) a["drift"] = drift
             if (status == "orphan") e.serviceRefs.filter { it !in svcKeys }.takeIf { it.isNotEmpty() }?.let { a["namesMissing"] = it }
             e.map["authority"] = a
         }
+    }
+
+    /**
+     * How the app's copy [def] of the application's changelog [app] differs from it, change set by change
+     * set — null when the two do the same thing. A change set is matched by id and author, and compared by
+     * its content with whitespace, attribute order and comments normalised away, so a copy Design wrote
+     * out again is not a difference. Every copy of the definition counts, the first of a change set wins.
+     */
+    private fun drift(app: Entry, def: Entry): Map<String, Any?>? {
+        fun sets(files: List<LiquibaseReplay.File>) = LinkedHashMap<Pair<String, String>, com.flowable.atlas.liquibase.LbChangeSet>().apply {
+            for (f in files) for (cs in f.changelog.changeSets) putIfAbsent(cs.id to cs.author, cs)
+        }
+        val a = sets(listOf(app.file))
+        val d = sets(def.copies)
+        val onlyApp = a.keys.filter { it !in d }.map { it.first }
+        val onlyDef = d.keys.filter { it !in a }.map { it.first }
+        val changed = a.keys.filter { it in d && a.getValue(it).signature != d.getValue(it).signature }.map { it.first }
+        if (onlyApp.isEmpty() && onlyDef.isEmpty() && changed.isEmpty()) return null
+        return linkedMapOf(
+            "application" to app.file.rel, "definition" to def.file.rel,
+            "onlyApplication" to onlyApp, "onlyDefinition" to onlyDef, "changed" to changed,
+        )
     }
 
     // ---------------------------------------------------------------------------

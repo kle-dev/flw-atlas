@@ -126,6 +126,9 @@ object Findings {
                             "superseded by " + ((authority["supersededBy"] as? List<*>)
                                 ?.joinToString(", ") { it.toString() } ?: "another changelog"))
                     }
+                    (authority["drift"] as? Map<String, Any?>)?.let { d ->
+                        add("changelogDrift", WARNING, n, driftMessage(d), subject = d["application"]?.toString())
+                    }
                 }
                 // Like the variable branch below: two independent things can be wrong with one service,
                 // so a service without coverage data must still be able to report a crossed mapping.
@@ -602,6 +605,22 @@ object Findings {
      * the reader has to compare two names to see the defect at all — "the mapping looks crossed" alone
      * would send them back to the model to find out which one.
      */
+    /** `db/…/customer.xml` in the code does not match the app's copy: which change sets differ, and how. */
+    private fun driftMessage(d: Map<String, Any?>): String {
+        fun sets(k: String) = (d[k] as? List<*>).orEmpty().map { it.toString() }
+        fun named(ids: List<String>) = (if (ids.size == 1) "change set " else "change sets ") + ids.joinToString(", ") { "`$it`" }
+        val parts = listOfNotNull(
+            sets("onlyApplication").takeIf { it.isNotEmpty() }?.let { "${named(it)} only in the code" },
+            sets("onlyDefinition").takeIf { it.isNotEmpty() }?.let { "${named(it)} only in the app" },
+            sets("changed").takeIf { it.isNotEmpty() }?.let { "${named(it)} ${if (it.size == 1) "differs" else "differ"}" },
+        )
+        // the copy by its archive and entry name: the whole path of a nested export says nothing more
+        val f = d["definition"].toString()
+        val def = if ('!' in f) f.substringBeforeLast('!').substringAfterLast('/') + "!" + f.substringAfterLast('!').substringAfterLast('/')
+            else f.substringAfterLast('/')
+        return "`${d["application"]}` in the code does not match the app's copy `$def`: " + parts.joinToString("; ")
+    }
+
     private fun crossingMessage(group: Map<String, Any?>, pairs: List<Map<String, Any?>>): String {
         fun arrow(p: Map<String, Any?>) = "`${p["field"]}` → `${p["column"]}`"
         val first = pairs.first()

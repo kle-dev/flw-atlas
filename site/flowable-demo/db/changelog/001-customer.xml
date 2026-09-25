@@ -1,10 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog">
+<!-- The application's changelog for the customer table. The app's copy of it,
+     apps/liquibase-customerSchema.data.changelog.xml, shares its logicalFilePath but was exported before
+     the index in change set 2 was added here: the changelog-drift check's one real row. -->
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" logicalFilePath="customerSchema">
   <changeSet id="1" author="fixture">
     <createTable tableName="cust_customer">
       <column name="id_" type="varchar(64)"/>
       <column name="name_" type="varchar(255)"/>
       <column name="orphan_col_" type="varchar(255)"/>
     </createTable>
+  </changeSet>
+  <changeSet id="2" author="fixture">
+    <createIndex tableName="cust_customer" indexName="cust_customer_name_idx">
+      <column name="name_"/>
+    </createIndex>
   </changeSet>
 </databaseChangeLog>
