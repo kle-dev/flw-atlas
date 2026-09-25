@@ -61,6 +61,14 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   whatever it says. A data table's create, edit, view and delete actions count only while they are not
   switched off, and a create-instance button starts the process or the case its `instanceType` names, not
   both.
+- **A setting is a reference only where Flowable reads it as one.** An action's `signalName` triggered a
+  signal whatever its bot was; only the platform signal bot sends one — the start bots and the dynamic
+  sub-process bot read a definition key, and any other bot reads the field as it likes (five actions on
+  one real project "triggered" signals named after variables). A `#{…}` key is an expression like `${…}`,
+  not a missing model. An `in` mapping onto `formKey` names the form only through `sourceExpression`; its
+  `source` is the variable that holds the key. And an external agent's property counts as an event only
+  where its key is an event's — the vendor palette decides which property that is, and a template
+  property looked the same.
 - **A key two models share never hands one model's links to the other.** Wherever Atlas still looked a
   model up by key alone, it took whichever model it had listed first under that key. That lookup is gone:
   a record about a model reaches that model, or the other half of its family (a form and a page, a data

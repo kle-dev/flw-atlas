@@ -882,7 +882,7 @@ object ModelParsers {
         "agent" -> objOf(es["agentModel"])?.get("operationKey")
         "dataObject" -> es["dataObjectOperationKey"]
         else -> null
-    }?.toString()?.trim()?.takeIf { it.isNotEmpty() && !it.contains("\${") && !it.contains("{{") }
+    }?.toString()?.trim()?.takeIf { it.isNotEmpty() && !it.contains("\${") && !it.contains("#{") && !it.contains("{{") }
 
     /** What a button invokes, as `(kind, key)` — the callee its payload is mapped onto. */
     private fun calleeOf(es: Map<String, Any?>, n: Map<String, Any?>): Pair<String?, Any?> {
@@ -1029,9 +1029,12 @@ object ModelParsers {
                 ctx.addRef(key, "agent", ffile, "classifies-document", "document", objOf(d["contentModel"])?.get("key"))
             }
         }
-        // external agent settings: inbound-event-configuration properties reference an event model
+        // External agent settings: a property of the vendor palette's `inboundeventconfiguration` type
+        // references an event model. The palette says which property that is, and the agent does not —
+        // a `{id, key}` template property looks the same — so a property's key counts only where it is
+        // an event's; otherwise it was a missing event that nothing claimed.
         for (v in (objOf(objOf(doc["externalAgentSettings"])?.get("properties")) ?: emptyMap()).values) {
-            ctx.addRef(key, "agent", ffile, "agent-event", "event", objOf(v)?.get("key"))
+            ctx.addRef(key, "agent", ffile, "agent-event", "event", objOf(v)?.get("key"), ifResolved = true)
         }
         val kb = objOf(objOf(doc["knowledgeBase"])?.get("knowledgeBaseModelReference")) ?: emptyMap()
         if (truthy(kb["key"])) { info["knowledgeBase"] = kb["key"]; ctx.addRef(key, "agent", ffile, "knowledgeBase", "knowledgeBase", kb["key"]) }
@@ -1062,15 +1065,16 @@ object ModelParsers {
         // `channels` — `menu`, `quick-menu`, `slash-menu`, `mobile-*` (the platform's ActionChannelTypes) —
         // says where in the UI the action is offered. It is not a reference to a channel *model*, and reading
         // it as one made every action report two missing models. Kept on the record as a fact.
-        // `signalName` is a model key only for the start-instance bots (the platform's reference
-        // extractor discriminates on botKey the same way); for any other bot it is a real BPMN
-        // signal name and resolves against the signal index, not the process index.
+        // `signalName` is whatever the action's bot reads it as. The start-instance bots and the dynamic
+        // sub-process bot read a definition key (the platform's reference extractor discriminates on botKey
+        // the same way), the platform signal bot a BPMN signal. Any other bot — a custom one, the
+        // set-variable bot — reads it as it likes, and a variable name there was a "triggered signal".
         when (doc["botKey"]) {
-            "bpmn-start-process-instance-bot" ->
+            "bpmn-start-process-instance-bot", "bpmn-inject-dynamic-subprocess-bot" ->
                 ctx.addRef(key, "action", ffile, "starts-process", "process", doc["signalName"])
             "cmmn-start-case-instance-bot" ->
                 ctx.addRef(key, "action", ffile, "starts-case", "case", doc["signalName"])
-            else ->
+            "platform-signal-process-bot" ->
                 ctx.addRef(key, "action", ffile, "triggers-signal", "signal", doc["signalName"])
         }
         val permGroups = (doc["permissionGroups"] as? List<*>) ?: emptyList<Any?>()

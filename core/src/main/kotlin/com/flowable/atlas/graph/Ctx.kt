@@ -101,11 +101,13 @@ class Ctx {
         return "$t:$key"
     }
 
-    /** Record a static model→X reference; dynamic (`${…}`/`{{…}}`) values go to [dynamicRefs] instead.
-     *  [suspect] marks a reference the producer already knows is uncertain (e.g. a ref-by-id where a
-     *  key is expected) — it survives resolution and flags the resulting edge. */
+    /** Record a static model→X reference; dynamic (`${…}`, `#{…}`, `{{…}}`) values go to [dynamicRefs]
+     *  instead. [suspect] marks a reference the producer already knows is uncertain (e.g. a ref-by-id
+     *  where a key is expected) — it survives resolution and flags the resulting edge. [ifResolved] marks
+     *  one the producer cannot tell from another kind of value: it counts only if it resolves, and is
+     *  never reported missing. */
     fun addRef(frm: Any?, ftype: String, ffile: String, rel: String, kind: String, value: Any?,
-               suspect: Boolean = false) {
+               suspect: Boolean = false, ifResolved: Boolean = false) {
         if (value == null) return
         // Newer Design writes a reference as `{"id": "FORM_MODEL-…", "key": "X"}` where older exports
         // wrote `"X"`. Unwrapped here, at the one door every reference comes through, so a parser that
@@ -114,19 +116,23 @@ class Ctx {
         // with no `key` is not a reference and is dropped.
         if (value is Map<*, *>) {
             val k = value["key"] ?: return
-            addRef(frm, ftype, ffile, rel, kind, k, suspect)
+            addRef(frm, ftype, ffile, rel, kind, k, suspect, ifResolved)
             return
         }
         val v = value.toString().trim()
         if (v.isEmpty()) return
-        val target = if (v.contains("\${") || v.contains("{{")) dynamicRefs else refs
+        val target = if (isDynamic(v)) dynamicRefs else refs
         val entry = linkedMapOf<String, Any?>(
             "from" to frm, "fromType" to ftype, "fromFile" to ffile,
             "rel" to rel, "kind" to kind, "value" to v,
         )
         if (suspect) entry["suspect"] = true
+        if (ifResolved) entry["ifResolved"] = true
         target.add(entry)
     }
+
+    /** A value an expression decides at run time: JUEL `${…}` / `#{…}` or a form binding `{{…}}`. */
+    private fun isDynamic(v: String) = v.contains("\${") || v.contains("#{") || v.contains("{{")
 
     /**
      * Record an outbound REST call of the model being parsed. `source` stays the bare key the JSON has
@@ -156,7 +162,7 @@ class Ctx {
         val tk = targetKey.toString().trim()
         val ok = opKey.toString().trim()
         if (c.isEmpty() || tk.isEmpty() || ok.isEmpty()) return
-        if (listOf(tk, ok).any { it.contains("\${") || it.contains("{{") }) return
+        if (listOf(tk, ok).any(::isDynamic)) return
         opUse.add(linkedMapOf("consumer" to modelId(c), "targetKind" to targetKind, "targetKey" to tk, "op" to ok))
     }
 

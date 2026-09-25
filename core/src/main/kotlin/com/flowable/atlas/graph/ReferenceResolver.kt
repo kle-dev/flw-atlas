@@ -385,6 +385,8 @@ object ReferenceResolver {
                     ref2["targetType"] = kind
                 }
             }
+            // a reference its producer could not tell from another kind of value is no missing model
+            if (target == null && ref["ifResolved"] == true) continue
             (if (target != null) resolved else unresolved).add(ref2)
         }
 

@@ -393,12 +393,15 @@ class IoParametersTest {
 
     @Test
     fun formKeyPushedInThroughAnInMappingIsStillDetected() {
+        // `sourceExpression` is the value handed in; `source` names the variable that holds it
         val (_, ctx) = bpmn(
             """<callActivity id="callSub" calledElement="sub">
-                 <extensionElements><flowable:in source="myForm" target="formKey"/></extensionElements>
+                 <extensionElements><flowable:in sourceExpression="myForm" target="formKey"/>
+                   <flowable:in source="chosenFormKey" target="formKey"/></extensionElements>
                </callActivity>"""
         )
-        assertTrue(ctx.refs.any { it["rel"] == "task-form-mapping" && it["value"] == "myForm" })
+        val forms = ctx.refs.filter { it["rel"] == "task-form-mapping" }.map { it["value"] }
+        assertEquals(listOf("myForm"), forms)
     }
 
     @Test

@@ -202,6 +202,16 @@
               create, edit, view and delete actions count only while they are not switched off, and a
               create-instance button starts the process or the case its <code>instanceType</code> names, not
               both.</li>
+          <li><b>A setting is a reference only where Flowable reads it as one.</b> An action's
+              <code>signalName</code> triggered a signal whatever its bot was; only the platform signal bot
+              sends one — the start bots and the dynamic sub-process bot read a definition key, and any
+              other bot reads the field as it likes (five actions on one real project "triggered" signals
+              named after variables). A <code>#{…}</code> key is an expression like <code>${…}</code>, not a
+              missing model. An <code>in</code> mapping onto <code>formKey</code> names the form only
+              through <code>sourceExpression</code>; its <code>source</code> is the variable that holds the
+              key. And an external agent's property counts as an event only where its key is an event's —
+              the vendor palette decides which property that is, and a template property looked the
+              same.</li>
           <li><b>A key two models share never hands one model's links to the other.</b> Wherever Atlas still
               looked a model up by key alone, it took whichever model it had listed first under that key.
               That lookup is gone: a record about a model reaches that model, or the other half of its
@@ -538,12 +548,6 @@
               <code>in</code> into a service or agent names the callee's parameter, an <code>out</code> its
               result field: neither is a variable of any scope, so neither is reported as an input the
               callee never reads.</li>
-          <li><b>Scrolling over a form's layout no longer stutters in the IDE.</b> With the pointer resting
-              on a drawing, every wheel step waited for the page's zoom handler, and each form row sliding
-              under the cursor redrew a blurred highlight — which the IDE's off-screen browser copies into
-              Swing frame by frame. A plain wheel over a drawing now scrolls without the page's script in
-              the way (⌘/Ctrl + wheel still zooms), the drawing ignores the pointer while the pane scrolls,
-              and a form's cells highlight with an outline instead of a blur.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

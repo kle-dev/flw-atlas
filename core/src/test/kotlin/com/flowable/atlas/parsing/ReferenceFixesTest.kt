@@ -251,7 +251,10 @@ class ReferenceFixesTest {
         }
         assertTrue(Triple("starts-process", "process", "target") in parse("bpmn-start-process-instance-bot"))
         assertTrue(Triple("starts-case", "case", "target") in parse("cmmn-start-case-instance-bot"))
-        assertTrue(Triple("triggers-signal", "signal", "target") in parse("some-other-bot"))
+        assertTrue(Triple("triggers-signal", "signal", "target") in parse("platform-signal-process-bot"))
+        assertTrue(Triple("starts-process", "process", "target") in parse("bpmn-inject-dynamic-subprocess-bot"))
+        // any other bot reads `signalName` however it likes — nothing Atlas can check
+        assertTrue(parse("some-other-bot").none { it.third == "target" })
     }
 
     @Test

@@ -47,11 +47,15 @@ object XmlHelpers {
         return out
     }
 
-    /** Literal form keys pushed into a child scope via an in/out mapping onto `formKey`. */
+    /** Form keys pushed into a child scope via a mapping onto `formKey`. An `in`/`out` mapping's `source`
+     *  names a *variable* holding the key, not the key: only its `sourceExpression` is a value. */
     fun inoutFormKeys(mappings: List<Map<String, Any?>>?): List<Any?> =
         (mappings ?: emptyList()).filter {
-            it["source"] != null && (it["target"] as? String)?.lowercase()?.contains("formkey") == true
+            it["source"] != null && (it["target"] as? String)?.lowercase()?.contains("formkey") == true &&
+                (it["kind"] !in VARIABLE_SOURCE_KINDS || it["expression"] == true)
         }.map { it["source"] }
+
+    private val VARIABLE_SOURCE_KINDS = setOf("in", "out", "eventInParameter", "eventOutParameter")
 
     /**
      * The `<extensionElements>` children that carry a variable mapping, and the direction each implies.
