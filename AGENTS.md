@@ -19,7 +19,8 @@ A Gradle multi-module JVM project, JDK 21, **no third-party runtime dependencies
 | `:idea-plugin` | The IntelliJ plugin. Consumes `:core` **in-process**, so the IDE and the CLI can never disagree. |
 
 The explorer frontend is `core/src/main/resources/frontend/explorer.{html,css,js}` — plain files
-inlined at render time. The docs site sources are in `site/`.
+inlined at render time — plus the optional explorer extensions in `frontend/ext/`, inlined only when
+chosen. The docs site sources are in `site/`.
 
 ## The gate
 

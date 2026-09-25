@@ -181,7 +181,54 @@ val remoteStubUiTest by tasks.registering(Exec::class) {
     )
 }
 
-tasks.named("check") { dependsOn(searchSelfTest, explorerUiTest, diagramUiTest, remoteStubUiTest) }
+// The ER diagram designer (the explorer extension "erd"): its pure core in node, its page in Chrome. The page
+// test needs a report WITH the extension — the demo project, which has tables, a relation the models state
+// and a diagram file of its own — and one without it (the miniproject report above), because "absent unless
+// chosen" is half of what an extension promises.
+val erdSelfTest by tasks.registering(Exec::class) {
+    description = "Runs the ER diagram designer's core self-test (skipped when node is unavailable)."
+    group = "verification"
+    val script = rootProject.file("scripts/erd-selftest.mjs")
+    inputs.file(script)
+    inputs.dir(rootProject.file("core/src/main/resources/frontend/ext"))
+    onlyIf { nodePresentOrFail("erdSelfTest") }
+    commandLine(nodeExecutable ?: "node", script.absolutePath)
+}
+
+val erdUiTestDir = layout.buildDirectory.dir("erd-uitest")
+
+val erdUiTestReport by tasks.registering(JavaExec::class) {
+    description = "Generates the demo report with the ER diagram designer for its UI test."
+    group = "verification"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.flowable.atlas.cli.MainKt")
+    args(
+        rootProject.file("site/flowable-demo").absolutePath,
+        "--html", "--quiet", "--extension", "erd",
+        "-o", erdUiTestDir.get().asFile.resolve("flowable-demo.explorer.html").absolutePath,
+    )
+    inputs.dir(rootProject.file("site/flowable-demo"))
+    inputs.dir(rootProject.file("core/src/main/resources/frontend"))
+    outputs.dir(erdUiTestDir)
+}
+
+val erdUiTest by tasks.registering(Exec::class) {
+    description = "Drives the ER diagram designer in headless Chrome (skipped without node/Chrome)."
+    group = "verification"
+    dependsOn(erdUiTestReport, searchSelfTestReport)
+    val script = rootProject.file("scripts/erd-uitest.mjs")
+    inputs.file(script)
+    inputs.dir(rootProject.file("core/src/main/resources/frontend"))
+    onlyIf { nodePresentOrFail("erdUiTest") }
+    commandLine(
+        nodeExecutable ?: "node",
+        script.absolutePath,
+        erdUiTestDir.get().asFile.resolve("flowable-demo.explorer.html").absolutePath,
+        "--plain", searchSelfTestDir.get().asFile.resolve("miniproject.explorer.html").absolutePath,
+    )
+}
+
+tasks.named("check") { dependsOn(searchSelfTest, explorerUiTest, diagramUiTest, remoteStubUiTest, erdSelfTest, erdUiTest) }
 
 // ---- documentation site (site/ -> build/site) ----
 // The site lives here rather than in the root build because everything it needs is already wired up
@@ -201,7 +248,7 @@ val siteDemo by tasks.registering(JavaExec::class) {
     mainClass.set("com.flowable.atlas.cli.MainKt")
     args(
         rootProject.file("site/flowable-demo").absolutePath,
-        "--all", "--quiet",
+        "--all", "--quiet", "--extension", "erd",
         "-o", siteDemoDir.get().asFile.absolutePath,
     )
     inputs.dir(rootProject.file("site/flowable-demo"))

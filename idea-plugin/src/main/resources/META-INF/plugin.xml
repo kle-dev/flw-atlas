@@ -142,6 +142,36 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.28.0</h3>
+        <ul>
+          <li><b>An ER diagram designer in the explorer, for explaining a data model.</b> A page generated
+              with <code>--extension erd</code> has an <i>ER diagram</i> entry: the project's tables in a
+              list — every table the Liquibase changelogs leave once they have run, with each column's type
+              as written, and the tables of database services no changelog creates — to drag onto a canvas.
+              A card shows a table's business name, its table name and its first five columns, unfolds to
+              all of them, and takes a colour; columns can be dragged into the order that decides which five
+              show. Drawing from a card's dot to another table makes a relation with a name and a
+              cardinality (<code>1:1</code>, <code>1:n</code>, <code>n:1</code>, <code>n:m</code>), drawn
+              with crow's feet, and the relations the models already state — a data object field referring
+              to another data object, a service column relation — are offered as dashed proposals to take
+              with one click. Undo and redo, several diagrams per project, a <i>Present</i> mode that shows
+              the diagram and nothing else, and SVG and PNG export for a slide. What you draw is kept in the
+              browser, per project.</li>
+          <li><b>Explorer extensions are optional, and absent unless chosen.</b> The designer is the first
+              explorer extension: its code is inlined only into a page generated with it
+              (<code>--extension</code> on the CLI, comma-separated), so a page without it is byte-for-byte
+              what it was, and a <code>#/erd</code> link opened there lands on the overview. An unknown
+              extension, or <code>--extension</code> with an output that has no explorer page, is a misuse
+              (exit 2).</li>
+          <li><b>A diagram can live in the project.</b> <i>Export → Diagram file</i> writes
+              <code>&lt;name&gt;.atlas-erd.json</code>, which imports again in any explorer — from the menu,
+              by dropping it on the canvas, or by pasting it in the IDE. Commit it anywhere in the project
+              and every explorer generated with the designer opens on it without an import; what someone
+              changes there stays in their browser, marked <i>changed here</i>, until they export it again.
+              A diagram refers to tables by name, so it follows the schema: a dropped column leaves its
+              card, a new one joins, and a table the project no longer has is drawn dashed from the
+              diagram's own snapshot.</li>
+        </ul>
         <h3>0.27.2</h3>
         <ul>
           <li><b>Liquibase changelogs are replayed the way Liquibase runs them, and a table shows what it
@@ -515,35 +545,6 @@
               window empty beside a squeezed table. They now grow up to 2000px; descriptions keep a readable
               line length, and a check's description on the health list hugs its words instead of stretching
               a pill across the row. An IDE tab's width is unchanged.</li>
-          <li><b>A narrow explorer keeps its navigation on the left.</b> An editor tab of 800px or less —
-              the explorer between two tool windows — got the phone layout: no sidebar, the whole navigation
-              in one drop-down at the top. With a mouse it now keeps the sidebar as its icon rail, which
-              flies out on hover or focus, and the list becomes a drawer over the page that closes once it
-              has opened a node. Only a touch screen still stacks. The breadcrumb no longer runs into itself
-              when squeezed: the path above the page gives way first, and in a bar too narrow for a path it
-              shows the page's own name alone.</li>
-          <li><b>Services, data objects and changelogs name each other in their tables.</b> The
-              <i>Services</i> table gains a <i>Data objects</i> column, the <i>Data objects</i> table a
-              <i>Service</i> column, and both a <i>Liquibase</i> column with the changelog that creates the
-              table — for a data object through its service, the live definition first. Each is a link with
-              its key to copy. A copy button shows the ordinary pointer now, not the copy cursor with its
-              plus badge.</li>
-        </ul>
-        <h3>0.26.0</h3>
-        <ul>
-          <li><b>A <code>.zip</code> or <code>.bar</code> in the Project view opens up.</b> A Design export
-              in the repository could be searched but not browsed: the platform expands an archive only when
-              it is a library, and for one inside a content root it mounts the archive and then drops every
-              entry. A <code>.bar</code> was not even an archive to it, so a double-click asked which file
-              type it was. Both now expand into their folders and entries, and a model opens straight from
-              the tree, read-only.</li>
-          <li><b>A model opens beside its picture.</b> A process, case, decision, form or page, loose or out
-              of an archive, opens as text and picture side by side: the diagram, the decision table, or a
-              form's wireframe. The picture is painted in Swing on the IDE host with the SVG library the
-              platform draws its icons with, not in the IDE's SVG viewer, which is a browser panel — slow
-              under Remote Development, and one that opens on the markup until its layout toggle is clicked.
-              It fits the width, zooms from its toolbar and redraws when the file changes on disk. The
-              diagram gutter icon opens this editor with the picture showing.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

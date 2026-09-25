@@ -161,6 +161,24 @@ class CliTest {
         assertEquals(2, run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--fail-on", "nosuchcheck")))
     }
 
+    /**
+     * An explorer extension is in the page only when it was asked for — and a name that is not one, or a
+     * mode without an explorer page, is a misuse rather than a run that quietly produced something else.
+     */
+    @Test
+    fun anExtensionIsInThePageOnlyWhenNamed() {
+        val out = tempDir()
+        val plain = File(out, "plain.html"); val erd = File(out, "erd.html")
+        assertEquals(0, run(arrayOf(fixtureDir().path, "--html", "-o", plain.path, "-q")))
+        assertEquals(0, run(arrayOf(fixtureDir().path, "--html", "-o", erd.path, "-q", "--extension", "erd")))
+        assertTrue("the designer registers itself", erd.readText().contains("ATLAS_EXT.erd="))
+        assertTrue("…and only when named", !plain.readText().contains("ATLAS_EXT.erd="))
+        assertEquals(0, run(arrayOf(fixtureDir().path, "--all", "-o", File(out, "all").path, "-q", "--extension=erd")))
+        assertTrue(File(out, "all/miniproject.explorer.html").readText().contains("ATLAS_EXT.erd="))
+        assertEquals(2, run(arrayOf(fixtureDir().path, "--html", "-o", erd.path, "-q", "--extension", "nosuchpart")))
+        assertEquals(2, run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--extension", "erd")))
+    }
+
     @Test
     fun theJarAnswersHelpAndRefusesAllWithSlice() {
         assertEquals(0, run(arrayOf("--help")))

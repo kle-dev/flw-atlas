@@ -1,0 +1,40 @@
+{
+  "format": "atlas-erd",
+  "version": 1,
+  "name": "Orders and customers",
+  "project": "flowable-demo",
+  "tables": [
+    {
+      "table": "ord_order",
+      "alias": "Order",
+      "x": 40,
+      "y": 40,
+      "color": "#e8590c",
+      "expanded": false,
+      "order": ["id_", "order_no_", "customer_id_", "total_", "company_"],
+      "columns": []
+    },
+    {
+      "table": "cust_customer",
+      "alias": "Customer",
+      "x": 460,
+      "y": 72,
+      "color": "#2f6fed",
+      "expanded": false,
+      "order": ["id_", "name_"],
+      "columns": []
+    }
+  ],
+  "relations": [
+    {
+      "id": "r1",
+      "from": "ord_order",
+      "to": "cust_customer",
+      "fromColumn": "customer_id_",
+      "toColumn": "id_",
+      "cardinality": "n:1",
+      "label": "placed by"
+    }
+  ],
+  "dismissed": []
+}

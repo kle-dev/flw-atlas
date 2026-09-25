@@ -12,6 +12,30 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.28.0
+
+- **An ER diagram designer in the explorer, for explaining a data model.** A page generated with
+  `--extension erd` has an *ER diagram* entry: the project's tables in a list — every table the Liquibase
+  changelogs leave once they have run, with each column's type as written, and the tables of database
+  services no changelog creates — to drag onto a canvas. A card shows a table's business name, its table
+  name and its first five columns, unfolds to all of them, and takes a colour; columns can be dragged into
+  the order that decides which five show. Drawing from a card's dot to another table makes a relation with
+  a name and a cardinality (`1:1`, `1:n`, `n:1`, `n:m`), drawn with crow's feet, and the relations the models
+  already state — a data object field referring to another data object, a service column relation — are
+  offered as dashed proposals to take with one click. Undo and redo, several diagrams per project, a
+  *Present* mode that shows the diagram and nothing else, and SVG and PNG export for a slide. What you draw
+  is kept in the browser, per project.
+- **Explorer extensions are optional, and absent unless chosen.** The designer is the first explorer
+  extension: its code is inlined only into a page generated with it (`--extension` on the CLI, comma-separated),
+  so a page without it is byte-for-byte what it was, and a `#/erd` link opened there lands on the overview.
+  An unknown extension, or `--extension` with an output that has no explorer page, is a misuse (exit 2).
+- **A diagram can live in the project.** *Export → Diagram file* writes `<name>.atlas-erd.json`, which
+  imports again in any explorer — from the menu, by dropping it on the canvas, or by pasting it in the IDE.
+  Commit it anywhere in the project and every explorer generated with the designer opens on it without an
+  import; what someone changes there stays in their browser, marked *changed here*, until they export it
+  again. A diagram refers to tables by name, so it follows the schema: a dropped column leaves its card, a
+  new one joins, and a table the project no longer has is drawn dashed from the diagram's own snapshot.
+
 ## 0.27.2
 
 - **Liquibase changelogs are replayed the way Liquibase runs them, and a table shows what it holds at the

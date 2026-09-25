@@ -8,8 +8,11 @@
 <databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog">
   <changeSet id="002-order" author="demo">
     <createTable tableName="ord_order">
-      <column name="id_" type="VARCHAR(64)"/>
+      <column name="id_" type="VARCHAR(64)">
+        <constraints primaryKey="true" nullable="false"/>
+      </column>
       <column name="order_no_" type="VARCHAR(64)"/>
+      <column name="customer_id_" type="VARCHAR(64)"/>
       <column name="company_" type="VARCHAR(255)"/>
       <column name="total_" type="DECIMAL(19,2)"/>
       <column name="score_" type="DECIMAL(19,2)"/>

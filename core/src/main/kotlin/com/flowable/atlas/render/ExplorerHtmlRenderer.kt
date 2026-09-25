@@ -29,6 +29,8 @@ object ExplorerHtmlRenderer {
         generatedAt: java.time.Instant = java.time.Instant.now(),
         /** Who is accepting findings from this page — the default `by` of a rule written here. */
         waiverAuthor: String? = null,
+        /** The optional parts of the page to include ([ExplorerExtension]); none by default. */
+        extensions: Set<ExplorerExtension> = emptySet(),
     ): String {
         // error() rather than an empty map: every caller passes an Atlas.extract result, which always
         // carries "graph". The previous `as Map` threw here too — an explorer page silently rendered
@@ -66,10 +68,13 @@ object ExplorerHtmlRenderer {
         payload["waiverAuthor"] = waiverAuthor ?: ""
         payload["nodes"] = attachDiagrams(slimNodes(graph["nodes"]), root)
         payload["edges"] = graph["edges"]
+        // The project's own ER diagrams, for the designer to open on. Only with the designer: a page without
+        // it has no reader for them, and they are not analysis.
+        if (ExplorerExtension.ERD in extensions) payload["erdDiagrams"] = ErdDiagramFiles.find(root)
         val data = dataIsland(payload)
         // Stamp the version before the data island so a version like "__ATLAS_VERSION__" can't collide
         // with anything inside the (already-built) JSON.
-        return composeTemplate()
+        return composeTemplate(extensions)
             .replace("__ATLAS_VERSION__", "Atlas $version")
             .replace("__ATLAS_DATA__", data)
     }
@@ -248,8 +253,18 @@ object ExplorerHtmlRenderer {
     )
 
     /** The full explorer HTML page (CSS/JS inlined; `__ATLAS_DATA__` still unresolved). */
-    private fun composeTemplate(): String {
+    private fun composeTemplate(extensions: Set<ExplorerExtension> = emptySet()): String {
         var t = asset("explorer.html")
+        // The extension markers first, while the template is still only the template: nothing inlined
+        // afterwards can be mistaken for one. With no extension both vanish without a trace, so the page is
+        // the one generated before extensions existed. The script is its own element, ahead of the
+        // explorer's: explorer.js boots synchronously at its end, and an extension must be registered by then.
+        val ext = ExplorerExtension.entries.filter { it in extensions }
+        t = t.replace("/*__ATLAS_EXT_CSS__*/", ext.joinToString("") { "\n" + asset("ext/${it.id}.css").trimEnd('\n') })
+        t = t.replace(
+            "<!--__ATLAS_EXT_JS__-->",
+            ext.joinToString("") { "\n<script>\n" + asset("ext/${it.id}.js").trimEnd('\n') + "</script>" },
+        )
         t = t.replace("/*__ATLAS_CSS__*/", asset("explorer.css"))
         t = t.replace("/*__ATLAS_JS__*/", asset("explorer.js"))
         return t.trimEnd('\n')

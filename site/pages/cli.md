@@ -90,6 +90,7 @@ single-artifact run writes `APP_OVERVIEW.*` unless you name the file with `-o`. 
 | `--waivers <path>` | The [accepted-findings file](../checks/#accepting-a-finding). Defaults to `waivers.json` beside the artifacts: the `--all` directory, or the folder of the file `-o` names — the same folder the explorer's *Save* writes it to. |
 | `--waiver-author <name>` | Prefills the `by` of a rule accepted from the generated explorer page. Left out, a rule written from a CLI-generated page carries no author; inside the IDE the plugin supplies the project's git identity. |
 | `--no-waivers` | Ignore that file and report every finding — the audit run, for answering "what are we hiding?". |
+| `--extension <list>` | Include optional parts of the explorer page — comma-separated, repeatable. `erd` is the [ER diagram designer](../explorer/#er-diagram-designer), which also embeds the project's `*.atlas-erd.json` diagram files. Only with `--all` or `--html`; an unknown name, or the flag with another output, is a misuse (exit 2). A page generated without an extension carries none of its code. |
 | `--fail-on-stale-waivers` | Make the run **exit 1** when a waiver matched nothing or has expired. Separate from `--fail-on` on purpose: a stale waiver is a problem with your file, not a finding about your project. |
 | `-q`, `--quiet` | Silence the status lines on stderr. |
 | `-v`, `--verbose` | List every parse issue the status line counts, one per line, after it. |
@@ -126,7 +127,7 @@ worth knowing because nothing warns you:
 |---|---|
 | `0` | Success. |
 | `1` | The run succeeded and wrote its artifacts, but a finding matched `--fail-on`. |
-| `2` | Argument misuse: an unknown flag, two format flags, `--all` with `--slice`, an unknown `--fail-on` value, a missing option value, a second positional, a path that does not exist, a missing path, or a `--slice` that matches no node. |
+| `2` | Argument misuse: an unknown flag, two format flags, `--all` with `--slice`, an unknown `--fail-on` value, an unknown `--extension` or one without `--all`/`--html`, a missing option value, a second positional, a path that does not exist, a missing path, or a `--slice` that matches no node. |
 
 ## The status line
 

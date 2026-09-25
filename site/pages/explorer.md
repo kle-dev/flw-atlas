@@ -30,6 +30,7 @@ view you are looking at can be copied as a link.
 | `#/variables` | The [unused-variable](../variables/) report and what Atlas could not judge |
 | `#/scripts` | Every script body in the project |
 | `#/schema` | Schema gaps: Liquibase → service → data object, per column |
+| `#/erd` | The [ER diagram designer](#er-diagram-designer) — only in a page generated with it: the project's tables on a canvas, with the relations you draw between them |
 | `#/browse/<category>` | A category — one per node type, Java role, variable scope and review list — as a sortable table: name, key, file, references in and out, open findings, and a column or two the type is worth more with (the bot an action runs and the actions that reach a bot, a service's data objects and a data object's service, the Liquibase changelog behind either, the app a model belongs to, a service's table, a review list's finding). Opening a row brings the list back beside the node |
 | `#<nodeId>` | Browse with that node selected. This is the permalink form |
 | `#<nodeId>&q=<term>` | …with the search term that led there highlighted |
@@ -349,6 +350,106 @@ expression and type, a number per rule.
   each one touches and a badge on the ones with problems.
   <a href="../demo/explorer.html#/scripts" target="_blank" rel="noopener">Open it ↗</a></figcaption>
 </figure>
+
+## ER diagram designer
+
+An optional page for explaining a data model to someone who will never read a changelog: drag the
+project's tables onto a canvas, show each with its first columns, draw the relations between them with a
+name and a cardinality, colour them, and present the result — or export it for a slide.
+
+It is an **explorer extension**, so it is in a page only when it was asked for: `--extension erd` on the
+[CLI](../cli/#options). A page generated without it carries none of its code, has no sidebar entry, and
+treats a `#/erd` link like any page it does not have — it opens the overview.
+
+### Which tables
+
+The tables are the ones Atlas already reads, not a second copy of the schema:
+
+- every table an XML **Liquibase changelog** creates, as it stands once every change set has run —
+  renames, dropped columns and changed types applied — with each column's type exactly as the changelog
+  writes it (`VARCHAR(255)`, `DECIMAL(19,2)`, `${varchar.type}(255)`) and a key mark on the primary key.
+  When two changelogs define one table, the live one wins over an orphaned one, and both over a
+  superseded one (see [`changelogIssues`](../checks/#changelogissues-liquibase-authority));
+- every table a **database service** names that no changelog creates. Its columns are the service's
+  column mappings and its types the service's logical ones, and the list says *service model* beside it.
+
+A table's default business name is the name of the data object that reads it, when exactly one does.
+
+### Building a diagram
+
+- **Add a table** by dragging it from the list onto the canvas, or with its **+**. A table is on a
+  diagram once; dragging it again, or clicking it in the list, finds its card. The filter matches table
+  names, business names and column names.
+- **A card** shows the business name over the table name, then the first five columns — the primary key
+  first, then the changelog's order — each with its type. **+ N more** unfolds the rest and folds them
+  again. The width fits every column, shown or not, so unfolding makes a card longer, never wider.
+- **Reorder columns** with the grip that appears beside a row, or with ↑ ↓ in the card's panel. The order
+  is how you choose which five a folded card shows.
+- **The card's panel** — `⋯` on the card, or a double click — sets the business name and the colour
+  (eight swatches or any colour), lists every column in order, and links to the changelog, services and
+  data objects behind the table.
+- **Draw a relation** from the dot on a card's edge to another card (or back to the same one). Its panel
+  opens with the name field focused: give it a name, a cardinality — `1:1`, `1:n`, `n:1`, `n:m` — and,
+  if you like, the columns it joins; a sentence under the cardinality says what it means (*One Customer
+  has many Orders*). Dropping onto a column's row joins that column. The line ends in crow's feet with the
+  letters beside them, for whoever has never seen the notation.
+- **Proposals.** When both ends of a relation the models already state are on the canvas — a data object
+  field that refers to another data object (its one-to-one or one-to-many becomes the cardinality), or a
+  service column relation — it shows as a dashed line: click it to take it, `×` to dismiss it for this
+  diagram. One proposal per pair of tables, and none once you have drawn one.
+- **Keys.** `Delete` removes the selected card or relation, `⌘Z` / `Ctrl+Z` undoes and `⇧⌘Z` /
+  `Ctrl+Y` redoes (a name typed in one go is one step), `+` `−` `0` zoom and fit, `Esc` closes a panel.
+  Drag the empty canvas to pan, scroll to move, `⌘`/`Ctrl`+scroll or pinch to zoom.
+
+**Present** hides the sidebar, the list and the toolbar, goes full screen where the browser allows it and
+fits the diagram to the room; `Esc` comes back.
+
+### Keeping and sharing a diagram
+
+What you draw is kept in the browser, per project: every change is saved as you make it, and a project can
+have several diagrams — *Diagram → New, Rename, Duplicate, Delete*. A browser keeps it for one person on
+one machine, though, so two more ways out:
+
+- **The diagram file.** *Export → Diagram file* downloads `<name>.atlas-erd.json`; *Diagram → Import*,
+  dropping the file onto the canvas or (in the IDE) pasting it opens it again, in any Atlas explorer.
+- **Diagrams in the project.** Commit that file anywhere in the project (outside `build/`, `target/`,
+  `node_modules/` and the like) and every explorer generated with the designer carries it: the page opens
+  on it, listed with *— project* after its name, without an import. Changes you make stay in your browser
+  (*changed here*) until you export the file again and commit it; *Revert* drops them.
+
+A diagram refers to tables by name and keeps a snapshot of their columns only as a fallback, so it follows
+the schema: a column the changelogs dropped disappears from its card, a new one joins at the end, and a
+table this project does not have is drawn from the snapshot, dashed, marked *not in this project's schema*.
+
+The file is plain JSON:
+
+```json
+{
+  "format": "atlas-erd",
+  "version": 1,
+  "name": "Orders and customers",
+  "project": "flowable-demo",
+  "tables": [
+    {"table": "ord_order", "alias": "Order", "x": 40, "y": 40, "color": "#e8590c", "expanded": false,
+     "order": ["id_", "order_no_", "customer_id_"],
+     "columns": [{"name": "id_", "type": "VARCHAR(64)", "pk": true}, {"name": "order_no_", "type": "VARCHAR(64)"}]}
+  ],
+  "relations": [
+    {"id": "r1", "from": "ord_order", "to": "cust_customer", "fromColumn": "customer_id_", "toColumn": "id_",
+     "cardinality": "n:1", "label": "placed by"}
+  ],
+  "dismissed": []
+}
+```
+
+An import is forgiving — a table without a name, a relation to a table the diagram does not hold or an
+unknown cardinality is dropped or defaulted rather than failing the file — and strict only about `format`
+and `version`: a file from a newer Atlas is refused rather than half-read.
+
+**Pictures.** *Export → SVG image* and *PNG image* write the diagram as it is drawn, in light colours
+whatever the page's theme, without handles or proposals, sized to its content; the SVG carries its font,
+so it looks the same wherever it is opened. Inside IntelliJ the browser cannot download: *Export* copies
+the diagram file or the SVG to the clipboard instead, and *Open in Browser* has the rest.
 
 ## Search
 

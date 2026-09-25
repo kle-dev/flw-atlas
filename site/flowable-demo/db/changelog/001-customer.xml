@@ -5,7 +5,9 @@
 <databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" logicalFilePath="customerSchema">
   <changeSet id="1" author="fixture">
     <createTable tableName="cust_customer">
-      <column name="id_" type="varchar(64)"/>
+      <column name="id_" type="varchar(64)">
+        <constraints primaryKey="true" nullable="false"/>
+      </column>
       <column name="name_" type="varchar(255)"/>
       <column name="orphan_col_" type="varchar(255)"/>
     </createTable>

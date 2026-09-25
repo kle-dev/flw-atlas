@@ -18,7 +18,7 @@ Building needs a **JDK 21+**. Running the CLI needs only a **JRE 21+**.
 
 That runs the whole gate: the `:core` golden tests against `core/src/test/resources/miniproject`, the
 parser and graph unit tests, the drift/sync tests, the `:cli` contract tests (the artifact names the
-plugin depends on), the shared expression-validator parity suite, and the three browser-driven frontend
+plugin depends on), the shared expression-validator parity suite, and the browser-driven frontend
 tests. It also produces the installable plugin ZIP.
 
 ### The goldens
@@ -42,14 +42,16 @@ size-budgeted window onto its newest entries, because that field is capped at 65
 
 ### The browser tests
 
-Three tests drive the generated explorer in headless Chrome, because `explorer.js` is a large browser
-asset that no JUnit test can execute:
+These tests drive the generated explorer in headless Chrome — or its pure parts in node — because
+`explorer.js` is a large browser asset that no JUnit test can execute:
 
 | Task | What it proves |
 |---|---|
 | `:cli:searchSelfTest` | The search engine, evaluated out of `explorer.js` and run against a query table |
 | `:cli:explorerUiTest` | The page boots without errors; click, ⌘-click, Shift-click and Enter all activate a hit; facets narrow; the browse list navigates |
 | `:cli:diagramUiTest` | The diagram element card's geometry — that an expanded card escapes its viewport and the scrim covers the modal |
+| `:cli:erdSelfTest` | The ER diagram designer's core, evaluated out of `ext/erd.js` in node: which tables a project has, column order against a changed schema, the relations the models propose, what a diagram file may contain |
+| `:cli:erdUiTest` | The designer on the demo project, with real mouse and key input over the DevTools protocol (the canvas captures the pointer, which synthetic events skip): drag a table in, relate, reorder, colour, undo, reload, export, present — and that a page generated without the extension has none of it |
 
 They **skip themselves** when node or Chrome is missing, so `./gradlew build` stays green on a machine
 without them. `ATLAS_REQUIRE_BROWSER_TESTS=1` turns that skip into a failure — CI sets it, so a green
@@ -120,6 +122,13 @@ location, so the task is simply absent on a machine that has none.
 - The explorer frontend is `core/src/main/resources/frontend/explorer.{html,css,js}` — plain, editable
   files read at render time by `ExplorerHtmlRenderer` and inlined into the generated page. There is no
   separate top-level copy and no embed step.
+- Optional parts of the page — **explorer extensions** — live in `core/src/main/resources/frontend/ext/<id>.{js,css}`
+  and are inlined only when chosen (`ExplorerExtension`; `--extension` on the CLI). An extension's script is
+  its own `<script>`, ahead of `explorer.js`, and registers itself on `window.ATLAS_EXT`
+  (`{title, nav(), render(view), leave()}`); it may use the explorer's helpers only from code that runs
+  after the boot. The two scripts share one global scope, so an extension's top-level names carry its
+  prefix — a clash would stop the explorer from loading at all. `EXT_VIEWS` in `explorer.js` names the
+  routes an extension owns, which is also what the docs gate reads.
 - `explorer.css` has a layout token scale (`--space-*` on a 4pt grid, `--radius-*`, `--text-*`) at the
   top of `:root`. Use the tokens for spacing, radius and font size; borders, breakpoints and structural
   sizes stay raw pixels.

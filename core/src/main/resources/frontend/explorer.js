@@ -853,12 +853,24 @@ function computeInsights(){
 // #/checks&f=…&c=error&a=1 / #/tree&l=all&f=… -> a report with its own context: `f` filter text,
 //                    `c` the chip, `a` show-accepted, `l` the tree's lens — so a reload or a copied link
 //                    brings the report back as it was left, the way `&f=`/`&s=` already did for a list.
-const REPORT_VIEWS={'/schema':'schema','/scripts':'scripts','/checks':'checks','/variables':'variables','/tree':'tree'};
+const REPORT_VIEWS={'/schema':'schema','/scripts':'scripts','/checks':'checks','/variables':'variables','/tree':'tree',
+  '/erd':'erd'};
+// ---------- extensions ----------
+// An extension is optional page code the renderer inlines only when it was chosen (ExplorerExtension.kt):
+// its own <script> runs before this one and registers itself on window.ATLAS_EXT as
+// {title, nav(), render(view), leave()}. A report generated without it carries none of its code, and its
+// route falls back to the overview like any page this explorer does not have — a copied `#/erd` link
+// opened in a report without the designer must not land on an empty view.
+const EXT=(typeof window.ATLAS_EXT==='object' && window.ATLAS_EXT) || {};
+/** The report views an extension owns, by view: routable only in a page that carries that extension. */
+const EXT_VIEWS={erd:'erd'};
+const extOf = v => EXT_VIEWS[v]!=null ? EXT[EXT_VIEWS[v]] || null : null;
+const viewAvailable = v => EXT_VIEWS[v]==null || !!extOf(v);
 function parseHash(){
   const raw = location.hash.slice(1);
   if(!raw || raw==='/overview') return {view:'overview'};
   const first=raw.split('&')[0];
-  if(REPORT_VIEWS[first]){
+  if(REPORT_VIEWS[first] && viewAvailable(REPORT_VIEWS[first])){
     const ctx=hashContext(raw.split('&').slice(1));
     return {view:REPORT_VIEWS[first], rf:ctx.f, rc:ctx.c, acc:ctx.a, lens:ctx.l};
   }
@@ -906,8 +918,15 @@ function syncHashContext(){
   if(state.sort && state.sort!=='name') h+='&s='+enc(state.sort);
   if(location.hash.slice(1)!==h){ try{ history.replaceState(history.state, '', '#'+h); }catch(e){} }
 }
+let _shownView=null;
 function showView(v){
   if(v!=='browse') listMarksClear();          // a multi-selection cannot outlive the list it was made in
+  // An extension's page may hold state the rest of the page must not inherit (a full-screen presentation,
+  // a drag in progress): it is told when the reader leaves it.
+  const gone=_shownView!==v && extOf(_shownView);
+  if(gone && gone.leave) try{ gone.leave(); }catch(e){ console.error(e); }
+  _shownView=v;
+  Object.keys(EXT_VIEWS).forEach(x=>{ const el=document.getElementById('view-'+x); if(el) el.hidden = v!==x; });
   document.getElementById('view-overview').hidden = v!=='overview';
   document.getElementById('view-schema').hidden = v!=='schema';
   document.getElementById('view-scripts').hidden = v!=='scripts';
@@ -957,7 +976,9 @@ function rerenderView(){
     case 'tree': renderTree(); break;
     case 'checks': renderChecks(); break;
     case 'variables': renderVariables(); break;
-    default: renderDetail();
+    default:
+      if(extOf(state.view)) renderExtView(state.view);
+      else renderDetail();
   }
 }
 function route(){
@@ -1003,6 +1024,10 @@ function route(){
     state.view='variables'; state.sel=null;
     showView('variables'); renderVariables();
     renderSidebarActive(); renderCrumbs();
+  } else if(extOf(r.view)){
+    state.view=r.view; state.sel=null;
+    showView(r.view); renderExtView(r.view);
+    renderSidebarActive(); renderCrumbs();
   } else if(r.sel){
     // the page's tab rides in the hash, so Back lands on the tab the reader left (select() carries it on)
     state.pane = r.p || 'overview';
@@ -1020,6 +1045,18 @@ function route(){
     showView('browse'); renderTabs(); renderDetail();             // renderDetail() draws the category table
     renderSidebarActive(); renderCrumbs();
     syncHashContext();
+  }
+}
+
+/** Draw an extension's page. A fault in optional code must not take the rest of the explorer with it:
+ *  the view says what happened and every other page keeps working. */
+function renderExtView(v){
+  const el=document.getElementById('view-'+v), x=extOf(v);
+  if(!el || !x) return;
+  try{ x.render(el); }
+  catch(e){
+    console.error(e);
+    el.innerHTML='<div class="dash"><p class="empty">This page could not be drawn: '+esc(e && e.message || String(e))+'</p></div>';
   }
 }
 
@@ -1057,6 +1094,11 @@ function navItems(){
       color:covColor(gaps?'warn':'good'), count:gaps,
       tip:'Schema gaps — Liquibase → Service → Data object coverage'});
   }
+  // An extension adds its own entry, or none when it has nothing to show in this project.
+  Object.keys(EXT).forEach(id=>{
+    let it=null; try{ it=EXT[id].nav && EXT[id].nav(); }catch(e){ console.error(e); }
+    if(it) items.push(it);
+  });
   if(INSIGHTS.totalDirectedVars>0){
     const unusedVars=INSIGHTS.health.unusedVars+INSIGHTS.health.unreadInputs;
     items.push({route:'/variables', label:'Unused variables', sec:'Variables', pri:0, icon:'variable',
@@ -1209,6 +1251,10 @@ function renderCrumbs(){
   } else if(state.view==='tree'){
     h=link(DATA.project,'#/overview')+sep+cur('Reference tree');
     title='Reference tree — Flowable Atlas';
+  } else if(extOf(state.view)){
+    const t=extOf(state.view).title;
+    h=link(DATA.project,'#/overview')+sep+cur(t);
+    title=t+' — Flowable Atlas';
   } else {
     const cat=CATS.find(x=>x.id===state.cat);
     const n=state.sel&&byId.get(state.sel);

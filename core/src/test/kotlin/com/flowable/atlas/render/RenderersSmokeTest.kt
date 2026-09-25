@@ -1,7 +1,9 @@
 package com.flowable.atlas.render
 
 import com.flowable.atlas.graph.Atlas
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -38,6 +40,42 @@ class RenderersSmokeTest {
         for (gone in listOf("**Scale:**", "**Models:**", "Common Flowable pitfalls", " … (+", "not auto-detected")) {
             assertFalse("CLAUDE.md still contains: $gone", md.contains(gone))
         }
+    }
+
+    /**
+     * An extension is inlined only when chosen: without one the markers leave no trace (no empty script,
+     * no dormant code), with one its script sits *before* the explorer's — explorer.js boots synchronously
+     * at its end, and the routes an extension owns must be registered by then.
+     */
+    @Test
+    fun explorerExtensionsAreInlinedOnlyWhenChosen() {
+        val at = java.time.Instant.parse("2026-01-01T00:00:00Z")
+        val plain = ExplorerHtmlRenderer.render(result, fixtureDir, generatedAt = at)
+        assertFalse("leftover extension marker", plain.contains("__ATLAS_EXT_"))
+        assertFalse("the designer's code shipped although nobody asked for it", plain.contains("ATLAS_EXT.erd="))
+        assertTrue("the explorer's side of the contract is always there", plain.contains("const EXT_VIEWS="))
+
+        val erd = ExplorerHtmlRenderer.render(result, fixtureDir, generatedAt = at, extensions = setOf(ExplorerExtension.ERD))
+        assertFalse("leftover extension marker", erd.contains("__ATLAS_EXT_"))
+        val reg = erd.indexOf("ATLAS_EXT.erd=")
+        assertTrue("the designer registers itself", reg > 0)
+        assertTrue("…before the explorer boots", reg < erd.indexOf("const DATA = JSON.parse"))
+        assertTrue("the designer's styles ride along", erd.contains(".erd-card"))
+        fun asset(name: String) = javaClass.getResource("/frontend/ext/$name")!!.readText().trimEnd('\n')
+        // The designer's code and styles, and the project's diagrams for it (none in the fixture): nothing else.
+        assertEquals(
+            "the extension is the only difference",
+            plain,
+            erd.replace("\n" + asset("erd.css"), "").replace("\n<script>\n" + asset("erd.js") + "</script>", "")
+                .replace(",\"erdDiagrams\":[]", ""),
+        )
+    }
+
+    @Test
+    fun explorerExtensionIdsAreStrict() {
+        assertEquals(setOf(ExplorerExtension.ERD), ExplorerExtension.parse(listOf(" ERD ", "")))
+        assertEquals(emptySet<ExplorerExtension>(), ExplorerExtension.parse(emptyList()))
+        assertThrows(IllegalArgumentException::class.java) { ExplorerExtension.parse(listOf("erd", "nope")) }
     }
 
     @Test

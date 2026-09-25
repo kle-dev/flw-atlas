@@ -13,7 +13,7 @@ That writes five artifacts to `./atlas-output/<project>/` and opens the explorer
 
 | Artifact | What it is |
 |---|---|
-| `<project>.explorer.html` | A self-contained, offline, interactive explorer. Open by double-click; click through every relationship in both directions. |
+| `<project>.explorer.html` | A self-contained, offline, interactive explorer. Open by double-click; click through every relationship in both directions. With `--extension erd` it also carries an ER diagram designer: drag the project's tables onto a canvas, relate them, export the picture. |
 | `<project>.summary.md` | A compact (~few KB) LLM-first overview: apps, inventory, entry points, integrations, hotspots, health. |
 | `<project>.overview.md` | The full human report — every model in execution order, the access map, the data layer, every finding with `file:line`. |
 | `<project>.graph.json` | The traversable model↔code graph, for agents to **query** rather than read: every node carries `usedBy`, and a `_schema` key documents the shape and ships `jq` recipes. |

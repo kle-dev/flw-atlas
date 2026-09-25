@@ -7,6 +7,8 @@
   "columnMappings": [
     {"name": "id", "columnName": "id_", "type": "string"},
     {"name": "orderNumber", "columnName": "order_no_", "type": "string"},
+    {"name": "customer", "columnName": "customer_id_", "type": "object-relation",
+     "relation": {"referenceServiceDefinitionKey": "customerService", "referenceColumnName": "id"}},
     {"name": "companyName", "columnName": "company_", "type": "string"},
     {"name": "totalAmount", "columnName": "total_", "type": "number"},
     {"name": "internalScore", "columnName": "score_", "type": "number"},

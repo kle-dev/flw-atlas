@@ -4,6 +4,7 @@ import com.flowable.atlas.diagram.DiagramArtifacts
 import com.flowable.atlas.graph.Atlas
 import com.flowable.atlas.graph.Waivers
 import com.flowable.atlas.render.ClaudeRenderer
+import com.flowable.atlas.render.ExplorerExtension
 import com.flowable.atlas.render.ExplorerHtmlRenderer
 import com.flowable.atlas.render.GraphJsonRenderer
 import com.flowable.atlas.render.OverviewRenderer
@@ -56,6 +57,7 @@ fun run(args: Array<String>): Int {
     var failOn: String? = null
     var waiversPath: String? = null; var noWaivers = false; var failOnStaleWaivers = false
     var waiverAuthor: String? = null
+    val extensionIds = ArrayList<String>()
 
     var i = 0
     var endOpts = false
@@ -103,6 +105,7 @@ fun run(args: Array<String>): Int {
                     "--no-waivers" -> noWaivers = true
                     "--fail-on-stale-waivers" -> failOnStaleWaivers = true
                     "--waiver-author" -> waiverAuthor = value(name, inline) ?: return 2
+                    "--extension" -> extensionIds.addAll((value(name, inline) ?: return 2).split(','))
                     "--verbose" -> verbose++
                     "--quiet" -> quiet = true
                     "--help" -> { System.out.write(usage().toByteArray(Charsets.UTF_8)); System.out.flush(); return 0 }
@@ -142,6 +145,16 @@ fun run(args: Array<String>): Int {
     // `--all` used to win over `--slice` without a word — the one flag conflict that was not an error.
     if (all && slice != null) {
         errln("error: argument --slice: not allowed with --all")
+        return 2
+    }
+    // An extension is part of the explorer page: named for any other output it would change nothing, and a
+    // run that quietly ignored it would read as "the designer is in there".
+    val extensions = try { ExplorerExtension.parse(extensionIds) } catch (e: IllegalArgumentException) {
+        errln("error: argument --extension: ${e.message}")
+        return 2
+    }
+    if (extensions.isNotEmpty() && !all && !html) {
+        errln("error: argument --extension: only with --all or --html (it adds a part of the explorer page)")
         return 2
     }
     // `--fail-on` names severities and/or check ids; an unknown one is a misuse, not a silent no-match.
@@ -291,7 +304,7 @@ fun run(args: Array<String>): Int {
             "$name.summary.md" to SummaryRenderer.render(result, root),
             "$name.overview.md" to OverviewRenderer.render(result, root),
             "$name.graph.json" to GraphJsonRenderer.render(result, pretty = pretty),
-            "$name.explorer.html" to ExplorerHtmlRenderer.render(result, root, waiverAuthor = waiverAuthor),
+            "$name.explorer.html" to ExplorerHtmlRenderer.render(result, root, waiverAuthor = waiverAuthor, extensions = extensions),
             // The file names its siblings from the project root, so it needs to know where they land.
             "$name.CLAUDE.md" to ClaudeRenderer.render(result, root, ClaudeRenderer.Layout(outdir, siblings = true)),
         )
@@ -348,7 +361,7 @@ fun run(args: Array<String>): Int {
         // Alone, `--claude` writes no summary/graph next to itself; the file must not pretend otherwise.
         claude -> ClaudeRenderer.render(result, root, ClaudeRenderer.Layout(siblings = false)) to "CLAUDE.md"
         summary -> SummaryRenderer.render(result, root) to "summary.md"
-        html -> ExplorerHtmlRenderer.render(result, root, waiverAuthor = waiverAuthor) to "html"
+        html -> ExplorerHtmlRenderer.render(result, root, waiverAuthor = waiverAuthor, extensions = extensions) to "html"
         json -> GraphJsonRenderer.render(result, pretty = pretty) to "json"
         else -> OverviewRenderer.render(result, root) to "md"
     }
@@ -404,6 +417,8 @@ options:
   --waivers <path>            the accepted-findings file (default: waivers.json beside the artifacts)
   --waiver-author <name>      the `by` of a rule accepted from the explorer page
   --no-waivers                ignore it — report every finding, for an audit
+  --extension <list>          comma-separated optional explorer parts to include (--all, --html):
+                              ${ExplorerExtension.entries.joinToString(", ") { it.id + " (" + it.label + ")" }}
   --fail-on-stale-waivers     exit 1 when a waiver matched nothing or has expired
   -v, --verbose               list every parse issue the status line counts
   -q, --quiet                 silence the status lines on stderr
