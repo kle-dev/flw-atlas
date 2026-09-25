@@ -163,6 +163,9 @@ const SHOTS = [
   ['#/variables', 'variables-page', { w: 1400, h: 900 }],
   ['#/schema', 'schema-page', { w: 1400, h: 800 }],
   ['#/scripts', 'scripts-page', { w: 1400, h: 900 }],
+  // The ER diagram designer — the demo is generated with `--extension erd` and keeps a diagram file of its
+  // own (site/flowable-demo/docs/orders.atlas-erd.json), which a fresh profile opens on.
+  ['#/erd', 'erd-page', { w: 1400, h: 820 }],
   // Detail pages: a form (its tabs, facts and layout), a process (its drawing), and an operation whose
   // caller leaves out a required parameter — its Connections tab, the "Does it fit?" gap near the top.
   ['#form%3AorderForm', 'detail-form', { w: 1400, h: 1000 }],

@@ -408,6 +408,14 @@ A table's default business name is the name of the data object that reads it, wh
 **Present** hides the sidebar, the list and the toolbar, goes full screen where the browser allows it and
 fits the diagram to the room; `Esc` comes back.
 
+<figure class="fig">
+  <div class="body"><img class="only-light" src="../assets/img/erd-page.png" alt="The ER diagram designer: the project's tables in a list on the left, and on the canvas an Order and a Customer table joined by a relation named placed by, n to 1" width="1400" height="820"><img class="only-dark" src="../assets/img/erd-page-dark.png" alt="The ER diagram designer: the project's tables in a list on the left, and on the canvas an Order and a Customer table joined by a relation named placed by, n to 1" width="1400" height="820"></div>
+  <figcaption><b>The demo's own diagram</b>, from the <code>docs/orders.atlas-erd.json</code> it keeps —
+  the page opens on it without an import. Business names over table names, the primary key first, the
+  relation named, with its cardinality.
+  <a href="../demo/explorer.html#/erd" target="_blank" rel="noopener">Open it ↗</a></figcaption>
+</figure>
+
 ### Keeping and sharing a diagram
 
 What you draw is kept in the browser, per project: every change is saved as you make it, and a project can
