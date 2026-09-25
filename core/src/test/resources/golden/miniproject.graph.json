@@ -901,6 +901,13 @@
           "value": null
         },
         {
+          "id": "customerRecord.customerName",
+          "label": "Customer name",
+          "required": false,
+          "type": "text",
+          "value": null
+        },
+        {
           "id": "internalNote",
           "label": "Internal note",
           "required": false,
@@ -922,6 +929,13 @@
           "stores": "{{orderTotal}}",
           "type": "scriptButton",
           "value": "{{orderTotal}}"
+        },
+        {
+          "id": "shipTo.deliveryCity",
+          "label": "Ship-to city",
+          "required": false,
+          "type": "text",
+          "value": null
         },
         {
           "id": "totalDisplay",
@@ -1750,6 +1764,13 @@
               "value": null
             },
             {
+              "id": "customerRecord.customerName",
+              "label": "Customer name",
+              "required": false,
+              "type": "text",
+              "value": null
+            },
+            {
               "id": "internalNote",
               "label": "Internal note",
               "required": false,
@@ -1771,6 +1792,13 @@
               "stores": "{{orderTotal}}",
               "type": "scriptButton",
               "value": "{{orderTotal}}"
+            },
+            {
+              "id": "shipTo.deliveryCity",
+              "label": "Ship-to city",
+              "required": false,
+              "type": "text",
+              "value": null
             },
             {
               "id": "totalDisplay",

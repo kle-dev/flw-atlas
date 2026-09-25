@@ -81,6 +81,8 @@ _Scanned 27 models (27 files · 1 archives), 3 Java files, 2 REST endpoints. Gen
 - `totalDisplay` [text] Total ← `{{amount}}`
 - `lookupCustomer` [button] Lookup customer → service `customerService`
 - `customerRecord` [select] Customer record
+- `customerRecord.customerName` [text] Customer name
+- `shipTo.deliveryCity` [text] Ship-to city
 - `canEditButton` [restButton] Check if editable
 - `notifyButton` [workAction] Notify customer → action `notifyCustomerAction` visible when `{{amount > 0}}`
 - `orderTotal` [scriptButton] Recalculate ← `{{orderTotal}}` = `{{amount * 1.081}}`

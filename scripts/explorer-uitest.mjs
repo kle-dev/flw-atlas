@@ -969,6 +969,12 @@ const probe = `<script>
   steps.push(()=>{
     const cols=[...document.querySelectorAll('#detail [data-sect="columns"] .tbl .th .td')].map(t=>t.textContent.trim());
     ok("a data object's properties name the service column behind each field", cols.indexOf('Service column')>=0, cols.join('|'));
+    const shownIn=name=>{ const r=[...document.querySelectorAll('#detail [data-sect="columns"] .tbl .tr')].find(x=>x.textContent.trim().indexOf(name)===0);
+      return r?[...r.querySelectorAll('.vlink')].map(v=>v.dataset.id):null; };
+    ok('a field is shown in the form whose component under the bound record displays it',
+       (shownIn('customerName')||[]).indexOf(enc('form:orderForm'))>=0, JSON.stringify(shownIn('customerName')));
+    ok('a same-named path under another record does not count', (shownIn('deliveryCity')||[]).indexOf(enc('form:orderForm'))<0,
+       JSON.stringify(shownIn('deliveryCity')));
   });
 
   // --- a decision, an action and a form against what they meet ---

@@ -169,6 +169,11 @@
               whichever model Atlas listed first under that key: a service's operation calls showed up on a
               form or page with the same key, and the service showed none. Each call now carries the node it
               came from (<code>sourceId</code>).</li>
+          <li><b>A data object's <i>Shown in</i> names only the forms that show the field.</b> Any form
+              referring to the object counted every dotted component id's last segment as one of its fields,
+              so <code>shipTo.deliveryCity</code> on a form that also lists customers "showed" the
+              customer's <code>deliveryCity</code>. Only a component under one bound to this object counts
+              now — the same rule the form's own "not a field of the object" check uses.</li>
         </ul>
         <h3>0.27.0</h3>
         <ul>
@@ -539,14 +544,6 @@
               links to it. A table past a hundred rows, or a relation past sixty neighbours, shows the first
               ones and <i>show all</i>. On a touch screen a vertical swipe over a diagram scrolls the page
               and two fingers zoom.</li>
-          <li><b>One vocabulary for findings.</b> A defect is labelled by its severity, <i>error</i> or
-              <i>warning</i>; an advice finding is labelled <i>advice</i> and drawn grey — in the health
-              rows, the finding pills, the diagram badges, the Checks filter (which gains an <i>advice</i>
-              chip) and the Atlas Findings tool window, where advice wears the information icon. Every
-              advice row used to read WARNING under the <i>Advice</i> heading. <code>graph.json</code>, the
-              summary and <code>--fail-on</code> keep the severity; a saved
-              <code>#/checks&amp;c=warning</code> link now keeps a defect's warnings only, and the sidebar's
-              <i>Checks</i> badge is grey while only advice is open.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

@@ -4999,10 +4999,16 @@ S.properties={id:'columns', title:'Properties', hint:'the fields of the object, 
     // and pages that bind it (a component bound to this object, `customerRecord.name` → `name`)
     const svc=n.type==='dataObject'&&c.d.service?byId.get('service:'+c.d.service):null;
     const svcCols=new Map(((svc&&svc.data||{}).columns||[]).map(x=>[looseCol(x.name), x]));
+    // Only a component under one bound to *this* object shows its field — the rule formDoPaths checks with.
+    // Any dotted id of any form that touches the object used to count, so `order.status` on a form that
+    // also lists customers "showed" the customer's `status`.
     const binders=new Map();
-    if(n.type==='dataObject') (incM.get(n.id)||[]).forEach(e=>{ const m=byId.get(e.id); if(!m||(m.type!=='form'&&m.type!=='page')) return;
-      ((m.data||{}).fields||[]).forEach(f=>{ const id=String((f&&f.id)||''); if(id.indexOf('.')<0) return;
-        const k=looseCol(id.split('.').pop()); if(!binders.has(k)) binders.set(k, new Set()); binders.get(k).add(m.id); }); });
+    if(n.type==='dataObject') [...new Set((incM.get(n.id)||[]).map(e=>e.id))].forEach(mid=>{ const m=byId.get(mid); if(!m||(m.type!=='form'&&m.type!=='page')) return;
+      const fs=(m.data||{}).fields||[];
+      const roots=fs.filter(f=>f&&f.id&&f.callee&&f.callee.kind==='dataObject'&&f.callee.key===n.key).map(f=>String(f.id)+'.');
+      fs.forEach(f=>{ const id=String((f&&f.id)||''); const root=roots.find(r=>id.indexOf(r)===0); if(!root) return;
+        const sub=id.slice(root.length).split('.')[0].split('[')[0]; if(!sub) return;
+        const k=looseCol(sub); if(!binders.has(k)) binders.set(k, new Set()); binders.get(k).add(m.id); }); });
     const dict=c.d.dictionary;
     return tbl([{k:'name',label:'Name',w:'minmax(10ch,1.2fr)',mono:true},{k:'label',label:'Label',w:'minmax(10ch,1.4fr)',cls:'dim',opt:true},
                 {k:'type',label:'Type',w:'minmax(8ch,.8fr)',cls:'tags'},{k:'ref',label:'Relation',w:'minmax(10ch,1.2fr)',opt:true},

@@ -34,6 +34,10 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
 - **A REST call belongs to the model that makes it.** Calls were credited by key alone, to whichever model
   Atlas listed first under that key: a service's operation calls showed up on a form or page with the same
   key, and the service showed none. Each call now carries the node it came from (`sourceId`).
+- **A data object's *Shown in* names only the forms that show the field.** Any form referring to the object
+  counted every dotted component id's last segment as one of its fields, so `shipTo.deliveryCity` on a form
+  that also lists customers "showed" the customer's `deliveryCity`. Only a component under one bound to this
+  object counts now — the same rule the form's own "not a field of the object" check uses.
 
 ## 0.27.0
 

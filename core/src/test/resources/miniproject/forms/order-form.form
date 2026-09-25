@@ -32,6 +32,10 @@
       }
     ],
     [
+      {"id": "customerRecord.customerName", "type": "text", "label": "Customer name"},
+      {"id": "shipTo.deliveryCity", "type": "text", "label": "Ship-to city"}
+    ],
+    [
       {
         "id": "canEditButton",
         "type": "restButton",
