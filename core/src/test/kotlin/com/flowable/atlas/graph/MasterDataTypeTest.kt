@@ -29,7 +29,7 @@ class MasterDataTypeTest {
             File(dir, "pick.form").writeText(
                 """{"metadata":{"key":"DEMO-F001","name":"Pick","modelType":"form"},
                     "rows":[[{"id":"country","type":"select","label":"Country","value":"{{country}}",
-                      "extraSettings":{"dataSource":"MasterData","tableKey":"md-country"}}]]}""")
+                      "extraSettings":{"dataSource":"Master","tableKey":"md-country"}}]]}""")
             result = Atlas.extract(dir)
         }
 

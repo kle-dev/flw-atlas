@@ -19,6 +19,9 @@ class Ctx {
     val refs = ArrayList<MutableMap<String, Any?>>()
     val dynamicRefs = ArrayList<MutableMap<String, Any?>>()
     val restCalls = ArrayList<MutableMap<String, Any?>>()
+    /** Where a form's links and a data table's row click go — navigation, which the browser follows, not a
+     *  call the form makes. Kept apart from [restCalls] so no report lists a link as a call. */
+    val links = ArrayList<MutableMap<String, Any?>>()
     val expr = LinkedHashSet<String>()
     val mustache = LinkedHashSet<String>()
     val delegateClasses = LinkedHashSet<String>()
@@ -136,6 +139,12 @@ class Ctx {
             "source" to source, "sourceId" to modelId(source), "sourceFile" to sourceFile, "where" to where,
             "method" to method, "url" to url, "kind" to kind,
         ))
+    }
+
+    /** Record a link of the model being parsed — see [links]. */
+    fun addLink(source: Any?, sourceFile: String, where: Any?, url: String) {
+        links.add(linkedMapOf("source" to source, "sourceId" to modelId(source), "sourceFile" to sourceFile,
+            "where" to where, "url" to url))
     }
 
     /** Record that [consumer] invokes operation [opKey] on a service ([targetKind] = "service") or a

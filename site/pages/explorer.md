@@ -194,7 +194,8 @@ What each page asks:
   through the service mapping to the data-object field, and where the chain breaks;
 - **a decision** — every model that runs it: an input the caller never writes, a result it never reads;
 - **a form or page** — every call it makes (buttons, data sources, REST calls with the verb checked
-  against the handler), the variables its fields write and who reads them, the data-object paths it binds
+  against the handler — a link, a link button and a data table's row link are where the form goes, not
+  calls, and a setting left behind by a data source the component no longer uses is not read), the variables its fields write and who reads them, the data-object paths it binds
   that are no field of the object, and, for each task that shows it, the outcomes no downstream condition
   tests and the tested values that are no outcome;
 - **an action** — the buttons that invoke it against what its script reads with `flw.getInput`;

@@ -34,6 +34,20 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
 - **A REST call belongs to the model that makes it.** Calls were credited by key alone, to whichever model
   Atlas listed first under that key: a service's operation calls showed up on a form or page with the same
   key, and the service showed none. Each call now carries the node it came from (`sourceId`).
+- **A link is where a form goes, not a call it makes.** Every component with a URL was a GET call, so a link
+  button to a customer page, a help link and a data table's row link were listed as REST calls — and linked
+  to the project endpoint their URL happened to match. On five real projects 136 components did this. What a
+  URL is now follows the forms runtime: a REST button calls it, an HTML component loads its markup from it,
+  a link calls it only as a download (`asFileDownload`), and otherwise a link, a link button or a row link
+  *navigates to* it. Navigation is drawn as such and is not in the form's calls, its Calls table, or the
+  count of external REST URLs.
+- **A data source a component no longer uses is not read.** Switching a select or table to another data
+  source in Design leaves the old one's settings behind, and each of them was read as live: a static select
+  "called" its old REST URL, a REST select "showed" a master-data table, a static table ran its old query.
+  Only the source `dataSource` names counts now, as in the forms runtime — a data-object select is one
+  whatever it says. A data table's create, edit, view and delete actions count only while they are not
+  switched off, and a create-instance button starts the process or the case its `instanceType` names, not
+  both.
 - **A key two models share never hands one model's links to the other.** Wherever Atlas still looked a
   model up by key alone, it took whichever model it had listed first under that key. That lookup is gone:
   a record about a model reaches that model, or the other half of its family (a form and a page, a data

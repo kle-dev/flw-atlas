@@ -4907,7 +4907,7 @@ const FACTS={
     x.add('Kind', d.kind==='namespace'?('namespace '+(d.namespace||'?')+'.*'):d.kind==='flw'?'flw.* member':'top-level');
     x.mono('Signature', (d.member||n.label||'')+'('+(d.signature!=null?d.signature:'…')+')');
     x.mono('Registered in',(d.sources||[]).join(', ')); },
-  external(n,d,x){ x.add('Kind',d.flowableApi?'Flowable platform API':d.route?'In-app navigation route':d.platform?'Flowable platform bean':d.missingModel?'Missing model reference ('+(d.kind||'model')+')':d.dynamic?'Dynamic reference (expression) — expected '+(d.kind||'model'):(d.external_url?'External URL':d.kind||'external')); if(d.method&&d.method!=='(button)') x.mono('Method',d.method); },
+  external(n,d,x){ x.add('Kind',d.flowableApi?'Flowable platform API':d.route?'In-app navigation route':d.platform?'Flowable platform bean':d.missingModel?'Missing model reference ('+(d.kind||'model')+')':d.dynamic?'Dynamic reference (expression) — expected '+(d.kind||'model'):(d.external_url?'External URL':d.link?'External page (a link goes there)':d.kind||'external')); if(d.method&&d.method!=='(button)') x.mono('Method',d.method); },
   _(n,d,x){ Object.keys(d).forEach(k=>{
     // property probes, not reads: reading `d[k]` here would mark every container as consumed for the
     // "Other attributes" fallback while rendering only the scalars

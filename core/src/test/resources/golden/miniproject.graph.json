@@ -827,20 +827,6 @@
         },
         {
           "callee": {
-            "key": "https://portal.example.com/{{customer}}",
-            "kind": "rest"
-          },
-          "id": "customerPortal",
-          "label": "Open customer portal",
-          "required": false,
-          "settings": {
-            "target": "_blank"
-          },
-          "type": "linkButton",
-          "value": "Open customer portal"
-        },
-        {
-          "callee": {
             "key": "notifyCustomerAction",
             "kind": "action"
           },
@@ -899,6 +885,16 @@
           "required": false,
           "type": "select",
           "value": null
+        },
+        {
+          "id": "customerPortal",
+          "label": "Open customer portal",
+          "required": false,
+          "settings": {
+            "target": "_blank"
+          },
+          "type": "linkButton",
+          "value": "Open customer portal"
         },
         {
           "id": "customerRecord.customerName",
@@ -1034,12 +1030,6 @@
           "path": null,
           "url": "/api/customers/{{customer}}/score",
           "where": "creditScore"
-        },
-        {
-          "method": "GET",
-          "path": null,
-          "url": "https://portal.example.com/{{customer}}",
-          "where": "customerPortal"
         }
       ],
       "subforms": []
@@ -1421,6 +1411,11 @@
         "t": "process:orderProcess"
       },
       {
+        "rel": "navigates-to",
+        "s": "form:orderForm",
+        "t": "external:https://portal.example.com/{{customer}}"
+      },
+      {
         "rel": "open-app",
         "s": "group:backoffice",
         "t": "app:demoApp"
@@ -1495,11 +1490,6 @@
         "rel": "rest-call",
         "s": "form:orderForm",
         "t": "external:/api/customers/{{customer}}/score"
-      },
-      {
-        "rel": "rest-call",
-        "s": "form:orderForm",
-        "t": "external:https://portal.example.com/{{customer}}"
       },
       {
         "rel": "rest-call",
@@ -1690,20 +1680,6 @@
             },
             {
               "callee": {
-                "key": "https://portal.example.com/{{customer}}",
-                "kind": "rest"
-              },
-              "id": "customerPortal",
-              "label": "Open customer portal",
-              "required": false,
-              "settings": {
-                "target": "_blank"
-              },
-              "type": "linkButton",
-              "value": "Open customer portal"
-            },
-            {
-              "callee": {
                 "key": "notifyCustomerAction",
                 "kind": "action"
               },
@@ -1762,6 +1738,16 @@
               "required": false,
               "type": "select",
               "value": null
+            },
+            {
+              "id": "customerPortal",
+              "label": "Open customer portal",
+              "required": false,
+              "settings": {
+                "target": "_blank"
+              },
+              "type": "linkButton",
+              "value": "Open customer portal"
             },
             {
               "id": "customerRecord.customerName",
@@ -1897,12 +1883,6 @@
               "path": null,
               "url": "/api/customers/{{customer}}/score",
               "where": "creditScore"
-            },
-            {
-              "method": "GET",
-              "path": null,
-              "url": "https://portal.example.com/{{customer}}",
-              "where": "customerPortal"
             }
           ],
           "subforms": []
@@ -3882,17 +3862,6 @@
       },
       {
         "data": {
-          "external_url": true,
-          "method": "GET"
-        },
-        "file": null,
-        "id": "external:https://portal.example.com/{{customer}}",
-        "key": "https://portal.example.com/{{customer}}",
-        "label": "https://portal.example.com/{{customer}}",
-        "type": "external"
-      },
-      {
-        "data": {
           "file": "policies/case.policy",
           "key": "orderPolicy",
           "name": "Order policy",
@@ -4674,6 +4643,16 @@
         "id": "external:courierProcess",
         "key": "courierProcess",
         "label": "courierProcess",
+        "type": "external"
+      },
+      {
+        "data": {
+          "link": true
+        },
+        "file": null,
+        "id": "external:https://portal.example.com/{{customer}}",
+        "key": "https://portal.example.com/{{customer}}",
+        "label": "https://portal.example.com/{{customer}}",
         "type": "external"
       },
       {
@@ -7861,17 +7840,6 @@
       "sourceId": "form:orderForm",
       "url": "/api/customers/{{customer}}/score",
       "where": "creditScore"
-    },
-    {
-      "kind": "form-button",
-      "looseMatches": [],
-      "matches": [],
-      "method": "GET",
-      "source": "orderForm",
-      "sourceFile": "forms/order-form.form",
-      "sourceId": "form:orderForm",
-      "url": "https://portal.example.com/{{customer}}",
-      "where": "customerPortal"
     },
     {
       "kind": "form-query",

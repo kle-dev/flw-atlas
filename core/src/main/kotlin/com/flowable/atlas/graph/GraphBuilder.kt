@@ -9,6 +9,7 @@ import com.flowable.atlas.expr.ExprWrappers
 import com.flowable.atlas.expr.catalog.CustomFunctionCatalog
 import com.flowable.atlas.expr.catalog.FlowableExpressionCatalog
 import com.flowable.atlas.parsing.Constants
+import com.flowable.atlas.parsing.JavaParser
 import com.flowable.atlas.parsing.ModelKinds
 
 /**
@@ -35,7 +36,6 @@ object GraphBuilder {
     private val STR_IN_EXPR_RE = Regex("'[^']*'|\"[^\"]*\"")
     private val MUSTACHE_HEAD_RE = Regex("^\\$?([A-Za-z_][\\w]*)")
     private val DATAOBJ_QUERY_RE = Regex("dataObjectDefinitionKey=|/query/")
-    private val ENDPOINTS_PLATFORM_RE = Regex("(?:^|[/{\$\\s])endpoints\\.")
 
     /** The service operations the data-object runtime invokes itself for a bound data object. */
     private val DATA_OBJECT_ENGINE_OPS = setOf("lookup", "create", "update", "delete")
@@ -769,6 +769,30 @@ object GraphBuilder {
             addEdge(s, nid, rel, dynamic = true)
         }
 
+        fun isRoute(url: String) = url.contains("#/") || url.trimStart().startsWith("#")
+
+        /** The node of a URL outside the project: a client-side route, Flowable's own API, or elsewhere — a
+         *  URL something calls (`external_url`) or only links to (`link`), which no count of calls includes. */
+        fun externalUrl(url: String, method: Any?, route: Boolean, link: Boolean = false): String {
+            val nid = "external:$url"
+            if (nid !in extSeen) {
+                extSeen.add(nid)
+                nodes[nid] = linkedMapOf(
+                    "id" to nid, "type" to "external", "label" to url, "key" to url, "file" to null,
+                    "data" to linkedMapOf<String, Any?>(),
+                )
+            }
+            val data = nodes[nid]!!["data"] as MutableMap<String, Any?>
+            if (method != null) data.putIfAbsent("method", method)
+            when {
+                route -> data["route"] = true
+                JavaParser.callsFlowableApi(url) -> { data["platform"] = true; data["flowableApi"] = true }
+                link -> if (data["external_url"] != true) data["link"] = true
+                else -> { data["external_url"] = true; data.remove("link") }
+            }
+            return nid
+        }
+
         // rest calls -> endpoint (matched) or external url. The edge carries the URLs that reach it as
         // written (`via`), so the page can tell which of a model's calls an endpoint answers without a
         // matcher of its own — a second copy of the rules is a second set of answers.
@@ -784,23 +808,21 @@ object GraphBuilder {
             }
             val url = rc["url"] as? String ?: continue
             if (DATAOBJ_QUERY_RE.containsMatchIn(url)) continue
-            val data = linkedMapOf<String, Any?>("method" to rc["method"])
-            val rel: String
-            if (url.contains("#/") || url.trimStart().startsWith("#")) {
-                data["route"] = true; rel = "navigates-to"
-            } else if (ENDPOINTS_PLATFORM_RE.containsMatchIn(url)) {
-                data["platform"] = true; data["flowableApi"] = true; rel = "rest-call"
-            } else {
-                data["external_url"] = true; rel = "rest-call"
+            val route = isRoute(url)
+            addEdge(s, externalUrl(url, rc["method"], route), if (route) "navigates-to" else "rest-call")
+        }
+
+        // links -> the endpoint a browser opens (a report, a download), else the page or route it goes to
+        val codeEndpoints = bucketList("endpoints").filterIsInstance<Map<String, Any?>>()
+        for (lk in ctx.links) {
+            val s = kn(lk["sourceId"] ?: lk["source"]) ?: continue
+            val url = lk["url"] as? String ?: continue
+            val eps = JavaParser.matchRest(url, codeEndpoints, "GET").filter { it["loose"] != true }
+            if (eps.isNotEmpty()) {
+                for (ep in eps) addEdge(s, "endpoint:${ep["http"]} ${ep["path"]}", "navigates-to")
+                continue
             }
-            val nid = "external:$url"
-            if (nid !in extSeen) {
-                extSeen.add(nid)
-                nodes[nid] = linkedMapOf(
-                    "id" to nid, "type" to "external", "label" to url, "key" to url, "file" to null, "data" to data,
-                )
-            }
-            addEdge(s, nid, rel)
+            addEdge(s, externalUrl(url, null, isRoute(url), link = true), "navigates-to")
         }
 
         // group -> model (access)

@@ -39,7 +39,7 @@ class DataObjectOperationsTest {
                 """{"metadata":{"key":"ordersPage","name":"Orders","modelType":"page"},
                     "rows":[{"cols":[{"id":"tbl","type":"dataTable","extraSettings":{"dataSource":"DataObject",
                       "dataObjectDefinitionKey":"orderDO","dataObjectOperationKey":"searchAll",
-                      "dataObjectDataTableEditOperationKey":"update"}}]}]}""")
+                      "dataObjectDataTableEditOperationKey":"update","dataObjectDataTableEnableEdit":true}}]}]}""")
             // a select whose options come from a search operation and whose stored id resolves through a lookup
             File(dir, "pick.form").writeText(
                 """{"metadata":{"key":"pickForm","name":"Pick","modelType":"form"},

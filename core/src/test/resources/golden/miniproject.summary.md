@@ -47,7 +47,7 @@ Agents: orderAssistant
 - app `demoApp` — Demo App (referenced by 2)
 
 ## External surface
-- External REST URLs called: 4
+- External REST URLs called: 3
 - Review (unresolved in project — likely missing/external): bean:notifierBean, process:courierProcess
 
 ## Health — 9 defects · 8 advice

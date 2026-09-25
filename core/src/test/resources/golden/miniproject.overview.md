@@ -163,8 +163,6 @@ _Scanned 27 models (27 files · 1 archives), 3 Java files, 2 REST endpoints. Gen
     - ✅ served by GET /api/customers -> CustomerController#customers (src/main/java/com/example/CustomerController.java:10)
 - `GET` {{endpoints.baseUrl}}/api/customers/{{customer}}/canEdit  _(from form-button `orderForm/canEditButton`)_
     - ✅ served by GET /api/customers/{id}/canEdit -> CustomerController#canEdit (src/main/java/com/example/CustomerController.java:15)
-- `GET` https://portal.example.com/{{customer}}  _(from form-button `orderForm/customerPortal`)_
-    - ⚠️ no matching controller in project (external or unimplemented)
 - `GET` /api/customers/{{customer}}/score  _(from form-button `orderForm/creditScore`)_
     - ⚠️ no matching controller in project (external or unimplemented)
 - `GET` /api/customers  _(from service-op `customerService/findAll`)_

@@ -529,21 +529,25 @@ object ModelParsers {
                     // and the component says which form it embeds, so its row and its box can open it
                     component?.set("subform", modelRefKey(es["formRef"]))
                 }
-                if (truthy(es["dataObjectDefinitionKey"])) {
+                // Design's palettes share one `extraSettings` bag, so switching a select or table from one
+                // data source to another leaves the old source's keys behind; the runtime reads only the
+                // source `dataSource` names (see [sourceLive]). Read as live, a static select still
+                // "called" its old REST URL and a REST select still "showed" a master-data table.
+                if (truthy(es["dataObjectDefinitionKey"]) && sourceLive(es, n["type"], "DataObject")) {
                     dataSources.add(linkedMapOf("kind" to "dataObject", "key" to es["dataObjectDefinitionKey"], "op" to es["dataObjectOperationKey"]))
                     ctx.addRef(key, mtype, ffile, "field-dataObject", "dataObject", es["dataObjectDefinitionKey"])
                     ctx.addOpUse(key, "dataObject", es["dataObjectDefinitionKey"], es["dataObjectOperationKey"])
                     // The data table's own create/edit/delete operations name what its row actions call
-                    // (75 such keys across the real projects, none of them recorded before).
-                    for (ok in listOf("dataObjectDataTableCreateOperationKey", "dataObjectDataTableEditOperationKey",
-                                      "dataObjectDataTableDeleteOperationKey")) {
-                        ctx.addOpUse(key, "dataObject", es["dataObjectDefinitionKey"], es[ok])
+                    // (75 such keys across the real projects, none of them recorded before) — each only
+                    // while its action is switched on.
+                    for ((ok, flag) in DATA_TABLE_OPERATIONS) {
+                        if (enabled(es[flag])) ctx.addOpUse(key, "dataObject", es["dataObjectDefinitionKey"], es[ok])
                     }
                 }
                 // A select over a master-data table names the table, which is a data object of the
                 // master-data kind (9 on the real projects, only one of them reached the graph — and that
                 // one by accident, through a URL scan).
-                if (truthy(es["tableKey"])) {
+                if (truthy(es["tableKey"]) && sourceLive(es, n["type"], "Master")) {
                     dataSources.add(linkedMapOf("kind" to "masterData", "key" to es["tableKey"]))
                     ctx.addRef(key, mtype, ffile, "field-masterData", "dataObject", es["tableKey"])
                 }
@@ -555,12 +559,13 @@ object ModelParsers {
                 // A select/table reads its options over REST: `queryUrl` for the list, `lookupUrl` to
                 // resolve a stored id back to a label. Both are plain GETs.
                 for (uk in listOf("queryUrl", "lookupUrl")) {
-                    if (!truthy(es[uk])) continue
+                    // a data-object source's generated query URL gives way to one the model sets
+                    if (!truthy(es[uk]) || !sourceLive(es, n["type"], "Rest", "DataObject")) continue
                     dataSources.add(linkedMapOf("kind" to "rest", "url" to es[uk]))
                     ctx.addRestCall(key, ffile, n["id"], "GET", es[uk], "form-query")
                 }
                 val sm = objOf(es["serviceModel"])
-                if (sm != null && truthy(sm["serviceModelKey"])) {
+                if (sm != null && truthy(sm["serviceModelKey"]) && sourceLive(es, n["type"], "ServiceModel")) {
                     dataSources.add(linkedMapOf("kind" to "service", "key" to sm["serviceModelKey"], "op" to sm["operationKey"]))
                     ctx.addRef(key, mtype, ffile, "field-service", "service", sm["serviceModelKey"])
                     ctx.addOpUse(key, "service", sm["serviceModelKey"], sm["operationKey"])
@@ -569,9 +574,8 @@ object ModelParsers {
                     ctx.addOpUse(key, "service", sm["serviceModelKey"], sm["lookupOperationKey"])
                 }
                 // the four form keys a data-object data table carries (the platform's useDataObjectDT)
-                for (fk in listOf("dataObjectDataTableCreateFormKey", "dataObjectDataTableEditFormKey",
-                                  "dataObjectDataTableViewFormKey", "dataObjectDataTableDeleteFormKey")) {
-                    if (truthy(es[fk])) ctx.addRef(key, mtype, ffile, fk, "form", es[fk])
+                for ((fk, flag) in DATA_TABLE_FORMS) {
+                    if (truthy(es[fk]) && enabled(es[flag]) && sourceLive(es, n["type"], "DataObject")) ctx.addRef(key, mtype, ffile, fk, "form", es[fk])
                 }
                 if (truthy(es["expandablePanel"])) ctx.addRef(key, mtype, ffile, "datatable-detail-form", "form", es["expandablePanel"])
                 // Like the process/case references below, the newer Design editor writes the action
@@ -587,9 +591,14 @@ object ModelParsers {
                 }
                 // A create-instance button starts a process/case; a query data source runs a query
                 // model. The reference is a bare key or a {key: …} object, depending on the version.
-                ctx.addRef(key, mtype, ffile, "starts-process", "process", modelRefKey(es["processReference"]))
-                ctx.addRef(key, mtype, ffile, "starts-case", "case", modelRefKey(es["caseReference"]))
-                ctx.addRef(key, mtype, ffile, "runs-query", "query", modelRefKey(es["query"]))
+                // A create-instance button starts one of the two, by `instanceType`; the other reference
+                // is a leftover of the button's previous setting.
+                val startsCase = (es["instanceType"] as? String)?.equals("case", ignoreCase = true) == true
+                if (!startsCase) ctx.addRef(key, mtype, ffile, "starts-process", "process", modelRefKey(es["processReference"]))
+                if (startsCase || es["instanceType"] == null && es["processReference"] == null) {
+                    ctx.addRef(key, mtype, ffile, "starts-case", "case", modelRefKey(es["caseReference"]))
+                }
+                if (sourceLive(es, n["type"], "Query")) ctx.addRef(key, mtype, ffile, "runs-query", "query", modelRefKey(es["query"]))
                 // A button/section can be gated to groups: ["group1"] or [{"permission-group": "group1"}].
                 val pgs = (es["permissionGroups"] as? List<*> ?: emptyList<Any?>())
                     .map { if (it is Map<*, *>) it["permission-group"] else it }
@@ -641,22 +650,33 @@ object ModelParsers {
                 }
                 // Data-source / lookup / navigation URLs (queryUrl, lookupUrl, navigationUrl, …) can embed a
                 // dataObject/service operation as literal query params — pick those up as op-uses.
-                for (v in es.values) if (v is String) recordUrlOpUses(v, key, mtype, ffile, ctx)
+                for ((k, v) in es) {
+                    if (v !is String || (k == "queryUrl" || k == "lookupUrl") && !sourceLive(es, n["type"], "Rest", "DataObject")) continue
+                    recordUrlOpUses(v, key, mtype, ffile, ctx)
+                }
             }
-            // A REST/link button's endpoint. Real Design keeps it on `extraSettings.url` (palette
-            // `rest-button-url`); only hand-written and legacy models put it on the component itself.
-            // Reading `extraSettings` here — rather than wherever the walk happens to land — is what
-            // gives the call a `where`: on the bare `extraSettings` map there is no id to attribute it to.
-            // `extraSettings.method` is omitted whenever it is the palette default, hence the fallback.
+            // A component's `url`. Real Design keeps it on `extraSettings.url` (palette `rest-button-url`);
+            // only hand-written and legacy models put it on the component itself. Reading `extraSettings`
+            // here — rather than wherever the walk happens to land — is what gives the call a `where`: on
+            // the bare `extraSettings` map there is no id to attribute it to. What the URL *is* depends on
+            // the component: see [urlRole]. Every `url` used to be a GET call, so a link button to a
+            // customer page and a data table's row link were listed as REST calls the form never makes.
             val url = (pyOr(es?.get("url"), n["url"]) as? String)?.trim()
             // a component has a type; a map that merely has an `id` and a `url` key is not one
             if (truthy(n["id"]) && n["type"] is String && !url.isNullOrEmpty()) {
-                val method = ((es?.get("method") as? String)?.takeIf { it.isNotBlank() } ?: "get").uppercase()
-                restCalls.add(linkedMapOf(
-                    "where" to n["id"], "method" to method, "url" to url, "path" to es?.get("path"),
-                ))
-                ctx.addRestCall(key, ffile, n["id"], method, url, "form-button")
-                recordUrlOpUses(url, key, mtype, ffile, ctx)
+                when (urlRole(n["type"] as String, es)) {
+                    UrlRole.CALL -> {
+                        // `extraSettings.method` is omitted whenever it is the palette default, hence the fallback
+                        val method = ((es?.get("method") as? String)?.takeIf { it.isNotBlank() } ?: "get").uppercase()
+                        restCalls.add(linkedMapOf(
+                            "where" to n["id"], "method" to method, "url" to url, "path" to es?.get("path"),
+                        ))
+                        ctx.addRestCall(key, ffile, n["id"], method, url, "form-button")
+                        recordUrlOpUses(url, key, mtype, ffile, ctx)
+                    }
+                    UrlRole.LINK -> ctx.addLink(key, ffile, n["id"], url)
+                    null -> {}
+                }
             }
             // Link components carry their target URL in `value`.
             (n["value"] as? String)?.let { recordUrlOpUses(it, key, mtype, ffile, ctx) }
@@ -867,18 +887,74 @@ object ModelParsers {
     private fun calleeOf(es: Map<String, Any?>, n: Map<String, Any?>): Pair<String?, Any?> {
         if (truthy(es["actionDefinitionKey"])) return "action" to modelRefKey(es["actionDefinitionKey"])
         objOf(es["agentModel"])?.get("agentModelKey")?.let { if (truthy(it)) return "agent" to it }
-        objOf(es["serviceModel"])?.get("serviceModelKey")?.let { if (truthy(it)) return "service" to it }
-        if (truthy(es["dataObjectDefinitionKey"])) return "dataObject" to es["dataObjectDefinitionKey"]
+        objOf(es["serviceModel"])?.get("serviceModelKey")?.let { if (truthy(it) && sourceLive(es, n["type"], "ServiceModel")) return "service" to it }
+        if (truthy(es["dataObjectDefinitionKey"]) && sourceLive(es, n["type"], "DataObject")) return "dataObject" to es["dataObjectDefinitionKey"]
         // A create-instance button's callee is the process or case it starts — which is also the model
-        // whose contract its payload map has to match.
-        modelRefKey(es["processReference"])?.let { if (truthy(it)) return "process" to it }
+        // whose contract its payload map has to match. `instanceType` says which; the other is a leftover.
+        val startsCase = (es["instanceType"] as? String)?.equals("case", ignoreCase = true) == true
+        if (!startsCase) modelRefKey(es["processReference"])?.let { if (truthy(it)) return "process" to it }
         modelRefKey(es["caseReference"])?.let { if (truthy(it)) return "case" to it }
         // `extraSettings.url` is where a real REST button keeps its endpoint; the component-level `url`
         // only occurs in hand-written and legacy models. Without the former, a REST button's payload and
-        // header mappings carried no callee at all.
+        // header mappings carried no callee at all. A link's URL is where it goes, not what it calls.
         val url = pyOr(pyOr(es["url"], n["url"]), es["invokeServiceUrl"]) as? String
-        if (!url.isNullOrBlank()) return "rest" to url.trim()
+        if (!url.isNullOrBlank() && (truthy(es["invokeServiceUrl"]) || urlRole(n["type"] as? String, es) == UrlRole.CALL)) {
+            return "rest" to url.trim()
+        }
         return null to null
+    }
+
+    /** A data table's operation keys, each with the flag that switches its row action on. */
+    private val DATA_TABLE_OPERATIONS = listOf(
+        "dataObjectDataTableCreateOperationKey" to "dataObjectDataTableEnableCreate",
+        "dataObjectDataTableEditOperationKey" to "dataObjectDataTableEnableEdit",
+        "dataObjectDataTableDeleteOperationKey" to "dataObjectDataTableEnableDelete",
+    )
+
+    /** The four form keys a data-object data table carries (the platform's `useDataObjectDT`), each with
+     *  the flag that switches its action on. */
+    private val DATA_TABLE_FORMS = listOf(
+        "dataObjectDataTableCreateFormKey" to "dataObjectDataTableEnableCreate",
+        "dataObjectDataTableEditFormKey" to "dataObjectDataTableEnableEdit",
+        "dataObjectDataTableViewFormKey" to "dataObjectDataTableEnableView",
+        "dataObjectDataTableDeleteFormKey" to "dataObjectDataTableEnableDelete",
+    )
+
+    /** An action switch that is not switched off. Only an explicit `false` turns it off: the data table
+     *  enables view, edit and delete when the flag is absent (`DataTableNew`), and an expression decides at
+     *  run time. Reading an absent flag as off made the forms those actions open "unused". */
+    private fun enabled(v: Any?): Boolean = v != false && !(v is String && v.trim().equals("false", ignoreCase = true))
+
+    /**
+     * Whether a component's settings for one of [kinds] of data source are the ones the runtime reads.
+     * The forms runtime builds exactly one data source from `extraSettings.dataSource`
+     * (`DataSourceFactory.getDataSource`): `Rest` reads `queryUrl`/`lookupUrl`, `Master` builds its own URLs
+     * from `tableKey`, `DataObject` reads the definition and operation keys (and a `queryUrl` the model
+     * sets), `Query` the query model, `ServiceModel` the service; static `items` on a data-object source make
+     * it static. A data-object select is a data-object source whatever it says (`DataObject/Select.tsx` sets
+     * it), and a component without `dataSource` — a button, a work list, an older model — is taken at its
+     * word.
+     */
+    private fun sourceLive(es: Map<String, Any?>, type: Any?, vararg kinds: String): Boolean {
+        if (type == "dataObjectSelect") return kinds.any { it.equals("DataObject", ignoreCase = true) }
+        val ds = (es["dataSource"] as? String)?.trim()?.takeIf { it.isNotEmpty() } ?: return true
+        if (ds.equals("DataObject", ignoreCase = true) && (es["items"] as? List<*>)?.isNotEmpty() == true) return false
+        return kinds.any { it.equals(ds, ignoreCase = true) }
+    }
+
+    private enum class UrlRole { CALL, LINK }
+
+    /**
+     * What a component's `url` is at run time, per the Work forms runtime: a REST button calls it and an
+     * HTML component loads its markup from it (a call); a link or link button is an `href`, fetched only as
+     * a download (`asFileDownload`); a data table's `url` is where a row click goes. Any other component
+     * does nothing with it, and neither does this.
+     */
+    private fun urlRole(type: String?, es: Map<String, Any?>?): UrlRole? = when (type) {
+        "restButton", "htmlComponent", "cellComponent" -> UrlRole.CALL
+        "link", "linkButton" -> if (truthy(es?.get("asFileDownload"))) UrlRole.CALL else UrlRole.LINK
+        "dataTable" -> UrlRole.LINK
+        else -> null
     }
 
     /** `.agent` — model settings, tools, operations, knowledge base; records tool/KB refs. */

@@ -169,6 +169,22 @@
               whichever model Atlas listed first under that key: a service's operation calls showed up on a
               form or page with the same key, and the service showed none. Each call now carries the node it
               came from (<code>sourceId</code>).</li>
+          <li><b>A link is where a form goes, not a call it makes.</b> Every component with a URL was a GET
+              call, so a link button to a customer page, a help link and a data table's row link were listed
+              as REST calls — and linked to the project endpoint their URL happened to match. On five real
+              projects 136 components did this. What a URL is now follows the forms runtime: a REST button
+              calls it, an HTML component loads its markup from it, a link calls it only as a download
+              (<code>asFileDownload</code>), and otherwise a link, a link button or a row link <i>navigates
+              to</i> it. Navigation is drawn as such and is not in the form's calls, its Calls table, or the
+              count of external REST URLs.</li>
+          <li><b>A data source a component no longer uses is not read.</b> Switching a select or table to
+              another data source in Design leaves the old one's settings behind, and each of them was read
+              as live: a static select "called" its old REST URL, a REST select "showed" a master-data
+              table, a static table ran its old query. Only the source <code>dataSource</code> names counts
+              now, as in the forms runtime — a data-object select is one whatever it says. A data table's
+              create, edit, view and delete actions count only while they are not switched off, and a
+              create-instance button starts the process or the case its <code>instanceType</code> names, not
+              both.</li>
           <li><b>A key two models share never hands one model's links to the other.</b> Wherever Atlas still
               looked a model up by key alone, it took whichever model it had listed first under that key.
               That lookup is gone: a record about a model reaches that model, or the other half of its
@@ -531,20 +547,6 @@
               their whole text's width, and the playground's splitters honour that: after a long expression
               the divider to the payload was stuck. The rows are clipped now, with the full text on hover,
               and at most eight sub-expression rows are listed.</li>
-          <li><b>Flowable's own beans are not an external library.</b> A bean the platform ships —
-              <code>flwTimeUtils</code>, <code>initVariablesService</code> — was listed under <i>External /
-              library</i> with the third-party classes. It has a category of its own, <i>Flowable
-              platform</i>, beside <i>Flowable API</i>; a model key given as an expression is a <i>Dynamic
-              reference</i>.</li>
-          <li><b>Operations Java calls through the service registry are used.</b> A service-registry
-              invocation — <code>.serviceKey(…).operationKey(…)</code> — was invisible, so an operation only
-              Java called was reported unused and nothing linked it to the code. The call is rarely one
-              statement — a helper sets the service key and a lambda elsewhere names the operation, or the
-              class hands its own <code>SERVICE_KEY</code> constant to a shared client — and each shape is
-              followed now. On one real project twelve operations show the Java class that calls them and
-              six <i>unused operation</i> findings are gone. In the IDE, <code>.serviceData("name",
-              v)</code> is checked against the operation's input parameters, as a data object's
-              <code>.value(…)</code> already was.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

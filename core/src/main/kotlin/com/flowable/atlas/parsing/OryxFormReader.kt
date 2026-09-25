@@ -131,7 +131,8 @@ object OryxFormReader {
         // the data-object select / table configuration object: the object it reads and the operation
         for (k in listOf("dataobjectselectsearch", "searchdataobjectconfiguration")) {
             val cfg = props[k] as? Map<*, *> ?: continue
-            str(cfg["key"])?.let { es["dataObjectDefinitionKey"] = it; es["dataSource"] = "DataObject" }
+            // the configuration implies a data-object source — unless the model says which source it uses
+            str(cfg["key"])?.let { es["dataObjectDefinitionKey"] = it; es.putIfAbsent("dataSource", "DataObject") }
             str(cfg["operationKey"])?.let { es["dataObjectOperationKey"] = it }
         }
         if (es.isNotEmpty()) n["extraSettings"] = es

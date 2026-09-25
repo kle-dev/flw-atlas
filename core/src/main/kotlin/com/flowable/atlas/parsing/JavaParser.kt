@@ -436,6 +436,11 @@ object JavaParser {
         return CallPath(body.map { if (PLACEHOLDER_RE.containsMatchIn(it)) null else it }, prefixAllowed)
     }
 
+    /** True when [url] calls Flowable's own REST API: a platform `{{endpoints.<id>}}` base, or a URL whose
+     *  path starts at one of its roots (`platform-api/…`). A custom `{{endpoints.x}}` is not one of them. */
+    fun callsFlowableApi(url: String?): Boolean =
+        callPath(url)?.segs?.firstOrNull()?.let { it in PLATFORM_ROOTS } == true
+
     /** An endpoint path as segments, `null` for a path variable (`{id}`, `{id:\d+}`, a `*` pattern). */
     private fun endpointPath(path: String?): List<String?> =
         path.orEmpty().substringBefore('?').split('/').filter { it.isNotEmpty() }

@@ -14,7 +14,7 @@
     ],
     [
       {"id": "openOrders", "type": "workProcessList", "label": "Open orders", "extraSettings": {"scopeType": "process", "scopeDefinitionKey": "orderProcess"}},
-      {"id": "priorityPick", "type": "select", "label": "Priority", "value": "{{priority}}", "extraSettings": {"dataSource": "MasterData", "tableKey": "priorityMD"}}
+      {"id": "priorityPick", "type": "select", "label": "Priority", "value": "{{priority}}", "extraSettings": {"dataSource": "Master", "tableKey": "priorityMD"}}
     ]
   ]
 }
