@@ -165,6 +165,23 @@
               pages no longer run a matcher of their own: each rest-call edge carries the URLs that reach it
               (<code>via</code>), so the pages name exactly the endpoints the graph links. The IDE's
               endpoint gutter and Find Usages use the same rule.</li>
+          <li><b>A REST call on a base Atlas cannot name reaches no endpoint.</b>
+              <code>${crmUrl}/api/customers/${id}</code>, a placeholder host and a custom
+              <code>{{endpoints.x}}</code> may point at any server — on nine real projects every one of them
+              was another system — and matched by their path they looked like calls of the project's own
+              endpoint of that shape. A <code>?</code> or <code>#</code> inside a placeholder (<code>{{c ?
+              'a' : 'b'}}</code>) no longer cuts the URL short, and a service operation that names no verb
+              is a GET, as the service invoker sends it.</li>
+          <li><b>An endpoint is what the controller type serves.</b> The endpoint list read a controller's
+              paths loosely: any string among a mapping's arguments was its path, so
+              <code>@GetMapping(produces = "application/json")</code> served <code>/application/json</code>;
+              the file's first <code>class</code> decided where the base mapping ended, so a data class or
+              enum before the controller swallowed it and was credited with the controller's endpoints; and
+              the handler was whatever annotation came next. Now the path is the mapping's
+              <code>value</code>/<code>path</code> or first argument — every element of an array, a
+              <code>+</code> of literals and constants resolved through the project's constants — the base
+              mapping and the handlers belong to the annotated type, and a path nothing resolves is kept out
+              of matching.</li>
           <li><b>A REST call belongs to the model that makes it.</b> Calls were credited by key alone, to
               whichever model Atlas listed first under that key: a service's operation calls showed up on a
               form or page with the same key, and the service showed none. Each call now carries the node it
@@ -527,26 +544,6 @@
               Swing frame by frame. A plain wheel over a drawing now scrolls without the page's script in
               the way (⌘/Ctrl + wheel still zooms), the drawing ignores the pointer while the pane scrolls,
               and a form's cells highlight with an outline instead of a blur.</li>
-          <li><b>A subform shows the form it embeds, and opens it.</b> A subform was a dashed box with its
-              id: nothing said what it held, and nothing opened the form behind it. The wireframe now draws
-              the embedded form inside the box (nested subforms three levels deep, a form embedding itself
-              once), in the explorer, the IDE's preview and the diagrams folder alike. A double click on the
-              box opens that form — in the explorer, and in the IDE, where Ctrl/⌘-click does too. Its card
-              and its row in <i>Fields</i> link the form. The element card of any drawing also closes on a
-              click outside it, not only on its ✕.</li>
-          <li><b>Every operand of a long <code>||</code> gets its value.</b> With <i>Show Sub-Expression
-              Values</i> on, <code>a || b || c || d</code> showed values for its last operands only, and one
-              spot carried two: the chain parses as <code>((a || b) || c) || d</code>, so the first operands
-              sank below the depth the hints stop at, and every inner <code>(…) || c</code> ended where
-              <code>c</code> ends. The operands of a chain are siblings now, each with its own value; an
-              operand of <code>||</code> or <code>&amp;&amp;</code> is hinted even when it is a plain flag,
-              one the evaluation short-circuited says <i>skipped</i>, and a spot never carries two
-              values.</li>
-          <li><b>The playground's panes can be resized after a long expression.</b> The message rows under
-              the expression field — and, under Remote Development, its sub-expression rows — asked for
-              their whole text's width, and the playground's splitters honour that: after a long expression
-              the divider to the payload was stuck. The rows are clipped now, with the full text on hover,
-              and at most eight sub-expression rows are listed.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

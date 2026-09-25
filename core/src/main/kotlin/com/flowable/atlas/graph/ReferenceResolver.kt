@@ -148,8 +148,10 @@ object ReferenceResolver {
             for (ep in jc["endpoints"] as List<Map<String, Any?>>) {
                 val ep2 = LinkedHashMap(ep)
                 ep2["file"] = rel
-                ep2["controller"] = primary
-                ep2["controllerFqn"] = fqn
+                // the annotated type, which need not be the file's first
+                val ctl = (ep["controller"] as? String) ?: primary
+                ep2["controller"] = ctl
+                ep2["controllerFqn"] = if (ctl == primary) fqn else fqn.substringBeforeLast('.', "").let { if (it.isEmpty()) ctl else "$it.$ctl" }
                 bucketList("endpoints").add(ep2)
             }
             if (jc["isController"] as Boolean) bucketList("javaControllers").add(jc)
@@ -166,6 +168,22 @@ object ReferenceResolver {
             if (ops.isNotEmpty()) javaOpCalls[fqn] = ops
             val (svcKeys, svcOps) = JavaParser.serviceInvocations(srcText)
             if (svcOps.isNotEmpty()) javaServiceCalls[fqn] = Triple(svcKeys, svcOps, ownConstants.values)
+        }
+
+        // ---- Constants in mapping paths: `@RequestMapping(ApiPaths.BASE)` with the constant in another file.
+        // Resolved like a key constant; one nothing resolves — or a Spring `${…}` property — leaves the
+        // path unknown, and an unknown path is kept out of matching instead of matching as a variable.
+        for (ep in bucketList("endpoints")) {
+            @Suppress("UNCHECKED_CAST") val e = ep as MutableMap<String, Any?>
+            var path = e["path"] as? String ?: continue
+            if (JavaParser.PATH_CONST in path) {
+                path = Regex("${JavaParser.PATH_CONST}([^${JavaParser.PATH_CONST}]*)${JavaParser.PATH_CONST}").replace(path) { m ->
+                    val n = m.groupValues[1]
+                    (if (n in ambiguousConstants) null else javaConstants[n]) ?: ("\${" + n + "}")
+                }
+                e["path"] = "/" + path.split("/").filter { it.isNotEmpty() }.joinToString("/")
+            }
+            if ("\${" in (e["path"] as String)) e["pathUnresolved"] = true
         }
 
         // ---- Constants at key positions: `.caseDefinitionKey(ModelConstants.MAIN_CASE)` names the model the

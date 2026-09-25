@@ -67,20 +67,23 @@ class RestCallScannerTest {
 
     @Test
     fun scannedUrlMatchesControllerEndpointViaMatchRest() {
-        // The real pipeline: a model's requestUrl (with an EL base) resolves to a controller path.
-        val bpmn = """
+        // The real pipeline: a model's requestUrl resolves to a controller path — on the local host, not on
+        // a base the model does not name (an EL base may point at any server).
+        fun task(url: String) = """
             <serviceTask id="t" flowable:type="http">
               <extensionElements>
                 <flowable:field name="requestUrl">
-                  <flowable:string><![CDATA[$D{baseUrl}/api/things]]></flowable:string>
+                  <flowable:string><![CDATA[$url]]></flowable:string>
                 </flowable:field>
               </extensionElements>
             </serviceTask>
         """.trimIndent()
-        val url = RestCallScanner.scan(bpmn).single().url
         val endpoint = listOf(mapOf<String, Any?>("http" to "GET", "path" to "/api/things"))
+        val url = RestCallScanner.scan(task("http://localhost:8080/api/things")).single().url
         assertTrue(JavaParser.matchRest(url, endpoint).isNotEmpty())
         assertTrue(JavaParser.matchRest(url, listOf(mapOf("path" to "/api/other"))).isEmpty())
+        val elBase = RestCallScanner.scan(task("$D{baseUrl}/api/things")).single().url
+        assertTrue(JavaParser.matchRest(elBase, endpoint).isEmpty())
     }
 
     @Test

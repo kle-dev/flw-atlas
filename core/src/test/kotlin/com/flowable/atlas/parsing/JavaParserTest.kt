@@ -288,7 +288,12 @@ class JavaParserTest {
         assertEquals(listOf<Any?>("customer"), handlers("api/customers/{{\$id}}"))
         assertEquals(listOf<Any?>("customer"), handlers("{{endpoints.baseUrl}}api/customers/{{id}}"))
         assertEquals(listOf<Any?>("customer"), handlers("http://localhost:8080/work/api/customers/\${id}"))
-        assertEquals(listOf<Any?>("customer"), handlers("\${serverUrl}/api/customers/\${id}"))
+        // a base nothing names may be any server: on the real projects every one was another system
+        assertEquals(emptyList<Any?>(), handlers("\${serverUrl}/api/customers/\${id}"))
+        assertEquals(emptyList<Any?>(), handlers("https://{{host}}/api/customers/1"))
+        assertEquals(emptyList<Any?>(), handlers("{{endpoints.custom}}/api/customers/{{id}}"))
+        // a `?` inside a placeholder is no query string
+        assertEquals(listOf<Any?>("teamUsers"), handlers("api/teams/{{a ? 'x' : 'y'}}/users"))
         assertEquals(listOf<Any?>("teamUsers"), handlers("api/teams/{{team}}/users"))
     }
 
@@ -324,14 +329,43 @@ class JavaParserTest {
     }
 
     @Test
-    fun matchRestBasePlaceholder() {
-        // A leading placeholder is the base the URL is resolved against: a context path may sit between it
-        // and the endpoint's own path, but it does not stand in for segments the endpoint spells out — a
-        // `{{base}}/customers/99` is as likely another system's `/customers` as this one's `/app-api/v1/…`.
+    fun matchRestLocalContextPath() {
+        // An absolute URL on the local host may carry the application's context path before the endpoint's
+        // own path; a relative one is resolved against the application and may not.
         val eps = listOf(mapOf<String, Any?>("path" to "/app-api/v1/customers/{id}"))
-        assertTrue(JavaParser.matchRest("{{base}}/app-api/v1/customers/99", eps).isNotEmpty())
-        assertTrue(JavaParser.matchRest("{{base}}/work/app-api/v1/customers/99", eps).isNotEmpty())
-        assertTrue(JavaParser.matchRest("{{base}}/customers/99", eps).isEmpty())
-        assertTrue(JavaParser.matchRest("{{base}}/orders/{id}", eps).isEmpty())
+        assertTrue(JavaParser.matchRest("http://localhost:8080/work/app-api/v1/customers/99", eps).isNotEmpty())
+        assertTrue(JavaParser.matchRest("/work/app-api/v1/customers/99", eps).isNotEmpty())
+        assertTrue(JavaParser.matchRest("work/app-api/v1/customers/99", eps).isEmpty())
+        assertTrue(JavaParser.matchRest("http://localhost:8080/customers/99", eps).isEmpty())
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun anEndpointIsWhatTheControllerTypeServes() {
+        val src = """
+            package com.example
+            import org.springframework.web.bind.annotation.*
+            data class InvoiceDto(val id: String)
+            object ApiPaths { const val BASE = "/api/invoices" }
+            @RestController
+            @RequestMapping(ApiPaths.BASE)
+            class InvoiceController {
+                @GetMapping(produces = ["application/json"])
+                fun list(): List<InvoiceDto> = emptyList()
+                @PreAuthorize("hasRole('ADMIN')")
+                @PostMapping(ApiPaths.BASE + "/{id}/archive")
+                fun archive(@PathVariable id: String) {}
+                @GetMapping(value = ["/{id}", "/by-id/{id}"])
+                fun one(@PathVariable id: String): InvoiceDto = InvoiceDto(id)
+            }
+        """.trimIndent()
+        val eps = JavaParser.parseJava(src, "src/main/kotlin/com/example/InvoiceController.kt")["endpoints"] as List<Map<String, Any?>>
+        assertEquals(setOf(
+            Triple("GET", "/api/invoices", "list"),
+            Triple("POST", "/api/invoices/api/invoices/{id}/archive", "archive"),
+            Triple("GET", "/api/invoices/{id}", "one"),
+            Triple("GET", "/api/invoices/by-id/{id}", "one"),
+        ), eps.map { Triple(it["http"], it["path"], it["handler"]) }.toSet())
+        assertTrue(eps.all { it["controller"] == "InvoiceController" })
     }
 }

@@ -31,6 +31,19 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   serve is still a suspect link that says *verb differs*. The explorer's form, service and endpoint pages no
   longer run a matcher of their own: each rest-call edge carries the URLs that reach it (`via`), so the pages
   name exactly the endpoints the graph links. The IDE's endpoint gutter and Find Usages use the same rule.
+- **A REST call on a base Atlas cannot name reaches no endpoint.** `${crmUrl}/api/customers/${id}`, a
+  placeholder host and a custom `{{endpoints.x}}` may point at any server — on nine real projects every one
+  of them was another system — and matched by their path they looked like calls of the project's own
+  endpoint of that shape. A `?` or `#` inside a placeholder (`{{c ? 'a' : 'b'}}`) no longer cuts the URL
+  short, and a service operation that names no verb is a GET, as the service invoker sends it.
+- **An endpoint is what the controller type serves.** The endpoint list read a controller's paths loosely:
+  any string among a mapping's arguments was its path, so `@GetMapping(produces = "application/json")`
+  served `/application/json`; the file's first `class` decided where the base mapping ended, so a data
+  class or enum before the controller swallowed it and was credited with the controller's endpoints; and
+  the handler was whatever annotation came next. Now the path is the mapping's `value`/`path` or first
+  argument — every element of an array, a `+` of literals and constants resolved through the project's
+  constants — the base mapping and the handlers belong to the annotated type, and a path nothing resolves
+  is kept out of matching.
 - **A REST call belongs to the model that makes it.** Calls were credited by key alone, to whichever model
   Atlas listed first under that key: a service's operation calls showed up on a form or page with the same
   key, and the service showed none. Each call now carries the node it came from (`sourceId`).

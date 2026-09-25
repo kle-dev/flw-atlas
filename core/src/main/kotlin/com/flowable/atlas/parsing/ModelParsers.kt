@@ -337,7 +337,8 @@ object ModelParsers {
             // graph edge to draw, and a null `url` would violate the invariant every other restCalls
             // producer upholds (and break GraphBuilder's non-null cast).
             if (full != null) {
-                ctx.addRestCall(doc["key"], ffile, op["key"], oc["method"] ?: "?", full, "service-op")
+                // the service invoker's default verb when the operation names none
+                ctx.addRestCall(doc["key"], ffile, op["key"], oc["method"] ?: "GET", full, "service-op")
             }
         }
         return info

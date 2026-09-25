@@ -3409,12 +3409,14 @@
           "calledMethods": [],
           "endpoints": [
             {
+              "controller": "CustomerController",
               "handler": "canEdit",
               "http": "GET",
               "line": 15,
               "path": "/api/customers/{id}/canEdit"
             },
             {
+              "controller": "CustomerController",
               "handler": "customers",
               "http": "GET",
               "line": 10,
@@ -6378,12 +6380,14 @@
         "deps": [],
         "endpoints": [
           {
+            "controller": "CustomerController",
             "handler": "canEdit",
             "http": "GET",
             "line": 15,
             "path": "/api/customers/{id}/canEdit"
           },
           {
+            "controller": "CustomerController",
             "handler": "customers",
             "http": "GET",
             "line": 10,
@@ -6442,12 +6446,14 @@
       "deps": [],
       "endpoints": [
         {
+          "controller": "CustomerController",
           "handler": "canEdit",
           "http": "GET",
           "line": 15,
           "path": "/api/customers/{id}/canEdit"
         },
         {
+          "controller": "CustomerController",
           "handler": "customers",
           "http": "GET",
           "line": 10,

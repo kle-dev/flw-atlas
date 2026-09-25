@@ -56,8 +56,8 @@ object JavaParser {
     private val EL_ROOT_RE = Regex("""(?<![\w.$'"])([A-Za-z_]\w*)(?!\s*[(\w:])""")
     private val JAVA_STR_RE = Regex("""\"([^"\\\n]{2,80})\"""")
     private val REQUEST_METHOD_RE = Regex("""RequestMethod\.(\w+)""")
-    private val VALUE_PATH_RE = Regex("""(?:value|path)\s*=\s*"([^"]*)"""")
-    private val ANY_STR_RE = Regex("""\"([^"]*)\"""")
+    private val PATH_ATTR_RE = Regex("""(?:value|path)\s*=\s*(.+)""", RegexOption.DOT_MATCHES_ALL)
+    private val CONST_REF_RE = Regex("""(?:\w+\.)*[A-Za-z_]\w*""")
     private val HANDLER_RE = Regex("""\b(\w+)\s*\(""")
 
     // `static final String NAME = "value";` constant declarations — used to resolve a data-object key
@@ -164,10 +164,72 @@ object JavaParser {
         return out.toString()
     }
 
-    private fun mappingPath(args: String?): String {
-        if (args.isNullOrEmpty()) return ""
-        val m = VALUE_PATH_RE.find(args) ?: ANY_STR_RE.find(args)
-        return m?.groupValues?.get(1) ?: ""
+    /** Marks a constant a mapping path names that this file does not declare; the resolver has the
+     *  project's constants and replaces it, or flags the endpoint `pathUnresolved`. */
+    const val PATH_CONST = '\u0001'
+
+    /**
+     * The paths a mapping annotation's arguments name: the unnamed first argument or `value =`/`path =`,
+     * one per element of an array, each a literal or a `+` of literals and constants. A constant this file
+     * declares is resolved here; another file's is left marked ([PATH_CONST]). `produces = "…"` and the other
+     * attributes name no path — reading the first string of the arguments made one `/application/json`.
+     */
+    private fun mappingPaths(args: String?, consts: Map<String, String>): List<String> {
+        if (args.isNullOrBlank()) return listOf("")
+        val parts = topLevel(args, ',')
+        val expr = parts.firstNotNullOfOrNull { p -> PATH_ATTR_RE.matchEntire(p.trim())?.groupValues?.get(1) }
+            ?: parts.firstOrNull()?.trim()?.takeIf { topLevel(it, '=').size == 1 && it.isNotEmpty() }
+            ?: return listOf("")
+        val e = expr.trim()
+        val elements = if (e.length >= 2 && (e.first() == '{' && e.last() == '}' || e.first() == '[' && e.last() == ']')) {
+            topLevel(e.substring(1, e.length - 1), ',').map { it.trim() }.filter { it.isNotEmpty() }
+        } else listOf(e)
+        return elements.map { el ->
+            topLevel(el, '+').joinToString("") { piece ->
+                val t = piece.trim()
+                when {
+                    t.length >= 2 && t.first() == '"' && t.last() == '"' -> t.substring(1, t.length - 1)
+                    CONST_REF_RE.matches(t) -> t.substringAfterLast('.').let { n -> consts[n] ?: "$PATH_CONST$n$PATH_CONST" }
+                    else -> "${PATH_CONST}?$PATH_CONST"
+                }
+            }
+        }.ifEmpty { listOf("") }
+    }
+
+    /** [s] split at every [sep] outside quotes, braces, brackets and parentheses. */
+    private fun topLevel(s: String, sep: Char): List<String> {
+        val out = ArrayList<String>()
+        var depth = 0; var quote: Char? = null; var start = 0; var i = 0
+        while (i < s.length) {
+            val c = s[i]
+            when {
+                quote != null -> { if (c == '\\') i++ else if (c == quote) quote = null }
+                c == '"' || c == '\'' -> quote = c
+                c == '(' || c == '{' || c == '[' -> depth++
+                c == ')' || c == '}' || c == ']' -> depth--
+                c == sep && depth == 0 -> { out.add(s.substring(start, i)); start = i + 1 }
+            }
+            i++
+        }
+        out.add(s.substring(start))
+        return out
+    }
+
+    /** The index of the `}` closing the `{` at [open], skipping string and char literals; the text's end
+     *  when it never closes. */
+    private fun closingBrace(text: String, open: Int): Int {
+        var depth = 0; var i = open; var quote: Char? = null
+        while (i < text.length) {
+            val c = text[i]
+            when {
+                quote != null -> { if (c == '\\') i++ else if (c == quote) quote = null }
+                c == '"' || c == '\'' -> quote = c
+                c == '{' -> depth++
+                c == '}' -> { depth--; if (depth == 0) return i }
+            }
+            i++
+        }
+        return text.length
     }
 
     fun parseJava(rawText: String, ffile: String): Map<String, Any?> {
@@ -204,28 +266,37 @@ object JavaParser {
         }
 
         val isController = CONTROLLER_RE.containsMatchIn(text)
-        val classDeclIdx = text.indexOf("class ")
         val endpoints = ArrayList<Map<String, Any?>>()
-        if (isController) {
-            var base = ""
+        // The controller is the type declared after the annotation, its base mapping sits between the two,
+        // and its handlers are the mappings inside that type's body. Taking the file's first `class ` as the
+        // boundary let a data class or an enum before the controller swallow the base mapping, which then
+        // served `ANY /base` as a handler of its own while every real handler lost its base.
+        val ctlAnn = CONTROLLER_RE.find(text)
+        val ctlDecl = ctlAnn?.let { TYPE_RE.find(text, it.range.last + 1) }
+        if (isController && ctlAnn != null && ctlDecl != null) {
+            val consts = stringConstants(rawText)
+            val bases = MAPPING_RE.findAll(text.substring(ctlAnn.range.first, ctlDecl.range.first))
+                .firstOrNull { it.groupValues[1] == "Request" }
+                ?.let { mappingPaths(it.groups[2]?.value, consts) } ?: listOf("")
+            val open = text.indexOf('{', ctlDecl.range.last + 1)
+            val close = if (open < 0) text.length else closingBrace(text, open)
             for (m in MAPPING_RE.findAll(text)) {
-                if (classDeclIdx != -1 && m.range.first < classDeclIdx && m.groupValues[1] == "Request") {
-                    base = mappingPath(m.groupValues.getOrNull(2)); break
-                }
-            }
-            for (m in MAPPING_RE.findAll(text)) {
-                if (classDeclIdx != -1 && m.range.first < classDeclIdx) continue
+                if (m.range.first < open || m.range.first > close) continue
                 val verb = m.groupValues[1]
                 val args = m.groups[2]?.value
                 var http = if (verb == "Request") "ANY" else verb.uppercase()
                 if (verb == "Request" && !args.isNullOrEmpty()) {
                     http = REQUEST_METHOD_RE.find(args)?.groupValues?.get(1) ?: "ANY"
                 }
-                val path = mappingPath(args)
+                // the handler is the method after the mapping — past any other annotation on it
                 val tail = text.substring(m.range.last + 1, minOf(m.range.last + 1 + 400, text.length))
-                val handler = HANDLER_RE.find(tail)?.groupValues?.get(1) ?: "?"
-                val full = "/" + (base + "/" + path).split("/").filter { it.isNotEmpty() }.joinToString("/")
-                endpoints.add(linkedMapOf("http" to http, "path" to full, "handler" to handler, "line" to lineOf(m.range.first)))
+                val handler = HANDLER_RE.findAll(ANNOTATION_RE.replace(tail, " ")).map { it.groupValues[1] }
+                    .firstOrNull { it !in CONTROL_KEYWORDS } ?: "?"
+                for (base in bases) for (path in mappingPaths(args, consts)) {
+                    val full = "/" + (base + "/" + path).split("/").filter { it.isNotEmpty() }.joinToString("/")
+                    endpoints.add(linkedMapOf("http" to http, "path" to full, "handler" to handler,
+                        "line" to lineOf(m.range.first), "controller" to ctlDecl.groupValues[2]))
+                }
             }
         }
 
@@ -334,7 +405,7 @@ object JavaParser {
             "keyedIdents" to keyedIdents,
             "keyedIdentKinds" to keyedIdentKinds,
             "topics" to TOPIC_CALL_RE.findAll(text).map { it.groupValues[1] }.toSortedSet().toList(),
-            "line" to (if (classDeclIdx != -1) lineOf(classDeclIdx) else 1),
+            "line" to text.indexOf("class ").let { if (it != -1) lineOf(it) else 1 },
         )
         // bean name → line of its @Bean factory method, so a reference lands on the method, not the class
         if (beanMethods.isNotEmpty()) out["beanMethods"] = beanMethods
@@ -404,23 +475,21 @@ object JavaParser {
 
     /**
      * What a model URL calls, as path segments — a literal, or `null` for a segment a placeholder fills —
-     * plus whether a context path may precede the endpoint's own path. `null` when the URL can never reach
-     * this project: a client-side route (`#/…`), or an absolute URL on a host other than the local one.
-     * A leading run of placeholders is the base the URL is resolved against (`${serverUrl}`, a custom
-     * `{{endpoints.x}}`) and is dropped; `{{endpoints.baseUrl}}` is the application itself.
+     * plus whether a context path may precede the endpoint's own path. `null` when the URL cannot be shown
+     * to reach this project: a client-side route (`#/…`), an absolute URL on a host other than the local
+     * one, or a URL built on a base nothing names (`${crmUrl}/…`, a custom `{{endpoints.x}}`, a placeholder
+     * host). Every such base on the real projects was another system; matched by its path it looked like a
+     * call of the project's own endpoint of that shape. `{{endpoints.baseUrl}}` is the application itself.
      */
     private class CallPath(val segs: List<String?>, val prefixAllowed: Boolean)
 
+    /** What a placeholder becomes before the URL is cut up: one mark, so a `?` or `#` inside `{{c ? a : b}}`
+     *  is not taken for the query string or the fragment. */
+    private const val PH = "\u0002"
+
     private fun callPath(url: String?): CallPath? {
         var u = url?.trim().orEmpty()
-        if (u.isEmpty() || u.startsWith("#") || "#/" in u) return null
-        var prefixAllowed = u.startsWith("/")
-        SCHEME_HOST_RE.find(u)?.let { m ->
-            val host = m.groupValues[1]
-            if (!PLACEHOLDER_RE.containsMatchIn(host) && !LOCAL_HOST_RE.matches(host)) return null
-            u = u.substring(m.range.last + 1)
-            prefixAllowed = true
-        }
+        if (u.isEmpty()) return null
         u = PLATFORM_ENDPOINT_RE.replace(u) { m ->
             val id = m.groupValues[1]
             when {
@@ -429,11 +498,18 @@ object JavaParser {
                 else -> m.value
             }
         }
+        u = PLACEHOLDER_RE.replace(u, PH)
+        if (u.startsWith("#") || "#/" in u) return null
+        var prefixAllowed = u.startsWith("/")
+        SCHEME_HOST_RE.find(u)?.let { m ->
+            if (!LOCAL_HOST_RE.matches(m.groupValues[1])) return null
+            u = u.substring(m.range.last + 1)
+            prefixAllowed = true
+        }
         u = u.substringBefore('?').substringBefore('#')
         val raw = u.split('/').filter { it.isNotEmpty() }
-        val body = raw.dropWhile { PLACEHOLDER_RE.containsMatchIn(it) }
-        if (body.size < raw.size) prefixAllowed = true
-        return CallPath(body.map { if (PLACEHOLDER_RE.containsMatchIn(it)) null else it }, prefixAllowed)
+        if (raw.firstOrNull()?.contains(PH) == true) return null
+        return CallPath(raw.map { if (PH in it) null else it }, prefixAllowed)
     }
 
     /** True when [url] calls Flowable's own REST API: a platform `{{endpoints.<id>}}` base, or a URL whose
@@ -451,11 +527,11 @@ object JavaParser {
      *
      * A call reaches an endpoint when the endpoint's path is the tail of the call's path, segment by
      * segment: an endpoint literal needs the same literal in the call, an endpoint path variable takes any
-     * one segment. What went before the tail is a context path — allowed only where the URL is rooted,
-     * absolute or built on a base placeholder, never a relative URL (`api/x` is resolved against the
-     * application itself), and never one of Flowable's own REST roots (`platform-api/audit-trail` is not
-     * the project's `/audit-trail`). At least one literal has to agree, so a URL that is nothing but
-     * placeholders matches nothing.
+     * one segment. What went before the tail is a context path — allowed only where the URL is rooted or
+     * absolute on the local host, never a relative URL (`api/x` is resolved against the application
+     * itself), and never one of Flowable's own REST roots (`platform-api/audit-trail` is not the project's
+     * `/audit-trail`). At least one literal has to agree, so a URL that is nothing but placeholders matches
+     * nothing, and a URL on an unnamed base matches nothing at all (see [callPath]).
      *
      * A placeholder in the call is not evidence for an endpoint literal: `/api/orders/{{n}}` is not
      * `POST /api/orders/archive`, though `n` might be `archive` at run time. Treating it as a wildcard
@@ -478,6 +554,8 @@ object JavaParser {
         if (call.segs.isEmpty()) return emptyList()
         val hits = ArrayList<Pair<Map<String, Any?>, Int>>()
         for (ep in codeEndpoints) {
+            // a path a constant or a property decides that nothing in the project resolves is unknown
+            if (ep["pathUnresolved"] == true) continue
             val e = endpointPath(ep["path"] as? String)
             if (e.isEmpty() || e.size > call.segs.size) continue
             val prefix = call.segs.subList(0, call.segs.size - e.size)
