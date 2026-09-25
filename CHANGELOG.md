@@ -12,6 +12,18 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.28.1
+
+- **The ER diagram designer arranges the tables for you.** *Arrange* in the designer's toolbar lays every
+  table out by its relations — for a diagram with too many tables to sort by hand: each relation's one side
+  in a column left of its many side, the tables in a column ordered so that as few relation lines cross as
+  possible, each table level with the ones it relates to, the columns far enough apart for the relation
+  names between them, and unrelated tables and separate groups packed underneath. The cards glide to their
+  places and one undo puts them back.
+- **Relation names no longer sit on top of each other.** Two relations whose lines meet in the same gap
+  drew their names in one place; the lower one now moves below the upper, on the canvas and in an exported
+  picture alike.
+
 ## 0.28.0
 
 - **An ER diagram designer in the explorer, for explaining a data model.** A page generated with

@@ -228,6 +228,189 @@ function erdSlug(name){
   return String(name||'').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g,'')
     .replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60)||'diagram';
 }
+/**
+ * Where every table goes when the reader asks the page to arrange them — a layered drawing, the usual way
+ * to make a graph readable (Sugiyama): relations point from their "one" side to their "many" side (the
+ * direction a reader follows: a customer, then its orders), so each relation's one side sits in a column
+ * left of its many side; the order inside a column is chosen to cross as few relation lines as possible;
+ * each table then sits level with the tables it relates to, and the columns leave room for the relation
+ * names between them. Tables that relate to nothing, and separate groups, are packed underneath.
+ *
+ * [nodes] are `{key, w, h, x, y}` (size and current place), [edges] `{from, to, cardinality, gap}` where
+ * `gap` is the width a relation's name needs between two columns. Returns `{key: {x, y}}`, the arrangement's
+ * top-left where the current drawing's was. Deterministic: the same input gives the same picture, and the
+ * current vertical order breaks ties, so arranging twice changes nothing the second time.
+ */
+function erdArrange(nodes, edges, opts){
+  opts=opts||{};
+  const GAP_Y=opts.gapY||40, GAP_X=opts.gapX||110, GAP_GROUP=opts.gapGroup||100, DUMMY_H=24;
+  const byKey=new Map((nodes||[]).map(n=>[n.key, n]));
+  const cmpPlace=(a,b)=>(a.y-b.y)||(a.x-b.x)||(a.key<b.key?-1:a.key>b.key?1:0);
+
+  // ---- relations as arcs, from the "one" side to the "many" side ----
+  const arcs=[];
+  (edges||[]).forEach(e=>{
+    if(!byKey.has(e.from) || !byKey.has(e.to) || e.from===e.to) return;
+    const [a,b]=erdEnds(e.cardinality);
+    const flip=a!=='1' && b==='1';                // n:1 — the one side is the target
+    arcs.push({p:flip?e.to:e.from, c:flip?e.from:e.to, gap:e.gap||0});
+  });
+
+  // ---- groups: tables connected by any relation ----
+  const parent=new Map([...byKey.keys()].map(k=>[k,k]));
+  const find=k=>{ while(parent.get(k)!==k){ parent.set(k, parent.get(parent.get(k))); k=parent.get(k); } return k; };
+  arcs.forEach(a=>{ const x=find(a.p), y=find(a.c); if(x!==y) parent.set(x<y?y:x, x<y?x:y); });
+  const groups=new Map();
+  [...byKey.values()].sort(cmpPlace).forEach(n=>{ const r=find(n.key); if(!groups.has(r)) groups.set(r, []); groups.get(r).push(n); });
+
+  const blocks=[];                                // each: {w, h, pos:{key:{x,y}}, size, top}
+  groups.forEach(members=>{
+    if(members.length===1){ const n=members[0]; blocks.push({w:n.w, h:n.h, pos:{[n.key]:{x:0, y:0}}, size:1, top:n}); return; }
+    blocks.push(layered(members, arcs.filter(a=>members.some(m=>m.key===a.p))));
+  });
+
+  function layered(members, garcs){
+    const keys=members.map(m=>m.key), rank=new Map(members.map((m,i)=>[m.key,i]));   // current reading order
+    // Cycles (a relation back to an ancestor) cannot be layered: reverse the arcs a depth-first walk in
+    // reading order meets as back edges — the fewest a reader would notice turned round.
+    const out=new Map(keys.map(k=>[k,[]]));
+    garcs.forEach(a=>out.get(a.p).push(a));
+    out.forEach(l=>l.sort((x,y)=>rank.get(x.c)-rank.get(y.c)));
+    const state=new Map(), dag=[];
+    const visit=root=>{
+      const stack=[[root,0]]; state.set(root,1);
+      while(stack.length){
+        const top=stack[stack.length-1], list=out.get(top[0]);
+        if(top[1]>=list.length){ state.set(top[0],2); stack.pop(); continue; }
+        const a=list[top[1]++], s=state.get(a.c);
+        if(s===1) dag.push({p:a.c, c:a.p, gap:a.gap});
+        else { dag.push(a); if(!s){ state.set(a.c,1); stack.push([a.c,0]); } }
+      }
+    };
+    const indeg=new Map(keys.map(k=>[k,0]));
+    garcs.forEach(a=>indeg.set(a.c, indeg.get(a.c)+1));
+    keys.filter(k=>!indeg.get(k)).concat(keys).forEach(k=>{ if(!state.get(k)) visit(k); });
+
+    // Layers: the longest path from a table nothing points at; then each such root moves right, next to
+    // its nearest child, so a relation spans as few columns as it can.
+    const ins=new Map(keys.map(k=>[k,[]])), outs=new Map(keys.map(k=>[k,[]]));
+    const seenArc=new Set(), arcsU=[];
+    dag.forEach(a=>{ const id=a.p+'\u0000'+a.c; if(seenArc.has(id)) return; seenArc.add(id); arcsU.push(a); ins.get(a.c).push(a); outs.get(a.p).push(a); });
+    const layer=new Map(), deg=new Map(keys.map(k=>[k, ins.get(k).length])), queue=keys.filter(k=>!deg.get(k)), topo=[];
+    while(queue.length){ const k=queue.shift(); topo.push(k); outs.get(k).forEach(a=>{ deg.set(a.c, deg.get(a.c)-1); if(!deg.get(a.c)) queue.push(a.c); }); }
+    topo.forEach(k=>layer.set(k, ins.get(k).reduce((m,a)=>Math.max(m, layer.get(a.p)+1), 0)));
+    topo.slice().reverse().forEach(k=>{ if(!ins.get(k).length && outs.get(k).length) layer.set(k, Math.min(...outs.get(k).map(a=>layer.get(a.c)))-1); });
+
+    // A relation across several columns gets a placeholder in each column it passes, so it has a lane.
+    const items=new Map(members.map(m=>[m.key, {id:m.key, h:m.h, w:m.w, real:true, up:[], down:[]}]));
+    const links=[];
+    let dummy=0;
+    arcsU.forEach(a=>{
+      let prev=a.p;
+      for(let l=layer.get(a.p)+1; l<layer.get(a.c); l++){
+        const id='\u0001'+(dummy++);
+        items.set(id, {id, h:DUMMY_H, w:0, real:false, up:[], down:[]}); layer.set(id, l);
+        links.push([prev, id]); prev=id;
+      }
+      links.push([prev, a.c]);
+    });
+    links.forEach(([u,v])=>{ items.get(u).down.push(v); items.get(v).up.push(u); });
+    const L=Math.max(...[...layer.values()])+1, layers=[...Array(L)].map(()=>[]);
+    // start from the reading order: an arrangement close to what the reader had is easier to follow
+    const seed=new Map(members.map(m=>[m.key, m.y+m.h/2]));
+    [...items.keys()].forEach(id=>layers[layer.get(id)].push(id));
+    const guess=id=>{ if(seed.has(id)) return seed.get(id); const it=items.get(id); let s=0, n=0; it.up.concat(it.down).forEach(v=>{ if(seed.has(v)){ s+=seed.get(v); n++; } }); return n?s/n:0; };
+    layers.forEach(ls=>ls.sort((a,b)=>(guess(a)-guess(b)) || (a<b?-1:1)));
+
+    // Order inside the columns: barycentre sweeps, keeping the order with the fewest crossings.
+    const pos=new Map();
+    const index=()=>layers.forEach(ls=>ls.forEach((id,i)=>pos.set(id,i)));
+    const crossings=()=>{
+      let c=0;
+      for(let l=0;l<L-1;l++){
+        const e=[];
+        layers[l].forEach(u=>items.get(u).down.forEach(v=>e.push([pos.get(u), pos.get(v)])));
+        for(let i=0;i<e.length;i++) for(let j=i+1;j<e.length;j++) if((e[i][0]-e[j][0])*(e[i][1]-e[j][1])<0) c++;
+      }
+      return c;
+    };
+    index();
+    let best=layers.map(ls=>ls.slice()), bestC=crossings();
+    for(let it=0; it<8 && bestC>0; it++){
+      const down=it%2===0;
+      for(let s=0; s<L-1; s++){
+        const l=down?s+1:L-2-s, side=down?'up':'down';
+        const bary=new Map(layers[l].map(id=>{ const nb=items.get(id)[side]; return [id, nb.length?nb.reduce((t,v)=>t+pos.get(v),0)/nb.length:pos.get(id)]; }));
+        layers[l].sort((a,b)=>(bary.get(a)-bary.get(b)) || (pos.get(a)-pos.get(b)));
+        layers[l].forEach((id,i)=>pos.set(id,i));
+      }
+      const c=crossings();
+      if(c<bestC){ bestC=c; best=layers.map(ls=>ls.slice()); }
+    }
+    best.forEach((ls,l)=>{ layers[l]=ls; });
+    index();
+
+    // Heights: each table level with the ones it relates to, as far as the column lets it — an
+    // order-keeping least-squares placement, swept left and right a few times.
+    const top=new Map();
+    layers.forEach(ls=>{ let y=0; ls.forEach(id=>{ top.set(id,y); y+=items.get(id).h+GAP_Y; }); });
+    const centre=id=>top.get(id)+items.get(id).h/2;
+    const settle=(ls, want)=>{
+      const blocks=[];
+      ls.forEach(id=>{
+        const h=items.get(id).h;
+        let b={ids:[id], H:h, q:want.get(id)-h/2, n:1};
+        while(blocks.length){
+          const p=blocks[blocks.length-1];
+          if(p.q/p.n+p.H+GAP_Y<=b.q/b.n) break;
+          blocks.pop();
+          b={ids:p.ids.concat(b.ids), H:p.H+GAP_Y+b.H, q:p.q+b.q-b.n*(p.H+GAP_Y), n:p.n+b.n};
+        }
+        blocks.push(b);
+      });
+      blocks.forEach(b=>{ let y=b.q/b.n; b.ids.forEach(id=>{ top.set(id,y); y+=items.get(id).h+GAP_Y; }); });
+    };
+    for(let it=0; it<6; it++){
+      const down=it%2===0;
+      for(let s=0; s<L-1; s++){
+        const l=down?s+1:L-2-s, side=down?'up':'down';
+        settle(layers[l], new Map(layers[l].map(id=>{ const nb=items.get(id)[side];
+          return [id, nb.length?nb.reduce((t,v)=>t+centre(v),0)/nb.length:centre(id)]; })));
+      }
+    }
+    // last, both sides at once, so a table between two columns sits between its neighbours
+    layers.forEach(ls=>settle(ls, new Map(ls.map(id=>{ const it=items.get(id), nb=it.up.concat(it.down); return [id, nb.length?nb.reduce((t,v)=>t+centre(v),0)/nb.length:centre(id)]; }))));
+
+    // Columns: each as wide as its widest table, with room for the widest relation name crossing the gap.
+    const widths=layers.map(ls=>Math.max(0, ...ls.map(id=>items.get(id).w)));
+    const gaps=[...Array(Math.max(0,L-1))].map(()=>GAP_X);
+    arcsU.forEach(a=>{ for(let l=layer.get(a.p); l<layer.get(a.c); l++) gaps[l]=Math.max(gaps[l], a.gap+60); });
+    const colX=[0];
+    for(let l=1;l<L;l++) colX[l]=colX[l-1]+widths[l-1]+gaps[l-1];
+    let minY=Infinity, maxY=-Infinity;
+    members.forEach(m=>{ minY=Math.min(minY, top.get(m.key)); maxY=Math.max(maxY, top.get(m.key)+m.h); });
+    const out2={};
+    members.forEach(m=>{ out2[m.key]={x:colX[layer.get(m.key)], y:top.get(m.key)-minY}; });
+    return {w:colX[L-1]+widths[L-1], h:maxY-minY, pos:out2, size:members.length, top:members[0]};
+  }
+
+  // ---- pack the groups: the largest first, in rows about as wide as the whole is tall ----
+  blocks.sort((a,b)=>(b.size-a.size) || cmpPlace(a.top, b.top));
+  const area=blocks.reduce((s,b)=>s+(b.w+GAP_GROUP)*(b.h+GAP_GROUP),0);
+  const rowW=Math.max(blocks.length?Math.max(...blocks.map(b=>b.w)):0, Math.sqrt(area)*1.5);
+  let x=0, y=0, rowH=0;
+  const res={};
+  blocks.forEach(b=>{
+    if(x>0 && x+b.w>rowW){ x=0; y+=rowH+GAP_GROUP; rowH=0; }
+    Object.keys(b.pos).forEach(k=>{ res[k]={x:x+b.pos[k].x, y:y+b.pos[k].y}; });
+    x+=b.w+GAP_GROUP; rowH=Math.max(rowH, b.h);
+  });
+  // where the drawing was, on the canvas's 4px grid
+  const all=[...byKey.values()];
+  const ox=all.length?Math.min(...all.map(n=>n.x)):0, oy=all.length?Math.min(...all.map(n=>n.y)):0;
+  Object.keys(res).forEach(k=>{ res[k]={x:Math.round((ox+res[k].x)/4)*4, y:Math.round((oy+res[k].y)/4)*4}; });
+  return res;
+}
 /*__ERD_CORE_END__*/
 
 (function(){
@@ -451,14 +634,14 @@ function relationSvg(r, g, C, o){
   if(o.interactive) s+='<path class="erd-relhit" d="'+d+'"'+st({fill:'none', stroke:'transparent', 'stroke-width':14})+'/>';
   const text=r.label?r.label+'  ·  '+r.cardinality:'';
   if(text){
-    const m=mid(g), w=tw(text, F_PILL)+18;
+    const m=g.pill||mid(g), w=tw(text, F_PILL)+18;
     s+='<g class="erd-pill"><rect x="'+f(m.x-w/2)+'" y="'+f(m.y-11)+'" width="'+f(w)+'" height="22" rx="11"'+
        st({fill:C.pill, stroke:sel?C.accent:C.line, 'stroke-width':1})+'/>'+textEl(m.x, m.y+4, text, F_PILL, C.ink, ' text-anchor="middle"')+'</g>';
   }
   return s+'</g>';
 }
 function suggestionSvg(sg, g, C){
-  const m=mid(g), text='+ '+(sg.label||'suggested')+'  ·  '+sg.cardinality, w=tw(text, F_PILL)+18;
+  const m=g.pill||mid(g), text='+ '+(sg.label||'suggested')+'  ·  '+sg.cardinality, w=tw(text, F_PILL)+18;
   return '<g class="erd-sug" data-sug="'+esc(sg.id)+'" data-tip="'+esc(sg.why+' — click to add this relation, × to dismiss it')+'">'+
     '<path d="'+pathD(g)+'"'+st({fill:'none', stroke:C.faint, 'stroke-width':1.25, 'stroke-dasharray':'5 4'})+'/>'+
     '<path class="erd-relhit" d="'+pathD(g)+'"'+st({fill:'none', stroke:'transparent', 'stroke-width':12})+'/>'+
@@ -517,13 +700,35 @@ function sceneSvg(d, C, o){
   const rels=d.relations.filter(r=>lays.has(r.from)&&lays.has(r.to));
   const sugs=o.suggestions?visibleSuggestions(d, lays):[];
   const fan=fans(rels.concat(sugs));
+  const geo=new Map();
+  rels.concat(sugs).forEach(x=>{ const g=route(x, lays, fan.get(x.id)||0); if(g) geo.set(x.id, g); });
+  spreadPills(rels.filter(r=>r.label && geo.has(r.id)).map(r=>({g:geo.get(r.id), w:tw(r.label+'  ·  '+r.cardinality, F_PILL)+18}))
+    .concat(sugs.filter(sg=>geo.has(sg.id)).map(sg=>({g:geo.get(sg.id), w:tw('+ '+(sg.label||'suggested')+'  ·  '+sg.cardinality, F_PILL)+42}))));
   let s='<g class="erd-rels">';
-  rels.forEach(r=>{ const g=route(r, lays, fan.get(r.id)||0); if(g) s+=relationSvg(r, g, C, {interactive:o.interactive, sel:o.sel&&o.sel.kind==='rel'&&o.sel.id===r.id}); });
+  rels.forEach(r=>{ const g=geo.get(r.id); if(g) s+=relationSvg(r, g, C, {interactive:o.interactive, sel:o.sel&&o.sel.kind==='rel'&&o.sel.id===r.id}); });
   s+='</g><g class="erd-sugs">';
-  sugs.forEach(sg=>{ const g=route(sg, lays, fan.get(sg.id)||0); if(g) s+=suggestionSvg(sg, g, C); });
+  sugs.forEach(sg=>{ const g=geo.get(sg.id); if(g) s+=suggestionSvg(sg, g, C); });
   s+='</g><g class="erd-cards">';
   d.tables.forEach(t=>{ s+=cardSvg(lays.get(t.key), C, {interactive:o.interactive, sel:o.sel&&o.sel.kind==='table'&&o.sel.key===t.key}); });
   return {markup:s+'</g>', lays};
+}
+/**
+ * Relation names that would sit on top of each other — two lines meeting in one gap between columns — are
+ * moved apart vertically, the lower one below the upper, so every name stays readable. Each keeps its
+ * horizontal place on its line; `g.pill` is where its name is drawn.
+ */
+function spreadPills(pills){
+  const H=22, PAD=4;
+  pills.forEach(p=>{ p.c=mid(p.g); });
+  pills.sort((a,b)=>(a.c.y-b.c.y) || (a.c.x-b.c.x));
+  pills.forEach((p,i)=>{
+    for(let pass=0; pass<pills.length; pass++){
+      const hit=pills.slice(0,i).find(q=>Math.abs(p.c.x-q.c.x)<(p.w+q.w)/2+PAD && Math.abs(p.c.y-q.c.y)<H+PAD);
+      if(!hit) break;
+      p.c={x:p.c.x, y:hit.c.y+H+PAD};
+    }
+    p.g.pill=p.c;
+  });
 }
 /** Proposals worth showing: both tables on the canvas, not dismissed, and not already drawn by hand. */
 function visibleSuggestions(d, lays){
@@ -583,6 +788,11 @@ function build(root){
           '<span class="erd-sep"></span>'+
           btn('zoom-out','−','Zoom out (−)')+btn('fit','fit','Fit the diagram (0)')+btn('zoom-in','+','Zoom in (+)')+
           '<span class="erd-pct">100%</span>'+
+          '<span class="erd-sep"></span>'+
+          btn('arrange', ico('<rect width="7" height="6" x="2" y="3" rx="1"/><rect width="7" height="6" x="15" y="3" rx="1"/>'+
+            '<rect width="7" height="6" x="15" y="15" rx="1"/><path d="M9 6h6"/><path d="M18.5 9v6"/>')+'<span>Arrange</span>',
+            'Arrange — lay the tables out by their relations: each one side left of its many side, crossings kept low ('+MODK+'Z undoes it)',
+            ' erd-arrangebtn')+
           '<span class="erd-grow"></span>'+
           '<span class="erd-status" aria-live="polite"></span>'+
           btn('export','Export','Export — diagram file, SVG, PNG',' erd-menubtn')+
@@ -732,6 +942,42 @@ function addRelation(from, to, toColumn, extra){
   let id=null;
   mutate(d=>{ id=newRelId(d); d.relations.push(Object.assign({id, from, to, fromColumn:'', toColumn:toColumn||'', cardinality:'1:n', label:''}, extra||{})); });
   return id;
+}
+/**
+ * Lay every table out by its relations (erdArrange), as one undo step. The cards glide to their new places
+ * so the reader can follow where each one went — unless the system asks for less motion.
+ */
+function arrange(){
+  const d=active();
+  if(d.tables.length<2){ toast('Arrange needs at least two tables on the canvas'); return; }
+  closePop();
+  const lays=els.lays||new Map();
+  const nodes=d.tables.map(t=>{ const L=lays.get(t.key)||layout(t); return {key:t.key, w:L.w, h:L.h, x:t.x, y:t.y}; });
+  // a relation's name, and a proposal's, need room between the two columns it joins
+  const edges=d.relations.map(r=>({from:r.from, to:r.to, cardinality:r.cardinality,
+      gap:r.label?tw(r.label+'  ·  '+r.cardinality, F_PILL)+18:0}))
+    .concat(visibleSuggestions(d, lays).map(sg=>({from:sg.from, to:sg.to, cardinality:sg.cardinality,
+      gap:tw('+ '+(sg.label||'suggested')+'  ·  '+sg.cardinality, F_PILL)+46})));
+  const target=erdArrange(nodes, edges), before=snap(d);
+  const from=new Map(d.tables.map(t=>[t.key, {x:t.x, y:t.y}]));
+  const done=()=>{
+    d.tables.forEach(t=>{ const p=target[t.key]; if(p){ t.x=p.x; t.y=p.y; } });
+    commitGesture(before);
+    fit();
+    const moved=d.tables.filter(t=>{ const a=from.get(t.key); return a.x!==t.x || a.y!==t.y; }).length;
+    toast(moved?'Arranged '+d.tables.length+' tables — '+MODK+'Z puts them back':'Already arranged — nothing moved');
+  };
+  let still=false;
+  try{ still=matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
+  if(still){ done(); return; }
+  const t0=performance.now(), MS=320;
+  const step=now=>{
+    const k=Math.min(1, (now-t0)/MS), e=1-Math.pow(1-k, 3);     // ease out: fast start, gentle landing
+    d.tables.forEach(t=>{ const a=from.get(t.key), b=target[t.key]; if(a && b){ t.x=a.x+(b.x-a.x)*e; t.y=a.y+(b.y-a.y)*e; } });
+    draw();
+    if(k<1) requestAnimationFrame(step); else done();
+  };
+  requestAnimationFrame(step);
 }
 function acceptSuggestion(id){
   const sg=S.suggestions.find(x=>x.id===id);
@@ -1099,6 +1345,7 @@ function doAct(act, b){
     case 'zoom-in': zoomAt(1.25); break;
     case 'zoom-out': zoomAt(1/1.25); break;
     case 'fit': fit(); break;
+    case 'arrange': arrange(); break;
     case 'present': present(true); break;
     case 'present-off': present(false); break;
     case 'menu': {
@@ -1301,5 +1548,5 @@ window.ATLAS_EXT.erd={
 };
 // For the UI test: the state and the actions a test drives, without a second way in for the page itself.
 window.ATLAS_EXT.erd._test={state:()=>S, active:()=>S&&active(), fit:()=>fit(), importText:(t)=>importText(t,'test'),
-  docOf:()=>docOf(), pictureSvg:()=>pictureSvg(), addTable:(k,p)=>addTable(k,p)};
+  docOf:()=>docOf(), pictureSvg:()=>pictureSvg(), addTable:(k,p)=>addTable(k,p), arrange:()=>arrange()};
 })();

@@ -50,8 +50,8 @@ These tests drive the generated explorer in headless Chrome — or its pure part
 | `:cli:searchSelfTest` | The search engine, evaluated out of `explorer.js` and run against a query table |
 | `:cli:explorerUiTest` | The page boots without errors; click, ⌘-click, Shift-click and Enter all activate a hit; facets narrow; the browse list navigates |
 | `:cli:diagramUiTest` | The diagram element card's geometry — that an expanded card escapes its viewport and the scrim covers the modal |
-| `:cli:erdSelfTest` | The ER diagram designer's core, evaluated out of `ext/erd.js` in node: which tables a project has, column order against a changed schema, the relations the models propose, what a diagram file may contain |
-| `:cli:erdUiTest` | The designer on the demo project, with real mouse and key input over the DevTools protocol (the canvas captures the pointer, which synthetic events skip): drag a table in, relate, reorder, colour, undo, reload, export, present — and that a page generated without the extension has none of it |
+| `:cli:erdSelfTest` | The ER diagram designer's core, evaluated out of `ext/erd.js` in node: which tables a project has, column order against a changed schema, the relations the models propose, what a diagram file may contain, and *Arrange* — one side left of many, no overlaps, no avoidable crossing, stable when repeated, forty tables in well under a second |
+| `:cli:erdUiTest` | The designer on the demo project, with real mouse and key input over the DevTools protocol (the canvas captures the pointer, which synthetic events skip): drag a table in, relate, reorder, colour, undo, reload, export, arrange a heap of tables, present — and that a page generated without the extension has none of it |
 
 They **skip themselves** when node or Chrome is missing, so `./gradlew build` stays green on a machine
 without them. `ATLAS_REQUIRE_BROWSER_TESTS=1` turns that skip into a failure — CI sets it, so a green

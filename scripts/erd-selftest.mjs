@@ -25,7 +25,7 @@ if (a < 0 || b < 0 || b < a) {
   process.exit(2);
 }
 const E = new Function(`"use strict";${source.slice(a + START.length, b)};
-  return {erdKey, erdCatalog, erdDefaultOrder, erdOrder, erdSuggestions, erdNormalize, erdToDoc, erdSame, erdEnds, erdContrast, erdSlug,
+  return {erdKey, erdCatalog, erdDefaultOrder, erdOrder, erdSuggestions, erdNormalize, erdToDoc, erdSame, erdEnds, erdContrast, erdSlug, erdArrange,
     ERD_FORMAT, ERD_FORMAT_VERSION, ERD_CARDINALITIES};`)();
 
 let failed = 0, passed = 0;
@@ -125,6 +125,79 @@ eq('an empty diagram is fine, and named', E.erdNormalize({format:'atlas-erd', ve
 eq('cardinality ends', [E.erdEnds('1:n'), E.erdEnds('n:m'), E.erdEnds('n:1')], [['1','n'], ['n','m'], ['n','1']]);
 eq('ink on a colour', [E.erdContrast('#f59f00'), E.erdContrast('#2f6fed'), E.erdContrast('nope')], ['#131e29', '#ffffff', '']);
 eq('file names', [E.erdSlug('Orders & Customers'), E.erdSlug('Übersicht Konten'), E.erdSlug('  ')], ['orders-customers', 'ubersicht-konten', 'diagram']);
+
+// ---- arranging ----
+const box = (key, w = 220, h = 150, x = 0, y = 0) => ({key, w, h, x, y});
+const rel = (from, to, cardinality = '1:n', gap = 0) => ({from, to, cardinality, gap});
+function overlaps(nodes, pos, margin = 16) {
+  const r = nodes.map(n => ({k: n.key, x: pos[n.key].x, y: pos[n.key].y, w: n.w, h: n.h}));
+  for (let i = 0; i < r.length; i++) for (let j = i + 1; j < r.length; j++) {
+    const a = r[i], b = r[j];
+    if (a.x < b.x + b.w + margin && b.x < a.x + a.w + margin && a.y < b.y + b.h + margin && b.y < a.y + a.h + margin) return [a.k, b.k];
+  }
+  return null;
+}
+const centre = (n, p) => ({x: p[n.key].x + n.w / 2, y: p[n.key].y + n.h / 2});
+function crossings(nodes, edges, pos) {
+  const by = new Map(nodes.map(n => [n.key, n]));
+  const seg = edges.map(e => [centre(by.get(e.from), pos), centre(by.get(e.to), pos)]);
+  const ccw = (a, b, c) => (c.y - a.y) * (b.x - a.x) > (b.y - a.y) * (c.x - a.x);
+  let c = 0;
+  for (let i = 0; i < seg.length; i++) for (let j = i + 1; j < seg.length; j++) {
+    const [a, b] = seg[i], [d, e] = seg[j];
+    if ([a, b].some(p => [d, e].some(q => p.x === q.x && p.y === q.y))) continue;   // sharing a table is no crossing
+    if (ccw(a, d, e) !== ccw(b, d, e) && ccw(a, b, d) !== ccw(a, b, e)) c++;
+  }
+  return c;
+}
+
+{ // a chain reads left to right, one side first; n:1 turns the arc round
+  const nodes = [box('LINE', 200, 120, 0, 0), box('ORDER', 240, 200, 50, 400), box('CUSTOMER', 220, 160, 900, 100)];
+  const edges = [rel('CUSTOMER', 'ORDER', '1:n'), rel('LINE', 'ORDER', 'n:1')];
+  const p = E.erdArrange(nodes, edges);
+  ok('the one side of a relation stands left of its many side', p.CUSTOMER.x < p.ORDER.x && p.ORDER.x < p.LINE.x, p);
+  eq('no table overlaps another', overlaps(nodes, p), null);
+  eq('the arrangement starts where the drawing was', [Math.min(...Object.values(p).map(q => q.x)), Math.min(...Object.values(p).map(q => q.y))], [0, 0]);
+  const again = E.erdArrange(nodes.map(n => Object.assign({}, n, p[n.key])), edges);
+  const sorted = o => Object.fromEntries(Object.keys(o).sort().map(k => [k, o[k]]));
+  eq('arranging twice changes nothing the second time', sorted(again), sorted(p));
+  eq('the same input, the same picture', sorted(E.erdArrange(nodes, edges)), sorted(p));
+}
+{ // two parents whose children sit the wrong way round: arranging uncrosses them
+  const nodes = [box('P1', 200, 120, 0, 0), box('P2', 200, 120, 0, 300), box('C1', 200, 120, 500, 0), box('C2', 200, 120, 500, 300)];
+  const edges = [rel('P1', 'C2'), rel('P2', 'C1')];
+  eq('before, the two relations cross', crossings(nodes, edges, Object.fromEntries(nodes.map(n => [n.key, {x: n.x, y: n.y}]))), 1);
+  const p = E.erdArrange(nodes, edges);
+  eq('after, they do not', crossings(nodes, edges, p), 0);
+  eq('…and nothing overlaps', overlaps(nodes, p), null);
+}
+{ // a table sits level with the one it relates to
+  const nodes = [box('A', 200, 120, 0, 0), box('B', 200, 300, 0, 400), box('X', 200, 120, 600, 900)];
+  const p = E.erdArrange(nodes, [rel('B', 'X')]);
+  ok('a child is level with its parent (to the 4px grid)', Math.abs(centre(nodes[2], p).y - centre(nodes[1], p).y) <= 4, p);
+}
+{ // a relation back to an ancestor, a table on its own, a name that needs room
+  const nodes = [box('A'), box('B', 220, 150, 0, 200), box('C', 220, 150, 0, 400), box('LONELY', 180, 90, 0, 600), box('D', 220, 150, 0, 800)];
+  const edges = [rel('A', 'B'), rel('B', 'C'), rel('C', 'A'), rel('C', 'D', '1:1', 320)];
+  const p = E.erdArrange(nodes, edges);
+  eq('a cycle is laid out anyway, every table placed', Object.keys(p).sort(), ['A', 'B', 'C', 'D', 'LONELY']);
+  eq('…without overlaps', overlaps(nodes, p), null);
+  ok('a long relation name gets the room it needs', p.D.x - (p.C.x + 220) >= 320 + 60 - 4, [p.C, p.D]);
+  ok('a table on its own is packed with the rest', p.LONELY.y >= 0);
+}
+{ // many tables: still no overlap, still quick
+  let seed = 7;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  const nodes = [...Array(40)].map((_, i) => box('T' + i, 180 + Math.floor(rnd() * 180), 90 + Math.floor(rnd() * 160), Math.floor(rnd() * 2000), Math.floor(rnd() * 2000)));
+  const edges = [...Array(55)].map(() => rel('T' + Math.floor(rnd() * 40), 'T' + Math.floor(rnd() * 40), ['1:n', 'n:1', '1:1', 'n:m'][Math.floor(rnd() * 4)]));
+  const t0 = Date.now(), p = E.erdArrange(nodes, edges), ms = Date.now() - t0;
+  eq('forty tables: every one placed', Object.keys(p).length, 40);
+  eq('forty tables: none overlaps', overlaps(nodes, p), null);
+  ok('forty tables: fewer crossings than the scattered start', crossings(nodes, edges.filter(e => e.from !== e.to), p) <
+    crossings(nodes, edges.filter(e => e.from !== e.to), Object.fromEntries(nodes.map(n => [n.key, {x: n.x, y: n.y}]))));
+  ok('forty tables: arranged in well under a second (' + ms + ' ms)', ms < 1000);
+}
+eq('nothing to arrange', E.erdArrange([], []), {});
 
 if (failed) { console.error(`erd-selftest: ${failed} failed, ${passed} passed`); process.exit(1); }
 console.log(`erd-selftest: all ${passed} checks passed`);

@@ -14,7 +14,8 @@
  *    can be taken, a relation drawn from a card's dot gets a name and a cardinality;
  *  - a card expands and folds, a column can be dragged to the top, a colour set and undone;
  *  - the diagram survives a reload (localStorage), round-trips through its file format, exports a picture
- *    without the canvas handles, presents full-page and comes back on Escape, deletes with Delete;
+ *    without the canvas handles, arranges a heap of tables by their relations (and undoes that in one step),
+ *    presents full-page and comes back on Escape, deletes with Delete;
  *  - the page does not scroll sideways at a narrow width;
  * and, on a report generated WITHOUT the extension, that none of it is there: no sidebar entry, no code,
  * and a `#/erd` link falls back to the overview.
@@ -261,6 +262,26 @@ await withChrome(async page => {
   ok('…without the canvas handles', !/erd-link|erd-grip|erd-tools|erd-relhit/.test(pic.svg));
   ok('…in paper colours, not page references', !/var\(--/.test(pic.svg));
   ok('…with the letters it was drawn in', /@font-face/.test(pic.svg));
+
+  // ---- arrange: three tables dropped on top of each other, laid out by their relations ----
+  await page.eval(`${T}.importText(JSON.stringify({format:'atlas-erd', version:1, name:'A heap', tables:[
+    {table:'ord_order', x:100, y:100}, {table:'cust_customer', x:120, y:110}, {table:'legacy_audit', x:140, y:120}],
+    relations:[{id:'r1', from:'ord_order', to:'cust_customer', cardinality:'n:1', label:'placed by'}]}))`);
+  const boxes = `(function(){ return [...document.querySelectorAll('.erd-card')].map(c=>{ const r=c.querySelector('.erd-box').getBoundingClientRect();
+    return {k:c.dataset.key, x:r.left, y:r.top, w:r.width, h:r.height}; }); })()`;
+  const overlap = bs => bs.some((a, i) => bs.slice(i + 1).some(b => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h));
+  ok('the heap overlaps before arranging', overlap(await page.eval(boxes)));
+  const heap = await page.eval(`JSON.stringify(${T}.active().tables.map(t=>[t.key,t.x,t.y]))`);
+  await page.click(await page.at('[data-act=arrange]'));
+  ok('Arrange lays the tables out', await page.waitFor(`/Arranged/.test(document.getElementById('toast').textContent)`, 3000));
+  const laid = await page.eval(boxes);
+  ok('…with no table on another', !overlap(laid), laid);
+  const at = k => laid.find(b => b.k === k);
+  ok('…the one side of the relation left of its many side', at('CUST_CUSTOMER').x + at('CUST_CUSTOMER').w <= at('ORD_ORDER').x, laid);
+  await page.key('z', 'KeyZ', 2);
+  ok('one undo puts the heap back', await page.eval(`JSON.stringify(${T}.active().tables.map(t=>[t.key,t.x,t.y]))`) === heap);
+  await page.key('z', 'KeyZ', 2 | 8);
+  ok('…and redo arranges it again', !overlap(await page.eval(boxes)));
 
   // ---- present, and back ----
   await page.click(await page.at('[data-act=present]'));

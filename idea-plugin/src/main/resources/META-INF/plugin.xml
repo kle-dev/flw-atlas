@@ -147,6 +147,19 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.28.1</h3>
+        <ul>
+          <li><b>The ER diagram designer arranges the tables for you.</b> <i>Arrange</i> in the designer's
+              toolbar lays every table out by its relations — for a diagram with too many tables to sort by
+              hand: each relation's one side in a column left of its many side, the tables in a column
+              ordered so that as few relation lines cross as possible, each table level with the ones it
+              relates to, the columns far enough apart for the relation names between them, and unrelated
+              tables and separate groups packed underneath. The cards glide to their places and one undo
+              puts them back.</li>
+          <li><b>Relation names no longer sit on top of each other.</b> Two relations whose lines meet in
+              the same gap drew their names in one place; the lower one now moves below the upper, on the
+              canvas and in an exported picture alike.</li>
+        </ul>
         <h3>0.28.0</h3>
         <ul>
           <li><b>An ER diagram designer in the explorer, for explaining a data model.</b> A page generated
@@ -546,12 +559,6 @@
               <i>Open in Atlas Explorer</i>; <i>Go to Model…</i>, which ignores the selection, left that
               menu. In the editor, <i>Copy Model Key</i> and <i>Compare Model with Archive</i> sit together
               behind one separator. The generate actions stay available while the IDE indexes.</li>
-          <li><b>The actions table says which bot runs each action.</b> <code>#/browse/action</code> gains a
-              <i>Bot</i> column: a Java bot by its class, a platform bot by its key, as a link to the bot,
-              with a copy button for the class name or key and, inside the IDE, a button that opens the Java
-              bot's source. The <i>Bots</i> and <i>Java · bot</i> tables answer the other way round with an
-              <i>Actions</i> column. A link inside a category row now opens its own target; it used to open
-              the row, or, after a detail page had been shown, both.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

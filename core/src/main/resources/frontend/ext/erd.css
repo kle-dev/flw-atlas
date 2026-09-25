@@ -38,7 +38,7 @@
   .erd-pct{min-width:40px;text-align:center;font-size:var(--text-xs);color:var(--ink-faint);font-variant-numeric:tabular-nums}
   .erd-status{font-size:var(--text-xs);color:var(--ink-faint);max-width:44ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .erd-changed{color:var(--warn-text)}
-  .erd-presentbtn span{margin-left:2px}
+  .erd-presentbtn span,.erd-arrangebtn span{margin-left:2px}
   .erd-canvas{position:relative;flex:1;min-height:0;overflow:hidden;outline:none;touch-action:none;background-color:var(--bg);
     background-image:radial-gradient(var(--line) 1px,transparent 1px);background-size:20px 20px}
   .erd-canvas.drop{box-shadow:inset 0 0 0 2px var(--accent)}

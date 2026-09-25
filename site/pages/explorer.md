@@ -397,6 +397,14 @@ A table's default business name is the name of the data object that reads it, wh
   if you like, the columns it joins; a sentence under the cardinality says what it means (*One Customer
   has many Orders*). Dropping onto a column's row joins that column. The line ends in crow's feet with the
   letters beside them, for whoever has never seen the notation.
+- **Arrange** lays every table out by its relations, for when there are too many to sort by hand: each
+  relation's *one* side in a column left of its *many* side (a customer, then its orders), the tables in a
+  column ordered so as few relation lines cross as possible, each table level with the ones it relates to,
+  and the columns far enough apart for the relation names between them. Tables that relate to nothing, and
+  separate groups, are packed underneath; drawn relations and the proposals on the canvas both count. The
+  cards glide to their places, the view fits them, and one `⌘Z` puts everything back. Arranging an
+  arrangement moves nothing. Relation names that would land on top of each other — two lines meeting in one
+  gap — are moved apart, on the canvas and in an exported picture alike.
 - **Proposals.** When both ends of a relation the models already state are on the canvas — a data object
   field that refers to another data object (its one-to-one or one-to-many becomes the cardinality), or a
   service column relation — it shows as a dashed line: click it to take it, `×` to dismiss it for this
