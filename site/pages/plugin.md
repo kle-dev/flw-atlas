@@ -469,8 +469,11 @@ files were referring to it.
 
 It works for delegates and beans, for **bot classes** (an action's `botKey` ↔ the `BotService` that
 implements it) and for **REST handlers**: a Spring `@GetMapping` method is linked to the models whose
-HTTP task, REST button or service operation calls that URL — matched by written short name, so Spring
-does not even need to be on the classpath.
+HTTP task, REST button or service operation calls that URL — annotations are read by their written short
+name, so Spring does not even need to be on the classpath. A method is linked where a model calls it on
+one of its class's beans — `${orderService.place(…)}` is `OrderService.place`, not every `place` in the
+project — and a REST call is the one the explorer draws: a link is not a call, and a call reaches the handler
+that spells out most of its path, as Spring routes it.
 
 The model side answers too: Find Usages on a model's own key — the `id` of a process, the `"key"` of a
 form — lists every model that references it (the call activity, the task's form key, the service

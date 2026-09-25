@@ -48,7 +48,7 @@ class FlowableImplicitUsageTest : BasePlatformTestCase() {
             """<definitions xmlns:flowable="http://flowable.org/bpmn"><process id="P">""" +
                 """<serviceTask id="t" flowable:expression="${'$'}{myBean.doWork()}"/></process></definitions>""",
         )
-        myFixture.addFileToProject("com/acme/MyBean.java", "package com.acme; public class MyBean { public void doWork() {} }")
+        myFixture.addFileToProject("com/acme/MyBean.java", "package com.acme; @Service public class MyBean { public void doWork() {} }")
         val method = findClass("com.acme.MyBean").findMethodsByName("doWork", false).first()
 
         val found = mutableListOf<Usage>()

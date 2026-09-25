@@ -53,7 +53,8 @@ class ModelReferenceNavigatorTest : BasePlatformTestCase() {
                </definitions>""",
         ).virtualFile
         project.service<FlowableModelIndexService>().index()
-        val usages = ModelReferenceScan.affectedModelUsages(project, setOf("billingService"))
+        // the class's bean, used as the expression's root
+        val usages = ModelReferenceScan.affectedModelUsages(project, ModelReferenceScan.JavaRef(setOf("billingService"), emptySet(), null))
         val expected = String(process.contentsToByteArray()).indexOf("billingService")
         assertEquals("the first usage's offset, not line 1", mapOf(process to expected), usages)
         assertEquals(expected, ModelReferenceNavigator.rows(project, usages).single().offset)

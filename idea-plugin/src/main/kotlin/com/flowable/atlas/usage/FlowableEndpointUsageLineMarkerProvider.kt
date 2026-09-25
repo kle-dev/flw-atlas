@@ -46,11 +46,14 @@ class FlowableEndpointUsageLineMarkerProvider : LineMarkerProviderDescriptor() {
         // Without the build, a cold index is indistinguishable from "no model calls this endpoint".
         val service = elements.first().project.service<FlowableModelIndexService>()
         val index = service.cachedOrRequest() ?: return
+        var all: List<EndpointPsi.Endpoint>? = null
         for (element in elements) {
             if (element !is PsiIdentifier) continue
             val method = element.parent as? PsiMethod ?: continue
             if (method.nameIdentifier !== element) continue
-            val called = EndpointPsi.endpointsOf(method).filter { EndpointModelScan.anyModelCalls(index, it) }
+            val mine = EndpointPsi.endpointsOf(method).ifEmpty { continue }
+            val everything = all ?: EndpointPsi.projectEndpoints(method.project).also { all = it }
+            val called = mine.filter { EndpointModelScan.anyModelCalls(index, it, everything) }
             if (called.isEmpty()) continue
             result.add(buildMarker(element, called))
         }

@@ -31,8 +31,8 @@ class FlowableRenameWarningProvider : RefactoringElementListenerProvider {
             is PsiClass -> element.name ?: return null
             else -> return null
         }
-        val names = ModelReferenceScan.namesOf(element)
-        if (names.isEmpty()) return null
+        // taken before the rename: the models still say the old name
+        val ref = ModelReferenceScan.refOf(element) ?: return null
         val project = element.project
         // Fast path: when the index is already built, only attach a listener if the symbol is actually
         // referenced — no background work / task flash for unrelated renames. When the index is NOT yet
@@ -40,24 +40,22 @@ class FlowableRenameWarningProvider : RefactoringElementListenerProvider {
         // so attach a listener anyway and decide in the background (warn() re-checks and no-ops if not
         // referenced). This is what makes the warning reliable regardless of index-build timing.
         val cached = project.service<FlowableModelIndexService>().cachedOrNull()
-        if (cached != null && names.none { it in cached.referencedIdentifiers || it in cached.referencedClassFqns }) {
-            return null
-        }
+        if (cached != null && !ref.usedIn(cached)) return null
 
         return object : RefactoringElementListener {
-            override fun elementRenamed(newElement: PsiElement) = warn(project, displayName, names)
+            override fun elementRenamed(newElement: PsiElement) = warn(project, displayName, ref)
             override fun elementMoved(newElement: PsiElement) {}
         }
     }
 
-    private fun warn(project: Project, displayName: String, names: Set<String>) {
+    private fun warn(project: Project, displayName: String, ref: ModelReferenceScan.JavaRef) {
         object : Task.Backgroundable(project, "Checking Flowable model references", true) {
             override fun run(indicator: ProgressIndicator) {
                 if (project.isDisposed) return
                 val service = project.service<FlowableModelIndexService>()
                 val index = service.cachedOrNull() ?: service.index()   // build once, off the EDT, if needed
-                if (names.none { it in index.referencedIdentifiers || it in index.referencedClassFqns }) return
-                val files = ModelReferenceScan.affectedModelFiles(project, names)
+                if (!ref.usedIn(index)) return
+                val files = ModelReferenceScan.affectedModelFiles(project, ref)
                 ApplicationManager.getApplication().invokeLater {
                     if (!project.isDisposed) notify(project, displayName, files)
                 }

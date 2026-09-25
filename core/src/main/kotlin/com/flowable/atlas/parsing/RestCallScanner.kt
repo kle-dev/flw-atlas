@@ -1,5 +1,6 @@
 package com.flowable.atlas.parsing
 
+import com.flowable.atlas.graph.Ctx
 import kotlin.math.abs
 
 /**
@@ -28,7 +29,8 @@ object RestCallScanner {
     data class RestRef(val url: String, val method: String?)
 
     /**
-     * The model fields that hold an outbound URL, most specific first.
+     * The model fields that may hold an outbound URL, most specific first — where [scan] looks. Whether a
+     * value found there *is* a call is [calls]'s decision.
      *
      * - `requestUrl` — BPMN/CMMN HTTP service task (`flowable:type="http"`), a `flowable:field`.
      * - `url` — a form/page REST button's `extraSettings.url`, and a `.service` operation's `config.url`.
@@ -62,6 +64,40 @@ object RestCallScanner {
      *  method-aware matching. */
     fun refs(text: String): Set<RestRef> =
         scan(text).mapTo(LinkedHashSet()) { RestRef(it.url, it.method) }
+
+    /**
+     * The outbound REST calls of the model [fileName] holds, each at the offset of its URL as written in
+     * [text] — exactly the calls the `:core` parsers record for the explorer. The text scan alone found
+     * every `url`, so a link button, a data table's row link and the URL of a data source the component
+     * no longer uses were "calls" to the IDE, a service operation was matched without its `baseUrl`, and
+     * a verb Design omits (the GET default) matched any handler. Here the parser decides what is a call,
+     * with which verb and against which URL (a service's base joined in); the scan only says where.
+     */
+    fun calls(text: String, fileName: String, modelType: String? = null): List<RestCall> {
+        // the caller's type when it knows one (a Design export's `form-models/x.json`), else the extension's
+        val mtype = modelType ?: ModelKinds.modelTypeFor(fileName) ?: return emptyList()
+        val parser = ModelParsers.PARSERS[mtype] ?: return emptyList()
+        val ctx = Ctx().apply { currentModel = ModelKinds.NORMALIZE_TYPE[mtype] ?: mtype }
+        val parsed = try { parser(text.toByteArray(Charsets.UTF_8), ctx, fileName) } catch (e: Exception) { return emptyList() }
+        // the value as written → the URL the call goes to, and its verb
+        val written = LinkedHashMap<String, Pair<String, String?>>()
+        for (rc in ctx.restCalls) {
+            val url = (rc["url"] as? String)?.trim() ?: continue
+            written.putIfAbsent(url, url to (rc["method"] as? String)?.uppercase())
+        }
+        // a service operation writes its own path; the call goes to the service's base joined with it
+        for (op in ((parsed as? Map<*, *>)?.get("operations") as? List<*>).orEmpty()) {
+            val om = op as? Map<*, *> ?: continue
+            val raw = (om["url"] as? String)?.trim() ?: continue
+            val full = (om["fullUrl"] as? String)?.trim() ?: raw
+            written[raw] = full to ((om["method"] as? String)?.uppercase() ?: "GET")
+        }
+        return scan(text).mapNotNull { c -> written[c.url]?.let { (url, method) -> RestCall(url, c.range, method, c.field) } }
+    }
+
+    /** [calls] without the offsets — for index membership and method-aware matching. */
+    fun refs(text: String, fileName: String, modelType: String? = null): Set<RestRef> =
+        calls(text, fileName, modelType).mapTo(LinkedHashSet()) { RestRef(it.url, it.method) }
 
     /**
      * The method value nearest the URL at [urlStart], or null.

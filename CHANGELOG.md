@@ -19,6 +19,21 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   in Browser* submenu drew as an empty row, and *Copy Model Key* and *Compare Model with Archive* showed in a
   panel with no key or model to act on. The menu is *Tools → Flowable Atlas* again, entry for entry, with the
   same entries hidden. *Dump Key Index* stays out of it outside internal mode.
+- **The IDE marks a Java method only where a model calls it on its class's bean.** The *Referenced by
+  Flowable models* gutter, Find Usages and the rename warning matched names: every `getId`, `cancel` or
+  `process` in the project was "referenced" once any expression called any method of that name, and on the
+  real projects 92 of 168 marked methods were never called on their own class. A method is used where a
+  model calls or reads it on one of its class's Spring beans (a stereotype, a `@Bean` method's return type, a
+  Spring Data repository — the explorer's rules), a class where its bean is an expression's root or a `class`
+  attribute spells out its exact name. Ctrl/⌘-click on a bean name opens the class that declares that bean,
+  so a variable `order` beside a class `Order` goes nowhere, and completion labels a name *bean* only when
+  one is declared.
+- **The IDE's REST links are the explorer's.** The endpoint gutter and Find Usages read a model's calls with
+  the same parsers the explorer uses instead of scanning for every `url`: a link or a row link is no call, a
+  data source a component no longer uses is not read, a service operation is matched with its base URL, and a
+  button that names no verb is the GET it sends. A call marks only the handler that spells out most of its
+  path, as Spring routes it — `/items/search` is no longer also `GET /items/{id}`'s — and a `@FeignClient` or
+  `@HttpExchange` interface or a test source's controller serves no endpoint.
 - **A REST call links only to an endpoint its URL names.** A placeholder counted as whatever segment an
   endpoint needed, so a URL made mostly of placeholders was a call of every endpoint of its length: on one
   real project 24 forms "called" five unrelated controllers through `{{endpoints.idm}}/users?…`, and every

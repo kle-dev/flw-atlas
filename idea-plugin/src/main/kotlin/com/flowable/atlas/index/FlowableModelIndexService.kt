@@ -505,6 +505,8 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
         val byKey = HashMap<String, MutableList<ModelEntry>>()
         val referencedIdentifiers = HashSet<String>()
         val referencedClassFqns = HashSet<String>()
+        val beanMembers = HashSet<String>()
+        val expressionRoots = HashSet<String>()
         val variables = HashSet<String>()
         val messages = HashSet<String>()
         val signals = HashSet<String>()
@@ -532,7 +534,8 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
                 }
                 val text = String(bytes, Charsets.UTF_8)
                 ModelRefScanner.scan(text, referencedIdentifiers, referencedClassFqns)
-                restCalls.addAll(RestCallScanner.refs(text))
+                ModelRefScanner.scanMembers(text, beanMembers, expressionRoots)
+                restCalls.addAll(RestCallScanner.refs(text, fileName, type.parserKey))
             } catch (pce: ProcessCanceledException) {
                 throw pce                      // a cancelled action is not a failure
             } catch (e: Exception) {
@@ -577,6 +580,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
         }
         return FlowableIndex(
             byKey, referencedIdentifiers, referencedClassFqns,
+            beanMembers = beanMembers, expressionRoots = expressionRoots,
             variables = variables, messages = messages, signals = signals,
             userTaskIds = userTaskIds, activityIds = activityIds,
             restCalls = restCalls,

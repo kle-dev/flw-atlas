@@ -68,7 +68,7 @@ class FlowableExpressionCompletionTest : BasePlatformTestCase() {
     }
 
     fun testReferencedIdentifiersLabelledBeanOnlyWhenTheyResolveToAProjectClass() {
-        myFixture.addFileToProject("OrderService.java", "public class OrderService { public String process(String s){return s;} }")
+        myFixture.addFileToProject("OrderService.java", "@Service public class OrderService { public String process(String s){return s;} }")
         // A model whose expressions reference: orderService (a project class), process/order (not classes),
         // and the catalog function `now` / namespace `date` (must not appear as spurious beans).
         myFixture.addFileToProject(
@@ -87,7 +87,7 @@ class FlowableExpressionCompletionTest : BasePlatformTestCase() {
         fun typeOf(s: String): String? = elements.firstOrNull { it.lookupString == s }
             ?.let { val p = LookupElementPresentation(); it.renderElement(p); p.typeText }
 
-        assertEquals("resolvable project class → bean", "bean", typeOf("orderService"))
+        assertEquals("a declared project bean → bean", "bean", typeOf("orderService"))
         assertEquals("non-class identifier → referenced, not bean", "referenced", typeOf("order"))
         // …and neither sits iconless beside the iconed variables any more.
         fun iconOf(s: String) = elements.firstOrNull { it.lookupString == s }?.let { val p = LookupElementPresentation(); it.renderElement(p); p.icon }

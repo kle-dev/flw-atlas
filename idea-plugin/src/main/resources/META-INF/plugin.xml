@@ -150,6 +150,25 @@
               Model Key</i> and <i>Compare Model with Archive</i> showed in a panel with no key or model to
               act on. The menu is <i>Tools → Flowable Atlas</i> again, entry for entry, with the same
               entries hidden. <i>Dump Key Index</i> stays out of it outside internal mode.</li>
+          <li><b>The IDE marks a Java method only where a model calls it on its class's bean.</b> The
+              <i>Referenced by Flowable models</i> gutter, Find Usages and the rename warning matched names:
+              every <code>getId</code>, <code>cancel</code> or <code>process</code> in the project was
+              "referenced" once any expression called any method of that name, and on the real projects 92
+              of 168 marked methods were never called on their own class. A method is used where a model
+              calls or reads it on one of its class's Spring beans (a stereotype, a <code>@Bean</code>
+              method's return type, a Spring Data repository — the explorer's rules), a class where its bean
+              is an expression's root or a <code>class</code> attribute spells out its exact name.
+              Ctrl/⌘-click on a bean name opens the class that declares that bean, so a variable
+              <code>order</code> beside a class <code>Order</code> goes nowhere, and completion labels a
+              name <i>bean</i> only when one is declared.</li>
+          <li><b>The IDE's REST links are the explorer's.</b> The endpoint gutter and Find Usages read a
+              model's calls with the same parsers the explorer uses instead of scanning for every
+              <code>url</code>: a link or a row link is no call, a data source a component no longer uses is
+              not read, a service operation is matched with its base URL, and a button that names no verb is
+              the GET it sends. A call marks only the handler that spells out most of its path, as Spring
+              routes it — <code>/items/search</code> is no longer also <code>GET /items/{id}</code>'s — and
+              a <code>@FeignClient</code> or <code>@HttpExchange</code> interface or a test source's
+              controller serves no endpoint.</li>
           <li><b>A REST call links only to an endpoint its URL names.</b> A placeholder counted as whatever
               segment an endpoint needed, so a URL made mostly of placeholders was a call of every endpoint
               of its length: on one real project 24 forms "called" five unrelated controllers through
@@ -527,21 +546,6 @@
               bean names; a sequence what its numbers look like; a query the groups it filters by, where it
               said <i>0</i> before. The orphan banners on operations and functions are gone — the finding
               says it.</li>
-          <li><b>Relations take a row per relation.</b> A relation lists its neighbours as chips on one row
-              — <i>App contains</i> five models is one row, not five — and unfolds only where a neighbour
-              has more to say: a caller's parameter mappings, every REST call with its verb. The drawing is
-              a switch away and stays on from page to page. An operation's page is related to its service,
-              and a variable's page lists the models that write, read or merely mention it, where both used
-              to say they had no relationships.</li>
-          <li><b>A process's page says whether its calls fit.</b> <i>Does it fit?</i> lists every call a
-              process or case makes — sub-process, case, decision, operation, agent, form, event — with what
-              it hands over and takes back, and every caller of it against what it reads: a value it reads
-              that no caller passes, a value passed in that it never reads (the same verdict as the
-              <i>unread call input</i> finding), a value mapped back that it never writes, a required
-              operation parameter left out or one the operation does not declare. A process nothing calls
-              lists the values whoever starts it has to provide. Where Atlas cannot see far enough — a
-              callee outside the project, a call with no explicit mappings, a name only a script guesses at
-              — the cell is a ? that says why.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

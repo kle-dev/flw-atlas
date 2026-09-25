@@ -21,6 +21,11 @@ class FlowableIndex(
     val referencedIdentifiers: Set<String> = emptySet(),
     /** Fully-qualified class names referenced from models (delegate/class attributes). */
     val referencedClassFqns: Set<String> = emptySet(),
+    /** Every `root.member` a model expression names, as `root#member` — how a Java method is found used
+     *  on one of its class's beans rather than by its name anywhere. */
+    val beanMembers: Set<String> = emptySet(),
+    /** Every root a model expression starts with — a bean name, or a variable. */
+    val expressionRoots: Set<String> = emptySet(),
     /** Project-wide process/case variable names (BPMN dataObjects, formProperties, form fields). */
     val variables: Set<String> = emptySet(),
     /** BPMN top-level `<message name>` values. */

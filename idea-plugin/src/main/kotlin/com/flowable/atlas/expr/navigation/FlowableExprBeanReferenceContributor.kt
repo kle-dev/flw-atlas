@@ -3,8 +3,8 @@ package com.flowable.atlas.expr.navigation
 import com.flowable.atlas.expr.BackendGrounding
 import com.flowable.atlas.expr.ExpressionDialect
 import com.flowable.atlas.expr.catalog.FlowableExpressionCatalog
-import com.flowable.atlas.expr.completion.BackendBeanResolver
 import com.flowable.atlas.expr.lang.FlowableExprFile
+import com.flowable.atlas.usage.SpringBeans
 import com.intellij.openapi.util.TextRange
 import com.intellij.patterns.PlatformPatterns
 import com.intellij.psi.PsiElement
@@ -15,15 +15,14 @@ import com.intellij.psi.PsiReferenceContributor
 import com.intellij.psi.PsiReferenceProvider
 import com.intellij.psi.PsiReferenceRegistrar
 import com.intellij.psi.ResolveResult
-import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.util.ProcessingContext
 
 /**
  * `${orderService.process(order)}` — Ctrl+click on `orderService` opens the class the Spring bean name
  * denotes, and Ctrl+Q shows that class's documentation; inside an injected expression in a model and in
- * the playground alike. The root is resolved the way member completion already resolves it
- * ([BackendBeanResolver]: the decapitalised simple class name is Spring's default bean name), in the
- * project only — `list`, `date` or `process` must not light up a JDK type.
+ * the playground alike. The root resolves to the classes that declare a bean of that name in the project
+ * ([SpringBeans] — a stereotype, a `@Bean` method's return type, a Spring Data repository), so `list`,
+ * `date` or `process` light up no JDK type, and a variable `order` no class `Order`.
  *
  * Every backend root that is not a catalogued engine root gets a reference; one that is a process
  * variable resolves to nothing. The reference is soft for that reason: the grounding inspection is the
@@ -58,7 +57,9 @@ class FlowableExprBeanReferenceContributor : PsiReferenceContributor() {
 
         override fun multiResolve(incompleteCode: Boolean): Array<ResolveResult> {
             val project = element.project
-            val classes = BackendBeanResolver.resolveClasses(name, project, GlobalSearchScope.projectScope(project))
+            // a declared bean only: a variable `order` beside a plain class `Order` names no class, and
+            // `@Service("other")` answers to `other`, not to its class's decapitalised name
+            val classes = SpringBeans.classesNamed(name, project)
             return PsiElementResolveResult.createResults(classes)
         }
 

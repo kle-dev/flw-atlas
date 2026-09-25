@@ -1,6 +1,8 @@
 package com.flowable.atlas.usage
 
+import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiAnnotation
 import com.intellij.psi.PsiAnnotationMemberValue
@@ -8,7 +10,13 @@ import com.intellij.psi.PsiArrayInitializerMemberValue
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiExpression
 import com.intellij.psi.PsiMethod
+import com.intellij.psi.PsiModifier
 import com.intellij.psi.PsiModifierListOwner
+import com.intellij.psi.impl.java.stubs.index.JavaAnnotationIndex
+import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.psi.util.CachedValueProvider
+import com.intellij.psi.util.CachedValuesManager
+import com.intellij.psi.util.PsiModificationTracker
 
 /**
  * Recognises Spring REST endpoints in Java PSI — the live counterpart to the `:core` text heuristic in
@@ -41,6 +49,7 @@ object EndpointPsi {
      */
     fun endpointsOf(method: PsiMethod): List<Endpoint> {
         val mapping = mappingAnnotation(method) ?: return emptyList()
+        if (!isServed(method)) return emptyList()
         val verb = verbOf(mapping)
         val bases = classBasePaths(method.containingClass).ifEmpty { listOf("") }
         val paths = pathValues(mapping.annotation).ifEmpty { listOf("") }
@@ -50,7 +59,53 @@ object EndpointPsi {
     }
 
     /** True when [method]'s name identifier is a REST handler — the gutter-marker fast-path guard. */
-    fun isEndpointMethod(method: PsiMethod): Boolean = mappingAnnotation(method) != null
+    fun isEndpointMethod(method: PsiMethod): Boolean = mappingAnnotation(method) != null && isServed(method)
+
+    /**
+     * Every endpoint the project serves, cached until PSI changes — what a model call is matched against,
+     * so a call reaches the most specific handler as Spring routes it: `/api/customers/search` is the
+     * `search` handler's, not `GET /api/customers/{id}`'s, whose variable would also take `search`. Matched
+     * one endpoint at a time, both got the gutter marker. Empty while indexing.
+     */
+    fun projectEndpoints(project: Project): List<Endpoint> {
+        if (DumbService.isDumb(project)) return emptyList()
+        return CachedValuesManager.getManager(project).getCachedValue(project) {
+            val scope = GlobalSearchScope.projectScope(project)
+            val out = LinkedHashSet<Endpoint>()
+            for (name in METHOD_MAPPINGS.keys) {
+                for (ann in JavaAnnotationIndex.getInstance().getAnnotations(name, project, scope)) {
+                    val method = ann.parent?.parent as? PsiMethod ?: continue
+                    out.addAll(endpointsOf(method))
+                }
+            }
+            CachedValueProvider.Result.create(out.toList(), PsiModificationTracker.getInstance(project))
+        }
+    }
+
+    /**
+     * Whether the project serves [method]'s mapping: a controller's handler, or one an abstract base or an
+     * API interface declares for the controllers that extend it. A `@FeignClient` or `@HttpExchange`
+     * interface declares the endpoints of *another* service it calls, a plain class with mappings serves
+     * nothing, and a test source's stub controller is not the application — all three got the gutter
+     * marker and Find Usages hits the explorer never showed.
+     */
+    private fun isServed(method: PsiMethod): Boolean {
+        val cls = method.containingClass ?: return false
+        val file = method.containingFile?.virtualFile
+        if (file != null && ProjectFileIndex.getInstance(method.project).isInTestSourceContent(file)) return false
+        val names = cls.annotations.mapNotNull { shortName(it) }.toSet()
+        if (names.any { it in CLIENT_ANNOTATIONS }) return false
+        if (names.any { it in CONTROLLER_ANNOTATIONS } || metaController(cls)) return true
+        return cls.isInterface || cls.hasModifierProperty(PsiModifier.ABSTRACT)
+    }
+
+    private val CONTROLLER_ANNOTATIONS = setOf("RestController", "Controller")
+    private val CLIENT_ANNOTATIONS = setOf("FeignClient", "HttpExchange")
+
+    /** A composed stereotype (`@ApiController` carrying `@RestController`). */
+    private fun metaController(cls: PsiClass): Boolean = cls.annotations.any { ann ->
+        ann.resolveAnnotationType()?.annotations?.any { shortName(it) in CONTROLLER_ANNOTATIONS } == true
+    }
 
     private data class Mapping(val annotation: PsiAnnotation, val shortName: String)
 

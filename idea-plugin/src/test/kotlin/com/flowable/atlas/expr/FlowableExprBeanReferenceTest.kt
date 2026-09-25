@@ -12,7 +12,7 @@ class FlowableExprBeanReferenceTest : BasePlatformTestCase() {
     private fun addOrderService() {
         myFixture.addFileToProject(
             "com/demo/OrderService.java",
-            "package com.demo; /** Orders. */ public class OrderService { public int total() { return 1; } }",
+            "package com.demo; /** Orders. */ @Service public class OrderService { public int total() { return 1; } }",
         )
     }
 

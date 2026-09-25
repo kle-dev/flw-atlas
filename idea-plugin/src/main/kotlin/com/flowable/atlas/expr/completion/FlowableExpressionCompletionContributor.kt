@@ -130,10 +130,11 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
             }
             exclude += service.variables()   // real variables are offered separately, properly labelled
 
-            val projectScope = com.intellij.psi.search.GlobalSearchScope.projectScope(project)
+            val beans = com.flowable.atlas.usage.SpringBeans.byName(project)
             for (id in service.index().referencedIdentifiers) {
                 if (id.length < 2 || id in exclude) continue
-                val type = if (BackendBeanResolver.resolveClasses(id, project, projectScope).isNotEmpty()) "bean" else "referenced"
+                // labelled a bean only where the project declares one of that name
+                val type = if (id in beans) "bean" else "referenced"
                 out.addElement(referenceLookup(id, type))
             }
         }

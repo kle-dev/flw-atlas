@@ -62,7 +62,7 @@ class FlowableRestButtonEndpointUsageTest : BasePlatformTestCase() {
         assertEquals(
             "the button URL resolves to the handler path despite {{…}} vs {…}",
             1,
-            EndpointModelScan.usageRanges(page, endpoints).size,
+            EndpointModelScan.usageRanges(page, "review.page", endpoints).size,
         )
         val files = EndpointModelScan.affectedModelFiles(project, endpoints)
         assertTrue("the page model is reported: $files", files.any { it.name == "review.page" })
@@ -74,7 +74,7 @@ class FlowableRestButtonEndpointUsageTest : BasePlatformTestCase() {
         project.service<FlowableModelIndexService>().index()
 
         val other = listOf(EndpointPsi.Endpoint("/myEndpoint/canDelete/{caseId}", "GET"))
-        assertTrue(EndpointModelScan.usageRanges(page, other).isEmpty())
+        assertTrue(EndpointModelScan.usageRanges(page, "review.page", other).isEmpty())
         assertTrue(EndpointModelScan.affectedModelFiles(project, other).isEmpty())
     }
 
@@ -101,11 +101,10 @@ class FlowableRestButtonEndpointUsageTest : BasePlatformTestCase() {
         assertEquals("a POST button must not mark a GET-only handler", 0, markers().size)
     }
 
-    fun testAButtonWithoutAVerbMatchesOnPathAlone() {
-        // `extraSettings.method` is omitted whenever it is the palette default, which is most buttons.
-        // A text scanner cannot tell which JSON object a nearby `method` belongs to, so an absent verb
-        // stays unknown — and an unknown verb matches any handler verb on the path. That direction is
-        // deliberate: guessing a verb here would silently drop the very call the user is looking for.
+    fun testAButtonWithoutAVerbIsAGet() {
+        // `extraSettings.method` is omitted whenever it is the palette default — GET, which is what the
+        // REST button sends. The form parser knows that; the text scan did not, left the verb unknown,
+        // and marked a POST-only handler that answers such a button with a 405.
         myFixture.addFileToProject(
             "models/archive.page",
             restButtonPage("{{endpoints.baseUrl}}/myEndpoint/archive/{{myCaseVarX}}"),
@@ -115,7 +114,65 @@ class FlowableRestButtonEndpointUsageTest : BasePlatformTestCase() {
         myFixture.configureByText("CaseController.java", controller())
         myFixture.doHighlighting()
 
-        assertEquals("the POST handler on that path is still found", 1, markers().size)
+        assertEquals("a GET button does not reach the POST-only handler", 0, markers().size)
+    }
+
+    fun testALinkButtonIsNoCall() {
+        // A link button's URL is where the browser goes, not a call the page makes.
+        myFixture.addFileToProject(
+            "models/links.page",
+            """{"metadata":{"key":"DEMO-P003","name":"Links","modelType":"page"},
+                "rows":[[{"id":"open","type":"linkButton","value":"Open","extraSettings":{
+                  "url":"{{endpoints.baseUrl}}/myEndpoint/canEdit/{{myCaseVarX}}"}}]]}""",
+        )
+        project.service<FlowableModelIndexService>().index()
+
+        myFixture.configureByText("CaseController.java", controller())
+        myFixture.doHighlighting()
+
+        assertEquals(0, markers().size)
+    }
+
+    fun testOnlyTheMostSpecificHandlerIsMarked() {
+        // `/items/search` is the `search` handler's, as Spring routes it — not also `GET /items/{id}`'s,
+        // whose variable would take `search` too.
+        myFixture.addFileToProject("models/search.page", restButtonPage("{{endpoints.baseUrl}}/items/search"))
+        project.service<FlowableModelIndexService>().index()
+
+        myFixture.configureByText(
+            "ItemController.java",
+            """
+            @RestController @RequestMapping("items")
+            class ItemController {
+                @GetMapping("/{id}") public String one(@PathVariable String id) { return ""; }
+                @GetMapping("/search") public String search() { return ""; }
+            }
+            """.trimIndent(),
+        )
+        myFixture.doHighlighting()
+
+        val gutters = markers()
+        assertEquals(1, gutters.size)
+        assertTrue(gutters.single().tooltipText!!.contains("/items/search"))
+    }
+
+    fun testAClientInterfaceServesNothing() {
+        // A @FeignClient declares another service's endpoints — the ones this application calls.
+        myFixture.addFileToProject("models/review.page", restButtonPage("{{endpoints.baseUrl}}/myEndpoint/canEdit/{{myCaseVarX}}"))
+        project.service<FlowableModelIndexService>().index()
+
+        myFixture.configureByText(
+            "RemoteCases.java",
+            """
+            @FeignClient(name = "cases")
+            interface RemoteCases {
+                @GetMapping("/myEndpoint/canEdit/{caseId}") String canEdit(@PathVariable String caseId);
+            }
+            """.trimIndent(),
+        )
+        myFixture.doHighlighting()
+
+        assertEquals(0, markers().size)
     }
 
     fun testAnIconUrlIsNotTreatedAsAnEndpoint() {
@@ -129,6 +186,6 @@ class FlowableRestButtonEndpointUsageTest : BasePlatformTestCase() {
         project.service<FlowableModelIndexService>().index()
 
         val endpoints = listOf(EndpointPsi.Endpoint("/myEndpoint/canEdit/{caseId}", "GET"))
-        assertTrue(EndpointModelScan.usageRanges(page, endpoints).isEmpty())
+        assertTrue(EndpointModelScan.usageRanges(page, "review.page", endpoints).isEmpty())
     }
 }
