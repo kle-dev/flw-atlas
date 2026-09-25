@@ -19,6 +19,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   in Browser* submenu drew as an empty row, and *Copy Model Key* and *Compare Model with Archive* showed in a
   panel with no key or model to act on. The menu is *Tools → Flowable Atlas* again, entry for entry, with the
   same entries hidden. *Dump Key Index* stays out of it outside internal mode.
+- **A custom function's page shows the function.** The explorer listed a project's `additionalData`
+  functions by name and signature only; its page now shows the implementation — the arrow or method the
+  registration holds, or the declaration it names, followed through the registration's import into its own
+  file — with the file and line, which opens in the IDE. For a compiled `ext/custom.js` the code is read from
+  the bundle's sourcemap, whose original sources are readable where the minified bundle is not.
 - **The IDE marks a Java method only where a model calls it on its class's bean.** The *Referenced by
   Flowable models* gutter, Find Usages and the rename warning matched names: every `getId`, `cancel` or
   `process` in the project was "referenced" once any expression called any method of that name, and on the

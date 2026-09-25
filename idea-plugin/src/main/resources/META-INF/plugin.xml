@@ -150,6 +150,12 @@
               Model Key</i> and <i>Compare Model with Archive</i> showed in a panel with no key or model to
               act on. The menu is <i>Tools → Flowable Atlas</i> again, entry for entry, with the same
               entries hidden. <i>Dump Key Index</i> stays out of it outside internal mode.</li>
+          <li><b>A custom function's page shows the function.</b> The explorer listed a project's
+              <code>additionalData</code> functions by name and signature only; its page now shows the
+              implementation — the arrow or method the registration holds, or the declaration it names,
+              followed through the registration's import into its own file — with the file and line, which
+              opens in the IDE. For a compiled <code>ext/custom.js</code> the code is read from the bundle's
+              sourcemap, whose original sources are readable where the minified bundle is not.</li>
           <li><b>The IDE marks a Java method only where a model calls it on its class's bean.</b> The
               <i>Referenced by Flowable models</i> gutter, Find Usages and the rename warning matched names:
               every <code>getId</code>, <code>cancel</code> or <code>process</code> in the project was
@@ -538,13 +544,6 @@
               field, which ⌖ finds — instead of a path like <code>rows[1].cols[0].label</code> and "TODO
               left in the model". The same form as an app's <code>.form</code> and as a Design export is one
               finding per marker, not two, and a one-line model gives no line number.</li>
-          <li><b>Detail pages ask whether a model fits.</b> On the Connections tab each question is a
-              section of its own — <i>Calls</i>, <i>Called by</i>, <i>Fields and the variables they
-              write</i> — and every gap table is drawn one way, the schema coverage table first: a row per
-              thing that should line up, tinted by how badly it does not, a pill per kind of gap in its
-              heading and <i>only gaps</i> to hide the rows that are fine. A cell says ✓ it fits, ✗ it is
-              missing, ⚠ it looks wrong, or ? Atlas cannot tell — and its tooltip says what the mark means
-              and why.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

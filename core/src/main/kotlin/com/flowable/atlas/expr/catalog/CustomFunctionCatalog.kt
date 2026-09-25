@@ -23,6 +23,9 @@ data class CustomFunctionCatalog(
     /** Best-effort parameter text per display name (`ns.member`, `flw.member`, or top-level name),
      *  e.g. `"customer, docs"` — for completion tail text / insertion. Absent when not a function. */
     val signatures: Map<String, String> = emptyMap(),
+    /** The source of each function by display name, where Atlas can find it — the declaration the
+     *  registration points at, from the readable source or, for a bundle, from its sourcemap. */
+    val code: Map<String, FunctionCode> = emptyMap(),
 ) {
     fun isEmpty(): Boolean = namespaces.isEmpty() && flw.isEmpty() && topLevel.isEmpty()
 
@@ -42,6 +45,13 @@ data class CustomFunctionCatalog(
         val EMPTY = CustomFunctionCatalog(emptyMap(), emptySet(), emptySet(), emptyList(), emptyList(), emptyMap())
     }
 }
+
+/** A custom function's source: the [file] and [line] it starts on — project-relative, or as a bundle's
+ *  sourcemap names it ([inProject] false: a path that opens nothing) — and its [text], cut at
+ *  [CustomFunctionExtractor.MAX_CODE_LINES] ([truncated]). */
+data class FunctionCode(
+    val file: String, val line: Int, val text: String, val truncated: Boolean = false, val inProject: Boolean = true,
+)
 
 /**
  * Best-effort STATIC extraction of a project's `externals.additionalData` custom functions from
@@ -78,9 +88,10 @@ object CustomFunctionExtractor {
         val sources = ArrayList<String>()
         val diagnostics = ArrayList<String>()
         val signatures = HashMap<String, String>()
+        val code = HashMap<String, FunctionCode>()
         fun build() = CustomFunctionCatalog(
             namespaces.mapValues { it.value.toSet() }, flw.toSet(), topLevel.toSet(),
-            sources.toList(), diagnostics.toList(), signatures.toMap(),
+            sources.toList(), diagnostics.toList(), signatures.toMap(), code.toMap(),
         )
     }
 
@@ -193,6 +204,7 @@ object CustomFunctionExtractor {
     private fun memberNames(
         masked: String, orig: String, open: Int, close: Int, diag: MutableList<String>, ctx: String,
         sigs: MutableMap<String, String>? = null, prefix: String = "",
+        code: ((String, IntRange) -> Unit)? = null,
     ): Set<String> {
         val names = HashSet<String>()
         for (span in objectEntries(masked, open, close)) {
@@ -200,6 +212,7 @@ object CustomFunctionExtractor {
             if (key != null) {
                 names += key
                 if (sigs != null) memberSignature(masked, orig, span.first, span.last + 1)?.let { sigs[prefix + key] = it }
+                code?.invoke(prefix + key, span)
             } else if (kind is Kind.Spread || kind is Kind.Computed)
                 diag += "$ctx: unresolved ${if (kind is Kind.Spread) "spread" else "computed"} entry (members may be incomplete)"
         }
@@ -292,7 +305,13 @@ object CustomFunctionExtractor {
         return null
     }
 
-    private fun absorbAdditionalDataObject(masked: String, orig: String, open: Int, close: Int, cat: Cat, ctx: String) {
+    private fun absorbAdditionalDataObject(
+        masked: String, orig: String, open: Int, close: Int, cat: Cat, ctx: String,
+        imported: ((String) -> FunctionCode?)? = null,
+    ) {
+        fun capture(display: String, span: IntRange) {
+            entryCode(masked, orig, span, ctx, imported)?.let { cat.code.putIfAbsent(display, it) }
+        }
         for (span in objectEntries(masked, open, close)) {
             val (key, kind) = entryKeyAndKind(masked, orig, span.first, span.last + 1)
             if (key == null) {
@@ -301,12 +320,13 @@ object CustomFunctionExtractor {
                 continue
             }
             if (kind is Kind.Obj) {
-                val members = memberNames(masked, orig, kind.open, kind.close, cat.diagnostics, "$ctx.$key", cat.signatures, "$key.")
+                val members = memberNames(masked, orig, kind.open, kind.close, cat.diagnostics, "$ctx.$key", cat.signatures, "$key.", ::capture)
                 if (key == "flw") cat.flw += members
                 else cat.namespaces.getOrPut(key) { HashSet() } += members
             } else {
                 cat.topLevel += key
                 memberSignature(masked, orig, span.first, span.last + 1)?.let { cat.signatures[key] = it }
+                capture(key, span)
             }
         }
     }
@@ -382,6 +402,146 @@ object CustomFunctionExtractor {
         }
         return out
     }
+
+    // ---- the function's own source, for the explorer to show ----
+
+    const val MAX_CODE_LINES = 80
+    private const val MAX_CODE_CHARS = 6000
+
+    /**
+     * The source of the function an object entry registers: the entry itself when its value is the
+     * function (`fn: (x) => …`, `fn(x) { … }`), else the declaration its identifier names — in this file,
+     * or through the file's import of it ([imported]). Null when neither is readable.
+     */
+    private fun entryCode(
+        masked: String, orig: String, span: IntRange, file: String, imported: ((String) -> FunctionCode?)?,
+    ): FunctionCode? {
+        val s = span.first; val e = span.last + 1
+        val seg = masked.substring(s, e)
+        val lead = s + (seg.length - seg.trimStart().length)
+        val m = IDENT_KEY.find(orig.substring(lead, e)) ?: return null
+        val key = m.groupValues[1].ifEmpty { m.groupValues[2] }
+        var j = lead + m.value.length
+        while (j < e && masked[j].isWhitespace()) j++
+        val ident: String = when {
+            j >= e -> key                                                          // shorthand `{ fn }`
+            masked[j] == '(' -> return codeOf(file, orig, lead, e)                 // method shorthand
+            masked[j] == ':' -> {
+                var v = j + 1
+                while (v < e && masked[v].isWhitespace()) v++
+                val tail = masked.substring(v, e).trimEnd()
+                Regex("""^([A-Za-z_$][\w$]*)$""").find(tail)?.groupValues?.get(1) ?: return codeOf(file, orig, lead, e)
+            }
+            else -> return null
+        }
+        declarationSpan(masked, ident)?.let { return codeOf(file, orig, it.first, it.last + 1) }
+        return imported?.invoke(ident)
+    }
+
+    /** The span of the top-level declaration of [name] in a (masked) source: `function name(…) {…}`, or
+     *  `const|let|var name = …` up to the end of its function body or statement. */
+    private fun declarationSpan(masked: String, name: String): IntRange? {
+        val n = Regex.escape(name)
+        Regex("""\b(?:export\s+(?:default\s+)?)?(?:async\s+)?function\s*\*?\s*$n\s*(?:<[^>(]*>)?\s*\(""").find(masked)?.let { fm ->
+            val close = matchBrace(masked, fm.range.last)
+            if (close == -1) return null
+            val body = masked.indexOf('{', close)
+            if (body == -1) return null
+            val end = matchBrace(masked, body)
+            return if (end == -1) null else fm.range.first..end
+        }
+        val dm = Regex("""\b(?:export\s+)?(?:const|let|var)\s+$n\b\s*(?::[^=;]{0,200})?=(?!=)""").find(masked) ?: return null
+        val start = dm.range.first
+        fun nextChar(from: Int): Char? {
+            var k = from
+            while (k < masked.length && masked[k].isWhitespace()) k++
+            return masked.getOrNull(k)
+        }
+        var depth = 0
+        var last = ' '                      // the last non-blank character seen at depth 0
+        var i = dm.range.last + 1
+        while (i < masked.length) {
+            val c = masked[i]
+            when {
+                c == '{' || c == '(' || c == '[' -> depth++
+                c == '}' || c == ')' || c == ']' -> {
+                    depth--
+                    if (depth < 0) return start until i          // the enclosing block ends first
+                    // a body closed at the declaration's own level ends the statement — unless the
+                    // expression goes on (`}.bind(…)`, `})(…)`)
+                    if (depth == 0 && c == '}' && nextChar(i + 1) !in setOf('.', '(')) return start..i
+                }
+                depth == 0 && (c == ';' || c == ',') -> return start until i
+                // a line break ends it, unless the expression visibly continues: an operator on either
+                // side, or an arrow / assignment whose body starts on the next line
+                depth == 0 && c == '\n' && last != ' ' && last !in "=>+-*/&|?:,(" &&
+                    nextChar(i + 1)?.let { it in ".?:+-*/&|=" } != true -> return start until i
+            }
+            if (depth == 0 && !c.isWhitespace()) last = c
+            i++
+        }
+        return start until masked.length
+    }
+
+    /** [orig] from [start] to [end] as the code of a function in [file] — dedented and capped. */
+    private fun codeOf(file: String, orig: String, start: Int, end: Int): FunctionCode {
+        val line = orig.substring(0, start).count { it == '\n' } + 1
+        // a line's leading indentation before [start] belongs to the code too, so dedent sees it
+        val lineStart = orig.lastIndexOf('\n', start - 1) + 1
+        val raw = orig.substring(if (orig.substring(lineStart, start).isBlank()) lineStart else start, end).trimEnd()
+        val lines = raw.split('\n')
+        val indent = lines.filter { it.isNotBlank() }.minOfOrNull { l -> l.length - l.trimStart().length } ?: 0
+        var text = lines.joinToString("\n") { if (it.length >= indent) it.substring(indent) else it.trimStart() }
+        var truncated = false
+        val kept = text.split('\n')
+        if (kept.size > MAX_CODE_LINES) { text = kept.take(MAX_CODE_LINES).joinToString("\n"); truncated = true }
+        if (text.length > MAX_CODE_CHARS) { text = text.take(MAX_CODE_CHARS); truncated = true }
+        return FunctionCode(file, line, text, truncated)
+    }
+
+    /** The declaration of [name] in [file] — the target of the registration's import of it. */
+    private fun declarationIn(file: File, name: String, root: File): FunctionCode? {
+        val text = readIfSmall(file) ?: return null
+        val span = declarationSpan(mask(text), name) ?: return null
+        return codeOf(relOf(file, root), text, span.first, span.last + 1)
+    }
+
+    /**
+     * A bundle's functions from its sourcemap: the original source of each registered name, where the
+     * map carries it (`sourcesContent`) — minified, the bundle's own text is no code anyone can read.
+     */
+    private fun applySourceCode(cat: Cat, bundle: File, text: String, root: File) {
+        val bundleRel = relOf(bundle, root)
+        val mp = findSourcemap(bundle, text) ?: return
+        if (mp.length() > 20_000_000L) return
+        val data = runCatching { MiniJson.parseOrNull(mp.readText()) }.getOrNull() as? Map<*, *> ?: return
+        val contents = data["sourcesContent"] as? List<*> ?: return
+        val names = data["sources"] as? List<*> ?: emptyList<Any?>()
+        val sources = contents.mapIndexedNotNull { i, c ->
+            (c as? String)?.takeIf { it.length < 2_000_000 }?.let { cleanSourceName(names.getOrNull(i) as? String ?: "source $i") to it }
+        }.filter { (name, _) -> "node_modules" !in name }
+        val masked = sources.map { (n, t) -> Triple(n, t, mask(t)) }
+        fun find(display: String, member: String) {
+            // a readable source of the project already gave it — only the bundle's own text is replaced
+            val had = cat.code[display]
+            if (had != null && had.file != bundleRel) return
+            for ((n, t, m) in masked) {
+                val span = declarationSpan(m, member) ?: continue
+                // the map's path is relative to wherever the bundle was built; it opens only if the project has it
+                val inProject = root.isDirectory && File(root, n).isFile
+                cat.code[display] = codeOf(n, t, span.first, span.last + 1).copy(inProject = inProject)
+                return
+            }
+        }
+        cat.namespaces.forEach { (ns, members) -> members.forEach { find("$ns.$it", it) } }
+        cat.flw.forEach { find("flw.$it", it) }
+        cat.topLevel.forEach { find(it, it) }
+    }
+
+    /** `webpack://app/./src/x.ts` → `src/x.ts` — the path a reader recognises. */
+    private fun cleanSourceName(s: String): String =
+        s.substringAfter("://").let { if ("://" in s) it.substringAfter('/') else it }.removePrefix("./").trimStart('/')
+            .replace(Regex("""^(?:\.\./)+"""), "")
 
     // ---- real parameter names from a bundle's sourcemap (minification renames them to e,t,r) ----
 
@@ -485,9 +645,16 @@ object CustomFunctionExtractor {
         val rel = relOf(path, root)
         var handled = false
         // (1) `export default { … additionalData … }` — the externals config object.
+        // a registered name the file imports: its declaration in the imported file
+        fun importedFrom(file: File, text: String): (String) -> FunctionCode? = { name ->
+            resolveImport(file, name, text)?.let { declarationIn(it, name, root) }
+        }
         findExportDefaultObject(masked)?.let { (o, c) ->
             when (val v = valueForKey(masked, orig, o, c, "additionalData")) {
-                is Value.Obj -> { absorbAdditionalDataObject(masked, orig, v.open, v.close, cat, rel); cat.sources += rel; handled = true }
+                is Value.Obj -> {
+                    absorbAdditionalDataObject(masked, orig, v.open, v.close, cat, rel, importedFrom(path, orig))
+                    cat.sources += rel; handled = true
+                }
                 is Value.Ident -> {
                     val target = resolveImport(path, v.name, orig)
                     if (target != null && seen.add(target.path)) {
@@ -496,7 +663,7 @@ object CustomFunctionExtractor {
                             val tMasked = mask(tOrig)
                             findExportDefaultObject(tMasked)?.let { (to, tc) ->
                                 val tRel = relOf(target, root)
-                                absorbAdditionalDataObject(tMasked, tOrig, to, tc, cat, tRel)
+                                absorbAdditionalDataObject(tMasked, tOrig, to, tc, cat, tRel, importedFrom(target, tOrig))
                                 cat.sources += tRel
                                 handled = true
                             }
@@ -512,7 +679,10 @@ object CustomFunctionExtractor {
                 val j = m.range.last + 1
                 if (j < masked.length && masked[j] == '{') {
                     val close = matchBrace(masked, j)
-                    if (close != -1) { absorbAdditionalDataObject(masked, orig, j, close, cat, rel); cat.sources += rel; handled = true; break }
+                    if (close != -1) {
+                        absorbAdditionalDataObject(masked, orig, j, close, cat, rel, importedFrom(path, orig))
+                        cat.sources += rel; handled = true; break
+                    }
                 }
             }
         }
@@ -525,7 +695,7 @@ object CustomFunctionExtractor {
             for ((o, c, high) in fallbackAdditionalDataSpans(masked)) {
                 if (o in absorbed) continue
                 if (!high && !objectIsRegistrationShaped(masked, orig, o, c)) continue
-                absorbAdditionalDataObject(masked, orig, o, c, cat, rel)
+                absorbAdditionalDataObject(masked, orig, o, c, cat, rel, importedFrom(path, orig))
                 absorbed += o
                 handled = true
             }
@@ -534,7 +704,7 @@ object CustomFunctionExtractor {
             if (!handled) {
                 for (m in Regex("""\badditionalData\b\s*[:=]\s*([A-Za-z_$][\w$]*)""").findAll(masked)) {
                     val span = resolveIdentObject(masked, orig, m.groupValues[1]) ?: continue
-                    absorbAdditionalDataObject(masked, orig, span.first, span.second, cat, rel)
+                    absorbAdditionalDataObject(masked, orig, span.first, span.second, cat, rel, importedFrom(path, orig))
                     handled = true
                     break
                 }
@@ -542,7 +712,10 @@ object CustomFunctionExtractor {
             if (handled) cat.sources += rel
         }
         // Recover real parameter names from a bundle's sourcemap (minification renamed them to e,t,r).
-        if (handled) applySourceSignatures(cat, signaturesFromSourceMap(path, orig))
+        if (handled) {
+            applySourceSignatures(cat, signaturesFromSourceMap(path, orig))
+            applySourceCode(cat, path, orig, root)
+        }
         return handled
     }
 

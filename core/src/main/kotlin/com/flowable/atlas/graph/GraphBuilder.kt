@@ -599,13 +599,20 @@ object GraphBuilder {
             for ((disp, kind, ns, member) in customFunctionEntries(custom)) {
                 val params = sigs[disp]
                 val label = if (params != null) "$disp($params)" else disp
+                val code = custom.code[disp]
                 addNode(
-                    "customFunction", disp, label, null,
-                    linkedMapOf(
+                    "customFunction", disp, label, code?.takeIf { it.inProject }?.file,
+                    linkedMapOf<String, Any?>(
                         "kind" to kind, "namespace" to ns, "member" to member, "signature" to params,
                         "sources" to custom.sources, "usedBy" to (cfnUsed[disp]?.sorted() ?: emptyList<String>()),
                         "bindings" to (cfnBindings[disp]?.sorted() ?: emptyList<String>()),
-                    ),
+                    ).apply {
+                        // the function itself, so its page shows what `{{ns.fn(x)}}` actually runs
+                        if (code != null) {
+                            put("code", code.text); put("codeFile", code.file); put("line", code.line)
+                            if (code.truncated) put("codeTruncated", true)
+                        }
+                    },
                 )
             }
         }

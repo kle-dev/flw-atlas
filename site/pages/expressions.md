@@ -73,7 +73,10 @@ table, and the Alt-Enter quick fix on an unknown-function warning writes into it
 
 Atlas also **discovers** frontend custom functions automatically by scanning your customisation sources
 for `additionalData`. `--custom-functions <path>` points that scan somewhere specific;
-`--no-custom-functions` turns it off.
+`--no-custom-functions` turns it off. Each function's page in the explorer shows its **implementation** —
+the entry that registers it, or the declaration it names, followed through the registration's import —
+with the file and line it starts on. For a compiled bundle the code comes from its sourcemap, which names a
+path of the build rather than of the project, so it is shown but does not open.
 
 ## What is deliberately not validated
 

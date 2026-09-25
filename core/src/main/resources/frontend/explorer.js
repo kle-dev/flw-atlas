@@ -2567,7 +2567,7 @@ const HL_KEYWORDS={
 function hlFamily(lang){
   const l=String(lang||'').toLowerCase();
   if(l==='groovy') return 'groovy';
-  if(['javascript','js','ecmascript','nashorn','graal.js'].indexOf(l)>=0) return 'js';
+  if(['javascript','js','ecmascript','nashorn','graal.js','typescript','ts','jsx','tsx'].indexOf(l)>=0) return 'js';
   if(l==='python'||l==='jython') return 'py';
   return null;
 }
@@ -5376,6 +5376,14 @@ S.thresholds={id:'thresholds', title:'Thresholds', hint:'the targets the SLA is 
   build:(n,c)=>{ const ts=c.d.thresholds||[]; if(!ts.length) return '';
     return tbl([{k:'type',label:'Type',w:'minmax(12ch,1fr)'},{k:'dur',label:'Duration',w:'minmax(10ch,1fr)',mono:true}],
       ts.map(t=>({hay:elHay(t.type,t.duration), cells:{type:esc(String(t.type||'')), dur:esc(String(t.duration||''))}}))); }};
+/** A custom function's own code — what `{{ns.fn(x)}}` actually runs — with the file and line it is declared at. */
+S.fnCode={id:'fncode', title:'Implementation', hint:'the function as the project declares it',
+  build:(n,c)=>{ const d=c.d; if(!d.code) return '';
+    const f=String(d.codeFile||''), ext=f.split('.').pop().toLowerCase(), lang=['ts','tsx'].indexOf(ext)>=0?'typescript':'javascript';
+    // a file of the project opens in the IDE; a path out of a bundle's sourcemap is only said
+    const at=n.file?lineRef(n.file, d.line):(d.line!=null?':'+esc(String(d.line)):'');
+    return codeblk(d.code, lang, null, {label:esc(f)+at+(n.file?'':' <span class="muted" data-tip="Read from the bundle\'s sourcemap — not a file of this project">(sourcemap)</span>')})+
+      (d.codeTruncated?'<div class="muted">… the rest is in the file</div>':''); }};
 /** The template's actual text — the thing a reader searches for — and each variation with its parameters. */
 S.templateBody={id:'templatebody', title:'Template body', hint:'the text, and every variation of it',
   build:(n,c)=>{ const d=c.d; if(!(d.content||(d.variations||[]).length)) return '';
@@ -5668,7 +5676,7 @@ const PAGES={
   liquibase:{pic:[S.lqBanner, S.lqColumns]},
   expression:{pic:[S.problems]},
   binding:'expression',
-  customFunction:{},
+  customFunction:{pic:[S.fnCode]},
   masterData:{pic:[S.properties]},
   variable:{pic:[S.rw], det:[S.passedAs, S.inScripts, S.usedIn]},
   string:{pic:[S.usedIn]},
