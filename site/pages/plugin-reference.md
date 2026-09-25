@@ -251,6 +251,7 @@ everything except `waivers.json` out of the repository — the same file the CLI
 |---|---|
 | Atlas output folder | `atlas-output` |
 | Artifacts: Explorer HTML · Summary · Overview · Graph JSON · CLAUDE.md · Diagrams (SVG) | Explorer HTML only |
+| Explorer extensions — optional parts of the explorer page: *ER diagram designer* adds the [`#/erd` page](../../explorer/#er-diagram-designer). A page generated without one carries none of its code; changing the choice regenerates the explorer (or, with none on disk yet, offers to generate one) | none |
 | Pulled models folder — where *Pull from Flowable Design* writes the app archives; which environment and which apps is chosen in the Atlas Hub | `flowable-models` |
 
 #### → Generation → Model Constants

@@ -358,8 +358,10 @@ project's tables onto a canvas, show each with its first columns, draw the relat
 name and a cardinality, colour them, and present the result — or export it for a slide.
 
 It is an **explorer extension**, so it is in a page only when it was asked for: `--extension erd` on the
-[CLI](../cli/#options). A page generated without it carries none of its code, has no sidebar entry, and
-treats a `#/erd` link like any page it does not have — it opens the overview.
+[CLI](../cli/#options), or *Settings → Tools → Flowable Atlas → Generation → Explorer extensions* in the
+[IntelliJ plugin](../plugin/reference/). A page generated without it carries none of its code, has no
+sidebar entry, and treats a `#/erd` link like any page it does not have — it opens the overview. In the
+IDE's explorer tab it works too, but the tab cannot download: *Export* copies instead (see below).
 
 ### Which tables
 

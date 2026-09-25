@@ -28,7 +28,7 @@ This is the artifact for a human who wants to *understand* a project. It has its
 [The Atlas explorer](../explorer/).
 
 Optional parts of the page — **explorer extensions** — are included only when asked for, with
-`--extension` on the CLI. `erd` adds the [ER diagram designer](../explorer/#er-diagram-designer) and, with
+`--extension` on the CLI or *Settings → Generation → Explorer extensions* in the plugin. `erd` adds the [ER diagram designer](../explorer/#er-diagram-designer) and, with
 it, every `*.atlas-erd.json` diagram file the project keeps, so the page opens on the diagrams the team has
 committed. Without an extension the page carries none of its code.
 

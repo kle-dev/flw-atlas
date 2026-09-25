@@ -1,6 +1,7 @@
 package com.flowable.atlas.settings
 
 import com.flowable.atlas.explorer.AtlasArtifact
+import com.flowable.atlas.render.ExplorerExtension
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import java.nio.file.Path
 
@@ -19,6 +20,7 @@ class GenerationConfigurableTest : BasePlatformTestCase() {
             settings.atlasArtifacts = mutableSetOf(AtlasArtifact.EXPLORER_HTML)
             settings.atlasOutputDir = FlowableAtlasProjectSettings.DEFAULT_ATLAS_OUTPUT_DIR
             settings.designTargetFolder = FlowableAtlasProjectSettings.DEFAULT_DESIGN_TARGET_FOLDER
+            settings.explorerExtensions = emptySet()
         } finally {
             super.tearDown()
         }
@@ -56,6 +58,23 @@ class GenerationConfigurableTest : BasePlatformTestCase() {
             assertFalse(configurable.isModified)
             configurable.apply()
             assertEquals("models/pulled", settings.designTargetFolder)
+        } finally {
+            configurable.disposeUIResources()
+        }
+    }
+
+    /** One checkbox per explorer extension, bound to the project's choice; nothing is chosen by default. */
+    fun testTheExplorerExtensionsRoundTrip() {
+        val settings = FlowableAtlasProjectSettings.getInstance(project)
+        assertTrue("the designer is opt-in", settings.explorerExtensions.isEmpty())
+        val configurable = GenerationConfigurable(project)
+        try {
+            configurable.createComponent()
+            settings.explorerExtensions = setOf(ExplorerExtension.ERD)
+            configurable.reset()
+            assertFalse(configurable.isModified)
+            configurable.apply()
+            assertEquals(setOf(ExplorerExtension.ERD), settings.explorerExtensions)
         } finally {
             configurable.disposeUIResources()
         }

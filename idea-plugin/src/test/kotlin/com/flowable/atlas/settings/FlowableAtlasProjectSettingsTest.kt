@@ -29,6 +29,29 @@ class FlowableAtlasProjectSettingsTest {
         return s
     }
 
+    /**
+     * The explorer's extensions are stored as ids: a file written by a newer Atlas that knows more of them
+     * still loads, the ids this version does not know are not offered, and nothing is chosen by default.
+     */
+    @Test
+    fun `explorer extensions are ids, known ones offered, none by default`() {
+        assertTrue(settings().explorerExtensions.isEmpty())
+        val s = settings({ it.explorerExtensions = mutableSetOf("erd", "fromTheFuture") })
+        assertEquals(setOf(com.flowable.atlas.render.ExplorerExtension.ERD), s.explorerExtensions)
+        s.explorerExtensions = emptySet()
+        assertTrue(s.getState().explorerExtensions.isEmpty())
+        s.explorerExtensions = setOf(com.flowable.atlas.render.ExplorerExtension.ERD)
+        assertEquals(mutableSetOf("erd"), s.getState().explorerExtensions)
+    }
+
+    @Test
+    fun `a sub-project that only chose an extension is configured`() {
+        val sub = FlowableAtlasProjectSettings.SubProjectState("apps/one")
+        assertTrue(sub.isUnconfigured())
+        sub.explorerExtensions = mutableSetOf("erd")
+        assertFalse("its choice must survive the prune in getState()", sub.isUnconfigured())
+    }
+
     @Test
     fun `namespace entry covers the namespace and its functions`() {
         val s = settings({ it.allowedNamespaces.add("myns") })

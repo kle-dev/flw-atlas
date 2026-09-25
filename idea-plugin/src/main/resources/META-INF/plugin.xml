@@ -118,6 +118,11 @@
               overview Markdown, the graph JSON, the explorer HTML, a CLAUDE.md primer for AI agents.
               Generation runs entirely in-process — no external tools required — and honours the
               project's expression allowlist.</li>
+          <li><b>An ER diagram designer, if you want one</b> — tick <i>Explorer extensions → ER diagram
+              designer</i> under Settings → Generation and the explorer gains a page to drag the project's
+              tables onto a canvas, show their columns and types, draw named 1:1 / 1:n / n:m relations and
+              colour them — for explaining a data model to the business — with SVG/PNG export and a
+              diagram file you can commit.</li>
           <li><b>IDE-native viewing</b> — the embedded explorer follows the IDE light/dark theme
               (switching restyles live) and carries a toolbar with <i>Regenerate Atlas Explorer</i>,
               <i>Reload</i>, <i>Open Atlas Playground</i> and <i>Open in Browser</i>.</li>
@@ -171,6 +176,12 @@
               A diagram refers to tables by name, so it follows the schema: a dropped column leaves its
               card, a new one joins, and a table the project no longer has is drawn dashed from the
               diagram's own snapshot.</li>
+          <li><b>The plugin chooses the explorer's extensions per project.</b> <i>Settings → Tools →
+              Flowable Atlas → Generation → Explorer extensions</i> has a checkbox per extension, stored
+              with the project's other generation settings. Changing it regenerates the explorer, so the
+              page on disk has the designer — or loses it — at once; with no page yet, the IDE offers to
+              generate one. Inside the IDE's explorer tab the designer works, and <i>Export</i> copies the
+              diagram file or the SVG to the clipboard, since the tab cannot download.</li>
         </ul>
         <h3>0.27.2</h3>
         <ul>
@@ -540,11 +551,6 @@
               the form, decision or process a row points at, a field id, a property or parameter name. The
               button shows on the row under the pointer or the keyboard. The copy buttons on the overview's
               chips were never wired, so a click on one opened the chip's node; they copy now.</li>
-          <li><b>The explorer uses a wide window.</b> In a browser on a large screen the overview and the
-              report pages stopped at 1160px and a node's page at 1000px, which left about half of a 2560px
-              window empty beside a squeezed table. They now grow up to 2000px; descriptions keep a readable
-              line length, and a check's description on the health list hugs its words instead of stretching
-              a pill across the row. An IDE tab's width is unchanged.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

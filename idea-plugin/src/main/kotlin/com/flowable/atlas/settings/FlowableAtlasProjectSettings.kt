@@ -7,6 +7,7 @@ import com.flowable.atlas.generate.ConstantFormat
 import com.flowable.atlas.generate.ConstantNaming
 import com.flowable.atlas.generate.dto.DtoClassNamePattern
 import com.flowable.atlas.generate.liquibase.LiquibaseFileNamePattern
+import com.flowable.atlas.render.ExplorerExtension
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.Service
@@ -49,6 +50,7 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         var customFunctionsPath: String
         var atlasOutputDir: String
         var atlasArtifacts: MutableSet<AtlasArtifact>
+        var explorerExtensions: MutableSet<String>
         var constantNaming: ConstantNaming
         var constantFormat: ConstantFormat
         var liquibaseOutputDir: String
@@ -97,6 +99,7 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         override var customFunctionsPath: String = ""
         override var atlasOutputDir: String = DEFAULT_ATLAS_OUTPUT_DIR
         override var atlasArtifacts: MutableSet<AtlasArtifact> = mutableSetOf(AtlasArtifact.EXPLORER_HTML)
+        override var explorerExtensions: MutableSet<String> = mutableSetOf()
         override var constantNaming: ConstantNaming = ConstantNaming.NAME_AND_KEY
         override var constantFormat: ConstantFormat = ConstantFormat.CLASS
         override var liquibaseOutputDir: String = DEFAULT_LIQUIBASE_DIR
@@ -120,7 +123,7 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
             allowedNamespaces.isEmpty() && allowedFunctions.isEmpty() && allowedGroundingRoots.isEmpty() &&
                 customFunctionsEnabled && customFunctionsPath.isEmpty() &&
                 atlasOutputDir == DEFAULT_ATLAS_OUTPUT_DIR &&
-                atlasArtifacts == mutableSetOf(AtlasArtifact.EXPLORER_HTML) &&
+                atlasArtifacts == mutableSetOf(AtlasArtifact.EXPLORER_HTML) && explorerExtensions.isEmpty() &&
                 constantNaming == ConstantNaming.NAME_AND_KEY && constantFormat == ConstantFormat.CLASS &&
                 liquibaseOutputDir == DEFAULT_LIQUIBASE_DIR && liquibaseFileNamePattern == DEFAULT_LIQUIBASE_PATTERN &&
                 liquibaseRenameFind.isEmpty() && liquibaseRenameReplace.isEmpty() &&
@@ -153,6 +156,13 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
 
         /** Which artifacts the "Generate Atlas Explorer" action produces. */
         var atlasArtifacts: MutableSet<AtlasArtifact> = mutableSetOf(AtlasArtifact.EXPLORER_HTML)
+
+        /**
+         * The optional parts of the explorer page ([ExplorerExtension] ids), none by default. Ids rather than
+         * the enum: a file written by a newer Atlas that knows more extensions still loads here, and the ids
+         * this version does not know are simply not offered.
+         */
+        var explorerExtensions: MutableSet<String> = mutableSetOf()
 
         /** How generated model-constant identifiers are derived. */
         var constantNaming: ConstantNaming = ConstantNaming.NAME_AND_KEY
@@ -226,6 +236,8 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
             get() = state.atlasOutputDir; set(v) { state.atlasOutputDir = v }
         override var atlasArtifacts: MutableSet<AtlasArtifact>
             get() = state.atlasArtifacts; set(v) { state.atlasArtifacts = v }
+        override var explorerExtensions: MutableSet<String>
+            get() = state.explorerExtensions; set(v) { state.explorerExtensions = v }
         override var constantNaming: ConstantNaming
             get() = state.constantNaming; set(v) { state.constantNaming = v }
         override var constantFormat: ConstantFormat
@@ -350,6 +362,11 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         set(value) {
             active().atlasArtifacts = if (value.isEmpty()) mutableSetOf(AtlasArtifact.EXPLORER_HTML) else value
         }
+
+    /** The extensions the generated explorer page carries — the known ones, in declaration order. */
+    var explorerExtensions: Set<ExplorerExtension>
+        get() = ExplorerExtension.entries.filterTo(LinkedHashSet()) { it.id in active().explorerExtensions }
+        set(value) { active().explorerExtensions = ExplorerExtension.entries.filter { it in value }.mapTo(LinkedHashSet()) { it.id } }
 
     var constantNaming: ConstantNaming
         get() = active().constantNaming

@@ -1,5 +1,7 @@
 package com.flowable.atlas.explorer
 
+import com.flowable.atlas.render.ExplorerExtension
+import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.openapi.progress.EmptyProgressIndicator
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.util.io.FileUtil
@@ -44,6 +46,25 @@ class AtlasGeneratorServiceTest : BasePlatformTestCase() {
         assertTrue(outcome.toString(), outcome is AtlasGeneratorService.Outcome.Success)
         assertEquals(Files.readString(pages[0]), Files.readString(pages[1]))
         assertTrue(Files.readString(pages[0]).contains("DEMO-P001"))
+    }
+
+    /** The designer is in the page only when the project chose it — in both ways a page is generated. */
+    fun testTheExplorerCarriesTheExtensionsTheProjectChose() {
+        val settings = FlowableAtlasProjectSettings.getInstance(project)
+        val out = Files.createDirectories(dir.toPath().resolve("atlas-output"))
+        val page = out.resolve("a.explorer.html")
+        val gen = AtlasGeneratorService.getInstance(project)
+        try {
+            gen.generateExplorers(dir.toPath(), listOf(page), EmptyProgressIndicator())
+            assertFalse("not chosen, not there", Files.readString(page).contains("ATLAS_EXT.erd="))
+            settings.explorerExtensions = setOf(ExplorerExtension.ERD)
+            gen.generateExplorers(dir.toPath(), listOf(page), EmptyProgressIndicator())
+            assertTrue("chosen, carried", Files.readString(page).contains("ATLAS_EXT.erd="))
+            gen.generateAll(dir.toPath(), out, EmptyProgressIndicator(), setOf(AtlasArtifact.EXPLORER_HTML))
+            assertTrue("…by the full generator too", Files.readString(out.resolve("${dir.name}.explorer.html")).contains("ATLAS_EXT.erd="))
+        } finally {
+            settings.explorerExtensions = emptySet()
+        }
     }
 
     fun testAPageRemembersTheFolderItWasMadeFrom() {

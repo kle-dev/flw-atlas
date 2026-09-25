@@ -221,8 +221,10 @@ card says so. On a local IDE nothing changes: the file is read from disk.
 
 Generate it from **Tools → Flowable Atlas → Generate → Atlas Explorer…** — the page opens as a
 tab the moment it is written — reopen it later with **Open Atlas Explorer**, and choose which artifacts a
-run produces in *Settings → Tools → Flowable Atlas → Generation*. Full detail:
-[The Atlas explorer](../explorer/).
+run produces in *Settings → Tools → Flowable Atlas → Generation*. The same page adds optional parts to the
+explorer: *Explorer extensions → ER diagram designer* gives it an [`#/erd` page](../explorer/#er-diagram-designer)
+to drag the project's tables onto a canvas and draw the relations between them — for explaining a data model
+to people who do not read changelogs. Full detail: [The Atlas explorer](../explorer/).
 
 ### In and out parameter tracing
 

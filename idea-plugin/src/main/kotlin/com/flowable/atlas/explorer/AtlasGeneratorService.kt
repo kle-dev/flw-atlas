@@ -64,7 +64,7 @@ class AtlasGeneratorService(private val project: Project) {
             val result = extract(root, indicator, waiverFile(outputs.first().parent))
 
             indicator.text = "Rendering Atlas explorer…"
-            val html = ExplorerHtmlRenderer.render(result, root, waiverAuthor = Waivers.defaultAuthor(root))
+            val html = ExplorerHtmlRenderer.render(result, root, waiverAuthor = Waivers.defaultAuthor(root), extensions = extensions())
             // The last moment a Cancel can still leave the old pages as they were.
             indicator.checkCanceled()
             for (out in outputs) out.toFile().writeText(html, Charsets.UTF_8)
@@ -76,6 +76,9 @@ class AtlasGeneratorService(private val project: Project) {
             LOG.warn("Atlas explorer generation failed", e)
             Outcome.Failure("Failed to generate the Atlas explorer: ${e.message}", e.stackTraceToString())
         }
+
+    /** The optional parts of the explorer page the project chose (Settings → Generation → Explorer extensions). */
+    private fun extensions() = FlowableAtlasProjectSettings.getInstance(project).explorerExtensions
 
     /** Generate the selected [artifacts] (summary, overview, graph, explorer, CLAUDE.md) into [outputDir]. */
     fun generateAll(
@@ -101,7 +104,9 @@ class AtlasGeneratorService(private val project: Project) {
                 // and pretty-printed it, which on a large project meant a multi-megabyte file in the
                 // user's repo.
                 AtlasArtifact.GRAPH_JSON to { GraphJsonRenderer.render(result) },
-                AtlasArtifact.EXPLORER_HTML to { ExplorerHtmlRenderer.render(result, root, waiverAuthor = Waivers.defaultAuthor(root)) },
+                AtlasArtifact.EXPLORER_HTML to {
+                    ExplorerHtmlRenderer.render(result, root, waiverAuthor = Waivers.defaultAuthor(root), extensions = extensions())
+                },
                 // The file spells its sibling paths from the project root and only names the ones that
                 // are actually being written — the user picks the artifact set in Settings → Generation.
                 AtlasArtifact.CLAUDE_MD to {

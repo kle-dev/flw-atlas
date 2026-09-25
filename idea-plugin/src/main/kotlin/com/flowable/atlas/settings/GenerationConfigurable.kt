@@ -2,6 +2,8 @@ package com.flowable.atlas.settings
 
 import com.flowable.atlas.FlowableAtlasBundle
 import com.flowable.atlas.explorer.AtlasArtifact
+import com.flowable.atlas.explorer.AtlasGenerationRunner
+import com.flowable.atlas.render.ExplorerExtension
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogPanel
@@ -29,6 +31,9 @@ class GenerationConfigurable(project: Project) : AtlasProjectConfigurable(
     FlowableAtlasBundle.message("configurable.atlas.generation"),
     "com.flowable.atlas.settings.generation",
 ) {
+
+    /** Set when an Apply changed which extensions the explorer carries — the page then regenerates it. */
+    private var extensionsChanged = false
 
     override fun createPanel(): DialogPanel {
         val settings = FlowableAtlasProjectSettings.getInstance(project)
@@ -74,6 +79,30 @@ class GenerationConfigurable(project: Project) : AtlasProjectConfigurable(
                     )
                 }
             }
+            // Parts of the explorer page rather than artifacts of their own: the page is still one file, it just
+            // carries more. One checkbox per ExplorerExtension, so the next extension appears here by itself.
+            group("Explorer Extensions") {
+                row {
+                    comment(
+                        "Optional parts of the explorer page. A page generated without one carries none of its code; " +
+                            "changing this regenerates the explorer.",
+                    )
+                }
+                for (ext in ExplorerExtension.entries) {
+                    row {
+                        checkBox(ext.label)
+                            .comment(ext.description + ".")
+                            .bindSelected(
+                                { ext in settings.explorerExtensions },
+                                { selected ->
+                                    val next = if (selected) settings.explorerExtensions + ext else settings.explorerExtensions - ext
+                                    if (next != settings.explorerExtensions) extensionsChanged = true
+                                    settings.explorerExtensions = next
+                                },
+                            )
+                    }
+                }
+            }
             // Where the pull lands is the one fact about a pull that is a fact about *this project* rather
             // than about a server or a moment — the rest (environment, workspace, apps) is chosen in the Hub.
             // A page of its own held this single row; "where does Atlas write into my project" is the
@@ -97,5 +126,16 @@ class GenerationConfigurable(project: Project) : AtlasProjectConfigurable(
                 }
             }
         }
+    }
+
+    /**
+     * An extension is part of the page, so the page that exists should have it — or lose it — now, not on
+     * some later generate the user has to remember. With no page on disk, regenerate says so and offers to
+     * generate one.
+     */
+    override fun doApply() {
+        if (!extensionsChanged) return
+        extensionsChanged = false
+        AtlasGenerationRunner.regenerate(project)
     }
 }

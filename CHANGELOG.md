@@ -35,6 +35,11 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   import; what someone changes there stays in their browser, marked *changed here*, until they export it
   again. A diagram refers to tables by name, so it follows the schema: a dropped column leaves its card, a
   new one joins, and a table the project no longer has is drawn dashed from the diagram's own snapshot.
+- **The plugin chooses the explorer's extensions per project.** *Settings → Tools → Flowable Atlas →
+  Generation → Explorer extensions* has a checkbox per extension, stored with the project's other generation
+  settings. Changing it regenerates the explorer, so the page on disk has the designer — or loses it — at
+  once; with no page yet, the IDE offers to generate one. Inside the IDE's explorer tab the designer works,
+  and *Export* copies the diagram file or the SVG to the clipboard, since the tab cannot download.
 
 ## 0.27.2
 
