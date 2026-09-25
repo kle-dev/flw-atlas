@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Deliberately orphaned: no service and no data object references this table, so the
-     changelog-authority check has one real "orphan" row to report. -->
+<!-- Deliberately orphaned: it says it backs `legacyAuditService`, which the project no longer defines,
+     and no service or data object references its table — the changelog-authority check's one real
+     "orphan" row. (A changelog that names no service at all is the application's own table and is
+     not reported.) -->
 <databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog">
+  <property name="serviceDefinitionReferences" value="legacyAuditService"/>
   <changeSet id="003-legacy-audit" author="demo">
     <createTable tableName="legacy_audit">
       <column name="id_" type="VARCHAR(64)"/>

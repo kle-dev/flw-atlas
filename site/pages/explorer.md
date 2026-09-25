@@ -191,7 +191,8 @@ What each page asks:
   `{path variable}` has a parameter, and the handler method; and, where no changelog lets the schema
   coverage do it, the service's column mappings against the data object's fields;
 - **a data object and a Liquibase changelog** — the schema coverage table: every changelog column
-  through the service mapping to the data-object field, and where the chain breaks;
+  through the service mapping to the data-object field, and where the chain breaks — a mapped column the
+  table no longer has names the change set that dropped or renamed it;
 - **a decision** — every model that runs it: an input the caller never writes, a result it never reads;
 - **a form or page** — every call it makes (buttons, data sources, REST calls with the verb checked
   against the handler — a link, a link button and a data table's row link are where the form goes, not
@@ -489,8 +490,12 @@ The explorer never presents a guess as a fact:
   finding is labelled *advice* and drawn grey — in the pills, the health rows, the diagram badges and
   the findings filter alike. The severity `graph.json` records for advice (always `warning`) is what the
   summary and `--fail-on` read; the page only stops printing it where it contradicted the heading.
-- Liquibase changelogs carry **live / superseded / orphan**, and services carry per-column schema
-  coverage badges. The **Schema coverage** table — every column from the changelog through the service
+- Liquibase changelogs carry **live / copy / superseded / orphan**, and services carry per-column schema
+  coverage badges. A changelog's page shows the columns of its tables as they stand once every change set
+  has run, with the change set that added each one and the columns and tables a later change set dropped
+  or renamed away; its *Details* tab lists every change set in run order — what it changes, and whether it
+  ran, was skipped by its precondition or had already run from another file (see
+  [how changelogs are read](../checks/#how-changelogs-are-read)). The **Schema coverage** table — every column from the changelog through the service
   mapping to the data object field — is on all three pages of the chain: the service's, and the data
   object's and the changelog's, which show the table of every service whose coverage names them. A column
   mapping that pairs a field with another field's column is marked **`⇄ crossed`** in that table and in

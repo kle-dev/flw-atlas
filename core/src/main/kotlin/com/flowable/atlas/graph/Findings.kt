@@ -118,7 +118,10 @@ object Findings {
                     val authority = data["authority"] as? Map<String, Any?> ?: continue
                     when (authority["status"]) {
                         "orphan" -> add("changelogIssues", WARNING, n,
-                            "changelog is referenced by no service or data object")
+                            (authority["namesMissing"] as? List<*>)?.takeIf { it.isNotEmpty() }?.let { names ->
+                                "changelog names service" + (if (names.size == 1) " " else "s ") + names.joinToString(", ") { "`$it`" } +
+                                    ", which the project does not define, and no service or data object references it"
+                            } ?: "changelog is referenced by no service or data object")
                         "superseded" -> add("changelogIssues", WARNING, n,
                             "superseded by " + ((authority["supersededBy"] as? List<*>)
                                 ?.joinToString(", ") { it.toString() } ?: "another changelog"))

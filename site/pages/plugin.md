@@ -644,7 +644,9 @@ can see every gap at once — and shows each service's table on its data object'
 too, wherever you started from.
 
 Changelogs are parsed and replayed with a small dedicated reader — no XSD, no Liquibase runtime on the
-classpath — which is why this works regardless of how Liquibase is wired in your project.
+classpath — which is why this works regardless of how Liquibase is wired in your project. The inspection
+replays the project's other changelogs too: a column a later changelog drops or renames, as a `v3/` folder
+does to a `v2/` one, is not flagged where it was declared.
 
 ### Flowable Design sync
 

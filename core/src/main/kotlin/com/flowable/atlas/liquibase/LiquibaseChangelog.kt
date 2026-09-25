@@ -1,9 +1,8 @@
 package com.flowable.atlas.liquibase
 
 /**
- * Parsing + replay of Liquibase changelogs, ported from `flowable_atlas.py`
- * (`_liquibase_ops` / `_liquibase_replay` / `_loose` / `_liquibase_key`). Regex-based over the raw
- * text — no XSD, no Liquibase runtime — so it works on any changelog the IDE has open.
+ * One changelog's schema changes as the IDE inspection needs them, read by [LiquibaseParser] — the reader
+ * the whole Liquibase coverage uses, so the editor and the explorer see the same change sets.
  *
  * The point is to line a changelog's columns up against the Flowable `.service` model that generated
  * it: a column present in the changelog but absent from the service's `columnMappings` is a schema
@@ -23,57 +22,28 @@ object LiquibaseChangelog {
 
     data class Column(val name: String, val type: String?)
 
-    private val BLOCK = Regex("<(createTable|addColumn)\\b([^>]*?)>(.*?)</\\1\\s*>", setOf(RegexOption.DOT_MATCHES_ALL))
-    private val COLUMN = Regex("<column\\b([^>]*?)/?>")
-    private val RENAME_COL = Regex("<renameColumn\\b([^>]*?)/?>", setOf(RegexOption.DOT_MATCHES_ALL))
-    private val DROP_COL = Regex("<dropColumn\\b([^>]*?)(?:/>|>(.*?)</dropColumn\\s*>)", setOf(RegexOption.DOT_MATCHES_ALL))
-    private val MODIFY_TYPE = Regex("<modifyDataType\\b([^>]*?)/?>", setOf(RegexOption.DOT_MATCHES_ALL))
-    private val RENAME_TABLE = Regex("<renameTable\\b([^>]*?)/?>", setOf(RegexOption.DOT_MATCHES_ALL))
-    private val DROP_TABLE = Regex("<dropTable\\b([^>]*?)/?>", setOf(RegexOption.DOT_MATCHES_ALL))
     private val SERVICE_REFS = Regex("name=\"serviceDefinitionReferences\"\\s+value=\"([^\"]*)\"")
     private val TABLE_NAME = Regex("tableName=\"([^\"]+)\"")
 
-    /** Parse a changelog into an ordered list of schema-change ops (document order preserved). */
+    /**
+     * The schema-change ops of a changelog's change sets, in document order — read by [LiquibaseParser],
+     * so a change inside a `<rollback>` or a change set commented out is not one. Empty for text that is
+     * not a well-formed changelog (a file mid-edit): no verdict beats one read off half a file.
+     */
     fun parseOps(text: String): List<Op> {
-        val found = ArrayList<Pair<Int, Op>>()
-        for (m in BLOCK.findAll(text)) {
-            val cols = COLUMN.findAll(m.groupValues[3]).mapNotNull { cm ->
-                val nm = attr(cm.groupValues[1], "name") ?: return@mapNotNull null
-                Column(nm, attr(cm.groupValues[1], "type"))
-            }.toList()
-            if (cols.isNotEmpty()) {
-                found.add(m.range.first to Op.TableColumns(m.groupValues[1], attr(m.groupValues[2], "tableName"), cols))
-            }
-        }
-        for (m in RENAME_COL.findAll(text)) {
-            val a = m.groupValues[1]
-            val old = attr(a, "oldColumnName")
-            val new = attr(a, "newColumnName")
-            if (old != null && new != null) {
-                found.add(m.range.first to Op.RenameColumn(attr(a, "tableName"), old, new, attr(a, "columnDataType")))
-            }
-        }
-        for (m in DROP_COL.findAll(text)) {
-            val a = m.groupValues[1]
-            val names = ArrayList<String>()
-            attr(a, "columnName")?.let { names.add(it) }
-            COLUMN.findAll(m.groupValues.getOrElse(2) { "" }).forEach { cm -> attr(cm.groupValues[1], "name")?.let { names.add(it) } }
-            if (names.isNotEmpty()) found.add(m.range.first to Op.DropColumn(attr(a, "tableName"), names))
-        }
-        for (m in MODIFY_TYPE.findAll(text)) {
-            val a = m.groupValues[1]
-            attr(a, "columnName")?.let { found.add(m.range.first to Op.ModifyType(attr(a, "tableName"), it, attr(a, "newDataType"))) }
-        }
-        for (m in RENAME_TABLE.findAll(text)) {
-            val a = m.groupValues[1]
-            val old = attr(a, "oldTableName")
-            val new = attr(a, "newTableName")
-            if (old != null && new != null) found.add(m.range.first to Op.RenameTable(old, new))
-        }
-        for (m in DROP_TABLE.findAll(text)) {
-            attr(m.groupValues[1], "tableName")?.let { found.add(m.range.first to Op.DropTable(it)) }
-        }
-        return found.sortedBy { it.first }.map { it.second }
+        val changelog = try { LiquibaseParser.parse(text) } catch (e: LiquibaseParser.ParseException) { null } ?: return emptyList()
+        return changelog.changeSets.flatMap { cs -> cs.changes.mapNotNull(::op) }
+    }
+
+    private fun op(c: LbChange): Op? = when (c) {
+        is LbChange.CreateTable -> Op.TableColumns("createTable", c.table, c.columns.map { Column(it.name, it.type) }).takeIf { c.columns.isNotEmpty() }
+        is LbChange.AddColumn -> Op.TableColumns("addColumn", c.table, c.columns.map { Column(it.name, it.type) }).takeIf { c.columns.isNotEmpty() }
+        is LbChange.RenameColumn -> Op.RenameColumn(c.table, c.oldName, c.newName, c.type)
+        is LbChange.DropColumn -> Op.DropColumn(c.table, c.columns)
+        is LbChange.ModifyDataType -> Op.ModifyType(c.table, c.column, c.type)
+        is LbChange.RenameTable -> Op.RenameTable(c.oldName, c.newName)
+        is LbChange.DropTable -> Op.DropTable(c.table)
+        is LbChange.SqlFile, is LbChange.Unread -> null
     }
 
     /**
@@ -141,9 +111,6 @@ object LiquibaseChangelog {
             .replace(Regex("\\.xml$", RegexOption.IGNORE_CASE), "")
             .replace(Regex("\\.sql$", RegexOption.IGNORE_CASE), "")
     }
-
-    private fun attr(attrs: String, name: String): String? =
-        Regex("\\b${Regex.escape(name)}\\s*=\\s*\"([^\"]*)\"").find(attrs)?.groupValues?.get(1)
 
     /**
      * The Liquibase column `type` Flowable Design generates for a service `columnMappings[].type`,

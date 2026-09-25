@@ -285,6 +285,34 @@ class FlowableFeaturesTest : BasePlatformTestCase() {
         assertTrue("varchar palette entry expected too: $strings", strings.any { it.contains("varchar.type") })
     }
 
+    fun testLiquibaseCoverageHonoursADropInALaterVersionFolder() {
+        addDatabaseService()
+        myFixture.enableInspections(LiquibaseCoverageInspection::class.java)
+        // v3 drops FAX_: the table the service maps no longer has it, so v2's declaration is no gap
+        myFixture.addFileToProject(
+            "src/main/resources/db/changelog/v3/order.xml",
+            """<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog">
+                 <changeSet id="2" author="demo"><dropColumn tableName="DB_ORDER" columnName="FAX_"/></changeSet>
+               </databaseChangeLog>""",
+        )
+        val v2 = myFixture.addFileToProject(
+            "src/main/resources/db/changelog/v2/order.xml",
+            """<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog">
+                 <changeSet id="1" author="demo">
+                   <createTable tableName="DB_ORDER">
+                     <column name="ID_" type="varchar(255)"/>
+                     <column name="FAX_" type="varchar(255)"/>
+                     <column name="BOGUS_" type="varchar(255)"/>
+                   </createTable>
+                 </changeSet>
+               </databaseChangeLog>""",
+        )
+        myFixture.configureFromExistingVirtualFile(v2.virtualFile)
+        val flagged = myFixture.doHighlighting().mapNotNull { it.description }.filter { it.contains("is not mapped") }
+        assertTrue("BOGUS_ stays in the table: $flagged", flagged.any { it.contains("'BOGUS_'") })
+        assertFalse("FAX_ is dropped in v3: $flagged", flagged.any { it.contains("'FAX_'") })
+    }
+
     fun testLiquibaseCoverageAcceptsMappedColumns() {
         addDatabaseService()
         myFixture.enableInspections(LiquibaseCoverageInspection::class.java)

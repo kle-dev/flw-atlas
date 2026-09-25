@@ -212,24 +212,59 @@ parameter used twice is reported twice.
 
 ### `changelogIssues` — Liquibase authority
 
-A changelog is reported when it is:
+The changelogs are first replayed the way Liquibase runs them (see [how changelogs are read](#how-changelogs-are-read)
+below). A changelog is then reported when it is:
 
-The same changelog loose under `src/main/resources` and inside the app's `.bar` is one changelog — the
-loose copy is the one read — so a project that keeps its extracted changelogs beside the export does not
-see each copy "superseded" by the other.
+- **orphan** — nothing explains why its table exists: a schema definition no service or data object
+  references, or an application changelog whose `serviceDefinitionReferences` names a service the project
+  does not define, which the finding names. An application changelog that names no service, and whose
+  tables no service maps, backs a table the code owns — a JPA entity, a lock table — and is not reported;
+- **superseded** — the services of its table are bound to another changelog, of another Liquibase run,
+  and the finding names it: typically an older schema definition the app still carries for a table the
+  project's own changelog builds. Changelogs of one run are one history and never supersede each other —
+  the file that adds a column to another file's table is part of that table.
 
-Changelogs are read wherever they are: loose under `src/main/resources`, and **inside an archive** — a
-Design export packs `liquibase-<key>.data.changelog.xml` next to the models it belongs to, and until
-{{VERSION}} those were invisible, so an app's reference to its own changelog was reported as a missing model
-and the service it describes had no schema coverage.
+Not reported: a schema definition with the same `logicalFilePath` as one of the application's changelogs
+is the same Liquibase changelog. The app carries a copy, the application runs its own, and the explorer
+marks it **copy**. The same file loose and inside a `.bar`, or exported into several folders, is one
+changelog as well.
 
-- **orphan** — no service and no data object references it, so nothing in the models explains why that
-  table exists;
-- **superseded** — a later changelog provides the same table, and the finding names the successors.
+#### How changelogs are read
+
+Changelogs are read wherever they are: loose under `src/main/resources`, and inside an archive — a Design
+export packs `liquibase-<key>.data.changelog.xml` next to the models it belongs to. They reach the
+database two ways, and are replayed the same two ways:
+
+- **The application's changelogs** — loose files that are not a `.data.changelog.xml` — are one run into
+  one database, as the application's Liquibase applies them at startup. A master runs its `<include>`s
+  and `<includeAll>`s where they stand, and an `includeAll` takes its folder recursively in Liquibase's
+  plain path order: `v10/` runs before `v2/`. A changelog no master includes runs after the masters, in
+  natural path order. Changelogs under a test source set are replayed apart from the application's.
+- **Each schema definition** — a `.data.changelog.xml` — is a run of its own: the data-object engine
+  applies it on request, against a changelog table of its own. Every copy of one definition, such as the
+  same app exported into `v2/` and `v3/`, runs into the same history, in natural path order.
+
+Within a run, a change set is identified the way Liquibase identifies it: by id, author and
+`logicalFilePath`, or the path it was included by. One that already ran does not run again, so a
+changelog kept in several version folders under one logical path builds its table once. A precondition is
+evaluated against the tables built so far: `tableExists`, `columnExists`, `changeSetExecuted`, `not`,
+`and` and `or`. A table no changelog of the project creates, such as an engine table, counts as neither
+there nor missing. A check that needs a live database, such as `sqlCheck` or `dbms`, passes. A change set
+whose precondition fails is skipped unless `onFail` is `WARN`. Nothing inside a `<rollback>` or an XML
+comment runs. For `<sql>`, `<sqlFile>` and formatted-SQL changelogs, the `CREATE TABLE`, `ALTER TABLE`
+and `DROP TABLE` statements are read. Properties such as `${varchar.type}` are expanded. A changelog that
+is not well-formed XML is a `parseIssues` error, because Liquibase stops on it at startup.
+
+The table a service maps is the one the application builds: when one of the project's own changelogs
+shapes the service's table, that changelog describes it, whichever schema definition the service model
+names. The definition is applied on request only, and the project's copy is usually the newer one.
 
 ### `schemaGaps` — the database and the models disagree
 
 Per column, walking Liquibase → service → data object:
+
+The table is the one Liquibase leaves once every change set has run, so a column a later change set
+drops is not a gap, and one it adds is compared too.
 
 A service that no data object binds reports no "used by no data object" rows: it is used directly, and
 the row would be true of every mapped column and say nothing about any one of them.

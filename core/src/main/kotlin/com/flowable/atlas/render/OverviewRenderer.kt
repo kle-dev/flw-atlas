@@ -942,7 +942,7 @@ object OverviewRenderer {
      * The data layer as one chain: **service ↔ Liquibase table ↔ data object**, column by column.
      *
      * `LiquibaseCoverage` replays the changelogs, matches every column against the service mapping and
-     * the data objects that consume it, and records changelog authority (live / superseded / orphan). It
+     * the data objects that consume it, and records changelog authority (live / copy / superseded / orphan). It
      * is the most expensive analysis in `:core` — and its result reached only the HTML explorer's schema
      * tab. A report that lists a service, a data object and a changelog separately leaves the reader to
      * work out whether they actually line up, which is the one thing the analysis already knows.
@@ -978,7 +978,11 @@ object OverviewRenderer {
                 val what = when (r["status"]) {
                     "no-service" -> "in Liquibase only — the service does not map it"
                     "no-dataobject" -> "mapped by the service but no data object uses it"
-                    "extra-service" -> "mapped by the service but not in any changelog"
+                    "extra-service" -> asMap(r["removed"]).takeIf { it.isNotEmpty() }?.let { rm ->
+                        val by = asMap(rm["by"])
+                        (if (truthy(rm["renamedTo"])) "renamed to `${pyStr(rm["renamedTo"])}`" else "dropped") +
+                            " by change set `${pyStr(by["changeSet"])}` of `${pyStr(by["file"])}`, yet mapped by the service"
+                    } ?: "mapped by the service but not in any changelog"
                     else -> pyStr(r["status"])
                 }
                 val sqlType = Fmt.list(r["sqlType"]).let { if (it.isEmpty()) "" else " ($it)" }
@@ -993,10 +997,12 @@ object OverviewRenderer {
         for (cl in changelogs) {
             val auth = asMap(cl["authority"])
             val status = auth["status"]?.toString() ?: continue
-            if (status == "live") continue
+            // a copy of the application's own changelog is the same changelog, not one in doubt
+            if (status == "live" || status == "copy") continue
             val detail = when (status) {
                 "superseded" -> "superseded by ${Fmt.codeList(auth["supersededBy"])}"
-                "orphan" -> "referenced by no service or data object"
+                "orphan" -> if (truthy(auth["namesMissing"])) "names ${Fmt.codeList(auth["namesMissing"])}, which the project does not define"
+                    else "referenced by no service or data object"
                 else -> status
             }
             L.add("- ⚠ changelog `${pyStr(cl["key"])}` — $detail — `${pyStr(cl["file"])}`")

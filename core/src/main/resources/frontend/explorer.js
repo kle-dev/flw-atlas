@@ -1400,7 +1400,9 @@ function schemaCoverageHtml(sc, onlyGaps, leadChipId, crossed, sect){
   // the service column wraps: its ⇄ crossed marker sits last, and a clipped cell cut exactly that off
   return gapTable([{k:'lb',label:'Liquibase column',w:'minmax(14ch,1.4fr)',mono:true},{k:'sv',label:'Service mapping',w:'minmax(14ch,1.4fr)',mono:true,cls:'wrap'},{k:'do',label:'Data object field',w:'minmax(12ch,1.2fr)',mono:true,opt:true}],
     (sc.rows||[]).map(r=>{
-      const lb = r.inLiquibase ? esc(r.sql)+(r.sqlType?' <span class="muted">'+esc(r.sqlType)+'</span>':'') : '<span class="miss">— not in changelog</span>';
+      const lb = r.inLiquibase ? esc(r.sql)+(r.sqlType?' <span class="muted">'+esc(r.sqlType)+'</span>':'')
+        : r.removed ? '<span class="miss">— '+(r.removed.renamedTo?'renamed to '+esc(r.removed.renamedTo):'dropped')+' by '+csRef(r.removed.by)+'</span>'
+        : '<span class="miss">— not in changelog</span>';
       const cr = crossOf(r);
       const sv = r.inService ? esc(r.service||r.serviceCol||'')+
           (r.serviceCol&&looseCol(r.serviceCol)!==looseCol(r.service||'')?' <span class="muted">'+esc(r.serviceCol)+'</span>':'')+
@@ -3250,6 +3252,8 @@ function authBadge(n){
     return '<span class="pill pill-ok" title="Live / authoritative'+(by?' — referenced by '+esc(by):'')+'">live</span>'; }
   if(a.status==='superseded'){ const by=(a.supersededBy||[]).join(', ');
     return '<span class="pill pill-warn" title="Superseded — the same table is provided by '+esc(by||'a referenced changelog')+'">superseded</span>'; }
+  if(a.status==='copy')
+    return '<span class="pill pill-info" title="Copy — the same changelog as the application’s '+esc(a.copyOf||'')+', which is the one that runs">copy</span>';
   return '<span class="pill pill-bad" title="Orphan — not referenced by any service or data object">orphan</span>';
 }
 
@@ -4893,11 +4897,20 @@ const FACTS={
     if(chs.length) x.rows.push(['Channels',{html:chs.map(c=>vlink('channel:'+c,c)).join(', ')}]); },
   bot(n,d,x){ x.add('Kind',d.platform?'Flowable platform bot':'project-defined bot'); },
   liquibase(n,d,x){ const a=d.authority||{};
-    x.add('Status', a.status==='live'?'live (authoritative)':a.status==='superseded'?'superseded revision':a.status==='orphan'?'orphan — unreferenced':undefined);
+    x.add('Kind', d.origin==='definition'?'schema definition — deployed with an app, applied on request'
+      :d.origin==='test'?'test changelog — replayed apart from the application'
+      :d.origin==='application'?'application changelog — run by the application’s Liquibase at startup':undefined);
+    x.add('Status', a.status==='live'?'live (authoritative)':a.status==='superseded'?'superseded revision':a.status==='orphan'?'orphan — unreferenced'
+      :a.status==='copy'?'copy of an application changelog':undefined);
+    if(a.copyOf) x.rows.push(['Runs as',{html:vlink('liquibase:'+a.copyOf, a.copyOf)}]);
     if((a.referencedBy||[]).length) x.rows.push(['Referenced by',{html:a.referencedBy.map(k=>vlink('service:'+k, k)).join(', ')}]);
     if((a.supersededBy||[]).length) x.rows.push(['Live definition',{html:a.supersededBy.map(k=>vlink('liquibase:'+k, k)).join(', ')}]);
     const tables=d.tables||[], eff=d.effectiveTables||[];     // both read: the raw list is the same fact as the effective one
-    x.mono('Tables',(eff.length?eff:tables).join(', ')); },
+    x.mono('Tables',(eff.length?eff:tables).join(', '));
+    if(d.logicalFilePath) x.mono('Logical path', d.logicalFilePath);
+    // every copy of a definition runs into one history: the table is what applying all of them leaves
+    if((d.revisions||[]).length) x.rows.push(['Revisions',{html:d.revisions.map(r=>'<span class="mono" data-tip="'+esc(r)+'">'+esc(lbFileLabel(r))+'</span>'+openBtn(r)).join('<br>')}]);
+    if((d.includesMissing||[]).length) x.mono('Includes not in the project', d.includesMissing.join(', ')); },
 
 
   expression(n,d,x){
@@ -5548,29 +5561,71 @@ S.methods={id:'methods', title:'Declared methods', hint:'every method, and the m
 S.lqBanner={raw:true, build:(n,c)=>{ const d=c.d, a=d.authority||{};
   if(a.status==='superseded'){ const chips=(a.supersededBy||[]).map(k=>nodeChip('liquibase:'+k)).join('');
     return '<div class="authnote authnote-old">⚠ Superseded revision — the live definition of <b>'+esc((d.effectiveTables||[]).join(', '))+'</b> is referenced elsewhere. These columns reflect an older revision of the same table.'+(chips?'<div class="nodechips">'+chips+'</div>':'')+'</div>'; }
-  if(a.status==='orphan') return '<div class="authnote authnote-orphan">⚠ Orphan changelog — no service or data object references it. It may be dead/legacy or referenced only at runtime.</div>';
+  if(a.status==='orphan') return '<div class="authnote authnote-orphan">⚠ Orphan changelog — '+
+    ((a.namesMissing||[]).length?'it names '+a.namesMissing.map(k=>'<span class="mono">'+esc(k)+'</span>').join(', ')+', which the project does not define, and ':'')+
+    'no service or data object references it. It may be dead/legacy or referenced only at runtime.</div>';
+  if(a.status==='copy'){ const chip=nodeChip('liquibase:'+a.copyOf);
+    return '<div class="authnote">The same changelog as the application’s own <b>'+esc(a.copyOf||'')+'</b> — one <span class="mono">logicalFilePath</span>, so one Liquibase history. '+
+      'The app carries this copy; the application runs its own at startup, and a service’s table is read from that one.'+(chip?'<div class="nodechips">'+chip+'</div>':'')+'</div>'; }
   return ''; }};
-/** Every column the changelog declares, per table, with how far each one is mapped through when a
- *  service references the changelog. */
-S.lqColumns={id:'columns', title:'Columns', hint:'per table; the dot says how far a column is mapped through',
+/** A changelog file by the part a reader recognises it by: an archive entry with its archive's name, a
+ *  loose file with its folder — `Configuration-bar.zip!liquibase-X.data.changelog.xml`, `v3/customer.xml`. */
+function lbFileLabel(f){
+  f=String(f||''); const i=f.lastIndexOf('!');
+  if(i>=0) return f.slice(0,i).split('/').pop()+'!'+f.slice(i+1).split('/').pop();
+  return f.split('/').slice(-2).join('/');
+}
+/** A change set as a cell — `change set 4` in the page's own file, the file's label before it elsewhere —
+ *  with its line opening in the IDE. */
+function csRef(r, own){
+  if(!r||!r.file) return '';
+  return (r.file===own?'':'<span data-tip="'+esc(r.file)+'">'+esc(lbFileLabel(r.file))+'</span> · ')+
+    'change set <span class="mono">'+esc(String(r.changeSet))+'</span>'+lineRef(r.file, r.line);
+}
+/** Every column of the tables the changelog shapes, as they stand once every change set has run — which
+ *  change set added each one, how far each is mapped through when a service reads the changelog, and the
+ *  columns a later change set dropped or renamed away. */
+S.lqColumns={id:'columns', title:'Columns', hint:'per table, after every change set has run; the dot says how far a column is mapped through',
   count:(n,c)=>(c.d.columns||[]).length,
-  build:(n,c)=>{ const d=c.d, cs=d.columns||[]; if(!cs.length) return '';
+  build:(n,c)=>{ const d=c.d, cs=d.columns||[], gone=d.dropped||[], goneT=d.droppedTables||[];
+    if(!cs.length&&!gone.length&&!goneT.length) return '';
     const cov=d.coverage;                    // present only when a service references this changelog
     const inS=cov?new Set(cov.service||[]):null, inD=cov?new Set(cov.dataObject||[]):null;
     const stOf=k=>!inS.has(k)?'bad':(!inD.has(k)?'warn':'good');
     const stTitle={bad:'not mapped by any service',warn:'mapped in service, but no data object field',good:'mapped through to a data object'};
     const byT={}; cs.forEach(x=>{ (byT[x.table||'(table)']=byT[x.table||'(table)']||[]).push(x); });
+    const goneBy={}; gone.forEach(x=>{ (goneBy[x.table||'(table)']=goneBy[x.table||'(table)']||[]).push(x); });
+    Object.keys(goneBy).forEach(t=>{ if(!byT[t]) byT[t]=[]; });
     let b='';
     if(cov) b+='<div class="covlegend"><span><span class="covdot" style="background:'+covColor('bad')+'"></span>not in service</span>'+
       '<span><span class="covdot" style="background:'+covColor('warn')+'"></span>not in data object</span>'+
       '<span><span class="covdot" style="background:'+covColor('good')+'"></span>mapped through</span></div>';
     Object.keys(byT).forEach(t=>{
-      b+='<div class="sublab mono">'+esc(t)+'</div>'+tbl([{k:'dot',label:'',w:'1.2em',cls:'tags'},{k:'name',label:'Column',w:'minmax(12ch,1.6fr)',mono:true},{k:'type',label:'Type',w:'minmax(8ch,1fr)',mono:true,cls:'faint'}],
+      b+='<div class="sublab mono">'+esc(t)+'</div>'+tbl([{k:'dot',label:'',w:'1.2em',cls:'tags'},{k:'name',label:'Column',w:'minmax(12ch,1.6fr)',mono:true},{k:'type',label:'Type',w:'minmax(8ch,1fr)',mono:true,cls:'faint'},{k:'from',label:'Added by',w:'minmax(12ch,1.4fr)',cls:'faint',opt:true}],
         byT[t].map(x=>{ const st=cov?stOf(looseCol(x.name)):null;
           return {hay:elHay(x.name,x.type), cls:st==='bad'?'cov-bad':st==='warn'?'cov-warn':'', cells:{
-            dot:cov?'<span class="covdot" data-tip="'+stTitle[st]+'" style="background:'+covColor(st)+'"></span>':'', name:esc(x.name), type:esc(x.type||'')}}; }), {filter:false});
+            dot:cov?'<span class="covdot" data-tip="'+stTitle[st]+'" style="background:'+covColor(st)+'"></span>':'', name:esc(x.name), type:esc(x.type||''), from:csRef(x.from, n.file)}}; })
+        // what the table no longer has: a column a later change set dropped, or renamed away
+        .concat((goneBy[t]||[]).map(x=>({hay:elHay(x.name,x.type,x.renamedTo), cls:'faint', cells:{
+            dot:'', name:'<s>'+esc(x.name)+'</s>', type:esc(x.type||''),
+            from:(x.renamedTo?'renamed to <span class="mono">'+esc(x.renamedTo)+'</span> by ':'dropped by ')+csRef(x.by, n.file)}}))), {filter:false});
     });
+    goneT.forEach(x=>{ b+='<div class="muted tbl-empty">Table <span class="mono">'+esc(x.table)+'</span> — dropped by '+csRef(x.by, n.file)+'</div>'; });
     return b; }};
+/** Every change set, in the order Liquibase runs them: what it changes, and whether it ran — a failed
+ *  precondition skips one, and one that already ran (the same id, author and logical path in another
+ *  file or revision) does not run again. */
+S.lqChangeSets={id:'changesets', title:'Change sets', hint:'in the order Liquibase runs them, and what each one did',
+  count:(n,c)=>(c.d.changeSets||[]).length,
+  build:(n,c)=>{ const all=c.d.changeSets||[]; if(!all.length) return '';
+    const multi=new Set(all.map(x=>x.file)).size>1;
+    const ST={ran:'<span class="tag">ran</span>', skipped:'<span class="tag sev-warn">skipped</span>', duplicate:'<span class="tag faint">ran before</span>'};
+    const cols=[{k:'st',label:'',w:'minmax(9ch,.7fr)',cls:'tags'},{k:'id',label:'Change set',w:'minmax(12ch,1.3fr)',mono:true},{k:'what',label:'Changes',w:'minmax(18ch,2.6fr)',cls:'wrap'}];
+    if(multi) cols.push({k:'file',label:'File',w:'minmax(12ch,1.4fr)',mono:true,cls:'faint',opt:true});
+    return tbl(cols, all.map(x=>({hay:elHay(x.id,x.author,(x.changes||[]).join(' '),x.note,x.file), cls:x.status==='skipped'?'cov-warn':'',
+      cells:{st:ST[x.status]||tag(x.status), id:esc(x.id)+' <span class="muted">'+esc(x.author||'')+'</span>'+lineRef(x.file,x.line),
+        what:((x.changes||[]).length?x.changes.map(esc).join('<br>'):'<span class="muted">no schema change</span>')+(x.note?'<div class="muted">'+esc(x.note)+'</div>':''),
+        file:multi?'<span data-tip="'+esc(x.file)+'">'+esc(lbFileLabel(x.file))+'</span>'+openBtn(x.file,x.line):''}})), {placeholder:'filter change sets…'}); }};
 // --- expressions, bindings, functions ---
 S.problems={id:'problems', title:'Problems', hint:'what the validator found in this expression',
   count:(n,c)=>(c.d.problems||[]).length,
@@ -5673,7 +5728,7 @@ const PAGES={
   knowledgeBase:{pic:[S.kbSources]},
   java:{pic:[S.methods], det:[S.endpoints]},
   property:{pic:[S.propDefined]},
-  liquibase:{pic:[S.lqBanner, S.lqColumns]},
+  liquibase:{pic:[S.lqBanner, S.lqColumns], det:[S.lqChangeSets]},
   expression:{pic:[S.problems]},
   binding:'expression',
   customFunction:{pic:[S.fnCode]},

@@ -6,11 +6,13 @@ Reports a <code>&lt;column name="…"&gt;</code> under <code>createTable</code> 
 <code>CREW_ID_</code> matches <code>crewId</code>.
 <p>Example: <i>Column 'LEGACY_NOTE_' is not mapped in Flowable service model 'DEMO-S010'</i> — the table will
 have a column no model reads or writes.</p>
-<p>No quick fix: the fix is in the model or in the changelog, and Atlas cannot decide which.</p>
+<p>The quick fix opens the service model at its key: the fix is in the model or in the changelog, and Atlas
+cannot decide which.</p>
 <!-- tooltip end -->
 <p>The changelog is matched to a service through its <code>serviceDefinitionReferences</code> property, the
 service's <code>referencedLiquibaseModelKey</code>, or a <code>tableName</code> match; when nothing matches
-the inspection stays silent. A column renamed or dropped later in the same file is honoured; an
-<code>&lt;include&gt;</code> of another file is not replayed.</p>
+the inspection stays silent. A column a later change set renames or drops is not reported — later in the
+same file, or in another of the project's changelogs, which are replayed together the way Liquibase runs
+them: a history kept in <code>v2/</code>, <code>v3/</code> and <code>v4/</code> folders is one table.</p>
 </body>
 </html>

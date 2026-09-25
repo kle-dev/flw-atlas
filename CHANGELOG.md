@@ -12,6 +12,42 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.27.2
+
+- **Liquibase changelogs are replayed the way Liquibase runs them, and a table shows what it holds at the
+  end.** Changelogs were matched with regular expressions and deduplicated by file name, so of a history
+  kept as `v2/customer.xml`, `v3/customer.xml` and `v4/customer.xml` only the first file was read, and the
+  table showed what that one said. Atlas now reads the XML itself and follows a master's `<include>` and
+  `<includeAll>` where they stand, an `includeAll` in Liquibase's plain path order. A change set is
+  identified by its id, author and `logicalFilePath`, so one that already ran does not run again. A failed
+  precondition skips its change set, a `<rollback>` or a commented-out change set no longer adds or drops
+  anything, and `<sql>`, `<sqlFile>` and formatted-SQL changelogs have their DDL read. Every copy of one
+  schema definition — the same app exported into several folders — is one history too.
+- **A service's table is the one the application builds.** When a project keeps its tables in its own
+  changelogs, run by the application at startup, and the app carries the schema definition the service
+  model names, Atlas read the definition. The columns the project added in its own changelog were then
+  reported as "not in Liquibase", and the project's changelog as *superseded* by its older copy in the app.
+  The application's changelog now describes the table. A definition with the same `logicalFilePath` as the
+  application's changelog is marked **copy**, not superseded. Changelogs of one Liquibase run never
+  supersede one another: the file that adds a column to another file's table is part of that table. On a
+  real project this took the changelog findings from 15 to 3, the three definitions the project really had
+  left behind.
+- **A changelog the application uses for its own tables is no orphan.** An application changelog that names
+  no service, and whose tables no service maps, backs a table the code owns — a JPA entity, a lock table —
+  and is no longer reported. One that names a service the project does not define still is, and the
+  finding now says which service.
+- **A changelog page shows its change sets and where each column came from.** The explorer lists every
+  change set in run order with what it changes and whether it ran, was skipped by its precondition, or had
+  already run from another file. Each column names the change set that added it, and a column or table a
+  later change set dropped or renamed is listed as gone. In the schema coverage table, a mapped column the
+  table no longer has says which change set dropped or renamed it, where it said "not in changelog".
+- **The IDE's changelog inspection knows about the project's other changelogs.** *Liquibase column not
+  defined in Flowable model* flagged a column at its declaration even when a later changelog dropped or
+  renamed it, as a `v3/` folder does to a `v2/` one. It now replays the project's changelogs and leaves a
+  column alone once the table no longer has it.
+- **A changelog that is not well-formed XML is reported.** Liquibase stops at startup on a changelog it
+  cannot read; Atlas reported nothing and read what its regular expressions found. It is now a parse issue.
+
 ## 0.27.1
 
 - **The Atlas Hub's ⋮ menu shows the right entries again.** 0.27.0 handed the menu unloaded placeholders of

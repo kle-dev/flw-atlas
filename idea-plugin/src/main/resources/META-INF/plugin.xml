@@ -142,6 +142,49 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.27.2</h3>
+        <ul>
+          <li><b>Liquibase changelogs are replayed the way Liquibase runs them, and a table shows what it
+              holds at the end.</b> Changelogs were matched with regular expressions and deduplicated by
+              file name, so of a history kept as <code>v2/customer.xml</code>, <code>v3/customer.xml</code>
+              and <code>v4/customer.xml</code> only the first file was read, and the table showed what that
+              one said. Atlas now reads the XML itself and follows a master's <code>&lt;include&gt;</code>
+              and <code>&lt;includeAll&gt;</code> where they stand, an <code>includeAll</code> in
+              Liquibase's plain path order. A change set is identified by its id, author and
+              <code>logicalFilePath</code>, so one that already ran does not run again. A failed
+              precondition skips its change set, a <code>&lt;rollback&gt;</code> or a commented-out change
+              set no longer adds or drops anything, and <code>&lt;sql&gt;</code>,
+              <code>&lt;sqlFile&gt;</code> and formatted-SQL changelogs have their DDL read. Every copy of
+              one schema definition — the same app exported into several folders — is one history too.</li>
+          <li><b>A service's table is the one the application builds.</b> When a project keeps its tables in
+              its own changelogs, run by the application at startup, and the app carries the schema
+              definition the service model names, Atlas read the definition. The columns the project added
+              in its own changelog were then reported as "not in Liquibase", and the project's changelog as
+              <i>superseded</i> by its older copy in the app. The application's changelog now describes the
+              table. A definition with the same <code>logicalFilePath</code> as the application's changelog
+              is marked <b>copy</b>, not superseded. Changelogs of one Liquibase run never supersede one
+              another: the file that adds a column to another file's table is part of that table. On a real
+              project this took the changelog findings from 15 to 3, the three definitions the project
+              really had left behind.</li>
+          <li><b>A changelog the application uses for its own tables is no orphan.</b> An application
+              changelog that names no service, and whose tables no service maps, backs a table the code owns
+              — a JPA entity, a lock table — and is no longer reported. One that names a service the project
+              does not define still is, and the finding now says which service.</li>
+          <li><b>A changelog page shows its change sets and where each column came from.</b> The explorer
+              lists every change set in run order with what it changes and whether it ran, was skipped by
+              its precondition, or had already run from another file. Each column names the change set that
+              added it, and a column or table a later change set dropped or renamed is listed as gone. In
+              the schema coverage table, a mapped column the table no longer has says which change set
+              dropped or renamed it, where it said "not in changelog".</li>
+          <li><b>The IDE's changelog inspection knows about the project's other changelogs.</b> <i>Liquibase
+              column not defined in Flowable model</i> flagged a column at its declaration even when a later
+              changelog dropped or renamed it, as a <code>v3/</code> folder does to a <code>v2/</code> one.
+              It now replays the project's changelogs and leaves a column alone once the table no longer has
+              it.</li>
+          <li><b>A changelog that is not well-formed XML is reported.</b> Liquibase stops at startup on a
+              changelog it cannot read; Atlas reported nothing and read what its regular expressions found.
+              It is now a parse issue.</li>
+        </ul>
         <h3>0.27.1</h3>
         <ul>
           <li><b>The Atlas Hub's ⋮ menu shows the right entries again.</b> 0.27.0 handed the menu unloaded
@@ -504,46 +547,6 @@
               icon on a form key — in Java, on a user task's <code>flowable:formKey</code>, on a subform
               reference — opens it like any other diagram. All 153 forms and pages of two real app corpora
               render.</li>
-          <li><b>The Structure tool window outlines a model.</b> A form's or page's components as Design
-              nests them, by caption with the id beside it; a process's or case's elements by name, without
-              the connectors, the plan items and the diagram interchange. A click goes to the component or
-              the element, in an archive entry as much as in a loose file. Any other JSON or XML keeps its
-              usual outline.</li>
-          <li><b>Any file opened out of an archive is safe from the formatting-layer crash.</b> Since the
-              Project view expands archives, a <code>manifest.json</code> or a model under a name Atlas does
-              not recognise opens just as easily, and is just as read-only and minified. The platform's
-              visual formatting layer throws on such a file (<code>Wrong line: 1. Available lines count:
-              1</code>); the guard that kept it off model files now keeps it off every file inside an
-              archive.</li>
-          <li><b>A detail page in four tabs.</b> Under the title, a page is <i>Overview</i> — Design's
-              description and a process's documentation as prose, the facts, and the picture: the drawing,
-              or the table that <i>is</i> the model — <i>Findings</i>, <i>Connections</i> — whether it fits
-              what it meets, and its relations — and <i>Details</i>: elements, fields, parameters,
-              variables, the tests that deploy it, <i>Other attributes</i>. A tab with nothing to show is
-              left out, Findings counts what is open and Connections carries a dot when a table found a gap.
-              The tab is part of the link (<code>&amp;p=connections</code>), carries over to the next page
-              that has it, and <code>1</code>–<code>4</code> pick one. A section is a heading with its count
-              and its explanation behind an ⓘ, and every section starts open but <i>Other attributes</i>. On
-              a model's own page a finding drops the model, the file and a severity its check's head already
-              says.</li>
-          <li><b>Nothing cut off is out of reach.</b> Text cut to fit — a table cell, a chip, a tag, a
-              card's title, a name in the list — says itself in full on hover and on keyboard focus. In a
-              narrow panel a table keeps every column it cannot do without on the row: a table with three of
-              them put the third into a 1em track, a Liquibase column's type reading "v…" and a finding's
-              message one letter per line.</li>
-          <li><b>⌖ always lands.</b> From any tab, a <i>Show on diagram</i> button brings the drawing up on
-              Overview with the element selected and in view below the tab bar; a form's field rows have one
-              too. An element the drawing does not show keeps a faint ⌖ that says so, and a page with no
-              drawing offers none — both used to be buttons that did nothing.</li>
-          <li><b>Zooming a drawing on a trackpad.</b> ⌘/Ctrl + scroll zooms by how far the wheel turns
-              instead of a fixed step per event, so a trackpad no longer jumps; a pinch zooms too. Inside
-              IntelliJ, whose browser rounds a trackpad's steps and delivers many as zero, every zero step
-              zoomed <i>out</i> — zooming in barely worked there. A zero step is no step now.</li>
-          <li><b>A leftover TODO says where it is.</b> In a JSON model the finding names the element that
-              carries the marker and quotes it — <i>TODO in the label: "Current Pod (TODO)"</i> on the
-              field, which ⌖ finds — instead of a path like <code>rows[1].cols[0].label</code> and "TODO
-              left in the model". The same form as an app's <code>.form</code> and as a Design export is one
-              finding per marker, not two, and a one-line model gives no line number.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

@@ -3186,6 +3186,11 @@
             "rows": [
               {
                 "dataObjects": [],
+                "from": {
+                  "changeSet": "1",
+                  "file": "db/changelog/001-customer.xml",
+                  "line": 6
+                },
                 "inLiquibase": true,
                 "inService": false,
                 "service": null,
@@ -3204,6 +3209,11 @@
                     "type": "string"
                   }
                 ],
+                "from": {
+                  "changeSet": "1",
+                  "file": "db/changelog/001-customer.xml",
+                  "line": 6
+                },
                 "inLiquibase": true,
                 "inService": true,
                 "service": "customerName",
@@ -3222,6 +3232,11 @@
                     "type": "string"
                   }
                 ],
+                "from": {
+                  "changeSet": "1",
+                  "file": "db/changelog/001-customer.xml",
+                  "line": 6
+                },
                 "inLiquibase": true,
                 "inService": true,
                 "service": "deliveryCity",
@@ -3240,6 +3255,11 @@
                     "type": "string"
                   }
                 ],
+                "from": {
+                  "changeSet": "1",
+                  "file": "db/changelog/001-customer.xml",
+                  "line": 6
+                },
                 "inLiquibase": true,
                 "inService": true,
                 "service": "deliveryZip",
@@ -3258,6 +3278,11 @@
                     "type": "string"
                   }
                 ],
+                "from": {
+                  "changeSet": "1",
+                  "file": "db/changelog/001-customer.xml",
+                  "line": 6
+                },
                 "inLiquibase": true,
                 "inService": true,
                 "service": "id",
@@ -3289,28 +3314,66 @@
             "status": "live",
             "supersededBy": []
           },
+          "changeSets": [
+            {
+              "author": "fixture",
+              "changes": [
+                "createTable cust_customer (5 columns)"
+              ],
+              "file": "db/changelog/001-customer.xml",
+              "id": "1",
+              "line": 6,
+              "note": null,
+              "status": "ran"
+            }
+          ],
           "columns": [
             {
+              "from": {
+                "changeSet": "1",
+                "file": "db/changelog/001-customer.xml",
+                "line": 6
+              },
               "name": "delivery_city_",
               "table": "cust_customer",
               "type": "varchar(255)"
             },
             {
+              "from": {
+                "changeSet": "1",
+                "file": "db/changelog/001-customer.xml",
+                "line": 6
+              },
               "name": "delivery_zip_",
               "table": "cust_customer",
               "type": "varchar(16)"
             },
             {
+              "from": {
+                "changeSet": "1",
+                "file": "db/changelog/001-customer.xml",
+                "line": 6
+              },
               "name": "id_",
               "table": "cust_customer",
               "type": "varchar(64)"
             },
             {
+              "from": {
+                "changeSet": "1",
+                "file": "db/changelog/001-customer.xml",
+                "line": 6
+              },
               "name": "name_",
               "table": "cust_customer",
               "type": "varchar(255)"
             },
             {
+              "from": {
+                "changeSet": "1",
+                "file": "db/changelog/001-customer.xml",
+                "line": 6
+              },
               "name": "orphan_col_",
               "table": "cust_customer",
               "type": "varchar(255)"
@@ -3333,6 +3396,7 @@
           "effectiveTables": [
             "cust_customer"
           ],
+          "origin": "application",
           "tables": [
             "cust_customer"
           ]
@@ -6177,28 +6241,66 @@
         "status": "live",
         "supersededBy": []
       },
+      "changeSets": [
+        {
+          "author": "fixture",
+          "changes": [
+            "createTable cust_customer (5 columns)"
+          ],
+          "file": "db/changelog/001-customer.xml",
+          "id": "1",
+          "line": 6,
+          "note": null,
+          "status": "ran"
+        }
+      ],
       "columns": [
         {
+          "from": {
+            "changeSet": "1",
+            "file": "db/changelog/001-customer.xml",
+            "line": 6
+          },
           "name": "delivery_city_",
           "table": "cust_customer",
           "type": "varchar(255)"
         },
         {
+          "from": {
+            "changeSet": "1",
+            "file": "db/changelog/001-customer.xml",
+            "line": 6
+          },
           "name": "delivery_zip_",
           "table": "cust_customer",
           "type": "varchar(16)"
         },
         {
+          "from": {
+            "changeSet": "1",
+            "file": "db/changelog/001-customer.xml",
+            "line": 6
+          },
           "name": "id_",
           "table": "cust_customer",
           "type": "varchar(64)"
         },
         {
+          "from": {
+            "changeSet": "1",
+            "file": "db/changelog/001-customer.xml",
+            "line": 6
+          },
           "name": "name_",
           "table": "cust_customer",
           "type": "varchar(255)"
         },
         {
+          "from": {
+            "changeSet": "1",
+            "file": "db/changelog/001-customer.xml",
+            "line": 6
+          },
           "name": "orphan_col_",
           "table": "cust_customer",
           "type": "varchar(255)"
@@ -6223,6 +6325,7 @@
       ],
       "file": "db/changelog/001-customer.xml",
       "key": "001-customer",
+      "origin": "application",
       "serviceRefs": [],
       "tables": [
         "cust_customer"
@@ -7617,6 +7720,11 @@
         "rows": [
           {
             "dataObjects": [],
+            "from": {
+              "changeSet": "1",
+              "file": "db/changelog/001-customer.xml",
+              "line": 6
+            },
             "inLiquibase": true,
             "inService": false,
             "service": null,
@@ -7635,6 +7743,11 @@
                 "type": "string"
               }
             ],
+            "from": {
+              "changeSet": "1",
+              "file": "db/changelog/001-customer.xml",
+              "line": 6
+            },
             "inLiquibase": true,
             "inService": true,
             "service": "customerName",
@@ -7653,6 +7766,11 @@
                 "type": "string"
               }
             ],
+            "from": {
+              "changeSet": "1",
+              "file": "db/changelog/001-customer.xml",
+              "line": 6
+            },
             "inLiquibase": true,
             "inService": true,
             "service": "deliveryCity",
@@ -7671,6 +7789,11 @@
                 "type": "string"
               }
             ],
+            "from": {
+              "changeSet": "1",
+              "file": "db/changelog/001-customer.xml",
+              "line": 6
+            },
             "inLiquibase": true,
             "inService": true,
             "service": "deliveryZip",
@@ -7689,6 +7812,11 @@
                 "type": "string"
               }
             ],
+            "from": {
+              "changeSet": "1",
+              "file": "db/changelog/001-customer.xml",
+              "line": 6
+            },
             "inLiquibase": true,
             "inService": true,
             "service": "id",

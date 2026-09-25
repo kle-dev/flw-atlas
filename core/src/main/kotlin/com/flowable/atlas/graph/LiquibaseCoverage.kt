@@ -1,21 +1,22 @@
 package com.flowable.atlas.graph
 
+import com.flowable.atlas.liquibase.LiquibaseChangelog
+import com.flowable.atlas.liquibase.LiquibaseParser
+import com.flowable.atlas.liquibase.LiquibaseReplay
 import com.flowable.atlas.model.Dyn
 import java.io.File
 
 /**
- * Liquibase schema-coverage — a faithful port of the `_liquibase_*`, `_enrich_data_objects`,
- * `_schema_coverage` and `_mark_liquibase_authority` helpers in `flowable_atlas.py` (~lines 1615-2079)
- * together with the changelog-building block inside `extract` (~lines 1413-1466).
+ * Liquibase schema coverage: what each changelog builds, which changelog describes a service's table,
+ * and how far each of that table's columns is mapped through to a data object.
  *
  * [apply] is the single entry point: given the assembled [Atlas.extract] `result` (already carrying its
- * parsed `services` / `dataObjects`), the discovered `.xml`/`.sql` candidate files and the project root,
- * it (1) builds `result["liquibase"]` — a list of changelog objects with keys
- * `key, file, tables, effectiveTables, serviceRefs, columns` (plus `coverage` and `authority` added by
- * the coverage/authority passes), (2) denormalizes each data object's backing-service table onto it
- * (`serviceTableName` / `serviceType`), and (3) attaches `schemaCoverage` to each service.
- *
- * Regex-based over the raw changelog text, exactly like the Python (no XSD, no Liquibase runtime).
+ * parsed `services` / `dataObjects`) and every `.xml`/`.sql` text the project holds, it (1) replays the
+ * changelogs ([LiquibaseReplay]) and builds `result["liquibase"]` — one entry per changelog, with the
+ * columns its tables hold once everything has run, where each came from, what was dropped, and what
+ * happened to each change set — (2) denormalizes each data object's backing-service table onto it
+ * (`serviceTableName` / `serviceType`), (3) attaches `schemaCoverage` to each service, and (4) records
+ * each changelog's `authority`.
  */
 object LiquibaseCoverage {
 
@@ -26,10 +27,10 @@ object LiquibaseCoverage {
      * invisible: the app's reference to its own changelog came back as a *missing model*.
      */
     fun apply(result: MutableMap<String, Any?>, sources: List<Pair<String, String>>) {
-        buildLiquibase(result, sources)
+        val book = buildLiquibase(result, sources)
         enrichDataObjects(result)
-        schemaCoverage(result)
-        markLiquibaseAuthority(result)
+        val bound = schemaCoverage(result, book)
+        markLiquibaseAuthority(result, book, bound)
     }
 
     /** The files-on-disk form of [apply]: [xmlFiles] relative to [root]. */
@@ -42,365 +43,177 @@ object LiquibaseCoverage {
         },
     )
 
-    // ---------------------------------------------------------------------------
-    // Regexes (mirror _LB_* in flowable_atlas.py)
-    // ---------------------------------------------------------------------------
-    private val S = setOf(RegexOption.DOT_MATCHES_ALL)
-    private val BLOCK_RE = Regex("<(createTable|addColumn)\\b([^>]*?)>(.*?)</\\1\\s*>", S)
-    private val COLUMN_RE = Regex("<column\\b([^>]*?)/?>")
-    private val RENAMECOL_RE = Regex("<renameColumn\\b([^>]*?)/?>", S)
-    private val DROPCOL_RE = Regex("<dropColumn\\b([^>]*?)(?:/>|>(.*?)</dropColumn\\s*>)", S)
-    private val MODIFYTYPE_RE = Regex("<modifyDataType\\b([^>]*?)/?>", S)
-    private val RENAMETABLE_RE = Regex("<renameTable\\b([^>]*?)/?>", S)
-    private val DROPTABLE_RE = Regex("<dropTable\\b([^>]*?)/?>", S)
-    private val INCLUDE_RE = Regex("<include(All)?\\b([^>]*?)/?>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-    private val TABLE_NAME_RE = Regex("tableName=\"([^\"]+)\"")
-    private val SVC_REFS_RE = Regex("name=\"serviceDefinitionReferences\"\\s+value=\"([^\"]*)\"")
-    private val NON_ALNUM_RE = Regex("[^a-z0-9]")
-    private val DIGITS_RE = Regex("\\d+")
-
-    // ---------------------------------------------------------------------------
-    // A discovered changelog file (uses reference identity, like Python's id(f)).
-    // ---------------------------------------------------------------------------
-    private class LbFile(val rel: String, val txt: String) {
-        val ops: List<Map<String, Any?>> = liquibaseOps(txt)
-        val tables: List<String> = TABLE_NAME_RE.findAll(txt).map { it.groupValues[1] }.toSortedSet().toList()
-        /** The path `<include>`/`<includeAll>` references are matched against — inside an archive, the
-         *  entry's path after the `!`. */
-        val pathStr: String = rel.substringAfterLast('!')
-        val baseName: String = pathStr.substringAfterLast('/')
-        val parent: String = pathStr.substringBeforeLast('/', "")
-    }
-
-    // ---------------------------------------------------------------------------
-    // _liquibase_ops
-    // ---------------------------------------------------------------------------
-    private fun liquibaseOps(txt: String): List<Map<String, Any?>> {
-        val found = ArrayList<Pair<Int, Map<String, Any?>>>()
-        for (m in BLOCK_RE.findAll(txt)) {
-            val cols = ArrayList<Map<String, Any?>>()
-            for (cm in COLUMN_RE.findAll(m.groupValues[3])) {
-                val nm = lbAttr(cm.groupValues[1], "name")
-                if (nm != null) cols.add(linkedMapOf("name" to nm, "type" to lbAttr(cm.groupValues[1], "type")))
-            }
-            if (cols.isNotEmpty()) {
-                found.add(m.range.first to linkedMapOf(
-                    "op" to m.groupValues[1], "table" to lbAttr(m.groupValues[2], "tableName"), "columns" to cols,
-                ))
-            }
-        }
-        for (m in RENAMECOL_RE.findAll(txt)) {
-            val a = m.groupValues[1]
-            val old = lbAttr(a, "oldColumnName"); val new = lbAttr(a, "newColumnName")
-            if (old != null && new != null) {
-                found.add(m.range.first to linkedMapOf(
-                    "op" to "renameColumn", "table" to lbAttr(a, "tableName"),
-                    "oldName" to old, "newName" to new, "type" to lbAttr(a, "columnDataType"),
-                ))
-            }
-        }
-        for (m in DROPCOL_RE.findAll(txt)) {
-            val a = m.groupValues[1]; val body = m.groupValues.getOrElse(2) { "" }
-            val names = ArrayList<String>()
-            lbAttr(a, "columnName")?.let { names.add(it) }
-            for (cm in COLUMN_RE.findAll(body)) lbAttr(cm.groupValues[1], "name")?.let { names.add(it) }
-            if (names.isNotEmpty()) {
-                found.add(m.range.first to linkedMapOf("op" to "dropColumn", "table" to lbAttr(a, "tableName"), "columns" to names))
-            }
-        }
-        for (m in MODIFYTYPE_RE.findAll(txt)) {
-            val a = m.groupValues[1]
-            val col = lbAttr(a, "columnName")
-            if (col != null) {
-                found.add(m.range.first to linkedMapOf(
-                    "op" to "modifyDataType", "table" to lbAttr(a, "tableName"), "column" to col, "type" to lbAttr(a, "newDataType"),
-                ))
-            }
-        }
-        for (m in RENAMETABLE_RE.findAll(txt)) {
-            val a = m.groupValues[1]
-            val old = lbAttr(a, "oldTableName"); val new = lbAttr(a, "newTableName")
-            if (old != null && new != null) {
-                found.add(m.range.first to linkedMapOf("op" to "renameTable", "oldTable" to old, "newTable" to new))
-            }
-        }
-        for (m in DROPTABLE_RE.findAll(txt)) {
-            val t = lbAttr(m.groupValues[1], "tableName")
-            if (t != null) found.add(m.range.first to linkedMapOf("op" to "dropTable", "table" to t))
-        }
-        return found.sortedBy { it.first }.map { it.second }
-    }
-
-    /** _lb_attr — read one XML attribute value out of a tag's attribute string. */
-    private fun lbAttr(s: String?, name: String): String? =
-        Regex("\\b" + Regex.escape(name) + "\\s*=\\s*\"([^\"]*)\"").find(s ?: "")?.groupValues?.get(1)
-
-    // ---------------------------------------------------------------------------
-    // _natural_key — v2 < v10 ordering
-    // ---------------------------------------------------------------------------
-    /** re.split(r'(\d+)', s): alternating non-digit / digit segments, keeping empties. */
-    private fun reSplitDigits(s: String): List<String> {
-        val out = ArrayList<String>()
-        var last = 0
-        for (m in DIGITS_RE.findAll(s)) {
-            out.add(s.substring(last, m.range.first))
-            out.add(m.value)
-            last = m.range.last + 1
-        }
-        out.add(s.substring(last))
-        return out
-    }
-
-    /** Compare two strings the way `_natural_key` orders them (numbers numerically, else lower-cased). */
-    private fun compareNatural(aRaw: String?, bRaw: String?): Int {
-        val pa = reSplitDigits(aRaw ?: "")
-        val pb = reSplitDigits(bRaw ?: "")
-        val n = minOf(pa.size, pb.size)
-        for (i in 0 until n) {
-            val x = pa[i]; val y = pb[i]
-            val xd = x.isNotEmpty() && x.all { it.isDigit() }
-            val yd = y.isNotEmpty() && y.all { it.isDigit() }
-            val c = if (xd && yd) x.toBigInteger().compareTo(y.toBigInteger()) else x.lowercase().compareTo(y.lowercase())
-            if (c != 0) return c
-        }
-        return pa.size.compareTo(pb.size)
-    }
-
-    private val NATURAL_BY_REL = Comparator<LbFile> { a, b -> compareNatural(a.rel, b.rel) }
-
-    // ---------------------------------------------------------------------------
-    // _loose
-    // ---------------------------------------------------------------------------
-    private fun loose(s: String?): String = NON_ALNUM_RE.replace((s ?: "").lowercase(), "")
-
-    // ---------------------------------------------------------------------------
-    // _liquibase_key
-    // ---------------------------------------------------------------------------
-    private val KEY_SUFFIX_RE = Regex("\\.data\\.changelog\\.xml$|\\.changelog\\.xml$|\\.xml$|\\.sql$", RegexOption.IGNORE_CASE)
-
     /** Whether a `.xml`/`.sql` text is a changelog at all — the same test [buildLiquibase] applies. */
-    fun isChangelog(txt: String): Boolean =
-        txt.contains("databaseChangeLog") || txt.contains("<changeSet") || txt.lowercase().contains("createtable")
+    fun isChangelog(txt: String): Boolean = LiquibaseParser.isChangelog(txt)
 
     /** The model key a changelog file carries: `liquibase-<key>.data.changelog.xml` → `<key>`. Public so the
      *  extractor can index changelogs before references resolve — an app lists its changelogs by this key. */
-    fun keyOf(path: String): String = liquibaseKey(path)
+    fun keyOf(path: String): String = LiquibaseChangelog.changelogKey(path)
 
-    private fun liquibaseKey(path: String): String {
-        var base = path.substringAfterLast('!').substringAfterLast('/')
-        base = base.replaceFirst(Regex("^liquibase-"), "")
-        return KEY_SUFFIX_RE.replaceFirst(base, "")
+    // ---------------------------------------------------------------------------
+    // the changelog entries
+    // ---------------------------------------------------------------------------
+
+    /** One changelog node: an application changelog, or a schema definition with every copy of it. */
+    private class Entry(
+        val map: MutableMap<String, Any?>,
+        val key: String,
+        val file: LiquibaseReplay.File,
+        val run: LiquibaseReplay.Run?,
+        val definition: Boolean,
+        /** The Liquibase identity: its `logicalFilePath`, a definition's key when it declares none. */
+        val logical: String?,
+        /** Upper-cased tables its change sets shape that exist once everything ran. */
+        val effective: Set<String>,
+        val hasChangeSets: Boolean,
+    ) {
+        val serviceRefs: List<String> get() = Dyn.strings(map["serviceRefs"])
     }
 
-    // ---------------------------------------------------------------------------
-    // _liquibase_groups
-    // ---------------------------------------------------------------------------
-    private fun clean(p: String?): String =
-        Regex("^classpath\\*?:").replace(p ?: "", "").replace('\\', '/').trim('/').lowercase()
-
-    private fun liquibaseGroups(files: List<LbFile>): List<List<LbFile>> {
-        val byBase = LinkedHashMap<String, MutableList<LbFile>>()
-        for (f in files) byBase.getOrPut(f.baseName) { ArrayList() }.add(f)
-
-        fun nat(fs: List<LbFile>): List<LbFile> = fs.sortedWith(NATURAL_BY_REL)
-
-        fun closure(master: LbFile): List<LbFile> {
-            val ordered = ArrayList<LbFile>()
-            val seen = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<LbFile, Boolean>())
-
-            fun walk(f: LbFile) {
-                if (!seen.add(f)) return
-                for (m in INCLUDE_RE.findAll(f.txt)) {
-                    val a = m.groupValues[2]
-                    if (m.groupValues[1].isNotEmpty()) {                     // <includeAll path="dir">
-                        val pdir = clean(lbAttr(a, "path") ?: lbAttr(a, "dir") ?: "")
-                        if (pdir.isEmpty()) continue
-                        val kids = files.filter { g ->
-                            g !== f && g.parent.replace('\\', '/').lowercase().endsWith(pdir)
-                        }
-                        for (g in nat(kids)) walk(g)
-                    } else {                                                 // <include file="x.xml">
-                        val ref = clean(lbAttr(a, "file"))
-                        if (ref.isEmpty()) continue
-                        var g: LbFile? = files.firstOrNull { it.pathStr.replace('\\', '/').lowercase().endsWith(ref) }
-                        if (g == null) g = byBase[ref.substringAfterLast('/')]?.firstOrNull()
-                        if (g != null) walk(g)
-                    }
-                }
-                ordered.add(f)                                               // master itself after its includes
-            }
-
-            walk(master)
-            return ordered
-        }
-
-        val masters = files.filter { INCLUDE_RE.containsMatchIn(it.txt) }
-        val assigned = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<LbFile, Boolean>())
-        val groups = ArrayList<List<LbFile>>()
-        for (master in nat(masters)) {
-            if (master in assigned) continue
-            val grp = closure(master).filter { it !in assigned }
-            if (grp.isNotEmpty()) {
-                assigned.addAll(grp)
-                groups.add(grp)
-            }
-        }
-        for (f in nat(files)) {
-            if (f !in assigned) {
-                assigned.add(f)
-                groups.add(listOf(f))
-            }
-        }
-        return groups
+    private class Book(val entries: List<Entry>) {
+        val byKey: Map<String, Entry> = entries.associateBy { it.key }
     }
 
-    // ---------------------------------------------------------------------------
-    // _liquibase_replay
-    // ---------------------------------------------------------------------------
-    /** Returns (schema, alias): schema maps UPPER table -> surviving columns; alias maps any historical
-     *  UPPER name to its final UPPER name. Column maps carry name/type/table (the _k loose key is dropped). */
-    private fun liquibaseReplay(files: List<LbFile>): Pair<Map<String, List<Map<String, Any?>>>, Map<String, String>> {
-        val schema = LinkedHashMap<String, ArrayList<MutableMap<String, Any?>>>()
-        val alias = LinkedHashMap<String, String>()
-
-        fun cur(start: String): String {
-            var tu = start
-            val seen = HashSet<String>()
-            while (alias.containsKey(tu) && tu !in seen) {
-                seen.add(tu)
-                tu = alias.getValue(tu)
-            }
-            return tu
-        }
-
-        for (lf in files) for (op in lf.ops) {
-            when (op["op"] as String) {
-                "createTable", "addColumn" -> {
-                    val tu = cur((op["table"] as? String ?: "").uppercase())
-                    val lst = schema.getOrPut(tu) { ArrayList() }
-                    val idx = HashMap<String, MutableMap<String, Any?>>()
-                    for (c in lst) idx[c["_k"] as String] = c
-                    val columns = Dyn.maps(op["columns"])
-                    for (col in columns) {
-                        val k = loose(col["name"] as? String)
-                        val existing = idx[k]
-                        if (existing != null) {
-                            if (truthy(col["type"])) existing["type"] = col["type"]
-                            continue
-                        }
-                        val c = linkedMapOf<String, Any?>(
-                            "name" to col["name"], "type" to col["type"], "table" to op["table"], "_k" to k,
-                        )
-                        idx[k] = c
-                        lst.add(c)
-                    }
-                }
-                "renameColumn" -> {
-                    val tu = cur((op["table"] as? String ?: "").uppercase())
-                    val lst = schema[tu]
-                    val ok = loose(op["oldName"] as? String); val nk = loose(op["newName"] as? String)
-                    val hit = lst?.firstOrNull { it["_k"] == ok }
-                    if (hit != null) {
-                        hit["name"] = op["newName"]; hit["_k"] = nk
-                        if (truthy(op["type"])) hit["type"] = op["type"]
-                    } else {
-                        schema.getOrPut(tu) { ArrayList() }.add(linkedMapOf(
-                            "name" to op["newName"], "type" to op["type"], "table" to op["table"], "_k" to nk,
-                        ))
-                    }
-                }
-                "dropColumn" -> {
-                    val tu = cur((op["table"] as? String ?: "").uppercase())
-                    val lst = schema[tu]
-                    if (lst != null) {
-                        val cols = Dyn.strings(op["columns"])
-                        val drop = cols.map { loose(it) }.toHashSet()
-                        schema[tu] = ArrayList(lst.filter { it["_k"] !in drop })
-                    }
-                }
-                "modifyDataType" -> {
-                    val tu = cur((op["table"] as? String ?: "").uppercase())
-                    val lst = schema[tu]
-                    if (lst != null && truthy(op["type"])) {
-                        val k = loose(op["column"] as? String)
-                        for (c in lst) if (c["_k"] == k) c["type"] = op["type"]
-                    }
-                }
-                "renameTable" -> {
-                    val old = cur((op["oldTable"] as String).uppercase()); val new = (op["newTable"] as String).uppercase()
-                    val lst = schema.remove(old)
-                    if (lst != null) {
-                        for (c in lst) c["table"] = op["newTable"]
-                        val merged = ArrayList<MutableMap<String, Any?>>()
-                        schema[new]?.let { merged.addAll(it) }
-                        merged.addAll(lst)
-                        schema[new] = merged
-                    }
-                    alias[old] = new
-                }
-                "dropTable" -> schema.remove(cur((op["table"] as? String ?: "").uppercase()))
-            }
-        }
-
-        val out = LinkedHashMap<String, List<Map<String, Any?>>>()
-        for ((t, lst) in schema) {
-            out[t] = lst.map { linkedMapOf("name" to it["name"], "type" to it["type"], "table" to it["table"]) }
-        }
-        val aliasOut = LinkedHashMap<String, String>()
-        for (k in alias.keys) aliasOut[k] = cur(k)
-        return out to aliasOut
-    }
-
-    // ---------------------------------------------------------------------------
-    // extract() changelog-building block -> result["liquibase"]
-    // ---------------------------------------------------------------------------
-    private fun buildLiquibase(result: MutableMap<String, Any?>, sources: List<Pair<String, String>>) {
-        val lbFiles = ArrayList<LbFile>()
-        // The same changelog loose in `src/main/resources` and inside the app's `.bar` is one changelog
-        // — the model buckets are deduped by key the same way. Loose files come first in [sources], so
-        // the project's own copy is the one kept; without this each copy "superseded" the other.
-        val seenKeys = HashSet<String>()
-        for ((rel, txt) in sources) {
-            if (!isChangelog(txt)) continue
-            if (!seenKeys.add(liquibaseKey(rel))) continue
-            lbFiles.add(LbFile(rel, txt))
-        }
-        if (lbFiles.isEmpty()) return
-
-        // Per replay-group schema/alias, keyed by file identity.
-        val schemaOf = java.util.IdentityHashMap<LbFile, Map<String, List<Map<String, Any?>>>>()
-        val aliasOf = java.util.IdentityHashMap<LbFile, Map<String, String>>()
-        for (grp in liquibaseGroups(lbFiles)) {
-            val (schema, alias) = liquibaseReplay(grp)
-            for (lf in grp) { schemaOf[lf] = schema; aliasOf[lf] = alias }
-        }
-
+    private fun buildLiquibase(result: MutableMap<String, Any?>, sources: List<Pair<String, String>>): Book {
         // error(), not `?: return`: Atlas.extract seeds this bucket, so a missing or wrong-typed one is
-        // a programming error, and the previous `as MutableList` threw too. Degrading it to a silent
-        // skip would hide a broken result map behind an empty Liquibase section.
+        // a programming error. Degrading it to a silent skip would hide a broken result map behind an
+        // empty Liquibase section.
         val bucket = Dyn.mutableListOrNull(result["liquibase"])
             ?: error("result[\"liquibase\"] is missing or not a MutableList — Atlas.extract must seed it")
-        for (lf in lbFiles) {
-            val schema = schemaOf[lf] ?: emptyMap()
-            val alias = aliasOf[lf] ?: emptyMap()
-            val touched = ArrayList<String>(); val seenT = HashSet<String>()
-            for (op in lf.ops) {
-                val t = strOr(op["table"], op["newTable"])
-                if (t != null && t.uppercase() !in seenT) { seenT.add(t.uppercase()); touched.add(t) }
+        val files = ArrayList<LiquibaseReplay.File>()
+        val plainSql = LinkedHashMap<String, String>()
+        for ((rel, txt) in sources) {
+            val parsed = try {
+                LiquibaseParser.parse(txt, rel)
+            } catch (e: LiquibaseParser.ParseException) {
+                // Liquibase stops at a changelog it cannot read, so this is the application failing to start
+                Dyn.mutableListOrNull(result["diagnostics"])?.add(linkedMapOf("kind" to "parse", "path" to rel, "message" to "(liquibase) ${e.message}"))
+                null
             }
-            val cols = ArrayList<Map<String, Any?>>()
-            for (t in touched) cols.addAll(schema[alias[t.uppercase()] ?: t.uppercase()] ?: emptyList())
-            val effTables = cols.mapNotNull { it["table"] as? String }.filter { it.isNotEmpty() }.toSortedSet().toList()
-            val svcRefs = SVC_REFS_RE.findAll(lf.txt)
-                .flatMap { it.groupValues[1].split(Regex("[,\\s]+")).asSequence() }
-                .filter { it.isNotEmpty() }.toSortedSet().toList()
-            bucket.add(linkedMapOf(
-                "key" to liquibaseKey(lf.rel), "file" to lf.rel,
-                "tables" to lf.tables, "effectiveTables" to effTables,
-                "serviceRefs" to svcRefs, "columns" to cols,
+            if (parsed != null) files.add(LiquibaseReplay.File(rel, parsed))
+            else if (rel.lowercase().endsWith(".sql")) plainSql[rel] = txt
+        }
+        if (files.isEmpty()) return Book(emptyList())
+        val replay = LiquibaseReplay.replay(files, plainSql)
+
+        // A definition is one node however many copies of it the project holds — the app exported into
+        // `v2/` and `v3/`, or extracted beside the export. The project's own copy names the node; else the
+        // newest copy that adds a change set to the history, else the first.
+        val definitions = replay.runs.filter { it.kind == "definition" }
+        val defKeys = definitions.mapNotNull { it.key }.toHashSet()
+        val singles = files.filter { !it.isDefinition } + replay.runOf.keys.filter { it !in files && !it.isDefinition }
+        val keys = applicationKeys(singles, defKeys)
+
+        val entries = ArrayList<Entry>()
+        for (f in singles) {
+            val run = replay.runOf[f]
+            val (key, label) = keys.getValue(f)
+            entries.add(entry(key, label, f, listOf(f), run, false, replay))
+        }
+        for (run in definitions) {
+            val copies = run.files.filter { it.isDefinition }
+            val rep = copies.firstOrNull { '!' !in it.rel }
+                ?: copies.lastOrNull { f -> run.outcomes[f].orEmpty().any { it.status != "duplicate" } } ?: copies.first()
+            entries.add(entry(run.key!!, null, rep, copies, run, true, replay))
+        }
+        for (e in entries) bucket.add(e.map)
+        return Book(entries)
+    }
+
+    /**
+     * An application changelog's key is the one its file name carries, as before; two files of one name —
+     * `v2/customer.xml` and `v3/customer.xml` — are told apart by the folders they sit in, and so is a
+     * file whose name a schema definition's key already uses: an app lists definitions by key.
+     */
+    private fun applicationKeys(files: List<LiquibaseReplay.File>, taken: Set<String>): Map<LiquibaseReplay.File, Pair<String, String?>> {
+        val out = java.util.IdentityHashMap<LiquibaseReplay.File, Pair<String, String?>>()
+        for ((base, fs) in files.groupBy { keyOf(it.rel) }) {
+            if (fs.size == 1 && base !in taken) { out[fs[0]] = base to null; continue }
+            val dirs = fs.associateWith { it.rel.replace('!', '/').split('/').dropLast(1) }
+            val depth = dirs.values.maxOf { it.size }
+            var assigned = false
+            for (k in 1..depth) {
+                val cands = fs.map { f -> (dirs.getValue(f).takeLast(k) + base).joinToString("/") }
+                if (cands.toSet().size == fs.size && cands.none { it in taken }) {
+                    for ((f, c) in fs.zip(cands)) out[f] = c to (dirs.getValue(f).takeLast(k) + f.baseName).joinToString("/")
+                    assigned = true
+                    break
+                }
+            }
+            if (!assigned) for (f in fs) out[f] = f.rel to f.rel
+        }
+        return out
+    }
+
+    private fun entry(
+        key: String,
+        label: String?,
+        file: LiquibaseReplay.File,
+        copies: List<LiquibaseReplay.File>,
+        run: LiquibaseReplay.Run?,
+        definition: Boolean,
+        replay: LiquibaseReplay.Result,
+    ): Entry {
+        // the run's properties: global and first-come, as the replay expanded them
+        val props = run?.props ?: file.changelog.properties
+        fun x(s: String) = LiquibaseReplay.expand(s, props)
+        val changeSets = copies.flatMap { it.changelog.changeSets }
+        val named = LinkedHashSet<String>()
+        val shaped = LinkedHashSet<String>()
+        for (cs in changeSets) {
+            cs.tables.forEach { named.add(x(it)) }
+            for (c in cs.changes) LiquibaseParser.tablesOf(c).forEach { shaped.add(x(it)) }
+        }
+        val schema = run?.schema
+        val effective = LinkedHashMap<String, String>()
+        if (schema != null) for (t in shaped) {
+            val k = schema.resolve(t)
+            schema.tables[k]?.let { effective.putIfAbsent(k, it.name) }
+        }
+        val columns = ArrayList<Map<String, Any?>>()
+        val dropped = ArrayList<Map<String, Any?>>()
+        if (schema != null) for (k in effective.keys) {
+            val t = schema.tables.getValue(k)
+            for (c in t.columns.values) columns.add(linkedMapOf("name" to c.name, "type" to c.type, "table" to c.table, "from" to ref(c.from)))
+            for (r in t.removed) dropped.add(linkedMapOf(
+                "name" to r.name, "type" to r.type, "table" to r.table, "by" to ref(r.by), "renamedTo" to r.renamedTo,
             ))
         }
+        // the tables it shaped that are gone at the end, and the change set that dropped each
+        val droppedTables = if (schema == null) emptyList() else shaped.map { schema.resolve(it) }.distinct().mapNotNull { k ->
+            schema.droppedTables[k]?.let { linkedMapOf("table" to (shaped.firstOrNull { t -> schema.resolve(t) == k } ?: k), "by" to ref(it)) }
+        }
+        val outcomes = if (run == null) emptyList() else copies.flatMap { run.outcomes[it] ?: emptyList() }
+        val logical = file.changelog.logicalFilePath?.removeSuffix(".data.changelog.xml") ?: if (definition) key else null
+        val map = linkedMapOf<String, Any?>(
+            "key" to key, "file" to file.rel,
+            "tables" to named.toSortedSet().toList(),
+            "effectiveTables" to effective.values.toSortedSet().toList(),
+            "serviceRefs" to copies.flatMap { it.changelog.serviceRefs }.toSortedSet().toList(),
+            "columns" to columns,
+        )
+        if (label != null) map["label"] = label
+        map["origin"] = when {
+            definition -> "definition"
+            run?.kind == "test" -> "test"
+            else -> "application"
+        }
+        file.changelog.logicalFilePath?.let { map["logicalFilePath"] = it }
+        if (dropped.isNotEmpty()) map["dropped"] = dropped
+        if (droppedTables.isNotEmpty()) map["droppedTables"] = droppedTables
+        if (outcomes.isNotEmpty()) map["changeSets"] = outcomes.map { o ->
+            linkedMapOf(
+                "id" to o.changeSet.id, "author" to o.changeSet.author, "file" to o.file.rel, "line" to o.changeSet.line,
+                "status" to o.status, "note" to o.note, "changes" to o.changes,
+            )
+        }
+        if (copies.size > 1) map["revisions"] = copies.map { it.rel }
+        replay.unresolved.filter { (f, _) -> copies.any { it === f } }.map { it.second }.distinct()
+            .takeIf { it.isNotEmpty() }?.let { map["includesMissing"] = it }
+        return Entry(map, key, file, run, definition, logical, effective.keys, changeSets.isNotEmpty())
     }
+
+    private fun ref(r: LiquibaseReplay.Ref): Map<String, Any?> = linkedMapOf("file" to r.file, "changeSet" to r.changeSet, "line" to r.line)
 
     // ---------------------------------------------------------------------------
     // _enrich_data_objects
@@ -449,51 +262,65 @@ object LiquibaseCoverage {
     }
 
     // ---------------------------------------------------------------------------
-    // _schema_coverage
+    // schema coverage
     // ---------------------------------------------------------------------------
-    private fun schemaCoverage(result: MutableMap<String, Any?>) {
-        val liquibase = mapList(result["liquibase"])
+
+    /** A service bound to the changelog its coverage reads. [strong] when that choice says something about
+     *  the table: the changelog the service names, or the application's own changelog of its table. */
+    private class Binding(val service: String, val entry: Entry, val strong: Boolean)
+
+    /**
+     * The changelog a service's table is read from. The application's own changelog of that table comes
+     * first — the one the service names, the one naming the service back, any that shapes the table: it is
+     * what the application's Liquibase builds at startup. A schema definition in the app is applied on
+     * request only, so the table in the database is the application's even when the service model names
+     * the definition. Reading the definition first — which a service's `referencedLiquibaseModelKey`
+     * always names — reported the columns the project added in its own changelog as "not in Liquibase"
+     * and the project's changelog as superseded, on a project that keeps both.
+     */
+    private fun resolve(s: Map<String, Any?>, book: Book): Binding? {
+        val sk = s["key"] as? String ?: return null
+        val rk = s["referencedLiquibaseModelKey"]?.toString()?.takeIf { it.isNotEmpty() }
+        val table = (s["tableName"] as? String)?.uppercase()?.ifEmpty { null }
+        val apps = book.entries.filter { !it.definition && it.run?.kind == "application" }
+        val named = rk?.let { book.byKey[it] }
+        val byLogical = { k: String? -> k?.let { l -> apps.firstOrNull { it.logical == l && it.hasChangeSets } } }
+        val backRef = book.entries.firstOrNull { sk in it.serviceRefs }
+        fun builds(e: Entry) = table == null || table in e.effective
+        val own = listOfNotNull(byLogical(rk), byLogical(named?.logical), named, backRef).firstOrNull { !it.definition && it.run?.kind == "application" && builds(it) }
+            ?: table?.let { t -> apps.filter { t in it.effective }.let { es -> es.firstOrNull { e -> e.run?.schema?.tables?.get(t)?.createdBy?.file == e.file.rel } ?: es.firstOrNull() } }
+        if (own != null) return Binding(sk, own, true)
+        val lb = named ?: backRef ?: table?.let { t -> book.entries.firstOrNull { t in it.effective } } ?: return null
+        return Binding(sk, lb, lb === named)
+    }
+
+    private fun schemaCoverage(result: MutableMap<String, Any?>, book: Book): List<Binding> {
         val services = mapList(result["services"])
         val dataObjects = mapList(result["dataObjects"])
-
-        val lbByKey = LinkedHashMap<String, MutableMap<String, Any?>>()
-        for (lb in liquibase) (lb["key"] as? String)?.let { lbByKey[it] = lb }
-
-        val lbByTable = LinkedHashMap<String, MutableMap<String, Any?>>()
-        for (lb in liquibase) {
-            val tabs = LinkedHashSet<String>()
-            asStrings(lb["effectiveTables"]).forEach { tabs.add(it) }
-            asStrings(lb["tables"]).forEach { tabs.add(it) }
-            for (t in tabs) lbByTable.putIfAbsent(t.uppercase(), lb)
-        }
-
-        val lbBySvcRef = LinkedHashMap<String, MutableMap<String, Any?>>()
-        for (lb in liquibase) for (sk in asStrings(lb["serviceRefs"])) lbBySvcRef.putIfAbsent(sk, lb)
-
         val dosByService = LinkedHashMap<String, MutableList<Map<String, Any?>>>()
         for (d in dataObjects) (d["service"] as? String)?.let { dosByService.getOrPut(it) { ArrayList() }.add(d) }
 
-        // consumed[lbKey] = ("service" loose names, "dataObject" loose names)
+        // consumed[entry key] = ("service" loose names, "dataObject" loose names)
         val consumed = LinkedHashMap<String, Pair<LinkedHashSet<String>, LinkedHashSet<String>>>()
+        val bindings = ArrayList<Binding>()
 
         for (s in services) {
-            val rk = s["referencedLiquibaseModelKey"]
-            var lb: MutableMap<String, Any?>? = if (truthy(rk)) lbByKey[rk.toString()] else null
-            if (lb == null) lb = lbBySvcRef[s["key"] as? String]
-            if (lb == null && truthy(s["tableName"])) lb = lbByTable[(s["tableName"] as String).uppercase()]
-
+            val binding = resolve(s, book)
+            binding?.let { bindings.add(it) }
+            val lb = binding?.entry
             val svcTable = ((s["tableName"] as? String) ?: "").uppercase().ifEmpty { null }
-            val lbCols = ArrayList<Map<String, Any?>>()
-            if (lb != null) {
-                // Only the service's own table. The changelog may create several; falling back to all of
-                // its columns when none matched made every column of every *other* table a "not mapped by
-                // the service" gap on this service (CrossedColumns already guards the same way).
-                for (c in mapListRO(lb["columns"])) {
-                    val ct = c["table"] as? String
-                    if (svcTable != null && ct != null && ct.uppercase() != svcTable) continue
-                    lbCols.add(c)
-                }
+            val schema = lb?.run?.schema
+            // Only the service's own table, as the run left it. The changelog may shape several; falling
+            // back to all of their columns made every column of every *other* table a "not mapped by the
+            // service" gap on this service (CrossedColumns already guards the same way).
+            val table = if (schema == null) null else svcTable?.let { schema.table(it) }
+            val tables = when {
+                schema == null -> emptyList()
+                svcTable != null -> listOfNotNull(table)
+                else -> lb.effective.mapNotNull { schema.tables[it] }
             }
+            val lbCols = tables.flatMap { it.columns.values }
+            val removed = tables.flatMap { it.removed }
 
             val svcByLoose = LinkedHashMap<String, Map<String, Any?>>()
             for (c in mapListRO(s["columns"])) {
@@ -523,7 +350,7 @@ object LiquibaseCoverage {
             val rows = ArrayList<Map<String, Any?>>()
             val seenSvc = HashSet<String>()
             for (c in lbCols) {
-                val sql = (c["name"] as? String) ?: ""
+                val sql = c.name
                 val key = loose(sql)
                 val svcCol = svcByLoose[key]
                 if (svcCol != null) seenSvc.add(key)
@@ -539,10 +366,11 @@ object LiquibaseCoverage {
                 val status = if (svcCol != null && hits.isNotEmpty()) "ok"
                     else if (svcCol != null) "no-dataobject" else "no-service"
                 rows.add(linkedMapOf(
-                    "sql" to sql, "table" to c["table"], "sqlType" to c["type"],
+                    "sql" to sql, "table" to c.table, "sqlType" to c.type,
                     "inLiquibase" to true, "inService" to (svcCol != null),
                     "service" to (svcCol?.get("name")), "serviceCol" to (svcCol?.get("columnName")),
                     "serviceType" to (svcCol?.get("type")), "dataObjects" to hits, "status" to status,
+                    "from" to ref(c.from),
                 ))
             }
 
@@ -550,27 +378,38 @@ object LiquibaseCoverage {
                 for (c in mapListRO(s["columns"])) {
                     val sql = (c["columnName"] as? String) ?: (c["name"] as? String) ?: ""
                     if (sql.isEmpty() || loose(sql) in seenSvc) continue
-                    rows.add(linkedMapOf(
+                    val row = linkedMapOf<String, Any?>(
                         "sql" to sql, "table" to null, "sqlType" to null,
                         "inLiquibase" to false, "inService" to true,
                         "service" to c["name"], "serviceCol" to c["columnName"], "serviceType" to c["type"],
                         "dataObjects" to doHitsFor(c["name"] as? String),
                         "status" to "extra-service",
-                    ))
+                    )
+                    // not in the table *now*: a change set dropped it or renamed it away, and says which
+                    removed.lastOrNull { loose(it.name) == loose(sql) }?.let { r ->
+                        row["removed"] = linkedMapOf("by" to ref(r.by), "renamedTo" to r.renamedTo)
+                    }
+                    rows.add(row)
                 }
             }
 
             if (lb != null) {
-                val cc = consumed.getOrPut(lb["key"] as String) { LinkedHashSet<String>() to LinkedHashSet<String>() }
-                for (r in rows) {
-                    if (r["inLiquibase"] == true && r["inService"] == true) cc.first.add(loose(r["sql"] as? String))
-                    if (r["inLiquibase"] == true && (r["dataObjects"] as List<*>).isNotEmpty()) cc.second.add(loose(r["sql"] as? String))
+                // every changelog of the run that shapes the table sees the same columns, so each one's
+                // column list can say how far a column is mapped
+                val shaping = if (lb.definition || lb.run == null) listOf(lb)
+                    else book.entries.filter { it.run === lb.run && tables.any { t -> lb.run.schema.resolve(t.name) in it.effective } }.ifEmpty { listOf(lb) }
+                for (e in shaping) {
+                    val cc = consumed.getOrPut(e.key) { LinkedHashSet<String>() to LinkedHashSet<String>() }
+                    for (r in rows) {
+                        if (r["inLiquibase"] == true && r["inService"] == true) cc.first.add(loose(r["sql"] as? String))
+                        if (r["inLiquibase"] == true && (r["dataObjects"] as List<*>).isNotEmpty()) cc.second.add(loose(r["sql"] as? String))
+                    }
                 }
             }
 
             if (rows.isEmpty()) continue
             s["schemaCoverage"] = linkedMapOf(
-                "liquibase" to (lb?.get("key")),
+                "liquibase" to lb?.key,
                 "table" to s["tableName"],
                 "dataObjects" to dos.map { it["key"] },
                 "rows" to rows,
@@ -584,82 +423,102 @@ object LiquibaseCoverage {
             )
         }
 
-        for (lb in liquibase) {
-            val cc = consumed[lb["key"] as? String] ?: continue
-            lb["coverage"] = linkedMapOf(
-                "service" to cc.first.sorted(),
-                "dataObject" to cc.second.sorted(),
-            )
+        for (e in book.entries) {
+            val cc = consumed[e.key] ?: continue
+            e.map["coverage"] = linkedMapOf("service" to cc.first.sorted(), "dataObject" to cc.second.sorted())
         }
+        return bindings
     }
 
     // ---------------------------------------------------------------------------
-    // _mark_liquibase_authority
+    // authority
     // ---------------------------------------------------------------------------
-    private fun markLiquibaseAuthority(result: MutableMap<String, Any?>) {
+
+    /**
+     * Whether each changelog is the live description of its tables:
+     *
+     * - **live** — a service's coverage reads it, or it names a service, or a service names it, or it
+     *   shapes a table a service maps.
+     * - **copy** — a schema definition that is the same Liquibase changelog as one of the application's own
+     *   (the same `logicalFilePath`): the app carries it, the application runs its own copy.
+     * - **superseded** — another changelog, in another run, is the one the services of its tables are
+     *   bound to. Changelogs of one run are one history and never supersede one another: the file that
+     *   adds a column to a table another file created is part of the same table, not a rival of it.
+     * - **orphan** — nothing references it. An application changelog that names no service and whose
+     *   tables no service maps is the application's own table (a JPA entity, a lock table) and gets no
+     *   status: nothing in the models is meant to explain it.
+     */
+    private fun markLiquibaseAuthority(result: MutableMap<String, Any?>, book: Book, bindings: List<Binding>) {
         val services = mapList(result["services"])
-        val liquibase = mapList(result["liquibase"])
-
-        val forward = LinkedHashMap<String, MutableList<String?>>()          // lb key -> [services binding it forward]
-        val svcByTable = LinkedHashMap<String, MutableList<String?>>()       // TABLE -> [service keys] (tableName match)
-        for (s in services) {
-            (s["referencedLiquibaseModelKey"] as? String)?.let { forward.getOrPut(it) { ArrayList() }.add(s["key"] as? String) }
-            (s["tableName"] as? String)?.let { svcByTable.getOrPut(it.uppercase()) { ArrayList() }.add(s["key"] as? String) }
-        }
         val svcKeys = services.mapNotNull { it["key"] as? String }.toHashSet()
-
-        val backref = LinkedHashMap<String, MutableList<String>>()           // lb key -> [services it names back]
-        for (lb in liquibase) for (sk in asStrings(lb["serviceRefs"])) {
-            if (sk in svcKeys) backref.getOrPut(lb["key"] as String) { ArrayList() }.add(sk)
+        val svcByTable = LinkedHashMap<String, MutableList<String>>()
+        val namedBy = LinkedHashMap<String, MutableList<String>>()
+        for (s in services) {
+            val k = s["key"] as? String ?: continue
+            (s["tableName"] as? String)?.takeIf { it.isNotEmpty() }?.let { svcByTable.getOrPut(it.uppercase()) { ArrayList() }.add(k) }
+            (s["referencedLiquibaseModelKey"] as? String)?.let { namedBy.getOrPut(it) { ArrayList() }.add(k) }
         }
+        val strong = LinkedHashMap<String, MutableList<String>>()
+        for (b in bindings) if (b.strong) strong.getOrPut(b.entry.key) { ArrayList() }.add(b.service)
+        val owners = LinkedHashMap<String, MutableList<Entry>>()      // TABLE -> entries strongly bound to it
+        for (e in book.entries) if (!strong[e.key].isNullOrEmpty()) for (t in e.effective) owners.getOrPut(t) { ArrayList() }.add(e)
+        val appByLogical = book.entries.filter { !it.definition && it.run?.kind == "application" && it.hasChangeSets && it.logical != null }
+            .associateBy { it.logical!! }
 
-        fun eff(lb: Map<String, Any?>): Set<String> = asStrings(lb["effectiveTables"]).map { it.uppercase() }.toHashSet()
-
-        val forwardOwner = LinkedHashMap<String, MutableList<String>>()      // TABLE -> [lb keys bound forward]
-        for (lb in liquibase) {
-            val k = lb["key"] as String
-            if (!forward[k].isNullOrEmpty()) for (t in eff(lb)) forwardOwner.getOrPut(t) { ArrayList() }.add(k)
-        }
-
-        for (lb in liquibase) {
-            val k = lb["key"] as String
-            val tbls = eff(lb)
-            val fwd = (forward[k] ?: emptyList()).filterNotNull().distinct().sorted()
-            val back = (backref[k] ?: emptyList()).distinct().sorted()
-            if (tbls.isEmpty() && fwd.isEmpty() && back.isEmpty()) continue
-            val owners = tbls.flatMap { forwardOwner[it] ?: emptyList() }.filter { it != k }.distinct().sorted()
-            val status: String; val by: List<String>
-            if (fwd.isNotEmpty()) { status = "live"; by = fwd }
-            else if (owners.isNotEmpty()) { status = "superseded"; by = emptyList() }
-            else if (back.isNotEmpty()) { status = "live"; by = back }
-            else {
-                val tblRefs = tbls.flatMap { (svcByTable[it] ?: emptyList()) }.filterNotNull().distinct().sorted()
-                if (tblRefs.isNotEmpty()) { status = "live"; by = tblRefs } else { status = "orphan"; by = emptyList() }
+        for (e in book.entries) {
+            val fwd = strong[e.key].orEmpty().distinct().sorted()
+            val back = e.serviceRefs.filter { it in svcKeys }.distinct().sorted()
+            val named = namedBy[e.key].orEmpty().distinct().sorted()
+            val tblRefs = e.effective.flatMap { svcByTable[it].orEmpty() }.distinct().sorted()
+            val status: String
+            var by: List<String> = emptyList()
+            var superseded: List<String> = emptyList()
+            var copyOf: String? = null
+            if (!e.definition) {
+                when {
+                    fwd.isNotEmpty() || tblRefs.isNotEmpty() -> { status = "live"; by = (fwd + tblRefs).distinct().sorted() }
+                    back.isNotEmpty() -> { status = "live"; by = back }
+                    named.isNotEmpty() -> { status = "live"; by = named }
+                    e.serviceRefs.isNotEmpty() -> status = "orphan"   // it names services the project does not have
+                    else -> continue
+                }
+            } else {
+                val copy = e.logical?.let { appByLogical[it] }
+                val rivals = e.effective.flatMap { owners[it].orEmpty() }.filter { it !== e && it.run !== e.run }.map { it.key }.distinct().sorted()
+                when {
+                    fwd.isNotEmpty() -> { status = "live"; by = fwd }
+                    copy != null -> { status = "copy"; copyOf = copy.key; by = (named + back).distinct().sorted() }
+                    rivals.isNotEmpty() -> { status = "superseded"; superseded = rivals }
+                    back.isNotEmpty() -> { status = "live"; by = back }
+                    named.isNotEmpty() -> { status = "live"; by = named }
+                    tblRefs.isNotEmpty() -> { status = "live"; by = tblRefs }
+                    e.effective.isEmpty() -> continue
+                    else -> status = "orphan"
+                }
             }
-            lb["authority"] = linkedMapOf("status" to status, "referencedBy" to by, "supersededBy" to owners)
+            val a = linkedMapOf<String, Any?>("status" to status, "referencedBy" to by, "supersededBy" to superseded)
+            if (copyOf != null) a["copyOf"] = copyOf
+            if (status == "orphan") e.serviceRefs.filter { it !in svcKeys }.takeIf { it.isNotEmpty() }?.let { a["namesMissing"] = it }
+            e.map["authority"] = a
         }
     }
 
     // ---------------------------------------------------------------------------
     // small helpers
     // ---------------------------------------------------------------------------
-    /** Python `a or b` for string-ish values (empty/null a falls through to b). */
-    private fun strOr(a: Any?, b: Any?): String? {
-        val sa = a as? String
-        return if (!sa.isNullOrEmpty()) sa else b as? String
-    }
+    private val NON_ALNUM_RE = Regex("[^a-z0-9]")
+
+    private fun loose(s: String?): String = NON_ALNUM_RE.replace((s ?: "").lowercase(), "")
 
     /** os.path.relpath(path, root) with forward slashes. */
     private fun relpath(root: File, path: File): String =
         root.toPath().relativize(path.toPath()).toString().replace(File.separatorChar, '/')
 
     // Thin aliases over Dyn so the many call sites below stay short; the unchecked cast itself lives
-    // in Dyn, not here. Kept as names rather than inlined to avoid a 14-site rename for no gain.
+    // in Dyn, not here.
     private fun mapList(v: Any?): List<MutableMap<String, Any?>> = Dyn.mutableMaps(v)
 
     private fun mapListRO(v: Any?): List<Map<String, Any?>> = Dyn.maps(v)
-
-    private fun asStrings(v: Any?): List<String> = Dyn.strings(v)
 
     /** Python truthiness for the `or []` / `if x` guards used above. */
     private fun truthy(v: Any?): Boolean = when (v) {

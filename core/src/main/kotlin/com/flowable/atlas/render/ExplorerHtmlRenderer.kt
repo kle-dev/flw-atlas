@@ -197,7 +197,7 @@ object ExplorerHtmlRenderer {
         "bindings", "botKey",
         "callActivities", "completionActions",
         "calledMethods", "calls", "candidateStarterGroups", "channels", "channelType", "class", "className",
-        "columns", "conditions",
+        "changeSets", "columns", "conditions", "dropped", "droppedTables", "includesMissing", "revisions",
         "controller", "correlation", "coverage", "crossedColumns", "dataObjects", "dataObjectType",
         "dataSources",
         "declaredIn", "decisions",

@@ -86,6 +86,31 @@ object AtlasXml {
                 return out?.toString()
             }
 
+        /** Every text and CDATA node directly under this element, joined — the body of a Liquibase `<sql>`
+         *  that carries a `<comment>` child before its statements, which [text] stops at. */
+        val ownText: String
+            get() {
+                val out = StringBuilder()
+                val kids = e.childNodes
+                for (i in 0 until kids.length) {
+                    val n = kids.item(i)
+                    if (n.nodeType == Node.TEXT_NODE || n.nodeType == Node.CDATA_SECTION_NODE) out.append(n.nodeValue)
+                }
+                return out.toString()
+            }
+
+        /** Attributes by local name, in document order. */
+        val attributes: Map<String, String>
+            get() {
+                val out = LinkedHashMap<String, String>()
+                val attrs = e.attributes
+                for (i in 0 until attrs.length) {
+                    val a = attrs.item(i)
+                    out[local(a.nodeName)] = a.nodeValue
+                }
+                return out
+            }
+
         /** Direct child elements, in document order. */
         val children: List<El>
             get() {

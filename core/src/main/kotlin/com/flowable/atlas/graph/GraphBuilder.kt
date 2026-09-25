@@ -183,12 +183,15 @@ object GraphBuilder {
         }
         for (o in bucketList("liquibase")) {
             val lb = o as Map<String, Any?>
+            // two files of one name (`v2/customer.xml`, `v3/customer.xml`) are labelled with their folders
             addNode(
-                "liquibase", lb["key"], basename(lb["file"] as? String), lb["file"],
-                linkedMapOf(
+                "liquibase", lb["key"], (lb["label"] as? String) ?: basename(lb["file"] as? String), lb["file"],
+                linkedMapOf<String, Any?>(
                     "tables" to lb["tables"], "effectiveTables" to lb["effectiveTables"],
                     "columns" to lb["columns"], "coverage" to lb["coverage"], "authority" to lb["authority"],
-                ),
+                ).apply {
+                    for (k in listOf("origin", "logicalFilePath", "dropped", "droppedTables", "changeSets", "revisions", "includesMissing")) lb[k]?.let { put(k, it) }
+                },
             )
         }
         for (o in bucketList("others")) {
