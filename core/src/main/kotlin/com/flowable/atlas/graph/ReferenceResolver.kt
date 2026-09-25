@@ -55,22 +55,31 @@ object ReferenceResolver {
     )
 
     /**
-     * Cross-type fallback compatibility: an expected model kind may silently fall back only to these
-     * types (tagged `fallbackType`, still a normal edge). Any other cross-type match is kept but
-     * flagged `suspect` — a `process --callActivity--> form` edge is semantically impossible and must
-     * be visible as such instead of looking like a clean resolution.
+     * Cross-type fallback compatibility: an expected model kind may fall back only to these types (tagged
+     * `fallbackType`, still a normal edge). Any other model of the same key is a different model: the
+     * reference stays unresolved — a missing model — instead of drawing a `process --callActivity--> form`
+     * edge that also hid the missing callee.
      */
     private val FALLBACK_COMPAT = mapOf(
-        "process" to setOf("case"),          // call activity may start a case (calledElementType)
-        "case" to setOf("process"),          // work definitions cover both
         "form" to setOf("page"),             // casePage-/work-form keys may name a page model
         "page" to setOf("form"),
         "dataObject" to setOf("masterData"), // master data is a data-object specialisation
         "masterData" to setOf("dataObject"),
     )
 
+    /**
+     * The references whose target may be a process or a case: the model naming it cannot say which (a
+     * variable extractor, an SLA, a query over instances). A call activity, a process task or a case
+     * task can only start its own kind — a BPMN call activity never starts a case.
+     */
+    private val PROCESS_OR_CASE_RELS = setOf("extracts-from", "sla-of-process", "queries-process")
+
+    private val PROCESS_OR_CASE = setOf("process", "case")
+
+    /** App child-model types the app definition spells differently from the model kind. */
+    private val KIND_ALIASES = mapOf("security" to "securityPolicy", "decisionService" to "decision")
+
     /** A value that is exactly one `${ident}` / `#{ident}` — the only shape we best-effort resolve. */
-    private val SIMPLE_EXPR_RE = Regex("^[#$]\\{\\s*([A-Za-z_]\\w*)\\s*}$")
 
     private val EXPR_STRIP_RE = Regex("^[#$]\\{|\\}$")
     private val STR_LIT_IN_EXPR_RE = Regex("'[^']*'|\"[^\"]*\"")
@@ -167,11 +176,14 @@ object ReferenceResolver {
             val idents = jc["keyedIdents"] as? Collection<*> ?: continue
             val keyed = jc["keyedStrings"] as? MutableSet<String> ?: continue
             val strings = jc["strings"] as? MutableSet<String> ?: continue
+            val kinds = jc["keyedKinds"] as? MutableMap<String, MutableSet<String>>
+            val identKinds = jc["keyedIdentKinds"] as? Map<String, Set<String>>
             for (id in idents) {
                 val n = id as? String ?: continue
                 if (n in ambiguousConstants) continue
                 val v = javaConstants[n] ?: continue
                 keyed.add(v); strings.add(v)
+                kinds?.getOrPut(v) { sortedSetOf() }?.addAll(identKinds?.get(n).orEmpty())
             }
         }
 
@@ -242,7 +254,7 @@ object ReferenceResolver {
             })
         }
         replaceInPlace(ctx.access, dedupe(ctx.access) { a ->
-            listOf(a["model"], a["scope"], a["action"], a["groups"], a["users"])
+            listOf(a["modelType"], a["model"], a["scope"], a["action"], a["groups"], a["users"])
         })
 
         // ---- Platform query URLs carry model references in their query string / path ----
@@ -299,7 +311,7 @@ object ReferenceResolver {
             when {
                 kind.startsWith("model:") || kind in MODEL_KIND_NAMES -> {
                     var norm = if (kind.startsWith("model:")) kind.substringAfter(":") else kind
-                    norm = ModelKinds.NORMALIZE_TYPE[norm] ?: norm
+                    norm = KIND_ALIASES[norm] ?: ModelKinds.NORMALIZE_TYPE[norm] ?: norm
                     target = modelIndex[norm to value]
                     ref2["target"] = target
                     ref2["targetType"] = "model"
@@ -308,20 +320,19 @@ object ReferenceResolver {
                     // `orderX` whenever both existed — a clean-looking edge to the wrong model.
                     if (target != null) ref2["targetNodeType"] = norm
                     if (target == null && value in byKey) {
-                        // Fallback across model types: prefer a same-type entry, then a semantically
-                        // compatible one ([FALLBACK_COMPAT]) — anything else stays resolvable but is
-                        // flagged `suspect` so impossible edges are visible instead of looking clean.
+                        // Fallback across model types: a same-type entry, then a compatible one
+                        // ([FALLBACK_COMPAT], process↔case only where the relation allows both). Any
+                        // other type of that key is another model, and the reference stays missing.
                         val entries = byKey[value]!!
-                        val compat = FALLBACK_COMPAT[norm] ?: emptySet()
+                        val compat = (FALLBACK_COMPAT[norm] ?: emptySet()) +
+                            (if (ref["rel"] in PROCESS_OR_CASE_RELS && norm in PROCESS_OR_CASE) PROCESS_OR_CASE - norm else emptySet())
                         val match = entries.firstOrNull { it.first == norm }
                             ?: entries.firstOrNull { it.first in compat }
-                            ?: entries[0]
-                        target = match.second
-                        ref2["target"] = target
-                        ref2["targetNodeType"] = match.first
-                        if (match.first != norm) {
-                            ref2["fallbackType"] = match.first
-                            if (match.first !in compat) ref2["suspect"] = true
+                        if (match != null) {
+                            target = match.second
+                            ref2["target"] = target
+                            ref2["targetNodeType"] = match.first
+                            if (match.first != norm) ref2["fallbackType"] = match.first
                         }
                     }
                 }
@@ -359,25 +370,11 @@ object ReferenceResolver {
             (if (target != null) resolved else unresolved).add(ref2)
         }
 
-        // ---- Best-effort resolution of dynamic (expression-valued) references ----
-        // A model ref whose value is exactly `${ident}` resolves when `ident` is a project constant
-        // (`static final String`, e.g. a generated model-keys class) whose value is an indexed model
-        // key. Everything else keeps its expression text; either way the graph builder renders these
-        // as `dynamic` edges (resolved → the model, unresolved → an expression placeholder node).
-        for (ref in ctx.dynamicRefs) {
-            ref["dynamic"] = true
-            val kind = ref["kind"] as? String ?: continue
-            if (!(kind.startsWith("model:") || kind in MODEL_KIND_NAMES)) continue
-            var norm = if (kind.startsWith("model:")) kind.substringAfter(":") else kind
-            norm = ModelKinds.NORMALIZE_TYPE[norm] ?: norm
-            val value = ref["value"] as? String ?: continue
-            val ident = SIMPLE_EXPR_RE.matchEntire(value)?.groupValues?.get(1) ?: continue
-            val candidate = javaConstants[ident] ?: continue
-            val hit = modelIndex[norm to candidate] ?: continue
-            ref["resolvedValue"] = candidate
-            ref["target"] = hit
-            ref["targetType"] = "model"
-        }
+        // ---- Dynamic (expression-valued) references ----
+        // Rendered as `dynamic` edges to an expression placeholder node. They are not resolved: `${SUB}`
+        // reads a variable or a bean when the engine evaluates it, never a Java constant of that name,
+        // so linking it through one (as this once did) drew an edge to whichever model the constant names.
+        for (ref in ctx.dynamicRefs) ref["dynamic"] = true
 
         // Must land in result BEFORE the graph step — it reads unresolvedRefs.
         result["resolvedRefs"] = resolved

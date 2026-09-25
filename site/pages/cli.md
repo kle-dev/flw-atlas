@@ -140,8 +140,8 @@ Atlas understood your project:
 - **java** — the Java *and Kotlin* sources read (one parser handles both); test source sets are not
   counted, because they are not scanned.
 - **resolved / unresolved refs** — references Atlas could and could not tie to something real.
-- **suspect / dynamic links** — resolved, but not certainly: *suspect* came from a loose or
-  cross-type match, *dynamic* from an expression-valued reference.
+- **suspect / dynamic links** — resolved, but not certainly: *suspect* came from an ambiguous
+  match, *dynamic* from an expression-valued reference.
 - **⚠ parse issues** — files that could not be read or fully parsed. These are never silent: they
   also appear in `graph.json`'s `diagnostics`, in the summary's Health block, in the overview's
   Findings section, and as a clickable badge in the explorer.

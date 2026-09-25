@@ -102,8 +102,8 @@ models are read completely; a reference that states its type (a `formKey`, a `ca
 the right one; and the expressions, bindings and variables harvested from each file are credited to the
 model of that file's type. (Until {{VERSION}} they went to whichever model was registered first, so a form
 that shared its case's key showed none of its own bindings and the case showed all of them.) What stays
-ambiguous is a reference that names the key alone — a Java string literal — which reaches one of the two
-and is marked *suspect*. The shared key is recorded in `graph.json`'s `diagnostics` as a `conflict`
+ambiguous is a Java string literal that names the key alone, outside a key-taking API — it reaches one of
+the two and is marked *suspect*. The shared key is recorded in `graph.json`'s `diagnostics` as a `conflict`
 entry so a reader knows, but it is not a finding: nothing failed.
 
 This is the one check you should never carry. A parse failure does not just cost you that file — every

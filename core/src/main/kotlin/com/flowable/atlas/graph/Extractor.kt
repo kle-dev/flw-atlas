@@ -151,8 +151,8 @@ object Atlas {
                 known.firstOrNull { it.first != norm }?.let { (otherType, otherLabel) ->
                     diag(
                         "conflict", label,
-                        "key '$key' is shared with the $otherType model $otherLabel — a reference that " +
-                            "names only the key (a Java string literal) reaches one of them, marked suspect",
+                        "key '$key' is shared with the $otherType model $otherLabel — a Java string literal " +
+                            "that names only the key, outside a key-taking API, reaches one of them, marked suspect",
                     )
                 }
             }
@@ -184,8 +184,11 @@ object Atlas {
             val parser = ModelParsers.PARSERS[mtype]
             val mkeys = ArrayList<Any?>()
             // Everything the parser and the harvest below record about this file's models carries this
-            // type (Ctx.modelId), so a key two types share cannot be mis-credited.
-            val nodeType = ModelKinds.NORMALIZE_TYPE[mtype] ?: mtype
+            // type (Ctx.modelId), so a key two types share cannot be mis-credited. The form parser may
+            // correct it — a `.form` whose metadata says `page` is a page — and then everything after the
+            // parse follows the correction; left at the extension's type, the page's bindings, variables
+            // and references went to `form:X`, which does not exist, and on to whatever else is called X.
+            var nodeType = ModelKinds.NORMALIZE_TYPE[mtype] ?: mtype
             ctx.currentModel = nodeType
             try {
                 if (parser == null) {
@@ -200,8 +203,9 @@ object Atlas {
                             mkeys.add((p as? Map<*, *>)?.get("key"))
                         }
                         else -> {
+                            nodeType = ctx.currentModel ?: nodeType
                             bucketList(bucket).add(parsed)
-                            index(mtype, parsed, label)
+                            index(nodeType, parsed, label)
                             mkeys.add((parsed as? Map<*, *>)?.get("key"))
                         }
                     }
@@ -261,16 +265,16 @@ object Atlas {
                             if (b !in Constants.FLOWABLE_CONTEXT && b !in Constants.JAVA_LITERALS) calls.add(b to meth)
                         }
                     }
-                    for (k in ks) for ((b, meth) in calls) ctx.addRef(k, mtype, label, "calls $meth()", "bean", b)
+                    for (k in ks) for ((b, meth) in calls) ctx.addRef(k, nodeType, label, "calls $meth()", "bean", b)
                 }
                 VarHarvest.collectDeclaredVars(ctx, text, ks)
                 VarHarvest.collectDirectedVars(ctx, text, ks)
                 // `templateService….variableContainer(execution)…process()` renders a template against the
                 // whole scope: every variable the model holds may be read, as by `getVariables()`.
-                if (Constants.WHOLE_CONTAINER_RE.containsMatchIn(text)) for (k in ks) ctx.varScopeReadsAll.add(k.toString())
+                if (Constants.WHOLE_CONTAINER_RE.containsMatchIn(text)) for (k in ks) ctx.varScopeReadsAll.add("$nodeType:$k")
                 // A Spring property the model reads: correlated by its key, like a signal by its name.
                 for (pm in Constants.PROPERTY_READ_RE.findAll(Constants.htmlUnescape(text))) {
-                    for (k in ks) ctx.addRef(k, mtype, label, "reads-property", "property", pm.groupValues[1])
+                    for (k in ks) ctx.addRef(k, nodeType, label, "reads-property", "property", pm.groupValues[1])
                 }
             }
 

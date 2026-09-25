@@ -66,6 +66,12 @@ object GraphBuilder {
      *  message/error/escalation — and external-worker topics — meet in one shared node. */
     private val NAMED_REF_KINDS = setOf("signal", "message", "error", "escalation", "topic", "property")
 
+    /** Model types one record may mean interchangeably: a `.form` can hold a page, a `.data` master data. */
+    private val TYPE_FAMILY = mapOf(
+        "form" to listOf("page"), "page" to listOf("form"),
+        "dataObject" to listOf("masterData"), "masterData" to listOf("dataObject"),
+    )
+
     /** Node types that are not models: code, correlation names, harvested text, and the derived nodes.
      *  What is left is what `stats.modelCount` counts — including apps, which a reader calls models too. */
     private val NON_MODEL_NODE_TYPES = setOf(
@@ -120,22 +126,29 @@ object GraphBuilder {
             return nid
         }
 
-        /** The node a parser's record points at: a typed id (`form:x`, as [Ctx.modelId] writes them) when
-         *  such a node exists, else the bare key through the first-wins map — which also serves an id whose
-         *  type the node table spells differently (a `.form` whose metadata says `page`), and a Java class. */
+        /** The node of a model whose type is known — `(type, key)`, then the type's family (form and page,
+         *  data object and master data), and nothing else: a key two types share is two models. With no
+         *  type, the first-wins key-only map. */
+        fun knt(type: Any?, key: Any?, strict: Boolean = true): String? {
+            val k = key as? String ?: return null
+            val t = (type as? String)?.let { ModelKinds.NORMALIZE_TYPE[it] ?: it } ?: return keyToNode[k]
+            nodes["$t:$k"]?.let { return it["id"] as String }
+            for (sib in TYPE_FAMILY[t].orEmpty()) nodes["$sib:$k"]?.let { return it["id"] as String }
+            return if (strict) null else keyToNode[k]
+        }
+
+        /**
+         * The node a record points at. A typed id (`form:x`, as [Ctx.modelId] writes them) resolves to that
+         * node only — or to its sibling in the same family, a `page:x` for a `form:x` — never to another type
+         * of the same key: that fallback handed a page's bindings to a same-key case, and a call mapped into
+         * a missing process to a same-key form. Only a bare key (a Java class, a record with no type) goes
+         * through the first-wins map.
+         */
         fun kn(key: Any?): String? {
             val k = key as? String ?: return null
             if (k in nodes) return k
-            return keyToNode[if (':' in k) k.substringAfter(':') else k]
-        }
-
-        /** The node of a model whose type is known — `(type, key)` first, the key-only map as fallback.
-         *  Two models of different types may share a key, and the type-blind map hands the first
-         *  registered one to every caller; wherever a ref carries its type that guess is avoidable. */
-        fun knt(type: Any?, key: Any?): String? {
-            val k = key as? String ?: return null
-            val t = (type as? String)?.let { ModelKinds.NORMALIZE_TYPE[it] ?: it }
-            return t?.let { nodes["$it:$k"]?.get("id") as? String } ?: keyToNode[k]
+            if (':' !in k) return keyToNode[k]
+            return knt(k.substringBefore(':'), k.substringAfter(':'), strict = true)
         }
 
         // --- model nodes from buckets (explicit semantic order — key_to_node is first-wins). ---
@@ -175,6 +188,14 @@ object GraphBuilder {
                 val k = (o as Map<String, Any?>)["key"]
                 if (truthy(k)) modelKeys.add(k.toString())
             }
+        }
+
+        // every model node by key, in registration order — a key two types share has two owners
+        val modelNodesByKey = LinkedHashMap<String, MutableList<String>>()
+        for (n in nodes.values) {
+            if (n["type"] in NON_MODEL_NODE_TYPES) continue
+            val k = n["key"]?.toString() ?: continue
+            modelNodesByKey.getOrPut(k) { ArrayList() }.add(n["id"] as String)
         }
 
         // --- which java classes are referenced by models + functional roles (delegate / listener) ---
@@ -715,7 +736,11 @@ object GraphBuilder {
                 }
             }
             val value = r["value"] as String
-            val nid = "external:$value"
+            // One node per missing thing, not per spelling: a missing form and a missing process of the
+            // same key are two gaps, and one shared node said "missing form" about the call activity too.
+            var nid = "external:$value"
+            val prev = nodes[nid]
+            if (prev != null && (prev["data"] as? Map<*, *>)?.get("kind") != kind) nid = "external:$kind:$value"
             if (nid !in extSeen) {
                 extSeen.add(nid)
                 nodes[nid] = linkedMapOf(
@@ -725,18 +750,12 @@ object GraphBuilder {
             addEdge(knt(r["fromType"], r["from"]), nid, r["rel"] as String, suspect = r["suspect"] == true)
         }
 
-        // dynamic (expression-valued) references — best-effort resolved by the reference resolver
-        // (constant-backed `${ident}` → model), else an expression placeholder node. Both variants
-        // carry `dynamic=true` so the explorer renders them dashed and they stay filterable.
+        // dynamic (expression-valued) references — an expression placeholder node, with `dynamic=true`
+        // so the explorer renders the edge dashed and it stays filterable.
         for (r in (result["dynamicRefs"] as? List<Map<String, Any?>> ?: emptyList())) {
             val s = knt(r["fromType"], r["from"]) ?: continue
             val rel = r["rel"] as? String ?: continue
             val kind = r["kind"] as? String ?: continue
-            val resolvedNode = (r["resolvedValue"] as? String)?.let { kn(it) }
-            if (resolvedNode != null) {
-                addEdge(s, resolvedNode, rel, dynamic = true)
-                continue
-            }
             if (!(kind.startsWith("model:") || kind in ReferenceResolver.MODEL_KIND_NAMES)) continue
             val value = r["value"] as? String ?: continue
             val nid = "external:$value"
@@ -811,15 +830,22 @@ object GraphBuilder {
                     addEdge(snode, "java:$dfqn", "uses", suspect = dep in ambiguousSimple)
                 }
             }
-            // a literal passed to a known key-taking API is a confident reference; any other
-            // literal that merely equals a model key ("status", "customer", …) only a suspect one
+            // A literal passed to a known key-taking API is a confident reference to a model of the type
+            // that API takes — `caseDefinitionKey("X")` is the case X, whatever else is called X. A literal
+            // that merely equals a model key ("status", "customer", …), or one handed to the untyped
+            // `key(…)` while several types share it, is only a suspect one.
             val keyed = jc["keyedStrings"] as? Collection<*> ?: emptyList<Any?>()
+            val keyedKinds = jc["keyedKinds"] as? Map<*, *> ?: emptyMap<Any?, Any?>()
             for (s in (jc["strings"] as? Collection<*> ?: emptyList<Any?>())) {
                 if (s !in modelKeys) continue
-                val t = kn(s)
-                if (t != null && t.substringBefore(":") !in setOf("liquibase", "java", "endpoint", "group")) {
-                    addEdge(snode, t, "references", suspect = s !in keyed)
+                val kinds = (keyedKinds[s] as? Collection<*>).orEmpty()
+                if (s in keyed && kinds.isNotEmpty()) {
+                    for (k in kinds) nodes["$k:$s"]?.let { addEdge(snode, it["id"] as String, "references") }
+                    continue
                 }
+                val owners = modelNodesByKey[s].orEmpty()
+                val t = owners.firstOrNull() ?: continue
+                addEdge(snode, t, "references", suspect = s !in keyed || owners.size > 1)
             }
             // external-worker subscriptions: the class polls a topic — meets the BPMN/CMMN
             // `external-topic` refs in the shared topic node
@@ -861,13 +887,13 @@ object GraphBuilder {
             val bot = a["botKey"]
             if (!truthy(bot)) continue
             val botStr = bot.toString()
-            val anode = kn(a["key"])
-            val botNode = kn(botStr)
+            // Typed on both ends: by key alone the action was whichever model came first under its key,
+            // and the bot key — never a key of a model — matched a group, a form or a variable of that name.
+            val anode = knt("action", a["key"])
             val jc = allJava.values.firstOrNull { j ->
                 botStr in (j["beanNames"] as Collection<String>) || j["primary"] == botStr
             }
             when {
-                botNode != null -> addEdge(anode, botNode, "bot")
                 botStr in botToFqn -> addEdge(anode, "java:${botToFqn[botStr]}", "bot")
                 jc != null -> addEdge(anode, "java:${jc["fqn"]}", "bot")
                 else -> {
@@ -921,11 +947,14 @@ object GraphBuilder {
         }
 
         // app -> model membership (co-located models)
-        val appByContainer = LinkedHashMap<String, String?>()
+        // Every app of a container — an export can hold several `.bar`s, each its own container, and an
+        // archive can hold two apps; keeping only the last one per container credited one app's models to
+        // the other.
+        val appByContainer = LinkedHashMap<String, MutableList<String>>()
         for (o in bucketList("apps")) {
             val am = o as Map<String, Any?>
-            val c = containerOf(am["file"] as? String)
-            if (c != null) appByContainer[c] = kn(am["key"])
+            val c = containerOf(am["file"] as? String) ?: continue
+            knt("app", am["key"])?.let { appByContainer.getOrPut(c) { ArrayList() }.add(it) }
         }
         if (appByContainer.isNotEmpty()) {
             val nonModel = setOf(
@@ -938,12 +967,14 @@ object GraphBuilder {
                 if (n["type"] in nonModel) continue
                 val key = n["key"]
                 val containers = LinkedHashSet<String?>()
-                for ((_, f) in (byKey[key] ?: emptyList())) containers.add(containerOf(f))
+                // the copies of *this* model only — a form X beside app A says nothing about the case X
+                // that sits beside app B
+                for ((t, f) in (byKey[key] ?: emptyList())) if (t == n["type"]) containers.add(containerOf(f))
                 containers.add(containerOf(n["file"] as? String))
                 // a member only because it sits beside the app — the app definition does not list it, which
                 // the app's completeness table tells apart from a declared member
                 for (c in containers) {
-                    if (c != null && c in appByContainer) addEdge(appByContainer[c], n["id"] as String, "contains", colocated = true)
+                    for (app in appByContainer[c].orEmpty()) addEdge(app, n["id"] as String, "contains", colocated = true)
                 }
             }
         }
@@ -1048,10 +1079,10 @@ object GraphBuilder {
         return path.substringAfterLast('!').substringAfterLast('/')
     }
 
-    /** The 'app container' of a file: its archive (before '!') or its parent dir. */
+    /** The 'app container' of a file: its innermost archive (before the last '!') or its parent dir. */
     private fun containerOf(path: String?): String? {
         if (path.isNullOrEmpty()) return null
-        if ("!" in path) return path.substringBefore("!")
+        if ("!" in path) return path.substringBeforeLast("!")
         return if ("/" in path) path.substringBeforeLast("/") else "."
     }
 

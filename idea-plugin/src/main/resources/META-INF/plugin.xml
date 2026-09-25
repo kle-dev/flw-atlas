@@ -169,7 +169,35 @@
               whichever model Atlas listed first under that key: a service's operation calls showed up on a
               form or page with the same key, and the service showed none. Each call now carries the node it
               came from (<code>sourceId</code>).</li>
-          <li><b>A data object's <i>Shown in</i> names only the forms that show the field.</b> Any form
+          <li><b>A key two models share never hands one model's links to the other.</b> Wherever Atlas still
+              looked a model up by key alone, it took whichever model it had listed first under that key.
+              That lookup is gone: a record about a model reaches that model, or the other half of its
+              family (a form and a page, a data object and master data), or nothing. - A Java literal passed
+              to a key-taking API reaches a model of the type that API takes:
+              <code>caseDefinitionKey("X")</code> is the case <code>X</code>, never the process
+              <code>X</code>. Signal names, message names and operation keys
+              (<code>signalEventReceived</code>, <code>messageName</code>, <code>operationKey</code>) are no
+              model keys, and no longer make clean references to a process of that name. - An action's bot
+              is linked from the action, not from a process of the same key, and a bot key never links to a
+              form, group or variable that happens to share it. - A <code>.form</code> file whose metadata
+              says <code>page</code> is a page throughout: its bindings, variables and references belong to
+              it. They went to a same-key case, and so did the app's <i>contains</i> and a task's form. - A
+              master-data list's references and access are its own. - A scope that reads every variable
+              (<code>getVariables()</code>, a template rendered against the whole container) silences its
+              own unused variables — not a same-key model's. Two false <i>written but never read</i> went
+              away on one real project. - A key only a model of another type has is a missing reference, not
+              an edge to that model: a call activity naming a form's key starts no process, and is reported
+              as the missing process it is. A process and a case stand in for each other only where the
+              reference cannot say which — a variable extractor, an SLA, a query. The app definition's
+              <code>security</code> and <code>decisionService</code> child types resolve to the security
+              policy and decision they name, instead of as suspect links. - An app contains a model beside
+              it in its own archive — not a model of another type with the same key beside another app, and
+              not every model of an export that holds several <code>.bar</code>s. - A missing form and a
+              missing process of the same key are two missing models, not one node that calls both a form. -
+              A dynamic reference (<code>calledElement="${subProcessKey}"</code>) is no longer resolved
+              through a Java constant of that name: the engine reads a variable there, and the constant said
+              nothing about it.</li>
+          <li><b>A data object's Shown in column names only the forms that show the field.</b> Any form
               referring to the object counted every dotted component id's last segment as one of its fields,
               so <code>shipTo.deliveryCity</code> on a form that also lists customers "showed" the
               customer's <code>deliveryCity</code>. Only a component under one bound to this object counts
@@ -517,33 +545,6 @@
               six <i>unused operation</i> findings are gone. In the IDE, <code>.serviceData("name",
               v)</code> is checked against the operation's input parameters, as a data object's
               <code>.value(…)</code> already was.</li>
-          <li><b>A Spring property a model reads links to where it is set.</b>
-              <code>environment.getProperty('crm.base-url')</code> and
-              <code>propertyConfigurationService.getProperty("…")</code> in a model are edges to a property
-              node whose page lists the file and line of every <code>application*.properties</code> and
-              <code>application*.yml</code> that sets it, in Spring's relaxed spelling. Ctrl/⌘-click on the
-              key in the expression opens those lines. A property set nowhere in the repository is not a
-              finding: the value may come from the environment.</li>
-          <li><b>User definitions and tenant setups join the graph.</b> A <code>.user.json</code> user
-              definition links to the forms that create, show and edit such a user and to the groups it
-              joins; a tenant setup to the groups it defines and the user definitions its users are of. A
-              tenant setup contributes how many users of each kind it creates, never their logins or
-              passwords. A form the platform ships is not reported missing.</li>
-          <li><b>More of what Java hands the engine is seen.</b> A map passed to
-              <code>startProcessInstanceByKey</code>, <code>complete</code>, <code>.variables(…)</code> or
-              <code>setVariables</code> writes every name put into it. A model that renders a template
-              against its whole variable container reads every variable it holds, so none of them is
-              reported unread. <code>mainContentTemplate(…)</code> and <code>userDefinitionKey(…)</code>
-              name a model like the other key-taking calls.</li>
-          <li><b>A model's page names the tests that deploy it</b>, from <code>@Deployment(resources =
-              …)</code> and its CMMN, DMN and app siblings; a master-data definition lists the files that
-              load its rows.</li>
-          <li><b>Explorer pages for endpoints and groups.</b> An endpoint lists who calls it, with the verb,
-              the URL as the model spells it and the button that does; a group lists what its members may do
-              per model. A form's REST call or a service operation whose URL lands on a project endpoint
-              links to it. A table past a hundred rows, or a relation past sixty neighbours, shows the first
-              ones and <i>show all</i>. On a touch screen a vertical swipe over a diagram scrolls the page
-              and two fingers zoom.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

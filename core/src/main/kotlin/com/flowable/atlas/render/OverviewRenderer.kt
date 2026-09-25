@@ -660,8 +660,7 @@ object OverviewRenderer {
         if (dynRefs.isNotEmpty()) {
             L.add("### Dynamic references (expression-valued — resolved at runtime)")
             for (r in dynRefs.take(30)) {
-                val res = r["resolvedValue"]?.let { " → resolves to `${pyStr(it)}` (constant)" } ?: ""
-                L.add("- `${pyStr(r["from"])}` —${pyStr(r["rel"])}→ ${pyStr(r["kind"])} `${pyStr(r["value"])}`$res")
+                L.add("- `${pyStr(r["from"])}` —${pyStr(r["rel"])}→ ${pyStr(r["kind"])} `${pyStr(r["value"])}`")
             }
             if (dynRefs.size > 30) L.add("- … ${dynRefs.size - 30} more")
             L.add("")

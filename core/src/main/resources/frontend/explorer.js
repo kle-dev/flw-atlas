@@ -1231,7 +1231,7 @@ function renderDashboard(){
   let h='<div class="dash">';
   const suN=st.suspectEdges||0, dyN=st.dynamicEdges||0;
   const uncertain=(suN||dyN)?' · '+[suN?suN+' suspect':'',dyN?dyN+' dynamic':''].filter(Boolean).join(' + ')
-    +' <span data-tip="suspect = loose/cross-type match — dynamic = expression-valued reference">link'+((suN+dyN)>1?'s':'')+'</span>':'';
+    +' <span data-tip="suspect = ambiguous match — dynamic = expression-valued reference">link'+((suN+dyN)>1?'s':'')+'</span>':'';
   h+='<div class="dash-title">'+esc(DATA.project)+'</div>'+
      '<div class="dash-sub">'+nodes.length+' nodes · '+edges.length+' links'+uncertain+' across the model &amp; code graph</div>';
   // Health beside hotspots, then the inventory, then apps beside entry points — what a reader came for
@@ -2335,7 +2335,7 @@ function renderChecks(){
   const suN=st.suspectEdges||0, dyN=st.dynamicEdges||0;
   if(suN+dyN){
     b+=section('chk-uncertain','Uncertain links','<p class="ddesc">'+
-       (suN?suN+' suspect (≈ resolved by a loose or cross-type match)':'')+(suN&&dyN?' · ':'')+
+       (suN?suN+' suspect (≈ resolved by an ambiguous match)':'')+(suN&&dyN?' · ':'')+
        (dyN?dyN+' dynamic (ƒ expression-valued reference)':'')+' — View › Uncertain links in the top bar hides them everywhere.</p>',
        {count:suN+dyN, attrs:' id="chk-uncertain"'});
   }
@@ -3227,7 +3227,7 @@ function syncListSelection(){
 function nodeChip(id,f){
   const n=byId.get(id); if(!n) return '';
   const cls=f&&f.sus?' nc-sus':f&&f.dyn?' nc-dyn':'';
-  const flag=f&&f.sus?'<span class="ncflag" title="suspect — loose or cross-type match">≈</span>'
+  const flag=f&&f.sus?'<span class="ncflag" title="suspect — ambiguous match">≈</span>'
            :f&&f.dyn?'<span class="ncflag" title="dynamic — reference is an expression">ƒ</span>':'';
   return '<span class="nc'+cls+'" data-id="'+enc(id)+'" tabindex="0" role="link">'+nodeIcon(n)+
     '<span class="nm">'+esc(n.label)+'</span>'+flag+'<span class="ty">'+esc(nodeKind(n))+'</span>'+copyBtn(n.key,nodeKind(n)+' key')+'</span>';
@@ -8868,7 +8868,7 @@ function wireViewMenu(){
   const st=DATA.stats||{}, su=st.suspectEdges||0, dy=st.dynamicEdges||0;
   const ITEMS=[
     {id:'linkfilter', show:su+dy>0, on:()=>!hideUncertain,
-     desc:()=>su+' suspect ≈ (a loose or cross-type match) · '+dy+' dynamic ƒ (an expression) — '+
+     desc:()=>su+' suspect ≈ (an ambiguous match) · '+dy+' dynamic ƒ (an expression) — '+
        (hideUncertain?'hidden':'shown')+' in the panel, the tree and the overview counts',
      flip:()=>{
        hideUncertain=!hideUncertain;

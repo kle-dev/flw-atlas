@@ -418,6 +418,8 @@ object ModelParsers {
         val key = meta["key"]
         val defaultType = if (ffile.lowercase().endsWith(".page")) "page" else "form"
         val mtype = (meta["modelType"] as? String) ?: defaultType
+        // the metadata, not the extension, says which node this is — see Extractor.dispatch
+        if (mtype == "form" || mtype == "page") ctx.currentModel = mtype
         val fields = ArrayList<Any?>()
         val outcomes = ArrayList<Any?>()
         val dataSources = ArrayList<Any?>()
@@ -1095,26 +1097,28 @@ object ModelParsers {
     fun parseDataObject(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
         val doc = json(data)
         val key = doc["key"]
+        val masterData = doc["dataObjectType"] == "masterData"
+        // what every record below is about: a master-data list is its own node type, not a data object
+        val self = if (masterData) "masterData" else "dataObject"
         (objOf(doc["definitionIdentityLinks"]) ?: emptyMap()).forEach { (action, links) ->
             val lm = objOf(links) ?: return@forEach
-            ctx.addAccess(key, "dataObject", "definition", action, (lm["groups"] as? List<*>)?.joinToString(",") ?: "")
+            ctx.addAccess(key, self, "definition", action, (lm["groups"] as? List<*>)?.joinToString(",") ?: "")
         }
         for (il in listOfObjs(doc["instanceIdentityLinks"])) {
-            ctx.addAccess(key, "dataObject", "instance", (il["type"] as? String) ?: "link", (il["groups"] as? List<*>)?.joinToString(",") ?: "")
+            ctx.addAccess(key, self, "instance", (il["type"] as? String) ?: "link", (il["groups"] as? List<*>)?.joinToString(",") ?: "")
         }
-        ctx.addRef(key, "dataObject", ffile, "backed-by-service", "service", doc["referencedServiceDefinitionModelKey"])
-        ctx.addRef(key, "dataObject", ffile, "typed-by-dictionary", "dataDictionary", doc["referencedDataDictionaryModelKey"])
+        ctx.addRef(key, self, ffile, "backed-by-service", "service", doc["referencedServiceDefinitionModelKey"])
+        ctx.addRef(key, self, ffile, "typed-by-dictionary", "dataDictionary", doc["referencedDataDictionaryModelKey"])
         val columns = ArrayList<Map<String, Any?>>()
         for (f in listOfObjs(doc["fieldMappings"])) {
             val col = linkedMapOf<String, Any?>("name" to f["name"], "label" to f["label"], "type" to f["type"])
             if (truthy(f["dataObjectModelKey"])) {
                 col["refDataObject"] = f["dataObjectModelKey"]
                 col["relationship"] = f["dataObjectModelRelationshipType"]
-                ctx.addRef(key, "dataObject", ffile, "relates-to", "dataObject", f["dataObjectModelKey"])
+                ctx.addRef(key, self, ffile, "relates-to", "dataObject", f["dataObjectModelKey"])
             }
             columns.add(col)
         }
-        val masterData = doc["dataObjectType"] == "masterData"
         objOf(doc["variables"])?.forEach { (n, lbl) ->
             columns.add(linkedMapOf("name" to n, "label" to (lbl as? String), "type" to null))
             // A master-data list's `variables` are the columns of its reference table (`lang`, `color`),
@@ -1129,7 +1133,7 @@ object ModelParsers {
         val out = linkedMapOf<String, Any?>(
             "key" to key, "name" to doc["name"], "file" to ffile,
             // the `others` bucket node-ifies by `modelType`; a data object's is redundant but harmless
-            "modelType" to (if (masterData) "masterData" else "dataObject"),
+            "modelType" to self,
             "dataObjectType" to doc["dataObjectType"], "sourceId" to doc["sourceId"],
             "service" to doc["referencedServiceDefinitionModelKey"], "dictionary" to doc["referencedDataDictionaryModelKey"],
             "dictionaryType" to doc["dataDictionaryTypeName"],

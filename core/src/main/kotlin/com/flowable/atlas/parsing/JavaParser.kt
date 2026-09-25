@@ -74,21 +74,33 @@ object JavaParser {
     // model-keys class is the usual home); one real project's whole Java layer is written this way and
     // had no code → model edge at all.
     private val IDENT_CTX_RE = Regex("""\b(\w+)\s*\(\s*((?:\w+\.)*[A-Z][A-Z0-9_]{2,})\s*[,)]""")
-    private val KEY_API_METHODS = setOf(
-        // engine + platform methods whose (first) String argument is a model key
-        "startProcessInstanceByKey", "startProcessInstanceByKeyAndTenantId", "startProcessInstanceByMessage",
-        "processDefinitionKey", "processDefinitionKeyLike", "processDefinitionKeyLikeIgnoreCase",
-        "caseDefinitionKey", "caseDefinitionKeyLike", "caseDefinitionKeyLikeIgnoreCase",
-        "decisionKey", "formDefinitionKey", "getFormModelByKey", "getFormModelWithVariablesByKey",
-        "getFormInstanceModelByKey", "definitionKey", "dataObjectDefinitionKey",
-        "eventDefinitionKey", "channelDefinitionKey", "getEventModelByKey", "getChannelModelByKey",
-        "serviceKey", "operationKey", "actionDefinitionKey", "templateKey", "processTemplate", "mainContentTemplate",
-        "userDefinitionKey",
-        "agentDefinitionKey", "getServiceDefinitionModelByKey", "getServiceDefinitionByKey",
-        "getActionDefinitionModelByKey", "getActionDefinitionByKey", "getPolicyModelByKey",
-        "taskFormKey", "formKey", "key", "operation", "messageName", "signalEventReceived",
-        "signalEventReceivedAsync", "messageEventReceived", "messageEventReceivedAsync",
-    )
+    /**
+     * Engine and platform methods whose (first) String argument is a model key, with the model types that
+     * key can name — an empty set for the untyped `key(…)`. The type is what keeps the reference honest:
+     * `caseDefinitionKey("X")` names the case `X`, not the process or form that happens to share the key
+     * (a key shared by two types is common). Signal and message names, and operation keys, are no model
+     * keys at all and are not listed: `signalEventReceived("X")` was a clean reference to a process `X`.
+     */
+    private val KEY_API_KINDS: Map<String, Set<String>> = buildMap {
+        fun put(kinds: Set<String>, vararg methods: String) = methods.forEach { put(it, kinds) }
+        put(setOf("process"), "startProcessInstanceByKey", "startProcessInstanceByKeyAndTenantId",
+            "processDefinitionKey", "processDefinitionKeyLike", "processDefinitionKeyLikeIgnoreCase")
+        put(setOf("case"), "caseDefinitionKey", "caseDefinitionKeyLike", "caseDefinitionKeyLikeIgnoreCase")
+        put(setOf("decision"), "decisionKey")
+        put(setOf("form", "page"), "formDefinitionKey", "getFormModelByKey", "getFormModelWithVariablesByKey",
+            "getFormInstanceModelByKey", "taskFormKey", "formKey")
+        put(setOf("dataObject", "masterData"), "definitionKey", "dataObjectDefinitionKey")
+        put(setOf("event"), "eventDefinitionKey", "getEventModelByKey")
+        put(setOf("channel"), "channelDefinitionKey", "getChannelModelByKey")
+        put(setOf("service"), "serviceKey", "getServiceDefinitionModelByKey", "getServiceDefinitionByKey")
+        put(setOf("action"), "actionDefinitionKey", "getActionDefinitionModelByKey", "getActionDefinitionByKey")
+        put(setOf("template"), "templateKey", "processTemplate", "mainContentTemplate")
+        put(setOf("agent"), "agentDefinitionKey")
+        put(setOf("securityPolicy"), "getPolicyModelByKey")
+        put(setOf("user"), "userDefinitionKey")
+        put(emptySet(), "key")
+    }
+
     // Flowable data-object runtime builder chain: `.definitionKey(<expr>) … .operation("<literal>")`.
     private val DEFINITION_KEY_RE = Regex("""\.definitionKey\(\s*([^)]+?)\s*\)""")
     // The operation as written — a literal or a constant (`.operation(Ops.FIND_ALL)`), resolved by the caller.
@@ -259,14 +271,22 @@ object JavaParser {
         if (roles.isEmpty()) roles.add("other")
 
         // literals whose call context is a known key-taking Flowable API — confident model refs
+        // and the model types each can name (`keyedKinds`, empty for the untyped `key(…)`)
         val keyedStrings = LinkedHashSet<String>()
+        val keyedKinds = LinkedHashMap<String, MutableSet<String>>()
         for (m in STR_CTX_RE.findAll(text)) {
-            if (m.groupValues[1] in KEY_API_METHODS) keyedStrings.add(m.groupValues[2])
+            val kinds = KEY_API_KINDS[m.groupValues[1]] ?: continue
+            keyedStrings.add(m.groupValues[2])
+            keyedKinds.getOrPut(m.groupValues[2]) { sortedSetOf() }.addAll(kinds)
         }
         // constants at the same positions, by simple name — the resolver has the values
         val keyedIdents = LinkedHashSet<String>()
+        val keyedIdentKinds = LinkedHashMap<String, MutableSet<String>>()
         for (m in IDENT_CTX_RE.findAll(text)) {
-            if (m.groupValues[1] in KEY_API_METHODS) keyedIdents.add(m.groupValues[2].substringAfterLast('.'))
+            val kinds = KEY_API_KINDS[m.groupValues[1]] ?: continue
+            val ident = m.groupValues[2].substringAfterLast('.')
+            keyedIdents.add(ident)
+            keyedIdentKinds.getOrPut(ident) { sortedSetOf() }.addAll(kinds)
         }
 
         // Variable accesses, split by verb. `vars` stays the union so every existing consumer is
@@ -310,7 +330,9 @@ object JavaParser {
             "readsAllVariables" to JAVA_VARS_ALL_RE.containsMatchIn(text),
             "strings" to JAVA_STR_RE.findAll(text).map { it.groupValues[1] }.toCollection(LinkedHashSet()),
             "keyedStrings" to keyedStrings,
+            "keyedKinds" to keyedKinds,
             "keyedIdents" to keyedIdents,
+            "keyedIdentKinds" to keyedIdentKinds,
             "topics" to TOPIC_CALL_RE.findAll(text).map { it.groupValues[1] }.toSortedSet().toList(),
             "line" to (if (classDeclIdx != -1) lineOf(classDeclIdx) else 1),
         )

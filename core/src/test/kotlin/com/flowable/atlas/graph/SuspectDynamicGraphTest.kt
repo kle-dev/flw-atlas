@@ -2,7 +2,7 @@ package com.flowable.atlas.graph
 
 import org.junit.AfterClass
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.BeforeClass
 import org.junit.Test
@@ -10,9 +10,9 @@ import java.io.File
 import java.nio.file.Files
 
 /**
- * Graph-level behavior of the audit fixes: an incompatible cross-type key fallback yields a
- * SUSPECT edge (not a clean one), a compatible one (process↔case) stays clean but tagged,
- * expression-valued references surface as DYNAMIC edges to a placeholder node, and
+ * Graph-level behavior of the audit fixes: a key only a model of another type has is a missing
+ * reference, not an edge to that model; expression-valued references surface as DYNAMIC edges to a
+ * placeholder node, and
  * signal-throw/catch plus external-worker topics meet in shared named nodes.
  */
 class SuspectDynamicGraphTest {
@@ -71,17 +71,15 @@ class SuspectDynamicGraphTest {
         edges().firstOrNull { it["s"] == s && it["t"] == t && it["rel"] == rel }
 
     @Test
-    fun incompatibleCrossTypeFallbackIsSuspect() {
-        val e = edge("process:callerProcess", "form:customerForm", "callActivity")
-        assertTrue("expected the cross-type callActivity edge to exist", e != null)
-        assertEquals("a process→form callActivity edge must be flagged suspect", true, e!!["suspect"])
-    }
-
-    @Test
-    fun compatibleCrossTypeFallbackStaysClean() {
-        val e = edge("process:callerProcess", "case:reviewCase", "callActivity")
-        assertTrue("expected the process→case callActivity edge to exist", e != null)
-        assertNull("process→case is a compatible fallback — no suspect flag", e!!["suspect"])
+    @Suppress("UNCHECKED_CAST")
+    fun aCallActivityToAKeyOnlyAnotherTypeHasIsAMissingProcess() {
+        // A form and a case of that key are other models: a call activity starts a process or nothing.
+        // Drawn as a (suspect) edge to them, the missing callee was never reported.
+        val targets = edges().filter { it["s"] == "process:callerProcess" && it["rel"] == "callActivity" }.map { it["t"] }
+        assertFalse("form:customerForm" in targets)
+        assertFalse("case:reviewCase" in targets)
+        val missing = (result["findings"] as List<Map<String, Any?>>).filter { it["check"] == "missingRefs" }.map { it["node"] }
+        assertTrue(missing.toString(), "external:customerForm" in missing && "external:reviewCase" in missing)
     }
 
     @Test
@@ -112,7 +110,7 @@ class SuspectDynamicGraphTest {
     fun statsCountSuspectAndDynamicEdges() {
         @Suppress("UNCHECKED_CAST")
         val stats = result["stats"] as Map<String, Any?>
-        assertTrue((stats["suspectEdges"] as Number).toInt() >= 1)
+        assertEquals(0, (stats["suspectEdges"] as Number).toInt())
         assertTrue((stats["dynamicEdges"] as Number).toInt() >= 1)
     }
 }

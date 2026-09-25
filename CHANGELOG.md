@@ -34,7 +34,35 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
 - **A REST call belongs to the model that makes it.** Calls were credited by key alone, to whichever model
   Atlas listed first under that key: a service's operation calls showed up on a form or page with the same
   key, and the service showed none. Each call now carries the node it came from (`sourceId`).
-- **A data object's *Shown in* names only the forms that show the field.** Any form referring to the object
+- **A key two models share never hands one model's links to the other.** Wherever Atlas still looked a
+  model up by key alone, it took whichever model it had listed first under that key. That lookup is gone:
+  a record about a model reaches that model, or the other half of its family (a form and a page, a data
+  object and master data), or nothing.
+  - A Java literal passed to a key-taking API reaches a model of the type that API takes:
+    `caseDefinitionKey("X")` is the case `X`, never the process `X`. Signal names, message names and
+    operation keys (`signalEventReceived`, `messageName`, `operationKey`) are no model keys, and no longer
+    make clean references to a process of that name.
+  - An action's bot is linked from the action, not from a process of the same key, and a bot key never
+    links to a form, group or variable that happens to share it.
+  - A `.form` file whose metadata says `page` is a page throughout: its bindings, variables and
+    references belong to it. They went to a same-key case, and so did the app's *contains* and a task's
+    form.
+  - A master-data list's references and access are its own.
+  - A scope that reads every variable (`getVariables()`, a template rendered against the whole container)
+    silences its own unused variables — not a same-key model's. Two false *written but never read* went
+    away on one real project.
+  - A key only a model of another type has is a missing reference, not an edge to that model: a call
+    activity naming a form's key starts no process, and is reported as the missing process it is. A
+    process and a case stand in for each other only where the reference cannot say which — a variable
+    extractor, an SLA, a query. The app definition's `security` and `decisionService` child types
+    resolve to the security policy and decision they name, instead of as suspect links.
+  - An app contains a model beside it in its own archive — not a model of another type with the same key
+    beside another app, and not every model of an export that holds several `.bar`s.
+  - A missing form and a missing process of the same key are two missing models, not one node that calls
+    both a form.
+  - A dynamic reference (`calledElement="${subProcessKey}"`) is no longer resolved through a Java
+    constant of that name: the engine reads a variable there, and the constant said nothing about it.
+- **A data object's Shown in column names only the forms that show the field.** Any form referring to the object
   counted every dotted component id's last segment as one of its fields, so `shipTo.deliveryCity` on a form
   that also lists customers "showed" the customer's `deliveryCity`. Only a component under one bound to this
   object counts now — the same rule the form's own "not a field of the object" check uses.

@@ -6302,7 +6302,9 @@
         ],
         "isController": false,
         "isGlue": false,
+        "keyedIdentKinds": {},
         "keyedIdents": [],
+        "keyedKinds": {},
         "keyedStrings": [],
         "line": 7,
         "methods": [
@@ -6349,7 +6351,9 @@
         "interfaces": [],
         "isController": false,
         "isGlue": false,
+        "keyedIdentKinds": {},
         "keyedIdents": [],
+        "keyedKinds": {},
         "keyedStrings": [],
         "line": 6,
         "methods": [
@@ -6412,7 +6416,9 @@
         "interfaces": [],
         "isController": true,
         "isGlue": false,
+        "keyedIdentKinds": {},
         "keyedIdents": [],
+        "keyedKinds": {},
         "keyedStrings": [],
         "line": 8,
         "methods": [
@@ -6474,7 +6480,9 @@
       "interfaces": [],
       "isController": true,
       "isGlue": false,
+      "keyedIdentKinds": {},
       "keyedIdents": [],
+      "keyedKinds": {},
       "keyedStrings": [],
       "line": 8,
       "methods": [
@@ -7701,17 +7709,6 @@
       "fromFile": "processes/order.bpmn",
       "fromType": "bpmn",
       "kind": "bean",
-      "rel": "calls run()",
-      "target": "src/main/java/com/example/DemoBean.java:6 (com.example.DemoBean)",
-      "targetFqn": "com.example.DemoBean",
-      "targetType": "bean",
-      "value": "demoBean"
-    },
-    {
-      "from": "orderProcess",
-      "fromFile": "processes/order.bpmn",
-      "fromType": "bpmn",
-      "kind": "bean",
       "rel": "serviceTask-expression",
       "target": "src/main/java/com/example/DemoBean.java:6 (com.example.DemoBean)",
       "targetFqn": "com.example.DemoBean",
@@ -7772,6 +7769,17 @@
       "targetNodeType": "process",
       "targetType": "model",
       "value": "fulfilmentProcess"
+    },
+    {
+      "from": "orderProcess",
+      "fromFile": "processes/order.bpmn",
+      "fromType": "process",
+      "kind": "bean",
+      "rel": "calls run()",
+      "target": "src/main/java/com/example/DemoBean.java:6 (com.example.DemoBean)",
+      "targetFqn": "com.example.DemoBean",
+      "targetType": "bean",
+      "value": "demoBean"
     },
     {
       "from": "orderVarExtractor",

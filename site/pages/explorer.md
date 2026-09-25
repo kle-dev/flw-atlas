@@ -462,7 +462,8 @@ Tab shortcuts are Alt-based on purpose: browsers reserve ⌘/Ctrl+1…9 and ⌘W
 
 The explorer never presents a guess as a fact:
 
-- **`≈` suspect** — the link was resolved through a loose or cross-type match. The chip is dashed.
+- **`≈` suspect** — the link was resolved through an ambiguous match (see
+  [uncertain links](../artifacts/#uncertain-links)). The chip is dashed.
 - **`ƒ` dynamic** — the reference was an expression, so its target is only certain at runtime.
 - **View › Uncertain links** in the top bar hides every uncertain link at once — in the detail panel, the reference tree, the
   overview's hotspots and reference counts alike — so you can see what is left when only

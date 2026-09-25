@@ -143,13 +143,18 @@ type and renders every match.
 Atlas distinguishes three states, in every artifact, rather than presenting a guess as a fact:
 
 - **resolved** — the reference ties to a real node.
-- **suspect** (`≈`) — resolved through a loose or cross-type match: an ambiguous Java simple name, a
-  loose REST path match, a cross-type fallback, or a Java string literal that merely equals a model key
-  without being passed to a key-taking API. A constant passed to such an API — `.caseDefinitionKey(
-  ModelConstants.MAIN_CASE)` — is resolved to its `static final String` value and counts as the literal
-  would, unless two classes give that name different values.
+- **suspect** (`≈`) — resolved, but not certainly: a Java simple name or bean name two classes share, a
+  Java string literal that merely equals a model key without being passed to a key-taking API, a model
+  referenced by id where a key is expected, or a REST call whose verb the handler for that path does not
+  serve. A literal passed to a key-taking API reaches a model of the type that API takes —
+  `.caseDefinitionKey("X")` is the case `X`, never a process or form of the same key — and a constant
+  passed to one (`.caseDefinitionKey(ModelConstants.MAIN_CASE)`) is resolved to its `static final String`
+  value and counts as the literal would, unless two classes give that name different values. A key that
+  only a model of another type has is not a suspect link but a missing reference: a call activity
+  naming a form's key starts no process.
 - **dynamic** (`ƒ`) — the reference was an expression, so its target is only known at runtime. Atlas
-  resolves it when a constant backs it and otherwise records the placeholder.
+  records the placeholder; `${subProcessKey}` reads a variable when it runs, and no Java constant of that
+  name says which.
 
 Anything that could not be resolved at all is listed separately — platform beans, external REST
 endpoints, missing keys — so a real gap stands out instead of hiding among the noise.

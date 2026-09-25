@@ -63,7 +63,8 @@ object VarHarvest {
                 ctx.addVarSite(k, n, Ctx.READ, "scriptRead", element, elementName, elementType, proven = false)
             }
             for (n in use.undecided) ctx.markReadsUnknown(n)
-            if (use.readsWholeScope) ctx.varScopeReadsAll.add(k.toString())
+            // typed, like every record about the model: by bare key it silenced a same-key model instead
+            if (use.readsWholeScope) ctx.modelId(k)?.let { ctx.varScopeReadsAll.add(it) }
         }
     }
 
