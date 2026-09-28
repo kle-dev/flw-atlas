@@ -50,6 +50,8 @@ These tests drive the generated explorer in headless Chrome — or its pure part
 | `:cli:searchSelfTest` | The search engine, evaluated out of `explorer.js` and run against a query table |
 | `:cli:explorerUiTest` | The page boots without errors; click, ⌘-click, Shift-click and Enter all activate a hit; facets narrow; the browse list navigates |
 | `:cli:diagramUiTest` | The diagram element card's geometry — that an expanded card escapes its viewport and the scrim covers the modal |
+| `:cli:islandSelfTest` | The explorer's inflater, evaluated out of `explorer.js` in node against zlib: stored, fixed and dynamic blocks, every level and strategy, multi-byte text, truncated or mislabelled input, and a 20 MB island in well under a second |
+| `:cli:explorerUiTestDeflated` | Every `explorerUiTest` check again, on a page whose data island is deflated — written with the system property `atlas.explorer.compressAbove=0`, since the fixture is far below the 1 MB where deflating starts |
 | `:cli:erdSelfTest` | The ER diagram designer's core, evaluated out of `erd.js` in node: which tables a project has, column order against a changed schema, the relations the models propose, what a diagram file may contain, the search's ranking, and *Arrange* — one side left of many, no overlaps, no avoidable crossing, stable when repeated, forty tables in well under a second |
 | `:cli:erdUiTest` | The designer's page for the demo project, with real mouse and key input over the DevTools protocol (the canvas captures the pointer, which synthetic events skip): drag a table in, relate, reorder, colour, undo, reload, export, arrange a heap of tables, expand and collapse all, search and go to a column, present — and that the explorer has none of it |
 

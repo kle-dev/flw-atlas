@@ -13,6 +13,7 @@
  * Usage:  node scripts/search-diagnose.mjs <report.explorer.html> "<query>"
  */
 import fs from 'fs';
+import zlib from 'zlib';
 
 const [file, query] = process.argv.slice(2);
 if (!file || !query) {
@@ -45,7 +46,12 @@ eng.SX_ENV.elementNames = new Function(
 const tmSrc = html.match(/const TM\s*=\s*\{[\s\S]*?\n\};/);
 if (tmSrc) eng.SX_ENV.TM = new Function(`${tmSrc[0]}return TM;`)();
 
-const DATA = JSON.parse(html.match(/<script type="application\/json" id="atlas-data">([\s\S]*?)<\/script>/)[1]);
+// a large project's island is deflated and Base64-encoded (ExplorerHtmlRenderer.islandTag)
+const plainIsland = html.match(/<script type="application\/json" id="atlas-data">([\s\S]*?)<\/script>/);
+const deflatedIsland = html.match(/<script type="application\/octet-stream" id="atlas-data" data-encoding="deflate-base64"[^>]*>([\s\S]*?)<\/script>/);
+// the deflated one first: explorer.js names the plain island's tag in a comment, which a deflated page's
+// plain-island match would find instead
+const DATA = JSON.parse(deflatedIsland ? zlib.inflateRawSync(Buffer.from(deflatedIsland[1], 'base64')).toString('utf8') : plainIsland[1]);
 const nodes = DATA.nodes || [];
 const indeg = new Map();
 for (const e of DATA.edges || []) indeg.set(e.to, (indeg.get(e.to) || 0) + 1);

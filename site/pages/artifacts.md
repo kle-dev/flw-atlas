@@ -26,6 +26,12 @@ network — it works. In the IDE the same file renders as an editor tab, theme-s
 footer says which Atlas version generated it and when, so a page that has travelled can still tell you
 how old it is.
 
+A large project's graph — anything above 1 MB of it — is embedded deflated and Base64-encoded, and the
+page inflates it with its own code before it starts: the file is about a quarter of the size, and it
+still opens the same way in any browser, from disk, from a web server or in the IDE. That is what keeps a
+large project's explorer under the 20 MB above which the IDE, and a Remote Development client, refuse to
+open a file.
+
 This is the artifact for a human who wants to *understand* a project. It has its own page:
 [The Atlas explorer](../explorer/).
 

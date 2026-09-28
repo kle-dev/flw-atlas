@@ -885,6 +885,8 @@ function build(root){
         '<div class="erd-list" role="listbox" aria-label="Tables — drag one onto the canvas"></div>'+
         '<div class="erd-side-foot">Drag a table onto the canvas, or press <b>+</b>.</div>'+
       '</aside>'+
+      '<div class="erd-side-resize" role="separator" aria-orientation="vertical" tabindex="0" aria-valuemin="'+SIDE_MIN+'" '+
+        'aria-valuemax="'+SIDE_MAX+'"></div>'+
       '<div class="erd-main">'+
         '<div class="erd-bar" role="toolbar" aria-label="Diagram">'+
           '<select class="erd-pick" aria-label="Diagram"></select>'+
@@ -928,8 +930,51 @@ function build(root){
   els={root, box:q('.erd'), list:q('.erd-list'), filter:q('.erd-filter'), pick:q('.erd-pick'), status:document.getElementById('erd-status'),
     pct:q('.erd-pct'), canvas:q('.erd-canvas'), svg:q('.erd-svg'), world:q('.erd-world'), overlay:q('.erd-overlay'),
     hint:q('.erd-empty'), pop:q('.erd-pop'), file:q('.erd-file'), bar:q('.erd-bar'),
-    search:q('.erd-q'), results:q('.erd-results'), qwrap:q('.erd-qwrap')};
+    search:q('.erd-q'), results:q('.erd-results'), qwrap:q('.erd-qwrap'), sideResize:q('.erd-side-resize')};
   wire();
+}
+// ---------- the list's width ----------
+// A table name of forty characters does not fit the list's 264px. Its right edge drags, as the explorer's
+// sidebar does — the same contract: ←/→ by 16px, Home or a double click resets — and the width is
+// remembered in this browser: it is how one person likes the page, not part of any diagram.
+const SIDE_MIN=200, SIDE_MAX=640, SIDE_DEF=264, SIDE_KEY='atlas-erd-side-w';
+function sideClamp(v){ return Math.round(Math.max(SIDE_MIN, Math.min(SIDE_MAX, v))); }
+function sideWidth(){
+  let w=NaN; try{ w=parseInt(localStorage.getItem(SIDE_KEY), 10); }catch(e){}
+  return w>=SIDE_MIN && w<=SIDE_MAX ? w : SIDE_DEF;
+}
+function applySide(w, keep){
+  els.box.style.setProperty('--erd-side-w', w+'px');
+  els.sideResize.setAttribute('aria-valuenow', String(w));
+  els.sideResize.setAttribute('aria-label', 'Table list width '+w+'px — drag to resize, double-click to reset');
+  if(keep===undefined) return;
+  try{ if(keep) localStorage.setItem(SIDE_KEY, String(w)); else localStorage.removeItem(SIDE_KEY); }catch(e){}
+}
+function wireSideResize(){
+  const h=els.sideResize;
+  applySide(sideWidth());
+  let startX=0, startW=0, dragging=false;
+  h.addEventListener('pointerdown', e=>{
+    dragging=true; startX=e.clientX; startW=els.side().getBoundingClientRect().width;
+    try{ h.setPointerCapture(e.pointerId); }catch(_){}
+    els.box.classList.add('resizing'); e.preventDefault();
+  });
+  h.addEventListener('pointermove', e=>{ if(dragging) applySide(sideClamp(startW+e.clientX-startX)); });
+  const end=e=>{
+    if(!dragging) return; dragging=false;
+    els.box.classList.remove('resizing');
+    try{ h.releasePointerCapture(e.pointerId); }catch(_){}
+    applySide(sideClamp(els.side().getBoundingClientRect().width), true);
+  };
+  h.addEventListener('pointerup', end);
+  h.addEventListener('pointercancel', end);
+  h.addEventListener('dblclick', ()=>applySide(SIDE_DEF, false));
+  h.addEventListener('keydown', e=>{
+    if(e.key==='ArrowLeft' || e.key==='ArrowRight'){
+      e.preventDefault();
+      applySide(sideClamp(els.side().getBoundingClientRect().width+(e.key==='ArrowRight'?16:-16)), true);
+    } else if(e.key==='Home'){ e.preventDefault(); applySide(SIDE_DEF, false); }
+  });
 }
 function ico(body){ return '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" '+
   'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+body+'</svg>'; }
@@ -1241,6 +1286,8 @@ function wire(){
     doAct(b.dataset.act, b);
   });
   els.pick.addEventListener('change', ()=>switchTo(els.pick.value));
+  els.side=()=>els.box.querySelector('.erd-side');
+  wireSideResize();
   wireSearch();
   els.filter.addEventListener('input', ()=>{ S.filter=els.filter.value; renderList(); });
   els.list.addEventListener('pointerdown', onListDown);

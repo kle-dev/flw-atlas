@@ -227,7 +227,56 @@ val erdUiTest by tasks.registering(Exec::class) {
     )
 }
 
-tasks.named("check") { dependsOn(searchSelfTest, explorerUiTest, diagramUiTest, remoteStubUiTest, erdSelfTest, erdUiTest) }
+// A large project's data island is embedded deflated (ExplorerHtmlRenderer.islandTag) and inflated by the
+// page's own code before it boots. The inflater is held to zlib in node; then every explorer check runs
+// again on a deflated page — miniproject is far below the 1 MB where deflating starts, so this report is
+// written with the threshold at 0.
+val islandSelfTest by tasks.registering(Exec::class) {
+    description = "Runs the explorer's data-island inflater against zlib (skipped when node is unavailable)."
+    group = "verification"
+    val script = rootProject.file("scripts/island-selftest.mjs")
+    inputs.file(script)
+    inputs.file(rootProject.file("core/src/main/resources/frontend/explorer.js"))
+    onlyIf { nodePresentOrFail("islandSelfTest") }
+    commandLine(nodeExecutable ?: "node", script.absolutePath)
+}
+
+val explorerUiTestDeflatedDir = layout.buildDirectory.dir("explorer-uitest-deflated")
+
+val explorerUiTestDeflatedReport by tasks.registering(JavaExec::class) {
+    description = "Generates the miniproject explorer with its data island deflated."
+    group = "verification"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.flowable.atlas.cli.MainKt")
+    systemProperty("atlas.explorer.compressAbove", "0")
+    args(
+        rootProject.file("core/src/test/resources/miniproject").absolutePath,
+        "--html", "--quiet",
+        "-o", explorerUiTestDeflatedDir.get().asFile.resolve("miniproject.explorer.html").absolutePath,
+    )
+    inputs.dir(rootProject.file("core/src/test/resources/miniproject"))
+    inputs.dir(rootProject.file("core/src/main/resources/frontend"))
+    outputs.dir(explorerUiTestDeflatedDir)
+}
+
+val explorerUiTestDeflated by tasks.registering(Exec::class) {
+    description = "Drives the explorer in headless Chrome with its data island deflated (skipped without node/Chrome)."
+    group = "verification"
+    dependsOn(explorerUiTestDeflatedReport, islandSelfTest)
+    val script = rootProject.file("scripts/explorer-uitest.mjs")
+    inputs.file(script)
+    inputs.dir(rootProject.file("core/src/main/resources/frontend"))
+    onlyIf { nodePresentOrFail("explorerUiTestDeflated") }
+    commandLine(
+        nodeExecutable ?: "node",
+        script.absolutePath,
+        explorerUiTestDeflatedDir.get().asFile.resolve("miniproject.explorer.html").absolutePath,
+    )
+}
+
+tasks.named("check") {
+    dependsOn(searchSelfTest, explorerUiTest, diagramUiTest, remoteStubUiTest, erdSelfTest, erdUiTest, islandSelfTest, explorerUiTestDeflated)
+}
 
 // ---- documentation site (site/ -> build/site) ----
 // The site lives here rather than in the root build because everything it needs is already wired up

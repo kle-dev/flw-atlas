@@ -162,6 +162,25 @@ await withChrome(async page => {
   ok('a drawn relation hides the proposal for the same pair', await page.eval(`document.querySelectorAll('.erd-sug').length`) === 0);
   ok('the status says where the diagram comes from', /docs\/orders\.atlas-erd\.json/.test(await page.eval(`document.querySelector('.erd-status').textContent`)));
 
+  // ---- the list's width: dragged wider for a long table name, remembered, reset ----
+  const sideW = () => page.eval(`Math.round(document.querySelector('.erd-side').getBoundingClientRect().width)`);
+  ok('the list starts at its default width', await sideW() === 264, await sideW());
+  const edge = await page.at('.erd-side-resize');
+  await page.drag(edge, { x: edge.x + 160, y: edge.y }, 8);
+  ok('dragging the list’s edge widens it', Math.abs(await sideW() - 424) <= 3, await sideW());
+  ok('…the canvas gives way', Math.abs(await page.eval(`Math.round(document.querySelector('.erd-main').getBoundingClientRect().left)`) - await sideW()) <= 1);
+  ok('…and the width is remembered', await page.eval(`localStorage.getItem('atlas-erd-side-w')`) === String(await sideW()));
+  const edge2 = await page.at('.erd-side-resize');
+  await page.drag(edge2, { x: edge2.x + 900, y: edge2.y }, 8);
+  ok('it stops at 640px', await sideW() === 640, await sideW());
+  await page.eval(`document.querySelector('.erd-side-resize').dispatchEvent(new MouseEvent('dblclick', {bubbles:true}))`);
+  ok('a double click puts it back', await sideW() === 264 && await page.eval(`localStorage.getItem('atlas-erd-side-w')`) === null, await sideW());
+  await page.eval(`document.querySelector('.erd-side-resize').focus()`);
+  await page.key('ArrowRight', 'ArrowRight');
+  ok('→ widens it by 16px', await sideW() === 280, await sideW());
+  await page.key('Home', 'Home');
+  ok('Home resets it', await sideW() === 264, await sideW());
+
   // ---- a new diagram, from the menu ----
   await page.click(await page.at('[data-act=menu]'));
   ok('the diagram menu opens', await page.waitFor(`document.querySelector('.erd-pop[data-kind=menu]')`));

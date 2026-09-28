@@ -12,6 +12,21 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.28.3
+
+- **A large project's explorer is a fraction of its size, and opens under Remote Development again.**
+  0.28.0 made the explorer carry every Liquibase column's origin, every change set and each service's
+  schema coverage — on the projects measured the Liquibase part of the page about tripled — and a large
+  project's explorer grew past 20 MB: the IDE's content limit, above which a Remote Development client
+  refuses to open a file (*the file is too large*) before any editor is asked. The graph inside the page,
+  above 1 MB, is now embedded deflated and inflated by the page itself before it starts. It deflates about
+  tenfold, so an explorer is about a quarter of its size (5.4 MB to 1.4 MB on the largest project measured)
+  and still one self-contained HTML file that opens the same way in any browser, from disk, from a web
+  server or in the IDE. Nothing on the page changes.
+- **The ER designer's table list can be dragged wider,** for a table name longer than the list: drag its
+  right edge, or move the focused edge with `←` `→`; a double click or `Home` resets it. The width is
+  remembered in this browser.
+
 ## 0.28.2
 
 - **The ER diagram designer is a page of its own: `<project>.erd.html`.** It was a page inside the explorer,

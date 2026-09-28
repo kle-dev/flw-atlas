@@ -217,15 +217,18 @@ seconds is asked for again, and if it is still missing the card says what arrive
 asks only for the missing parts. The compressed page is kept in the client's
 browser storage under its content hash, so reopening the tab transfers nothing and a regenerated report is
 fetched once; a report too large for that storage (above roughly 20 MB) is fetched on every open, and the
-card says so. On a local IDE nothing changes: the file is read from disk.
+card says so. On a local IDE nothing changes: the file is read from disk. The client also refuses any file
+above the IDE's content limit — 20 MB, `idea.max.content.load.filesize` — with *the file is too large*,
+before the tab is even asked; the explorer stays well under it because a large project's graph is embedded
+deflated (see [the explorer artifact](../artifacts/)).
 
 Generate it from **Tools → Flowable Atlas → Generate → Atlas Explorer…** — the page opens as a
 tab the moment it is written — reopen it later with **Open Atlas Explorer**, and choose which artifacts a
 run produces in *Settings → Tools → Flowable Atlas → Generation*. One of them is the
 [ER diagram designer](../erd/), a page of its own beside the explorer: the project's tables on a canvas,
 searched, related and arranged — for explaining a data model to people who do not read changelogs. It opens
-in the same kind of tab, in the IDE's theme and colours, and stays small where a large explorer is too big
-for a Remote Development client. Once it is chosen, *Tools → Flowable Atlas → Open Atlas ER Diagram Designer*
+in the same kind of tab, in the IDE's theme and colours, and stays a few hundred KB whatever the size of
+the project. Once it is chosen, *Tools → Flowable Atlas → Open Atlas ER Diagram Designer*
 (also in the Hub's ⋮) opens the page — generating it first when there is none.
 Full detail: [The Atlas explorer](../explorer/).
 

@@ -29,6 +29,8 @@ object ExplorerHtmlRenderer {
         generatedAt: java.time.Instant = java.time.Instant.now(),
         /** Who is accepting findings from this page — the default `by` of a rule written here. */
         waiverAuthor: String? = null,
+        /** The island size (chars) above which it is embedded deflated — see [islandTag]. */
+        compressAbove: Int = compressAboveDefault(),
     ): String {
         // error() rather than an empty map: every caller passes an Atlas.extract result, which always
         // carries "graph". The previous `as Map` threw here too — an explorer page silently rendered
@@ -69,9 +71,57 @@ object ExplorerHtmlRenderer {
         val data = dataIsland(payload)
         // Stamp the version before the data island so a version like "__ATLAS_VERSION__" can't collide
         // with anything inside the (already-built) JSON.
-        return composeTemplate()
+        val page = composeTemplate()
+        check(PLAIN_ISLAND in page) { "explorer.html has lost its data island: $PLAIN_ISLAND" }
+        return page
             .replace("__ATLAS_VERSION__", "Atlas $version")
-            .replace("__ATLAS_DATA__", data)
+            .replace(PLAIN_ISLAND, islandTag(data, compressAbove))
+    }
+
+    /** The island as explorer.html writes it, with the placeholder the payload replaces. */
+    private const val PLAIN_ISLAND = """<script type="application/json" id="atlas-data">__ATLAS_DATA__</script>"""
+
+    /**
+     * An island larger than this is embedded deflated. 1 MB keeps a fixture's or a small project's page
+     * plain JSON, readable in its source, while every project large enough to matter shrinks.
+     */
+    const val COMPRESS_ABOVE = 1 shl 20
+
+    /**
+     * [COMPRESS_ABOVE], or the `atlas.explorer.compressAbove` system property: how the build gets a deflated
+     * page out of a fixture far below 1 MB, to run every browser check on it again (`:cli:explorerUiTestDeflated`).
+     */
+    internal fun compressAboveDefault(): Int =
+        System.getProperty("atlas.explorer.compressAbove")?.toIntOrNull() ?: COMPRESS_ABOVE
+
+    /**
+     * The `<script id="atlas-data">` element for [json]: as it is up to [compressAbove] chars, and above
+     * that raw DEFLATE, Base64-encoded, with the inflated byte count — which `atlasIslandText` in
+     * explorer.js reverses before the page boots.
+     *
+     * Why: an explorer is mostly its island, and the island is mostly repetition (the same keys, types and
+     * file paths on every node and every Liquibase column), so it deflates about tenfold. A JetBrains
+     * Remote Development client refuses to open any file above the IDE's content limit (20 MB,
+     * `idea.max.content.load.filesize`) before a plugin's editor is even asked — and a large project passed
+     * it once 0.28.0 carried every Liquibase column's origin, every change set and each service's schema
+     * coverage (the Liquibase part of an island about tripled on the projects measured).
+     * Deflated, the same page is a few MB, and still one self-contained file. Raw DEFLATE rather than gzip:
+     * the page inflates it with its own code (no browser API does it synchronously), and a gzip header
+     * and checksum would only be more to parse; the byte count is what catches a truncated file.
+     */
+    internal fun islandTag(json: String, compressAbove: Int = COMPRESS_ABOVE): String {
+        if (json.length <= compressAbove) return PLAIN_ISLAND.replace("__ATLAS_DATA__", json)
+        val bytes = json.toByteArray(Charsets.UTF_8)
+        val deflater = java.util.zip.Deflater(java.util.zip.Deflater.DEFAULT_COMPRESSION, true)
+        val deflated = try {
+            val out = java.io.ByteArrayOutputStream(bytes.size / 8)
+            java.util.zip.DeflaterOutputStream(out, deflater, 1 shl 16).use { it.write(bytes) }
+            out.toByteArray()
+        } finally {
+            deflater.end()
+        }
+        return """<script type="application/octet-stream" id="atlas-data" data-encoding="deflate-base64" data-size="${bytes.size}">""" +
+            java.util.Base64.getEncoder().encodeToString(deflated) + "</script>"
     }
 
     /**

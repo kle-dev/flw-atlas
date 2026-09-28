@@ -149,6 +149,22 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.28.3</h3>
+        <ul>
+          <li><b>A large project's explorer is a fraction of its size, and opens under Remote Development
+              again.</b> 0.28.0 made the explorer carry every Liquibase column's origin, every change set
+              and each service's schema coverage — on the projects measured the Liquibase part of the page
+              about tripled — and a large project's explorer grew past 20 MB: the IDE's content limit, above
+              which a Remote Development client refuses to open a file (<i>the file is too large</i>) before
+              any editor is asked. The graph inside the page, above 1 MB, is now embedded deflated and
+              inflated by the page itself before it starts. It deflates about tenfold, so an explorer is
+              about a quarter of its size (5.4 MB to 1.4 MB on the largest project measured) and still one
+              self-contained HTML file that opens the same way in any browser, from disk, from a web server
+              or in the IDE. Nothing on the page changes.</li>
+          <li><b>The ER designer's table list can be dragged wider,</b> for a table name longer than the
+              list: drag its right edge, or move the focused edge with <code>←</code> <code>→</code>; a
+              double click or <code>Home</code> resets it. The width is remembered in this browser.</li>
+        </ul>
         <h3>0.28.2</h3>
         <ul>
           <li><b>The ER diagram designer is a page of its own: <code>&lt;project&gt;.erd.html</code>.</b> It
@@ -542,20 +558,6 @@
               zoom readout. Half-typed text that does not parse keeps the last picture up, with a line
               saying so, instead of flipping to "no layout" at every keystroke. Opening a subform is ⌘-click
               on macOS, where Ctrl-click is the context click.</li>
-          <li><b>The playground's panes each say one thing.</b> What just happened to the context — <i>Using
-              QA · CAS-4711</i> after a paste, <i>Saved as QA</i> — is said on a line under the context's
-              summary instead of being written over the last result, and a value's type sits beside the
-              result's caption (<i>Result · string</i>) instead of being padded onto the value. <i>Evaluate
-              Against App</i> is <i>Evaluate Against Work</i>, its shortcut is spelled the way your keymap
-              spells it, and it — like <i>Show Sub-Expression Values</i> — stays on the toolbar, disabled
-              with a reason, in the dialect it does not apply to, so switching the dialect no longer moves
-              the buttons. The backend row keeps <i>Paste Work URL…</i> and puts naming or forgetting
-              targets and <i>Manage Environments…</i> behind one ⋮; the gear's <i>Environment Settings…</i>
-              became that same <i>Manage Environments…</i>, and the Scripts tab, which has no environment,
-              lost it. The Scripts tab's context says how much it holds (<i>5 bindings · 34 beans</i>)
-              rather than repeating the toolbar, remembers whether it is folded, says so when nothing is
-              bound or touched, opens its pickers under their buttons, and tells a failed model scan apart
-              from a project without scripts.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

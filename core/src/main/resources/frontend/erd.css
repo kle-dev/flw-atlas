@@ -12,7 +12,14 @@
   .erd-root{flex:1;min-height:0;position:relative;overflow:hidden}
   .erd-open{border:0;background:none;padding:0;font:inherit;color:var(--accent);cursor:pointer}
   .erd-open:hover{text-decoration:underline}
-  .erd{position:relative;display:grid;grid-template-columns:264px minmax(0,1fr);height:100%}
+  .erd{--erd-side-w:264px;position:relative;display:grid;grid-template-columns:var(--erd-side-w) minmax(0,1fr);height:100%}
+  /* the list's right edge, dragged wider for a long table name — the explorer's sidebar handle, again */
+  .erd-side-resize{position:absolute;top:0;bottom:0;left:var(--erd-side-w);transform:translateX(-3px);width:6px;z-index:6;
+    cursor:col-resize;touch-action:none}
+  .erd-side-resize::before{content:"";position:absolute;top:0;bottom:0;left:2px;width:2px;background:transparent;transition:background .12s}
+  .erd-side-resize:hover::before,.erd-side-resize:focus-visible::before,.erd.resizing .erd-side-resize::before{background:var(--accent)}
+  .erd-side-resize:focus-visible{outline:none}
+  .erd.resizing{cursor:col-resize;user-select:none}
   .erd-side{display:flex;flex-direction:column;min-height:0;background:var(--panel2);border-right:1px solid var(--line)}
   .erd-side-h{display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-3);border-bottom:1px solid var(--line)}
   .erd-side-t{font-size:var(--text-md);font-weight:600;color:var(--ink)}
@@ -106,7 +113,7 @@
   /* ---- presenting: the diagram and nothing else ---- */
   html.erd-presenting .erd-top{display:none!important}
   .erd-present .erd{grid-template-columns:minmax(0,1fr)}
-  .erd-present .erd-side,.erd-present .erd-bar,.erd-present .erd-link,.erd-present .erd-grip,.erd-present .erd-tools{display:none}
+  .erd-present .erd-side,.erd-present .erd-side-resize,.erd-present .erd-bar,.erd-present .erd-link,.erd-present .erd-grip,.erd-present .erd-tools{display:none}
   .erd-present .erd-mini{display:flex}
   .erd-present .erd-canvas{background-image:none}
   /* ---- the floating panel: a table, a relation, a menu ---- */
@@ -208,5 +215,6 @@
   @media (max-width:800px){
     .erd{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
     .erd-side{max-height:34vh;border-right:0;border-bottom:1px solid var(--line)}
+    .erd-side-resize{display:none}
     .erd-side-foot,.erd-status,.erd-prov{display:none}
   }

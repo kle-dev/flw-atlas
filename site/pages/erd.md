@@ -7,8 +7,7 @@ them, and present the result — or export it for a slide.
 
 It is a page of its own, beside the [explorer](../explorer/), and carries only what it draws: the tables,
 their columns and the relations the models state. So it stays a few hundred KB however large the project
-is — it opens where a large explorer does not (a Remote Development client refuses files above its size
-limit), and it can be sent to someone who only wants the data model.
+is, and it can be sent to someone who only wants the data model.
 
 - **CLI:** `--erd` writes it on its own; `--all` writes `<project>.erd.html` beside the explorer whenever
   the project has a table (see the [CLI reference](../cli/#output-format)). Written beside the explorer,
@@ -42,7 +41,9 @@ A table's default business name is the name of the data object that reads it, wh
   diagram once; dragging it again, or clicking it in the list, finds its card. The list's filter matches
   table names, business names and column names. A table read by one data object shows that data object's
   name with a quiet copy icon for its key, and its **(i)** opens the same overview as the card's — both
-  before the table is on the canvas.
+  before the table is on the canvas. For a table name longer than the list, drag the list's right edge
+  wider (`←` `→` on the focused edge move it by 16px; a double click or `Home` resets it); the width
+  is remembered in this browser.
 - **A card** shows the business name over the table name, then the first five columns — the primary key
   first, then the changelog's order — each with its type. **+ N more** unfolds the rest and folds them
   again. The width fits every column, shown or not, so unfolding makes a card longer, never wider.

@@ -77,6 +77,46 @@ class RenderersSmokeTest {
         assertFalse(ErdHtmlRenderer.hasTables(Atlas.extract(empty)))
     }
 
+    /**
+     * A large island is embedded deflated, and it has to come back as exactly the JSON a plain page carries:
+     * the page's own inflater (explorer.js, `atlasIslandText`) returns what it inflates to JSON.parse and
+     * nothing else, so byte equality here is the whole contract. scripts/island-selftest.mjs holds that
+     * inflater to zlib, and the build's browser test runs every explorer check again on a deflated page.
+     */
+    @Test
+    fun aLargeIslandIsDeflatedAndInflatesToTheSameJson() {
+        val at = java.time.Instant.parse("2026-09-28T08:00:00Z")
+        val plain = ExplorerHtmlRenderer.render(result, fixtureDir, generatedAt = at, compressAbove = Int.MAX_VALUE)
+        val deflated = ExplorerHtmlRenderer.render(result, fixtureDir, generatedAt = at, compressAbove = 0)
+        val json = Regex("""<script type="application/json" id="atlas-data">(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
+            .find(plain)!!.groupValues[1]
+        val tag = Regex("""<script type="application/octet-stream" id="atlas-data" data-encoding="deflate-base64" data-size="(\d+)">([A-Za-z0-9+/=]+)</script>""")
+            .find(deflated)
+        assertTrue("expected a deflated island", tag != null)
+        val bytes = java.util.Base64.getDecoder().decode(tag!!.groupValues[2])
+        val inflater = java.util.zip.Inflater(true)
+        val inflated = try {
+            inflater.setInput(bytes)
+            val out = java.io.ByteArrayOutputStream()
+            val buf = ByteArray(1 shl 16)
+            while (!inflater.finished()) {
+                val n = inflater.inflate(buf)
+                check(n > 0 || !inflater.needsInput()) { "the deflated island ends before its data does" }
+                out.write(buf, 0, n)
+            }
+            out.toByteArray()
+        } finally {
+            inflater.end()
+        }
+        assertEquals("data-size is the inflated byte count", inflated.size, tag.groupValues[1].toInt())
+        assertEquals("the deflated island inflates to the plain island's JSON", json, inflated.toString(Charsets.UTF_8))
+        assertEquals("the rest of the page is the same", plain.replace(json, ""),
+            deflated.replace(tag.value, """<script type="application/json" id="atlas-data"></script>"""))
+        assertTrue("deflated, the page is smaller", deflated.length < plain.length)
+        assertTrue("a small project's island stays plain JSON",
+            ExplorerHtmlRenderer.render(result, fixtureDir).contains("""<script type="application/json" id="atlas-data">"""))
+    }
+
     @Test
     fun explorerHtmlIsFullyComposed() {
         val html = ExplorerHtmlRenderer.render(result, fixtureDir)

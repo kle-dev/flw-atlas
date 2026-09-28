@@ -10,9 +10,108 @@ function bootFailed(err){
     '<pre>'+text.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))+'</pre>'+
     'Regenerate the page with Atlas (Tools → Flowable Atlas → Generate, or the CLI). If it fails again, the text above is what to report.</div>';
 }
-// Data arrives as a JSON island (<script type="application/json" id="atlas-data">):
-// JSON.parse is faster than a JS literal for large payloads and needs no JS escaping.
-const DATA = JSON.parse(document.getElementById('atlas-data').textContent);
+/*__ISLAND_START__*/
+// A large project's island arrives deflated (raw DEFLATE, RFC 1951) and Base64-encoded — see
+// ExplorerHtmlRenderer.islandTag: its text compresses about tenfold, and a JetBrains Remote Development
+// client refuses to open a file above the IDE's 20 MB content limit, which a large project reached. It is inflated here, synchronously, by this page's own code, so the boot below
+// is the same for a deflated island as for a plain one and the page stays one file that opens anywhere —
+// from disk, from a web server, in the IDE. DecompressionStream was the rejected alternative: it is
+// asynchronous, and every listener this script registers at the top level (the IDE bridge among them)
+// would have had to wait for a promise.
+function atlasIslandText(el){
+  if(el.getAttribute('data-encoding')!=='deflate-base64') return el.textContent;
+  const bin=atob(el.textContent.trim()), src=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) src[i]=bin.charCodeAt(i);
+  return new TextDecoder('utf-8').decode(inflateRaw(src, parseInt(el.getAttribute('data-size'),10)||0));
+}
+const INF_LBASE=[3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258];
+const INF_LEXT=[0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0];
+const INF_DBASE=[1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577];
+const INF_DEXT=[0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13];
+const INF_ORDER=[16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15];
+/**
+ * Raw DEFLATE → bytes. [size] is the inflated length when known (the island says it), so the output is
+ * allocated once. Huffman codes decode through a table indexed by the next maxBits input bits (bit-reversed,
+ * as DEFLATE packs them): one lookup per symbol, rather than a bit-by-bit walk, keeps a 20 MB island well
+ * under a second. Anything malformed throws, and the boot overlay shows the error.
+ */
+function inflateRaw(src, size){
+  let out=new Uint8Array(size>0?size:Math.max(1024, src.length*4)), op=0, ip=0, bb=0, bc=0;
+  const need=n=>{ while(bc<n){ if(ip>src.length+4) throw new Error('the data island is truncated'); bb|=(ip<src.length?src[ip]:0)<<bc; ip++; bc+=8; } };
+  const bits=n=>{ need(n); const v=bb&((1<<n)-1); bb>>>=n; bc-=n; return v; };
+  const room=n=>{ if(op+n<=out.length) return; let m=out.length*2; while(m<op+n) m*=2; const o=new Uint8Array(m); o.set(out); out=o; };
+  const table=(lens, n)=>{
+    let max=0; const count=new Uint16Array(16), next=new Uint16Array(16);
+    for(let i=0;i<n;i++){ count[lens[i]]++; if(lens[i]>max) max=lens[i]; }
+    count[0]=0;
+    for(let b=1, code=0;b<16;b++){ code=(code+count[b-1])<<1; next[b]=code; }
+    const t=new Int32Array(1<<max);          // 0 = no code ends here: an incomplete code's gap throws below
+    for(let s=0;s<n;s++){
+      const l=lens[s]; if(!l) continue;
+      let c=next[l]++, r=0;
+      for(let i=0;i<l;i++){ r=(r<<1)|(c&1); c>>=1; }
+      for(let k=r;k<t.length;k+=1<<l) t[k]=(s<<4)|l;
+    }
+    return {t, mask:(1<<max)-1, max};
+  };
+  const sym=h=>{ need(h.max); const e=h.t[bb&h.mask], l=e&15; if(!l) throw new Error('the data island has an invalid code'); bb>>>=l; bc-=l; return e>>4; };
+  let fixedL=null, fixedD=null;
+  for(let last=0;!last;){
+    last=bits(1);
+    const type=bits(2);
+    if(type===0){
+      const drop=bc&7; bb>>>=drop; bc-=drop; ip-=bc>>3; bb=0; bc=0;   // back to the byte boundary
+      if(ip+4>src.length) throw new Error('the data island is truncated');
+      const len=src[ip]|(src[ip+1]<<8), nlen=src[ip+2]|(src[ip+3]<<8); ip+=4;
+      if((len^0xffff)!==nlen || ip+len>src.length) throw new Error('the data island has a broken stored block');
+      room(len); out.set(src.subarray(ip, ip+len), op); op+=len; ip+=len;
+      continue;
+    }
+    let lt, dt;
+    if(type===1){
+      if(!fixedL){
+        const l=new Uint8Array(288); l.fill(8,0,144); l.fill(9,144,256); l.fill(7,256,280); l.fill(8,280,288);
+        fixedL=table(l,288); fixedD=table(new Uint8Array(30).fill(5),30);
+      }
+      lt=fixedL; dt=fixedD;
+    } else if(type===2){
+      const hlit=bits(5)+257, hdist=bits(5)+1, hclen=bits(4)+4, cl=new Uint8Array(19);
+      for(let i=0;i<hclen;i++) cl[INF_ORDER[i]]=bits(3);
+      const ct=table(cl,19), lens=new Uint8Array(hlit+hdist);
+      for(let i=0;i<hlit+hdist;){
+        const s=sym(ct);
+        if(s<16){ lens[i++]=s; continue; }
+        let v=0, rep;
+        if(s===16){ if(!i) throw new Error('the data island has an invalid code'); v=lens[i-1]; rep=3+bits(2); }
+        else rep=s===17?3+bits(3):11+bits(7);
+        if(i+rep>hlit+hdist) throw new Error('the data island has an invalid code');
+        while(rep--) lens[i++]=v;
+      }
+      if(!lens[256]) throw new Error('the data island has no end code');
+      lt=table(lens.subarray(0,hlit),hlit); dt=table(lens.subarray(hlit),hdist);
+    } else throw new Error('the data island has an invalid block');
+    for(;;){
+      const s=sym(lt);
+      if(s<256){ if(op>=out.length) room(1); out[op++]=s; continue; }
+      if(s===256) break;
+      const li=s-257; if(li>=29) throw new Error('the data island has an invalid code');
+      const len=INF_LBASE[li]+bits(INF_LEXT[li]), ds=sym(dt);
+      if(ds>=30) throw new Error('the data island has an invalid code');
+      const dist=INF_DBASE[ds]+bits(INF_DEXT[ds]);
+      if(dist>op) throw new Error('the data island refers back past its start');
+      room(len);
+      for(let k=0, from=op-dist;k<len;k++) out[op++]=out[from++];
+    }
+  }
+  if(ip-(bc>>3)>src.length) throw new Error('the data island is truncated');
+  if(size>0 && op!==size) throw new Error('the data island inflated to '+op+' bytes, not '+size);
+  return out.subarray(0, op);
+}
+/*__ISLAND_END__*/
+// Data arrives as a JSON island (<script type="application/json" id="atlas-data">), or, for a large
+// project, that JSON deflated (above): JSON.parse is faster than a JS literal for large payloads and needs
+// no JS escaping.
+const DATA = JSON.parse(atlasIslandText(document.getElementById('atlas-data')));
 const nodes = DATA.nodes, edges = DATA.edges;
 const byId = new Map(nodes.map(n => [n.id, n]));
 // Node-type labels. Wording follows Flowable Design's own `modelType.*` strings so a term you read here
