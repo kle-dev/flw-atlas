@@ -1,8 +1,17 @@
-  /* ---- the ER diagram designer (explorer extension "erd", inlined only when chosen) ----
+  /* ---- the ER diagram designer: <project>.erd.html, beside the explorer (ErdHtmlRenderer) ----
      The canvas colours live in erd.js as var() references (PAGE) so an exported picture can swap them for
      values; this file only lays out the page and styles what changes on hover, selection and focus. The
      !important rules below override those inline canvas colours for a hover or a target — nothing else. */
-  #view-erd{overflow:hidden}
+  body.erd-page{display:flex;flex-direction:column;height:100vh;overflow:hidden;background:var(--bg);color:var(--ink)}
+  .erd-top{flex:none;display:flex;align-items:center;gap:var(--space-2);height:var(--topbar-h);padding:0 var(--space-4);
+    background:var(--panel);border-bottom:1px solid var(--line)}
+  .erd-brand{display:flex;align-items:baseline;gap:var(--space-2);min-width:0}
+  .erd-brand-t{font-size:var(--text-lg);font-weight:600;color:var(--ink)}
+  .erd-proj{font-size:var(--text-sm);color:var(--ink-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .erd-prov{font-size:var(--text-2xs);color:var(--ink-faint);white-space:nowrap}
+  .erd-root{flex:1;min-height:0;position:relative;overflow:hidden}
+  .erd-open{border:0;background:none;padding:0;font:inherit;color:var(--accent);cursor:pointer}
+  .erd-open:hover{text-decoration:underline}
   .erd{position:relative;display:grid;grid-template-columns:264px minmax(0,1fr);height:100%}
   .erd-side{display:flex;flex-direction:column;min-height:0;background:var(--panel2);border-right:1px solid var(--line)}
   .erd-side-h{display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-3);border-bottom:1px solid var(--line)}
@@ -36,7 +45,8 @@
   .erd-sep{width:1px;height:18px;background:var(--line);margin:0 var(--space-1)}
   .erd-grow{flex:1}
   .erd-pct{min-width:40px;text-align:center;font-size:var(--text-xs);color:var(--ink-faint);font-variant-numeric:tabular-nums}
-  .erd-status{font-size:var(--text-xs);color:var(--ink-faint);max-width:44ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .erd-status{min-width:0;font-size:var(--text-xs);color:var(--ink-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .erd-status+.erd-prov:before{content:"·";margin-right:var(--space-2);color:var(--ink-faint)}
   .erd-changed{color:var(--warn-text)}
   .erd-presentbtn span,.erd-arrangebtn span{margin-left:2px}
   .erd-canvas{position:relative;flex:1;min-height:0;overflow:hidden;outline:none;touch-action:none;background-color:var(--bg);
@@ -53,6 +63,33 @@
   .erd-foot[data-act]:hover text{fill:var(--accent)!important}
   .erd-tools:hover rect{fill:rgba(127,127,127,.18)!important}
   .erd-card.target .erd-box{stroke:var(--accent)!important;stroke-width:2.5!important}
+  /* ---- search: what matches stands out, the rest steps back ---- */
+  .erd-card.dim{opacity:.28}
+  .erd-card.found .erd-box{stroke:var(--accent)!important;stroke-width:2!important}
+  .erd-canvas.searching .erd-rels,.erd-canvas.searching .erd-sugs{opacity:.4}
+  .erd-qwrap{position:relative;display:flex;align-items:center;gap:var(--space-1);height:28px;padding:0 var(--space-15) 0 var(--space-2);
+    border:1px solid var(--line2);border-radius:var(--radius-md);background:var(--input);color:var(--ink-faint);min-width:0;flex:0 1 260px}
+  .erd-qwrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--focus)}
+  .erd-q{flex:1;min-width:0;height:100%;border:0;background:none;color:var(--ink);font:inherit;font-size:var(--text-sm);outline:none}
+  .erd-qwrap:focus-within .erd-qkbd{display:none}
+  .erd-results{position:absolute;left:-1px;top:calc(100% + 4px);z-index:80;width:min(460px,86vw);max-height:min(420px,60vh);overflow:auto;
+    background:var(--panel);border:1px solid var(--line2);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:var(--space-1)}
+  .erd-rhead{padding:var(--space-1) var(--space-2);font-size:var(--text-2xs);color:var(--ink-faint)}
+  .erd-res{display:flex;align-items:baseline;gap:var(--space-2);padding:var(--space-15) var(--space-2);border-radius:var(--radius-md);cursor:pointer;
+    font-size:var(--text-sm);color:var(--ink)}
+  .erd-res:hover,.erd-res.on{background:var(--hover)}
+  .erd-res.on{box-shadow:inset 2px 0 0 var(--accent)}
+  .erd-rkind{flex:none;width:44px;font-size:var(--text-2xs);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.04em}
+  .erd-rmain{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .erd-rname{font-family:var(--mono);font-size:var(--text-xs)}
+  .erd-rsub{font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-faint);margin-left:var(--space-1)}
+  .erd-rmain .erd-rsub:first-child{margin-left:0}
+  .erd-rtype{flex:none;max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint)}
+  .erd-roff{flex:none;font-size:var(--text-2xs);color:var(--accent);border:1px solid var(--accent);border-radius:var(--radius-full);padding:0 var(--space-15)}
+  .erd-rmore{padding:var(--space-15) var(--space-2);font-size:var(--text-2xs);color:var(--ink-faint)}
+  .erd-results mark,.erd-cols mark{background:var(--hl-bg);color:var(--hl-ink);border-radius:2px}
+  .erd-colq{width:100%;margin-bottom:var(--space-1)}
+  .erd-cnone{justify-content:center;color:var(--ink-faint);font-size:var(--text-xs)}
   .erd-rel,.erd-sug{cursor:pointer}
   .erd-rel:hover>path:first-child{stroke:var(--accent)!important}
   .erd-sug{opacity:.8}
@@ -67,8 +104,7 @@
   .erd-none{max-width:64ch;padding:var(--space-6) 0;color:var(--ink-dim)}
   .erd-none .dtitle{margin-bottom:var(--space-2)}
   /* ---- presenting: the diagram and nothing else ---- */
-  html.erd-presenting .sidebar,html.erd-presenting .side-resize,html.erd-presenting .topbar,html.erd-presenting .wvbar{display:none!important}
-  html.erd-presenting .shell{grid-template-columns:minmax(0,1fr)!important}
+  html.erd-presenting .erd-top{display:none!important}
   .erd-present .erd{grid-template-columns:minmax(0,1fr)}
   .erd-present .erd-side,.erd-present .erd-bar,.erd-present .erd-link,.erd-present .erd-grip,.erd-present .erd-tools{display:none}
   .erd-present .erd-mini{display:flex}
@@ -137,5 +173,5 @@
   @media (max-width:800px){
     .erd{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
     .erd-side{max-height:34vh;border-right:0;border-bottom:1px solid var(--line)}
-    .erd-side-foot,.erd-status{display:none}
+    .erd-side-foot,.erd-status,.erd-prov{display:none}
   }

@@ -9,6 +9,12 @@ enum class AtlasArtifact(val label: String, val suffix: String) {
     /** The self-contained interactive explorer HTML. */
     EXPLORER_HTML("Explorer HTML", ".explorer.html"),
 
+    /**
+     * The ER diagram designer: the project's tables and their relations, on a page of its own beside the
+     * explorer — small whatever the project's size, so it opens where a large explorer does not.
+     */
+    ERD_HTML("ER diagram designer (HTML)", ".erd.html"),
+
     /** Compact LLM-first Markdown summary. */
     SUMMARY_MD("Summary (Markdown)", ".summary.md"),
 
@@ -29,4 +35,12 @@ enum class AtlasArtifact(val label: String, val suffix: String) {
     DIAGRAMS_SVG("Diagrams (SVG)", ".diagrams");
 
     override fun toString(): String = label
+
+    companion object {
+        /** A generated page the Atlas editor tab shows: the explorer, or the ER diagram designer. */
+        fun isPage(fileName: String): Boolean =
+            fileName.endsWith(EXPLORER_HTML.suffix, ignoreCase = true) || fileName.endsWith(ERD_HTML.suffix, ignoreCase = true)
+
+        fun isErdPage(fileName: String): Boolean = fileName.endsWith(ERD_HTML.suffix, ignoreCase = true)
+    }
 }

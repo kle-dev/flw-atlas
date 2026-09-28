@@ -19,8 +19,8 @@ A Gradle multi-module JVM project, JDK 21, **no third-party runtime dependencies
 | `:idea-plugin` | The IntelliJ plugin. Consumes `:core` **in-process**, so the IDE and the CLI can never disagree. |
 
 The explorer frontend is `core/src/main/resources/frontend/explorer.{html,css,js}` — plain files
-inlined at render time — plus the optional explorer extensions in `frontend/ext/`, inlined only when
-chosen. The docs site sources are in `site/`.
+inlined at render time — and the ER diagram designer's page beside it is `frontend/erd.{html,css,js}`.
+The docs site sources are in `site/`.
 
 ## The gate
 
@@ -62,6 +62,7 @@ Three questions, every time:
 | Variable read/write analysis or its silence rules | `site/pages/variables.md` |
 | Expression/script validation, the function catalog, script bindings | `site/pages/expressions.md` |
 | The explorer frontend — a route, page, facet or visible layout | `site/pages/explorer.md`; regenerate screenshots (`node scripts/site-shots.mjs`) or adjust the `site/mockups/*.html` if the change is visual |
+| The ER diagram designer (`frontend/erd.*`, `ErdHtmlRenderer`) — what it reads, shows or writes | `site/pages/erd.md`; the screenshot comes from `scripts/site-shots.mjs` like the explorer's |
 | What agents receive (the `CLAUDE.md` renderer, `--summary`, `--slice`, `--json`) | `site/pages/agents.md`, the *For LLMs / agents* section of `README.md`; `CLAUDE.template.md` regenerates itself |
 | Build, test, CI or release workflow | `site/pages/develop.md` (the long form), `CONTRIBUTING.md` only if the policy or the signing setup changed, and `.github/workflows/build.yml` if the commands moved |
 | Supported IDE range, or what was actually verified | `AtlasPlatformSupport` (the verified range, quoted in submitted bug reports), `plugin.xml`, `site/pages/develop.md`, `site/pages/plugin-reference.md` |

@@ -18,7 +18,8 @@ import javax.swing.JComponent
 class AtlasExplorerStaleNotificationProvider : EditorNotificationProvider, DumbAware {
 
     override fun collectNotificationData(project: Project, file: VirtualFile): Function<in FileEditor, out JComponent?>? {
-        if (!file.name.endsWith(".explorer.html")) return null
+        // the ER diagram page too: its tables are the models', and its Regenerate rewrites it as one
+        if (!AtlasArtifact.isPage(file.name)) return null
         val changedAt = AtlasExplorerStaleness.latestModelChange(project) ?: return null
         if (!AtlasExplorerStaleness.isStale(listOf(file.timeStamp), changedAt)) return null
         return Function { editor ->

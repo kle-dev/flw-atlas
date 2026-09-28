@@ -1,7 +1,8 @@
 # Generated artifacts
 
 One run produces five files. They are not five formats of the same thing — they are five *sizes*,
-meant for five different readers, and picking the right one is most of the value.
+meant for five different readers, and picking the right one is most of the value. A project with
+database tables gets a sixth: the ER diagram designer.
 
 ```
 atlas-output/order-management/
@@ -11,6 +12,7 @@ atlas-output/order-management/
   order-management.graph.json      the traversable graph, for querying — not for reading
   order-management.CLAUDE.md       drop-in context for an AI agent
   order-management.diagrams/       one SVG per model that can be drawn
+  order-management.erd.html        the ER diagram designer — when the project has tables
 ```
 
 Only `--all` names files after the project. A single-artifact run writes `APP_OVERVIEW.*` unless you
@@ -27,10 +29,15 @@ how old it is.
 This is the artifact for a human who wants to *understand* a project. It has its own page:
 [The Atlas explorer](../explorer/).
 
-Optional parts of the page — **explorer extensions** — are included only when asked for, with
-`--extension` on the CLI or *Settings → Generation → Explorer extensions* in the plugin. `erd` adds the [ER diagram designer](../explorer/#er-diagram-designer) and, with
-it, every `*.atlas-erd.json` diagram file the project keeps, so the page opens on the diagrams the team has
-committed. Without an extension the page carries none of its code.
+## `<project>.erd.html` — the ER diagram designer
+
+The project's tables — as the Liquibase changelogs leave them, and those only a database service names —
+to drag onto a canvas, relate, colour, search and arrange, for explaining a data model to people who do
+not read changelogs; with every `*.atlas-erd.json` diagram the project keeps built in, so the page opens
+on the diagrams the team has committed. It carries only the tables, not the graph, so it stays a few
+hundred KB however large the explorer gets. `--all` writes it when the project has a table, and links its
+tables into the explorer beside it; `--erd` writes it on its own. It has its own page:
+[The ER diagram designer](../erd/).
 
 ## `<project>.summary.md` — orientation
 

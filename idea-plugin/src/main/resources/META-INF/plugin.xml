@@ -118,11 +118,12 @@
               overview Markdown, the graph JSON, the explorer HTML, a CLAUDE.md primer for AI agents.
               Generation runs entirely in-process — no external tools required — and honours the
               project's expression allowlist.</li>
-          <li><b>An ER diagram designer, if you want one</b> — tick <i>Explorer extensions → ER diagram
-              designer</i> under Settings → Generation and the explorer gains a page to drag the project's
-              tables onto a canvas, show their columns and types, draw named 1:1 / 1:n / n:m relations and
-              colour them — for explaining a data model to the business — with SVG/PNG export and a
-              diagram file you can commit.</li>
+          <li><b>An ER diagram designer</b> — tick <i>ER diagram designer (HTML)</i> under Settings →
+              Generation and Atlas writes a page of its own beside the explorer: drag the project's tables
+              onto a canvas, show their columns and types, search across every table and column, draw named
+              1:1 / 1:n / n:m relations, colour them and let Atlas arrange them — for explaining a data model
+              to the business — with SVG/PNG export and a diagram file you can commit. It carries only the
+              tables, so it stays small however large the project is.</li>
           <li><b>IDE-native viewing</b> — the embedded explorer follows the IDE light/dark theme
               (switching restyles live) and carries a toolbar with <i>Regenerate Atlas Explorer</i>,
               <i>Reload</i>, <i>Open Atlas Playground</i> and <i>Open in Browser</i>.</li>
@@ -147,6 +148,35 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.29.0</h3>
+        <ul>
+          <li><b>The ER diagram designer is a page of its own: <code>&lt;project&gt;.erd.html</code>.</b> It
+              was a page inside the explorer, and that was the wrong place: the explorer carries the whole
+              graph, and a large one outgrows what a Remote Development client will open, while the designer
+              needs a sliver of it. The new page carries only the tables — the Liquibase changelogs'
+              columns, the database services, the data objects that read a table and their relations — and
+              the project's <code>*.atlas-erd.json</code> diagrams, so it stays a few hundred KB however
+              large the project is. <code>--all</code> writes it beside the explorer when the project has a
+              table, its tables linking into the explorer's pages; <code>--erd</code> writes it on its own.
+              In the plugin it is the artifact <i>ER diagram designer (HTML)</i> in <i>Settings →
+              Generation</i>, and opens in the same kind of editor tab, whose <i>Regenerate</i> rewrites it
+              and whose banner says when the models are newer. The explorer is back to what it was before
+              the designer: no <code>--extension</code> flag, no <i>Explorer extensions</i> setting, no
+              <code>#/erd</code> page (a link to one opens the overview). On the corpora measured, the
+              designer was about 100 KB of an explorer; a page of 20 MB is the project's own data, which the
+              explorer carries as before.</li>
+          <li><b>Search every table and column.</b> <code>⌘F</code>, <code>Ctrl+F</code> or <code>/</code>
+              in the designer searches the project's tables and their columns — by name, business name, data
+              object or column type — on the diagram or not. The results list tables and
+              <code>table.column</code> rows, the diagram's own first; <code>Enter</code> goes to one,
+              centred on the column, and adds its table when the diagram does not have it. While a search is
+              on, matching cards are outlined, the rest step back, matching columns are marked, and a folded
+              card also shows the columns it found — the one column of forty without unfolding the rest. A
+              table's panel filters its columns too.</li>
+          <li><b>Expand all, collapse all.</b> Two buttons unfold every card to all its columns and fold
+              them back to the first five, one undo step each; unfolding moves the cards below down so none
+              is covered.</li>
+        </ul>
         <h3>0.28.1</h3>
         <ul>
           <li><b>The ER diagram designer arranges the tables for you.</b> <i>Arrange</i> in the designer's
@@ -533,32 +563,6 @@
               problem with the selected rows at the table. The Liquibase dialog's <i>Browse</i> no longer
               writes an absolute path, and an absolute folder typed in is refused — the check trimmed the
               leading slash first, so one got through and every row read "new".</li>
-          <li><b>One name for every Atlas surface, one verb for opening it.</b> The tool windows are
-              <i>Atlas Hub</i>, <i>Atlas Findings</i> and <i>Atlas Playground</i> — the playground used to
-              be called <i>Expression Playground</i> although half of it is scripts — and every entry that
-              opens one reads <i>Open Atlas …</i>. Under <i>Generate</i> the entries no longer repeat the
-              submenu's verb (<i>Atlas Explorer…</i>, <i>Model Constants</i>, <i>Liquibase Changelogs → From
-              Data Object…</i>), while <i>Find Action</i> shows the whole sentence, so the two <i>From Data
-              Object…</i> entries are no longer lookalikes there. <i>Generate Model Constants</i> lost an
-              ellipsis it never earned: it asks for nothing.</li>
-          <li><b>Atlas Findings wears the explorer's Checks glyph</b> instead of the IDE's own Problems
-              icon, and <i>Regenerate Atlas Explorer</i> wears the platform's build hammer, so it can be
-              told from <i>Reload</i> beside it.</li>
-          <li><b>Every gutter mark can be switched off.</b> The four marks are listed under <i>Settings →
-              Editor → General → Gutter Icons</i> by name — <i>Flowable: Java referenced by models</i>,
-              <i>bot used by actions</i>, <i>REST handler called by models</i>, <i>model picture</i> — and a
-              click on a mark that finds no model any more says so instead of doing nothing.</li>
-          <li><b>Balloons instead of dialogs.</b> <i>Open Atlas Explorer</i> with nothing to open, the
-              Open-in-Explorer intention in the same situation, and an explorer file that went missing say
-              so in a balloon with the fix on it (<i>Generate Atlas Explorer…</i>, <i>Regenerate Atlas
-              Explorer</i>) instead of a modal question. <i>Show Details</i> opens a read-only editor tab
-              whatever the text's length; it used to be a dialog when short. The two notification groups are
-              listed as <i>Flowable Atlas: needs attention</i> and <i>Flowable Atlas: finished jobs</i>, and
-              every balloon now lands in the group its kind belongs to.</li>
-          <li><b>Context menus about what was right-clicked.</b> A model file in the Project view offers
-              <i>Open in Atlas Explorer</i>; <i>Go to Model…</i>, which ignores the selection, left that
-              menu. In the editor, <i>Copy Model Key</i> and <i>Compare Model with Archive</i> sit together
-              behind one separator. The generate actions stay available while the IDE indexes.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

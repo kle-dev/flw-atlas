@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#ffffff">
+<title>ER diagram — Flowable Atlas</title>
+<script>
+/* The ER diagram designer: its own page, next to the explorer rather than inside it, so it opens where the
+   explorer is too large to — it carries only the tables, not the whole graph (ErdHtmlRenderer.kt).
+   Seed the theme before first paint, exactly as explorer.html does, so both pages agree:
+   ?ideTheme -> localStorage('atlas-theme') -> prefers-color-scheme; ?idePal= carries the IDE's colours. */
+try{
+  var _t=new URLSearchParams(location.search).get('ideTheme');
+  var _ide=(_t==='light'||_t==='dark')?_t:null;
+  var _p=null; try{_p=localStorage.getItem('atlas-theme');}catch(e){}
+  _p=_p||(_ide?'auto':'light');
+  var _sys=_ide||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');
+  document.documentElement.dataset.theme=(_p==='auto')?_sys:_p;
+  var _pal=new URLSearchParams(location.search).get('idePal');
+  if(_pal&&_ide&&document.documentElement.dataset.theme===_ide){
+    var _c=_pal.split('.');
+    if(_c.length===9&&_c.every(function(x){return /^[0-9a-f]{6}$/i.test(x);})){
+      var _s=document.documentElement.style;
+      _s.setProperty('--bg','#'+_c[0]); _s.setProperty('--panel','#'+_c[1]); _s.setProperty('--panel2','#'+_c[2]);
+      _s.setProperty('--line','#'+_c[3]); _s.setProperty('--ink','#'+_c[4]); _s.setProperty('--ink-dim','#'+_c[5]); _s.setProperty('--accent','#'+_c[6]);
+    }
+  }
+}catch(e){}
+</script>
+<style>
+/*__ATLAS_CSS__*/</style>
+<style>
+/*__ERD_CSS__*/</style>
+</head>
+<body class="erd-page">
+<header class="erd-top">
+  <div class="erd-brand"><span class="erd-brand-t">ER diagram</span><span class="erd-proj" id="erd-proj"></span></div>
+  <span class="erd-grow"></span>
+  <!-- the diagram's status (where it comes from, whether it is saved): up here, where there is room for it -->
+  <span class="erd-status" id="erd-status" aria-live="polite"></span>
+  <span class="erd-prov" id="erd-prov">__ATLAS_VERSION__</span>
+  <button type="button" class="tbtn" id="erd-theme" aria-label="Switch color theme"></button>
+</header>
+<main class="erd-root" id="erd-root"></main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script type="application/json" id="atlas-data">__ATLAS_DATA__</script>
+<script>
+/*__ERD_JS__*/</script>
+</body>
+</html>

@@ -9,7 +9,7 @@ import java.nio.file.Files
 
 /**
  * Contract tests for the standalone CLI (`run(argv)`), mirroring Python's `tests/test_cli.py`:
- * `--all` writes exactly the five `<name>.*` artifacts; the Markdown artifacts match the committed
+ * `--all` writes exactly the five `<name>.*` artifacts (and the ER page, for a project with tables); the Markdown artifacts match the committed
  * goldens (the renderers are already golden-verified, so `--all` output + the trailing newline the
  * golden test appends is byte-identical); `graph.json` parses and normalizes to the golden graph; a
  * `--summary --stdout` run returns 0 without touching disk; a missing path exits 2.
@@ -25,6 +25,8 @@ class CliTest {
         val expected = setOf(
             "miniproject.summary.md", "miniproject.overview.md", "miniproject.graph.json",
             "miniproject.explorer.html", "miniproject.CLAUDE.md",
+            // The ER diagram designer, because the fixture has a table: a project without one gets no such page.
+            "miniproject.erd.html",
             // The drawings: the fixture has no diagram layout, so only its forms and pages are drawn —
             // as the wireframes the explorer and the IDE preview show.
             "miniproject.diagrams",
@@ -155,28 +157,28 @@ class CliTest {
     fun failOnTurnsFindingsIntoExitOneButStillWrites() {
         val out = tempDir()
         assertEquals(1, run(arrayOf(fixtureDir().path, "--all", "-o", out.path, "-q", "--fail-on", "error")))
-        assertEquals("the artifacts are written before the verdict", 6, out.listFiles()!!.count { it.isFile })
+        assertEquals("the artifacts are written before the verdict", 7, out.listFiles()!!.count { it.isFile })
         assertEquals(1, run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--fail-on", "parseIssues")))
         assertEquals(1, run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--fail-on=warning,missingRefs")))
         assertEquals(2, run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--fail-on", "nosuchcheck")))
     }
 
     /**
-     * An explorer extension is in the page only when it was asked for — and a name that is not one, or a
-     * mode without an explorer page, is a misuse rather than a run that quietly produced something else.
+     * The ER diagram designer is an artifact of its own: `--erd` writes it alone, `--all` beside the explorer
+     * it links into, and the explorer carries none of it. Asked for with another output, it is a misuse.
      */
     @Test
-    fun anExtensionIsInThePageOnlyWhenNamed() {
+    fun theErPageIsItsOwnArtifact() {
         val out = tempDir()
-        val plain = File(out, "plain.html"); val erd = File(out, "erd.html")
-        assertEquals(0, run(arrayOf(fixtureDir().path, "--html", "-o", plain.path, "-q")))
-        assertEquals(0, run(arrayOf(fixtureDir().path, "--html", "-o", erd.path, "-q", "--extension", "erd")))
-        assertTrue("the designer registers itself", erd.readText().contains("ATLAS_EXT.erd="))
-        assertTrue("…and only when named", !plain.readText().contains("ATLAS_EXT.erd="))
-        assertEquals(0, run(arrayOf(fixtureDir().path, "--all", "-o", File(out, "all").path, "-q", "--extension=erd")))
-        assertTrue(File(out, "all/miniproject.explorer.html").readText().contains("ATLAS_EXT.erd="))
-        assertEquals(2, run(arrayOf(fixtureDir().path, "--html", "-o", erd.path, "-q", "--extension", "nosuchpart")))
-        assertEquals(2, run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--extension", "erd")))
+        val erd = File(out, "model.erd.html")
+        assertEquals(0, run(arrayOf(fixtureDir().path, "--erd", "-o", erd.path, "-q")))
+        assertTrue("the designer's page", erd.readText().contains("window.ATLAS_ERD="))
+        assertTrue("alone, it links to no explorer", erd.readText().contains("\"explorer\":null"))
+        assertEquals(0, run(arrayOf(fixtureDir().path, "--all", "-o", File(out, "all").path, "-q")))
+        assertTrue("beside the explorer, it links into it",
+            File(out, "all/miniproject.erd.html").readText().contains("\"explorer\":\"miniproject.explorer.html\""))
+        assertTrue("the explorer carries none of it", !File(out, "all/miniproject.explorer.html").readText().contains("ATLAS_ERD"))
+        assertEquals(2, run(arrayOf(fixtureDir().path, "--erd", "--html", "-q")))
     }
 
     @Test

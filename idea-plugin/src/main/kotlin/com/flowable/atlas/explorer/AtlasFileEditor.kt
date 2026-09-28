@@ -62,8 +62,8 @@ import javax.swing.JPanel
 
 /**
  * Embedded viewer for a self-contained Atlas explorer HTML, rendered with JCEF and wrapped with a
- * thin editor toolbar (Regenerate / Reload / Open in Browser). Registered for any `*.explorer.html`
- * file (see [AtlasFileEditorProvider]), so a page generated into the project can be viewed without
+ * thin editor toolbar (Regenerate / Reload / Open in Browser). Registered for any `*.explorer.html` and
+ * `*.erd.html` file (see [AtlasFileEditorProvider]), so a page generated into the project can be viewed without
  * leaving the IDE.
  *
  * The page follows the IDE theme — and wears its colours: the initial load seeds `?ideTheme=light|dark`

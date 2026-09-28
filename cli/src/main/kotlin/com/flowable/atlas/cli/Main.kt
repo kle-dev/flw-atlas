@@ -4,7 +4,7 @@ import com.flowable.atlas.diagram.DiagramArtifacts
 import com.flowable.atlas.graph.Atlas
 import com.flowable.atlas.graph.Waivers
 import com.flowable.atlas.render.ClaudeRenderer
-import com.flowable.atlas.render.ExplorerExtension
+import com.flowable.atlas.render.ErdHtmlRenderer
 import com.flowable.atlas.render.ExplorerHtmlRenderer
 import com.flowable.atlas.render.GraphJsonRenderer
 import com.flowable.atlas.render.OverviewRenderer
@@ -46,7 +46,7 @@ fun run(args: Array<String>): Int {
     // ---- hand-rolled argument parsing (argparse-equivalent) ----
     var path: String? = null
     var output: String? = null
-    var all = false; var json = false; var html = false; var summary = false; var claude = false
+    var all = false; var json = false; var html = false; var erd = false; var summary = false; var claude = false
     var claudeTemplate = false
     var stdout = false; var open = false; var noCustom = false; var quiet = false
     var pretty = false
@@ -57,7 +57,6 @@ fun run(args: Array<String>): Int {
     var failOn: String? = null
     var waiversPath: String? = null; var noWaivers = false; var failOnStaleWaivers = false
     var waiverAuthor: String? = null
-    val extensionIds = ArrayList<String>()
 
     var i = 0
     var endOpts = false
@@ -90,6 +89,7 @@ fun run(args: Array<String>): Int {
                     "--all" -> all = true
                     "--json" -> json = true
                     "--html" -> html = true
+                    "--erd" -> erd = true
                     "--summary" -> summary = true
                     "--claude" -> claude = true
                     "--claude-template" -> claudeTemplate = true
@@ -105,7 +105,6 @@ fun run(args: Array<String>): Int {
                     "--no-waivers" -> noWaivers = true
                     "--fail-on-stale-waivers" -> failOnStaleWaivers = true
                     "--waiver-author" -> waiverAuthor = value(name, inline) ?: return 2
-                    "--extension" -> extensionIds.addAll((value(name, inline) ?: return 2).split(','))
                     "--verbose" -> verbose++
                     "--quiet" -> quiet = true
                     "--help" -> { System.out.write(usage().toByteArray(Charsets.UTF_8)); System.out.flush(); return 0 }
@@ -137,24 +136,14 @@ fun run(args: Array<String>): Int {
     }
 
     // Mutually-exclusive format group (argparse errors with exit code 2).
-    if (listOf(all, json, html, summary, claude, claudeTemplate).count { it } > 1) {
-        errln("error: argument --all/--json/--html/--summary/--claude/--claude-template: " +
+    if (listOf(all, json, html, erd, summary, claude, claudeTemplate).count { it } > 1) {
+        errln("error: argument --all/--json/--html/--erd/--summary/--claude/--claude-template: " +
             "not allowed with one another")
         return 2
     }
     // `--all` used to win over `--slice` without a word — the one flag conflict that was not an error.
     if (all && slice != null) {
         errln("error: argument --slice: not allowed with --all")
-        return 2
-    }
-    // An extension is part of the explorer page: named for any other output it would change nothing, and a
-    // run that quietly ignored it would read as "the designer is in there".
-    val extensions = try { ExplorerExtension.parse(extensionIds) } catch (e: IllegalArgumentException) {
-        errln("error: argument --extension: ${e.message}")
-        return 2
-    }
-    if (extensions.isNotEmpty() && !all && !html) {
-        errln("error: argument --extension: only with --all or --html (it adds a part of the explorer page)")
         return 2
     }
     // `--fail-on` names severities and/or check ids; an unknown one is a misuse, not a silent no-match.
@@ -300,14 +289,19 @@ fun run(args: Array<String>): Int {
         // The analysis here is regenerated and may carry client data; waivers.json is a decision a team
         // made and belongs in review. The .gitignore says so; see Waivers.OUTPUT_GITIGNORE.
         Waivers.ensureOutputGitignore(outdir)
-        val artifacts = listOf(
+        val artifacts = mutableListOf(
             "$name.summary.md" to SummaryRenderer.render(result, root),
             "$name.overview.md" to OverviewRenderer.render(result, root),
             "$name.graph.json" to GraphJsonRenderer.render(result, pretty = pretty),
-            "$name.explorer.html" to ExplorerHtmlRenderer.render(result, root, waiverAuthor = waiverAuthor, extensions = extensions),
+            "$name.explorer.html" to ExplorerHtmlRenderer.render(result, root, waiverAuthor = waiverAuthor),
             // The file names its siblings from the project root, so it needs to know where they land.
             "$name.CLAUDE.md" to ClaudeRenderer.render(result, root, ClaudeRenderer.Layout(outdir, siblings = true)),
         )
+        // The ER diagram designer, beside the explorer it links into — only for a project with tables to draw:
+        // on any other it would be a page that can only say it has nothing to show.
+        if (ErdHtmlRenderer.hasTables(result)) {
+            artifacts.add("$name.erd.html" to ErdHtmlRenderer.render(result, root, explorerFile = "$name.explorer.html"))
+        }
         val written = ArrayList<File>()
         for ((fn, content) in artifacts) {
             val p = File(outdir, fn)
@@ -361,7 +355,8 @@ fun run(args: Array<String>): Int {
         // Alone, `--claude` writes no summary/graph next to itself; the file must not pretend otherwise.
         claude -> ClaudeRenderer.render(result, root, ClaudeRenderer.Layout(siblings = false)) to "CLAUDE.md"
         summary -> SummaryRenderer.render(result, root) to "summary.md"
-        html -> ExplorerHtmlRenderer.render(result, root, waiverAuthor = waiverAuthor, extensions = extensions) to "html"
+        html -> ExplorerHtmlRenderer.render(result, root, waiverAuthor = waiverAuthor) to "html"
+        erd -> ErdHtmlRenderer.render(result, root) to "erd.html"
         json -> GraphJsonRenderer.render(result, pretty = pretty) to "json"
         else -> OverviewRenderer.render(result, root) to "md"
     }
@@ -382,7 +377,7 @@ fun run(args: Array<String>): Int {
     }
     File(target).writeText(out, Charsets.UTF_8)
     if (!quiet) errln("wrote $target $EM_DASH $status")
-    if (open && ext == "html") openFile(target)
+    if (open && ext.endsWith("html")) openFile(target)
     return exitAfterOutput()
 }
 
@@ -395,9 +390,11 @@ usage: java -jar cli-<version>-all.jar <path> [options]
 
 output (mutually exclusive):
   (none)              the full Markdown report (APP_OVERVIEW.md)
-  --all               all five artifacts into a directory (-o, default .), plus <name>.diagrams/
+  --all               all five artifacts into a directory (-o, default .), plus <name>.diagrams/ and,
+                      when the project has tables, <name>.erd.html
   --summary           the compact LLM-first overview
   --html              the interactive explorer
+  --erd               the ER diagram designer (the project's tables and their relations)
   --json              the traversable graph
   --claude            drop-in agent context (CLAUDE.md)
   --claude-template   the project-independent Flowable primer (needs no path)
@@ -406,7 +403,7 @@ options:
   -o, --output <path>         output file — or, with --all, the output directory
   --slice <type:key>          render one node with its full context (not with --all)
   --stdout                    write the single artifact to stdout
-  --open                      open the result in a browser (--all, --html)
+  --open                      open the result in a browser (--all, --html, --erd)
   --pretty                    indent graph.json
   --expr-allowlist <list>     comma-separated expression namespaces/functions the project registers itself
   --custom-functions <path>   where to look for frontend customisation sources
@@ -417,8 +414,6 @@ options:
   --waivers <path>            the accepted-findings file (default: waivers.json beside the artifacts)
   --waiver-author <name>      the `by` of a rule accepted from the explorer page
   --no-waivers                ignore it — report every finding, for an audit
-  --extension <list>          comma-separated optional explorer parts to include (--all, --html):
-                              ${ExplorerExtension.entries.joinToString(", ") { it.id + " (" + it.label + ")" }}
   --fail-on-stale-waivers     exit 1 when a waiver matched nothing or has expired
   -v, --verbose               list every parse issue the status line counts
   -q, --quiet                 silence the status lines on stderr

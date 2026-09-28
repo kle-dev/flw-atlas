@@ -124,7 +124,7 @@ object AtlasGenerationRunner {
                     val lfs = LocalFileSystem.getInstance()
                     lfs.refreshNioFiles(outcome.written)
                     explorerVf = outcome.explorerHtml?.let { lfs.findFileByNioFile(it) }
-                    outcome.written.filter { it.fileName.toString().endsWith(".explorer.html") }
+                    outcome.written.filter { AtlasArtifact.isPage(it.fileName.toString()) }
                         .forEach { AtlasExplorerFiles.rememberRoot(project, it, projectDir) }
                 }
                 ApplicationManager.getApplication().invokeLater {

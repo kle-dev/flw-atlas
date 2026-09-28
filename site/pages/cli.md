@@ -14,7 +14,7 @@ interface with every flag.
 ./atlas /path/to/your-flowable-project
 ```
 
-That analyses the project, writes all five artifacts to `./atlas-output/<project>/`, and opens the
+That analyses the project, writes all five artifacts to `./atlas-output/<project>/` (and the ER diagram page, for a project with tables), and opens the
 explorer in your browser. Two optional positionals and one flag of its own:
 
 ```bash
@@ -58,14 +58,15 @@ Build the jar with `./gradlew :cli:shadowJar`, or download `cli-<version>-all.ja
 
 ### Output format
 
-These six are mutually exclusive — passing two is an error, not a silent preference.
+These seven are mutually exclusive — passing two is an error, not a silent preference.
 
 | Flag | Writes | Default file name |
 |---|---|---|
 | *(none)* | The full Markdown report | `APP_OVERVIEW.md` |
-| `--all` | All five artifacts into a **directory**, plus `<name>.diagrams/` when any model has a layout | `<name>.*` in `-o`, default `.` |
+| `--all` | All five artifacts into a **directory**, plus `<name>.diagrams/` when any model has a layout and `<name>.erd.html` when the project has a table | `<name>.*` in `-o`, default `.` |
 | `--summary` | The compact LLM-first overview | `APP_OVERVIEW.summary.md` |
 | `--html` | The interactive explorer | `APP_OVERVIEW.html` |
+| `--erd` | The [ER diagram designer](../erd/): the project's tables and their relations, on a page of its own | `APP_OVERVIEW.erd.html` |
 | `--json` | The traversable graph | `APP_OVERVIEW.json` |
 | `--claude` | Drop-in agent context | `CLAUDE.md` |
 | `--claude-template` | The project-independent Flowable primer. Needs **no** path | stdout |
@@ -81,7 +82,7 @@ single-artifact run writes `APP_OVERVIEW.*` unless you name the file with `-o`. 
 | `-o <path>`, `--output <path>` | Output file — or, with `--all`, the output **directory** (created if missing). Also accepts `-o<path>` and `--output=<path>`. |
 | `--slice <type:key>` | Render one node with its full context instead of a whole report. A bare `<key>` matches any type, and every match is rendered. |
 | `--stdout` | Write the single artifact to stdout and touch no files. |
-| `--open` | Open the result in a browser. Applies to `--all` (the first HTML written) and to `--html`. |
+| `--open` | Open the result in a browser. Applies to `--all` (the first HTML written), `--html` and `--erd`. |
 | `--pretty` | Indent `graph.json`. It is minified by default. |
 | `--expr-allowlist <list>` | Comma-separated expression namespaces / functions your project registers itself, so they stop being reported as *suspect*. See [Expressions](../expressions/#the-allowlist). |
 | `--custom-functions <path>` | Where to look for frontend customisation sources, instead of the project root. |
@@ -90,7 +91,6 @@ single-artifact run writes `APP_OVERVIEW.*` unless you name the file with `-o`. 
 | `--waivers <path>` | The [accepted-findings file](../checks/#accepting-a-finding). Defaults to `waivers.json` beside the artifacts: the `--all` directory, or the folder of the file `-o` names — the same folder the explorer's *Save* writes it to. |
 | `--waiver-author <name>` | Prefills the `by` of a rule accepted from the generated explorer page. Left out, a rule written from a CLI-generated page carries no author; inside the IDE the plugin supplies the project's git identity. |
 | `--no-waivers` | Ignore that file and report every finding — the audit run, for answering "what are we hiding?". |
-| `--extension <list>` | Include optional parts of the explorer page — comma-separated, repeatable. `erd` is the [ER diagram designer](../explorer/#er-diagram-designer), which also embeds the project's `*.atlas-erd.json` diagram files. Only with `--all` or `--html`; an unknown name, or the flag with another output, is a misuse (exit 2). A page generated without an extension carries none of its code. |
 | `--fail-on-stale-waivers` | Make the run **exit 1** when a waiver matched nothing or has expired. Separate from `--fail-on` on purpose: a stale waiver is a problem with your file, not a finding about your project. |
 | `-q`, `--quiet` | Silence the status lines on stderr. |
 | `-v`, `--verbose` | List every parse issue the status line counts, one per line, after it. |
@@ -127,7 +127,7 @@ worth knowing because nothing warns you:
 |---|---|
 | `0` | Success. |
 | `1` | The run succeeded and wrote its artifacts, but a finding matched `--fail-on`. |
-| `2` | Argument misuse: an unknown flag, two format flags, `--all` with `--slice`, an unknown `--fail-on` value, an unknown `--extension` or one without `--all`/`--html`, a missing option value, a second positional, a path that does not exist, a missing path, or a `--slice` that matches no node. |
+| `2` | Argument misuse: an unknown flag, two format flags, `--all` with `--slice`, an unknown `--fail-on` value, a missing option value, a second positional, a path that does not exist, a missing path, or a `--slice` that matches no node. |
 
 ## The status line
 

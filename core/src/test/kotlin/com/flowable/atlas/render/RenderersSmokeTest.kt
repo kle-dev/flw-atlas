@@ -3,7 +3,6 @@ package com.flowable.atlas.render
 import com.flowable.atlas.graph.Atlas
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -43,39 +42,36 @@ class RenderersSmokeTest {
     }
 
     /**
-     * An extension is inlined only when chosen: without one the markers leave no trace (no empty script,
-     * no dormant code), with one its script sits *before* the explorer's — explorer.js boots synchronously
-     * at its end, and the routes an extension owns must be registered by then.
+     * The ER diagram designer is a page of its own: the explorer carries none of it (it moved out because the
+     * explorer is the page that grows with the project), and the ER page is complete — the explorer's
+     * stylesheet for its tokens, its own script, a payload of tables only.
      */
     @Test
-    fun explorerExtensionsAreInlinedOnlyWhenChosen() {
-        val at = java.time.Instant.parse("2026-01-01T00:00:00Z")
-        val plain = ExplorerHtmlRenderer.render(result, fixtureDir, generatedAt = at)
-        assertFalse("leftover extension marker", plain.contains("__ATLAS_EXT_"))
-        assertFalse("the designer's code shipped although nobody asked for it", plain.contains("ATLAS_EXT.erd="))
-        assertTrue("the explorer's side of the contract is always there", plain.contains("const EXT_VIEWS="))
+    fun theErDesignerIsItsOwnPage() {
+        val explorer = ExplorerHtmlRenderer.render(result, fixtureDir)
+        assertFalse("the explorer carries none of the designer", explorer.contains("ATLAS_ERD") || explorer.contains(".erd-card"))
+        assertFalse("…and no route to it", explorer.contains("'/erd'"))
 
-        val erd = ExplorerHtmlRenderer.render(result, fixtureDir, generatedAt = at, extensions = setOf(ExplorerExtension.ERD))
-        assertFalse("leftover extension marker", erd.contains("__ATLAS_EXT_"))
-        val reg = erd.indexOf("ATLAS_EXT.erd=")
-        assertTrue("the designer registers itself", reg > 0)
-        assertTrue("…before the explorer boots", reg < erd.indexOf("const DATA = JSON.parse"))
-        assertTrue("the designer's styles ride along", erd.contains(".erd-card"))
-        fun asset(name: String) = javaClass.getResource("/frontend/ext/$name")!!.readText().trimEnd('\n')
-        // The designer's code and styles, and the project's diagrams for it (none in the fixture): nothing else.
-        assertEquals(
-            "the extension is the only difference",
-            plain,
-            erd.replace("\n" + asset("erd.css"), "").replace("\n<script>\n" + asset("erd.js") + "</script>", "")
-                .replace(",\"erdDiagrams\":[]", ""),
-        )
+        val erd = ErdHtmlRenderer.render(result, fixtureDir, explorerFile = "miniproject.explorer.html")
+        for (marker in listOf("/*__ATLAS_CSS__*/", "/*__ERD_CSS__*/", "/*__ERD_JS__*/", "__ATLAS_DATA__", "__ATLAS_VERSION__")) {
+            assertFalse("leftover marker $marker", erd.contains(marker))
+        }
+        assertTrue("the explorer's tokens", erd.contains("--space-1:"))
+        assertTrue("the designer's script", erd.contains("window.ATLAS_ERD=") && erd.contains("function erdArrange("))
+        assertTrue("the designer's styles", erd.contains(".erd-card"))
+        assertFalse("nothing of explorer.js", erd.contains("function renderDashboard"))
+        assertTrue("the fixture's table", erd.contains("\"cust_customer\""))
+        assertTrue("the link to the explorer beside it", erd.contains("\"explorer\":\"miniproject.explorer.html\""))
+        assertFalse("no drawings, no findings — tables only", erd.contains("\"diagram\":") || erd.contains("\"findings\":"))
+        assertTrue("a sliver of the explorer (${erd.length} vs ${explorer.length})", erd.length * 2 < explorer.length)
     }
 
     @Test
-    fun explorerExtensionIdsAreStrict() {
-        assertEquals(setOf(ExplorerExtension.ERD), ExplorerExtension.parse(listOf(" ERD ", "")))
-        assertEquals(emptySet<ExplorerExtension>(), ExplorerExtension.parse(emptyList()))
-        assertThrows(IllegalArgumentException::class.java) { ExplorerExtension.parse(listOf("erd", "nope")) }
+    fun onlyAProjectWithTablesHasAnErPage() {
+        assertTrue(ErdHtmlRenderer.hasTables(result))
+        val empty = java.nio.file.Files.createTempDirectory("no-tables").toFile().also { it.deleteOnExit() }
+        java.io.File(empty, "DEMO-P001.bpmn").writeText("""<definitions><process id="DEMO-P001"/></definitions>""")
+        assertFalse(ErdHtmlRenderer.hasTables(Atlas.extract(empty)))
     }
 
     @Test

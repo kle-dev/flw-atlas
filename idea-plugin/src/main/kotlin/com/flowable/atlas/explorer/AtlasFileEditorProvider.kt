@@ -10,7 +10,8 @@ import com.intellij.openapi.vfs.VirtualFile
 import org.jdom.Element
 
 /**
- * Contributes the "Atlas Explorer" tab (rendered by JCEF) for any `*.explorer.html` file and hides the
+ * Contributes the "Atlas Explorer" tab (rendered by JCEF) for any `*.explorer.html` file — and for the ER
+ * diagram designer's `*.erd.html`, which uses the same bridges and toolbar — and hides the
  * platform's default HTML "Text" editor for it — a generated, self-contained page isn't meant to be
  * hand-edited, so the rendered explorer is the only editor. Only offered when JCEF is available in the
  * running IDE; otherwise the provider bows out (the default editor stays, and the page can still be
@@ -22,7 +23,8 @@ class AtlasFileEditorProvider : FileEditorProvider, DumbAware {
         !file.isDirectory &&
             // a report inside a .zip has no path to regenerate into or open in a browser (`toNioPath()` throws)
             file.isInLocalFileSystem &&
-            file.name.endsWith(".explorer.html", ignoreCase = true) &&
+            // the explorer, and the ER diagram designer beside it — one tab, the same bridges
+            AtlasArtifact.isPage(file.name) &&
             JcefSupport.isAvailable()
 
     override fun createEditor(project: Project, file: VirtualFile): FileEditor = AtlasFileEditor(project, file)

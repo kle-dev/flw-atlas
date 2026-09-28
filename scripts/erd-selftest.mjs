@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Behaviour test for the ER diagram designer's pure core (core/src/main/resources/frontend/ext/erd.js).
+ * Behaviour test for the ER diagram designer's pure core (core/src/main/resources/frontend/erd.js).
  *
  * The designer decides a few things no picture shows wrong until much later: which tables a project has
  * (and from which changelog, when several define one), what a remembered column order means once the
@@ -16,7 +16,7 @@ import path from 'path';
 import url from 'url';
 
 const HERE = path.dirname(url.fileURLToPath(import.meta.url));
-const JS_PATH = path.join(HERE, '..', 'core', 'src', 'main', 'resources', 'frontend', 'ext', 'erd.js');
+const JS_PATH = path.join(HERE, '..', 'core', 'src', 'main', 'resources', 'frontend', 'erd.js');
 const source = fs.readFileSync(JS_PATH, 'utf8');
 const START = '/*__ERD_CORE_START__*/', END = '/*__ERD_CORE_END__*/';
 const a = source.indexOf(START), b = source.indexOf(END);
@@ -25,7 +25,7 @@ if (a < 0 || b < 0 || b < a) {
   process.exit(2);
 }
 const E = new Function(`"use strict";${source.slice(a + START.length, b)};
-  return {erdKey, erdCatalog, erdDefaultOrder, erdOrder, erdSuggestions, erdNormalize, erdToDoc, erdSame, erdEnds, erdContrast, erdSlug, erdArrange,
+  return {erdKey, erdCatalog, erdDefaultOrder, erdOrder, erdSuggestions, erdNormalize, erdToDoc, erdSame, erdEnds, erdContrast, erdSlug, erdArrange, erdSearch, erdColumnHits, erdTableMatches,
     ERD_FORMAT, ERD_FORMAT_VERSION, ERD_CARDINALITIES};`)();
 
 let failed = 0, passed = 0;
@@ -198,6 +198,31 @@ function crossings(nodes, edges, pos) {
   ok('forty tables: arranged in well under a second (' + ms + ' ms)', ms < 1000);
 }
 eq('nothing to arrange', E.erdArrange([], []), {});
+
+// ---- searching ----
+{
+  const cat = [
+    {key: 'ORD_ORDER', name: 'ord_order', alias: 'Order', dataObjects: [{name: 'Order'}],
+     columns: [{name: 'id_', type: 'VARCHAR(64)', pk: true}, {name: 'customer_id_', type: 'VARCHAR(64)'}, {name: 'note_', type: 'VARCHAR(4000)'}]},
+    {key: 'CUST_CUSTOMER', name: 'cust_customer', alias: 'Customer', dataObjects: [{name: 'Customer'}],
+     columns: [{name: 'id_', type: 'VARCHAR(64)', pk: true}, {name: 'customer_no_', type: 'VARCHAR(32)'}]},
+    {key: 'DEMO_WIDE', name: 'demo_wide', alias: '', dataObjects: [],
+     columns: [...Array(40)].map((_, i) => ({name: 'attr_' + i + '_', type: 'VARCHAR(255)'})).concat([{name: 'CUSTOMER_REF_', type: 'VARCHAR(64)'}])},
+  ];
+  const r = E.erdSearch(cat, '  Customer ', new Set(['ORD_ORDER']));
+  eq('counts tables and columns apart', [r.tables, r.columns, r.total], [1, 3, 4]);
+  eq('the diagram’s own first, then the closest match, then the table’s name and the column’s place',
+    r.items.map(i => i.kind + ':' + i.table + (i.column ? '.' + i.column : '')),
+    ['column:ord_order.customer_id_', 'table:cust_customer', 'column:cust_customer.customer_no_', 'column:demo_wide.CUSTOMER_REF_']);
+  ok('a result says whether its table is on the diagram', r.items[0].on === true && r.items[1].on === false);
+  eq('a business name finds its table', E.erdSearch(cat, 'order').items.filter(i => i.kind === 'table').map(i => i.key), ['ORD_ORDER']);
+  eq('a type finds its columns, after any name', E.erdSearch(cat, '4000').items.map(i => i.column), ['note_']);
+  eq('the limit keeps the list short, the count stays whole', [E.erdSearch(cat, 'attr_', null, 10).items.length, E.erdSearch(cat, 'attr_', null, 10).total], [10, 40]);
+  eq('no query, no results', E.erdSearch(cat, '   ').total, 0);
+  eq('the columns a query finds in one table, by name or type', [...E.erdColumnHits(cat[0].columns, 'varchar(4')], ['NOTE_']);
+  ok('a table answers by its name, business name or data object', E.erdTableMatches('ord_order', '', [{name: 'Order'}], 'order') &&
+    E.erdTableMatches('x', 'Bestellung', [], 'bestell') && !E.erdTableMatches('x', '', [], 'order') && !E.erdTableMatches('x', '', [], ''));
+}
 
 if (failed) { console.error(`erd-selftest: ${failed} failed, ${passed} passed`); process.exit(1); }
 console.log(`erd-selftest: all ${passed} checks passed`);

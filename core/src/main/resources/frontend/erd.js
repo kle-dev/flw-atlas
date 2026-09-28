@@ -1,5 +1,5 @@
-/* Flowable Atlas — the ER diagram designer, the explorer extension "erd" (ExplorerHtmlRenderer inlines this
-   file only when it was chosen: `--extension erd`, or Settings → Generation in the plugin).
+/* Flowable Atlas — the ER diagram designer: the script of `<project>.erd.html`, a page of its own beside the
+   explorer (ErdHtmlRenderer.kt writes it: `--erd`, `--all`, or the artifact in Settings → Generation).
 
    A page to explain a project's data model to people who never read a changelog: drag the project's tables
    onto a canvas, show each with its first columns, draw the relations between them with a name and a
@@ -8,10 +8,10 @@
    a diagram is a *view* of the live schema: it stores layout and decisions, never a second copy of the
    columns it could get wrong.
 
-   This script runs before explorer.js (it is its own <script>, ahead of the explorer's) and registers itself
-   on window.ATLAS_EXT; everything it borrows from explorer.js (esc, toast, debounce, DATA, …) is only
-   touched from functions that run after the explorer has booted. Top-level names are prefixed `erd` /
-   `ERD_`: the two scripts share one global scope, and a clash would stop the explorer from loading at all. */
+   It used to be a page inside the explorer, and moved out because the explorer carries the whole graph —
+   on a large project more than a Remote Development client will open — while this page needs only the
+   tables. It shares the explorer's stylesheet (tokens, fonts, controls) and nothing of its script: the
+   few helpers it needs (escaping, the toast, the copy bridge, the theme) are here, below. */
 
 /*__ERD_CORE_START__*/
 // The pure part — no DOM, no explorer globals — so scripts/erd-selftest.mjs can run it in Node.
@@ -223,6 +223,51 @@ function erdContrast(hex){
   return L>0.4?'#131e29':'#ffffff';
 }
 
+/** Whether a table answers a search by its own names: table name, business name, the data objects that read it. */
+function erdTableMatches(name, alias, dataObjects, q){
+  if(!q) return false;
+  return [name, alias].concat((dataObjects||[]).map(d=>d && d.name)).some(n=>n && String(n).toLowerCase().indexOf(q)>=0);
+}
+
+/** The columns a search finds in a table — by name, or by type (`varchar(4000)`) — as their keys. */
+function erdColumnHits(columns, q){
+  const out=new Set();
+  if(!q) return out;
+  (columns||[]).forEach(c=>{ if(String(c.name).toLowerCase().indexOf(q)>=0 || String(c.type||'').toLowerCase().indexOf(q)>=0) out.add(erdKey(c.name)); });
+  return out;
+}
+
+/**
+ * A search over every table of the project and every one of its columns, on the diagram or not. Tables and
+ * columns the diagram shows come first; then an exact name before one that starts with the query before
+ * one that contains it, names before types; then the table's name and the column's place in it. [query]
+ * is matched case-insensitively as one piece of text — a column is usually looked for by a fragment of
+ * its name (`customer`, `_id_`), and splitting it into words would find less, not more.
+ */
+function erdSearch(catalog, query, onCanvas, limit){
+  const q=String(query||'').trim().toLowerCase();
+  const res={items:[], total:0, tables:0, columns:0};
+  if(!q) return res;
+  const on=onCanvas||new Set(), all=[];
+  const rank=n=>{ n=String(n||'').toLowerCase(); return n===q?0:n.indexOf(q)===0?1:n.indexOf(q)>=0?2:9; };
+  (catalog||[]).forEach(t=>{
+    const isOn=on.has(t.key);
+    const tr=Math.min(rank(t.name), rank(t.alias), ...(t.dataObjects||[]).map(d=>rank(d.name)));
+    if(tr<9){ all.push({kind:'table', key:t.key, table:t.name, alias:t.alias||'', count:(t.columns||[]).length, on:isOn, score:tr, pos:-1}); res.tables++; }
+    (t.columns||[]).forEach((c,i)=>{
+      const nr=rank(c.name), ty=String(c.type||'').toLowerCase().indexOf(q)>=0;
+      if(nr===9 && !ty) return;
+      all.push({kind:'column', key:t.key, table:t.name, alias:t.alias||'', column:c.name, type:c.type||'', pk:!!c.pk, on:isOn,
+        score:nr<9?nr+3:7, pos:i});
+      res.columns++;
+    });
+  });
+  all.sort((a,b)=>(Number(b.on)-Number(a.on)) || (a.score-b.score) || a.table.localeCompare(b.table) || (a.pos-b.pos));
+  res.total=all.length;
+  res.items=all.slice(0, limit||80);
+  return res;
+}
+
 /** A file name for a diagram: `Orders & customers` → `orders-customers`. */
 function erdSlug(name){
   return String(name||'').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g,'')
@@ -416,8 +461,78 @@ function erdArrange(nodes, edges, opts){
 (function(){
 'use strict';
 
-const ICON='<rect width="8" height="7" x="2" y="3" rx="1"/><path d="M2 6.5h8"/><rect width="8" height="7" x="14" y="14" rx="1"/>'+
-  '<path d="M14 17.5h8"/><path d="M10 6.5h3a2 2 0 0 1 2 2V14"/>';
+// ---------- the page: the few things explorer.js gives its pages, for this one ----------
+const DATA=JSON.parse(document.getElementById('atlas-data').textContent);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const enc=encodeURIComponent;
+const MODK=/Mac|iPhone|iPad/.test(navigator.platform||'')?'⌘':'Ctrl';
+const cssEsc=v=>(window.CSS && CSS.escape)?CSS.escape(v):String(v).replace(/["\\\]\[]/g,'\\$&');
+const byId=new Map((DATA.nodes||[]).map(n=>[n.id, n]));
+let _toastT=0;
+function toast(msg){
+  const box=document.getElementById('toast');
+  if(!box || !msg) return;
+  box.textContent=msg; box.classList.add('show');
+  clearTimeout(_toastT); _toastT=setTimeout(()=>box.classList.remove('show'), 2400);
+}
+/** Copy through the IDE's bridge where there is one (the embedded browser has no clipboard of its own). */
+function atlasCopy(text, onOk){
+  const fallback=()=>{
+    const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); if(onOk) onOk(); }catch(e){ toast('Could not copy'); }
+    ta.remove();
+  };
+  if(window.__atlasCopy){ window.__atlasCopy(text); if(onOk) onOk(); return; }
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(()=>{ if(onOk) onOk(); }, fallback);
+  else fallback();
+}
+/** Hover help on [data-tip]: the IDE's embedded browser draws no native title tooltip (explorer.css .atlas-tip). */
+(function(){
+  let tip=null, timer=0, on=null;
+  const hide=()=>{ clearTimeout(timer); on=null; if(tip) tip.classList.remove('show'); };
+  document.addEventListener('mouseover', e=>{
+    const el=e.target.closest && e.target.closest('[data-tip]');
+    if(el===on) return;
+    hide();
+    if(!el || !el.getAttribute('data-tip')) return;
+    on=el;
+    timer=setTimeout(()=>{
+      if(!tip){ tip=document.createElement('div'); tip.className='atlas-tip'; document.body.appendChild(tip); }
+      tip.textContent=el.getAttribute('data-tip');
+      const r=el.getBoundingClientRect(), w=tip.offsetWidth, h=tip.offsetHeight;
+      tip.style.left=Math.max(6, Math.min(innerWidth-w-6, r.left+r.width/2-w/2))+'px';
+      tip.style.top=(r.bottom+6+h>innerHeight ? r.top-h-6 : r.bottom+6)+'px';
+      tip.classList.add('show');
+    }, 450);
+  });
+  document.addEventListener('pointerdown', hide, true);
+  document.addEventListener('scroll', hide, true);
+})();
+/** The theme: auto, light or dark — the same preference the explorer keeps, so the two pages agree. */
+let _ideTheme=(()=>{ const t=new URLSearchParams(location.search).get('ideTheme'); return t==='light'||t==='dark'?t:null; })();
+function themePref(){ try{ return localStorage.getItem('atlas-theme')||(_ideTheme?'auto':'light'); }catch(e){ return _ideTheme?'auto':'light'; } }
+const THEME_ICON={auto:'<circle cx="12" cy="12" r="9"/><path d="M12 3v18a9 9 0 0 0 0-18z" fill="currentColor"/>',
+  light:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  dark:'<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'};
+function applyTheme(){
+  const p=themePref(), sys=_ideTheme||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');
+  document.documentElement.dataset.theme=p==='auto'?sys:p;
+  const b=document.getElementById('erd-theme');
+  if(b){ b.innerHTML=ico(THEME_ICON[p]||THEME_ICON.auto); b.dataset.tip='Theme: '+p+' — click to switch'; }
+}
+/** The IDE pushes its theme and colours when they change (AtlasFileEditor.pushIdeTheme). */
+window.__atlasSetIdeTheme=(mode, pal)=>{
+  _ideTheme=mode==='light'||mode==='dark'?mode:null;
+  const st=document.documentElement.style, c=String(pal||'').split('.');
+  ['--bg','--panel','--panel2','--line','--ink','--ink-dim','--accent'].forEach((k,i)=>{
+    if(c.length===9 && /^[0-9a-f]{6}$/i.test(c[i])) st.setProperty(k, '#'+c[i]); else st.removeProperty(k);
+  });
+  applyTheme();
+};
+/** Inside the IDE the page gets bridges to copy and to open files; it says so on <html>, as the explorer does. */
+const markIde=()=>{ if(window.__atlasOpen) document.documentElement.classList.add('ide'); };
+window.addEventListener('atlas-ide-bridge', markIde);
+
 const VISIBLE=5;
 const ROW=22, HEAD1=32, HEAD2=44, FOOT=22, WMIN=200, WMAX=420;
 // Single quotes inside: these end up in style="…" attributes, where a double quote would close the attribute.
@@ -427,7 +542,7 @@ const F_TITLE='600 13px '+SANS, F_SUB='11px '+MONO, F_ROW='12px '+SANS, F_TYPE='
 const CARD_TEXT={'1:1':'one to one', '1:n':'one to many', 'n:1':'many to one', 'n:m':'many to many'};
 /** The page's colours, as references: a theme switch restyles the canvas without a redraw. */
 const PAGE={panel:'var(--panel)', line:'var(--line2)', head:'var(--panel2)', ink:'var(--ink)', dim:'var(--ink-dim)',
-  faint:'var(--ink-faint)', accent:'var(--accent)', bg:'var(--bg)', pill:'var(--panel)'};
+  faint:'var(--ink-faint)', accent:'var(--accent)', bg:'var(--bg)', pill:'var(--panel)', mark:'var(--hl-bg)'};
 /** …and an exported picture's, as values: it leaves the page, so it cannot refer to it — and it is light,
  *  because it ends up on a slide or in a document, whatever theme the page was in. */
 const PAPER={panel:'#ffffff', line:'#c9ced4', head:'#f1f5f9', ink:'#131e29', dim:'#4c5b6a', faint:'#79848f',
@@ -441,7 +556,7 @@ function state(){
   const catalog=erdCatalog(DATA.nodes||[]);
   S={catalog, byKey:new Map(catalog.map(t=>[t.key,t])), suggestions:erdSuggestions(DATA.nodes||[], DATA.edges||[]),
     diagrams:[], activeId:null, undo:[], redo:[], sel:null, pop:null, root:null, filter:'', present:false,
-    storageOk:true, projectErrors:[], lastCoalesce:null, drag:null, dirtyTimer:0};
+    storageOk:true, projectErrors:[], lastCoalesce:null, drag:null, dirtyTimer:0, q:'', results:[], resIdx:0};
   load();
   return S;
 }
@@ -455,7 +570,7 @@ function load(){
     catch(e){ /* an entry this page cannot read is dropped from the list, not allowed to break it */ }
   });
   // Diagrams that live in the project (embedded at generation) come first: they are the shared ones.
-  (DATA.erdDiagrams||[]).forEach(p=>{
+  (DATA.diagrams||[]).forEach(p=>{
     if(!p || !p.file) return;
     if(p.error || !p.doc){ S.projectErrors.push(p.file+': '+(p.error||'unreadable')); return; }
     let base;
@@ -545,10 +660,15 @@ function clip(text, font, max){
 }
 /** Where everything on a card sits. The width is set by *all* columns, shown or not, so expanding a card
  *  makes it longer, never wider — the relations around it stay where they were. */
-function layout(t){
+function layout(t, q){
   const e=effective(t), byK=new Map(e.columns.map(c=>[erdKey(c.name), c]));
   const ordered=e.order.map(n=>byK.get(erdKey(n))).filter(Boolean);
-  const shown=t.expanded?ordered:ordered.slice(0, VISIBLE);
+  // While a search is on, a folded card also shows the columns it found, where they stand in its order: the
+  // one column of forty the reader is after, without unfolding the other thirty-four.
+  const hits=q?erdColumnHits(ordered, q):null;
+  const shown=t.expanded?ordered:ordered.filter((c,i)=>i<VISIBLE || (hits && hits.has(erdKey(c.name))));
+  const live=S && S.byKey.get(t.key);
+  const match=!q || !!(hits && hits.size) || erdTableMatches(t.name, t.alias, live && live.dataObjects, q);
   const title=t.alias||t.name, sub=t.alias?t.name:'';
   const head=sub?HEAD2:HEAD1;
   let w=Math.max(WMIN, tw(title,F_TITLE)+56, sub?tw(sub,F_SUB)+40:0);
@@ -558,7 +678,7 @@ function layout(t){
   const rows=shown.map((c,i)=>({c, y:head+3+i*ROW}));
   const h=head+(shown.length?shown.length*ROW+6:0)+(foot?FOOT:0);
   return {t, x:t.x, y:t.y, w, h, head, title, sub, rows, total:ordered.length, more:ordered.length-shown.length,
-    foot, ghost:e.ghost, ordered};
+    foot, ghost:e.ghost, ordered, hits, match};
 }
 /** The point a relation leaves a card from, and the direction it leaves in. */
 function sideOf(A, B){
@@ -654,7 +774,8 @@ function suggestionSvg(sg, g, C){
 const KEY_ICON='<circle cx="4" cy="7" r="2.6"/><path d="M6.6 7H13M11 7v2.6M13 7v2"/>';
 function cardSvg(L, C, o){
   const t=L.t, col=t.color, hi=col?erdContrast(col):'', sel=o.sel, w=L.w;
-  let s='<g class="erd-card'+(sel?' sel':'')+(L.ghost?' ghost':'')+'" data-key="'+esc(t.key)+'" transform="translate('+f(L.x)+','+f(L.y)+')">';
+  const sq=o.q?(L.match?' found':' dim'):'';
+  let s='<g class="erd-card'+(sel?' sel':'')+(L.ghost?' ghost':'')+sq+'" data-key="'+esc(t.key)+'" transform="translate('+f(L.x)+','+f(L.y)+')">';
   s+='<rect class="erd-box" width="'+w+'" height="'+L.h+'" rx="8"'+st({fill:C.panel, stroke:sel?C.accent:C.line,
     'stroke-width':sel?2:1, 'stroke-dasharray':L.ghost?'6 4':''})+'/>';
   s+='<path class="erd-head" d="M0,8 a8,8 0 0 1 8,-8 h'+(w-16)+' a8,8 0 0 1 8,8 v'+(L.head-8)+' h-'+w+' z"'+st({fill:col||C.head})+'/>';
@@ -670,6 +791,7 @@ function cardSvg(L, C, o){
   L.rows.forEach(r=>{
     const c=r.c, typeW=Math.min(tw(c.type||'',F_TYPE), w*0.45), nameMax=w-30-typeW-22;
     s+='<g class="erd-row" data-col="'+esc(c.name)+'" transform="translate(0,'+r.y+')">';
+    if(L.hits && L.hits.has(erdKey(c.name))) s+='<rect class="erd-rowmark" x="1" width="'+(w-2)+'" height="'+ROW+'"'+st({fill:C.mark})+'/>';
     if(o.interactive) s+='<rect class="erd-rowhit" x="1" width="'+(w-2)+'" height="'+ROW+'"'+st({fill:'transparent'})+'/>';
     if(c.pk) s+='<g transform="translate(9,4)"'+st({fill:'none', stroke:C.dim, 'stroke-width':1.2})+' aria-label="primary key">'+KEY_ICON+'</g>';
     const fr=c.pk?'600 '+F_ROW:F_ROW;
@@ -696,7 +818,7 @@ function cardSvg(L, C, o){
 /** The whole diagram as SVG markup: the canvas draws it with the page's colours and its handles, an export
  *  with paper colours and nothing interactive — one drawing, so the picture is what the screen showed. */
 function sceneSvg(d, C, o){
-  const lays=new Map(d.tables.map(t=>[t.key, layout(t)]));
+  const lays=new Map(d.tables.map(t=>[t.key, layout(t, o.q)]));
   const rels=d.relations.filter(r=>lays.has(r.from)&&lays.has(r.to));
   const sugs=o.suggestions?visibleSuggestions(d, lays):[];
   const fan=fans(rels.concat(sugs));
@@ -709,7 +831,7 @@ function sceneSvg(d, C, o){
   s+='</g><g class="erd-sugs">';
   sugs.forEach(sg=>{ const g=geo.get(sg.id); if(g) s+=suggestionSvg(sg, g, C); });
   s+='</g><g class="erd-cards">';
-  d.tables.forEach(t=>{ s+=cardSvg(lays.get(t.key), C, {interactive:o.interactive, sel:o.sel&&o.sel.kind==='table'&&o.sel.key===t.key}); });
+  d.tables.forEach(t=>{ s+=cardSvg(lays.get(t.key), C, {interactive:o.interactive, q:o.q, sel:o.sel&&o.sel.kind==='table'&&o.sel.key===t.key}); });
   return {markup:s+'</g>', lays};
 }
 /**
@@ -761,7 +883,7 @@ function render(root){
   if(!v.fitted) requestAnimationFrame(()=>{ fit(); v.fitted=true; });
 }
 function build(root){
-  root.classList.add('view-erd');
+  root.classList.add('erd-host');
   if(!S.catalog.length){
     root.innerHTML='<div class="dash"><div class="erd-none"><div class="dtitle">ER diagram</div>'+
       '<p>This project defines no database tables Atlas can read: no Liquibase changelog creates one, and no database '+
@@ -793,8 +915,15 @@ function build(root){
             '<rect width="7" height="6" x="15" y="15" rx="1"/><path d="M9 6h6"/><path d="M18.5 9v6"/>')+'<span>Arrange</span>',
             'Arrange — lay the tables out by their relations: each one side left of its many side, crossings kept low ('+MODK+'Z undoes it)',
             ' erd-arrangebtn')+
+          btn('expand-all', ico('<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>'), 'Expand all — every table shows all its columns')+
+          btn('collapse-all', ico('<path d="m7 20 5-5 5 5"/><path d="m7 4 5 5 5-5"/>'), 'Collapse all — every table back to its first '+VISIBLE+' columns')+
+          '<span class="erd-sep"></span>'+
+          '<div class="erd-qwrap">'+ico('<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>')+
+            '<input class="erd-q" type="search" placeholder="Search tables and columns" aria-label="Search every table and column of the project" '+
+              'autocomplete="off" spellcheck="false" aria-controls="erd-results" aria-expanded="false">'+
+            '<kbd class="kbd erd-qkbd">'+MODK+'F</kbd>'+
+            '<div class="erd-results" id="erd-results" role="listbox" aria-label="Search results" hidden></div></div>'+
           '<span class="erd-grow"></span>'+
-          '<span class="erd-status" aria-live="polite"></span>'+
           btn('export','Export','Export — diagram file, SVG, PNG',' erd-menubtn')+
           btn('present', ico('<path d="M2 3h20"/><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path d="m7 21 5-5 5 5"/>')+'<span>Present</span>',
             'Present — hide everything but the diagram (Esc to leave)', ' erd-presentbtn')+
@@ -811,9 +940,10 @@ function build(root){
       '<input type="file" class="erd-file" accept=".json,application/json" hidden>'+
     '</div>';
   const q=sel=>root.querySelector(sel);
-  els={root, box:q('.erd'), list:q('.erd-list'), filter:q('.erd-filter'), pick:q('.erd-pick'), status:q('.erd-status'),
+  els={root, box:q('.erd'), list:q('.erd-list'), filter:q('.erd-filter'), pick:q('.erd-pick'), status:document.getElementById('erd-status'),
     pct:q('.erd-pct'), canvas:q('.erd-canvas'), svg:q('.erd-svg'), world:q('.erd-world'), overlay:q('.erd-overlay'),
-    hint:q('.erd-empty'), pop:q('.erd-pop'), file:q('.erd-file'), bar:q('.erd-bar')};
+    hint:q('.erd-empty'), pop:q('.erd-pop'), file:q('.erd-file'), bar:q('.erd-bar'),
+    search:q('.erd-q'), results:q('.erd-results'), qwrap:q('.erd-qwrap')};
   wire();
 }
 function ico(body){ return '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" '+
@@ -866,12 +996,13 @@ function renderList(){
 function draw(){
   if(!els || els.empty) return;
   const d=active();
-  const {markup, lays}=sceneSvg(d, PAGE, {interactive:true, suggestions:!S.present, sel:S.sel});
+  const {markup, lays}=sceneSvg(d, PAGE, {interactive:true, suggestions:!S.present, sel:S.sel, q:S.q});
   els.world.innerHTML=markup;
   els.lays=lays;
   applyView();
   els.hint.hidden=d.tables.length>0;
   els.canvas.classList.toggle('has-sel', !!S.sel);
+  els.canvas.classList.toggle('searching', !!S.q);
 }
 function applyView(){
   const v=view();
@@ -902,10 +1033,11 @@ function fit(){
   v.tx=(r.width-b.w*v.s)/2-b.x*v.s; v.ty=(r.height-b.h*v.s)/2-b.y*v.s;
   applyView();
 }
-function center(key){
+function center(key, column){
   const L=els.lays&&els.lays.get(key); if(!L) return;
   const v=view(), r=els.svg.getBoundingClientRect();
-  v.tx=r.width/2-(L.x+L.w/2)*v.s; v.ty=r.height/2-(L.y+Math.min(L.h,160)/2)*v.s;
+  const row=column && L.rows.find(x=>erdKey(x.c.name)===erdKey(column));
+  v.tx=r.width/2-(L.x+L.w/2)*v.s; v.ty=r.height/2-(row?L.y+row.y+ROW/2:L.y+Math.min(L.h,160)/2)*v.s;
   applyView();
 }
 
@@ -979,6 +1111,113 @@ function arrange(){
   };
   requestAnimationFrame(step);
 }
+/** Every card unfolded to all its columns, or folded back to the first five — one undo step either way. */
+function setAllExpanded(on){
+  const d=active();
+  if(!d.tables.length){ toast('No tables on the canvas yet'); return; }
+  const n=d.tables.filter(t=>!!t.expanded!==on).length;
+  if(!n){ toast(on?'Every table already shows all its columns':'Every table already shows its first '+VISIBLE+' columns'); return; }
+  mutate(x=>{ x.tables.forEach(t=>{ t.expanded=on; }); if(on) makeRoom(x); });
+  toast((on?'Expanded ':'Collapsed ')+n+' table'+(n===1?'':'s')+' — '+MODK+'Z undoes it');
+}
+/**
+ * Cards that grew now reach over the ones below them: move those down, top to bottom, just far enough —
+ * a card only moves for one it shares columns of the canvas with, so the layout keeps its shape. Folding
+ * back moves nothing: the room stays, and Arrange closes it up.
+ */
+function makeRoom(d){
+  const GAP=24;
+  const boxes=d.tables.map(t=>{ const L=layout(t, S.q); return {t, w:L.w, h:L.h}; });
+  // again until nothing moves: a card pushed down can pass one that was below it, and must then clear it
+  for(let round=0; round<boxes.length+1; round++){
+    let moved=false;
+    boxes.sort((p,q)=>(p.t.y-q.t.y) || (p.t.x-q.t.x));
+    boxes.forEach((cur,i)=>{
+      const over=boxes.slice(0,i).find(o=>o.t.x<cur.t.x+cur.w+GAP && cur.t.x<o.t.x+o.w+GAP && cur.t.y<o.t.y+o.h+GAP);
+      if(over){ cur.t.y=Math.ceil((over.t.y+over.h+GAP)/4)*4; moved=true; }
+    });
+    if(!moved) break;
+  }
+}
+
+// ---------- search ----------
+/** The query, for the canvas and the result list: lower-cased, trimmed, empty when there is none. */
+function setSearch(text){
+  const q=String(text||'').trim().toLowerCase();
+  if(els.search && els.search.value!==text && text!=null) els.search.value=text;
+  if(q===S.q) { renderResults(); return; }
+  S.q=q; S.resIdx=0;
+  renderResults(); draw();
+}
+const markQ=text=>{
+  const t=String(text==null?'':text), i=S.q?t.toLowerCase().indexOf(S.q):-1;
+  return i<0?esc(t):esc(t.slice(0,i))+'<mark>'+esc(t.slice(i, i+S.q.length))+'</mark>'+esc(t.slice(i+S.q.length));
+};
+function renderResults(){
+  const box=els.results;
+  if(!box) return;
+  const open=!!S.q && document.activeElement===els.search;
+  els.search.setAttribute('aria-expanded', String(open));
+  if(!open){ box.hidden=true; return; }
+  const r=erdSearch(S.catalog, S.q, new Set(active().tables.map(t=>t.key)), 60);
+  S.results=r.items;
+  if(S.resIdx>=r.items.length) S.resIdx=0;
+  let h='<div class="erd-rhead">'+(r.total?r.tables+' table'+(r.tables===1?'':'s')+' · '+r.columns+' column'+(r.columns===1?'':'s')
+    :'Nothing matches “'+esc(S.q)+'”')+'</div>';
+  r.items.forEach((it,i)=>{
+    const main=it.kind==='table'
+      ? '<span class="erd-rname">'+markQ(it.table)+'</span>'+(it.alias?'<span class="erd-rsub">'+markQ(it.alias)+'</span>':'')
+      : '<span class="erd-rsub">'+esc(it.table)+'.</span><span class="erd-rname">'+(it.pk?'<b class="erd-pk">PK</b>':'')+markQ(it.column)+'</span>';
+    h+='<div class="erd-res'+(i===S.resIdx?' on':'')+'" role="option" aria-selected="'+(i===S.resIdx)+'" data-i="'+i+'">'+
+      '<span class="erd-rkind">'+(it.kind==='table'?'table':'column')+'</span><span class="erd-rmain">'+main+'</span>'+
+      '<span class="erd-rtype">'+(it.kind==='table'?it.count+' columns':markQ(it.type))+'</span>'+
+      (it.on?'':'<span class="erd-roff" data-tip="Not on this diagram — choosing it adds the table">add</span>')+'</div>';
+  });
+  if(r.total>r.items.length) h+='<div class="erd-rmore">'+(r.total-r.items.length)+' more — type more of the name</div>';
+  box.innerHTML=h; box.hidden=false;
+  const cur=box.querySelector('.erd-res.on'); if(cur) cur.scrollIntoView({block:'nearest'});
+}
+/** Go to what was found: the card centred on the column, added to the diagram first when it is not on it. */
+function openResult(it){
+  if(!it) return;
+  const d=active();
+  if(!d.tables.some(t=>t.key===it.key)) addTable(it.key);
+  S.sel={kind:'table', key:it.key};
+  draw();
+  center(it.key, it.column);
+  els.results.hidden=true;
+  els.search.setAttribute('aria-expanded','false');
+}
+function focusSearch(){ if(!els || !els.search) return; els.search.focus(); els.search.select(); renderResults(); }
+function wireSearch(){
+  const inp=els.search;
+  inp.addEventListener('input', ()=>setSearch(inp.value));
+  inp.addEventListener('focus', ()=>renderResults());
+  inp.addEventListener('blur', ()=>setTimeout(()=>{ if(document.activeElement!==inp){ els.results.hidden=true; inp.setAttribute('aria-expanded','false'); } }, 120));
+  inp.addEventListener('keydown', e=>{
+    const n=S.results.length;
+    if(e.key==='ArrowDown' || e.key==='ArrowUp'){
+      e.preventDefault();
+      if(n){ S.resIdx=(S.resIdx+(e.key==='ArrowDown'?1:-1)+n)%n; renderResults(); }
+    } else if(e.key==='Enter'){
+      e.preventDefault();
+      if(n) openResult(S.results[S.resIdx]);
+    } else if(e.key==='Escape'){
+      // first the list, then the query; the page's own Escape (panels, presenting) waits for the next one
+      e.preventDefault(); e.stopPropagation();
+      if(!els.results.hidden){ els.results.hidden=true; inp.setAttribute('aria-expanded','false'); }
+      else if(inp.value){ inp.value=''; setSearch(''); }
+      else inp.blur();
+    }
+  });
+  // pointerdown, not click: a click would blur the field first and close the list under the pointer
+  els.results.addEventListener('pointerdown', e=>{
+    const row=e.target.closest('.erd-res');
+    if(!row) return;
+    e.preventDefault();
+    openResult(S.results[+row.dataset.i]);
+  });
+}
 function acceptSuggestion(id){
   const sg=S.suggestions.find(x=>x.id===id);
   if(!sg) return;
@@ -1012,6 +1251,7 @@ function wire(){
     doAct(b.dataset.act, b);
   });
   els.pick.addEventListener('change', ()=>switchTo(els.pick.value));
+  wireSearch();
   els.filter.addEventListener('input', ()=>{ S.filter=els.filter.value; renderList(); });
   els.list.addEventListener('pointerdown', onListDown);
   els.list.addEventListener('click', e=>{
@@ -1223,9 +1463,9 @@ function openTablePop(key){
   if(!t) return;
   const c=S.byKey.get(key), e=effective(t);
   const src=[];
-  if(c && c.changelog){ const n=byId.get(c.changelog); src.push('changelog <a href="#'+enc(c.changelog)+'">'+esc(n?n.label:c.changelog)+'</a>'); }
-  if(c) c.services.forEach(id=>{ const n=byId.get(id); src.push('service <a href="#'+enc(id)+'">'+esc(n?n.label:id)+'</a>'); });
-  if(c) c.dataObjects.forEach(x=>src.push('data object <a href="#'+enc(x.id)+'">'+esc(x.name)+'</a>'));
+  if(c && c.changelog){ const n=byId.get(c.changelog); src.push('changelog '+srcLink(c.changelog, n?n.label:c.changelog)); }
+  if(c) c.services.forEach(id=>{ const n=byId.get(id); src.push('service '+srcLink(id, n?n.label:id)); });
+  if(c) c.dataObjects.forEach(x=>src.push('data object '+srcLink(x.id, x.name)));
   const html='<div class="erd-pop-h"><span class="erd-pop-t">'+esc(t.name)+'</span>'+closeBtn()+'</div>'+
     (e.ghost?'<p class="erd-warn">This project’s schema has no table of this name — the card shows the columns the diagram was saved with.</p>':'')+
     '<label class="erd-fld"><span>Business name</span><input data-f="alias" value="'+esc(t.alias)+'" placeholder="'+esc(t.name)+'" autofocus></label>'+
@@ -1234,7 +1474,10 @@ function openTablePop(key){
       ERD_SWATCHES.map(h=>'<button type="button" class="erd-swatch'+(t.color===h?' on':'')+'" data-color="'+h+'" style="background:'+h+'" aria-label="Colour '+h+'"></button>').join('')+
       '<label class="erd-swatch custom'+(t.color&&ERD_SWATCHES.indexOf(t.color)<0?' on':'')+'" data-tip="Any colour"><input type="color" data-f="color" value="'+(t.color||'#2f6fed')+'" aria-label="Any colour"></label>'+
     '</div></div>'+
-    '<div class="erd-fld"><span>Columns <em>the first '+VISIBLE+' show on a folded card</em></span><ol class="erd-cols"></ol>'+
+    '<div class="erd-fld"><span>Columns <em>the first '+VISIBLE+' show on a folded card</em></span>'+
+      (e.order.length>8?'<input class="erd-colq" type="search" placeholder="Filter the '+e.order.length+' columns" aria-label="Filter the columns" value="'+
+        esc(S.q && erdColumnHits(e.columns, S.q).size?S.q:'')+'">':'')+
+      '<ol class="erd-cols"></ol>'+
       '<label class="erd-check"><input type="checkbox" data-f="expanded"'+(t.expanded?' checked':'')+'> Show all columns on the card</label></div>'+
     (src.length?'<div class="erd-srcs">From '+src.join(' · ')+'</div>':'')+
     '<div class="erd-pop-a"><button type="button" class="tbtn erd-danger" data-pa="remove">Remove from the diagram</button></div>';
@@ -1243,8 +1486,12 @@ function openTablePop(key){
   const pop=els.pop;
   pop.querySelector('[data-f=alias]').addEventListener('input', ev=>{ const val=ev.target.value; mutate(d=>{ const x=d.tables.find(x=>x.key===key); if(x) x.alias=val.slice(0,120); }, 'alias:'+key); });
   pop.querySelector('[data-f=color]').addEventListener('input', ev=>setColor(key, ev.target.value, true));
+  const cq=pop.querySelector('.erd-colq');
+  if(cq) cq.addEventListener('input', ()=>renderPopCols(key));
   pop.querySelector('[data-f=expanded]').addEventListener('change', ev=>{ const on=ev.target.checked; mutate(d=>{ const x=d.tables.find(x=>x.key===key); if(x) x.expanded=on; }); });
   pop.addEventListener('click', ev=>{
+    const op=ev.target.closest('[data-open]');
+    if(op && window.__atlasOpen){ window.__atlasOpen(op.dataset.open); return; }
     const sw=ev.target.closest('[data-color]');
     if(sw){ setColor(key, sw.dataset.color); return; }
     const mv=ev.target.closest('[data-mv]');
@@ -1253,6 +1500,18 @@ function openTablePop(key){
     if(a && a.dataset.pa==='remove'){ S.sel={kind:'table', key}; removeSelected(); }
     if(ev.target.closest('[data-pa=close]')) closePop();
   });
+}
+/**
+ * Where a table comes from, as something to follow: inside the IDE the model file opens in the editor; in a
+ * browser, the model's page in the explorer written beside this one, when there is one; else just its name.
+ */
+function srcLink(id, label){
+  const n=byId.get(id), file=n && n.file;
+  if(window.__atlasOpen && file)
+    return '<button type="button" class="erd-open" data-open="'+esc(file)+'" data-tip="Open '+esc(file)+' in the editor">'+esc(label)+'</button>';
+  if(DATA.explorer)
+    return '<a href="'+esc(DATA.explorer)+'#'+enc(id)+'" target="_blank" rel="noopener" data-tip="Open its page in the Atlas explorer">'+esc(label)+'</a>';
+  return '<span'+(file?' data-tip="'+esc(file)+'"':'')+'>'+esc(label)+'</span>';
 }
 function setColor(key, hex, coalesce){
   mutate(d=>{ const x=d.tables.find(x=>x.key===key); if(x) x.color=/^#[0-9a-f]{6}$/i.test(hex||'')?hex.toLowerCase():''; }, coalesce?'color:'+key:null);
@@ -1263,13 +1522,17 @@ function renderPopCols(key, focusCol, focusDir){
   const t=active().tables.find(x=>x.key===key), ol=els.pop.querySelector('.erd-cols');
   if(!t || !ol) return;
   const e=effective(t), byK=new Map(e.columns.map(c=>[erdKey(c.name), c]));
+  const fq=els.pop.querySelector('.erd-colq'), cq=fq?fq.value.trim().toLowerCase():'';
+  const hit=cq?erdColumnHits(e.columns, cq):null;
   ol.innerHTML=e.order.map((n,i)=>{
     const c=byK.get(erdKey(n))||{name:n};
+    // filtered, a column still moves within the whole order: ↑ and ↓ are about its place, not the list's
+    if(hit && !hit.has(erdKey(c.name))) return '';
     return '<li class="'+(i===VISIBLE-1?'cut':'')+'"><span class="erd-cn">'+(c.pk?'<b class="erd-pk" data-tip="Primary key">PK</b>':'')+esc(c.name)+'</span>'+
       '<span class="erd-ct">'+esc(c.type||'')+'</span>'+
       '<button type="button" data-mv="-1" data-col="'+esc(c.name)+'"'+(i===0?' disabled':'')+' aria-label="Move '+esc(c.name)+' up">↑</button>'+
       '<button type="button" data-mv="1" data-col="'+esc(c.name)+'"'+(i===e.order.length-1?' disabled':'')+' aria-label="Move '+esc(c.name)+' down">↓</button></li>';
-  }).join('');
+  }).join('')||'<li class="erd-cnone">No column matches</li>';
   if(focusCol){ const b=ol.querySelector('[data-col="'+cssEsc(focusCol)+'"][data-mv="'+focusDir+'"]')||ol.querySelector('[data-col="'+cssEsc(focusCol)+'"]'); if(b) b.focus(); }
 }
 function moveCol(key, col, dir){
@@ -1346,6 +1609,8 @@ function doAct(act, b){
     case 'zoom-out': zoomAt(1/1.25); break;
     case 'fit': fit(); break;
     case 'arrange': arrange(); break;
+    case 'expand-all': setAllExpanded(true); break;
+    case 'collapse-all': setAllExpanded(false); break;
     case 'present': present(true); break;
     case 'present-off': present(false); break;
     case 'menu': {
@@ -1495,14 +1760,16 @@ document.addEventListener('fullscreenchange', ()=>{ if(!document.fullscreenEleme
 // ---------- keys and paste ----------
 const typing=t=>!!(t && t.closest && t.closest('input,textarea,select,[contenteditable]'));
 document.addEventListener('keydown', e=>{
-  if(!S || !els || els.empty || !onPage()) return;
+  if(!S || !els || els.empty) return;
+  if((e.metaKey||e.ctrlKey) && !e.altKey && (e.key==='f'||e.key==='F')){ e.preventDefault(); focusSearch(); return; }
+  if(e.key==='/' && !typing(e.target)){ e.preventDefault(); focusSearch(); return; }
   if(e.key==='Escape'){
     if(S.pop){ closePop(); e.preventDefault(); }
     else if(S.present){ present(false); e.preventDefault(); }
     else if(S.sel && !typing(e.target)){ S.sel=null; draw(); }
     return;
   }
-  if(typing(e.target) || document.getElementById('palette') && !document.getElementById('palette').hidden) return;
+  if(typing(e.target)) return;
   const mod=e.metaKey||e.ctrlKey;
   if(mod && (e.key==='z'||e.key==='Z')){ e.preventDefault(); if(e.shiftKey) redo(); else undo(); }
   else if(mod && (e.key==='y'||e.key==='Y')){ e.preventDefault(); redo(); }
@@ -1512,41 +1779,38 @@ document.addEventListener('keydown', e=>{
   else if(!mod && !e.altKey && e.key==='0'){ e.preventDefault(); fit(); }
 });
 document.addEventListener('paste', e=>{
-  if(!S || !els || els.empty || !onPage() || typing(e.target)) return;
+  if(!S || !els || els.empty || typing(e.target)) return;
   const text=e.clipboardData && e.clipboardData.getData('text');
   if(text && /"format"\s*:\s*"atlas-erd"/.test(text)){ e.preventDefault(); importText(text, 'The pasted diagram'); }
 });
 document.addEventListener('pointerdown', e=>{
+  if(els && els.results && !els.results.hidden && !(els.qwrap && els.qwrap.contains(e.target))) els.results.hidden=true;
   if(!S || !S.pop || !els || !els.pop) return;
   if(els.pop.contains(e.target) || e.target.closest && e.target.closest('.erd-menubtn,.erd-svg')) return;
   closePop();
 }, true);
-const onPage=()=>{ const v=document.getElementById('view-erd'); return !!(v && !v.hidden); };
 
-// ---------- registration ----------
-// The view element is the extension's own: a report without the designer carries no trace of it.
+// ---------- boot ----------
+document.getElementById('erd-proj').textContent=DATA.project;
 (function(){
-  const content=document.getElementById('content');
-  if(content && !document.getElementById('view-erd')){
-    const sec=document.createElement('section');
-    sec.className='view'; sec.id='view-erd'; sec.hidden=true;
-    content.appendChild(sec);
-  }
+  // provenance, as the explorer's footer says it: a page that has travelled can still say how old it is
+  const el=document.getElementById('erd-prov'), t=Date.parse(DATA.generatedAt||'');
+  if(!el || isNaN(t)) return;
+  const m=Math.round((Date.now()-t)/60000), h=Math.round(m/60), d=Math.round(h/24);
+  el.textContent='Atlas '+(DATA.atlasVersion||'')+' · generated '+(m<2?'just now':m<60?m+' min ago':h<48?h+' h ago':d+' days ago');
+  el.dataset.tip=new Date(t).toLocaleString();
 })();
-window.ATLAS_EXT=window.ATLAS_EXT||{};
-window.ATLAS_EXT.erd={
-  title:'ER diagram',
-  nav(){
-    const s=state();
-    if(!s.catalog.length) return null;
-    if(!TYPE_ICONS.erd) TYPE_ICONS.erd=ICON;
-    return {route:'/erd', label:'ER diagram', sec:'Models', pri:0, icon:'erd', color:color('liquibase'), count:s.catalog.length,
-      tip:'ER diagram — lay out the project’s '+s.catalog.length+' table'+(s.catalog.length===1?'':'s')+' and draw the relations between them'};
-  },
-  render,
-  leave(){ if(!S) return; if(S.present) present(false); closePop(); }
-};
+document.getElementById('erd-theme').addEventListener('click', ()=>{
+  const order=['auto','light','dark'], next=order[(order.indexOf(themePref())+1)%order.length];
+  try{ localStorage.setItem('atlas-theme', next); }catch(e){}
+  applyTheme();
+});
+try{ matchMedia('(prefers-color-scheme: light)').addEventListener('change', applyTheme); }catch(e){}
+applyTheme();
+markIde();
+render(document.getElementById('erd-root'));
 // For the UI test: the state and the actions a test drives, without a second way in for the page itself.
-window.ATLAS_EXT.erd._test={state:()=>S, active:()=>S&&active(), fit:()=>fit(), importText:(t)=>importText(t,'test'),
-  docOf:()=>docOf(), pictureSvg:()=>pictureSvg(), addTable:(k,p)=>addTable(k,p), arrange:()=>arrange()};
+window.ATLAS_ERD={_test:{state:()=>S, active:()=>S&&active(), fit:()=>fit(), importText:(t)=>importText(t,'test'),
+  docOf:()=>docOf(), pictureSvg:()=>pictureSvg(), addTable:(k,p)=>addTable(k,p), arrange:()=>arrange(),
+  search:(q)=>setSearch(q), setAllExpanded:(on)=>setAllExpanded(on)}};
 })();

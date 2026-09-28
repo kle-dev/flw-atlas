@@ -52,12 +52,12 @@ class ErdDiagramFilesTest {
         assertEquals(emptyList<Any>(), ErdDiagramFiles.find(f))
     }
 
-    /** The diagrams ride along only with the designer — a page without it has no reader for them. */
+    /** The diagrams ride along with the ER page, which reads them — not with the explorer, which has no use for them. */
     @Test
-    fun theExplorerEmbedsThemOnlyWithTheDesigner() {
+    fun theErPageEmbedsThemAndTheExplorerDoesNot() {
         val root = File(javaClass.classLoader.getResource("miniproject")!!.toURI())
         val result = com.flowable.atlas.graph.Atlas.extract(root)
-        assertTrue(!ExplorerHtmlRenderer.render(result, root).contains("\"erdDiagrams\""))
-        assertTrue(ExplorerHtmlRenderer.render(result, root, extensions = setOf(ExplorerExtension.ERD)).contains("\"erdDiagrams\":["))
+        assertTrue(!ExplorerHtmlRenderer.render(result, root).contains("atlas-erd"))
+        assertTrue(ErdHtmlRenderer.render(result, root).contains("\"diagrams\":["))
     }
 }

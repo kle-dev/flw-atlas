@@ -9,11 +9,12 @@ click through and query. An IntelliJ IDEA plugin and a command-line tool, sharin
 ./atlas /path/to/your-flowable-project
 ```
 
-That writes five artifacts to `./atlas-output/<project>/` and opens the explorer in your browser:
+That writes five artifacts to `./atlas-output/<project>/` — six for a project with database tables — and opens the explorer in your browser:
 
 | Artifact | What it is |
 |---|---|
-| `<project>.explorer.html` | A self-contained, offline, interactive explorer. Open by double-click; click through every relationship in both directions. With `--extension erd` it also carries an ER diagram designer: drag the project's tables onto a canvas, relate them, export the picture. |
+| `<project>.explorer.html` | A self-contained, offline, interactive explorer. Open by double-click; click through every relationship in both directions. |
+| `<project>.erd.html` | The ER diagram designer, for a project with tables: drag them onto a canvas, search every column, relate and arrange them, export the picture. Small whatever the project's size (`--erd` writes it alone). |
 | `<project>.summary.md` | A compact (~few KB) LLM-first overview: apps, inventory, entry points, integrations, hotspots, health. |
 | `<project>.overview.md` | The full human report — every model in execution order, the access map, the data layer, every finding with `file:line`. |
 | `<project>.graph.json` | The traversable model↔code graph, for agents to **query** rather than read: every node carries `usedBy`, and a `_schema` key documents the shape and ships `jq` recipes. |

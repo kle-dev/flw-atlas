@@ -385,7 +385,7 @@ if (fs.existsSync(DEMO_IN)) {
   const demoOut = path.join(OUT, 'demo');
   fs.mkdirSync(demoOut, { recursive: true });
   const friendly = {
-    '.explorer.html': 'explorer.html', '.summary.md': 'summary.md', '.overview.md': 'overview.md',
+    '.explorer.html': 'explorer.html', '.erd.html': 'erd.html', '.summary.md': 'summary.md', '.overview.md': 'overview.md',
     '.graph.json': 'graph.json', '.CLAUDE.md': 'CLAUDE.md',
   };
   for (const f of fs.readdirSync(DEMO_IN)) {

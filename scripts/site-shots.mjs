@@ -163,9 +163,9 @@ const SHOTS = [
   ['#/variables', 'variables-page', { w: 1400, h: 900 }],
   ['#/schema', 'schema-page', { w: 1400, h: 800 }],
   ['#/scripts', 'scripts-page', { w: 1400, h: 900 }],
-  // The ER diagram designer — the demo is generated with `--extension erd` and keeps a diagram file of its
-  // own (site/flowable-demo/docs/orders.atlas-erd.json), which a fresh profile opens on.
-  ['#/erd', 'erd-page', { w: 1400, h: 820 }],
+  // The ER diagram designer — its own page beside the explorer (`--all` writes it for a project with tables);
+  // the demo keeps a diagram file (site/flowable-demo/docs/orders.atlas-erd.json), which a fresh profile opens on.
+  ['', 'erd-page', { w: 1400, h: 820, page: EXPLORER.replace(/\.explorer\.html$/, '.erd.html') }],
   // Detail pages: a form (its tabs, facts and layout), a process (its drawing), and an operation whose
   // caller leaves out a required parameter — its Connections tab, the "Does it fit?" gap near the top.
   ['#form%3AorderForm', 'detail-form', { w: 1400, h: 1000 }],
@@ -180,8 +180,9 @@ const SHOTS = [
    `?ideTheme=dark` is the explorer's own IDE-embedding hook: it makes the page's default preference
    `auto` and resolves that to dark. Without it the explorer defaults to light in a browser. */
 for (const [hash, base, size] of SHOTS) {
-  shot(fileUrl(EXPLORER, hash), `${base}.png`, size);
-  shot(fileUrl(EXPLORER, `?ideTheme=dark${hash}`), `${base}-dark.png`, size);
+  const page = size.page || EXPLORER;
+  shot(fileUrl(page, hash), `${base}.png`, size);
+  shot(fileUrl(page, `?ideTheme=dark${hash}`), `${base}-dark.png`, size);
 }
 
 console.log('site-shots: social card');

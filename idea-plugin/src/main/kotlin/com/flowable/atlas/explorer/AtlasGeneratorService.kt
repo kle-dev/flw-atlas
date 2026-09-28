@@ -4,6 +4,7 @@ import com.flowable.atlas.diagram.DiagramArtifacts
 import com.flowable.atlas.graph.Atlas
 import com.flowable.atlas.graph.Waivers
 import com.flowable.atlas.render.ClaudeRenderer
+import com.flowable.atlas.render.ErdHtmlRenderer
 import com.flowable.atlas.render.ExplorerHtmlRenderer
 import com.flowable.atlas.render.GraphJsonRenderer
 import com.flowable.atlas.render.OverviewRenderer
@@ -64,10 +65,12 @@ class AtlasGeneratorService(private val project: Project) {
             val result = extract(root, indicator, waiverFile(outputs.first().parent))
 
             indicator.text = "Rendering Atlas explorer…"
-            val html = ExplorerHtmlRenderer.render(result, root, waiverAuthor = Waivers.defaultAuthor(root), extensions = extensions())
+            // A page is rewritten as what it is: an ER diagram page stays one (its tab's Regenerate lands here too).
+            val explorer by lazy { ExplorerHtmlRenderer.render(result, root, waiverAuthor = Waivers.defaultAuthor(root)) }
+            val pages = outputs.associateWith { out -> if (AtlasArtifact.isErdPage(out.fileName.toString())) erdPage(result, root, out) else explorer }
             // The last moment a Cancel can still leave the old pages as they were.
             indicator.checkCanceled()
-            for (out in outputs) out.toFile().writeText(html, Charsets.UTF_8)
+            for ((out, html) in pages) out.toFile().writeText(html, Charsets.UTF_8)
 
             Outcome.Success(outputs.first(), outputs, summaryLog(result), outputs.first().parent, findingsOf(result))
         } catch (pce: ProcessCanceledException) {
@@ -77,8 +80,15 @@ class AtlasGeneratorService(private val project: Project) {
             Outcome.Failure("Failed to generate the Atlas explorer: ${e.message}", e.stackTraceToString())
         }
 
-    /** The optional parts of the explorer page the project chose (Settings → Generation → Explorer extensions). */
-    private fun extensions() = FlowableAtlasProjectSettings.getInstance(project).explorerExtensions
+    /**
+     * The ER diagram page at [out], linked to the explorer beside it when there is one — the page's tables
+     * open their changelogs, services and data objects there.
+     */
+    private fun erdPage(result: Map<String, Any?>, root: File, out: Path): String {
+        val sibling = out.fileName.toString().dropLast(AtlasArtifact.ERD_HTML.suffix.length) + AtlasArtifact.EXPLORER_HTML.suffix
+        val explorer = sibling.takeIf { out.resolveSibling(it).toFile().isFile }
+        return ErdHtmlRenderer.render(result, root, explorerFile = explorer)
+    }
 
     /** Generate the selected [artifacts] (summary, overview, graph, explorer, CLAUDE.md) into [outputDir]. */
     fun generateAll(
@@ -104,8 +114,12 @@ class AtlasGeneratorService(private val project: Project) {
                 // and pretty-printed it, which on a large project meant a multi-megabyte file in the
                 // user's repo.
                 AtlasArtifact.GRAPH_JSON to { GraphJsonRenderer.render(result) },
-                AtlasArtifact.EXPLORER_HTML to {
-                    ExplorerHtmlRenderer.render(result, root, waiverAuthor = Waivers.defaultAuthor(root), extensions = extensions())
+                AtlasArtifact.EXPLORER_HTML to { ExplorerHtmlRenderer.render(result, root, waiverAuthor = Waivers.defaultAuthor(root)) },
+                // Linked to the explorer only when that is written too — a link to a page that is not there
+                // would be the one broken thing on it.
+                AtlasArtifact.ERD_HTML to {
+                    val explorer = "$name${AtlasArtifact.EXPLORER_HTML.suffix}".takeIf { AtlasArtifact.EXPLORER_HTML in artifacts }
+                    ErdHtmlRenderer.render(result, root, explorerFile = explorer)
                 },
                 // The file spells its sibling paths from the project root and only names the ones that
                 // are actually being written — the user picks the artifact set in Settings → Generation.
@@ -138,7 +152,9 @@ class AtlasGeneratorService(private val project: Project) {
                     written.add(p)
                 }
             }
-            val explorer = written.firstOrNull { it.fileName.toString().endsWith(".explorer.html") }
+            // the page to open afterwards: the explorer, else the ER diagram page when that is all that was chosen
+            val explorer = written.firstOrNull { it.fileName.toString().endsWith(AtlasArtifact.EXPLORER_HTML.suffix) }
+                ?: written.firstOrNull { AtlasArtifact.isErdPage(it.fileName.toString()) }
             Outcome.Success(explorer, written, summaryLog(result), outputDir, findingsOf(result))
         } catch (pce: ProcessCanceledException) {
             throw pce                      // a cancelled action is not a failure

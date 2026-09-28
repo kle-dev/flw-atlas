@@ -12,6 +12,29 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.29.0
+
+- **The ER diagram designer is a page of its own: `<project>.erd.html`.** It was a page inside the explorer,
+  and that was the wrong place: the explorer carries the whole graph, and a large one outgrows what a Remote
+  Development client will open, while the designer needs a sliver of it. The new page carries only the
+  tables — the Liquibase changelogs' columns, the database services, the data objects that read a table and
+  their relations — and the project's `*.atlas-erd.json` diagrams, so it stays a few hundred KB however
+  large the project is. `--all` writes it beside the explorer when the project has a table, its tables
+  linking into the explorer's pages; `--erd` writes it on its own. In the plugin it is the artifact
+  *ER diagram designer (HTML)* in *Settings → Generation*, and opens in the same kind of editor tab, whose
+  *Regenerate* rewrites it and whose banner says when the models are newer. The explorer is back to what it
+  was before the designer: no `--extension` flag, no *Explorer extensions* setting, no `#/erd` page (a link
+  to one opens the overview). On the corpora measured, the designer was about 100 KB of an explorer; a page
+  of 20 MB is the project's own data, which the explorer carries as before.
+- **Search every table and column.** `⌘F`, `Ctrl+F` or `/` in the designer searches the project's tables and
+  their columns — by name, business name, data object or column type — on the diagram or not. The results
+  list tables and `table.column` rows, the diagram's own first; `Enter` goes to one, centred on the column,
+  and adds its table when the diagram does not have it. While a search is on, matching cards are outlined,
+  the rest step back, matching columns are marked, and a folded card also shows the columns it found — the
+  one column of forty without unfolding the rest. A table's panel filters its columns too.
+- **Expand all, collapse all.** Two buttons unfold every card to all its columns and fold them back to the
+  first five, one undo step each; unfolding moves the cards below down so none is covered.
+
 ## 0.28.1
 
 - **The ER diagram designer arranges the tables for you.** *Arrange* in the designer's toolbar lays every

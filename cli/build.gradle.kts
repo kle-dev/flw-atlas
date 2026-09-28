@@ -181,16 +181,15 @@ val remoteStubUiTest by tasks.registering(Exec::class) {
     )
 }
 
-// The ER diagram designer (the explorer extension "erd"): its pure core in node, its page in Chrome. The page
-// test needs a report WITH the extension — the demo project, which has tables, a relation the models state
-// and a diagram file of its own — and one without it (the miniproject report above), because "absent unless
-// chosen" is half of what an extension promises.
+// The ER diagram designer (<project>.erd.html): its pure core in node, its page in Chrome — on the demo
+// project, which has tables, a relation the models state and a diagram file of its own — and the explorer
+// (the miniproject report above), which must carry none of it since the designer moved out of it.
 val erdSelfTest by tasks.registering(Exec::class) {
     description = "Runs the ER diagram designer's core self-test (skipped when node is unavailable)."
     group = "verification"
     val script = rootProject.file("scripts/erd-selftest.mjs")
     inputs.file(script)
-    inputs.dir(rootProject.file("core/src/main/resources/frontend/ext"))
+    inputs.file(rootProject.file("core/src/main/resources/frontend/erd.js"))
     onlyIf { nodePresentOrFail("erdSelfTest") }
     commandLine(nodeExecutable ?: "node", script.absolutePath)
 }
@@ -198,14 +197,14 @@ val erdSelfTest by tasks.registering(Exec::class) {
 val erdUiTestDir = layout.buildDirectory.dir("erd-uitest")
 
 val erdUiTestReport by tasks.registering(JavaExec::class) {
-    description = "Generates the demo report with the ER diagram designer for its UI test."
+    description = "Generates the demo project's ER diagram page for its UI test."
     group = "verification"
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("com.flowable.atlas.cli.MainKt")
     args(
         rootProject.file("site/flowable-demo").absolutePath,
-        "--html", "--quiet", "--extension", "erd",
-        "-o", erdUiTestDir.get().asFile.resolve("flowable-demo.explorer.html").absolutePath,
+        "--erd", "--quiet",
+        "-o", erdUiTestDir.get().asFile.resolve("flowable-demo.erd.html").absolutePath,
     )
     inputs.dir(rootProject.file("site/flowable-demo"))
     inputs.dir(rootProject.file("core/src/main/resources/frontend"))
@@ -223,7 +222,7 @@ val erdUiTest by tasks.registering(Exec::class) {
     commandLine(
         nodeExecutable ?: "node",
         script.absolutePath,
-        erdUiTestDir.get().asFile.resolve("flowable-demo.explorer.html").absolutePath,
+        erdUiTestDir.get().asFile.resolve("flowable-demo.erd.html").absolutePath,
         "--plain", searchSelfTestDir.get().asFile.resolve("miniproject.explorer.html").absolutePath,
     )
 }
@@ -248,7 +247,7 @@ val siteDemo by tasks.registering(JavaExec::class) {
     mainClass.set("com.flowable.atlas.cli.MainKt")
     args(
         rootProject.file("site/flowable-demo").absolutePath,
-        "--all", "--quiet", "--extension", "erd",
+        "--all", "--quiet",
         "-o", siteDemoDir.get().asFile.absolutePath,
     )
     inputs.dir(rootProject.file("site/flowable-demo"))

@@ -1,26 +1,29 @@
 #!/usr/bin/env node
 /**
- * Runtime test for the ER diagram designer (the explorer extension "erd", core/src/main/resources/frontend/ext/),
- * driven in headless Chrome over the DevTools protocol with real input.
+ * Runtime test for the ER diagram designer — `<project>.erd.html`, a page of its own beside the explorer
+ * (core/src/main/resources/frontend/erd.*) — driven in headless Chrome over the DevTools protocol with real input.
  *
  * Real input, not dispatched DOM events: the canvas captures the pointer (setPointerCapture) for every drag,
  * and a synthetic MouseEvent skips the pointer pipeline entirely — it would pass while a real mouse fails
  * (the diagram card's click bug, 2026-07-28). So every drag and click here is Input.dispatchMouseEvent at
  * coordinates measured after the route has landed, and every key is Input.dispatchKeyEvent.
  *
- * What it proves, on the demo project generated with `--extension erd`:
+ * What it proves, on the demo project's page (`--erd`):
  *  - the page opens on the diagram the project keeps (docs/orders.atlas-erd.json), drawn with its relation;
  *  - a table dragged from the list lands on the canvas, the + button adds one, a proposal from the models
  *    can be taken, a relation drawn from a card's dot gets a name and a cardinality;
- *  - a card expands and folds, a column can be dragged to the top, a colour set and undone;
+ *  - a card expands and folds, a column can be dragged to the top, a colour set and undone; every card expands
+ *    and collapses at once;
+ *  - a search (⌘F) finds columns across every table, dims what does not match, marks what does, and goes to a
+ *    result — adding its table when the diagram does not have it;
  *  - the diagram survives a reload (localStorage), round-trips through its file format, exports a picture
  *    without the canvas handles, arranges a heap of tables by their relations (and undoes that in one step),
  *    presents full-page and comes back on Escape, deletes with Delete;
  *  - the page does not scroll sideways at a narrow width;
- * and, on a report generated WITHOUT the extension, that none of it is there: no sidebar entry, no code,
- * and a `#/erd` link falls back to the overview.
+ * and, on an explorer, that none of it is there: no sidebar entry, no code, and a `#/erd` link (a 0.28 one)
+ * falls back to the overview.
  *
- * Usage:  node scripts/erd-uitest.mjs <erd-report.explorer.html> --plain <report-without-extension.explorer.html> [--chrome <path>]
+ * Usage:  node scripts/erd-uitest.mjs <project.erd.html> --plain <project.explorer.html> [--chrome <path>]
  * Wired up as `./gradlew :cli:erdUiTest`, which skips when node or Chrome is missing (unless ATLAS_REQUIRE_BROWSER_TESTS=1).
  */
 import fs from 'fs';
@@ -34,7 +37,7 @@ const plainPath = flagValue('--plain');
 const chromeArg = flagValue('--chrome');
 const reportPath = args.find((a, i) => !a.startsWith('--') && !['--plain', '--chrome'].includes(args[i - 1]));
 if (!reportPath || !plainPath) {
-  console.error('usage: node scripts/erd-uitest.mjs <erd-report.explorer.html> --plain <plain-report.explorer.html> [--chrome <path>]');
+  console.error('usage: node scripts/erd-uitest.mjs <project.erd.html> --plain <project.explorer.html> [--chrome <path>]');
   process.exit(2);
 }
 const CHROME_CANDIDATES = [
@@ -144,13 +147,13 @@ async function withChrome(fn) {
   }
 }
 
-const T = 'ATLAS_EXT.erd._test';
-const erdUrl = 'file://' + path.resolve(reportPath) + '#/erd';
+const T = 'ATLAS_ERD._test';
+const erdUrl = 'file://' + path.resolve(reportPath);
 
 await withChrome(async page => {
   await page.open(erdUrl);
-  ok('the sidebar has the designer', await page.eval(`!!document.querySelector('#nav [data-route="/erd"]')`));
-  ok('the designer view is shown', await page.eval(`!document.getElementById('view-erd').hidden`));
+  ok('the page is the designer', await page.eval(`!!document.querySelector('.erd') && document.getElementById('erd-proj').textContent==='flowable-demo'`));
+  ok('…and says which Atlas made it, when', /Atlas .* generated/.test(await page.eval(`document.getElementById('erd-prov').textContent`)));
   ok('the list holds the project’s tables', await page.eval(`document.querySelectorAll('.erd-item').length`) === 3);
   ok('it opens on the diagram the project keeps', await page.eval(`${T}.active().name`) === 'Orders and customers',
     await page.eval(`${T}.active().name`));
@@ -285,7 +288,7 @@ await withChrome(async page => {
 
   // ---- present, and back ----
   await page.click(await page.at('[data-act=present]'));
-  ok('Present hides everything but the diagram', await page.eval(`document.documentElement.classList.contains('erd-presenting') && !document.querySelector('.sidebar').offsetParent && !document.querySelector('.erd-side').offsetParent`));
+  ok('Present hides everything but the diagram', await page.eval(`document.documentElement.classList.contains('erd-presenting') && !document.querySelector('.erd-top').offsetParent && !document.querySelector('.erd-side').offsetParent`));
   await page.key('Escape', 'Escape');
   ok('Escape leaves the presentation', await page.eval(`!document.documentElement.classList.contains('erd-presenting') && !!document.querySelector('.erd-side').offsetParent`));
 
@@ -297,6 +300,35 @@ await withChrome(async page => {
   await page.key('Delete', 'Delete');
   ok('Delete removes the selected relation', await page.eval(`${T}.active().relations.length`) === n - 1);
 
+  // ---- every card at once ----
+  await page.click(await page.at('[data-act=expand-all]'));
+  ok('Expand all unfolds every card', await page.eval(`${T}.active().tables.every(t=>t.expanded)`) &&
+    await page.eval(`document.querySelectorAll('.erd-card[data-key="ORD_ORDER"] .erd-row').length`) > 5);
+  const rects = `(function(){ return [...document.querySelectorAll('.erd-card .erd-box')].map(b=>{ const r=b.getBoundingClientRect(); return {x:r.left,y:r.top,w:r.width,h:r.height}; }); })()`;
+  ok('…and moves cards down rather than cover them', !overlap(await page.eval(rects)));
+  await page.click(await page.at('[data-act=collapse-all]'));
+  ok('Collapse all folds them back to five', await page.eval(`${T}.active().tables.every(t=>!t.expanded)`) &&
+    await page.eval(`document.querySelectorAll('.erd-card[data-key="ORD_ORDER"] .erd-row').length`) === 5);
+
+  // ---- search: across every table, on the diagram or not ----
+  await page.eval(`${T}.importText(JSON.stringify({format:'atlas-erd', version:1, name:'Only customers', tables:[{table:'cust_customer', x:0, y:0}]}))`);
+  await page.key('f', 'KeyF', 2);                     // Ctrl+F: the page's search, not the browser's
+  ok('Ctrl+F goes to the search', await page.eval(`document.activeElement===document.querySelector('.erd-q')`));
+  await page.type('order_no');
+  ok('the results list what matches', await page.waitFor(`!document.querySelector('.erd-results').hidden && document.querySelectorAll('.erd-res').length===1`));
+  ok('…a column of a table not on the diagram, said so', await page.eval(`/ord_order\\.order_no_/.test(document.querySelector('.erd-res').textContent) && !!document.querySelector('.erd-res .erd-roff')`));
+  ok('the diagram steps back from what does not match', await page.eval(`document.querySelector('.erd-card[data-key="CUST_CUSTOMER"]').classList.contains('dim')`));
+  await page.key('Enter', 'Enter');
+  ok('choosing it adds the table and goes to it', await page.waitFor(`${T}.active().tables.some(t=>t.key==='ORD_ORDER') && ${T}.state().sel && ${T}.state().sel.key==='ORD_ORDER'`));
+  ok('…with the column found marked', await page.eval(`!!document.querySelector('.erd-card[data-key="ORD_ORDER"] .erd-row[data-col="order_no_"] .erd-rowmark')`));
+  await page.click(await page.at('.erd-q'));
+  await page.key('Escape', 'Escape'); await page.key('Escape', 'Escape');
+  ok('Escape closes the list, then clears the search', await page.eval(`${T}.state().q==='' && !document.querySelector('.erd-card.dim')`));
+  await page.eval(`${T}.search('delivery')`);
+  ok('a folded card shows the columns a search finds beyond its first five',
+    await page.eval(`!!document.querySelector('.erd-card[data-key="ORD_ORDER"] .erd-row[data-col="delivery_zip_"] .erd-rowmark')`));
+  await page.eval(`${T}.search('')`);
+
   // ---- narrow ----
   await page.viewport(700, 800);
   ok('no sideways scroll at 700px', await page.eval(`document.documentElement.scrollWidth<=document.documentElement.clientWidth+1`));
@@ -306,8 +338,8 @@ await withChrome(async page => {
 
 await withChrome(async page => {
   await page.open('file://' + path.resolve(plainPath) + '#/erd');
-  ok('without the extension: no sidebar entry', await page.eval(`!document.querySelector('#nav [data-route="/erd"]')`));
-  ok('…no designer code', await page.eval(`typeof window.ATLAS_EXT==='undefined' && !document.getElementById('view-erd')`));
+  ok('the explorer has no designer entry', await page.eval(`!document.querySelector('#nav [data-route="/erd"]')`));
+  ok('…no designer code', await page.eval(`typeof window.ATLAS_ERD==='undefined' && !document.querySelector('.erd')`));
   ok('…and #/erd falls back to the overview', await page.eval(`!document.getElementById('view-overview').hidden && location.hash==='#/overview'`));
   ok('no script errors on the plain page', page.errors.length === 0, page.errors);
 });
