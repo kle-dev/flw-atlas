@@ -12,7 +12,7 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
-## 0.29.0
+## 0.28.2
 
 - **The ER diagram designer is a page of its own: `<project>.erd.html`.** It was a page inside the explorer,
   and that was the wrong place: the explorer carries the whole graph, and a large one outgrows what a Remote
@@ -34,15 +34,17 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   one column of forty without unfolding the rest. A table's panel filters its columns too.
 - **Expand all, collapse all.** Two buttons unfold every card to all its columns and fold them back to the
   first five, one undo step each; unfolding moves the cards below down so none is covered.
-- **A table's data object and service keys, to copy.** The table panel now says at its top — not below forty
-  columns, where it was out of sight — which changelog, services and data objects are behind the table, with
-  each service's and data object's key beside its name and a button that copies it. A search finds a table by
-  those keys too.
-- **The ER diagram from the Atlas Hub.** With *ER diagram designer (HTML)* chosen in Settings → Generation, the
-  Hub's *Explorer* block has an *ER diagram* button, and *Tools → Flowable Atlas* an *Open Atlas ER Diagram
-  Designer*: it opens the newest page in an editor tab, generating one into the output folder first when there
-  is none. In the IDE the page wears the IDE's theme and colours exactly as the explorer does — it runs the
-  explorer's own theme code — and its toolbar keeps to one row in a narrow editor tab.
+- **A table's data object and service keys, to copy.** An (i) beside the table's name in its panel unfolds
+  what is behind it — its changelog, the services that map it and the data objects that read it — each name
+  with its key under it and a copy button, and the table's own name has a copy button in the panel's title;
+  the line that listed them under forty columns, out of sight, is gone. In the list, a table read by one data object has a quiet copy icon for that key beside the
+  data object's name, and the same (i), before the table is on the canvas. A search finds a table by those
+  keys too.
+- **The ER diagram from the menu.** With *ER diagram designer (HTML)* chosen in Settings → Generation,
+  *Tools → Flowable Atlas* — and so the Atlas Hub's ⋮ — has an *Open Atlas ER Diagram Designer*: it opens the
+  newest page in an editor tab, generating one into the output folder first when there is none. In the IDE the page wears the IDE's theme and
+  colours exactly as the explorer does — it runs the explorer's own theme code — and its toolbar keeps to one
+  row in a narrow editor tab.
 
 ## 0.28.1
 

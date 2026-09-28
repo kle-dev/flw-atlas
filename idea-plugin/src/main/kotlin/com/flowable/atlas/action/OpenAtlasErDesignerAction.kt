@@ -23,9 +23,10 @@ import com.intellij.openapi.vfs.VirtualFile
 import java.nio.file.Path
 
 /**
- * Tools → Flowable Atlas → "Open Atlas ER Diagram Designer", and the Atlas Hub's *ER diagram* button: the
+ * Tools → Flowable Atlas → "Open Atlas ER Diagram Designer" (so also the Atlas Hub's ⋮, which is that menu): the
  * newest `*.erd.html` in an editor tab — and, when there is none yet, the page generated into the output
- * folder first, so the button always ends on the designer rather than on a balloon about a missing file.
+ * folder first, so the entry always ends on the designer rather than on a balloon about a missing file. A menu
+ * entry and no button: the designer is an occasional tool, and the Hub's Explorer block stays about the explorer.
  *
  * Offered only while the project has chosen the page (Settings → Generation → *ER diagram designer
  * (HTML)*): the designer is an artifact a team opts into, and an entry for something it never asked for

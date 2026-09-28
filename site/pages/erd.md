@@ -14,9 +14,9 @@ limit), and it can be sent to someone who only wants the data model.
   the project has a table (see the [CLI reference](../cli/#output-format)). Written beside the explorer,
   its tables link into the explorer's pages.
 - **IntelliJ:** tick *ER diagram designer (HTML)* in *Settings → Tools → Flowable Atlas → Generation*
-  (see the [plugin reference](../plugin/reference/)). Then the Atlas Hub's *Explorer* block has an
-  **ER diagram** button — and *Tools → Flowable Atlas* an *Open Atlas ER Diagram Designer* — which opens the
-  page in an editor tab, generating it first when there is none. The tab wears the IDE's theme and colours,
+  (see the [plugin reference](../plugin/reference/)). Then *Tools → Flowable Atlas → Open Atlas ER Diagram
+  Designer* — also in the Atlas Hub's ⋮ — opens the page in an editor tab, generating it first when there is
+  none. The tab wears the IDE's theme and colours,
   as the explorer's does, and has the same toolbar: *Regenerate* rewrites the page, and the banner says when
   the models are newer than it.
 
@@ -40,7 +40,9 @@ A table's default business name is the name of the data object that reads it, wh
 
 - **Add a table** by dragging it from the list onto the canvas, or with its **+**. A table is on a
   diagram once; dragging it again, or clicking it in the list, finds its card. The list's filter matches
-  table names, business names and column names.
+  table names, business names and column names. A table read by one data object shows that data object's
+  name with a quiet copy icon for its key, and its **(i)** opens the same overview as the card's — both
+  before the table is on the canvas.
 - **A card** shows the business name over the table name, then the first five columns — the primary key
   first, then the changelog's order — each with its type. **+ N more** unfolds the rest and folds them
   again. The width fits every column, shown or not, so unfolding makes a card longer, never wider.
@@ -51,10 +53,11 @@ A table's default business name is the name of the data object that reads it, wh
   is how you choose which five a folded card shows.
 - **The card's panel** — `⋯` on the card, or a double click — sets the business name and the colour
   (eight swatches or any colour), lists every column in order, with a filter for a table of more than
-  eight, and says at its top what is behind the table: the changelog, the services and the data objects —
-  each service's and data object's **key** beside its name, with a button that copies it (the key is what
-  code and models refer to it by). Inside the IDE the names open the file; in a browser, the model's page
-  in the explorer written beside this one. A search finds a table by those keys too.
+  eight. The button beside the table's name copies it, and the **(i)** unfolds what is behind the table —
+  its changelog, the services that map it and the data objects that read it, each name with its **key**
+  under it and a button that copies the key (the key is what code and models refer to it by). Inside the IDE
+  the names open the file; in a browser, the model's page in the explorer written beside this one. A search
+  finds a table by those keys too.
 - **Draw a relation** from the dot on a card's edge to another card (or back to the same one). Its panel
   opens with the name field focused: give it a name, a cardinality — `1:1`, `1:n`, `n:1`, `n:m` — and,
   if you like, the columns it joins; a sentence under the cardinality says what it means (*One Customer

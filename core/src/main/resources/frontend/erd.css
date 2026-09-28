@@ -114,7 +114,8 @@
     background:var(--panel);border:1px solid var(--line2);border-radius:var(--radius-lg);box-shadow:var(--shadow);color:var(--ink);font-size:var(--text-sm)}
   .erd-pop[data-kind=menu],.erd-pop[data-kind=export]{width:min(300px,calc(100% - 16px));padding:var(--space-1)}
   .erd-pop-h{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);margin-bottom:var(--space-1)}
-  .erd-pop-t{font-family:var(--mono);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .erd-pop-t{min-width:0;font-family:var(--mono);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .erd-pop-h .erd-cpy{flex:none;margin-left:calc(-1*var(--space-1))}
   .erd-x{flex:none;width:24px;height:24px;border:0;border-radius:var(--radius-md);background:none;color:var(--ink-dim);cursor:pointer;font-size:16px;line-height:1}
   .erd-x:hover{background:var(--hover);color:var(--ink)}
   .erd-fld{display:flex;flex-direction:column;gap:var(--space-1);margin:var(--space-25) 0 0}
@@ -139,12 +140,29 @@
   .erd-cols button:hover:not(:disabled){border-color:var(--line2);color:var(--ink)}
   .erd-cols button:disabled{opacity:.3;cursor:default}
   .erd-check{display:flex;align-items:center;gap:var(--space-15);margin-top:var(--space-15);font-size:var(--text-xs);color:var(--ink-dim);cursor:pointer}
-  .erd-srcs{margin:var(--space-1) 0 var(--space-2);font-size:var(--text-xs);color:var(--ink-faint);line-height:1.8}
-  .erd-srcs a,.erd-pop a{color:var(--accent);text-decoration:none}
-  .erd-srcs a:hover{text-decoration:underline}
-  .erd-key{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-dim);background:var(--panel2);border:1px solid var(--line);
-    border-radius:var(--radius-xs);padding:0 3px}
-  .erd-cpy{display:inline-flex;vertical-align:-3px;width:18px;height:18px;align-items:center;justify-content:center;padding:0;margin-left:1px;
+  .erd-pop a{color:var(--accent);text-decoration:none}
+  .erd-pop a:hover{text-decoration:underline}
+  /* ---- what is behind a table: an (i) badge, and under it a label column beside names with their keys ---- */
+  .erd-ibtn{flex:none;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;padding:0;
+    border:1px solid var(--line2);border-radius:50%;background:none;color:var(--ink-faint);cursor:pointer;
+    font:italic 600 10px/1 Georgia,'Times New Roman',serif}
+  .erd-ibtn:hover,.erd-ibtn.on{color:var(--accent);border-color:var(--accent)}
+  .erd-item .erd-ibtn{opacity:0}
+  .erd-item:hover .erd-ibtn,.erd-item:focus-within .erd-ibtn{opacity:1}
+  .erd-info{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:var(--space-25) var(--space-3);margin:0 0 var(--space-2);
+    padding:var(--space-2) 0 var(--space-3);border-bottom:1px solid var(--line);font-size:var(--text-xs);line-height:18px}
+  .erd-info dt{color:var(--ink-faint)}
+  .erd-info dd{margin:0;min-width:0;display:flex;flex-direction:column;gap:var(--space-2)}
+  .erd-in{color:var(--ink);overflow-wrap:anywhere}
+  .erd-in .erd-open{text-align:left}
+  .erd-ik{display:flex;align-items:center;min-width:0}
+  .erd-ik .erd-cpy{opacity:.6}
+  .erd-ie:hover .erd-ik .erd-cpy,.erd-ik .erd-cpy:focus-visible{opacity:1}
+  .erd-pop[data-kind=info] .erd-info{border-bottom:0;padding-bottom:0;margin-bottom:0}
+  .erd-lcpy{opacity:.55;margin-left:0}
+  .erd-item:hover .erd-lcpy{opacity:1}
+  .erd-key{min-width:0;font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-dim);overflow-wrap:anywhere}
+  .erd-cpy{display:inline-flex;vertical-align:-3px;width:18px;height:18px;align-items:center;justify-content:center;padding:0;margin-left:2px;
     border:0;border-radius:var(--radius-sm);background:none;color:var(--ink-faint);cursor:pointer}
   .erd-cpy:hover{background:var(--hover);color:var(--ink)}
   .erd-cpy svg{width:12px;height:12px}

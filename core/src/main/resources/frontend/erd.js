@@ -965,11 +965,16 @@ function renderList(){
       if(!inName && !col) return '';
       if(col) hit='<span class="erd-hit">'+esc(col.name)+'</span>';
     }
-    const sub=[t.alias&&t.alias!==t.name?esc(t.alias):'', t.columns.length+' column'+(t.columns.length===1?'':'s'),
+    // the one data object that reads the table is its business name: its key, copied from here, before the
+    // table is even on the canvas
+    const doKey=t.dataObjects.length===1 && t.alias===t.dataObjects[0].name ? t.dataObjects[0].key : '';
+    const alias=t.alias&&t.alias!==t.name?esc(t.alias)+(doKey?copyBtn(doKey, 'Copy the data object key '+doKey, 'erd-lcpy'):''):'';
+    const sub=[alias, t.columns.length+' column'+(t.columns.length===1?'':'s'),
       t.source==='service'?'<span class="erd-src-svc" data-tip="No changelog creates this table — the columns are the service’s mappings, the types its logical ones">service model</span>':'']
       .filter(Boolean).join(' · ');
     return '<div class="erd-item'+(on.has(t.key)?' on':'')+'" role="option" tabindex="-1" data-key="'+esc(t.key)+'" aria-selected="'+on.has(t.key)+'">'+
       '<div class="erd-item-main"><div class="erd-item-n">'+esc(t.name)+'</div><div class="erd-item-s">'+sub+(hit?' · '+hit:'')+'</div></div>'+
+      infoBtn(t.key)+
       (on.has(t.key)?'<span class="erd-item-on" data-tip="On the canvas — click to find it">'+ico('<path d="M20 6 9 17l-5-5"/>')+'</span>'
                     :'<button type="button" class="erd-add" data-add="'+esc(t.key)+'" data-tip="Add to the canvas" aria-label="Add '+esc(t.name)+' to the canvas">+</button>')+
     '</div>';
@@ -1240,12 +1245,16 @@ function wire(){
   els.filter.addEventListener('input', ()=>{ S.filter=els.filter.value; renderList(); });
   els.list.addEventListener('pointerdown', onListDown);
   els.list.addEventListener('click', e=>{
+    const cp=e.target.closest('[data-copy]');
+    if(cp){ const k=cp.dataset.copy; atlasCopy(k, ()=>toast('Copied '+k)); return; }
+    const ib=e.target.closest('[data-info]');
+    if(ib){ openInfoPop(ib.dataset.info, ib); return; }
     const add=e.target.closest('[data-add]');
     if(add){ addTable(add.dataset.add); return; }
     const it=e.target.closest('.erd-item');
     if(it && it.classList.contains('on')){ select({kind:'table', key:it.dataset.key}); center(it.dataset.key); }
   });
-  els.list.addEventListener('dblclick', e=>{ const it=e.target.closest('.erd-item'); if(it && !e.target.closest('[data-add]')) addTable(it.dataset.key); });
+  els.list.addEventListener('dblclick', e=>{ const it=e.target.closest('.erd-item'); if(it && !e.target.closest('[data-add],[data-copy],[data-info]')) addTable(it.dataset.key); });
   els.list.addEventListener('keydown', e=>{
     const it=e.target.closest('.erd-item'); if(!it) return;
     if(e.key==='Enter'||e.key==='+'){ e.preventDefault(); addTable(it.dataset.key); }
@@ -1392,7 +1401,7 @@ function reorderPreview(g, p){
 }
 function onListDown(e){
   const it=e.target.closest('.erd-item');
-  if(!it || e.button!==0 || e.target.closest('[data-add]')) return;
+  if(!it || e.button!==0 || e.target.closest('[data-add],[data-copy],[data-info]')) return;
   const key=it.dataset.key, x0=e.clientX, y0=e.clientY;
   let ghost=null;
   try{ it.setPointerCapture(e.pointerId); }catch(err){}
@@ -1446,16 +1455,10 @@ function nearOfCard(key){
 function openTablePop(key){
   const d=active(), t=d.tables.find(x=>x.key===key);
   if(!t) return;
-  const c=S.byKey.get(key), e=effective(t);
-  const src=[];
-  if(c && c.changelog){ const n=byId.get(c.changelog); src.push('changelog '+srcLink(c.changelog, n?n.label:c.changelog)); }
-  // the service's and the data object's key beside their names, to copy: the key is what code and models
-  // refer to them by (definitionKey("…"), a service task's serviceKey), and it is not the name
-  if(c) c.services.forEach(id=>{ const n=byId.get(id); src.push('service '+srcLink(id, n?n.label:id)+keyChip(n && n.key)); });
-  if(c) c.dataObjects.forEach(x=>src.push('data object '+srcLink(x.id, x.name)+keyChip(x.key)));
-  const html='<div class="erd-pop-h"><span class="erd-pop-t">'+esc(t.name)+'</span>'+closeBtn()+'</div>'+
+  const e=effective(t);
+  const html='<div class="erd-pop-h">'+popTitle(t.name)+'<span class="erd-grow"></span>'+infoBtn(key)+closeBtn()+'</div>'+
+    '<div class="erd-infowrap" hidden>'+infoHtml(key)+'</div>'+
     (e.ghost?'<p class="erd-warn">This project’s schema has no table of this name — the card shows the columns the diagram was saved with.</p>':'')+
-    (src.length?'<div class="erd-srcs">From '+src.join(' · ')+'</div>':'')+
     '<label class="erd-fld"><span>Business name</span><input data-f="alias" value="'+esc(t.alias)+'" placeholder="'+esc(t.name)+'" autofocus></label>'+
     '<div class="erd-fld"><span>Colour</span><div class="erd-sw">'+
       '<button type="button" class="erd-swatch none'+(t.color?'':' on')+'" data-color="" data-tip="No colour" aria-label="No colour"></button>'+
@@ -1477,6 +1480,8 @@ function openTablePop(key){
   if(cq) cq.addEventListener('input', ()=>renderPopCols(key));
   pop.querySelector('[data-f=expanded]').addEventListener('change', ev=>{ const on=ev.target.checked; mutate(d=>{ const x=d.tables.find(x=>x.key===key); if(x) x.expanded=on; }); });
   pop.addEventListener('click', ev=>{
+    const ib=ev.target.closest('[data-info]');
+    if(ib){ const w=pop.querySelector('.erd-infowrap'); w.hidden=!w.hidden; ib.classList.toggle('on', !w.hidden); return; }
     const cp=ev.target.closest('[data-copy]');
     if(cp){ const k=cp.dataset.copy; atlasCopy(k, ()=>toast('Copied '+k)); return; }
     const op=ev.target.closest('[data-open]');
@@ -1490,10 +1495,52 @@ function openTablePop(key){
     if(ev.target.closest('[data-pa=close]')) closePop();
   });
 }
+/**
+ * What is behind a table: its changelog, the services that map it and the data objects that read it — each
+ * name on a line of its own and its key under it, to copy (the key is what code and models refer to it by:
+ * definitionKey("…"), a service task's serviceKey). A label column and nothing else: name and key side by side
+ * squeezed a long changelog name to its first letters, and a row for the table repeated the panel's title,
+ * which carries its own copy button. Behind an (i) badge, in the table panel and in the list: it is
+ * reference, not the diagram.
+ */
+function infoHtml(key){
+  const c=S.byKey.get(key);
+  if(!c) return '<p class="erd-warn">Not in this project’s schema.</p>';
+  const entry=(id, label, k)=>'<div class="erd-ie"><div class="erd-in">'+srcLink(id, label)+'</div>'+(k?'<div class="erd-ik">'+keyChip(k)+'</div>':'')+'</div>';
+  const group=(one, many, items)=>items.length?'<dt>'+(items.length>1?many:one)+'</dt><dd>'+items.join('')+'</dd>':'';
+  const changelog=c.changelog?[entry(c.changelog, (byId.get(c.changelog) || {}).label || c.changelog, null)]:[];
+  const services=c.services.map(id=>{ const n=byId.get(id); return entry(id, n?n.label:id, n && n.key); });
+  const dataObjects=c.dataObjects.map(x=>entry(x.id, x.name, x.key));
+  return '<dl class="erd-info">'+group('Changelog', 'Changelogs', changelog)+group('Service', 'Services', services)+
+    group('Data object', 'Data objects', dataObjects)+'</dl>';
+}
+/** The panel's title — the table's name — with the button that copies it. */
+function popTitle(name){
+  return '<span class="erd-pop-t">'+esc(name)+'</span>'+copyBtn(name, 'Copy the table name');
+}
+function infoBtn(key){
+  return '<button type="button" class="erd-ibtn" data-info="'+esc(key)+'" data-tip="What is behind this table — its changelog, services and data objects, with their keys" '+
+    'aria-label="What is behind '+esc(key)+'">i</button>';
+}
+/** The same table, opened from the list — for a table that is not on the canvas yet. */
+function openInfoPop(key, el){
+  const c=S.byKey.get(key), r=el.getBoundingClientRect();
+  openPop('info', '<div class="erd-pop-h">'+popTitle((c && c.name) || key)+'<span class="erd-grow"></span>'+closeBtn()+'</div>'+infoHtml(key), {x:r.right+8, y:r.top-10});
+  els.pop.addEventListener('click', ev=>{
+    const cp=ev.target.closest('[data-copy]');
+    if(cp){ const k=cp.dataset.copy; atlasCopy(k, ()=>toast('Copied '+k)); return; }
+    const op=ev.target.closest('[data-open]');
+    if(op && window.__atlasOpen){ window.__atlasOpen(op.dataset.open); return; }
+    if(ev.target.closest('[data-pa=close]')) closePop();
+  });
+}
 /** A model key in the table panel, with a button that copies it. */
 function keyChip(key){
   if(!key) return '';
-  return ' <code class="erd-key">'+esc(key)+'</code><button type="button" class="erd-cpy" data-copy="'+esc(key)+'" data-tip="Copy the key" aria-label="Copy '+esc(key)+'">'+
+  return '<code class="erd-key">'+esc(key)+'</code>'+copyBtn(key, 'Copy the key');
+}
+function copyBtn(text, tip, cls){
+  return '<button type="button" class="erd-cpy'+(cls?' '+cls:'')+'" data-copy="'+esc(text)+'" data-tip="'+esc(tip)+'" aria-label="Copy '+esc(text)+'">'+
     ico('<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>')+'</button>';
 }
 /**

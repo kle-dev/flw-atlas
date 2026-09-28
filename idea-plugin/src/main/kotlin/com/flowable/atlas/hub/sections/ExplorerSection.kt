@@ -72,7 +72,6 @@ internal class ExplorerSection(private val host: HubHost) : HubSection {
     private var listRow: Row? = null
     private var hintRow: Row? = null
     private lateinit var openButton: JButton
-    private var erdRow: Row? = null
     private var browserAvailable = false
 
     override fun build(panel: Panel) {
@@ -89,13 +88,6 @@ internal class ExplorerSection(private val host: HubHost) : HubSection {
                 (list.selectedValue ?: model.items.firstOrNull())?.let(::open)
             }.applyToComponent { toolTipText = FlowableActionIds.text(FlowableActionIds.OPEN_ATLAS_EXPLORER) }.component
         }
-        // The ER diagram designer, a page beside the explorer — only for a project that generates it. A row of
-        // its own: a third button beside Generate… and Open would not fit the stripe's 280 px.
-        erdRow = panel.row {
-            button(FlowableActionIds.text(FlowableActionIds.OPEN_ATLAS_ER_DESIGNER, FlowableActionIds.HUB_SECTION)) {
-                host.invokeAction(FlowableActionIds.OPEN_ATLAS_ER_DESIGNER)
-            }.applyToComponent { toolTipText = FlowableActionIds.text(FlowableActionIds.OPEN_ATLAS_ER_DESIGNER) }
-        }.visible(false)
     }
 
     override fun apply(s: HubSnapshot) {
@@ -108,7 +100,6 @@ internal class ExplorerSection(private val host: HubHost) : HubSection {
         listRow?.visible(s.artifacts.isNotEmpty())
         hintRow?.visible(s.artifacts.isEmpty())
         openButton.isEnabled = s.artifacts.isNotEmpty()
-        erdRow?.visible(s.erdChosen)
         // Not "nothing has been generated" — this panel cannot know that. *Generate…* writes wherever
         // you point it, and the search is scoped to the active Flowable project's output folder, so a
         // page saved elsewhere is invisible here. Naming the folder turns a wrong claim into a findable

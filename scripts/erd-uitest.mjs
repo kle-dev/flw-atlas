@@ -182,6 +182,15 @@ await withChrome(async page => {
   ok('the list marks it as on the canvas', await page.eval(`document.querySelector('.erd-item[data-key="ORD_ORDER"]').classList.contains('on')`));
   ok('five columns show on a folded card', await page.eval(`document.querySelectorAll('.erd-card[data-key="ORD_ORDER"] .erd-row').length`) === 5);
 
+  // ---- the list: the data object's key to copy, and what is behind a table, before it is on the canvas ----
+  ok('the list offers the data object key beside its name', await page.eval(`document.querySelector('.erd-item[data-key="CUST_CUSTOMER"] .erd-lcpy').dataset.copy`) === 'customerDO');
+  await page.eval(`document.querySelector('.erd-item[data-key="CUST_CUSTOMER"] .erd-ibtn').style.opacity='1'`);
+  await page.click(await page.at('.erd-item[data-key="CUST_CUSTOMER"] .erd-ibtn'));
+  ok('…and its (i) says what is behind the table', await page.waitFor(`document.querySelector('.erd-pop[data-kind=info] .erd-info')`) &&
+    /customerService/.test(await page.eval(`document.querySelector('.erd-pop[data-kind=info]').textContent`)));
+  await page.key('Escape', 'Escape');
+  ok('…and a click there adds nothing', await page.eval(`!${T}.active().tables.some(t=>t.key==='CUST_CUSTOMER')`));
+
   // ---- the + button, then the proposal the models make ----
   await page.eval(`document.querySelector('.erd-item[data-key="CUST_CUSTOMER"] .erd-add').style.opacity='1'`);
   await page.click(await page.at('.erd-item[data-key="CUST_CUSTOMER"] .erd-add'));
@@ -228,8 +237,15 @@ await withChrome(async page => {
   await page.eval(`document.querySelector('.erd-card[data-key="ORD_ORDER"] .erd-tools').style.opacity='1'`);
   await page.click(await page.at('.erd-card[data-key="ORD_ORDER"] .erd-tools'));
   ok('⋯ opens the table’s panel', await page.waitFor(`document.querySelector('.erd-pop[data-kind=table]')`));
-  ok('…with the data object’s and the service’s keys, each to copy', await page.eval(`[...document.querySelectorAll('.erd-pop .erd-cpy')].map(b=>b.dataset.copy).join(',')`) === 'orderService,orderDO',
-    await page.eval(`[...document.querySelectorAll('.erd-pop .erd-cpy')].map(b=>b.dataset.copy)`));
+  ok('what is behind the table waits behind its (i)', await page.eval(`document.querySelector('.erd-pop .erd-infowrap').hidden`));
+  await page.click(await page.at('.erd-pop .erd-ibtn'));
+  ok('(i) shows its changelog, service and data object, each key to copy', await page.eval(`!document.querySelector('.erd-pop .erd-infowrap').hidden`) &&
+    await page.eval(`[...document.querySelectorAll('.erd-pop .erd-info dt')].map(d=>d.textContent).join(',')`) === 'Changelog,Service,Data object' &&
+    await page.eval(`[...document.querySelectorAll('.erd-pop .erd-info .erd-cpy')].map(b=>b.dataset.copy).join(',')`) === 'orderService,orderDO',
+    await page.eval(`[...document.querySelectorAll('.erd-pop .erd-info .erd-cpy')].map(b=>b.dataset.copy)`));
+  ok('…no name in it is cut off', await page.eval(`[...document.querySelectorAll('.erd-pop .erd-info .erd-in, .erd-pop .erd-info .erd-key')].every(e=>e.scrollWidth<=e.clientWidth+1)`));
+  ok('the table’s own name is copied from the panel’s title, not repeated under it', await page.eval(`document.querySelector('.erd-pop .erd-pop-h .erd-cpy').dataset.copy`) === 'ord_order' &&
+    !/ord_order/.test(await page.eval(`document.querySelector('.erd-pop .erd-info').textContent`)));
   await page.click(await page.at('.erd-pop .erd-swatch[data-color="#0e9f6e"]'));
   ok('a swatch colours the table', await page.eval(`${T}.active().tables[0].color`) === '#0e9f6e');
   ok('…and its header', /#0e9f6e/i.test(await page.eval(`document.querySelector('.erd-card[data-key="ORD_ORDER"] .erd-head').getAttribute('style')`)));

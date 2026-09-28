@@ -122,7 +122,7 @@
               Generation and Atlas writes a page of its own beside the explorer: drag the project's tables
               onto a canvas, show their columns and types, search across every table and column, draw named
               1:1 / 1:n / n:m relations, colour them and let Atlas arrange them — for explaining a data model
-              to the business — with SVG/PNG export and a diagram file you can commit; the Atlas Hub opens it
+              to the business — with SVG/PNG export and a diagram file you can commit; Tools → Flowable Atlas opens it
               in an editor tab in the IDE's theme. It carries only the tables, so it stays small however large
               the project is.</li>
           <li><b>IDE-native viewing</b> — the embedded explorer follows the IDE light/dark theme
@@ -149,7 +149,7 @@
     ]]></description>
 
     <change-notes><![CDATA[
-        <h3>0.29.0</h3>
+        <h3>0.28.2</h3>
         <ul>
           <li><b>The ER diagram designer is a page of its own: <code>&lt;project&gt;.erd.html</code>.</b> It
               was a page inside the explorer, and that was the wrong place: the explorer carries the whole
@@ -177,16 +177,19 @@
           <li><b>Expand all, collapse all.</b> Two buttons unfold every card to all its columns and fold
               them back to the first five, one undo step each; unfolding moves the cards below down so none
               is covered.</li>
-          <li><b>A table's data object and service keys, to copy.</b> The table panel now says at its top —
-              not below forty columns, where it was out of sight — which changelog, services and data
-              objects are behind the table, with each service's and data object's key beside its name and a
-              button that copies it. A search finds a table by those keys too.</li>
-          <li><b>The ER diagram from the Atlas Hub.</b> With <i>ER diagram designer (HTML)</i> chosen in
-              Settings → Generation, the Hub's <i>Explorer</i> block has an <i>ER diagram</i> button, and
-              <i>Tools → Flowable Atlas</i> an <i>Open Atlas ER Diagram Designer</i>: it opens the newest
-              page in an editor tab, generating one into the output folder first when there is none. In the
-              IDE the page wears the IDE's theme and colours exactly as the explorer does — it runs the
-              explorer's own theme code — and its toolbar keeps to one row in a narrow editor tab.</li>
+          <li><b>A table's data object and service keys, to copy.</b> An (i) beside the table's name in its
+              panel unfolds what is behind it — its changelog, the services that map it and the data objects
+              that read it — each name with its key under it and a copy button, and the table's own name has
+              a copy button in the panel's title; the line that listed them under forty columns, out of
+              sight, is gone. In the list, a table read by one data object has a quiet copy icon for that
+              key beside the data object's name, and the same (i), before the table is on the canvas. A
+              search finds a table by those keys too.</li>
+          <li><b>The ER diagram from the menu.</b> With <i>ER diagram designer (HTML)</i> chosen in Settings
+              → Generation, <i>Tools → Flowable Atlas</i> — and so the Atlas Hub's ⋮ — has an <i>Open Atlas
+              ER Diagram Designer</i>: it opens the newest page in an editor tab, generating one into the
+              output folder first when there is none. In the IDE the page wears the IDE's theme and colours
+              exactly as the explorer does — it runs the explorer's own theme code — and its toolbar keeps
+              to one row in a narrow editor tab.</li>
         </ul>
         <h3>0.28.1</h3>
         <ul>
@@ -553,17 +556,6 @@
               rather than repeating the toolbar, remembers whether it is folded, says so when nothing is
               bound or touched, opens its pickers under their buttons, and tells a failed model scan apart
               from a project without scripts.</li>
-          <li><b>Settings say whose they are.</b> Every project settings page names the Flowable project its
-              values belong to when that is a question — a sub-project is chosen, or the repository holds
-              several — since the choice is made elsewhere, in the Atlas Hub. <i>Apply</i> on the
-              Environments page with something missing selects the environment or connection it is about.
-              The model-constants identifier and format read as choices with an example (<i>Name and key —
-              ORDER_FULFILMENT_P_0001</i>) instead of enum names, the custom-functions source is only
-              editable while discovery is on, the copy button is disabled on a connection, and <i>Share with
-              Project</i> wears a share icon rather than a save icon. The sign-in form lost two paragraphs
-              to help marks, the Work connection reads <i>Server URL</i> like the Design one and is called
-              Work wherever it was called "app", and settings paths read <i>Settings → Tools → Flowable
-              Atlas → …</i>.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>
@@ -1037,12 +1029,11 @@
                     icon="/icons/atlas/explorer.svg">
                 <override-text place="AtlasHubSection"/>
             </action>
-            <!-- Hidden unless the project generates the ER diagram page (Settings → Generation). -->
+            <!-- Hidden unless the project generates the ER diagram page (Settings → Generation). Menu only — and so the
+                 Hub's ⋮ — not a button in the Hub's Explorer block: an occasional tool. -->
             <action id="Flowable.OpenAtlasErDesigner"
                     class="com.flowable.atlas.action.OpenAtlasErDesignerAction"
-                    icon="/icons/atlas/type-dataObject.svg">
-                <override-text place="AtlasHubSection"/>
-            </action>
+                    icon="/icons/atlas/type-dataObject.svg"/>
             <action id="Flowable.OpenAtlasPlayground"
                     class="com.flowable.atlas.action.OpenAtlasPlaygroundAction"
                     icon="/icons/atlas/playground.svg">
