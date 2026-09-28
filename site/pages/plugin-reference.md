@@ -44,6 +44,7 @@ is *Explorer* the buttons read *Generate…* and *Open*. Every tool-window opene
 | Open Atlas Hub | — |
 | Open Atlas Findings | — |
 | Open Atlas Explorer | Atlas Hub toolbar and its *Explorer* block |
+| Open Atlas ER Diagram Designer | The Atlas Hub's *Explorer* block (*ER diagram*). Only while the project generates the [ER diagram page](../../erd/); opens the newest `*.erd.html`, and generates one into the output folder first when there is none |
 | Open Atlas Playground | Atlas Hub toolbar and its *Playground* block |
 | Go to Model… | Atlas Hub toolbar and the model count in its header; `Ctrl+Alt+Shift+M`. Under Remote Development it opens the *Find in Models…* list, because Search Everywhere has no Flowable tab there |
 | Find in Models… | The *Go to Model…* popup, with `⇧⏎` on any row |

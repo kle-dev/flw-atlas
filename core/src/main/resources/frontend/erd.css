@@ -139,9 +139,15 @@
   .erd-cols button:hover:not(:disabled){border-color:var(--line2);color:var(--ink)}
   .erd-cols button:disabled{opacity:.3;cursor:default}
   .erd-check{display:flex;align-items:center;gap:var(--space-15);margin-top:var(--space-15);font-size:var(--text-xs);color:var(--ink-dim);cursor:pointer}
-  .erd-srcs{margin-top:var(--space-3);font-size:var(--text-xs);color:var(--ink-faint);line-height:1.6}
+  .erd-srcs{margin:var(--space-1) 0 var(--space-2);font-size:var(--text-xs);color:var(--ink-faint);line-height:1.8}
   .erd-srcs a,.erd-pop a{color:var(--accent);text-decoration:none}
   .erd-srcs a:hover{text-decoration:underline}
+  .erd-key{font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-dim);background:var(--panel2);border:1px solid var(--line);
+    border-radius:var(--radius-xs);padding:0 3px}
+  .erd-cpy{display:inline-flex;vertical-align:-3px;width:18px;height:18px;align-items:center;justify-content:center;padding:0;margin-left:1px;
+    border:0;border-radius:var(--radius-sm);background:none;color:var(--ink-faint);cursor:pointer}
+  .erd-cpy:hover{background:var(--hover);color:var(--ink)}
+  .erd-cpy svg{width:12px;height:12px}
   .erd-pop-a{display:flex;justify-content:flex-end;gap:var(--space-2);margin-top:var(--space-3)}
   .erd-pop .erd-danger{color:var(--bad-text)}
   .erd-pop .erd-danger:hover{border-color:var(--bad-border);color:var(--bad-text)}
@@ -170,6 +176,17 @@
   .erd-confirm{margin:0 0 var(--space-2);line-height:1.5}
   .erd-ghost{position:fixed;left:0;top:0;z-index:200;pointer-events:none;padding:var(--space-1) var(--space-2);background:var(--panel);
     border:1px solid var(--accent);border-radius:var(--radius-md);box-shadow:var(--shadow);font-family:var(--mono);font-size:var(--text-xs);color:var(--ink)}
+  /* an IDE editor tab is often narrower than a browser: the labelled buttons lose their labels (their tips stay)
+     and the search shrinks first, so the toolbar keeps to one row */
+  @media (max-width:1440px){
+    .erd-arrangebtn span,.erd-presentbtn span{display:none}
+    .erd-qwrap{flex-basis:200px}
+  }
+  @media (max-width:1180px){
+    .erd-pick{max-width:170px}
+    .erd-qwrap{flex-basis:150px;min-width:110px}
+    .erd-pct,.erd-qkbd{display:none}
+  }
   @media (max-width:800px){
     .erd{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
     .erd-side{max-height:34vh;border-right:0;border-bottom:1px solid var(--line)}

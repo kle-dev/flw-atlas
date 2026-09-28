@@ -34,6 +34,15 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   one column of forty without unfolding the rest. A table's panel filters its columns too.
 - **Expand all, collapse all.** Two buttons unfold every card to all its columns and fold them back to the
   first five, one undo step each; unfolding moves the cards below down so none is covered.
+- **A table's data object and service keys, to copy.** The table panel now says at its top — not below forty
+  columns, where it was out of sight — which changelog, services and data objects are behind the table, with
+  each service's and data object's key beside its name and a button that copies it. A search finds a table by
+  those keys too.
+- **The ER diagram from the Atlas Hub.** With *ER diagram designer (HTML)* chosen in Settings → Generation, the
+  Hub's *Explorer* block has an *ER diagram* button, and *Tools → Flowable Atlas* an *Open Atlas ER Diagram
+  Designer*: it opens the newest page in an editor tab, generating one into the output folder first when there
+  is none. In the IDE the page wears the IDE's theme and colours exactly as the explorer does — it runs the
+  explorer's own theme code — and its toolbar keeps to one row in a narrow editor tab.
 
 ## 0.28.1
 

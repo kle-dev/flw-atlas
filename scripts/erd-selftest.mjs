@@ -219,6 +219,10 @@ eq('nothing to arrange', E.erdArrange([], []), {});
   eq('a type finds its columns, after any name', E.erdSearch(cat, '4000').items.map(i => i.column), ['note_']);
   eq('the limit keeps the list short, the count stays whole', [E.erdSearch(cat, 'attr_', null, 10).items.length, E.erdSearch(cat, 'attr_', null, 10).total], [10, 40]);
   eq('no query, no results', E.erdSearch(cat, '   ').total, 0);
+  const keyed = [{key: 'ORD_ORDER', name: 'ord_order', alias: '', dataObjects: [{name: 'Order', key: 'orderDO'}], services: ['service:orderService'], columns: []}];
+  eq('a data object key finds its table', E.erdSearch(keyed, 'orderdo').items.map(i => i.key), ['ORD_ORDER']);
+  eq('…and a service key', E.erdSearch(keyed, 'orderService').items.map(i => i.key), ['ORD_ORDER']);
+  ok('…on the canvas too', E.erdTableMatches('x', '', [{name: 'Order', key: 'orderDO'}], 'orderdo') && E.erdTableMatches('x', '', [], 'orderservice', ['service:orderService']));
   eq('the columns a query finds in one table, by name or type', [...E.erdColumnHits(cat[0].columns, 'varchar(4')], ['NOTE_']);
   ok('a table answers by its name, business name or data object', E.erdTableMatches('ord_order', '', [{name: 'Order'}], 'order') &&
     E.erdTableMatches('x', 'Bestellung', [], 'bestell') && !E.erdTableMatches('x', '', [], 'order') && !E.erdTableMatches('x', '', [], ''));

@@ -122,8 +122,9 @@
               Generation and Atlas writes a page of its own beside the explorer: drag the project's tables
               onto a canvas, show their columns and types, search across every table and column, draw named
               1:1 / 1:n / n:m relations, colour them and let Atlas arrange them — for explaining a data model
-              to the business — with SVG/PNG export and a diagram file you can commit. It carries only the
-              tables, so it stays small however large the project is.</li>
+              to the business — with SVG/PNG export and a diagram file you can commit; the Atlas Hub opens it
+              in an editor tab in the IDE's theme. It carries only the tables, so it stays small however large
+              the project is.</li>
           <li><b>IDE-native viewing</b> — the embedded explorer follows the IDE light/dark theme
               (switching restyles live) and carries a toolbar with <i>Regenerate Atlas Explorer</i>,
               <i>Reload</i>, <i>Open Atlas Playground</i> and <i>Open in Browser</i>.</li>
@@ -176,6 +177,16 @@
           <li><b>Expand all, collapse all.</b> Two buttons unfold every card to all its columns and fold
               them back to the first five, one undo step each; unfolding moves the cards below down so none
               is covered.</li>
+          <li><b>A table's data object and service keys, to copy.</b> The table panel now says at its top —
+              not below forty columns, where it was out of sight — which changelog, services and data
+              objects are behind the table, with each service's and data object's key beside its name and a
+              button that copies it. A search finds a table by those keys too.</li>
+          <li><b>The ER diagram from the Atlas Hub.</b> With <i>ER diagram designer (HTML)</i> chosen in
+              Settings → Generation, the Hub's <i>Explorer</i> block has an <i>ER diagram</i> button, and
+              <i>Tools → Flowable Atlas</i> an <i>Open Atlas ER Diagram Designer</i>: it opens the newest
+              page in an editor tab, generating one into the output folder first when there is none. In the
+              IDE the page wears the IDE's theme and colours exactly as the explorer does — it runs the
+              explorer's own theme code — and its toolbar keeps to one row in a narrow editor tab.</li>
         </ul>
         <h3>0.28.1</h3>
         <ul>
@@ -553,16 +564,6 @@
               to help marks, the Work connection reads <i>Server URL</i> like the Design one and is called
               Work wherever it was called "app", and settings paths read <i>Settings → Tools → Flowable
               Atlas → …</i>.</li>
-          <li><b>Dialogs check before they close.</b> <i>Paste Session…</i> refuses a paste that carries no
-              session header — it used to close and report the problem afterwards, with the pasted text gone
-              — and <i>Sign In to Flowable</i> (no longer "Flowable App": Design uses it too) enables <i>Use
-              this session</i> once a session cookie has been seen. <i>Create Access Token</i> is laid out
-              in one column of labels, says where the token goes (the access-token field; Apply stores it)
-              and that a blank validity never expires. The two Generate dialogs are one column of labels
-              from the source to the footer, name their patterns as the settings pages do, and point a
-              problem with the selected rows at the table. The Liquibase dialog's <i>Browse</i> no longer
-              writes an absolute path, and an absolute folder typed in is refused — the check trimmed the
-              leading slash first, so one got through and every row read "new".</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>
@@ -1034,6 +1035,12 @@
             <action id="Flowable.OpenAtlasExplorer"
                     class="com.flowable.atlas.action.OpenAtlasExplorerAction"
                     icon="/icons/atlas/explorer.svg">
+                <override-text place="AtlasHubSection"/>
+            </action>
+            <!-- Hidden unless the project generates the ER diagram page (Settings → Generation). -->
+            <action id="Flowable.OpenAtlasErDesigner"
+                    class="com.flowable.atlas.action.OpenAtlasErDesignerAction"
+                    icon="/icons/atlas/type-dataObject.svg">
                 <override-text place="AtlasHubSection"/>
             </action>
             <action id="Flowable.OpenAtlasPlayground"

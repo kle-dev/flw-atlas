@@ -60,6 +60,9 @@ class RenderersSmokeTest {
         assertTrue("the designer's script", erd.contains("window.ATLAS_ERD=") && erd.contains("function erdArrange("))
         assertTrue("the designer's styles", erd.contains(".erd-card"))
         assertFalse("nothing of explorer.js", erd.contains("function renderDashboard"))
+        // …except its theme section, verbatim: the IDE's mode and colours arrive the same way on both pages
+        assertTrue("the explorer's theme code", erd.contains(ErdHtmlRenderer.themeScript()) && erd.contains("function applyIdePalette("))
+        assertTrue("…and its theme button", erd.contains("data-theme-btn"))
         assertTrue("the fixture's table", erd.contains("\"cust_customer\""))
         assertTrue("the link to the explorer beside it", erd.contains("\"explorer\":\"miniproject.explorer.html\""))
         assertFalse("no drawings, no findings — tables only", erd.contains("\"diagram\":") || erd.contains("\"findings\":"))

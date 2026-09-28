@@ -98,6 +98,18 @@ object AtlasGenerationRunner {
         })
     }
 
+    /**
+     * The ER diagram page, alone, into the output folder — what the Hub's *ER diagram* button falls back to
+     * when there is no page to open yet. [onSuccess] gets the page's VirtualFile, to open it.
+     */
+    fun generateErdPage(project: Project, onSuccess: ((VirtualFile?) -> Unit)? = null) {
+        val projectDir = projectDir(project) ?: return
+        val outputDir = projectDir.resolve(FlowableAtlasProjectSettings.getInstance(project).atlasOutputDir)
+        run(project, projectDir, "Generating the ER diagram page", quiet = true, onSuccess) { indicator ->
+            AtlasGeneratorService.getInstance(project).generateAll(projectDir, outputDir, indicator, setOf(AtlasArtifact.ERD_HTML))
+        }
+    }
+
     /** The directory to analyse — the active Flowable sub-project, or the whole project when none. */
     private fun projectDir(project: Project): Path? =
         AtlasProjectRootService.getInstance(project).activeProjectDir()

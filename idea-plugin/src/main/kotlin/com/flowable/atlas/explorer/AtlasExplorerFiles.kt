@@ -83,11 +83,12 @@ object AtlasExplorerFiles {
         private fun isPage(path: String) = path.endsWith(".explorer.html", ignoreCase = true)
     }
 
-    fun find(base: Path, outputDir: String = "atlas-output"): List<Path> {
+    /** The pages ending in [suffix] — the explorer's by default, the ER diagram designer's with its suffix. */
+    fun find(base: Path, outputDir: String = "atlas-output", suffix: String = ".explorer.html"): List<Path> {
         val found = LinkedHashSet<Path>()
         val atlasOutput = base.resolve(outputDir)
-        if (Files.isDirectory(atlasOutput)) walk(atlasOutput, Int.MAX_VALUE, found)
-        if (found.isEmpty()) walk(base, PROJECT_SCAN_DEPTH, found)
+        if (Files.isDirectory(atlasOutput)) walk(atlasOutput, Int.MAX_VALUE, found, suffix)
+        if (found.isEmpty()) walk(base, PROJECT_SCAN_DEPTH, found, suffix)
         // No logging in the sort key on purpose: it is evaluated O(n log n) times, and a file whose
         // timestamp cannot be read simply sorts last, which is the right outcome anyway.
         return found.sortedByDescending {
@@ -95,7 +96,7 @@ object AtlasExplorerFiles {
         }
     }
 
-    private fun walk(root: Path, maxDepth: Int, into: MutableSet<Path>) {
+    private fun walk(root: Path, maxDepth: Int, into: MutableSet<Path>, suffix: String) {
         // A failure here means the Atlas Hub shows "no explorer files" for a project that has them —
         // indistinguishable from "none generated yet" unless it is logged. Individual unreadable files
         // are already tolerated by visitFileFailed below, so reaching the catch means the whole walk
@@ -108,7 +109,7 @@ object AtlasExplorerFiles {
                 }
 
                 override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
-                    if (file.fileName?.toString()?.endsWith(".explorer.html", ignoreCase = true) == true) {
+                    if (file.fileName?.toString()?.endsWith(suffix, ignoreCase = true) == true) {
                         into.add(file)
                         if (into.size >= MAX_RESULTS) return FileVisitResult.TERMINATE
                     }
@@ -117,6 +118,6 @@ object AtlasExplorerFiles {
 
                 override fun visitFileFailed(file: Path, exc: IOException): FileVisitResult = FileVisitResult.CONTINUE
             })
-        }.onFailure { LOG.warn("Scanning $root for *.explorer.html failed", it) }
+        }.onFailure { LOG.warn("Scanning $root for *$suffix failed", it) }
     }
 }

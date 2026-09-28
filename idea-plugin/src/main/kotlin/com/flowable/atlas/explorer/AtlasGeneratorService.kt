@@ -115,10 +115,11 @@ class AtlasGeneratorService(private val project: Project) {
                 // user's repo.
                 AtlasArtifact.GRAPH_JSON to { GraphJsonRenderer.render(result) },
                 AtlasArtifact.EXPLORER_HTML to { ExplorerHtmlRenderer.render(result, root, waiverAuthor = Waivers.defaultAuthor(root)) },
-                // Linked to the explorer only when that is written too — a link to a page that is not there
-                // would be the one broken thing on it.
+                // Linked to the explorer when there is one beside it — written now, or by an earlier run: a link
+                // to a page that is not there would be the one broken thing on it.
                 AtlasArtifact.ERD_HTML to {
-                    val explorer = "$name${AtlasArtifact.EXPLORER_HTML.suffix}".takeIf { AtlasArtifact.EXPLORER_HTML in artifacts }
+                    val explorer = "$name${AtlasArtifact.EXPLORER_HTML.suffix}"
+                        .takeIf { AtlasArtifact.EXPLORER_HTML in artifacts || outputDir.resolve(it).toFile().isFile }
                     ErdHtmlRenderer.render(result, root, explorerFile = explorer)
                 },
                 // The file spells its sibling paths from the project root and only names the ones that

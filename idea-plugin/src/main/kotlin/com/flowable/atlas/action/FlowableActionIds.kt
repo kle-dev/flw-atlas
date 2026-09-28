@@ -11,6 +11,7 @@ object FlowableActionIds {
     const val OPEN_ATLAS_HUB = "Flowable.OpenAtlasHub"
     const val OPEN_ATLAS_FINDINGS = "Flowable.OpenAtlasFindings"
     const val OPEN_ATLAS_EXPLORER = "Flowable.OpenAtlasExplorer"
+    const val OPEN_ATLAS_ER_DESIGNER = "Flowable.OpenAtlasErDesigner"
     const val OPEN_ATLAS_PLAYGROUND = "Flowable.OpenAtlasPlayground"
     const val OPEN_MODEL_IN_ATLAS_EXPLORER = "Flowable.OpenModelInAtlasExplorer"
     const val GO_TO_MODEL = "Flowable.GoToModel"

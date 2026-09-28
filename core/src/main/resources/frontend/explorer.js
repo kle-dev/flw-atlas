@@ -9194,6 +9194,10 @@ function execCopy(text){
 }
 
 // ---------- theme ----------
+/*__THEME_START__*/
+// (Between the THEME sentinels: self-contained, and inlined as-is into the ER diagram page by
+// ErdHtmlRenderer, so the two pages follow the IDE's theme and colours the same way. Keep it free of
+// anything else of this file.)
 // Preference cycle: light → dark → auto (follow the OS). Light is the default — it is the
 // Flowable Hub look. JS always resolves the effective theme onto <html data-theme=…>, so the
 // CSS needs only one dark-override block; because all node colors are emitted as var()
@@ -9279,6 +9283,7 @@ function cycleTheme(){
 document.querySelectorAll('[data-theme-btn]').forEach(b=>b.onclick=cycleTheme);
 matchMedia('(prefers-color-scheme: light)').addEventListener('change',applyThemePref);
 applyThemePref();
+/*__THEME_END__*/
 
 // ---------- text size ----------
 // Every font size is a px token, and the IDE's embedded browser applies none of the IDE's font scaling

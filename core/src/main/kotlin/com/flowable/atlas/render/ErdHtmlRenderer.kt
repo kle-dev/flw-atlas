@@ -108,11 +108,28 @@ object ErdHtmlRenderer {
             linkedMapOf("id" to m["id"], "type" to m["type"], "key" to m["key"], "label" to m["label"], "file" to m["file"], "data" to data)
         }
 
+    /**
+     * The explorer's theme code — between `__THEME_START__` / `__THEME_END__` in explorer.js — for the ER page
+     * to run as-is: the preference, the IDE's mode and colours, the live push from the IDE. A copy would
+     * drift; the slice cannot.
+     */
+    internal fun themeScript(): String {
+        val js = ExplorerHtmlRenderer.asset("explorer.js")
+        val start = js.indexOf(THEME_START)
+        val end = js.indexOf(THEME_END)
+        check(start >= 0 && end > start) { "explorer.js has lost its $THEME_START … $THEME_END section" }
+        return js.substring(start + THEME_START.length, end).trim('\n')
+    }
+
+    private const val THEME_START = "/*__THEME_START__*/"
+    private const val THEME_END = "/*__THEME_END__*/"
+
     private fun composeTemplate(): String {
         var t = ExplorerHtmlRenderer.asset("erd.html")
         // The designer's own script and styles first, while the template is still only the template: nothing
         // inlined afterwards can be mistaken for a marker.
         t = t.replace("/*__ERD_JS__*/", ExplorerHtmlRenderer.asset("erd.js"))
+        t = t.replace("/*__ATLAS_THEME__*/", themeScript())
         t = t.replace("/*__ERD_CSS__*/", ExplorerHtmlRenderer.asset("erd.css"))
         t = t.replace("/*__ATLAS_CSS__*/", ExplorerHtmlRenderer.asset("explorer.css"))
         return t.trimEnd('\n')

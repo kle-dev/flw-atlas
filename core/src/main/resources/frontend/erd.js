@@ -223,10 +223,12 @@ function erdContrast(hex){
   return L>0.4?'#131e29':'#ffffff';
 }
 
-/** Whether a table answers a search by its own names: table name, business name, the data objects that read it. */
-function erdTableMatches(name, alias, dataObjects, q){
+/** Whether a table answers a search by its own names: table name, business name, the data objects that read it
+ *  (by name or key) and the services that map it (by key). */
+function erdTableMatches(name, alias, dataObjects, q, services){
   if(!q) return false;
-  return [name, alias].concat((dataObjects||[]).map(d=>d && d.name)).some(n=>n && String(n).toLowerCase().indexOf(q)>=0);
+  return [name, alias].concat((dataObjects||[]).map(d=>d && d.name), (dataObjects||[]).map(d=>d && d.key),
+    (services||[]).map(id=>String(id).replace(/^service:/,''))).some(n=>n && String(n).toLowerCase().indexOf(q)>=0);
 }
 
 /** The columns a search finds in a table — by name, or by type (`varchar(4000)`) — as their keys. */
@@ -252,7 +254,8 @@ function erdSearch(catalog, query, onCanvas, limit){
   const rank=n=>{ n=String(n||'').toLowerCase(); return n===q?0:n.indexOf(q)===0?1:n.indexOf(q)>=0?2:9; };
   (catalog||[]).forEach(t=>{
     const isOn=on.has(t.key);
-    const tr=Math.min(rank(t.name), rank(t.alias), ...(t.dataObjects||[]).map(d=>rank(d.name)));
+    const tr=Math.min(rank(t.name), rank(t.alias), ...(t.dataObjects||[]).map(d=>Math.min(rank(d.name), rank(d.key))),
+      ...(t.services||[]).map(id=>rank(String(id).replace(/^service:/,''))));
     if(tr<9){ all.push({kind:'table', key:t.key, table:t.name, alias:t.alias||'', count:(t.columns||[]).length, on:isOn, score:tr, pos:-1}); res.tables++; }
     (t.columns||[]).forEach((c,i)=>{
       const nr=rank(c.name), ty=String(c.type||'').toLowerCase().indexOf(q)>=0;
@@ -508,27 +511,9 @@ function atlasCopy(text, onOk){
   document.addEventListener('pointerdown', hide, true);
   document.addEventListener('scroll', hide, true);
 })();
-/** The theme: auto, light or dark — the same preference the explorer keeps, so the two pages agree. */
-let _ideTheme=(()=>{ const t=new URLSearchParams(location.search).get('ideTheme'); return t==='light'||t==='dark'?t:null; })();
-function themePref(){ try{ return localStorage.getItem('atlas-theme')||(_ideTheme?'auto':'light'); }catch(e){ return _ideTheme?'auto':'light'; } }
-const THEME_ICON={auto:'<circle cx="12" cy="12" r="9"/><path d="M12 3v18a9 9 0 0 0 0-18z" fill="currentColor"/>',
-  light:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
-  dark:'<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'};
-function applyTheme(){
-  const p=themePref(), sys=_ideTheme||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');
-  document.documentElement.dataset.theme=p==='auto'?sys:p;
-  const b=document.getElementById('erd-theme');
-  if(b){ b.innerHTML=ico(THEME_ICON[p]||THEME_ICON.auto); b.dataset.tip='Theme: '+p+' — click to switch'; }
-}
-/** The IDE pushes its theme and colours when they change (AtlasFileEditor.pushIdeTheme). */
-window.__atlasSetIdeTheme=(mode, pal)=>{
-  _ideTheme=mode==='light'||mode==='dark'?mode:null;
-  const st=document.documentElement.style, c=String(pal||'').split('.');
-  ['--bg','--panel','--panel2','--line','--ink','--ink-dim','--accent'].forEach((k,i)=>{
-    if(c.length===9 && /^[0-9a-f]{6}$/i.test(c[i])) st.setProperty(k, '#'+c[i]); else st.removeProperty(k);
-  });
-  applyTheme();
-};
+// The theme — the preference, the IDE's mode and colours (?ideTheme, ?idePal, the live __atlasSetIdeTheme),
+// the header's button — is the explorer's own code, inlined before this script (ErdHtmlRenderer): one
+// implementation, so the page looks like the explorer inside the IDE, and the two share the preference.
 /** Inside the IDE the page gets bridges to copy and to open files; it says so on <html>, as the explorer does. */
 const markIde=()=>{ if(window.__atlasOpen) document.documentElement.classList.add('ide'); };
 window.addEventListener('atlas-ide-bridge', markIde);
@@ -668,7 +653,7 @@ function layout(t, q){
   const hits=q?erdColumnHits(ordered, q):null;
   const shown=t.expanded?ordered:ordered.filter((c,i)=>i<VISIBLE || (hits && hits.has(erdKey(c.name))));
   const live=S && S.byKey.get(t.key);
-  const match=!q || !!(hits && hits.size) || erdTableMatches(t.name, t.alias, live && live.dataObjects, q);
+  const match=!q || !!(hits && hits.size) || erdTableMatches(t.name, t.alias, live && live.dataObjects, q, live && live.services);
   const title=t.alias||t.name, sub=t.alias?t.name:'';
   const head=sub?HEAD2:HEAD1;
   let w=Math.max(WMIN, tw(title,F_TITLE)+56, sub?tw(sub,F_SUB)+40:0);
@@ -1464,10 +1449,13 @@ function openTablePop(key){
   const c=S.byKey.get(key), e=effective(t);
   const src=[];
   if(c && c.changelog){ const n=byId.get(c.changelog); src.push('changelog '+srcLink(c.changelog, n?n.label:c.changelog)); }
-  if(c) c.services.forEach(id=>{ const n=byId.get(id); src.push('service '+srcLink(id, n?n.label:id)); });
-  if(c) c.dataObjects.forEach(x=>src.push('data object '+srcLink(x.id, x.name)));
+  // the service's and the data object's key beside their names, to copy: the key is what code and models
+  // refer to them by (definitionKey("…"), a service task's serviceKey), and it is not the name
+  if(c) c.services.forEach(id=>{ const n=byId.get(id); src.push('service '+srcLink(id, n?n.label:id)+keyChip(n && n.key)); });
+  if(c) c.dataObjects.forEach(x=>src.push('data object '+srcLink(x.id, x.name)+keyChip(x.key)));
   const html='<div class="erd-pop-h"><span class="erd-pop-t">'+esc(t.name)+'</span>'+closeBtn()+'</div>'+
     (e.ghost?'<p class="erd-warn">This project’s schema has no table of this name — the card shows the columns the diagram was saved with.</p>':'')+
+    (src.length?'<div class="erd-srcs">From '+src.join(' · ')+'</div>':'')+
     '<label class="erd-fld"><span>Business name</span><input data-f="alias" value="'+esc(t.alias)+'" placeholder="'+esc(t.name)+'" autofocus></label>'+
     '<div class="erd-fld"><span>Colour</span><div class="erd-sw">'+
       '<button type="button" class="erd-swatch none'+(t.color?'':' on')+'" data-color="" data-tip="No colour" aria-label="No colour"></button>'+
@@ -1479,7 +1467,6 @@ function openTablePop(key){
         esc(S.q && erdColumnHits(e.columns, S.q).size?S.q:'')+'">':'')+
       '<ol class="erd-cols"></ol>'+
       '<label class="erd-check"><input type="checkbox" data-f="expanded"'+(t.expanded?' checked':'')+'> Show all columns on the card</label></div>'+
-    (src.length?'<div class="erd-srcs">From '+src.join(' · ')+'</div>':'')+
     '<div class="erd-pop-a"><button type="button" class="tbtn erd-danger" data-pa="remove">Remove from the diagram</button></div>';
   openPop('table', html, nearOfCard(key));
   renderPopCols(key);
@@ -1490,6 +1477,8 @@ function openTablePop(key){
   if(cq) cq.addEventListener('input', ()=>renderPopCols(key));
   pop.querySelector('[data-f=expanded]').addEventListener('change', ev=>{ const on=ev.target.checked; mutate(d=>{ const x=d.tables.find(x=>x.key===key); if(x) x.expanded=on; }); });
   pop.addEventListener('click', ev=>{
+    const cp=ev.target.closest('[data-copy]');
+    if(cp){ const k=cp.dataset.copy; atlasCopy(k, ()=>toast('Copied '+k)); return; }
     const op=ev.target.closest('[data-open]');
     if(op && window.__atlasOpen){ window.__atlasOpen(op.dataset.open); return; }
     const sw=ev.target.closest('[data-color]');
@@ -1500,6 +1489,12 @@ function openTablePop(key){
     if(a && a.dataset.pa==='remove'){ S.sel={kind:'table', key}; removeSelected(); }
     if(ev.target.closest('[data-pa=close]')) closePop();
   });
+}
+/** A model key in the table panel, with a button that copies it. */
+function keyChip(key){
+  if(!key) return '';
+  return ' <code class="erd-key">'+esc(key)+'</code><button type="button" class="erd-cpy" data-copy="'+esc(key)+'" data-tip="Copy the key" aria-label="Copy '+esc(key)+'">'+
+    ico('<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>')+'</button>';
 }
 /**
  * Where a table comes from, as something to follow: inside the IDE the model file opens in the editor; in a
@@ -1800,13 +1795,6 @@ document.getElementById('erd-proj').textContent=DATA.project;
   el.textContent='Atlas '+(DATA.atlasVersion||'')+' · generated '+(m<2?'just now':m<60?m+' min ago':h<48?h+' h ago':d+' days ago');
   el.dataset.tip=new Date(t).toLocaleString();
 })();
-document.getElementById('erd-theme').addEventListener('click', ()=>{
-  const order=['auto','light','dark'], next=order[(order.indexOf(themePref())+1)%order.length];
-  try{ localStorage.setItem('atlas-theme', next); }catch(e){}
-  applyTheme();
-});
-try{ matchMedia('(prefers-color-scheme: light)').addEventListener('change', applyTheme); }catch(e){}
-applyTheme();
 markIde();
 render(document.getElementById('erd-root'));
 // For the UI test: the state and the actions a test drives, without a second way in for the page itself.

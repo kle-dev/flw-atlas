@@ -66,6 +66,7 @@ class ActionNamingTest : BasePlatformTestCase() {
             FlowableActionIds.OPEN_ATLAS_HUB,
             FlowableActionIds.OPEN_ATLAS_FINDINGS,
             FlowableActionIds.OPEN_ATLAS_EXPLORER,
+            FlowableActionIds.OPEN_ATLAS_ER_DESIGNER,
             FlowableActionIds.OPEN_ATLAS_PLAYGROUND,
         )) {
             assertTrue(FlowableActionIds.text(id), FlowableActionIds.text(id).startsWith("Open Atlas "))

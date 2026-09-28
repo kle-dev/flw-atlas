@@ -228,6 +228,8 @@ await withChrome(async page => {
   await page.eval(`document.querySelector('.erd-card[data-key="ORD_ORDER"] .erd-tools').style.opacity='1'`);
   await page.click(await page.at('.erd-card[data-key="ORD_ORDER"] .erd-tools'));
   ok('⋯ opens the table’s panel', await page.waitFor(`document.querySelector('.erd-pop[data-kind=table]')`));
+  ok('…with the data object’s and the service’s keys, each to copy', await page.eval(`[...document.querySelectorAll('.erd-pop .erd-cpy')].map(b=>b.dataset.copy).join(',')`) === 'orderService,orderDO',
+    await page.eval(`[...document.querySelectorAll('.erd-pop .erd-cpy')].map(b=>b.dataset.copy)`));
   await page.click(await page.at('.erd-pop .erd-swatch[data-color="#0e9f6e"]'));
   ok('a swatch colours the table', await page.eval(`${T}.active().tables[0].color`) === '#0e9f6e');
   ok('…and its header', /#0e9f6e/i.test(await page.eval(`document.querySelector('.erd-card[data-key="ORD_ORDER"] .erd-head').getAttribute('style')`)));

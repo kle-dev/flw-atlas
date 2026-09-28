@@ -40,11 +40,13 @@ try{
   <!-- the diagram's status (where it comes from, whether it is saved): up here, where there is room for it -->
   <span class="erd-status" id="erd-status" aria-live="polite"></span>
   <span class="erd-prov" id="erd-prov">__ATLAS_VERSION__</span>
-  <button type="button" class="tbtn" id="erd-theme" aria-label="Switch color theme"></button>
+  <button type="button" class="tbtn" data-theme-btn aria-label="Switch color theme"></button>
 </header>
 <main class="erd-root" id="erd-root"></main>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script type="application/json" id="atlas-data">__ATLAS_DATA__</script>
+<script>
+/*__ATLAS_THEME__*/</script>
 <script>
 /*__ERD_JS__*/</script>
 </body>

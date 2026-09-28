@@ -224,7 +224,9 @@ tab the moment it is written — reopen it later with **Open Atlas Explorer**, a
 run produces in *Settings → Tools → Flowable Atlas → Generation*. One of them is the
 [ER diagram designer](../erd/), a page of its own beside the explorer: the project's tables on a canvas,
 searched, related and arranged — for explaining a data model to people who do not read changelogs. It opens
-in the same kind of tab, and stays small where a large explorer is too big for a Remote Development client.
+in the same kind of tab, in the IDE's theme and colours, and stays small where a large explorer is too big
+for a Remote Development client. Once it is chosen, the Hub's *Explorer* block has an **ER diagram** button
+(and the menu *Open Atlas ER Diagram Designer*), which opens the page — generating it first when there is none.
 Full detail: [The Atlas explorer](../explorer/).
 
 ### In and out parameter tracing

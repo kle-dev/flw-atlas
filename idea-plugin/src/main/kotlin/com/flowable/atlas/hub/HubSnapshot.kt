@@ -75,6 +75,8 @@ internal data class HubSnapshot(
     /** Where the explorer search looked — what the empty state has to name to be believable. */
     val searchedIn: String,
     val findings: FindingsHealth = FindingsHealth(running = false, defects = null, advice = null, stale = false),
+    /** Whether the project generates the ER diagram page — then the Explorer block offers to open it. */
+    val erdChosen: Boolean = false,
 ) {
     val designConnection: AtlasConnection?
         get() = (designResolution as? Resolution.Selected)?.connection
@@ -153,6 +155,7 @@ internal data class HubSnapshot(
                     val last = f.last
                     FindingsHealth(f.running, last?.defects, last?.advice, f.stale)
                 },
+                erdChosen = com.flowable.atlas.explorer.AtlasArtifact.ERD_HTML in settings.atlasArtifacts,
             )
         }
     }
