@@ -842,13 +842,14 @@ function clip(text, font, max){
 }
 /** Where everything on a card sits. The width is set by *all* columns, shown or not, so expanding a card
  *  makes it longer, never wider — the relations around it stay where they were. */
-function layout(t, q){
+function layout(t, q, d){
   const e=effective(t), byK=new Map(e.columns.map(c=>[erdKey(c.name), c]));
   const ordered=e.order.map(n=>byK.get(erdKey(n))).filter(Boolean);
   // While a search is on, a folded card also shows the columns it found, where they stand in its order: the
-  // one column of forty the reader is after, without unfolding the other thirty-four.
-  const hits=q?erdColumnHits(ordered, q):null;
-  const shown=t.expanded?ordered:ordered.filter((c,i)=>i<VISIBLE || (hits && hits.has(erdKey(c.name))));
+  // one column of forty the reader is after, without unfolding the other thirty-four. The columns a relation
+  // joins show the same way, always: the line meets its column's row, so the row has to be there.
+  const hits=q?erdColumnHits(ordered, q):null, joined=joinedColumns(d||(S && active()), t.key);
+  const shown=t.expanded?ordered:ordered.filter((c,i)=>i<VISIBLE || (hits && hits.has(erdKey(c.name))) || joined.has(erdKey(c.name)));
   const live=S && S.byKey.get(t.key);
   const match=!q || !!(hits && hits.size) || erdTableMatches(t.name, t.alias, live && live.dataObjects, q, live && live.services);
   const title=t.alias||t.name, sub=t.alias?t.name:'';
@@ -861,6 +862,15 @@ function layout(t, q){
   const h=head+(shown.length?shown.length*ROW+6:0)+(foot?FOOT:0);
   return {t, x:t.x, y:t.y, w, h, head, title, sub, rows, total:ordered.length, more:ordered.length-shown.length,
     foot, ghost:e.ghost, ordered, hits, match};
+}
+/** The columns of table [key] the diagram's relations join, as keys. */
+function joinedColumns(d, key){
+  const out=new Set();
+  ((d && d.relations)||[]).forEach(r=>(r.pairs||[]).forEach(p=>{
+    if(r.from===key && p.from) out.add(erdKey(p.from));
+    if(r.to===key && p.to) out.add(erdKey(p.to));
+  }));
+  return out;
 }
 /** The point a relation leaves a card from, and the direction it leaves in. */
 function sideOf(A, B){
@@ -884,18 +894,51 @@ function anchorOf(L, side, columns, offset){
   return {x, y, n:NORMAL[side]};
 }
 /** A relation's route: a cubic curve leaving each card square to its side, parallel relations fanned out. */
+/**
+ * A relation's route: a cubic curve leaving each card square to its side, parallel relations fanned out. A
+ * relation over columns meets each card at the rows of its columns — from the side, so also when the cards
+ * stand one above the other, and forking just outside the card to each of its rows when it joins several:
+ * the line never points at a row it does not join.
+ */
 function route(r, lays, fan){
   const A=lays.get(r.from), B=lays.get(r.to);
   if(!A || !B) return null;
-  if(A===B){
+  const ps=(r.pairs||[]).filter(p=>p.from||p.to), colsA=ps.map(p=>p.from).filter(Boolean), colsB=ps.map(p=>p.to).filter(Boolean);
+  if(A===B && !colsA.length && !colsB.length){
     const p1={x:A.x+A.w, y:A.y+A.head/2+fan*10, n:[1,0]}, p2={x:A.x+A.w, y:A.y+Math.min(A.h-8, A.head+30)+fan*10, n:[1,0]};
     const k=48+Math.abs(fan)*12;
     return {p1, p2, c1:{x:p1.x+k, y:p1.y-10}, c2:{x:p2.x+k, y:p2.y+10}};
   }
-  const [sa, sb]=sideOf(A, B);
-  const ps=r.pairs||[], p1=anchorOf(A, sa, ps.map(p=>p.from), fan*14), p2=anchorOf(B, sb, ps.map(p=>p.to), fan*14);
+  let [sa, sb]=sideOf(A, B);
+  if((colsA.length || colsB.length) && (sa==='top' || sa==='bottom')){ sa='right'; sb='right'; }
+  const e1=endAt(A, sa, colsA, fan), e2=endAt(B, sb, colsB, fan), p1=e1.p, p2=e2.p;
   const k=Math.max(36, Math.min(160, Math.hypot(p2.x-p1.x, p2.y-p1.y)/3));
-  return {p1, p2, c1:{x:p1.x+p1.n[0]*k, y:p1.y+p1.n[1]*k}, c2:{x:p2.x+p2.n[0]*k, y:p2.y+p2.n[1]*k}};
+  return {p1, p2, fork1:e1.fork, fork2:e2.fork, c1:{x:p1.x+p1.n[0]*k, y:p1.y+p1.n[1]*k}, c2:{x:p2.x+p2.n[0]*k, y:p2.y+p2.n[1]*k}};
+}
+/** How far outside the card a relation over several columns forks to their rows. */
+const FORK=12;
+/** Where one end of a relation meets its card: the row of its column, the fork to the rows of its columns,
+ *  or — no column the card shows — the side's middle, fanned out. */
+function endAt(L, side, cols, fan){
+  if((side==='left' || side==='right') && cols.length){
+    const seen=new Set(), ys=[];
+    cols.forEach(c=>{ const k=erdKey(c), row=L.rows.find(x=>erdKey(x.c.name)===k); if(row && !seen.has(k)){ seen.add(k); ys.push(L.y+row.y+ROW/2); } });
+    const n=NORMAL[side], x=side==='left'?L.x:L.x+L.w;
+    if(ys.length===1) return {p:{x, y:ys[0], n}};
+    if(ys.length>1){
+      const xs=x+n[0]*FORK, y0=Math.min(...ys), y1=Math.max(...ys);
+      return {p:{x:xs, y:(y0+y1)/2, n}, fork:{x, xs, ys}};
+    }
+  }
+  return {p:anchorOf(L, side, null, fan*14)};
+}
+/** A fork's strokes: a spine outside the card, a short stub to each joined row, a dot where each meets it. */
+function forkSvg(fk, stroke, width, dash){
+  if(!fk) return '';
+  const y0=Math.min(...fk.ys), y1=Math.max(...fk.ys);
+  return '<path d="M'+f(fk.xs)+','+f(y0)+' V'+f(y1)+fk.ys.map(y=>' M'+f(fk.x)+','+f(y)+' H'+f(fk.xs)).join('')+'"'+
+    st({fill:'none', stroke, 'stroke-width':width, 'stroke-dasharray':dash||''})+'/>'+
+    fk.ys.map(y=>'<circle cx="'+f(fk.x)+'" cy="'+f(y)+'" r="2.5"'+st({fill:stroke})+'/>').join('');
 }
 const mid=g=>({x:(g.p1.x+3*g.c1.x+3*g.c2.x+g.p2.x)/8, y:(g.p1.y+3*g.c1.y+3*g.c2.y+g.p2.y)/8});
 const pathD=g=>'M'+f(g.p1.x)+','+f(g.p1.y)+' C'+f(g.c1.x)+','+f(g.c1.y)+' '+f(g.c2.x)+','+f(g.c2.y)+' '+f(g.p2.x)+','+f(g.p2.y);
@@ -948,6 +991,7 @@ function relationSvg(r, g, C, o){
   const [ea, eb]=erdEnds(r.cardinality), d=pathD(g), sel=o.sel;
   let s='<g class="erd-rel'+(sel?' sel':'')+'" data-rel="'+esc(r.id)+'">';
   s+='<path d="'+d+'"'+st({fill:'none', stroke:sel?C.accent:C.dim, 'stroke-width':sel?2.25:1.5})+'/>';
+  if(g.fork1 || g.fork2) s+='<g class="erd-fork">'+forkSvg(g.fork1, sel?C.accent:C.dim, sel?2.25:1.5)+forkSvg(g.fork2, sel?C.accent:C.dim, sel?2.25:1.5)+'</g>';
   s+=endMark(g.p1, ea, C)+endMark(g.p2, eb, C);
   if(o.interactive) s+='<path class="erd-relhit" d="'+d+'"'+st({fill:'none', stroke:'transparent', 'stroke-width':14})+'/>';
   const text=r.label?r.label+'  ·  '+r.cardinality:'';
@@ -962,6 +1006,7 @@ function suggestionSvg(sg, g, C){
   const m=g.pill||mid(g), text='+ '+(sg.label||'suggested')+'  ·  '+sg.cardinality, w=tw(text, F_PILL)+18;
   return '<g class="erd-sug" data-sug="'+esc(sg.id)+'" data-tip="'+esc(sg.why+' — click to add this relation, × to dismiss it')+'">'+
     '<path d="'+pathD(g)+'"'+st({fill:'none', stroke:C.faint, 'stroke-width':1.25, 'stroke-dasharray':'5 4'})+'/>'+
+    forkSvg(g.fork1, C.faint, 1.25, '3 3')+forkSvg(g.fork2, C.faint, 1.25, '3 3')+
     '<path class="erd-relhit" d="'+pathD(g)+'"'+st({fill:'none', stroke:'transparent', 'stroke-width':12})+'/>'+
     '<g class="erd-sug-add"><rect x="'+f(m.x-w/2)+'" y="'+f(m.y-11)+'" width="'+f(w)+'" height="22" rx="11"'+
       st({fill:C.pill, stroke:C.faint, 'stroke-width':1, 'stroke-dasharray':'3 3'})+'/>'+
@@ -1049,7 +1094,7 @@ const framesBackToFront=d=>(d.frames||[]).map((fr,i)=>({fr,i})).sort((a,b)=>(b.f
 /** The whole diagram as SVG markup: the canvas draws it with the page's colours and its handles, an export
  *  with paper colours and nothing interactive — one drawing, so the picture is what the screen showed. */
 function sceneSvg(d, C, o){
-  const lays=new Map(d.tables.map(t=>[t.key, layout(t, o.q)]));
+  const lays=new Map(d.tables.map(t=>[t.key, layout(t, o.q, d)]));
   const rels=d.relations.filter(r=>lays.has(r.from)&&lays.has(r.to));
   const sugs=o.suggestions?visibleSuggestions(d, lays):[];
   const fan=fans(rels.concat(sugs));

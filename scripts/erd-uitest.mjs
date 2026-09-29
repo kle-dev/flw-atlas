@@ -449,6 +449,31 @@ await withChrome(async page => {
     await page.eval(`!!document.querySelector('.erd-card[data-key="ORD_ORDER"] .erd-row[data-col="delivery_zip_"] .erd-rowmark')`));
   await page.eval(`${T}.search('')`);
 
+  // ---- a relation meets the rows of its columns: forked for several, from the side, and on a folded card ----
+  const relGeom = () => page.eval(`(function(){
+    const d=document.querySelector('.erd-rel path').getAttribute('d').match(/-?[\\d.]+/g).map(Number);
+    const box=k=>{ const t=${T}.active().tables.find(x=>x.key===k); return {x:t.x, y:t.y, w:+document.querySelector('.erd-card[data-key="'+k+'"] .erd-box').getAttribute('width')}; };
+    const row=(k,c)=>{ const g=document.querySelector('.erd-card[data-key="'+k+'"] .erd-row[data-col="'+c+'"]');
+      return g ? box(k).y+Number(g.getAttribute('transform').match(/,([\\d.]+)/)[1])+11 : null; };
+    return {start:[d[0],d[1]], end:[d[6],d[7]], dots:[...document.querySelectorAll('.erd-rel .erd-fork circle')].map(c=>[+c.getAttribute('cx'), +c.getAttribute('cy')]),
+      o:box('ORD_ORDER'), c:box('CUST_CUSTOMER'), rows:document.querySelectorAll('.erd-card[data-key="ORD_ORDER"] .erd-row').length,
+      y:{id:row('ORD_ORDER','id_'), total:row('ORD_ORDER','total_'), cust:row('ORD_ORDER','customer_id_'), zip:row('ORD_ORDER','delivery_zip_'), cid:row('CUST_CUSTOMER','id_')}}; })()`);
+  const joinedBy = (name, tables, fromColumn, toColumn) => page.eval(`${T}.importText(${JSON.stringify(JSON.stringify({format: 'atlas-erd', version: 3, name, tables,
+    relations: [{ id: 'r1', from: 'ord_order', to: 'cust_customer', cardinality: '0..n:1', label: 'placed by', fromColumn, toColumn }]}))})`);
+  const near = (a, b) => a != null && b != null && Math.abs(a - b) < 1;
+  await joinedBy('Two columns apart', [{ table: 'ord_order', x: 40, y: 40 }, { table: 'cust_customer', x: 600, y: 40 }], ['id_', 'total_'], ['id_', 'name_']);
+  let gm = await relGeom();
+  ok('a relation over two columns apart forks to each of their rows', gm.dots.filter(p => p[0] === gm.o.x + gm.o.w).length === 2 &&
+    [gm.y.id, gm.y.total].every(y => gm.dots.some(p => near(p[1], y))), gm);
+  ok('…and its line leaves from outside the card, not from a row it does not join', gm.start[0] > gm.o.x + gm.o.w, gm);
+  await joinedBy('Stacked', [{ table: 'ord_order', x: 40, y: 40 }, { table: 'cust_customer', x: 60, y: 420 }], 'customer_id_', 'id_');
+  gm = await relGeom();
+  ok('cards one above the other: the relation still meets its rows, from the side', near(gm.start[1], gm.y.cust) && gm.start[0] === gm.o.x + gm.o.w &&
+    near(gm.end[1], gm.y.cid) && gm.end[0] === gm.c.x + gm.c.w, gm);
+  await joinedBy('Folded', [{ table: 'ord_order', x: 40, y: 40 }, { table: 'cust_customer', x: 600, y: 40 }], 'delivery_zip_', 'id_');
+  gm = await relGeom();
+  ok('a folded card shows the column a relation joins, beyond its first five, and the line meets it', gm.rows === 6 && near(gm.start[1], gm.y.zip), gm);
+
   // ---- narrow ----
   await page.viewport(700, 800);
   ok('no sideways scroll at 700px', await page.eval(`document.documentElement.scrollWidth<=document.documentElement.clientWidth+1`));

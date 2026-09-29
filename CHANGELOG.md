@@ -12,6 +12,16 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.28.6
+
+- **An ER designer relation meets the rows of the columns it joins.** Over several columns it left the card
+  from halfway between their rows — over `id_` and `total_`, from `customer_id_`, a row it does not join.
+  Now it forks just outside the card, a short stub with a dot to each of its rows. A relation over columns
+  also meets them when the two cards stand one above the other — from the side, as a bow, where it used to
+  run from edge to edge past every column — and a folded card shows the columns its relations join, in their
+  place among its first five, where a column beyond them left the line at the card's header. A relation
+  without columns meets the card's middle, as before.
+
 ## 0.28.5
 
 - **An ER designer relation can join on several columns.** The relation's panel lists the columns it joins,

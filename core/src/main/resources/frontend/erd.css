@@ -109,6 +109,8 @@
   .erd-fnote{margin:var(--space-2) 0 0;font-size:var(--text-xs);color:var(--ink-faint)}
   .erd-rel,.erd-sug{cursor:pointer}
   .erd-rel:hover>path:first-child{stroke:var(--accent)!important}
+  .erd-rel:hover .erd-fork path{stroke:var(--accent)!important}
+  .erd-rel:hover .erd-fork circle{fill:var(--accent)!important}
   .erd-sug{opacity:.8}
   .erd-sug:hover{opacity:1}
   .erd-sug-add:hover rect{stroke:var(--accent)!important}

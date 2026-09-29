@@ -45,7 +45,8 @@ A table's default business name is the name of the data object that reads it, wh
   wider (`←` `→` on the focused edge move it by 16px; a double click or `Home` resets it); the width
   is remembered in this browser.
 - **A card** shows the business name over the table name, then the first five columns — the primary key
-  first, then the changelog's order — each with its type. **+ N more** unfolds the rest and folds them
+  first, then the changelog's order — each with its type — and, where they stand in that order, the columns
+  its relations join, so every relation has its row to meet. **+ N more** unfolds the rest and folds them
   again. The width fits every column, shown or not, so unfolding makes a card longer, never wider.
 - **Expand all** and **Collapse all** in the toolbar unfold every card to all its columns, and fold them
   back to their first five. Cards an unfolded one would cover move down to make room; folding moves
@@ -63,8 +64,10 @@ A table's default business name is the name of the data object that reads it, wh
   opens with the name field focused: give it a name, a cardinality and, if you like, the columns it joins —
   a row per column pair under the two tables' names, and **+ Column pair** for a key over several columns
   (`order_id_, line_no_` → `order_id_, line_no_`), paired position by position as SQL pairs them; `×`
-  removes a pair. Dropping onto a column's row joins that column. The line leaves each card from the rows of
-  its columns — from between them, for several. Two tables can have any number of relations, each on its
+  removes a pair. Dropping onto a column's row joins that column. A relation over columns meets each card at the
+  rows of its columns, from the card's side — also when the cards stand one above the other, then as a bow
+  — and over several it forks just outside the card, a short stub with a dot to each of its rows, so it never
+  points at a row it does not join. A relation without columns meets the card's middle. Two tables can have any number of relations, each on its
   own line: an order's billing and its delivery address are two. The line ends in crow's feet with the counts beside
   them, for whoever has never seen the notation, and `⇄` turns the relation round, each table keeping its
   own end.

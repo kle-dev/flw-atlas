@@ -149,6 +149,17 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.28.6</h3>
+        <ul>
+          <li><b>An ER designer relation meets the rows of the columns it joins.</b> Over several columns it
+              left the card from halfway between their rows — over <code>id_</code> and <code>total_</code>,
+              from <code>customer_id_</code>, a row it does not join. Now it forks just outside the card, a
+              short stub with a dot to each of its rows. A relation over columns also meets them when the
+              two cards stand one above the other — from the side, as a bow, where it used to run from edge
+              to edge past every column — and a folded card shows the columns its relations join, in their
+              place among its first five, where a column beyond them left the line at the card's header. A
+              relation without columns meets the card's middle, as before.</li>
+        </ul>
         <h3>0.28.5</h3>
         <ul>
           <li><b>An ER designer relation can join on several columns.</b> The relation's panel lists the
@@ -560,12 +571,6 @@
               in the tooltip. Each block folds at its title and stays folded. Dragging the stripe narrow
               again after it had been wide now works too — the platform's foldable group reported its last
               width as its minimum.</li>
-          <li><b>The Hub says what it could not do, where it could not do it.</b> A Design workspace list
-              that cannot be read shows the reason under the workspace picker with <i>Retry</i>, instead of
-              a balloon that was gone by the time anyone looked; the picker says <i>loading workspaces…</i>
-              while it asks. The model count's row says <i>scanning…</i> or <i>index failed</i> while there
-              is no index — it used to go blank, because a disabled link hides itself. A removed environment
-              is said once, in the attention line and in the picker, not also in a red note beside it.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>
