@@ -15,10 +15,11 @@
 
 /*__ERD_CORE_START__*/
 // The pure part — no DOM, no explorer globals — so scripts/erd-selftest.mjs can run it in Node.
-// Version 2 added frames and a count at each end of a relation: a page of version 1 would read such a file
-// with its frames gone and `0..n` defaulted, so it is refused there rather than half-read. Version 1 files
-// are read as they are — their `1:n` is a valid cardinality of this version too.
-const ERD_FORMAT='atlas-erd', ERD_FORMAT_VERSION=2;
+// Version 2 added frames and a count at each end of a relation, version 3 relations over several columns:
+// an older page would read such a file with its frames gone, `0..n` defaulted or a relation's columns lost,
+// so it is refused there rather than half-read. Older files are read as they are — their `1:n` is a valid
+// cardinality, their one column a valid column list, of this version too.
+const ERD_FORMAT='atlas-erd', ERD_FORMAT_VERSION=3;
 /**
  * What one end of a relation can say: how many rows of the table at that end one row of the other table
  * has — exactly one, zero or one, one or more, zero or more. A minimum (0 or 1) and a maximum (1 or many),
@@ -136,49 +137,103 @@ function erdCardinality(s){
 const erdEndOne=e=>e==='1'||e==='0..1';
 
 /**
- * Relations the models already state, as proposals: a data object field that references another data
- * object (its relationship type becomes the cardinality — one-to-one 1:1, one-to-many 1:0..n, as the model
- * says; it states no minimum, and many without one is zero or more), and a database service's column
- * relation to another service. Both ends must be tables; the id is stable, so a dismissed proposal stays
- * dismissed across reloads and in the diagram file.
+ * Relations the models already state, as proposals, each over the columns it joins when the models say:
+ *
+ * - a database service's column relation — its column refers to a column of another service's table
+ *   (`customer_id_` → `customerService.id`): a lookup, many rows to one, over exactly those columns;
+ * - a data object field that references another data object. Its relationship type is the field's own
+ *   count — one-to-one 1:1, one-to-many 1:0..n, as the model says — and its columns are those of the field's
+ *   mapping in the object's service, when that mapping is a column relation.
+ *
+ * Two proposals over the same columns are one relation told twice: they become one, named as the data
+ * object names it, counted as the service's schema counts it. So is a data object field without columns
+ * that is the only one between two tables with a single proposal over columns. Anything else stays apart —
+ * two fields of one object that both refer to addresses are two relations. Both ends must be tables; the
+ * id is stable, so a dismissed proposal stays dismissed across reloads and in the diagram file.
  */
-function erdSuggestions(nodes, edges){
-  const tableOfDo=new Map(), tableOfSvc=new Map(), label=new Map();
+function erdSuggestions(nodes){
+  const svc=new Map(), doOf=new Map();
   (nodes||[]).forEach(n=>{
-    const d=(n&&n.data)||{};
     if(!n) return;
-    label.set(n.id, n.label||n.key);
-    if(n.type==='dataObject' && d.serviceTableName) tableOfDo.set(n.key, erdKey(d.serviceTableName));
-    if(n.type==='service' && d.tableName) tableOfSvc.set(n.id, erdKey(d.tableName));
+    const d=n.data||{};
+    if(n.type==='service' && d.tableName) svc.set(n.key, {key:n.key, label:n.label||n.key, table:erdKey(d.tableName), columns:d.columns||[]});
+    if(n.type==='dataObject' && d.serviceTableName) doOf.set(n.key, {table:erdKey(d.serviceTableName), service:d.service||null});
   });
-  const out=[], seen=new Set();
+  // the column a relation refers to: the referenced service's mapping of that name, else the name as written
+  const target=rel=>{
+    const t=rel && svc.get(rel.service);
+    if(!t) return null;
+    const m=t.columns.find(c=>c && c.name===rel.column);
+    return {table:t.table, label:t.label, column:(m && m.columnName) || rel.column || ''};
+  };
+  const fromSvc=[], fromDo=[], seen=new Set();
+  svc.forEach(s=>s.columns.forEach(c=>{
+    const t=c && c.columnName && target(c.relation);
+    if(!t) return;
+    const id='service:'+s.key+'#'+c.columnName;
+    if(seen.has(id)) return;
+    seen.add(id);
+    fromSvc.push({id, from:s.table, to:t.table, pairs:[{from:c.columnName, to:t.column}], cardinality:'0..n:1', label:'',
+      why:'Service '+s.label+' — column '+c.columnName+' refers to '+t.label+(c.relation.column?'.'+c.relation.column:'')});
+  }));
   (nodes||[]).forEach(n=>{
-    if(!n || n.type!=='dataObject') return;
-    const from=tableOfDo.get(n.key);
-    if(!from) return;
+    if(!n || n.type!=='dataObject' || !doOf.has(n.key)) return;
+    const own=doOf.get(n.key), s=own.service && svc.get(own.service);
     ((n.data||{}).columns||[]).forEach(c=>{
-      if(!c || !c.refDataObject) return;
-      const to=tableOfDo.get(c.refDataObject);
-      if(!to) return;
+      if(!c || !c.refDataObject || !doOf.has(c.refDataObject)) return;
       const id='dataObject:'+n.key+'#'+c.name;
       if(seen.has(id)) return;
       seen.add(id);
-      out.push({id, from, to, cardinality:c.relationship==='one-to-many'?'1:0..n':'1:1', label:c.label||c.name||'',
-        why:'Data object '+(n.label||n.key)+' — field '+(c.label||c.name)+' refers to '+c.refDataObject+
-            ' ('+(c.relationship||'relation')+')'});
+      const m=s && s.columns.find(x=>x && x.name===c.name && x.columnName), t=m && target(m.relation);
+      fromDo.push({id, from:own.table, to:doOf.get(c.refDataObject).table, pairs:t?[{from:m.columnName, to:t.column}]:[],
+        cardinality:c.relationship==='one-to-many'?'1:0..n':'1:1', label:c.label||c.name||'',
+        why:'Data object '+(n.label||n.key)+' — field '+(c.label||c.name)+' refers to '+c.refDataObject+' ('+(c.relationship||'relation')+')'});
     });
   });
-  (edges||[]).forEach(e=>{
-    if(!e || e.rel!=='relates-to-service') return;
-    const from=tableOfSvc.get(e.s), to=tableOfSvc.get(e.t);
-    if(!from || !to) return;
-    const id='service:'+String(e.s).replace(/^service:/,'')+'>'+String(e.t).replace(/^service:/,'');
-    if(seen.has(id)) return;
-    seen.add(id);
-    out.push({id, from, to, cardinality:'0..n:1', label:'',
-      why:'Service '+(label.get(e.s)||e.s)+' has a column relation to '+(label.get(e.t)||e.t)});
+  const colsOf=sg=>sg.pairs.map(p=>erdKey(p.from)).sort().join(',');
+  const sig=sg=>sg.from+'>'+sg.to+'#'+colsOf(sg);
+  const pair=sg=>[sg.from, sg.to].sort().join('\u0000');
+  // the service's count and the data object's name and id: the id a dismissal was stored under stays
+  const merge=(sv, dob)=>Object.assign({}, sv, {id:dob.id, label:dob.label||sv.label, why:dob.why+' · '+sv.why});
+  const out=fromSvc.slice();
+  fromDo.forEach(dob=>{
+    const same=dob.pairs.length ? out.findIndex(x=>x.id.indexOf('service:')===0 && sig(x)===sig(dob))
+      : (()=>{
+        const onPair=out.filter(x=>pair(x)===pair(dob) && x.pairs.length && x.id.indexOf('service:')===0);
+        const alone=fromDo.filter(x=>pair(x)===pair(dob) && !x.pairs.length).length===1;
+        return onPair.length===1 && alone ? out.indexOf(onPair[0]) : -1;
+      })();
+    if(same>=0) out[same]=merge(out[same], dob); else out.push(dob);
   });
-  return out;
+  // the data objects' own first, as the models name them; then what only a service says
+  return out.filter(x=>x.id.indexOf('dataObject:')===0).concat(out.filter(x=>x.id.indexOf('dataObject:')!==0));
+}
+
+/**
+ * The proposals a diagram does not have yet: both tables on it ([onCanvas]), not dismissed, not drawn. A
+ * drawn relation accounts for one proposal between its two tables — the one over its columns; else, the
+ * first one left that names no columns; else, drawn without columns itself, the first one left at all — so a
+ * second relation between two tables (a billing and a delivery address) is still proposed once the first is
+ * drawn, and one drawn by hand hides what it already shows.
+ */
+function erdOpenSuggestions(suggestions, relations, onCanvas, dismissed){
+  const pair=x=>[x.from, x.to].sort().join('\u0000');
+  const cset=list=>list.map(erdKey).filter(Boolean).sort().join(',');
+  const left=(suggestions||[]).filter(sg=>onCanvas.has(sg.from) && onCanvas.has(sg.to) && (dismissed||[]).indexOf(sg.id)<0);
+  const take=sg=>{ left.splice(left.indexOf(sg), 1); };
+  const rest=[];
+  (relations||[]).forEach(r=>{
+    const pairs=(r.pairs||[]).filter(p=>p.from||p.to);
+    // the relation's columns on the table the proposal starts from — the side its foreign key is on
+    const hit=pairs.length && left.find(sg=>pair(sg)===pair(r) && sg.pairs.length &&
+      cset(sg.pairs.map(p=>p.from))===cset(pairs.map(p=>r.from===sg.from?p.from:p.to)));
+    if(hit) take(hit); else rest.push({r, cols:pairs.length>0});
+  });
+  rest.forEach(({r, cols})=>{
+    const hit=left.find(sg=>pair(sg)===pair(r) && !sg.pairs.length) || (!cols && left.find(sg=>pair(sg)===pair(r)));
+    if(hit) take(hit);
+  });
+  return left;
 }
 
 /**
@@ -216,7 +271,7 @@ function erdNormalize(doc){
     let id=str(r.id,64)||('r'+(i+1));
     while(ids.has(id)) id+='_';
     ids.add(id);
-    relations.push({id, from, to, fromColumn:str(r.fromColumn,128), toColumn:str(r.toColumn,128),
+    relations.push({id, from, to, pairs:erdPairs(r.fromColumn, r.toColumn),
       cardinality:erdCardinality(r.cardinality)||'1:0..n', label:str(r.label,200)});
   });
   const frames=[], fids=new Set();
@@ -233,6 +288,17 @@ function erdNormalize(doc){
     dismissed:(Array.isArray(doc.dismissed)?doc.dismissed:[]).filter(s=>typeof s==='string').slice(0,1000)};
 }
 
+/**
+ * The columns a relation joins, as the file writes them — `fromColumn` and `toColumn` each a name, or for a
+ * relation over several columns a list of them, position by position, as SQL writes `FOREIGN KEY (a, b)
+ * REFERENCES t (x, y)` — read into pairs. A side may leave a column out (`''`); a pair with neither is none.
+ */
+function erdPairs(fromColumn, toColumn){
+  const list=v=>(Array.isArray(v)?v:[v]).slice(0,64).map(x=>typeof x==='string'?x.slice(0,128):'');
+  const a=list(fromColumn), b=list(toColumn), out=[];
+  for(let i=0; i<Math.max(a.length, b.length); i++) if(a[i] || b[i]) out.push({from:a[i]||'', to:b[i]||''});
+  return out;
+}
 /** A diagram as the file format (see site/pages/erd.md). Relations name their tables as written. */
 function erdToDoc(d, meta){
   meta=meta||{};
@@ -245,13 +311,19 @@ function erdToDoc(d, meta){
     color:t.color||'', expanded:!!t.expanded, order:(t.order||[]).slice(),
     columns:(t.columns||[]).map(c=>c.pk?{name:c.name, type:c.type==null?null:c.type, pk:true}:{name:c.name, type:c.type==null?null:c.type})}));
   doc.relations=(d.relations||[]).map(r=>({id:r.id, from:nameOf.get(r.from)||r.from, to:nameOf.get(r.to)||r.to,
-    fromColumn:r.fromColumn||'', toColumn:r.toColumn||'', cardinality:r.cardinality, label:r.label||''}));
+    ...columnsOut(r.pairs), cardinality:r.cardinality, label:r.label||''}));
   doc.frames=(d.frames||[]).map(fr=>({id:fr.id, name:fr.name||'', x:Math.round(fr.x), y:Math.round(fr.y),
     w:Math.round(fr.w), h:Math.round(fr.h), color:fr.color||''}));
   doc.dismissed=(d.dismissed||[]).slice();
   return doc;
 }
 
+/** A relation's columns for the file: one name each side for one pair, lists for several (see [erdPairs]). */
+function columnsOut(pairs){
+  const ps=(pairs||[]).filter(p=>p.from||p.to);
+  if(ps.length>1) return {fromColumn:ps.map(p=>p.from||''), toColumn:ps.map(p=>p.to||'')};
+  return {fromColumn:(ps[0]&&ps[0].from)||'', toColumn:(ps[0]&&ps[0].to)||''};
+}
 /** Whether two diagrams say the same thing — the "changed here" test for a diagram from a project file. */
 function erdSame(a, b){ return JSON.stringify(erdToDoc(a))===JSON.stringify(erdToDoc(b)); }
 
@@ -664,7 +736,7 @@ let S=null;          // the page's state, built on first use (the explorer's glo
 function state(){
   if(S) return S;
   const catalog=erdCatalog(DATA.nodes||[]);
-  S={catalog, byKey:new Map(catalog.map(t=>[t.key,t])), suggestions:erdSuggestions(DATA.nodes||[], DATA.edges||[]),
+  S={catalog, byKey:new Map(catalog.map(t=>[t.key,t])), suggestions:erdSuggestions(DATA.nodes||[]),
     diagrams:[], activeId:null, undo:[], redo:[], sel:null, pop:null, root:null, filter:'', present:false,
     storageOk:true, projectErrors:[], lastCoalesce:null, drag:null, dirtyTimer:0, q:'', results:[], resIdx:0, tool:null};
   load();
@@ -798,11 +870,12 @@ function sideOf(A, B){
   return B.y+B.h/2>A.y+A.h/2 ? ['bottom','top'] : ['top','bottom'];
 }
 const NORMAL={left:[-1,0], right:[1,0], top:[0,-1], bottom:[0,1]};
-function anchorOf(L, side, column, offset){
+function anchorOf(L, side, columns, offset){
   let y=L.y+L.head/2, x=L.x+L.w/2;
   if(side==='left'||side==='right'){
-    const r=column && L.rows.find(r=>erdKey(r.c.name)===erdKey(column));
-    y=r ? L.y+r.y+ROW/2 : y+offset;
+    // over several columns, from the middle of the rows the card shows of them
+    const rows=(columns||[]).map(c=>c && L.rows.find(r=>erdKey(r.c.name)===erdKey(c))).filter(Boolean);
+    y=rows.length ? L.y+rows.reduce((t,r)=>t+r.y, 0)/rows.length+ROW/2 : y+offset;
     x=side==='left'?L.x:L.x+L.w;
   } else {
     x+=offset;
@@ -820,7 +893,7 @@ function route(r, lays, fan){
     return {p1, p2, c1:{x:p1.x+k, y:p1.y-10}, c2:{x:p2.x+k, y:p2.y+10}};
   }
   const [sa, sb]=sideOf(A, B);
-  const p1=anchorOf(A, sa, r.fromColumn, fan*14), p2=anchorOf(B, sb, r.toColumn, fan*14);
+  const ps=r.pairs||[], p1=anchorOf(A, sa, ps.map(p=>p.from), fan*14), p2=anchorOf(B, sb, ps.map(p=>p.to), fan*14);
   const k=Math.max(36, Math.min(160, Math.hypot(p2.x-p1.x, p2.y-p1.y)/3));
   return {p1, p2, c1:{x:p1.x+p1.n[0]*k, y:p1.y+p1.n[1]*k}, c2:{x:p2.x+p2.n[0]*k, y:p2.y+p2.n[1]*k}};
 }
@@ -1013,17 +1086,7 @@ function spreadPills(pills){
   });
 }
 /** Proposals worth showing: both tables on the canvas, not dismissed, and not already drawn by hand. */
-function visibleSuggestions(d, lays){
-  // One proposal per pair of tables: a data object and its service often state the same relation twice,
-  // and the data object's — which knows the cardinality — comes first.
-  const taken=new Set(d.relations.map(r=>[r.from,r.to].sort().join('\u0000')));
-  return S.suggestions.filter(sg=>{
-    const pair=[sg.from,sg.to].sort().join('\u0000');
-    if(!lays.has(sg.from) || !lays.has(sg.to) || d.dismissed.indexOf(sg.id)>=0 || taken.has(pair)) return false;
-    taken.add(pair);
-    return true;
-  });
-}
+function visibleSuggestions(d, lays){ return erdOpenSuggestions(S.suggestions, d.relations, new Set(lays.keys()), d.dismissed); }
 /** What the drawing covers — its tables and its frames — with [pad] around it; null for an empty one. */
 function bounds(lays, pad, frames){
   let x0=Infinity, y0=Infinity, x1=-Infinity, y1=-Infinity;
@@ -1293,7 +1356,7 @@ function removeSelected(){
 function newRelId(d){ let i=d.relations.length+1; while(d.relations.some(r=>r.id==='r'+i)) i++; return 'r'+i; }
 function addRelation(from, to, toColumn, extra){
   let id=null;
-  mutate(d=>{ id=newRelId(d); d.relations.push(Object.assign({id, from, to, fromColumn:'', toColumn:toColumn||'', cardinality:'1:0..n', label:''}, extra||{})); });
+  mutate(d=>{ id=newRelId(d); d.relations.push(Object.assign({id, from, to, pairs:toColumn?[{from:'', to:toColumn}]:[], cardinality:'1:0..n', label:''}, extra||{})); });
   return id;
 }
 /**
@@ -1505,7 +1568,7 @@ function wireSearch(){
 function acceptSuggestion(id){
   const sg=S.suggestions.find(x=>x.id===id);
   if(!sg) return;
-  const rid=addRelation(sg.from, sg.to, '', {cardinality:sg.cardinality, label:sg.label});
+  const rid=addRelation(sg.from, sg.to, '', {cardinality:sg.cardinality, label:sg.label, pairs:sg.pairs.map(p=>({from:p.from, to:p.to}))});
   if(rid){ S.sel={kind:'rel', id:rid}; draw(); toast('Relation added — click it to name it or change the cardinality'); }
 }
 function dismissSuggestion(id){ mutate(d=>{ if(d.dismissed.indexOf(id)<0) d.dismissed.push(id); }); }
@@ -1957,8 +2020,9 @@ function openRelPop(id, ev, fresh){
     // one row per end, in the order the cardinality is written: how many of this table per row of the other
     '<div class="erd-fld"><span>Cardinality</span>'+endRow(0, nm(A), nm(B), ends[0])+endRow(1, nm(B), nm(A), ends[1])+
     '<div class="erd-say"></div></div>'+
-    '<div class="erd-two"><label class="erd-fld"><span>From column</span><select data-f="fromColumn">'+opts(A, r.fromColumn)+'</select></label>'+
-      '<label class="erd-fld"><span>To column</span><select data-f="toColumn">'+opts(B, r.toColumn)+'</select></label></div>'+
+    '<div class="erd-fld"><span>Columns <em>several, for a key over several columns</em></span><div class="erd-pairs"></div>'+
+      '<button type="button" class="tbtn erd-addpair" data-pa="addpair" data-tip="Join on one more column — position by position, as a key over several columns does">'+
+      '+ Column pair</button></div>'+
     '<div class="erd-pop-a"><button type="button" class="tbtn erd-danger" data-pa="delete">Delete the relation</button></div>';
   const g=els.lays && route(r, els.lays, 0), svgR=els.svg.getBoundingClientRect(), v=view();
   const near=ev&&ev.clientX!=null?{x:ev.clientX+14, y:ev.clientY-20}:g?{x:svgR.left+mid(g).x*v.s+v.tx+14, y:svgR.top+mid(g).y*v.s+v.ty-20}:null;
@@ -1973,7 +2037,26 @@ function openRelPop(id, ev, fresh){
   };
   say();
   pop.querySelector('[data-f=label]').addEventListener('input', e2=>{ const val=e2.target.value; mutate(d=>{ const x=d.relations.find(x=>x.id===id); if(x) x.label=val.slice(0,200); }, 'label:'+id); });
-  pop.querySelectorAll('select[data-f]').forEach(s=>s.addEventListener('change', ()=>{ const k=s.dataset.f, val=s.value; mutate(d=>{ const x=d.relations.find(x=>x.id===id); if(x) x[k]=val; }); }));
+  // The rows being edited, one more than the relation has while an added one is still empty: a relation keeps
+  // only the pairs that name a column, and an empty row is only a place to choose one.
+  const rows=(r.pairs||[]).map(p=>({from:p.from, to:p.to}));
+  if(!rows.length) rows.push({from:'', to:''});
+  const savePairs=()=>mutate(d=>{ const x=d.relations.find(x=>x.id===id); if(x) x.pairs=rows.filter(p=>p.from||p.to).map(p=>({from:p.from, to:p.to})); });
+  const renderPairs=()=>{
+    const x=active().relations.find(x=>x.id===id); if(!x) return;
+    const a=active().tables.find(t=>t.key===x.from), b=active().tables.find(t=>t.key===x.to);
+    pop.querySelector('.erd-pairs').innerHTML='<div class="erd-pairh"><span>'+esc(nm(a))+'</span><span></span><span>'+esc(nm(b))+'</span><span></span></div>'+
+      rows.map((p,i)=>'<div class="erd-pair"><select data-side="from" data-i="'+i+'" aria-label="Column of '+esc(nm(a))+'">'+opts(a, p.from)+'</select>'+
+        '<span class="erd-arrow">→</span><select data-side="to" data-i="'+i+'" aria-label="Column of '+esc(nm(b))+'">'+opts(b, p.to)+'</select>'+
+        '<button type="button" class="erd-x" data-pa="delpair" data-i="'+i+'" data-tip="Remove this column pair" aria-label="Remove this column pair">×</button></div>').join('');
+  };
+  renderPairs();
+  pop.addEventListener('change', e2=>{
+    const sel=e2.target.closest('select[data-side]');
+    if(!sel) return;
+    rows[+sel.dataset.i][sel.dataset.side]=sel.value;
+    savePairs();
+  });
   pop.addEventListener('click', e2=>{
     const c=e2.target.closest('[data-end]');
     if(c){
@@ -1984,9 +2067,18 @@ function openRelPop(id, ev, fresh){
     const a=e2.target.closest('[data-pa]');
     if(!a) return;
     if(a.dataset.pa==='delete'){ S.sel={kind:'rel', id}; removeSelected(); }
+    else if(a.dataset.pa==='addpair'){
+      rows.push({from:'', to:''}); renderPairs();
+      const last=pop.querySelectorAll('.erd-pair select[data-side=from]'); if(last.length) last[last.length-1].focus();
+    }
+    else if(a.dataset.pa==='delpair'){
+      rows.splice(+a.dataset.i, 1);
+      if(!rows.length) rows.push({from:'', to:''});
+      savePairs(); renderPairs();
+    }
     else if(a.dataset.pa==='swap'){
       // the relation turned round, read from the other table: each table keeps its own end
-      mutate(d=>{ const x=d.relations.find(x=>x.id===id); if(!x) return; [x.from,x.to]=[x.to,x.from]; [x.fromColumn,x.toColumn]=[x.toColumn,x.fromColumn];
+      mutate(d=>{ const x=d.relations.find(x=>x.id===id); if(!x) return; [x.from,x.to]=[x.to,x.from]; x.pairs=(x.pairs||[]).map(p=>({from:p.to, to:p.from}));
         x.cardinality=erdEnds(x.cardinality).reverse().join(':'); });
       openRelPop(id, null);
     }

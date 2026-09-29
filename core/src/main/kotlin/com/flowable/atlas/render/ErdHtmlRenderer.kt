@@ -40,10 +40,6 @@ object ErdHtmlRenderer {
         payload["atlasVersion"] = version
         payload["explorer"] = explorerFile
         payload["nodes"] = nodes(graph["nodes"])
-        payload["edges"] = (graph["edges"] as? List<*>).orEmpty().mapNotNull { e ->
-            val m = e as? Map<*, *> ?: return@mapNotNull null
-            if (m["rel"] == "relates-to-service") linkedMapOf("s" to m["s"], "t" to m["t"], "rel" to m["rel"]) else null
-        }
         payload["diagrams"] = ErdDiagramFiles.find(root)
         return composeTemplate()
             .replace("__ATLAS_VERSION__", "Atlas $version")
@@ -67,8 +63,8 @@ object ErdHtmlRenderer {
     /**
      * The nodes the designer's catalog and proposals read, each cut down to the fields they use: a
      * changelog's columns (name, type, table, key) and authority, a database service's table and column
-     * mappings, a table-backed data object's name and fields. Everything else in the graph stays in the
-     * explorer.
+     * mappings — with each column's relation to another service, the columns a proposed relation joins — and
+     * a table-backed data object's name, service and fields. Everything else in the graph stays in the explorer.
      */
     private fun nodes(all: Any?): List<Map<String, Any?>> =
         (all as? List<*>).orEmpty().mapNotNull { n ->
@@ -90,13 +86,14 @@ object ErdHtmlRenderer {
                     if (table.isNullOrBlank()) return@mapNotNull null
                     linkedMapOf("tableName" to table, "columns" to (d["columns"] as? List<*>).orEmpty().mapNotNull { c ->
                         val cm = c as? Map<*, *> ?: return@mapNotNull null
-                        linkedMapOf("name" to cm["name"], "columnName" to cm["columnName"], "type" to cm["type"])
+                        linkedMapOf<String, Any?>("name" to cm["name"], "columnName" to cm["columnName"], "type" to cm["type"])
+                            .also { cm["relation"]?.let { r -> it["relation"] = r } }
                     })
                 }
                 "dataObject" -> {
                     val table = d["serviceTableName"] as? String
                     if (table.isNullOrBlank()) return@mapNotNull null
-                    linkedMapOf("name" to d["name"], "serviceTableName" to table, "columns" to (d["columns"] as? List<*>).orEmpty().mapNotNull { c ->
+                    linkedMapOf("name" to d["name"], "serviceTableName" to table, "service" to d["service"], "columns" to (d["columns"] as? List<*>).orEmpty().mapNotNull { c ->
                         val cm = c as? Map<*, *> ?: return@mapNotNull null
                         linkedMapOf<String, Any?>("name" to cm["name"], "label" to cm["label"], "type" to cm["type"]).also {
                             cm["refDataObject"]?.let { r -> it["refDataObject"] = r; it["relationship"] = cm["relationship"] }

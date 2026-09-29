@@ -26,7 +26,7 @@ if (a < 0 || b < 0 || b < a) {
 }
 const E = new Function(`"use strict";${source.slice(a + START.length, b)};
   return {erdKey, erdCatalog, erdDefaultOrder, erdOrder, erdSuggestions, erdNormalize, erdToDoc, erdSame, erdEnds, erdContrast, erdSlug, erdArrange, erdSearch, erdColumnHits, erdTableMatches,
-    erdEnd, erdCardinality, erdEndOne, erdFrameParents, erdArrangeFramed,
+    erdEnd, erdCardinality, erdEndOne, erdFrameParents, erdArrangeFramed, erdOpenSuggestions, erdPairs,
     ERD_FORMAT, ERD_FORMAT_VERSION, ERD_ENDS, ERD_FRAME_PAD, ERD_FRAME_TOP};`)();
 
 let failed = 0, passed = 0;
@@ -49,19 +49,24 @@ const nodes = [
              {name:'ID_', type:'VARCHAR(64)', table:'ORD_ORDER'},     // the same column again, other case: once
              {name:'customer_id_', type:'VARCHAR(64)', table:'ord_order'},
              {name:'id_', type:'VARCHAR(64)', table:'cust_customer', pk:true}, {name:'name_', type:'VARCHAR(255)', table:'cust_customer'}]}},
-  {id:'service:orderService', type:'service', key:'orderService', label:'Order Service', data:{tableName:'ORD_ORDER', columns:[]}},
+  {id:'service:orderService', type:'service', key:'orderService', label:'Order Service', data:{tableName:'ORD_ORDER', columns:[
+    {name:'id', columnName:'id_', type:'string'},
+    {name:'customer', columnName:'customer_id_', type:'object-relation', relation:{service:'customerService', column:'id'}},
+    {name:'payer', columnName:'payer_id_', type:'object-relation', relation:{service:'customerService', column:'id'}},
+    {name:'lost', columnName:'lost_id_', type:'object-relation', relation:{service:'noSuchService', column:'id'}}]}},
+  {id:'service:customerService', type:'service', key:'customerService', label:'Customer Service', data:{tableName:'cust_customer',
+    columns:[{name:'id', columnName:'id_', type:'string'}]}},
   {id:'service:auditService', type:'service', key:'auditService', label:'Audit Service', data:{tableName:'aud_entry',
-    columns:[{name:'id', columnName:'id_', type:'string'}, {name:'when', columnName:'when_', type:'date'}, {name:'x', columnName:'id_', type:'string'}]}},
+    columns:[{name:'id', columnName:'id_', type:'string'}, {name:'when', columnName:'when_', type:'date'}, {name:'x', columnName:'id_', type:'string'},
+             {name:'order', columnName:'order_id_', type:'object-relation', relation:{service:'orderService', column:'id'}}]}},
   {id:'service:restService', type:'service', key:'restService', label:'REST', data:{}},
-  {id:'dataObject:orderDO', type:'dataObject', key:'orderDO', label:'Order', data:{name:'Order', serviceTableName:'ord_order',
+  {id:'dataObject:orderDO', type:'dataObject', key:'orderDO', label:'Order', data:{name:'Order', serviceTableName:'ord_order', service:'orderService',
     columns:[{name:'customer', label:'Customer', type:'DATA-OBJECT', refDataObject:'customerDO', relationship:'one-to-one'},
+             {name:'payer', label:'Payer', type:'DATA-OBJECT', refDataObject:'customerDO', relationship:'one-to-one'},
              {name:'lines', label:'Lines', type:'DATA-OBJECT', refDataObject:'lineDO', relationship:'one-to-many'}]}},
   {id:'dataObject:customerDO', type:'dataObject', key:'customerDO', label:'Customer', data:{name:'Customer', serviceTableName:'cust_customer'}},
   {id:'dataObject:customerDO2', type:'dataObject', key:'customerDO2', label:'Customer (lite)', data:{name:'Customer (lite)', serviceTableName:'CUST_CUSTOMER'}},
 ];
-const edges = [{s:'service:auditService', t:'service:orderService', rel:'relates-to-service'},
-               {s:'service:restService', t:'service:orderService', rel:'relates-to-service'}];
-
 const cat = E.erdCatalog(nodes);
 eq('every table once, sorted by name', cat.map(t => t.key), ['AUD_ENTRY', 'CUST_CUSTOMER', 'ORD_ORDER']);
 const order = cat.find(t => t.key === 'ORD_ORDER');
@@ -73,7 +78,7 @@ eq('services and data objects behind a table', [order.services, order.dataObject
 eq('one data object → its name is the business name', order.alias, 'Order');
 eq('two data objects → no guess', cat.find(t => t.key === 'CUST_CUSTOMER').alias, '');
 const audit = cat.find(t => t.key === 'AUD_ENTRY');
-eq('a table only a service knows: its mapped columns, once', [audit.source, audit.columns.map(c => c.name)], ['service', ['id_', 'when_']]);
+eq('a table only a service knows: its mapped columns, once', [audit.source, audit.columns.map(c => c.name)], ['service', ['id_', 'when_', 'order_id_']]);
 ok('…with the service’s logical types, marked', audit.columns.every(c => c.logical) && audit.columns[1].type === 'date');
 eq('no tables, no crash', E.erdCatalog(null), []);
 
@@ -84,15 +89,44 @@ eq('a remembered order keeps its place; a gone column drops, a new one joins at 
 eq('an empty memory is the default order', E.erdOrder([], order.columns), E.erdDefaultOrder(order.columns));
 
 // ---- suggestions ----
-const sug = E.erdSuggestions(nodes, edges);
-eq('what the models state, between tables only', sug.map(s => [s.id, s.from, s.to, s.cardinality, s.label]), [
-  ['dataObject:orderDO#customer', 'ORD_ORDER', 'CUST_CUSTOMER', '1:1', 'Customer'],
-  ['service:auditService>orderService', 'AUD_ENTRY', 'ORD_ORDER', '0..n:1', ''],
+const sug = E.erdSuggestions(nodes);
+const cols = s => s.pairs.map(p => p.from + '→' + p.to).join(',');
+eq('what the models state, between tables only, each over its columns', sug.map(s => [s.id, s.from, s.to, cols(s), s.cardinality, s.label]), [
+  ['dataObject:orderDO#customer', 'ORD_ORDER', 'CUST_CUSTOMER', 'customer_id_→id_', '0..n:1', 'Customer'],
+  ['dataObject:orderDO#payer', 'ORD_ORDER', 'CUST_CUSTOMER', 'payer_id_→id_', '0..n:1', 'Payer'],
+  ['service:auditService#order_id_', 'AUD_ENTRY', 'ORD_ORDER', 'order_id_→id_', '0..n:1', ''],
 ]);
+ok('a data object field and its service column are one relation, and says so twice', /field Customer/.test(sug[0].why) && /column customer_id_/.test(sug[0].why), sug[0].why);
 ok('each says where it comes from', sug.every(s => s.why && s.why.length > 10));
+{ // a field the service does not map to a column: one relation when it is the only one between its tables
+  const n = [
+    {type:'service', key:'aS', data:{tableName:'A', columns:[{name:'b', columnName:'b_id_', relation:{service:'bS', column:'id'}}]}},
+    {type:'service', key:'bS', data:{tableName:'B', columns:[]}},
+    {type:'dataObject', key:'aDO', label:'A', data:{serviceTableName:'A', service:'aS', columns:[{name:'theB', label:'The B', refDataObject:'bDO'}]}},
+    {type:'dataObject', key:'bDO', data:{serviceTableName:'B'}},
+  ];
+  eq('…merged into the one over columns', E.erdSuggestions(n).map(s => [s.id, cols(s), s.label]), [['dataObject:aDO#theB', 'b_id_→id', 'The B']]);
+  n[2].data.columns.push({name:'otherB', label:'Other B', refDataObject:'bDO'});
+  eq('…but two of them are not guessed at', E.erdSuggestions(n).map(s => [s.id, cols(s)]),
+    [['dataObject:aDO#theB', ''], ['dataObject:aDO#otherB', ''], ['service:aS#b_id_', 'b_id_→id']]);
+}
+{ // what a diagram still lacks: a drawn relation accounts for one proposal between its tables
+  const on = new Set(['ORD_ORDER', 'CUST_CUSTOMER']);
+  const open = (rels, dismissed) => E.erdOpenSuggestions(sug, rels, on, dismissed || []).map(s => s.id);
+  eq('both tables on the canvas', open([]), ['dataObject:orderDO#customer', 'dataObject:orderDO#payer']);
+  eq('a dismissed one is gone', open([], ['dataObject:orderDO#payer']), ['dataObject:orderDO#customer']);
+  eq('a relation over its columns takes that one — the second relation between the tables is still proposed',
+    open([{from:'ORD_ORDER', to:'CUST_CUSTOMER', pairs:[{from:'CUSTOMER_ID_', to:'id_'}]}]), ['dataObject:orderDO#payer']);
+  eq('…drawn the other way round too', open([{from:'CUST_CUSTOMER', to:'ORD_ORDER', pairs:[{from:'id_', to:'payer_id_'}]}]), ['dataObject:orderDO#customer']);
+  eq('a relation without columns takes the first one left', open([{from:'ORD_ORDER', to:'CUST_CUSTOMER', pairs:[]}]), ['dataObject:orderDO#payer']);
+  eq('…two take both', open([{from:'ORD_ORDER', to:'CUST_CUSTOMER', pairs:[]}, {from:'CUST_CUSTOMER', to:'ORD_ORDER', pairs:[]}]), []);
+  eq('a relation over other columns is another relation', open([{from:'ORD_ORDER', to:'CUST_CUSTOMER', pairs:[{from:'note_', to:''}]}]),
+    ['dataObject:orderDO#customer', 'dataObject:orderDO#payer']);
+  eq('a table off the canvas, no proposal', E.erdOpenSuggestions(sug, [], new Set(['ORD_ORDER']), []).length, 0);
+}
 
 // ---- the file format ----
-const doc = {format:'atlas-erd', version:2, name:'Orders', project:'demo', tables:[
+const doc = {format:'atlas-erd', version:3, name:'Orders', project:'demo', tables:[
   {table:'ORD_ORDER', alias:'Order', x:10.4, y:'nope', color:'#E8590C', expanded:true, order:['id_', 5], columns:[{name:'id_', type:'VARCHAR(64)', pk:true}, {type:'x'}]},
   {table:'ord_order', alias:'duplicate'},
   {table:'CUST_CUSTOMER', color:'red'},
@@ -101,7 +135,7 @@ const doc = {format:'atlas-erd', version:2, name:'Orders', project:'demo', table
   {id:'r1', from:'ord_order', to:'CUST_CUSTOMER', cardinality:'n:1', label:'placed by', fromColumn:'customer_id_', toColumn:'id_'},
   {id:'r1', from:'ORD_ORDER', to:'CUST_CUSTOMER', cardinality:'many'},
   {from:'ORD_ORDER', to:'NOWHERE'},
-  {id:'r3', from:'CUST_CUSTOMER', to:'ORD_ORDER', cardinality:'1 : 1..*'},
+  {id:'r3', from:'CUST_CUSTOMER', to:'ORD_ORDER', cardinality:'1 : 1..*', fromColumn:['id_', 'no_', 7], toColumn:['customer_id_', 'customer_no_']},
 ], frames:[
   {id:'f1', name:'Sales', x:-20.6, y:-60, w:900, h:400, color:'#0E9F6E'},
   {id:'f1', name:'  ', x:0, y:0, w:10, h:'tall', color:'green'},
@@ -114,6 +148,12 @@ eq('a colour is a 6-digit hex or nothing', d.tables.map(t => t.color), ['#e8590c
 eq('order keeps strings only; columns need a name', [d.tables[0].order, d.tables[0].columns.length], [['id_'], 1]);
 eq('relations: ids unique, cardinality read as this page writes it, both ends present', d.relations.map(r => [r.id, r.from, r.cardinality]),
   [['r1', 'ORD_ORDER', '0..n:1'], ['r1_', 'ORD_ORDER', '1:0..n'], ['r3', 'CUST_CUSTOMER', '1:1..n']]);
+eq('a relation’s columns: one pair from two names, several from two lists, position by position', d.relations.map(r => r.pairs),
+  [[{from:'customer_id_', to:'id_'}], [], [{from:'id_', to:'customer_id_'}, {from:'no_', to:'customer_no_'}]]);
+eq('…and written back the same way', E.erdToDoc(d).relations.map(r => [r.fromColumn, r.toColumn]),
+  [['customer_id_', 'id_'], ['', ''], [['id_', 'no_'], ['customer_id_', 'customer_no_']]]);
+eq('lists of unequal length leave the other side out; a pair with neither is none', [E.erdPairs(['a', 'b'], ['x']), E.erdPairs(['', 3], [null]), E.erdPairs('a', undefined)],
+  [[{from:'a', to:'x'}, {from:'b', to:''}], [], [{from:'a', to:''}]]);
 eq('frames: ids unique, numbers rounded, at least their least size, a colour or none', d.frames,
   [{id:'f1', name:'Sales', x:-21, y:-60, w:900, h:400, color:'#0e9f6e'}, {id:'f1_', name:'  ', x:0, y:0, w:160, h:320, color:''}]);
 eq('dismissed keeps strings', d.dismissed, ['x']);
@@ -124,7 +164,7 @@ ok('a primary key is written only where there is one', back.tables[0].columns[0]
 ok('same content is the same diagram', E.erdSame(d, E.erdNormalize(back)));
 ok('a moved table is not', !E.erdSame(d, Object.assign({}, d, {tables:[Object.assign({}, d.tables[0], {x:99}), d.tables[1]]})));
 throws('refuses what is not a diagram', () => E.erdNormalize({format:'other', version:1}), /not an Atlas ER diagram/);
-throws('refuses a newer format', () => E.erdNormalize({format:'atlas-erd', version:3}), /newer Atlas/);
+throws('refuses a newer format', () => E.erdNormalize({format:'atlas-erd', version:4}), /newer Atlas/);
 { // a file from before frames and counts at each end reads as it is
   const v1 = E.erdNormalize({format:'atlas-erd', version:1, tables:[{table:'A'}, {table:'B'}],
     relations:[{from:'A', to:'B', cardinality:'1:n'}, {from:'A', to:'B', cardinality:'n:m'}, {from:'B', to:'A', cardinality:'1:1'}]});

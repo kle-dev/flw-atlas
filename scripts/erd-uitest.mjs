@@ -223,8 +223,10 @@ await withChrome(async page => {
   ok('the models propose the order → customer relation', await page.waitFor(`document.querySelector('.erd-sug')`));
   await page.click(await page.at('.erd-sug .erd-sug-add'));
   const rel1 = await page.eval(`${T}.active().relations[0]`);
-  ok('a proposal becomes a relation, with the model’s name and cardinality', rel1 && rel1.label === 'Customer' && rel1.cardinality === '1:1'
-    && rel1.from === 'ORD_ORDER' && rel1.to === 'CUST_CUSTOMER', rel1);
+  ok('a proposal becomes a relation, with the model’s name, the service’s cardinality and the columns it joins', rel1 && rel1.label === 'Customer'
+    && rel1.cardinality === '0..n:1' && rel1.from === 'ORD_ORDER' && rel1.to === 'CUST_CUSTOMER'
+    && JSON.stringify(rel1.pairs) === JSON.stringify([{ from: 'customer_id_', to: 'id_' }]), rel1);
+  ok('…and is proposed no more', await page.eval(`document.querySelectorAll('.erd-sug').length`) === 0);
 
   // ---- expand and fold ----
   await page.click(await page.at('.erd-card[data-key="ORD_ORDER"] .erd-foot'));
@@ -262,6 +264,21 @@ await withChrome(async page => {
   const turned = await page.eval(`${T}.active().relations[1]`);
   ok('⇄ turns the relation round, each table keeping its own end', turned.from === 'CUST_CUSTOMER' && turned.cardinality === '0..1:0..n', turned);
   await page.click(await page.at('.erd-pop [data-pa=swap]'));
+  // ---- the columns it joins: a pair per row, several for a key over several columns ----
+  const pick = (i, side, value) => page.eval(`(function(){ const s=document.querySelectorAll('.erd-pop select[data-side=${side}]')[${i}];
+    s.value=${JSON.stringify(value)}; s.dispatchEvent(new Event('change', {bubbles:true})); })()`);
+  const pairsNow = () => page.eval(`JSON.stringify(${T}.active().relations[1].pairs)`);
+  ok('the panel has a row for the columns, under the two tables’ names', await page.eval(`document.querySelectorAll('.erd-pop .erd-pair').length`) === 1 &&
+    /Order.*Customer/.test(await page.eval(`document.querySelector('.erd-pop .erd-pairh').textContent`)));
+  await pick(0, 'from', 'order_no_'); await pick(0, 'to', 'name_');
+  await page.click(await page.at('.erd-pop [data-pa=addpair]'));
+  ok('+ Column pair adds a row', await page.eval(`document.querySelectorAll('.erd-pop .erd-pair').length`) === 2);
+  await pick(1, 'from', 'company_'); await pick(1, 'to', 'id_');
+  ok('a relation joins on several columns, position by position', await pairsNow() === JSON.stringify([{ from: 'order_no_', to: 'name_' }, { from: 'company_', to: 'id_' }]), await pairsNow());
+  ok('…and the file writes them as two lists', JSON.stringify(await page.eval(`(function(){ const r=${T}.docOf().relations[1]; return [r.fromColumn, r.toColumn]; })()`)) ===
+    JSON.stringify([['order_no_', 'company_'], ['name_', 'id_']]));
+  await page.click(await page.at('.erd-pop [data-pa=delpair][data-i="1"]'));
+  ok('× removes a pair', await pairsNow() === JSON.stringify([{ from: 'order_no_', to: 'name_' }]), await pairsNow());
   await page.key('Escape', 'Escape');
   ok('Escape closes the panel', await page.eval(`document.querySelector('.erd-pop').hidden`));
   ok('two relations between one pair get their own lanes', await page.eval(`document.querySelectorAll('.erd-rel').length`) === 2);
@@ -337,7 +354,7 @@ await withChrome(async page => {
 
   // ---- the file format round trip, and the picture ----
   const doc = await page.eval(`${T}.docOf()`);
-  ok('the file names its format and version', doc.format === 'atlas-erd' && doc.version === 2 && doc.project === 'flowable-demo');
+  ok('the file names its format and version', doc.format === 'atlas-erd' && doc.version === 3 && doc.project === 'flowable-demo');
   ok('…carries the frame and the counts at each end', doc.frames.length === 1 && doc.frames[0].name === 'Sales' && doc.relations[1].cardinality === '0..n:0..1', doc.frames);
   ok('…carries the live columns', doc.tables.find(t => t.table.toLowerCase() === 'ord_order').columns.length >= 8);
   await page.eval(`${T}.importText(JSON.stringify(${T}.docOf()))`);

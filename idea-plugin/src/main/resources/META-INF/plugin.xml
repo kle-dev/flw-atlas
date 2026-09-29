@@ -149,6 +149,24 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.28.5</h3>
+        <ul>
+          <li><b>An ER designer relation can join on several columns.</b> The relation's panel lists the
+              columns it joins, a row per pair under the two tables' names, and <i>+ Column pair</i> adds
+              one — for a key over several columns, <code>order_id_, line_no_</code> → <code>order_id_,
+              line_no_</code>, paired position by position as SQL pairs them. The line leaves each card from
+              between its columns' rows. In the diagram file, <code>fromColumn</code> and
+              <code>toColumn</code> are a name each for one column and lists for several; the file is
+              version 3, so 0.28.4 refuses it rather than read the relations without their columns.</li>
+          <li><b>Every relation the models state is proposed, not one per pair of tables.</b> Two fields of
+              one data object that both refer to a customer — a buyer and a payer — were one proposal, and
+              taking it hid the other. Now each is proposed on its own, over the columns it joins: a
+              service's column relation joins exactly its column and the one it refers to, and a data object
+              field the columns its service maps it to. When a data object and its service tell the same
+              relation it is one proposal, named as the data object names it and counted as the service
+              counts it. A relation you draw accounts for the proposal over its columns — else the first one
+              left — and leaves the others.</li>
+        </ul>
         <h3>0.28.4</h3>
         <ul>
           <li><b>The ER designer's relations say how many at each end.</b> A relation had four cardinalities
@@ -548,23 +566,6 @@
               while it asks. The model count's row says <i>scanning…</i> or <i>index failed</i> while there
               is no index — it used to go blank, because a disabled link hides itself. A removed environment
               is said once, in the attention line and in the picker, not also in a red note beside it.</li>
-          <li><b>Atlas Findings says why, and stays current.</b> A pane beside the tree explains the
-              selected check the way the explorer's Checks page does — the kind of finding, why it matters,
-              what to do, a link to the checks page — and opens the finding's model in the explorer. A
-              status line says how current the analysis is (<i>17 defects · 24 advice · analyzed 2 min
-              ago</i>) and, once a model changed since, how many and <i>Analyze Again</i>. Generating the
-              explorer brings the window up to date without a second analysis; it used to analyse only when
-              opened and after an accept. <i>Accept…</i> asks in a dialog that refuses an empty reason, the
-              two filters sit behind the Problems view's eye instead of drawing as text buttons, and the
-              tree expands and collapses from the toolbar. The Hub shows the counts in a health row of its
-              own — a link into the window, or <i>Analyze findings</i> before any analysis.</li>
-          <li><b>The explorer tab loads, fails and comes back where it was.</b> A spinner at the right of
-              its toolbar says the page is loading — the tab used to stay blank until the browser painted —
-              and a page the embedded browser cannot load is replaced by a panel naming the file and the
-              reason, with <i>Reload</i> and <i>Regenerate Atlas Explorer</i>. A tab open when the IDE
-              closes reopens on the page it was left on instead of the dashboard. A link to a file the page
-              no longer finds offers <i>Regenerate Atlas Explorer</i> on the balloon that says so, and
-              opening a file from the page no longer resolves it on the UI thread.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

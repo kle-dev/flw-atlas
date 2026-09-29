@@ -60,8 +60,12 @@ A table's default business name is the name of the data object that reads it, wh
   the names open the file; in a browser, the model's page in the explorer written beside this one. A search
   finds a table by those keys too.
 - **Draw a relation** from the dot on a card's edge to another card (or back to the same one). Its panel
-  opens with the name field focused: give it a name, a cardinality and, if you like, the columns it joins.
-  Dropping onto a column's row joins that column. The line ends in crow's feet with the counts beside
+  opens with the name field focused: give it a name, a cardinality and, if you like, the columns it joins —
+  a row per column pair under the two tables' names, and **+ Column pair** for a key over several columns
+  (`order_id_, line_no_` → `order_id_, line_no_`), paired position by position as SQL pairs them; `×`
+  removes a pair. Dropping onto a column's row joins that column. The line leaves each card from the rows of
+  its columns — from between them, for several. Two tables can have any number of relations, each on its
+  own line: an order's billing and its delivery address are two. The line ends in crow's feet with the counts beside
   them, for whoever has never seen the notation, and `⇄` turns the relation round, each table keeping its
   own end.
 - **The cardinality** is chosen per end, a row for each: how many of this table per row of the other —
@@ -91,10 +95,16 @@ A table's default business name is the name of the data object that reads it, wh
   cards glide to their places, the view fits them, and one `⌘Z` puts everything back. Arranging an
   arrangement moves nothing. Relation names that would land on top of each other — two lines meeting in one
   gap — are moved apart, on the canvas and in an exported picture alike.
-- **Proposals.** When both ends of a relation the models already state are on the canvas — a data object
-  field that refers to another data object (its one-to-one becomes `1:1`, its one-to-many `1:0..n`), or a
-  service column relation (`0..n:1`) — it shows as a dashed line: click it to take it, `×` to dismiss it for this
-  diagram. One proposal per pair of tables, and none once you have drawn one.
+- **Proposals.** When both ends of a relation the models already state are on the canvas, it shows as a
+  dashed line: click it to take it — with its name, cardinality and columns — or `×` to dismiss it for this
+  diagram. The models state two kinds: a database service's column relation (its column refers to a column
+  of another service's table, `customer_id_` → `customerService.id`: `0..n:1` over exactly those columns),
+  and a data object field that refers to another data object (named as the field, its one-to-one `1:1`,
+  its one-to-many `1:0..n`, over the columns its service maps the field to). The two telling one relation —
+  over the same columns, or the only two between their tables — are one proposal, named as the data object
+  names it and counted as the service counts it. Each relation is proposed on its own, so two tables can
+  have several; a relation you draw accounts for one of them — the one over its columns, else the first left
+  — and the others stay proposed.
 
 **Present** hides the header, the list and the toolbar, goes full screen where the browser allows it and
 fits the diagram to the room; `Esc` comes back.
@@ -150,7 +160,7 @@ The file is plain JSON:
 ```json
 {
   "format": "atlas-erd",
-  "version": 2,
+  "version": 3,
   "name": "Orders and customers",
   "project": "flowable-demo",
   "tables": [
@@ -169,14 +179,17 @@ The file is plain JSON:
 }
 ```
 
-A cardinality is `from:to`, each end one of `1`, `0..1`, `1..n` and `0..n`; written by hand, `n`, `m`
+`fromColumn` and `toColumn` name the columns a relation joins: a name each for one column, or lists of the
+same length for several — `"fromColumn": ["order_id_", "line_no_"], "toColumn": ["order_id_", "line_no_"]`
+— paired position by position; `""` leaves a side's column open. A cardinality is `from:to`, each end one of `1`, `0..1`, `1..n` and `0..n`; written by hand, `n`, `m`
 and `*` are read as `0..n` (UML's `*`), `1..*` as `1..n` — so `1:n` is `1:0..n` and `n:m` is
 `0..n:0..n`. A frame holds no list of tables: it holds whatever lies inside it.
 
 An import is forgiving — a table without a name, a relation to a table the diagram does not hold or an
 unknown cardinality is dropped or defaulted rather than failing the file — and strict only about `format`
 and `version`: a file from a newer Atlas is refused rather than half-read. Version 2 added frames and the
-count at each end; a version 1 file reads as it is, and an export writes version 2.
+count at each end, version 3 relations over several columns; an older file reads as it is, and an export
+writes version 3.
 
 **Pictures.** *Export → SVG image* and *PNG image* write the diagram as it is drawn, in light colours
 whatever the page's theme, with its frames but without handles, proposals or search marks, sized to its content; the SVG

@@ -297,8 +297,13 @@ object ModelParsers {
         val doc = json(data)
         val cfg = objOf(doc["config"]) ?: emptyMap()
         val base = (cfg["baseUrl"] ?: cfg["url"]) as? String
-        val columns = listOfObjs(doc["columnMappings"]).map {
-            linkedMapOf("name" to (it["name"] ?: it["columnName"]), "columnName" to it["columnName"], "type" to it["type"])
+        val columns = listOfObjs(doc["columnMappings"]).map { cm ->
+            linkedMapOf<String, Any?>("name" to (cm["name"] ?: cm["columnName"]), "columnName" to cm["columnName"], "type" to cm["type"]).also { col ->
+                // A column relation: this column holds a key of another service's table — the relation, over
+                // exactly these columns, that the ER designer proposes. Only where there is one.
+                val rel = objOf(cm["relation"])
+                rel?.get("referenceServiceDefinitionKey")?.let { col["relation"] = linkedMapOf("service" to it, "column" to rel["referenceColumnName"]) }
+            }
         }
         val operations = ArrayList<Any?>()
         val info = linkedMapOf<String, Any?>(

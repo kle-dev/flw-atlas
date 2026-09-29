@@ -12,6 +12,22 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.28.5
+
+- **An ER designer relation can join on several columns.** The relation's panel lists the columns it joins,
+  a row per pair under the two tables' names, and *+ Column pair* adds one — for a key over several columns,
+  `order_id_, line_no_` → `order_id_, line_no_`, paired position by position as SQL pairs them. The line
+  leaves each card from between its columns' rows. In the diagram file, `fromColumn` and `toColumn` are a
+  name each for one column and lists for several; the file is version 3, so 0.28.4 refuses it rather than
+  read the relations without their columns.
+- **Every relation the models state is proposed, not one per pair of tables.** Two fields of one data object
+  that both refer to a customer — a buyer and a payer — were one proposal, and taking it hid the other. Now
+  each is proposed on its own, over the columns it joins: a service's column relation joins exactly its
+  column and the one it refers to, and a data object field the columns its service maps it to. When a data
+  object and its service tell the same relation it is one proposal, named as the data object names it and
+  counted as the service counts it. A relation you draw accounts for the proposal over its columns — else
+  the first one left — and leaves the others.
+
 ## 0.28.4
 
 - **The ER designer's relations say how many at each end.** A relation had four cardinalities — `1:1`,
