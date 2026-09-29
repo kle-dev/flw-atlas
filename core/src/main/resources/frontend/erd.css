@@ -55,7 +55,8 @@
   .erd-status{min-width:0;font-size:var(--text-xs);color:var(--ink-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .erd-status+.erd-prov:before{content:"·";margin-right:var(--space-2);color:var(--ink-faint)}
   .erd-changed{color:var(--warn-text)}
-  .erd-presentbtn span,.erd-arrangebtn span{margin-left:2px}
+  .erd-presentbtn span,.erd-arrangebtn span,.erd-framebtn span{margin-left:2px}
+  .erd-bar .tbtn[aria-pressed=true]{background:var(--accent-subtle);color:var(--accent);border-color:var(--accent)}
   .erd-canvas{position:relative;flex:1;min-height:0;overflow:hidden;outline:none;touch-action:none;background-color:var(--bg);
     background-image:radial-gradient(var(--line) 1px,transparent 1px);background-size:20px 20px}
   .erd-canvas.drop{box-shadow:inset 0 0 0 2px var(--accent)}
@@ -97,6 +98,15 @@
   .erd-results mark,.erd-cols mark{background:var(--hl-bg);color:var(--hl-ink);border-radius:2px}
   .erd-colq{width:100%;margin-bottom:var(--space-1)}
   .erd-cnone{justify-content:center;color:var(--ink-faint);font-size:var(--text-xs)}
+  /* ---- frames: the area inside is the canvas; the name tab and the edge take the pointer ---- */
+  .erd-fbox{pointer-events:none}
+  .erd-ftab,.erd-fedge{cursor:move}
+  .erd-frame:hover .erd-fbox{stroke:var(--accent)!important}
+  .erd-fh[data-h=nw],.erd-fh[data-h=se]{cursor:nwse-resize}
+  .erd-fh[data-h=ne],.erd-fh[data-h=sw]{cursor:nesw-resize}
+  .erd-canvas.framing,.erd-canvas.framing *{cursor:crosshair!important}
+  .erd-canvas.searching .erd-frames{opacity:.5}
+  .erd-fnote{margin:var(--space-2) 0 0;font-size:var(--text-xs);color:var(--ink-faint)}
   .erd-rel,.erd-sug{cursor:pointer}
   .erd-rel:hover>path:first-child{stroke:var(--accent)!important}
   .erd-sug{opacity:.8}
@@ -113,7 +123,7 @@
   /* ---- presenting: the diagram and nothing else ---- */
   html.erd-presenting .erd-top{display:none!important}
   .erd-present .erd{grid-template-columns:minmax(0,1fr)}
-  .erd-present .erd-side,.erd-present .erd-side-resize,.erd-present .erd-bar,.erd-present .erd-link,.erd-present .erd-grip,.erd-present .erd-tools{display:none}
+  .erd-present .erd-side,.erd-present .erd-side-resize,.erd-present .erd-bar,.erd-present .erd-link,.erd-present .erd-grip,.erd-present .erd-tools,.erd-present .erd-fh{display:none}
   .erd-present .erd-mini{display:flex}
   .erd-present .erd-canvas{background-image:none}
   /* ---- the floating panel: a table, a relation, a menu ---- */
@@ -187,7 +197,16 @@
   .erd-seg button:last-child{border-right:0}
   .erd-seg button:hover{color:var(--ink);background:var(--hover)}
   .erd-seg button[aria-checked=true]{background:var(--accent);color:var(--on-accent)}
-  .erd-say{font-size:var(--text-xs);color:var(--ink-dim);min-height:1.4em}
+  /* a relation's two ends, a row each: which table, and its four counts with their crow's feet */
+  .erd-endrow{display:flex;flex-direction:column;gap:2px;margin-top:var(--space-1)}
+  .erd-endlbl{min-width:0;font-size:var(--text-xs);color:var(--ink-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .erd-endlbl b{font-family:var(--mono);font-weight:600;color:var(--ink-dim)}
+  .erd-seg-end{display:flex;align-self:stretch}
+  .erd-seg.erd-seg-end button{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:var(--space-1);padding:var(--space-1) var(--space-15)}
+  .erd-glyph{flex:none;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round}
+  .erd-glyph circle{fill:var(--panel)}
+  .erd-seg button[aria-checked=true] .erd-glyph circle{fill:var(--accent)}
+  .erd-say{font-size:var(--text-xs);color:var(--ink-dim);min-height:1.4em;margin-top:var(--space-1);line-height:1.45}
   .erd-two{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
   .erd-menu{display:flex;flex-direction:column}
   .erd-menu [role=menuitem]{text-align:left;background:none;border:0;border-radius:var(--radius-md);padding:var(--space-15) var(--space-2);
@@ -204,7 +223,7 @@
   /* an IDE editor tab is often narrower than a browser: the labelled buttons lose their labels (their tips stay)
      and the search shrinks first, so the toolbar keeps to one row */
   @media (max-width:1440px){
-    .erd-arrangebtn span,.erd-presentbtn span{display:none}
+    .erd-arrangebtn span,.erd-presentbtn span,.erd-framebtn span{display:none}
     .erd-qwrap{flex-basis:200px}
   }
   @media (max-width:1180px){

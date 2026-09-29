@@ -11,7 +11,10 @@
  * What it proves, on the demo project's page (`--erd`):
  *  - the page opens on the diagram the project keeps (docs/orders.atlas-erd.json), drawn with its relation;
  *  - a table dragged from the list lands on the canvas, the + button adds one, a proposal from the models
- *    can be taken, a relation drawn from a card's dot gets a name and a cardinality;
+ *    can be taken, a relation drawn from a card's dot gets a name and a count at each end, drawn as crow's feet,
+ *    and turns round keeping them;
+ *  - a frame drawn over two tables holds them: it is named, moves with them, resizes by a corner, keeps them
+ *    together when the diagram is arranged, and goes without them;
  *  - a card expands and folds, a column can be dragged to the top, a colour set and undone; every card expands
  *    and collapses at once;
  *  - a search (⌘F) finds columns across every table, dims what does not match, marks what does, and goes to a
@@ -244,10 +247,21 @@ await withChrome(async page => {
   ok('a relation drawn from the dot opens its panel', await page.waitFor(`document.querySelector('.erd-pop[data-kind=rel]')`));
   ok('…with the name field focused', await page.eval(`document.activeElement && document.activeElement.dataset.f==='label'`));
   await page.type('places');
-  await page.click(await page.at('.erd-pop [data-card="n:1"]'));
+  ok('a new relation starts as exactly one to zero or more', (await page.eval(`${T}.active().relations[1]`)).cardinality === '1:0..n');
+  await page.click(await page.at('.erd-pop [data-end="0"][data-v="0..n"]'));
+  await page.click(await page.at('.erd-pop [data-end="1"][data-v="0..1"]'));
   const rel2 = await page.eval(`${T}.active().relations[1]`);
-  ok('the new relation has its name and cardinality', rel2 && rel2.label === 'places' && rel2.cardinality === 'n:1', rel2);
-  ok('…and says what it means', /Many .* share one /.test(await page.eval(`document.querySelector('.erd-say').textContent`)));
+  ok('each end takes its own count', rel2 && rel2.label === 'places' && rel2.cardinality === '0..n:0..1', rel2);
+  ok('…and says what it means', /^Many to one: each Order has zero or one Customer, each Customer zero or more Order\.$/.test(
+    await page.eval(`document.querySelector('.erd-say').textContent`)), await page.eval(`document.querySelector('.erd-say').textContent`));
+  const marks = await page.eval(`(function(){ const g=document.querySelector('.erd-rel[data-rel="${rel2.id}"]');
+    return {rings:g.querySelectorAll('circle').length, counts:[...g.querySelectorAll('text')].map(t=>t.textContent)}; })()`);
+  ok('…the line ends in a ring for “none” at both ends, the counts beside them', marks.rings === 2 &&
+    ['0..n', '0..1'].every(c => marks.counts.includes(c)), marks);
+  await page.click(await page.at('.erd-pop [data-pa=swap]'));
+  const turned = await page.eval(`${T}.active().relations[1]`);
+  ok('⇄ turns the relation round, each table keeping its own end', turned.from === 'CUST_CUSTOMER' && turned.cardinality === '0..1:0..n', turned);
+  await page.click(await page.at('.erd-pop [data-pa=swap]'));
   await page.key('Escape', 'Escape');
   ok('Escape closes the panel', await page.eval(`document.querySelector('.erd-pop').hidden`));
   ok('two relations between one pair get their own lanes', await page.eval(`document.querySelectorAll('.erd-rel').length`) === 2);
@@ -281,6 +295,36 @@ await withChrome(async page => {
   await page.key('z', 'KeyZ', 2 | 8);   // Ctrl+Shift+Z
   ok('redo puts the colour back', await page.eval(`${T}.active().tables[0].color`) === '#0e9f6e');
 
+  // ---- a frame over both tables: named, moved with them, resized ----
+  const cardBox = k => page.eval(`(function(){ const r=document.querySelector('.erd-card[data-key="${k}"] .erd-box').getBoundingClientRect(); return {x:r.left, y:r.top, w:r.width, h:r.height}; })()`);
+  const bo = await cardBox('ORD_ORDER'), bc = await cardBox('CUST_CUSTOMER');
+  await page.key('f', 'KeyF');
+  ok('F takes the frame tool', await page.eval(`${T}.state().tool==='frame' && document.querySelector('[data-act=frame]').getAttribute('aria-pressed')==='true'`));
+  await page.drag({ x: Math.min(bo.x, bc.x) - 30, y: Math.min(bo.y, bc.y) - 70 }, { x: Math.max(bo.x + bo.w, bc.x + bc.w) + 30, y: Math.max(bo.y + bo.h, bc.y + bc.h) + 30 }, 12);
+  ok('a frame is drawn where the drag went', await page.waitFor(`${T}.active().frames.length===1`), await page.eval(`${T}.active().frames`));
+  ok('…and the tool is put away', await page.eval(`${T}.state().tool===null`));
+  ok('…its panel opens with the name focused', await page.eval(`!!document.querySelector('.erd-pop[data-kind=frame]') && document.activeElement.dataset.f==='name'`));
+  ok('…and says it holds both tables', /Holds 2 tables/.test(await page.eval(`document.querySelector('.erd-pop[data-kind=frame]').textContent`)));
+  await page.type('Sales');
+  ok('the name is on the frame’s tab', await page.eval(`document.querySelector('.erd-frame .erd-ftab').textContent`) === 'Sales');
+  await page.key('Escape', 'Escape');
+  const places = () => page.eval(`(function(){ const d=${T}.active(), f=d.frames[0]; return {f:[f.x,f.y], o:[d.tables[0].x,d.tables[0].y], c:[d.tables[1].x,d.tables[1].y]}; })()`);
+  const p0 = await places();
+  const tab = await page.at('.erd-frame .erd-ftab rect');
+  await page.drag(tab, { x: tab.x + 80, y: tab.y + 40 }, 8);
+  const p1 = await places(), dx = k => [p1[k][0] - p0[k][0], p1[k][1] - p0[k][1]];
+  ok('dragging its tab moves the frame and the tables it holds, together', dx('f')[0] > 0 && dx('f')[1] > 0 &&
+    JSON.stringify(dx('o')) === JSON.stringify(dx('f')) && JSON.stringify(dx('c')) === JSON.stringify(dx('f')), { p0, p1 });
+  await page.key('z', 'KeyZ', 2);
+  ok('…one undo puts all three back', JSON.stringify(await places()) === JSON.stringify(p0), await places());
+  await page.click(await page.at('.erd-frame .erd-ftab rect'));
+  ok('a click on the tab opens the frame’s panel', await page.waitFor(`document.querySelector('.erd-pop[data-kind=frame]')`));
+  await page.key('Escape', 'Escape');
+  ok('…and the selected frame shows its four corners', await page.eval(`document.querySelectorAll('.erd-frame.sel .erd-fh').length`) === 4);
+  const w0 = await page.eval(`${T}.active().frames[0].w`), se = await page.at('.erd-fh[data-h=se]');
+  await page.drag(se, { x: se.x + 60, y: se.y + 40 }, 6);
+  ok('a corner resizes it', await page.eval(`${T}.active().frames[0].w`) > w0 && JSON.stringify((await places()).o) === JSON.stringify(p0.o));
+
   // ---- it survives a reload ----
   const before = await page.eval(`JSON.stringify(${T}.docOf().tables.map(t=>[t.table,t.x,t.y,t.color]))`);
   await sleep(400);                    // the save is debounced
@@ -288,18 +332,22 @@ await withChrome(async page => {
   ok('after a reload the same diagram is active', await page.eval(`${T}.active().tables.length`) === 2
     && await page.eval(`JSON.stringify(${T}.docOf().tables.map(t=>[t.table,t.x,t.y,t.color]))`) === before);
   ok('…with both relations', await page.eval(`${T}.active().relations.length`) === 2);
+  ok('…and its frame, named', await page.eval(`${T}.active().frames.length===1 && ${T}.active().frames[0].name==='Sales'`));
   ok('…and the project’s diagram is still there', await page.eval(`${T}.state().diagrams.some(d=>d.origin && d.origin.file==='docs/orders.atlas-erd.json')`));
 
   // ---- the file format round trip, and the picture ----
   const doc = await page.eval(`${T}.docOf()`);
-  ok('the file names its format and version', doc.format === 'atlas-erd' && doc.version === 1 && doc.project === 'flowable-demo');
+  ok('the file names its format and version', doc.format === 'atlas-erd' && doc.version === 2 && doc.project === 'flowable-demo');
+  ok('…carries the frame and the counts at each end', doc.frames.length === 1 && doc.frames[0].name === 'Sales' && doc.relations[1].cardinality === '0..n:0..1', doc.frames);
   ok('…carries the live columns', doc.tables.find(t => t.table.toLowerCase() === 'ord_order').columns.length >= 8);
   await page.eval(`${T}.importText(JSON.stringify(${T}.docOf()))`);
   ok('an exported file imports as a new diagram', await page.eval(`${T}.active().name`) !== doc.name
-    && await page.eval(`${T}.active().tables.length`) === 2 && await page.eval(`${T}.active().relations.length`) === 2);
+    && await page.eval(`${T}.active().tables.length`) === 2 && await page.eval(`${T}.active().relations.length`) === 2
+    && await page.eval(`${T}.active().frames.length`) === 1);
   const pic = await page.eval(`${T}.pictureSvg()`);
   ok('the picture is a standalone SVG', pic.svg.startsWith('<svg xmlns="http://www.w3.org/2000/svg"') && pic.w > 200 && pic.h > 100);
-  ok('…without the canvas handles', !/erd-link|erd-grip|erd-tools|erd-relhit/.test(pic.svg));
+  ok('…without the canvas handles', !/erd-link|erd-grip|erd-tools|erd-relhit|erd-fedge|erd-fh/.test(pic.svg));
+  ok('…with the frame and its name', /class="erd-frame"/.test(pic.svg) && />Sales</.test(pic.svg));
   ok('…in paper colours, not page references', !/var\(--/.test(pic.svg));
   ok('…with the letters it was drawn in', /@font-face/.test(pic.svg));
 
@@ -322,6 +370,24 @@ await withChrome(async page => {
   ok('one undo puts the heap back', await page.eval(`JSON.stringify(${T}.active().tables.map(t=>[t.key,t.x,t.y]))`) === heap);
   await page.key('z', 'KeyZ', 2 | 8);
   ok('…and redo arranges it again', !overlap(await page.eval(boxes)));
+
+  // ---- arrange with a frame: its tables stay together in it, the other table out of it ----
+  await page.eval(`${T}.importText(JSON.stringify({format:'atlas-erd', version:2, name:'A framed heap', tables:[
+    {table:'ord_order', x:100, y:100}, {table:'cust_customer', x:120, y:110}, {table:'legacy_audit', x:900, y:600}],
+    relations:[{id:'r1', from:'ord_order', to:'cust_customer', cardinality:'0..n:1', label:'placed by'}],
+    frames:[{id:'f1', name:'Sales', x:40, y:40, w:500, h:400}]}))`);
+  await page.eval(`document.getElementById('toast').textContent=''`);
+  await page.click(await page.at('[data-act=arrange]'));
+  ok('Arrange lays out a diagram with a frame', await page.waitFor(`/Arranged/.test(document.getElementById('toast').textContent)`, 3000));
+  const fbox = await page.eval(`(function(){ const r=document.querySelector('.erd-frame .erd-fbox').getBoundingClientRect(); return {x:r.left, y:r.top, w:r.width, h:r.height}; })()`);
+  const inF = b => b.x >= fbox.x && b.y >= fbox.y && b.x + b.w <= fbox.x + fbox.w && b.y + b.h <= fbox.y + fbox.h;
+  const framed = await page.eval(boxes), fb = k => framed.find(b => b.k === k);
+  ok('…keeping the frame’s tables in it', inF(fb('ORD_ORDER')) && inF(fb('CUST_CUSTOMER')) && !overlap([fb('ORD_ORDER'), fb('CUST_CUSTOMER')]), { fbox, framed });
+  ok('…and the other table out of it', !overlap([fb('LEGACY_AUDIT'), fbox]), { fbox, framed });
+  await page.click(await page.at('.erd-frame .erd-ftab rect'));
+  await page.key('Escape', 'Escape');
+  await page.key('Delete', 'Delete');
+  ok('Delete removes a selected frame, and nothing it held', await page.eval(`${T}.active().frames.length===0 && ${T}.active().tables.length===3`));
 
   // ---- present, and back ----
   await page.click(await page.at('[data-act=present]'));

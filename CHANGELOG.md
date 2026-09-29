@@ -12,6 +12,26 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.28.4
+
+- **The ER designer's relations say how many at each end.** A relation had four cardinalities — `1:1`,
+  `1:n`, `n:1`, `n:m` — and none of them could say that a customer may have no orders at all, or an order
+  at most one invoice. Now each end is chosen on its own, a row each in the relation's panel: `1` exactly
+  one, `0..1` zero or one, `1..n` one or more, `0..n` zero or more — the minimum and maximum crow's-foot
+  notation draws, so the two rows give all sixteen cardinalities, `0..n:1`, `1:0..1`, `0..n:0..n` and the
+  rest. The line draws them as the notation does — a ring for none, a bar for one, a foot for many — with
+  the count beside it, and the sentence under the choice says what it means (*Many to one: each Order has
+  exactly one Customer, each Customer zero or more Order*). `⇄` now turns a relation round with each table
+  keeping its own end, where it used to hand the ends to the other table.
+- **Frames gather tables under a name.** *Frame* in the designer's toolbar (or `F`), then drag over the
+  tables: the frame holds whatever lies inside it, gets a name and a colour in its panel, moves with its
+  tables when dragged by its name tab or edge, and resizes by its corners; *Fit to its tables* draws it
+  around them again. *Arrange* keeps a frame's tables together, arranged inside it, and places the frame
+  as one block beside what its tables relate to. Frames are in exported pictures and in the diagram file.
+- **The diagram file is version 2**, for the frames and the counts at each end. A version 1 file reads as
+  it is (`1:n` is `1:0..n`, `n:m` is `0..n:0..n`); 0.28.3 and older refuse a version 2 file rather than
+  read it without its frames.
+
 ## 0.28.3
 
 - **A large project's explorer is a fraction of its size, and opens under Remote Development again.**

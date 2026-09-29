@@ -149,6 +149,32 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.28.4</h3>
+        <ul>
+          <li><b>The ER designer's relations say how many at each end.</b> A relation had four cardinalities
+              — <code>1:1</code>, <code>1:n</code>, <code>n:1</code>, <code>n:m</code> — and none of them
+              could say that a customer may have no orders at all, or an order at most one invoice. Now each
+              end is chosen on its own, a row each in the relation's panel: <code>1</code> exactly one,
+              <code>0..1</code> zero or one, <code>1..n</code> one or more, <code>0..n</code> zero or more —
+              the minimum and maximum crow's-foot notation draws, so the two rows give all sixteen
+              cardinalities, <code>0..n:1</code>, <code>1:0..1</code>, <code>0..n:0..n</code> and the rest.
+              The line draws them as the notation does — a ring for none, a bar for one, a foot for many —
+              with the count beside it, and the sentence under the choice says what it means (<i>Many to
+              one: each Order has exactly one Customer, each Customer zero or more Order</i>).
+              <code>⇄</code> now turns a relation round with each table keeping its own end, where it used
+              to hand the ends to the other table.</li>
+          <li><b>Frames gather tables under a name.</b> <i>Frame</i> in the designer's toolbar (or
+              <code>F</code>), then drag over the tables: the frame holds whatever lies inside it, gets a
+              name and a colour in its panel, moves with its tables when dragged by its name tab or edge,
+              and resizes by its corners; <i>Fit to its tables</i> draws it around them again.
+              <i>Arrange</i> keeps a frame's tables together, arranged inside it, and places the frame as
+              one block beside what its tables relate to. Frames are in exported pictures and in the diagram
+              file.</li>
+          <li><b>The diagram file is version 2</b>, for the frames and the counts at each end. A version 1
+              file reads as it is (<code>1:n</code> is <code>1:0..n</code>, <code>n:m</code> is
+              <code>0..n:0..n</code>); 0.28.3 and older refuse a version 2 file rather than read it without
+              its frames.</li>
+        </ul>
         <h3>0.28.3</h3>
         <ul>
           <li><b>A large project's explorer is a fraction of its size, and opens under Remote Development
@@ -539,25 +565,6 @@
               closes reopens on the page it was left on instead of the dashboard. A link to a file the page
               no longer finds offers <i>Regenerate Atlas Explorer</i> on the balloon that says so, and
               opening a file from the page no longer resolves it on the UI thread.</li>
-          <li><b>The explorer opens under Remote Development whatever its size, and says how far it has
-              got.</b> A 17.8 MB report sat on <i>Loading … over the IDE connection</i> and never arrived:
-              it was sent uncompressed, as 35 one-megabyte answers at once. It now travels gzipped, at a
-              sixth to an eighth of its size, a few parts at a time, and the card shows how much has
-              arrived, how much is left, the speed and the time remaining. The IDE connection can lose an
-              answer without a word, so a part missing for 30 seconds is asked for again; if it is still
-              missing, a card says what arrived, and its <i>Retry</i> asks only for the missing parts. It
-              used to be a spinner for good. The thin client keeps the compressed page, so a report of up to
-              about 20 MB opens without any transfer the next time; a larger one is fetched on every open,
-              and the card says so.</li>
-          <li><b>The model picture is a sheet you can point at.</b> The drawing stays white in every theme,
-              as in the explorer, but now sits on the panel as a framed sheet rather than a white block with
-              no edge in a dark IDE. The element under the pointer is outlined, the pointer turns into a
-              hand and the tooltip names the element, so what can be clicked is visible before a click. A
-              click leaves the focus on the picture, which is what the zoom keys needed — they were
-              registered on a component that never got the focus. The toolbar gains <i>Actual Size</i> and a
-              zoom readout. Half-typed text that does not parse keeps the last picture up, with a line
-              saying so, instead of flipping to "no layout" at every keystroke. Opening a subform is ⌘-click
-              on macOS, where Ctrl-click is the context click.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

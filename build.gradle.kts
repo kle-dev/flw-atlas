@@ -9,7 +9,7 @@ plugins {
 
 allprojects {
     group = "com.flowable.atlas"
-    version = "0.28.3"
+    version = "0.28.4"
 }
 
 // Convenience aliases so the documentation site is discoverable from the root: the tasks themselves

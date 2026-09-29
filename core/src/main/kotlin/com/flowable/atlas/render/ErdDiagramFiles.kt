@@ -7,15 +7,15 @@ import java.io.File
 
 /**
  * The ER diagrams a project keeps beside its models — `*.atlas-erd.json`, exported from the designer and
- * committed — embedded into an explorer page that carries the designer ([ExplorerExtension.ERD]).
+ * committed — embedded into the ER diagram page ([ErdHtmlRenderer]).
  *
  * This is how a diagram is shared: a browser keeps what one person draws only for that person, while a
  * file in the repository reaches everyone who generates the explorer, and the generated page opens on it
  * without an import. The page reads the file's content as a starting point; what someone changes there
- * stays in their browser until they export it again (explorer.md, "ER diagram designer").
+ * stays in their browser until they export it again (site/pages/erd.md).
  *
  * The files are passed through as parsed JSON, not validated here: the page's reader (`erdNormalize` in
- * `ext/erd.js`) is the one definition of what a diagram may contain, and it already has to read files from
+ * `frontend/erd.js`) is the one definition of what a diagram may contain, and it already has to read files from
  * other projects and older versions. A file that is not JSON travels as its error, so the page can say why
  * the diagram is missing instead of silently not listing it.
  */

@@ -26,7 +26,8 @@ if (a < 0 || b < 0 || b < a) {
 }
 const E = new Function(`"use strict";${source.slice(a + START.length, b)};
   return {erdKey, erdCatalog, erdDefaultOrder, erdOrder, erdSuggestions, erdNormalize, erdToDoc, erdSame, erdEnds, erdContrast, erdSlug, erdArrange, erdSearch, erdColumnHits, erdTableMatches,
-    ERD_FORMAT, ERD_FORMAT_VERSION, ERD_CARDINALITIES};`)();
+    erdEnd, erdCardinality, erdEndOne, erdFrameParents, erdArrangeFramed,
+    ERD_FORMAT, ERD_FORMAT_VERSION, ERD_ENDS, ERD_FRAME_PAD, ERD_FRAME_TOP};`)();
 
 let failed = 0, passed = 0;
 function ok(label, cond, detail) {
@@ -86,12 +87,12 @@ eq('an empty memory is the default order', E.erdOrder([], order.columns), E.erdD
 const sug = E.erdSuggestions(nodes, edges);
 eq('what the models state, between tables only', sug.map(s => [s.id, s.from, s.to, s.cardinality, s.label]), [
   ['dataObject:orderDO#customer', 'ORD_ORDER', 'CUST_CUSTOMER', '1:1', 'Customer'],
-  ['service:auditService>orderService', 'AUD_ENTRY', 'ORD_ORDER', 'n:1', ''],
+  ['service:auditService>orderService', 'AUD_ENTRY', 'ORD_ORDER', '0..n:1', ''],
 ]);
 ok('each says where it comes from', sug.every(s => s.why && s.why.length > 10));
 
 // ---- the file format ----
-const doc = {format:'atlas-erd', version:1, name:'Orders', project:'demo', tables:[
+const doc = {format:'atlas-erd', version:2, name:'Orders', project:'demo', tables:[
   {table:'ORD_ORDER', alias:'Order', x:10.4, y:'nope', color:'#E8590C', expanded:true, order:['id_', 5], columns:[{name:'id_', type:'VARCHAR(64)', pk:true}, {type:'x'}]},
   {table:'ord_order', alias:'duplicate'},
   {table:'CUST_CUSTOMER', color:'red'},
@@ -100,14 +101,21 @@ const doc = {format:'atlas-erd', version:1, name:'Orders', project:'demo', table
   {id:'r1', from:'ord_order', to:'CUST_CUSTOMER', cardinality:'n:1', label:'placed by', fromColumn:'customer_id_', toColumn:'id_'},
   {id:'r1', from:'ORD_ORDER', to:'CUST_CUSTOMER', cardinality:'many'},
   {from:'ORD_ORDER', to:'NOWHERE'},
+  {id:'r3', from:'CUST_CUSTOMER', to:'ORD_ORDER', cardinality:'1 : 1..*'},
+], frames:[
+  {id:'f1', name:'Sales', x:-20.6, y:-60, w:900, h:400, color:'#0E9F6E'},
+  {id:'f1', name:'  ', x:0, y:0, w:10, h:'tall', color:'green'},
+  'not a frame',
 ], dismissed:['x', 3]};
 const d = E.erdNormalize(doc);
 eq('tables: one per name, junk dropped', d.tables.map(t => t.key), ['ORD_ORDER', 'CUST_CUSTOMER']);
 eq('numbers rounded, a bad one defaulted', [d.tables[0].x, typeof d.tables[0].y], [10, 'number']);
 eq('a colour is a 6-digit hex or nothing', d.tables.map(t => t.color), ['#e8590c', '']);
 eq('order keeps strings only; columns need a name', [d.tables[0].order, d.tables[0].columns.length], [['id_'], 1]);
-eq('relations: ids unique, cardinality known, both ends present', d.relations.map(r => [r.id, r.from, r.cardinality]),
-  [['r1', 'ORD_ORDER', 'n:1'], ['r1_', 'ORD_ORDER', '1:n']]);
+eq('relations: ids unique, cardinality read as this page writes it, both ends present', d.relations.map(r => [r.id, r.from, r.cardinality]),
+  [['r1', 'ORD_ORDER', '0..n:1'], ['r1_', 'ORD_ORDER', '1:0..n'], ['r3', 'CUST_CUSTOMER', '1:1..n']]);
+eq('frames: ids unique, numbers rounded, at least their least size, a colour or none', d.frames,
+  [{id:'f1', name:'Sales', x:-21, y:-60, w:900, h:400, color:'#0e9f6e'}, {id:'f1_', name:'  ', x:0, y:0, w:160, h:320, color:''}]);
 eq('dismissed keeps strings', d.dismissed, ['x']);
 const back = E.erdToDoc(d, {project:'demo', atlasVersion:'9.9.9', exportedAt:'2026-01-01T00:00:00Z'});
 eq('the file names tables as written', back.relations[0].from, 'ORD_ORDER');
@@ -116,13 +124,27 @@ ok('a primary key is written only where there is one', back.tables[0].columns[0]
 ok('same content is the same diagram', E.erdSame(d, E.erdNormalize(back)));
 ok('a moved table is not', !E.erdSame(d, Object.assign({}, d, {tables:[Object.assign({}, d.tables[0], {x:99}), d.tables[1]]})));
 throws('refuses what is not a diagram', () => E.erdNormalize({format:'other', version:1}), /not an Atlas ER diagram/);
-throws('refuses a newer format', () => E.erdNormalize({format:'atlas-erd', version:2}), /newer Atlas/);
+throws('refuses a newer format', () => E.erdNormalize({format:'atlas-erd', version:3}), /newer Atlas/);
+{ // a file from before frames and counts at each end reads as it is
+  const v1 = E.erdNormalize({format:'atlas-erd', version:1, tables:[{table:'A'}, {table:'B'}],
+    relations:[{from:'A', to:'B', cardinality:'1:n'}, {from:'A', to:'B', cardinality:'n:m'}, {from:'B', to:'A', cardinality:'1:1'}]});
+  eq('version 1: 1:n is exactly one to zero or more, n:m zero or more at both ends', v1.relations.map(r => r.cardinality), ['1:0..n', '0..n:0..n', '1:1']);
+  eq('…and has no frames', v1.frames, []);
+  eq('a file is written in the current version', E.erdToDoc(v1).version, E.ERD_FORMAT_VERSION);
+}
+eq('the frames round-trip', E.erdNormalize(E.erdToDoc(d)).frames, d.frames);
 throws('refuses a missing version', () => E.erdNormalize({format:'atlas-erd'}), /version/);
 throws('refuses a list', () => E.erdNormalize([]), /object/);
 eq('an empty diagram is fine, and named', E.erdNormalize({format:'atlas-erd', version:1}).name, 'Imported diagram');
 
 // ---- small helpers ----
-eq('cardinality ends', [E.erdEnds('1:n'), E.erdEnds('n:m'), E.erdEnds('n:1')], [['1','n'], ['n','m'], ['n','1']]);
+eq('cardinality ends', [E.erdEnds('1:0..n'), E.erdEnds('0..1:1..n'), E.erdEnds('n:1'), E.erdEnds('nonsense')],
+  [['1','0..n'], ['0..1','1..n'], ['0..n','1'], ['1','0..n']]);
+eq('every end, and how people write them', ['1', '1..1', '0..1', '0 .. 1', '1..n', '1..*', '1..m', '0..n', 'n', 'M', '*', '0..*', '0', '2', ''].map(E.erdEnd),
+  ['1', '1', '0..1', '0..1', '1..n', '1..n', '1..n', '0..n', '0..n', '0..n', '0..n', '0..n', null, null, null]);
+eq('sixteen cardinalities, each a pair of ends', E.ERD_ENDS.flatMap(a => E.ERD_ENDS.map(b => E.erdCardinality(a + ':' + b))).filter(Boolean).length, 16);
+eq('…and nothing else', [E.erdCardinality('1'), E.erdCardinality('1:2'), E.erdCardinality('1:n:m'), E.erdCardinality(null)], [null, null, null, null]);
+eq('the one side of a relation', E.ERD_ENDS.map(E.erdEndOne), [true, true, false, false]);
 eq('ink on a colour', [E.erdContrast('#f59f00'), E.erdContrast('#2f6fed'), E.erdContrast('nope')], ['#131e29', '#ffffff', '']);
 eq('file names', [E.erdSlug('Orders & Customers'), E.erdSlug('Übersicht Konten'), E.erdSlug('  ')], ['orders-customers', 'ubersicht-konten', 'diagram']);
 
@@ -198,6 +220,54 @@ function crossings(nodes, edges, pos) {
   ok('forty tables: arranged in well under a second (' + ms + ' ms)', ms < 1000);
 }
 eq('nothing to arrange', E.erdArrange([], []), {});
+
+// ---- frames ----
+{ // what a frame holds: a table by its centre, a frame wholly inside it, the smallest when several do
+  const frames = [{id: 'OUT', x: 0, y: 0, w: 1000, h: 800}, {id: 'IN', x: 100, y: 100, w: 400, h: 300},
+    {id: 'SAME', x: 0, y: 0, w: 1000, h: 800}, {id: 'CROSS', x: 900, y: 700, w: 300, h: 300}];
+  const tables = [box('A', 100, 80, 150, 150), box('B', 100, 80, 600, 150), box('C', 100, 80, 460, 360), box('D', 100, 80, 2000, 0)];
+  const p = E.erdFrameParents(frames, tables);
+  eq('a table belongs to the smallest frame around its centre', [p.table.get('A'), p.table.get('B'), p.table.get('D')], ['IN', 'SAME', undefined]);
+  eq('…by its centre, not its corner', p.table.get('C'), 'SAME');
+  eq('a frame inside a frame belongs to it; of two equal ones, the later is inside the earlier; one across an edge to none',
+    [p.frame.get('IN'), p.frame.get('SAME'), p.frame.get('OUT'), p.frame.get('CROSS')], ['SAME', 'OUT', undefined, undefined]);
+  eq('no frames, no parents', [E.erdFrameParents([], tables).table.size, E.erdFrameParents(null, null).frame.size], [0, 0]);
+}
+const inside = (b, r) => b.x >= r.x && b.y >= r.y && b.x + b.w <= r.x + r.w && b.y + b.h <= r.y + r.h;
+{ // arranging keeps a frame's tables in it, fits the frame around them, and relates the frame as a block
+  const nodes = [box('CUSTOMER', 220, 160, 40, 40), box('ADDRESS', 200, 120, 60, 300), box('ORDER', 240, 200, 0, 900), box('LINE', 200, 120, 400, 900)];
+  const frames = [{id: 'f1', x: 0, y: 0, w: 400, h: 500, minW: 300}];
+  const edges = [rel('CUSTOMER', 'ADDRESS', '1:0..n'), rel('CUSTOMER', 'ORDER', '1:0..n'), rel('ORDER', 'LINE', '1:1..n')];
+  const res = E.erdArrangeFramed(nodes, edges, frames);
+  eq('every table placed, and the frame', [Object.keys(res.tables).sort(), Object.keys(res.frames)], [['ADDRESS', 'CUSTOMER', 'LINE', 'ORDER'], ['f1']]);
+  const F = res.frames.f1, at = k => Object.assign({}, nodes.find(n => n.key === k), res.tables[k]);
+  ok('the frame holds its tables, inside its padding', ['CUSTOMER', 'ADDRESS'].every(k => inside(at(k),
+    {x: F.x + E.ERD_FRAME_PAD, y: F.y + E.ERD_FRAME_TOP, w: F.w - 2 * E.ERD_FRAME_PAD, h: F.h - E.ERD_FRAME_TOP - E.ERD_FRAME_PAD})), {F, t: res.tables});
+  ok('…and fits around them', F.x + F.w === at('ADDRESS').x + 200 + E.ERD_FRAME_PAD && F.x === at('CUSTOMER').x - E.ERD_FRAME_PAD &&
+    F.y + F.h === Math.max(at('CUSTOMER').y + 160, at('ADDRESS').y + 120) + E.ERD_FRAME_PAD, {F, t: res.tables});
+  ok('…as wide as its name needs', F.w >= 300, F);
+  ok('the tables outside stay outside', ['ORDER', 'LINE'].every(k => { const b = at(k); return b.x >= F.x + F.w || b.x + b.w <= F.x || b.y >= F.y + F.h || b.y + b.h <= F.y; }), {F, t: res.tables});
+  ok('inside the frame, the one side left of the many side', at('CUSTOMER').x < at('ADDRESS').x, res.tables);
+  ok('the frame stands left of what its tables relate to outside it', F.x + F.w <= at('ORDER').x, {F, t: res.tables});
+  eq('nothing overlaps outside the frame', overlaps([nodes[2], nodes[3], {key: 'F', w: F.w, h: F.h}], Object.assign({F: {x: F.x, y: F.y}}, res.tables)), null);
+  const again = E.erdArrangeFramed(nodes.map(n => Object.assign({}, n, res.tables[n.key])), edges, [Object.assign({id: 'f1', minW: 300}, F)]);
+  eq('arranging twice changes nothing the second time', again, res);
+}
+{ // a frame in a frame, and one that holds nothing
+  const nodes = [box('A', 200, 100, 120, 120), box('B', 200, 100, 700, 120), box('C', 200, 100, 1500, 1500)];
+  const frames = [{id: 'outer', x: 0, y: 0, w: 1200, h: 600}, {id: 'inner', x: 60, y: 60, w: 400, h: 300}, {id: 'empty', x: 2000, y: 0, w: 300, h: 200}];
+  const res = E.erdArrangeFramed(nodes, [rel('A', 'B'), rel('B', 'C')], frames);
+  const r = k => Object.assign({}, nodes.find(n => n.key === k), res.tables[k]);
+  ok('a table stays in its inner frame', inside(r('A'), res.frames.inner), res);
+  ok('the inner frame stays in the outer one, beside its other table', inside(res.frames.inner, res.frames.outer) && inside(r('B'), res.frames.outer), res);
+  ok('a frame that holds nothing keeps its size', res.frames.empty.w === 300 && res.frames.empty.h === 200, res.frames.empty);
+  eq('…and nothing lands on it', overlaps([nodes[2], {key: 'E', w: 300, h: 200}, {key: 'O', w: res.frames.outer.w, h: res.frames.outer.h}],
+    {C: res.tables.C, E: res.frames.empty, O: res.frames.outer}), null);
+}
+{ // without frames it is erdArrange
+  const nodes = [box('X'), box('Y', 220, 150, 400, 0)];
+  eq('no frames: the arrangement erdArrange makes', E.erdArrangeFramed(nodes, [rel('X', 'Y')], []), {tables: E.erdArrange(nodes, [rel('X', 'Y')]), frames: {}});
+}
 
 // ---- searching ----
 {

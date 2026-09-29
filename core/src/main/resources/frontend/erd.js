@@ -15,8 +15,21 @@
 
 /*__ERD_CORE_START__*/
 // The pure part — no DOM, no explorer globals — so scripts/erd-selftest.mjs can run it in Node.
-const ERD_FORMAT='atlas-erd', ERD_FORMAT_VERSION=1;
-const ERD_CARDINALITIES=['1:1','1:n','n:1','n:m'];
+// Version 2 added frames and a count at each end of a relation: a page of version 1 would read such a file
+// with its frames gone and `0..n` defaulted, so it is refused there rather than half-read. Version 1 files
+// are read as they are — their `1:n` is a valid cardinality of this version too.
+const ERD_FORMAT='atlas-erd', ERD_FORMAT_VERSION=2;
+/**
+ * What one end of a relation can say: how many rows of the table at that end one row of the other table
+ * has — exactly one, zero or one, one or more, zero or more. A minimum (0 or 1) and a maximum (1 or many),
+ * which is all crow's-foot notation can draw, written as UML writes multiplicities, with `n` for many. A
+ * relation is two of them, `from:to` — `0..n:1` is "each order has exactly one customer, each customer zero
+ * or more orders" — so every pairing (0:1, 1:0..1, 0..n:0..n …) is one of these sixteen.
+ */
+const ERD_ENDS=['1','0..1','1..n','0..n'];
+const ERD_END_WORDS={'1':'exactly one', '0..1':'zero or one', '1..n':'one or more', '0..n':'zero or more'};
+/** Room a frame keeps around what it holds: its name tab sits in the top band. On the 4px grid. */
+const ERD_FRAME_PAD=28, ERD_FRAME_TOP=56, ERD_FRAME_MIN_W=160, ERD_FRAME_MIN_H=100;
 /** Colours a table can wear. Literal hex, not theme tokens: a colour is part of the diagram file and of an
  *  exported picture, and must mean the same thing in a dark IDE, a light browser and a slide. */
 const ERD_SWATCHES=['#2f6fed','#0e9f6e','#e8590c','#d6336c','#7048e8','#0c8599','#f59f00','#868e96'];
@@ -105,10 +118,29 @@ function erdOrder(order, columns){
 }
 
 /**
+ * One end of a relation as this page writes it, or null: the four of [ERD_ENDS], and what people write by
+ * hand for them — `n`, `m` and `*` are many with no minimum (UML's `*` is `0..*`), `1..1` is one.
+ */
+function erdEnd(s){
+  const t=String(s==null?'':s).trim().toLowerCase().replace(/\s+/g,'').replace(/[m*]/g,'n');
+  return t==='1'||t==='1..1'?'1' : t==='0..1'?'0..1' : t==='1..n'?'1..n' : t==='n'||t==='0..n'?'0..n' : null;
+}
+/** A relation's cardinality as this page writes it (`1:n` → `1:0..n`, `n:m` → `0..n:0..n`), or null. */
+function erdCardinality(s){
+  const p=String(s==null?'':s).split(':');
+  if(p.length!==2) return null;
+  const a=erdEnd(p[0]), b=erdEnd(p[1]);
+  return a && b ? a+':'+b : null;
+}
+/** Whether an end is at most one — the "one" side of a relation, for arranging. */
+const erdEndOne=e=>e==='1'||e==='0..1';
+
+/**
  * Relations the models already state, as proposals: a data object field that references another data
- * object (its relationship type becomes the cardinality — one-to-one 1:1, one-to-many 1:n, as the model
- * says), and a database service's column relation to another service. Both ends must be tables; the id is
- * stable, so a dismissed proposal stays dismissed across reloads and in the diagram file.
+ * object (its relationship type becomes the cardinality — one-to-one 1:1, one-to-many 1:0..n, as the model
+ * says; it states no minimum, and many without one is zero or more), and a database service's column
+ * relation to another service. Both ends must be tables; the id is stable, so a dismissed proposal stays
+ * dismissed across reloads and in the diagram file.
  */
 function erdSuggestions(nodes, edges){
   const tableOfDo=new Map(), tableOfSvc=new Map(), label=new Map();
@@ -131,7 +163,7 @@ function erdSuggestions(nodes, edges){
       const id='dataObject:'+n.key+'#'+c.name;
       if(seen.has(id)) return;
       seen.add(id);
-      out.push({id, from, to, cardinality:c.relationship==='one-to-many'?'1:n':'1:1', label:c.label||c.name||'',
+      out.push({id, from, to, cardinality:c.relationship==='one-to-many'?'1:0..n':'1:1', label:c.label||c.name||'',
         why:'Data object '+(n.label||n.key)+' — field '+(c.label||c.name)+' refers to '+c.refDataObject+
             ' ('+(c.relationship||'relation')+')'});
     });
@@ -143,7 +175,7 @@ function erdSuggestions(nodes, edges){
     const id='service:'+String(e.s).replace(/^service:/,'')+'>'+String(e.t).replace(/^service:/,'');
     if(seen.has(id)) return;
     seen.add(id);
-    out.push({id, from, to, cardinality:'n:1', label:'',
+    out.push({id, from, to, cardinality:'0..n:1', label:'',
       why:'Service '+(label.get(e.s)||e.s)+' has a column relation to '+(label.get(e.t)||e.t)});
   });
   return out;
@@ -185,13 +217,23 @@ function erdNormalize(doc){
     while(ids.has(id)) id+='_';
     ids.add(id);
     relations.push({id, from, to, fromColumn:str(r.fromColumn,128), toColumn:str(r.toColumn,128),
-      cardinality:ERD_CARDINALITIES.indexOf(r.cardinality)>=0?r.cardinality:'1:n', label:str(r.label,200)});
+      cardinality:erdCardinality(r.cardinality)||'1:0..n', label:str(r.label,200)});
   });
-  return {name:str(doc.name,120).trim()||'Imported diagram', tables, relations,
+  const frames=[], fids=new Set();
+  (Array.isArray(doc.frames)?doc.frames:[]).slice(0,200).forEach((fr,i)=>{
+    if(!fr || typeof fr!=='object') return;
+    let id=str(fr.id,64)||('f'+(i+1));
+    while(fids.has(id)) id+='_';
+    fids.add(id);
+    frames.push({id, name:str(fr.name,120), x:num(fr.x, 0), y:num(fr.y, 0),
+      w:Math.max(ERD_FRAME_MIN_W, num(fr.w, 480)), h:Math.max(ERD_FRAME_MIN_H, num(fr.h, 320)),
+      color:/^#[0-9a-f]{6}$/i.test(fr.color||'')?fr.color.toLowerCase():''});
+  });
+  return {name:str(doc.name,120).trim()||'Imported diagram', tables, relations, frames,
     dismissed:(Array.isArray(doc.dismissed)?doc.dismissed:[]).filter(s=>typeof s==='string').slice(0,1000)};
 }
 
-/** A diagram as the file format (see site/pages/explorer.md). Relations name their tables as written. */
+/** A diagram as the file format (see site/pages/erd.md). Relations name their tables as written. */
 function erdToDoc(d, meta){
   meta=meta||{};
   const nameOf=new Map((d.tables||[]).map(t=>[t.key, t.name]));
@@ -204,6 +246,8 @@ function erdToDoc(d, meta){
     columns:(t.columns||[]).map(c=>c.pk?{name:c.name, type:c.type==null?null:c.type, pk:true}:{name:c.name, type:c.type==null?null:c.type})}));
   doc.relations=(d.relations||[]).map(r=>({id:r.id, from:nameOf.get(r.from)||r.from, to:nameOf.get(r.to)||r.to,
     fromColumn:r.fromColumn||'', toColumn:r.toColumn||'', cardinality:r.cardinality, label:r.label||''}));
+  doc.frames=(d.frames||[]).map(fr=>({id:fr.id, name:fr.name||'', x:Math.round(fr.x), y:Math.round(fr.y),
+    w:Math.round(fr.w), h:Math.round(fr.h), color:fr.color||''}));
   doc.dismissed=(d.dismissed||[]).slice();
   return doc;
 }
@@ -211,8 +255,9 @@ function erdToDoc(d, meta){
 /** Whether two diagrams say the same thing — the "changed here" test for a diagram from a project file. */
 function erdSame(a, b){ return JSON.stringify(erdToDoc(a))===JSON.stringify(erdToDoc(b)); }
 
-/** The two ends of a cardinality: `1:n` is one on the from-side and many on the to-side. */
-function erdEnds(card){ const p=String(card||'1:n').split(':'); return [p[0]||'1', p[1]||'n']; }
+/** The two ends of a cardinality, from-side first: `1:0..n` is exactly one at the from-side, zero or more at
+ *  the to-side. */
+function erdEnds(card){ return (erdCardinality(card)||'1:0..n').split(':'); }
 
 /** Readable text on a coloured header: dark ink on a light colour, white on a dark one (WCAG luminance). */
 function erdContrast(hex){
@@ -300,7 +345,7 @@ function erdArrange(nodes, edges, opts){
   (edges||[]).forEach(e=>{
     if(!byKey.has(e.from) || !byKey.has(e.to) || e.from===e.to) return;
     const [a,b]=erdEnds(e.cardinality);
-    const flip=a!=='1' && b==='1';                // n:1 — the one side is the target
+    const flip=!erdEndOne(a) && erdEndOne(b);     // n:1 — the one side is the target
     arcs.push({p:flip?e.to:e.from, c:flip?e.from:e.to, gap:e.gap||0});
   });
 
@@ -459,6 +504,87 @@ function erdArrange(nodes, edges, opts){
   Object.keys(res).forEach(k=>{ res[k]={x:Math.round((ox+res[k].x)/4)*4, y:Math.round((oy+res[k].y)/4)*4}; });
   return res;
 }
+
+/**
+ * What each frame holds. A frame holds what is inside it — no list of members to keep in step: a table
+ * whose centre lies inside it, a frame lying wholly inside it; when several frames qualify, the smallest,
+ * so a frame drawn inside a frame belongs to it and its tables to the inner one. [tables] are
+ * `{key, x, y, w, h}`. Returns `{table, frame}`: Maps from a table key and a frame id to the id of the
+ * frame holding it; what no frame holds is absent.
+ */
+function erdFrameParents(frames, tables){
+  const list=(frames||[]).map((f,i)=>({f, i, a:f.w*f.h}));
+  // a strict order — by area, then the later-drawn frame the smaller of two equal ones — so no two frames
+  // can hold each other
+  const smaller=(p,q)=>p.a<q.a || (p.a===q.a && p.i>q.i);
+  const inside=(f, x, y)=>x>=f.x && x<=f.x+f.w && y>=f.y && y<=f.y+f.h;
+  const least=c=>c.reduce((m,o)=>!m || smaller(o,m) ? o : m, null);
+  const table=new Map(), frame=new Map();
+  (tables||[]).forEach(t=>{
+    const c=least(list.filter(o=>inside(o.f, t.x+t.w/2, t.y+t.h/2)));
+    if(c) table.set(t.key, c.f.id);
+  });
+  list.forEach(p=>{
+    const c=least(list.filter(o=>o!==p && smaller(p,o) && inside(o.f, p.f.x, p.f.y) && inside(o.f, p.f.x+p.f.w, p.f.y+p.f.h)));
+    if(c) frame.set(p.f.id, c.f.id);
+  });
+  return {table, frame};
+}
+
+/**
+ * [erdArrange] for a diagram with frames: a frame keeps its tables together. Each frame is arranged on its
+ * own first — its tables (and the frames inside it) by the relations between them — and fitted around the
+ * result; then, one level out, it takes part as a single block, related to whatever its tables relate to,
+ * so a frame of customers still stands left of the orders outside it. [frames] are `{id, x, y, w, h}`,
+ * with an optional `minW` (the room its name needs). Returns `{tables: {key: {x, y}}, frames: {id: {x, y,
+ * w, h}}}`; a frame that holds nothing keeps its size and moves as a block.
+ */
+function erdArrangeFramed(nodes, edges, frames, opts){
+  frames=frames||[];
+  if(!frames.length) return {tables:erdArrange(nodes, edges, opts), frames:{}};
+  const par=erdFrameParents(frames, nodes), FR='\u0002';
+  const tablesOut={}, framesOut={};
+  // the child of [cid] (a frame id, or null for the canvas) that holds table [k], or null when [cid] does not
+  const rep=(k, cid)=>{
+    let c=par.table.get(k)||null;
+    if(c===cid) return k;
+    while(c){ const p=par.frame.get(c)||null; if(p===cid) return FR+c; c=p; }
+    return null;
+  };
+  // a container's children arranged, relative to its content's top-left
+  const measure=cid=>{
+    const kids=(nodes||[]).filter(n=>(par.table.get(n.key)||null)===cid).map(n=>({key:n.key, w:n.w, h:n.h, x:n.x, y:n.y}));
+    const sub=new Map();
+    frames.filter(f=>(par.frame.get(f.id)||null)===cid).forEach(f=>{
+      const m=measure(f.id);
+      const w=m.empty?f.w:Math.max(f.minW||0, ERD_FRAME_MIN_W, m.w+2*ERD_FRAME_PAD);
+      const h=m.empty?f.h:Math.max(ERD_FRAME_MIN_H, m.h+ERD_FRAME_TOP+ERD_FRAME_PAD);
+      sub.set(f.id, Object.assign(m, {fw:w, fh:h}));
+      kids.push({key:FR+f.id, w, h, x:f.x, y:f.y});
+    });
+    if(!kids.length) return {empty:true, rel:{}, sub, w:0, h:0, x0:0, y0:0};
+    const es=[];
+    (edges||[]).forEach(e=>{ const a=rep(e.from, cid), b=rep(e.to, cid); if(a && b && a!==b) es.push(Object.assign({}, e, {from:a, to:b})); });
+    const p=erdArrange(kids, es, opts);
+    let x0=Infinity, y0=Infinity, x1=-Infinity, y1=-Infinity;
+    kids.forEach(k=>{ const q=p[k.key]; x0=Math.min(x0,q.x); y0=Math.min(y0,q.y); x1=Math.max(x1,q.x+k.w); y1=Math.max(y1,q.y+k.h); });
+    const rel={};
+    kids.forEach(k=>{ rel[k.key]={x:p[k.key].x-x0, y:p[k.key].y-y0}; });
+    return {empty:false, rel, sub, w:x1-x0, h:y1-y0, x0, y0};
+  };
+  const place=(m, ox, oy)=>{
+    Object.keys(m.rel).forEach(k=>{
+      const q={x:ox+m.rel[k].x, y:oy+m.rel[k].y};
+      if(k.charAt(0)!==FR){ tablesOut[k]=q; return; }
+      const s=m.sub.get(k.slice(1));
+      framesOut[k.slice(1)]={x:q.x, y:q.y, w:s.fw, h:s.fh};
+      if(!s.empty) place(s, q.x+ERD_FRAME_PAD, q.y+ERD_FRAME_TOP);
+    });
+  };
+  const top=measure(null);
+  place(top, top.x0, top.y0);          // the canvas's arrangement is already where the drawing was
+  return {tables:tablesOut, frames:framesOut};
+}
 /*__ERD_CORE_END__*/
 
 (function(){
@@ -524,7 +650,6 @@ const ROW=22, HEAD1=32, HEAD2=44, FOOT=22, WMIN=200, WMAX=420;
 const SANS="Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif";
 const MONO="'SFMono-Regular', ui-monospace, Menlo, Monaco, Consolas, monospace";
 const F_TITLE='600 13px '+SANS, F_SUB='11px '+MONO, F_ROW='12px '+SANS, F_TYPE='11px '+MONO, F_PILL='12px '+SANS;
-const CARD_TEXT={'1:1':'one to one', '1:n':'one to many', 'n:1':'many to one', 'n:m':'many to many'};
 /** The page's colours, as references: a theme switch restyles the canvas without a redraw. */
 const PAGE={panel:'var(--panel)', line:'var(--line2)', head:'var(--panel2)', ink:'var(--ink)', dim:'var(--ink-dim)',
   faint:'var(--ink-faint)', accent:'var(--accent)', bg:'var(--bg)', pill:'var(--panel)', mark:'var(--hl-bg)'};
@@ -541,7 +666,7 @@ function state(){
   const catalog=erdCatalog(DATA.nodes||[]);
   S={catalog, byKey:new Map(catalog.map(t=>[t.key,t])), suggestions:erdSuggestions(DATA.nodes||[], DATA.edges||[]),
     diagrams:[], activeId:null, undo:[], redo:[], sel:null, pop:null, root:null, filter:'', present:false,
-    storageOk:true, projectErrors:[], lastCoalesce:null, drag:null, dirtyTimer:0, q:'', results:[], resIdx:0};
+    storageOk:true, projectErrors:[], lastCoalesce:null, drag:null, dirtyTimer:0, q:'', results:[], resIdx:0, tool:null};
   load();
   return S;
 }
@@ -569,7 +694,7 @@ function load(){
   S.activeId=(st && S.diagrams.some(d=>d.id===st.active)) ? st.active : S.diagrams[0].id;
 }
 function blank(name){ return {id:'l:'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), name, tables:[],
-  relations:[], dismissed:[], stored:false, origin:null}; }
+  relations:[], frames:[], dismissed:[], stored:false, origin:null}; }
 const active=()=>S.diagrams.find(d=>d.id===S.activeId)||S.diagrams[0];
 function persist(){
   clearTimeout(S.dirtyTimer);
@@ -582,8 +707,8 @@ function persist(){
   renderStatus();
 }
 function schedulePersist(){ clearTimeout(S.dirtyTimer); S.dirtyTimer=setTimeout(persist, 250); }
-const snap=d=>JSON.stringify({name:d.name, tables:d.tables, relations:d.relations, dismissed:d.dismissed});
-function restore(d, json){ const o=JSON.parse(json); d.name=o.name; d.tables=o.tables; d.relations=o.relations; d.dismissed=o.dismissed; }
+const snap=d=>JSON.stringify({name:d.name, tables:d.tables, relations:d.relations, frames:d.frames||[], dismissed:d.dismissed});
+function restore(d, json){ const o=JSON.parse(json); d.name=o.name; d.tables=o.tables; d.relations=o.relations; d.frames=o.frames; d.dismissed=o.dismissed; }
 /** Every change goes through here: one undo step, a save, a redraw. [coalesce] folds a run of the same edit
  *  (typing a name) into one step, so ⌘Z undoes the word rather than its last letter. */
 function mutate(fn, coalesce){
@@ -715,20 +840,35 @@ const st=o=>' style="'+Object.keys(o).filter(k=>o[k]!=null&&o[k]!=='').map(k=>k+
 function textEl(x, y, s, font, fill, extra){
   return '<text x="'+f(x)+'" y="'+f(y)+'"'+(extra||'')+st({font, fill})+'>'+esc(s)+'</text>';
 }
-/** The cardinality mark at one end: a bar for one, a crow's foot for many, and the letter beside it —
- *  the crow's foot is the notation, the letter is for whoever has never seen one. */
+/**
+ * One end's crow's foot, as lines and a ring, leaving point [p] in direction [n]: the maximum at the card —
+ * a bar for one, a foot for many — and the minimum just outside it — a bar for at least one, a ring for
+ * none. So `1` is ‖, `0..1` o|, `1..n` |<, `0..n` o<. [k] scales it, for the panel's buttons.
+ */
+function endShapes(p, n, end, k){
+  const [nx,ny]=n, tx=-ny, ty=nx;
+  const at=d=>({x:p.x+nx*d*k, y:p.y+ny*d*k}), across=(q,s)=>[{x:q.x+tx*s*k, y:q.y+ty*s*k}, {x:q.x-tx*s*k, y:q.y-ty*s*k}];
+  const many=!erdEndOne(end), zero=end==='0..1'||end==='0..n', lines=[];
+  if(many){ const q=at(12), [a,b]=across(p,7); lines.push([q,a], [q,b], [q,p]); }
+  else lines.push(across(at(7),6));
+  let ring=null;
+  if(zero) ring={c:at(many?20:16), r:4*k};
+  else lines.push(across(at(many?17:12),6));
+  return {lines, ring};
+}
+/** The cardinality mark at one end, and its count beside it — the crow's foot is the notation, the count
+ *  for whoever has never seen one. */
 function endMark(p, end, C){
-  const [nx,ny]=p.n, tx=-ny, ty=nx, out=[];
-  const L=(a,b)=>'<path d="M'+f(a.x)+','+f(a.y)+' L'+f(b.x)+','+f(b.y)+'"'+st({stroke:C.dim, 'stroke-width':1.5, fill:'none'})+'/>';
-  if(end==='1'){
-    const q={x:p.x+nx*11, y:p.y+ny*11};
-    out.push(L({x:q.x+tx*6, y:q.y+ty*6}, {x:q.x-tx*6, y:q.y-ty*6}));
-  } else {
-    const q={x:p.x+nx*13, y:p.y+ny*13};
-    out.push(L(q, {x:p.x+tx*7, y:p.y+ty*7}), L(q, {x:p.x-tx*7, y:p.y-ty*7}), L(q, p));
-  }
-  const lx=p.x+nx*19+tx*9, ly=p.y+ny*19+ty*9;
-  out.push(textEl(lx, ly+4, end, '600 11px '+SANS, C.dim, ' text-anchor="middle"'));
+  const {lines, ring}=endShapes(p, p.n, end, 1), [nx,ny]=p.n, tx=-ny, ty=nx, out=[];
+  const S={stroke:C.dim, 'stroke-width':1.5, fill:'none'};
+  lines.forEach(([a,b])=>out.push('<path d="M'+f(a.x)+','+f(a.y)+' L'+f(b.x)+','+f(b.y)+'"'+st(S)+'/>'));
+  // filled with the canvas, so the line does not run through the ring
+  if(ring) out.push('<circle cx="'+f(ring.c.x)+'" cy="'+f(ring.c.y)+'" r="'+ring.r+'"'+st({stroke:C.dim, 'stroke-width':1.5, fill:C.bg})+'/>');
+  // beside the line, clear of the foot: under or over a level line, left or right of an upright one — then
+  // anchored at its near end, as `0..n` is four letters wide
+  const lx=p.x+nx*14+tx*12, ly=p.y+ny*14+ty*12;
+  const anchor=Math.abs(tx)>0.5?(tx>0?'start':'end'):'middle';
+  out.push(textEl(lx, ly+4, end, '600 11px '+SANS, C.dim, ' text-anchor="'+anchor+'"'));
   return out.join('');
 }
 function relationSvg(r, g, C, o){
@@ -800,6 +940,39 @@ function cardSvg(L, C, o){
   }
   return s+'</g>';
 }
+const F_FRAME='600 12px '+SANS, FRAME_TAB_H=24;
+/** The width a frame's name tab takes — and so the least a frame can be, for Arrange to leave it readable. */
+const frameTabW=fr=>tw(fr.name||'Frame', F_FRAME)+22;
+/**
+ * A frame: a tinted area behind the tables it holds, its name on a tab in its top-left corner. The tab and
+ * the frame's edge are what take the pointer — the area inside stays the canvas, to pan and to drop on — and
+ * a selected frame shows its four corners to resize it by.
+ */
+function frameSvg(fr, C, o){
+  const col=fr.color, sel=o.sel, x=fr.x, y=fr.y, w=fr.w, h=fr.h;
+  let s='<g class="erd-frame'+(sel?' sel':'')+'" data-frame="'+esc(fr.id)+'">';
+  s+='<rect class="erd-fbox" x="'+f(x)+'" y="'+f(y)+'" width="'+f(w)+'" height="'+f(h)+'" rx="12"'+
+     st({fill:col||C.faint, 'fill-opacity':col?0.07:0.05, stroke:sel?C.accent:(col||C.line), 'stroke-width':sel?2:1.5})+'/>';
+  if(o.interactive) s+='<rect class="erd-fedge" x="'+f(x)+'" y="'+f(y)+'" width="'+f(w)+'" height="'+f(h)+'" rx="12"'+
+     st({fill:'none', stroke:'transparent', 'stroke-width':12})+'/>';
+  // unnamed, the tab still shows on the canvas — it is the handle — but not in an exported picture
+  const name=fr.name||(o.interactive?'Frame':'');
+  if(name){
+    const tabW=Math.min(w-16, frameTabW(fr)), ink=col?erdContrast(col):(fr.name?C.ink:C.faint);
+    s+='<g class="erd-ftab"><rect x="'+f(x+8)+'" y="'+f(y+8)+'" width="'+f(tabW)+'" height="'+FRAME_TAB_H+'" rx="6"'+
+       st({fill:col||C.head, stroke:col?'':C.line, 'stroke-width':1})+'/>'+
+       textEl(x+19, y+24.5, clip(name, F_FRAME, tabW-22), fr.name?F_FRAME:'italic '+F_FRAME, ink)+'</g>';
+  }
+  if(o.interactive && sel){
+    [['nw',x,y],['ne',x+w,y],['sw',x,y+h],['se',x+w,y+h]].forEach(([k,cx,cy])=>{
+      s+='<rect class="erd-fh" data-h="'+k+'" x="'+f(cx-5)+'" y="'+f(cy-5)+'" width="10" height="10" rx="2"'+
+         st({fill:C.panel, stroke:C.accent, 'stroke-width':1.5})+'/>';
+    });
+  }
+  return s+'</g>';
+}
+/** Frames back to front: a larger one first, so a frame inside another is drawn — and clicked — on top. */
+const framesBackToFront=d=>(d.frames||[]).map((fr,i)=>({fr,i})).sort((a,b)=>(b.fr.w*b.fr.h-a.fr.w*a.fr.h) || (a.i-b.i)).map(x=>x.fr);
 /** The whole diagram as SVG markup: the canvas draws it with the page's colours and its handles, an export
  *  with paper colours and nothing interactive — one drawing, so the picture is what the screen showed. */
 function sceneSvg(d, C, o){
@@ -811,7 +984,9 @@ function sceneSvg(d, C, o){
   rels.concat(sugs).forEach(x=>{ const g=route(x, lays, fan.get(x.id)||0); if(g) geo.set(x.id, g); });
   spreadPills(rels.filter(r=>r.label && geo.has(r.id)).map(r=>({g:geo.get(r.id), w:tw(r.label+'  ·  '+r.cardinality, F_PILL)+18}))
     .concat(sugs.filter(sg=>geo.has(sg.id)).map(sg=>({g:geo.get(sg.id), w:tw('+ '+(sg.label||'suggested')+'  ·  '+sg.cardinality, F_PILL)+42}))));
-  let s='<g class="erd-rels">';
+  let s='<g class="erd-frames">';
+  framesBackToFront(d).forEach(fr=>{ s+=frameSvg(fr, C, {interactive:o.interactive, sel:o.sel&&o.sel.kind==='frame'&&o.sel.id===fr.id}); });
+  s+='</g><g class="erd-rels">';
   rels.forEach(r=>{ const g=geo.get(r.id); if(g) s+=relationSvg(r, g, C, {interactive:o.interactive, sel:o.sel&&o.sel.kind==='rel'&&o.sel.id===r.id}); });
   s+='</g><g class="erd-sugs">';
   sugs.forEach(sg=>{ const g=geo.get(sg.id); if(g) s+=suggestionSvg(sg, g, C); });
@@ -849,9 +1024,11 @@ function visibleSuggestions(d, lays){
     return true;
   });
 }
-function bounds(lays, pad){
+/** What the drawing covers — its tables and its frames — with [pad] around it; null for an empty one. */
+function bounds(lays, pad, frames){
   let x0=Infinity, y0=Infinity, x1=-Infinity, y1=-Infinity;
   lays.forEach(L=>{ x0=Math.min(x0,L.x); y0=Math.min(y0,L.y); x1=Math.max(x1,L.x+L.w); y1=Math.max(y1,L.y+L.h); });
+  (frames||[]).forEach(F=>{ x0=Math.min(x0,F.x); y0=Math.min(y0,F.y); x1=Math.max(x1,F.x+F.w); y1=Math.max(y1,F.y+F.h); });
   if(!isFinite(x0)) return null;
   return {x:x0-pad, y:y0-pad, w:x1-x0+2*pad, h:y1-y0+2*pad};
 }
@@ -904,6 +1081,9 @@ function build(root){
             ' erd-arrangebtn')+
           btn('expand-all', ico('<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>'), 'Expand all — every table shows all its columns')+
           btn('collapse-all', ico('<path d="m7 20 5-5 5 5"/><path d="m7 4 5 5 5-5"/>'), 'Collapse all — every table back to its first '+VISIBLE+' columns')+
+          btn('frame', ico('<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/>'+
+            '<path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect width="7" height="5" x="7" y="7" rx="1"/><rect width="7" height="5" x="10" y="12" rx="1"/>')+
+            '<span>Frame</span>', 'Frame — drag over tables to put them in a frame you can name (F)', ' erd-framebtn')+
           '<span class="erd-sep"></span>'+
           '<div class="erd-qwrap">'+ico('<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>')+
             '<input class="erd-q" type="search" placeholder="Search tables and columns" aria-label="Search every table and column of the project" '+
@@ -1035,9 +1215,12 @@ function draw(){
   els.world.innerHTML=markup;
   els.lays=lays;
   applyView();
-  els.hint.hidden=d.tables.length>0;
+  els.hint.hidden=d.tables.length>0 || (d.frames||[]).length>0;
   els.canvas.classList.toggle('has-sel', !!S.sel);
   els.canvas.classList.toggle('searching', !!S.q);
+  els.canvas.classList.toggle('framing', S.tool==='frame');
+  const fb=els.bar.querySelector('[data-act=frame]');
+  if(fb) fb.setAttribute('aria-pressed', String(S.tool==='frame'));
 }
 function applyView(){
   const v=view();
@@ -1061,7 +1244,7 @@ function zoomAt(k, cx, cy){
 }
 function fit(){
   if(!els || els.empty) return;
-  const v=view(), b=bounds(els.lays||new Map(), 32), r=els.svg.getBoundingClientRect();
+  const v=view(), b=bounds(els.lays||new Map(), 32, active().frames), r=els.svg.getBoundingClientRect();
   if(!b || r.width<50 || r.height<50){ v.s=1; v.tx=40; v.ty=40; applyView(); return; }
   // presenting, a small diagram may grow to fill the room it has — it is being shown across a table
   v.s=Math.max(0.2, Math.min(S.present?1.6:1.25, r.width/b.w, r.height/b.h));
@@ -1081,6 +1264,7 @@ function selected(){
   const d=active(), s=S.sel;
   if(!s) return null;
   if(s.kind==='table') return d.tables.find(t=>t.key===s.key)||null;
+  if(s.kind==='frame') return (d.frames||[]).find(x=>x.id===s.id)||null;
   return d.relations.find(r=>r.id===s.id)||null;
 }
 function select(sel){ S.sel=sel; draw(); }
@@ -1101,37 +1285,44 @@ function removeSelected(){
   const s=S.sel;
   if(!s) return;
   if(s.kind==='table') mutate(d=>{ d.tables=d.tables.filter(t=>t.key!==s.key); d.relations=d.relations.filter(r=>r.from!==s.key&&r.to!==s.key); });
+  // a frame goes, what it held stays where it is
+  else if(s.kind==='frame') mutate(d=>{ d.frames=d.frames.filter(x=>x.id!==s.id); });
   else mutate(d=>{ d.relations=d.relations.filter(r=>r.id!==s.id); });
   S.sel=null; closePop(); draw();
 }
 function newRelId(d){ let i=d.relations.length+1; while(d.relations.some(r=>r.id==='r'+i)) i++; return 'r'+i; }
 function addRelation(from, to, toColumn, extra){
   let id=null;
-  mutate(d=>{ id=newRelId(d); d.relations.push(Object.assign({id, from, to, fromColumn:'', toColumn:toColumn||'', cardinality:'1:n', label:''}, extra||{})); });
+  mutate(d=>{ id=newRelId(d); d.relations.push(Object.assign({id, from, to, fromColumn:'', toColumn:toColumn||'', cardinality:'1:0..n', label:''}, extra||{})); });
   return id;
 }
 /**
- * Lay every table out by its relations (erdArrange), as one undo step. The cards glide to their new places
- * so the reader can follow where each one went — unless the system asks for less motion.
+ * Lay every table out by its relations (erdArrange; erdArrangeFramed keeps each frame's tables together and
+ * fits the frame around them), as one undo step. The cards and frames glide to their new places so the
+ * reader can follow where each one went — unless the system asks for less motion.
  */
 function arrange(){
   const d=active();
   if(d.tables.length<2){ toast('Arrange needs at least two tables on the canvas'); return; }
   closePop();
   const lays=els.lays||new Map();
-  const nodes=d.tables.map(t=>{ const L=lays.get(t.key)||layout(t); return {key:t.key, w:L.w, h:L.h, x:t.x, y:t.y}; });
+  const nodes=boxesOf(d);
   // a relation's name, and a proposal's, need room between the two columns it joins
   const edges=d.relations.map(r=>({from:r.from, to:r.to, cardinality:r.cardinality,
       gap:r.label?tw(r.label+'  ·  '+r.cardinality, F_PILL)+18:0}))
     .concat(visibleSuggestions(d, lays).map(sg=>({from:sg.from, to:sg.to, cardinality:sg.cardinality,
       gap:tw('+ '+(sg.label||'suggested')+'  ·  '+sg.cardinality, F_PILL)+46})));
-  const target=erdArrange(nodes, edges), before=snap(d);
+  const res=erdArrangeFramed(nodes, edges, d.frames.map(fr=>({id:fr.id, x:fr.x, y:fr.y, w:fr.w, h:fr.h, minW:frameTabW(fr)+16}))),
+    target=res.tables, frameTo=res.frames, before=snap(d);
   const from=new Map(d.tables.map(t=>[t.key, {x:t.x, y:t.y}]));
+  const fromF=new Map(d.frames.map(fr=>[fr.id, {x:fr.x, y:fr.y, w:fr.w, h:fr.h}]));
   const done=()=>{
     d.tables.forEach(t=>{ const p=target[t.key]; if(p){ t.x=p.x; t.y=p.y; } });
+    d.frames.forEach(fr=>{ const p=frameTo[fr.id]; if(p) Object.assign(fr, p); });
     commitGesture(before);
     fit();
-    const moved=d.tables.filter(t=>{ const a=from.get(t.key); return a.x!==t.x || a.y!==t.y; }).length;
+    const moved=d.tables.filter(t=>{ const a=from.get(t.key); return a.x!==t.x || a.y!==t.y; }).length+
+      d.frames.filter(fr=>{ const a=fromF.get(fr.id); return a.x!==fr.x || a.y!==fr.y || a.w!==fr.w || a.h!==fr.h; }).length;
     toast(moved?'Arranged '+d.tables.length+' tables — '+MODK+'Z puts them back':'Already arranged — nothing moved');
   };
   let still=false;
@@ -1141,10 +1332,68 @@ function arrange(){
   const step=now=>{
     const k=Math.min(1, (now-t0)/MS), e=1-Math.pow(1-k, 3);     // ease out: fast start, gentle landing
     d.tables.forEach(t=>{ const a=from.get(t.key), b=target[t.key]; if(a && b){ t.x=a.x+(b.x-a.x)*e; t.y=a.y+(b.y-a.y)*e; } });
+    d.frames.forEach(fr=>{ const a=fromF.get(fr.id), b=frameTo[fr.id]; if(a && b) ['x','y','w','h'].forEach(p=>{ fr[p]=a[p]+(b[p]-a[p])*e; }); });
     draw();
     if(k<1) requestAnimationFrame(step); else done();
   };
   requestAnimationFrame(step);
+}
+/** Every card as the box it takes on the canvas now — what frames and Arrange measure against. */
+function boxesOf(d){
+  const lays=els && els.lays;
+  return d.tables.map(t=>{ const L=(lays && lays.get(t.key))||layout(t, S.q); return {key:t.key, w:L.w, h:L.h, x:t.x, y:t.y}; });
+}
+/** The tables and frames inside frame [id] — directly or in a frame inside it — as they are now. */
+function frameContents(d, id, boxes){
+  const par=erdFrameParents(d.frames, boxes||boxesOf(d));
+  const within=f=>{ while(f){ if(f===id) return true; f=par.frame.get(f); } return false; };
+  return {tables:d.tables.filter(t=>within(par.table.get(t.key))), frames:d.frames.filter(x=>x.id!==id && within(par.frame.get(x.id)))};
+}
+/**
+ * Change the cards' size ([fn]: unfold, fold) without them slipping out of their frames: a frame holds a card
+ * by its centre, and unfolding moves the centre down. Each frame grows, never shrinks, to go on holding
+ * what it held — and so does the frame around it.
+ */
+function keepFramed(d, fn){
+  if(!(d.frames||[]).length){ fn(d); return; }
+  const par=erdFrameParents(d.frames, boxesOf(d));
+  fn(d);
+  const byId=new Map(d.frames.map(x=>[x.id, x]));
+  const grow=(id, x1, y1)=>{
+    for(let fr=byId.get(id); fr; fr=byId.get(par.frame.get(fr.id))){
+      fr.w=Math.max(fr.w, Math.ceil((x1+ERD_FRAME_PAD-fr.x)/4)*4); fr.h=Math.max(fr.h, Math.ceil((y1+ERD_FRAME_PAD-fr.y)/4)*4);
+      x1=fr.x+fr.w; y1=fr.y+fr.h;
+    }
+  };
+  d.tables.forEach(t=>{ const id=par.table.get(t.key); if(!id) return; const L=layout(t, S.q); grow(id, t.x+L.w, t.y+L.h); });
+}
+function newFrameId(d){ let i=d.frames.length+1; while(d.frames.some(x=>x.id==='f'+i)) i++; return 'f'+i; }
+/** A frame on the canvas at [r] (world coordinates), selected, its panel open to name it. */
+function addFrame(r){
+  let id=null;
+  mutate(d=>{ id=newFrameId(d); d.frames.push({id, name:'', x:Math.round(r.x/4)*4, y:Math.round(r.y/4)*4,
+    w:Math.max(ERD_FRAME_MIN_W, Math.round(r.w/4)*4), h:Math.max(ERD_FRAME_MIN_H, Math.round(r.h/4)*4), color:''}); });
+  if(!id) return;
+  S.sel={kind:'frame', id}; draw();
+  openFramePop(id, true);
+}
+/** The frame drawn again around what it holds, with room for its name — after the tables have moved on. */
+function fitFrame(id){
+  const d=active(), fr=d.frames.find(x=>x.id===id);
+  if(!fr) return;
+  const lays=els.lays||new Map(), c=frameContents(d, id);
+  const boxes=c.tables.map(t=>{ const L=lays.get(t.key)||layout(t, S.q); return {x:t.x, y:t.y, w:L.w, h:L.h}; }).concat(c.frames);
+  if(!boxes.length){ toast('Nothing in this frame to fit it to — drag tables into it first'); return; }
+  const b=bounds(new Map(boxes.map((x,i)=>[i, x])), 0);
+  mutate(x=>{ const g=x.frames.find(y=>y.id===id); if(!g) return;
+    g.x=Math.floor((b.x-ERD_FRAME_PAD)/4)*4; g.y=Math.floor((b.y-ERD_FRAME_TOP)/4)*4;
+    g.w=Math.max(ERD_FRAME_MIN_W, frameTabW(g)+16, Math.ceil((b.x+b.w+ERD_FRAME_PAD-g.x)/4)*4);
+    g.h=Math.max(ERD_FRAME_MIN_H, Math.ceil((b.y+b.h+ERD_FRAME_PAD-g.y)/4)*4); });
+}
+function setTool(tool){
+  S.tool=tool;
+  if(tool==='frame'){ closePop(); toast('Drag over the tables to frame them — Esc cancels'); }
+  draw();
 }
 /** Every card unfolded to all its columns, or folded back to the first five — one undo step either way. */
 function setAllExpanded(on){
@@ -1152,7 +1401,7 @@ function setAllExpanded(on){
   if(!d.tables.length){ toast('No tables on the canvas yet'); return; }
   const n=d.tables.filter(t=>!!t.expanded!==on).length;
   if(!n){ toast(on?'Every table already shows all its columns':'Every table already shows its first '+VISIBLE+' columns'); return; }
-  mutate(x=>{ x.tables.forEach(t=>{ t.expanded=on; }); if(on) makeRoom(x); });
+  mutate(x=>keepFramed(x, x=>{ x.tables.forEach(t=>{ t.expanded=on; }); if(on) makeRoom(x); }));
   toast((on?'Expanded ':'Collapsed ')+n+' table'+(n===1?'':'s')+' — '+MODK+'Z undoes it');
 }
 /**
@@ -1328,11 +1577,22 @@ function onDown(e){
   const t=e.target, svg=els.svg, start=toWorld(e.clientX, e.clientY), d=active();
   const cardEl=t.closest('.erd-card'), key=cardEl&&cardEl.dataset.key;
   let g=null;
-  if(t.closest('.erd-sug-x')){ g={kind:'click', up:()=>dismissSuggestion(t.closest('.erd-sug').dataset.sug)}; }
+  // the frame tool draws wherever the drag starts, over a card too: a frame is drawn around tables
+  if(S.tool==='frame'){ g={kind:'frame-draw', start}; }
+  else if(t.closest('.erd-sug-x')){ g={kind:'click', up:()=>dismissSuggestion(t.closest('.erd-sug').dataset.sug)}; }
   else if(t.closest('.erd-sug')){ g={kind:'click', up:()=>acceptSuggestion(t.closest('.erd-sug').dataset.sug)}; }
   else if(t.closest('.erd-rel')){
     const id=t.closest('.erd-rel').dataset.rel;
     g={kind:'click', up:ev=>{ select({kind:'rel', id}); openRelPop(id, ev); }};
+  }
+  else if(t.closest('.erd-fh')){
+    const fr=d.frames.find(x=>x.id===t.closest('.erd-frame').dataset.frame);
+    g={kind:'frame-size', fr, h:t.closest('.erd-fh').dataset.h, r0:{x:fr.x, y:fr.y, w:fr.w, h:fr.h}, start, before:snap(d)};
+  }
+  else if(t.closest('.erd-ftab') || t.closest('.erd-fedge')){
+    // a frame moves with everything it holds, as they are when the drag starts
+    const id=t.closest('.erd-frame').dataset.frame, fr=d.frames.find(x=>x.id===id), c=frameContents(d, id);
+    g={kind:'frame-move', id, start, before:snap(d), items:[fr].concat(c.frames, c.tables).map(o=>({o, x:o.x, y:o.y}))};
   }
   else if(key && t.closest('.erd-link')){
     const L=els.lays.get(key);
@@ -1343,7 +1603,7 @@ function onDown(e){
     g={kind:'reorder', key, col, before:snap(d), tb};
   }
   else if(key && t.closest('[data-act=toggle]')){
-    g={kind:'click', up:()=>mutate(d=>{ const x=d.tables.find(x=>x.key===key); if(x) x.expanded=!x.expanded; })};
+    g={kind:'click', up:()=>mutate(d=>keepFramed(d, d=>{ const x=d.tables.find(x=>x.key===key); if(x) x.expanded=!x.expanded; }))};
   }
   else if(key && t.closest('[data-act=edit]')){
     g={kind:'click', up:()=>{ select({kind:'table', key}); openTablePop(key); }};
@@ -1370,6 +1630,14 @@ function onDown(e){
       frame();
     }
     else if(g.kind==='link'){ linkPreview(g, p, ev); }
+    else if(g.kind==='frame-draw' && g.moved){ frameDrawPreview(g, p); }
+    else if(g.kind==='frame-move' && g.moved){
+      const dx=Math.round((p.x-g.start.x)/4)*4, dy=Math.round((p.y-g.start.y)/4)*4;
+      g.items.forEach(it=>{ it.o.x=it.x+dx; it.o.y=it.y+dy; });
+      if(!S.sel || S.sel.id!==g.id) S.sel={kind:'frame', id:g.id};
+      frame();
+    }
+    else if(g.kind==='frame-size' && g.moved){ resizeFrame(g, p); frame(); }
     else if(g.kind==='reorder' && g.moved){ reorderPreview(g, p); }
   };
   const up=ev=>{
@@ -1378,6 +1646,20 @@ function onDown(e){
     els.overlay.innerHTML='';
     els.root.querySelectorAll('.erd-card.target').forEach(c=>c.classList.remove('target'));
     if(g.kind==='click'){ if(!g.moved) g.up(ev); return; }
+    if(g.kind==='frame-draw'){
+      S.tool=null;
+      const p=toWorld(ev.clientX, ev.clientY), w=Math.abs(p.x-g.start.x), h=Math.abs(p.y-g.start.y);
+      // a click, or a drag too small to mean a size, puts down a frame of a useful size where it was
+      if(!g.moved || w<24 || h<24) addFrame({x:g.start.x, y:g.start.y, w:480, h:320});
+      else addFrame({x:Math.min(p.x, g.start.x), y:Math.min(p.y, g.start.y), w, h});
+      return;
+    }
+    if(g.kind==='frame-move'){
+      if(g.moved){ commitGesture(g.before); return; }
+      select({kind:'frame', id:g.id}); openFramePop(g.id);
+      return;
+    }
+    if(g.kind==='frame-size'){ if(g.moved) commitGesture(g.before); else draw(); return; }
     if(g.kind==='pan'){ if(!g.moved && S.sel){ S.sel=null; draw(); } return; }
     if(g.kind==='move'){
       if(g.moved){ commitGesture(g.before); return; }
@@ -1413,7 +1695,8 @@ function onDown(e){
   };
   const cancel=()=>{
     svg.removeEventListener('pointermove', move); svg.removeEventListener('pointerup', up); svg.removeEventListener('pointercancel', cancel);
-    if((g.kind==='move'||g.kind==='reorder') && g.moved) restore(active(), g.before);
+    if(['move','reorder','frame-move','frame-size'].indexOf(g.kind)>=0 && g.moved) restore(active(), g.before);
+    if(g.kind==='frame-draw') S.tool=null;
     S.drag=null; els.overlay.innerHTML=''; draw();
   };
   svg.addEventListener('pointermove', move); svg.addEventListener('pointerup', up);
@@ -1437,6 +1720,25 @@ function linkPreview(g, p, ev){
   const k=Math.max(30, Math.abs(p.x-g.p.x)/2);
   els.overlay.innerHTML='<path d="M'+f(g.p.x)+','+f(g.p.y)+' C'+f(g.p.x+k)+','+f(g.p.y)+' '+f(p.x-k)+','+f(p.y)+' '+f(p.x)+','+f(p.y)+'"'+
     st({fill:'none', stroke:PAGE.accent, 'stroke-width':2, 'stroke-dasharray':'6 4'})+'/><circle cx="'+f(p.x)+'" cy="'+f(p.y)+'" r="4"'+st({fill:PAGE.accent})+'/>';
+}
+/** The frame being drawn, and the cards it is going to hold — those whose centre is inside it. */
+function frameDrawPreview(g, p){
+  const x=Math.min(g.start.x, p.x), y=Math.min(g.start.y, p.y), w=Math.abs(p.x-g.start.x), h=Math.abs(p.y-g.start.y);
+  els.overlay.innerHTML='<rect x="'+f(x)+'" y="'+f(y)+'" width="'+f(w)+'" height="'+f(h)+'" rx="12"'+
+    st({fill:PAGE.accent, 'fill-opacity':0.06, stroke:PAGE.accent, 'stroke-width':1.5, 'stroke-dasharray':'6 4'})+'/>';
+  (els.lays||new Map()).forEach((L, key)=>{
+    const cx=L.x+L.w/2, cy=L.y+L.h/2, on=cx>=x && cx<=x+w && cy>=y && cy<=y+h;
+    const el=els.world.querySelector('.erd-card[data-key="'+cssEsc(key)+'"]');
+    if(el) el.classList.toggle('target', on);
+  });
+}
+/** A frame dragged by a corner: that corner follows the pointer, the opposite one stays, never below the least size. */
+function resizeFrame(g, p){
+  const r=g.r0, dx=p.x-g.start.x, dy=p.y-g.start.y, q=v=>Math.round(v/4)*4;
+  let x0=r.x, y0=r.y, x1=r.x+r.w, y1=r.y+r.h;
+  if(g.h.indexOf('w')>=0) x0=Math.min(x1-ERD_FRAME_MIN_W, q(r.x+dx)); else x1=Math.max(x0+ERD_FRAME_MIN_W, q(x1+dx));
+  if(g.h.indexOf('n')>=0) y0=Math.min(y1-ERD_FRAME_MIN_H, q(r.y+dy)); else y1=Math.max(y0+ERD_FRAME_MIN_H, q(y1+dy));
+  Object.assign(g.fr, {x:x0, y:y0, w:x1-x0, h:y1-y0});
 }
 function reorderPreview(g, p){
   const L=els.lays.get(g.key);
@@ -1507,11 +1809,7 @@ function openTablePop(key){
     '<div class="erd-infowrap" hidden>'+infoHtml(key)+'</div>'+
     (e.ghost?'<p class="erd-warn">This project’s schema has no table of this name — the card shows the columns the diagram was saved with.</p>':'')+
     '<label class="erd-fld"><span>Business name</span><input data-f="alias" value="'+esc(t.alias)+'" placeholder="'+esc(t.name)+'" autofocus></label>'+
-    '<div class="erd-fld"><span>Colour</span><div class="erd-sw">'+
-      '<button type="button" class="erd-swatch none'+(t.color?'':' on')+'" data-color="" data-tip="No colour" aria-label="No colour"></button>'+
-      ERD_SWATCHES.map(h=>'<button type="button" class="erd-swatch'+(t.color===h?' on':'')+'" data-color="'+h+'" style="background:'+h+'" aria-label="Colour '+h+'"></button>').join('')+
-      '<label class="erd-swatch custom'+(t.color&&ERD_SWATCHES.indexOf(t.color)<0?' on':'')+'" data-tip="Any colour"><input type="color" data-f="color" value="'+(t.color||'#2f6fed')+'" aria-label="Any colour"></label>'+
-    '</div></div>'+
+    swatchesHtml(t.color)+
     '<div class="erd-fld"><span>Columns <em>the first '+VISIBLE+' show on a folded card</em></span>'+
       (e.order.length>8?'<input class="erd-colq" type="search" placeholder="Filter the '+e.order.length+' columns" aria-label="Filter the columns" value="'+
         esc(S.q && erdColumnHits(e.columns, S.q).size?S.q:'')+'">':'')+
@@ -1522,10 +1820,11 @@ function openTablePop(key){
   renderPopCols(key);
   const pop=els.pop;
   pop.querySelector('[data-f=alias]').addEventListener('input', ev=>{ const val=ev.target.value; mutate(d=>{ const x=d.tables.find(x=>x.key===key); if(x) x.alias=val.slice(0,120); }, 'alias:'+key); });
-  pop.querySelector('[data-f=color]').addEventListener('input', ev=>setColor(key, ev.target.value, true));
+  const tableOf=d=>d.tables.find(x=>x.key===key);
+  pop.querySelector('[data-f=color]').addEventListener('input', ev=>setColor(tableOf, ev.target.value, 'color:'+key));
   const cq=pop.querySelector('.erd-colq');
   if(cq) cq.addEventListener('input', ()=>renderPopCols(key));
-  pop.querySelector('[data-f=expanded]').addEventListener('change', ev=>{ const on=ev.target.checked; mutate(d=>{ const x=d.tables.find(x=>x.key===key); if(x) x.expanded=on; }); });
+  pop.querySelector('[data-f=expanded]').addEventListener('change', ev=>{ const on=ev.target.checked; mutate(d=>keepFramed(d, d=>{ const x=d.tables.find(x=>x.key===key); if(x) x.expanded=on; })); });
   pop.addEventListener('click', ev=>{
     const ib=ev.target.closest('[data-info]');
     if(ib){ const w=pop.querySelector('.erd-infowrap'); w.hidden=!w.hidden; ib.classList.toggle('on', !w.hidden); return; }
@@ -1534,7 +1833,7 @@ function openTablePop(key){
     const op=ev.target.closest('[data-open]');
     if(op && window.__atlasOpen){ window.__atlasOpen(op.dataset.open); return; }
     const sw=ev.target.closest('[data-color]');
-    if(sw){ setColor(key, sw.dataset.color); return; }
+    if(sw){ setColor(tableOf, sw.dataset.color); return; }
     const mv=ev.target.closest('[data-mv]');
     if(mv){ moveCol(key, mv.dataset.col, +mv.dataset.mv); return; }
     const a=ev.target.closest('[data-pa]');
@@ -1602,8 +1901,17 @@ function srcLink(id, label){
     return '<a href="'+esc(DATA.explorer)+'#'+enc(id)+'" target="_blank" rel="noopener" data-tip="Open its page in the Atlas explorer">'+esc(label)+'</a>';
   return '<span'+(file?' data-tip="'+esc(file)+'"':'')+'>'+esc(label)+'</span>';
 }
-function setColor(key, hex, coalesce){
-  mutate(d=>{ const x=d.tables.find(x=>x.key===key); if(x) x.color=/^#[0-9a-f]{6}$/i.test(hex||'')?hex.toLowerCase():''; }, coalesce?'color:'+key:null);
+/** The colour field of a table's or a frame's panel: no colour, the eight swatches, any colour. */
+function swatchesHtml(color){
+  return '<div class="erd-fld"><span>Colour</span><div class="erd-sw">'+
+    '<button type="button" class="erd-swatch none'+(color?'':' on')+'" data-color="" data-tip="No colour" aria-label="No colour"></button>'+
+    ERD_SWATCHES.map(h=>'<button type="button" class="erd-swatch'+(color===h?' on':'')+'" data-color="'+h+'" style="background:'+h+'" aria-label="Colour '+h+'"></button>').join('')+
+    '<label class="erd-swatch custom'+(color&&ERD_SWATCHES.indexOf(color)<0?' on':'')+'" data-tip="Any colour"><input type="color" data-f="color" value="'+(color||'#2f6fed')+'" aria-label="Any colour"></label>'+
+  '</div></div>';
+}
+/** Colour what [find] picks out of the diagram — a table or a frame; [coalesce] folds a run of picks into one undo step. */
+function setColor(find, hex, coalesce){
+  mutate(d=>{ const x=find(d); if(x) x.color=/^#[0-9a-f]{6}$/i.test(hex||'')?hex.toLowerCase():''; }, coalesce||null);
   els.pop.querySelectorAll('.erd-swatch').forEach(s=>s.classList.toggle('on', (s.dataset.color||'')===(hex||'') ||
     (s.classList.contains('custom') && hex && ERD_SWATCHES.indexOf(hex.toLowerCase())<0)));
 }
@@ -1640,14 +1948,15 @@ function openRelPop(id, ev, fresh){
   if(!r) return;
   const A=d.tables.find(t=>t.key===r.from), B=d.tables.find(t=>t.key===r.to);
   const nm=t=>t?(t.alias||t.name):'?';
+  const ends=erdEnds(r.cardinality);
   const opts=(t, cur)=>'<option value="">— the table —</option>'+(t?effective(t).order.map(n=>'<option'+(erdKey(n)===erdKey(cur)?' selected':'')+'>'+esc(n)+'</option>').join(''):'');
   const html='<div class="erd-pop-h"><span class="erd-pop-t">Relation</span>'+closeBtn()+'</div>'+
     '<div class="erd-ends"><b>'+esc(nm(A))+'</b><span>→</span><b>'+esc(nm(B))+'</b>'+
       '<button type="button" class="tbtn" data-pa="swap" data-tip="Swap the direction">⇄</button></div>'+
     '<label class="erd-fld"><span>Name</span><input data-f="label" value="'+esc(r.label)+'" placeholder="e.g. places, belongs to"'+(fresh||!r.label?' autofocus':'')+'></label>'+
-    '<div class="erd-fld"><span>Cardinality</span><div class="erd-seg" role="radiogroup" aria-label="Cardinality">'+
-      ERD_CARDINALITIES.map(c=>'<button type="button" role="radio" data-card="'+c+'" aria-checked="'+(r.cardinality===c)+'">'+c+'</button>').join('')+
-    '</div><div class="erd-say"></div></div>'+
+    // one row per end, in the order the cardinality is written: how many of this table per row of the other
+    '<div class="erd-fld"><span>Cardinality</span>'+endRow(0, nm(A), nm(B), ends[0])+endRow(1, nm(B), nm(A), ends[1])+
+    '<div class="erd-say"></div></div>'+
     '<div class="erd-two"><label class="erd-fld"><span>From column</span><select data-f="fromColumn">'+opts(A, r.fromColumn)+'</select></label>'+
       '<label class="erd-fld"><span>To column</span><select data-f="toColumn">'+opts(B, r.toColumn)+'</select></label></div>'+
     '<div class="erd-pop-a"><button type="button" class="tbtn erd-danger" data-pa="delete">Delete the relation</button></div>';
@@ -1658,33 +1967,81 @@ function openRelPop(id, ev, fresh){
   const say=()=>{
     const x=active().relations.find(x=>x.id===id); if(!x) return;
     const a=nm(active().tables.find(t=>t.key===x.from)), b=nm(active().tables.find(t=>t.key===x.to));
-    const t={'1:1':'Each '+a+' has one '+b+', and each '+b+' one '+a+'.', '1:n':'One '+a+' has many '+b+'.',
-      'n:1':'Many '+a+' share one '+b+'.', 'n:m':'Many '+a+' relate to many '+b+'.'}[x.cardinality];
-    pop.querySelector('.erd-say').textContent=t||'';
+    const [ea, eb]=erdEnds(x.cardinality), one=erdEndOne;
+    const kind=one(ea)?(one(eb)?'One to one':'One to many'):(one(eb)?'Many to one':'Many to many');
+    pop.querySelector('.erd-say').textContent=kind+': each '+a+' has '+ERD_END_WORDS[eb]+' '+b+', each '+b+' '+ERD_END_WORDS[ea]+' '+a+'.';
   };
   say();
   pop.querySelector('[data-f=label]').addEventListener('input', e2=>{ const val=e2.target.value; mutate(d=>{ const x=d.relations.find(x=>x.id===id); if(x) x.label=val.slice(0,200); }, 'label:'+id); });
   pop.querySelectorAll('select[data-f]').forEach(s=>s.addEventListener('change', ()=>{ const k=s.dataset.f, val=s.value; mutate(d=>{ const x=d.relations.find(x=>x.id===id); if(x) x[k]=val; }); }));
   pop.addEventListener('click', e2=>{
-    const c=e2.target.closest('[data-card]');
-    if(c){ const val=c.dataset.card; mutate(d=>{ const x=d.relations.find(x=>x.id===id); if(x) x.cardinality=val; });
-      pop.querySelectorAll('[data-card]').forEach(b=>b.setAttribute('aria-checked', String(b.dataset.card===val))); say(); return; }
+    const c=e2.target.closest('[data-end]');
+    if(c){
+      const i=+c.dataset.end, val=c.dataset.v;
+      mutate(d=>{ const x=d.relations.find(x=>x.id===id); if(!x) return; const e=erdEnds(x.cardinality); e[i]=val; x.cardinality=e.join(':'); });
+      pop.querySelectorAll('[data-end="'+i+'"]').forEach(b=>b.setAttribute('aria-checked', String(b.dataset.v===val))); say(); return;
+    }
     const a=e2.target.closest('[data-pa]');
     if(!a) return;
     if(a.dataset.pa==='delete'){ S.sel={kind:'rel', id}; removeSelected(); }
     else if(a.dataset.pa==='swap'){
-      mutate(d=>{ const x=d.relations.find(x=>x.id===id); if(!x) return; [x.from,x.to]=[x.to,x.from]; [x.fromColumn,x.toColumn]=[x.toColumn,x.fromColumn]; });
+      // the relation turned round, read from the other table: each table keeps its own end
+      mutate(d=>{ const x=d.relations.find(x=>x.id===id); if(!x) return; [x.from,x.to]=[x.to,x.from]; [x.fromColumn,x.toColumn]=[x.toColumn,x.fromColumn];
+        x.cardinality=erdEnds(x.cardinality).reverse().join(':'); });
       openRelPop(id, null);
     }
     else if(a.dataset.pa==='close') closePop();
   });
+}
+/** A frame's panel: its name, its colour, fitting it to what it holds, deleting it (what it holds stays). */
+function openFramePop(id, fresh){
+  const d=active(), fr=d.frames.find(x=>x.id===id);
+  if(!fr) return;
+  const n=frameContents(d, id).tables.length;
+  const html='<div class="erd-pop-h"><span class="erd-pop-t">Frame</span>'+closeBtn()+'</div>'+
+    '<label class="erd-fld"><span>Name</span><input data-f="name" value="'+esc(fr.name)+'" maxlength="120" placeholder="e.g. Sales, Accounting"'+
+      (fresh||!fr.name?' autofocus':'')+'></label>'+
+    swatchesHtml(fr.color)+
+    '<p class="erd-fnote">'+(n?'Holds '+n+' table'+(n===1?'':'s')+' — they move with it.':'Holds no table yet — drag tables into it.')+'</p>'+
+    '<div class="erd-pop-a"><button type="button" class="tbtn" data-pa="fit" data-tip="Draw the frame around the tables it holds, with room for its name">'+
+      'Fit to its tables</button><span class="erd-grow"></span>'+
+      '<button type="button" class="tbtn erd-danger" data-pa="delete" data-tip="The tables it holds stay where they are">Delete the frame</button></div>';
+  const r=els.svg.getBoundingClientRect(), v=view();
+  openPop('frame', html, {x:r.left+(fr.x+8)*v.s+v.tx, y:r.top+(fr.y+8+FRAME_TAB_H)*v.s+v.ty+8});
+  const pop=els.pop, frameOf=d=>d.frames.find(x=>x.id===id);
+  pop.querySelector('[data-f=name]').addEventListener('input', ev=>{ const val=ev.target.value; mutate(d=>{ const x=frameOf(d); if(x) x.name=val.slice(0,120); }, 'fname:'+id); });
+  pop.querySelector('[data-f=color]').addEventListener('input', ev=>setColor(frameOf, ev.target.value, 'fcolor:'+id));
+  pop.addEventListener('click', ev=>{
+    const sw=ev.target.closest('[data-color]');
+    if(sw){ setColor(frameOf, sw.dataset.color); return; }
+    const a=ev.target.closest('[data-pa]');
+    if(!a) return;
+    if(a.dataset.pa==='fit') fitFrame(id);
+    else if(a.dataset.pa==='delete'){ S.sel={kind:'frame', id}; removeSelected(); }
+    else if(a.dataset.pa==='close') closePop();
+  });
+}
+/** One end's choice in the relation panel: how many [self] per [other], each count with its crow's foot. */
+function endRow(i, self, other, cur){
+  return '<div class="erd-endrow"><div class="erd-endlbl"><b>'+esc(self)+'</b> per '+esc(other)+'</div>'+
+    '<div class="erd-seg erd-seg-end" role="radiogroup" aria-label="How many '+esc(self)+' per '+esc(other)+'">'+
+    ERD_ENDS.map(e=>'<button type="button" role="radio" data-end="'+i+'" data-v="'+e+'" aria-checked="'+(cur===e)+'" '+
+      'data-tip="'+esc(ERD_END_WORDS[e].charAt(0).toUpperCase()+ERD_END_WORDS[e].slice(1)+' '+self+' per '+other)+'">'+endGlyph(e)+'<span>'+e+'</span></button>').join('')+
+  '</div></div>';
+}
+/** An end's crow's foot, small, the way the canvas draws it at a card on the right. */
+function endGlyph(end){
+  const {lines, ring}=endShapes({x:21, y:7}, [-1,0], end, 0.7);
+  return '<svg class="erd-glyph" viewBox="0 0 24 14" width="24" height="14" aria-hidden="true"><path d="M1 7H21M21 1v12"/>'+
+    lines.map(([a,b])=>'<path d="M'+f(a.x)+','+f(a.y)+' L'+f(b.x)+','+f(b.y)+'"/>').join('')+
+    (ring?'<circle cx="'+f(ring.c.x)+'" cy="'+f(ring.c.y)+'" r="'+f(ring.r)+'"/>':'')+'</svg>';
 }
 function closeBtn(){ return '<button type="button" class="erd-x" data-pa="close" aria-label="Close">×</button>'; }
 
 // ---------- diagrams: switch, new, rename, duplicate, delete, import, export ----------
 function switchTo(id){
   if(!S.diagrams.some(d=>d.id===id)) return;
-  S.activeId=id; S.undo=[]; S.redo=[]; S.sel=null; S.lastCoalesce=null;
+  S.activeId=id; S.undo=[]; S.redo=[]; S.sel=null; S.lastCoalesce=null; S.tool=null;
   closePop(); persist(); renderPick(); renderList(); draw(); renderStatus();
   if(!view().fitted) requestAnimationFrame(()=>{ fit(); view().fitted=true; });
 }
@@ -1698,6 +2055,7 @@ function doAct(act, b){
     case 'zoom-out': zoomAt(1/1.25); break;
     case 'fit': fit(); break;
     case 'arrange': arrange(); break;
+    case 'frame': setTool(S.tool==='frame'?null:'frame'); break;
     case 'expand-all': setAllExpanded(true); break;
     case 'collapse-all': setAllExpanded(false); break;
     case 'present': present(true); break;
@@ -1715,7 +2073,7 @@ function doAct(act, b){
       menuWire({
         new:()=>ask('New diagram', uniqueName('Diagram '+(S.diagrams.length+1)), name=>{ const n=blank(name); n.stored=true; S.diagrams.push(n); switchTo(n.id); persist(); }),
         rename:()=>ask('Rename the diagram', d.name, name=>{ mutate(x=>{ x.name=name; }); renderPick(); }),
-        duplicate:()=>{ const n=Object.assign(JSON.parse(JSON.stringify({name:d.name, tables:d.tables, relations:d.relations, dismissed:d.dismissed})),
+        duplicate:()=>{ const n=Object.assign(JSON.parse(JSON.stringify({name:d.name, tables:d.tables, relations:d.relations, frames:d.frames||[], dismissed:d.dismissed})),
           {id:blank('').id, stored:true, origin:null}); n.name=uniqueName(d.name+' copy'); S.diagrams.push(n); switchTo(n.id); persist(); },
         delete:()=>confirmPop('Delete “'+d.name+'”? It is only in this browser — export it first to keep it.', 'Delete', ()=>{
           S.diagrams=S.diagrams.filter(x=>x.id!==d.id); if(!S.diagrams.length) S.diagrams.push(blank('Diagram 1'));
@@ -1787,7 +2145,7 @@ function fontCss(){
 /** The diagram as a standalone picture: paper colours, no handles, no proposals, sized to its content. */
 function pictureSvg(){
   const d=fresh(active()), {markup, lays}=sceneSvg(d, PAPER, {interactive:false, suggestions:false, sel:null});
-  let b=bounds(lays, 40);
+  let b=bounds(lays, 40, d.frames);
   if(!b) b={x:0, y:0, w:320, h:120};
   const w=Math.ceil(b.w), h=Math.ceil(b.h);
   const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'" viewBox="'+f(b.x)+' '+f(b.y)+' '+w+' '+h+'">'+
@@ -1833,7 +2191,7 @@ function importText(text, from){
 function present(on){
   if(!els || els.empty) return;
   S.present=!!on;
-  if(S.present) S.sel=null;              // a selection outline is an editing aid, not part of what is shown
+  if(S.present){ S.sel=null; S.tool=null; }  // a selection outline is an editing aid, not part of what is shown
   document.documentElement.classList.toggle('erd-presenting', S.present);
   els.root.classList.toggle('erd-present', S.present);
   closePop();
@@ -1853,7 +2211,8 @@ document.addEventListener('keydown', e=>{
   if((e.metaKey||e.ctrlKey) && !e.altKey && (e.key==='f'||e.key==='F')){ e.preventDefault(); focusSearch(); return; }
   if(e.key==='/' && !typing(e.target)){ e.preventDefault(); focusSearch(); return; }
   if(e.key==='Escape'){
-    if(S.pop){ closePop(); e.preventDefault(); }
+    if(S.tool){ setTool(null); e.preventDefault(); }
+    else if(S.pop){ closePop(); e.preventDefault(); }
     else if(S.present){ present(false); e.preventDefault(); }
     else if(S.sel && !typing(e.target)){ S.sel=null; draw(); }
     return;
@@ -1866,6 +2225,7 @@ document.addEventListener('keydown', e=>{
   else if(!mod && !e.altKey && (e.key==='+'||e.key==='=')){ e.preventDefault(); zoomAt(1.25); }
   else if(!mod && !e.altKey && e.key==='-'){ e.preventDefault(); zoomAt(1/1.25); }
   else if(!mod && !e.altKey && e.key==='0'){ e.preventDefault(); fit(); }
+  else if(!mod && !e.altKey && (e.key==='f'||e.key==='F') && !S.present){ e.preventDefault(); setTool(S.tool==='frame'?null:'frame'); }
 });
 document.addEventListener('paste', e=>{
   if(!S || !els || els.empty || typing(e.target)) return;

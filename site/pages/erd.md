@@ -2,8 +2,8 @@
 
 `<project>.erd.html` is a page for explaining a data model to someone who will never read a changelog:
 drag the project's tables onto a canvas, show each with its first columns, find a column in a table of
-forty, draw the relations between them with a name and a cardinality, colour them, let Atlas arrange
-them, and present the result — or export it for a slide.
+forty, draw the relations between them with a name and a cardinality, gather them in named frames, colour
+them, let Atlas arrange them, and present the result — or export it for a slide.
 
 It is a page of its own, beside the [explorer](../explorer/), and carries only what it draws: the tables,
 their columns and the relations the models state. So it stays a few hundred KB however large the project
@@ -60,31 +60,50 @@ A table's default business name is the name of the data object that reads it, wh
   the names open the file; in a browser, the model's page in the explorer written beside this one. A search
   finds a table by those keys too.
 - **Draw a relation** from the dot on a card's edge to another card (or back to the same one). Its panel
-  opens with the name field focused: give it a name, a cardinality — `1:1`, `1:n`, `n:1`, `n:m` — and,
-  if you like, the columns it joins; a sentence under the cardinality says what it means (*One Customer
-  has many Orders*). Dropping onto a column's row joins that column. The line ends in crow's feet with the
-  letters beside them, for whoever has never seen the notation.
+  opens with the name field focused: give it a name, a cardinality and, if you like, the columns it joins.
+  Dropping onto a column's row joins that column. The line ends in crow's feet with the counts beside
+  them, for whoever has never seen the notation, and `⇄` turns the relation round, each table keeping its
+  own end.
+- **The cardinality** is chosen per end, a row for each: how many of this table per row of the other —
+  `1` exactly one (‖), `0..1` zero or one (o|), `1..n` one or more (|<), `0..n` zero or more (o<). Each
+  end is a minimum and a maximum, which is all crow's-foot notation draws, so the two rows give all sixteen
+  cardinalities: `0..n:1` (each order has exactly one customer, a customer any number of orders),
+  `1:0..1`, `0..n:0..n` and the rest. A sentence under them says what the choice means (*Many to one:
+  each Order has exactly one Customer, each Customer zero or more Order*). A new relation starts as
+  `1:0..n`.
+- **Frames** gather tables under a name — *Sales*, *Accounting* — to show which part of the model belongs
+  to which area. Press **Frame** in the toolbar (or `F`) and drag over the tables; the tables whose centre
+  is inside the rectangle are marked as you drag, and the frame's panel opens with its name field focused
+  (a click without a drag puts down a frame of a useful size). A frame holds what is inside it: drag a table
+  in or out and it joins or leaves. Its name tab and its edge take the pointer — drag them to move the
+  frame together with its tables, click the tab for its panel — while the area inside is still the canvas,
+  to pan and to drop tables on. A selected frame resizes by its corners. The panel names and colours it,
+  says how many tables it holds, *Fit to its tables* draws it around them again, and *Delete the frame*
+  removes it and nothing it holds. Frames may sit inside frames; a card that unfolds keeps its frame around
+  it.
 - **Arrange** lays every table out by its relations, for when there are too many to sort by hand: each
   relation's *one* side in a column left of its *many* side (a customer, then its orders), the tables in a
   column ordered so as few relation lines cross as possible, each table level with the ones it relates to,
   and the columns far enough apart for the relation names between them. Tables that relate to nothing, and
-  separate groups, are packed underneath; drawn relations and the proposals on the canvas both count. The
+  separate groups, are packed underneath; drawn relations and the proposals on the canvas both count. A
+  frame keeps its tables together: they are arranged inside it, it is fitted around them, and it takes its
+  place among the other tables as one block, beside what its tables relate to. The
   cards glide to their places, the view fits them, and one `⌘Z` puts everything back. Arranging an
   arrangement moves nothing. Relation names that would land on top of each other — two lines meeting in one
   gap — are moved apart, on the canvas and in an exported picture alike.
 - **Proposals.** When both ends of a relation the models already state are on the canvas — a data object
-  field that refers to another data object (its one-to-one or one-to-many becomes the cardinality), or a
-  service column relation — it shows as a dashed line: click it to take it, `×` to dismiss it for this
+  field that refers to another data object (its one-to-one becomes `1:1`, its one-to-many `1:0..n`), or a
+  service column relation (`0..n:1`) — it shows as a dashed line: click it to take it, `×` to dismiss it for this
   diagram. One proposal per pair of tables, and none once you have drawn one.
 
 **Present** hides the header, the list and the toolbar, goes full screen where the browser allows it and
 fits the diagram to the room; `Esc` comes back.
 
 <figure class="fig">
-  <div class="body"><img class="only-light" src="../assets/img/erd-page.png" alt="The ER diagram designer: the project's tables in a list on the left, and on the canvas an Order and a Customer table joined by a relation named placed by, n to 1" width="1400" height="820"><img class="only-dark" src="../assets/img/erd-page-dark.png" alt="The ER diagram designer: the project's tables in a list on the left, and on the canvas an Order and a Customer table joined by a relation named placed by, n to 1" width="1400" height="820"></div>
+  <div class="body"><img class="only-light" src="../assets/img/erd-page.png" alt="The ER diagram designer: the project's tables in a list on the left, and on the canvas an Order and a Customer table in a frame named Sales, joined by a relation named placed by, zero or more orders to exactly one customer" width="1400" height="820"><img class="only-dark" src="../assets/img/erd-page-dark.png" alt="The ER diagram designer: the project's tables in a list on the left, and on the canvas an Order and a Customer table in a frame named Sales, joined by a relation named placed by, zero or more orders to exactly one customer" width="1400" height="820"></div>
   <figcaption><b>The demo's own diagram</b>, from the <code>docs/orders.atlas-erd.json</code> it keeps —
   the page opens on it without an import. Business names over table names, the primary key first, the
-  relation named, with its cardinality.
+  relation named, with its count at each end, and both tables in a frame.
   <a href="../demo/erd.html" target="_blank" rel="noopener">Open it ↗</a></figcaption>
 </figure>
 
@@ -104,9 +123,9 @@ five, where they stand in its order — the one column of forty, without unfoldi
 
 ## Keys
 
-`⌘F` / `Ctrl+F` or `/` searches, `Delete` removes the selected card or relation, `⌘Z` / `Ctrl+Z` undoes
-and `⇧⌘Z` / `Ctrl+Y` redoes (a name typed in one go is one step), `+` `−` `0` zoom and fit, `Esc` closes
-a panel or the search list. Drag the empty canvas to pan, scroll to move, `⌘`/`Ctrl`+scroll or pinch to
+`⌘F` / `Ctrl+F` or `/` searches, `F` takes the frame tool, `Delete` removes the selected card, relation or frame, `⌘Z` / `Ctrl+Z` undoes
+and `⇧⌘Z` / `Ctrl+Y` redoes (a name typed in one go is one step), `+` `−` `0` zoom and fit, `Esc` puts the
+frame tool away, closes a panel or the search list. Drag the empty canvas to pan, scroll to move, `⌘`/`Ctrl`+scroll or pinch to
 zoom.
 
 ## Keeping and sharing a diagram
@@ -131,7 +150,7 @@ The file is plain JSON:
 ```json
 {
   "format": "atlas-erd",
-  "version": 1,
+  "version": 2,
   "name": "Orders and customers",
   "project": "flowable-demo",
   "tables": [
@@ -141,18 +160,26 @@ The file is plain JSON:
   ],
   "relations": [
     {"id": "r1", "from": "ord_order", "to": "cust_customer", "fromColumn": "customer_id_", "toColumn": "id_",
-     "cardinality": "n:1", "label": "placed by"}
+     "cardinality": "0..n:1", "label": "placed by"}
+  ],
+  "frames": [
+    {"id": "f1", "name": "Sales", "x": 12, "y": -16, "w": 688, "h": 268, "color": ""}
   ],
   "dismissed": []
 }
 ```
 
+A cardinality is `from:to`, each end one of `1`, `0..1`, `1..n` and `0..n`; written by hand, `n`, `m`
+and `*` are read as `0..n` (UML's `*`), `1..*` as `1..n` — so `1:n` is `1:0..n` and `n:m` is
+`0..n:0..n`. A frame holds no list of tables: it holds whatever lies inside it.
+
 An import is forgiving — a table without a name, a relation to a table the diagram does not hold or an
 unknown cardinality is dropped or defaulted rather than failing the file — and strict only about `format`
-and `version`: a file from a newer Atlas is refused rather than half-read.
+and `version`: a file from a newer Atlas is refused rather than half-read. Version 2 added frames and the
+count at each end; a version 1 file reads as it is, and an export writes version 2.
 
 **Pictures.** *Export → SVG image* and *PNG image* write the diagram as it is drawn, in light colours
-whatever the page's theme, without handles, proposals or search marks, sized to its content; the SVG
+whatever the page's theme, with its frames but without handles, proposals or search marks, sized to its content; the SVG
 carries its font, so it looks the same wherever it is opened. Inside IntelliJ the embedded browser cannot
 download: *Export* copies the diagram file or the SVG to the clipboard instead, and *Open in Browser* has
 the rest.

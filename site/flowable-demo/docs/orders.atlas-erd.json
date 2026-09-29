@@ -1,6 +1,6 @@
 {
   "format": "atlas-erd",
-  "version": 1,
+  "version": 2,
   "name": "Orders and customers",
   "project": "flowable-demo",
   "tables": [
@@ -32,8 +32,19 @@
       "to": "cust_customer",
       "fromColumn": "customer_id_",
       "toColumn": "id_",
-      "cardinality": "n:1",
+      "cardinality": "0..n:1",
       "label": "placed by"
+    }
+  ],
+  "frames": [
+    {
+      "id": "f1",
+      "name": "Sales",
+      "x": 12,
+      "y": -16,
+      "w": 688,
+      "h": 268,
+      "color": ""
     }
   ],
   "dismissed": []

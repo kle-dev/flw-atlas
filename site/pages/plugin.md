@@ -226,7 +226,7 @@ Generate it from **Tools → Flowable Atlas → Generate → Atlas Explorer…**
 tab the moment it is written — reopen it later with **Open Atlas Explorer**, and choose which artifacts a
 run produces in *Settings → Tools → Flowable Atlas → Generation*. One of them is the
 [ER diagram designer](../erd/), a page of its own beside the explorer: the project's tables on a canvas,
-searched, related and arranged — for explaining a data model to people who do not read changelogs. It opens
+searched, related, framed and arranged — for explaining a data model to people who do not read changelogs. It opens
 in the same kind of tab, in the IDE's theme and colours, and stays a few hundred KB whatever the size of
 the project. Once it is chosen, *Tools → Flowable Atlas → Open Atlas ER Diagram Designer*
 (also in the Hub's ⋮) opens the page — generating it first when there is none.
