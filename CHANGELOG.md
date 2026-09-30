@@ -19,9 +19,9 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   table list is now grouped by database: the project's own first, then every database added with
   *+ Database*. *+ Table* on a group adds a table by hand — a name, and a row per column with its type and
   whether it is the primary key — to that database or to the project's own. A table added by hand is a table
-  like any other: it relates to any table of any database, frames, arranges and searches, its card names its
-  database, and its panel edits it; a renamed table or column keeps its relations. The databases belong to
-  the diagram and its file (format version 4).
+  like any other: it relates to any table of any database, frames, arranges and searches, and its panel
+  edits it; a renamed table or column keeps its relations. The databases belong to
+  the diagram and its file (format version 4). Every card names its database, small in its corner.
 - **A diagram kept in the project exports again, and says when it was changed.** Opened for the first time
   in a browser, the diagram was the very object it was compared with: *changed here* never showed, and an
   export of it — the diagram file, SVG or PNG — failed without a word.
@@ -29,7 +29,8 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
   everything else, tables and columns alike, so the columns of the tables on the canvas came first — an
   `order_id_` in each of them buried the `ORDER` table, and past sixty rows it was not listed at all, though
   the count above the list said it was found. Tables now come first, then columns; within each, what the
-  diagram shows first, as before.
+  diagram shows first, as before. And what a search finds in a table's name is marked on its card, as a
+  column it finds is — and in the list, what its filter finds.
 
 ## 0.28.6
 

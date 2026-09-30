@@ -459,6 +459,14 @@ await withChrome(async page => {
     /ord_order\.legacy_note_/.test(await page.eval(`document.querySelector('.erd-results').textContent`)),
     await page.eval(`[...document.querySelectorAll('.erd-res')].map(r=>r.textContent)`));
   await page.key('Escape', 'Escape'); await page.key('Escape', 'Escape');
+  await page.eval(`${T}.search('cust')`);
+  ok('a search marks what it found in a table’s name, as it marks a column', await page.eval(`(function(){ const m=document.querySelector('.erd-card[data-key="CUST_CUSTOMER"] .erd-namemark');
+    return !!m && m.nextElementSibling.querySelector('tspan').textContent==='cust'; })()`) &&
+    await page.eval(`!document.querySelector('.erd-card[data-key="ORD_ORDER"] .erd-namemark')`));
+  await page.eval(`${T}.search('')`);
+  await page.eval(`(function(){ const i=document.querySelector('.erd-filter'); i.value='ord'; i.dispatchEvent(new Event('input', {bubbles:true})); })()`);
+  ok('…and the list’s filter marks it in the list', await page.eval(`(document.querySelector('.erd-item[data-key="ORD_ORDER"] .erd-item-n mark')||{}).textContent`) === 'ord');
+  await page.eval(`(function(){ const i=document.querySelector('.erd-filter'); i.value=''; i.dispatchEvent(new Event('input', {bubbles:true})); })()`);
   await page.eval(`${T}.search('delivery')`);
   ok('a folded card shows the columns a search finds beyond its first five',
     await page.eval(`!!document.querySelector('.erd-card[data-key="ORD_ORDER"] .erd-row[data-col="delivery_zip_"] .erd-rowmark')`));
@@ -506,7 +514,8 @@ await withChrome(async page => {
   ok('Create adds the table to its database and puts it on the canvas', await page.waitFor(`document.querySelector('.erd-card[data-key="${crm}"]')`) &&
     await page.eval(`!!document.querySelector('.erd-grp[data-db="crm"] .erd-item[data-key="${crm}"]')`) &&
     await page.eval(`JSON.stringify(${T}.active().databases[0].tables[0])`) === JSON.stringify({ name: 'CUSTOMER', columns: [{ name: 'ID', type: 'VARCHAR(64)', pk: true }, { name: 'NAME', type: null, pk: false }] }));
-  ok('…its card names its database', /CRM/.test(await page.eval(`document.querySelector('.erd-card[data-key="${crm}"]').textContent`)));
+  ok('…every card names its database, small in its corner', await page.eval(`document.querySelector('.erd-card[data-key="${crm}"] .erd-dbname').textContent`) === 'CRM' &&
+    await page.eval(`document.querySelector('.erd-card[data-key="ORD_ORDER"] .erd-dbname').textContent`) === 'flowable-demo');
   await page.drag(await page.at(`.erd-card[data-key="${crm}"] .erd-head`, 0.4, 0.5), await page.at('.erd-canvas', 0.7, 0.3), 10);
   await page.eval(`document.querySelector('.erd-card[data-key="ORD_ORDER"] .erd-link').style.opacity='1'`);
   await page.drag(await page.at('.erd-card[data-key="ORD_ORDER"] .erd-link-dot'), await page.at(`.erd-card[data-key="${crm}"] .erd-row[data-col="ID"]`), 12);

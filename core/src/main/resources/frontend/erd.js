@@ -853,10 +853,10 @@ const ROW=22, HEAD1=32, HEAD2=44, FOOT=22, WMIN=200, WMAX=420;
 // Single quotes inside: these end up in style="…" attributes, where a double quote would close the attribute.
 const SANS="Geist, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif";
 const MONO="'SFMono-Regular', ui-monospace, Menlo, Monaco, Consolas, monospace";
-const F_TITLE='600 13px '+SANS, F_SUB='11px '+MONO, F_ROW='12px '+SANS, F_TYPE='11px '+MONO, F_PILL='12px '+SANS;
+const F_TITLE='600 13px '+SANS, F_SUB='11px '+MONO, F_ROW='12px '+SANS, F_TYPE='11px '+MONO, F_PILL='12px '+SANS, F_DB='500 9px '+SANS;
 /** The page's colours, as references: a theme switch restyles the canvas without a redraw. */
 const PAGE={panel:'var(--panel)', line:'var(--line2)', head:'var(--panel2)', ink:'var(--ink)', dim:'var(--ink-dim)',
-  faint:'var(--ink-faint)', accent:'var(--accent)', bg:'var(--bg)', pill:'var(--panel)', mark:'var(--hl-bg)'};
+  faint:'var(--ink-faint)', accent:'var(--accent)', bg:'var(--bg)', pill:'var(--panel)', mark:'var(--hl-bg)', markInk:'var(--hl-ink)'};
 /** …and an exported picture's, as values: it leaves the page, so it cannot refer to it — and it is light,
  *  because it ends up on a slide or in a document, whatever theme the page was in. */
 const PAPER={panel:'#ffffff', line:'#c9ced4', head:'#f1f5f9', ink:'#131e29', dim:'#4c5b6a', faint:'#79848f',
@@ -996,16 +996,17 @@ function layout(t, q, d){
   const shown=t.expanded?ordered:ordered.filter((c,i)=>i<VISIBLE || (hits && hits.has(erdKey(c.name))) || joined.has(erdKey(c.name)));
   const live=S && S.byKey.get(t.key);
   const match=!q || !!(hits && hits.size) || erdTableMatches(t.name, t.alias, live && live.dataObjects, q, live && live.services);
-  // a table of a database added by hand says which: the CRM's CUSTOMER is not the project's
-  const title=t.alias||t.name, sub=[live && live.dbName, t.alias?t.name:''].filter(Boolean).join(' · ');
+  // every card says which database its table is in — small, in the header's corner: the CRM's CUSTOMER is not
+  // the project's, and on a diagram of several databases the reader should not have to ask
+  const title=t.alias||t.name, sub=t.alias?t.name:'', db=(live && live.dbName) || t.db || DATA.project, dbW=db?tw(db, F_DB):0;
   const head=sub?HEAD2:HEAD1;
-  let w=Math.max(WMIN, tw(title,F_TITLE)+56, sub?tw(sub,F_SUB)+40:0);
+  let w=Math.max(WMIN, tw(title,F_TITLE)+Math.max(56, dbW+42), sub?tw(sub,F_SUB)+40:0);
   ordered.forEach(c=>{ w=Math.max(w, 30+tw(c.name,F_ROW)+18+tw(c.type||'',F_TYPE)+12); });
   w=Math.min(WMAX, Math.ceil(w));
   const foot=ordered.length>VISIBLE || e.ghost;
   const rows=shown.map((c,i)=>({c, y:head+3+i*ROW}));
   const h=head+(shown.length?shown.length*ROW+6:0)+(foot?FOOT:0);
-  return {t, x:t.x, y:t.y, w, h, head, title, sub, rows, total:ordered.length, more:ordered.length-shown.length,
+  return {t, x:t.x, y:t.y, w, h, head, title, sub, db, dbW, rows, total:ordered.length, more:ordered.length-shown.length,
     foot, ghost:e.ghost, ordered, hits, match};
 }
 /** The columns of table [key] the diagram's relations join, as keys. */
@@ -1159,6 +1160,17 @@ function suggestionSvg(sg, g, C){
     '<g class="erd-sug-x" data-tip="Dismiss this suggestion"><circle cx="'+f(m.x+w/2+12)+'" cy="'+f(m.y)+'" r="8"'+st({fill:C.pill, stroke:C.faint})+'/>'+
       textEl(m.x+w/2+12, m.y+4, '×', '12px '+SANS, C.dim, ' text-anchor="middle"')+'</g></g>';
 }
+/** A line of text with the part [q] finds marked — the search's highlight behind it, its ink on it — or plain
+ *  text when there is no query or it finds nothing here (a name cut short with … is not marked past the cut). */
+function markText(x, y, text, font, fill, extra, q, C){
+  const t=String(text==null?'':text), i=q?t.toLowerCase().indexOf(q):-1;
+  if(i<0) return textEl(x, y, t, font, fill, extra);
+  const pre=t.slice(0, i), hit=t.slice(i, i+q.length), px=+((/(\d+)px/.exec(font)||[])[1]||12);
+  return '<rect class="erd-namemark" x="'+f(x+tw(pre, font)-1)+'" y="'+f(y-px+1)+'" width="'+f(tw(hit, font)+2)+'" height="'+(px+3)+'" rx="2"'+
+      st({fill:C.mark})+'/>'+
+    '<text x="'+f(x)+'" y="'+f(y)+'"'+(extra||'')+st({font, fill})+'>'+esc(pre)+'<tspan'+st({fill:C.markInk})+'>'+esc(hit)+'</tspan>'+
+      esc(t.slice(i+q.length))+'</text>';
+}
 const KEY_ICON='<circle cx="4" cy="7" r="2.6"/><path d="M6.6 7H13M11 7v2.6M13 7v2"/>';
 function cardSvg(L, C, o){
   const t=L.t, col=t.color, hi=col?erdContrast(col):'', sel=o.sel, w=L.w;
@@ -1168,9 +1180,12 @@ function cardSvg(L, C, o){
     'stroke-width':sel?2:1, 'stroke-dasharray':L.ghost?'6 4':''})+'/>';
   s+='<path class="erd-head" d="M0,8 a8,8 0 0 1 8,-8 h'+(w-16)+' a8,8 0 0 1 8,8 v'+(L.head-8)+' h-'+w+' z"'+st({fill:col||C.head})+'/>';
   if(!col) s+='<path d="M0,'+L.head+' h'+w+'"'+st({stroke:C.line, 'stroke-width':1})+'/>';
-  const maxT=w-(o.interactive?44:24);
-  s+=textEl(12, L.sub?19:20.5, clip(L.title, F_TITLE, maxT), F_TITLE, hi||C.ink);
-  if(L.sub) s+=textEl(12, 35, clip(L.sub, F_SUB, w-24), F_SUB, hi||C.dim, hi?' opacity=".82"':'');
+  // the title stops short of the database's name in the corner, and of the ⋯ under it
+  const maxT=w-Math.max(o.interactive?44:24, L.db?L.dbW+30:0);
+  // while a search is on, what it found in the table's names is marked, as a column it found is
+  s+=markText(12, L.sub?19:20.5, clip(L.title, F_TITLE, maxT), F_TITLE, hi||C.ink, '', o.q, C);
+  if(L.sub) s+=markText(12, 35, clip(L.sub, F_SUB, w-24), F_SUB, hi||C.dim, hi?' opacity=".82"':'', o.q, C);
+  if(L.db) s+=textEl(w-10, 11, clip(L.db, F_DB, w*0.5), F_DB, hi||C.faint, ' class="erd-dbname" text-anchor="end" opacity="'+(hi?'.7':'.9')+'"');
   if(o.interactive){
     s+='<g class="erd-tools" data-act="edit" data-tip="Edit — name, colour, column order"><rect x="'+(w-30)+'" y="'+(L.head/2-11)+
        '" width="22" height="22" rx="5"'+st({fill:'transparent'})+'/>'+
@@ -1445,13 +1460,13 @@ function renderList(){
     // the one data object that reads the table is its business name: its key, copied from here, before the
     // table is even on the canvas
     const doKey=t.dataObjects.length===1 && t.alias===t.dataObjects[0].name ? t.dataObjects[0].key : '';
-    const alias=t.alias&&t.alias!==t.name?esc(t.alias)+(doKey?copyBtn(doKey, 'Copy the data object key '+doKey, 'erd-lcpy'):''):'';
+    const alias=t.alias&&t.alias!==t.name?markIn(t.alias, q)+(doKey?copyBtn(doKey, 'Copy the data object key '+doKey, 'erd-lcpy'):''):'';
     const sub=[alias, t.columns.length+' column'+(t.columns.length===1?'':'s'),
       t.source==='service'?'<span class="erd-src-svc" data-tip="No changelog creates this table — the columns are the service’s mappings, the types its logical ones">service model</span>':'',
       t.source==='manual'?'<span class="erd-src-man" data-tip="Added by hand to this diagram — its panel edits it">by hand</span>':'']
       .filter(Boolean).join(' · ');
     return '<div class="erd-item'+(on.has(t.key)?' on':'')+'" role="option" tabindex="-1" data-key="'+esc(t.key)+'" aria-selected="'+on.has(t.key)+'">'+
-      '<div class="erd-item-main"><div class="erd-item-n">'+esc(t.name)+'</div><div class="erd-item-s">'+sub+(hit?' · '+hit:'')+'</div></div>'+
+      '<div class="erd-item-main"><div class="erd-item-n">'+markIn(t.name, q)+'</div><div class="erd-item-s">'+sub+(hit?' · '+hit:'')+'</div></div>'+
       infoBtn(t.key)+
       (on.has(t.key)?'<span class="erd-item-on" data-tip="On the canvas — click to find it">'+ico('<path d="M20 6 9 17l-5-5"/>')+'</span>'
                     :'<button type="button" class="erd-add" data-add="'+esc(t.key)+'" data-tip="Add to the canvas" aria-label="Add '+esc(t.name)+' to the canvas">+</button>')+
@@ -1704,10 +1719,12 @@ function setSearch(text){
   S.q=q; S.resIdx=0;
   renderResults(); draw();
 }
-const markQ=text=>{
-  const t=String(text==null?'':text), i=S.q?t.toLowerCase().indexOf(S.q):-1;
-  return i<0?esc(t):esc(t.slice(0,i))+'<mark>'+esc(t.slice(i, i+S.q.length))+'</mark>'+esc(t.slice(i+S.q.length));
+/** [text] escaped, with the part [q] finds in <mark>. */
+const markIn=(text, q)=>{
+  const t=String(text==null?'':text), i=q?t.toLowerCase().indexOf(q):-1;
+  return i<0?esc(t):esc(t.slice(0,i))+'<mark>'+esc(t.slice(i, i+q.length))+'</mark>'+esc(t.slice(i+q.length));
 };
+const markQ=text=>markIn(text, S.q);
 function renderResults(){
   const box=els.results;
   if(!box) return;

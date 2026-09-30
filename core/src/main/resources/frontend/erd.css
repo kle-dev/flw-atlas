@@ -113,7 +113,7 @@
   .erd-rtype{flex:none;max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-faint)}
   .erd-roff{flex:none;font-size:var(--text-2xs);color:var(--accent);border:1px solid var(--accent);border-radius:var(--radius-full);padding:0 var(--space-15)}
   .erd-rmore{padding:var(--space-15) var(--space-2);font-size:var(--text-2xs);color:var(--ink-faint)}
-  .erd-results mark,.erd-cols mark{background:var(--hl-bg);color:var(--hl-ink);border-radius:2px}
+  .erd-results mark,.erd-cols mark,.erd-item mark{background:var(--hl-bg);color:var(--hl-ink);border-radius:2px}
   .erd-colq{width:100%;margin-bottom:var(--space-1)}
   .erd-cnone{justify-content:center;color:var(--ink-faint);font-size:var(--text-xs)}
   /* ---- frames: the area inside is the canvas; the name tab and the edge take the pointer ---- */

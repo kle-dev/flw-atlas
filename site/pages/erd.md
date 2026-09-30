@@ -51,8 +51,7 @@ added by hand:
   primary key. `Enter` walks on from the name to the first column and from each column to the next,
   adding one after the last; *Create* puts the table on the canvas.
 - **A table added by hand** is a table like any other: drag it, relate it to any table of any database, frame
-  it, arrange it, search for it. The list marks it *by hand*, its card names its database under the table
-  name, and its panel's **Edit the table…** changes it — a renamed table keeps its place and its relations, a
+  it, arrange it, search for it. The list marks it *by hand*, its card names its database in its corner, and its panel's **Edit the table…** changes it — a renamed table keeps its place and its relations, a
   renamed column stays joined to its relations and keeps its place in the card's order. *Delete the table*
   takes it from its database, the canvas and every relation.
 
@@ -69,7 +68,8 @@ of the same name added by hand to the project's database.
   before the table is on the canvas. For a table name longer than the list, drag the list's right edge
   wider (`←` `→` on the focused edge move it by 16px; a double click or `Home` resets it); the width
   is remembered in this browser.
-- **A card** shows the business name over the table name, then the first five columns — the primary key
+- **A card** shows the business name over the table name — and, small in its corner, the database the table is
+  in — then the first five columns — the primary key
   first, then the changelog's order — each with its type — and, where they stand in that order, the columns
   its relations join, so every relation has its row to meet. **+ N more** unfolds the rest and folds them
   again. The width fits every column, shown or not, so unfolding makes a card longer, never wider.
@@ -156,7 +156,8 @@ first when the diagram does not have it (the row says *add*) — and `Esc` close
 search.
 
 While a search is on, the canvas answers it too: the cards with a match are outlined and the rest step
-back, the matching columns are marked, and a folded card also shows the columns it found beyond its first
+back, what the search found — in a column or in a table's name — is marked, as the list's filter marks it in the
+list, and a folded card also shows the columns it found beyond its first
 five, where they stand in its order — the one column of forty, without unfolding the rest.
 
 ## Keys
