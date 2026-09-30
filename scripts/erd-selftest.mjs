@@ -321,10 +321,14 @@ const inside = (b, r) => b.x >= r.x && b.y >= r.y && b.x + b.w <= r.x + r.w && b
   ];
   const r = E.erdSearch(cat, '  Customer ', new Set(['ORD_ORDER']));
   eq('counts tables and columns apart', [r.tables, r.columns, r.total], [1, 3, 4]);
-  eq('the diagram’s own first, then the closest match, then the table’s name and the column’s place',
+  eq('tables first, then columns; in each the diagram’s own first, then the closest match, the table’s name and the column’s place',
     r.items.map(i => i.kind + ':' + i.table + (i.column ? '.' + i.column : '')),
-    ['column:ord_order.customer_id_', 'table:cust_customer', 'column:cust_customer.customer_no_', 'column:demo_wide.CUSTOMER_REF_']);
-  ok('a result says whether its table is on the diagram', r.items[0].on === true && r.items[1].on === false);
+    ['table:cust_customer', 'column:ord_order.customer_id_', 'column:cust_customer.customer_no_', 'column:demo_wide.CUSTOMER_REF_']);
+  const many = [{key: 'DEMO_ORDER', name: 'demo_order', alias: '', dataObjects: [], columns: [{name: 'id_'}]}].concat([...Array(70)].map((_, i) =>
+    ({key: 'DEMO_T' + i, name: 'demo_t' + i, alias: '', dataObjects: [], columns: [{name: 'order_id_'}]})));
+  eq('a table is not pushed off the list by the columns of the tables on the diagram',
+    E.erdSearch(many, 'order', new Set(many.slice(1).map(t => t.key)), 60).items[0].key, 'DEMO_ORDER');
+  ok('a result says whether its table is on the diagram', r.items.find(i => i.column === 'customer_id_').on === true && r.items.find(i => i.kind === 'table').on === false);
   eq('a business name finds its table', E.erdSearch(cat, 'order').items.filter(i => i.kind === 'table').map(i => i.key), ['ORD_ORDER']);
   eq('a type finds its columns, after any name', E.erdSearch(cat, '4000').items.map(i => i.column), ['note_']);
   eq('the limit keeps the list short, the count stays whole', [E.erdSearch(cat, 'attr_', null, 10).items.length, E.erdSearch(cat, 'attr_', null, 10).total], [10, 40]);

@@ -444,6 +444,14 @@ await withChrome(async page => {
   await page.click(await page.at('.erd-q'));
   await page.key('Escape', 'Escape'); await page.key('Escape', 'Escape');
   ok('Escape closes the list, then clears the search', await page.eval(`${T}.state().q==='' && !document.querySelector('.erd-card.dim')`));
+  await page.click(await page.at('.erd-q'));
+  await page.type('legacy');
+  ok('a table comes before the columns of the tables on the diagram', await page.waitFor(`document.querySelector('.erd-res')`) &&
+    await page.eval(`document.querySelector('.erd-res .erd-rkind').textContent`) === 'table' &&
+    /legacy_audit/.test(await page.eval(`document.querySelector('.erd-res').textContent`)) &&
+    /ord_order\.legacy_note_/.test(await page.eval(`document.querySelector('.erd-results').textContent`)),
+    await page.eval(`[...document.querySelectorAll('.erd-res')].map(r=>r.textContent)`));
+  await page.key('Escape', 'Escape'); await page.key('Escape', 'Escape');
   await page.eval(`${T}.search('delivery')`);
   ok('a folded card shows the columns a search finds beyond its first five',
     await page.eval(`!!document.querySelector('.erd-card[data-key="ORD_ORDER"] .erd-row[data-col="delivery_zip_"] .erd-rowmark')`));

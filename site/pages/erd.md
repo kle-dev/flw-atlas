@@ -124,9 +124,9 @@ fits the diagram to the room; `Esc` comes back.
 
 The search in the toolbar — `⌘F` / `Ctrl+F`, or `/` — looks through every table of the project and every
 one of its columns, on the diagram or not, by name, business name, data object and column type
-(`varchar(4000)` finds the long text columns). The results list tables and `table.column` rows: what the
-diagram already shows first, then an exact name before one that starts with the query before one that
-contains it. `↑` `↓` walk them, `Enter` goes to one — the card centred on the column, the table added
+(`varchar(4000)` finds the long text columns). The results list the tables first, then `table.column` rows;
+within each, what the diagram already shows first, then an exact name before one that starts with the query
+before one that contains it — so a table is never buried under the columns of the tables already drawn. `↑` `↓` walk them, `Enter` goes to one — the card centred on the column, the table added
 first when the diagram does not have it (the row says *add*) — and `Esc` closes the list, then clears the
 search.
 

@@ -357,8 +357,10 @@ function erdColumnHits(columns, q){
 }
 
 /**
- * A search over every table of the project and every one of its columns, on the diagram or not. Tables and
- * columns the diagram shows come first; then an exact name before one that starts with the query before
+ * A search over every table of the project and every one of its columns, on the diagram or not. Tables come
+ * first, then columns — a table's name is what a search for it wants, and ranked by the diagram first, the
+ * columns of the tables already on it (an `order_id_` in each) pushed the `ORDER` table off the list. Within
+ * each, what the diagram shows comes first; then an exact name before one that starts with the query before
  * one that contains it, names before types; then the table's name and the column's place in it. [query]
  * is matched case-insensitively as one piece of text — a column is usually looked for by a fragment of
  * its name (`customer`, `_id_`), and splitting it into words would find less, not more.
@@ -382,7 +384,8 @@ function erdSearch(catalog, query, onCanvas, limit){
       res.columns++;
     });
   });
-  all.sort((a,b)=>(Number(b.on)-Number(a.on)) || (a.score-b.score) || a.table.localeCompare(b.table) || (a.pos-b.pos));
+  all.sort((a,b)=>((a.kind==='table'?0:1)-(b.kind==='table'?0:1)) || (Number(b.on)-Number(a.on)) || (a.score-b.score) ||
+    a.table.localeCompare(b.table) || (a.pos-b.pos));
   res.total=all.length;
   res.items=all.slice(0, limit||80);
   return res;

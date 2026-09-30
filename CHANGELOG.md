@@ -12,6 +12,14 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.28.7
+
+- **The ER designer's search finds tables again.** It ranked what the diagram already shows before
+  everything else, tables and columns alike, so the columns of the tables on the canvas came first — an
+  `order_id_` in each of them buried the `ORDER` table, and past sixty rows it was not listed at all, though
+  the count above the list said it was found. Tables now come first, then columns; within each, what the
+  diagram shows first, as before.
+
 ## 0.28.6
 
 - **An ER designer relation meets the rows of the columns it joins.** Over several columns it left the card
