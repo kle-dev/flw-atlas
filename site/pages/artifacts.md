@@ -38,7 +38,8 @@ This is the artifact for a human who wants to *understand* a project. It has its
 ## `<project>.erd.html` — the ER diagram designer
 
 The project's tables — as the Liquibase changelogs leave them, and those only a database service names —
-to drag onto a canvas, relate, gather in named frames, colour, search and arrange, for explaining a data
+to drag onto a canvas — with databases and tables added by hand — relate, gather in named frames, colour, search
+and arrange, for explaining a data
 model to people who do not read changelogs; with every `*.atlas-erd.json` diagram the project keeps built in, so the page opens
 on the diagrams the team has committed. It carries only the tables, not the graph, so it stays a few
 hundred KB however large the explorer gets. `--all` writes it when the project has a table, and links its

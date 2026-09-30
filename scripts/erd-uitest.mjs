@@ -164,6 +164,13 @@ await withChrome(async page => {
   ok('…and its relation, named', await page.eval(`[...document.querySelectorAll('.erd-rel text')].some(t=>/placed by/.test(t.textContent))`));
   ok('a drawn relation hides the proposal for the same pair', await page.eval(`document.querySelectorAll('.erd-sug').length`) === 0);
   ok('the status says where the diagram comes from', /docs\/orders\.atlas-erd\.json/.test(await page.eval(`document.querySelector('.erd-status').textContent`)));
+  // the project's diagram is a copy of its file: exporting it works, and an edit says it changed it (both failed when
+  // the two were one object, and the base held the diagram that held it)
+  ok('the project’s diagram exports', await page.eval(`(function(){ try{ return ${T}.docOf().tables.length===2; }catch(e){ return false; } })()`));
+  await page.drag(await page.at('.erd-card[data-key="CUST_CUSTOMER"] .erd-head', 0.5, 0.5), await page.at('.erd-card[data-key="CUST_CUSTOMER"] .erd-head', 0.6, 1.5), 6);
+  ok('…and an edit of it says so', /changed here/.test(await page.eval(`document.querySelector('.erd-status').textContent`)));
+  await page.key('z', 'KeyZ', 2);
+  ok('…until it is undone', !/changed here/.test(await page.eval(`document.querySelector('.erd-status').textContent`)));
 
   // ---- the list's width: dragged wider for a long table name, remembered, reset ----
   const sideW = () => page.eval(`Math.round(document.querySelector('.erd-side').getBoundingClientRect().width)`);
@@ -354,7 +361,7 @@ await withChrome(async page => {
 
   // ---- the file format round trip, and the picture ----
   const doc = await page.eval(`${T}.docOf()`);
-  ok('the file names its format and version', doc.format === 'atlas-erd' && doc.version === 3 && doc.project === 'flowable-demo');
+  ok('the file names its format and version', doc.format === 'atlas-erd' && doc.version === 4 && doc.project === 'flowable-demo');
   ok('…carries the frame and the counts at each end', doc.frames.length === 1 && doc.frames[0].name === 'Sales' && doc.relations[1].cardinality === '0..n:0..1', doc.frames);
   ok('…carries the live columns', doc.tables.find(t => t.table.toLowerCase() === 'ord_order').columns.length >= 8);
   await page.eval(`${T}.importText(JSON.stringify(${T}.docOf()))`);
@@ -481,6 +488,52 @@ await withChrome(async page => {
   await joinedBy('Folded', [{ table: 'ord_order', x: 40, y: 40 }, { table: 'cust_customer', x: 600, y: 40 }], 'delivery_zip_', 'id_');
   gm = await relGeom();
   ok('a folded card shows the column a relation joins, beyond its first five, and the line meets it', gm.rows === 6 && near(gm.start[1], gm.y.zip), gm);
+
+  // ---- a database of one's own, its tables added by hand, related to the project's ----
+  await page.eval(`${T}.importText(JSON.stringify({format:'atlas-erd', version:4, name:'With a CRM', tables:[{table:'ord_order', x:40, y:40}]}))`);
+  ok('the list is grouped by database, the project’s first', await page.eval(`[...document.querySelectorAll('.erd-grp')].map(g=>g.dataset.db).join()`) === 'project');
+  await page.click(await page.at('[data-act=add-db]'));
+  await page.type('CRM'); await page.key('Enter', 'Enter');
+  ok('+ Database adds a group, and opens a new table in it', await page.waitFor(`document.querySelector('.erd-grp[data-db="crm"]') && document.querySelector('.erd-pop[data-kind=tabledef]')`) &&
+    /in CRM/.test(await page.eval(`document.querySelector('.erd-pop').textContent`)));
+  await page.type('CUSTOMER'); await page.key('Enter', 'Enter');
+  await page.type('ID'); await page.key('Enter', 'Enter'); await page.type('VARCHAR(64)'); await page.key('Enter', 'Enter');
+  await page.type('NAME');
+  ok('Enter walks through the columns, adding one after the last', await page.eval(`document.querySelectorAll('.erd-pop .erd-tcol').length`) === 2);
+  await page.click(await page.at('.erd-pop input[data-c=pk][data-i="0"]'));
+  await page.click(await page.at('.erd-pop [data-pa=save]'));
+  const crm = 'crm/CUSTOMER';
+  ok('Create adds the table to its database and puts it on the canvas', await page.waitFor(`document.querySelector('.erd-card[data-key="${crm}"]')`) &&
+    await page.eval(`!!document.querySelector('.erd-grp[data-db="crm"] .erd-item[data-key="${crm}"]')`) &&
+    await page.eval(`JSON.stringify(${T}.active().databases[0].tables[0])`) === JSON.stringify({ name: 'CUSTOMER', columns: [{ name: 'ID', type: 'VARCHAR(64)', pk: true }, { name: 'NAME', type: null, pk: false }] }));
+  ok('…its card names its database', /CRM/.test(await page.eval(`document.querySelector('.erd-card[data-key="${crm}"]').textContent`)));
+  await page.drag(await page.at(`.erd-card[data-key="${crm}"] .erd-head`, 0.4, 0.5), await page.at('.erd-canvas', 0.7, 0.3), 10);
+  await page.eval(`document.querySelector('.erd-card[data-key="ORD_ORDER"] .erd-link').style.opacity='1'`);
+  await page.drag(await page.at('.erd-card[data-key="ORD_ORDER"] .erd-link-dot'), await page.at(`.erd-card[data-key="${crm}"] .erd-row[data-col="ID"]`), 12);
+  await page.key('Escape', 'Escape');
+  const crel = await page.eval(`JSON.stringify(${T}.docOf().relations[0])`);
+  ok('a relation joins a project table to one of the other database, and the file says which',
+    /"from":"ord_order","to":"CUSTOMER","toDb":"crm"/.test(crel) && /"toColumn":"ID"/.test(crel), crel);
+  ok('…and the file carries the database', await page.eval(`JSON.stringify(${T}.docOf().databases.map(d=>[d.id, d.name, d.tables.length]))`) === '[["crm","CRM",1]]');
+  await sleep(400);
+  await page.open(erdUrl);
+  ok('after a reload the database, its table and the relation are there', await page.eval(`${T}.active().name==='With a CRM' && !!document.querySelector('.erd-grp[data-db="crm"] .erd-item') && ${T}.active().relations.length===1`));
+  // editing it: the rename of a column follows into the relation that joins it
+  await page.eval(`document.querySelector('.erd-card[data-key="${crm}"] .erd-tools').style.opacity='1'`);
+  await page.click(await page.at(`.erd-card[data-key="${crm}"] .erd-tools`));
+  await page.click(await page.at('.erd-pop [data-pa=edit-def]'));
+  ok('its panel edits it', await page.waitFor(`document.querySelector('.erd-pop[data-kind=tabledef]')`));
+  await page.eval(`(function(){ const i=document.querySelector('.erd-pop input[data-c=name][data-i="0"]'); i.value='CUSTOMER_ID'; i.dispatchEvent(new Event('input', {bubbles:true})); })()`);
+  await page.click(await page.at('.erd-pop [data-pa=save]'));
+  ok('a renamed column stays joined', await page.eval(`${T}.active().relations[0].pairs[0].to`) === 'CUSTOMER_ID', await page.eval(`${T}.active().relations[0]`));
+  // and deleting the database takes its table and the relation — undo brings them back
+  await page.click(await page.at('.erd-grp[data-db="crm"] [data-dbmenu]'));
+  await page.click(await page.at('[data-mi=delete-db]'));
+  await page.click(await page.at('.erd-pop [data-pa=ok]'));
+  ok('deleting the database takes its table and its relations', await page.eval(`!document.querySelector('.erd-grp[data-db="crm"]') && ${T}.active().tables.length===1 && ${T}.active().relations.length===0`));
+  await page.click(await page.at('.erd-canvas', 0.95, 0.95));
+  await page.key('z', 'KeyZ', 2);
+  ok('…and one undo brings all back', await page.eval(`!!document.querySelector('.erd-grp[data-db="crm"]') && ${T}.active().tables.length===2 && ${T}.active().relations.length===1`));
 
   // ---- narrow ----
   await page.viewport(700, 800);

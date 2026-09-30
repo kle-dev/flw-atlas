@@ -151,6 +151,19 @@
     <change-notes><![CDATA[
         <h3>0.28.7</h3>
         <ul>
+          <li><b>The ER designer takes databases and tables of your own.</b> A data model rarely ends at the
+              project's schema — an order refers to a customer kept in a CRM, a task to an engine table no
+              changelog creates. The table list is now grouped by database: the project's own first, then
+              every database added with <i>+ Database</i>. <i>+ Table</i> on a group adds a table by hand —
+              a name, and a row per column with its type and whether it is the primary key — to that
+              database or to the project's own. A table added by hand is a table like any other: it relates
+              to any table of any database, frames, arranges and searches, its card names its database, and
+              its panel edits it; a renamed table or column keeps its relations. The databases belong to the
+              diagram and its file (format version 4).</li>
+          <li><b>A diagram kept in the project exports again, and says when it was changed.</b> Opened for
+              the first time in a browser, the diagram was the very object it was compared with: <i>changed
+              here</i> never showed, and an export of it — the diagram file, SVG or PNG — failed without a
+              word.</li>
           <li><b>The ER designer's search finds tables again.</b> It ranked what the diagram already shows
               before everything else, tables and columns alike, so the columns of the tables on the canvas
               came first — an <code>order_id_</code> in each of them buried the <code>ORDER</code> table,
@@ -562,11 +575,6 @@
               (information, not a finding). A Design export and its deployment count as one copy — and a
               legacy form's data table now keeps the buttons its columns render, which the reader dropped,
               so both formats report the same actions.</li>
-          <li><b>A data object's Shown in column names only the forms that show the field.</b> Any form
-              referring to the object counted every dotted component id's last segment as one of its fields,
-              so <code>shipTo.deliveryCity</code> on a form that also lists customers "showed" the
-              customer's <code>deliveryCity</code>. Only a component under one bound to this object counts
-              now — the same rule the form's own "not a field of the object" check uses.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

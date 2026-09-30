@@ -15,11 +15,14 @@
 
 /*__ERD_CORE_START__*/
 // The pure part — no DOM, no explorer globals — so scripts/erd-selftest.mjs can run it in Node.
-// Version 2 added frames and a count at each end of a relation, version 3 relations over several columns:
-// an older page would read such a file with its frames gone, `0..n` defaulted or a relation's columns lost,
-// so it is refused there rather than half-read. Older files are read as they are — their `1:n` is a valid
-// cardinality, their one column a valid column list, of this version too.
-const ERD_FORMAT='atlas-erd', ERD_FORMAT_VERSION=3;
+// Version 2 added frames and a count at each end of a relation, version 3 relations over several columns,
+// version 4 databases and tables added by hand: an older page would read such a file with its frames gone,
+// `0..n` defaulted, a relation's columns or a hand-made table lost, so it is refused there rather than
+// half-read. Older files are read as they are — their `1:n` is a valid cardinality, their one column a valid
+// column list, their tables the project's, in this version too.
+const ERD_FORMAT='atlas-erd', ERD_FORMAT_VERSION=4;
+/** The project's own database, in a diagram's `databases`: where the tables added by hand to it are kept. */
+const ERD_PROJECT_DB='project';
 /**
  * What one end of a relation can say: how many rows of the table at that end one row of the other table
  * has — exactly one, zero or one, one or more, zero or more. A minimum (0 or 1) and a maximum (1 or many),
@@ -38,6 +41,9 @@ const ERD_SWATCHES=['#2f6fed','#0e9f6e','#e8590c','#d6336c','#7048e8','#0c8599',
 /** A table's identity: Liquibase and the databases it targets compare table names case-insensitively,
  *  and the replay upper-cases them — `ord_order` in one changelog is `ORD_ORDER` in the next. */
 function erdKey(name){ return String(name==null?'':name).trim().toUpperCase(); }
+/** A table's identity in a diagram: its name, and in a database added by hand that database's id before it —
+ *  the project's CUSTOMER and the CRM's are two tables. `/` is in no table name a database accepts unquoted. */
+function erdTableKey(db, name){ return (db && db!==ERD_PROJECT_DB ? db+'/' : '')+erdKey(name); }
 
 /**
  * Every table the project defines, from the explorer's payload. A table comes from the replayed Liquibase
@@ -249,24 +255,44 @@ function erdNormalize(doc){
   if(v>ERD_FORMAT_VERSION) throw new Error('written by a newer Atlas (format version '+v+'; this page reads '+ERD_FORMAT_VERSION+')');
   const str=(x,max)=>typeof x==='string'?x.slice(0,max||200):'';
   const num=(x,d)=>typeof x==='number'&&isFinite(x)?Math.round(Math.max(-1e6, Math.min(1e6, x))):d;
+  const dbIdOf=x=>str(x,40).trim().toLowerCase().replace(/[^a-z0-9_-]+/g,'-').replace(/^-+|-+$/g,'');
+  const databases=[], dbIds=new Set();
+  (Array.isArray(doc.databases)?doc.databases:[]).slice(0,50).forEach((x,i)=>{
+    if(!x || typeof x!=='object') return;
+    let id=dbIdOf(x.id)||('db'+(i+1));
+    if(id===ERD_PROJECT_DB && dbIds.has(id)) return;
+    while(dbIds.has(id)) id+='-2';
+    dbIds.add(id);
+    const names=new Set(), defs=[];
+    (Array.isArray(x.tables)?x.tables:[]).slice(0,500).forEach(t=>{
+      const name=t && typeof t==='object' ? str(t.name,128).trim() : '';
+      if(!name || names.has(erdKey(name))) return;
+      names.add(erdKey(name));
+      const seen=new Set();
+      defs.push({name, columns:(Array.isArray(t.columns)?t.columns:[]).filter(c=>c && typeof c.name==='string' && c.name.trim()).slice(0,500)
+        .map(c=>({name:str(c.name,128).trim(), type:typeof c.type==='string' && c.type.trim()?str(c.type,128).trim():null, pk:c.pk===true}))
+        .filter(c=>{ const k=erdKey(c.name); if(seen.has(k)) return false; seen.add(k); return true; })});
+    });
+    databases.push({id, name:id===ERD_PROJECT_DB?'':(str(x.name,120).trim()||id), tables:defs});
+  });
   const tables=[], keys=new Set();
   (Array.isArray(doc.tables)?doc.tables:[]).forEach((t,i)=>{
     if(!t || typeof t!=='object') return;
     const name=str(t.table,128).trim();
     if(!name) return;
-    const k=erdKey(name);
+    const db=dbIdOf(t.db), k=erdTableKey(db, name);
     if(keys.has(k)) return;
     keys.add(k);
     const cols=(Array.isArray(t.columns)?t.columns:[]).filter(c=>c && typeof c.name==='string' && c.name).slice(0,500)
       .map(c=>({name:str(c.name,128), type:typeof c.type==='string'?str(c.type,128):null, pk:c.pk===true}));
-    tables.push({key:k, name, alias:str(t.alias,120), x:num(t.x, 40+(i%4)*320), y:num(t.y, 40+Math.floor(i/4)*280),
+    tables.push({key:k, name, db:db===ERD_PROJECT_DB?'':db, alias:str(t.alias,120), x:num(t.x, 40+(i%4)*320), y:num(t.y, 40+Math.floor(i/4)*280),
       color:/^#[0-9a-f]{6}$/i.test(t.color||'')?t.color.toLowerCase():'', expanded:t.expanded===true,
       order:(Array.isArray(t.order)?t.order:[]).filter(s=>typeof s==='string').slice(0,500), columns:cols});
   });
   const relations=[], ids=new Set();
   (Array.isArray(doc.relations)?doc.relations:[]).forEach((r,i)=>{
     if(!r || typeof r!=='object') return;
-    const from=erdKey(r.from), to=erdKey(r.to);
+    const from=erdTableKey(dbIdOf(r.fromDb), r.from), to=erdTableKey(dbIdOf(r.toDb), r.to);
     if(!keys.has(from) || !keys.has(to)) return;
     let id=str(r.id,64)||('r'+(i+1));
     while(ids.has(id)) id+='_';
@@ -284,7 +310,7 @@ function erdNormalize(doc){
       w:Math.max(ERD_FRAME_MIN_W, num(fr.w, 480)), h:Math.max(ERD_FRAME_MIN_H, num(fr.h, 320)),
       color:/^#[0-9a-f]{6}$/i.test(fr.color||'')?fr.color.toLowerCase():''});
   });
-  return {name:str(doc.name,120).trim()||'Imported diagram', tables, relations, frames,
+  return {name:str(doc.name,120).trim()||'Imported diagram', databases, tables, relations, frames,
     dismissed:(Array.isArray(doc.dismissed)?doc.dismissed:[]).filter(s=>typeof s==='string').slice(0,1000)};
 }
 
@@ -307,11 +333,14 @@ function erdToDoc(d, meta){
   if(meta.project) doc.project=meta.project;
   if(meta.atlasVersion) doc.atlasVersion=meta.atlasVersion;
   if(meta.exportedAt) doc.exportedAt=meta.exportedAt;
-  doc.tables=(d.tables||[]).map(t=>({table:t.name, alias:t.alias||'', x:Math.round(t.x), y:Math.round(t.y),
+  doc.databases=(d.databases||[]).map(x=>Object.assign({id:x.id}, x.id===ERD_PROJECT_DB?{}:{name:x.name||x.id}, {tables:x.tables.map(t=>({name:t.name,
+    columns:t.columns.map(c=>c.pk?{name:c.name, type:c.type==null?null:c.type, pk:true}:{name:c.name, type:c.type==null?null:c.type})}))}));
+  const dbOf=new Map((d.tables||[]).map(t=>[t.key, t.db||'']));
+  doc.tables=(d.tables||[]).map(t=>Object.assign({table:t.name}, t.db?{db:t.db}:{}, {alias:t.alias||'', x:Math.round(t.x), y:Math.round(t.y),
     color:t.color||'', expanded:!!t.expanded, order:(t.order||[]).slice(),
     columns:(t.columns||[]).map(c=>c.pk?{name:c.name, type:c.type==null?null:c.type, pk:true}:{name:c.name, type:c.type==null?null:c.type})}));
-  doc.relations=(d.relations||[]).map(r=>({id:r.id, from:nameOf.get(r.from)||r.from, to:nameOf.get(r.to)||r.to,
-    ...columnsOut(r.pairs), cardinality:r.cardinality, label:r.label||''}));
+  doc.relations=(d.relations||[]).map(r=>Object.assign({id:r.id, from:nameOf.get(r.from)||r.from}, dbOf.get(r.from)?{fromDb:dbOf.get(r.from)}:{},
+    {to:nameOf.get(r.to)||r.to}, dbOf.get(r.to)?{toDb:dbOf.get(r.to)}:{}, columnsOut(r.pairs), {cardinality:r.cardinality, label:r.label||''}));
   doc.frames=(d.frames||[]).map(fr=>({id:fr.id, name:fr.name||'', x:Math.round(fr.x), y:Math.round(fr.y),
     w:Math.round(fr.w), h:Math.round(fr.h), color:fr.color||''}));
   doc.dismissed=(d.dismissed||[]).slice();
@@ -326,6 +355,106 @@ function columnsOut(pairs){
 }
 /** Whether two diagrams say the same thing — the "changed here" test for a diagram from a project file. */
 function erdSame(a, b){ return JSON.stringify(erdToDoc(a))===JSON.stringify(erdToDoc(b)); }
+
+/**
+ * The tables a diagram can show: the project's ([erdCatalog]) and those added to the diagram by hand — to the
+ * project's database (one no changelog creates: an engine table, another application's) or to a database of
+ * their own (`crm`, a partner's system) — each knowing its database. A table the project defines wins over one
+ * of the same name added to the project's database by hand; the hand-made one stays in the diagram, unused.
+ */
+function erdDiagramCatalog(project, d){
+  const out=(project||[]).slice(), taken=new Set(out.map(t=>t.key));
+  ((d && d.databases)||[]).forEach(db=>db.tables.forEach(t=>{
+    const key=erdTableKey(db.id, t.name);
+    if(taken.has(key)) return;
+    taken.add(key);
+    out.push({key, name:t.name, columns:t.columns.map(c=>({name:c.name, type:c.type, pk:!!c.pk})), source:'manual',
+      db:db.id===ERD_PROJECT_DB?'':db.id, dbName:db.id===ERD_PROJECT_DB?'':db.name, status:'', rank:4, changelog:null,
+      services:[], dataObjects:[], alias:''});
+  }));
+  return out;
+}
+/** Where hand-made table [key] is defined in a diagram — its database and its entry — or null. */
+function erdDefinition(d, key){
+  for(const db of (d && d.databases)||[]) for(const t of db.tables) if(erdTableKey(db.id, t.name)===key) return {db, table:t};
+  return null;
+}
+/** A database added by hand, named [name]; its id is the name made safe for a key, and unique. */
+function erdAddDatabase(d, name){
+  name=String(name||'').trim().slice(0,120);
+  if(!name) return null;
+  d.databases=d.databases||[];
+  const base=name.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9_-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,36)||'db';
+  let id=base===ERD_PROJECT_DB?base+'-2':base, i=2;
+  while(d.databases.some(x=>x.id===id)) id=base+'-'+(++i);
+  d.databases.push({id, name, tables:[]});
+  return id;
+}
+/**
+ * Save hand-made table [key] as edited (null [key]: a new one, in database [db]): its [name], and its columns
+ * as [rows] — `{name, type, pk, was}`, `was` the column's name before the edit, `''` for a new one. What
+ * refers to it follows a rename: its place on the canvas keeps its position and colour, the relations that join
+ * it keep joining it, a renamed column keeps its place in the card's order and in the relations that join it;
+ * a column taken away leaves them. [projectKeys] are the project's own tables, whose names are taken.
+ * Returns `{key}` or `{error}`.
+ */
+function erdSaveTable(d, key, db, name, rows, projectKeys){
+  name=String(name||'').trim().slice(0,128);
+  if(!name) return {error:'The table needs a name'};
+  const cols=[], seen=new Set();
+  for(const r of rows||[]){
+    const n=String((r && r.name)||'').trim().slice(0,128);
+    if(!n) continue;
+    if(seen.has(erdKey(n))) return {error:'Two columns are called '+n};
+    seen.add(erdKey(n));
+    cols.push({name:n, type:String(r.type||'').trim().slice(0,128)||null, pk:!!r.pk, was:String(r.was||'')});
+  }
+  d.databases=d.databases||[];
+  const cur=key?erdDefinition(d, key):null;
+  if(key && !cur) return {error:'The table is gone'};
+  const id=cur?cur.db.id:(db||ERD_PROJECT_DB), next=erdTableKey(id, name);
+  if(next!==key && (erdDefinition(d, next) || (id===ERD_PROJECT_DB && projectKeys && projectKeys.has(next))))
+    return {error:(id===ERD_PROJECT_DB?'The project':'This database')+' already has a table called '+name};
+  let home=cur?cur.db:d.databases.find(x=>x.id===id);
+  if(!home){
+    if(id!==ERD_PROJECT_DB) return {error:'The database is gone'};
+    home={id, name:'', tables:[]}; d.databases.unshift(home);
+  }
+  const def={name, columns:cols.map(c=>({name:c.name, type:c.type, pk:c.pk}))};
+  if(!cur){ home.tables.push(def); return {key:next}; }
+  const kept=new Set(cols.filter(c=>c.was).map(c=>erdKey(c.was)));
+  const gone=new Set(cur.table.columns.map(c=>erdKey(c.name)).filter(k=>!kept.has(k)));
+  const renamed=new Map(cols.filter(c=>c.was).map(c=>[erdKey(c.was), c.name]));
+  const col=n=>n && gone.has(erdKey(n)) ? '' : (n && renamed.get(erdKey(n))) || n;
+  Object.assign(cur.table, def);
+  (d.tables||[]).forEach(t=>{
+    if(t.key!==key) return;
+    t.key=next; t.name=name;
+    t.order=(t.order||[]).map(col).filter(Boolean);
+    t.columns=def.columns.map(c=>Object.assign({}, c));
+  });
+  (d.relations||[]).forEach(r=>{
+    if(r.from!==key && r.to!==key) return;
+    r.pairs=(r.pairs||[]).map(p=>({from:r.from===key?col(p.from):p.from, to:r.to===key?col(p.to):p.to})).filter(p=>p.from||p.to);
+    if(r.from===key) r.from=next;
+    if(r.to===key) r.to=next;
+  });
+  return {key:next};
+}
+/** A hand-made table gone from the diagram: its definition, its card, the relations that join it. */
+function erdDeleteTable(d, key){
+  const cur=erdDefinition(d, key);
+  if(cur) cur.db.tables=cur.db.tables.filter(t=>t!==cur.table);
+  d.tables=(d.tables||[]).filter(t=>t.key!==key);
+  d.relations=(d.relations||[]).filter(r=>r.from!==key && r.to!==key);
+}
+/** A database added by hand gone, with every table in it. */
+function erdDeleteDatabase(d, id){
+  const db=(d.databases||[]).find(x=>x.id===id);
+  if(!db) return;
+  db.tables.slice().forEach(t=>erdDeleteTable(d, erdTableKey(id, t.name)));
+  d.databases=d.databases.filter(x=>x!==db);
+}
 
 /** The two ends of a cardinality, from-side first: `1:0..n` is exactly one at the from-side, zero or more at
  *  the to-side. */
@@ -375,11 +504,11 @@ function erdSearch(catalog, query, onCanvas, limit){
     const isOn=on.has(t.key);
     const tr=Math.min(rank(t.name), rank(t.alias), ...(t.dataObjects||[]).map(d=>Math.min(rank(d.name), rank(d.key))),
       ...(t.services||[]).map(id=>rank(String(id).replace(/^service:/,''))));
-    if(tr<9){ all.push({kind:'table', key:t.key, table:t.name, alias:t.alias||'', count:(t.columns||[]).length, on:isOn, score:tr, pos:-1}); res.tables++; }
+    if(tr<9){ all.push({kind:'table', key:t.key, table:t.name, alias:t.alias||'', db:t.dbName||'', count:(t.columns||[]).length, on:isOn, score:tr, pos:-1}); res.tables++; }
     (t.columns||[]).forEach((c,i)=>{
       const nr=rank(c.name), ty=String(c.type||'').toLowerCase().indexOf(q)>=0;
       if(nr===9 && !ty) return;
-      all.push({kind:'column', key:t.key, table:t.name, alias:t.alias||'', column:c.name, type:c.type||'', pk:!!c.pk, on:isOn,
+      all.push({kind:'column', key:t.key, table:t.name, alias:t.alias||'', db:t.dbName||'', column:c.name, type:c.type||'', pk:!!c.pk, on:isOn,
         score:nr<9?nr+3:7, pos:i});
       res.columns++;
     });
@@ -738,12 +867,19 @@ let S=null;          // the page's state, built on first use (the explorer's glo
 // ---------- state: catalog, diagrams, persistence ----------
 function state(){
   if(S) return S;
-  const catalog=erdCatalog(DATA.nodes||[]);
-  S={catalog, byKey:new Map(catalog.map(t=>[t.key,t])), suggestions:erdSuggestions(DATA.nodes||[]),
+  const project=erdCatalog(DATA.nodes||[]);
+  S={project, projectKeys:new Set(project.map(t=>t.key)), catalog:project, byKey:new Map(project.map(t=>[t.key,t])),
+    suggestions:erdSuggestions(DATA.nodes||[]), collapsed:new Set(),
     diagrams:[], activeId:null, undo:[], redo:[], sel:null, pop:null, root:null, filter:'', present:false,
     storageOk:true, projectErrors:[], lastCoalesce:null, drag:null, dirtyTimer:0, q:'', results:[], resIdx:0, tool:null};
   load();
+  refreshCatalog();
   return S;
+}
+/** The tables the active diagram can show: the project's and the ones added to it by hand (erdDiagramCatalog). */
+function refreshCatalog(){
+  S.catalog=erdDiagramCatalog(S.project, active());
+  S.byKey=new Map(S.catalog.map(t=>[t.key, t]));
 }
 const storeKey=()=>'atlas-erd:'+DATA.project;   // every report on file:// shares one origin
 function load(){
@@ -762,13 +898,16 @@ function load(){
     try{ base=erdNormalize(p.doc); }catch(e){ S.projectErrors.push(p.file+': '+e.message); return; }
     const id='p:'+p.file, local=stored.get(id);
     stored.delete(id);
-    S.diagrams.push(Object.assign(local||base, {id, stored:!!local, origin:{file:p.file, base}}));
+    // the diagram shown is a copy of the file's: were it the same object, editing it would edit the base it is
+    // compared with — never "changed here" — and the base would hold the diagram that holds it, which no
+    // export can write out
+    S.diagrams.push(Object.assign(local||erdNormalize(p.doc), {id, stored:!!local, origin:{file:p.file, base}}));
   });
   stored.forEach(d=>S.diagrams.push(d));
   if(!S.diagrams.length) S.diagrams.push(blank('Diagram 1'));
   S.activeId=(st && S.diagrams.some(d=>d.id===st.active)) ? st.active : S.diagrams[0].id;
 }
-function blank(name){ return {id:'l:'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), name, tables:[],
+function blank(name){ return {id:'l:'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), name, databases:[], tables:[],
   relations:[], frames:[], dismissed:[], stored:false, origin:null}; }
 const active=()=>S.diagrams.find(d=>d.id===S.activeId)||S.diagrams[0];
 function persist(){
@@ -782,14 +921,15 @@ function persist(){
   renderStatus();
 }
 function schedulePersist(){ clearTimeout(S.dirtyTimer); S.dirtyTimer=setTimeout(persist, 250); }
-const snap=d=>JSON.stringify({name:d.name, tables:d.tables, relations:d.relations, frames:d.frames||[], dismissed:d.dismissed});
-function restore(d, json){ const o=JSON.parse(json); d.name=o.name; d.tables=o.tables; d.relations=o.relations; d.frames=o.frames; d.dismissed=o.dismissed; }
+const snap=d=>JSON.stringify({name:d.name, databases:d.databases||[], tables:d.tables, relations:d.relations, frames:d.frames||[], dismissed:d.dismissed});
+function restore(d, json){ const o=JSON.parse(json); d.name=o.name; d.databases=o.databases; d.tables=o.tables; d.relations=o.relations; d.frames=o.frames; d.dismissed=o.dismissed; }
 /** Every change goes through here: one undo step, a save, a redraw. [coalesce] folds a run of the same edit
  *  (typing a name) into one step, so ⌘Z undoes the word rather than its last letter. */
 function mutate(fn, coalesce){
   const d=active(), before=snap(d);
   fn(d);
   if(snap(d)===before) return false;
+  refreshCatalog();
   const now=Date.now(), c=S.lastCoalesce;
   if(!(coalesce && c && c.key===coalesce && c.id===d.id && now-c.at<1500)){
     S.undo.push(before);
@@ -809,6 +949,7 @@ function step(from, to){
   if(!from.length) return;
   to.push(snap(d));
   restore(d, from.pop());
+  refreshCatalog();
   d.stored=true; S.lastCoalesce=null;
   if(S.sel && !selected()) S.sel=null;
   closePop();
@@ -823,7 +964,7 @@ function effective(t){
 }
 /** The diagram with every table's columns refreshed from the live schema — what an export writes. */
 function fresh(d){
-  const c=JSON.parse(JSON.stringify(d));
+  const c=JSON.parse(snap(d));
   c.tables.forEach(t=>{ const e=effective(t); t.columns=e.columns.map(x=>({name:x.name, type:x.type, pk:!!x.pk})); t.order=e.order; });
   return c;
 }
@@ -855,7 +996,8 @@ function layout(t, q, d){
   const shown=t.expanded?ordered:ordered.filter((c,i)=>i<VISIBLE || (hits && hits.has(erdKey(c.name))) || joined.has(erdKey(c.name)));
   const live=S && S.byKey.get(t.key);
   const match=!q || !!(hits && hits.size) || erdTableMatches(t.name, t.alias, live && live.dataObjects, q, live && live.services);
-  const title=t.alias||t.name, sub=t.alias?t.name:'';
+  // a table of a database added by hand says which: the CRM's CUSTOMER is not the project's
+  const title=t.alias||t.name, sub=[live && live.dbName, t.alias?t.name:''].filter(Boolean).join(' · ');
   const head=sub?HEAD2:HEAD1;
   let w=Math.max(WMIN, tw(title,F_TITLE)+56, sub?tw(sub,F_SUB)+40:0);
   ordered.forEach(c=>{ w=Math.max(w, 30+tw(c.name,F_ROW)+18+tw(c.type||'',F_TYPE)+12); });
@@ -1157,21 +1299,14 @@ function render(root){
 }
 function build(root){
   root.classList.add('erd-host');
-  if(!S.catalog.length){
-    root.innerHTML='<div class="dash"><div class="erd-none"><div class="dtitle">ER diagram</div>'+
-      '<p>This project defines no database tables Atlas can read: no Liquibase changelog creates one, and no database '+
-      'service names one. The designer lists the tables of Liquibase changelogs (as they stand after every change set '+
-      'has run) and of services with a table name.</p></div></div>';
-    els={root, empty:true};
-    return;
-  }
   root.innerHTML=
     '<div class="erd">'+
       '<aside class="erd-side" aria-label="Tables">'+
-        '<div class="erd-side-h"><div class="erd-side-t">Tables <span class="erd-count">'+S.catalog.length+'</span></div>'+
+        '<div class="erd-side-h"><div class="erd-side-top"><div class="erd-side-t">Tables <span class="erd-count"></span></div>'+
+          '<button type="button" class="tbtn erd-adddb" data-act="add-db" data-tip="A database of your own — another system’s — to add tables to by hand">+ Database</button></div>'+
           '<input class="erd-filter" type="search" placeholder="Filter tables or columns…" aria-label="Filter tables or columns"></div>'+
         '<div class="erd-list" role="listbox" aria-label="Tables — drag one onto the canvas"></div>'+
-        '<div class="erd-side-foot">Drag a table onto the canvas, or press <b>+</b>.</div>'+
+        '<div class="erd-side-foot">Drag a table onto the canvas, or press <b>+</b>. <b>+ Table</b> adds one by hand.</div>'+
       '</aside>'+
       '<div class="erd-side-resize" role="separator" aria-orientation="vertical" tabindex="0" aria-valuemin="'+SIDE_MIN+'" '+
         'aria-valuemax="'+SIDE_MAX+'"></div>'+
@@ -1272,12 +1407,12 @@ function ico(body){ return '<svg viewBox="0 0 24 24" width="14" height="14" fill
 function btn(act, html, tip, cls){ return '<button type="button" class="tbtn'+(cls||'')+'" data-act="'+act+'" data-tip="'+esc(tip)+'" aria-label="'+esc(tip)+'">'+html+'</button>'; }
 
 function renderPick(){
-  if(!els || els.empty) return;
+  if(!els) return;
   els.pick.innerHTML=S.diagrams.map(d=>'<option value="'+esc(d.id)+'"'+(d.id===S.activeId?' selected':'')+'>'+
     esc(d.name+(d.origin?' — project':''))+'</option>').join('');
 }
 function renderStatus(){
-  if(!els || els.empty) return;
+  if(!els) return;
   const d=active();
   let s;
   if(d.origin){
@@ -1290,10 +1425,16 @@ function renderStatus(){
   b.querySelector('[data-act=undo]').disabled=!S.undo.length;
   b.querySelector('[data-act=redo]').disabled=!S.redo.length;
 }
+/**
+ * The list, a group per database: the project's own first — the tables its changelogs and services define,
+ * and those added to it by hand — then each database added by hand, in the order it was added. A group folds;
+ * while the list is filtered every group with a match is open and the rest are hidden.
+ */
 function renderList(){
-  if(!els || els.empty) return;
+  if(!els) return;
   const d=active(), on=new Set(d.tables.map(t=>t.key)), q=S.filter.trim().toLowerCase();
-  const rows=S.catalog.map(t=>{
+  els.box.querySelector('.erd-side-t .erd-count').textContent=String(S.catalog.length);
+  const item=t=>{
     let hit='';
     if(q){
       const inName=(t.name+' '+t.alias+' '+t.dataObjects.map(x=>x.name).join(' ')).toLowerCase().indexOf(q)>=0;
@@ -1306,7 +1447,8 @@ function renderList(){
     const doKey=t.dataObjects.length===1 && t.alias===t.dataObjects[0].name ? t.dataObjects[0].key : '';
     const alias=t.alias&&t.alias!==t.name?esc(t.alias)+(doKey?copyBtn(doKey, 'Copy the data object key '+doKey, 'erd-lcpy'):''):'';
     const sub=[alias, t.columns.length+' column'+(t.columns.length===1?'':'s'),
-      t.source==='service'?'<span class="erd-src-svc" data-tip="No changelog creates this table — the columns are the service’s mappings, the types its logical ones">service model</span>':'']
+      t.source==='service'?'<span class="erd-src-svc" data-tip="No changelog creates this table — the columns are the service’s mappings, the types its logical ones">service model</span>':'',
+      t.source==='manual'?'<span class="erd-src-man" data-tip="Added by hand to this diagram — its panel edits it">by hand</span>':'']
       .filter(Boolean).join(' · ');
     return '<div class="erd-item'+(on.has(t.key)?' on':'')+'" role="option" tabindex="-1" data-key="'+esc(t.key)+'" aria-selected="'+on.has(t.key)+'">'+
       '<div class="erd-item-main"><div class="erd-item-n">'+esc(t.name)+'</div><div class="erd-item-s">'+sub+(hit?' · '+hit:'')+'</div></div>'+
@@ -1314,13 +1456,31 @@ function renderList(){
       (on.has(t.key)?'<span class="erd-item-on" data-tip="On the canvas — click to find it">'+ico('<path d="M20 6 9 17l-5-5"/>')+'</span>'
                     :'<button type="button" class="erd-add" data-add="'+esc(t.key)+'" data-tip="Add to the canvas" aria-label="Add '+esc(t.name)+' to the canvas">+</button>')+
     '</div>';
+  };
+  const groups=[{id:ERD_PROJECT_DB, name:DATA.project, own:false, tables:S.catalog.filter(t=>!t.db)}]
+    .concat((d.databases||[]).filter(x=>x.id!==ERD_PROJECT_DB).map(x=>({id:x.id, name:x.name, own:true, tables:S.catalog.filter(t=>t.db===x.id)})));
+  const html=groups.map(g=>{
+    const rows=g.tables.slice().sort((a,b)=>a.name.localeCompare(b.name, undefined, {sensitivity:'base'})).map(item).filter(Boolean);
+    if(q && !rows.length) return '';
+    const open=!!q || !S.collapsed.has(g.id);
+    const none=g.own?'No tables yet — <b>+ Table</b> adds one.'
+      :'No Liquibase changelog creates a table and no database service names one — <b>+ Table</b> adds one by hand.';
+    return '<div class="erd-grp'+(open?'':' shut')+'" data-db="'+esc(g.id)+'">'+
+      '<div class="erd-grp-h"><button type="button" class="erd-grp-t" data-grp="'+esc(g.id)+'" aria-expanded="'+open+'">'+
+        ico('<path d="m6 9 6 6 6-6"/>')+'<span class="erd-grp-n">'+esc(g.name)+'</span><span class="erd-count">'+g.tables.length+'</span>'+
+        (g.own?'':'<span class="erd-grp-k" data-tip="The project’s own database: the tables its changelogs and services define">project</span>')+'</button>'+
+        '<button type="button" class="erd-grp-add" data-newtable="'+esc(g.id)+'" data-tip="Add a table to '+esc(g.name)+' by hand">+ Table</button>'+
+        (g.own?'<button type="button" class="erd-grp-menu" data-dbmenu="'+esc(g.id)+'" data-tip="Rename or delete the database" aria-label="'+esc(g.name)+': rename or delete">⋯</button>':'')+
+      '</div>'+
+      (open?'<div class="erd-grp-b">'+(rows.join('')||'<div class="erd-list-none">'+none+'</div>')+'</div>':'')+
+    '</div>';
   }).join('');
-  els.list.innerHTML=rows||'<div class="erd-list-none">No table or column matches.</div>';
+  els.list.innerHTML=html||'<div class="erd-list-none">No table or column matches.</div>';
   const first=els.list.querySelector('.erd-item');
   if(first) first.tabIndex=0;
 }
 function draw(){
-  if(!els || els.empty) return;
+  if(!els) return;
   const d=active();
   const {markup, lays}=sceneSvg(d, PAGE, {interactive:true, suggestions:!S.present, sel:S.sel, q:S.q});
   els.world.innerHTML=markup;
@@ -1354,7 +1514,7 @@ function zoomAt(k, cx, cy){
   applyView();
 }
 function fit(){
-  if(!els || els.empty) return;
+  if(!els) return;
   const v=view(), b=bounds(els.lays||new Map(), 32, active().frames), r=els.svg.getBoundingClientRect();
   if(!b || r.width<50 || r.height<50){ v.s=1; v.tx=40; v.ty=40; applyView(); return; }
   // presenting, a small diagram may grow to fill the room it has — it is being shown across a table
@@ -1388,7 +1548,7 @@ function addTable(key, at){
   if(!c) return;
   if(d.tables.some(t=>t.key===key)){ select({kind:'table', key}); center(key); return; }
   const p=at||freeSpot();
-  mutate(d=>{ d.tables.push({key, name:c.name, alias:c.alias||'', x:Math.round(p.x), y:Math.round(p.y), color:'', expanded:false,
+  mutate(d=>{ d.tables.push({key, name:c.name, db:c.db||'', alias:c.alias||'', x:Math.round(p.x), y:Math.round(p.y), color:'', expanded:false,
     order:erdDefaultOrder(c.columns), columns:c.columns.map(x=>({name:x.name, type:x.type, pk:!!x.pk}))}); });
   select({kind:'table', key});
 }
@@ -1561,7 +1721,7 @@ function renderResults(){
     :'Nothing matches “'+esc(S.q)+'”')+'</div>';
   r.items.forEach((it,i)=>{
     const main=it.kind==='table'
-      ? '<span class="erd-rname">'+markQ(it.table)+'</span>'+(it.alias?'<span class="erd-rsub">'+markQ(it.alias)+'</span>':'')
+      ? '<span class="erd-rname">'+markQ(it.table)+'</span>'+(it.alias?'<span class="erd-rsub">'+markQ(it.alias)+'</span>':'')+(it.db?'<span class="erd-rsub">'+esc(it.db)+'</span>':'')
       : '<span class="erd-rsub">'+esc(it.table)+'.</span><span class="erd-rname">'+(it.pk?'<b class="erd-pk">PK</b>':'')+markQ(it.column)+'</span>';
     h+='<div class="erd-res'+(i===S.resIdx?' on':'')+'" role="option" aria-selected="'+(i===S.resIdx)+'" data-i="'+i+'">'+
       '<span class="erd-rkind">'+(it.kind==='table'?'table':'column')+'</span><span class="erd-rmain">'+main+'</span>'+
@@ -1652,6 +1812,12 @@ function wire(){
   els.filter.addEventListener('input', ()=>{ S.filter=els.filter.value; renderList(); });
   els.list.addEventListener('pointerdown', onListDown);
   els.list.addEventListener('click', e=>{
+    const gt=e.target.closest('[data-grp]');
+    if(gt){ const id=gt.dataset.grp; if(S.collapsed.has(id)) S.collapsed.delete(id); else S.collapsed.add(id); renderList(); return; }
+    const nt=e.target.closest('[data-newtable]');
+    if(nt){ openTableEditor(null, nt.dataset.newtable, nt); return; }
+    const dm=e.target.closest('[data-dbmenu]');
+    if(dm){ openDbMenu(dm.dataset.dbmenu, dm); return; }
     const cp=e.target.closest('[data-copy]');
     if(cp){ const k=cp.dataset.copy; atlasCopy(k, ()=>toast('Copied '+k)); return; }
     const ib=e.target.closest('[data-info]');
@@ -1926,7 +2092,9 @@ function openTablePop(key){
         esc(S.q && erdColumnHits(e.columns, S.q).size?S.q:'')+'">':'')+
       '<ol class="erd-cols"></ol>'+
       '<label class="erd-check"><input type="checkbox" data-f="expanded"'+(t.expanded?' checked':'')+'> Show all columns on the card</label></div>'+
-    '<div class="erd-pop-a"><button type="button" class="tbtn erd-danger" data-pa="remove">Remove from the diagram</button></div>';
+    '<div class="erd-pop-a">'+(e.live && e.live.source==='manual'?'<button type="button" class="tbtn" data-pa="edit-def" '+
+      'data-tip="Its name, its columns, their types and its key — it was added by hand">Edit the table…</button><span class="erd-grow"></span>':'')+
+      '<button type="button" class="tbtn erd-danger" data-pa="remove">Remove from the diagram</button></div>';
   openPop('table', html, nearOfCard(key));
   renderPopCols(key);
   const pop=els.pop;
@@ -1937,6 +2105,8 @@ function openTablePop(key){
   if(cq) cq.addEventListener('input', ()=>renderPopCols(key));
   pop.querySelector('[data-f=expanded]').addEventListener('change', ev=>{ const on=ev.target.checked; mutate(d=>keepFramed(d, d=>{ const x=d.tables.find(x=>x.key===key); if(x) x.expanded=on; })); });
   pop.addEventListener('click', ev=>{
+    const et=ev.target.closest('[data-edit-table]');
+    if(et){ openTableEditor(et.dataset.editTable); return; }
     const ib=ev.target.closest('[data-info]');
     if(ib){ const w=pop.querySelector('.erd-infowrap'); w.hidden=!w.hidden; ib.classList.toggle('on', !w.hidden); return; }
     const cp=ev.target.closest('[data-copy]');
@@ -1949,6 +2119,7 @@ function openTablePop(key){
     if(mv){ moveCol(key, mv.dataset.col, +mv.dataset.mv); return; }
     const a=ev.target.closest('[data-pa]');
     if(a && a.dataset.pa==='remove'){ S.sel={kind:'table', key}; removeSelected(); }
+    if(a && a.dataset.pa==='edit-def'){ openTableEditor(key); return; }
     if(ev.target.closest('[data-pa=close]')) closePop();
   });
 }
@@ -1963,6 +2134,8 @@ function openTablePop(key){
 function infoHtml(key){
   const c=S.byKey.get(key);
   if(!c) return '<p class="erd-warn">Not in this project’s schema.</p>';
+  if(c.source==='manual') return '<dl class="erd-info"><dt>Database</dt><dd><div class="erd-in">'+esc(c.dbName||DATA.project)+'</div></dd>'+
+    '<dt>Added</dt><dd><div class="erd-in">by hand, in this diagram — <button type="button" class="erd-open" data-edit-table="'+esc(key)+'">edit it</button></div></dd></dl>';
   const entry=(id, label, k)=>'<div class="erd-ie"><div class="erd-in">'+srcLink(id, label)+'</div>'+(k?'<div class="erd-ik">'+keyChip(k)+'</div>':'')+'</div>';
   const group=(one, many, items)=>items.length?'<dt>'+(items.length>1?many:one)+'</dt><dd>'+items.join('')+'</dd>':'';
   const changelog=c.changelog?[entry(c.changelog, (byId.get(c.changelog) || {}).label || c.changelog, null)]:[];
@@ -1984,6 +2157,8 @@ function openInfoPop(key, el){
   const c=S.byKey.get(key), r=el.getBoundingClientRect();
   openPop('info', '<div class="erd-pop-h">'+popTitle((c && c.name) || key)+'<span class="erd-grow"></span>'+closeBtn()+'</div>'+infoHtml(key), {x:r.right+8, y:r.top-10});
   els.pop.addEventListener('click', ev=>{
+    const et=ev.target.closest('[data-edit-table]');
+    if(et){ openTableEditor(et.dataset.editTable, null, el); return; }
     const cp=ev.target.closest('[data-copy]');
     if(cp){ const k=cp.dataset.copy; atlasCopy(k, ()=>toast('Copied '+k)); return; }
     const op=ev.target.closest('[data-open]');
@@ -2133,6 +2308,92 @@ function openRelPop(id, ev, fresh){
     else if(a.dataset.pa==='close') closePop();
   });
 }
+/**
+ * A table added by hand, new or as it is: its name and its columns — name, type and whether it is (part of) the
+ * primary key — a row each. Nothing changes until *Save*: a rename ripples through the diagram (erdSaveTable),
+ * and one step is what ⌘Z should take back. A new table goes onto the canvas at once, selected.
+ */
+function openTableEditor(key, db, anchor){
+  const d=active(), cur=key?erdDefinition(d, key):null;
+  if(key && !cur) return;
+  const dbId=cur?cur.db.id:(db||ERD_PROJECT_DB);
+  const dbx=(d.databases||[]).find(x=>x.id===dbId), dbName=dbId===ERD_PROJECT_DB?DATA.project:(dbx?dbx.name:dbId);
+  const rows=cur?cur.table.columns.map(c=>({name:c.name, type:c.type||'', pk:!!c.pk, was:c.name})):[{name:'', type:'', pk:false, was:''}];
+  const html='<div class="erd-pop-h"><span class="erd-pop-t">'+(cur?'Edit the table':'New table')+'</span><span class="erd-pop-db">in '+esc(dbName)+'</span>'+
+      '<span class="erd-grow"></span>'+closeBtn()+'</div>'+
+    '<label class="erd-fld"><span>Name</span><input data-f="tname" value="'+esc(cur?cur.table.name:'')+'" maxlength="128" placeholder="e.g. CUSTOMER" autofocus></label>'+
+    '<div class="erd-fld"><span>Columns <em>name, type, primary key</em></span><div class="erd-tcols"></div>'+
+      '<button type="button" class="tbtn erd-addpair" data-pa="addcol">+ Column</button></div>'+
+    '<p class="erd-warn" hidden></p>'+
+    '<div class="erd-pop-a">'+(cur?'<button type="button" class="tbtn erd-danger" data-pa="deldef" data-tip="From the database, the canvas and every relation">Delete the table</button>':'')+
+      '<span class="erd-grow"></span><button type="button" class="tbtn" data-pa="close">Cancel</button>'+
+      '<button type="button" class="tbtn erd-primary" data-pa="save">'+(cur?'Save':'Create')+'</button></div>';
+  const r=anchor&&anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : null;
+  openPop('tabledef', html, r?{x:r.right+8, y:r.top-10}:(key && els.lays && els.lays.get(key) ? nearOfCard(key) : null));
+  const pop=els.pop, box=pop.querySelector('.erd-tcols'), warn=pop.querySelector('.erd-warn');
+  const renderCols=focus=>{
+    box.innerHTML=rows.map((c,i)=>'<div class="erd-tcol">'+
+      '<input data-c="name" data-i="'+i+'" value="'+esc(c.name)+'" maxlength="128" placeholder="column" aria-label="Column name">'+
+      '<input data-c="type" data-i="'+i+'" value="'+esc(c.type)+'" maxlength="128" placeholder="type" aria-label="Column type">'+
+      '<label class="erd-tpk" data-tip="Part of the primary key"><input type="checkbox" data-c="pk" data-i="'+i+'"'+(c.pk?' checked':'')+'>PK</label>'+
+      '<button type="button" class="erd-x" data-pa="delcol" data-i="'+i+'" aria-label="Remove this column">×</button></div>').join('')||
+      '<div class="erd-cnone">No columns — + Column adds one</div>';
+    if(focus!=null){ const el=box.querySelector('input[data-c=name][data-i="'+focus+'"]'); if(el) el.focus(); }
+  };
+  renderCols();
+  pop.addEventListener('input', e=>{ const el=e.target.closest('[data-c]'); if(!el) return; const c=el.dataset.c; rows[+el.dataset.i][c]=c==='pk'?el.checked:el.value; warn.hidden=true; });
+  pop.addEventListener('change', e=>{ const el=e.target.closest('input[data-c=pk]'); if(el) rows[+el.dataset.i].pk=el.checked; });
+  // Enter walks on: from the name to the first column, from a column to the next — a new one after the last
+  pop.addEventListener('keydown', e=>{
+    if(e.key!=='Enter' || e.target.type==='checkbox') return;
+    if((e.metaKey||e.ctrlKey)){ e.preventDefault(); save(); return; }
+    const el=e.target.closest('input'); if(!el) return;
+    e.preventDefault();
+    if(el.dataset.f==='tname'){ const first=box.querySelector('input[data-c=name]'); if(first) first.focus(); else { rows.push({name:'', type:'', pk:false, was:''}); renderCols(0); } return; }
+    const i=+el.dataset.i;
+    if(el.dataset.c==='name'){ const t=box.querySelector('input[data-c=type][data-i="'+i+'"]'); if(t) t.focus(); return; }
+    if(i===rows.length-1){ rows.push({name:'', type:'', pk:false, was:''}); renderCols(i+1); }
+    else { const n=box.querySelector('input[data-c=name][data-i="'+(i+1)+'"]'); if(n) n.focus(); }
+  });
+  const save=()=>{
+    const name=pop.querySelector('[data-f=tname]').value;
+    let res=null;
+    const at=key?null:freeSpot();
+    mutate(x=>{
+      res=erdSaveTable(x, key, dbId, name, rows, S.projectKeys);
+      if(!res.key || key) return;
+      const def=erdDefinition(x, res.key).table;
+      x.tables.push({key:res.key, name:def.name, db:dbId===ERD_PROJECT_DB?'':dbId, alias:'', x:Math.round(at.x), y:Math.round(at.y), color:'',
+        expanded:false, order:erdDefaultOrder(def.columns), columns:def.columns.map(c=>Object.assign({}, c))});
+    });
+    if(!res || res.error){ warn.textContent=(res && res.error)||'Nothing to save'; warn.hidden=false; return; }
+    closePop();
+    if(active().tables.some(t=>t.key===res.key)){ S.sel={kind:'table', key:res.key}; draw(); if(!key) center(res.key); }
+    toast(key?'Saved '+name.trim():'Added '+name.trim()+' to '+dbName);
+  };
+  pop.addEventListener('click', e=>{
+    const a=e.target.closest('[data-pa]');
+    if(!a) return;
+    if(a.dataset.pa==='addcol'){ rows.push({name:'', type:'', pk:false, was:''}); renderCols(rows.length-1); }
+    else if(a.dataset.pa==='delcol'){ rows.splice(+a.dataset.i, 1); renderCols(); }
+    else if(a.dataset.pa==='save') save();
+    else if(a.dataset.pa==='close') closePop();
+    else if(a.dataset.pa==='deldef') confirmPop('Delete '+cur.table.name+'? It goes from '+dbName+', from the canvas and from every relation that joins it.', 'Delete', ()=>{
+      mutate(x=>erdDeleteTable(x, key)); if(S.sel && !selected()) S.sel=null; draw(); toast('Deleted '+cur.table.name+' — '+MODK+'Z brings it back'); });
+  });
+}
+/** A database added by hand: rename it, or delete it with every table in it. */
+function openDbMenu(id, anchor){
+  const db=(active().databases||[]).find(x=>x.id===id);
+  if(!db) return;
+  const r=anchor.getBoundingClientRect();
+  openPop('menu', '<div class="erd-menu" role="menu">'+mi('rename-db', 'Rename…')+mi('delete-db', 'Delete…')+'</div>', {x:r.left, y:r.bottom+6});
+  menuWire({
+    'rename-db':()=>ask('Rename the database', db.name, name=>mutate(x=>{ const y=(x.databases||[]).find(z=>z.id===id); if(y) y.name=name.slice(0,120); })),
+    'delete-db':()=>confirmPop('Delete '+db.name+(db.tables.length?' and its '+db.tables.length+' table'+(db.tables.length===1?'':'s')+' — from the canvas and from every relation that joins them':'')+'?',
+      'Delete', ()=>{ mutate(x=>erdDeleteDatabase(x, id)); if(S.sel && !selected()) S.sel=null; draw(); toast('Deleted '+db.name+' — '+MODK+'Z brings it back'); }),
+  });
+}
 /** A frame's panel: its name, its colour, fitting it to what it holds, deleting it (what it holds stays). */
 function openFramePop(id, fresh){
   const d=active(), fr=d.frames.find(x=>x.id===id);
@@ -2182,6 +2443,7 @@ function closeBtn(){ return '<button type="button" class="erd-x" data-pa="close"
 function switchTo(id){
   if(!S.diagrams.some(d=>d.id===id)) return;
   S.activeId=id; S.undo=[]; S.redo=[]; S.sel=null; S.lastCoalesce=null; S.tool=null;
+  refreshCatalog();
   closePop(); persist(); renderPick(); renderList(); draw(); renderStatus();
   if(!view().fitted) requestAnimationFrame(()=>{ fit(); view().fitted=true; });
 }
@@ -2195,6 +2457,11 @@ function doAct(act, b){
     case 'zoom-out': zoomAt(1/1.25); break;
     case 'fit': fit(); break;
     case 'arrange': arrange(); break;
+    case 'add-db': ask('New database', '', name=>{
+      let id=null;
+      mutate(x=>{ id=erdAddDatabase(x, name); });
+      if(id){ S.collapsed.delete(id); renderList(); const b=els.list.querySelector('[data-newtable="'+cssEsc(id)+'"]'); openTableEditor(null, id, b); }
+    }, 'e.g. CRM, Billing'); break;
     case 'frame': setTool(S.tool==='frame'?null:'frame'); break;
     case 'expand-all': setAllExpanded(true); break;
     case 'collapse-all': setAllExpanded(false); break;
@@ -2213,13 +2480,13 @@ function doAct(act, b){
       menuWire({
         new:()=>ask('New diagram', uniqueName('Diagram '+(S.diagrams.length+1)), name=>{ const n=blank(name); n.stored=true; S.diagrams.push(n); switchTo(n.id); persist(); }),
         rename:()=>ask('Rename the diagram', d.name, name=>{ mutate(x=>{ x.name=name; }); renderPick(); }),
-        duplicate:()=>{ const n=Object.assign(JSON.parse(JSON.stringify({name:d.name, tables:d.tables, relations:d.relations, frames:d.frames||[], dismissed:d.dismissed})),
+        duplicate:()=>{ const n=Object.assign(JSON.parse(JSON.stringify({name:d.name, databases:d.databases||[], tables:d.tables, relations:d.relations, frames:d.frames||[], dismissed:d.dismissed})),
           {id:blank('').id, stored:true, origin:null}); n.name=uniqueName(d.name+' copy'); S.diagrams.push(n); switchTo(n.id); persist(); },
         delete:()=>confirmPop('Delete “'+d.name+'”? It is only in this browser — export it first to keep it.', 'Delete', ()=>{
           S.diagrams=S.diagrams.filter(x=>x.id!==d.id); if(!S.diagrams.length) S.diagrams.push(blank('Diagram 1'));
           switchTo(S.diagrams[0].id); persist(); }),
         revert:()=>confirmPop('Drop the changes made here and show '+d.origin.file+' as it is in the project?', 'Revert', ()=>{
-          const base=JSON.parse(JSON.stringify(d.origin.base)); Object.assign(d, base, {stored:false}); S.undo=[]; S.redo=[]; persist(); draw(); renderList(); renderStatus(); }),
+          const base=JSON.parse(JSON.stringify(d.origin.base)); Object.assign(d, base, {stored:false}); S.undo=[]; S.redo=[]; refreshCatalog(); persist(); draw(); renderList(); renderStatus(); }),
         import:()=>els.file.click(),
       });
       break;
@@ -2250,9 +2517,9 @@ function menuWire(handlers){
     if(h) h();
   });
 }
-function ask(title, value, done){
+function ask(title, value, done, placeholder){
   openPop('ask', '<div class="erd-pop-h"><span class="erd-pop-t">'+esc(title)+'</span>'+closeBtn()+'</div>'+
-    '<form class="erd-ask"><input value="'+esc(value)+'" maxlength="120" autofocus aria-label="'+esc(title)+'">'+
+    '<form class="erd-ask"><input value="'+esc(value)+'" maxlength="120" autofocus aria-label="'+esc(title)+'"'+(placeholder?' placeholder="'+esc(placeholder)+'"':'')+'>'+
     '<button type="submit" class="tbtn erd-primary">OK</button></form>', null);
   const form=els.pop.querySelector('form');
   form.addEventListener('submit', e=>{ e.preventDefault(); const v=form.querySelector('input').value.trim(); if(!v) return; closePop(); done(v); });
@@ -2329,7 +2596,7 @@ function importText(text, from){
 
 // ---------- presenting ----------
 function present(on){
-  if(!els || els.empty) return;
+  if(!els) return;
   S.present=!!on;
   if(S.present){ S.sel=null; S.tool=null; }  // a selection outline is an editing aid, not part of what is shown
   document.documentElement.classList.toggle('erd-presenting', S.present);
@@ -2347,7 +2614,7 @@ document.addEventListener('fullscreenchange', ()=>{ if(!document.fullscreenEleme
 // ---------- keys and paste ----------
 const typing=t=>!!(t && t.closest && t.closest('input,textarea,select,[contenteditable]'));
 document.addEventListener('keydown', e=>{
-  if(!S || !els || els.empty) return;
+  if(!S || !els) return;
   if((e.metaKey||e.ctrlKey) && !e.altKey && (e.key==='f'||e.key==='F')){ e.preventDefault(); focusSearch(); return; }
   if(e.key==='/' && !typing(e.target)){ e.preventDefault(); focusSearch(); return; }
   if(e.key==='Escape'){
@@ -2368,7 +2635,7 @@ document.addEventListener('keydown', e=>{
   else if(!mod && !e.altKey && (e.key==='f'||e.key==='F') && !S.present){ e.preventDefault(); setTool(S.tool==='frame'?null:'frame'); }
 });
 document.addEventListener('paste', e=>{
-  if(!S || !els || els.empty || typing(e.target)) return;
+  if(!S || !els || typing(e.target)) return;
   const text=e.clipboardData && e.clipboardData.getData('text');
   if(text && /"format"\s*:\s*"atlas-erd"/.test(text)){ e.preventDefault(); importText(text, 'The pasted diagram'); }
 });

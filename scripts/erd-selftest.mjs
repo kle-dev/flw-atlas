@@ -27,6 +27,7 @@ if (a < 0 || b < 0 || b < a) {
 const E = new Function(`"use strict";${source.slice(a + START.length, b)};
   return {erdKey, erdCatalog, erdDefaultOrder, erdOrder, erdSuggestions, erdNormalize, erdToDoc, erdSame, erdEnds, erdContrast, erdSlug, erdArrange, erdSearch, erdColumnHits, erdTableMatches,
     erdEnd, erdCardinality, erdEndOne, erdFrameParents, erdArrangeFramed, erdOpenSuggestions, erdPairs,
+    erdTableKey, erdDiagramCatalog, erdDefinition, erdAddDatabase, erdSaveTable, erdDeleteTable, erdDeleteDatabase, ERD_PROJECT_DB,
     ERD_FORMAT, ERD_FORMAT_VERSION, ERD_ENDS, ERD_FRAME_PAD, ERD_FRAME_TOP};`)();
 
 let failed = 0, passed = 0;
@@ -164,7 +165,7 @@ ok('a primary key is written only where there is one', back.tables[0].columns[0]
 ok('same content is the same diagram', E.erdSame(d, E.erdNormalize(back)));
 ok('a moved table is not', !E.erdSame(d, Object.assign({}, d, {tables:[Object.assign({}, d.tables[0], {x:99}), d.tables[1]]})));
 throws('refuses what is not a diagram', () => E.erdNormalize({format:'other', version:1}), /not an Atlas ER diagram/);
-throws('refuses a newer format', () => E.erdNormalize({format:'atlas-erd', version:4}), /newer Atlas/);
+throws('refuses a newer format', () => E.erdNormalize({format:'atlas-erd', version:5}), /newer Atlas/);
 { // a file from before frames and counts at each end reads as it is
   const v1 = E.erdNormalize({format:'atlas-erd', version:1, tables:[{table:'A'}, {table:'B'}],
     relations:[{from:'A', to:'B', cardinality:'1:n'}, {from:'A', to:'B', cardinality:'n:m'}, {from:'B', to:'A', cardinality:'1:1'}]});
@@ -176,6 +177,56 @@ eq('the frames round-trip', E.erdNormalize(E.erdToDoc(d)).frames, d.frames);
 throws('refuses a missing version', () => E.erdNormalize({format:'atlas-erd'}), /version/);
 throws('refuses a list', () => E.erdNormalize([]), /object/);
 eq('an empty diagram is fine, and named', E.erdNormalize({format:'atlas-erd', version:1}).name, 'Imported diagram');
+
+// ---- databases and tables added by hand ----
+{
+  const f = E.erdNormalize({format:'atlas-erd', version:4, databases:[
+    {id:'project', tables:[{name:'ACT_RU_TASK', columns:[{name:'ID_', type:'varchar(64)', pk:true}, {name:'id_'}, {name:'  '}]}]},
+    {id:'CRM system', name:'CRM', tables:[{name:'CUSTOMER', columns:[{name:'ID', pk:true}, {name:'NAME', type:' '}]}, {name:'customer'}, {columns:[]}]},
+    {id:'crm-system', name:'Second'}, 'junk',
+  ], tables:[{table:'ord_order'}, {table:'CUSTOMER', db:'crm-system'}, {table:'customer', db:'CRM-System'}, {table:'ACT_RU_TASK', db:'project'}],
+  relations:[{from:'ord_order', to:'CUSTOMER', toDb:'crm-system', fromColumn:'customer_id_', toColumn:'ID'}, {from:'ord_order', to:'CUSTOMER'}]});
+  eq('databases: ids made safe and unique, the project’s own unnamed, tables and columns each once by name',
+    f.databases.map(d => [d.id, d.name, d.tables.map(t => t.name + '(' + t.columns.map(c => c.name + (c.pk ? '*' : '') + (c.type ? ':' + c.type : '')).join(',') + ')')]),
+    [['project', '', ['ACT_RU_TASK(ID_*:varchar(64))']], ['crm-system', 'CRM', ['CUSTOMER(ID*,NAME)']], ['crm-system-2', 'Second', []]]);
+  eq('a table of a database of its own is a table of its own; one of the project’s database is keyed by its name',
+    f.tables.map(t => [t.key, t.db]), [['ORD_ORDER', ''], ['crm-system/CUSTOMER', 'crm-system'], ['ACT_RU_TASK', '']]);
+  eq('a relation names the database of each end', f.relations.map(r => [r.from, r.to, r.pairs.length]), [['ORD_ORDER', 'crm-system/CUSTOMER', 1]]);
+  const doc = E.erdToDoc(f);
+  eq('…and so does the file', [doc.tables[1].db, doc.relations[0].toDb, 'fromDb' in doc.relations[0], 'db' in doc.tables[0]], ['crm-system', 'crm-system', false, false]);
+  eq('the databases round-trip', E.erdToDoc(E.erdNormalize(doc)), doc);
+  const project = [{key:'ORD_ORDER', name:'ord_order', columns:[], dataObjects:[], services:[], alias:''}, {key:'ACT_RU_TASK', name:'act_ru_task', columns:[], dataObjects:[], services:[], alias:''}];
+  const cat = E.erdDiagramCatalog(project, f);
+  eq('the diagram’s tables: the project’s, and those added by hand, each knowing its database — the project’s own wins',
+    cat.map(t => [t.key, t.source || 'project', t.db || '', t.dbName || '']),
+    [['ORD_ORDER', 'project', '', ''], ['ACT_RU_TASK', 'project', '', ''], ['crm-system/CUSTOMER', 'manual', 'crm-system', 'CRM']]);
+
+  // editing: a rename ripples through the diagram
+  const d = E.erdNormalize(doc);
+  d.tables[1].order = ['NAME', 'ID'];
+  const keys = new Set(project.map(t => t.key));
+  eq('a new database: an id from its name, never the project’s', [E.erdAddDatabase(d, 'Billing & Pay'), E.erdAddDatabase(d, 'Billing & Pay'), E.erdAddDatabase(d, 'Project'), E.erdAddDatabase(d, '  ')],
+    ['billing-pay', 'billing-pay-3', 'project-2', null]);
+  eq('a new table in it', E.erdSaveTable(d, null, 'billing-pay', ' INVOICE ', [{name:'ID', pk:true}, {name:''}, {name:'CUSTOMER_ID', type:'varchar(64)'}], keys),
+    {key:'billing-pay/INVOICE'});
+  eq('…its columns as written, the empty row dropped', E.erdDefinition(d, 'billing-pay/INVOICE').table.columns,
+    [{name:'ID', type:null, pk:true}, {name:'CUSTOMER_ID', type:'varchar(64)', pk:false}]);
+  ok('a name its database has, or the project’s, is refused',
+    /already has a table called invoice/i.test(E.erdSaveTable(d, null, 'billing-pay', 'invoice', [], keys).error) &&
+    /The project already has a table called ord_order/.test(E.erdSaveTable(d, null, 'project', 'ord_order', [], keys).error) &&
+    /needs a name/.test(E.erdSaveTable(d, null, 'project', ' ', [], keys).error) &&
+    /Two columns are called id/.test(E.erdSaveTable(d, null, 'project', 'T', [{name:'ID'}, {name:'id'}], keys).error));
+  const res = E.erdSaveTable(d, 'crm-system/CUSTOMER', null, 'CLIENT',
+    [{name:'CLIENT_ID', pk:true, was:'ID'}, {name:'EMAIL', was:''}], keys);
+  eq('renamed, it keeps its place and its relations — a renamed column in the relation and the order, a removed one out',
+    [res.key, d.tables[1].key, d.tables[1].name, d.tables[1].order, d.relations[0].to, d.relations[0].pairs],
+    ['crm-system/CLIENT', 'crm-system/CLIENT', 'CLIENT', ['CLIENT_ID'], 'crm-system/CLIENT', [{from:'customer_id_', to:'CLIENT_ID'}]]);
+  E.erdDeleteTable(d, 'ACT_RU_TASK');
+  eq('a deleted table goes from its database and the canvas', [E.erdDefinition(d, 'ACT_RU_TASK'), d.tables.some(t => t.key === 'ACT_RU_TASK')], [null, false]);
+  E.erdDeleteDatabase(d, 'crm-system');
+  eq('a deleted database takes its tables and their relations', [d.databases.some(x => x.id === 'crm-system'), d.tables.map(t => t.key), d.relations.length],
+    [false, ['ORD_ORDER'], 0]);
+}
 
 // ---- small helpers ----
 eq('cardinality ends', [E.erdEnds('1:0..n'), E.erdEnds('0..1:1..n'), E.erdEnds('n:1'), E.erdEnds('nonsense')],

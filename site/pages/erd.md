@@ -35,6 +35,31 @@ The tables are the ones Atlas already reads, not a second copy of the schema:
 
 A table's default business name is the name of the data object that reads it, when exactly one does.
 
+## Databases and tables of your own
+
+A data model rarely ends at the project's own schema: an order refers to a customer kept in a CRM, a
+payment to a partner's system, a task to an engine table no changelog creates. The designer takes those too,
+added by hand:
+
+- **The list is grouped by database.** The project's own comes first — named after the project, marked
+  *project* — with the tables Atlas reads; then every database you add, in the order you added it. A group
+  folds with its arrow; while the list is filtered, every group with a match is open.
+- **+ Database** in the list's header adds a database — *CRM*, *Billing* — and opens a new table in it.
+  Its **⋯** renames it, or deletes it with every table in it (and their relations; `⌘Z` brings them back).
+- **+ Table** on a group adds a table to that database, the project's own included (an engine table like
+  `ACT_RU_TASK`, another application's): a name, and a row per column — its name, its type, *PK* for the
+  primary key. `Enter` walks on from the name to the first column and from each column to the next,
+  adding one after the last; *Create* puts the table on the canvas.
+- **A table added by hand** is a table like any other: drag it, relate it to any table of any database, frame
+  it, arrange it, search for it. The list marks it *by hand*, its card names its database under the table
+  name, and its panel's **Edit the table…** changes it — a renamed table keeps its place and its relations, a
+  renamed column stays joined to its relations and keeps its place in the card's order. *Delete the table*
+  takes it from its database, the canvas and every relation.
+
+The databases and their tables belong to the diagram: they are in its file, so a diagram committed to the
+project carries them, and *Duplicate* copies them. A table the project comes to define takes over from one
+of the same name added by hand to the project's database.
+
 ## Building a diagram
 
 - **Add a table** by dragging it from the list onto the canvas, or with its **+**. A table is on a
@@ -122,8 +147,8 @@ fits the diagram to the room; `Esc` comes back.
 
 ## Search
 
-The search in the toolbar — `⌘F` / `Ctrl+F`, or `/` — looks through every table of the project and every
-one of its columns, on the diagram or not, by name, business name, data object and column type
+The search in the toolbar — `⌘F` / `Ctrl+F`, or `/` — looks through every table — the project's and those added by hand,
+named with their database — and every one of its columns, on the diagram or not, by name, business name, data object and column type
 (`varchar(4000)` finds the long text columns). The results list the tables first, then `table.column` rows;
 within each, what the diagram already shows first, then an exact name before one that starts with the query
 before one that contains it — so a table is never buried under the columns of the tables already drawn. `↑` `↓` walk them, `Enter` goes to one — the card centred on the column, the table added
@@ -163,17 +188,24 @@ The file is plain JSON:
 ```json
 {
   "format": "atlas-erd",
-  "version": 3,
+  "version": 4,
   "name": "Orders and customers",
   "project": "flowable-demo",
+  "databases": [
+    {"id": "crm", "name": "CRM", "tables": [
+      {"name": "CUSTOMER", "columns": [{"name": "ID", "type": "VARCHAR(64)", "pk": true}, {"name": "NAME", "type": null}]}]}
+  ],
   "tables": [
     {"table": "ord_order", "alias": "Order", "x": 40, "y": 40, "color": "#e8590c", "expanded": false,
      "order": ["id_", "order_no_", "customer_id_"],
-     "columns": [{"name": "id_", "type": "VARCHAR(64)", "pk": true}, {"name": "order_no_", "type": "VARCHAR(64)"}]}
+     "columns": [{"name": "id_", "type": "VARCHAR(64)", "pk": true}, {"name": "order_no_", "type": "VARCHAR(64)"}]},
+    {"table": "CUSTOMER", "db": "crm", "alias": "", "x": 760, "y": 40, "color": "", "expanded": false, "order": [], "columns": []}
   ],
   "relations": [
     {"id": "r1", "from": "ord_order", "to": "cust_customer", "fromColumn": "customer_id_", "toColumn": "id_",
-     "cardinality": "0..n:1", "label": "placed by"}
+     "cardinality": "0..n:1", "label": "placed by"},
+    {"id": "r2", "from": "cust_customer", "to": "CUSTOMER", "toDb": "crm", "fromColumn": "", "toColumn": "ID",
+     "cardinality": "0..1:1", "label": "kept in"}
   ],
   "frames": [
     {"id": "f1", "name": "Sales", "x": 12, "y": -16, "w": 688, "h": 268, "color": ""}
@@ -188,11 +220,16 @@ same length for several — `"fromColumn": ["order_id_", "line_no_"], "toColumn"
 and `*` are read as `0..n` (UML's `*`), `1..*` as `1..n` — so `1:n` is `1:0..n` and `n:m` is
 `0..n:0..n`. A frame holds no list of tables: it holds whatever lies inside it.
 
+`databases` holds the tables added by hand, per database: one of your own under its `id` and `name`, and
+the project's own under the id `project` (without a name). A table of a database of your own names it —
+`"db": "crm"` on the table, `fromDb` / `toDb` on a relation — so the CRM's `CUSTOMER` and the project's
+are two tables; a table without one is the project's.
+
 An import is forgiving — a table without a name, a relation to a table the diagram does not hold or an
 unknown cardinality is dropped or defaulted rather than failing the file — and strict only about `format`
 and `version`: a file from a newer Atlas is refused rather than half-read. Version 2 added frames and the
-count at each end, version 3 relations over several columns; an older file reads as it is, and an export
-writes version 3.
+count at each end, version 3 relations over several columns, version 4 databases and tables added by hand;
+an older file reads as it is, and an export writes version 4.
 
 **Pictures.** *Export → SVG image* and *PNG image* write the diagram as it is drawn, in light colours
 whatever the page's theme, with its frames but without handles, proposals or search marks, sized to its content; the SVG
