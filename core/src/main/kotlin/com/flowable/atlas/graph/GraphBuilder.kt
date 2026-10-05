@@ -305,7 +305,7 @@ object GraphBuilder {
                 linkedMapOf(
                     "controller" to ep["controller"], "handler" to ep["handler"], "line" to ep["line"],
                     "http" to ep["http"], "path" to ep["path"],
-                ),
+                ).also { d -> ep["params"]?.let { d["params"] = it } },
             )
         }
 

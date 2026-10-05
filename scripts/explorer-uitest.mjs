@@ -1023,6 +1023,20 @@ const probe = `<script>
     const s=fitView();
     const row=s&&[...s.querySelectorAll('.tbl .tr')].find(r=>r.querySelector('.vlink[data-id="'+enc('form:orderForm')+'"]'));
     ok('an endpoint lists its callers with the verb each uses', !!row && /canEditButton/.test(row.textContent) && !!row.querySelector('.gm-ok'), row?row.textContent:'(no row)');
+    // what the handler takes, on the Overview: the path variable its signature types
+    const ps=document.querySelector('#detail [data-sect="epparams"]');
+    const prow=ps&&[...ps.querySelectorAll('.tbl .tr')].find(r=>((r.querySelector('.cxn')||{}).textContent||'').trim()==='id');
+    ok('an endpoint lists what its handler takes and where each value goes', !!prow && /path/.test(prow.textContent) && /String/.test(prow.textContent) && /required/.test(prow.textContent), prow?prow.textContent:'(no row)');
+    location.hash=enc('endpoint:GET /api/customers');
+  });
+  steps.push(()=>{
+    const ps=document.querySelector('#detail [data-sect="epparams"]');
+    ok('a handler that takes nothing says so', !!ps && /takes no parameters/.test(ps.textContent), ps?ps.textContent:'(no section)');
+    location.hash=enc('java:com.example.CustomerController');
+  });
+  steps.push(()=>{
+    const es=document.querySelector('#detail [data-sect="endpoints"]');
+    ok("a class's endpoints link to their pages", !!es && !!es.querySelector('.vlink[data-id="'+enc('endpoint:GET /api/customers/{id}/canEdit')+'"]'));
     location.hash=enc('java:com.example.DemoBean');
   });
   steps.push(()=>{

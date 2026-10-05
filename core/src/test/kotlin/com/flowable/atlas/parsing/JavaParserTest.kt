@@ -370,4 +370,103 @@ class JavaParserTest {
         ), eps.map { Triple(it["http"], it["path"], it["handler"]) }.toSet())
         assertTrue(eps.all { it["controller"] == "InvoiceController" })
     }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun anEndpointNamesWhatItsHandlerTakesAndWhereEachValueComesFrom() {
+        val src = """package com.example;
+            @RestController
+            @RequestMapping("/api/{tenant}/orders")
+            public class OrderController {
+                private static final String TRACE = "X-Trace";
+                @GetMapping("/{id}")
+                @PreAuthorize("hasRole('A') or hasRole('B')")
+                @Operation(summary = "x", responses = {@ApiResponse(responseCode = "200", content = @Content(schema = @Schema(implementation = OrderDto.class)))})
+                public ResponseEntity<Map<String, Object>> one(@PathVariable("tenant") String tenant,
+                        @PathVariable Long id,
+                        @RequestParam(name = "q", required = false) String q,
+                        @RequestParam(defaultValue = "10") int size,
+                        @RequestHeader(TRACE) String trace,
+                        @Valid @RequestBody OrderDto body,
+                        @RequestParam Map<String, List<String>> all,
+                        @RequestParam Optional<String> maybe,
+                        HttpServletRequest request,
+                        @AuthenticationPrincipal UserDetails user,
+                        final String filter) {
+                    return null;
+                }
+            }"""
+        val ep = (JavaParser.parseJava(src, "OrderController.java")["endpoints"] as List<Map<String, Any?>>).single()
+        // the nested annotation arguments neither hide the handler nor its parameters
+        assertEquals("one", ep["handler"])
+        assertEquals(listOf(
+            mapOf("name" to "tenant", "in" to "path", "type" to "String", "required" to true),
+            mapOf("name" to "id", "in" to "path", "type" to "Long", "required" to true),
+            mapOf("name" to "q", "in" to "query", "type" to "String"),
+            mapOf("name" to "size", "in" to "query", "type" to "int", "default" to "10"),
+            // a constant of the same file names the header
+            mapOf("name" to "X-Trace", "in" to "header", "type" to "String", "required" to true),
+            mapOf("name" to "body", "in" to "body", "type" to "OrderDto", "required" to true),
+            mapOf("name" to "all", "in" to "query", "type" to "Map<String, List<String>>"),
+            mapOf("name" to "maybe", "in" to "query", "type" to "Optional<String>"),
+            // the servlet request and the principal are the server's; an unannotated value is Spring's default binding
+            mapOf("name" to "filter", "in" to "query", "type" to "String", "implicit" to true),
+        ), ep["params"])
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun aKotlinHandlerSaysWhatItTakesTheSameWay() {
+        val src = """
+            package com.example
+            @RestController
+            class InvoiceController {
+                @PostMapping("/api/invoices/{id}")
+                fun update(@PathVariable id: String, @RequestParam q: String?, @RequestParam size: Int = 20,
+                           @RequestParam(defaultValue = "a@b") mail: String, @RequestBody body: HttpEntity<InvoiceDto>): InvoiceDto = TODO()
+            }
+        """.trimIndent()
+        val ep = (JavaParser.parseJava(src, "InvoiceController.kt")["endpoints"] as List<Map<String, Any?>>).single()
+        assertEquals(listOf(
+            mapOf("name" to "id", "in" to "path", "type" to "String", "required" to true),
+            mapOf("name" to "q", "in" to "query", "type" to "String?"),
+            mapOf("name" to "size", "in" to "query", "type" to "Int", "default" to "20"),
+            mapOf("name" to "mail", "in" to "query", "type" to "String", "default" to "a@b"),
+            mapOf("name" to "body", "in" to "body", "type" to "HttpEntity<InvoiceDto>", "required" to true),
+        ), ep["params"])
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun anEndpointsParametersAreHeldAgainstItsPath() {
+        val src = """package com.example;
+            @RestController
+            public class Ctl {
+                @GetMapping("/a/{id}/b/{part:[0-9]+}")
+                public String typed(@PathVariable String other, @PathVariable("part") int part) { return ""; }
+                @GetMapping({"/c", "/c/{id}"})
+                public String either(@PathVariable(required = false) String id) { return ""; }
+                @PostMapping("/archive")
+                public String archive() { return ""; }
+                @GetMapping("/forms")
+                public String form(HttpEntity<FormDto> entity) { return ""; }
+            }"""
+        val eps = (JavaParser.parseJava(src, "Ctl.java")["endpoints"] as List<Map<String, Any?>>).associateBy { it["path"] }
+        assertEquals(listOf(
+            // the path's own variables first, in its order — the one no parameter takes still has to be sent
+            mapOf("name" to "id", "in" to "path", "required" to true),
+            mapOf("name" to "part", "in" to "path", "type" to "int", "required" to true),
+            // a required path variable the path does not name: Spring fails the request
+            mapOf("name" to "other", "in" to "path", "type" to "String", "required" to true, "notInPath" to true),
+        ), eps.getValue("/a/{id}/b/{part:[0-9]+}")["params"])
+        // an optional path variable belongs to the path that names it
+        assertEquals(emptyList<Any>(), eps.getValue("/c")["params"])
+        assertEquals(listOf(mapOf("name" to "id", "in" to "path", "type" to "String", "required" to true)), eps.getValue("/c/{id}")["params"])
+        // a handler that takes nothing says so — an empty list, not a missing one
+        assertEquals(emptyList<Any>(), eps.getValue("/archive")["params"])
+        assertEquals(listOf(mapOf("name" to "entity", "in" to "body", "type" to "FormDto")), eps.getValue("/forms")["params"])
+        // idempotent: the resolver runs it again once a constant in the path is resolved
+        val again = JavaParser.withPathVariables("/a/{id}/b/{part:[0-9]+}", eps.getValue("/a/{id}/b/{part:[0-9]+}")["params"] as List<Map<String, Any?>>)
+        assertEquals(eps.getValue("/a/{id}/b/{part:[0-9]+}")["params"], again)
+    }
 }

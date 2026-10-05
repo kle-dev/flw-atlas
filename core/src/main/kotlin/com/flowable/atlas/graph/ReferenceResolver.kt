@@ -222,6 +222,9 @@ object ReferenceResolver {
                     resolveConst(n, e["controllerFqn"] as? String) ?: ("\${" + n + "}")
                 }
                 e["path"] = "/" + path.split("/").filter { it.isNotEmpty() }.joinToString("/")
+                // the resolved path may name a `{variable}` the constant hid from the parser
+                @Suppress("UNCHECKED_CAST")
+                (e["params"] as? List<Map<String, Any?>>)?.let { e["params"] = JavaParser.withPathVariables(e["path"] as String, it) }
             }
             if ("\${" in (e["path"] as String)) e["pathUnresolved"] = true
         }

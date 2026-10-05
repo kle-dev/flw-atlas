@@ -12,6 +12,24 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.28.8
+
+- **An endpoint's page says what it takes.** A REST endpoint's page named its path, its handler and who
+  calls it, but not what a caller has to send. Its Overview now opens with *Parameters*: every
+  `{variable}` of the path, then each query parameter, header, cookie, multipart part and the body its
+  handler declares (`@PathVariable`, `@RequestParam`, `@RequestHeader`, `@CookieValue`, `@RequestPart`,
+  `@RequestBody`). Each row shows the name the caller sends, the type, whether it is required and its
+  default, for Java and Kotlin handlers alike. *Required* follows Spring: `required = false`, a
+  `defaultValue`, an `Optional` or a Kotlin `T?` makes a parameter optional. A parameter without an
+  annotation is listed as the query parameter Spring binds it to. What the server supplies itself (the
+  request, the principal, a session attribute) is not listed. A path variable the handler takes but the
+  path does not name is marked *not in the path*, since Spring fails every such request, and a handler
+  that takes nothing says so. A class's *Endpoints served* now links each path to its page, and
+  `graph.json` carries the same list as the endpoint's `params`.
+- **A handler behind a nested annotation has its own name again.** When a mapping was followed by
+  `@PreAuthorize("hasRole('A')")`, or by an OpenAPI `@Operation(…)` with annotations nested inside it, the
+  handler was named after a word inside that annotation (`hasRole`) instead of the method.
+
 ## 0.28.7
 
 - **The ER designer takes databases and tables of your own.** A data model rarely ends at the project's

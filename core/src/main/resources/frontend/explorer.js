@@ -3393,7 +3393,7 @@ const SECT_STORE='atlas-sect2';
 const DEFAULT_CLOSED={otherattrs:true};
 const DEFAULT_OPEN_SECTIONS={diagram:true, relations:true, elements:true, findings:true, fit:true, formfields:true, columns:true, usertasks:true, svctasks:true, scripttasks:true,
   plan:true, ops:true, dmnrules:true, permissions:true, escalations:true, rw:true, payload:true, dicttypes:true, agentops:true,
-  endpoints:true, script:true, templatebody:true, extractors:true, coverage:true, problems:true, opparams:true};
+  endpoints:true, script:true, templatebody:true, extractors:true, coverage:true, problems:true, opparams:true, epparams:true};
 function sectAll(){ try{ return JSON.parse(localStorage.getItem(SECT_STORE)||'{}')||{}; }catch(e){ return {}; } }
 /** `dflt` (a node page's default for this section) keeps the store to what the reader changed: a <details>
  *  rendered open fires `toggle` on insertion, and remembering that as a choice froze every default the day
@@ -5628,7 +5628,25 @@ S.endpoints={id:'endpoints', title:'Endpoints served', hint:'the REST routes thi
   count:(n,c)=>(c.d.endpoints||[]).length,
   build:(n,c)=>{ const es=c.d.endpoints||[]; if(!es.length) return '';
     return tbl([{k:'verb',label:'Verb',w:'7ch',cls:'tags'},{k:'path',label:'Path',w:'minmax(16ch,2.4fr)',mono:true},{k:'h',label:'Handler',w:'minmax(12ch,1.4fr)',mono:true,opt:true}],
-      es.map(e=>({hay:elHay(e.http,e.path,e.handler), cells:{verb:'<span class="tag verb">'+esc(e.http||'')+'</span>', path:esc(e.path||''), h:esc(e.handler||'')+'() '+lineRef(n.file,e.line)}}))); }};
+      es.map(e=>({hay:elHay(e.http,e.path,e.handler), cells:{verb:'<span class="tag verb">'+esc(e.http||'')+'</span>',
+        path:vlink('endpoint:'+(e.http||'')+' '+(e.path||''), e.path||''), h:esc(e.handler||'')+'() '+lineRef(n.file,e.line)}}))); }};
+/** What a caller sends an endpoint: the handler's signature held against the path (JavaParser.handlerParam).
+ *  No `params` at all is a signature Atlas could not read and claims nothing; an empty list is a handler
+ *  that takes nothing, which is worth saying. */
+const EP_PARAM_TIP={path:'Part of the URL path', query:'A query parameter, or a field of a form body', header:'A request header',
+  cookie:'A cookie', body:'The request body', part:'A part of a multipart request', matrix:'A matrix variable inside a path segment'};
+S.epParams={id:'epparams', title:'Parameters', hint:'what a caller sends: path, query, headers and body',
+  count:(n,c)=>(c.d.params||[]).length||null,
+  build:(n,c)=>{ const ps=c.d.params; if(!Array.isArray(ps)) return '';
+    if(!ps.length) return '<div class="muted tbl-empty">The handler takes no parameters.</div>';
+    return tbl([{k:'in',label:'',w:'10ch',cls:'tags'},{k:'name',label:'Parameter',w:'minmax(14ch,2.2fr)',mono:true},{k:'type',label:'Type',w:'minmax(8ch,1fr)',cls:'tags'},
+        {k:'req',label:'',w:'minmax(6ch,.7fr)',cls:'tags',opt:true},{k:'def',label:'Default',w:'minmax(8ch,.8fr)',mono:true,opt:true}],
+      ps.map(p=>({hay:elHay(p.in,p.name,p.type), cells:{
+        in:'<span class="tag" data-tip="'+esc(p.implicit?'Not annotated: Spring binds it by name from the query string or a form body':(EP_PARAM_TIP[p.in]||''))+'">'+esc(p.in||'')+'</span>',
+        // the warning sits by the name it is about: the narrow required column wrapped and clipped it
+        name:cpyCell(esc(p.name||''), p.name, 'parameter name')+(p.notInPath?' '+gm('warn', 'not in the path', 'The handler takes a path variable this path does not name, so Spring fails every request'):''),
+        type:tag(p.type), req:p.required?tag('required'):'',
+        def:p.default!=null?esc(String(p.default)):''}})), {filter:false}); }};
 /** Where a Spring property a model reads is set — every profile's file, each line opening in the IDE.
  *  None is not a defect: the value may come from the environment, a Helm chart or a vault. */
 S.propDefined={id:'defined', title:'Defined in', hint:'the Spring configuration files that set this property',
@@ -5835,6 +5853,7 @@ const PAGES={
   variableExtractor:{pic:[S.extractors]},
   knowledgeBase:{pic:[S.kbSources]},
   java:{pic:[S.methods], det:[S.endpoints]},
+  endpoint:{pic:[S.epParams]},
   property:{pic:[S.propDefined]},
   liquibase:{pic:[S.lqBanner, S.lqColumns], det:[S.lqChangeSets]},
   expression:{pic:[S.problems]},

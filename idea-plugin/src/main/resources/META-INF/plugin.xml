@@ -149,6 +149,28 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.28.8</h3>
+        <ul>
+          <li><b>An endpoint's page says what it takes.</b> A REST endpoint's page named its path, its
+              handler and who calls it, but not what a caller has to send. Its Overview now opens with
+              <i>Parameters</i>: every <code>{variable}</code> of the path, then each query parameter,
+              header, cookie, multipart part and the body its handler declares (<code>@PathVariable</code>,
+              <code>@RequestParam</code>, <code>@RequestHeader</code>, <code>@CookieValue</code>,
+              <code>@RequestPart</code>, <code>@RequestBody</code>). Each row shows the name the caller
+              sends, the type, whether it is required and its default, for Java and Kotlin handlers alike.
+              <i>Required</i> follows Spring: <code>required = false</code>, a <code>defaultValue</code>, an
+              <code>Optional</code> or a Kotlin <code>T?</code> makes a parameter optional. A parameter
+              without an annotation is listed as the query parameter Spring binds it to. What the server
+              supplies itself (the request, the principal, a session attribute) is not listed. A path
+              variable the handler takes but the path does not name is marked <i>not in the path</i>, since
+              Spring fails every such request, and a handler that takes nothing says so. A class's
+              <i>Endpoints served</i> now links each path to its page, and <code>graph.json</code> carries
+              the same list as the endpoint's <code>params</code>.</li>
+          <li><b>A handler behind a nested annotation has its own name again.</b> When a mapping was
+              followed by <code>@PreAuthorize("hasRole('A')")</code>, or by an OpenAPI
+              <code>@Operation(…)</code> with annotations nested inside it, the handler was named after a
+              word inside that annotation (<code>hasRole</code>) instead of the method.</li>
+        </ul>
         <h3>0.28.7</h3>
         <ul>
           <li><b>The ER designer takes databases and tables of your own.</b> A data model rarely ends at the
@@ -540,42 +562,6 @@
               key. And an external agent's property counts as an event only where its key is an event's —
               the vendor palette decides which property that is, and a template property looked the
               same.</li>
-          <li><b>A key two models share never hands one model's links to the other.</b> Wherever Atlas still
-              looked a model up by key alone, it took whichever model it had listed first under that key.
-              That lookup is gone: a record about a model reaches that model, or the other half of its
-              family (a form and a page, a data object and master data), or nothing. - A Java literal passed
-              to a key-taking API reaches a model of the type that API takes:
-              <code>caseDefinitionKey("X")</code> is the case <code>X</code>, never the process
-              <code>X</code>. Signal names, message names and operation keys
-              (<code>signalEventReceived</code>, <code>messageName</code>, <code>operationKey</code>) are no
-              model keys, and no longer make clean references to a process of that name. - An action's bot
-              is linked from the action, not from a process of the same key, and a bot key never links to a
-              form, group or variable that happens to share it. - A <code>.form</code> file whose metadata
-              says <code>page</code> is a page throughout: its bindings, variables and references belong to
-              it. They went to a same-key case, and so did the app's <i>contains</i> and a task's form. - A
-              master-data list's references and access are its own. - A scope that reads every variable
-              (<code>getVariables()</code>, a template rendered against the whole container) silences its
-              own unused variables — not a same-key model's. Two false <i>written but never read</i> went
-              away on one real project. - A key only a model of another type has is a missing reference, not
-              an edge to that model: a call activity naming a form's key starts no process, and is reported
-              as the missing process it is. A process and a case stand in for each other only where the
-              reference cannot say which — a variable extractor, an SLA, a query. The app definition's
-              <code>security</code> and <code>decisionService</code> child types resolve to the security
-              policy and decision they name, instead of as suspect links. - An app contains a model beside
-              it in its own archive — not a model of another type with the same key beside another app, and
-              not every model of an export that holds several <code>.bar</code>s. - A missing form and a
-              missing process of the same key are two missing models, not one node that calls both a form. -
-              A dynamic reference (<code>calledElement="${subProcessKey}"</code>) is no longer resolved
-              through a Java constant of that name: the engine reads a variable there, and the constant said
-              nothing about it.</li>
-          <li><b>A model defined twice says so.</b> A test stub that reuses a production key, or an older
-              version of a model kept beside the current one, was merged into one node that named the first
-              file and showed the other file's references as its own. Where copies of a model reference
-              different models, its page now lists the others under <i>Other copies</i>, and
-              <code>graph.json</code>'s <code>diagnostics</code> records a <code>copy</code> entry
-              (information, not a finding). A Design export and its deployment count as one copy — and a
-              legacy form's data table now keeps the buttons its columns render, which the reader dropped,
-              so both formats report the same actions.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

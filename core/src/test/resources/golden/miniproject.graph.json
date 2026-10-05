@@ -534,6 +534,14 @@
       "handler": "canEdit",
       "http": "GET",
       "line": 15,
+      "params": [
+        {
+          "in": "path",
+          "name": "id",
+          "required": true,
+          "type": "String"
+        }
+      ],
       "path": "/api/customers/{id}/canEdit"
     },
     {
@@ -543,6 +551,7 @@
       "handler": "customers",
       "http": "GET",
       "line": 10,
+      "params": [],
       "path": "/api/customers"
     }
   ],
@@ -3420,6 +3429,14 @@
               "handler": "canEdit",
               "http": "GET",
               "line": 15,
+              "params": [
+                {
+                  "in": "path",
+                  "name": "id",
+                  "required": true,
+                  "type": "String"
+                }
+              ],
               "path": "/api/customers/{id}/canEdit"
             },
             {
@@ -3427,6 +3444,7 @@
               "handler": "customers",
               "http": "GET",
               "line": 10,
+              "params": [],
               "path": "/api/customers"
             }
           ],
@@ -3756,6 +3774,14 @@
           "handler": "canEdit",
           "http": "GET",
           "line": 15,
+          "params": [
+            {
+              "in": "path",
+              "name": "id",
+              "required": true,
+              "type": "String"
+            }
+          ],
           "path": "/api/customers/{id}/canEdit"
         },
         "file": "src/main/java/com/example/CustomerController.java",
@@ -3770,6 +3796,7 @@
           "handler": "customers",
           "http": "GET",
           "line": 10,
+          "params": [],
           "path": "/api/customers"
         },
         "file": "src/main/java/com/example/CustomerController.java",
@@ -6081,6 +6108,14 @@
             "handler": "canEdit",
             "http": "GET",
             "line": 15,
+            "params": [
+              {
+                "in": "path",
+                "name": "id",
+                "required": true,
+                "type": "String"
+              }
+            ],
             "path": "/api/customers/{id}/canEdit"
           },
           {
@@ -6088,6 +6123,7 @@
             "handler": "customers",
             "http": "GET",
             "line": 10,
+            "params": [],
             "path": "/api/customers"
           }
         ],
@@ -6163,6 +6199,14 @@
           "handler": "canEdit",
           "http": "GET",
           "line": 15,
+          "params": [
+            {
+              "in": "path",
+              "name": "id",
+              "required": true,
+              "type": "String"
+            }
+          ],
           "path": "/api/customers/{id}/canEdit"
         },
         {
@@ -6170,6 +6214,7 @@
           "handler": "customers",
           "http": "GET",
           "line": 10,
+          "params": [],
           "path": "/api/customers"
         }
       ],

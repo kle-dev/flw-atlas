@@ -276,6 +276,236 @@ object JavaParser {
         return text.length
     }
 
+    // ---- What a handler takes: its signature read parameter by parameter.
+
+    /** Spring's binding annotations: where on the wire a handler parameter's value comes from. */
+    private val PARAM_SOURCES = mapOf(
+        "PathVariable" to "path", "RequestParam" to "query", "RequestHeader" to "header", "CookieValue" to "cookie",
+        "RequestBody" to "body", "RequestPart" to "part", "ModelAttribute" to "query", "MatrixVariable" to "matrix",
+    )
+    /** Values the server supplies itself — a request or session attribute, the authenticated user, a
+     *  property. A caller sends none of them, so they are no parameter of the endpoint. */
+    private val SERVER_SIDE_PARAM_ANNOTATIONS = setOf(
+        "RequestAttribute", "SessionAttribute", "AuthenticationPrincipal", "CurrentSecurityContext", "Value",
+    )
+    /** Types Spring hands an unannotated parameter from the request or the framework, not from a value the
+     *  caller names. An unannotated `Map` is the MVC model, not the query string (that needs `@RequestParam`). */
+    private val FRAMEWORK_PARAM_TYPES = setOf(
+        "HttpServletRequest", "HttpServletResponse", "ServletRequest", "ServletResponse", "HttpSession",
+        "WebRequest", "NativeWebRequest", "ServerWebExchange", "ServerHttpRequest", "ServerHttpResponse",
+        "Principal", "Authentication", "Locale", "TimeZone", "ZoneId", "Model", "ModelMap", "Map",
+        "BindingResult", "Errors", "SessionStatus", "RedirectAttributes", "UriComponentsBuilder",
+        "InputStream", "OutputStream", "Reader", "Writer", "HttpMethod", "HttpHeaders",
+    )
+    /** An unannotated `HttpEntity<T>` is the request body as a `T`, with its headers. */
+    private val BODY_WRAPPER_TYPES = setOf("HttpEntity", "RequestEntity")
+    /** Parameter types that take every query parameter at once — none of them is required by name. */
+    private val MAP_PARAM_TYPES = setOf("Map", "MultiValueMap", "HashMap", "LinkedHashMap", "HttpHeaders")
+    // `{id}`, `{id:\d+}`, `{*rest}` — a `${…}` placeholder is stripped before this runs
+    private val PATH_VAR_RE = Regex("""\{\*?([A-Za-z_][\w-]*)(?::[^}]*)?}""")
+    private val SPRING_PLACEHOLDER_RE = Regex("""\$\{[^}]*}""")
+    private val JAVA_PARAM_DECL_RE = Regex("""^(.*?)\s*\b([A-Za-z_$][\w$]*)$""", RegexOption.DOT_MATCHES_ALL)
+
+    /** The index of the `)` closing the `(` at [open], skipping string and char literals; the text's end
+     *  when it never closes. */
+    private fun closingParen(text: String, open: Int): Int {
+        var depth = 0; var i = open; var quote: Char? = null
+        while (i < text.length) {
+            val c = text[i]
+            when {
+                quote != null -> { if (c == '\\') i++ else if (c == quote) quote = null }
+                c == '"' || c == '\'' -> quote = c
+                c == '(' -> depth++
+                c == ')' -> { depth--; if (depth == 0) return i }
+            }
+            i++
+        }
+        return text.length
+    }
+
+    /**
+     * The end of the annotation starting at [at] — `@Name`, `@a.b.Name`, Kotlin's `@param:Name`, and its
+     * argument list balanced however deep it nests — or [at] when no annotation starts there.
+     * [ANNOTATION_RE] stops at the first `)`, which `@PreAuthorize("hasRole('A')")` and an OpenAPI
+     * `@Operation(responses = {@ApiResponse(…)})` both have long before their own end.
+     */
+    private fun annotationEnd(s: String, at: Int): Int {
+        if (at >= s.length || s[at] != '@') return at
+        var i = at + 1
+        while (i < s.length && (s[i].isLetterOrDigit() || s[i] == '_' || s[i] == '$' || s[i] == '.' || s[i] == ':')) i++
+        if (i == at + 1) return at
+        var j = i
+        while (j < s.length && s[j].isWhitespace()) j++
+        return if (j < s.length && s[j] == '(') closingParen(s, j) + 1 else i
+    }
+
+    /** The method declared at [from] — past its annotations, modifiers, type parameters and return type — as
+     *  its name and the text between its parentheses; null when a `;`, `{`, `}` or `=` comes first. */
+    private fun handlerSignature(text: String, from: Int): Pair<String, String>? {
+        var i = from; var angle = 0
+        while (i < text.length) {
+            val c = text[i]
+            when (c) {
+                '@' -> { val e = annotationEnd(text, i); if (e > i) { i = e; continue } }
+                '<' -> angle++
+                '>' -> angle--
+                '(' -> if (angle <= 0) {
+                    var k = i
+                    while (k > from && text[k - 1].isWhitespace()) k--
+                    var s = k
+                    while (s > from && (text[s - 1].isLetterOrDigit() || text[s - 1] == '_' || text[s - 1] == '$')) s--
+                    return text.substring(s, k) to text.substring(i + 1, closingParen(text, i).coerceAtMost(text.length))
+                }
+                ';', '{', '}', '=' -> return null
+            }
+            i++
+        }
+        return null
+    }
+
+    /** A parameter list split at its top-level commas. Unlike [topLevel] it counts `<>` as brackets too,
+     *  so `Map<String, List<String>> all` stays one parameter. */
+    private fun splitParams(s: String): List<String> {
+        val out = ArrayList<String>()
+        var depth = 0; var quote: Char? = null; var start = 0; var i = 0
+        while (i < s.length) {
+            val c = s[i]
+            when {
+                quote != null -> { if (c == '\\') i++ else if (c == quote) quote = null }
+                c == '"' || c == '\'' -> quote = c
+                c == '(' || c == '{' || c == '[' || c == '<' -> depth++
+                c == ')' || c == '}' || c == ']' || c == '>' -> depth--
+                c == ',' && depth == 0 -> { out.add(s.substring(start, i)); start = i + 1 }
+            }
+            i++
+        }
+        out.add(s.substring(start))
+        return out.map { it.trim() }.filter { it.isNotEmpty() }
+    }
+
+    private fun unquote(v: String?): String? {
+        val t = v?.trim() ?: return null
+        return if (t.length >= 2 && t.first() == '"' && t.last() == '"') t.substring(1, t.length - 1) else null
+    }
+
+    /**
+     * One handler parameter as the caller sees it: the name it sends (an annotation's `value`/`name`, else
+     * the parameter's own), where it goes (`path`, `query`, `header`, `cookie`, `body`, `part`, `matrix`),
+     * its type, and — only when they apply — `required`, `default` and `implicit` (no annotation: Spring
+     * binds it from the query string or form data by name). Null for what the caller does not send: a
+     * servlet request, the principal, a session attribute.
+     *
+     * Required follows Spring: a path variable, a body or a part unless `required = false`; a query
+     * parameter, header or cookie also not with a `defaultValue`, an `Optional`, a Kotlin `T?` or a Kotlin
+     * default value — and never an unannotated one, a model attribute or a map that takes them all.
+     */
+    private fun handlerParam(raw: String, kotlin: Boolean, consts: Map<String, String>): Map<String, Any?>? {
+        val anns = ArrayList<Pair<String, String?>>()
+        val rest = StringBuilder()
+        var i = 0
+        while (i < raw.length) {
+            if (raw[i] == '"') {   // a Kotlin default value: an `@` in it starts no annotation
+                var k = i + 1
+                while (k < raw.length && raw[k] != '"') k += if (raw[k] == '\\') 2 else 1
+                rest.append(raw, i, minOf(k + 1, raw.length)); i = k + 1; continue
+            }
+            val e = annotationEnd(raw, i)
+            if (e > i) {
+                val head = raw.substring(i + 1, e)
+                val name = head.takeWhile { it.isLetterOrDigit() || it == '_' || it == '$' || it == '.' || it == ':' }
+                val args = head.substring(name.length).trim().takeIf { it.startsWith("(") }?.removePrefix("(")?.removeSuffix(")")
+                anns.add(name.substringAfterLast(':').substringAfterLast('.') to args)
+                rest.append(' '); i = e; continue
+            }
+            rest.append(raw[i]); i++
+        }
+        if (anns.any { it.first in SERVER_SIDE_PARAM_ANNOTATIONS }) return null
+        val decl = rest.toString().trim().replace(Regex("""^(?:(?:final|vararg|val|var)\s+)+"""), "")
+        val pname: String; var type: String; var kotlinDefault: String? = null
+        if (kotlin) {
+            val colon = decl.indexOf(':').takeIf { it > 0 } ?: return null
+            pname = decl.substring(0, colon).trim()
+            val tail = topLevel(decl.substring(colon + 1), '=')
+            type = tail[0].trim()
+            if (tail.size > 1) kotlinDefault = tail.drop(1).joinToString("=").trim()
+        } else {
+            val m = JAVA_PARAM_DECL_RE.find(decl) ?: return null
+            pname = m.groupValues[2]; type = m.groupValues[1].trim()
+        }
+        if (pname.isEmpty() || type.isEmpty()) return null
+        type = type.replace(Regex("""\s+"""), " ").replace(Regex("""\s*([<>,])\s*"""), "$1").replace(",", ", ")
+        val simple = type.substringBefore('<').removeSuffix("?").substringAfterLast('.').trim()
+        val bind = anns.firstOrNull { it.first in PARAM_SOURCES }
+        val attrs = LinkedHashMap<String, String>()
+        var unnamed: String? = null
+        bind?.second?.let { args ->
+            for (part in topLevel(args, ',')) {
+                val kv = topLevel(part, '=')
+                if (kv.size >= 2) attrs[kv[0].trim()] = kv.drop(1).joinToString("=").trim()
+                else if (part.isNotBlank() && unnamed == null) unnamed = part.trim()
+            }
+        }
+        val source: String
+        var implicit = false
+        var wrapped = false   // an HttpEntity may arrive without a body; Spring does not insist on one
+        when {
+            bind != null -> source = PARAM_SOURCES.getValue(bind.first)
+            simple in FRAMEWORK_PARAM_TYPES -> return null
+            simple in BODY_WRAPPER_TYPES -> { source = "body"; wrapped = true; type = type.substringAfter('<', "").substringBeforeLast('>', "").ifEmpty { "?" } }
+            else -> { source = "query"; implicit = true }
+        }
+        // The name on the wire: a literal, or a constant this file declares; a constant from elsewhere is
+        // most likely the parameter's own name spelt out, and the parameter's name is what is left.
+        val named = attrs["value"] ?: attrs["name"] ?: unnamed
+        val wire = unquote(named) ?: named?.trim()?.takeIf { CONST_REF_RE.matches(it) }?.let { consts[it.substringAfterLast('.')] }
+        // a Kotlin `= null` says the same as its `T?`, which already makes the parameter optional
+        val default = unquote(attrs["defaultValue"]) ?: kotlinDefault?.takeIf { it != "null" }?.let { unquote(it) ?: it }
+        val optional = simple == "Optional" || type.endsWith("?")
+        val off = attrs["required"]?.trim() == "false"
+        val required = when (source) {
+            "path", "body", "part", "matrix" -> !off && !optional && !wrapped
+            else -> !implicit && !off && !optional && default == null && bind?.first != "ModelAttribute" && simple !in MAP_PARAM_TYPES
+        }
+        val rec = linkedMapOf<String, Any?>("name" to (if (source == "body") pname else wire ?: pname), "in" to source, "type" to type)
+        if (required) rec["required"] = true
+        default?.let { rec["default"] = it }
+        if (implicit) rec["implicit"] = true
+        return rec
+    }
+
+    /**
+     * A handler's parameters against one of its paths: every `{variable}` of the path first, in the path's
+     * order and required — typed by the `@PathVariable` that takes it, untyped when none does (the URL needs
+     * it all the same) — then the others as declared. A required path variable the path does not name is
+     * kept and marked `notInPath`, since Spring fails every such request; an optional one belongs to another
+     * of the handler's paths and is left out of this one. Idempotent: the resolver runs it again once a
+     * constant in the path is resolved, and only rows with a type (the declared ones) carry over.
+     */
+    fun withPathVariables(path: String?, params: List<Map<String, Any?>>): List<Map<String, Any?>> {
+        val declared = params.filter { it["type"] != null }.map { LinkedHashMap(it).apply { remove("notInPath") } }
+        val p = path.orEmpty()
+        val known = PATH_CONST !in p && "\${" !in p
+        val vars = PATH_VAR_RE.findAll(SPRING_PLACEHOLDER_RE.replace(p, "")).map { it.groupValues[1] }.distinct().toList()
+        val used = HashSet<Int>()
+        val out = ArrayList<Map<String, Any?>>()
+        for (v in vars) {
+            val at = declared.indexOfFirst { it["in"] == "path" && it["name"] == v }
+            if (at >= 0) {
+                used.add(at)
+                out.add(LinkedHashMap(declared[at]).apply { put("required", true) })
+            } else out.add(linkedMapOf("name" to v, "in" to "path", "required" to true))
+        }
+        declared.forEachIndexed { k, d ->
+            if (k in used) return@forEachIndexed
+            if (d["in"] == "path" && known) {
+                if (d["required"] != true) return@forEachIndexed
+                d["notInPath"] = true
+            }
+            out.add(d)
+        }
+        return out
+    }
+
     fun parseJava(rawText: String, ffile: String): Map<String, Any?> {
         val text = blankComments(rawText)
         val kotlin = ffile.lowercase().endsWith(".kt")
@@ -354,14 +584,23 @@ object JavaParser {
                 if (verb == "Request" && !args.isNullOrEmpty()) {
                     http = REQUEST_METHOD_RE.find(args)?.groupValues?.get(1) ?: "ANY"
                 }
-                // the handler is the method after the mapping — past any other annotation on it
+                // the handler is the method after the mapping — past any other annotation on it, however deep
+                // its arguments nest (`@PreAuthorize("hasRole('A')")` ended the regex at its first `)`, and the
+                // handler was `hasRole`)
+                val sig = handlerSignature(text, m.range.last + 1)
                 val tail = text.substring(m.range.last + 1, minOf(m.range.last + 1 + 400, text.length))
-                val handler = HANDLER_RE.findAll(ANNOTATION_RE.replace(tail, " ")).map { it.groupValues[1] }
-                    .firstOrNull { it !in CONTROL_KEYWORDS } ?: "?"
+                val handler = sig?.first?.takeIf { it.isNotEmpty() && it !in CONTROL_KEYWORDS }
+                    ?: HANDLER_RE.findAll(ANNOTATION_RE.replace(tail, " ")).map { it.groupValues[1] }
+                        .firstOrNull { it !in CONTROL_KEYWORDS } ?: "?"
+                // what the handler takes — one signature for all of its paths, each held against its own path;
+                // absent, not empty, when the signature cannot be read, so an empty list is a fact
+                val declared = sig?.let { splitParams(it.second).mapNotNull { p -> handlerParam(p, kotlin, consts) } }
                 for (base in bases) for (path in mappingPaths(args, consts, types)) {
                     val full = "/" + (base + "/" + path).split("/").filter { it.isNotEmpty() }.joinToString("/")
-                    endpoints.add(linkedMapOf("http" to http, "path" to full, "handler" to handler,
-                        "line" to lineOf(m.range.first), "controller" to ctlDecl.groupValues[2]))
+                    val ep = linkedMapOf<String, Any?>("http" to http, "path" to full, "handler" to handler,
+                        "line" to lineOf(m.range.first), "controller" to ctlDecl.groupValues[2])
+                    if (declared != null) ep["params"] = withPathVariables(full, declared)
+                    endpoints.add(ep)
                 }
             }
         }

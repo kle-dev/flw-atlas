@@ -129,7 +129,11 @@ with nothing to show is left out:
 - **Overview** — what the model is: the description the modeller wrote in Design (and a process's or
   case's documentation) as prose, the facts, and the picture — the drawing, or the table that *is* the
   model: a process's diagram, a form's layout, a decision table, a service's operations, an event's
-  payload, a data object's properties.
+  payload, a data object's properties. A REST endpoint's picture is what its handler takes: every
+  `{variable}` of the path, then the query parameters, headers, cookies, parts and the body its signature
+  declares, each with its type, whether it is required and its default. A parameter without an annotation
+  is the query parameter Spring binds it to, and a path variable the path does not name is marked
+  *not in the path*.
 - **Findings** — what Atlas reports on it, check by check, each row with its *accept…*.
 - **Connections** — whether it fits what it meets, a section per question ([below](#does-it-fit)), and
   its **Relations**.

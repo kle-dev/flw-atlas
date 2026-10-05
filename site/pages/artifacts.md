@@ -86,6 +86,11 @@ It is designed to make that easy:
 - An `expression` node that is a Spring property placeholder — `${mail.imap-url:imap://localhost/inbox}`,
   the shape a channel URL takes when the environment fills it in — carries **`placeholder: true`**
   instead of a JUEL verdict, and its segments are not harvested as variables.
+- An `endpoint` node carries **`params`**, what a caller sends it. Each entry has a `name`, `in` (`path`,
+  `query`, `header`, `cookie`, `body`, `part` or `matrix`) and a `type`, plus `required`, `default`,
+  `implicit` (no annotation, so Spring binds it by name) and `notInPath` where they apply. The path's
+  `{variables}` come first. The key is missing when Atlas could not read the handler's signature, and an
+  empty list means the handler takes nothing.
 - **`findings`** is the itemised list every other surface summarises, **`checks`** the open count per
   check plus `open` and `waived`, and **`waivers`** — present when the project carries a
   `waivers.json` — its rules with how many findings each matched, its notes, and what is wrong with
