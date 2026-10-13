@@ -732,6 +732,38 @@ class IoParametersTest {
     }
 
     @Test
+    fun aResultButtonWhoseValueNamesNoPathReplacesThePayload() {
+        // The forms runtime writes the result to the path a plain binding names, and to the root of the
+        // payload for anything else — so `{{}}` is no "no variable needed", it is "overwrite everything".
+        fun replaces(value: String?): Boolean {
+            val v = if (value == null) "" else ""","value":"$value""""
+            val (f, _) = form("""{"id":"b","type":"scriptButton"$v,"extraSettings":{"script":"{{1}}"}}""")
+            return fields(f).single()["replacesPayload"] == true
+        }
+        for (v in listOf("{{}}", "{{ }}", null, "", "{{a + b}}", "{{my-total}}", "total")) {
+            assertTrue("`$v` names no path, so the result lands on the root", replaces(v))
+        }
+        for (v in listOf("{{total}}", "{{ order.total }}", "{{${'$'}temp.total}}", "{{items[0].total}}")) {
+            assertTrue("`$v` is a path", !replaces(v))
+        }
+    }
+
+    @Test
+    fun aRestButtonWithAResponseMapWritesTheMappedNamesInstead() {
+        fun replaces(extra: String): Boolean {
+            val (f, _) = form("""{"id":"r","type":"restButton","extraSettings":{"url":"/api/x"$extra}}""")
+            return fields(f).single()["replacesPayload"] == true
+        }
+        assertTrue("no value and no map: the whole response becomes the payload", replaces(""))
+        assertTrue(!replaces(""","responsePayloadMapping":[{"name":"score","expression":"{{${'$'}response.score}}"}]"""))
+        // an empty map is still the mapping branch, which writes nothing
+        assertTrue(!replaces(""","responsePayloadMapping":[]"""))
+        // an action button carries a placeholder value and stores nothing; it is not asked
+        val (f, _) = form("""{"id":"a","type":"workAction","value":".","extraSettings":{"actionDefinitionKey":"x"}}""")
+        assertTrue(fields(f).single()["replacesPayload"] == null)
+    }
+
+    @Test
     fun aCaptionlessButtonIsStillListedWithItsEndpoint() {
         // Half the REST buttons of one real project have neither `label` nor `extraSettings.text`: they
         // are icon-only, or captioned by `value`. They used to be dropped from the model entirely.

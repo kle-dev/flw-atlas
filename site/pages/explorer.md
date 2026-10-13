@@ -26,6 +26,7 @@ view you are looking at can be copied as a link.
 |---|---|
 | *(empty)* or `#/overview` | The dashboard: a health summary (the open defects and advice, each split by tier — broken, runtime risk, unfinished, noise — and the checks with the most to say, every part a way into the Checks page), hotspots (the project's own most-referenced models and code — platform beans, URLs and security policies aside), the inventory grouped as the sidebar groups it, apps and entry points |
 | `#/tree` | The reference tree: what each app starts, and what those models reach |
+| `#/elements` | [Elements](#elements): the palette entries the project's processes, cases, forms and pages use, grouped as Design's palette groups them — pick one to list every model holding it |
 | `#/checks` | Every [finding](../checks/) in one place, in two groups — **Defects** (wrong now) and **Advice** (a pattern worth a look): a block per check with its rows under one line saying what it means (*why · what to do* opens beneath it), the accept controls, and what the project already accepted — with its reasons |
 | `#/variables` | The [unused-variable](../variables/) report and what Atlas could not judge |
 | `#/scripts` | Every script body in the project |
@@ -35,7 +36,7 @@ view you are looking at can be copied as a link.
 | `#<nodeId>&q=<term>` | …with the search term that led there highlighted |
 | `#<nodeId>&e=<elementId>` | …with a specific model element opened — and selected on the diagram |
 | `…&f=<filter>&s=<sort>` | On a node or a category route: the list's filter text and sort order (`name`, `key`, `file`, `refs`, `out`, `findings`; a leading `-` reverses it). Written by the page as you type or pick (no history entry), so a reload or a copied link brings the list back as you left it |
-| `#/checks&f=…&c=error&a=1`, `#/tree&l=all&f=…`, `#/scripts&f=…&c=…`, `#/variables&f=…&c=…` | On a report route: the filter text (`f`), the active chip (`c` — a tone (`error`, `warning`, `advice`), a script group, a write construct), *show accepted* (`a`) and, on the tree, the lens (`l`). Written the same way, so a report can be reloaded or sent to a colleague exactly as it was left |
+| `#/checks&f=…&c=error&a=1`, `#/tree&l=all&f=…`, `#/scripts&f=…&c=…`, `#/variables&f=…&c=…`, `#/elements&t=form:upload&f=…` | On a report route: the filter text (`f`), the active chip (`c` — a tone (`error`, `warning`, `advice`), a script group, a write construct), *show accepted* (`a`), on the tree the lens (`l`) and on the Elements page the palette entry picked (`t`). Written the same way, so a report can be reloaded or sent to a colleague exactly as it was left |
 
 The ER diagram designer — the project's tables on a canvas, with the relations between them — is a page
 of its own beside the explorer, `<project>.erd.html`: see [The ER diagram designer](../erd/).
@@ -65,6 +66,30 @@ rebuilding a shared subtree per path is exponential. An edge back into the path 
 The filter takes the same [search grammar](#search) as ⌘K, and a row survives it if it matches **or** a
 descendant does, so the path to a hit is never hidden. The **models** lens shows Design models only;
 **everything** adds the expressions, variables and Java the graph also holds.
+
+## Elements
+
+`#/elements` is Design's palette turned round. Every element of every process, case, form and page is in
+the report, but only inside its model, so *which forms have an attachment?* used to mean opening every
+form. The page lists the palette entries the project actually uses, each with how often it occurs, under
+Design's own groups and in Design's order: **Processes** (start events, activities, Flowable Work tasks,
+structural, gateways, other events, end events, swimlanes), **Cases** (tasks, containers, sentries,
+listeners) and **Forms & pages** (data entry, selection, display, container, Flowable Work). An entry a
+project uses that the palette does not list — a custom stencil, a legacy component — sits under *Other*,
+named by its type.
+
+Every entry carries Design's word, not the type the model stores: an `upload` component is an
+**Attachment**, a `scriptButton` an **Expression button**, a service task of type `http` an **HTTP task**.
+Where two palette entries save the same type, the setting that tells them apart decides: a `number` with
+`numberType` *float* is a **Decimal**, a `select` with `multi` a **Select (multiple)**. The Fields table of
+a form says the same.
+
+Pick an entry and the page lists every model that holds one, a row per model, opened to its elements: each
+element by its caption, its id and — on a form component — the value it binds or stores, with any open
+finding on that element beside it. A click on an element opens it in its model, selected on the diagram.
+The filter narrows by element id, caption, value, model name, key or file; the picked entry and the filter
+ride in the URL. The same question works from anywhere with the search's [`has:`](#search) filter, and the
+button beside the heading asks it there, where it combines with `label:`, `id:` and the rest.
 
 ## Browse categories
 
@@ -363,7 +388,7 @@ expression and type, a number per rule.
 
 - **Every term must match, in any order.** `order form demo` finds the same thing as `demo form order`.
 - **Quoted phrases** are a hard, contiguous requirement.
-- **Facets** narrow inline: `t:` / `type:`, `file:`, `key:`, `in:`, `id:`, `label:`, `desc:` (spelled
+- **Facets** narrow inline: `t:` / `type:`, `file:`, `key:`, `in:`, `id:`, `label:`, `desc:`, `has:` (spelled
   `description:` or `doc:` if you prefer). A space after the colon is fine — `desc: approval` is the same
   query as `desc:approval` — and nothing about a search is case-sensitive: not the terms, not the facet
   name, not its value. A multi-word value goes in quotes: `label: "Customer name"` matches that caption
@@ -388,6 +413,17 @@ expression and type, a number per rule.
   and CMMN `documentation` (on the model *and* on each element), a form component's description, a DMN
   rule's annotation. `desc:approval` finds the task documented as needing one. A plain query searches
   these too, so you do not have to know the facet exists.
+- **`has:` asks for the models holding an element of a type** — by the type the model stores or by
+  Design's word for it: `has:attachment`, `has:"start event"`, `has:"expression button"`,
+  `has:scriptButton` and `has:expressionbutton` all work, and a fragment matches like every other facet
+  (`has:task` finds every kind of task). Beside it, `id:` and `label:` describe *that* element rather than
+  anything anywhere in the model: `has:attachment label:passport` is the form with an attachment captioned
+  *Passport*. The row says which element matched and opens on it. The [Elements](#elements) page asks the
+  same question by pointing.
+- **A word of punctuation only is matched as written** — `{{}}`, `${}`, `=>` would split into nothing and
+  leave an empty query, so they are searched for literally instead: `{{}}` finds every empty binding, and
+  every form whose button stores its result in one (see
+  [`payloadOverwrite`](../checks/#payloadoverwrite-a-button-that-replaces-the-payload)).
 - **Word boundaries are understood** — `demo d05`, `demo-d05` and `demo_d05` are the same query, because
   tokens split at camelCase and letter↔digit boundaries as well as at punctuation.
 - **It searches inside models**, not just their names: element ids, in/out parameters, form fields,

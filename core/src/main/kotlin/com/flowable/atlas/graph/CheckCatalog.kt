@@ -196,6 +196,20 @@ object CheckCatalog {
             docs = "implicitsplit-a-fork-nobody-drew",
         ),
         Check(
+            id = "payloadOverwrite", kind = DEFECT, tier = "runtime", severity = "warning",
+            label = "buttons that overwrite the payload", title = "Result replaces the payload",
+            what = "an expression or REST button whose value names no variable to store its result in",
+            clean = "every button stores its result in a variable",
+            why = "The button writes its result to the path its value binds. `{{}}`, an expression or no " +
+                "value at all binds none, so the result replaces the form's whole payload — or a bound " +
+                "panel's whole value — and every field the user filled in is gone, the moment it is pressed " +
+                "or, set to execute automatically, the moment the form opens.",
+            fix = "Bind the value to the variable the result belongs in — `{{total}}`, or `{{\$temp.total}}` " +
+                "for one only the form needs. A REST button can map the response with Store response " +
+                "attributes instead. Accept it only when replacing the payload is the point.",
+            docs = "payloadoverwrite-a-button-that-replaces-the-payload",
+        ),
+        Check(
             id = "suspectExpr", kind = DEFECT, tier = "noise", severity = "warning",
             label = "suspect expressions", title = "Suspect expressions",
             what = "flagged for review by the catalog",

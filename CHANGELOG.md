@@ -12,6 +12,40 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.29.0
+
+- **A button that would wipe the form is a finding.** An expression button stores what it computes, and a
+  REST button what its call returns, in the variable its value binds — but only a plain binding names one.
+  `{{}}`, `{{ }}`, an expression such as `{{a + b}}`, a literal or no value at all binds no path, and the forms
+  runtime then writes the result over the form's whole payload, or a bound panel's whole value: every field
+  the user filled in is gone the moment the button is pressed, or the moment the form opens when it runs on
+  its own. The new defect `payloadOverwrite` names each such button by Design's name and its id, says what its
+  value is and whether it runs on its own, shows the value as the finding's snippet and opens on the button.
+  A REST button that maps its response with *Store response attributes* writes the mapped names instead and
+  is not reported. Atlas now runs twenty-five checks.
+- **Elements: Design's palette, turned round.** A new page, `#/elements` (sidebar → Models → Elements), lists
+  the palette entries the project's processes, cases, forms and pages use, each with how often, under
+  Design's own groups and in its order — start events, activities, gateways … for processes, tasks,
+  sentries, listeners for cases, data entry, selection, display, container, Flowable Work for forms and
+  pages. Pick one and the page lists every model holding it, opened to the elements themselves: caption, id,
+  the value a form component binds or stores, and any open finding on it, each a click away from the element
+  in its model. The filter narrows by element id, caption, value, model name, key or file, and the pick and
+  the filter ride in the URL.
+- **Every form component is called what Design calls it.** A form's Fields table, the Elements page and the
+  search name all of the form and page palette by Design's word: an `upload` is an *Attachment*, a
+  `htmlComponent` a *Text display*, a `number` with `numberType` *float* a *Decimal*, a `select` with `multi`
+  a *Select (multiple)* — the parser now records which of the two entries sharing a type a component came
+  from. Document tasks (*Create document*, *Merge documents*, *PDF convert*) and the other Flowable Work tasks
+  have their Design names too.
+- **The search asks for elements by type.** `has:attachment`, `has:"start event"`, `has:"expression button"`
+  or `has:scriptButton` finds the models holding an element of that type, by the type the model stores or by
+  Design's word for it. Beside `has:`, `id:` and `label:` describe that same element: `has:attachment
+  label:passport` is the form with an attachment captioned *Passport*. The row names the element that
+  matched and opens on it; the Elements page hands its pick to the search with one click.
+- **A word of punctuation only is searched for as written.** `{{}}`, `${}` or `=>` split into no words at all,
+  so the query was empty and the palette answered with the recent list. Such a word is now matched
+  literally: `{{}}` finds every empty binding and every form whose button stores its result in one.
+
 ## 0.28.8
 
 - **An endpoint's page says what it takes.** A REST endpoint's page named its path, its handler and who

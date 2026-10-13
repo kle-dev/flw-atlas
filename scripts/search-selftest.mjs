@@ -54,6 +54,13 @@ function lift(name) {
 // are lifted out of the source the same way the engine block is.
 engine.SX_ENV.elementNames = new Function(
   `"use strict";${lift('caseCriteria')}${lift('elementNames')};return elementNames;`)();
+// `has:` matches an element by Design's word for its type as well as by the type itself — "Expression
+// button" is what a reader types, `scriptButton` what the model stores — so the word has to come from the
+// real vocabulary table, not a stub that would let the Design-word cases pass for no reason.
+const termsAt = source.indexOf('const DESIGN_TERMS = {');
+const termsSrc = source.slice(termsAt, source.indexOf('\n};', termsAt) + 3);
+engine.SX_ENV.elTerm = new Function(
+  `"use strict";${termsSrc}${lift('elementTypeKey')}${lift('elementTypeLabel')};return elementTypeLabel;`)();
 
 // ---------- load the report ----------
 const reportPath = process.argv[2];
@@ -195,6 +202,29 @@ const cases = [
   { q: 'backoffice checks', top: PROC_ORDER, why: 'two words that only ever occur in one documentation' },
   { q: 'shipping stamp',    has: PROC_ORDER, why: 'an element documentation, as a plain query' },
 
+  // --- a word of separators only is matched literally: the empty binding an expression button writes
+  //     the whole payload through used to be an empty query, answered with the recent list ---
+  { q: '{{}}',              has: FORM_ORDER,  why: 'the form whose button stores into {{}}' },
+  { q: '{{}}',              has: 'binding:{{}}', why: 'and the binding itself' },
+  { q: '{{}} reset',        has: FORM_ORDER,  why: 'a literal word beside a plain one: both AND in' },
+  { q: '{{}} zzzznope',     none: true,       why: 'the literal word does not excuse a term that matches nothing' },
+
+  // --- `has:` asks for models holding an element of a type — by the type or by Design's word for it ---
+  { q: 'has:"expression button"', has: FORM_ORDER, why: "Design's word for a scriptButton" },
+  { q: 'has:expressionbutton', has: FORM_ORDER, why: 'the word run together' },
+  { q: 'has:scriptButton',  has: FORM_ORDER,  why: 'the type the model stores' },
+  { q: 'has:attachment',    top: FORM_ORDER,  why: 'an `upload` component is what Design calls Attachment' },
+  { q: 'has:decimal',       has: FORM_ORDER,  why: 'a float `number` is a Decimal — the variant decides the palette entry' },
+  { q: 'has:"start event"', has: PROC_ORDER,  why: 'a BPMN element by its palette name' },
+  { q: 'has:"start event"', missing: FORM_ORDER, why: 'a form has no start event' },
+  { q: 'has:usertask',      missing: DO_CUSTOMER, why: 'a node without elements never answers has:' },
+  { q: 'has:zzzznope',      none: true,       why: 'a type nothing has' },
+  // With has:, label: and id: describe that same element, not anything anywhere in the model.
+  { q: 'has:"expression button" label:recalculate', has: FORM_ORDER, why: 'the expression button captioned Recalculate' },
+  { q: 'has:"expression button" id:resetTotal', has: FORM_ORDER, why: 'the expression button with that id' },
+  { q: 'has:"expression button" label:internal', none: true, why: 'Internal note is a textarea, not an expression button' },
+  { q: 'has:"expression button" id:notifyButton', none: true, why: 'notifyButton is an action button' },
+
   // --- AND semantics: a word that matches nothing drops the node ---
   { q: 'customer zzzznope',  none: true, why: 'every word has to match' },
 ];
@@ -261,6 +291,15 @@ unit('a facet typed through the colon but unvalued is pending, never the term "l
 unit('a lone pending facet keeps the query empty instead of searching for the prefix word',
   (p => [p.empty, p.pending])(engine.qParse('label: ')),
   [true, 'lab']);
+unit('a word of separators only becomes a literal phrase, and the query is not empty',
+  (p => [p.terms, p.phrases, p.empty])(engine.qParse('{{}}')),
+  [[], ['{{}}'], false]);
+unit('…beside ordinary words, which still split into terms',
+  (p => [p.terms, p.phrases])(engine.qParse('{{}} order-form')),
+  [['order', 'form'], ['{{}}']]);
+unit('qParse reads has:, quoted or bare',
+  [engine.qParse('has:"Start event"').facets, engine.qParse('has:upload id:x').facets],
+  [{ has: 'start event' }, { has: 'upload', id: 'x' }]);
 unit('hlite marks every occurrence, merged and escaped-safe',
   engine.hlite('Template of a template', engine.qParse('template')).map(s => (s.hit ? '[' : '') + s.t + (s.hit ? ']' : '')).join(''),
   '[Template] of a [template]');
@@ -344,6 +383,12 @@ unit('a label: hit on a task caption names that element',
   whyOf('label:approval', PROC_ORDER), 'label · Decide approval');
 unit('a desc: hit is explained by the sentence it came from',
   whyOf('desc:Backoffice', PROC_ORDER), 'doc · Backoffice checks the order total before it shi… @approveTask');
+unit('a has: hit names the element by its palette word and caption',
+  whyOf('has:"expression button" label:recalculate', FORM_ORDER), 'Expression button · Recalculate @orderTotal');
+unit('a has: hit narrowed by id: names that element',
+  whyOf('has:"expression button" id:resetTotal', FORM_ORDER), 'Expression button · Reset total @resetTotal');
+unit('a literal {{}} hit names the field that carries it',
+  whyOf('{{}}', FORM_ORDER), 'value · {{}} @resetTotal');
 unit("a label: hit on the node's own label leaves the hint to the key",
   whyOf('label:priority', DO_PRIORITY), null);
 

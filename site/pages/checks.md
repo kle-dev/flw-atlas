@@ -1,6 +1,6 @@
 # Health checks
 
-Atlas runs twenty-four checks over every project it analyses. They are computed once, in `:core`, and
+Atlas runs twenty-five checks over every project it analyses. They are computed once, in `:core`, and
 every surface reads the same result — the CLI status line, the summary's *Health* block, the
 overview's *Findings* section, `graph.json`'s `findings` and `checks` keys, the generated `CLAUDE.md`
 and the explorer's *Checks* page all agree by construction.
@@ -38,7 +38,7 @@ The explorer and the IDE's findings tool window label every advice finding *advi
   <a href="../demo/explorer.html#/checks" target="_blank" rel="noopener">Open it ↗</a></figcaption>
 </figure>
 
-## The twenty-four checks
+## The twenty-five checks
 
 | Check | Kind | Severity | What it means |
 |---|---|---|---|
@@ -54,6 +54,7 @@ The explorer and the IDE's findings tool window label every advice finding *advi
 | `schemaGaps` | defect | warning | A database column and the model that should describe it disagree. |
 | `gatewayNoDefault` | defect | warning | An exclusive or inclusive gateway whose every outgoing flow is conditional, with no default. |
 | `implicitSplit` | defect | warning | An activity with several outgoing flows and no gateway — a fork nobody drew. |
+| `payloadOverwrite` | defect | warning | An expression or REST button whose value names no variable, so its result replaces the whole payload. |
 | `suspectExpr` | defect | warning | An expression calls a function or namespace Atlas does not know. |
 | `leftoverMarkers` | advice | warning | A TODO, FIXME or HACK left in a model file. |
 | `nonExclusiveAsync` | advice | warning | An async element explicitly set `exclusive="false"`. |
@@ -351,6 +352,26 @@ DMN service task, which the parser lists both as a service task and as a rule ta
 
 Put a parallel gateway there if the fork is meant, or an exclusive gateway with conditions if it is a
 choice.
+
+### `payloadOverwrite` — a button that replaces the payload
+
+An expression button stores what its expression computes, and a REST button what its call returns, in the
+variable its **Value** binds. The forms runtime takes the path to write from that binding, and only from a
+plain one — braces around a variable path, `{{total}}`, `{{order.total}}`, `{{$temp.total}}`. `{{}}`,
+`{{ }}`, an expression such as `{{a + b}}`, a literal, or no value at all binds no path, so the result is
+written to the root of whatever the button sits in: the form's whole payload, or the whole value of a bound
+panel or subform. It replaces it rather than merging into it, even when the result is empty. Every field
+the user filled in is gone the moment the button is pressed — or, when it executes automatically, the
+moment the form opens. A button meant only to *do* something still stores what it computed, which is how a
+`{{}}` written as "no variable needed" turns into a form that loses its data.
+
+A REST button with **Store response attributes** writes each mapped name instead of its response, and is
+not reported. The message names the button, what its value says, and whether it runs on its own; the
+finding opens on the button in the form.
+
+Bind the value to the variable the result belongs in, or to `{{$temp.…}}` for a value only the form needs.
+Find every expression button in the explorer with `has:"expression button"`, and every empty binding with
+a search for `{{}}`. Accept the finding only when replacing the payload is the point.
 
 ### `nonExclusiveAsync` — async jobs that may run at the same time
 

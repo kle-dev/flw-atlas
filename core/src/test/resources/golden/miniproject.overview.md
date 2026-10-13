@@ -90,6 +90,9 @@ _Scanned 27 models (27 files · 1 archives), 3 Java files, 2 REST endpoints. Gen
 - `customerPortal` [linkButton] Open customer portal
 - `creditScore` [restButton] Refresh score ← `{{$temp.score}}` *(hidden)* value dropped when `{{!customer}}`
 - `internalNote` [textarea] Internal note enabled when `{{isSupervisor}}`
+- `invoiceCopy` [upload] Invoice copy
+- `discountRate` [number] Discount rate
+- `resetTotal` [scriptButton] Reset total ← `{{}}` = `{{amount > 0}}`
 - outcomes: `approve`
 - 🔌 data source: rest `/api/customers`
 - 🔌 data source: service `customerService.findAll`
@@ -289,7 +292,7 @@ _component (1):_
 
 ## 13. Variables, beans & expressions
 
-**Variables (32)** — where each one lives, is set and is read:
+**Variables (34)** — where each one lives, is set and is read:
 
 - `amount` [form]
     - used in: orderForm (form field), orderForm {{amount * 1.081}}, orderForm {{amount > 0}}, orderForm {{amount}}
@@ -313,9 +316,13 @@ _component (1):_
     - used in: DEMO-LF001 (form field), DEMO-LF001 {{customerPick}}
 - `customerRecord` [form]
     - used in: orderForm (form field)
+- `discountRate` [form]
+    - used in: orderForm (form field)
 - `grandTotal` [template]
     - used in: orderConfirmationTemplate ${grandTotal}
 - `internalNote` [form]
+    - used in: orderForm (form field)
+- `invoiceCopy` [form]
     - used in: orderForm (form field)
 - `isSupervisor` [form]
     - used in: orderForm {{isSupervisor}}
@@ -358,7 +365,7 @@ _component (1):_
 
 **Beans/objects with method calls:** `demoBean`
 
-**Expressions (38)** — grouped by what they call:
+**Expressions (39)** — grouped by what they call:
 
 - `$response` (5)
     - `{{$response.total}}` — in `DEMO-LF001`
@@ -366,6 +373,10 @@ _component (1):_
     - `{{$response.executionPayload.sent}}` — in `orderForm`
     - `{{$response.scopeId}}` — in `orderForm`
     - `{{$response.score}}` — in `orderForm`
+- `(other)` (3)
+    - `${!managerApproved}` — in `approvalSla`
+    - `{{!customer}}` — in `orderForm`
+    - `{{}}` — in `orderForm`
 - `amount` (3)
     - `{{amount}}` — in `orderForm`
     - `{{amount > 0}}` — in `orderForm`
@@ -373,9 +384,6 @@ _component (1):_
 - `$temp` (2)
     - `{{$temp.loaded}}` — in `DEMO-LF001`
     - `{{$temp.score}}` — in `orderForm`
-- `(other)` (2)
-    - `${!managerApproved}` — in `approvalSla`
-    - `{{!customer}}` — in `orderForm`
 - `customer` (2)
     - `{{customer}}` — in `orderForm`
     - `{{customer.email}}` — in `orderForm`
@@ -429,9 +437,9 @@ _component (1):_
 
 **Also in the graph** (queryable in `miniproject.graph.json`, no section here): 1 masterData · 1 document · 1 variableExtractor · 1 knowledgeBase · 1 palette · 1 query · 1 sequence · 1 sla · 1 template · 1 string · 1 serviceOperation · 1 method · 1 bot.
 
-## 14. Findings — 9 defects · 8 advice
+## 14. Findings — 10 defects · 8 advice
 
-Defects — unparseable files: 1 · invalid expressions: 2 · script syntax: 2 · missing models: 1 · crossed column mappings: 1 · literal secrets: 1 · schema gaps: 1
+Defects — unparseable files: 1 · invalid expressions: 2 · script syntax: 2 · missing models: 1 · crossed column mappings: 1 · literal secrets: 1 · schema gaps: 1 · buttons that overwrite the payload: 1
 Advice — calls with no error path: 2 · async without retry: 1 · variables never read: 3 · unread call parameters: 1 · script-inferred variables: 1
 
 **unparseable files** (1)
@@ -460,6 +468,10 @@ Advice — calls with no error path: 2 · async without retry: 1 · variables ne
 
 **schema gaps** (1)
 - · column `orphan_col_` of table `cust_customer` is in Liquibase but not mapped by the service — in: `Customer Service` · file: `services/customer.service`
+
+**buttons that overwrite the payload** (1)
+- · Expression button `resetTotal` stores its result in `{{}}`, which names no variable — pressing it replaces the whole payload — in: `Order Form` · at: `resetTotal` · file: `forms/order-form.form`
+    `{{}}`
 
 *Advice — nothing below is broken; each is a pattern worth a look.*
 

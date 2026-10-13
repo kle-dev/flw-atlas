@@ -149,6 +149,49 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.29.0</h3>
+        <ul>
+          <li><b>A button that would wipe the form is a finding.</b> An expression button stores what it
+              computes, and a REST button what its call returns, in the variable its value binds — but only
+              a plain binding names one. <code>{{}}</code>, <code>{{ }}</code>, an expression such as
+              <code>{{a + b}}</code>, a literal or no value at all binds no path, and the forms runtime then
+              writes the result over the form's whole payload, or a bound panel's whole value: every field
+              the user filled in is gone the moment the button is pressed, or the moment the form opens when
+              it runs on its own. The new defect <code>payloadOverwrite</code> names each such button by
+              Design's name and its id, says what its value is and whether it runs on its own, shows the
+              value as the finding's snippet and opens on the button. A REST button that maps its response
+              with <i>Store response attributes</i> writes the mapped names instead and is not reported.
+              Atlas now runs twenty-five checks.</li>
+          <li><b>Elements: Design's palette, turned round.</b> A new page, <code>#/elements</code> (sidebar
+              → Models → Elements), lists the palette entries the project's processes, cases, forms and
+              pages use, each with how often, under Design's own groups and in its order — start events,
+              activities, gateways … for processes, tasks, sentries, listeners for cases, data entry,
+              selection, display, container, Flowable Work for forms and pages. Pick one and the page lists
+              every model holding it, opened to the elements themselves: caption, id, the value a form
+              component binds or stores, and any open finding on it, each a click away from the element in
+              its model. The filter narrows by element id, caption, value, model name, key or file, and the
+              pick and the filter ride in the URL.</li>
+          <li><b>Every form component is called what Design calls it.</b> A form's Fields table, the
+              Elements page and the search name all of the form and page palette by Design's word: an
+              <code>upload</code> is an <i>Attachment</i>, a <code>htmlComponent</code> a <i>Text
+              display</i>, a <code>number</code> with <code>numberType</code> <i>float</i> a <i>Decimal</i>,
+              a <code>select</code> with <code>multi</code> a <i>Select (multiple)</i> — the parser now
+              records which of the two entries sharing a type a component came from. Document tasks
+              (<i>Create document</i>, <i>Merge documents</i>, <i>PDF convert</i>) and the other Flowable
+              Work tasks have their Design names too.</li>
+          <li><b>The search asks for elements by type.</b> <code>has:attachment</code>, <code>has:"start
+              event"</code>, <code>has:"expression button"</code> or <code>has:scriptButton</code> finds the
+              models holding an element of that type, by the type the model stores or by Design's word for
+              it. Beside <code>has:</code>, <code>id:</code> and <code>label:</code> describe that same
+              element: <code>has:attachment label:passport</code> is the form with an attachment captioned
+              <i>Passport</i>. The row names the element that matched and opens on it; the Elements page
+              hands its pick to the search with one click.</li>
+          <li><b>A word of punctuation only is searched for as written.</b> <code>{{}}</code>,
+              <code>${}</code> or <code>=&gt;</code> split into no words at all, so the query was empty and
+              the palette answered with the recent list. Such a word is now matched literally:
+              <code>{{}}</code> finds every empty binding and every form whose button stores its result in
+              one.</li>
+        </ul>
         <h3>0.28.8</h3>
         <ul>
           <li><b>An endpoint's page says what it takes.</b> A REST endpoint's page named its path, its
@@ -532,36 +575,6 @@
               methods were credited to a class that does not have them. A bean of a library type (a
               <code>JavaDelegate</code> lambda) stays with the class whose factory defines it, and no method
               of it is credited there.</li>
-          <li><b>A Java class is linked only by what the code says.</b> - A bean name comes from a
-              stereotype on a <i>type</i>, a <code>@Bean</code> method or a Spring Data repository.
-              MapStruct's <code>@Named</code> on a method, a JSR-330 qualifier on a parameter and
-              <code>@NamedQuery</code> made bean names; and a class that merely shares a name no longer
-              makes it a bean — <code>${customer.getName()}</code> beside a plain <code>Customer</code>
-              class reads the variable <code>customer</code> again, which also brought back one true
-              <i>written but never read</i> on a real project. - A field or constructor parameter's type is
-              the class its imports name: <code>import org.flowable.task.api.Task</code> is not the
-              project's own <code>Task</code>. - A constant is its owner's: <code>LibKeys.MAIN</code> from
-              an imported library is not the project's <code>AKeys.MAIN</code>, and a bare name is the
-              class's own, a statically imported one, or the project's only one. - A string literal that
-              equals a model key counts only where the code does something with it — a constant holds it, a
-              comparison tests it, or it is handed to a project method or an enum entry. A log line, a map
-              key or a <code>@JsonProperty</code> of that name is no reference. -
-              <code>${auditLog.log('orderService.cancel()')}</code> calls <code>log</code>, not
-              <code>cancel</code>; a method is declared in a class only where the class declares it; an
-              expression's bean is no delegate (only <code>class</code> and <code>delegateExpression</code>
-              make one) and a Spring <code>ApplicationListener</code> no listener; and a class is an
-              external worker only for <code>topic(name, lockDuration)</code> or <code>@FlowableWorker(topic
-              = …)</code>, not any builder's <code>.topic(…)</code>.</li>
-          <li><b>A setting is a reference only where Flowable reads it as one.</b> An action's
-              <code>signalName</code> triggered a signal whatever its bot was; only the platform signal bot
-              sends one — the start bots and the dynamic sub-process bot read a definition key, and any
-              other bot reads the field as it likes (five actions on one real project "triggered" signals
-              named after variables). A <code>#{…}</code> key is an expression like <code>${…}</code>, not a
-              missing model. An <code>in</code> mapping onto <code>formKey</code> names the form only
-              through <code>sourceExpression</code>; its <code>source</code> is the variable that holds the
-              key. And an external agent's property counts as an event only where its key is an event's —
-              the vendor palette decides which property that is, and a template property looked the
-              same.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

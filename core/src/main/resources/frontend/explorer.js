@@ -209,6 +209,7 @@ const TYPE_ICONS={
   checks:'<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
   schema:'<path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/>',
   tree:'<path d="M3 5h6v4H3z"/><path d="M15 3h6v4h-6z"/><path d="M15 15h6v4h-6z"/><path d="M6 9v8h9"/><path d="M15 5H9"/>',
+  elements:'<path d="M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1Z"/><rect x="3" y="14" width="7" height="7" rx="1"/><circle cx="17.5" cy="17.5" r="3.5"/>',
   _:'<circle cx="12" cy="12" r="10"/>',
 };
 // The icon carries no width/height: CSS sizes .ti in --ui-scale units, so A−/A+ scales icons with
@@ -291,6 +292,13 @@ const DESIGN_TERMS = {
   'el:serviceTask/audit': ['Audit', 'Writes an audit entry.'],
   'el:serviceTask/script': ['Script task', 'Runs an inline script and can store its result in a variable.'],
   'el:serviceTask/generate-document': ['Generate Document', 'Renders a document from a template model.'],
+  'el:serviceTask/create-document': ['Create document', 'Creates a document in a content model.'],
+  'el:serviceTask/merge-document': ['Merge documents', 'Merges several documents into one.'],
+  'el:serviceTask/convert-document-to-pdf': ['PDF convert', 'Converts a document to PDF.'],
+  'el:serviceTask/set-business-status': ['Set business status', 'Sets the business status of the instance.'],
+  'el:serviceTask/set-data-policy': ['Set data policy', 'Applies a data policy to the instance.'],
+  'el:serviceTask/power-automate': ['Power Automate flow', 'Runs a Microsoft Power Automate flow.'],
+  'el:serviceTask/trigger-intent-evaluation': ['Trigger intent evaluation', 'Has the instance’s intents evaluated.'],
   'el:scriptTask': ['Script task', 'Runs an inline script and can store its result in a variable.'],
   'el:sendTask': ['Send task', 'Sends a message.'],
   'el:manualTask': ['Manual task', 'Work done outside the engine — recorded, not executed.'],
@@ -319,6 +327,57 @@ const DESIGN_TERMS = {
   'el:linkButton': ['Link button', 'Opens a URL; it calls nothing.'],
   'el:createInstanceButton': ['Create-instance button', 'Starts a process or case.'],
   'el:workUserEventListenerButton': ['User event button', 'Triggers a user event listener of the case.'],
+  // --- the rest of the form/page palette, by the type a component saves. Two entries share `number`
+  // (Number, Decimal) and two share `select` (single, multiple); the parser records which as the variant.
+  'el:text': ['Text', 'A single-line text input.'],
+  'el:number': ['Number', 'A numeric input.'],
+  'el:number/integer': ['Number', 'A whole-number input.'],
+  'el:number/float': ['Decimal', 'A number input that takes decimals.'],
+  'el:date': ['Date', 'A date picker.'],
+  'el:dateRange': ['Date range', 'Picks a start and an end date.'],
+  'el:textarea': ['Multiline text', 'A text input of several lines.'],
+  'el:richText': ['Rich text', 'A formatted-text editor.'],
+  'el:password': ['Password', 'A text input that hides what is typed.'],
+  'el:upload': ['Attachment', 'Uploads one or more files.'],
+  'el:attachment': ['Attachment', 'Uploads one or more files.'],
+  'el:stringList': ['Text list', 'A list of text entries the user adds to.'],
+  'el:radio': ['Radio buttons', 'Picks one of a few options, all shown.'],
+  'el:switcher': ['Switch', 'An on/off toggle.'],
+  'el:slider': ['Slider', 'Picks a number by dragging.'],
+  'el:boolean': ['Checkbox', 'A single yes/no box.'],
+  'el:checkboxGroup': ['Checkbox group', 'Picks several of a few options.'],
+  'el:select': ['Select (single)', 'A dropdown that picks one option — static, REST, people or groups.'],
+  'el:select/multi': ['Select (multiple)', 'A dropdown that picks several options.'],
+  'el:htmlComponent': ['Text display', 'Shows text or HTML, typically with bindings in it — Design’s Text display and HTML display.'],
+  'el:list': ['List', 'Shows a list of items, often from a REST call.'],
+  'el:image': ['Image', 'Shows an image.'],
+  'el:link': ['Link', 'A hyperlink.'],
+  'el:pdfViewer': ['PDF document', 'Shows a PDF.'],
+  'el:galleries': ['Document gallery', 'Shows a gallery of documents.'],
+  'el:dataTable': ['Data table', 'A table of rows from a REST call, a data object or a service.'],
+  'el:hline': ['Horizontal line', 'A divider.'],
+  'el:alert': ['Alert', 'A highlighted message.'],
+  'el:validationPanel': ['Validation panel', 'Lists the form’s validation errors.'],
+  'el:panel': ['Panel', 'Groups components; bound, it gives them a scope of their own.'],
+  'el:modal': ['Modal', 'A dialog that opens over the form.'],
+  'el:tabs': ['Tabs', 'Splits the form into tabs.'],
+  'el:masterDetail': ['Master detail', 'A list with the details of the selected entry beside it.'],
+  'el:accordion': ['Accordion', 'Sections that fold open one at a time.'],
+  'el:wizard': ['Wizard', 'Steps through the form one page at a time.'],
+  'el:buttonGroup': ['Button group', 'Lays several buttons out together.'],
+  'el:outcomeButtonGroup': ['Outcome button group', 'The buttons that complete the task, laid out together.'],
+  'el:subform': ['Subform', 'Embeds another form; bound, its fields live under that binding.'],
+  'el:iFrame': ['IFrame', 'Embeds another web page.'],
+  'el:dataObjectSelect': ['Data object select', 'A dropdown over the instances of a data object.'],
+  'el:serviceModelSelect': ['Service model select', 'A dropdown filled by a service operation.'],
+  'el:serviceModelDataTable': ['Service model data table', 'A table filled by a service operation.'],
+  'el:workTaskList': ['Task list', 'Lists tasks.'],
+  'el:workProcessList': ['Process list', 'Lists process instances.'],
+  'el:workCaseList': ['Case list', 'Lists case instances.'],
+  'el:workChart': ['Chart', 'A chart of a query’s results.'],
+  'el:workQueryDataTable': ['Query data table', 'A table over a query model’s results.'],
+  'el:abbyyManualReview': ['Abbyy manual review', 'Reviews a document an ABBYY task extracted.'],
+  'el:lane': ['Lane', 'A lane of a pool — who does the work drawn in it.'],
   'el:actionBot': ['Action bot', 'The bot an action is dispatched to at runtime.'],
   'el:task': ['Task', 'A plain task; its flowable:type decides what it does.'],
   'el:decisionTask': ['Decision task', 'Evaluates a decision table from a case.'],
@@ -952,14 +1011,16 @@ function computeInsights(){
 // #/checks&f=…&c=error&a=1 / #/tree&l=all&f=… -> a report with its own context: `f` filter text,
 //                    `c` the chip, `a` show-accepted, `l` the tree's lens — so a reload or a copied link
 //                    brings the report back as it was left, the way `&f=`/`&s=` already did for a list.
-const REPORT_VIEWS={'/schema':'schema','/scripts':'scripts','/checks':'checks','/variables':'variables','/tree':'tree'};
+// #/elements&t=form:attachment -> the Elements page with one palette entry picked (`t`, group:type).
+const REPORT_VIEWS={'/schema':'schema','/scripts':'scripts','/checks':'checks','/variables':'variables','/tree':'tree',
+  '/elements':'elements'};
 function parseHash(){
   const raw = location.hash.slice(1);
   if(!raw || raw==='/overview') return {view:'overview'};
   const first=raw.split('&')[0];
   if(REPORT_VIEWS[first]){
     const ctx=hashContext(raw.split('&').slice(1));
-    return {view:REPORT_VIEWS[first], rf:ctx.f, rc:ctx.c, acc:ctx.a, lens:ctx.l};
+    return {view:REPORT_VIEWS[first], rf:ctx.f, rc:ctx.c, acc:ctx.a, lens:ctx.l, elt:ctx.t};
   }
   if(raw.indexOf('/browse/')===0){
     const parts = raw.slice(8).split('&');
@@ -976,7 +1037,7 @@ function parseHash(){
 }
 /** The `k=v` pairs behind a route's first part; unknown keys are ignored, absent ones stay undefined. */
 function hashContext(pairs){
-  const out={q:'', e:'', f:undefined, s:undefined, c:undefined, a:undefined, l:undefined, p:undefined};
+  const out={q:'', e:'', f:undefined, s:undefined, c:undefined, a:undefined, l:undefined, p:undefined, t:undefined};
   pairs.forEach(p=>{ const i=p.indexOf('='); if(i<0) return; const k=p.slice(0,i); if(k in out) out[k]=dec(p.slice(i+1)); });
   return out;
 }
@@ -992,6 +1053,7 @@ function syncHashContext(){
     if(state.rc) h+='&c='+enc(state.rc);
     if(state.acc) h+='&a='+enc(state.acc);
     if(state.view==='tree' && state.treeLens && state.treeLens!=='models') h+='&l='+enc(state.treeLens);
+    if(state.view==='elements' && state.elt) h+='&t='+enc(state.elt);
     // keep the entry's state: it carries the page's place in the history (navStamp)
     if(location.hash.slice(1)!==h){ try{ history.replaceState(history.state, '', '#'+h); }catch(e){} }
     return;
@@ -1013,6 +1075,7 @@ function showView(v){
   document.getElementById('view-checks').hidden = v!=='checks';
   document.getElementById('view-variables').hidden = v!=='variables';
   document.getElementById('view-tree').hidden = v!=='tree';
+  document.getElementById('view-elements').hidden = v!=='elements';
   document.getElementById('view-browse').hidden = v!=='browse';
 }
 let _navCount = 0;
@@ -1056,6 +1119,7 @@ function rerenderView(){
     case 'tree': renderTree(); break;
     case 'checks': renderChecks(); break;
     case 'variables': renderVariables(); break;
+    case 'elements': renderElements(); break;
     default: renderDetail();
   }
 }
@@ -1102,6 +1166,10 @@ function route(){
     state.view='variables'; state.sel=null;
     showView('variables'); renderVariables();
     renderSidebarActive(); renderCrumbs();
+  } else if(r.view==='elements'){
+    state.view='elements'; state.sel=null; state.elt=r.elt||'';
+    showView('elements'); renderElements();
+    renderSidebarActive(); renderCrumbs();
   } else if(r.sel){
     // the page's tab rides in the hash, so Back lands on the tab the reader left (select() carries it on)
     state.pane = r.p || 'overview';
@@ -1145,6 +1213,11 @@ function navItems(){
   items.push({route:'/tree', label:'Reference tree', sec:'Models', pri:0, icon:'tree',
     color:color('process'),
     tip:'What each app starts, and what those models reach — every relation except app membership'});
+  // no count: the number of palette entries in use is not a number anyone acts on, and beside the
+  // node counts of the entries below it read as one
+  if(elementIndex().total) items.push({route:'/elements', label:'Elements', sec:'Models', pri:0, icon:'elements',
+    color:'var(--accent)',
+    tip:'The palette entries this project uses, and the processes, cases, forms and pages holding each'});
   // red while an error is open, amber for a defect's warning, grey when only advice is open
   const openChecks=INSIGHTS.checksOpen, K0=kindCounts(), ot=openTone();
   items.push({route:'/checks', label:'Checks', sec:'Checks', pri:0, icon:'checks',
@@ -1308,6 +1381,10 @@ function renderCrumbs(){
   } else if(state.view==='tree'){
     h=link(DATA.project,'#/overview')+sep+cur('Reference tree');
     title='Reference tree — Flowable Atlas';
+  } else if(state.view==='elements'){
+    const t=state.elt&&elementIndex().types.get(state.elt);
+    h=link(DATA.project,'#/overview')+sep+(t?link('Elements','#/elements')+sep+cur(t.label):cur('Elements'));
+    title=(t?t.label+' — ':'')+'Elements — Flowable Atlas';
   } else {
     const cat=CATS.find(x=>x.id===state.cat);
     const n=state.sel&&byId.get(state.sel);
@@ -2807,6 +2884,190 @@ function renderScripts(){
     v.querySelectorAll('.fbar .pf, .fbar .pchip').forEach(el=>el.addEventListener(el.tagName==='INPUT'?'input':'click', ()=>setTimeout(syncAll,150)));
     syncAll();
   }
+  wireNodeLinks(v, '[data-goto],[data-id]');
+}
+
+// ---------- elements (#/elements) ----------
+// Design's palette turned round. Every element of every process, case, form and page is in the report — the
+// start event, the attachment field, the expression button — but only inside its model, so "which forms
+// have an attachment?" meant opening every form. This page lists the palette entries the project actually
+// uses, grouped and ordered the way Design's palette is, and a pick lists every model holding one with the
+// elements themselves. The filter narrows by element id, caption, model name, key or file. `has:` in the
+// search asks the same question from anywhere.
+
+/** Which models each palette group draws from — forms and pages share one palette in Design. */
+const PALETTE_GROUPS=[
+  {id:'process', label:'Processes', types:['process']},
+  {id:'case', label:'Cases', types:['case']},
+  {id:'form', label:'Forms & pages', types:['form','page']},
+];
+/** Design's palette groups, in its order, with the element types each holds in palette order. A type
+ *  missing here still shows, under Other — the palette is extensible and a project may use what is not
+ *  listed. Order is a reader's convenience; nothing depends on it. */
+const PALETTE_CATEGORIES={
+  process:[
+    ['Start events', ['startEvent']],
+    ['Activities', ['userTask','serviceTask/case','serviceTask','scriptTask','serviceTask/script','businessRuleTask','receiveTask','manualTask','sendTask','task',
+      'serviceTask/mail','serviceTask/camel','serviceTask/shell','serviceTask/http','serviceTask/mule','serviceTask/dmn','serviceTask/send-event','serviceTask/external-worker']],
+    ['Flowable Work', ['serviceTask/init-variables','serviceTask/set-business-status','serviceTask/set-data-policy','serviceTask/generate-document',
+      'serviceTask/create-document','serviceTask/merge-document','serviceTask/convert-document-to-pdf','serviceTask/service-registry',
+      'serviceTask/audit','serviceTask/data-object','serviceTask/power-automate','serviceTask/agent','serviceTask/trigger-intent-evaluation']],
+    ['Structural', ['subProcess','callActivity','adhocSubProcess','transaction']],
+    ['Gateways', ['exclusiveGateway','parallelGateway','inclusiveGateway','eventBasedGateway','complexGateway']],
+    ['Other events', ['boundaryEvent','intermediateCatchEvent','intermediateThrowEvent']],
+    ['End events', ['endEvent']],
+    ['Swimlanes', ['lane']],
+  ],
+  case:[
+    ['Tasks', ['task','humanTask','humanTaskWithService','caseTask','processTask','milestone','serviceTask','serviceTask/script','decisionTask','serviceTask/mail','serviceTask/http','serviceTask/send-event','serviceTask/external-worker']],
+    ['Flowable Work', ['serviceTask/init-variables','serviceTask/set-business-status','serviceTask/set-data-policy','serviceTask/generate-document',
+      'serviceTask/create-document','serviceTask/merge-document','serviceTask/convert-document-to-pdf','serviceTask/service-registry',
+      'serviceTask/audit','serviceTask/data-object','serviceTask/power-automate','serviceTask/agent','serviceTask/trigger-intent-evaluation']],
+    ['Containers', ['casePlanModel','stage','planFragment']],
+    ['Sentries', ['entryCriterion','exitCriterion']],
+    ['Listeners', ['timerEventListener','userEventListener','signalEventListener','variableEventListener','eventListener']],
+  ],
+  form:[
+    ['Data entry', ['text','number','number/integer','number/float','date','dateRange','textarea','richText','password','upload','attachment','stringList']],
+    ['Selection', ['radio','switcher','slider','boolean','checkboxGroup','select','select/multi','linkButton','restButton','scriptButton','outcomeButton']],
+    ['Display', ['htmlComponent','list','image','link','pdfViewer','galleries','dataTable','hline','alert','validationPanel']],
+    ['Container', ['panel','modal','tabs','masterDetail','accordion','wizard','buttonGroup','outcomeButtonGroup','subform','iFrame']],
+    ['Flowable Work', ['dataObjectSelect','serviceModelSelect','serviceModelDataTable','workTaskList','workProcessList','workCaseList','workChart',
+      'workAction','workInvokeService','workAgentButton','createInstanceButton','workQueryDataTable','abbyyManualReview','workUserEventListenerButton']],
+  ],
+};
+/** The palette entry an element belongs to: its type, refined by the `flowable:type` (or a form
+ *  component's variant) wherever Design has a word for the pair. A CMMN `<task flowable:type="http">` is
+ *  the HTTP task a BPMN service task is, so the serviceTask/* words cover both dialects (see elementTerm). */
+function elementTypeKey(type, sub){
+  if(!type) return '';
+  if(sub && DESIGN_TERMS['el:'+type+'/'+sub]) return type+'/'+sub;
+  if(sub && type==='task' && DESIGN_TERMS['el:serviceTask/'+sub]) return 'serviceTask/'+sub;
+  return sub && type==='serviceTask' ? type+'/'+sub : type;
+}
+/** elementTerm() as plain text — for the search index, a chip, a page title. */
+function elementTypeLabel(type, sub){
+  const k=elementTypeKey(type, sub), e=DESIGN_TERMS['el:'+k];
+  if(e&&e[0]) return e[0];
+  const base=DESIGN_TERMS['el:'+type];
+  return base&&base[0] ? base[0]+(sub?' · '+sub:'') : [type,sub].filter(Boolean).join(' · ');
+}
+let _elIdx=null;
+/** Every element of every model, by palette entry: `types` maps `group:key` → `{id, group, key, label,
+ *  hint, rows:[{model, id, name}], models:Set}`. Built once — node data never changes at runtime. */
+function elementIndex(){
+  if(_elIdx) return _elIdx;
+  const types=new Map(), models=new Set();
+  let total=0;
+  PALETTE_GROUPS.forEach(g=>nodes.forEach(n=>{
+    if(g.types.indexOf(n.type)<0) return;
+    for(const [id,e] of elementNames(n)){
+      if(!e.type) continue;
+      const key=elementTypeKey(e.type, e.sub), tid=g.id+':'+key;
+      let t=types.get(tid);
+      if(!t){
+        const term=DESIGN_TERMS['el:'+key]||DESIGN_TERMS['el:'+e.type]||[];
+        t={id:tid, group:g.id, key, label:elementTypeLabel(e.type, e.sub), hint:term[1]||'', rows:[], models:new Set()};
+        types.set(tid, t);
+      }
+      t.rows.push({model:n.id, id, name:e.name||''});
+      t.models.add(n.id); models.add(n.id); total++;
+    }
+  }));
+  _elIdx={types, total, models:models.size};
+  return _elIdx;
+}
+/** `n process(es)` in the group's own words — "3 forms & pages" would say nothing about which. */
+function elementModelCount(ids){
+  const by={};
+  ids.forEach(id=>{ const n=byId.get(id); if(n) by[n.type]=(by[n.type]||0)+1; });
+  return Object.keys(by).map(t=>by[t]+' '+(by[t]===1?term('type',t).label||t:(TM[t]?TM[t][0]:t)).toLowerCase()).join(', ');
+}
+function elementPaletteHtml(ix, sel){
+  let h='<div class="elpal">';
+  PALETTE_GROUPS.forEach(g=>{
+    const ts=[...ix.types.values()].filter(t=>t.group===g.id);
+    if(!ts.length) return;
+    const ms=new Set(); let count=0;
+    ts.forEach(t=>{ count+=t.rows.length; t.models.forEach(m=>ms.add(m)); });
+    const order=PALETTE_CATEGORIES[g.id]||[];
+    const catOf=k=>{ const c=order.find(x=>x[1].indexOf(k)>=0); return c?c[0]:'Other'; };
+    const pos=k=>{ for(const c of order){ const i=c[1].indexOf(k); if(i>=0) return i; } return 999; };
+    const cats=order.map(c=>c[0]).concat('Other');
+    h+='<div class="elpal-g"><div class="elpal-h">'+esc(g.label)+'<span class="muted"> · '+count+' element'+(count===1?'':'s')+
+       ' in '+esc(elementModelCount([...ms]))+'</span></div>';
+    cats.forEach(c=>{
+      const inC=ts.filter(t=>catOf(t.key)===c).sort((a,b)=>pos(a.key)-pos(b.key)||a.label.localeCompare(b.label));
+      if(!inC.length) return;
+      h+='<div class="elpal-row"><span class="elpal-c">'+esc(c)+'</span><span class="elpal-chips">'+inC.map(t=>{
+        const on=sel&&sel.id===t.id;
+        return '<button type="button" class="pchip'+(on?' on':'')+'" data-elt="'+esc(t.id)+'" aria-pressed="'+on+'"'+
+          ' title="'+esc((t.hint?t.hint+' — ':'')+t.rows.length+' in '+elementModelCount([...t.models]))+'">'+esc(t.label)+
+          '<span class="pchipn">'+t.rows.length+'</span></button>';
+      }).join('')+'</span></div>';
+    });
+    h+='</div>';
+  });
+  return h+'</div>';
+}
+/** One element's row inside its model: where it is, what it reads, and an open finding on it. */
+function elementRowHtml(mid, r, fieldOf){
+  const n=byId.get(mid)||{}, f=fieldOf(r.id);
+  // a form component's value is what it binds or stores — the one thing a reader looking for `{{}}` needs
+  const val=f&&typeof f.value==='string'&&f.value!==''&&f.value!==f.label?'<span class="mono el-val">'+esc(f.value)+'</span>':'';
+  const open=(FIND_BY_NODE.get(mid)||[]).filter(x=>String(x.element)===String(r.id)&&!waiverFor(x));
+  const pills=open.map(x=>{ const tone=findTone(x);
+    return '<span class="pill pill-'+(tone==='error'?'bad':tone==='warning'?'warn':'advice')+'" data-tip="'+esc(x.message||'')+'">'+
+      esc(checkTitle(x.check))+'</span>'; }).join('');
+  return '<div class="elrow"'+hayAttr([r.id, r.name, f&&f.value, n.label, n.key, n.file].filter(Boolean).join(' '))+'>'+
+    elJumpHtml(mid, r.id, r.name||r.id, 'Open this element in its model')+
+    (r.name&&r.name!==r.id?cpyCell('<span class="mono muted">'+esc(r.id)+'</span>', r.id, 'element id'):'')+val+pills+'</div>';
+}
+function elementUsesHtml(t){
+  const byModel=new Map();
+  t.rows.forEach(r=>{ if(!byModel.has(r.model)) byModel.set(r.model,[]); byModel.get(r.model).push(r); });
+  const models=[...byModel.keys()].sort((a,b)=>String((byId.get(a)||{}).label||a).localeCompare(String((byId.get(b)||{}).label||b)));
+  const cols=[{k:'m',label:'Model',w:'minmax(14ch,1.5fr)'},{k:'key',label:'Key',w:'minmax(10ch,1fr)',mono:true,opt:true},
+    {k:'els',label:t.label,w:'minmax(16ch,2.2fr)',opt:true},{k:'n',label:'',w:'5ch',cls:'dim'}];
+  const rows=models.map(mid=>{
+    const n=byId.get(mid)||{label:mid, key:''}, els=byModel.get(mid);
+    const fs=new Map(((n.data||{}).fields||[]).filter(f=>f&&typeof f==='object').map(f=>[String(f.id), f]));
+    const fieldOf=id=>fs.get(String(id));
+    const shown=els.slice(0,3).map(r=>esc(r.name||r.id)).join(', ')+(els.length>3?' <span class="muted">+'+(els.length-3)+'</span>':'');
+    return {open:els.length<=3||models.length===1, cls:'fldrow', bodyCls:'fldbody',
+      body:els.map(r=>elementRowHtml(mid, r, fieldOf)).join(''),
+      cells:{m:nodeIcon(n)+' '+vlink(mid, n.label), key:cpyCell(esc(n.key||''), n.key, 'key'), els:shown, n:String(els.length)}};
+  });
+  return '<div class="el-sel"><span class="el-sel-t">'+esc(t.label)+'</span><span class="muted"> · '+t.rows.length+' in '+
+    esc(elementModelCount(models))+'</span>'+
+    '<button type="button" class="pchip" data-elt-search="'+esc(t.label)+'" title="The same question in the search, where it combines with id:, label:, type: and the rest">'+
+    uiIcon('search')+' has:"'+esc(t.label.toLowerCase())+'"</button></div>'+
+    tbl(cols, rows, {filter:1, placeholder:'filter — element id, caption, value, model name, key or file…', keepCols:true});
+}
+function renderElements(){
+  const v=document.getElementById('view-elements');
+  const ix=elementIndex(), sel=ix.types.get(state.elt||'')||null;
+  let h='<div class="dash" data-fscope>';
+  h+=pageHeader({icon:'elements', color:'var(--accent)', title:'Elements',
+    sub:ix.total?'the palette entries this project uses — pick one to list every process, case, form and page that holds it'
+                :'no process, case, form or page in this project has an element',
+    facts:ix.total?[['Element types',ix.types.size],['Elements',ix.total],['Models',ix.models]]:[]});
+  if(!ix.total){
+    h+=estateHtml({icon:typeIcon('elements',{color:'var(--accent)'}), title:'No elements',
+      hint:'Nothing to show — this project has no process, case, form or page with an element in it.'});
+  } else {
+    h+=elementPaletteHtml(ix, sel);
+    h+=sel?elementUsesHtml(sel):'<p class="muted el-pick">Pick a palette entry to list the models holding one. The search asks '+
+      'the same from anywhere: <code>has:attachment</code>, <code>has:"start event" label:order</code>.</p>';
+  }
+  v.innerHTML=h+'</div>';
+  wireReport(v);
+  v.querySelectorAll('[data-elt]').forEach(b=>b.onclick=()=>{
+    state.elt=state.elt===b.dataset.elt?'':b.dataset.elt;
+    renderElements(); renderCrumbs(); syncHashContext();
+  });
+  const srch=v.querySelector('[data-elt-search]');
+  if(srch) srch.onclick=()=>openPalette('has:"'+srch.dataset.eltSearch.toLowerCase()+'" ');
   wireNodeLinks(v, '[data-goto],[data-id]');
 }
 
@@ -5971,7 +6232,8 @@ function fieldRow(f, d){
   // A link button's caption *is* its `value`, so the value column would only say it twice.
   const val=(f.value!=null&&f.value!==''&&String(f.value)!==String(f.label==null?'':f.label))
     ?'<span class="muted">←</span> '+paramSide(String(f.value)):'';
-  const ty=termHtml('el', f.type, 'tag')||tag(f.type);
+  // the palette entry, not just the type: a Decimal saves as `number` and reads as Decimal here too
+  const ty=termHtml('el', elementTypeKey(f.type, f.variant), 'tag')||tag(f.type);
   const req=(f.required===true||f.required==='true')?'<span class="tag" data-tip="Required field">required</span>':'';
   const hay=[id, f.label, f.type, f.value, callee&&callee.key, f.subform, f.description].filter(Boolean).join(' ');
   return {el:f.id, hay, body:b, cls:b?'fldrow':'', bodyCls:'fldbody', cells:{
@@ -6865,7 +7127,7 @@ function elementNames(n){
   (d.lanes||[]).forEach(l=>put(l.id,l.name,'lane'));
   (d.milestones||[]).forEach(x=>{ if(x&&typeof x==='object') put(x.id,x.name,'milestone'); });
   // a form's components are the elements of its wireframe
-  if(n.type==='form'||n.type==='page') (d.fields||[]).forEach(f=>{ if(f&&typeof f==='object') put(f.id, f.label, f.type); });
+  if(n.type==='form'||n.type==='page') (d.fields||[]).forEach(f=>{ if(f&&typeof f==='object') put(f.id, f.label, f.type, f.variant); });
   if(d.planModel)(function walk(nd){ put(nd.id,nd.name,nd.type,nd.serviceTaskType); (nd.children||[]).forEach(walk); })(d.planModel);
   // criterion diamonds: named after the plan item they guard, typed entry/exitCriterion.
   // (Resolve via the definition already indexed above — `planItem` may be a raw definition id.)
@@ -7905,7 +8167,7 @@ function cycleTab(delta){
 //
 // The two things the engine needs from the rest of the app, injected rather than closed over so the
 // block stays standalone. Assigned right after the block (TM and elementNames both exist by then).
-const SX_ENV={TM:{}, elementNames:()=>new Map()};
+const SX_ENV={TM:{}, elementNames:()=>new Map(), elTerm:()=>''};
 
 // ---------- search index (shared by the command palette and the browse list) ----------
 // One field per haystack, because "find everything" and "rank sensibly" pull in opposite directions:
@@ -7997,12 +8259,16 @@ function hayTokens(s){
 }
 
 const SX_FACET_KEYS={t:'type',type:'type',file:'file',key:'key',in:'section',id:'id',
-  label:'lab',desc:'desc',description:'desc',doc:'desc'};
+  label:'lab',desc:'desc',description:'desc',doc:'desc',has:'has'};
+// Every prefix above as one regex alternation, longest first so the intent is readable (the engine would
+// backtrack into it either way). The parser and the palette's chips both build their patterns from it, so
+// a new facet cannot be understood by one and typed through as a plain word by the other.
+const SX_FACET_ALT=Object.keys(SX_FACET_KEYS).sort((a,b)=>b.length-a.length||a.localeCompare(b)).join('|');
 /**
  * Parse a raw query into `{terms, phrases, facets, pending}`.
  *  - terms   — order-independent, ALL must match somewhere (AND)
  *  - phrases — `"…"` quoted, must match contiguously
- *  - facets  — inline `t:`/`type:`/`file:`/`key:`/`in:`/`id:`/`label:`/`desc:` hard filters
+ *  - facets  — inline `t:`/`type:`/`file:`/`key:`/`in:`/`id:`/`label:`/`desc:`/`has:` hard filters
  *  - pending — a facet typed through the colon but not given a value yet (`label:` at the end)
  */
 function qParse(q){
@@ -8015,7 +8281,7 @@ function qParse(q){
   // gave up and the word "label" degraded into a free-text term. The query then answered with whichever
   // nodes happened to contain both the word "label" and the phrase — three arbitrary hits instead of
   // every node carrying that caption. The value stays contiguous, exactly as a quoted phrase would.
-  let rest=raw.replace(/(^|\s)(description|label|type|desc|file|doc|key|in|id|t):\s*"([^"]*)"/gi,(m,pre,k,inner)=>{
+  let rest=raw.replace(new RegExp('(^|\\s)('+SX_FACET_ALT+'):\\s*"([^"]*)"','gi'),(m,pre,k,inner)=>{
     const v=inner.trim().toLowerCase();
     if(v) parsed.facets[SX_FACET_KEYS[k.toLowerCase()]]=v;
     return ' ';
@@ -8033,7 +8299,7 @@ function qParse(q){
   // Longest alternative first so the intent is readable; the engine would backtrack into it either way.
   // Case is irrelevant on both halves: the prefix through /i, the value through toLowerCase() below
   // against haystacks that are lowercased when the index is built.
-  rest=rest.replace(/(^|\s)(description|label|type|desc|file|doc|key|in|id|t):\s*(\S+)/gi,(m,pre,k,v)=>{
+  rest=rest.replace(new RegExp('(^|\\s)('+SX_FACET_ALT+'):\\s*(\\S+)','gi'),(m,pre,k,v)=>{
     parsed.facets[SX_FACET_KEYS[k.toLowerCase()]]=v.toLowerCase();
     return ' ';
   });
@@ -8041,11 +8307,20 @@ function qParse(q){
   // colon and are about to type the caption). It must not fall through as the term "label" — that is
   // the degraded query this parser exists to prevent — so it is claimed here and surfaced as `pending`
   // for the palette to explain instead of answering.
-  rest=rest.replace(/(^|\s)(description|label|type|desc|file|doc|key|in|id|t):\s*$/i,(m,pre,k)=>{
+  rest=rest.replace(new RegExp('(^|\\s)('+SX_FACET_ALT+'):\\s*$','i'),(m,pre,k)=>{
     parsed.pending=SX_FACET_KEYS[k.toLowerCase()];
     return ' ';
   });
-  rest.split(SX_SEP).forEach(t=>{ if(t) parsed.terms.push(t.toLowerCase()); });
+  // A word made of separators only — `{{}}`, `${}`, `=>` — splits into nothing, so the query used to be
+  // empty and answered with the recent list: an empty binding, the one thing worth hunting down because
+  // it writes over a whole payload, could not be searched for at all. Such a word is kept as it was
+  // typed and matched as a phrase, literally; every other word still splits into terms.
+  rest.split(/\s+/).forEach(w=>{
+    if(!w) return;
+    const ts=w.split(SX_SEP).filter(Boolean);
+    if(ts.length) ts.forEach(t=>parsed.terms.push(t.toLowerCase()));
+    else parsed.phrases.push(w.toLowerCase());
+  });
   parsed.empty=!parsed.terms.length && !parsed.phrases.length && !Object.keys(parsed.facets).length;
   return parsed;
 }
@@ -8106,6 +8381,21 @@ function termScore(sx, term){
 }
 
 /**
+ * The elements of a prepared index that answer a `has:` facet — of a type whose identifier or Design word
+ * contains the value, and, when the query also has them, whose id contains `id:` and whose caption
+ * contains `label:`. Empty when nothing qualifies, including on a node that has no elements at all.
+ */
+function hasElements(sx, fc){
+  const out=[];
+  for(const e of (sx.els||[])){
+    if(e.ty.indexOf(fc.has)<0) continue;
+    if(fc.id && e.idl.indexOf(fc.id)<0) continue;
+    if(fc.lab && e.lab.indexOf(fc.lab)<0) continue;
+    out.push(e);
+  }
+  return out;
+}
+/**
  * Score a parsed query against one prepared index (see searchIndex). Returns `{score, fields}` or
  * `null` when the node is not a match. `indeg` is an importance prior: a heavily referenced model
  * beats an obscure string literal that happens to contain the same word.
@@ -8116,12 +8406,19 @@ function scoreIndex(sx, parsed, indeg){
   if(fc.type && (sx.type||'').indexOf(fc.type)<0) return null;
   if(fc.file && (sx.file||'').indexOf(fc.file)<0) return null;
   if(fc.key && (sx.key||'').indexOf(fc.key)<0) return null;
-  if(fc.lab && (sx.lab||'').indexOf(fc.lab)<0) return null;
+  // `has:` asks for models holding an element of that type, and then `id:` and `label:` describe that
+  // element rather than anything anywhere in the model: `has:attachment label:passport` is the form with
+  // an attachment captioned Passport, not a form with an attachment and, somewhere else, the word.
+  const els=fc.has?hasElements(sx, fc):null;
+  if(els && !els.length) return null;
+  if(!els && fc.lab && (sx.lab||'').indexOf(fc.lab)<0) return null;
   if(fc.desc && (sx.desc||'').indexOf(fc.desc)<0) return null;
-  if(fc.id && (sx.ids||'').indexOf(fc.id)<0) return null;
+  if(!els && fc.id && (sx.ids||'').indexOf(fc.id)<0) return null;
   if(fc.section && (sx.section||'').toLowerCase().indexOf(fc.section)<0) return null;
   let score=0;
   const fields={};
+  // the model with five such elements is likelier the one meant than the model with one
+  if(els) score+=Math.min(els.length, 20)*5;
   for(let i=0;i<parsed.phrases.length;i++){
     const ph=parsed.phrases[i];
     let sc=0, fld='';
@@ -8311,6 +8608,18 @@ function searchIndex(n){
     (d.restCalls||[]).forEach(r=>ids.push(r.where));
   }
   (d.ioParameters||[]).forEach(p=>ids.push(p.element));
+  // What `has:` reads: every element with its type spelled every way a reader may type it — the
+  // identifier the model stores (`scriptButton`, `serviceTask/http`) and the word Design's palette shows
+  // (`Expression button`, `HTTP task`), the latter also run together so `has:expressionbutton` works.
+  // A form's components are its elements too; its ids and captions already reach the haystacks through
+  // `fields` above, so they are only looked up here.
+  const typed=els||((n.type==='form'||n.type==='page')?SX_ENV.elementNames(n):null);
+  const elx=typed?[...typed.entries()].map(([id,e])=>{
+    const word=String(SX_ENV.elTerm(e.type, e.sub)||'');
+    const ty=[e.type, e.sub?e.type+'/'+e.sub:'', e.sub||'', word, word.replace(/[\s-]+/g,'')]
+      .filter(Boolean).join('\n').toLowerCase();
+    return {id, ty, word, idl:String(id).toLowerCase(), lab:String(e.name||'').toLowerCase(), name:e.name||''};
+  }):[];
   const entries=[], labs=[], descs=[];
   for(const k in d){ if(!HAY_SKIP.has(k)) walkHay(d[k], k, null, entries, labs, descs); }
   // The label people mean first is the node's own, and the walk only ever sees node.data — unless this
@@ -8337,6 +8646,7 @@ function searchIndex(n){
     name, key, file, mem,
     lab:labRaw.toLowerCase(), desc:descRaw.toLowerCase(),
     ids:ids.filter(x=>x!=null&&x!=='').join(' ').toLowerCase(),
+    els:elx,
     // Both the internal type and the Design wording, so `t:do`, `t:dataobject` and `t:data` all work.
     type:(n.type+' '+(tm[0]||'')).toLowerCase(),
     section:n.type==='external'?(d.flowableApi?'Integration':'Other'):(tm[1]||'Other'),
@@ -8358,6 +8668,12 @@ function paramHaystack(p){ return (p.source||'')+' '+(p.target||'')+' '+(p.eleme
 // `fields` is the winning-field set from scoreIndex: a pure name/key hit needs no explanation.
 function matchWhere(n,parsed,fields){
   if(!parsed||parsed.empty) return null;
+  // A `has:` search asked for an element of a type, so the answer is the first such element — named by
+  // Design's word for its type and its caption, and handed back so the row opens on it.
+  if(parsed.facets&&parsed.facets.has){
+    const e=hasElements(searchIndex(n), parsed.facets)[0];
+    if(e) return {hint:(e.word||e.ty.split('\n')[0])+' · '+(e.name||e.id)+(e.name?' @'+e.id:''), el:String(e.id)};
+  }
   // An `id:` search asked for one element by name, so the answer is that element — named in original
   // case, because `el` has to match the row's `data-el` for the panel to open it.
   const fid=parsed.facets&&parsed.facets.id;
@@ -8423,6 +8739,7 @@ function matchWhere(n,parsed,fields){
 /*__SEARCH_CORE_END__*/
 SX_ENV.TM=TM;
 SX_ENV.elementNames=elementNames;
+SX_ENV.elTerm=elementTypeLabel;
 
 // ---------- glue between the pure engine and the app (globals live out here on purpose) ----------
 /** Score one node against a parsed query. The ranking itself is in the engine above. */
@@ -8648,6 +8965,7 @@ const PAL_FACET_HELP=[
   {k:'desc',   t:'desc:',  re:'description|desc|doc', gloss:'description', hint:'Only the prose the modeller wrote — documentation, descriptions, annotations'},
   {k:'key',    t:'key:',   re:'key',                  gloss:'model key',   hint:'The model key'},
   {k:'id',     t:'id:',    re:'id',                   gloss:'element id',  hint:'Element ids — a button, a task, a mapping target'},
+  {k:'has',    t:'has:',   re:'has',                  gloss:'element type',hint:'Models holding an element of that type — has:attachment, has:"start event", has:"expression button". With id: or label:, that same element must match them'},
   {k:'type',   t:'type:',  re:'t|type',               gloss:'e.g. form',   hint:'Kind of node — type:form, type:process, type:dataObject (t: for short)'},
   {k:'file',   t:'file:',  re:'file',                 gloss:'path',        hint:'Source file path'},
   {k:'section',t:'in:',    re:'in',                   gloss:'section',     hint:'Result section — in:Models, in:Code'},
@@ -8746,7 +9064,7 @@ function palRenderFacets(counts, total, typeCounts, parsed){
  *  means "I picked the other one", and `label: desc:` would parse `desc:` as label's value. */
 function palWireSyntax(bar){
   bar.querySelectorAll('[data-syn]').forEach(b=>b.onclick=()=>{
-    const v=palq.value.replace(/(^|\s)(description|label|type|desc|file|doc|key|in|id|t):\s*$/i,'$1').replace(/\s+$/,'');
+    const v=palq.value.replace(new RegExp('(^|\\s)('+SX_FACET_ALT+'):\\s*$','i'),'$1').replace(/\s+$/,'');
     palq.value=(v?v+' ':'')+b.dataset.syn;
     palShown=PAL_PAGE; palAuto=true; palMarksClear(); _palNote='';
     palRender(); palq.focus();
@@ -8788,7 +9106,7 @@ function palEmptyHtml(parsed, hidden){
     '<div class="pal-tip">Every word has to match, in any order. Searched: names, keys, labels and '+
     'descriptions, files, element ids, script bodies, documentation, conditions, endpoints, groups. '+
     'Narrow with <code>label:</code> <code>desc:</code> <code>key:</code> <code>id:</code> '+
-    '<code>type:</code> <code>file:</code> <code>in:</code>; quote <code>"…"</code> for an exact '+
+    '<code>has:</code> <code>type:</code> <code>file:</code> <code>in:</code>; quote <code>"…"</code> for an exact '+
     'phrase — alone, or as a facet value: <code>label: "Customer name"</code>. '+
     'Open this search anywhere with <code>/</code> or '+MODK+'K.</div></div>';
 }

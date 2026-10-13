@@ -123,6 +123,18 @@
     ],
     [
       {"id": "internalNote", "type": "textarea", "label": "Internal note", "enabled": "{{isSupervisor}}"}
+    ],
+    [
+      {"id": "invoiceCopy", "type": "upload", "label": "Invoice copy"},
+      {"id": "discountRate", "type": "number", "label": "Discount rate", "extraSettings": {"numberType": "float"}}
+    ],
+    [
+      {
+        "id": "resetTotal",
+        "type": "scriptButton",
+        "value": "{{}}",
+        "extraSettings": {"text": "Reset total", "script": "{{amount > 0}}"}
+      }
     ]
   ],
   "outcomes": [

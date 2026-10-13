@@ -358,8 +358,9 @@
     "hardcodedSecrets": 1,
     "invalidExpr": 2,
     "missingRefs": 1,
-    "open": 17,
+    "open": 18,
     "parseIssues": 1,
+    "payloadOverwrite": 1,
     "schemaGaps": 1,
     "scriptIssues": 2,
     "unguardedTasks": 2,
@@ -658,6 +659,17 @@
       "severity": "error"
     },
     {
+      "check": "payloadOverwrite",
+      "element": "resetTotal",
+      "file": "forms/order-form.form",
+      "label": "Order Form",
+      "message": "Expression button `resetTotal` stores its result in `{{}}`, which names no variable — pressing it replaces the whole payload",
+      "node": "form:orderForm",
+      "severity": "warning",
+      "snippet": "{{}}",
+      "subject": "resetTotal"
+    },
+    {
       "check": "schemaGaps",
       "file": "services/customer.service",
       "label": "Customer Service",
@@ -753,7 +765,8 @@
           "binding:{{customer}}",
           "binding:{{endpoints.baseUrl}}",
           "binding:{{isSupervisor}}",
-          "binding:{{orderTotal}}"
+          "binding:{{orderTotal}}",
+          "binding:{{}}"
         ],
         "serviceOperation": [
           "serviceOperation:customerService#findAll"
@@ -762,7 +775,9 @@
           "variable:amount",
           "variable:customer",
           "variable:customerRecord",
+          "variable:discountRate",
           "variable:internalNote",
+          "variable:invoiceCopy",
           "variable:isSupervisor",
           "variable:orderTotal"
         ]
@@ -907,6 +922,14 @@
           "value": null
         },
         {
+          "id": "discountRate",
+          "label": "Discount rate",
+          "required": false,
+          "type": "number",
+          "value": null,
+          "variant": "float"
+        },
+        {
           "id": "internalNote",
           "label": "Internal note",
           "required": false,
@@ -914,6 +937,13 @@
             "enabled": "{{isSupervisor}}"
           },
           "type": "textarea",
+          "value": null
+        },
+        {
+          "id": "invoiceCopy",
+          "label": "Invoice copy",
+          "required": false,
+          "type": "upload",
           "value": null
         },
         {
@@ -928,6 +958,18 @@
           "stores": "{{orderTotal}}",
           "type": "scriptButton",
           "value": "{{orderTotal}}"
+        },
+        {
+          "id": "resetTotal",
+          "label": "Reset total",
+          "replacesPayload": true,
+          "required": false,
+          "settings": {
+            "script": "{{amount > 0}}"
+          },
+          "stores": "{{}}",
+          "type": "scriptButton",
+          "value": "{{}}"
         },
         {
           "id": "shipTo.deliveryCity",
@@ -1603,7 +1645,8 @@
               "binding:{{customer}}",
               "binding:{{endpoints.baseUrl}}",
               "binding:{{isSupervisor}}",
-              "binding:{{orderTotal}}"
+              "binding:{{orderTotal}}",
+              "binding:{{}}"
             ],
             "serviceOperation": [
               "serviceOperation:customerService#findAll"
@@ -1612,7 +1655,9 @@
               "variable:amount",
               "variable:customer",
               "variable:customerRecord",
+              "variable:discountRate",
               "variable:internalNote",
+              "variable:invoiceCopy",
               "variable:isSupervisor",
               "variable:orderTotal"
             ]
@@ -1757,6 +1802,14 @@
               "value": null
             },
             {
+              "id": "discountRate",
+              "label": "Discount rate",
+              "required": false,
+              "type": "number",
+              "value": null,
+              "variant": "float"
+            },
+            {
               "id": "internalNote",
               "label": "Internal note",
               "required": false,
@@ -1764,6 +1817,13 @@
                 "enabled": "{{isSupervisor}}"
               },
               "type": "textarea",
+              "value": null
+            },
+            {
+              "id": "invoiceCopy",
+              "label": "Invoice copy",
+              "required": false,
+              "type": "upload",
               "value": null
             },
             {
@@ -1778,6 +1838,18 @@
               "stores": "{{orderTotal}}",
               "type": "scriptButton",
               "value": "{{orderTotal}}"
+            },
+            {
+              "id": "resetTotal",
+              "label": "Reset total",
+              "replacesPayload": true,
+              "required": false,
+              "settings": {
+                "script": "{{amount > 0}}"
+              },
+              "stores": "{{}}",
+              "type": "scriptButton",
+              "value": "{{}}"
             },
             {
               "id": "shipTo.deliveryCity",
@@ -4829,6 +4901,49 @@
           "readCount": 1,
           "reads": [
             {
+              "element": "discountRate",
+              "elementName": "Discount rate",
+              "elementType": "number",
+              "model": "form:orderForm",
+              "via": "formField"
+            }
+          ],
+          "scopes": [
+            "form"
+          ],
+          "usages": [
+            {
+              "model": "form:orderForm",
+              "snippets": [
+                "(form field)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "form:orderForm"
+          ],
+          "writeCount": 1,
+          "writes": [
+            {
+              "element": "discountRate",
+              "elementName": "Discount rate",
+              "elementType": "number",
+              "model": "form:orderForm",
+              "via": "formField"
+            }
+          ]
+        },
+        "file": null,
+        "id": "variable:discountRate",
+        "key": "discountRate",
+        "label": "discountRate",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 1,
+          "reads": [
+            {
               "element": "internalNote",
               "elementName": "Internal note",
               "elementType": "textarea",
@@ -4865,6 +4980,49 @@
         "id": "variable:internalNote",
         "key": "internalNote",
         "label": "internalNote",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 1,
+          "reads": [
+            {
+              "element": "invoiceCopy",
+              "elementName": "Invoice copy",
+              "elementType": "upload",
+              "model": "form:orderForm",
+              "via": "formField"
+            }
+          ],
+          "scopes": [
+            "form"
+          ],
+          "usages": [
+            {
+              "model": "form:orderForm",
+              "snippets": [
+                "(form field)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "form:orderForm"
+          ],
+          "writeCount": 1,
+          "writes": [
+            {
+              "element": "invoiceCopy",
+              "elementName": "Invoice copy",
+              "elementType": "upload",
+              "model": "form:orderForm",
+              "via": "formField"
+            }
+          ]
+        },
+        "file": null,
+        "id": "variable:invoiceCopy",
+        "key": "invoiceCopy",
+        "label": "invoiceCopy",
         "type": "variable"
       },
       {
@@ -5793,6 +5951,18 @@
       {
         "data": {
           "usedBy": [
+            "form:orderForm"
+          ]
+        },
+        "file": null,
+        "id": "binding:{{}}",
+        "key": "{{}}",
+        "label": "{{}}",
+        "type": "binding"
+      },
+      {
+        "data": {
+          "usedBy": [
             "page:orderPage"
           ]
         },
@@ -6705,7 +6875,8 @@
     "{{openOrderCount}}",
     "{{orderId}}",
     "{{orderTotal}}",
-    "{{priority}}"
+    "{{priority}}",
+    "{{}}"
   ],
   "policies": [
     {
@@ -7882,7 +8053,7 @@
   "stats": {
     "advice": 8,
     "archives": 1,
-    "defects": 9,
+    "defects": 10,
     "dynamicEdges": 0,
     "edges": 64,
     "endpoints": 2,
@@ -7891,7 +8062,7 @@
     "java": 3,
     "modelCount": 27,
     "models": 27,
-    "nodes": 116,
+    "nodes": 119,
     "scriptIssues": 2,
     "suspectEdges": 0
   },

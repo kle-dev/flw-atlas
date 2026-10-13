@@ -273,6 +273,35 @@ class FindingsTest {
     }
 
     @Test
+    fun aButtonThatReplacesThePayloadIsReportedOnTheButton() {
+        fun btn(id: String, type: String, value: String?, vararg settings: Pair<String, Any?>) =
+            linkedMapOf<String, Any?>("id" to id, "type" to type, "value" to value, "replacesPayload" to true)
+                .apply { if (settings.isNotEmpty()) put("settings", mapOf(*settings)) }
+        val r = run(listOf(
+            node("form:f", "form", data = mapOf("fields" to listOf(
+                btn("clear", "scriptButton", "{{}}"),
+                btn("score", "restButton", null, "autoExecute" to true),
+                btn("sum", "scriptButton", "{{a + b}}", "autoExecute" to "{{a}}"),
+                mapOf("id" to "fine", "type" to "scriptButton", "value" to "{{total}}"),
+            ))),
+            // a page is the same component model, and it is never an "unused form"
+            node("page:p", "page", data = mapOf("fields" to listOf(btn("reset", "scriptButton", "{{ }}")))),
+        ), edges = listOf(mapOf("s" to "process:x", "t" to "form:f", "rel" to "humanTask-form")))
+        val found = findings(r).filter { it["check"] == "payloadOverwrite" }
+        assertEquals(listOf("clear", "reset", "score", "sum"), found.map { it["element"] }.sortedBy { it.toString() })
+        val msg = found.associate { it["element"] to it["message"].toString() }
+        assertEquals("Expression button `clear` stores its result in `{{}}`, which names no variable — " +
+            "pressing it replaces the whole payload", msg["clear"])
+        assertEquals("REST button `score` has no value to store its response in — it runs as the form opens " +
+            "and replaces the whole payload", msg["score"])
+        assertTrue(msg.getValue("sum").contains("which is not a variable path — pressing it, or its automatic run,"))
+        // the binding itself is the snippet, so the row shows the expression that is wrong
+        assertEquals("{{}}", found.single { it["element"] == "clear" }["snippet"])
+        assertEquals(4, checks(r)["payloadOverwrite"])
+        assertTrue(findings(r).none { it["check"] == "unusedForms" })
+    }
+
+    @Test
     fun aDecisionNothingCallsIsReported() {
         val r = run(
             nodes = listOf(node("decision:orphan", "decision"), node("decision:used", "decision"),

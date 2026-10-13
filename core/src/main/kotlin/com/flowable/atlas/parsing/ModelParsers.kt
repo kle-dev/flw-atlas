@@ -490,6 +490,7 @@ object ModelParsers {
                     if (truthy(t) && t != label) i18nLabels.add(linkedMapOf("locale" to loc, "label" to t))
                 }
                 if (i18nLabels.isNotEmpty()) component["i18nLabels"] = i18nLabels
+                paletteVariant(ftype, objOf(n["extraSettings"]))?.let { component["variant"] = it }
                 // A select/radio's static options are the values the field can take — read both
                 // persisted homes (component-level and extraSettings; either may hold the list).
                 val opts = (n["options"] as? List<*> ?: objOf(n["extraSettings"])?.get("options") as? List<*>)
@@ -535,6 +536,7 @@ object ModelParsers {
                 if (ftype in RESULT_BINDING_TYPES) {
                     val target = (n["value"] as? String)?.takeIf { it.contains("{{") }
                     if (target != null) component["stores"] = target
+                    if (replacesPayload(ftype, n)) component["replacesPayload"] = true
                     bindingRoot(target)?.let { root ->
                         ctx.addVar(key, root, "form_field_use")
                         ctx.addVarSite(key, root, Ctx.WRITE, ftype, n["id"], label, ftype)
@@ -888,6 +890,42 @@ object ModelParsers {
     internal fun modelRefKey(v: Any?): Any? = if (v is Map<*, *>) v["key"] else v
 
     /** The variable root a `{{binding}}` names, or null when the value is an expression, not a target. */
+    /**
+     * Which of two palette entries a component came from, where both save the same `type`: Design's Number
+     * and Decimal are both `number` (`numberType` integer / float), Select (single) and Select (multiple)
+     * both `select`. Without it every decimal field reads as a Number, and "which forms have a decimal?"
+     * has no answer. Null for every other component.
+     */
+    private fun paletteVariant(type: String, es: Map<String, Any?>?): String? = when (type) {
+        "number" -> (es?.get("numberType") as? String)?.takeIf { it == "integer" || it == "float" }
+        "select" -> if (es?.get("multi") == true || es?.get("multi") == "true") "multi" else null
+        else -> null
+    }
+
+    /**
+     * The binding the forms runtime turns into the path a component writes to: braces around nothing but a
+     * path. It is the runtime's own test, character class included — `{{a + b}}` and `{{my-total}}` fail it.
+     */
+    private val PLAIN_BINDING = Regex("^\\{\\{[\$\\w.\\[\\]\\s]+\\}\\}$")
+
+    /**
+     * Whether pressing this result-storing button writes over the whole payload rather than one value in it.
+     *
+     * The runtime derives the write path from `value`, and only from a plain binding with something inside
+     * it. `{{}}`, `{{ }}`, an expression, a literal or no value at all name no path, so the result is
+     * written to the root of whatever the button sits in: the form's whole payload, or a bound panel's or
+     * subform's whole value — replaced, not merged, even when the result is `undefined`. A button meant
+     * only to *do* something still stores what it computed, so `{{}}` there deletes the form's data. A REST
+     * button with a response map is the exception: it writes each mapped name instead of its response, and
+     * an empty map writes nothing.
+     */
+    private fun replacesPayload(type: String, n: Map<String, Any?>): Boolean {
+        val responseMap = objOf(n["extraSettings"])?.get("responsePayloadMapping")
+        if (type == "restButton" && (responseMap is List<*> || responseMap is String && responseMap.isNotEmpty())) return false
+        val value = n["value"] as? String ?: return true
+        return !PLAIN_BINDING.matches(value) || value.removeSurrounding("{{", "}}").isBlank()
+    }
+
     private fun bindingRoot(value: Any?): String? {
         val raw = (value as? String)?.trim() ?: return null
         if (!raw.startsWith("{{") || !raw.endsWith("}}")) return null

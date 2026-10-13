@@ -955,6 +955,19 @@
   .pagebar{margin:var(--space-4) 0 var(--space-1)}
   .toolrow{display:flex;flex-wrap:wrap;gap:var(--space-15)}
   .card-vars{display:inline-flex;flex-wrap:wrap;gap:var(--space-15);font-size:var(--text-xs)}
+  /* the Elements page: Design's palette as rows of chips under a group heading, then what a pick holds */
+  .elpal{display:grid;gap:var(--space-4);margin:var(--space-4) 0 var(--space-5)}
+  .elpal-h{font-weight:600;font-size:var(--text-sm);margin-bottom:var(--space-15)}
+  .elpal-h .muted{font-weight:400}
+  .elpal-row{display:grid;grid-template-columns:minmax(9ch,13ch) minmax(0,1fr);gap:var(--space-2);align-items:baseline;padding:var(--space-05) 0}
+  .elpal-c{font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.04em;color:var(--ink-faint);font-weight:500}
+  .elpal-chips{display:flex;flex-wrap:wrap;gap:var(--space-15);min-width:0}
+  .el-sel{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-15);margin:var(--space-4) 0 var(--space-2)}
+  .el-sel-t{font-weight:600}
+  .elrow{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);padding:var(--space-05) 0;min-width:0}
+  .el-val{color:var(--ink-dim);overflow-wrap:anywhere}
+  .el-pick{margin:var(--space-3) 0}
+  @media (max-width:640px){ .elpal-row{grid-template-columns:minmax(0,1fr)} }
   /* ---- copy-to-clipboard icon button (keys, values, "used by" badges) ---- */
   .cpy{display:inline-flex;align-items:center;justify-content:center;flex:none;width:20px;height:20px;padding:0;
     margin-left:var(--space-1);vertical-align:middle;line-height:0;background:transparent;

@@ -111,8 +111,18 @@ object Findings {
                         )
                     }
                 }
-                "form" -> if (n["id"] !in referenced) {
-                    add("unusedForms", WARNING, n, "no model or code references this form")
+                "form", "page" -> {
+                    if (n["type"] == "form" && n["id"] !in referenced) {
+                        add("unusedForms", WARNING, n, "no model or code references this form")
+                    }
+                    for (f in (data["fields"] as? List<*>).orEmpty()) {
+                        val field = f as? Map<String, Any?> ?: continue
+                        if (field["replacesPayload"] != true) continue
+                        val id = field["id"]?.toString() ?: continue
+                        add("payloadOverwrite", WARNING, n, payloadOverwriteMessage(field, id),
+                            element = id, subject = id,
+                            snippet = (field["value"] as? String)?.takeIf { it.isNotEmpty() })
+                    }
                 }
                 "liquibase" -> {
                     val authority = data["authority"] as? Map<String, Any?> ?: continue
@@ -598,6 +608,29 @@ object Findings {
                 report("implicitSplit", "`$what` has ${outs.size} outgoing flows and no gateway — $how", id)
             }
         }
+    }
+
+    /**
+     * Why one button writes over the payload, in the words its value gives: an empty binding, no value, or
+     * one that is not a path. What the button is goes first, by Design's name — the id alone does not say
+     * whether it computes something or calls something.
+     */
+    private fun payloadOverwriteMessage(field: Map<String, Any?>, id: String): String {
+        val rest = field["type"] == "restButton"
+        val what = if (rest) "REST button" else "Expression button"
+        val value = (field["value"] as? String)?.takeIf { it.isNotEmpty() }
+        val target = when {
+            value == null -> "has no value to store its ${if (rest) "response" else "result"} in"
+            value.removeSurrounding("{{", "}}").isBlank() -> "stores its ${if (rest) "response" else "result"} in `$value`, which names no variable"
+            else -> "stores its ${if (rest) "response" else "result"} in `$value`, which is not a variable path"
+        }
+        // A conditional auto-execute (`{{customer}}`) may or may not fire on its own, so it is not stated as fact.
+        val effect = when ((field["settings"] as? Map<*, *>)?.get("autoExecute")) {
+            true, "true" -> "it runs as the form opens and replaces the whole payload"
+            is String -> "pressing it, or its automatic run, replaces the whole payload"
+            else -> "pressing it replaces the whole payload"
+        }
+        return "$what `$id` $target — $effect"
     }
 
     /**

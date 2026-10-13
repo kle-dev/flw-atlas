@@ -1735,6 +1735,42 @@ const probe = `<script>
   steps.push(()=>{
     ok('the tree route brings its lens back', state.view==='tree' && !!document.querySelector('#view-tree .pchip.on[data-lens="all"]'), location.hash);
     ok('the crumb names the tree', (document.getElementById('crumbs').textContent||'').indexOf('Reference tree')>=0);
+    location.hash='#/elements';
+  });
+
+  // --- the Elements page: Design's palette entries, and a pick lists every model holding one ---
+  steps.push(()=>{
+    const v=document.getElementById('view-elements');
+    ok('the elements route renders', state.view==='elements' && !v.hidden, state.view);
+    ok('its sidebar entry is the active one', !!document.querySelector('#nav .side-item.on[data-route="/elements"]'));
+    const up=v.querySelector('.pchip[data-elt="form:upload"]');
+    ok('an upload component is listed by its Design name', !!up && up.textContent.indexOf('Attachment')>=0, up?up.textContent:'(no chip)');
+    ok('a float number is listed as a Decimal', !!v.querySelector('.pchip[data-elt="form:number/float"]'));
+    ok('a BPMN element sits under its palette group', [...v.querySelectorAll('.elpal-row')].some(r=>
+      (r.querySelector('.elpal-c')||{}).textContent==='Start events' && !!r.querySelector('.pchip[data-elt="process:startEvent"]')));
+    click(v.querySelector('.pchip[data-elt="form:scriptButton"]'));
+  });
+  steps.push(()=>{
+    const v=document.getElementById('view-elements');
+    ok('a pick rides in the URL', decodeURIComponent(location.hash).indexOf('t=form:scriptButton')>=0, location.hash);
+    const els=[...v.querySelectorAll('.elrow')];
+    ok('a pick lists the elements of that type', els.length===2, els.length+' rows');
+    const reset=els.find(r=>r.querySelector('[data-goto-el="resetTotal"]'));
+    ok('an element shows the value it stores and its open finding',
+      !!reset && reset.textContent.indexOf('{{}}')>=0 && !!reset.querySelector('.pill'), reset?reset.textContent:'(no row)');
+    ok('the crumb names the pick', (document.getElementById('crumbs').textContent||'').indexOf('Expression button')>=0);
+    location.hash='#/elements&t=form:upload';
+  });
+  steps.push(()=>{
+    const v=document.getElementById('view-elements');
+    ok('a pick in the URL is restored', !!v.querySelector('.pchip.on[data-elt="form:upload"]') && v.querySelectorAll('.elrow').length===1);
+    location.hash='#/overview';
+    openPalette('{{}}');
+  });
+  steps.push(()=>{
+    ok('a search for {{}} finds the form whose button stores into it', rows().some(r=>r.textContent.indexOf('Order Form')>=0),
+      rows().map(r=>r.textContent.slice(0,40)).join(' | ')||'(no rows)');
+    closePalette();
   });
   let i=0;(function run(){
     if(i>=steps.length){

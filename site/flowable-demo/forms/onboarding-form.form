@@ -82,6 +82,17 @@
     ],
     [
       {
+        "id": "checkVolume",
+        "type": "scriptButton",
+        "value": "{{}}",
+        "extraSettings": {
+          "text": "Check volume",
+          "script": "{{expectedVolume > 10000}}"
+        }
+      }
+    ],
+    [
+      {
         "id": "confirmButton",
         "type": "workAction",
         "label": "Confirm onboarding",
