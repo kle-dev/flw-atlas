@@ -56,7 +56,11 @@ object OryxFormReader {
         "query-url" to "queryUrl", "lookup-url" to "lookupUrl", "query-params" to "queryParams", "path" to "path",
         "datasource" to "dataSource", "table-key" to "tableKey", "link-target" to "target",
         "options" to "options", "options-run" to "optionsExpression", "modelevents" to "events",
-        "custom-validations" to "customValidations", "default-value" to "defaultValue",
+        "default-value" to "defaultValue",
+        // the validation rules, where the palette puts them (`extraSettings.min`, …)
+        "min-value" to "min", "max-value" to "max", "min-length" to "minLength", "max-length" to "maxLength",
+        "min-children" to "minItems", "max-children" to "maxItems", "min-files" to "minFiles", "max-files" to "maxFiles",
+        "min-date" to "minDate", "max-date" to "maxDate", "fraction-size" to "fractionSize", "format" to "format",
         "data-object-data-table-view-form" to "dataObjectDataTableViewFormKey",
         "data-object-data-table-edit-form" to "dataObjectDataTableEditFormKey",
         "data-object-data-table-create-form" to "dataObjectDataTableCreateFormKey",
@@ -76,6 +80,7 @@ object OryxFormReader {
     private val NODE_KEYS: Map<String, String> = mapOf(
         "value" to "value", "visible" to "visible", "enabled" to "enabled", "ignored" to "ignore",
         "required" to "isRequired", "description" to "description", "tooltip" to "tooltip", "placeholder" to "placeholder",
+        "validation-regexp" to "validationRegExp", "validation-mask" to "validationMask",
     )
 
     private val STENCILS_WITH_ROW_LINK = setOf("cloud-datatable", "base-datatable", "data-object-datatable")
@@ -95,6 +100,9 @@ object OryxFormReader {
             out["outcomes"] = oc.map { o -> LinkedHashMap<String, Any?>(o).also { it.remove("\$\$hashKey") } }
         }
         str(root["outcomevariablename"])?.let { out["outcomevariablename"] = it }
+        if (root["do-not-create-outcome-variable"] == true || str(root["do-not-create-outcome-variable"]) == "true") {
+            out["doNotCreateOutcomeVariable"] = true
+        }
         str(root["description"])?.let { out["description"] = it }
         out["components"] = children(body)
         return out
@@ -117,6 +125,9 @@ object OryxFormReader {
             val v = str(props["$from-run"])?.takeIf { it.isNotBlank() } ?: props[from]
             if (v != null && v != "") n[to] = v
         }
+        // Custom validations sit on the component itself, as the palette (and the form runtime) has them —
+        // not under `extraSettings`, where the modern reader would never look.
+        items(props["custom-validations"])?.takeIf { it.isNotEmpty() }?.let { n["customValidations"] = it }
         stencilId?.let { n["designInfo"] = linkedMapOf("stencilId" to it) }
         i18n(props)?.let { n["i18n"] = it }
 

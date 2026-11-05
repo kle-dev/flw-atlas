@@ -36,6 +36,8 @@ class MarkdownHygieneTest {
             "summary.md" to SummaryRenderer.render(result, fixtureDir),
             "overview.md" to OverviewRenderer.render(result, fixtureDir),
             "CLAUDE.md" to ClaudeRenderer.render(result, fixtureDir),
+            "playwright.md" to PlaywrightRenderer.render(result, fixtureDir),
+            "playwright-map.md" to PlaywrightRenderer.renderMap(result, fixtureDir),
         )
         val hits = ArrayList<String>()
         for ((name, text) in artifacts) {

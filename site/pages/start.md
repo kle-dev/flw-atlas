@@ -68,8 +68,9 @@ download instead.
 ./atlas ~/projects/order-management
 ```
 
-Atlas walks the project, resolves every relationship it can, and writes five files to
-`./atlas-output/order-management/` before opening the explorer in your browser:
+Atlas walks the project, resolves every relationship it can, and writes six artifacts to
+`./atlas-output/order-management/` — the guide for driving Flowable Work comes as two files — before
+opening the explorer in your browser:
 
 ```
 order-management.explorer.html   ← opens automatically
@@ -77,6 +78,8 @@ order-management.summary.md
 order-management.overview.md
 order-management.graph.json
 order-management.CLAUDE.md
+order-management.playwright.md
+order-management.playwright-map.md
 ```
 
 The last line on stderr is the health check, and it is the first thing worth reading:

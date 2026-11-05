@@ -410,21 +410,39 @@ object ModelParsers {
         val variables = objOf(doc["variables"]) ?: emptyMap()
         val key = doc["key"]
         val childModels = (design["childModels"] as? List<*>) ?: emptyList<Any?>()
+        // A deployed `.app` lists its pages under `pageModels`; a Design-workspace app body (the legacy
+        // export) under `pages`, with the same `key` / `label` / `url` per page.
+        val pageList = listOfObjs(doc["pageModels"]).ifEmpty { listOfObjs(doc["pages"]) }
         val info = linkedMapOf<String, Any?>(
             "key" to key, "name" to doc["name"], "file" to ffile,
             "description" to doc["description"], "theme" to doc["theme"],
             "paletteDefinitionCategory" to doc["paletteDefinitionCategory"],
             "usersAccess" to doc["usersAccess"], "groupsAccess" to doc["groupsAccess"],
             "variables" to variables.entries.map { linkedMapOf("key" to it.key, "type" to objOf(it.value)?.get("type")) },
-            "pages" to listOfObjs(doc["pageModels"]).map { linkedMapOf("key" to it["key"], "access" to it["accessPermissions"]) },
+            // What a user sees and types: the sidebar shows a page's `label`, and the route is
+            // `#/<app url>/<page url>` — each segment the model's `url`, else its key.
+            "pages" to pageList.map { p ->
+                linkedMapOf<String, Any?>("key" to p["key"], "access" to p["accessPermissions"]).apply {
+                    for (k in listOf("label", "url")) (p[k] as? String)?.trim()?.ifEmpty { null }?.let { put(k, it) }
+                }
+            },
             "childModels" to childModels,
         )
+        // Only a `flowApp` is a sidebar entry in Work (the platform's flow-apps list filters on it); the
+        // others are deployment units whose cases and processes are reached through the create dialog.
+        // `url` is the app's route segment, `order` its place in the sidebar. Recorded only when set.
+        when (val fa = doc["flowApp"]) {
+            is Boolean -> info["flowApp"] = fa
+            is String -> fa.trim().lowercase().takeIf { it == "true" || it == "false" }?.let { info["flowApp"] = it == "true" }
+        }
+        (doc["url"] as? String)?.trim()?.ifEmpty { null }?.let { info["url"] = it }
+        doc["order"]?.takeIf { it is Number || (it is String && it.isNotBlank()) }?.let { info["order"] = it }
         for (cm in childModels.mapNotNull { objOf(it) }) {
             val modelKind = if (truthy(cm["type"])) cm["type"].toString() else "?"
             ctx.addRef(key, "app", ffile, "contains", "model:$modelKind", cm["key"])
         }
         ctx.addAccess(key, "app", "app", "open-app", doc["groupsAccess"], doc["usersAccess"])
-        for (p in listOfObjs(doc["pageModels"])) {
+        for (p in pageList) {
             ctx.addAccess(p["key"] ?: key, "page", "page", "view", p["accessPermissions"])
             // pages listed only under pageModels (not in extension.design.childModels) still
             // belong to the app — dedupe/edge-dedupe absorbs the overlap when both are present
@@ -454,17 +472,45 @@ object ModelParsers {
             "ioParameters" to ioParameters, "restCalls" to restCalls,
         )
         withDesc(info, doc, meta)
+        // The Design version the form was saved with. The form runtime greys outcomes out on an invalid
+        // form only from 3080 (Design 3.8) on; below that, or without a version — a hand-written form —
+        // an outcome is as enabled as its own `enabled` says. MiniJson reads every number as a Double, and
+        // a deployment may carry it as a string, hence the two shapes.
+        when (val v = meta["flowableDesignVersion"]) {
+            is Number -> v.toInt()
+            is String -> v.trim().toIntOrNull()
+            else -> null
+        }?.let { info["designVersion"] = it }
+        // No outcome variable at all: pressing an outcome then steers nothing a sentry or gateway can read.
+        if (doc["doNotCreateOutcomeVariable"] == true || (doc["doNotCreateOutcomeVariable"] as? String)?.trim()?.equals("true", true) == true) {
+            info["doNotCreateOutcomeVariable"] = true
+        }
         for (oc in listOfObjs(doc["outcomes"])) {
-            outcomes.add(linkedMapOf("value" to oc["value"], "label" to oc["label"]))
+            val rec = linkedMapOf("value" to oc["value"], "label" to oc["label"])
+            // An outcome is greyed out until the form is valid unless it says otherwise: its own `enabled`
+            // replaces that gate, `ignoreValidation` lifts it, and `visible` can hide it. Kept only when set.
+            for ((k, default) in listOf("visible" to true, "enabled" to null, "ignoreValidation" to false)) {
+                val v = oc[k]?.let { if (it is String && it.trim().lowercase() in setOf("true", "false")) it.trim().toBoolean() else it }
+                if (v != null && v != "" && v != default) rec[k] = v
+            }
+            // where Work goes after the outcome was pressed — the next screen is then not the next task
+            (oc["navigationUrl"] as? String)?.trim()?.ifEmpty { null }?.let { rec["navigationUrl"] = it }
+            outcomes.add(rec)
             ctx.addRef(key, mtype, ffile, "outcome-form", "form", oc["outcomeFormKey"])
         }
         // the variable the chosen outcome is stored in (the key is all-lowercase in the model JSON)
+        // — on the record too: a gateway or sentry that branches on the outcome reads this name, and
+        // whoever has to pick the outcome that leads somewhere needs to know which name to look for
+        if (truthy(doc["outcomevariablename"])) info["outcomeVariableName"] = doc["outcomevariablename"]
         ctx.addVar(key, doc["outcomevariablename"])
         ctx.addVarSite(key, doc["outcomevariablename"], Ctx.WRITE, "formOutcome", elementType = "form")
         // Which button the user pressed is what the Work UI shows in a task list and what a query filters
         // on, so an outcome variable no flow condition reads is not evidence of anything. Recording the
         // write but not claiming to know its readers is the honest half.
         ctx.markReadsUnknown(doc["outcomevariablename"])
+        // the date format a date field without its own falls back to
+        (doc["defaultDateFormat"] as? String)?.trim()?.ifEmpty { null }?.let { info["defaultDateFormat"] = it }
+        val containerGates = containerGatesOf(doc)
         fun visit(n: Map<String, Any?>) {
             // The component's own record, kept mutable: what a *button* does lives in `extraSettings`,
             // which this walk only reaches further down.
@@ -505,6 +551,14 @@ object ModelParsers {
                 // hidden button, and 252 of 338 buttons in one real project are `visible: false` (the
                 // auto-executing worker pattern), which a reader has no way to guess.
                 gatingOf(n)?.let { component["settings"] = it }
+                // The rules a value must pass besides `required` — a pattern, a range, a length, a date
+                // window, a custom check. Without them the only way to learn that a policy number must
+                // look like `AB-123456` is to type a guess and read the error.
+                validationOf(n)?.let { component["validation"] = it }
+                // The form runtime validates a component whatever its visibility, but skips a disabled or
+                // ignored one, and a container passes both down to everything inside it. So whether a
+                // required field can block the form depends on the panels around it as much as on itself.
+                containerGates[n]?.let { component["containerGates"] = it }
                 fields.add(component)
                 if (n["type"] == "outcomeButton" && truthy(n["value"])) {
                     outcomes.add(linkedMapOf("value" to n["value"], "label" to label))
@@ -842,6 +896,78 @@ object ModelParsers {
         gate("enabled", true)
         gate("ignore", false)
         return out.ifEmpty { null }
+    }
+
+    /** `extraSettings` validation keys the form runtime checks (its `validate/` rules), by the name kept. */
+    private val VALIDATION_SETTINGS = listOf(
+        "min", "max", "minLength", "maxLength", "minDate", "maxDate", "minItems", "maxItems",
+        "minFiles", "maxFiles", "fractionSize", "matchTo",
+    )
+
+    /**
+     * The rules a component's value has to pass besides `required`, as the form runtime reads them, or
+     * null when there are none: `pattern` (`validationRegExp`, matched against the whole value), `mask`
+     * (`validationMask`), the `extraSettings` bounds in [VALIDATION_SETTINGS], `format` (a date field's
+     * display and entry format) and `custom` — `{expression, errorMsg}` per custom validation. Values are
+     * kept as the model spells them, expressions included; a whole number read as `10.0` is `10` again.
+     */
+    internal fun validationOf(n: Map<String, Any?>): Map<String, Any?>? {
+        val out = linkedMapOf<String, Any?>()
+        fun put(k: String, v: Any?) {
+            val x = when (v) {
+                null -> return
+                is String -> v.trim().ifEmpty { return }
+                is Double -> if (v % 1.0 == 0.0 && kotlin.math.abs(v) < 1e15) v.toLong() else v
+                is Number, is Boolean -> v
+                else -> return
+            }
+            out[k] = x
+        }
+        put("pattern", n["validationRegExp"])
+        put("mask", n["validationMask"])
+        val es = objOf(n["extraSettings"]).orEmpty()
+        for (k in VALIDATION_SETTINGS) put(k, es[k])
+        if ((n["type"] as? String)?.lowercase()?.let { "date" in it || "time" in it } == true) put("format", es["format"])
+        val custom = listOfObjs(n["customValidations"]).mapNotNull { cv ->
+            val expr = (cv["expression"] as? String)?.trim()?.ifEmpty { null }
+            val msg = (cv["errorMsg"] as? String)?.trim()?.ifEmpty { null }
+            if (expr == null && msg == null) null else linkedMapOf("expression" to expr, "errorMsg" to msg)
+        }
+        if (custom.isNotEmpty()) out["custom"] = custom
+        return out.ifEmpty { null }
+    }
+
+    /**
+     * For every component inside a gated container, the containers around it — nearest first — that are
+     * hidden, disabled or ignored, or may be: `{id, type, label?, visible?, enabled?, ignore?}`, the gate
+     * values as [gatingOf] keeps them. Keyed by identity: the walk in [parseForm] meets the very same maps.
+     *
+     * Why it matters: the form runtime skips a disabled or ignored component when it validates, and a
+     * disabled or ignored container takes everything inside it along; visibility it ignores entirely. A
+     * required field in a hidden-but-enabled panel therefore keeps the form invalid with no error shown,
+     * and one in a disabled panel blocks nothing — neither is visible on the field's own record.
+     */
+    private fun containerGatesOf(doc: Map<String, Any?>): java.util.IdentityHashMap<Map<*, *>, List<Map<String, Any?>>> {
+        val out = java.util.IdentityHashMap<Map<*, *>, List<Map<String, Any?>>>()
+        fun walk(node: Any?, gates: List<Map<String, Any?>>) {
+            when (node) {
+                is List<*> -> node.forEach { walk(it, gates) }
+                is Map<*, *> -> {
+                    @Suppress("UNCHECKED_CAST") val m = node as Map<String, Any?>
+                    if (gates.isNotEmpty() && m["id"] is String && m["type"] is String) out[m] = gates
+                    val own = if (m["id"] is String && m["type"] is String) gatingOf(m) else null
+                    val inner = if (own == null) gates else {
+                        val g = linkedMapOf<String, Any?>("id" to m["id"], "type" to m["type"])
+                        componentCaption(m)?.let { g["label"] = it }
+                        g.putAll(own)
+                        listOf(g) + gates
+                    }
+                    for ((k, v) in m) if (k !in ORYX_METADATA_KEYS) walk(v, inner)
+                }
+            }
+        }
+        walk(doc, emptyList())
+        return out
     }
 
     /**

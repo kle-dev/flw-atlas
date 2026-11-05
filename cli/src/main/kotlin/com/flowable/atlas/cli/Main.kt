@@ -8,6 +8,7 @@ import com.flowable.atlas.render.ErdHtmlRenderer
 import com.flowable.atlas.render.ExplorerHtmlRenderer
 import com.flowable.atlas.render.GraphJsonRenderer
 import com.flowable.atlas.render.OverviewRenderer
+import com.flowable.atlas.render.PlaywrightRenderer
 import com.flowable.atlas.render.SliceRenderer
 import com.flowable.atlas.render.SummaryRenderer
 import java.io.File
@@ -47,6 +48,7 @@ fun run(args: Array<String>): Int {
     var path: String? = null
     var output: String? = null
     var all = false; var json = false; var html = false; var erd = false; var summary = false; var claude = false
+    var playwright = false
     var claudeTemplate = false
     var stdout = false; var open = false; var noCustom = false; var quiet = false
     var pretty = false
@@ -92,6 +94,7 @@ fun run(args: Array<String>): Int {
                     "--erd" -> erd = true
                     "--summary" -> summary = true
                     "--claude" -> claude = true
+                    "--playwright" -> playwright = true
                     "--claude-template" -> claudeTemplate = true
                     "--pretty" -> pretty = true
                     "--slice" -> slice = value(name, inline) ?: return 2
@@ -136,8 +139,8 @@ fun run(args: Array<String>): Int {
     }
 
     // Mutually-exclusive format group (argparse errors with exit code 2).
-    if (listOf(all, json, html, erd, summary, claude, claudeTemplate).count { it } > 1) {
-        errln("error: argument --all/--json/--html/--erd/--summary/--claude/--claude-template: " +
+    if (listOf(all, json, html, erd, summary, claude, playwright, claudeTemplate).count { it } > 1) {
+        errln("error: argument --all/--json/--html/--erd/--summary/--claude/--playwright/--claude-template: " +
             "not allowed with one another")
         return 2
     }
@@ -282,7 +285,7 @@ fun run(args: Array<String>): Int {
     val name = splitextName(abs.name).ifEmpty { "project" }
     val root = File(projectPath)
 
-    // ---- --all: write all five artifacts into the -o directory (default ".") ----
+    // ---- --all: write all six artifacts (the Playwright guide in two files) into the -o directory (default ".") ----
     if (all) {
         val outdir = outputDir
         outdir.mkdirs()
@@ -295,8 +298,14 @@ fun run(args: Array<String>): Int {
             "$name.graph.json" to GraphJsonRenderer.render(result, pretty = pretty),
             "$name.explorer.html" to ExplorerHtmlRenderer.render(result, root, waiverAuthor = waiverAuthor),
             // The file names its siblings from the project root, so it needs to know where they land.
-            "$name.CLAUDE.md" to ClaudeRenderer.render(result, root, ClaudeRenderer.Layout(outdir, siblings = true)),
+            "$name.CLAUDE.md" to ClaudeRenderer.render(result, root,
+                ClaudeRenderer.Layout(outdir, siblings = true, playwright = true, playwrightMap = true)),
         )
+        // The browser guide in two files: what a skill loads whole (rules, index), and the project map it
+        // reads on demand — on a real project the map is most of the text.
+        val guide = PlaywrightRenderer.Layout(outdir, graph = true, map = true)
+        artifacts.add("$name.${PlaywrightRenderer.SUFFIX}" to PlaywrightRenderer.render(result, root, guide))
+        artifacts.add("$name.${PlaywrightRenderer.MAP_SUFFIX}" to PlaywrightRenderer.renderMap(result, root, guide))
         // The ER diagram designer, beside the explorer it links into — only for a project with tables to draw:
         // on any other it would be a page that can only say it has nothing to show.
         if (ErdHtmlRenderer.hasTables(result)) {
@@ -354,6 +363,9 @@ fun run(args: Array<String>): Int {
     val (out, ext) = when {
         // Alone, `--claude` writes no summary/graph next to itself; the file must not pretend otherwise.
         claude -> ClaudeRenderer.render(result, root, ClaudeRenderer.Layout(siblings = false)) to "CLAUDE.md"
+        // Alone, it has no graph.json beside it either (its lookups section says how to make one), and it
+        // keeps the project map inline: one artifact, one file.
+        playwright -> PlaywrightRenderer.render(result, root, PlaywrightRenderer.Layout(graph = false)) to "playwright.md"
         summary -> SummaryRenderer.render(result, root) to "summary.md"
         html -> ExplorerHtmlRenderer.render(result, root, waiverAuthor = waiverAuthor) to "html"
         erd -> ErdHtmlRenderer.render(result, root) to "erd.html"
@@ -390,13 +402,17 @@ usage: java -jar cli-<version>-all.jar <path> [options]
 
 output (mutually exclusive):
   (none)              the full Markdown report (APP_OVERVIEW.md)
-  --all               all five artifacts into a directory (-o, default .), plus <name>.diagrams/ and,
-                      when the project has tables, <name>.erd.html
+  --all               all six artifacts into a directory (-o, default .) — the Playwright guide as
+                      <name>.playwright.md plus its project map <name>.playwright-map.md — plus
+                      <name>.diagrams/ and, when the project has tables, <name>.erd.html
   --summary           the compact LLM-first overview
   --html              the interactive explorer
   --erd               the ER diagram designer (the project's tables and their relations)
   --json              the traversable graph
   --claude            drop-in agent context (CLAUDE.md)
+  --playwright        the agent's guide to driving Flowable Work in a browser, with this project's
+                      stages, tasks, required fields and button conditions (also a Claude Code skill);
+                      one file, the project map inline
   --claude-template   the project-independent Flowable primer (needs no path)
 
 options:

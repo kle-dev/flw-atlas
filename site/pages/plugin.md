@@ -229,7 +229,11 @@ run produces in *Settings → Tools → Flowable Atlas → Generation*. One of t
 with databases and tables of your own, searched, related, framed and arranged — for explaining a data model to people who do not read changelogs. It opens
 in the same kind of tab, in the IDE's theme and colours, and stays a few hundred KB whatever the size of
 the project. Once it is chosen, *Tools → Flowable Atlas → Open Atlas ER Diagram Designer*
-(also in the Hub's ⋮) opens the page — generating it first when there is none.
+(also in the Hub's ⋮) opens the page — generating it first when there is none. Another is the
+[Playwright guide](../artifacts/#playwrightmd-driving-flowable-work-in-a-browser), `<project>.playwright.md`
+with its project map: what an agent needs to open a case, complete its tasks and bring it to a stage in
+Flowable Work, through a browser. With *CLAUDE.md primer* also ticked, the generated CLAUDE.md says when to
+read it.
 Full detail: [The Atlas explorer](../explorer/).
 
 ### In and out parameter tracing

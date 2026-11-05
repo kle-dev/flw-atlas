@@ -12,6 +12,96 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.30.0
+
+- **A guide for agents that drive Flowable Work in a browser.** Atlas now writes `<project>.playwright.md`:
+  what an agent with a browser — the Playwright MCP server, a Playwright script or another browser tool —
+  needs to work *in* Work rather than on the code. Start a case or process, open a case or task, see which
+  stage a case is in, claim and complete tasks and fill in their forms, press a case's actions, bring a case
+  to a given stage, find the open tasks of a user or group, explain why a button is missing or greyed out,
+  and know when to stop and ask. The first part is how Work behaves, for any project: a quick start that
+  reads a case's whole state in one call; the rules (act through the UI, only look through REST, never click
+  a disabled button, ask before anything irreversible); the sign-in, the routes, *Create New*, the stage bar,
+  the toolbar where manual-activation items and user event listeners become buttons, and a task's outcome
+  buttons; the read-only REST endpoints that explain a screen; the CMMN rules that move a case; a checklist
+  for a disabled button; the loop for reaching a stage; and the Playwright traps, with what each script call
+  is in Playwright MCP.
+- **The guide says which Work it describes.** Locators, dialogs and buttons differ between Work's lines. The
+  guide describes 2026.1 and newer, marks what older lines do differently, and keeps a table with one column
+  each for 2026.1 and newer, 2025.2, 2025.1 with 3.15–3.17, and 3.14 and older — apart because Work's own
+  screens got their ARIA roles only in 3.15. The version the project builds against names the column, and the
+  agent is told to read the running version from the system before relying on it. The notes were compiled
+  from Work's frontend source for each line and its own end-to-end test helpers, not by driving a running
+  Work; the guide says so, and what to fall back on when a locator finds nothing.
+- **Its second part is this project, read from its models.** An index of every deployed case and process:
+  its key, the link that starts it (`#/work?create=true&definitionKey=<key>`, which also tells apart two
+  definitions with one title), its stage bar or its number of user tasks, and who may start it; then the apps
+  the sidebar shows, with their pages. Behind the index, for each case: its stage bar in Work's order, and
+  for each stage what starts it, read out of its sentries, whether it completes by itself, and the tasks,
+  manual items and listeners inside it with the groups that get them. For each process: its user tasks in
+  flow order and what leads to each. For every form: its required fields and their validation rules, its
+  outcomes and the variable they write, and its conditional buttons. A condition on a variable names the
+  outcome or the field that sets it, and ⚠ marks the traps: a required field that can be hidden, which, on a
+  form saved by Design 3.8 or later, keeps the outcomes disabled with no error on the page, and stage-bar
+  entries that share a `displayOrder` or have none, which Work reorders as they end. Models that only a test source set deploys are left out.
+- **One artifact in two files.** A skill is loaded whole, and on a real project the details are most of the
+  text, so `--all`, the launcher and the plugin write them to a project map beside the guide,
+  `<project>.playwright-map.md`, which its index points into; `--playwright` alone writes one file with the
+  details inline. In the plugin, tick *Playwright guide for Flowable Work (+ project map)* under *Settings →
+  Tools → Flowable Atlas → Generation*. The guide opens with skill front matter: copy it to
+  `.claude/skills/flowable-work-ui/SKILL.md` and the map beside it as `project-map.md`, and Claude Code loads
+  it when a request is about Work. With the guide written beside it, the generated `CLAUDE.md` names the
+  requests it is for and says to read it before the first click. Written outside the project — the
+  launcher's default — the guide names the map and the graph by their full path, the home directory as `~`.
+- **A sentry's condition is read from its `ifPart`.** Design writes its condition builder as
+  `<flowable:condition>` elements before the `ifPart`. Atlas took the first of them, which is empty, so on
+  every sentry built that way the real condition was missing from the overview, the explorer and the graph.
+- **The graph keeps what moves a case in Work.** Sentries keep their `triggerMode` and the event each on-part
+  waits for, and every entry and exit criterion the plan item it sits on (`planItemId`); an exit keeps its
+  `exitEventType` and `exitType`. A case keeps its own exit criteria, its start form, its *Work form* and
+  its candidate starter users. Stages and milestones keep `displayOrder`, `includeInStageOverview` and their
+  place in Work's stage overview, and a stage its `autoCompleteCondition`. A plan item keeps the button
+  name, groups and users of its manual activation, the start form that button opens, its `maxInstanceCount`
+  and the collection a repetition runs over, and its `parentCompletionRule` and `completionNeutralRule`; a
+  listener keeps its `availableCondition`, its timer, and the variable or signal it waits for. A user task
+  keeps its candidate users and the sub-process around it, a multi-instance its completion condition, and a
+  process its candidate starter users.
+- **Forms and apps keep what Work shows of them.** A form keeps the variable its outcome is stored in
+  (`outcomeVariableName`), `doNotCreateOutcomeVariable` and the Design version it records. An
+  outcome keeps `visible`, `enabled`, `ignoreValidation` and `navigationUrl`. A field keeps its validation
+  rules — pattern, bounds, length, date format, custom checks — and the containers around it that can hide,
+  disable or ignore it. An app keeps `flowApp`, its `url` and `order`, and each page its label and url.
+- **A deployed model wins over its test copy.** A model under a test source set (`src/test/…`) that shared
+  its key with one the app deploys could stand in for it everywhere: the first copy read was the model, and
+  loose files are read before archives, so an empty test fixture replaced the process a `.bar` deploys — in
+  the explorer, the overview, the graph and the findings. Test copies are read last now: the deployed copy is
+  the model, and a test copy that references other models is listed among its other copies.
+- **A case's generic event listeners are among its event listeners.** Design writes a variable, signal or
+  reactivation listener as a generic `eventListener`, which Atlas did not count as one, so a signal listener
+  was never linked to the models that throw its signal. It is listed now, with its kind, and linked.
+- **A form input without a caption is a field.** Design lets a modeller leave the label out, and such an
+  input was never recorded: a task form whose only input was a required number field read as having nothing
+  required. An input without a caption now counts when it is required, or bound to a value.
+- **An app that lists its pages under `pages` contains them.** Older Design workspace exports keep an app's
+  pages there rather than under `pageModels`, the only place Atlas looked: such an app contained no page, and
+  its pages' permissions were missing from the access map.
+- **`CLAUDE.md` states the Flowable version of Work projects.** Only engine versions (6.x–9.x) were accepted,
+  and the property the platform's project template declares, `<com.flowable.platform.version>`, was not
+  looked for: every Work project measured (3.11 to 2025.1) was told nothing about its version. Platform
+  versions (3.x, 2025.x, 2026.x) are now found in Maven properties and dependencies and in Gradle properties,
+  version catalogs and dependency coordinates, the platform's `com.flowable.platform:…` sub-groups included,
+  and a platform version wins over an engine one. The Playwright guide picks its version column from it.
+- **Execution order holds across a loop.** When a process's flows loop back, the overview could put a step
+  the loop leads to ahead of the loop's own gateway: breaking the cycle compared one step's position in the
+  file with the order in which the walk had reached the others. The step the walk is waiting on goes first
+  now, in the overview and in the guide's user tasks.
+- **A project given as `.` names its files by its directory.** Run on `.` from inside the project, the
+  summary, the overview and `CLAUDE.md` pointed at `..graph.json`, `..overview.md` and so on, while the files
+  themselves were written under the directory's name. They name the files as written now.
+- **The Atlas Hub stays where you scrolled it.** Ticking or unticking an app in the Design block threw the
+  panel back up to the Explorer block, so the next app further down meant scrolling down again — and so did
+  every other refresh of the Hub: an analysis landing, or the index rebuilt. The Hub now keeps its place.
+
 ## 0.29.0
 
 - **A button that would wipe the form is a finding.** An expression button stores what it computes, and a

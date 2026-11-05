@@ -27,14 +27,15 @@ reference between them — and then handing you the answer in whichever shape yo
 ```
 
 That is the whole thing. Atlas walks the project, resolves what it can, tells you what it could not,
-and writes five files:
+and writes six artifacts:
 
 <div class="cards">
 <a class="card" href="explorer/" style="--tint:var(--c-process)"><h3>explorer.html</h3><p>An offline, interactive explorer. Click through every relationship in both directions, search inside models, read diagrams.</p></a>
-<a class="card" href="artifacts/#projectsummarymd--orientation" style="--tint:var(--c-form)"><h3>summary.md</h3><p>A few KB of orientation: apps, inventory, entry points, integrations, hotspots, health. Written for an LLM first.</p></a>
-<a class="card" href="artifacts/#projectoverviewmd--the-full-report" style="--tint:var(--c-case)"><h3>overview.md</h3><p>The full human report — every model in execution order, the access map, the data layer, every finding with file:line.</p></a>
-<a class="card" href="artifacts/#projectgraphjson--for-querying" style="--tint:var(--c-service)"><h3>graph.json</h3><p>The traversable model↔code graph, for querying rather than reading. Every node carries <code>usedBy</code>, and the file documents itself.</p></a>
+<a class="card" href="artifacts/#summarymd-orientation" style="--tint:var(--c-form)"><h3>summary.md</h3><p>A few KB of orientation: apps, inventory, entry points, integrations, hotspots, health. Written for an LLM first.</p></a>
+<a class="card" href="artifacts/#overviewmd-the-full-report" style="--tint:var(--c-case)"><h3>overview.md</h3><p>The full human report — every model in execution order, the access map, the data layer, every finding with file:line.</p></a>
+<a class="card" href="artifacts/#graphjson-for-querying" style="--tint:var(--c-service)"><h3>graph.json</h3><p>The traversable model↔code graph, for querying rather than reading. Every node carries <code>usedBy</code>, and the file documents itself.</p></a>
 <a class="card" href="agents/" style="--tint:var(--c-agent)"><h3>CLAUDE.md</h3><p>Drop-in context for an AI agent: a Flowable primer plus this project's real conventions, findings and available APIs.</p></a>
+<a class="card" href="artifacts/#playwrightmd-driving-flowable-work-in-a-browser" style="--tint:var(--c-agent)"><h3>playwright.md</h3><p>How an agent drives Flowable Work in a browser — and, in a project map beside it, this project's stage bars, tasks, required fields and button conditions, read from the models.</p></a>
 </div>
 
 Needs a **JRE 21+** and nothing else. No third-party dependencies, no database, no running Flowable
@@ -49,7 +50,7 @@ broken key is worth catching while you are typing it, not after a deployment.
 <a class="card" href="plugin/#model-key-intelligence" style="--tint:var(--c-service)"><h3>Keys become references</h3><p>Completion at every Flowable API position, Ctrl-click to the model, docs on hover, and a Search Everywhere tab that searches inside <code>.bar</code> archives.</p></a>
 <a class="card" href="plugin/#key-validation" style="--tint:var(--c-invalidExpr,#be2323)"><h3>Typos caught in the editor</h3><p>A key that matches no model in the project is flagged with a fix to the nearest real key — in Java and inside model XML.</p></a>
 <a class="card" href="expressions/" style="--tint:var(--c-expression)"><h3>Expressions as a language</h3><p>Both dialects highlighted, completed, documented and validated. Real Groovy and JavaScript inside script bodies. Two playgrounds.</p></a>
-<a class="card" href="plugin/#java--model-linking" style="--tint:var(--c-java)"><h3>The IDE stops lying</h3><p>Find Usages from Java into models, gutter icons both ways, and a warning when a rename would silently break a model.</p></a>
+<a class="card" href="plugin/#java-model-linking" style="--tint:var(--c-java)"><h3>The IDE stops lying</h3><p>Find Usages from Java into models, gutter icons both ways, and a warning when a rename would silently break a model.</p></a>
 <a class="card" href="plugin/#code-generation" style="--tint:var(--c-dataObject)"><h3>Less boilerplate</h3><p>A typed constants class that keeps itself in sync, data-object DTOs, and Liquibase changelogs — each previewed before anything is written.</p></a>
 <a class="card" href="plugin/#flowable-design-sync" style="--tint:var(--c-channel)"><h3>Pull from Design</h3><p>Fetch app exports straight into the repository, and be told which model keys disappeared since the last pull.</p></a>
 </div>
@@ -80,6 +81,6 @@ the ones it does name are worth acting on.
 | [Getting started](start/) | Install the plugin or the CLI, and your first run |
 | [What the plugin does](plugin/) | The IntelliJ side, feature by feature, illustrated |
 | [The Atlas explorer](explorer/) | Every view, the search grammar, the keyboard map |
-| [Generated artifacts](artifacts/) | What each of the five files is for, and `jq` recipes for the graph |
+| [Generated artifacts](artifacts/) | What each of the six artifacts is for, and `jq` recipes for the graph |
 | [CLI reference](cli/) | Every flag, the launcher, exit codes |
-| [For LLMs & agents](agents/) | Four sizes of context, and which to use when |
+| [For LLMs & agents](agents/) | Four sizes of context, which to use when, and driving Flowable Work |

@@ -88,7 +88,32 @@ object ModelJsonReader {
     fun isFormComponent(node: Map<*, *>): Boolean =
         node["id"] is String && node.containsKey("type") &&
             (node.containsKey("label") || (node["extraSettings"] as? Map<*, *>)?.get("text") != null ||
-                node["type"] in BUTTON_TYPES)
+                node["type"] in BUTTON_TYPES || isUnlabeledInput(node))
+
+    /**
+     * The palette types a user types, picks or uploads a value into. Display components (`htmlComponent`,
+     * output, images) carry a `value` too, but only to show it — which is why a value alone admits nothing.
+     */
+    val INPUT_TYPES: Set<String> = setOf(
+        "text", "textarea", "password", "number", "date", "dateRange", "time", "select", "radio", "boolean",
+        "checkboxGroup", "switcher", "slider", "upload", "attachment", "richText", "stringList", "color",
+        "dataObjectSelect",
+    )
+
+    /**
+     * An input without a caption is still an input. Design lets a modeller leave `label` out (the caption
+     * sits in a neighbouring text, or the field is the only one on the form), and such a field was never
+     * recorded — a required number field that is a task form's only input made the form read as "nothing
+     * required". Admitted when it is required (literally or by expression), or when it is an input type
+     * bound to a value; a container or display component without a caption still stays out.
+     */
+    private fun isUnlabeledInput(node: Map<*, *>): Boolean {
+        val type = node["type"] as? String ?: return false
+        val required = node["isRequired"]
+        if (required == true) return true
+        if (required is String && (required.trim().equals("true", ignoreCase = true) || required.contains("{{"))) return true
+        return type in INPUT_TYPES && (node["value"] as? String)?.contains("{{") == true
+    }
 
     /** Form field ids + outcomes of a `.form` model (used to build member vocabularies). */
     fun readForm(bytes: ByteArray): FormInfo {

@@ -2,6 +2,7 @@ package com.flowable.atlas.cli
 
 import com.flowable.atlas.model.MiniJson
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -9,7 +10,7 @@ import java.nio.file.Files
 
 /**
  * Contract tests for the standalone CLI (`run(argv)`), mirroring Python's `tests/test_cli.py`:
- * `--all` writes exactly the five `<name>.*` artifacts (and the ER page, for a project with tables); the Markdown artifacts match the committed
+ * `--all` writes exactly the six `<name>.*` artifacts (and the ER page, for a project with tables); the Markdown artifacts match the committed
  * goldens (the renderers are already golden-verified, so `--all` output + the trailing newline the
  * golden test appends is byte-identical); `graph.json` parses and normalizes to the golden graph; a
  * `--summary --stdout` run returns 0 without touching disk; a missing path exits 2.
@@ -17,7 +18,7 @@ import java.nio.file.Files
 class CliTest {
 
     @Test
-    fun allWritesExactlyFiveArtifactsAndAGitignore() {
+    fun allWritesExactlySixArtifactsAndAGitignore() {
         val out = tempDir()
         val code = run(arrayOf(fixtureDir().path, "--all", "-o", out.path, "-q"))
         assertEquals("run(--all) exit code", 0, code)
@@ -25,6 +26,9 @@ class CliTest {
         val expected = setOf(
             "miniproject.summary.md", "miniproject.overview.md", "miniproject.graph.json",
             "miniproject.explorer.html", "miniproject.CLAUDE.md",
+            // The agent's guide to driving Flowable Work in a browser — written for every project, in two
+            // files: what a skill loads whole, and the project map it reads on demand.
+            "miniproject.playwright.md", "miniproject.playwright-map.md",
             // The ER diagram designer, because the fixture has a table: a project without one gets no such page.
             "miniproject.erd.html",
             // The drawings: the fixture has no diagram layout, so only its forms and pages are drawn —
@@ -34,7 +38,7 @@ class CliTest {
             // without ever carrying an analysis into a repository.
             ".gitignore",
         )
-        assertEquals("exactly the five artifacts, the drawings and the gitignore", expected,
+        assertEquals("exactly the six artifacts (the guide in two files), the drawings and the gitignore", expected,
             out.listFiles()!!.map { it.name }.toSet())
         for (f in out.listFiles()!!) assertTrue("${f.name} is empty", f.length() > 0)
         val drawings = File(out, "miniproject.diagrams").listFiles()!!.map { it.name }.toSet()
@@ -43,6 +47,13 @@ class CliTest {
         val ignore = File(out, ".gitignore").readText()
         assertTrue("everything is ignored", ignore.lineSequence().any { it.trim() == "*" })
         assertTrue("except the waivers", ignore.contains("!waivers.json"))
+        // The guide points into its map, and CLAUDE.md names both.
+        val guide = File(out, "miniproject.playwright.md").readText()
+        assertTrue("the guide points at its map", guide.contains("miniproject.playwright-map.md"))
+        assertTrue("the map holds the case", File(out, "miniproject.playwright-map.md").readText().contains("#### Case `reviewCase`"))
+        assertFalse("the details are not repeated in the guide", guide.contains("#### Case `reviewCase`"))
+        val claude = File(out, "miniproject.CLAUDE.md").readText()
+        assertTrue(claude.contains("miniproject.playwright.md") && claude.contains("miniproject.playwright-map.md"))
     }
 
     @Test
@@ -157,10 +168,42 @@ class CliTest {
     fun failOnTurnsFindingsIntoExitOneButStillWrites() {
         val out = tempDir()
         assertEquals(1, run(arrayOf(fixtureDir().path, "--all", "-o", out.path, "-q", "--fail-on", "error")))
-        assertEquals("the artifacts are written before the verdict", 7, out.listFiles()!!.count { it.isFile })
+        assertEquals("the artifacts are written before the verdict", 9, out.listFiles()!!.count { it.isFile })
         assertEquals(1, run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--fail-on", "parseIssues")))
         assertEquals(1, run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--fail-on=warning,missingRefs")))
         assertEquals(2, run(arrayOf(fixtureDir().path, "--summary", "--stdout", "-q", "--fail-on", "nosuchcheck")))
+    }
+
+    /**
+     * Run from inside a project as `.`, the files are named after the directory — and so are the siblings
+     * they name: a CLAUDE.md pointing at `..playwright.md` points at nothing.
+     */
+    @Test
+    fun aProjectGivenAsDotNamesItsSiblingsAfterTheDirectory() {
+        val out = tempDir()
+        assertEquals(0, run(arrayOf(".", "--all", "-o", out.path, "-q")))
+        val name = File(".").absoluteFile.normalize().name
+        for (suffix in listOf("CLAUDE.md", "playwright.md", "playwright-map.md")) {
+            val text = File(out, "$name.$suffix").readText()
+            assertFalse("$suffix names a dot file", text.contains("..graph.json") || text.contains("..playwright"))
+        }
+    }
+
+    /**
+     * The Playwright guide alone: a skill-shaped file with no graph beside it, so its lookups say how to make
+     * one. Asked for with another output, it is a misuse like any other pair of formats.
+     */
+    @Test
+    fun thePlaywrightGuideIsItsOwnArtifact() {
+        val out = tempDir()
+        val guide = File(out, "work.playwright.md")
+        assertEquals(0, run(arrayOf(fixtureDir().path, "--playwright", "-o", guide.path, "-q")))
+        val text = guide.readText()
+        assertTrue("it opens as a skill", text.startsWith("---\nname: flowable-work-ui\n"))
+        assertTrue("alone, it says how to get the graph it queries", text.contains("--json -o miniproject.graph.json"))
+        assertTrue("the case of the fixture is mapped, inline: one artifact, one file", text.contains("#### Case `reviewCase`"))
+        assertEquals("nothing beside it", listOf("work.playwright.md"), out.listFiles()!!.map { it.name })
+        assertEquals(2, run(arrayOf(fixtureDir().path, "--playwright", "--claude", "-q")))
     }
 
     /**

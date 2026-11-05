@@ -1,0 +1,41 @@
+{
+  "metadata": {
+    "key": "claimIntakeForm",
+    "name": "Claim intake",
+    "modelType": "form"
+  },
+  "rows": [
+    [
+      {
+        "id": "claimantName",
+        "type": "text",
+        "label": "Claimant",
+        "isRequired": true
+      }
+    ],
+    [
+      {
+        "id": "policyNumber",
+        "type": "text",
+        "label": "Policy number",
+        "isRequired": true,
+        "validationRegExp": "[A-Z]{2}-[0-9]{6}"
+      }
+    ],
+    [
+      {
+        "id": "incidentDate",
+        "type": "date",
+        "label": "Date of incident",
+        "isRequired": true
+      }
+    ],
+    [
+      {
+        "id": "damageDescription",
+        "type": "textarea",
+        "label": "What happened"
+      }
+    ]
+  ]
+}

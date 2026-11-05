@@ -14,7 +14,7 @@ interface with every flag.
 ./atlas /path/to/your-flowable-project
 ```
 
-That analyses the project, writes all five artifacts to `./atlas-output/<project>/` (and the ER diagram page, for a project with tables), and opens the
+That analyses the project, writes all six artifacts to `./atlas-output/<project>/` (and the ER diagram page, for a project with tables), and opens the
 explorer in your browser. Two optional positionals and one flag of its own:
 
 ```bash
@@ -58,17 +58,18 @@ Build the jar with `./gradlew :cli:shadowJar`, or download `cli-<version>-all.ja
 
 ### Output format
 
-These seven are mutually exclusive — passing two is an error, not a silent preference.
+These eight are mutually exclusive — passing two is an error, not a silent preference.
 
 | Flag | Writes | Default file name |
 |---|---|---|
 | *(none)* | The full Markdown report | `APP_OVERVIEW.md` |
-| `--all` | All five artifacts into a **directory**, plus `<name>.diagrams/` when any model has a layout and `<name>.erd.html` when the project has a table | `<name>.*` in `-o`, default `.` |
+| `--all` | All six artifacts into a **directory** — the Playwright guide as `<name>.playwright.md` and its project map `<name>.playwright-map.md` — plus `<name>.diagrams/` when any model has a layout and `<name>.erd.html` when the project has a table | `<name>.*` in `-o`, default `.` |
 | `--summary` | The compact LLM-first overview | `APP_OVERVIEW.summary.md` |
 | `--html` | The interactive explorer | `APP_OVERVIEW.html` |
 | `--erd` | The [ER diagram designer](../erd/): the project's tables and their relations, on a page of its own | `APP_OVERVIEW.erd.html` |
 | `--json` | The traversable graph | `APP_OVERVIEW.json` |
 | `--claude` | Drop-in agent context | `CLAUDE.md` |
+| `--playwright` | The [agent's guide to driving Flowable Work](../artifacts/#playwrightmd-driving-flowable-work-in-a-browser) in a browser, with this project's stages, tasks, required fields and button conditions; also a Claude Code skill. One file: the project map `--all` writes beside it is inline here, and with no `graph.json` beside it, its lookups say how to make one | `APP_OVERVIEW.playwright.md` |
 | `--claude-template` | The project-independent Flowable primer. Needs **no** path | stdout |
 
 Only `--all` derives file names from the project (`<name>.summary.md`, `<name>.explorer.html`, …). A
@@ -103,7 +104,7 @@ The one-line CI recipe:
 java -jar cli-<version>-all.jar . --all -o atlas-output --fail-on error
 ```
 
-writes the five artifacts (keep them as build artifacts) and fails the job on any error-level finding —
+writes the six artifacts (keep them as build artifacts) and fails the job on any error-level finding —
 a model that would not parse, an expression with a syntax error, a reference to a model that does not
 exist. Tighten to `--fail-on any` once the project is clean, and record what you decide to live with in
 [`waivers.json`](../checks/#accepting-a-finding) rather than dropping the gate.

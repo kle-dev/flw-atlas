@@ -1230,11 +1230,11 @@ object OverviewRenderer {
      * every step appears after the steps that can reach it.
      *
      * Robustness matters more than elegance here — real exports contain loops, unreachable fragments and
-     * flows pointing at elements that live in a sub-process. So: a cycle releases its
-     * earliest-in-document member and carries on, and anything the flows never mention keeps its
-     * document position rather than disappearing.
+     * flows pointing at elements that live in a sub-process. So: a cycle releases its earliest-reached
+     * member (document order only for members the walk never reached) and carries on, and anything the
+     * flows never mention keeps its document position rather than disappearing.
      */
-    private fun flowOrder(p: Map<String, Any?>, docIds: List<String>): Map<String, Int> {
+    internal fun flowOrder(p: Map<String, Any?>, docIds: List<String>): Map<String, Int> {
         val flows = asList(p["flows"]).map { asMap(it) }.mapNotNull { f ->
             val from = f["from"]?.toString()?.ifEmpty { null }
             val to = f["to"]?.toString()?.ifEmpty { null }
@@ -1284,8 +1284,12 @@ object OverviewRenderer {
         val rank = HashMap<String, Int>()
         var n = 0
         while (remaining.isNotEmpty()) {
-            // A cycle empties the frontier while nodes remain: release the earliest one and carry on.
-            val next = ready.pollFirst() ?: remaining.minByOrNull { discovered[it] ?: pos(it) }!!
+            // A cycle empties the frontier while nodes remain: release the earliest *discovered* one — the
+            // node the walk is waiting on — and carry on. Discovery counters and document positions are
+            // different scales: mixing them let an unreached task low in the file jump a loop's gateway.
+            val next = ready.pollFirst()
+                ?: remaining.filter { it in discovered }.minByOrNull { discovered[it]!! }
+                ?: remaining.minByOrNull { pos(it) }!!
             if (!remaining.remove(next)) continue
             rank[next] = n++
             for (t in outgoing[next] ?: emptyList()) {

@@ -58,6 +58,37 @@ class AtlasGeneratorServiceTest : BasePlatformTestCase() {
         assertFalse("the explorer carries none of it", Files.readString(out.resolve("${dir.name}.explorer.html")).contains("ATLAS_ERD"))
     }
 
+    /**
+     * The Playwright guide is one artifact in two files — the guide and the project map it points into — and
+     * the CLAUDE.md written beside it names both; without it, CLAUDE.md names neither.
+     */
+    fun testThePlaywrightGuideIsWrittenWithItsProjectMap() {
+        // a user task, so the map has something to hold — with nothing to drive the guide sends nobody there
+        File(dir, "models/DEMO-P002.bpmn").writeText("""<definitions><process id="DEMO-P002" name="Demo task">
+            <startEvent id="s"/><sequenceFlow id="f" sourceRef="s" targetRef="t"/><userTask id="t" name="Check"/>
+            </process></definitions>""")
+        val out = dir.toPath().resolve("atlas-output")
+        val service = AtlasGeneratorService.getInstance(project)
+        val outcome = service.generateAll(dir.toPath(), out, EmptyProgressIndicator(),
+            setOf(AtlasArtifact.CLAUDE_MD, AtlasArtifact.PLAYWRIGHT_MD))
+        assertTrue(outcome.toString(), outcome is AtlasGeneratorService.Outcome.Success)
+        val written = (outcome as AtlasGeneratorService.Outcome.Success).written.map { it.fileName.toString() }.toSet()
+        assertEquals(setOf("${dir.name}.CLAUDE.md", "${dir.name}.playwright.md", "${dir.name}.playwright-map.md"), written)
+        val guide = Files.readString(out.resolve("${dir.name}.playwright.md"))
+        assertTrue("the guide points into its map", guide.contains("${dir.name}.playwright-map.md"))
+        // no graph ticked: the hint writes it to the very path every lookup reads
+        val graph = "atlas-output/${dir.name}.graph.json"
+        assertTrue(guide, guide.contains("--json -o $graph`"))
+        assertTrue(guide, guide.lines().filter { it.startsWith("jq '") }.all { it.endsWith(" $graph") })
+        val claude = Files.readString(out.resolve("${dir.name}.CLAUDE.md"))
+        assertTrue(claude.contains("${dir.name}.playwright.md") && claude.contains("${dir.name}.playwright-map.md"))
+
+        val alone = dir.toPath().resolve("atlas-output-2")
+        service.generateAll(dir.toPath(), alone, EmptyProgressIndicator(), setOf(AtlasArtifact.CLAUDE_MD))
+        assertFalse(Files.readString(alone.resolve("${dir.name}.CLAUDE.md")).contains("playwright"))
+        assertFalse(Files.exists(alone.resolve("${dir.name}.playwright-map.md")))
+    }
+
     /** An ER page's own Regenerate rewrites it as an ER page, not as an explorer under the wrong name. */
     fun testRegeneratingAnErPageKeepsItOne() {
         val out = Files.createDirectories(dir.toPath().resolve("atlas-output"))

@@ -83,11 +83,18 @@ object BackendModelParsers {
                 "ioParameters" to ioParameters, "dataObjects" to dataObjects,
             )
 
+            // Work offers a definition in its create dialog to a non-admin user only when the user or one of
+            // their groups is a candidate starter — users count as much as groups, and were access-only.
+            proc.attr("candidateStarterUsers")?.trim()?.ifEmpty { null }?.let { info["candidateStarterUsers"] = it }
             val listeners = XmlHelpers.readListeners(proc)
             info["listeners"] = listeners
             XmlHelpers.collectListenerRefs(ctx, pkey, "bpmn", ffile, listeners)
             ctx.addAccess(pkey, "process", "start", "start",
                 proc.attr("candidateStarterGroups"), proc.attr("candidateStarterUsers"))
+            // The sub-process each element sits in. A user task inside an event sub-process exists only once
+            // that sub-process's event fires, so "the process's user tasks, in order" needs to know which
+            // tasks are not on the main path at all.
+            val enclosing = enclosingSubProcess(proc)
 
             // process-level extension references (parity with CMMN cases)
             fun ensureModelRefs(): ArrayList<Any?> {
@@ -168,12 +175,15 @@ object BackendModelParsers {
                 }
                 val mi = el.findChild("multiInstanceLoopCharacteristics")
                 if (mi != null && tag != "process") {
-                    multiInstance.add(linkedMapOf(
+                    val rec = linkedMapOf<String, Any?>(
                         "activity" to eid, "collection" to mi.attr("collection"),
                         "elementVariable" to mi.attr("elementVariable"),
                         "cardinality" to mi.childText("loopCardinality"),
                         "sequential" to mi.attr("isSequential"),
-                    ))
+                    )
+                    // the one thing that lets the activity move on before every instance is done
+                    mi.childText("completionCondition")?.let { rec["completionCondition"] = it }
+                    multiInstance.add(rec)
                 }
 
                 // In/out parameter mappings, read once for every element: Flowable allows them on call
@@ -221,10 +231,13 @@ object BackendModelParsers {
                             "formKey" to el.attr("formKey"),
                         )
                         // scheduling/classification attributes only when the model declares them, so
-                        // the common case keeps the minimal five-key shape
-                        for (a in listOf("dueDate", "priority", "category")) {
+                        // the common case keeps the minimal five-key shape. Candidate users likewise: a
+                        // task offered to named users only is closed to everyone else, which nothing on
+                        // the record said while they went to the access list alone.
+                        for (a in listOf("candidateUsers", "dueDate", "priority", "category")) {
                             el.attr(a)?.ifEmpty { null }?.let { ut[a] = it }
                         }
+                        enclosing[eid]?.let { ut["parent"] = it }
                         userTasks.add(withElementExtras(ut, el, elListeners))
                         ctx.addRef(pkey, "bpmn", ffile, "userTask-form", "form", ut["formKey"])
                         ctx.addAccess(pkey, "process", "task:$eid", "assign",
@@ -333,10 +346,14 @@ object BackendModelParsers {
                             suspect = calledType.equals("id", ignoreCase = true))
                     }
                     tag in listOf("subProcess", "transaction", "adhocSubProcess") -> {
-                        subProcesses.add(withElementExtras(linkedMapOf(
+                        val sp = linkedMapOf<String, Any?>(
                             "id" to eid, "name" to ename, "type" to tag,
                             "eventSubProcess" to (el.attr("triggeredByEvent") == "true"),
-                        ), el, elListeners))
+                        )
+                        // nested sub-processes chain up, so "is this task inside an event sub-process"
+                        // can be answered for any depth
+                        enclosing[eid]?.let { sp["parent"] = it }
+                        subProcesses.add(withElementExtras(sp, el, elListeners))
                     }
                     tag in XmlHelpers.BPMN_EVENT_TAGS -> {
                         val (k, v) = XmlHelpers.eventInfo(el)
@@ -458,6 +475,9 @@ object BackendModelParsers {
                 d["assignee"] = el.attr("assignee")
                 d["candidateGroups"] = el.attr("candidateGroups")
                 d["formKey"] = el.attr("formKey")
+                // only when set (the record keeps its shape otherwise): a task offered to named users
+                // only is closed to everyone else, and the access list was the only place that said so
+                el.attr("candidateUsers")?.trim()?.ifEmpty { null }?.let { d["candidateUsers"] = it }
                 ctx.addRef(caseKey, "cmmn", ffile, "humanTask-form", "form", el.attr("formKey"))
                 ctx.addAccess(caseKey, "case", "task:${el.attr("id")}", "assign",
                     el.attr("candidateGroups"), pyOr(el.attr("candidateUsers"), el.attr("assignee")))
@@ -491,6 +511,11 @@ object BackendModelParsers {
                 // assignment on generic tasks carries access too (parity with humanTask)
                 if (truthy(el.attr("assignee"))) d["assignee"] = el.attr("assignee")
                 if (truthy(el.attr("candidateGroups"))) d["candidateGroups"] = el.attr("candidateGroups")
+                if (truthy(el.attr("candidateUsers"))) d["candidateUsers"] = el.attr("candidateUsers")
+                // What a generic `<task>` is at runtime: `casePage` creates no task at all — Work shows it
+                // as an entry in the case's navigation — so "task X" would send a reader to a task list
+                // where it never appears. Service-task flavours keep their `serviceTaskType`.
+                if (tag == "task") el.attr("type")?.trim()?.ifEmpty { null }?.let { d["taskType"] = it }
                 ctx.addAccess(caseKey, "case", "task:${el.attr("id")}", "assign",
                     el.attr("candidateGroups"), pyOr(el.attr("candidateUsers"), el.attr("assignee")))
                 // CMMN script task: <task flowable:type="script"> with body in a <flowable:field name="script">
@@ -514,6 +539,42 @@ object BackendModelParsers {
         // Forms linked via Design extension elements or pushed in through an in-mapping
         for ((rel, fk) in XmlHelpers.designFormKeys(el)) {
             ctx.addRef(caseKey, "cmmn", ffile, rel, "form", fk)
+            // A start form on a plan item definition is what its action button opens before the item
+            // starts — on a user event listener, a reactivation listener and a manually activated task or
+            // process task alike (Design writes `startformkey` on any of them). Recorded on the item so it
+            // is not mistaken for the case's own start form, which the edge alone cannot tell apart.
+            if (rel == "start-form") d["startFormKey"] = fk
+        }
+        // Work turns an enabled (manual-activation) plan item and an available user event listener into an
+        // action button. It is named after the plan item unless the model names it, and it is offered only
+        // to the groups and users the model lists — the facts that decide whether a user can find and press it.
+        XmlHelpers.extEl(el)?.let { ext ->
+            for ((tag2, field) in listOf(
+                "manual-activation-name" to "actionName", "event-listener-name" to "actionName",
+                "manual-activation-permission-groups" to "actionGroups", "event-listener-permission-groups" to "actionGroups",
+                "manual-activation-permission-users" to "actionUsers", "event-listener-permission-users" to "actionUsers",
+            )) ext.childText(tag2)?.let { d[field] = it }
+            // A reactivation listener's button is offered only for this long after the case ended.
+            if (tag == "eventListener") ext.childText("event-listener-timer-expression")?.let { d["offeredFor"] = it }
+        }
+        if (tag.endsWith("EventListener") || tag == "eventListener") {
+            // While this is false the listener is *unavailable*: no button, nothing to trigger. The engine
+            // re-checks it on every evaluation, so the button comes and goes with the variables it reads.
+            el.attr("availableCondition")?.trim()?.ifEmpty { null }?.let { d["availableCondition"] = it }
+        }
+        when (tag) {
+            // what a timer listener waits for, on the plan-tree record itself
+            "timerEventListener" -> el.childText("timerExpression")?.let { d["timer"] = it }
+            // A generic `<eventListener>` is typed by its `flowable:eventType` *attribute* — `variable`,
+            // `signal`, `intent`, `reactivate` — not to be confused with the event-registry `<eventType>`
+            // child element (see XmlHelpers.eventKeys, recorded as `eventType`). Each waits for something
+            // other than a click, and the reactivation listener is the case's *Reopen* button.
+            "eventListener" -> {
+                el.attr("eventType")?.trim()?.ifEmpty { null }?.let { d["listenerType"] = it }
+                for (a in listOf("variableName", "variableChangeType", "signalRef")) {
+                    el.attr(a)?.trim()?.ifEmpty { null }?.let { d[a] = it }
+                }
+            }
         }
         // A form key can also arrive as the target of an in-mapping. The mappings themselves are rolled up
         // once per case in [parseCmmn]; here they are only needed to spot that form reference.
@@ -551,6 +612,63 @@ object BackendModelParsers {
         return d
     }
 
+    /**
+     * The two attributes that decide a stage's or milestone's place in Work's stage overview — the bar a
+     * user (and an agent asked to "bring the case to stage 5") counts stages by. `displayOrder` orders it,
+     * `includeInStageOverview="false"` hides the element from it. Recorded only when the model sets them.
+     */
+    private fun stageOverviewAttrs(el: El, rec: MutableMap<String, Any?>) {
+        el.attr("displayOrder")?.trim()?.ifEmpty { null }?.let { rec["displayOrder"] = it }
+        el.attr("includeInStageOverview")?.trim()?.ifEmpty { null }?.let { rec["includeInStageOverview"] = it }
+    }
+
+    /**
+     * One entry or exit criterion. `planItemId` joins it to the plan item it sits on — the definition id
+     * alone (`planItemDef`) is shared by every plan item that references the same definition, which is
+     * legal CMMN, and gave each of them the other's criteria. `exitEventType` / `exitType` say what an exit
+     * does: on a stage, `complete`/`forceComplete` ends it as *completed* (sentries waiting for "completes"
+     * fire), where a plain exit only fires "is exited"; `exitType` limits which instances are ended.
+     */
+    private fun criterion(crit: El, pi: El?): LinkedHashMap<String, Any?> {
+        val rec = linkedMapOf<String, Any?>("id" to crit.attr("id"))
+        if (pi != null) {
+            rec["planItem"] = pyOr(pi.attr("name"), pi.attr("definitionRef"))
+            rec["planItemDef"] = pi.attr("definitionRef")
+        }
+        rec["type"] = crit.tag
+        rec["sentryRef"] = crit.attr("sentryRef")
+        pi?.attr("id")?.ifEmpty { null }?.let { rec["planItemId"] = it }
+        for (a in listOf("exitEventType", "exitType")) crit.attr(a)?.trim()?.ifEmpty { null }?.let { rec[a] = it }
+        return rec
+    }
+
+    /**
+     * A plan item's item-control rules: the three CMMN rules (condition text, or `true` when it has none),
+     * plus the Flowable details that change what they mean at runtime — how many instances a repetition
+     * runs at once or over which collection, whether the item holds its stage open (`parentCompletionRule`,
+     * `completionNeutralRule`), and whether a manual activation is for the case's AI agent.
+     */
+    private fun itemRules(ic: El?): LinkedHashMap<String, Any?> {
+        val rules = LinkedHashMap<String, Any?>()
+        if (ic == null) return rules
+        for (r in listOf("repetitionRule", "requiredRule", "manualActivationRule")) {
+            val rn = ic.findChild(r)
+            if (rn != null) rules[r] = pyOr(rn.childText("condition"), true)
+        }
+        ic.findChild("repetitionRule")?.let { rep ->
+            for (a in listOf("maxInstanceCount", "collectionVariable", "elementVariable")) {
+                rep.attr(a)?.trim()?.ifEmpty { null }?.let { rules[a] = it }
+            }
+        }
+        ic.findChild("manualActivationRule")?.let { XmlHelpers.extEl(it) }?.childText("aiActivationType")
+            ?.let { rules["aiActivationType"] = it }
+        XmlHelpers.extEl(ic)?.let { ext ->
+            ext.findChild("parentCompletionRule")?.let { rules["parentCompletionRule"] = it.attr("type")?.trim()?.ifEmpty { null } ?: true }
+            ext.findChild("completionNeutralRule")?.let { rules["completionNeutralRule"] = pyOr(it.childText("condition"), true) }
+        }
+        return rules
+    }
+
     /** Recursively walk a CMMN stage/plan-fragment, mirroring definitionRef resolution. */
     private fun cmmnWalk(
         ctx: Ctx, caseKey: Any?, ffile: String, stage: El,
@@ -577,30 +695,43 @@ object BackendModelParsers {
             "id" to stage.attr("id"), "name" to stage.attr("name"), "type" to stage.tag,
             "autoComplete" to stage.attr("autoComplete"), "children" to children, "criteria" to criteria,
         )
+        stageOverviewAttrs(stage, node)
+        // An autoComplete decided at runtime: the stage completes by itself only while this holds.
+        stage.attr("autoCompleteCondition")?.trim()?.ifEmpty { null }?.let { node["autoCompleteCondition"] = it }
+        // A stage's own start form — the dialog its manual-activation button opens. The case plan model's
+        // forms are the case's and are recorded by [parseCmmn].
+        if (allDefs != null) {
+            for ((rel, fk) in XmlHelpers.designFormKeys(stage)) {
+                ctx.addRef(caseKey, "cmmn", ffile, rel, "form", fk)
+                if (rel == "start-form") node["startFormKey"] = fk
+            }
+            XmlHelpers.extEl(stage)?.let { ext ->
+                for ((tag2, field) in listOf(
+                    "manual-activation-name" to "actionName", "manual-activation-permission-groups" to "actionGroups",
+                    "manual-activation-permission-users" to "actionUsers",
+                )) ext.childText(tag2)?.let { node[field] = it }
+            }
+        }
         for (pi in stage.findChildren("planItem")) {
+            // id joins the criterion to its diagram shape; planItemId (else planItemDef) to the plan-tree row
             for (crit in pi.children) {
-                if (crit.tag in listOf("entryCriterion", "exitCriterion")) {
-                    // id joins the criterion to its diagram shape; planItemDef to the plan-tree row
-                    criteria.add(linkedMapOf(
-                        "id" to crit.attr("id"),
-                        "planItem" to pyOr(pi.attr("name"), pi.attr("definitionRef")),
-                        "planItemDef" to pi.attr("definitionRef"),
-                        "type" to crit.tag, "sentryRef" to crit.attr("sentryRef"),
-                    ))
-                }
+                if (crit.tag in listOf("entryCriterion", "exitCriterion")) criteria.add(criterion(crit, pi))
             }
-            // item control rules
-            val ic = pi.findChild("itemControl")
-            val rules = LinkedHashMap<String, Any?>()
-            if (ic != null) {
-                for (r in listOf("repetitionRule", "requiredRule", "manualActivationRule")) {
-                    val rn = ic.findChild(r)
-                    if (rn != null) rules[r] = pyOr(rn.childText("condition"), true)
-                }
-            }
+            val rules = itemRules(pi.findChild("itemControl"))
             val ref = pi.attr("definitionRef")
             var target: El? = ref?.let { defs[it] }
             if (target == null) target = ref?.let { allDefsResolved[it] }
+            // A sentry's onPart names the *plan item* (`planItemhumanTask1`), the tree is keyed by the
+            // definition (`humanTask1`): without the plan item's id on the record, "after X completes"
+            // could not be said by name. Only when the two differ, which in a Design export is always.
+            // The plan item's own name likewise, when it differs from the definition's: Work names the
+            // running instance (its task, its action button, its entry in the stage bar) after it.
+            fun planItemId(rec: MutableMap<String, Any?>) {
+                val pid = pi.attr("id")
+                if (truthy(pid) && pid != rec["id"]) rec["planItemId"] = pid
+                val pname = pi.attr("name")?.trim()
+                if (!pname.isNullOrEmpty() && pname != (rec["name"] as? String)?.trim()) rec["planItemName"] = pname
+            }
             if (target == null) {
                 children.add(linkedMapOf(
                     "id" to pi.attr("id"), "name" to pi.attr("name"), "type" to "planItem(?)", "rules" to rules,
@@ -610,10 +741,12 @@ object BackendModelParsers {
                 if (tid in seenResolved) continue  // guard against pathological scope cycles
                 val child = cmmnWalk(ctx, caseKey, ffile, target, allDefsResolved, seenResolved + setOfNotNull(tid))
                 child["rules"] = rules
+                planItemId(child)
                 children.add(child)
             } else {
                 val d = cmmnDef(ctx, caseKey, ffile, target)
                 d["rules"] = rules
+                planItemId(d)
                 children.add(d)
             }
         }
@@ -642,6 +775,9 @@ object BackendModelParsers {
                 "eventListeners" to eventListeners, "modelRefs" to modelRefs,
                 "ioParameters" to ioParameters,
             )
+            val overview = HashMap<String, Int>()   // stage/milestone id → place in the stage overview, below
+            // see the same key on a process: users count as much as groups for who may start it
+            case.attr("candidateStarterUsers")?.trim()?.ifEmpty { null }?.let { info["candidateStarterUsers"] = it }
             ctx.addAccess(ckey, "case", "start", "start",
                 case.attr("candidateStarterGroups"), case.attr("candidateStarterUsers"))
             if (plan != null) {
@@ -649,9 +785,46 @@ object BackendModelParsers {
                     ctx.addRef(ckey, "cmmn", ffile, "start-form", "form", plan.attr("formKey"))
                 }
                 // case work form / start form referenced via Design extension elements
-                for ((rel, fk) in XmlHelpers.designFormKeys(plan)) {
+                val planForms = XmlHelpers.designFormKeys(plan)
+                for ((rel, fk) in planForms) {
                     ctx.addRef(ckey, "cmmn", ffile, rel, "form", fk)
                 }
+                // The case's *own* forms, on the record. Every plan item's start form is a `start-form` edge
+                // of the case too (the reference belongs to the case model), so the edges alone cannot say
+                // which one the create dialog shows and which one an action button opens.
+                (plan.attr("formKey")?.trim()?.ifEmpty { null } ?: planForms.firstOrNull { it.first == "start-form" }?.second)
+                    ?.let { info["startFormKey"] = it }
+                planForms.firstOrNull { it.first == "work-form" }?.let { info["workFormKey"] = it.second }
+                // A custom case view is where the case's pages and its own navigation live; Work links to it
+                // from the case header, for the view's permission groups. Only the first view is kept: Work
+                // takes the first one the user's groups allow, and one is enough to say that a view exists.
+                XmlHelpers.extEl(plan)?.findChildren("custom-view-element")
+                    ?.firstOrNull { !it.attr("customViewKey").isNullOrBlank() }?.let { v ->
+                        info["customViewKey"] = v.attr("customViewKey")!!.trim()
+                        v.attr("permissionGroups")?.trim()?.ifEmpty { null }?.let { info["customViewGroups"] = it }
+                    }
+                // An exit criterion on the case plan model ends the whole case — every stage, every open
+                // task — and the plan-tree walk only reads criteria on plan items. Kept on the plan model's
+                // own record, where the XML has it.
+                @Suppress("UNCHECKED_CAST")
+                val pm = info["planModel"] as? MutableMap<String, Any?>
+                plan.findChildren("exitCriterion").map { criterion(it, null) }.takeIf { it.isNotEmpty() }
+                    ?.let { pm?.set("exitCriteria", it) }
+                // Where Work's stage overview puts each stage and milestone before `displayOrder` and end
+                // times reorder it: every stage of the case in document order (nested ones included), then
+                // every milestone. It is the tie-break between entries that share a `displayOrder` or have
+                // none, and it is not the plan-item order the tree is in.
+                for (tag in listOf("stage", "milestone")) for (e in plan.iter(tag)) {
+                    e.attr("id")?.ifEmpty { null }?.let { overview.putIfAbsent(it, overview.size) }
+                }
+                fun placeInOverview(node: MutableMap<String, Any?>) {
+                    @Suppress("UNCHECKED_CAST")
+                    for (ch in (node["children"] as? List<*>).orEmpty().mapNotNull { it as? MutableMap<String, Any?> }) {
+                        if (ch["type"] == "stage" || ch["type"] == "milestone") overview[ch["id"]]?.let { ch["overviewIndex"] = it }
+                        if (ch.containsKey("children")) placeInOverview(ch)
+                    }
+                }
+                pm?.let(::placeInOverview)
             }
             // case-level extension references
             XmlHelpers.collectDesignExtensionRefs(ctx, ckey, "cmmn", "case", ffile, case)
@@ -697,12 +870,32 @@ object BackendModelParsers {
                     }
                     when {
                         el.tag == "sentry" -> {
-                            val cond = pyOr(el.textOfDescendant("condition"), el.textOfDescendant("ifPart"))
-                            val on = el.findChildren("planItemOnPart").map { it.attr("sourceRef") }
-                            sentries.add(linkedMapOf("id" to el.attr("id"), "condition" to cond, "onParts" to on))
+                            // `ifPart/condition` first: Design writes its condition builder as
+                            // `<flowable:condition>` elements under extensionElements, *before* the ifPart, so
+                            // "the first descendant called condition" was an empty builder node and the real
+                            // condition was lost on every sentry built that way.
+                            val cond = pyOr(pyOr(el.findChild("ifPart")?.childText("condition"),
+                                el.textOfDescendant("condition")), el.textOfDescendant("ifPart"))
+                            val parts = el.findChildren("planItemOnPart")
+                            val on = parts.map { it.attr("sourceRef") }
+                            val sentry = linkedMapOf<String, Any?>("id" to el.attr("id"), "condition" to cond, "onParts" to on)
+                            // `onEvent`: a satisfied on-part is not remembered, so the event and the condition
+                            // have to coincide — a later variable change does not fire it any more.
+                            el.attr("triggerMode")?.trim()?.ifEmpty { null }?.let { sentry["triggerMode"] = it }
+                            // Which transition of the source fires the sentry — `complete` almost always, but
+                            // `occur` (a milestone or user event listener) and `exit`/`terminate` say something
+                            // quite different about what has to happen first. Only when the model says it.
+                            val events = parts.mapNotNull { p ->
+                                p.childText("standardEvent")?.let { linkedMapOf("source" to p.attr("sourceRef"), "event" to it) }
+                            }
+                            if (events.isNotEmpty()) sentry["events"] = events
+                            sentries.add(sentry)
                         }
                         el.tag == "milestone" -> {
-                            milestones.add(linkedMapOf("id" to el.attr("id"), "name" to el.attr("name")))
+                            val ms = linkedMapOf<String, Any?>("id" to el.attr("id"), "name" to el.attr("name"))
+                            stageOverviewAttrs(el, ms)
+                            overview[el.attr("id")]?.let { ms["overviewIndex"] = it }
+                            milestones.add(ms)
                         }
                         el.tag == "timerEventListener" -> {
                             eventListeners.add(linkedMapOf(
@@ -710,7 +903,10 @@ object BackendModelParsers {
                                 "timer" to el.childText("timerExpression"),
                             ))
                         }
-                        el.tag.endsWith("EventListener") -> {
+                        // `eventListener` itself too: the generic listener (and the typed variable, signal and
+                        // reactivation listeners Design writes as one) used to fall outside the suffix test,
+                        // so a signal listener's signal was never correlated with whoever throws it.
+                        el.tag.endsWith("EventListener") || el.tag == "eventListener" -> {
                             val lext = XmlHelpers.extEl(el)
                             val lev = if (lext != null) lext.childText("eventType") else null
                             if (!lev.isNullOrEmpty()) {
@@ -720,6 +916,7 @@ object BackendModelParsers {
                                 "id" to el.attr("id"), "name" to el.attr("name"), "type" to el.tag,
                             )
                             if (!lev.isNullOrEmpty()) entry["eventType"] = lev
+                            if (el.tag == "eventListener") el.attr("eventType")?.trim()?.ifEmpty { null }?.let { entry["listenerType"] = it }
                             // signal event listener — correlates by signal name across models
                             val sref = el.attr("signalRef")
                             if (!sref.isNullOrEmpty()) {
@@ -740,7 +937,6 @@ object BackendModelParsers {
     // helpers
     // -----------------------------------------------------------------------
 
-    /** ElementTree `elem.iter()` (no tag): self + every descendant, pre-order. */
     /**
      * Element-level extras every flow node can carry, added only when the model declares them (so a
      * plain task keeps the record shape it always had):
@@ -769,6 +965,24 @@ object BackendModelParsers {
         return rec
     }
 
+    /** Sub-process kinds that scope the elements inside them. */
+    private val SUB_PROCESS_TAGS = setOf("subProcess", "transaction", "adhocSubProcess")
+
+    /** Element id → the id of the nearest sub-process around it, for every element that sits in one. */
+    private fun enclosingSubProcess(proc: El): Map<String, String> {
+        val out = HashMap<String, String>()
+        fun walk(e: El, sp: String?) {
+            for (c in e.children) {
+                val id = c.attr("id")
+                if (sp != null && !id.isNullOrEmpty()) out[id] = sp
+                walk(c, if (c.tag in SUB_PROCESS_TAGS && !id.isNullOrEmpty()) id else sp)
+            }
+        }
+        walk(proc, null)
+        return out
+    }
+
+    /** ElementTree `elem.iter()` (no tag): self + every descendant, pre-order. */
     private fun iterAll(el: El): List<El> {
         val out = ArrayList<El>()
         fun walk(e: El) {

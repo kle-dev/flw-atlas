@@ -5644,7 +5644,17 @@ function planTreeHtml(nd, c, CRIT){
   const kids=nd.children||[];
   const isStage=x=>x.type==='stage'||x.type==='planFragment'||x.type==='casePlanModel';
   const items=kids.filter(x=>!isStage(x)), stages=kids.filter(isStage);
-  const rulesOf=x=>x.rules?Object.keys(x.rules).map(r=>({repetitionRule:'repeatable',requiredRule:'required',manualActivationRule:'manual'}[r]||r)).map(tag).join(''):'';
+  // The three CMMN rules read as one word each; the repetition and completion details beside them only
+  // with their value — a bare `maxInstanceCount` chip says nothing. The element variable is plumbing.
+  const RULE_TAG={repetitionRule:'repeatable',requiredRule:'required',manualActivationRule:'manual'};
+  const RULE_DETAIL={
+    maxInstanceCount:v=>String(v).toLowerCase()==='unlimited'?'':'max '+v+' at once',
+    collectionVariable:v=>'per '+v,
+    parentCompletionRule:v=>(v===true||v==='default')?'':'parent completion: '+v,
+    completionNeutralRule:()=>'completion-neutral',
+    aiActivationType:v=>'AI: '+v,
+  };
+  const rulesOf=x=>x.rules?Object.entries(x.rules).map(([k,v])=>RULE_TAG[k]||(RULE_DETAIL[k]?RULE_DETAIL[k](v):'')).filter(Boolean).map(tag).join(''):'';
   const refs=x=>[
     x.formKey?'<span class="muted">form</span> '+vlinkCopy('form:'+x.formKey, x.formKey, 'form key'):'',
     x.processRef?'<span class="muted">process</span> '+vlinkCopy('process:'+x.processRef, x.processRef, 'process key'):'',

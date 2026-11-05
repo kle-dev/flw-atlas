@@ -306,6 +306,7 @@
             "id": "reviewTask",
             "listeners": [],
             "name": "Review order",
+            "planItemId": "pi_review",
             "rules": {},
             "type": "humanTask"
           },
@@ -315,6 +316,7 @@
             "listeners": [],
             "name": "Lookup customer",
             "operationKey": "findAll",
+            "planItemId": "pi_lookup",
             "rules": {},
             "serviceModelKey": "customerService",
             "serviceTaskType": null,
@@ -324,6 +326,7 @@
             "id": "startOrder",
             "listeners": [],
             "name": "Start order",
+            "planItemId": "pi_order",
             "processRef": "orderProcess",
             "rules": {},
             "type": "processTask"
@@ -1219,6 +1222,7 @@
       "key": "DEMO-LF001",
       "modelType": "form",
       "name": "Legacy order lookup",
+      "outcomeVariableName": "legacyAction",
       "outcomes": [
         {
           "label": "Save",
@@ -2106,6 +2110,7 @@
           "key": "DEMO-LF001",
           "modelType": "form",
           "name": "Legacy order lookup",
+          "outcomeVariableName": "legacyAction",
           "outcomes": [
             {
               "label": "Save",
@@ -2845,6 +2850,7 @@
                 "id": "reviewTask",
                 "listeners": [],
                 "name": "Review order",
+                "planItemId": "pi_review",
                 "rules": {},
                 "type": "humanTask"
               },
@@ -2854,6 +2860,7 @@
                 "listeners": [],
                 "name": "Lookup customer",
                 "operationKey": "findAll",
+                "planItemId": "pi_lookup",
                 "rules": {},
                 "serviceModelKey": "customerService",
                 "serviceTaskType": null,
@@ -2863,6 +2870,7 @@
                 "id": "startOrder",
                 "listeners": [],
                 "name": "Start order",
+                "planItemId": "pi_order",
                 "processRef": "orderProcess",
                 "rules": {},
                 "type": "processTask"

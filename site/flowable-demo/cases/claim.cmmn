@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/CMMN/20151109/MODEL"
+             xmlns:flowable="http://flowable.org/cmmn"
+             targetNamespace="http://flowable.org/demo">
+  <!-- A case that moves through stages: the shape a request like "bring the claim to stage 5" is about.
+       Five stages in a fixed order, a form outcome that decides whether the route goes on, an item someone
+       has to start by hand, a milestone kept out of the stage bar, and a user event listener that jumps
+       straight to the last stage. Plan item ids follow Design's export (`planItem` + definition id). -->
+  <case id="claimCase" name="Claim handling" flowable:candidateStarterGroups="claimHandlers">
+    <casePlanModel id="claimPlan" name="Claim handling" flowable:formKey="claimIntakeForm">
+      <planItem id="planItemstageIntake" name="Intake" definitionRef="stageIntake"/>
+      <planItem id="planItemstageAssessment" name="Assessment" definitionRef="stageAssessment">
+        <entryCriterion id="critAssessment" sentryRef="sentryIntakeDone"/>
+      </planItem>
+      <planItem id="planItemstageDecision" name="Decision" definitionRef="stageDecision">
+        <entryCriterion id="critDecision" sentryRef="sentryApproved"/>
+      </planItem>
+      <planItem id="planItemstageSettlement" name="Settlement" definitionRef="stageSettlement">
+        <entryCriterion id="critSettlement" sentryRef="sentryDecided"/>
+      </planItem>
+      <planItem id="planItemmsPaid" name="Claim paid" definitionRef="msPaid">
+        <entryCriterion id="critPaid" sentryRef="sentrySettled"/>
+      </planItem>
+      <planItem id="planItemstageClosure" name="Closure" definitionRef="stageClosure">
+        <entryCriterion id="critClosureSettled" sentryRef="sentrySettledForClosure"/>
+        <entryCriterion id="critClosureEarly" sentryRef="sentryClosedEarly"/>
+      </planItem>
+      <planItem id="planItemuelClose" name="Close without payout" definitionRef="uelClose"/>
+
+      <sentry id="sentryIntakeDone">
+        <planItemOnPart id="onIntakeDone" sourceRef="planItemstageIntake">
+          <standardEvent>complete</standardEvent>
+        </planItemOnPart>
+      </sentry>
+      <sentry id="sentryApproved">
+        <planItemOnPart id="onAssessmentDone" sourceRef="planItemstageAssessment">
+          <standardEvent>complete</standardEvent>
+        </planItemOnPart>
+        <ifPart><condition><![CDATA[${assessmentOutcome == 'approve'}]]></condition></ifPart>
+      </sentry>
+      <sentry id="sentryDecided">
+        <planItemOnPart id="onDecisionDone" sourceRef="planItemstageDecision">
+          <standardEvent>complete</standardEvent>
+        </planItemOnPart>
+      </sentry>
+      <sentry id="sentrySettled">
+        <planItemOnPart id="onSettledPaid" sourceRef="planItemstageSettlement">
+          <standardEvent>complete</standardEvent>
+        </planItemOnPart>
+      </sentry>
+      <sentry id="sentrySettledForClosure">
+        <planItemOnPart id="onSettledClosure" sourceRef="planItemstageSettlement">
+          <standardEvent>complete</standardEvent>
+        </planItemOnPart>
+      </sentry>
+      <sentry id="sentryClosedEarly">
+        <planItemOnPart id="onClosedEarly" sourceRef="planItemuelClose">
+          <standardEvent>occur</standardEvent>
+        </planItemOnPart>
+      </sentry>
+
+      <stage id="stageIntake" name="Intake" autoComplete="true" flowable:displayOrder="1">
+        <planItem id="planItemhtCheckDocuments" name="Check documents" definitionRef="htCheckDocuments">
+          <itemControl><requiredRule/></itemControl>
+        </planItem>
+        <humanTask id="htCheckDocuments" name="Check documents" flowable:candidateGroups="claimHandlers"/>
+      </stage>
+
+      <stage id="stageAssessment" name="Assessment" autoComplete="true" flowable:displayOrder="2">
+        <planItem id="planItemhtAssess" name="Assess damage" definitionRef="htAssess">
+          <itemControl><requiredRule/></itemControl>
+        </planItem>
+        <planItem id="planItemhtExpert" name="Request expert opinion" definitionRef="htExpert">
+          <itemControl><manualActivationRule/></itemControl>
+        </planItem>
+        <humanTask id="htAssess" name="Assess damage" flowable:candidateGroups="claimHandlers"
+                   flowable:formKey="claimAssessmentForm"/>
+        <humanTask id="htExpert" name="Request expert opinion" flowable:candidateGroups="claimHandlers"/>
+      </stage>
+
+      <!-- No autoComplete: the stage completes once nothing in it is waiting. -->
+      <stage id="stageDecision" name="Decision" flowable:displayOrder="3">
+        <planItem id="planItemhtApprove" name="Approve payout" definitionRef="htApprove"/>
+        <humanTask id="htApprove" name="Approve payout" flowable:candidateGroups="claimManagers"/>
+      </stage>
+
+      <stage id="stageSettlement" name="Settlement" autoComplete="true" flowable:displayOrder="4">
+        <planItem id="planItemhtPay" name="Confirm payment" definitionRef="htPay"/>
+        <humanTask id="htPay" name="Confirm payment" flowable:candidateGroups="claimManagers"/>
+      </stage>
+
+      <milestone id="msPaid" name="Claim paid" flowable:includeInStageOverview="false"/>
+
+      <stage id="stageClosure" name="Closure" autoComplete="true" flowable:displayOrder="5">
+        <planItem id="planItemhtLetter" name="Send closing letter" definitionRef="htLetter"/>
+        <humanTask id="htLetter" name="Send closing letter" flowable:candidateGroups="claimHandlers"/>
+      </stage>
+
+      <userEventListener id="uelClose" name="Close without payout">
+        <extensionElements>
+          <flowable:event-listener-permission-groups>claimManagers</flowable:event-listener-permission-groups>
+        </extensionElements>
+      </userEventListener>
+    </casePlanModel>
+  </case>
+</definitions>

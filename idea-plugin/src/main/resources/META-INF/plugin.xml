@@ -115,9 +115,11 @@
               HTML page. Save it into the project and open it in your browser or right inside the IDE
               (embedded viewer), then click through every relationship in both directions. In
               Settings → Generation you pick exactly which artifacts are written — summary &amp;
-              overview Markdown, the graph JSON, the explorer HTML, a CLAUDE.md primer for AI agents.
-              Generation runs entirely in-process — no external tools required — and honours the
-              project's expression allowlist.</li>
+              overview Markdown, the graph JSON, the explorer HTML, a CLAUDE.md primer for AI agents,
+              and a Playwright guide that lets an agent drive Flowable Work in a browser, with this
+              project's stage bars, tasks, required fields and button conditions. Generation runs
+              entirely in-process — no external tools required — and honours the project's expression
+              allowlist.</li>
           <li><b>An ER diagram designer</b> — tick <i>ER diagram designer (HTML)</i> under Settings →
               Generation and Atlas writes a page of its own beside the explorer: drag the project's tables
               onto a canvas, show their columns and types, search across every table and column, draw named
@@ -149,6 +151,120 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.30.0</h3>
+        <ul>
+          <li><b>A guide for agents that drive Flowable Work in a browser.</b> Atlas now writes
+              <code>&lt;project&gt;.playwright.md</code>: what an agent with a browser — the Playwright MCP
+              server, a Playwright script or another browser tool — needs to work <i>in</i> Work rather than
+              on the code. Start a case or process, open a case or task, see which stage a case is in, claim
+              and complete tasks and fill in their forms, press a case's actions, bring a case to a given
+              stage, find the open tasks of a user or group, explain why a button is missing or greyed out,
+              and know when to stop and ask. The first part is how Work behaves, for any project: a quick
+              start that reads a case's whole state in one call; the rules (act through the UI, only look
+              through REST, never click a disabled button, ask before anything irreversible); the sign-in,
+              the routes, <i>Create New</i>, the stage bar, the toolbar where manual-activation items and
+              user event listeners become buttons, and a task's outcome buttons; the read-only REST
+              endpoints that explain a screen; the CMMN rules that move a case; a checklist for a disabled
+              button; the loop for reaching a stage; and the Playwright traps, with what each script call is
+              in Playwright MCP.</li>
+          <li><b>The guide says which Work it describes.</b> Locators, dialogs and buttons differ between
+              Work's lines. The guide describes 2026.1 and newer, marks what older lines do differently, and
+              keeps a table with one column each for 2026.1 and newer, 2025.2, 2025.1 with 3.15–3.17, and
+              3.14 and older — apart because Work's own screens got their ARIA roles only in 3.15. The
+              version the project builds against names the column, and the agent is told to read the running
+              version from the system before relying on it. The notes were compiled from Work's frontend
+              source for each line and its own end-to-end test helpers, not by driving a running Work; the
+              guide says so, and what to fall back on when a locator finds nothing.</li>
+          <li><b>Its second part is this project, read from its models.</b> An index of every deployed case
+              and process: its key, the link that starts it
+              (<code>#/work?create=true&amp;definitionKey=&lt;key&gt;</code>, which also tells apart two
+              definitions with one title), its stage bar or its number of user tasks, and who may start it;
+              then the apps the sidebar shows, with their pages. Behind the index, for each case: its stage
+              bar in Work's order, and for each stage what starts it, read out of its sentries, whether it
+              completes by itself, and the tasks, manual items and listeners inside it with the groups that
+              get them. For each process: its user tasks in flow order and what leads to each. For every
+              form: its required fields and their validation rules, its outcomes and the variable they
+              write, and its conditional buttons. A condition on a variable names the outcome or the field
+              that sets it, and ⚠ marks the traps: a required field that can be hidden, which, on a form
+              saved by Design 3.8 or later, keeps the outcomes disabled with no error on the page, and
+              stage-bar entries that share a <code>displayOrder</code> or have none, which Work reorders as
+              they end. Models that only a test source set deploys are left out.</li>
+          <li><b>One artifact in two files.</b> A skill is loaded whole, and on a real project the details
+              are most of the text, so <code>--all</code>, the launcher and the plugin write them to a
+              project map beside the guide, <code>&lt;project&gt;.playwright-map.md</code>, which its index
+              points into; <code>--playwright</code> alone writes one file with the details inline. In the
+              plugin, tick <i>Playwright guide for Flowable Work (+ project map)</i> under <i>Settings →
+              Tools → Flowable Atlas → Generation</i>. The guide opens with skill front matter: copy it to
+              <code>.claude/skills/flowable-work-ui/SKILL.md</code> and the map beside it as
+              <code>project-map.md</code>, and Claude Code loads it when a request is about Work. With the
+              guide written beside it, the generated <code>CLAUDE.md</code> names the requests it is for and
+              says to read it before the first click. Written outside the project — the launcher's default —
+              the guide names the map and the graph by their full path, the home directory as
+              <code>~</code>.</li>
+          <li><b>A sentry's condition is read from its <code>ifPart</code>.</b> Design writes its condition
+              builder as <code>&lt;flowable:condition&gt;</code> elements before the <code>ifPart</code>.
+              Atlas took the first of them, which is empty, so on every sentry built that way the real
+              condition was missing from the overview, the explorer and the graph.</li>
+          <li><b>The graph keeps what moves a case in Work.</b> Sentries keep their <code>triggerMode</code>
+              and the event each on-part waits for, and every entry and exit criterion the plan item it sits
+              on (<code>planItemId</code>); an exit keeps its <code>exitEventType</code> and
+              <code>exitType</code>. A case keeps its own exit criteria, its start form, its <i>Work
+              form</i> and its candidate starter users. Stages and milestones keep
+              <code>displayOrder</code>, <code>includeInStageOverview</code> and their place in Work's stage
+              overview, and a stage its <code>autoCompleteCondition</code>. A plan item keeps the button
+              name, groups and users of its manual activation, the start form that button opens, its
+              <code>maxInstanceCount</code> and the collection a repetition runs over, and its
+              <code>parentCompletionRule</code> and <code>completionNeutralRule</code>; a listener keeps its
+              <code>availableCondition</code>, its timer, and the variable or signal it waits for. A user
+              task keeps its candidate users and the sub-process around it, a multi-instance its completion
+              condition, and a process its candidate starter users.</li>
+          <li><b>Forms and apps keep what Work shows of them.</b> A form keeps the variable its outcome is
+              stored in (<code>outcomeVariableName</code>), <code>doNotCreateOutcomeVariable</code> and the
+              Design version it records. An outcome keeps <code>visible</code>, <code>enabled</code>,
+              <code>ignoreValidation</code> and <code>navigationUrl</code>. A field keeps its validation
+              rules — pattern, bounds, length, date format, custom checks — and the containers around it
+              that can hide, disable or ignore it. An app keeps <code>flowApp</code>, its <code>url</code>
+              and <code>order</code>, and each page its label and url.</li>
+          <li><b>A deployed model wins over its test copy.</b> A model under a test source set
+              (<code>src/test/…</code>) that shared its key with one the app deploys could stand in for it
+              everywhere: the first copy read was the model, and loose files are read before archives, so an
+              empty test fixture replaced the process a <code>.bar</code> deploys — in the explorer, the
+              overview, the graph and the findings. Test copies are read last now: the deployed copy is the
+              model, and a test copy that references other models is listed among its other copies.</li>
+          <li><b>A case's generic event listeners are among its event listeners.</b> Design writes a
+              variable, signal or reactivation listener as a generic <code>eventListener</code>, which Atlas
+              did not count as one, so a signal listener was never linked to the models that throw its
+              signal. It is listed now, with its kind, and linked.</li>
+          <li><b>A form input without a caption is a field.</b> Design lets a modeller leave the label out,
+              and such an input was never recorded: a task form whose only input was a required number field
+              read as having nothing required. An input without a caption now counts when it is required, or
+              bound to a value.</li>
+          <li><b>An app that lists its pages under <code>pages</code> contains them.</b> Older Design
+              workspace exports keep an app's pages there rather than under <code>pageModels</code>, the
+              only place Atlas looked: such an app contained no page, and its pages' permissions were
+              missing from the access map.</li>
+          <li><b><code>CLAUDE.md</code> states the Flowable version of Work projects.</b> Only engine
+              versions (6.x–9.x) were accepted, and the property the platform's project template declares,
+              <code>&lt;com.flowable.platform.version&gt;</code>, was not looked for: every Work project
+              measured (3.11 to 2025.1) was told nothing about its version. Platform versions (3.x, 2025.x,
+              2026.x) are now found in Maven properties and dependencies and in Gradle properties, version
+              catalogs and dependency coordinates, the platform's <code>com.flowable.platform:…</code>
+              sub-groups included, and a platform version wins over an engine one. The Playwright guide
+              picks its version column from it.</li>
+          <li><b>Execution order holds across a loop.</b> When a process's flows loop back, the overview
+              could put a step the loop leads to ahead of the loop's own gateway: breaking the cycle
+              compared one step's position in the file with the order in which the walk had reached the
+              others. The step the walk is waiting on goes first now, in the overview and in the guide's
+              user tasks.</li>
+          <li><b>A project given as <code>.</code> names its files by its directory.</b> Run on
+              <code>.</code> from inside the project, the summary, the overview and <code>CLAUDE.md</code>
+              pointed at <code>..graph.json</code>, <code>..overview.md</code> and so on, while the files
+              themselves were written under the directory's name. They name the files as written now.</li>
+          <li><b>The Atlas Hub stays where you scrolled it.</b> Ticking or unticking an app in the Design
+              block threw the panel back up to the Explorer block, so the next app further down meant
+              scrolling down again — and so did every other refresh of the Hub: an analysis landing, or the
+              index rebuilt. The Hub now keeps its place.</li>
+        </ul>
         <h3>0.29.0</h3>
         <ul>
           <li><b>A button that would wipe the form is a finding.</b> An expression button stores what it
@@ -469,112 +585,6 @@
               followed through the registration's import into its own file — with the file and line, which
               opens in the IDE. For a compiled <code>ext/custom.js</code> the code is read from the bundle's
               sourcemap, whose original sources are readable where the minified bundle is not.</li>
-          <li><b>The IDE marks a Java method only where a model calls it on its class's bean.</b> The
-              <i>Referenced by Flowable models</i> gutter, Find Usages and the rename warning matched names:
-              every <code>getId</code>, <code>cancel</code> or <code>process</code> in the project was
-              "referenced" once any expression called any method of that name, and on the real projects 92
-              of 168 marked methods were never called on their own class. A method is used where a model
-              calls or reads it on one of its class's Spring beans (a stereotype, a <code>@Bean</code>
-              method's return type, a Spring Data repository — the explorer's rules), a class where its bean
-              is an expression's root or a <code>class</code> attribute spells out its exact name.
-              Ctrl/⌘-click on a bean name opens the class that declares that bean, so a variable
-              <code>order</code> beside a class <code>Order</code> goes nowhere, and completion labels a
-              name <i>bean</i> only when one is declared.</li>
-          <li><b>The IDE's REST links are the explorer's.</b> The endpoint gutter and Find Usages read a
-              model's calls with the same parsers the explorer uses instead of scanning for every
-              <code>url</code>: a link or a row link is no call, a data source a component no longer uses is
-              not read, a service operation is matched with its base URL, and a button that names no verb is
-              the GET it sends. A call marks only the handler that spells out most of its path, as Spring
-              routes it — <code>/items/search</code> is no longer also <code>GET /items/{id}</code>'s — and
-              a <code>@FeignClient</code> or <code>@HttpExchange</code> interface or a test source's
-              controller serves no endpoint.</li>
-          <li><b>A REST call links only to an endpoint its URL names.</b> A placeholder counted as whatever
-              segment an endpoint needed, so a URL made mostly of placeholders was a call of every endpoint
-              of its length: on one real project 24 forms "called" five unrelated controllers through
-              <code>{{endpoints.idm}}/users?…</code>, and every <code>#/…/case/{{$item.id}}</code>
-              navigation link called the project's one single-segment endpoint. A call now reaches an
-              endpoint only where its URL ends in that endpoint's path. A placeholder only fills a path
-              variable. <code>{{endpoints.idm}}</code> and the other platform bases read as the Flowable API
-              they stand for (<code>idm-api</code>, <code>platform-api</code>, …). A client-side route,
-              another host, and a URL of nothing but placeholders reach no endpoint at all. The fallback
-              that linked a call to any endpoint sharing its last path segment is gone — on nine real
-              projects it never once found the right one. A call whose verb the handler does not serve is
-              still a suspect link that says <i>verb differs</i>. The explorer's form, service and endpoint
-              pages no longer run a matcher of their own: each rest-call edge carries the URLs that reach it
-              (<code>via</code>), so the pages name exactly the endpoints the graph links. The IDE's
-              endpoint gutter and Find Usages use the same rule.</li>
-          <li><b>A REST call on a base Atlas cannot name reaches no endpoint.</b>
-              <code>${crmUrl}/api/customers/${id}</code>, a placeholder host and a custom
-              <code>{{endpoints.x}}</code> may point at any server — on nine real projects every one of them
-              was another system — and matched by their path they looked like calls of the project's own
-              endpoint of that shape. A <code>?</code> or <code>#</code> inside a placeholder (<code>{{c ?
-              'a' : 'b'}}</code>) no longer cuts the URL short, and a service operation that names no verb
-              is a GET, as the service invoker sends it.</li>
-          <li><b>An endpoint is what the controller type serves.</b> The endpoint list read a controller's
-              paths loosely: any string among a mapping's arguments was its path, so
-              <code>@GetMapping(produces = "application/json")</code> served <code>/application/json</code>;
-              the file's first <code>class</code> decided where the base mapping ended, so a data class or
-              enum before the controller swallowed it and was credited with the controller's endpoints; and
-              the handler was whatever annotation came next. Now the path is the mapping's
-              <code>value</code>/<code>path</code> or first argument — every element of an array, a
-              <code>+</code> of literals and constants resolved through the project's constants — the base
-              mapping and the handlers belong to the annotated type, and a path nothing resolves is kept out
-              of matching.</li>
-          <li><b>A REST call belongs to the model that makes it.</b> Calls were credited by key alone, to
-              whichever model Atlas listed first under that key: a service's operation calls showed up on a
-              form or page with the same key, and the service showed none. Each call now carries the node it
-              came from (<code>sourceId</code>).</li>
-          <li><b>A link is where a form goes, not a call it makes.</b> Every component with a URL was a GET
-              call, so a link button to a customer page, a help link and a data table's row link were listed
-              as REST calls — and linked to the project endpoint their URL happened to match. On five real
-              projects 136 components did this. What a URL is now follows the forms runtime: a REST button
-              calls it, an HTML component loads its markup from it, a link calls it only as a download
-              (<code>asFileDownload</code>), and otherwise a link, a link button or a row link <i>navigates
-              to</i> it. Navigation is drawn as such and is not in the form's calls, its Calls table, or the
-              count of external REST URLs.</li>
-          <li><b>A data source a component no longer uses is not read.</b> Switching a select or table to
-              another data source in Design leaves the old one's settings behind, and each of them was read
-              as live: a static select "called" its old REST URL, a REST select "showed" a master-data
-              table, a static table ran its old query. Only the source <code>dataSource</code> names counts
-              now, as in the forms runtime — a data-object select is one whatever it says. A data table's
-              create, edit, view and delete actions count only while they are not switched off, and a
-              create-instance button starts the process or the case its <code>instanceType</code> names, not
-              both.</li>
-          <li><b>A variable is a name that lives in a process or case scope, and only there.</b> Many names
-              that live somewhere else were variables, and the variable graph tied unrelated models together
-              through them: on the real projects 231 variables and some 900 of their uses went away. -
-              <code>{{$currentUser}}</code>, <code>{{$searchText}}</code>, <code>{{$route}}</code> and every
-              other <code>$</code> root belong to the forms runtime. - A <code>${x}</code> or
-              <code>{{x}}</code> in a service, a query or an agent is a parameter of the call — the same
-              name in three unrelated models used to be one variable they shared. - An input or output
-              parameter's <code>name</code> is the callee's field, and an action bot's
-              <code>flw.getInput('x')</code> / <code>flw.setOutput('x')</code> its payload (in a script task
-              the same calls stay reads and writes of variables). - The id of a component that binds no
-              value — a data table, an HTML component, a work list — is no variable, and Design's default
-              ids (<code>datatable1</code>) no longer join unrelated forms. - A form embedded only through a
-              bound subform writes under that binding (<code>address.street</code>), so its
-              <code>street</code> is not a variable of its own. - An EL function's namespace
-              (<code>json:object()</code>), a lambda's or script's locals (arrow parameters, destructuring,
-              <code>def (a, b)</code>, <code>for (String x : …)</code>), a template's <code>&lt;#list … as
-              x&gt;</code> / <code>&lt;#assign x&gt;</code> and its <code>?built_ins</code>, a Java
-              <code>@Value("${…}")</code> and any SpEL <code>#{…}</code> in Java or a channel are no
-              variables either. - A decision table with several results (rule order, output order, collect)
-              writes one variable named after the decision — the list of matched rows — and none of its
-              outputs. Read as outputs, they made six false <i>written but never read</i> on two real
-              projects. - The explorer's <i>Also in</i> and a form's <i>Read by</i> list only the models a
-              flow connects; the same name in a model nothing connects to is counted apart as
-              <i>unrelated</i> — at run time it is another variable.</li>
-          <li><b>A data object uses the operations the engine calls by key.</b> The data-object runtime
-              invokes <code>findById</code>, <code>create</code>, <code>update</code> and
-              <code>delete</code>, and the service registry picks an operation by its key; every operation
-              merely <i>of</i> the lookup, update or delete type was credited to the data object, which hid
-              six unused operations on four real projects.</li>
-          <li><b>A bean from a <code>@Bean</code> method is the class the method returns.</b> It resolved to
-              the configuration class, which then "declared" every method a model called on the bean and was
-              labelled a delegate: on five real projects 84 links went to nine configuration classes, and 53
-              methods were credited to a class that does not have them. A bean of a library type (a
-              <code>JavaDelegate</code> lambda) stays with the class whose factory defines it, and no method
-              of it is credited there.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

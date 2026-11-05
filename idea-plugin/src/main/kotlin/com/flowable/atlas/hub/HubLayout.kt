@@ -211,6 +211,11 @@ internal class HubText(comment: Boolean = true) {
         override fun getPreferredSize(): Dimension =
             Dimension(JBUI.scale(NARROW_TEXT), super.getPreferredSize().height)
         override fun getMinimumSize(): Dimension = preferredSize
+        // Setting the text moves the caret to its end, and a moved caret scrolls itself into view. Every
+        // refresh rewrites these lines, so the Hub jumped back up to the first one, the Explorer's, after
+        // each ticked app. Nobody types here, so there is no caret to follow. Not the caret's NEVER_UPDATE
+        // policy instead: a theme switch installs a fresh caret, and the jumping would come back with it.
+        override fun scrollRectToVisible(aRect: Rectangle) = Unit
     }.apply {
         isEditable = false
         isFocusable = false

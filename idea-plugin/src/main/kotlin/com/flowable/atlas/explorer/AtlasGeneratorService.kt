@@ -8,6 +8,7 @@ import com.flowable.atlas.render.ErdHtmlRenderer
 import com.flowable.atlas.render.ExplorerHtmlRenderer
 import com.flowable.atlas.render.GraphJsonRenderer
 import com.flowable.atlas.render.OverviewRenderer
+import com.flowable.atlas.render.PlaywrightRenderer
 import com.flowable.atlas.render.SummaryRenderer
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.openapi.components.Service
@@ -90,7 +91,7 @@ class AtlasGeneratorService(private val project: Project) {
         return ErdHtmlRenderer.render(result, root, explorerFile = explorer)
     }
 
-    /** Generate the selected [artifacts] (summary, overview, graph, explorer, CLAUDE.md) into [outputDir]. */
+    /** Generate the selected [artifacts] (summary, overview, graph, explorer, CLAUDE.md, Playwright guide) into [outputDir]. */
     fun generateAll(
         projectDir: Path,
         outputDir: Path,
@@ -126,19 +127,30 @@ class AtlasGeneratorService(private val project: Project) {
                 // are actually being written — the user picks the artifact set in Settings → Generation.
                 AtlasArtifact.CLAUDE_MD to {
                     val siblings = AtlasArtifact.SUMMARY_MD in artifacts && AtlasArtifact.GRAPH_JSON in artifacts
-                    ClaudeRenderer.render(result, root, ClaudeRenderer.Layout(outputDir.toFile(), siblings))
+                    val guide = AtlasArtifact.PLAYWRIGHT_MD in artifacts
+                    ClaudeRenderer.render(result, root, ClaudeRenderer.Layout(outputDir.toFile(), siblings,
+                        playwright = guide, playwrightMap = guide))
                 },
+                // Its lookups point at the graph only when the graph is written beside it.
+                AtlasArtifact.PLAYWRIGHT_MD to { PlaywrightRenderer.render(result, root, guideLayout(outputDir, artifacts)) },
             )
             val diagrams = if (AtlasArtifact.DIAGRAMS_SVG in artifacts) DiagramArtifacts.render(result, root) else emptyMap()
             val texts = AtlasArtifact.entries
                 .filter { it in artifacts && it != AtlasArtifact.DIAGRAMS_SVG }
-                .associateWith { renderers.getValue(it)() }
+                .associate { "$name${it.suffix}" to renderers.getValue(it)() }
+                .toMutableMap()
+            // The guide is one artifact in two files: what a skill loads whole, and the project map it
+            // reads on demand (on a real project most of the text).
+            if (AtlasArtifact.PLAYWRIGHT_MD in artifacts) {
+                texts["$name.${PlaywrightRenderer.MAP_SUFFIX}"] =
+                    PlaywrightRenderer.renderMap(result, root, guideLayout(outputDir, artifacts))
+            }
             // Everything is rendered before anything is written, and this is the last moment a Cancel can
             // still leave the previous artifacts as they were.
             indicator.checkCanceled()
             val written = ArrayList<Path>()
-            for ((artifact, text) in texts) {
-                val p = outputDir.resolve("$name${artifact.suffix}")
+            for ((fileName, text) in texts) {
+                val p = outputDir.resolve(fileName)
                 p.toFile().writeText(text, Charsets.UTF_8)
                 written.add(p)
             }
@@ -163,6 +175,10 @@ class AtlasGeneratorService(private val project: Project) {
             LOG.warn("Atlas artifact generation failed", e)
             Outcome.Failure("Failed to generate the Atlas artifacts: ${e.message}", e.stackTraceToString())
         }
+
+    /** The Playwright guide's layout: its project map beside it, its lookups on the graph when that is written too. */
+    private fun guideLayout(outputDir: Path, artifacts: Set<AtlasArtifact>) =
+        PlaywrightRenderer.Layout(outputDir.toFile(), graph = AtlasArtifact.GRAPH_JSON in artifacts, map = true)
 
     @Suppress("UNCHECKED_CAST")
     private fun findingsOf(result: Map<String, Any?>): List<Map<String, Any?>> =

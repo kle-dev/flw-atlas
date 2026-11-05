@@ -4,7 +4,7 @@
 #
 #   ./atlas <project-dir-or-zip> [output-dir]
 #
-# Analyzes any Flowable project (models + Java) and writes 5 artifacts into the
+# Analyzes any Flowable project (models + Java) and writes 6 artifacts into the
 # output dir (default: ./atlas-output/<project>/), then opens the HTML explorer.
 #
 #   <project>.explorer.html   interactive, human-friendly explorer (opens automatically)
@@ -12,6 +12,8 @@
 #   <project>.overview.md     full human/LLM Markdown report
 #   <project>.graph.json      full traversable model+code graph
 #   <project>.CLAUDE.md       AI-agent context (Flowable primer + this project's facts)
+#   <project>.playwright.md   AI-agent guide to driving Flowable Work in a browser (Playwright)
+#   <project>.playwright-map.md   …and its project map: stages, tasks, forms (read on demand)
 #
 # This runs the standalone Kotlin CLI fat-jar (the successor to flowable_atlas.py).
 # Pass any extra flags after the paths to override (e.g. --no-open, see below).
@@ -38,11 +40,14 @@ Outputs (in the output dir, default ./atlas-output/<project>/):
   <project>.overview.md     full Markdown report
   <project>.graph.json      traversable graph to query (minified; --pretty to indent)
   <project>.CLAUDE.md       AI-agent context (Flowable primer + this project's facts + findings)
+  <project>.playwright.md   AI-agent guide to driving Flowable Work with Playwright (rules, index)
+  <project>.playwright-map.md   its project map: each case's stages, tasks, buttons and forms
 
 Advanced (run the fat-jar directly for single artifacts):
   $JAVA -jar <cli-all.jar> <project> --summary --stdout
   $JAVA -jar <cli-all.jar> <project> --json -o graph.json
   $JAVA -jar <cli-all.jar> <project> --claude        # writes CLAUDE.md
+  $JAVA -jar <cli-all.jar> <project> --playwright --stdout   # the Work browser guide alone, map inline
   $JAVA -jar <cli-all.jar> <project> --slice process:myProcess --stdout   # one node, both directions
   $JAVA -jar <cli-all.jar> --claude-template         # the generic Flowable primer, no project needed
 EOF

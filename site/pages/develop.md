@@ -218,7 +218,8 @@ node scripts/plugin-icons.mjs           # regenerate the plugin's icon set (comm
   diff-reviewable and about 2 KB each.
 - `site/flowable-demo/` is the sample project every screenshot and the live demo are generated from.
   `DEMO-*` keys and `com.example.*` packages only: **this repository is public, so no customer
-  identifier belongs anywhere in it.**
+  identifier belongs anywhere in it.** Its `cases/claim.cmmn` and `forms/claim-*.form` are also what
+  `PlaywrightRendererTest` renders the Playwright guide from; change them together.
 - Nothing generated is committed. `.github/workflows/pages.yml` builds the demo artifacts and the
   screenshots and deploys the result; `--strict` makes a missing generated file a build failure there,
   while a local build only warns.

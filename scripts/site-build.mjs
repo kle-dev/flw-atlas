@@ -387,6 +387,7 @@ if (fs.existsSync(DEMO_IN)) {
   const friendly = {
     '.explorer.html': 'explorer.html', '.erd.html': 'erd.html', '.summary.md': 'summary.md', '.overview.md': 'overview.md',
     '.graph.json': 'graph.json', '.CLAUDE.md': 'CLAUDE.md',
+    '.playwright.md': 'playwright.md', '.playwright-map.md': 'playwright-map.md',
   };
   for (const f of fs.readdirSync(DEMO_IN)) {
     const from = path.join(DEMO_IN, f);

@@ -9,7 +9,7 @@ click through and query. An IntelliJ IDEA plugin and a command-line tool, sharin
 ./atlas /path/to/your-flowable-project
 ```
 
-That writes five artifacts to `./atlas-output/<project>/` — six for a project with database tables — and opens the explorer in your browser:
+That writes six artifacts to `./atlas-output/<project>/` — seven for a project with database tables — and opens the explorer in your browser:
 
 | Artifact | What it is |
 |---|---|
@@ -19,6 +19,7 @@ That writes five artifacts to `./atlas-output/<project>/` — six for a project 
 | `<project>.overview.md` | The full human report — every model in execution order, the access map, the data layer, every finding with `file:line`. |
 | `<project>.graph.json` | The traversable model↔code graph, for agents to **query** rather than read: every node carries `usedBy`, and a `_schema` key documents the shape and ships `jq` recipes. |
 | `<project>.CLAUDE.md` | Context for AI agents: a Flowable primer, this project's conventions, wiring examples and known issues, and the complete expression/script catalogs. Copy it to your repo root as `CLAUDE.md`, or import it from your own `CLAUDE.md` with `@atlas-output/<project>/<project>.CLAUDE.md`. |
+| `<project>.playwright.md` + `<project>.playwright-map.md` | The agent's guide to driving **Flowable Work** in a browser (Playwright MCP or a script): how Work's UI behaves, from 3.x to 2026.x, how to read a case's state over REST, and an index of this project's cases and processes with their start links. The project map beside it holds the details — each case's stage bar in Work's order, what starts each stage, the tasks, required fields, outcomes and button conditions. Doubles as a Claude Code skill; `--playwright` writes it alone, as one file. |
 
 It resolves the relationships a Flowable repository does not state: app → models, process → the case,
 decision or form it calls, `${bean.method()}` → the **Java or Kotlin class and method** with `file:line` (a `@Bean` factory method included), form →
@@ -60,7 +61,7 @@ explorer you can click through:
 | [Generated artifacts](https://kle-dev.github.io/flw-atlas/artifacts/) | What each file is for, and `jq` recipes for the graph |
 | [CLI reference](https://kle-dev.github.io/flw-atlas/cli/) | Every flag, the launcher, exit codes |
 | [Health checks](https://kle-dev.github.io/flw-atlas/checks/) | All twenty-five, and what each one detects |
-| [For LLMs & agents](https://kle-dev.github.io/flw-atlas/agents/) | Four sizes of context, and which to use when |
+| [For LLMs & agents](https://kle-dev.github.io/flw-atlas/agents/) | Four sizes of context, which to use when, and the guide for driving Flowable Work |
 | [Development](https://kle-dev.github.io/flw-atlas/develop/) | Build, tests, goldens, the compatibility gate, CI |
 
 ## Development

@@ -30,22 +30,55 @@ object ClaudeRenderer {
      * alone writes nothing but this file, and the plugin lets the user untick them.
      *
      * `outDir == null` means "unknown": sibling names stay bare, as they were before this existed.
+     *
+     * [playwright] says `<name>.playwright.md` (the browser guide for Flowable Work) is written beside it;
+     * [playwrightMap] that the guide keeps its project details in `<name>.playwright-map.md` beside it,
+     * which is what `--all`, the launcher and the plugin write — `--playwright` alone keeps them inline.
      */
-    data class Layout(val outDir: File? = null, val siblings: Boolean = true)
+    data class Layout(
+        val outDir: File? = null, val siblings: Boolean = true,
+        val playwright: Boolean = false, val playwrightMap: Boolean = false,
+    )
+
+    /**
+     * The Atlas output directory as seen from the project root, with a trailing slash — or `""` when it
+     * is not inside the project (or unknown), in which case sibling names stay bare. A CLAUDE.md and the
+     * Playwright guide are both read from the repository root, so both spell their siblings this way.
+     */
+    internal fun siblingPrefix(root: File, outDir: File?): String {
+        val rootAbs = File(root.path.trimEnd('/').ifEmpty { "." }).absoluteFile.normalize()
+        val outAbs = outDir?.absoluteFile?.normalize() ?: return ""
+        if (!rootAbs.isDirectory || !outAbs.startsWith(rootAbs)) return ""
+        val rel = rootAbs.toPath().relativize(outAbs.toPath()).toString().replace(File.separatorChar, '/')
+        return if (rel.isEmpty() || rel == ".") "" else "$rel/"
+    }
+
+    /**
+     * An absolute directory as a generated file shows it: `~/…` under the home directory — the file gets
+     * committed, and the user's name is not its business — and with `/` on every platform, since the
+     * names joined to it use `/`. Compared as paths, not strings: `C:\Users\x` never starts with `…/`.
+     */
+    internal fun shownDir(dir: File): String {
+        val p = dir.absoluteFile.normalize().toPath()
+        val home = System.getProperty("user.home")?.takeIf { it.isNotBlank() }?.let { File(it).absoluteFile.normalize().toPath() }
+        return when {
+            home == null || !p.startsWith(home) -> p.toString().replace(File.separatorChar, '/')
+            p == home -> "~"
+            else -> "~/" + home.relativize(p).toString().replace(File.separatorChar, '/')
+        }
+    }
 
     @Suppress("UNCHECKED_CAST")
     fun render(result: Map<String, Any?>, root: File, layout: Layout = Layout()): String {
-        val name = splitextName(File(root.path.trimEnd('/')).absoluteFile.name).ifEmpty { "project" }
+        // The same name every sibling artifact carries (`.` names the directory, not a file called `.`).
+        val name = Fmt.artifactName(root)
         val s = result["stats"] as Map<String, Any?>
 
         // Sibling paths as seen from the project root, which is where a CLAUDE.md is read from.
         val rootAbs = File(root.path.trimEnd('/').ifEmpty { "." }).absoluteFile.normalize()
         val outAbs = layout.outDir?.absoluteFile?.normalize()
         val inside = outAbs != null && rootAbs.isDirectory && outAbs.startsWith(rootAbs)
-        val prefix = if (inside) {
-            val rel = rootAbs.toPath().relativize(outAbs!!.toPath()).toString().replace(File.separatorChar, '/')
-            if (rel.isEmpty() || rel == ".") "" else "$rel/"
-        } else ""
+        val prefix = siblingPrefix(root, layout.outDir)
         fun art(suffix: String) = "$prefix$name.$suffix"
         val nodes = (result["graph"] as Map<String, Any?>)["nodes"] as List<Map<String, Any?>>
         val byType = LinkedHashMap<String, MutableList<Map<String, Any?>>>()
@@ -131,13 +164,25 @@ object ClaudeRenderer {
         steps.add("Open **`${art("explorer.html")}`** for the clickable view (for humans).")
         steps.add("Read the actual source to verify, then implement.")
         steps.forEachIndexed { i, step -> L.add("${i + 1}. $step") }
+        // The browser guide is a few hundred lines that a coding task never needs, so it is not in this
+        // file — one instruction says when to read it, which is the kind of line agents demonstrably follow.
+        // Phrased as the requests it is for — the words a user actually types — because the line competes
+        // with the code for the agent's attention: "why is Approve greyed out" otherwise gets answered from
+        // the sources, without the guide that knows the form runtime's rules.
+        if (layout.playwright) {
+            val map = if (layout.playwrightMap) " (its §9 index points into **`${art("playwright-map.md")}`**)" else ""
+            L.add("")
+            L.add("**Asked to do something in Flowable Work itself** — start or open a case, complete a task, " +
+                    "trigger an action, bring a case to a stage, find the open tasks of a user or group, explain " +
+                    "why a button is missing or disabled — read **`${art("playwright.md")}`**$map before the first " +
+                    "click. It is how Work's UI behaves in a browser, plus this project's stages, tasks, required " +
+                    "fields and button conditions, read from the models.")
+        }
         if (layout.siblings && outAbs != null && !inside) {
             // The launcher's default output directory is next to the Atlas checkout, not in the project:
             // from the repository root none of the names above resolve unless the file says where they are.
             // `~` rather than the literal home: this file gets committed, and a user name is not its business.
-            val home = System.getProperty("user.home")?.trimEnd('/')
-            val shown = if (!home.isNullOrEmpty() && outAbs.path.startsWith("$home/")) "~" + outAbs.path.removePrefix(home)
-                        else outAbs.path
+            val shown = shownDir(outAbs)
             L.add("")
             L.add("The Atlas files live in `$shown` (as generated); if they are missing, regenerate them: " +
                     "`./atlas <project-dir> <out-dir>`, or in the IDE *Tools → Flowable Atlas → Generate*.")
@@ -220,38 +265,9 @@ object ClaudeRenderer {
                         "; the app auto-deploys its bundled models on startup.")
             }
             // The Flowable version decides which engine APIs exist — the file's own pitfall list says so
-            // ("Flowable APIs differ across versions"), and it used to be detected from `pom.xml` only,
-            // so every Gradle project was told "not auto-detected" about the one fact it warned about.
-            var ver: String? = null
-            fun accept(cand: String?): Boolean {
-                val v = cand?.trim() ?: return false
-                if (v.isEmpty() || !Regex("^[6-9]\\.").containsMatchIn(v)) return false
-                ver = v
-                return true
-            }
-            try {
-                if (fileExists("pom.xml")) {
-                    val pom = File(root, "pom.xml").readText()
-                    val m = Regex("<flowable(?:[.-]engine|[.-]bom|[.-]platform)?\\.version>\\s*([0-9][^<\\s]+)").find(pom)
-                        ?: Regex("(?:com|org)\\.flowable\\b[^<]*</groupId>\\s*<artifactId>[^<]*</artifactId>" +
-                                "\\s*<version>\\s*([0-9][^<\\s]+)", RegexOption.DOT_MATCHES_ALL).find(pom)
-                    accept(m?.groupValues?.get(1))
-                }
-                // Gradle: a `flowableVersion = "8.x"`-style property, a version catalog entry, or the
-                // version on a `com.flowable:…` dependency coordinate.
-                if (ver == null) {
-                    for (f in listOf("gradle.properties", "gradle/libs.versions.toml",
-                        "build.gradle.kts", "build.gradle", "settings.gradle.kts", "settings.gradle")) {
-                        if (!fileExists(*f.split("/").toTypedArray())) continue
-                        val text = File(root, f).readText()
-                        val hit = Regex("(?i)flowable[-_.]?version\\s*[=:]\\s*[\"']?([0-9][^\"'\\s,)]*)").find(text)
-                            ?: Regex("(?:com|org)\\.flowable[^\"']*:([0-9][^\"'\\s:]*)[\"']").find(text)
-                        if (accept(hit?.groupValues?.get(1))) break
-                    }
-                }
-            } catch (_: Exception) { ver = null }
+            // ("Flowable APIs differ across versions").
             // "not auto-detected" was a line about the absence of a fact; §5 already says to check the deps.
-            if (!ver.isNullOrEmpty()) L.add("- **Flowable version:** $ver")
+            flowableVersion(root)?.let { L.add("- **Flowable version:** $it") }
         }
 
         // Concrete wiring examples, auto-picked from the resolved graph — mirror these for new code.
@@ -463,12 +479,56 @@ object ClaudeRenderer {
         return L.joinToString("\n")
     }
 
-    /** Mirror of `os.path.splitext(base)[0]`: strip a trailing extension (last dot preceded by a non-dot). */
-    private fun splitextName(base: String): String {
-        val dot = base.lastIndexOf('.')
-        if (dot < 0) return base
-        for (i in 0 until dot) if (base[i] != '.') return base.substring(0, dot)
-        return base
+    /**
+     * The Flowable version the project builds against, from its root build file — or null.
+     *
+     * Two numbering schemes are plausible and both are kept: an **engine** version (`6.x`–`9.x`, the
+     * open-source line) and a **platform** version (`3.x` up to 3.17, then `2025.1.x`, `2026.1.x`), which
+     * is the one that names a Work release. Only the engine scheme used to be accepted, and the property
+     * the platform's own project template declares — `<com.flowable.platform.version>` — was not looked
+     * for at all, so every Work project measured (3.11 to 2025.1) was told nothing about the one fact
+     * whose absence the pitfall list warns about. A platform property wins over an engine one: it is the
+     * number that says which Work UI is deployed, which the Playwright guide depends on.
+     */
+    internal fun flowableVersion(root: File): String? {
+        if (!root.isDirectory) return null
+        val plausible = Regex("^(?:3|[6-9])\\.\\d|^20\\d\\d\\.\\d")
+        fun ok(v: String?): String? = v?.trim()?.takeIf { it.isNotEmpty() && plausible.containsMatchIn(it) }
+        fun read(rel: String): String? =
+            File(root, rel).takeIf { it.isFile }?.let { runCatching { it.readText() }.getOrNull() }
+        fun platformFirst(hits: Sequence<Pair<String, String>>): String? =
+            hits.toList().sortedBy { if (it.first.contains("platform", ignoreCase = true)) 0 else 1 }
+                .firstNotNullOfOrNull { ok(it.second) }
+
+        read("pom.xml")?.let { pom ->
+            // <com.flowable.platform.version>, <flowable.version>, <flowable-engine.version>, …
+            val props = Regex("<((?:com\\.)?flowable(?:[.-](?:engine|bom|platform|work))?)\\.version>\\s*([0-9][^<\\s]*)")
+                .findAll(pom).map { it.groupValues[1] to it.groupValues[2] }
+            platformFirst(props)?.let { return it }
+            // a literal version on a com.flowable / org.flowable dependency or parent
+            Regex("(?:com|org)\\.flowable\\b[^<]*</groupId>\\s*<artifactId>([^<]*)</artifactId>\\s*<version>\\s*([0-9][^<\\s]+)",
+                RegexOption.DOT_MATCHES_ALL).findAll(pom).map { it.groupValues[1] to it.groupValues[2] }
+                .let(::platformFirst)?.let { return it }
+        }
+        // Gradle: a `flowableVersion = "8.x"` / `flowablePlatformVersion=…` property, a version catalog
+        // entry (`flowable = "…"`, `flowable-platform = "…"` — catalog keys carry no `version` suffix), or
+        // the version on a dependency coordinate. The platform publishes under sub-groups
+        // (`com.flowable.platform:…`, `com.flowable.core:…`), so the group is matched with them, and kept
+        // in the name a hit is ranked by: a platform coordinate names the Work release, whatever its artifact.
+        // All three kinds are ranked together per file, so an engine property cannot shadow a platform
+        // coordinate a few lines further down.
+        val catalog = Regex("(?im)^\\s*(flowable(?:[-_.]?(?:platform|engine|work|bom))?)(?:[-_.]?version)?\\s*=\\s*[\"']([0-9][^\"']*)[\"']")
+        for (f in listOf("gradle.properties", "gradle/libs.versions.toml",
+            "build.gradle.kts", "build.gradle", "settings.gradle.kts", "settings.gradle")) {
+            val text = read(f) ?: continue
+            val props = Regex("(?i)(flowable(?:[-_.]?(?:platform|engine|work|bom))?)[-_.]?version\\s*[=:]\\s*[\"']?([0-9][^\"'\\s,)]*)")
+                .findAll(text).map { it.groupValues[1] to it.groupValues[2] }
+            val entries = if (f.endsWith(".toml")) catalog.findAll(text).map { it.groupValues[1] to it.groupValues[2] } else emptySequence()
+            val coords = Regex("((?:com|org)\\.flowable(?:\\.[\\w-]+)*:[^:\"'\\s]*):([0-9][^\"'\\s:]*)[\"']").findAll(text)
+                .map { it.groupValues[1] to it.groupValues[2] }
+            platformFirst(props + entries + coords)?.let { return it }
+        }
+        return null
     }
 
     /** Python truthiness for `.get(...) or …` / `if x:` idioms (None/""/0/empty → false). */

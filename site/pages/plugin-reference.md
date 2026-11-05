@@ -251,7 +251,7 @@ everything except `waivers.json` out of the repository — the same file the CLI
 | Option | Default |
 |---|---|
 | Atlas output folder | `atlas-output` |
-| Artifacts: Explorer HTML · ER diagram designer (HTML) · Summary · Overview · Graph JSON · CLAUDE.md · Diagrams (SVG). The [ER diagram designer](../../erd/) is `<project>.erd.html`, linked to the explorer when both are chosen; it opens in the same editor tab, whose *Regenerate* rewrites it | Explorer HTML only |
+| Artifacts: Explorer HTML · ER diagram designer (HTML) · Summary · Overview · Graph JSON · CLAUDE.md · Playwright guide for Flowable Work (+ project map) · Diagrams (SVG). The [Playwright guide](../../artifacts/#playwrightmd-driving-flowable-work-in-a-browser) is `<project>.playwright.md`, written with its project map `<project>.playwright-map.md`; with it chosen, the generated CLAUDE.md says when to read it, and with Graph JSON chosen too, its lookups query the graph beside it. The [ER diagram designer](../../erd/) is `<project>.erd.html`, linked to the explorer when both are chosen; it opens in the same editor tab, whose *Regenerate* rewrites it | Explorer HTML only |
 | Pulled models folder — where *Pull from Flowable Design* writes the app archives; which environment and which apps is chosen in the Atlas Hub | `flowable-models` |
 
 #### → Generation → Model Constants

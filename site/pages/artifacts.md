@@ -1,8 +1,9 @@
 # Generated artifacts
 
-One run produces five files. They are not five formats of the same thing — they are five *sizes*,
-meant for five different readers, and picking the right one is most of the value. A project with
-database tables gets a sixth: the ER diagram designer.
+One run produces six artifacts. Five of them are not five formats of the same thing — they are five
+*sizes*, meant for five different readers, and picking the right one is most of the value. The sixth
+is a different kind: a guide, in two files, for an agent that drives Flowable Work in a browser. A
+project with database tables also gets the ER diagram designer.
 
 ```
 atlas-output/order-management/
@@ -11,6 +12,8 @@ atlas-output/order-management/
   order-management.overview.md     the full human report, every model in execution order
   order-management.graph.json      the traversable graph, for querying — not for reading
   order-management.CLAUDE.md       drop-in context for an AI agent
+  order-management.playwright.md   how an agent drives Flowable Work in a browser, and an index of this project
+  order-management.playwright-map.md   …and the project map behind that index: stages, tasks, forms
   order-management.diagrams/       one SVG per model that can be drawn
   order-management.erd.html        the ER diagram designer — when the project has tables
 ```
@@ -78,7 +81,7 @@ real project produces several megabytes. Query it.
 
 It is designed to make that easy:
 
-- A **`_schema`** key comes first and describes the file's own shape, including six ready-made `jq`
+- A **`_schema`** key comes first and describes the file's own shape, including seven ready-made `jq`
   recipes. An agent that opens the file learns how to use it from the file.
 - A **`_generated`** key beside it says when the file was written and by which Atlas version, so a
   graph pasted into a ticket or kept as a pipeline artifact carries its own age.
@@ -91,6 +94,17 @@ It is designed to make that easy:
   `implicit` (no annotation, so Spring binds it by name) and `notInPath` where they apply. The path's
   `{variables}` come first. The key is missing when Atlas could not read the handler's signature, and an
   empty list means the handler takes nothing.
+- The model bodies keep what Work does with them. In **`forms`**, a field keeps its **`validation`**
+  (`pattern`, `mask`, bounds, lengths, a date's `format`, `custom` checks) and the **`containerGates`**
+  around it that can hide, disable or ignore it; an outcome keeps `visible`, `enabled`, `ignoreValidation`
+  and `navigationUrl`; a form keeps `outcomeVariableName`, `doNotCreateOutcomeVariable` and
+  `designVersion`. In **`cases`**, `planModel.exitCriteria` holds what ends the whole case; a sentry keeps
+  its `triggerMode` and the `events` its on-parts wait for; every criterion keeps its `planItemId`, and an
+  exit its `exitEventType` and `exitType`; a stage or milestone keeps `displayOrder`,
+  `includeInStageOverview` and `overviewIndex`, its place in Work's stage overview. In **`apps`**, an app
+  keeps `flowApp`, `url` and `order`, and each page its `label` and `url`. The
+  [Playwright guide](#playwrightmd-driving-flowable-work-in-a-browser) is built from them, and its §10
+  queries them.
 - **`findings`** is the itemised list every other surface summarises, **`checks`** the open count per
   check plus `open` and `waived`, and **`waivers`** — present when the project carries a
   `waivers.json` — its rules with how many findings each matched, its notes, and what is wrong with
@@ -141,6 +155,70 @@ agent could derive itself is the one kind of context-file content measured not t
 source so the two cannot drift. `--claude-template` prints it without needing a project.
 
 See [For LLMs & agents](../agents/) for how the four sizes fit together.
+
+## `<project>.playwright.md` — driving Flowable Work in a browser
+
+What an agent needs to work *in* Flowable Work rather than on the code: start a case or process, open a
+case or task, see which stage a case is in, fill and complete the task forms, press the case's actions,
+bring a case to a given stage, find the open tasks of a user or group, explain why a button is missing or
+greyed out. It is written for an agent with a browser — the Playwright MCP server, a Playwright script or
+another browser tool — and it has two halves.
+
+**How Work behaves, for any project (§0–§8).**
+- **Quick start.** The base URL, how to start or open an instance, which groups the route needs, and a
+  snippet that reads a case's whole state in one call: who you are, the stage bar, every plan item and every
+  open task.
+- **Rules.** Act through the UI and only *look* through REST. Never click a disabled button. Ask before
+  anything irreversible, and report the path taken.
+- **The UI.** The sign-in, the routes, *Create New*, the instance header and its stage bar, the toolbar
+  where manual-activation items and user event listeners become buttons, and the task's outcome buttons.
+- **REST, read-only.** The endpoints that explain a screen: `stage-overview`, plan item states, tasks, case
+  variables, the deployed form, and the lookup that turns a business key into an instance id.
+- **The CMMN rules that move a case.** Sentries and their trigger mode, manual activation, required items,
+  repetition, and when a stage or the case completes.
+- **Why a button is disabled**, and where on the page the invalid field hides.
+- **The loop for reaching a stage**, the Playwright traps, and what each script call is in Playwright MCP.
+- **Versions.** It describes 2026.1 and newer and marks what older lines do differently; its version table
+  has one column each for 2026.1 and newer, 2025.2, 2025.1 with 3.15–3.17, and 3.14 and older. The version
+  the project builds against is read from its `pom.xml` or Gradle files, and the note at the top of the file
+  names the column to use. The notes are compiled from Work's frontend source for each line and its own
+  end-to-end test helpers, not by driving a running Work, and the guide says what to fall back on when a
+  locator finds nothing.
+
+**This project (§9), read from the models.** §9 is an index: every deployed case and process with its
+key, the link that starts it (`#/work?create=true&definitionKey=<key>`, which also tells apart two
+definitions with one title), its stage bar or its number of user tasks, and who may start it; then the
+apps the sidebar shows, with their pages. Behind it are the details:
+- **Cases.** Each case's stage bar in Work's order: every stage and milestone, sorted by `displayOrder`
+  with the unordered ones first, minus those with `includeInStageOverview="false"`. The order is exact when
+  every shown entry has its own `displayOrder`; Work reorders entries that share one, or have none, by when
+  they end, and the file marks such ties with ⚠. For each stage it says what starts it, read out of its
+  sentries — *Assessment* completes **and** `${assessmentOutcome == 'approve'}` ← outcome **Approve** on
+  task *Assess damage* — whether it completes by itself, and every task, manual item and listener inside
+  it, with the groups that get them.
+- **Processes.** Each process's user tasks in flow order, and what leads to each.
+- **Actions and forms.** The project's own actions, and each form behind the tasks: its required fields and
+  their rules, its outcomes and the variable they write, and its conditional buttons — flagging a required
+  field that can be hidden, which, on a form saved by Design 3.8 or later, keeps the outcomes disabled with
+  no error on the page.
+- Models that only a test source set deploys are named once and left out.
+- §10 gives the `jq` queries for the rest, run from the project root.
+
+**One artifact, two files.** `--all`, the launcher and the plugin write the details to
+`<project>.playwright-map.md` beside the guide, and §9 points into it: a skill is loaded whole, and on a
+real project the details are most of the text. `--playwright` alone writes one file, with the details
+inline. Written outside the project — the launcher's default — the guide names the map and the graph by
+their full path, with the home directory as `~`.
+
+The guide opens with skill front matter. Keep it beside `CLAUDE.md` — the generated `CLAUDE.md` says when
+to read it — or install it as a Claude Code skill: copy the guide to
+`.claude/skills/flowable-work-ui/SKILL.md` and the map to `.claude/skills/flowable-work-ui/project-map.md`,
+and Claude Code loads it whenever a request is about Work. Copy both again after each regeneration;
+[For LLMs & agents](../agents/#working-in-flowable-work-itself) has the setup.
+
+The guide generated for the sample project is live: [playwright.md](../demo/playwright.md) and its
+[project map](../demo/playwright-map.md). Its *Claim handling* case has five stages, an outcome-gated route
+and a shortcut.
 
 ## `<project>.diagrams/` — SVG per model
 

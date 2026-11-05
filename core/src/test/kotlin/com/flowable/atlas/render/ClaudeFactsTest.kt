@@ -56,6 +56,98 @@ class ClaudeFactsTest {
         assertTrue(render().contains("**Flowable version:** 7.4.0"))
     }
 
+    /**
+     * The property the platform's own project template declares. Every Work project measured (3.11 to
+     * 2025.1) uses it or `flowable.version` with a 3.x value, and neither used to be recognised.
+     */
+    @Test
+    fun aPlatformVersionIsFoundInTheMavenPropertyTheTemplateDeclares() {
+        tmp.newFile("pom.xml").writeText(
+            "<project><properties><java.version>21</java.version>" +
+                "<com.flowable.platform.version>2025.1.01.RC1</com.flowable.platform.version></properties>" +
+                "<parent><groupId>com.flowable</groupId><artifactId>flowable-platform-parent</artifactId>" +
+                "<version>\${com.flowable.platform.version}</version></parent></project>"
+        )
+        assertTrue(render().contains("**Flowable version:** 2025.1.01.RC1"))
+    }
+
+    @Test
+    fun aThreeDotXPlatformVersionIsAccepted() {
+        tmp.newFile("pom.xml").writeText("<project><properties><flowable.version>3.11.3</flowable.version></properties></project>")
+        assertTrue(render().contains("**Flowable version:** 3.11.3"))
+    }
+
+    @Test
+    fun thePlatformVersionWinsOverAnEngineVersion() {
+        tmp.newFile("pom.xml").writeText(
+            "<project><properties><flowable-engine.version>7.1.0</flowable-engine.version>" +
+                "<com.flowable.platform.version>2026.1.4</com.flowable.platform.version></properties></project>"
+        )
+        assertTrue(render().contains("**Flowable version:** 2026.1.4"))
+    }
+
+    /** The browser guide is a separate file; CLAUDE.md says when to read it, and only when it was written. */
+    @Test
+    fun thePlaywrightGuideIsPointedToOnlyWhenItIsWritten() {
+        val with = render(layout = ClaudeRenderer.Layout(tmp.root, siblings = true, playwright = true))
+        assertTrue(with, with.contains("**Asked to do something in Flowable Work itself**"))
+        assertTrue(with, with.contains("`$name.playwright.md`"))
+        val without = render(layout = ClaudeRenderer.Layout(tmp.root, siblings = true))
+        assertFalse(without, without.contains("playwright.md"))
+    }
+
+    /** The platform publishes under sub-groups; `com.flowable:` alone never matched a Work project's coordinate. */
+    @Test
+    fun aPlatformVersionIsFoundOnASubGroupCoordinate() {
+        tmp.newFile("build.gradle.kts").writeText(
+            "dependencies {\n  implementation(\"com.flowable.platform:flowable-spring-boot-starter-platform:2025.2.01\")\n}\n"
+        )
+        assertTrue(render().contains("**Flowable version:** 2025.2.01"))
+    }
+
+    /** Version catalog keys carry no `version` suffix — `flowable-platform = "…"` is the usual spelling. */
+    @Test
+    fun aPlatformVersionIsFoundInAVersionCatalog() {
+        tmp.newFolder("gradle")
+        tmp.newFile("gradle/libs.versions.toml").writeText("[versions]\nkotlin = \"2.0.20\"\nflowable-platform = \"2025.2.01\"\n")
+        assertTrue(render().contains("**Flowable version:** 2025.2.01"))
+    }
+
+    @Test
+    fun aGradlePlatformPropertyWinsOverAnEngineProperty() {
+        tmp.newFile("gradle.properties").writeText("flowableVersion=7.1.0\nflowablePlatformVersion=2025.1.03\n")
+        assertTrue(render().contains("**Flowable version:** 2025.1.03"))
+    }
+
+    /**
+     * The pointer is phrased as the requests it is for, and names the map file when one is written —
+     * an agent that only finds the index in the guide has to know where the details went.
+     */
+    @Test
+    fun thePlaywrightPointerNamesTheRequestsAndTheMapFileWhenOneIsWritten() {
+        val with = render(layout = ClaudeRenderer.Layout(tmp.root, siblings = true, playwright = true, playwrightMap = true))
+        assertTrue(with, with.contains("find the open tasks of a user or group"))
+        assertTrue(with, with.contains("explain why a button is missing or disabled"))
+        assertTrue(with, with.contains("read **`$name.playwright.md`** (its §9 index points into **`$name.playwright-map.md`**)"))
+        val single = render(layout = ClaudeRenderer.Layout(tmp.root, siblings = true, playwright = true))
+        assertTrue(single, single.contains("read **`$name.playwright.md`** before the first click"))
+        assertFalse(single, single.contains("playwright-map.md"))
+    }
+
+    /** Run from inside the project as `.`, the artifacts are named after the directory — and so are the links to them. */
+    @Test
+    fun theArtifactNameOfDotIsTheDirectorysName() {
+        val dotted = java.io.File(tmp.root, ".")
+        assertTrue(Fmt.artifactName(dotted) == name)
+        val result = mapOf(
+            "stats" to mapOf("models" to 0, "java" to 0, "archives" to 0),
+            "graph" to mapOf("nodes" to emptyList<Any?>(), "edges" to emptyList<Any?>()),
+        )
+        val out = ClaudeRenderer.render(result, dotted, ClaudeRenderer.Layout(tmp.root, siblings = true, playwright = true))
+        assertTrue(out, out.contains("`$name.playwright.md`"))
+        assertFalse(out, out.contains("..playwright.md") || out.contains("..graph.json"))
+    }
+
     @Test
     fun anImplausibleVersionIsNotReportedAsTheFlowableVersion() {
         // A Gradle plugin version or a Java release must not be mistaken for the engine version — and

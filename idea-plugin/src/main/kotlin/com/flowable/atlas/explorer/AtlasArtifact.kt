@@ -28,6 +28,14 @@ enum class AtlasArtifact(val label: String, val suffix: String) {
     CLAUDE_MD("CLAUDE.md primer", ".CLAUDE.md"),
 
     /**
+     * The agent's guide to driving Flowable Work in a browser with Playwright: how Work's UI behaves, plus
+     * an index of this project's cases and processes. Doubles as a Claude Code skill. Written with its
+     * project map, `<name>.playwright-map.md` — each case's stages, tasks and buttons, and the forms'
+     * required fields and conditions — which the guide points into.
+     */
+    PLAYWRIGHT_MD("Playwright guide for Flowable Work (+ project map)", ".playwright.md"),
+
+    /**
      * Rendered process/case/decision diagrams — one SVG per model, written into a `<name>.diagrams/`
      * folder (the [suffix] names that folder, not a single file). Rendered from each model's diagram
      * interchange layout, so it works even for Design exports that no longer bundle a `.svg`.

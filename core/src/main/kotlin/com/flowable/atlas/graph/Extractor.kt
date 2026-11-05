@@ -2,6 +2,7 @@ package com.flowable.atlas.graph
 
 import com.flowable.atlas.model.Dyn
 import com.flowable.atlas.model.MiniJson
+import com.flowable.atlas.model.ModelPaths
 import com.flowable.atlas.expr.catalog.CustomFunctionCatalog
 import com.flowable.atlas.expr.catalog.CustomFunctionExtractor
 import com.flowable.atlas.parsing.Constants
@@ -148,7 +149,12 @@ object Atlas {
         fun index(mtype: String, obj: Any?, label: String) {
             val key = (obj as? Map<*, *>)?.get("key") as? String ?: return
             val norm = ModelKinds.NORMALIZE_TYPE[mtype] ?: mtype
-            modelIndex[norm to key] = label
+            // Later copies replace earlier ones here (an archive's copy wins over a loose one), except that a
+            // copy under a test source set never replaces a deployed one — see the dispatch order below.
+            val prev = modelIndex[norm to key]
+            if (prev == null || !ModelPaths.isTestSourceModel(label) || ModelPaths.isTestSourceModel(prev)) {
+                modelIndex[norm to key] = label
+            }
             copies.putIfAbsent(norm to key, label to obj)
             val known = byKey.getOrPut(key) { ArrayList() }
             // Two models of different types sharing one key is legal in Flowable and common in practice
@@ -438,18 +444,29 @@ object Atlas {
             return true
         }
 
-        for (path in discovered.models) {
-            checkCanceled()
-            val rel = relOf(path)
-            try {
-                if (tooLarge(rel, path.length())) continue
-                val mt = ModelKinds.modelTypeFor(path.name)
-                if (mt != null) dispatch(mt, path.readBytes(), rel)
-                else dispatchDesignJson(path.parentFile?.name, path.readBytes(), rel)
-            } catch (e: Exception) {
-                diag("read", rel, e.message ?: e.toString())
+        // A model under a test source set is read after every deployed one, loose or archived. The first
+        // copy of a (type, key) is the one the graph shows — `copies`, the bucket dedupe and the node all keep
+        // it — and discovery lists loose files before archives, so an empty `src/test` fixture sharing a key
+        // with the process the app's `.bar` deploys used to stand in for it: the guide then said the main
+        // process had no user task. Test copies still count (they become `otherCopies`), they just never win.
+        val (testModels, mainModels) = discovered.models.partition { ModelPaths.isTestSourceModel(relOf(it)) }
+        val (testArchives, mainArchives) = discovered.archives.partition { ModelPaths.isTestSourceModel(relOf(it)) }
+
+        fun readLoose(models: List<File>) {
+            for (path in models) {
+                checkCanceled()
+                val rel = relOf(path)
+                try {
+                    if (tooLarge(rel, path.length())) continue
+                    val mt = ModelKinds.modelTypeFor(path.name)
+                    if (mt != null) dispatch(mt, path.readBytes(), rel)
+                    else dispatchDesignJson(path.parentFile?.name, path.readBytes(), rel)
+                } catch (e: Exception) {
+                    diag("read", rel, e.message ?: e.toString())
+                }
             }
         }
+        readLoose(mainModels)
 
         /**
          * One archive entry: a model goes to its parser, a legacy-export JSON wrapper to
@@ -528,28 +545,33 @@ object Atlas {
             dispatchDesignJson(folder, bytes, label)
         }
 
-        for (arc in discovered.archives) {
-            // Outside the try below: its catch would record a cancellation as an unreadable archive.
-            checkCanceled()
-            val rel = relOf(arc)
-            try {
-                java.util.zip.ZipFile(arc).use { zf ->
-                    val entries = zf.entries()
-                    while (entries.hasMoreElements()) {
-                        val entry = entries.nextElement()
-                        if (entry.name.endsWith("/")) continue
-                        val label = "$rel!${entry.name}"
-                        try {
-                            scanEntry(entry.name, entry.size, label, 0) { zf.getInputStream(entry).use(::readCapped) }
-                        } catch (e: Exception) {
-                            diag("archive", label, e.message ?: e.toString())
+        fun readArchives(archives: List<File>) {
+            for (arc in archives) {
+                // Outside the try below: its catch would record a cancellation as an unreadable archive.
+                checkCanceled()
+                val rel = relOf(arc)
+                try {
+                    java.util.zip.ZipFile(arc).use { zf ->
+                        val entries = zf.entries()
+                        while (entries.hasMoreElements()) {
+                            val entry = entries.nextElement()
+                            if (entry.name.endsWith("/")) continue
+                            val label = "$rel!${entry.name}"
+                            try {
+                                scanEntry(entry.name, entry.size, label, 0) { zf.getInputStream(entry).use(::readCapped) }
+                            } catch (e: Exception) {
+                                diag("archive", label, e.message ?: e.toString())
+                            }
                         }
                     }
+                } catch (e: Exception) {
+                    diag("archive", rel, e.message ?: e.toString())
                 }
-            } catch (e: Exception) {
-                diag("archive", rel, e.message ?: e.toString())
             }
         }
+        readArchives(mainArchives)
+        readLoose(testModels)
+        readArchives(testArchives)
 
         for (f in discovered.templateParts) {
             try { templateParts.add(relOf(f) to f.readText(Charsets.UTF_8)) } catch (e: Exception) { diag("parse", relOf(f), e.message ?: e.toString()) }

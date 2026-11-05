@@ -62,7 +62,8 @@ object Fmt {
     }
 
     fun artifactName(root: java.io.File): String {
-        val base = java.io.File(root.path.trimEnd('/')).absoluteFile.name
+        // normalized: run from inside the project as `.`, the name is the directory's, as the CLI writes it
+        val base = java.io.File(root.path.trimEnd('/').ifEmpty { "." }).absoluteFile.normalize().name
         val dot = base.lastIndexOf('.')
         val stem = if (dot < 0) base else {
             var allDots = true

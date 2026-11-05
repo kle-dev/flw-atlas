@@ -9,6 +9,10 @@ APP_SUMMARY.*
 APP_EXPLORER.*
 *.CLAUDE.md
 /CLAUDE.md
+*.playwright.md
+*.playwright-map.md
+*.erd.html
+*.diagrams/
 
 # Screenshots / images
 screenshots/

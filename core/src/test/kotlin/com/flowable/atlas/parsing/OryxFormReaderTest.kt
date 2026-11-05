@@ -73,4 +73,37 @@ class OryxFormReaderTest {
         val io = form["ioParameters"] as List<Map<String, Any?>>
         assertTrue(io.toString(), io.any { it["element"] == "runCheck" && it["refKey"] == "notifyCustomerAction" && it["target"] == "email" })
     }
+
+    /**
+     * The validation rules are spelled the palette's way in the legacy editor (`min-value`,
+     * `validation-regexp`, a `{totalCount, items}` list of custom validations) and land where the modern
+     * reader — and the form runtime — has them: on the component, and under `extraSettings`.
+     */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun validationRulesLandWhereTheModernFormHasThem() {
+        val body = mapOf(
+            "properties" to mapOf("do-not-create-outcome-variable" to true),
+            "childShapes" to listOf(mapOf(
+                "resourceId" to "r1", "stencil" to mapOf("id" to "Text"),
+                "properties" to mapOf(
+                    "id" to "claimEmail", "stencilid" to "cloud-text", "label" to "E-mail",
+                    "validation-regexp" to ".+@example\\.com", "min-length" to "7", "max-length-run" to "{{maxLen}}",
+                    "custom-validations" to mapOf("totalCount" to 1, "items" to listOf(
+                        mapOf("expression" to "{{claimEmail != 'x'}}", "errorMsg" to "Not x"))),
+                ),
+            )),
+        )
+        val modern = OryxFormReader.toModern(body)
+        assertEquals(true, modern["doNotCreateOutcomeVariable"])
+        val c = (modern["components"] as List<Map<String, Any?>>).single()
+        assertEquals(".+@example\\.com", c["validationRegExp"])
+        assertEquals(listOf(mapOf("expression" to "{{claimEmail != 'x'}}", "errorMsg" to "Not x")), c["customValidations"])
+        val es = c["extraSettings"] as Map<String, Any?>
+        assertEquals("7", es["minLength"])
+        assertEquals("{{maxLen}}", es["maxLength"])
+        assertEquals(mapOf("pattern" to ".+@example\\.com", "minLength" to "7", "maxLength" to "{{maxLen}}",
+            "custom" to listOf(mapOf("expression" to "{{claimEmail != 'x'}}", "errorMsg" to "Not x"))),
+            ModelParsers.validationOf(c))
+    }
 }

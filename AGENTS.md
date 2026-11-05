@@ -57,13 +57,14 @@ Three questions, every time:
 |---|---|
 | Anything user-visible, at all | `CHANGELOG.md` — the source of truth for the release history, hand-authored, one entry per user-visible change |
 | A plugin feature (action, inspection, completion, hint, line marker, tool window, setting) | `site/pages/plugin.md` + `site/pages/plugin-reference.md`; the `<description>` in `plugin.xml` if it is a headline feature |
-| A CLI flag, or what an artifact contains | `README.md` (the artifact list and *Advanced — single artifacts*), `site/pages/cli.md`, `site/pages/artifacts.md` |
-| A health check or finding | `site/pages/checks.md`, the findings paragraph in `README.md` |
+| A CLI flag, or what an artifact contains | `README.md` (the artifact table), `site/pages/cli.md`, `site/pages/artifacts.md` |
+| A health check or finding | `site/pages/checks.md`, the *Health checks* row of `README.md`'s documentation table (it states the count) |
 | Variable read/write analysis or its silence rules | `site/pages/variables.md` |
 | Expression/script validation, the function catalog, script bindings | `site/pages/expressions.md` |
 | The explorer frontend — a route, page, facet or visible layout | `site/pages/explorer.md`; regenerate screenshots (`node scripts/site-shots.mjs`) or adjust the `site/mockups/*.html` if the change is visual |
 | The ER diagram designer (`frontend/erd.*`, `ErdHtmlRenderer`) — what it reads, shows or writes | `site/pages/erd.md`; the screenshot comes from `scripts/site-shots.mjs` like the explorer's |
-| What agents receive (the `CLAUDE.md` renderer, `--summary`, `--slice`, `--json`) | `site/pages/agents.md`, the *For LLMs / agents* section of `README.md`; `CLAUDE.template.md` regenerates itself |
+| What agents receive (the `CLAUDE.md` renderer, `--summary`, `--slice`, `--json`) | `site/pages/agents.md`, the *For LLMs & agents* row of `README.md`'s documentation table; `CLAUDE.template.md` regenerates itself |
+| The Playwright guide for Flowable Work — its hand-written generic half `core/src/main/resources/agents/playwright-guide.md` (§0–§8, whose section numbers the renderer cites) or `PlaywrightRenderer` (front matter, version note, §9 and its project map, §10) | `site/pages/artifacts.md` (the guide's section), `site/pages/agents.md` (*Working in Flowable Work itself*), the guide's row in the `README.md` artifact table |
 | Build, test, CI or release workflow | `site/pages/develop.md` (the long form), `CONTRIBUTING.md` only if the policy or the signing setup changed, and `.github/workflows/build.yml` if the commands moved |
 | Supported IDE range, or what was actually verified | `AtlasPlatformSupport` (the verified range, quoted in submitted bug reports), `plugin.xml`, `site/pages/develop.md`, `site/pages/plugin-reference.md` |
 | The version | `version` in the root `build.gradle.kts` and the `CHANGELOG.md` entry, then `./gradlew :core:updateGoldens`. Nothing else states a version: the site writes `{{VERSION}}` and the generator rejects a literal one |

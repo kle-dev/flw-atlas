@@ -37,6 +37,15 @@ object ModelPaths {
         return false
     }
 
+    /**
+     * [isTestSource] for a model's `file` as Atlas records it: a project-relative path, or
+     * `archive.bar!entry` for a model inside an archive, where the archive's own path decides. Such a
+     * model is deployed by the project's tests only — never with the app, so Work never offers it — and
+     * when it shares a key with a deployed copy, the deployed copy is the model (see `Atlas.extract`).
+     */
+    fun isTestSourceModel(file: String?): Boolean =
+        file != null && isTestSource(file.substringBefore('!').replace('\\', '/'))
+
     /** True if [name] ends with a business-archive extension (case-insensitive). */
     fun isArchive(name: String): Boolean {
         val low = name.lowercase()
