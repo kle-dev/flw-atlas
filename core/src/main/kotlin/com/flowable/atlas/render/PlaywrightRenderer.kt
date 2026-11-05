@@ -1653,8 +1653,11 @@ object PlaywrightRenderer {
 
             // A disabled or ignored component is valid whatever its value, and so is everything inside a
             // disabled or ignored container: such a field blocks nothing, however `isRequired` reads.
+            val containers = f["containers"] as? Map<*, *>
+            fun around(fl: Map<String, Any?>): List<Map<*, *>> =
+                (fl["containerGates"] as? List<*>).orEmpty().mapNotNull { containers?.get(it) as? Map<*, *> }
             fun gates(fl: Map<String, Any?>): List<Map<*, *>> =
-                listOfNotNull(fl["settings"] as? Map<*, *>) + objs(fl["containerGates"])
+                listOfNotNull(fl["settings"] as? Map<*, *>) + around(fl)
             val required = fields.filter { fl ->
                 val r = fl["required"]
                 (r == true || (r as? String)?.trim()?.equals("true", ignoreCase = true) == true || conditional(r) != null) &&
@@ -1675,7 +1678,7 @@ object PlaywrightRenderer {
                 val gs = gates(r)
                 if (gs.any { it["ignore"] != null && it["ignore"] != false }) return@mapNotNull null
                 val own = r["settings"] as? Map<*, *>
-                val hider: Pair<Map<*, *>, Any?> = (listOfNotNull(own) + objs(r["containerGates"]))
+                val hider: Pair<Map<*, *>, Any?> = (listOfNotNull(own) + around(r))
                     .firstOrNull { it["visible"] == false || it["visible"] is String }?.let { it to it["visible"] } ?: return@mapNotNull null
                 val enables = gs.mapNotNull { it["enabled"] as? String }
                 if (hider.second is String && enables.any { same(it, hider.second as String) }) return@mapNotNull null

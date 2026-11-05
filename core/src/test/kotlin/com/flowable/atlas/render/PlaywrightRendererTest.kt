@@ -365,15 +365,18 @@ class PlaywrightRendererTest {
 
     @Test
     fun aRequiredFieldThatCanBeHiddenIsATrapOnlyWhenItStaysEnabled() {
-        val form = mapOf("key" to "f", "name" to "F", "file" to "forms/f.form", "fields" to listOf(
+        val form = mapOf("key" to "f", "name" to "F", "file" to "forms/f.form",
+            "containers" to mapOf(
+                "details" to mapOf("id" to "details", "type" to "panel", "visible" to "{{show}}"),
+                "p2" to mapOf("id" to "p2", "type" to "panel", "visible" to "{{y}}", "ignore" to "{{!y}}"),
+            ),
+            "fields" to listOf(
             mapOf("id" to "trap", "type" to "text", "required" to true, "settings" to mapOf("visible" to "{{x}}")),
             mapOf("id" to "fine", "type" to "text", "required" to "{{x}}", "settings" to mapOf("visible" to "{{x}}")),
             mapOf("id" to "paired", "type" to "text", "required" to true, "settings" to mapOf("visible" to "{{x}}", "enabled" to "{{ x }}")),
             mapOf("id" to "locked", "type" to "text", "required" to true, "settings" to mapOf("enabled" to false)),
-            mapOf("id" to "inPanel", "type" to "text", "required" to true,
-                "containerGates" to listOf(mapOf("id" to "details", "type" to "panel", "visible" to "{{show}}"))),
-            mapOf("id" to "ignored", "type" to "text", "required" to true,
-                "containerGates" to listOf(mapOf("id" to "p2", "type" to "panel", "visible" to "{{y}}", "ignore" to "{{!y}}"))),
+            mapOf("id" to "inPanel", "type" to "text", "required" to true, "containerGates" to listOf("details")),
+            mapOf("id" to "ignored", "type" to "text", "required" to true, "containerGates" to listOf("p2")),
         ))
         val out = render(case(task("t", "T", "formKey" to "f")), listOf(form))
         val line = out.lines().single { it.contains("required but hidden at times") }

@@ -95,8 +95,9 @@ It is designed to make that easy:
   `{variables}` come first. The key is missing when Atlas could not read the handler's signature, and an
   empty list means the handler takes nothing.
 - The model bodies keep what Work does with them. In **`forms`**, a field keeps its **`validation`**
-  (`pattern`, `mask`, bounds, lengths, a date's `format`, `custom` checks) and the **`containerGates`**
-  around it that can hide, disable or ignore it; an outcome keeps `visible`, `enabled`, `ignoreValidation`
+  (`pattern`, `mask`, bounds, lengths, a date's `format`, `custom` checks) and, as **`containerGates`**,
+  the ids of the containers around it that can hide, disable or ignore it, nearest first — each described
+  once in the form's **`containers`**; an outcome keeps `visible`, `enabled`, `ignoreValidation`
   and `navigationUrl`; a form keeps `outcomeVariableName`, `doNotCreateOutcomeVariable` and
   `designVersion`. In **`cases`**, `planModel.exitCriteria` holds what ends the whole case; a sentry keeps
   its `triggerMode` and the `events` its on-parts wait for; every criterion keeps its `planItemId`, and an

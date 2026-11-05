@@ -12,6 +12,15 @@ Release notes for the Flowable Atlas IntelliJ plugin and CLI (one Gradle version
      newest entries (that field is capped at 65535 characters, so it holds a window, not everything).
      See ChangelogSyncTest. -->
 
+## 0.30.1
+
+- **`graph.json` is back to its size on projects with large, nested forms.** 0.30.0 copied the gated
+  containers around a form field — each panel or subform that can hide, disable or ignore it, with its
+  conditions — onto every field inside them. That grew with fields × nesting depth × condition length,
+  and on large, deeply nested forms it multiplied the size of the whole graph and slowed the explorer and
+  everything else that reads it. A form now describes each such container once, under `containers`, and a
+  field's `containerGates` lists only their ids, nearest first.
+
 ## 0.30.0
 
 - **A guide for agents that drive Flowable Work in a browser.** Atlas now writes `<project>.playwright.md`:

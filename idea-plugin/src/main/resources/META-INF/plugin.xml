@@ -151,6 +151,16 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.30.1</h3>
+        <ul>
+          <li><b><code>graph.json</code> is back to its size on projects with large, nested forms.</b>
+              0.30.0 copied the gated containers around a form field — each panel or subform that can hide,
+              disable or ignore it, with its conditions — onto every field inside them. That grew with
+              fields × nesting depth × condition length, and on large, deeply nested forms it multiplied the
+              size of the whole graph and slowed the explorer and everything else that reads it. A form now
+              describes each such container once, under <code>containers</code>, and a field's
+              <code>containerGates</code> lists only their ids, nearest first.</li>
+        </ul>
         <h3>0.30.0</h3>
         <ul>
           <li><b>A guide for agents that drive Flowable Work in a browser.</b> Atlas now writes
@@ -570,21 +580,6 @@
           <li><b>A changelog that is not well-formed XML is reported.</b> Liquibase stops at startup on a
               changelog it cannot read; Atlas reported nothing and read what its regular expressions found.
               It is now a parse issue.</li>
-        </ul>
-        <h3>0.27.1</h3>
-        <ul>
-          <li><b>The Atlas Hub's ⋮ menu shows the right entries again.</b> 0.27.0 handed the menu unloaded
-              placeholders of its actions instead of the actions, so none of them got to decide whether it
-              applies: the <i>Open Environment in Browser</i> submenu drew as an empty row, and <i>Copy
-              Model Key</i> and <i>Compare Model with Archive</i> showed in a panel with no key or model to
-              act on. The menu is <i>Tools → Flowable Atlas</i> again, entry for entry, with the same
-              entries hidden. <i>Dump Key Index</i> stays out of it outside internal mode.</li>
-          <li><b>A custom function's page shows the function.</b> The explorer listed a project's
-              <code>additionalData</code> functions by name and signature only; its page now shows the
-              implementation — the arrow or method the registration holds, or the declaration it names,
-              followed through the registration's import into its own file — with the file and line, which
-              opens in the IDE. For a compiled <code>ext/custom.js</code> the code is read from the bundle's
-              sourcemap, whose original sources are readable where the minified bundle is not.</li>
         </ul>
         <p>Older releases: see <code>CHANGELOG.md</code> in the repository.</p>
     ]]></change-notes>

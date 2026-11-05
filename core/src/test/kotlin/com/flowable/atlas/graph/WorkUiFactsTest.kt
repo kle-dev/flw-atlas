@@ -143,12 +143,45 @@ class WorkUiFactsTest {
 
     @Test
     fun aFieldKnowsTheGatedContainersAroundItNearestFirst() {
-        val inner = list(field("claimForm", "innerAmount")["containerGates"])
-        assertEquals(listOf(mapOf("id" to "detailsPanel", "type" to "panel", "visible" to "{{showDetails}}")), inner)
-        val deep = list(field("claimForm", "deepField")["containerGates"])
-        assertEquals(listOf("lockedPanel", "detailsPanel"), deep.map { it["id"] })
-        assertEquals(false, deep[0]["enabled"])
+        assertEquals(listOf("detailsPanel"), field("claimForm", "innerAmount")["containerGates"])
+        assertEquals(listOf("lockedPanel", "detailsPanel"), field("claimForm", "deepField")["containerGates"])
         assertFalse("outside every gated container", field("claimForm", "policyNumber").containsKey("containerGates"))
+        @Suppress("UNCHECKED_CAST")
+        val containers = bucket("forms").single { it["key"] == "claimForm" }["containers"] as Map<String, Map<String, Any?>>
+        assertEquals(setOf("detailsPanel", "lockedPanel"), containers.keys)
+        assertEquals(mapOf("id" to "detailsPanel", "type" to "panel", "visible" to "{{showDetails}}"), containers["detailsPanel"])
+        assertEquals(false, containers.getValue("lockedPanel")["enabled"])
+    }
+
+    /**
+     * A container's gates are stored once per form, not once per field inside it: copied onto every field,
+     * they grew with fields × nesting depth × condition length and multiplied the size of graphs with large,
+     * nested forms.
+     */
+    @Test
+    fun aGatedContainerIsRecordedOncePerFormNotOncePerField() {
+        val expr = "{{caseStatus == 'DEMO-OPEN' && userRole != 'DEMO-viewer' && !readonlyMode}}"
+        fun level(d: Int): String {
+            val fields = (0 until 40).joinToString(",") { """{"cols": [{"id": "f${d}_$it", "type": "text", "label": "F$it", "isRequired": true}]}""" }
+            val inner = if (d == 5) "" else
+                """,{"cols": [{"id": "panel$d", "type": "panel", "visible": "$expr", "extraSettings": {"layoutDefinition": {"rows": [${level(d + 1)}]}}}]}"""
+            return fields + inner
+        }
+        val tmp = Files.createTempDirectory("atlas-gates-test").toFile()
+        try {
+            File(tmp, "forms").mkdirs()
+            File(tmp, "forms/deep.form").writeText("""{"metadata": {"key": "DEMO-deep", "name": "Deep"}, "rows": [${level(0)}]}""")
+            @Suppress("UNCHECKED_CAST")
+            val form = (Atlas.extract(tmp)["forms"] as List<Map<String, Any?>>).single()
+            assertEquals("one record per container", 5, (form["containers"] as Map<*, *>).size)
+            @Suppress("UNCHECKED_CAST")
+            val chains = (form["fields"] as List<Map<String, Any?>>).mapNotNull { it["containerGates"] as? List<*> }
+            assertEquals("every field below the first panel names its panels", 200, chains.size)
+            assertTrue("a field names its containers, it does not carry them", chains.flatten().all { it is String })
+            assertEquals(listOf("panel4", "panel3", "panel2", "panel1", "panel0"), chains.last())
+        } finally {
+            tmp.deleteRecursively()
+        }
     }
 
     @Test
