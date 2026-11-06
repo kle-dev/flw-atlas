@@ -156,4 +156,94 @@ class LegacyDesignExportTest {
         }
     }
 
+    private fun zip(file: File, entries: List<Pair<String, String>>) {
+        ZipOutputStream(file.outputStream()).use { zs ->
+            for ((entry, content) in entries) {
+                zs.putNextEntry(ZipEntry(entry))
+                zs.write(content.toByteArray())
+                zs.closeEntry()
+            }
+        }
+    }
+
+    /** How Design's editor writes a template: `variationParameters` + `templateText` per variation, or the
+     *  id of an attached document. */
+    private val templateBody = """{"templateType": "text",
+        "variationParameters": [{"name": "channel", "defaultValue": "email"}],
+        "templateVariations": [
+          {"variationParameters": {"channel": "email"}, "templateText": "Dear ${'$'}{customerName}", "templateResourceType": "text"},
+          {"templateFileResourceId": "DEMO-file-1", "templateResourceType": "file"}]}"""
+    private val queryBody = """{"type": "case", "subType": "instance", "sourceIndex": "DEMO-index",
+        "parameters": {"customerId": {"type": "string", "label": "Customer", "required": true}, "status": {"type": "string"}},
+        "templateFilter": "{\"bool\": {\"must\": []}}"}"""
+    private val extractorBody = """{"sourceIndex": "case-instances", "fullTextVariables": [],
+        "variableExtractors": [{"filter": {"name": "customerName", "scopeDefinitionKey": "DEMO-case"},
+                                "path": "customerName", "to": "customerNameIdx", "type": "string"}]}"""
+
+    private fun designExport(wrap: (String, String, String) -> String) = listOf(
+        "template-models/DEMO-t.json" to wrap("DEMO-t", "DEMO T", templateBody),
+        // a query and an extractor keep their own extension inside a Design export, so the extension
+        // routes them to their parser with the wrapper still around the body
+        "query-models/DEMO-q.query" to wrap("DEMO-q", "DEMO Q", queryBody),
+        "variable-extractor-models/DEMO-v.extractor" to wrap("DEMO-v", "DEMO V", extractorBody),
+    )
+
+    @Suppress("UNCHECKED_CAST")
+    private fun only(result: Map<String, Any?>, modelType: String): Map<String, Any?> =
+        (result["others"] as List<Map<String, Any?>>).single { it["modelType"] == modelType }
+
+    /**
+     * A template, a query and a variable extractor in a Design workspace export: every one of them came
+     * out as its key and name only — no variations, no parameters, no extracted variables — because the
+     * body sat inside `editorJson` where its parser never looked.
+     */
+    @Test
+    fun aDesignExportKeepsTemplateVariationsQueryParametersAndExtractors() {
+        for ((shape, wrap) in listOf<Pair<String, (String, String, String) -> String>>(
+            "editorJson as an object" to ::wrapper,
+            "editorJson as a string" to ::stringWrapper,
+        )) {
+            val root = tmp.newFolder("export-" + shape.filter { it.isLetter() })
+            zip(File(root, "DEMO.zip"), designExport(wrap))
+            val result = Atlas.extract(root)
+
+            val template = only(result, "template")
+            assertEquals("$shape: template variations", listOf(
+                mapOf("parameters" to mapOf("channel" to "email"), "text" to "Dear \${customerName}"),
+                mapOf("resource" to "DEMO-file-1"),
+            ), template["variations"])
+            assertEquals("$shape: template type", "text", template["templateType"])
+
+            val query = only(result, "query")
+            assertEquals("$shape: query type", "case", query["type"])
+            assertEquals("$shape: query subType", "instance", query["subType"])
+            assertEquals("$shape: query parameters", listOf("customerId", "status"),
+                (query["parameters"] as List<*>).map { (it as Map<*, *>)["name"] })
+            assertTrue("$shape: query templateFilter", query["templateFilter"] != null)
+
+            val extractor = only(result, "variableExtractor")
+            assertEquals("$shape: extractors", 1, (extractor["extractors"] as List<*>).size)
+            @Suppress("UNCHECKED_CAST")
+            val nodes = (result["graph"] as Map<String, Any?>)["nodes"] as List<Map<String, Any?>>
+            @Suppress("UNCHECKED_CAST")
+            val variable = nodes.single { it["id"] == "variable:customerNameIdx" }["data"] as Map<String, Any?>
+            assertEquals("$shape: the extracted variable is a variableExtractor write", listOf("variableExtractor"),
+                (variable["writes"] as List<*>).map { (it as Map<*, *>)["via"] })
+        }
+    }
+
+    /** The same models deployed beside their Design export are one model each, not two that disagree. */
+    @Test
+    fun aDesignExportBesideItsBarIsNoCopyConflict() {
+        val root = tmp.newFolder("export-and-bar")
+        zip(File(root, "DEMO.zip"), designExport(::wrapper))
+        zip(File(root, "DEMO-bar.zip"), listOf(
+            "DEMO-q.query" to queryBody.replaceFirst("{", """{"key": "DEMO-q", "name": "DEMO Q", """),
+            "variable-extractor-DEMO-v.extractor" to extractorBody.replaceFirst("{", """{"key": "DEMO-v", "name": "DEMO V", """),
+        ))
+        val result = Atlas.extract(root)
+        val copies = (result["diagnostics"] as List<*>).map { it as Map<*, *> }.filter { it["kind"] == "copy" }
+        assertEquals("no copy conflict between identical bodies", emptyList<Any?>(), copies)
+    }
+
 }

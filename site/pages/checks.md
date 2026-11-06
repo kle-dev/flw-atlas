@@ -93,7 +93,10 @@ app) is opened one level down and its models are read like any other. A Design-w
 legacy editor's `form-models` and `page-models` JSON, whose bodies are a tree of `childShapes` — is read
 in full since 0.24.0: its components are rewritten into the shape the current Design writes and
 parsed by the same reader, so such a form has its fields, subforms, references and REST calls instead of
-being an empty shell registered by key.
+being an empty shell registered by key. The same export keeps a query as `query-models/<key>.query` and
+a variable extractor as `variable-extractor-models/<key>.extractor`, wrapper and all: both, and a
+template's variations, are read from inside the wrapper, so a project whose only copy is the export has
+its query parameters and extracted variables.
 
 A UTF-8 byte-order mark at the start of a JSON model is not a parse failure; the model is read like any
 other.
@@ -115,7 +118,10 @@ entry so a reader knows, but it is not a finding: nothing failed.
 The same model — one type, one key — in several files is one model: a Design export beside its deployed
 `.bar`, a loose file beside its archive. Where those files reference different models — a test stub reusing
 a production key, the older version of a migration test — the model's page lists the others under
-*Other copies* and shows the references of every copy, and `diagnostics` records a `copy` entry.
+*Other copies* and shows the references of every copy, and `diagnostics` records a `copy` entry. The
+model is one of those files everywhere — the first one read outside a test source set: its own entry,
+`graph.json`'s `modelIndex`, the `target` of every reference to it and the overview's listing of an app's
+models all name it.
 
 This is the one check you should never carry. A parse failure does not just cost you that file — every
 reference into and out of it disappears too, which makes the rest of the report quietly less complete.

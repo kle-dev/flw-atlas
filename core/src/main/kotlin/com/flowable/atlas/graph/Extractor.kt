@@ -152,13 +152,13 @@ object Atlas {
         fun index(mtype: String, obj: Any?, label: String) {
             val key = (obj as? Map<*, *>)?.get("key") as? String ?: return
             val norm = ModelKinds.NORMALIZE_TYPE[mtype] ?: mtype
-            // Later copies replace earlier ones here (an archive's copy wins over a loose one), except that a
-            // copy under a test source set never replaces a deployed one — see the dispatch order below.
-            val prev = modelIndex[norm to key]
-            if (prev == null || !ModelPaths.isTestSourceModel(label) || ModelPaths.isTestSourceModel(prev)) {
-                modelIndex[norm to key] = label
-            }
             copies.putIfAbsent(norm to key, label to obj)
+            // One winner for every reader: the copy the node, the bucket dedupe and `copies` keep — the first
+            // deployed one, since test sources are read last (see the dispatch order below) — is the file the
+            // index names. The index used to let every later copy replace the earlier one, so with a `.bar`
+            // and a Design export side by side a reference and the overview's model listing named the export
+            // while the model's own entry named the deployed archive.
+            modelIndex[norm to key] = copies.getValue(norm to key).first
             val known = byKey.getOrPut(key) { ArrayList() }
             // Two models of different types sharing one key is legal in Flowable and common in practice
             // — a case and its start form, a data object and its generated service. Everything a parser

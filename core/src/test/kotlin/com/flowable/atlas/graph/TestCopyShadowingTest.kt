@@ -52,6 +52,47 @@ class TestCopyShadowingTest {
         }
     }
 
+    /**
+     * Two deployed copies of one form — the `.bar` and the Design export beside it. The node keeps the
+     * first; the index used to keep the last, so a reference to the form and the overview's listing named
+     * the export while the form's own entry named the archive Flowable deploys.
+     */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun theIndexNamesTheSameCopyAsTheNode() {
+        val dir = Files.createTempDirectory("atlas-two-copies").toFile()
+        try {
+            val form = """{"metadata": {"key": "DEMO-form", "name": "Order form", "modelType": "form"}, "rows": []}"""
+            for (zip in listOf("app/custom/DEMO-bar.zip", "app/design/DEMO.zip")) {
+                File(dir, zip).parentFile.mkdirs()
+                ZipOutputStream(File(dir, zip).outputStream()).use { z ->
+                    z.putNextEntry(ZipEntry("DEMO-form.form"))
+                    z.write(form.toByteArray())
+                    z.closeEntry()
+                }
+            }
+            File(dir, "processes").mkdirs()
+            File(dir, "processes/DEMO-order.bpmn20.xml").writeText(
+                """<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn">""" +
+                    """<process id="DEMO-order"><userTask id="t" flowable:formKey="DEMO-form"/></process></definitions>""",
+            )
+            val result = Atlas.extract(dir)
+            val nodes = (result["graph"] as Map<String, Any?>)["nodes"] as List<Map<String, Any?>>
+            val nodeFile = nodes.single { it["id"] == "form:DEMO-form" }["file"]
+            assertEquals("app/custom/DEMO-bar.zip!DEMO-form.form", nodeFile)
+            assertEquals(nodeFile, (result["modelIndex"] as Map<String, Any?>)["form:DEMO-form"])
+            val refs = (result["resolvedRefs"] as List<Map<String, Any?>>).filter { it["value"] == "DEMO-form" }
+            assertTrue("the process references the form", refs.isNotEmpty())
+            for (r in refs) assertEquals(nodeFile, r["target"])
+
+            val overview = com.flowable.atlas.render.OverviewRenderer.render(result, dir)
+            assertTrue(overview, overview.contains("form `DEMO-form` (`app/custom/DEMO-bar.zip!DEMO-form.form`)"))
+            assertFalse(overview, overview.contains("(`app/design/DEMO.zip!DEMO-form.form`)"))
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
     @Test
     fun aModelFileUnderATestSourceSetIsTold() {
         assertTrue(ModelPaths.isTestSourceModel("app/src/test/resources/processes/claim.bpmn20.xml"))

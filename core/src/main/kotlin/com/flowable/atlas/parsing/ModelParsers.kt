@@ -107,6 +107,27 @@ object ModelParsers {
     private fun objOf(v: Any?): Map<String, Any?>? = v as? Map<String, Any?>
 
     /**
+     * A Design workspace wrapper `{id, key, name, description, editorJson}` → its body, carrying the
+     * wrapper's identity; any other document unchanged.
+     *
+     * The extractor unwraps a `<type>-models/x.json` before a parser sees it, but a Design export keeps a
+     * query as `query-models/x.query` and a variable extractor as `variable-extractor-models/x.extractor`:
+     * the extension routes them straight here, wrapper and all, and every parameter, filter and extracted
+     * variable sat one level below where the parser looked. Unwrapping in the parser, not by routing on
+     * the folder, also covers a loose wrapper-shaped `.tpl` in a folder Design never uses.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun designBody(doc: Map<String, Any?>): Map<String, Any?> {
+        val ej = when (val raw = doc["editorJson"]) {
+            is Map<*, *> -> raw as Map<String, Any?>
+            // how Design persists it: the body as an escaped JSON string
+            is String -> try { MiniJson.parse(raw) as? Map<String, Any?> } catch (e: Exception) { null }
+            else -> null
+        } ?: return doc
+        return LinkedHashMap(ej).apply { for (k in listOf("key", "name", "description")) doc[k]?.let { putIfAbsent(k, it) } }
+    }
+
+    /**
      * Carry Design's model **Description** into the parsed record.
      *
      * Design keeps a Description on the model itself, beside its key and name — usually the only
@@ -1449,7 +1470,7 @@ object ModelParsers {
 
     /** `.query` — source index, declared parameters/columns, sort keys and the query body itself. */
     fun parseQuery(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
-        val doc = json(data)
+        val doc = designBody(json(data))
         val key = doc["key"]
         val info = othersHead(doc, ffile, "query")
         for (k in listOf("type", "subType", "sourceIndex")) if (truthy(doc[k])) info[k] = doc[k]
@@ -1589,20 +1610,29 @@ object ModelParsers {
         val doc = json(data)
         val key = doc["key"]
         val info = othersHead(doc, ffile, "template")
-        for (k in listOf("type", "subType", "templateType", "documentType")) if (truthy(doc[k])) info[k] = doc[k]
-        // demo/legacy shape keeps the body at the top level; Design persists it under `editorJson`
+        // demo/legacy shape keeps the body at the top level; Design persists it under `editorJson`, and the
+        // extractor has already lifted it to the top for a `template-models/x.json` — so the body is the
+        // wrapper's `editorJson` (object or string) when there is one, else the document itself. Reading
+        // only `editorJson` lost every variation of an unwrapped Design export.
+        val ej = designBody(doc)
+        for (k in listOf("type", "subType", "templateType", "documentType")) {
+            val v = if (truthy(doc[k])) doc[k] else ej[k]
+            if (truthy(v)) info[k] = v
+        }
         (doc["content"] as? String)?.takeIf { it.isNotBlank() }?.let { info["content"] = capText(it) }
-        val ej = objOf(doc["editorJson"]) ?: emptyMap()
-        if (truthy(ej["templateType"]) && info["templateType"] == null) info["templateType"] = ej["templateType"]
         val varParams = listOfObjs(ej["variationParameters"]).map {
             linkedMapOf("name" to it["name"], "defaultValue" to it["defaultValue"])
         }
         if (varParams.isNotEmpty()) info["variationParameters"] = varParams
+        // Two spellings of a variation: Design's editor writes `{variationParameters, templateText}` (or a
+        // `templateFileResourceId` for an attached document), the older and hand-written shape
+        // `{parameterValues, text, resource}`. Reading only the second, every variation of a Design export
+        // came out empty and was dropped.
         val variations = listOfObjs(ej["templateVariations"]).map { v ->
             val rec = linkedMapOf<String, Any?>()
-            objOf(v["parameterValues"])?.let { rec["parameters"] = it }
-            (v["text"] as? String)?.let { rec["text"] = capText(it) }
-            v["resource"]?.let { rec["resource"] = it }
+            (objOf(v["parameterValues"]) ?: objOf(v["variationParameters"])?.takeIf { it.isNotEmpty() })?.let { rec["parameters"] = it }
+            ((v["text"] ?: v["templateText"]) as? String)?.let { rec["text"] = capText(it) }
+            (v["resource"] ?: v["templateFileResourceId"])?.let { rec["resource"] = it }
             rec
         }.filter { it.isNotEmpty() }
         if (variations.isNotEmpty()) info["variations"] = variations
@@ -1636,7 +1666,7 @@ object ModelParsers {
 
     /** `.extractor` — which indexed variables it writes, from which scope. */
     fun parseVariableExtractor(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
-        val doc = json(data)
+        val doc = designBody(json(data))
         val key = doc["key"]
         val info = othersHead(doc, ffile, "variableExtractor")
         (doc["sourceIndex"] ?: doc["extends"])?.let { info["sourceIndex"] = it }
