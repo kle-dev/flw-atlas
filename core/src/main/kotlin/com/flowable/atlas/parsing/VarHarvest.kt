@@ -35,6 +35,12 @@ object VarHarvest {
     private val MI_COLLECTION_RE = Regex("\\bcollectionVariable=\"([A-Za-z_]\\w*)\"")
     private val INITIATOR_RE = Regex("\\binitiatorVariableName=\"([A-Za-z_]\\w*)\"")
     private val VARIABLE_NAME_RE = Regex("\\bvariableName=\"([A-Za-z_]\\w*)\"")
+    /** `<flowable:variableAggregation target="T"><variable source="S" target="field"/></…>` — the engine's
+     *  own format (`MultiInstanceExport`), in a BPMN loop and a CMMN repetition rule alike. */
+    private val AGGREGATION_RE = Regex(
+        "<(?:\\w+:)?variableAggregation\\b([^>]*)>([\\s\\S]*?)</(?:\\w+:)?variableAggregation>")
+    private val AGG_TARGET_RE = Regex("\\btarget=\"([A-Za-z_]\\w*)\"")
+    private val AGG_SOURCE_RE = Regex("<(?:\\w+:)?variable\\b[^>]*\\bsource=\"([A-Za-z_]\\w*)\"")
 
     /**
      * Variables a script body touches — the Flowable APIs *and* the bare identifiers the script reads
@@ -117,9 +123,20 @@ object VarHarvest {
         // A multi-instance collection is read to be iterated over.
         emit(MI_COLLECTION_RE, Ctx.READ, "multiInstanceCollection")
         emit(COLL_RE, Ctx.READ, "multiInstanceCollection")
-        // `flowable:variableName` belongs to a variable listener or a multi-instance aggregation. Both
-        // watch or build a variable rather than reading or writing it outright, so the direction is not
-        // ours to declare — recording the name as undecidable keeps the check quiet about it.
+        // A multi-instance aggregation reads each `<variable source>` out of every instance and writes the
+        // collected list to its `target`. The inner `<variable target>` is a field of each collected item,
+        // no variable; a `targetExpression` / `sourceExpression` is read by the expression sweep.
+        for (agg in AGGREGATION_RE.findAll(raw)) {
+            AGG_TARGET_RE.find(agg.groupValues[1])?.let { t ->
+                for (k in mkeys) ctx.addVarSite(k, t.groupValues[1], Ctx.WRITE, "variableAggregation")
+            }
+            for (s in AGG_SOURCE_RE.findAll(agg.groupValues[2])) {
+                for (k in mkeys) ctx.addVarSite(k, s.groupValues[1], Ctx.READ, "variableAggregationSource")
+            }
+        }
+        // `flowable:variableName` belongs to a variable listener, which watches a variable rather than
+        // reading or writing it outright, so the direction is not ours to declare — recording the name as
+        // undecidable keeps the check quiet about it.
         for (m in VARIABLE_NAME_RE.findAll(raw)) ctx.markReadsUnknown(m.groupValues[1])
     }
 }

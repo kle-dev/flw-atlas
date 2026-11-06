@@ -36,7 +36,9 @@ The sites come from everywhere a name can appear:
 | Design's data-import column mappings and additional variables (`design:variablemapping`, `design:additionalvariables`), its report and output variable names | write |
 | Response and error-response payload mappings — unless the button stores its response under its own `{{…}}` binding, in which case the mapping names are properties of that value: the binding's root is the write, and a `$temp` root is form-local | write |
 | Script API calls, with the verb that decides direction | write or read |
-| DMN inputs and outputs — a table with several results (rule order, output order, collect without an aggregation) writes one variable named after the decision, the list of matched rows, and no output of its own | read and write |
+| DMN inputs and outputs — a table with several results (rule order, output order, collect without an aggregation) writes one variable named after the decision, the list of matched rows, and no output of its own. Outputs are writes only where a process, a case or a decision service one of them calls runs the table: Java that executes it gets them back in a result map | read and write |
+| Multi-instance variable aggregations — each `<variable source>` is read from every instance, and the aggregation's `target` is written | read and write |
+| A query's literal `"variables.name": "x"` filter and its columns' `variableName` — of a path such as `customer.name`, its root | read |
 | Form fields, form properties, form outcomes | write |
 | Data objects, multi-instance elements and collections, the initiator, variable extractors | write |
 | Java `setVariable` / `getVariable` calls — in production sources only; `src/test/**` and every other test source set are not scanned | write and read |
@@ -110,7 +112,8 @@ what makes the names it does report worth acting on.
 
 1. A construct whose direction Flowable does not fix (a variable listener, `hasVariable`).
 2. A value whose consumer is outside the models — an action's response payload, an extracted variable
-   a query indexes, a form's outcome variable the task list shows, a loop counter.
+   a query indexes, a form's outcome variable the task list shows, a loop counter, a decision output
+   only Java code receives.
 3. A name written into a container object, where only field-level reads would show it is used.
 4. A bare-EL Init-Variables value, which Atlas has no parser for in that position.
 5. A name the `{{…}}` harvester deliberately ignores, so its frontend reads were never collected.
@@ -122,9 +125,14 @@ Rule 7 is the broadest and the most important: one `execution.getVariables()` in
 script that iterates the whole map, and every variable in that scope becomes unjudgeable. That is the
 correct answer — the code genuinely might read any of them — and it is better than guessing.
 
-Beyond the eight, two whole areas are out of scope by design: query, dashboard and master-data models
-are not analysed for variable references (a query's `${…}` is its request parameter, see above), and the
-Work UI (or any REST client) is outside the project Atlas can see.
+A decision table whose outputs nothing in the models receives is not judged either way: where only Java
+runs it, its outputs are counted under rule 2, and where nothing runs it at all, the
+[`unusedDecisions`](../checks/) check reports the table itself.
+
+Beyond the eight, two whole areas are out of scope by design: dashboard and master-data models, and a
+query apart from the variables it names literally, are not analysed for variable references (a query's
+`${…}` is its request parameter, see above), and the Work UI (or any REST client) is outside the project
+Atlas can see.
 
 ## Where to read it
 

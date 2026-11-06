@@ -725,6 +725,7 @@ object Findings {
         "formProperty" to "a form property",
         "dataObject" to "a data-object declaration in",
         "multiInstanceElement" to "a multi-instance element variable",
+        "variableAggregation" to "a multi-instance variable aggregation",
         "initiator" to "the initiator variable",
         "variableExtractor" to "a variable extractor",
         "flwPayload" to "an action payload output of",

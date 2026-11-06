@@ -1501,11 +1501,26 @@ object ModelParsers {
             linkedMapOf("name" to it["name"], "label" to it["label"], "variableName" to it["variableName"])
         }
         if (columns.isNotEmpty()) info["columns"] = columns
+        // A column shows the variable it names: a read the task or instance list performs. A path
+        // (`customer.name`) reads its root, as the explorer's column check takes it — whole, it is no name.
+        for (c in columns) (c["variableName"] as? String)?.substringBefore('.')?.substringBefore('[')?.let {
+            ctx.addVar(key, it)
+            ctx.addVarSite(key, it, Ctx.READ, "queryColumn")
+        }
         (doc["sortParameters"] as? List<*>)?.mapNotNull { if (it is Map<*, *>) it["name"] else it }
             ?.takeIf { it.isNotEmpty() }?.let { info["sortParameters"] = it }
         // the search-template body is the query's actual logic — searchable once it is here
         for (k in listOf("templateContent", "templateFilter")) {
-            (doc[k] as? String)?.takeIf { it.isNotBlank() }?.let { info[k] = capText(it) }
+            val text = (doc[k] as? String)?.takeIf { it.isNotBlank() } ?: continue
+            info[k] = capText(text)
+            // A literal `"variables.name": "x"` term filters the indexed instances or tasks on the variable
+            // `x` — unlike the template's `${…}`, which is a request parameter. Eleven queries driving the task
+            // lists of one real project filtered on a flag reported as written but never read; deleting its
+            // write, as that report advised, would have emptied every one of those lists.
+            for (name in queryFilterVariables(text)) {
+                ctx.addVar(key, name)
+                ctx.addVarSite(key, name, Ctx.READ, "queryFilter")
+            }
         }
         // builder queries: name the aggregations without embedding the whole configuration tree
         objOf(doc["configuration"])?.let { cfg ->
@@ -1523,6 +1538,17 @@ object ModelParsers {
         }
         return info
     }
+
+    // `"variables.name": "x"` or the `terms` list `"variables.name": ["x", "y"]`, with or without `.keyword`;
+    // the quotes may be escaped once more where a template was itself stored as a JSON string.
+    private val QUERY_VAR_TERM_RE = Regex("""\\?"variables\.name(?:\.keyword)?\\?"\s*:\s*(\[[^\]]*]|\\?"[^"\\]*\\?")""")
+    private val QUOTED_RE = Regex("""\\?"([^"\\]*)\\?"""")
+    private val PLAIN_NAME_RE = Regex("[A-Za-z_]\\w*")
+
+    /** The variables a query template filters on by literal name; a `${…}` or Freemarker value is a parameter. */
+    internal fun queryFilterVariables(template: String): Set<String> =
+        QUERY_VAR_TERM_RE.findAll(template).flatMap { m -> QUOTED_RE.findAll(m.groupValues[1]).map { it.groupValues[1] } }
+            .filter { PLAIN_NAME_RE.matches(it) }.toCollection(LinkedHashSet())
 
     /** `.sequence` — the number format and its counters. */
     fun parseSequence(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {

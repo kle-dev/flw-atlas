@@ -274,6 +274,37 @@ class UnusedVariablesTest {
     }
 
     @Test
+    fun aDecisionOutputIsAWriteOnlyWhereAModelRunsTheTable() {
+        val table = model("decision:T", "decision")
+        fun risk(vararg extra: Map<String, Any?>) =
+            variable("risk", writes = listOf(write("decision:T", "dmnOutput")) + extra.toList())
+
+        // a rule task runs it: the output lands in the process, and nothing reads it there
+        val byRuleTask = judge(listOf(risk()), others = listOf(table, model("process:p")),
+            edges = listOf(edge("process:p", "decision:T", "ruleTask-decision")))
+        assertEquals(mapOf("unread" to true), byRuleTask["risk"])
+
+        // …or a process runs the decision service that contains it
+        val viaService = judge(listOf(risk()), others = listOf(table, model("decision:DS", "decision"), model("process:p")),
+            edges = listOf(edge("process:p", "decision:DS", "ruleTask-decision"), edge("decision:DS", "decision:T", "contains-decision")))
+        assertEquals(mapOf("unread" to true), viaService["risk"])
+
+        // only Java runs it, and reads the output out of the result map: its reader is outside the models
+        val byJava = judge(listOf(risk()), others = listOf(table, model("java:com.example.Risk", "java")),
+            edges = listOf(edge("java:com.example.Risk", "decision:T", "references")))
+        assertEquals(mapOf("readsUnknown" to true), byJava["risk"])
+
+        // nothing runs it: the table is the unused-decision check's finding, the output is no variable
+        val uncalled = judge(listOf(risk()), others = listOf(table, model("app:a", "app")),
+            edges = listOf(edge("app:a", "decision:T", "contains")))
+        assertEquals(emptyMap<String, Any?>(), uncalled["risk"])
+
+        // a script writes the same name as well: that write is judged as ever
+        val alsoScript = judge(listOf(risk(write("process:p"))), others = listOf(table, model("process:p")))
+        assertEquals(mapOf("unread" to true), alsoScript["risk"])
+    }
+
+    @Test
     fun theSilenceRulesAreDocumentedForTheReport() {
         // The page states what Atlas cannot see; if a rule is added without a sentence for it, the report
         // silently overstates its own confidence.
