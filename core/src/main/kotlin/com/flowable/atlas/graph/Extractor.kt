@@ -67,8 +67,20 @@ object Atlas {
         return (cur as? String)?.replace(Regex("\\s+"), " ")?.trim()?.take(160) to id
     }
 
-    /** A model file or archive entry above this is not read; a `.form` with embedded images stays far below. */
-    internal const val MAX_MODEL_BYTES: Long = 32L shl 20
+    /**
+     * A model file or archive entry above this is not read; a `.form` with embedded images stays far below.
+     * Public because the IDE's model index applies the same cap — otherwise the two disagree about what
+     * an oversized model is, and the index read without any limit at all.
+     */
+    const val MAX_MODEL_BYTES: Long = 32L shl 20
+
+    /**
+     * How much changelog and template text one run keeps for after the walk, all files and archive entries
+     * together. Each of them is read and checked on its own, but they are all held until the Liquibase
+     * replay and the template pass at the end — so a 1.3 MB archive of forty 31 MB entries filled a 1 GB
+     * heap before anything looked at them. The real projects hold between 72 KB and 6 MB of it.
+     */
+    const val MAX_RETAINED_TEXT_BYTES: Long = 8 * MAX_MODEL_BYTES
 
     private val XML_MODEL_TYPES = setOf("bpmn", "cmmn", "dmn")
 
@@ -112,6 +124,7 @@ object Atlas {
      *  - [customPath] — explicit frontend-customization source (dir or index file); defaults to [root].
      *  - [waivers] — findings the project has decided to accept; they stay in the report, marked, and
      *    out of the counts.
+     *  - [retainedTextBudget] — see [MAX_RETAINED_TEXT_BYTES]; a test lowers it rather than writing gigabytes.
      *  - [checkCanceled] — called between models and between phases; the IDE passes its progress
      *    indicator's check, which throws to abandon the run. A cancelled generation used to run to the
      *    end and overwrite the artifacts anyway.
@@ -122,6 +135,7 @@ object Atlas {
         discoverCustom: Boolean = true,
         customPath: File? = null,
         waivers: Waivers.Set = Waivers.EMPTY,
+        retainedTextBudget: Long = MAX_RETAINED_TEXT_BYTES,
         checkCanceled: () -> Unit = {},
     ): LinkedHashMap<String, Any?> {
         val ctx = Ctx()
@@ -459,6 +473,11 @@ object Atlas {
         val discovered = Discovery.discover(root)
         val isDir = root.isDirectory
         fun relOf(f: File): String = if (isDir) relativize(root, f) else f.name
+        // Said, not silent: a team that links a shared models folder in from a sibling checkout has to be
+        // able to see why those models are missing from the report.
+        for (link in discovered.outsideLinks) {
+            diag("skip", relOf(link), "a symbolic link out of the project — not followed")
+        }
 
         fun tooLarge(label: String, size: Long): Boolean {
             if (size <= MAX_MODEL_BYTES) return false
@@ -503,6 +522,15 @@ object Atlas {
         // file's name in `.tplfile-metadata`. Parts, not models: attached to the template after the walk.
         val templateParts = ArrayList<Pair<String, String>>()
 
+        // Changelog and template text kept so far — see MAX_RETAINED_TEXT_BYTES. What would go past the budget
+        // is not kept and is said, like an oversized model: a partial Liquibase picture is better than none.
+        var retained = 0L
+        fun retain(label: String, size: Long): Boolean {
+            if (retained + size <= retainedTextBudget) { retained += size; return true }
+            diag("skip", label, "the ${retainedTextBudget shr 20} MB of changelog and template text one run keeps is used up — not read")
+            return false
+        }
+
         fun scanEntry(entryName: String, size: Long, label: String, depth: Int, read: () -> ByteArray) {
             val base = entryName.substringAfterLast('/')
             val mt = ModelKinds.modelTypeFor(base)
@@ -512,16 +540,25 @@ object Atlas {
             if (Discovery.isTemplatePart(low)) {
                 if (size in 0..MAX_MODEL_BYTES || size < 0) {
                     val bytes = read()
-                    if (bytes.size <= MAX_MODEL_BYTES) templateParts.add(label to String(bytes, Charsets.UTF_8))
+                    if (bytes.size <= MAX_MODEL_BYTES && retain(label, bytes.size.toLong())) {
+                        templateParts.add(label to String(bytes, Charsets.UTF_8))
+                    }
                 }
                 return
             }
             if (mt == null && !isArchive && (low.endsWith(".xml") || low.endsWith(".sql"))) {
-                // a changelog candidate; LiquibaseCoverage keeps only what is one. An oversized resource
-                // is not a model that failed, so it is left alone without a word.
+                // a changelog candidate. An oversized resource is not a model that failed, so it is left alone
+                // without a word; an XML file that is no changelog is dropped as soon as it is read — the
+                // replay would only have discarded it at the end, after holding every one of them. A plain
+                // `.sql` is kept: a changelog's `<sqlFile>` may run it.
                 if (size in 0..MAX_MODEL_BYTES || size < 0) {
                     val bytes = read()
-                    if (bytes.size <= MAX_MODEL_BYTES) archiveChangelogs.add(label to String(bytes, Charsets.UTF_8))
+                    if (bytes.size <= MAX_MODEL_BYTES) {
+                        val text = String(bytes, Charsets.UTF_8)
+                        if ((low.endsWith(".sql") || LiquibaseCoverage.isChangelog(text)) && retain(label, bytes.size.toLong())) {
+                            archiveChangelogs.add(label to text)
+                        }
+                    }
                 }
                 return
             }
@@ -596,6 +633,7 @@ object Atlas {
         readArchives(testArchives)
 
         for (f in discovered.templateParts) {
+            if (tooLarge(relOf(f), f.length()) || !retain(relOf(f), f.length())) continue
             try { templateParts.add(relOf(f) to f.readText(Charsets.UTF_8)) } catch (e: Exception) { diag("parse", relOf(f), e.message ?: e.toString()) }
         }
         TemplateParts.attach(result, ctx, templateParts) { kind, path, msg -> diag(kind, path, msg) }
@@ -621,6 +659,9 @@ object Atlas {
             // resource it is left alone without a word.
             if (f.length() > MAX_MODEL_BYTES) return@mapNotNull null
             val txt = try { f.readText(Charsets.UTF_8) } catch (e: Exception) { return@mapNotNull null }
+            // as inside an archive: an XML file that is no changelog is not held, and what is held counts
+            if (f.name.lowercase().endsWith(".xml") && !LiquibaseCoverage.isChangelog(txt)) return@mapNotNull null
+            if (!retain(relOf(f), f.length())) return@mapNotNull null
             relOf(f) to txt
         }
         val changelogs = looseChangelogs + archiveChangelogs

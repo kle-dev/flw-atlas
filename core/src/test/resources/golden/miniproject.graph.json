@@ -1495,6 +1495,11 @@
         "t": "process:orderProcess"
       },
       {
+        "rel": "queries-process",
+        "s": "query:openOrdersQuery",
+        "t": "process:orderProcess"
+      },
+      {
         "rel": "query",
         "s": "group:sales",
         "t": "dataObject:customerDO"
@@ -2202,6 +2207,9 @@
               "binding:{{orderId}}"
             ]
           },
+          "definitionKeys": [
+            "orderProcess"
+          ],
           "description": "Work list of orders still awaiting approval.",
           "file": "queries/open-orders.query",
           "groups": [],
@@ -2226,7 +2234,7 @@
             "total"
           ],
           "sourceIndex": "work-instances",
-          "templateContent": "{\"bool\": {\"must\": [{\"term\": {\"variables.orderId\": \"{{orderId}}\"}}, {\"range\": {\"variables.total\": {\"gte\": \"{{minTotal}}\"}}}]}}",
+          "templateContent": "{\"bool\": {\"must\": [{\"term\": {\"processDefinitionKey\": \"orderProcess\"}}, {\"term\": {\"variables.orderId\": \"{{orderId}}\"}}, {\"range\": {\"variables.total\": {\"gte\": \"{{minTotal}}\"}}}]}}",
           "type": "workInstanceQuery"
         },
         "file": "queries/open-orders.query",
@@ -3071,6 +3079,7 @@
           "_uses": {
             "variable": [
               "variable:courierIndexed",
+              "variable:customerName",
               "variable:orderTotalIndexed"
             ]
           },
@@ -3093,7 +3102,10 @@
           ],
           "file": "extractors/order-vars.extractor",
           "fullTextVariables": [
-            "customerName"
+            {
+              "name": "customerName",
+              "scopeDefinitionKey": "reviewCase"
+            }
           ],
           "key": "orderVarExtractor",
           "modelType": "variableExtractor",
@@ -5523,37 +5535,6 @@
             {
               "model": "template:orderConfirmationTemplate",
               "snippets": [
-                "${customerName}"
-              ]
-            }
-          ],
-          "usedBy": [
-            "template:orderConfirmationTemplate"
-          ],
-          "writeCount": 0
-        },
-        "file": null,
-        "id": "variable:customerName",
-        "key": "customerName",
-        "label": "customerName",
-        "type": "variable"
-      },
-      {
-        "data": {
-          "readCount": 1,
-          "reads": [
-            {
-              "model": "template:orderConfirmationTemplate",
-              "via": "expression"
-            }
-          ],
-          "scopes": [
-            "template"
-          ],
-          "usages": [
-            {
-              "model": "template:orderConfirmationTemplate",
-              "snippets": [
                 "${grandTotal}"
               ]
             }
@@ -5746,6 +5727,51 @@
         "id": "variable:customerPick",
         "key": "customerPick",
         "label": "customerPick",
+        "type": "variable"
+      },
+      {
+        "data": {
+          "readCount": 2,
+          "reads": [
+            {
+              "elementType": "variableExtractor",
+              "model": "variableExtractor:orderVarExtractor",
+              "scope": "case:reviewCase",
+              "via": "fullTextIndex"
+            },
+            {
+              "model": "template:orderConfirmationTemplate",
+              "via": "expression"
+            }
+          ],
+          "scopes": [
+            "template",
+            "variableExtractor"
+          ],
+          "usages": [
+            {
+              "model": "template:orderConfirmationTemplate",
+              "snippets": [
+                "${customerName}"
+              ]
+            },
+            {
+              "model": "variableExtractor:orderVarExtractor",
+              "snippets": [
+                "(declared / mapped)"
+              ]
+            }
+          ],
+          "usedBy": [
+            "template:orderConfirmationTemplate",
+            "variableExtractor:orderVarExtractor"
+          ],
+          "writeCount": 0
+        },
+        "file": null,
+        "id": "variable:customerName",
+        "key": "customerName",
+        "label": "customerName",
         "type": "variable"
       },
       {
@@ -6696,6 +6722,9 @@
           "binding:{{orderId}}"
         ]
       },
+      "definitionKeys": [
+        "orderProcess"
+      ],
       "description": "Work list of orders still awaiting approval.",
       "file": "queries/open-orders.query",
       "groups": [],
@@ -6720,7 +6749,7 @@
         "total"
       ],
       "sourceIndex": "work-instances",
-      "templateContent": "{\"bool\": {\"must\": [{\"term\": {\"variables.orderId\": \"{{orderId}}\"}}, {\"range\": {\"variables.total\": {\"gte\": \"{{minTotal}}\"}}}]}}",
+      "templateContent": "{\"bool\": {\"must\": [{\"term\": {\"processDefinitionKey\": \"orderProcess\"}}, {\"term\": {\"variables.orderId\": \"{{orderId}}\"}}, {\"range\": {\"variables.total\": {\"gte\": \"{{minTotal}}\"}}}]}}",
       "type": "workInstanceQuery"
     },
     {
@@ -6853,6 +6882,7 @@
       "_uses": {
         "variable": [
           "variable:courierIndexed",
+          "variable:customerName",
           "variable:orderTotalIndexed"
         ]
       },
@@ -6875,7 +6905,10 @@
       ],
       "file": "extractors/order-vars.extractor",
       "fullTextVariables": [
-        "customerName"
+        {
+          "name": "customerName",
+          "scopeDefinitionKey": "reviewCase"
+        }
       ],
       "key": "orderVarExtractor",
       "modelType": "variableExtractor",
@@ -7702,6 +7735,17 @@
       "value": "customerService"
     },
     {
+      "from": "openOrdersQuery",
+      "fromFile": "queries/open-orders.query",
+      "fromType": "query",
+      "kind": "process",
+      "rel": "queries-process",
+      "target": "processes/order.bpmn",
+      "targetNodeType": "process",
+      "targetType": "model",
+      "value": "orderProcess"
+    },
+    {
       "from": "orderAssistant",
       "fromFile": "agents/order-assistant.agent",
       "fromType": "agent",
@@ -8224,7 +8268,7 @@
     "archives": 1,
     "defects": 10,
     "dynamicEdges": 0,
-    "edges": 66,
+    "edges": 67,
     "endpoints": 2,
     "exprSkippedNested": 0,
     "groups": 3,

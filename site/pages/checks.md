@@ -86,10 +86,13 @@ extracting custom functions. It also lists what Atlas decided **not** to read, a
 entries at warning level — a legacy wrapper without a body, a
 wrapper in a folder Design does not use, a template variation whose template is not in the project, a
 process in the old editor's JSON format with no XML twin, an archive nested two levels deep, a model
-file above the 32 MB limit — because a file that was skipped on purpose is no less absent from the
-report than one that failed. A file that is not a Flowable model at all — a Helm chart's `_helpers.tpl`
-with a model extension, a palette or manifest JSON in an export that is no model wrapper — is recorded
-in `diagnostics` (the CLI prints it with `-v`) but is no finding: nothing about the project is wrong.
+file above the 32 MB limit, a symbolic link that leads out of the project to a folder or to a file of
+a kind Atlas reads, and changelog or template text past the 256 MB a run keeps for the Liquibase replay
+(all files and archive entries together; the real projects hold a few MB) — because a file that was
+skipped on purpose is no less absent from the report than one that failed. A file that is not a
+Flowable model at all — a Helm chart's `_helpers.tpl` with a model extension, a palette or manifest JSON
+in an export that is no model wrapper — is recorded in `diagnostics` (the CLI prints it with `-v`) but
+is no finding: nothing about the project is wrong.
 An archive *inside* an archive (a Design export packing one `.bar` per
 app) is opened one level down and its models are read like any other. A Design-workspace export — the
 legacy editor's `form-models` and `page-models` JSON, whose bodies are a tree of `childShapes` — is read

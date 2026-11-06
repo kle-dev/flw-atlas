@@ -59,6 +59,13 @@ java -jar cli/build/libs/cli-*-all.jar <path> [options]
 `<path>` is a project directory, a single model file, or an exported `.zip` / `.bar` archive. Exactly
 one path is allowed; `--` ends option parsing, so a path that begins with a dash still works.
 
+A directory is read only inside itself: a symbolic link whose target lies outside it — a `vendor`
+folder linked in from a sibling checkout, an `up -> ..` — is not followed, so one project's report never
+carries another's models or Java literals. A linked folder, or a linked file of a kind Atlas reads, is
+listed as a `skip` in the diagnostics; a linked `.editorconfig`, or a `build` folder Atlas would not
+enter anyway, is not. A link that stays inside the project is followed. Analyse the folder the link
+points at, or the parent of both, to include it.
+
 Build the jar with `./gradlew :cli:shadowJar`, or download `cli-<version>-all.jar` from the
 [latest release](https://github.com/kle-dev/flw-atlas/releases/latest). It needs nothing but a JRE 21+.
 

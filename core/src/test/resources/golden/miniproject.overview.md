@@ -222,6 +222,7 @@ _Scanned 28 models (28 files · 1 archives), 3 Java files, 2 REST endpoints. Gen
 - `orderProcess` —callActivity→ process `fulfilmentProcess` (`processes/fulfilment.bpmn`)
 - `orderProcess` —ruleTask-decision→ decision `orderDecision` (`decisions/order-decision.dmn`)
 - `orderProcess` —receives-event→ event `orderShipped` (`events/order-shipped.event`)
+- `openOrdersQuery` —queries-process→ process `orderProcess` (`processes/order.bpmn`)
 - `approvalSla` —escalation-starts→ process `fulfilmentProcess` (`processes/fulfilment.bpmn`)
 - `archivedProcess` —userTask-form→ form `orderForm` (`forms/order-form.form`)
 
@@ -316,8 +317,8 @@ _component (1):_
     - used in: orderVarExtractor (declared / mapped)
 - `customer` [form]
     - used in: orderForm (form field), orderForm {{!customer}}, orderForm {{customer.email}}, orderForm {{customer}}
-- `customerName` [template]
-    - used in: orderConfirmationTemplate ${customerName}
+- `customerName` [template, variableExtractor]
+    - used in: orderConfirmationTemplate ${customerName}, orderVarExtractor (declared / mapped)
 - `customerPick` [form]
     - used in: DEMO-LF001 (form field), DEMO-LF001 {{customerPick}}
 - `customerRecord` [form]

@@ -25,6 +25,8 @@ object Discovery {
         val identity: List<File> = emptyList(),
         /** Java and Kotlin under a test source set — read only for the models they deploy. */
         val testSources: List<File> = emptyList(),
+        /** Symbolic links whose target lies outside the project — not followed (see [FileWalk.files]). */
+        val outsideLinks: List<File> = emptyList(),
     )
 
     /** A file that belongs to a template model without being one: the variation that holds the body a
@@ -41,36 +43,43 @@ object Discovery {
         val configs = ArrayList<File>()
         val identity = ArrayList<File>()
         val testSources = ArrayList<File>()
+        val outsideLinks = ArrayList<File>()
 
         if (root.isFile) {
             if (ModelPaths.isArchive(root.name)) archives.add(root)
             return Discovered(models, archives, javas, xmls)
         }
 
+        // The list a file goes into, or null for a file Atlas does not read.
+        fun bucketOf(f: File): MutableList<File>? {
+            val low = f.name.lowercase()
+            val rel by lazy { f.relativeTo(root).invariantSeparatorsPath }
+            return when {
+                // Test code is not the project (see ModelPaths.isTestSource); models under a test
+                // source set still are, which is why this is a per-file rule and not a pruned directory.
+                low.endsWith(".java") || low.endsWith(".kt") -> if (!ModelPaths.isTestSource(rel)) javas else testSources
+                ModelPaths.isArchive(low) -> archives
+                isTemplatePart(low) -> templateParts
+                ModelKinds.modelTypeFor(f.name) != null -> models
+                // legacy Design-workspace layout: per-model JSON wrappers inside `<type>-models/`
+                low.endsWith(".json") &&
+                    com.flowable.atlas.model.ModelType.byDesignFolder(f.parentFile?.name) != null -> models
+                com.flowable.atlas.graph.IdentitySetup.isIdentityFile(rel) -> if (!ModelPaths.isTestSource(rel)) identity else null
+                low.endsWith(".xml") || low.endsWith(".sql") -> xmls  // liquibase candidates
+                SpringProperties.isConfigFile(f.name) -> if (!ModelPaths.isTestSource(rel)) configs else null
+                else -> null
+            }
+        }
+
         // FileWalk, not walkTopDown(): the discovery order propagates into every insertion-ordered map
         // downstream, so a filesystem-dependent order made the generated artifacts machine-dependent.
-        FileWalk.files(root) { dir -> dir == root || dir.name !in ModelPaths.EXCLUDE_DIRS }
-            .forEach { f ->
-                val low = f.name.lowercase()
-                when {
-                    // Test code is not the project (see ModelPaths.isTestSource); models under a test
-                    // source set still are, which is why this is a per-file rule and not a pruned directory.
-                    low.endsWith(".java") || low.endsWith(".kt") ->
-                        if (!ModelPaths.isTestSource(f.relativeTo(root).invariantSeparatorsPath)) javas.add(f) else testSources.add(f)
-                    ModelPaths.isArchive(low) -> archives.add(f)
-                    isTemplatePart(low) -> templateParts.add(f)
-                    ModelKinds.modelTypeFor(f.name) != null -> models.add(f)
-                    // legacy Design-workspace layout: per-model JSON wrappers inside `<type>-models/`
-                    low.endsWith(".json") &&
-                        com.flowable.atlas.model.ModelType.byDesignFolder(f.parentFile?.name) != null ->
-                        models.add(f)
-                    com.flowable.atlas.graph.IdentitySetup.isIdentityFile(f.relativeTo(root).invariantSeparatorsPath) ->
-                        if (!ModelPaths.isTestSource(f.relativeTo(root).invariantSeparatorsPath)) identity.add(f)
-                    low.endsWith(".xml") || low.endsWith(".sql") -> xmls.add(f)  // liquibase candidates
-                    SpringProperties.isConfigFile(f.name) ->
-                        if (!ModelPaths.isTestSource(f.relativeTo(root).invariantSeparatorsPath)) configs.add(f)
-                }
-            }
-        return Discovered(models, archives, javas, xmls, templateParts, configs, identity, testSources)
+        FileWalk.files(root, onLeave = { link ->
+            // Reported only where the report loses something: a folder, which may hold anything, or a file
+            // Atlas would have read. A sub-project's `.editorconfig -> ../../.editorconfig` was never part
+            // of it, and a warning per such link would teach readers to skim the list.
+            if (link.isDirectory || bucketOf(link) != null) outsideLinks.add(link)
+        }) { dir -> dir == root || dir.name !in ModelPaths.EXCLUDE_DIRS }
+            .forEach { f -> bucketOf(f)?.add(f) }
+        return Discovered(models, archives, javas, xmls, templateParts, configs, identity, testSources, outsideLinks)
     }
 }

@@ -1,5 +1,6 @@
 package com.flowable.atlas.index
 
+import com.flowable.atlas.graph.Atlas
 import com.flowable.atlas.model.ModelFiles
 import com.flowable.atlas.model.ModelPaths
 import com.flowable.atlas.model.ModelType
@@ -22,6 +23,14 @@ object ArchiveModelScanner {
 
     fun isArchive(file: VirtualFile): Boolean =
         !file.isDirectory && ModelPaths.isArchive(file.name)
+
+    /**
+     * Whether a model of [length] bytes is read at all — the cap :core applies to every model, so the
+     * index and Generate skip the same files. Without it the index read every entry of every archive in
+     * full on project open: a cloned repository with a 1.5 MB archive holding a 1.5 GB model entry
+     * allocated gigabytes in the IDE before anyone asked for anything.
+     */
+    fun readable(length: Long): Boolean = length <= Atlas.MAX_MODEL_BYTES
 
     /**
      * Invoke [consume] for every model entry (name, content, type, navigable file) inside [archive].
@@ -47,7 +56,9 @@ object ArchiveModelScanner {
             override fun visitFile(entry: VirtualFile): Boolean {
                 if (!entry.isDirectory) {
                     val type = ModelFiles.typeOf(entry)
-                    if (type != null) {
+                    if (type != null && !readable(entry.length)) {
+                        LOG.debug("${entry.name} inside the archive is ${entry.length shr 20} MB, above the model limit — skipped")
+                    } else if (type != null) {
                         // Debug: one unreadable entry (truncated/encrypted archive) drops that single
                         // model from the index. Per-entry inside a walk, so it must not warn.
                         runCatching { entry.contentsToByteArray() }

@@ -587,6 +587,9 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
             if (project.isDisposed) break         // shutdown mid-scan — stop before the VFS goes away
             val type = ModelFiles.typeOf(file)
             when {
+                // the same size cap as inside an archive, and as Generate's: see ArchiveModelScanner.readable
+                type != null && !ArchiveModelScanner.readable(file.length) ->
+                    LOG.debug("skipping ${file.name}: ${file.length shr 20} MB is above the model limit")
                 type != null ->
                     runCatching { file.contentsToByteArray() }.getOrNull()
                         ?.let { processModel(file.name, it, type, file) }

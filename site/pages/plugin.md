@@ -141,7 +141,11 @@ The index is built when the project opens, in the background, and the Hub asks f
 finds none — one build for any number of askers, and the editor's markers, hints and inspections are
 re-run when it lands. Nothing that runs under the editor's read lock (a highlighting pass, a
 reference, Find Usages) ever builds the index itself; only completion and the explicit actions may
-wait for it. Apart from that the Hub never scans on its own: it subscribes to a project message bus that publishes
+wait for it. A model file or archive entry above 32 MB is left out of the index, as Generate leaves it
+out of the artifacts, so the two agree about which model is too large to read. One difference remains:
+the index walks the project as the IDE's file system shows it, which follows a folder symbolically
+linked in from outside the project — and Generate does not (see the [CLI](../cli/)). Beyond building
+the index the Hub never scans on its own: it subscribes to a project message bus that publishes
 index-invalidated, generation-finished, design-pull-finished, sub-project-switched,
 settings-applied, environments-changed and connection-switched events, so it reflects work started
 anywhere in the IDE without polling. Every Atlas settings page publishes the settings-applied event

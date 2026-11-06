@@ -26,13 +26,30 @@ object FileWalk {
      *
      * [enterDir] decides whether to descend into a directory and is called for [root] as well, matching
      * `walkTopDown().onEnter { … }` so call sites keep their `dir == root || …` guards unchanged.
+     *
+     * The walk stays inside [root]: a symbolic link — to a folder [enterDir] accepts, or to a file — whose
+     * real path lies outside it is not followed, and [onLeave] is told about it. A repository can commit a
+     * link (`up -> ..`, `vendor -> ../../elsewhere`), and following it put a sibling project's models and
+     * Java literals into this project's graph.json, explorer and summary — or walked the whole disk for a
+     * link to `/`. A link within the project is followed; the visited set still stops one that loops.
+     *
+     * [enterDir] stays the last parameter: every caller passes it as a trailing lambda, which would otherwise
+     * bind to [onLeave] — and compile, since a Boolean lambda is a Unit one too — and silently stop pruning.
      */
-    fun files(root: File, enterDir: (File) -> Boolean = { true }): Sequence<File> = sequence {
+    fun files(root: File, onLeave: (File) -> Unit = {}, enterDir: (File) -> Boolean = { true }): Sequence<File> = sequence {
         if (root.isDirectory && !enterDir(root)) return@sequence
-        if (root.isFile) yield(root) else yieldAll(descend(root, enterDir, HashSet()))
+        if (root.isFile) { yield(root); return@sequence }
+        val rootReal = realPath(root)
+        yieldAll(descend(root, enterDir, onLeave, rootReal, HashSet()))
     }
 
-    private fun descend(dir: File, enterDir: (File) -> Boolean, visited: MutableSet<String>): Sequence<File> = sequence {
+    private fun realPath(f: File): java.nio.file.Path =
+        runCatching { f.canonicalFile.toPath() }.getOrElse { f.absoluteFile.toPath().normalize() }
+
+    private fun descend(
+        dir: File, enterDir: (File) -> Boolean, onLeave: (File) -> Unit,
+        rootReal: java.nio.file.Path, visited: MutableSet<String>,
+    ): Sequence<File> = sequence {
         // `isDirectory` follows symlinks, so a link to an ancestor would re-walk the tree until the path
         // grew too long (and two such links, exponentially). Each real directory is entered once.
         val real = runCatching { dir.canonicalPath }.getOrElse { dir.absolutePath }
@@ -41,10 +58,16 @@ object FileWalk {
         // skipping it matches walkTopDown's default behaviour of not failing the traversal.
         val children = dir.listFiles()?.sortedBy { it.name } ?: return@sequence
         for (child in children) {
+            // Only a link can lead out, so only a link pays for the canonical path; an ordinary child of a
+            // directory inside the root is inside the root.
+            val leaves = java.nio.file.Files.isSymbolicLink(child.toPath()) && !realPath(child).startsWith(rootReal)
             if (child.isDirectory) {
-                if (enterDir(child)) yieldAll(descend(child, enterDir, visited))
+                // pruned first: a `build` or `node_modules` linked to somewhere else was never going to be
+                // walked, and reporting it as a link left unfollowed is noise about nothing
+                if (!enterDir(child)) continue
+                if (leaves) onLeave(child) else yieldAll(descend(child, enterDir, onLeave, rootReal, visited))
             } else {
-                yield(child)
+                if (leaves) onLeave(child) else yield(child)
             }
         }
     }

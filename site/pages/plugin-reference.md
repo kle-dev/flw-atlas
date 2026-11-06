@@ -368,7 +368,7 @@ archive icon. The icon is decided from the file name alone, so the Project view 
 | `.masterdata` | JSON | Field names for master-data query completion |
 | `.event`, `.channel` | JSON | Payload names for event parameter completion |
 | `.page`, `.dictionary`, `.query`, `.sequence`, `.sla`, `.agent`, `.tpl`, `.policy`, `.extractor`, `.knowledgebase`, `.dashboardcomponent`, `.document`, `.palette`, `.app` | JSON | Indexed by key, completed, navigable, hoverable, searchable — and they open with their content instead of a "file type not associated" panel |
-| `.bar`, `.zip` | Archive | Entries are indexed, navigable, searchable by path and content, and can render diagrams — without unpacking |
+| `.bar`, `.zip` | Archive | Entries are indexed, navigable, searchable by path and content, and can render diagrams — without unpacking. An entry above 32 MB is skipped, as it is by Generate |
 | Liquibase changelog XML | XML | Column, table and type completion; the coverage inspection |
 | Design workspace `*-models/*.json` | JSON | Inside a `.bar` / `.zip`, the forms, pages, actions and data objects are always models. Loose in the repository, indexed **only** with *Also index raw Flowable Design workspace sources* enabled |
 | `*.explorer.html` | — | Opens as the Atlas Explorer tab; its toolbar opens the Atlas Playground |
