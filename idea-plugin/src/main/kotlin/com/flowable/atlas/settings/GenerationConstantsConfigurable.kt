@@ -7,6 +7,7 @@ import com.flowable.atlas.generate.ConstantFormat
 import com.flowable.atlas.generate.ConstantNaming
 import com.flowable.atlas.generate.ModelConstantsService
 import com.flowable.atlas.generate.ModelConstantsSettings
+import com.flowable.atlas.project.AtlasProjectRootService
 import com.intellij.ui.dsl.builder.bindItem
 import com.intellij.ui.dsl.builder.bindSelected
 import com.intellij.ui.dsl.builder.bindText
@@ -56,7 +57,7 @@ class GenerationConstantsConfigurable(project: Project) : AtlasProjectConfigurab
             }
             row {
                 checkBox("Keep the generated class in sync")
-                    .comment("Regenerate automatically when models are added, renamed or removed.")
+                    .comment(syncComment(constants))
                     .bindSelected({ constants.autoRefresh }, { constants.autoRefresh = it })
             }
             // Readable choices with an example each — the combos used to show the enum names themselves.
@@ -76,6 +77,23 @@ class GenerationConstantsConfigurable(project: Project) : AtlasProjectConfigurab
                     )
             }
         }
+    }
+
+    /**
+     * The class holds one Flowable project's keys, and is left alone while another is active — which reads
+     * as "sync is broken" unless the page names the project it follows. Only once a class exists, and only
+     * where there is another project to pick: in a single-project repository "while the whole repository
+     * is the active Flowable project" names a choice nobody can make.
+     */
+    internal fun syncComment(
+        constants: ModelConstantsSettings.State,
+        projects: Int = AtlasProjectRootService.getInstance(project).detectedOrNull()?.size ?: 0,
+    ): String {
+        val base = message("settings.constants.sync.comment")
+        if (constants.fqcn.isBlank()) return base
+        if (constants.subProject.isBlank() && projects < 2) return base
+        val scope = constants.subProject.ifBlank { message("settings.constants.followsWhole") }
+        return base + " " + message("settings.constants.followsProject", scope)
     }
 
     private fun namingLabel(n: ConstantNaming): String = message(

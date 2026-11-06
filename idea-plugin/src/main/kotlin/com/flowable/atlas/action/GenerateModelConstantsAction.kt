@@ -21,7 +21,9 @@ import com.intellij.openapi.project.Project
 /**
  * Tools → Flowable Atlas → Generate → "Model Constants" (and the Atlas Hub "Generate Constants…" link):
  * generates a Java class holding every project model key as a constant. After generation the class is
- * kept in sync automatically when models are added/removed (see ModelConstantsAutoRefresher).
+ * kept in sync automatically when models are added/removed (see ModelConstantsAutoRefresher) — unless
+ * *Keep the generated class in sync* is switched off (Settings → Tools → Flowable Atlas → Generation →
+ * Model Constants), and only while the Flowable project it was generated from is the active one.
  *
  * The class name comes from Settings → Tools → Flowable Atlas → Generation (default [DEFAULT_FQCN]); no modal
  * prompt is shown, which is what makes the action reliable under JetBrains Remote Dev — a modal input
@@ -69,13 +71,15 @@ class GenerateModelConstantsAction : AnAction(), DumbAware {
                     return
                 }
 
-                val file = ModelConstantsService.getInstance(project).generateAndWrite(fqcn, root)
-                if (file == null) {
-                    notify(
-                        project, "Cannot generate model constants",
-                        "Could not write the class '$fqcn'.", NotificationType.ERROR,
-                    )
-                    return
+                val file = when (val result = ModelConstantsService.getInstance(project).generateAndWrite(fqcn, root)) {
+                    is ModelConstantsService.Result.Written -> result.file
+                    ModelConstantsService.Result.NotWritten -> {
+                        notify(
+                            project, "Cannot generate model constants",
+                            "Could not write the class '$fqcn'.", NotificationType.ERROR,
+                        )
+                        return
+                    }
                 }
                 FileEditorManager.getInstance(project).openFile(file, true)
                 if (usedDefault) {

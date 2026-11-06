@@ -21,6 +21,13 @@ class ModelConstantsSettings : PersistentStateComponent<ModelConstantsSettings.S
 
         /** Keep the class in sync when models are added/removed. */
         var autoRefresh: Boolean = true
+
+        /**
+         * The Flowable sub-project the class was generated from — its root-relative key, `""` for the whole
+         * repository. The class holds that scope's keys in that scope's naming, while the file and this
+         * state are one per repository; auto-refresh only rewrites it while the same scope is active.
+         */
+        var subProject: String = ""
     }
 
     private var state = State()

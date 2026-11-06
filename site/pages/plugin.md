@@ -631,7 +631,9 @@ DTOs, and Liquibase changelogs.
 
 A constants class is what turns every key into a compile-time-checked symbol — after which renaming a
 model is a refactoring rather than a search-and-replace. It regenerates itself in place when the models
-change, so it cannot go stale. The DTO generator emits typed fields, a `fromContainer(…)` mapper and a
+of the Flowable project it was generated in change, so it cannot go stale; in a monorepo, picking another
+project in the Hub leaves the class alone rather than filling it with another app's keys, and switching
+back brings it up to date. The DTO generator emits typed fields, a `fromContainer(…)` mapper and a
 fluent builder, either from one data object via Alt-Enter or in bulk for whole apps. A JSON field is a
 Jackson `JsonNode`, the type the platform keeps it as, and a field named after a Java keyword — `default`,
 `case` — becomes `default_` while its getter stays `getDefault()`. The Liquibase

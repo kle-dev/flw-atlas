@@ -264,7 +264,10 @@ everything except `waivers.json` out of the repository — the same file the CLI
 | Constant format: *A class of String constants per model type* / *An enum per model type* | class |
 
 The identifier and the format are stored per Flowable project; the class name and keeping it in sync are
-shared by the whole repository, and the page's scope line says so.
+shared by the whole repository, and the page's scope line says so. The class itself holds the keys of the
+Flowable project it was generated in, and is kept in sync only while that project is the active one: picking
+another in the Atlas Hub leaves it as it is, and the page says which project it follows. Generating it by
+hand leaves *Keep the generated class in sync* as you set it.
 
 #### → Generation → Liquibase
 
