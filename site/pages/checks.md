@@ -43,7 +43,7 @@ The explorer and the IDE's findings tool window label every advice finding *advi
 | Check | Kind | Severity | What it means |
 |---|---|---|---|
 | `parseIssues` | defect | error · warning | A file could not be read or fully parsed; as warnings, what Atlas decided not to read. (A key shared by two model types is recorded in `diagnostics`, not reported.) |
-| `invalidExpr` | defect | error · warning | An expression has a structural syntax error — every problem on that expression is listed, its warnings included. |
+| `invalidExpr` | defect | error · warning | An expression has a structural syntax error, or a `variables:` call the engine cannot bind — every problem on that expression is listed, its warnings included. |
 | `scriptIssues` | defect | error · warning | A script body has a syntax problem, or calls something its context does not bind. |
 | `missingRefs` | defect | error | A model key is referenced but no model in the project defines it. |
 | `crossedColumns` | defect | error · warning | A service maps a field to the column another field is named after — as an error when the pairing is a closed swap or rotation. |
@@ -140,8 +140,11 @@ explorer's sidebar footer.
 ### `invalidExpr` — the expression does not parse
 
 An expression whose problems include at least one error: an unclosed bracket, an unterminated string,
-a stray operator. It cannot evaluate at runtime, so this is a real defect rather than a style note.
-Every problem on that expression is listed under this check, including any warnings it also has.
+a stray operator — or a `variables:` call with a number of arguments the engine cannot bind, such as
+`${vars:get('route', 'A')}`, which reads `'route'` as the variable container
+([Expressions & scripts](../expressions/) has the rule). It cannot evaluate at runtime, so this is a real
+defect rather than a style note. Every problem on that expression is listed under this check, including
+any warnings it also has.
 
 ### `scriptIssues` — script bodies
 

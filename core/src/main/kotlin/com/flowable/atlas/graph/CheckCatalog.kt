@@ -75,12 +75,13 @@ object CheckCatalog {
         Check(
             id = "invalidExpr", kind = DEFECT, tier = "broken", severity = "error · warning",
             label = "invalid expressions", title = "Invalid expressions",
-            what = "syntax errors in \${ } / {{ }}",
+            what = "syntax errors in \${ } / {{ }}, and variables: calls the engine cannot bind",
             clean = "no syntax errors",
-            why = "An expression that does not parse cannot evaluate — the element it sits on fails the " +
-                "moment it is reached.",
-            fix = "Close the bracket or string the message points at. Every problem on the expression " +
-                "is listed under this check, warnings included.",
+            why = "An expression that does not parse, or that calls a variables: function with arguments the " +
+                "engine cannot bind, cannot evaluate — the element it sits on fails the moment it is reached.",
+            fix = "Close the bracket or string the message points at, or give the variables: call the " +
+                "arguments it takes. Every problem on the expression is listed under this check, warnings " +
+                "included.",
             docs = "invalidexpr-the-expression-does-not-parse",
         ),
         Check(

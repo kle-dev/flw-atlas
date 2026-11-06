@@ -3,6 +3,8 @@
 Reports function calls in Flowable expressions whose namespace or function name the Flowable
 expression catalog does not know.
 <p>Example: <code>${date:noww()}</code> is reported with the suggestion <i>did you mean 'now'?</i></p>
+<p>Also reports a <code>variables:</code> call with a number of arguments the engine cannot bind:
+<code>${vars:get('route', 'A')}</code> makes <code>'route'</code> the variable container and fails at runtime.</p>
 <p>
 Functions and namespaces the project registers itself (which the built-in catalog cannot know)
 can be added to the project's expression allowlist via <b>Alt+Enter → Add … to Flowable expression

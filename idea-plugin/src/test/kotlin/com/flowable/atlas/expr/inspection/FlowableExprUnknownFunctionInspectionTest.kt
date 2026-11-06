@@ -84,4 +84,14 @@ class FlowableExprUnknownFunctionInspectionTest : BasePlatformTestCase() {
         myFixture.configureByText("t.flowable-be", "date:noww()")
         assertFalse(myFixture.doHighlighting().any { it.description?.contains("Unknown") == true })
     }
+
+    fun testAVariablesCallTheEngineCannotBindIsReportedWithNothingToAllowlist() {
+        // two arguments make the engine read 'route' as the variable container: an engine rule, so no
+        // allowlist entry can make it right
+        myFixture.configureByText("t.flowable-be", "vars:g<caret>et('route', 'A')")
+        assertTrue(myFixture.doHighlighting().any { it.description?.contains("takes 1 argument") == true })
+        assertTrue(myFixture.availableIntentions.none { it.text.contains("allowlist") })
+        myFixture.configureByText("t2.flowable-be", "vars:get(execution, 'route')")
+        assertFalse(myFixture.doHighlighting().any { it.description?.contains("argument") == true })
+    }
 }

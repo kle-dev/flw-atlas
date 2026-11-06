@@ -1374,7 +1374,7 @@ object GraphBuilder {
         ExprProblemKind.UNKNOWN_NAMESPACE -> "unknown-namespace"
         ExprProblemKind.UNKNOWN_FUNCTION -> "unknown-function"
         ExprProblemKind.UNKNOWN_ROOT -> "unknown-root"
-        ExprProblemKind.SYNTAX, ExprProblemKind.DIALECT_MISUSE -> null
+        ExprProblemKind.SYNTAX, ExprProblemKind.DIALECT_MISUSE, ExprProblemKind.ARITY -> null
     }
 
     private fun exprProblemAllowlisted(p: Map<String, Any?>, allow: Set<String>): Boolean {

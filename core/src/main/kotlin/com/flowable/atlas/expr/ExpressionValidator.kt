@@ -5,7 +5,21 @@ import com.flowable.atlas.expr.catalog.FlowableExpressionCatalog
 import com.flowable.atlas.expr.lang.ExpressionLexer
 import com.flowable.atlas.expr.lang.Tok
 import com.flowable.atlas.expr.lang.TokType
+import com.flowable.atlas.expr.parse.ArrayNode
+import com.flowable.atlas.expr.parse.ArrowNode
+import com.flowable.atlas.expr.parse.BinaryNode
+import com.flowable.atlas.expr.parse.CallNode
+import com.flowable.atlas.expr.parse.ExprNode
 import com.flowable.atlas.expr.parse.ExprParser
+import com.flowable.atlas.expr.parse.IdentNode
+import com.flowable.atlas.expr.parse.IndexNode
+import com.flowable.atlas.expr.parse.LitNode
+import com.flowable.atlas.expr.parse.MemberNode
+import com.flowable.atlas.expr.parse.NsCallNode
+import com.flowable.atlas.expr.parse.ParenParamsNode
+import com.flowable.atlas.expr.parse.PipeNode
+import com.flowable.atlas.expr.parse.TernaryNode
+import com.flowable.atlas.expr.parse.UnaryNode
 import com.flowable.atlas.inspection.Suggestions
 
 enum class ExprSeverity { ERROR, WARNING }
@@ -22,6 +36,8 @@ enum class ExprProblemKind {
     UNKNOWN_FUNCTION,
     /** Codebase grounding: a root identifier that is no known variable/bean/root. */
     UNKNOWN_ROOT,
+    /** A `variables:` call with a number of arguments the engine cannot bind. An engine fact, never suppressible. */
+    ARITY,
 }
 
 /** A problem found in an expression body; offsets are relative to the body text passed to [ExpressionValidator.validate]. */
@@ -76,10 +92,11 @@ object ExpressionValidator {
     }
 
     /**
-     * Layers 2+3 — semantic, token-based findings: dialect-only operators and the function catalog.
-     * Reported through the `localInspection`s so severity, enablement, scopes and the project
-     * allowlist are user-controllable (the hand-maintained catalog can lag behind a project's
-     * custom JUEL functions).
+     * Layers 2+3 — semantic findings: dialect-only operators, the function catalog, and the argument
+     * count of a backend `variables:` call ([checkArity]). Reported through the `localInspection`s so
+     * severity, enablement, scopes and the project allowlist are user-controllable (the hand-maintained
+     * catalog can lag behind a project's custom JUEL functions) — all but the argument count, which is an
+     * engine rule and carries no subject to allowlist.
      */
     fun validateSemantics(body: String, dialect: ExpressionDialect, custom: CustomFunctionCatalog? = null): List<ExprProblem> {
         val (inner, shift) = stripOuterWrapper(body)
@@ -88,7 +105,64 @@ object ExpressionValidator {
         val problems = ArrayList<ExprProblem>()
         checkDialectOperators(toks, dialect, problems)
         checkFunctions(toks, dialect, problems, custom)
+        if (dialect == ExpressionDialect.BACKEND) checkArity(inner, problems)
         return shifted(problems, shift)
+    }
+
+    /**
+     * A `variables:` call the engine cannot bind. The engine puts the variable container in front of
+     * the arguments only when the call has fewer arguments than the Java method has parameters (or the
+     * method is varargs), and otherwise passes the call through as written — so `vars:get('route', 'A')`,
+     * two arguments for a two-parameter method, reads `'route'` as the container and fails at runtime, and
+     * `vars:equals(x)` is a parameter short. The one form with the full count that does work is the
+     * explicit container, `vars:get(execution, 'x')`, so a full count is reported only when its first
+     * argument is a literal, which no container can be. An error, like a syntax error: it is a fact
+     * about the engine, not about a catalog that may lag behind the project.
+     */
+    private fun checkArity(inner: String, out: MutableList<ExprProblem>) {
+        val ast = ExprParser.parse(inner, ExpressionDialect.BACKEND).takeIf { it.error == null }?.ast ?: return
+        fun visit(n: ExprNode) {
+            if (n is NsCallNode) arityProblem(n)?.let { out += it }
+            for (c in children(n)) visit(c)
+        }
+        visit(ast)
+    }
+
+    private fun arityProblem(call: NsCallNode): ExprProblem? {
+        val fn = FlowableExpressionCatalog.backendFunction(call.namespace, call.name) ?: return null
+        val p = fn.engineParams ?: return null
+        val n = call.args.size
+        val label = "${call.namespace}:${call.name}"
+        val message = when {
+            fn.varargs -> if (n == 0) "'$label' takes at least 1 argument (the variable name), got none" else return null
+            n < p - 1 || n > p -> "'$label' ${takes(p - 1)}, got $n"
+            n == p && call.args[0] is LitNode ->
+                "'$label' ${takes(p - 1)}, got $n — with $n the engine reads ${call.args[0].let { (it as LitNode).raw }} " +
+                    "as the variable container and fails at runtime"
+            else -> return null
+        }
+        return ExprProblem(call.nsStart, call.end, message, ExprSeverity.ERROR, kind = ExprProblemKind.ARITY)
+    }
+
+    private fun takes(n: Int) = when (n) {
+        1 -> "takes 1 argument (the variable name)"
+        2 -> "takes 2 arguments (the variable name and a value)"
+        else -> "takes $n arguments"
+    }
+
+    private fun children(n: ExprNode): List<ExprNode> = when (n) {
+        is MemberNode -> listOf(n.receiver)
+        is IndexNode -> listOf(n.receiver, n.index)
+        is CallNode -> listOf(n.callee) + n.args
+        is NsCallNode -> n.args
+        is UnaryNode -> listOf(n.operand)
+        is BinaryNode -> listOf(n.left, n.right)
+        is TernaryNode -> listOf(n.cond, n.then, n.otherwise)
+        is ArrayNode -> n.elements
+        is PipeNode -> listOf(n.left, n.right)
+        is ArrowNode -> listOf(n.body)
+        is ParenParamsNode -> n.items
+        is LitNode, is IdentNode -> emptyList()
     }
 
     private fun shifted(problems: List<ExprProblem>, shift: Int): List<ExprProblem> =

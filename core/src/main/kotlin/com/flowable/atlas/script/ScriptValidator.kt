@@ -332,11 +332,12 @@ object ScriptValidator {
     private fun checkSemantics(mask: CharArray, context: ScriptContext, out: MutableList<ScriptProblem>) {
         val masked = mask.concatToString()
         val roots = ScriptBindingsCatalog.rootsFor(context)
+        val local = localBindings(masked)
 
         for (m in MEMBER_CALL_RE.findAll(masked)) {
             val rootName = m.groupValues[1]
             val root = roots[rootName] ?: continue
-            if (locallyBound(masked, rootName)) continue
+            if (rootName in local) continue
             val first = m.groupValues[2]
             val second = m.groupValues[3]
             when {
@@ -354,7 +355,7 @@ object ScriptValidator {
             val reported = HashSet<String>()
             for (m in ROOT_USE_RE.findAll(masked)) {
                 val name = m.groupValues[1]
-                if (name in bound || !reported.add(name) || locallyBound(masked, name)) continue
+                if (name in bound || name in local || !reported.add(name)) continue
                 val r = m.groups[1]!!.range
                 out += ScriptProblem(r.first, r.last + 1,
                     ScriptBindingsCatalog.wrongContextMessage(name, context),
@@ -375,7 +376,7 @@ object ScriptValidator {
 
     private fun checkMember(obj: ScriptRoot, name: String, range: IntRange, out: MutableList<ScriptProblem>) {
         val members = obj.members ?: return
-        if (members.containsKey(name) || name in obj.subObjects) return
+        if (members.containsKey(name) || name in obj.subObjects || name in obj.accepted) return
         val near = Suggestions.closest(name, members.keys + obj.subObjects.keys) ?: return
         if (Suggestions.levenshtein(name, near) > MEMBER_TYPO_DISTANCE) return
         out += ScriptProblem(range.first, range.last + 1,
@@ -383,12 +384,44 @@ object ScriptValidator {
             ExprSeverity.WARNING, quickFix = near, kind = ScriptProblemKind.UNKNOWN_MEMBER)
     }
 
-    /** True when the script itself (re)binds [name] — a declaration or an assignment shadows the
-     *  engine binding, so the catalog must stand down for it. */
-    private fun locallyBound(masked: String, name: String): Boolean =
-        Regex("""\b(?:def|var|let|const|final)\s+$name\b""").containsMatchIn(masked) ||
-            Regex("""\b[A-Z]\w*(?:<[^>\n]{0,60}>)?\s+$name\s*=""").containsMatchIn(masked) ||
-            Regex("""(?<![.\w])$name\s*=[^=~]""").containsMatchIn(masked)
+    /**
+     * Every name the script binds itself, which shadows an engine binding of that name, so the catalog
+     * stands down for it: a declaration (`def`/`var`/`let`/`const`/`final`, or `Type name =`), an
+     * assignment, a Groovy closure parameter (`{ task ->`, `{ Task task ->`, `{ k, task ->`), a loop
+     * variable (`for (task in tasks)`, `for (Task task : tasks)`, JS `for…of`/`for…in`, Python
+     * `for task in`), a `catch` parameter, and a JS function or arrow parameter. Read off the masked
+     * text, so a string or comment never binds anything, and for the whole script rather than per
+     * scope: a closure parameter named `task` then also silences a bare `task.` elsewhere, and that
+     * undecidable case is the one where silence wins. Before closures counted, the check's only output
+     * across the real projects was a `{ task -> … }` over a task query.
+     */
+    private fun localBindings(masked: String): Set<String> {
+        val out = HashSet<String>()
+        for (re in listOf(DECL_RE, TYPED_DECL_RE, ASSIGN_RE, FOR_EACH_RE, CATCH_RE, ARROW_SINGLE_RE, PY_FOR_RE)) {
+            for (m in re.findAll(masked)) out += m.groupValues[1]
+        }
+        for (re in listOf(CLOSURE_HEADER_RE, FUNCTION_PARAMS_RE, ARROW_PARAMS_RE)) {
+            for (m in re.findAll(masked)) {
+                for (part in m.groupValues[1].split(',')) PARAM_RE.find(part.trim())?.let { out += it.groupValues[1] }
+            }
+        }
+        return out
+    }
+
+    private val DECL_RE = Regex("""\b(?:def|var|let|const|final)\s+([A-Za-z_$][\w$]*)""")
+    private val TYPED_DECL_RE = Regex("""\b[A-Z]\w*(?:<[^>\n]{0,60}>)?\s+([A-Za-z_]\w*)\s*=""")
+    private val ASSIGN_RE = Regex("""(?<![.\w])([A-Za-z_]\w*)\s*=[^=~]""")
+    /** `{ task ->` — the parameter list of a Groovy closure, on one line, braces excluded. */
+    private val CLOSURE_HEADER_RE = Regex("""\{\s*([^{}\n]*?)\s*->""")
+    private val FOR_EACH_RE = Regex(
+        """\bfor\s*\(\s*(?:(?:def|final|var|let|const)\s+|[A-Z][\w.]*(?:<[^>\n]{0,60}>)?\s+)?([A-Za-z_$][\w$]*)\s*(?:\bin\b|\bof\b|:)""")
+    private val CATCH_RE = Regex("""\bcatch\s*\(\s*[\w.|\s]*?\b([A-Za-z_$][\w$]*)\s*\)""")
+    private val FUNCTION_PARAMS_RE = Regex("""\bfunction\b\s*[\w$]*\s*\(([^)]*)\)""")
+    private val ARROW_PARAMS_RE = Regex("""\(([^()\n]*)\)\s*=>""")
+    private val ARROW_SINGLE_RE = Regex("""(?<![.\w$])([A-Za-z_$][\w$]*)\s*=>""")
+    private val PY_FOR_RE = Regex("""\bfor\s+([A-Za-z_]\w*)\s+in\b""")
+    /** The name at the end of one parameter — after its type, before a `= default`. */
+    private val PARAM_RE = Regex("""([A-Za-z_$][\w$]*)\s*(?:=[^,]*)?$""")
 
     /** The finding a parser attaches to a CMMN lifecycle listener that declares a script: the
      *  engine's listener factory has no script branch, so such a listener silently does nothing. */

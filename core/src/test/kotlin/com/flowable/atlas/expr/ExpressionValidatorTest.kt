@@ -19,6 +19,33 @@ class ExpressionValidatorTest {
     }
 
     @Test
+    fun aVariablesCallTheEngineCannotBindIsAnError() {
+        // the engine inserts the variable container only when an argument is missing: two arguments to
+        // `get` make the first one the container, and too few leave a parameter unbound
+        for (e in listOf(
+            "\${vars:get('route', 'A')}", "\${vars:equals(x)}", "\${variables:getOrDefault('a','b','c','d')}",
+            "\${var:isEmpty()}", "\${vars:contains()}", "\${vars:eq(a, 1) && vars:get('x', 2)}",
+        )) {
+            val p = backend(e).filter { it.kind == ExprProblemKind.ARITY }
+            assertEquals(e, 1, p.size)
+            assertEquals(e, ExprSeverity.ERROR, p.single().severity)
+            assertEquals(e, null, p.single().subject)
+        }
+        assertEquals("'vars:get' takes 1 argument (the variable name), got 2 — with 2 the engine reads 'route' " +
+            "as the variable container and fails at runtime", backend("\${vars:get('route', 'A')}").single().message)
+        assertEquals("'vars:equals' takes 2 arguments (the variable name and a value), got 1",
+            backend("\${vars:equals(x)}").single().message)
+        // the name form, the explicit container form, varargs and nested calls all bind
+        for (e in listOf(
+            "\${vars:get('x')}", "\${vars:get(x)}", "\${vars:get(execution, 'x')}", "\${vars:equals(status, 'open')}",
+            "\${vars:contains(tags, 'a', 'b', 'c')}", "\${vars:contains(tags)}", "\${vars:eq(a, 1) && vars:gt(b, 2)}",
+            "\${vars:getOrDefault('a', vars:get('b'))}", "\${date:format(d, 'x', 'y')}",
+        )) assertEquals(e, emptyList<ExprProblem>(), backend(e))
+        // a frontend expression has no `variables:` functions to bind
+        assertTrue(frontend("{{vars:get('a', 'b')}}").none { it.kind == ExprProblemKind.ARITY })
+    }
+
+    @Test
     fun aPropertyBeforeATernaryColonIsNotANamespace() {
         // `IDENT : IDENT (` is also what `… ? user.displayName : findUser(x)` looks like around the colon;
         // real models were flagged "Unknown function namespace 'displayName'" for it.

@@ -37,7 +37,13 @@ a runtime no-op and is not reported.
 - backend syntax in a frontend expression, with the `flw.` form suggested;
 - an unknown `flw.` member, or an unknown member of one of your own namespaces — but **only when there
   is a plausible near-match**. A member with no near-match is assumed to be a function your project
-  injected, and is left alone.
+  injected, and is left alone;
+- a `variables:` / `vars:` / `var:` call with a number of arguments the engine cannot bind — an
+  **error**, like a syntax error, because the rule is the engine's. The engine puts the variable
+  container in front of the arguments only when one is missing, so `${vars:get('route', 'A')}` reads
+  `'route'` as the container and fails at runtime, and `${vars:equals(x)}` is an argument short. The
+  explicit-container form, `${vars:get(execution, 'x')}`, is valid and is not reported; a literal in its
+  place is.
 
 Bare identifiers are never flagged. They are almost always process variables or form fields, and
 guessing there would produce noise instead of findings.
@@ -116,6 +122,13 @@ Script bodies get the same treatment, per script language and per context. Atlas
 - **Semantics** — an unknown member on a bound root object, a root object that does not exist in this
   script's context, an EL-only API called from a script, and a listener type that does not support
   scripts at all.
+
+A name the script binds itself is never reported as a missing root or checked as one: a declaration or
+assignment, a closure, loop or `catch` parameter (`tasks.any { task -> … }`, `for (task in tasks)`), and
+a JavaScript function or arrow parameter. A call is reported as a typo only when the bound object
+really lacks the member: the engine binds `execution`, `task`, `planItemInstance` and `caseInstance` as
+its entity objects, so the entities' own methods — `execution.getRootProcessInstance()`,
+`caseInstance.setName(…)` — are valid calls, though completion offers only the documented interface.
 
 Contexts are distinguished, because the bindings differ: script task (BPMN), execution listener,
 task listener, script task (CMMN), CMMN task listener, an action's bot script, and a script-type service

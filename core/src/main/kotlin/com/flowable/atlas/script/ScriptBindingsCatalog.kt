@@ -30,6 +30,9 @@ data class ScriptRoot(
     /** Resolves as a Spring bean (Work platform), not an engine binding — completion shows it as
      *  such, and the chips leave it out to stay readable. */
     val bean: Boolean = false,
+    /** Further members the bound runtime object has — the entity behind the delegate interface
+     *  ([ScriptEntityMembers]): valid calls the typo check accepts, never offered by completion. */
+    val accepted: Set<String> = emptySet(),
 )
 
 /**
@@ -41,7 +44,8 @@ data class ScriptRoot(
  *    `execution` for an ExecutionEntity XOR `task` for a TaskEntity — never both) and
  *    `CmmnVariableScopeResolver` (`caseInstance` / `planItemInstance` / `task`), plus the service
  *    bindings each registers; member surfaces from `VariableScope`, `DelegateExecution`,
- *    `DelegateTask`, `DelegatePlanItemInstance`/`PlanItemInstance` and `CaseInstance`;
+ *    `DelegateTask`, `DelegatePlanItemInstance`/`PlanItemInstance` and `CaseInstance` — plus, accepted
+ *    but not advertised, the methods of the entity each resolver binds ([ScriptEntityMembers]);
  *  - the commercial platform — it binds the script `flw` root into BPMN/CMMN/bot/service-registry
  *    scripts; the bot context additionally binds `flwActionContext`.
  *
@@ -279,13 +283,17 @@ object ScriptBindingsCatalog {
         service("cmmnTaskService", "CMMN task service", ScriptServiceApis.CMMN_TASK_SERVICE),
     )
 
+    // The delegate interfaces are what completion offers; the entity each resolver actually binds adds
+    // the rest of what a dynamically dispatched call can reach.
     private val EXECUTION = ScriptRoot("execution",
-        "the current execution (DelegateExecution)", EXECUTION_MEMBERS)
-    private val DELEGATE_TASK = ScriptRoot("task", "the current task (DelegateTask)", TASK_MEMBERS)
+        "the current execution (DelegateExecution)", EXECUTION_MEMBERS, accepted = ScriptEntityMembers.EXECUTION_ENTITY)
+    private val DELEGATE_TASK = ScriptRoot("task", "the current task (DelegateTask)", TASK_MEMBERS,
+        accepted = ScriptEntityMembers.TASK_ENTITY)
     private val PLAN_ITEM = ScriptRoot("planItemInstance",
-        "the current plan item (DelegatePlanItemInstance)", PLAN_ITEM_MEMBERS)
+        "the current plan item (DelegatePlanItemInstance)", PLAN_ITEM_MEMBERS,
+        accepted = ScriptEntityMembers.PLAN_ITEM_INSTANCE_ENTITY)
     private val CASE_INSTANCE = ScriptRoot("caseInstance",
-        "the case instance (CaseInstance)", CASE_INSTANCE_MEMBERS)
+        "the case instance (CaseInstance)", CASE_INSTANCE_MEMBERS, accepted = ScriptEntityMembers.CASE_INSTANCE_ENTITY)
 
     /** In a CMMN *script task* the `task` binding is a `List<TaskEntity>` (usually empty), not a
      *  task — member checks are off for it, only its existence is catalogued. */
