@@ -360,6 +360,14 @@ archive icon. The icon is decided from the file name alone, so the Project view 
 | Design workspace `*-models/*.json` | JSON | Inside a `.bar` / `.zip`, the forms, pages, actions and data objects are always models. Loose in the repository, indexed **only** with *Also index raw Flowable Design workspace sources* enabled |
 | `*.explorer.html` | — | Opens as the Atlas Explorer tab; its toolbar opens the Atlas Playground |
 
+A file type is registered for the whole IDE, not per project, and several model extensions mean something
+else outside Flowable: a Helm chart's `_helpers.tpl`, a systemd `.service` unit, a Java `.policy` file.
+So `.page`, `.data`, `.query`, `.sequence`, `.sla`, `.event`, `.service`, `.tpl`, `.policy`, `.document` and
+`.app` are treated as JSON only when the file holds a JSON object — its first character after any
+whitespace is `{`, followed by a quote or `}` — in a folder or inside an archive alike. Any other file with
+one of those extensions keeps its own type. The remaining model extensions are JSON by name, even while
+the file is still empty.
+
 ## Notifications
 
 Two groups, so either can be silenced in *Settings → Appearance & Behavior → Notifications* without the

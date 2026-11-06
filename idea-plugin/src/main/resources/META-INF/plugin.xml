@@ -954,10 +954,15 @@
              an unregistered extension resolves to UnknownFileType, which is binary, so the editor
              shows the "file type not associated" panel instead — most visibly for an entry opened
              out of a .bar/.zip. A <fileType> with no implementationClass only adds matchers to the
-             existing type (the same idiom the bundled javaFX and Maven plugins use). The list mirrors
-             ModelType.EXTENSIONS in :core. -->
+             existing type (the same idiom the bundled javaFX and Maven plugins use).
+             Only the extensions with no common meaning outside Flowable are mapped by name (the list is
+             FlowableJsonModelTypeDetector.NAME_MAPPED): a mapping is IDE-wide, and mapping .tpl, .service,
+             .policy or .data made a Helm _helpers.tpl, a systemd unit or a Java policy file in any project
+             a JSON file full of errors. Those, and the rest of ModelType.EXTENSIONS, are left to the
+             detector below, which claims a file as JSON only when it holds a JSON object. -->
         <fileType name="JSON"
-                  extensions="form;action;page;data;dictionary;query;sequence;sla;event;channel;agent;service;tpl;policy;extractor;knowledgebase;masterdata;dashboardcomponent;document;palette;app"/>
+                  extensions="form;action;dictionary;masterdata;knowledgebase;dashboardcomponent;extractor;palette;agent;channel"/>
+        <fileTypeDetector implementation="com.flowable.atlas.model.FlowableJsonModelTypeDetector"/>
         <!-- The XML-serialized models. .bpmn20.xml / .cmmn.xml / .dmn.xml already end in .xml. -->
         <fileType name="XML" extensions="bpmn;cmmn;dmn"/>
         <!-- A .bar is a zip under another name. As the platform's ARCHIVE a double-click expands it (see
