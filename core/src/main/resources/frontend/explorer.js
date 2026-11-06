@@ -3428,7 +3428,7 @@ function renderItems(cat, wrap){
     const rl='Referenced by '+rn+' node'+(rn>1?'s':'')+' — the count Most referenced sorts by';
     el.innerHTML=nodeIcon(n)+
       '<div class="meta"><div class="nm"><span class="nmt">'+hlHtml(n.label, parsed)+'</span>'+authBadge(n)+findPillHtml(n.id)+'</div>'+
-      (sub?'<div class="sub" title="'+esc(sub)+'">'+hlHtml(sub, parsed)+'</div>':'')+'</div>'+
+      (sub?'<div class="sub" title="'+esc((w&&w.full)||sub)+'">'+hlHtml(sub, parsed)+'</div>':'')+'</div>'+
       (rn?'<span class="refn" data-tip="'+esc(rl)+'" aria-label="'+esc(rl)+'">'+uiIcon('link')+rn+'</span>':'')+
       '<span class="ck" aria-hidden="true">✓</span>';
     el.onclick=e=>activateRow(e, n.id, {q:parsed.empty?undefined:state.filter, el:(w&&w.el)||undefined});
@@ -3603,7 +3603,7 @@ function paintCatRows(reset){
     const keyIsName=sameText(n.key, n.label), keyWhat=n.type==='java'?'class name':'key';
     const mk=listMarks.has(n.id), cells={
       name:nodeIcon(n)+'<span class="nm">'+hlHtml(n.label, parsed)+'</span>'+(keyIsName?copyBtn(n.key, keyWhat):'')+authBadge(n)+
-        (w&&w.hint?'<span class="cat-why">'+hlHtml(w.hint, parsed)+'</span>':''),
+        (w&&w.hint?'<span class="cat-why" title="'+esc(w.full||w.hint)+'">'+hlHtml(w.hint, parsed)+'</span>':''),
       key:keyIsName?'':cpyCell(hlHtml(n.key||'', parsed), n.key, keyWhat),
       file:n.file?'<span class="cellx"><span class="fp cxn" data-tip="'+esc(n.file)+'">'+esc(fileBase(n.file))+'</span>'+openBtn(n.file,(n.data||{}).line)+'</span>':'',
       in:String(INSIGHTS.indeg.get(n.id)||''), out:String(INSIGHTS.outdeg.get(n.id)||''),
@@ -8812,8 +8812,8 @@ function matchWhere(n,parsed,fields){
     const hit=ent.find(x=>keys.has(x.k)&&anyIn(x.v));
     // The matched text leads the hint: it is what the reader searched for, and it is what the
     // highlighter can light up — "label · orderTotal" named the owner but never showed the caption.
-    if(hit){ const v=String(hit.v), short=v.length>48?v.slice(0,47)+'…':v;
-      return {hint:(HAY_LABEL[hit.k]||hit.k)+' · '+short+(hit.id?' @'+hit.id:''), el:hit.id||''}; }
+    if(hit){ const v=String(hit.v), lab=(HAY_LABEL[hit.k]||hit.k)+' · ', at=hit.id?' @'+hit.id:'';
+      return {hint:lab+hintSnippet(v, hit.k, needles)+at, full:lab+hintSnippet(v, '', needles, HINT_FULL)+at, el:hit.id||''}; }
     // A BPMN/CMMN element's name never reaches the walked entries — it arrives through elementNames() —
     // so a `label:` hit on a task's caption has to be looked up where it actually lives.
     if(ffac && (n.type==='process'||n.type==='case'))
@@ -8828,8 +8828,33 @@ function matchWhere(n,parsed,fields){
   // The same shape as the facet paths above: the matched text leads, the owner follows after @. The
   // plain path used to name the field's id instead — twelve rows in a row reading "label · date1" for
   // a query the captions matched.
-  const v=String(e.v), short=v.length>48?v.slice(0,47)+'…':v;
-  return {hint:(HAY_LABEL[e.k]||e.k)+' · '+short+(e.id?' @'+e.id:''), el:e.id||''};
+  const v=String(e.v), lab=(HAY_LABEL[e.k]||e.k)+' · ', at=e.id?' @'+e.id:'';
+  return {hint:lab+hintSnippet(v, e.k, needles)+at, full:lab+hintSnippet(v, '', needles, HINT_FULL)+at, el:e.id||''};
+}
+/** The tooltip's share of a matched value (`full`): a path or a URL whole, a script body not — a bubble
+ *  is no place for three thousand characters, and the row opens the panel on the element anyway. */
+const HINT_FULL=400;
+/** At most [max] (48) characters of a matched value, cut AROUND the match: what the reader searched for
+ *  is what explains the row, and what the highlighter can light up. A long value carries its match in the
+ *  tail as often as not — a file path's zip entry, a URL's last segment, the property an expression
+ *  reads — and a head cut showed "file · <module>/src/main/resources/com/…" on thirty rows with nothing
+ *  lit. A file path whose last segment holds the match shows that segment, the part a reader recognises. */
+function hintSnippet(v, k, needles, max){
+  max=max||48;
+  if(v.length<=max) return v;
+  const low=v.toLowerCase();
+  let at=-1;
+  needles.forEach(nd=>{ if(!nd) return; const i=low.indexOf(nd); if(i>=0 && (at<0||i<at)) at=i; });
+  if(at<0) return v.slice(0,max-1)+'…';
+  if(k==='file'){                                // a URL keeps its window: the path before it is the context
+    const cut=Math.max(v.lastIndexOf('!'), v.lastIndexOf('/'));
+    if(cut>=0 && cut<at && v.length-cut<=max-1) return '…'+v.slice(cut);
+  }
+  // a quarter of the room as lead-in before the match, and [max] characters in all, ellipses included
+  const st=Math.max(0, Math.min(at-(max>>2), v.length-(max-1)));
+  if(!st) return v.slice(0,max-1)+'…';
+  if(st+max-1>=v.length) return '…'+v.slice(v.length-(max-1));
+  return '…'+v.slice(st, st+max-2)+'…';
 }
 /*__SEARCH_CORE_END__*/
 SX_ENV.TM=TM;
@@ -9278,14 +9303,15 @@ function palRender(){
       const w=parsed.empty?null:matchWhere(n, parsed, hit.fields);
       palList.push({n, el:(w&&w.el)||''});
       const hint=(w&&w.hint)||(sameText(n.key, n.label)?'':n.key);
-      // title on both: whatever the panel width clips is still readable on hover, without resizing.
+      // title on both: whatever the panel width clips is still readable on hover, without resizing — the
+      // hint's in full, since the row shows only the stretch of a long value around the match.
       const mk=palMarks.has(n.id);
       h+='<div class="pal-item'+(i===palSel?' sel':'')+(mk?' mark':'')+'" id="pal-'+i+'" role="option"'+
          ' aria-selected="'+(i===palSel)+'" aria-checked="'+mk+'" data-i="'+i+'">'+
          '<span class="ck" aria-hidden="true">✓</span>'+
          nodeIcon(n)+
          '<span class="nm" title="'+esc(n.label)+'">'+hlHtml(n.label, parsed)+'</span>'+
-         '<span class="hint" title="'+esc(hint)+'">'+hlHtml(hint, parsed)+'</span></div>';
+         '<span class="hint" title="'+esc((w&&w.full)||hint)+'">'+hlHtml(hint, parsed)+'</span></div>';
     });
   });
   if(!h) h=palEmptyHtml(parsed, hidden);

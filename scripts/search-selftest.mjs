@@ -391,6 +391,29 @@ unit('a literal {{}} hit names the field that carries it',
   whyOf('{{}}', FORM_ORDER), 'value · {{}} @resetTotal');
 unit("a label: hit on the node's own label leaves the hint to the key",
   whyOf('label:priority', DO_PRIORITY), null);
+// A long value is cut around the match, not from its start: a zip-entry path, a URL or an expression
+// carries its match in the tail as often as not, and a head cut showed the same
+// "file · <module>/src/main/resources/com/…" on thirty rows with nothing to highlight.
+function whyOfNode(q, n) {
+  const p = engine.qParse(q), r = engine.scoreIndex(engine.searchIndex(n), p, 0);
+  return r ? engine.matchWhere(n, p, r.fields) : null;
+}
+{
+  const P = 'modules/demo-app/src/main/resources/com/example/app/DEMO-shippingapp-bar.zip!form-DEMO-F1.form';
+  const w = whyOfNode('shippingapp', { id: 'form:DEMO-F1', type: 'form', key: 'DEMO-F1', label: 'Order form', file: P, data: { file: P } });
+  unit('a hint in a long path keeps the matched text', !!w && /shippingapp/i.test(w.hint), true);
+  unit('…within the hint width', !!w && w.hint.length <= 'file · '.length + 48, true);
+  unit('…and the whole value is kept for the tooltip', w && w.full, 'file · ' + P);
+  const Q = 'modules/demo-app/src/main/resources/com/example/app/DEMO-app-bar.zip!form-DEMO-intake.form';
+  unit('a match in the last segment of a path shows that segment',
+    (whyOfNode('intake', { id: 'form:DEMO-F2', type: 'form', key: 'DEMO-F2', label: 'Order form', file: Q, data: { file: Q } }) || {}).hint,
+    'file · …!form-DEMO-intake.form');
+  // the tooltip gets a path whole, but not a 4 000-character script around one matched word
+  const body = 'x'.repeat(2000) + ' zzneedle ' + 'y'.repeat(2000);
+  const w2 = whyOfNode('zzneedle', { id: 'process:DEMO-P1', type: 'process', key: 'DEMO-P1', label: 'Order', data: { script: body } });
+  unit('the tooltip shows a long body around the match, not all of it',
+    !!w2 && /zzneedle/.test(w2.full) && w2.full.length <= 420 && /zzneedle/.test(w2.hint), true);
+}
 
 // A zero-result query must still be able to suggest something (the palette's "did you mean").
 ran++;

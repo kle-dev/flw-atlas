@@ -515,6 +515,9 @@ const probe = `<script>
     ok('a script-body match still shows rows', !!it);
     ok('and the row says why it matched', !!it && /script/.test((it.querySelector('.cat-why')||{}).textContent||''),
        it?((it.querySelector('.cat-why')||{}).textContent||'(no why)'):'(none)');
+    // the hint is cut around the match; hovering it shows the value whole, as in the palette
+    const why=it&&it.querySelector('.cat-why'), tip=why?(why.getAttribute('title')||why.getAttribute('data-tip')||''):'';
+    ok('and hovering the reason shows more of the value than the row does', /setvariable/i.test(tip) && tip.length>=why.textContent.length, tip);
   });
 
   // --- nothing extracted is invisible: unconsumed data renders as Other attributes ---

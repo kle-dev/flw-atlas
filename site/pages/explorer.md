@@ -437,8 +437,9 @@ expression and type, a number per rule.
   over each node's data.
 - **It tells you why a row matched** — with the text that matched, and the element it belongs to after
   `@`: `label · Departure date @date1`. For a facet, with a field of that kind: `label:` is answered by
-  the caption that matched, never by the id beside it. On zero results it suggests the nearest real
-  names.
+  the caption that matched, never by the id beside it. A long value is cut around the match rather than
+  from its start — a file path shows the archive entry that matched, not the module folders before it —
+  and hovering the hint shows it whole. On zero results it suggests the nearest real names.
 
 Every one of these works in the live demo linked above. `desc:approval` lands on the process documented
 as needing one *and* on the DMN rule that says so; `label:volume` on the form field captioned *Expected
