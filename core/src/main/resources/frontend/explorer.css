@@ -212,6 +212,8 @@
   .estate-ic .ui,.estate-ic .ti{width:calc(24px*var(--ui-scale));height:calc(24px*var(--ui-scale))}
   .estate .et{font-size:var(--text-lg);font-weight:600;color:var(--ink-dim)}
   .estate .eh{font-size:var(--text-sm);max-width:340px;line-height:1.5}
+  /* under a filter bar: the answer to what was typed, close to it — not a page-sized empty state */
+  .estate.filter-empty{padding:var(--space-6) var(--space-4)}
   /* a short line should not end on one orphaned word */
   .ddesc,.estate .eh,.kindhint{text-wrap:pretty}
 

@@ -1786,6 +1786,30 @@ function estateHtml(o){
   return '<div class="estate"><div class="estate-ic" aria-hidden="true">'+o.icon+'</div>'+
     '<div class="et">'+o.title+'</div><div class="eh">'+o.hint+'</div></div>';
 }
+/** A filter on a page that matches nothing says so, under its bar, and offers the way out — the browse
+ *  list always had this (listEmptyHtml); a report page showed its headings over nothing, still counting
+ *  "Defects 19 open", and a filter restored from a shared link looked like an empty project. */
+function filterEmptyBody(q){
+  return '<div class="et">No match</div><div class="eh">'+
+    (q?'Nothing here matches “'+esc(q)+'” — ':'Nothing here under this filter — ')+
+    '<button type="button" class="dgbtn fe-clear">clear the filter</button>'+
+    (q?' or <button type="button" class="dgbtn fe-all">search everything ('+(IS_MAC?'⌘':'Ctrl+')+'K)</button>':'')+'</div>';
+}
+/** Show, refresh or hide the empty state right after a filter bar (after its .pagebar, where it has one);
+ *  [clear] empties the filter. One block per bar, made on first need and kept, so its live region stays. */
+function syncFilterEmpty(bar, empty, q, clear){
+  const anchor=bar.closest('.pagebar')||bar;
+  let el=anchor.nextElementSibling;
+  if(el && !el.classList.contains('filter-empty')) el=null;
+  if(!empty){ if(el) el.hidden=true; return; }
+  if(!el){
+    anchor.insertAdjacentHTML('afterend', '<div class="estate filter-empty" role="status"></div>');
+    el=anchor.nextElementSibling;
+  }
+  el.innerHTML=filterEmptyBody(q); el.hidden=false;
+  el.querySelector('.fe-clear').onclick=clear;
+  const all=el.querySelector('.fe-all'); if(all) all.onclick=()=>openPalette(q);
+}
 /** The header of a report page — the hero without the sticky bar: icon tile, title, one line saying
  *  what the page is, and the page's own numbers as facts. */
 function pageHeader(o){
@@ -2055,11 +2079,14 @@ function wireTree(v){
     const go=()=>{ state.treeLens=c.dataset.lens; try{ localStorage.setItem('atlas-tree-lens', c.dataset.lens); }catch(e){} syncHashContext(); renderTree(); };
     c.onclick=go; c.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); } };
   });
-  const f=v.querySelector('#tvf'), count=v.querySelector('#tvcount');
+  const f=v.querySelector('#tvf'), count=v.querySelector('#tvcount'), bar=v.querySelector('.tv-bar');
+  const groups=[...v.querySelectorAll('.tv-group')];
+  const clear=()=>{ f.value=''; f.dispatchEvent(new Event('input')); f.focus(); };
   if(f) f.addEventListener('input', debounce(()=>{
     const q=qParse(f.value.trim());
     const all=[...v.querySelectorAll('.tv-row')];
-    if(!f.value.trim()){ all.forEach(r=>r.hidden=false); if(count) count.textContent=''; return; }
+    if(!f.value.trim()){ all.forEach(r=>r.hidden=false); groups.forEach(g=>g.hidden=false);
+      if(bar) syncFilterEmpty(bar, false); if(count) count.textContent=''; return; }
     // A row survives if it matches or an ancestor of a match: a tree that hides the path to a hit has
     // hidden the hit.
     const hit=new Set();
@@ -2067,6 +2094,9 @@ function wireTree(v){
     all.forEach(r=>r.hidden=true);
     hit.forEach(r=>{ r.hidden=false; treeReveal(r);
       let p=r.parentElement; while(p){ const o=p.closest?p.closest('li.tv-row'):null; if(!o) break; o.hidden=false; p=o.parentElement; } });
+    // an app's header ("8 roots") over none of its rows read as if they were there
+    groups.forEach(g=>{ g.hidden=![...g.querySelectorAll('.tv-row')].some(r=>!r.hidden); });
+    if(bar) syncFilterEmpty(bar, !hit.size, f.value.trim(), clear);
     if(count) count.textContent=hit.size+' of '+all.length;
   }, 120));
 }
@@ -2536,7 +2566,7 @@ function checkBlockHtml(c, all){
   if(acc.length) body+='<details class="chk-acc"'+(showAccepted()?' open':'')+'><summary>'+acc.length+' accepted — kept in the report, out of the counts and the gate</summary>'+
     findingTable(acc)+'</details>';
   return section('chk-'+c.id, esc(c.title), body, {count:open.length, hint:acc.length?acc.length+' accepted':'',
-    attrs:' id="chk-'+esc(c.id)+'"'});
+    attrs:' id="chk-'+esc(c.id)+'" data-fgroup="'+checkKind(c.id)+'"'});
 }
 function renderChecks(){
   const v=document.getElementById('view-checks');
@@ -2551,7 +2581,7 @@ function renderChecks(){
     const blocks=checksInOrder().filter(c=>checkKind(c.id)===kind).map(c=>checkBlockHtml(c, byCheck[c.id]||[])).join('');
     if(!blocks) return;
     const n=kind==='advice'?K.advice:K.defects;
-    b+='<div class="kindhead kind-'+kind+'" id="chk-kind-'+kind+'"><span class="kindlbl">'+esc(KIND_LABEL[kind])+'</span>'+
+    b+='<div class="kindhead kind-'+kind+'" id="chk-kind-'+kind+'" data-fhead="'+kind+'"><span class="kindlbl">'+esc(KIND_LABEL[kind])+'</span>'+
        '<span class="pill '+(kind==='advice'?(n?'pill-advice':'pill-ok'):(n?'pill-bad':'pill-ok'))+'">'+n+' open</span>'+
        '<span class="kindhint">'+esc(KIND_HINT[kind])+'</span></div>'+blocks;
   });
@@ -3979,7 +4009,8 @@ function wireSectionFilter(root){
     // The count answers the chips: accepted rows and the rule/notes tables are filtered too, but "12 of
     // 340" against a chip saying 42 open contradicted itself.
     const counted=leaves.filter(el=>!el.closest('details.chk-acc, #chk-waived, #chk-waiver-notes, #chk-waiver-health'));
-    const containers=[...scope.querySelectorAll('details.card, details.tr, details.sect, details.chk-acc, .fgroup, .relrow')].filter(c=>c.querySelector('[data-hay]'));
+    // A table is one too: with every row filtered out, its column header was left standing over nothing.
+    const containers=[...scope.querySelectorAll('details.card, details.tr, details.sect, details.chk-acc, .fgroup, .relrow, .tbl')].filter(c=>c.querySelector('[data-hay]'));
     // A report page's own bar keeps its text and chip in the URL (see syncHashContext) and starts from it.
     const pageBar=state.view!=='browse' && scope.classList.contains('dash');
     if(pageBar){
@@ -4005,8 +4036,22 @@ function wireSectionFilter(root){
         const any=[...c.querySelectorAll('[data-hay]')].some(r=>!r.hidden&&!r.querySelector('[data-hay]'));
         c.hidden=!any; if(any&&(q||fv!=='all')) c.open=true;
       });
-      if(count) count.textContent=(q||fv!=='all')?shown+' of '+counted.length:'';
+      const active=!!q||fv!=='all';
+      // A heading over a group of blocks ("Defects 19 open") goes with the last of its rows: left
+      // standing over nothing, it read as if the rows were there.
+      heads.forEach(h=>{ h.hidden=active && !leaves.some(r=>!r.hidden && r.closest('[data-fgroup="'+h.dataset.fhead+'"]')); });
+      // Any row counts here, accepted ones and rule rows included: a filter that matches only those
+      // did match something, though `shown` (the open rows) is 0.
+      syncFilterEmpty(bar, active && leaves.length>0 && !leaves.some(r=>!r.hidden), (input.value||'').trim(), clear);
+      if(count) count.textContent=active?shown+' of '+counted.length:'';
       if(pageBar){ state.rf=(input.value||'').trim(); state.rc=(fk&&fv&&fv!=='all')?fv:''; syncHashContext(); }
+    };
+    const heads=[...scope.querySelectorAll('[data-fhead]')];
+    const clear=()=>{
+      input.value='';
+      const every=chips.find(c=>c.dataset.fv==='all')||chips[0];
+      chips.forEach(c=>c.classList.toggle('on', c===every));
+      apply(); input.focus();
     };
     input.addEventListener('input', debounce(apply,120));
     chips.forEach(c=>c.onclick=()=>{ chips.forEach(x=>x.classList.toggle('on', x===c)); apply(); });

@@ -1519,6 +1519,30 @@ const probe = `<script>
     const shown=[...document.querySelectorAll('#view-variables [data-varrow]')].filter(r=>!r.hidden);
     ok('a filter matching nothing hides every row', shown.length===0, shown.length+' rows still shown');
   });
+  // --- a report page's filter that matches nothing says so — also when it arrives in a link — and the
+  //     way out clears it; headings over nothing go with their rows ---
+  ['/checks','/tree','/scripts','/variables','/elements&t=process:startEvent'].forEach(route=>{
+    const isEl=route.indexOf('/elements')===0;
+    const view=()=>document.querySelector('.view:not([hidden])');
+    steps.push(()=>{ location.hash='#'+route+'&f=zzqqx'; });
+    steps.push(()=>{
+      const v=view(), fe=v&&v.querySelector('.filter-empty:not([hidden])');
+      ok(route+' with a filter matching nothing says so', !!fe && /zzqqx/.test(fe.textContent||''));
+      if(route==='/checks') ok(route+' leaves no kind heading over nothing', !v.querySelector('.kindhead:not([hidden])'));
+      if(route==='/tree') ok(route+' leaves no app header over nothing', !v.querySelector('.tv-group:not([hidden])'));
+      if(isEl) ok(route+' leaves no column header over nothing', !v.querySelector('.tbl:not([hidden])'));
+      const b=fe&&fe.querySelector('.fe-clear'); if(b) click(b);
+    });
+    steps.push(()=>{
+      const v=view(), pf=v&&v.querySelector('.pf');
+      ok(route+': clear the filter empties it', !!pf && pf.value==='');
+      ok(route+': and drops it from the link', !/[&]f=/.test(location.hash), location.hash);
+      ok(route+': and the empty state goes', !v.querySelector('.filter-empty:not([hidden])'));
+      if(route==='/checks') ok(route+': and the headings come back', !!v.querySelector('.kindhead:not([hidden])'));
+      if(route==='/tree') ok(route+': and the app headers come back', !!v.querySelector('.tv-group:not([hidden])'));
+      if(isEl) ok(route+': and the table comes back', !!v.querySelector('.tbl:not([hidden])'));
+    });
+  });
 
   // --- accepting a finding: the round trip that makes waivers worth having. A decision is taken on the
   //     row it is about, refuses to exist without a reason, narrows to the element by default, shows up
