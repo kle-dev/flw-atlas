@@ -25,6 +25,9 @@ dependencies {
 
 tasks.test {
     useJUnit()
+    // A failure's message in the console, not only in the HTML report: a failing golden names the line
+    // and the JSON path that differ (GoldenFiles), which is no help one click away from the build log.
+    testLogging { exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
 
     // Files this module's tests compare but that live OUTSIDE its source sets, so Gradle cannot infer
     // them: the sync tests (ClaudeTemplateSyncTest, ChangelogSyncTest) read them straight off the repo

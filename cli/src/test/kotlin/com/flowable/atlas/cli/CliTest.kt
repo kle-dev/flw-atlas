@@ -1,6 +1,7 @@
 package com.flowable.atlas.cli
 
 import com.flowable.atlas.model.MiniJson
+import com.flowable.atlas.parsing.ModelKinds
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -13,7 +14,7 @@ import java.io.File
  * Contract tests for the standalone CLI (`run(argv)`), mirroring Python's `tests/test_cli.py`:
  * `--all` writes exactly the six `<name>.*` artifacts (and the ER page, for a project with tables); the Markdown artifacts match the committed
  * goldens (the renderers are already golden-verified, so `--all` output + the trailing newline the
- * golden test appends is byte-identical); `graph.json` parses and normalizes to the golden graph; a
+ * golden test appends is byte-identical); `graph.json` is the golden projection, minified; a
  * `--summary --stdout` run returns 0 without touching disk; a missing path exits 2.
  */
 class CliTest {
@@ -73,44 +74,46 @@ class CliTest {
     }
 
     /**
-     * The written `graph.json` is the *projection* of the extract result (`GraphJsonRenderer`), not the
-     * result verbatim: a model node's body is stored once in its bucket and the node points at it with
-     * `dataIn`, nodes carry a `usedBy` reverse index, a `_schema` block describes the shape, and the file
-     * is minified. So this asserts the projection's contract against the golden result rather than byte
-     * equality with it — losing a bucket, or a node whose body can no longer be found, fails here.
+     * The written `graph.json` is the golden, apart from `_generated` (the time and the Atlas version) and
+     * the layout: the file is minified, the golden is laid out one token per line. `GoldenExtractionTest`
+     * pins the projection in `:core` and says where a difference is; this pins that the CLI writes exactly
+     * that projection. The contract assertions after it repeat part of what the comparison proves, to say
+     * what the shape is for: a model body is stored once and found through `dataIn`, and `usedBy` agrees
+     * with the edges.
      */
     @Suppress("UNCHECKED_CAST")
     @Test
-    fun allGraphJsonIsTheProjectionOfTheGoldenResult() {
+    fun allGraphJsonIsTheGoldenProjection() {
         val out = tempDir()
         assertEquals(0, run(arrayOf(fixtureDir().path, "--all", "-o", out.path, "-q")))
 
         val text = File(out, "miniproject.graph.json").readText()
         assertTrue("graph.json must be minified by default", !text.contains("\n  \""))
         val written = MiniJson.parse(text) as Map<String, Any?>
-        val golden = MiniJson.parse(goldenFile("miniproject.graph.json").readText()) as Map<String, Any?>
-
-        assertTrue("graph.json must describe its own shape", written.containsKey("_schema"))
+        assertEquals("graph.json must describe its own shape first", "_schema", written.keys.first())
         assertTrue("graph.json must say when and by which Atlas it was generated", written.containsKey("_generated"))
+        // Compact again before laying it out: a parsed number is a Double, which the compact writer prints
+        // as `64` and the indented one as `64.0`.
+        val content = LinkedHashMap(written).apply { remove("_generated") }
         assertEquals(
-            "graph.json top-level keys differ from the golden result (plus _schema and _generated)",
-            (golden.keys + "_schema" + "_generated").sorted(), written.keys.sorted(),
+            "miniproject.graph.json differs from the golden — GoldenExtractionTest names the line and its path",
+            goldenFile("miniproject.graph.json").readText(),
+            MiniJson.reindent(MiniJson.stringify(content), 2) + "\n",
         )
-        // Every top-level section except `graph` is passed through untouched.
-        for (key in golden.keys) {
-            if (key == "graph") continue
-            assertEquals("section '$key' differs", canonical(golden[key]), canonical(written[key]))
-        }
-        // Every model node resolves back to exactly one bucket entry via `dataIn` + type/key.
+
+        // Every node of a type that owns a bucket points into it, and resolves there by its key. Asserted
+        // for every such node, not only for those that happen to carry `dataIn`: a node that carries a
+        // second copy of its body instead is exactly the growth this file must not have.
         val nodes = (written["graph"] as Map<String, Any?>)["nodes"] as List<Map<String, Any?>>
+        val bucketTypes = ModelKinds.MODEL_KINDS.map { it.nodeType }.toSet()
         var resolved = 0
-        for (n in nodes) {
-            val data = n["data"] as? Map<String, Any?> ?: continue
-            val bucket = data["dataIn"] as? String ?: continue
+        for (n in nodes.filter { it["type"] in bucketTypes }) {
+            val data = n["data"] as? Map<String, Any?>
+            assertEquals("node ${n["id"]} carries its body instead of pointing at it", setOf("dataIn"), data?.keys)
+            val bucket = data!!["dataIn"] as String
             val entries = written[bucket] as? List<Map<String, Any?>>
                 ?: error("node ${n["id"]} points at missing bucket '$bucket'")
-            val hits = entries.filter { it["key"] == n["key"] }
-            assertTrue("node ${n["id"]} does not resolve in bucket '$bucket'", hits.isNotEmpty())
+            assertTrue("node ${n["id"]} does not resolve in bucket '$bucket'", entries.any { it["key"] == n["key"] })
             resolved++
         }
         assertTrue("no model node used the dataIn indirection at all", resolved > 0)
@@ -919,17 +922,5 @@ class CliTest {
         var d: File? = File(System.getProperty("user.dir")).absoluteFile
         while (d != null && !File(d, "settings.gradle.kts").isFile) d = d.parentFile
         return d ?: error("repo root (settings.gradle.kts) not found from ${System.getProperty("user.dir")}")
-    }
-
-    /** Replicates `com.flowable.atlas.graph.GoldenNormalize`: sort object keys + sort lists by their
-     *  canonical JSON, then round-trip through MiniJson for type-consistent structural comparison. */
-    private fun canonical(v: Any?): Any? = MiniJson.parse(MiniJson.stringify(normalize(v)))
-
-    private fun normalize(v: Any?): Any? = when (v) {
-        is Map<*, *> -> v.entries
-            .sortedBy { it.key.toString() }
-            .associateTo(LinkedHashMap()) { it.key.toString() to normalize(it.value) }
-        is Collection<*> -> v.map { normalize(it) }.sortedBy { MiniJson.stringify(it) }
-        else -> v
     }
 }

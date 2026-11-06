@@ -2,56 +2,32 @@ package com.flowable.atlas.graph
 
 import com.flowable.atlas.GoldenFiles
 import com.flowable.atlas.model.MiniJson
-import org.junit.Assert.assertEquals
-import org.junit.Assume.assumeFalse
+import com.flowable.atlas.render.GraphJsonRenderer
 import org.junit.Test
 import java.io.File
+import java.time.Instant
 
 /**
- * The cross-language golden harness for the Kotlin generator port (Phase 1).
+ * `golden/miniproject.graph.json` is the `graph.json` artifact of the `miniproject` fixture — the bytes
+ * the CLI writes, laid out one token per line so a change reads as a line diff — compared as text.
  *
- * Runs `:core`'s [Atlas.extract] over the same `miniproject` fixture the Python suite uses and asserts
- * each **implemented** result section matches the committed `core/src/test/resources/golden/miniproject.graph.json`
- * (compared through [GoldenNormalize], exactly as Python's `test_graph_golden` does). Sections are
- * added to [IMPLEMENTED_SECTIONS] as their parsers are ported, so the suite stays green while the port
- * grows and immediately flags any regression in an already-ported section.
+ * It used to be the raw extract result with every object's keys and every list sorted, compared as a
+ * `Map`. That was the deleted Python suite's normaliser, kept for parity, and it cost three things: no
+ * ordering regression could fail it (a form's field order, a case's stage order, `containerGates`
+ * nearest first, the findings order a test elsewhere pins), the golden matched no file Atlas ever
+ * writes (it carried every model body twice, where the artifact points into its bucket), and a failure
+ * printed two one-line ~200 KB `Map.toString()`s. Now order is checked, the golden *is* the artifact, and
+ * [GoldenFiles.assertMatches] reports the first differing line with its JSON path.
  *
- * Python stays the authoritative oracle until every section is covered here (see the migration plan).
+ * `_generated` is left out: it holds the time and the Atlas version, so every release would churn the
+ * golden without a change to its content. If a list ever turns out to be unordered, fix its order where
+ * it is built — a test that sorts it hides the next ordering bug as well.
  */
 class GoldenExtractionTest {
 
-    private val result: Map<String, Any?> by lazy { Atlas.extract(fixtureDir()) }
-    private val golden: Map<String, Any?> by lazy { loadGolden() }
-
     @Test
-    fun implementedSectionsMatchGolden() {
-        // The per-section diff is a *reading* aid; when re-baselining, wholeResultMatchesGolden writes.
-        assumeFalse("re-baselining goldens", GoldenFiles.updating)
-        for (section in IMPLEMENTED_SECTIONS) {
-            val mine = GoldenNormalize.canonicalTree(result[section])
-            val expected = golden[section]
-            assertEquals("result section '$section' differs from core/src/test/resources/golden/miniproject.graph.json", expected, mine)
-        }
-    }
-
-    /** The whole `extract()` result must equal the whole committed golden — the same total gate as
-     *  Python's `test_graph_golden` (every top-level key, normalized and compared). Includes
-     *  `diagnostics`/`warnings`: `:core`'s [com.flowable.atlas.model.MiniJson] now emits Python-`json`
-     *  -style parse-error messages, so even the broken-file diagnostic text matches. */
-    @Test
-    fun wholeResultMatchesGolden() {
-        if (GoldenFiles.updating) {
-            // Re-baseline through the same normalization the comparison uses: the strict gate below is
-            // list-order sensitive, so a raw `--all` dump would not pass. 2-space indent + trailing
-            // newline reproduce the committed file's shape exactly.
-            GoldenFiles.assertMatches(
-                "miniproject.graph.json",
-                MiniJson.stringify(GoldenNormalize.normalize(result), 2) + "\n",
-            )
-            return
-        }
-        val mine = GoldenNormalize.canonicalTree(result)
-        assertEquals("full result differs from core/src/test/resources/golden/miniproject.graph.json", golden, mine)
+    fun graphJsonMatchesGolden() {
+        GoldenFiles.assertMatches("miniproject.graph.json", goldenText(Atlas.extract(fixtureDir())))
     }
 
     private fun fixtureDir(): File {
@@ -60,39 +36,17 @@ class GoldenExtractionTest {
         return File(url.toURI())
     }
 
-    @Suppress("UNCHECKED_CAST")
-    private fun loadGolden(): Map<String, Any?> {
-        val text = javaClass.classLoader.getResourceAsStream("golden/miniproject.graph.json")
-            ?.readBytes()?.toString(Charsets.UTF_8)
-            ?: error("golden not on the test classpath")
-        return MiniJson.parse(text) as Map<String, Any?>
-    }
-
     companion object {
         /**
-         * Result sections whose parsers are ported and expected to match the golden. Grow this as the
-         * port advances. Includes buckets that must stay empty for this fixture, guarding against a
-         * parser wrongly populating them.
+         * The golden's form of a result: the graph.json projection without `_generated`, serialized the
+         * way the CLI serializes it (compact, so a whole number stays `64` rather than the `64.0` the
+         * indented writer prints for a parsed Double) and then re-laid out token by token, which changes
+         * whitespace and nothing else. `CliTest` builds the same text from the file the CLI wrote.
          */
-        private val IMPLEMENTED_SECTIONS = listOf(
-            // parsed model buckets (apps/processes/cases/forms/dataObjects now carry `_uses`)
-            "apps", "processes", "cases", "decisions", "forms", "dataObjects",
-            "events", "policies", "services",
-            // reference-resolution outputs
-            "resolvedRefs", "unresolvedRefs", "beans", "beanIndex", "delegateClasses",
-            "endpoints", "access", "groups", "variables", "expressions",
-            "placeholders", "dynamicRefs", "javaControllers", "javaByRole", "modelIndex",
-            "customFunctions", "restCalls",
-            // liquibase coverage
-            "liquibase",
-            // graph + stats produced by `_build_graph`
-            "graph", "stats",
-            // diagnostics/warnings — match now that MiniJson emits Python-json-style messages
-            "diagnostics", "warnings",
-            // health findings derived from all of the above (Findings.kt)
-            "findings", "checks",
-            // buckets that must remain empty for this fixture
-            "actions", "agents", "channels", "dictionaries", "others", "javaGlue",
-        )
+        fun goldenText(result: Map<String, Any?>): String {
+            val projected = LinkedHashMap(GraphJsonRenderer.project(result, Instant.EPOCH))
+            projected.remove("_generated")
+            return MiniJson.reindent(MiniJson.stringify(projected), 2)!! + "\n"
+        }
     }
 }

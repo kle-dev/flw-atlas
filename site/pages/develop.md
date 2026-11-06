@@ -40,10 +40,11 @@ That re-baselines the goldens **and** regenerates every other derived file in th
 `CHANGELOG.md`, which is the source of truth for the release history — the descriptor holds a
 size-budgeted window onto its newest entries, because that field is capped at 65535 characters).
 
-> A word of warning when reading a golden diff: the normaliser sorts every list by its canonical JSON,
-> so adding **any** key to a node's `data` re-sorts the whole `graph.nodes` list. The diff then looks
-> like nodes were shuffled or paired with the wrong data. They were not — compare keyed by node `id`,
-> never by list position.
+`miniproject.graph.json` is the `graph.json` the CLI writes for the fixture, minus its `_generated`
+block (the time and the Atlas version), laid out one token per line so that a change reads as a line
+diff. Nothing is sorted for the comparison, so the order of a form's fields, a case's stages or the
+findings is pinned as well. A failing golden names the first line that differs, its JSON path and both
+versions of it, so the console tells you where to look.
 
 ### The browser tests
 

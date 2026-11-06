@@ -179,7 +179,8 @@ object LiquibaseCoverage {
             val t = schema.tables.getValue(k)
             for (c in t.columns.values) {
                 val col = linkedMapOf<String, Any?>("name" to c.name, "type" to c.type, "table" to c.table, "from" to ref(c.from))
-                // only where true: a key on every column of every table would re-sort the goldens for nothing
+                // only where true: `pk: false` on every column of every table would add bytes to graph.json
+                // and lines to its golden, and say nothing
                 if (c.pk) col["pk"] = true
                 columns.add(col)
             }

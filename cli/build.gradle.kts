@@ -38,6 +38,12 @@ tasks.test {
     // it declared, an edit to the launcher alone would leave `test` UP-TO-DATE and the gate green on a
     // script nothing ran.
     inputs.file(rootProject.file("atlas")).withPropertyName("launcher")
+    // CliTest runs the CLI over :core's miniproject fixture and compares what it writes with :core's
+    // goldens byte for byte. Both live in :core's *test* resources, which this module does not depend on,
+    // so Gradle cannot infer them: a fixture change re-baselined in :core left this test UP-TO-DATE, and
+    // the build passed without ever checking that the CLI writes the new golden.
+    inputs.dir(rootProject.file("core/src/test/resources/miniproject")).withPropertyName("miniproject")
+    inputs.dir(rootProject.file("core/src/test/resources/golden")).withPropertyName("goldens")
 }
 
 // ---- explorer search behaviour test ----
