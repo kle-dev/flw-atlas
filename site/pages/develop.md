@@ -59,6 +59,12 @@ They **skip themselves** when node or Chrome is missing, so `./gradlew build` st
 without them. `ATLAS_REQUIRE_BROWSER_TESTS=1` turns that skip into a failure — CI sets it, so a green
 pipeline can never mean "the frontend was never opened".
 
+`explorerUiTest` and `diagramUiTest` run on Chrome's virtual time, which gives the page an allowance of
+page time rather than wall time. `explorerUiTest` works its allowance out from how many steps its probes
+have, so adding steps never means raising a constant. A probe that stops before its verdict says where it
+got to — *stopped at step 134 of 216, after 238 checks*, and the last check that ran — which tells a run
+cut short apart from a page that failed before the probe started (*never ran its first step*).
+
 ### Checking against a real corpus
 
 The bundled BPMN, CMMN and DMN schemas turn on the IDE's XML validation for every model file, at error

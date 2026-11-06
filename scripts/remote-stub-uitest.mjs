@@ -142,6 +142,10 @@ const harness = (mode, parts) => `<script>
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-remote-stub-'));
+// Five Chrome profiles and as many report copies, over 20 MB a run, so the directory goes when the run
+// ends. On exit rather than in a finally block, because a failure leaves through process.exit(1), which
+// runs none; withChrome has waited for each Chrome to shut down before then, so nothing still writes here.
+process.on('exit', () => { try { fs.rmSync(work, { recursive: true, force: true }); } catch (e) { /* a temp dir */ } });
 
 /**
  * One headless Chrome on [profile], spoken to over --remote-debugging-pipe (fd 3 in, fd 4 out, JSON messages

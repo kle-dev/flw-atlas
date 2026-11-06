@@ -62,8 +62,16 @@ if (!chrome) {
 const probe = `<script>
 (async function(){
   const log=[], errs=[];
-  const say=(k,v)=>log.push(k+': '+v);
-  const ok=(k,cond,detail)=>log.push(k+': '+(cond?'ok':'FAIL '+(detail||'')));
+  // How far the run has got, in a <meta> of its own — the explorer rewrites the title on every route
+  // change — so a run cut short says after which check, instead of reading like a page that never booted.
+  const stamp=()=>{
+    let pm=document.getElementById('uitest-progress');
+    if(!pm){ pm=document.createElement('meta'); pm.id='uitest-progress'; document.head.appendChild(pm); }
+    pm.setAttribute('content', String(log.length));
+    pm.setAttribute('data-last', log.length?log[log.length-1].slice(0,160):'');
+  };
+  const say=(k,v)=>{ log.push(k+': '+v); stamp(); };
+  const ok=(k,cond,detail)=>{ log.push(k+': '+(cond?'ok':'FAIL '+(detail||''))); stamp(); };
   window.addEventListener('error', e=>errs.push(e.message));
   window.addEventListener('unhandledrejection', e=>errs.push('promise: '+(e.reason&&e.reason.message)));
   const tick=ms=>new Promise(r=>setTimeout(r,ms||80));
@@ -73,6 +81,7 @@ const probe = `<script>
     log.push('uncaught errors: '+(errs.length?('FAIL '+errs.join(' | ')):'none'));
     document.title='UITEST_BEGIN '+log.join(' ;; ')+' UITEST_END';
   };
+  stamp();                                              // started: the search for a diagram logs nothing yet
   try{
     localStorage.removeItem('atlas-dgcard');            // a leftover pref would decide the start state
     // --- find a diagram with clickable elements ---
@@ -213,15 +222,22 @@ const probe = `<script>
 
 const html = fs.readFileSync(reportPath, 'utf8');
 if (!html.includes('</body>')) { console.error('diagram-uitest: not an explorer report'); process.exit(2); }
-const tmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-dguitest-')), 'report.html');
+const work = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-dguitest-'));
+// Removed on exit, not in a finally block: the failures below leave through process.exit(1), which runs none.
+process.on('exit', () => { try { fs.rmSync(work, { recursive: true, force: true }); } catch (e) { /* a temp dir */ } });
+const tmp = path.join(work, 'report.html');
 fs.writeFileSync(tmp, html.replace('</body>', probe + '</body>'));
 
+// Page time, not wall time — virtual time jumps from timer to timer, so the run takes seconds. Unlike
+// explorer-uitest.mjs there are no steps to derive it from: the probe is one async function whose ticks
+// add up to well under half of this.
+const BUDGET = 20000;
 let dom;
 try {
   dom = execFileSync(chrome, [
     '--headless', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
     // A narrow window on purpose: that is where a card trapped in the diagram becomes unusable.
-    '--window-size=980,760', '--virtual-time-budget=20000', '--dump-dom', 'file://' + tmp,
+    '--window-size=980,760', '--virtual-time-budget=' + BUDGET, '--dump-dom', 'file://' + tmp,
   ], { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024, timeout: 120000 });
 } catch (e) {
   console.error('diagram-uitest: Chrome failed to run —', e.message);
@@ -232,7 +248,15 @@ try {
 // the probe's own source text, which a bare search for the markers would "find".
 const m = dom.match(/<title>UITEST_BEGIN([\s\S]*?)UITEST_END<\/title>/);
 if (!m) {
-  console.error('diagram-uitest: the probe never finished — the page most likely threw during boot.');
+  // The probe's stamp tells a page that never ran it from a run cut short. The pattern is the serialized
+  // element, which the probe's own source text (also in the dump) does not contain.
+  const p = dom.match(/<meta id="uitest-progress" content="(\d+)"(?: data-last="([^"]*)")?>/);
+  if (!p) console.error('diagram-uitest: the probe never started — it failed to parse, or the page threw before it.');
+  else {
+    console.error(`diagram-uitest: stopped after ${p[1]} checks — the virtual-time budget (${BUDGET / 1000} s of page time) ran out first.`);
+    const last = (p[2] || '').replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, '\u00a0').replace(/&amp;/g, '&');
+    if (last) console.error('  last check:', last);
+  }
   const t = dom.match(/<title>([\s\S]*?)<\/title>/);
   console.error('  title was:', t ? t[1].slice(0, 300) : '(none)');
   process.exit(1);

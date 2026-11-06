@@ -53,6 +53,39 @@ if (!chrome) {
   process.exit(0);
 }
 
+// Every scratch file of this run — the probe pages and the touch run's Chrome profile — lives in one
+// directory, removed when the process exits. An 'exit' handler rather than a finally block: every failure
+// below leaves through process.exit(1), which runs no finally block, and a run that fails is exactly the
+// one that used to leave its profile behind (a few MB a run, in every developer's $TMPDIR).
+const work = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-uitest-'));
+process.on('exit', () => { try { fs.rmSync(work, { recursive: true, force: true }); } catch (e) { /* a temp dir */ } });
+
+/**
+ * The loop every probe ends with: one step every [ms] of page time, then the verdict in the title.
+ *
+ * Before each step it stamps where it has got to into a <meta> of its own, so a run that never reaches
+ * its verdict can say which step it stopped at (see [runProbe]) instead of reading like a page that never
+ * booted. Not into the title: the explorer rewrites that on every route change, and most steps navigate.
+ * [runProbe] derives its virtual-time budget from the probe's source: it counts `steps.push(` and reads
+ * the interval out of `setTimeout(run, <ms>)`, so keep both spelled so.
+ */
+function stepRunner(ms) {
+  return `
+  let i=0;(function run(){
+    if(i>=steps.length){
+      log.push('uncaught errors: '+(errs.length?('FAIL '+errs.join(' | ')):'none'));
+      document.title='UITEST_BEGIN '+log.join(' ;; ')+' UITEST_END';
+      return;
+    }
+    let pm=document.getElementById('uitest-progress');
+    if(!pm){ pm=document.createElement('meta'); pm.id='uitest-progress'; document.head.appendChild(pm); }
+    pm.setAttribute('content', (i+1)+'/'+steps.length+' '+log.length);
+    pm.setAttribute('data-last', log.length?log[log.length-1].slice(0,160):'');
+    try{ steps[i++](); }catch(e){ log.push('FAIL threw in step '+i+': '+e.message); }
+    setTimeout(run, ${ms});
+  })();`;
+}
+
 // The probe runs inside the page. It walks a list of steps on a timer (each search re-render is debounced
 // by 120ms), collects one line per assertion, and parks the result in document.title where --dump-dom
 // can retrieve it. Failures are marked FAIL and counted by the harness below.
@@ -1772,21 +1805,13 @@ const probe = `<script>
       rows().map(r=>r.textContent.slice(0,40)).join(' | ')||'(no rows)');
     closePalette();
   });
-  let i=0;(function run(){
-    if(i>=steps.length){
-      log.push('uncaught errors: '+(errs.length?('FAIL '+errs.join(' | ')):'none'));
-      document.title='UITEST_BEGIN '+log.join(' ;; ')+' UITEST_END';
-      return;
-    }
-    try{ steps[i++](); }catch(e){ log.push('FAIL threw in step '+i+': '+e.message); }
-    setTimeout(run, 300);
-  })();
+${stepRunner(300)}
 })();
 </script>`;
 
 const html = fs.readFileSync(reportPath, 'utf8');
 if (!html.includes('</body>')) { console.error('explorer-uitest: not an explorer report'); process.exit(2); }
-const tmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-uitest-')), 'report.html');
+const tmp = path.join(work, 'report.html');
 
 // A narrow window has two layouts. On a touch screen (<=800px, coarse pointer) the page stacks and the
 // category list becomes a <select>. With a mouse — an editor tab between two tool windows — the shell stays:
@@ -1794,16 +1819,6 @@ const tmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-uitest-')), '
 // navigation there. Headless Chrome has a mouse, so `narrowProbe` runs as it is; `touchProbe` runs under
 // the DevTools protocol's touch emulation (runTouchProbe below). Window sizes are launch flags — a page
 // cannot change its own.
-const probeRunner = `
-  let i=0;(function run(){
-    if(i>=steps.length){
-      log.push('uncaught errors: '+(errs.length?('FAIL '+errs.join(' | ')):'none'));
-      document.title='UITEST_BEGIN '+log.join(' ;; ')+' UITEST_END';
-      return;
-    }
-    try{ steps[i++](); }catch(e){ log.push('FAIL threw in step '+i+': '+e.message); }
-    setTimeout(run, 300);
-  })();`;
 const narrowProbe = `<script>
 (function(){
   const log=[], errs=[];
@@ -1864,7 +1879,7 @@ const narrowProbe = `<script>
     let st=null; try{ st=localStorage.getItem('atlas-list-hidden'); }catch(e){}
     ok('the drawer is not a stored choice', st===null, 'stored='+st);
   });
-${probeRunner}
+${stepRunner(300)}
 })();
 </script>`;
 const touchProbe = `<script>
@@ -1889,7 +1904,7 @@ const touchProbe = `<script>
     ok('no horizontal page scroll', document.documentElement.scrollWidth<=window.innerWidth+1,
        document.documentElement.scrollWidth+' > '+window.innerWidth);
   });
-${probeRunner}
+${stepRunner(300)}
 })();
 </script>`;
 
@@ -1969,15 +1984,7 @@ const ideProbe = `<script>
   steps.push(()=>{
     ok('showing the list brings it back', document.querySelector('.listcol').getBoundingClientRect().width>0 && document.getElementById('listshow').hidden);
   });
-  let i=0;(function run(){
-    if(i>=steps.length){
-      log.push('uncaught errors: '+(errs.length?('FAIL '+errs.join(' | ')):'none'));
-      document.title='UITEST_BEGIN '+log.join(' ;; ')+' UITEST_END';
-      return;
-    }
-    try{ steps[i++](); }catch(e){ log.push('FAIL threw in step '+i+': '+e.message); }
-    setTimeout(run, 300);
-  })();
+${stepRunner(300)}
 })();
 </script>`;
 
@@ -2016,20 +2023,42 @@ const wideProbe = `<script>
     ok('prose keeps a readable line length', !desc || desc.getBoundingClientRect().width<760, desc&&Math.round(desc.getBoundingClientRect().width)+'px');
     ok('no horizontal page scroll on a node page', noHScroll());
   });
-  let i=0;(function run(){
-    if(i>=steps.length){
-      log.push('uncaught errors: '+(errs.length?('FAIL '+errs.join(' | ')):'none'));
-      document.title='UITEST_BEGIN '+log.join(' ;; ')+' UITEST_END';
-      return;
-    }
-    try{ steps[i++](); }catch(e){ log.push('FAIL threw in step '+i+': '+e.message); }
-    setTimeout(run, 400);
-  })();
+${stepRunner(400)}
 })();
 </script>`;
 
+/**
+ * Where [stepRunner] had got to, read from the page's serialized DOM: `{ step, of, checks, last }`, or null
+ * when the probe never ran a step. The pattern is the serialized element, which the probe's own source
+ * text (also in the dump) does not contain.
+ */
+function progressIn(dom) {
+  const p = String(dom || '').match(/<meta id="uitest-progress" content="(\d+)\/(\d+) (\d+)"(?: data-last="([^"]*)")?>/);
+  const attr = s => s.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, '\u00a0').replace(/&amp;/g, '&');
+  return p && { step: +p[1], of: +p[2], checks: +p[3], last: attr(p[4] || '') };
+}
+
+/** Why a probe has no verdict, in terms that point at the cause: a boot that never ran it, or a run cut short. */
+function reportUnfinished(label, progress, cutShort) {
+  if (!progress) {
+    console.error(`explorer-uitest (${label}): the probe never ran its first step — it failed to parse, or the page threw before it.`);
+    return;
+  }
+  console.error(`explorer-uitest (${label}): stopped at step ${progress.step} of ${progress.of}, after ${progress.checks} checks — ${cutShort}.`);
+  if (progress.last) console.error('  last check:', progress.last);
+}
+
 function runProbe(probeHtml, windowSize, label) {
   fs.writeFileSync(tmp, html.replace('</body>', probeHtml + '</body>'));
+  // The budget is page time, not wall time: virtual time jumps from one timer to the next, so a generous
+  // budget costs next to nothing while a tight one ends the run part-way. A hand-set constant ran out as
+  // the probe grew (raised once from 60 s to 120 s, while the desktop probe went from 134 steps to over
+  // 200), so it is derived from the probe instead: a run takes its steps times its interval (each step
+  // waits that long on the runner's timer, whatever the step itself starts), and half as much again plus
+  // 30 s is headroom.
+  const steps = (probeHtml.match(/steps\.push\(/g) || []).length;
+  const interval = +((probeHtml.match(/setTimeout\(run, (\d+)\)/) || [])[1] || 300);
+  const budget = Math.max(60000, Math.ceil(steps * interval * 1.5) + 30000);
   let dom;
   try {
     dom = execFileSync(chrome, [
@@ -2037,10 +2066,8 @@ function runProbe(probeHtml, windowSize, label) {
       // Chrome's default viewport is 800x600 — exactly the stacked (<=800px) layout. The desktop shell
       // with its sidebar is what most steps mean to exercise, so the main run asks for one.
       '--window-size=' + windowSize,
-      // ~150 steps at 300ms each: the budget is virtual time the page may consume, so it only needs to outlast
-      // the run — too small, and the probe "never finishes", which reads like a boot failure
-      '--virtual-time-budget=120000', '--dump-dom', 'file://' + tmp,
-    ], { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024, timeout: 240000 });
+      '--virtual-time-budget=' + budget, '--dump-dom', 'file://' + tmp,
+    ], { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024, timeout: Math.max(240000, budget) });
   } catch (e) {
     console.error(`explorer-uitest (${label}): Chrome failed to run —`, e.message);
     process.exit(1);
@@ -2049,7 +2076,8 @@ function runProbe(probeHtml, windowSize, label) {
   // carries the probe's own source text, which a bare search for the markers used to "find".
   const m = dom.match(/<title>UITEST_BEGIN([\s\S]*?)UITEST_END<\/title>/);
   if (!m) {
-    console.error(`explorer-uitest (${label}): the probe never finished — the page most likely threw during boot.`);
+    reportUnfinished(label, progressIn(dom),
+      `the virtual-time budget (${budget / 1000} s of page time for ${steps} steps at ${interval} ms) ran out before the last one`);
     const t = dom.match(/<title>([\s\S]*?)<\/title>/);
     console.error('  title was:', t ? t[1].slice(0, 300) : '(none)');
     process.exit(1);
@@ -2063,11 +2091,12 @@ function runProbe(probeHtml, windowSize, label) {
  * NUL-terminated JSON), in real time; the probe parks its verdict in the title as it does under --dump-dom.
  */
 async function runTouchProbe(probeHtml, windowSize, label) {
-  const page = path.join(path.dirname(tmp), 'touch.html');
+  const page = path.join(work, 'touch.html');
   fs.writeFileSync(page, html.replace('</body>', probeHtml + '</body>'));
   const proc = spawn(chrome, ['--headless', '--disable-gpu', '--no-sandbox', '--hide-scrollbars', '--no-first-run',
-    '--window-size=' + windowSize, '--user-data-dir=' + fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-touch-')),
+    '--window-size=' + windowSize, '--user-data-dir=' + path.join(work, 'touch-profile'),
     '--remote-debugging-pipe', 'about:blank'], { stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'] });
+  const exited = new Promise(res => proc.on('exit', res));
   let seq = 0, buf = ''; const pending = new Map();
   proc.stdio[4].on('data', d => {
     buf += d; let i;
@@ -2078,6 +2107,7 @@ async function runTouchProbe(probeHtml, windowSize, label) {
     pending.set(id, m => { clearTimeout(timer); m.error ? rej(new Error(method + ': ' + m.error.message)) : res(m.result); });
     proc.stdio[3].write(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }) + '\0');
   });
+  let progress = null;
   try {
     const target = (await call('Target.getTargets')).targetInfos.find(t => t.type === 'page');
     const { sessionId } = await call('Target.attachToTarget', { targetId: target.targetId, flatten: true });
@@ -2090,12 +2120,20 @@ async function runTouchProbe(probeHtml, windowSize, label) {
       if (m) return m[1].split(' ;; ').map(x => x.trim()).filter(Boolean);
       await new Promise(r => setTimeout(r, 200));
     }
-    console.error(`explorer-uitest (${label}): the probe never finished within 60s`);
-    process.exit(1);
+    const stamp = await send('Runtime.evaluate', {
+      expression: "(function(){ var m=document.getElementById('uitest-progress'); return m ? m.outerHTML : ''; })()",
+      returnByValue: true,
+    });
+    progress = progressIn(stamp.result && stamp.result.value);
   } finally {
     await call('Browser.close').catch(() => {});
     proc.kill();
+    // The profile is inside `work`, which goes on exit: let Chrome finish writing to it first.
+    await Promise.race([exited, new Promise(r => setTimeout(r, 5000))]);
   }
+  // Out here, not in the loop: process.exit would skip the finally above and leave Chrome running.
+  reportUnfinished(label, progress, 'the page did not finish within 60 s of real time');
+  process.exit(1);
 }
 
 const lines = [
