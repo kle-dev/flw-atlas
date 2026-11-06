@@ -1433,6 +1433,21 @@ function renderCrumbs(){
   }
   c.innerHTML=h;
   document.title=title;
+  fitCrumbs();
+}
+let _crumbRO=null;
+/** The page's own name alone once the path above it cannot be read: an ancestor squeezed under three
+ *  letters' width (with its ellipsis) left "/ / GET /api/…" — separators around nothing — in a bar of
+ *  ~400px, while the 260px container query (explorer.css) waited for a narrower bar. Measured with the path
+ *  shown, so a bar that grew gets its path back. */
+function fitCrumbs(){
+  const c=document.getElementById('crumbs'); if(!c) return;
+  c.classList.remove('solo');
+  const floor=3*parseFloat(getComputedStyle(c).fontSize);
+  const cut=[...c.querySelectorAll('a.crumb .ct')].some(ct=>ct.getClientRects().length && ct.clientWidth<Math.min(ct.scrollWidth, floor));
+  if(cut) c.classList.add('solo');
+  // the bar's width is the topbar's, never its crumbs', so re-fitting it cannot resize what is observed
+  if(!_crumbRO && window.ResizeObserver){ _crumbRO=new ResizeObserver(()=>requestAnimationFrame(fitCrumbs)); _crumbRO.observe(c); }
 }
 
 // ---------- dashboard (#/overview) ----------

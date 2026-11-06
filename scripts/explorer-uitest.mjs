@@ -2039,13 +2039,28 @@ const narrowProbe = `<script>
     ok('a rail entry routes to its category', state.view==='browse' && state.cat==='process', location.hash);
     location.hash=encodeURIComponent('process:orderProcess');
   });
+  // the crumbs that are drawn, by their display: a crumb squeezed to 0px is still "shown" between its separators
+  const shownCrumbs=()=>[...document.querySelectorAll('#crumbs .crumb, #crumbs .crumb-sep')].filter(e=>getComputedStyle(e).display!=='none');
   steps.push(()=>{
     // crumbs never overlap: every visible crumb sits right of the one before it
-    const cs=[...document.querySelectorAll('#crumbs .crumb, #crumbs .crumb-sep')].filter(vis);
+    const cs=shownCrumbs();
     const clash=cs.some((c,i)=>i && c.getBoundingClientRect().left < cs[i-1].getBoundingClientRect().right-1);
     ok('the breadcrumb never runs into itself', !clash && cs.length>0, cs.map(c=>c.textContent+'@'+Math.round(c.getBoundingClientRect().left)).join(' '));
     const cur=document.querySelector('#crumbs .crumb.cur');
     ok('and keeps the page name', vis(cur));
+    // a long page name (a REST path, a changelog file) squeezed the ancestors to nothing in a bar wider than
+    // the 260px query: "/ / GET /api/…". Either they show a few letters each, or the path goes.
+    const n=byId.get('process:orderProcess'); window.__lbl=n.label;
+    n.label='Order process with a name long enough to squeeze its path to nothing';
+    renderCrumbs();
+    const c=document.getElementById('crumbs'), em=parseFloat(getComputedStyle(c).fontSize);
+    const seps=shownCrumbs().filter(e=>e.classList.contains('crumb-sep'));
+    const thin=[...c.querySelectorAll('a.crumb .ct')].filter(ct=>getComputedStyle(ct.parentElement).display!=='none' && ct.clientWidth<Math.min(ct.scrollWidth, 3*em));
+    ok('beside a long page name the path shows a few letters per crumb or goes', !seps.length || !thin.length,
+       seps.length+' separators around '+thin.map(t=>t.textContent+'='+t.clientWidth+'px').join(', '));
+    ok('and the page name stays', vis(document.querySelector('#crumbs .crumb.cur')));
+    n.label=window.__lbl; renderCrumbs();
+    ok('a short name gets its path back', !c.classList.contains('solo'));
   });
   steps.push(()=>{
     const vb=document.getElementById('view-browse'), det=document.querySelector('.detailwrap');

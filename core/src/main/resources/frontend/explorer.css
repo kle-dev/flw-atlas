@@ -292,9 +292,14 @@
   .crumbs .crumb .ti{flex:none}
   .crumbs .crumb>.ct{min-width:0;overflow:hidden;text-overflow:ellipsis}
   /* Too narrow for a path at all — a tab beside two tool windows leaves it ~90px: the page's own name
-     alone, not "/ / Or…" with the ancestors squeezed to nothing between their separators. */
+     alone, not "/ / Or…" with the ancestors squeezed to nothing between their separators. The width alone
+     cannot say when: a long page name (a REST path, a changelog file) squeezes the ancestors to nothing in a
+     bar of 400px, a short one leaves the whole path readable in 300px. So the page measures (fitCrumbs in
+     explorer.js) and sets .solo once an ancestor can no longer show a few letters; the query is the guard
+     for the first paint. */
   .crumbs{container-type:inline-size}
   @container (max-width:260px){ .crumbs a.crumb,.crumbs .crumb-sep{display:none} }
+  .crumbs.solo a.crumb,.crumbs.solo .crumb-sep{display:none}
   .crumbs a.crumb{color:var(--ink-dim);font-weight:500;text-decoration:none}
   .crumbs a.crumb:hover{color:var(--ink);text-decoration:underline}
   .crumbs .crumb.cur{color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;max-width:48ch;flex:0 1 auto}

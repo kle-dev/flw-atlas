@@ -335,7 +335,9 @@ In an editor tab the list starts at most 224px wide, and it **folds away**: the 
 it, as does dragging the handle shut, and the button at the page's top-left corner brings it back. The
 fold is remembered too. At 800px or less with a mouse the list is a drawer instead: closed while a page is
 open, opened over the page by that button, and closed again by the node you pick from it or by `Escape`.
-In a bar too narrow for the whole path, the breadcrumb shows the page's own name alone.
+In a bar too narrow for the whole path — a narrow tab, or a long page name such as a REST path beside a
+short bar — the breadcrumb shows the page's own name alone, rather than its ancestors squeezed to nothing
+between their separators; widen the bar and the path comes back.
 
 Nothing the parser extracted is invisible: whatever no specific section consumed renders at the bottom
 as a collapsed **Other attributes** key/value tree. When a new model attribute starts being parsed, it
