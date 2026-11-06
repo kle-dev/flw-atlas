@@ -6916,29 +6916,48 @@ function zoomable(view, opts){
     }
     z.scale=next; z.apply();
   };
-  // One wheel event as a zoom factor proportional to how far it turned: a mouse notch (~100px) is ~1.15×.
-  // A fixed step per event made a trackpad — dozens of small deltas per gesture — jump several times
-  // over; a pinch arrives as ctrl+wheel with small fractional deltas, so it gets more per pixel (a mouse
-  // notch held with Ctrl is large, and keeps the mouse's rate). Each step is capped.
-  //
-  // IntelliJ's embedded browser rounds a trackpad's fractional steps to whole ones on the way in
-  // (JBCefOsrComponent: Math.round(preciseWheelRotation × factor)), so many events arrive with deltaY 0 and
-  // the rest as ±1. A 0 is no direction — the old `deltaY<0 ? in : out` read every one as "out", which is
-  // why zooming out worked there and zooming in did not — and a ±1 still gets a small step of its own.
-  const wheelFactor=e=>{
-    const px=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?(view.clientHeight||600):1);
-    if(!px) return 1;
-    const pinch=e.ctrlKey && !e.metaKey && Math.abs(px)<50;
-    const mag=Math.min(0.35, Math.max(0.02, Math.abs(px)*0.002*(pinch?10:1)));
-    return Math.pow(2, px<0?mag:-mag);
-  };
-  const zoomWheel=e=>{
+  z.wheel=e=>{
     if(opts.modWheel && !e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
     if(opts.modWheel && !dgModHeld) dgZoomFor(view);   // a gesture the keys did not announce: keep taking it
     const r=view.getBoundingClientRect();
-    z.zoom(wheelFactor(e), e.clientX-r.left, e.clientY-r.top);
+    z.zoom(dgWheelFactor(view, e), e.clientX-r.left, e.clientY-r.top);
   };
+  if(opts.modWheel){
+    z.zoomWheel=z.wheel;                           // attached and detached by dgZoomAttach as ⌘/Ctrl go
+    // A detail render replaces the drawing, and this Set was the only thing still holding the old one —
+    // its SVG, its closures, its listeners — until the next ⌘/Ctrl press pruned it. Reading with the
+    // mouse alone, which is how the IDE's tool window is read, never pressed one: 160 diagram visits
+    // kept 99 dead drawings and a quarter of a million DOM nodes alive.
+    dgZoomViews.forEach(v=>{ if(!v.isConnected) dgZoomViews.delete(v); });
+    dgZoomViews.add(view);
+  }
+  // The element's listeners go on once and find the current state through view._z when they fire. The
+  // full-screen view persists across opens (wireDgClicks guards it the same way): wiring it on every open
+  // stacked another wheel and five pointer listeners per open, each holding its own SVG clone.
+  if(!view._zoomWired){ view._zoomWired=true; wireZoomGestures(view, opts); }
+  if(opts.modWheel) dgZoomAttach(view, dgModHeld);
+  return z;
+}
+// One wheel event as a zoom factor proportional to how far it turned: a mouse notch (~100px) is ~1.15×.
+// A fixed step per event made a trackpad — dozens of small deltas per gesture — jump several times
+// over; a pinch arrives as ctrl+wheel with small fractional deltas, so it gets more per pixel (a mouse
+// notch held with Ctrl is large, and keeps the mouse's rate). Each step is capped.
+//
+// IntelliJ's embedded browser rounds a trackpad's fractional steps to whole ones on the way in
+// (JBCefOsrComponent: Math.round(preciseWheelRotation × factor)), so many events arrive with deltaY 0 and
+// the rest as ±1. A 0 is no direction — the old `deltaY<0 ? in : out` read every one as "out", which is
+// why zooming out worked there and zooming in did not — and a ±1 still gets a small step of its own.
+function dgWheelFactor(view, e){
+  const px=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?(view.clientHeight||600):1);
+  if(!px) return 1;
+  const pinch=e.ctrlKey && !e.metaKey && Math.abs(px)<50;
+  const mag=Math.min(0.35, Math.max(0.02, Math.abs(px)*0.002*(pinch?10:1)));
+  return Math.pow(2, px<0?mag:-mag);
+}
+/** The wheel, touch and pan listeners of one zoomable view, attached once per element: each reads
+ *  view._z — the drawing shown now — when it fires, and does nothing while there is none. */
+function wireZoomGestures(view, opts){
   if(opts.modWheel){
     // Inline, a plain wheel scrolls the page. A non-passive wheel listener would make every scroll step
     // over the drawing wait for this script first — in the IDE's off-screen-rendered browser that is a
@@ -6947,19 +6966,17 @@ function zoomable(view, opts){
     // pinch (ctrl+wheel with no key pressed) and a ⌘ the page never saw go down (the IDE's browser without
     // focus), from the wheel event itself: this passive listener zooms that first event and hands the
     // rest of the gesture to the one that can keep the page from scrolling.
-    z.zoomWheel=zoomWheel;
     view.addEventListener('wheel', e=>{
+      const z=view._z; if(!z) return;
       if(!e.ctrlKey && !e.metaKey){ wheelHint(view); return; }
       if(view._zoomOn) return;                      // the real listener has this one
       const r=view.getBoundingClientRect();
-      z.zoom(wheelFactor(e), e.clientX-r.left, e.clientY-r.top);
+      z.zoom(dgWheelFactor(view, e), e.clientX-r.left, e.clientY-r.top);
       dgZoomFor(view);
     }, {passive:true});
     // ⌘ held while the pointer moves in: take the wheel before it turns
-    view.addEventListener('mousemove', e=>{ if((e.metaKey||e.ctrlKey) && !view._zoomOn) dgZoomFor(view); }, {passive:true});
-    dgZoomViews.add(view);
-    dgZoomAttach(view, dgModHeld);
-  } else view.addEventListener('wheel', zoomWheel, {passive:false});
+    view.addEventListener('mousemove', e=>{ if((e.metaKey||e.ctrlKey) && !view._zoomOn && view._z) dgZoomFor(view); }, {passive:true});
+  } else view.addEventListener('wheel', e=>{ const z=view._z; if(z) z.wheel(e); }, {passive:false});
   // Touch: inline, a vertical swipe scrolls the page (a finger on a 60vh diagram used to trap the page,
   // since the view took every gesture); a sideways drag still pans. Two fingers pinch-zoom, in both views.
   if(opts.modWheel) view.style.touchAction='pan-y';
@@ -6973,7 +6990,8 @@ function zoomable(view, opts){
   view.addEventListener('pointermove', e=>{
     if(!touches.has(e.pointerId)) return;
     touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
-    if(pinch&&touches.size===2){
+    const z=view._z;
+    if(z&&pinch&&touches.size===2){
       const [a,b]=[...touches.values()], d=Math.hypot(a.x-b.x,a.y-b.y)||1, r=view.getBoundingClientRect();
       z.zoom(d/pinch.d, (a.x+b.x)/2-r.left, (a.y+b.y)/2-r.top); pinch.d=d; z.moved=true;
     }
@@ -6981,7 +6999,8 @@ function zoomable(view, opts){
   const lift=e=>{ touches.delete(e.pointerId); if(touches.size<2) pinch=null; };
   view.addEventListener('pointerup', lift, true); view.addEventListener('pointercancel', lift, true);
   view.addEventListener('pointerdown', e=>{
-    if(e.button!==0) return;
+    const z=view._z;
+    if(!z||e.button!==0) return;
     if(pinch) return;                              // the second finger of a pinch does not start a pan
     // setPointerCapture retargets the eventual `click` to the view itself, so e.target there never
     // reaches the SVG element that was pressed — remember the real press target for the click handler.
@@ -7002,7 +7021,6 @@ function zoomable(view, opts){
     // pointerup — without this the diagram kept panning with no button held.
     view.addEventListener('pointercancel',up);
   });
-  return z;
 }
 // The inline drawings that zoom on ⌘/Ctrl + wheel: their zoom listener is attached while the modifier is
 // down and detached when it is released (or the window loses focus with it held).
@@ -7116,6 +7134,9 @@ function closeDiagramModal(){
   hideDgCard();
   dgmodal.hidden=true;
   dgmodal.querySelector('.dgpan').innerHTML='';    // drop the clone; a big SVG is worth reclaiming
+  // …and everything that still held it through its state: the view, and the zoom buttons' handlers
+  const mv=document.getElementById('dgmodalview'); if(mv) mv._z=null;
+  dgmodal.querySelectorAll('.dgbar button[data-z]').forEach(b=>{ b.onclick=null; });
   _dgZoom=null;
 }
 if(dgmodal){

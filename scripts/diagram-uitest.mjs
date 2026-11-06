@@ -186,8 +186,24 @@ const probe = `<script>
     const mr=mc.getBoundingClientRect();
     ok('the overlay centers on the window, not inside the modal panel',
        Math.abs((mr.left+mr.right)/2-window.innerWidth/2)<3);
+    // --- the full-screen view persists across opens: reopening it must not stack another set of pan and
+    //     zoom listeners, each holding its own clone, and the one set it has drives the drawing shown now ---
+    hideDgCard(); await tick(80);
+    const inlineSvg=document.querySelector('#detail details.sect[data-sect="diagram"] .dgview svg');
+    const addEL=EventTarget.prototype.addEventListener; let added=0;
+    EventTarget.prototype.addEventListener=function(){ if(this===mview) added++; return addEL.apply(this, arguments); };
+    try{ for(let i=0;i<3;i++){ closeDiagramModal(); openDiagramModal(inlineSvg); } }
+    finally{ EventTarget.prototype.addEventListener=addEL; }
+    await tick(120);
+    ok('reopening full screen adds no listeners to its persistent view', added===0, added+' added over 3 reopens');
+    const mpan=mview.querySelector('.dgpan'), before=mpan.style.transform, mr2=mview.getBoundingClientRect();
+    mview.dispatchEvent(new WheelEvent('wheel',{deltaY:-100, clientX:mr2.left+mr2.width/2, clientY:mr2.top+mr2.height/2, bubbles:true, cancelable:true}));
+    ok('and the wheel still zooms the reopened drawing', mview._z && mview._z.pan===mpan && mpan.style.transform!==before && mview._z.scale>0,
+       'transform '+before+' → '+mpan.style.transform);
     // --- findings on the canvas: a marker per element with an open finding, and the card lists them ---
     closeDiagramModal(); hideDgCard(); await tick(100);
+    ok('closing full screen lets go of its drawing', !mview._z
+       && [...document.querySelectorAll('#dgmodal .dgbar button[data-z]')].every(b=>!b.onclick));
     const withEl=(DATA.findings||[]).filter(f=>f.element!=null && !f.waived && byId.get(f.node));
     const target=withEl.length?byId.get(withEl[0].node):null;
     if(!target){ say('note','no element-level finding in this fixture'); }
@@ -215,6 +231,13 @@ const probe = `<script>
         }
       }
     }
+    // --- reading diagram after diagram with the mouse alone (no ⌘/Ctrl ever pressed) must not keep the
+    //     drawings it replaced: a detached view held its whole SVG, closures and listeners ---
+    for(const n of nodes.filter(n=>['process','case','decision'].indexOf(n.type)>=0).slice(0,3)){
+      location.hash='#'+encodeURIComponent(n.id); await tick(300);
+    }
+    ok('inline diagrams are not kept after they are replaced', [...dgZoomViews].every(v=>v.isConnected),
+       [...dgZoomViews].filter(v=>!v.isConnected).length+' of '+dgZoomViews.size+' tracked views detached');
   }catch(e){ log.push('FAIL threw: '+e.message); }
   finish();
 })();
