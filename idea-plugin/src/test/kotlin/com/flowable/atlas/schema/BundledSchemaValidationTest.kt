@@ -2,6 +2,7 @@ package com.flowable.atlas.schema
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.w3c.dom.ls.LSInput
 import org.w3c.dom.ls.LSResourceResolver
@@ -72,7 +73,7 @@ class BundledSchemaValidationTest {
      * The same validation against a checkout of real models, on demand:
      *
      * ```
-     * ./gradlew :idea-plugin:validateModelCorpus -Patlas.corpus=/path/to/a/checkout
+     * ./gradlew :idea-plugin:test --tests "*BundledSchemaValidationTest" -Patlas.corpus=/path/to/a/checkout
      * ```
      *
      * It cannot live in CI — a real corpus is customer work and must never be copied into this public
@@ -80,10 +81,16 @@ class BundledSchemaValidationTest {
      * whenever the schemas are refreshed from a newer engine. It reports rather than asserts: the
      * question it answers is *what proportion* of real models come out clean, and which causes account
      * for the rest.
+     *
+     * Without the property it reports itself skipped rather than passed — a pass would count a check that
+     * never ran — and a path that is not a directory fails, where it used to pass having read nothing.
      */
     @Test
     fun aRealCorpusValidatesWhenOneIsPointedAt() {
-        val corpus = System.getProperty("atlas.corpus")?.let(::File)?.takeIf { it.isDirectory } ?: return
+        val path = System.getProperty("atlas.corpus")
+        assumeTrue("set -Patlas.corpus=<a checkout> to validate a real corpus", path != null)
+        val corpus = File(path!!)
+        assertTrue("atlas.corpus=$path is not a directory", corpus.isDirectory)
         val byFormat = LinkedHashMap<String, IntArray>()          // format -> [clean, with findings]
         val causes = HashMap<String, Int>()
         corpus.walkTopDown()

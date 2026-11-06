@@ -283,15 +283,24 @@ gradle.taskGraph.whenReady {
 //
 //     ./gradlew :idea-plugin:test --tests "*BundledSchemaValidationTest" -Patlas.corpus=/path/to/checkout
 //
-// Nothing to configure without it, and it can never run in CI: a real corpus is customer work and must
-// not be copied into this public repository. See site/pages/develop.md.
+// Without it that one test reports itself skipped (an Assume), and it can never run in CI: a real corpus
+// is customer work and must not be copied into this public repository. See site/pages/develop.md.
 //
 // And paints the plugin's Swing panels into PNGs, on demand (UiShotsTest; see site/pages/develop.md):
 //
 //     ./gradlew :idea-plugin:test --tests "*UiShotsTest*" -Patlas.uiShots=build/ui-shots
+//
+// Without the property UiShotsTest is not run at all, rather than run and return at once: its four tests
+// used to be counted as passed in every build, having painted nothing. The exclusion has to be here — a
+// JUnit 3 test case cannot skip itself (UsefulTestCase.shouldRunTest() returning false is reported as a
+// pass too), and asking for it by --tests without the property now fails with "No tests found", which
+// is the useful answer.
 tasks.named<Test>("test") {
-    providers.gradleProperty("atlas.uiShots").orNull?.let {
-        systemProperty("atlas.uiShots", file(it).absolutePath)
+    val uiShots = providers.gradleProperty("atlas.uiShots").orNull
+    if (uiShots == null) {
+        filter { excludeTestsMatching("com.flowable.atlas.uishots.UiShotsTest") }
+    } else {
+        systemProperty("atlas.uiShots", file(uiShots).absolutePath)
         testLogging { showStandardStreams = true }
         outputs.upToDateWhen { false }
     }
@@ -300,4 +309,14 @@ tasks.named<Test>("test") {
         testLogging { showStandardStreams = true }
         outputs.upToDateWhen { false }
     }
+    // BundledSchemaValidationTest validates the models this repository ships, read straight off the repo,
+    // and neither tree is on this module's test classpath. Undeclared, a model added to the demo project
+    // that does not validate left `test` UP-TO-DATE and `build` green on exactly what that test exists to
+    // catch — the gap, and the fix, that core/build.gradle.kts records for its sync tests.
+    fun models(dir: String) = rootProject.fileTree(dir) {
+        include("**/*.bpmn", "**/*.cmmn", "**/*.dmn", "**/*.xml")
+        exclude("**/build/**")
+    }
+    inputs.files(models("site/flowable-demo"), models("core/src/test/resources"))
+        .withPropertyName("shippedModels").optional()
 }

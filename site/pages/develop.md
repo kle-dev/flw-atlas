@@ -78,13 +78,14 @@ Point the same test at a checkout that already exists on your machine:
 ./gradlew :idea-plugin:test --tests "*BundledSchemaValidationTest" -Patlas.corpus=/path/to/a/checkout
 ```
 
-It prints a count per format and the ten most common causes. A cause is only worth acting on when it is
-a *schema gap* — a construct Flowable supports that the schema does not declare — rather than a model
-defect such as an id that is not a valid XML name. The threshold for shipping a schema change is 99 % of
-files clean with no single cause above 1 %; at the time of writing it is 99.1 %, and every remaining
-finding is a real defect or a template file full of `$MODEL_KEY` placeholders. Run it before changing
-anything under `idea-plugin/src/main/resources/schemas/`, and again after — see `idea-plugin/README.md`
-for what may be changed in them and why.
+It prints a count per format and the ten most common causes. Without the property the test reports itself
+*skipped*, and a path that is not a directory fails it, so a mistyped path cannot pass having read nothing.
+A cause is only worth acting on when it is a *schema gap* — a construct Flowable supports that the schema
+does not declare — rather than a model defect such as an id that is not a valid XML name. The threshold
+for shipping a schema change is 99 % of files clean with no single cause above 1 %; at the time of writing
+it is 99.1 %, and every remaining finding is a real defect or a template file full of `$MODEL_KEY`
+placeholders. Run it before changing anything under `idea-plugin/src/main/resources/schemas/`, and again
+after — see `idea-plugin/README.md` for what may be changed in them and why.
 
 ### Pictures of the plugin's panels
 
@@ -101,8 +102,9 @@ at the side — and writes one PNG each. Every picture also prints how wide its 
 and flags it when that is more than it was given: the number that says whether a narrow tool window
 cuts something off. The pictures are laid out by the real UI DSL but painted under Darcula, because the
 test application has no themes installed to switch between, so they are for layout, not for colour. The
-New UI chrome and a light theme still need a look in `runIdeLocal`. Without the property the test does
-nothing, so `./gradlew build` never writes images.
+New UI chrome and a light theme still need a look in `runIdeLocal`. Without the property the test is left
+out of the run altogether, so `./gradlew build` never writes images and never counts a picture it did not
+paint as a passed test; asking for it by `--tests` without the property fails with *No tests found*.
 
 ### The compatibility gate
 
