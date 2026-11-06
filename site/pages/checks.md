@@ -148,6 +148,10 @@ note about it was recorded on the plan item and read by nothing.
 A model references another model by key, and no model in the project defines that key. Typically a
 typo, a model that was never exported, or a reference to something that lives in a different app.
 
+A security policy or an SLA is a reference wherever the platform reads it: on the process, on the case
+or its plan model — where Design writes a case's policy — and on a user task or human task, which may
+name a policy and an SLA of its own. A renamed one is missing whichever of these names it.
+
 An action's `channels` — `menu`, `quick-menu`, `slash-menu`, the mobile menus — say where in the UI the
 action is offered; they are not channel models and are not looked up (until {{VERSION}} every action with a
 placement reported two missing models). Likewise the event models the platform ships itself —

@@ -55,6 +55,70 @@ class DesignNamespaceRefsTest {
         assertTrue(writes.toString(), "report|designOutput" in writes)
     }
 
+    /**
+     * Design writes a case's policy on its plan model and a task's policy and SLA on the task — the
+     * elements the platform reads them from. Only `<process>` and `<case>` were read, so none of these was
+     * a reference and a key that names nothing could not be reported missing.
+     */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun policiesAndSlasAreReadWhereDesignWritesThem() {
+        val cctx = Ctx()
+        val case = BackendModelParsers.parseCmmn("""<definitions xmlns:flowable="http://flowable.org/cmmn">
+             <case id="DEMO-C1">
+               <casePlanModel id="plan">
+                 <extensionElements>
+                   <flowable:security-policy-model><![CDATA[DEMO-casePolicy]]></flowable:security-policy-model>
+                 </extensionElements>
+                 <planItem id="pi1" definitionRef="ht"/>
+                 <humanTask id="ht">
+                   <extensionElements>
+                     <flowable:security-policy-model><![CDATA[DEMO-taskPolicy]]></flowable:security-policy-model>
+                     <flowable:sla-definition-key><![CDATA[DEMO-taskSla]]></flowable:sla-definition-key>
+                   </extensionElements>
+                 </humanTask>
+               </casePlanModel>
+             </case>
+           </definitions>""".toByteArray(), cctx, "c.cmmn")[0]
+        assertTrue(refs(cctx).containsAll(setOf(
+            Triple("security-policy-model", "securityPolicy", "DEMO-casePolicy"),
+            Triple("security-policy-model", "securityPolicy", "DEMO-taskPolicy"),
+            Triple("sla-definition-key", "sla", "DEMO-taskSla"),
+        )))
+        assertTrue(cctx.refs.all { it["from"] == "DEMO-C1" })
+        // the plan model's policy is the case's own, and its page says so
+        assertEquals(listOf(mapOf("rel" to "security-policy-model", "key" to "DEMO-casePolicy")), case["modelRefs"])
+        val ht = ((case["planModel"] as Map<String, Any?>)["children"] as List<Map<String, Any?>>).single()
+        assertEquals("DEMO-taskSla", ht["sla"])
+        assertEquals("DEMO-taskPolicy", ht["securityPolicy"])
+
+        val pctx = Ctx()
+        val proc = BackendModelParsers.parseBpmn("""<definitions xmlns:flowable="http://flowable.org/bpmn">
+             <process id="DEMO-P1">
+               <extensionElements>
+                 <flowable:security-policy-model><![CDATA[DEMO-procPolicy]]></flowable:security-policy-model>
+               </extensionElements>
+               <userTask id="ut">
+                 <extensionElements>
+                   <flowable:security-policy-model><![CDATA[DEMO-taskPolicy]]></flowable:security-policy-model>
+                   <flowable:sla-definition-key><![CDATA[DEMO-taskSla]]></flowable:sla-definition-key>
+                 </extensionElements>
+               </userTask>
+             </process>
+           </definitions>""".toByteArray(), pctx, "p.bpmn")[0]
+        val ut = (proc["userTasks"] as List<Map<String, Any?>>).single()
+        assertEquals("DEMO-taskSla", ut["sla"])
+        assertEquals("DEMO-taskPolicy", ut["securityPolicy"])
+        assertTrue(refs(pctx).containsAll(setOf(
+            Triple("security-policy-model", "securityPolicy", "DEMO-taskPolicy"),
+            Triple("sla-definition-key", "sla", "DEMO-taskSla"),
+        )))
+        // the process's own policy is read twice (its model refs, and the element walk) — one reference
+        val procPolicy = pctx.refs.filter { it["value"] == "DEMO-procPolicy" }
+            .map { listOf(it["fromType"], it["from"], it["rel"], it["kind"], it["value"]) }.distinct()
+        assertEquals(1, procPolicy.size)
+    }
+
     @Test
     fun correlationParametersArePayloadAndTagsMatchCaseInsensitively() {
         val ctx = Ctx()

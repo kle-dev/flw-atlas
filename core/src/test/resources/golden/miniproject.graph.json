@@ -294,7 +294,12 @@
       "ioParameters": [],
       "key": "reviewCase",
       "milestones": [],
-      "modelRefs": [],
+      "modelRefs": [
+        {
+          "key": "orderPolicy",
+          "rel": "security-policy-model"
+        }
+      ],
       "name": "Review Case",
       "planModel": {
         "autoComplete": null,
@@ -1556,6 +1561,11 @@
         "t": "liquibase:001-customer"
       },
       {
+        "rel": "security-policy-model",
+        "s": "case:reviewCase",
+        "t": "securityPolicy:orderPolicy"
+      },
+      {
         "rel": "serves",
         "s": "java:com.example.CustomerController",
         "t": "endpoint:GET /api/customers"
@@ -1579,6 +1589,11 @@
         "rel": "serviceTask-expression",
         "s": "process:orderProcess",
         "t": "java:com.example.DemoBean"
+      },
+      {
+        "rel": "sla-definition-key",
+        "s": "process:orderProcess",
+        "t": "sla:approvalSla"
       },
       {
         "rel": "start",
@@ -2649,7 +2664,8 @@
               "documentation": "Backoffice checks the order total before it ships.",
               "formKey": "orderForm",
               "id": "approveTask",
-              "name": "Approve order"
+              "name": "Approve order",
+              "sla": "approvalSla"
             }
           ]
         },
@@ -2838,7 +2854,12 @@
           "ioParameters": [],
           "key": "reviewCase",
           "milestones": [],
-          "modelRefs": [],
+          "modelRefs": [
+            {
+              "key": "orderPolicy",
+              "rel": "security-policy-model"
+            }
+          ],
           "name": "Review Case",
           "planModel": {
             "autoComplete": null,
@@ -7178,7 +7199,8 @@
           "documentation": "Backoffice checks the order total before it ships.",
           "formKey": "orderForm",
           "id": "approveTask",
-          "name": "Approve order"
+          "name": "Approve order",
+          "sla": "approvalSla"
         }
       ]
     },
@@ -7744,6 +7766,17 @@
     {
       "from": "orderProcess",
       "fromFile": "processes/order.bpmn",
+      "fromType": "bpmn",
+      "kind": "sla",
+      "rel": "sla-definition-key",
+      "target": "slas/approval-sla.sla",
+      "targetNodeType": "sla",
+      "targetType": "model",
+      "value": "approvalSla"
+    },
+    {
+      "from": "orderProcess",
+      "fromFile": "processes/order.bpmn",
       "fromType": "process",
       "kind": "bean",
       "rel": "calls run()",
@@ -7784,6 +7817,17 @@
       "targetNodeType": "process",
       "targetType": "model",
       "value": "orderProcess"
+    },
+    {
+      "from": "reviewCase",
+      "fromFile": "cases/review.cmmn",
+      "fromType": "cmmn",
+      "kind": "securityPolicy",
+      "rel": "security-policy-model",
+      "target": "policies/case.policy",
+      "targetNodeType": "securityPolicy",
+      "targetType": "model",
+      "value": "orderPolicy"
     },
     {
       "from": "reviewCase",
@@ -8063,7 +8107,7 @@
     "archives": 1,
     "defects": 10,
     "dynamicEdges": 0,
-    "edges": 64,
+    "edges": 66,
     "endpoints": 2,
     "exprSkippedNested": 0,
     "groups": 3,

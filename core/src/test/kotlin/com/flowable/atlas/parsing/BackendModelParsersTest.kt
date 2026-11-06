@@ -126,7 +126,8 @@ class BackendModelParsersTest {
         assertEquals(emptyList<Any?>(), c["sentries"])
         assertEquals(emptyList<Any?>(), c["milestones"])
         assertEquals(emptyList<Any?>(), c["eventListeners"])
-        assertEquals(emptyList<Any?>(), c["modelRefs"])
+        // the security policy the plan model names is the case's own
+        assertEquals(listOf(mapOf("rel" to "security-policy-model", "key" to "orderPolicy")), c["modelRefs"])
 
         // cross-model references recorded on ctx
         val r = refs(ctx)

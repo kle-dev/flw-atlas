@@ -60,6 +60,27 @@ class ParserReferenceTest {
         assertEquals(listOf("external:DEMO-F9"), targets)
     }
 
+    /** A case's policy on its plan model and a task's SLA are references where Design writes them — so a
+     *  renamed one is a missing model, as a process-level one always was. */
+    @Test
+    fun aPlanModelPolicyAndATaskSlaThatNameNothingAreMissing() {
+        val r = extract(mapOf(
+            "cases/c.cmmn" to """<definitions xmlns:flowable="http://flowable.org/cmmn">
+              <case id="DEMO-C"><casePlanModel id="plan">
+                <extensionElements><flowable:security-policy-model>DEMO-renamed-policy</flowable:security-policy-model></extensionElements>
+                <planItem id="pi" definitionRef="ht"/>
+                <humanTask id="ht"><extensionElements><flowable:sla-definition-key>DEMO-renamed-sla</flowable:sla-definition-key></extensionElements></humanTask>
+              </casePlanModel></case></definitions>""",
+            "processes/p.bpmn" to """<definitions xmlns:flowable="http://flowable.org/bpmn">
+              <process id="DEMO-P"><userTask id="ut"><extensionElements>
+                <flowable:security-policy-model>DEMO-policy</flowable:security-policy-model>
+              </extensionElements></userTask></process></definitions>""",
+            "policies/p.policy" to """{"key":"DEMO-policy","name":"Policy"}""",
+        ))
+        assertEquals(setOf("external:DEMO-renamed-policy", "external:DEMO-renamed-sla"), r.missing().toSet())
+        assertTrue(r.edges().contains(Triple("process:DEMO-P", "security-policy-model", "securityPolicy:DEMO-policy")))
+    }
+
     @Test
     fun anExternalAgentPropertyIsAnEventOnlyWhereItNamesOne() {
         val r = extract(mapOf(

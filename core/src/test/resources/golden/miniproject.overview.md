@@ -50,6 +50,7 @@ _Scanned 27 models (27 files · 1 archives), 3 Java files, 2 REST endpoints. Gen
 ## 3. Cases (CMMN)
 
 ### Review Case (`reviewCase`) — `cases/review.cmmn`
+- security-policy-model: `orderPolicy`
     - 📁 **Case plan model** Review plan
         - Human task Review order formKey=`orderForm`
         - Process task Start order processRef=`orderProcess`
@@ -195,6 +196,7 @@ _Scanned 27 models (27 files · 1 archives), 3 Java files, 2 REST endpoints. Gen
 - `reviewCase` —humanTask-form→ form `orderForm` (`forms/order-form.form`)
 - `reviewCase` —processTask→ process `orderProcess` (`processes/order.bpmn`)
 - `reviewCase` —serviceMapping→ service `customerService` (`services/customer.service`)
+- `reviewCase` —security-policy-model→ securityPolicy `orderPolicy` (`policies/case.policy`)
 - `orderEvents` —channel-event→ event `orderShipped` (`events/order-shipped.event`)
 - `customerDO` —backed-by-service→ service `customerService` (`services/customer.service`)
 - `customerDO` —relates-to→ dataObject `priorityMD` (`data/priority.data`)
@@ -213,6 +215,7 @@ _Scanned 27 models (27 files · 1 archives), 3 Java files, 2 REST endpoints. Gen
 - `orderPage` —lists-instances→ process `orderProcess` (`processes/order.bpmn`)
 - `orderPage` —field-masterData→ dataObject `priorityMD` (`data/priority.data`)
 - `orderProcess` —start-form→ form `orderForm` (`forms/order-form.form`)
+- `orderProcess` —sla-definition-key→ sla `approvalSla` (`slas/approval-sla.sla`)
 - `orderProcess` —userTask-form→ form `orderForm` (`forms/order-form.form`)
 - `orderProcess` —callActivity→ process `fulfilmentProcess` (`processes/fulfilment.bpmn`)
 - `orderProcess` —ruleTask-decision→ decision `orderDecision` (`decisions/order-decision.dmn`)

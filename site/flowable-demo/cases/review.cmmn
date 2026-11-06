@@ -7,6 +7,10 @@
              targetNamespace="http://flowable.org/test">
   <case id="reviewCase" name="Review Case" flowable:candidateStarterGroups="auditors">
     <casePlanModel id="planModel" name="Review plan">
+      <!-- The case's security policy sits on its plan model, where Design writes it and Work reads it. -->
+      <extensionElements>
+        <flowable:security-policy-model><![CDATA[orderPolicy]]></flowable:security-policy-model>
+      </extensionElements>
       <planItem id="pi_review" definitionRef="reviewTask"/>
       <!-- Ordering the two that actually depend on each other: the order only starts once the
            review is done. `pi_lookup` stays available from the start, which is the point of a case. -->

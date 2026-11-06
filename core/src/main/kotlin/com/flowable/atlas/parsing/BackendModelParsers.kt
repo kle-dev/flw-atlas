@@ -241,6 +241,8 @@ object BackendModelParsers {
                         for (a in listOf("candidateUsers", "dueDate", "priority", "category")) {
                             el.attr(a)?.ifEmpty { null }?.let { ut[a] = it }
                         }
+                        // the SLA that times this task and the policy that gates it, when it names its own
+                        ut.putAll(XmlHelpers.governance(el))
                         enclosing[eid]?.let { ut["parent"] = it }
                         userTasks.add(withElementExtras(ut, el, elListeners))
                         ctx.addRef(pkey, "bpmn", ffile, "userTask-form", "form", ut["formKey"])
@@ -495,6 +497,8 @@ object BackendModelParsers {
                 // only when set (the record keeps its shape otherwise): a task offered to named users
                 // only is closed to everyone else, and the access list was the only place that said so
                 el.attr("candidateUsers")?.trim()?.ifEmpty { null }?.let { d["candidateUsers"] = it }
+                // the SLA that times this task and the policy that gates it, when it names its own
+                d.putAll(XmlHelpers.governance(el))
                 ctx.addRef(caseKey, "cmmn", ffile, "humanTask-form", "form", el.attr("formKey"))
                 ctx.addAccess(caseKey, "case", "task:${el.attr("id")}", "assign",
                     el.attr("candidateGroups"), pyOr(el.attr("candidateUsers"), el.attr("assignee")))
@@ -874,11 +878,20 @@ object BackendModelParsers {
             // case-level extension references
             XmlHelpers.collectDesignExtensionRefs(ctx, ckey, "cmmn", "case", ffile, case)
             val ext = XmlHelpers.extEl(case)
+            // The case's SLA and policy may sit on `<case>` or on its plan model, which is where Design writes
+            // the policy and where the platform reads it (AbstractPlatformSecurityService). The walk over the
+            // plan tree below records the same reference, with the same kind and relation, so the two collapse
+            // into one; what this adds is its place among the case's own model references, which is what
+            // says "this policy governs the case" on its page.
+            val planExt = plan?.let { XmlHelpers.extEl(it) }
+            for ((tag, kind) in listOf("sla-definition-key" to "sla", "security-policy-model" to "securityPolicy")) {
+                for (v in listOfNotNull(ext?.childText(tag), planExt?.childText(tag)).distinct()) {
+                    modelRefs.add(linkedMapOf("rel" to tag, "key" to v))
+                    ctx.addRef(ckey, "cmmn", ffile, tag, kind, v)
+                }
+            }
             if (ext != null) {
-                for ((tag, kind) in listOf(
-                    "sla-definition-key" to "sla", "security-policy-model" to "securityPolicy",
-                    "eventType" to "event", "channelKey" to "channel",
-                )) {
+                for ((tag, kind) in listOf("eventType" to "event", "channelKey" to "channel")) {
                     val v = ext.childText(tag)
                     if (truthy(v)) {
                         modelRefs.add(linkedMapOf("rel" to tag, "key" to v))

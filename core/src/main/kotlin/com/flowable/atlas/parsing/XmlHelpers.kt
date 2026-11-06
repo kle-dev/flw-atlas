@@ -366,7 +366,24 @@ object XmlHelpers {
         "processdefinitionkey" to ("process" to "starts-process"),
         "casedefinitionkey" to ("case" to "starts-case"),
         "inboundchannelreference" to ("channel" to "via-channel"),
+        // The policy and the SLA as the platform reads them: a case's policy from the plan model, a task's
+        // policy and SLA from the user task or human task itself (AbstractPlatformSecurityService,
+        // PlatformCreate*TaskInterceptor) — which is where Design writes them. Read from `<process>` and
+        // `<case>` only, every one of them was invisible and a wrong key could not be reported missing. The
+        // kind and relation are the ones the process-level read records, so its copy of a process's own
+        // policy collapses into one reference.
+        "security-policy-model" to ("securityPolicy" to "security-policy-model"),
+        "sla-definition-key" to ("sla" to "sla-definition-key"),
     )
+
+    /** The SLA and the security policy an element names for itself, for its own record. */
+    fun governance(el: El): Map<String, String> {
+        val ext = extEl(el) ?: return emptyMap()
+        val out = LinkedHashMap<String, String>()
+        ext.childText("sla-definition-key")?.let { out["sla"] = it }
+        ext.childText("security-policy-model")?.let { out["securityPolicy"] = it }
+        return out
+    }
 
     /** Group-permission extension elements → the access action they grant. */
     private val PERMISSION_GROUP_TAGS: Map<String, String> = linkedMapOf(
