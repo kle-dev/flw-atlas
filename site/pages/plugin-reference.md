@@ -180,7 +180,7 @@ variable, constant and property icons, a Liquibase column or table the database 
 | Member positions | DMN decision variables, event payload names, master-data field names |
 | Model XML | Cross-reference attribute values, extension-element text, and event payload names from the sibling `eventType` |
 | Liquibase changelogs | Column names and table names from the backing service, plus the matching Liquibase column type ranked first |
-| Expressions | Root objects, namespaces, functions, `flw.*` members (including nested), your own custom functions, variables and form fields, and — after `bean.` — that Java class's methods and getter-derived properties |
+| Expressions | Root objects, namespaces, functions, `flw.*` members (including nested), your own custom functions and values, variables and form fields, and — after `bean.` — that Java class's methods and getter-derived properties |
 | Script bodies | The root objects the selected script context binds, and their members **with parameter signatures** |
 
 The catalog covers `org.flowable.*` and `com.flowable.*` across process, case, decision, form, event,

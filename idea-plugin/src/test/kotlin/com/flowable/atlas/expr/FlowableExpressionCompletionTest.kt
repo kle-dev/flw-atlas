@@ -110,8 +110,23 @@ class FlowableExpressionCompletionTest : BasePlatformTestCase() {
                     "flw.formatIban" to "iban",
                     "greet" to "name",
                 ),
+                constants = setOf("\$isDesktopDemo"),
             ),
         )
+    }
+
+    fun testCustomValueCompletesWithoutParentheses() {
+        // `$isDesktopDemo: true` is a value: `{{$isDesktopDemo()}}` would fail at runtime
+        seedCustomFunctions()
+        myFixture.configureByText("t.flowable-fe", "<caret>")
+        myFixture.completeBasic()
+        val el = myFixture.lookupElements?.firstOrNull { it.lookupString == "\$isDesktopDemo" }
+        assertNotNull("a custom value is offered at the root", el)
+        val p = LookupElementPresentation(); el!!.renderElement(p)
+        assertEquals("custom value", p.typeText)
+        myFixture.lookup.currentItem = el
+        myFixture.finishLookup(com.intellij.codeInsight.lookup.Lookup.NORMAL_SELECT_CHAR)
+        assertEquals("\$isDesktopDemo", myFixture.editor.document.text)
     }
 
     fun testCustomFunctionListsParametersAsTailText() {

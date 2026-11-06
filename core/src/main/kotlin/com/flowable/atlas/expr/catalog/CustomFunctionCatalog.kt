@@ -26,8 +26,11 @@ data class CustomFunctionCatalog(
     /** The source of each function by display name, where Atlas can find it — the declaration the
      *  registration points at, from the readable source or, for a bundle, from its sourcemap. */
     val code: Map<String, FunctionCode> = emptyMap(),
+    /** Top-level entries whose value is a literal (`$isDesktop: true`, `supportEmail: "…"`): values an
+     *  expression reads, not functions it calls — so neither an unused function nor one to complete with `()`. */
+    val constants: Set<String> = emptySet(),
 ) {
-    fun isEmpty(): Boolean = namespaces.isEmpty() && flw.isEmpty() && topLevel.isEmpty()
+    fun isEmpty(): Boolean = namespaces.isEmpty() && flw.isEmpty() && topLevel.isEmpty() && constants.isEmpty()
 
     /** Parameter list of a callable by display name (`ns.member` / `flw.member` / top-level), or null. */
     fun signatureOf(display: String): String? = signatures[display]
@@ -37,6 +40,7 @@ data class CustomFunctionCatalog(
         namespaces.toSortedMap().forEach { (ns, m) -> parts += "$ns.* (${m.size})" }
         if (flw.isNotEmpty()) parts += "flw.* (+${flw.size})"
         if (topLevel.isNotEmpty()) parts += "${topLevel.size} top-level"
+        if (constants.isNotEmpty()) parts += "${constants.size} top-level value${if (constants.size == 1) "" else "s"}"
         val src = sources.firstOrNull()?.let { " from $it" } ?: ""
         return parts.joinToString(", ") + src
     }
@@ -85,13 +89,14 @@ object CustomFunctionExtractor {
         val namespaces = HashMap<String, MutableSet<String>>()
         val flw = HashSet<String>()
         val topLevel = HashSet<String>()
+        val constants = HashSet<String>()
         val sources = ArrayList<String>()
         val diagnostics = ArrayList<String>()
         val signatures = HashMap<String, String>()
         val code = HashMap<String, FunctionCode>()
         fun build() = CustomFunctionCatalog(
             namespaces.mapValues { it.value.toSet() }, flw.toSet(), topLevel.toSet(),
-            sources.toList(), diagnostics.toList(), signatures.toMap(), code.toMap(),
+            sources.toList(), diagnostics.toList(), signatures.toMap(), code.toMap(), constants.toSet(),
         )
     }
 
@@ -323,12 +328,30 @@ object CustomFunctionExtractor {
                 val members = memberNames(masked, orig, kind.open, kind.close, cat.diagnostics, "$ctx.$key", cat.signatures, "$key.", ::capture)
                 if (key == "flw") cat.flw += members
                 else cat.namespaces.getOrPut(key) { HashSet() } += members
+            } else if (entryValueIsLiteral(masked, orig, span.first, span.last + 1)) {
+                // `$isDesktop: true` is a flag a panel's `visible` reads, not a function: filed as one, it
+                // was reported as registered but never used, and deleting it as advised hid those panels.
+                // Only a literal decides this — `fmt: fmtImpl` may well name a function declared elsewhere.
+                cat.constants += key
             } else {
                 cat.topLevel += key
                 memberSignature(masked, orig, span.first, span.last + 1)?.let { cat.signatures[key] = it }
                 capture(key, span)
             }
         }
+    }
+
+    /** A value that is a literal: a string (its quotes survive [mask]), a number, an array, a keyword
+     *  literal — or a minifier's spelling of one (`!0`, `void 0`). */
+    private val LITERAL_VALUE = Regex("""^\s*(?:["'`\[]|-?\.?\d|(?:true|false|null|undefined)(?![\w$])|![01](?!\d)|void\s+0(?!\d))""")
+
+    /** True when the entry spanning [s, e) is `key: <literal>` — a value, not a function. */
+    private fun entryValueIsLiteral(masked: String, orig: String, s: Int, e: Int): Boolean {
+        val seg = masked.substring(s, e)
+        val (_, keyEnd) = keyAt(orig, s + (seg.length - seg.trimStart().length), e) ?: return false
+        var j = keyEnd
+        while (j < e && masked[j].isWhitespace()) j++
+        return j < e && masked[j] == ':' && LITERAL_VALUE.containsMatchIn(masked.substring(j + 1, e))
     }
 
     /**

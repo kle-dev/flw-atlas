@@ -62,6 +62,21 @@ class CustomFunctionExtractorTest {
         assertTrue("bareFn" in cat.topLevel)
     }
 
+    @Test fun aLiteralValueIsAConstantNotAFunction() {
+        // a literal decides it; an identifier may name a function declared elsewhere, so it stays one
+        write("src/custom.ts",
+            "function fmtImpl(x) { return x; }\n" +
+                "export default {\n" +
+                "  additionalData: {\n" +
+                "    \$flag: true, minified: !0, label: 'x', count: -1, list: [1], none: null, tpl: `a`,\n" +
+                "    fmt: fmtImpl, call: () => 1, method(a) { return a; }, trueish: trueImpl,\n" +
+                "  },\n" +
+                "};\n")
+        val cat = CustomFunctionExtractor.extract(tmp.root)!!
+        assertEquals(setOf("\$flag", "minified", "label", "count", "list", "none", "tpl"), cat.constants)
+        assertEquals(setOf("fmt", "call", "method", "trueish"), cat.topLevel)
+    }
+
     @Test fun directExternalsAssignment() {
         write("ext/custom.js",
             "flowable.externals = flowable.externals || {};\n" +

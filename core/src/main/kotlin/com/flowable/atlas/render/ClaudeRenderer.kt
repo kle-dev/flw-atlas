@@ -448,6 +448,9 @@ object ClaudeRenderer {
                 ?.let { lines.add("`flw.` — " + Fmt.list(it)) }
             (custom["topLevel"] as? List<*>)?.takeIf { it.isNotEmpty() }
                 ?.let { lines.add("top-level — " + Fmt.list(it)) }
+            // a literal value an expression reads; listed apart so nobody writes `{{$isDesktop()}}`
+            (custom["constants"] as? List<*>)?.takeIf { it.isNotEmpty() }
+                ?.let { lines.add("top-level values, read and never called — " + Fmt.list(it)) }
             if (lines.isNotEmpty()) {
                 L.add("\n**This project's own expression functions** (discovered in the repo):")
                 for (l in lines) L.add("- $l")

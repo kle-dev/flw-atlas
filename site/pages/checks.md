@@ -457,7 +457,10 @@ content, so nothing is missing.
 
 - A **form** with no incoming reference other than its app membership. Belonging to an app is not use.
 - A **service operation** nothing calls.
-- A **custom expression function** nothing calls.
+- A **custom expression function** nothing names. A `$`-prefixed name (`{{$fmt(x)}}`) counts like any
+  other, and so does a function handed on by reference (`{{names.map(fmt)}}`). An `additionalData` entry
+  whose value is a literal — `$isDesktop: true`, a string, a number — is a value a binding reads, not a
+  function, and is never reported.
 
 A group allowed to press a button on a form is not a use of the form either: access says who may, not
 that anything opens it. A data-object data table's four form keys — view, create, edit and delete — all

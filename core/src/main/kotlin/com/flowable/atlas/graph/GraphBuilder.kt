@@ -1414,9 +1414,14 @@ object GraphBuilder {
     private fun customFnsCalledIn(text: String, cat: CustomFunctionCatalog): Set<String> {
         val body = decodeJsonStringEscapes(Constants.htmlUnescape(text))
         val found = LinkedHashSet<String>()
+        // Name boundaries spelled out rather than `\b`: `$` is no word character, so `\b$fmt` never matched
+        // after `{`, a space or `(`, and every `$`-prefixed function or namespace was reported unused
+        // however often a form called it. A `.` before the name is a member of something else (`item.fmt`).
+        val start = "(?<![\\w$.])"
+        val end = "(?![\\w$])"
         for ((ns, members) in cat.namespaces) {
             for (m in members) {
-                if (Regex("\\b" + Regex.escape(ns) + "\\s*\\.\\s*" + Regex.escape(m) + "\\b").containsMatchIn(body)) {
+                if (Regex(start + Regex.escape(ns) + "\\s*\\.\\s*" + Regex.escape(m) + end).containsMatchIn(body)) {
                     found.add("$ns.$m")
                 }
             }
@@ -1424,8 +1429,12 @@ object GraphBuilder {
         for (m in cat.flw) {
             if (Regex("\\bflw\\s*\\.\\s*" + Regex.escape(m) + "\\b").containsMatchIn(body)) found.add("flw.$m")
         }
+        // A top-level function counts wherever it is named, not only where it is called: handed on by
+        // reference (`{{names.map(fmt)}}`) it runs just the same. Named in code, that is — without the call's
+        // `(` to anchor it, `{{kind == 'format'}}` would credit a function called `format`.
+        val code = STR_IN_EXPR_RE.replace(body, " ")
         for (fn in cat.topLevel) {
-            if (Regex("\\b" + Regex.escape(fn) + "\\s*\\(").containsMatchIn(body)) found.add(fn)
+            if (Regex(start + Regex.escape(fn) + end).containsMatchIn(code)) found.add(fn)
         }
         return found
     }

@@ -664,7 +664,7 @@ object Atlas {
         // ReferenceResolver already set this key to null; overwrite it with the summary shape when
         // custom functions were found (namespace member lists sorted, like Python's dict comprehension).
         if (custom != null) {
-            result["customFunctions"] = linkedMapOf(
+            result["customFunctions"] = linkedMapOf<String, Any?>(
                 "namespaces" to custom.namespaces.mapValues { it.value.sorted() },
                 "flw" to custom.flw.sorted(),
                 "topLevel" to custom.topLevel.sorted(),
@@ -672,7 +672,10 @@ object Atlas {
                 "diagnostics" to custom.diagnostics,
                 "signatures" to custom.signatures,
                 "summary" to custom.summary(),
-            )
+            ).apply {
+                // the literal values beside them (`$isDesktop: true`) — read, never called, so no function
+                if (custom.constants.isNotEmpty()) put("constants", custom.constants.sorted())
+            }
         }
 
         // Health findings, derived from everything above (graph + buckets + diagnostics + custom fns),

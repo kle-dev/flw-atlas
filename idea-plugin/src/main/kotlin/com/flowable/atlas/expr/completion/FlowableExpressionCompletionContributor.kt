@@ -112,6 +112,12 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
                         .withTailText("  $ns.…", true).withInsertHandler(DotInsertHandler),
                 )
             for (fn in cat.topLevel.sorted()) out.addElement(customFnLookup(fn, cat.signatureOf(fn)))
+            // a literal value (`$isDesktop: true`) is read, not called: completed with `()` it failed at runtime
+            for (c in cat.constants.sorted())
+                out.addElement(
+                    LookupElementBuilder.create(c).withIcon(AllIcons.Nodes.Constant).withTypeText("custom value", true)
+                        .withLookupStrings(KeyLookup.searchTokens(c, null)),
+                )
         }
 
         /**
