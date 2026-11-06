@@ -429,6 +429,14 @@
   .dashrow .ty{font-size:var(--text-2xs);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em;flex:none}
   .dashrow .pill{margin-left:auto;flex:none}
   .dashrow .sep{color:var(--ink-faint);flex:none}
+  /* An entry point is a group and what it can start: the models wrap under each other, and a chip too long
+     for the card is ellipsised instead of cut at its edge. A row of model chips says the kind by its icons;
+     the group's own chip is a user group on every row. */
+  .dashrow.eprow{flex-wrap:wrap;align-items:baseline}
+  .dashrow .epmodels{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-15);flex:1 1 0;min-width:min(100%,24ch)}
+  .dashrow .nc{min-width:0;max-width:100%}
+  .dashrow .nc .ty{display:none}
+  .epmodels .dash-more{margin-top:0}
   /* Unused-variables report (#/variables). A row carries more than a name — the construct that writes
      the variable, the models involved, and the write/read tally — so it wraps instead of truncating,
      and the counts stay legible as the one thing a reader scans down the column. */

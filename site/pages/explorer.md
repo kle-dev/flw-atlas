@@ -24,7 +24,7 @@ view you are looking at can be copied as a link.
 
 | Hash | View |
 |---|---|
-| *(empty)* or `#/overview` | The dashboard: a health summary (the open defects and advice, each split by tier — broken, runtime risk, unfinished, noise — and the checks with the most to say, every part a way into the Checks page), hotspots (the project's own most-referenced models and code — platform beans and bots, URLs and security policies aside), the inventory grouped as the sidebar groups it, apps and entry points |
+| *(empty)* or `#/overview` | The dashboard: a health summary (the open defects and advice, each split by tier — broken, runtime risk, unfinished, noise — and the checks with the most to say, every part a way into the Checks page), hotspots (the project's own most-referenced models and code — platform beans and bots, URLs and security policies aside), the inventory grouped as the sidebar groups it, apps, and the entry points — each user group once, with the models it can start (the first eight, the rest a click away) |
 | `#/tree` | The reference tree: what each app starts, and what those models reach |
 | `#/elements` | [Elements](#elements): the palette entries the project's processes, cases, forms and pages use, grouped as Design's palette groups them — pick one to list every model holding it |
 | `#/checks` | Every [finding](../checks/) in one place, in two groups — **Defects** (wrong now) and **Advice** (a pattern worth a look): a block per check with its rows under one line saying what it means (*why · what to do* opens beneath it), the accept controls, and what the project already accepted — with its reasons |

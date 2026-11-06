@@ -1485,14 +1485,21 @@ function renderDashboard(){
   }
   // entry points — who can start what
   if(INSIGHTS.entryPoints.length){
-    // The first fifty, and the rest one click away — the "+ N more" used to be text that led nowhere.
-    const EP_SHOWN=50, eps=INSIGHTS.entryPoints;
+    // One row per group, with what it can start: on real projects one group starts nearly everything, and
+    // a row per pair repeated "flowableUser can start" forty times. The first fifty groups, and per group
+    // the first eight models, with the rest one click away.
+    const EP_SHOWN=50, EP_MODELS_SHOWN=8, byGroup=new Map();
+    INSIGHTS.entryPoints.forEach(ep=>{ if(!byGroup.has(ep.group)) byGroup.set(ep.group, []); byGroup.get(ep.group).push(ep.model); });
+    const groups=[...byGroup];
     h+='<div class="dash-col"><div class="seclabel">Entry points — who can start what</div><div class="dashrows">';
-    eps.forEach((ep,i)=>{
-      h+='<div class="dashrow"'+(i>=EP_SHOWN?' data-ep-more hidden':'')+'>'+nodeChip(ep.group)+'<span class="sep">can start</span>'+nodeChip(ep.model)+'</div>';
+    groups.forEach(([g, ms], i)=>{
+      h+='<div class="dashrow eprow"'+(i>=EP_SHOWN?' data-ep-more hidden':'')+'>'+nodeChip(g)+'<span class="sep">can start</span><span class="epmodels">'+
+        ms.map((m,j)=>j<EP_MODELS_SHOWN?nodeChip(m):nodeChip(m).replace(/^<span /, '<span data-epm-more hidden ')).join('')+
+        (ms.length>EP_MODELS_SHOWN?'<button type="button" class="dgbtn dash-more" data-epm-toggle>+'+(ms.length-EP_MODELS_SHOWN)+' more</button>':'')+
+        '</span></div>';
     });
-    if(eps.length>EP_SHOWN)
-      h+='<button type="button" class="dgbtn dash-more" data-ep-toggle>show '+(eps.length-EP_SHOWN)+' more</button>';
+    if(groups.length>EP_SHOWN)
+      h+='<button type="button" class="dgbtn dash-more" data-ep-toggle>show '+(groups.length-EP_SHOWN)+' more</button>';
     h+='</div></div>';
   }
   h+='</div></div>';
@@ -1501,6 +1508,9 @@ function renderDashboard(){
   wireNodeLinks(v, '[data-id]', {first:reportNav});
   const epMore=v.querySelector('[data-ep-toggle]');
   if(epMore) epMore.onclick=()=>{ v.querySelectorAll('[data-ep-more]').forEach(r=>r.hidden=false); epMore.remove(); };
+  // a group's own "+N more" shows that group's models, not every group's
+  v.querySelectorAll('[data-epm-toggle]').forEach(b=>b.onclick=e=>{ e.stopPropagation();
+    b.parentElement.querySelectorAll('[data-epm-more]').forEach(c=>c.hidden=false); b.remove(); });
   v.querySelectorAll('[data-inv-toggle]').forEach(b=>b.onclick=e=>{ e.stopPropagation();
     b.parentElement.querySelectorAll('[data-inv-more]').forEach(r=>r.hidden=false); b.remove(); });
 }

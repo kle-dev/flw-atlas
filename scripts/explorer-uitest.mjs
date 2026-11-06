@@ -1321,6 +1321,35 @@ const probe = `<script>
     ok('exactly one theme toggle', document.querySelectorAll('[data-theme-btn]').length===1);
   });
 
+  // --- entry points: one row per group, with what it can start ---
+  steps.push(()=>{ location.hash='/overview'; });
+  steps.push(()=>{
+    const eps=INSIGHTS.entryPoints, n0=eps.length, g0=eps[0]&&eps[0].group;
+    // the fixture has one model per group: give one group nine more, past the eight a row shows
+    const extra=nodes.filter(n=>n.type!=='external' && n.type!=='group' && !eps.some(e=>e.group===g0&&e.model===n.id)).slice(0,9);
+    extra.forEach(n=>eps.push({group:g0, model:n.id}));
+    window.__epRestore=()=>{ eps.length=n0; renderDashboard(); };
+    renderDashboard();
+    const col=[...document.querySelectorAll('#view-overview .dash-col')].find(c=>/Entry points/.test(c.textContent));
+    const rows=col?[...col.querySelectorAll('.dashrow')]:[];
+    ok('entry points list each group once', rows.length===new Set(eps.map(e=>e.group)).size, rows.length+' rows for '+new Set(eps.map(e=>e.group)).size+' groups');
+    const row=rows.find(r=>r.querySelector('.nc[data-id="'+cssEsc(enc(g0))+'"]'));
+    const shown=row?[...row.querySelectorAll('.epmodels>.nc')].filter(c=>!c.hidden):[];
+    const more=row&&row.querySelector('[data-epm-toggle]');
+    ok('a group shows its first eight models and a +N more', shown.length===8 && !!more && more.textContent==='+'+(1+extra.length-8)+' more',
+       shown.length+' shown, '+(more&&more.textContent));
+    const box=col&&col.querySelector('.dashrows').getBoundingClientRect();
+    const past=col?[...col.querySelectorAll('.nc')].filter(c=>!c.hidden && c.getBoundingClientRect().right>box.right+1):[];
+    ok('no chip runs past the card', !past.length, past.map(c=>c.textContent).join(' | '));
+    if(more) click(more);
+    window.__epRow=row;
+  });
+  steps.push(()=>{
+    const row=window.__epRow;
+    ok('+N more shows that group\\'s models', !!row && [...row.querySelectorAll('.epmodels>.nc')].every(c=>!c.hidden) && !row.querySelector('[data-epm-toggle]'));
+    if(window.__epRestore) window.__epRestore();
+  });
+
   // --- the overview's health summary and inventory ---
   steps.push(()=>{ location.hash='/overview'; });
   steps.push(()=>{
