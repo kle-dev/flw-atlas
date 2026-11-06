@@ -32,7 +32,10 @@
        until its label and its count are a screen apart. */
     --page-max:2000px;
     --bg:#fafafa; --panel:#ffffff; --panel2:#f8fafc; --line:#e2e8f0; --line2:#d2d6da;
-    --ink:#131e29; --ink-dim:#4c5b6a; --ink-faint:#79848f; --accent:#0f55d6;
+    /* --ink-faint carries information at 10–11px — advice, counts, a check's description, provenance — so it
+       reads at 4.5:1 (WCAG AA) on every surface it sits on, a selected row's included; it was 3.6–3.8:1. It
+       stays a step lighter than --ink-dim, so the three inks keep their order. Same in the dark block. */
+    --ink:#131e29; --ink-dim:#4c5b6a; --ink-faint:#636e79; --accent:#0f55d6;
     --accent-hover:#0c44ab; --accent-subtle:#eff6ff; --hover:#f1f5f9; --active:#e5f0ff; --input:#ffffff;
     --sel-text:#1d4ed8; --sel-bar:#2563eb; --on-accent:#ffffff;
     /* Search-hit highlight. Deliberately NOT the accent: the accent already means "selected row", and a
@@ -67,7 +70,7 @@
   }
   :root[data-theme=dark]{
     --bg:#0c141c; --panel:#131e29; --panel2:#111c26; --line:#1f3245; --line2:#415161;
-    --ink:#e9eef0; --ink-dim:#a5adb5; --ink-faint:#62707d; --accent:#6f99e6;
+    --ink:#e9eef0; --ink-dim:#a5adb5; --ink-faint:#929da8; --accent:#6f99e6;
     --accent-hover:#9bb5d2; --accent-subtle:rgba(111,153,230,.12); --hover:#1a2b3b; --active:#1c3551; --input:#111c26;
     --sel-text:#cfddf7; --sel-bar:#6f99e6; --on-accent:#ffffff;
     --hl-bg:rgba(250,204,21,.28); --hl-ink:#fde68a;

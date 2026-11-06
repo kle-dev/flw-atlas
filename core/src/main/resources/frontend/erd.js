@@ -859,7 +859,7 @@ const PAGE={panel:'var(--panel)', line:'var(--line2)', head:'var(--panel2)', ink
   faint:'var(--ink-faint)', accent:'var(--accent)', bg:'var(--bg)', pill:'var(--panel)', mark:'var(--hl-bg)', markInk:'var(--hl-ink)'};
 /** …and an exported picture's, as values: it leaves the page, so it cannot refer to it — and it is light,
  *  because it ends up on a slide or in a document, whatever theme the page was in. */
-const PAPER={panel:'#ffffff', line:'#c9ced4', head:'#f1f5f9', ink:'#131e29', dim:'#4c5b6a', faint:'#79848f',
+const PAPER={panel:'#ffffff', line:'#c9ced4', head:'#f1f5f9', ink:'#131e29', dim:'#4c5b6a', faint:'#636e79',
   accent:'#0f55d6', bg:'#ffffff', pill:'#ffffff'};
 
 let S=null;          // the page's state, built on first use (the explorer's globals exist only after its boot)

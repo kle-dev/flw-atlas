@@ -9842,11 +9842,36 @@ window.__atlasSetIdeTheme=(t,pal)=>{
 // LaF instead of guessing nine more colours.
 const IDE_PAL_PROPS=['--bg','--panel','--panel2','--line','--line2','--ink','--ink-dim','--ink-faint','--accent','--accent-hover',
   '--accent-subtle','--hover','--active','--input','--sel-text','--sel-bar','--on-accent','--focus','--scroll','--scroll-hover'];
+// WCAG contrast over #rrggbb (the palette is validated to that form), for the two greys derived below.
+function palLum(h){
+  const c=i=>{ const v=parseInt(h.slice(i,i+2),16)/255; return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4); };
+  return 0.2126*c(1)+0.7152*c(3)+0.0722*c(5);
+}
+function palRatio(a,b){ const x=palLum(a), y=palLum(b); return (Math.max(x,y)+0.05)/(Math.min(x,y)+0.05); }
+/** `color-mix(in srgb, a pct%, b)` as a value, so its contrast can be measured. */
+function palMix(a,pct,b){
+  let o='#'; for(let i=1;i<7;i+=2){ const v=Math.round(parseInt(a.slice(i,i+2),16)*pct/100+parseInt(b.slice(i,i+2),16)*(100-pct)/100);
+    o+=(v<16?'0':'')+v.toString(16); }
+  return o;
+}
+/** `fg`, moved towards `to` in 5% steps until it reads at `min`:1 on every surface in `bgs` (or is `to`); one
+ *  that already reads comes back as it is. */
+function palReadable(fg,to,bgs,min){
+  const reads=c=>bgs.every(b=>palRatio(c,b)>=min);
+  let c=fg; for(let pct=5; pct<=100 && !reads(c); pct+=5) c=palMix(to,pct,fg);
+  return c;
+}
 function applyIdePalette(p){
   const st=document.documentElement.style, mix=(a,pct,b)=>'color-mix(in srgb, '+a+' '+pct+'%, '+b+')';
   st.setProperty('--bg',p.bg); st.setProperty('--panel',p.panel); st.setProperty('--panel2',p.panel2);
   st.setProperty('--line',p.line); st.setProperty('--line2',mix(p.line,70,p.ink));
-  st.setProperty('--ink',p.ink); st.setProperty('--ink-dim',p.inkDim); st.setProperty('--ink-faint',mix(p.inkDim,70,p.panel));
+  // The IDE's info grey is a hint colour (3.5:1 on the stock New UI themes), and the faint ink once derived
+  // from it — 70% of it over the panel — measured 2.3:1, on the labels that carry the page's metadata:
+  // advice, counts, a check's description, provenance. Both greys are raised towards the IDE's own ink until
+  // they read on all three surfaces: faint at 4.5:1 (WCAG AA), dim a step above it at 6:1 (the Hub palette's
+  // spacing between the two), so faint stays the lighter of the two.
+  const surf=[p.bg,p.panel,p.panel2], dim=palReadable(p.inkDim, p.ink, surf, 6);
+  st.setProperty('--ink',p.ink); st.setProperty('--ink-dim',dim); st.setProperty('--ink-faint',palReadable(palMix(dim,70,p.panel), p.ink, surf, 4.5));
   st.setProperty('--accent',p.accent); st.setProperty('--accent-hover',mix(p.accent,80,p.ink)); st.setProperty('--accent-subtle',mix(p.accent,12,p.panel));
   st.setProperty('--hover',mix(p.ink,6,p.panel)); st.setProperty('--active',mix(p.selBg,30,p.panel)); st.setProperty('--input',p.panel);
   st.setProperty('--sel-text',mix(p.selBg,65,p.ink)); st.setProperty('--sel-bar',p.accent); st.setProperty('--on-accent',p.selText);

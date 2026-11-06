@@ -572,6 +572,10 @@ link and selection colours replace the page's own palette (the type colours, ton
 highlight stay), so the tab reads like part of Darcula or the New UI instead of a website in a frame.
 That holds while the page shows the IDE's mode — following it, or set to the same mode explicitly. Force
 the other mode and the page falls back to its own palette for that mode; in a browser nothing changes.
+The two greys are the exception: the look-and-feel's hint grey is lighter than small labels can bear, so
+the page darkens it (lightens it, in a dark theme) towards the IDE's text colour until the faintest
+labels — advice, counts, a check's description, the provenance — read at 4.5:1, the WCAG AA level its own
+palettes meet in light and dark too.
 
 Beside it, `A−` / `A+` step the text size (85 % to 150 %) and remember the choice. Every font size on
 the page is a token that this one knob multiplies; the IDE's embedded browser applies none of the IDE's

@@ -1423,6 +1423,52 @@ const probe = `<script>
     window.__atlasSetIdeTheme('none');    // back to standalone
   });
 
+  // --- the faint ink is readable: it carries advice, counts, a check's description and the provenance at
+  //     10–11px, and measured 3.3–3.8:1 in the Hub palettes and 2.3:1 in the IDE's own colours ---
+  // Measured on real elements, so a later per-element override is caught too. A colour is resolved through a
+  // canvas: color-mix() computes to color(srgb …), which no regex here should have to parse.
+  const rgbOf=c=>{ const cv=document.createElement('canvas'); cv.width=cv.height=1; const x=cv.getContext('2d');
+    x.fillStyle='#000'; x.fillStyle=c; x.fillRect(0,0,1,1); const d=x.getImageData(0,0,1,1).data; return [d[0],d[1],d[2]]; };
+  const lumOf=([r,g,b])=>{ const l=v=>{ v/=255; return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4); }; return 0.2126*l(r)+0.7152*l(g)+0.0722*l(b); };
+  const ratio=(a,b)=>{ const x=lumOf(rgbOf(a)), y=lumOf(rgbOf(b)); return (Math.max(x,y)+0.05)/(Math.min(x,y)+0.05); };
+  const bgOf=el=>{ for(let x=el; x; x=x.parentElement){ const c=getComputedStyle(x).backgroundColor;
+    if(c && c!=='transparent' && !/rgba\\([^)]*,\\s*0\\)$/.test(c)) return c; } return getComputedStyle(document.body).backgroundColor; };
+  const tokenColor=v=>{ const s=document.createElement('span'); s.style.color='var('+v+')'; document.body.appendChild(s);
+    const c=getComputedStyle(s).color; s.remove(); return c; };
+  const faintReads=label=>{
+    const els=[document.querySelector('#view-checks .hrow.tone-advice .hsev'), document.querySelector('#view-checks .hrow .hs'),
+      document.getElementById('atlasver'), document.querySelector('#nav .side-item:not(.on) .n')].filter(e=>e&&e.getClientRects().length);
+    const low=els.map(e=>[e, ratio(getComputedStyle(e).color, bgOf(e))]).filter(x=>x[1]<4.5);
+    ok(label+': faint labels read at 4.5:1 or better', els.length===4 && !low.length,
+       els.length+' measured; '+low.map(x=>(x[0].id||x[0].className)+' '+x[1].toFixed(2)).join(' | '));
+    const panel=tokenColor('--panel'), dim=ratio(tokenColor('--ink-dim'), panel), faint=ratio(tokenColor('--ink-faint'), panel);
+    ok(label+': and stay lighter than the dim ink', dim>faint, 'dim '+dim.toFixed(2)+' vs faint '+faint.toFixed(2));
+  };
+  // the stock New UI themes: Label.infoForeground (Gray7) over the editor background
+  const NEWUI_LIGHT={bg:'#f7f8fa',panel:'#ffffff',panel2:'#f7f8fa',line:'#ebecf0',ink:'#000000',inkDim:'#818594',accent:'#2e55a3',selBg:'#d4e2ff',selText:'#000000'};
+  const NEWUI_DARK={bg:'#2b2d30',panel:'#1e1f22',panel2:'#2b2d30',line:'#1e1f22',ink:'#dfe1e5',inkDim:'#6f737a',accent:'#548af7',selBg:'#2e436e',selText:'#ffffff'};
+  steps.push(()=>{ location.hash='/checks'; });
+  steps.push(()=>{
+    faintReads('Hub light');
+    try{ localStorage.setItem('atlas-theme','dark'); }catch(e){}
+    applyThemePref();
+  });
+  steps.push(()=>{
+    faintReads('Hub dark');
+    try{ localStorage.removeItem('atlas-theme'); }catch(e){}
+    window.__atlasSetIdeTheme('light', NEWUI_LIGHT);
+  });
+  steps.push(()=>{
+    ok('the stock light IDE palette is applied', document.documentElement.classList.contains('idepal') && document.documentElement.dataset.theme==='light');
+    faintReads('IDE light');
+    window.__atlasSetIdeTheme('dark', NEWUI_DARK);
+  });
+  steps.push(()=>{
+    ok('the stock dark IDE palette is applied', document.documentElement.classList.contains('idepal') && document.documentElement.dataset.theme==='dark');
+    faintReads('IDE dark');
+    window.__atlasSetIdeTheme('none');
+  });
+
   // --- text size and the list splitter ---
   steps.push(()=>{
     const plus=document.querySelector('[data-ui-scale="+"]');
