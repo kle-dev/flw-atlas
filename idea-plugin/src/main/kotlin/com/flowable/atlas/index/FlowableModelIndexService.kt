@@ -539,6 +539,8 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
         val variables = HashSet<String>()
         val messages = HashSet<String>()
         val signals = HashSet<String>()
+        var dynamicMessages = false
+        var dynamicSignals = false
         val userTaskIds = HashSet<String>()
         val activityIds = HashSet<String>()
         val restCalls = HashSet<RestCallScanner.RestRef>()
@@ -557,6 +559,8 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
                         variables.addAll(m.variables)
                         messages.addAll(m.messages)
                         signals.addAll(m.signals)
+                        dynamicMessages = dynamicMessages || m.dynamicMessages
+                        dynamicSignals = dynamicSignals || m.dynamicSignals
                         userTaskIds.addAll(m.userTaskIds)
                         activityIds.addAll(m.activityIds)
                     }
@@ -615,6 +619,7 @@ class FlowableModelIndexService(private val project: Project) : Disposable {
             byKey, referencedIdentifiers, referencedClassFqns,
             beanMembers = beanMembers, expressionRoots = expressionRoots,
             variables = variables, messages = messages, signals = signals,
+            dynamicMessages = dynamicMessages, dynamicSignals = dynamicSignals,
             userTaskIds = userTaskIds, activityIds = activityIds,
             restCalls = restCalls,
             builtAtMillis = System.currentTimeMillis(),

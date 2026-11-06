@@ -674,6 +674,15 @@
                 enabledByDefault="true"
                 level="WARNING"
                 implementationClass="com.flowable.atlas.inspection.FlowableBrokenKeyInspection"/>
+        <!-- Java: a message, signal, task key or activity id no model declares (a runtime failure or a no-op). -->
+        <localInspection
+                language="JAVA"
+                shortName="FlowableUnknownName"
+                displayName="Unknown Flowable message, signal or task name"
+                groupName="Flowable"
+                enabledByDefault="true"
+                level="WARNING"
+                implementationClass="com.flowable.atlas.inspection.FlowableUnknownNameInspection"/>
         <!-- BPMN/CMMN model XML: an unknown model key at a cross-reference attribute (broken deployment). -->
         <localInspection
                 language="XML"
@@ -683,6 +692,15 @@
                 enabledByDefault="true"
                 level="WARNING"
                 implementationClass="com.flowable.atlas.inspection.FlowableXmlBrokenKeyInspection"/>
+        <!-- JSON models (forms, data objects, apps, …): an unknown model key at a reference site — the CLI's missingRefs. -->
+        <localInspection
+                language="JSON"
+                shortName="FlowableJsonBrokenKey"
+                displayName="Unknown Flowable model key (model JSON)"
+                groupName="Flowable"
+                enabledByDefault="true"
+                level="WARNING"
+                implementationClass="com.flowable.atlas.inspection.FlowableJsonBrokenKeyInspection"/>
         <!-- Ctrl-click a key literal → jump to the model file; Find Usages works too. -->
         <psi.referenceContributor
                 language="JAVA"

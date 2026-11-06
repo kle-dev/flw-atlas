@@ -6,6 +6,8 @@ import com.flowable.atlas.completion.OperationSite
 import com.flowable.atlas.completion.SiteMatching
 import com.flowable.atlas.completion.ValueKeyMatching
 import com.flowable.atlas.completion.ValueSite
+import com.flowable.atlas.completion.Vocabulary
+import com.flowable.atlas.completion.VocabularyScope
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
 import com.intellij.openapi.components.service
@@ -31,7 +33,9 @@ import com.intellij.util.ProcessingContext
  *
  * Operation-name (`.operation("…")`) and value-field (`.value("…", …)`) literals navigate too — to
  * the backing service model that declares the operation catalog (a data object via its backing
- * service), resolved exactly as completion resolves the offered operations.
+ * service), resolved exactly as completion resolves the offered operations. So do the names completion
+ * offers beside keys — a message, a signal, a task key, an activity id, a form outcome — to where a model
+ * declares them, narrowed to the model the chain names ([VocabularyScope]).
  */
 class FlowableKeyReferenceContributor : PsiReferenceContributor() {
 
@@ -45,6 +49,8 @@ class FlowableKeyReferenceContributor : PsiReferenceContributor() {
                     SiteMatching.keySiteForLiteral(literal)?.let { return arrayOf(FlowableKeyReference(literal, it)) }
                     // An operation-name / value-field literal → the backing service model file.
                     operationModelReference(literal)?.let { return arrayOf(it) }
+                    // A message, signal, task key, activity id or outcome → where a model declares it.
+                    vocabularyReference(literal)?.let { return arrayOf(it) }
                     // Value-based (opt-in): any literal whose value equals a known model key navigates too,
                     // even with no call site. cachedOrNull() only — a reference provider must not build.
                     valueKeyReference(literal)?.let { return arrayOf(it) }
@@ -162,6 +168,36 @@ private class FlowableValueKeyReference(
     }
 
     override fun getVariants(): Array<Any> = emptyArray()
+}
+
+/**
+ * A message, signal, task-key, activity-id or outcome literal → the declaration in each model that has the
+ * name: `<signal name="…">`, `<userTask id="…">`. Soft: a name no model declares is the unknown-name
+ * inspection's to report, with the reasons it may still be fine (a computed name, a model whose elements
+ * are not read). Not for variables — a variable is whatever the running instance was given, and a model
+ * mentioning the same name is no declaration of it.
+ */
+private class FlowableVocabularyReference(
+    literal: PsiLiteralExpression,
+    private val at: VocabularyScope.At,
+) : PsiReferenceBase.Poly<PsiLiteralExpression>(literal, innerRange(literal), true) {
+
+    override fun multiResolve(incompleteCode: Boolean): Array<ResolveResult> {
+        val value = element.value as? String ?: return ResolveResult.EMPTY_ARRAY
+        val project = element.project
+        // The cached index only — resolve runs under the read lock.
+        val index = project.service<FlowableModelIndexService>().cachedOrRequest() ?: return ResolveResult.EMPTY_ARRAY
+        val scopeKey = VocabularyScope.scopeKey(at.call, at.site, project)
+        return ModelKeyTargets.resolveElement(project, VocabularyScope.declaringModels(index, at.site, scopeKey, value), value)
+    }
+
+    override fun getVariants(): Array<Any> = emptyArray()
+}
+
+private fun vocabularyReference(literal: PsiLiteralExpression): PsiReference? {
+    val at = VocabularyScope.siteForLiteral(literal) ?: return null
+    if (at.site.vocabulary == Vocabulary.VARIABLE || (literal.value as String).isBlank()) return null
+    return FlowableVocabularyReference(literal, at)
 }
 
 /** A value-based key reference for [literal], or null if disabled, implausible, or not a known key. */

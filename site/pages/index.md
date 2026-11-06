@@ -48,7 +48,7 @@ broken key is worth catching while you are typing it, not after a deployment.
 
 <div class="cards">
 <a class="card" href="plugin/#model-key-intelligence" style="--tint:var(--c-service)"><h3>Keys become references</h3><p>Completion at every Flowable API position, Ctrl-click to the model, docs on hover, and a Search Everywhere tab that searches inside <code>.bar</code> archives.</p></a>
-<a class="card" href="plugin/#key-validation" style="--tint:var(--c-invalidExpr,#be2323)"><h3>Typos caught in the editor</h3><p>A key that matches no model in the project is flagged with a fix to the nearest real key — in Java and inside model XML.</p></a>
+<a class="card" href="plugin/#key-validation" style="--tint:var(--c-invalidExpr,#be2323)"><h3>Typos caught in the editor</h3><p>A key that matches no model in the project is flagged with a fix to the nearest real key — in Java, inside model XML and inside the JSON models.</p></a>
 <a class="card" href="expressions/" style="--tint:var(--c-expression)"><h3>Expressions as a language</h3><p>Both dialects highlighted, completed, documented and validated. Real Groovy and JavaScript inside script bodies. Two playgrounds.</p></a>
 <a class="card" href="plugin/#java-model-linking" style="--tint:var(--c-java)"><h3>The IDE stops lying</h3><p>Find Usages from Java into models, gutter icons both ways, and a warning when a rename would silently break a model.</p></a>
 <a class="card" href="plugin/#code-generation" style="--tint:var(--c-dataObject)"><h3>Less boilerplate</h3><p>A typed constants class that keeps itself in sync, data-object DTOs, and Liquibase changelogs — each previewed before anything is written.</p></a>

@@ -1,8 +1,6 @@
 package com.flowable.atlas.inspection
 
 import com.flowable.atlas.completion.FlowableXmlKeyCatalog
-import com.flowable.atlas.index.FlowableModelIndexService
-import com.flowable.atlas.index.ProjectModelScope
 import com.flowable.atlas.model.ModelType
 import com.flowable.atlas.navigation.FlowableXmlKeyReferenceContributor
 import com.intellij.codeInspection.LocalInspectionTool
@@ -10,7 +8,6 @@ import com.intellij.codeInspection.LocalQuickFix
 import com.intellij.codeInspection.ProblemDescriptor
 import com.intellij.codeInspection.ProblemHighlightType
 import com.intellij.codeInspection.ProblemsHolder
-import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
@@ -26,7 +23,8 @@ import com.intellij.psi.xml.XmlText
  * a key that no model in the project declares. Catches broken deployments before runtime.
  *
  * Only reports when the project actually contains keys of that type (so an unindexed / empty project
- * is never falsely flagged) and the value is a plain key (not an `${expression}`). Offers a quick fix
+ * is never falsely flagged), the value is a plain key (not an `${expression}`) and not one of the keys the
+ * platform ships itself — the verdict is [ModelKeyVerdict], shared with the JSON models. Offers a quick fix
  * to the closest known key, on attributes and on element text alike — the text read without the CDATA
  * section Design wraps it in. See [FlowableXmlKeyCatalog].
  *
@@ -63,34 +61,13 @@ class FlowableXmlBrokenKeyInspection : LocalInspectionTool() {
         types: List<ModelType>,
         fixFor: (String) -> LocalQuickFix,
     ) {
-        if (!FlowableXmlKeyCatalog.isResolvableKey(value)) return
-        val service = element.project.service<FlowableModelIndexService>()
-        val knownKeys = knownKeys(service, types)
-        if (knownKeys.isEmpty()) return          // nothing indexed for this type — don't guess
-        if (value in knownKeys) return
-
-        val typeLabel = types.joinToString("/") { it.display }
-        val suggestion = Suggestions.closest(value, knownKeys)
-        val fixes = suggestion?.let { arrayOf(fixFor(it)) } ?: LocalQuickFix.EMPTY_ARRAY
-        val hint = suggestion?.let { " — did you mean '$it'?" } ?: ""
-        // In a monorepo the index is one sub-project's; a key from another module is unknown *here*,
-        // and the message has to say so or it reads as "this key does not exist".
-        val scope = ProjectModelScope.label(element.project)?.let { " in $it" } ?: ""
-        val message = "'$value' is not a known $typeLabel key$scope$hint"
+        val verdict = ModelKeyVerdict.unknownKey(element.project, value, types) ?: return
+        val fixes = verdict.suggestion?.let { arrayOf(fixFor(it)) } ?: LocalQuickFix.EMPTY_ARRAY
         if (range == null) {
-            holder.registerProblem(element, message, ProblemHighlightType.WARNING, *fixes)
+            holder.registerProblem(element, verdict.message, ProblemHighlightType.WARNING, *fixes)
         } else {
-            holder.registerProblem(element, range, message, *fixes)
+            holder.registerProblem(element, range, verdict.message, *fixes)
         }
-    }
-
-    /** The cached index only — a highlighting pass must not build it; empty means "no verdict". */
-    private fun knownKeys(service: FlowableModelIndexService, types: Collection<ModelType>): Set<String> {
-        val index = service.cachedOrRequest() ?: return emptySet()
-        if (types.size == 1) return index.keySetOf(types.first())
-        val keys = LinkedHashSet<String>()
-        for (type in types) keys.addAll(index.keySetOf(type))
-        return keys
     }
 
     /** Replaces the flagged attribute value with a known key. */

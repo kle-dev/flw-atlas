@@ -216,6 +216,24 @@ class FlowableInfixAndXmlTest : BasePlatformTestCase() {
         assertFalse("a known key inside CDATA must not be flagged", infos.any { (it.description ?: "").contains("is not a known") })
     }
 
+    fun testAnEventThePlatformShipsIsNotFlagged() {
+        addTargetEvent()
+        myFixture.enableInspections(FlowableXmlBrokenKeyInspection::class.java)
+        myFixture.configureByText(
+            "caller.bpmn20.xml",
+            """<definitions xmlns:flowable="http://flowable.org/bpmn">
+                 <process id="CALLER" name="Caller">
+                   <startEvent id="s"><extensionElements><flowable:eventType>_flowableMailEvent</flowable:eventType></extensionElements></startEvent>
+                 </process>
+               </definitions>""",
+        )
+        val infos = myFixture.doHighlighting()
+        assertFalse(
+            "the platform's own mail event is no missing model — the report shows it as a platform external",
+            infos.any { (it.description ?: "").contains("is not a known") },
+        )
+    }
+
     fun testACdataWrappedUnknownTextIsFlaggedOnTheKeyOnly() {
         addTargetEvent()
         myFixture.enableInspections(FlowableXmlBrokenKeyInspection::class.java)

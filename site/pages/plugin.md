@@ -391,7 +391,9 @@ It goes further than one key at a time. **Cascade completion** resolves fluent c
 completes the operations of the data object or service resolved from the sibling `definitionKey(…)` or
 `serviceKey(…)`, and `value("…", …)` completes that operation's input fields. **More than keys**:
 message and signal names, process variables, task-definition keys, activity ids and form outcomes, each
-scoped to the model the call site names.
+scoped to the model the call site names. They are links as well: Ctrl+click on
+`signalEventReceived("orderCancelled")` or `taskDefinitionKey("approveTask")` lands on the `<signal>` or the
+`<userTask>` that declares it, and Ctrl-Q says which model that is.
 
 Search Everywhere finds the elements inside the models too — a user task id, a variable, a message, a
 form field — each row saying which model it belongs to and landing on its declaration, so the
@@ -436,7 +438,7 @@ required attribute nobody filled in. Those were always wrong; now they are visib
 ### Key validation
 
 A key that matches no model in the project is flagged in the editor, with a quick fix to the closest
-real key — in Java **and** inside model XML. Not in test sources: a test that starts `no-such-process`
+real key — in Java, inside model XML **and** inside the JSON models. Not in test sources: a test that starts `no-such-process`
 to assert the failure is doing its job, so `src/test/**` is left alone (test *models* are still judged).
 In a monorepo the message names the scope it judged against — *not a known Process key in
 apps/orders* — because a key from another module is unknown *here*, not nonexistent.
@@ -454,13 +456,22 @@ deployment to the editor removes an entire class of incident.
 Nearest-candidate suggestions compare only against the indexed keys of the *expected type*, so the
 proposal is always a key that would be valid there. Inside model XML the same check covers
 `calledElement`, `formKey`, `decisionRef`, `caseDefinitionKey` and the rest — in attributes and in the
-text of extension elements such as `eventType` alike.
+text of extension elements such as `eventType` alike. An event the platform ships itself
+(`_flowableMailEvent`) is not missing, as the report agrees.
 
-Navigation reaches further than the check. A key inside a **JSON** model — a data object's backing
-service, a form component's subform, data object, service or action, a document's forms, an app's
-models — is a link: Ctrl+click opens the referenced model at its key, and Find Usages on a model's key
-lists these sites. What counts as a reference is one catalog shared with the report, so the graph the
-CLI draws and the links the editor offers can never disagree.
+A key inside a **JSON** model — a data object's backing service, a form component's subform, data object,
+service or action, a document's forms, an app's models, a channel's event — is both a link and checked:
+Ctrl+click opens the referenced model at its key, Find Usages on a model's key lists these sites, and one
+that names no model is flagged with the same fix, so a generated or hand-edited JSON model with a broken
+subform says so before it is deployed. What counts as a reference is one catalog shared with the report,
+so the graph the CLI draws, the links the editor offers and the keys it flags can never disagree.
+
+The names beside the keys are checked too. A message or signal that no model declares —
+`startProcessInstanceByMessage("orderPlacd")` throws at run time, `signalEventReceived("orderCancelld")`
+reaches nobody without a word — is flagged with the nearest real name, and so is a task key or activity
+id when the same chain names its process. A bare `signalRef` with no `<signal>` behind it is the signal's
+name to the engine, and counts, as does a signal a case's event listener waits for; a name a model
+computes at run time (`flowable:signalExpression`) means no verdict at all, rather than a guess.
 
 ### Java ↔ model linking
 

@@ -55,6 +55,18 @@ internal object ModelKeyTargets {
             .submit(AppExecutorUtil.getAppExecutorService())
     }
 
+    /**
+     * Where a jump to the element [id] inside each of [entries] lands — its declaration (`<signal name="…">`,
+     * `<userTask id="…">`), the way Go to Symbol lands; the model's own key when the text does not spell it.
+     */
+    fun resolveElement(project: Project, entries: List<ModelEntry>, id: String): Array<ResolveResult> {
+        val psiManager = PsiManager.getInstance(project)
+        return entries.mapNotNull { entry ->
+            val psiFile = psiManager.findFile(entry.file) ?: return@mapNotNull null
+            ModelElements.declarationOffset(psiFile.text, id)?.let { psiFile.findElementAt(it) } ?: target(psiManager, entry)
+        }.map { PsiElementResolveResult(it) }.toTypedArray()
+    }
+
     /** `(line, column)` of [entry]'s key declaration in its file, both 0-based — null when the text does not declare it. */
     fun lineColumn(entry: ModelEntry): Pair<Int, Int>? {
         val text = runCatching { String(entry.file.contentsToByteArray(), Charsets.UTF_8) }.getOrNull() ?: return null

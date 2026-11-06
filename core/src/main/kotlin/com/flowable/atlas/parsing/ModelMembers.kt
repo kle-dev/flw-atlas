@@ -21,7 +21,11 @@ data class RawModel(
  *  - [userTaskIds]: `<userTask id>` — candidates for `taskDefinitionKey(...)`.
  *  - [activityIds]: ids of every flow node — candidates for `activityId(...)`.
  *  - [messages] / [signals]: BPMN top-level `<message name>` / `<signal name>` (file-level, copied onto
- *    every model in that file so a project-wide union can be built cheaply).
+ *    every model in that file so a project-wide union can be built cheaply), plus a bare `messageRef` /
+ *    `signalRef` that names no `<message id>` / `<signal id>` — the engine then uses the ref itself —
+ *    and the `signalRef` of a case's signal event listener, which the same signals reach.
+ *  - [dynamicMessages] / [dynamicSignals]: the file computes a message / signal name at run time
+ *    (`flowable:messageExpression`, a name holding `${…}`), so its names are not all known here.
  *  - [decisionVariables]: DMN input/output clause variable names — candidates for `variable(...)`.
  *  - [payload]: event payload + correlation parameter names.
  *  - [formFields] / [formOutcomes]: form field / outcome ids — what navigation lands on.
@@ -38,6 +42,8 @@ data class ModelMembers(
     val formFields: List<String> = emptyList(),
     val formOutcomes: List<String> = emptyList(),
     val botKey: String? = null,
+    val dynamicMessages: Boolean = false,
+    val dynamicSignals: Boolean = false,
 ) {
     companion object {
         val EMPTY = ModelMembers()

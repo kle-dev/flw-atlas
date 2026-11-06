@@ -32,6 +32,10 @@ class FlowableIndex(
     val messages: Set<String> = emptySet(),
     /** BPMN top-level `<signal name>` values. */
     val signals: Set<String> = emptySet(),
+    /** Some model computes a message name at run time — the [messages] are not all the names there are. */
+    val dynamicMessages: Boolean = false,
+    /** Some model computes a signal name at run time. */
+    val dynamicSignals: Boolean = false,
     /** `<userTask id>` values — candidates for `taskDefinitionKey(...)`. */
     val userTaskIds: Set<String> = emptySet(),
     /** Ids of every flow node — candidates for `activityId(...)`. */
@@ -111,6 +115,18 @@ class FlowableIndex(
     fun allEntries(): List<ModelEntry> = byKey.values.flatten()
 
     fun distinctCount(): Int = distinctByType.values.sumOf { it.size }
+
+    /**
+     * Whether some process is known only from a file whose elements are not read — a Design workspace
+     * JSON rather than BPMN XML. Its messages, signals and tasks are then missing from every vocabulary,
+     * so "no model declares this name" is no verdict.
+     */
+    val processWithoutMembers: Boolean by lazy {
+        byKey.values.any { entries ->
+            val processes = entries.filter { it.type == ModelType.PROCESS }
+            processes.isNotEmpty() && processes.none { ModelType.isXmlModel(it.file.name) }
+        }
+    }
 }
 
 /** An archive the index could not look into, and why. */

@@ -283,16 +283,10 @@ class FlowableJavaCompletionContributor : CompletionContributor() {
             site: VocabularySite,
             project: Project,
         ): ScopedValues? {
-            if (site.scopeKeyMethods.isEmpty() || call == null) return null
-            val key = site.scopeKeyMethods.firstNotNullOfOrNull { m -> resolveKey(call, m, project) } ?: return null
+            // The same narrowing the reference and the unknown-name inspection use (VocabularyScope).
+            val key = VocabularyScope.scopeKey(call, site, project) ?: return null
             val members = service.scopedMembers(key, site.scopeTypes) ?: return null
-            val values = when (site.vocabulary) {
-                Vocabulary.USER_TASK -> members.userTaskIds
-                Vocabulary.ACTIVITY -> members.activityIds
-                Vocabulary.VARIABLE -> members.variables
-                else -> return null
-            }
-            return values.ifEmpty { null }?.let { ScopedValues(key, it) }
+            return VocabularyScope.valuesOf(members, site.vocabulary).ifEmpty { null }?.let { ScopedValues(key, it) }
         }
 
         /** Members (DMN decision variables / event payload) of the model resolved from the sibling key. */

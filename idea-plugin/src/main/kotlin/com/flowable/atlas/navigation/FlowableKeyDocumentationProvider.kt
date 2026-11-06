@@ -2,6 +2,8 @@ package com.flowable.atlas.navigation
 
 import com.flowable.atlas.completion.SiteMatching
 import com.flowable.atlas.completion.ValueKeyMatching
+import com.flowable.atlas.completion.Vocabulary
+import com.flowable.atlas.completion.VocabularyScope
 import com.flowable.atlas.index.FlowableModelIndexService
 import com.flowable.atlas.model.ModelType
 import com.flowable.atlas.index.ModelEntry
@@ -23,21 +25,38 @@ import com.intellij.psi.util.PsiTreeUtil
 /**
  * Shows the model type, name, backing table and file when hovering (or Ctrl-Q) over a Flowable key —
  * a literal at a public-API call site in Java, a cross-reference or the file's own key inside a model
- * file (BPMN/CMMN XML, or the JSON models) — as a documentation card, the platform's own shape.
+ * file (BPMN/CMMN XML, or the JSON models) — as a documentation card, the platform's own shape. A
+ * message, signal, task key, activity id or outcome literal gets a card too: what it is, and in which model.
  */
 class FlowableKeyDocumentationProvider : AbstractDocumentationProvider() {
 
     // The one-line popup (Ctrl+hover): key, type and name — the card is for Ctrl-Q.
-    override fun getQuickNavigateInfo(element: PsiElement?, originalElement: PsiElement?): String? =
-        resolve(element, originalElement)?.let { (entries, key) ->
+    override fun getQuickNavigateInfo(element: PsiElement?, originalElement: PsiElement?): String? {
+        vocabularyName(element, originalElement)?.let { n ->
+            return "<b>" + escape(n.value) + "</b> — " + n.at.site.vocabulary.display + " · in " + escape(n.ownerKeys())
+        }
+        return resolve(element, originalElement)?.let { (entries, key) ->
             val first = entries.first()
             buildString {
                 append("<b>").append(escape(key)).append("</b> — ").append(first.type.display)
                 if (first.name != key) append(" · ").append(escape(first.name))
             }
         }
+    }
 
     override fun generateDoc(element: PsiElement?, originalElement: PsiElement?): String? {
+        vocabularyName(element, originalElement)?.let { n ->
+            return buildString {
+                append(DocumentationMarkup.DEFINITION_START)
+                append("<b>").append(escape(n.value)).append("</b> — ").append(n.at.site.vocabulary.display)
+                append(DocumentationMarkup.DEFINITION_END)
+                append(DocumentationMarkup.CONTENT_START).append("in ").append(escape(n.ownerKeys())).append(DocumentationMarkup.CONTENT_END)
+                append(DocumentationMarkup.SECTIONS_START)
+                section("File", escape(presentablePath(n.project, n.owners.first().file)))
+                if (n.owners.size > 1) section("Also in", "${n.owners.size - 1} more file(s)")
+                append(DocumentationMarkup.SECTIONS_END)
+            }
+        }
         val (entries, key, service, project) = resolve(element, originalElement) ?: return null
         val first = entries.first()
         // The platform's own card shape — definition, content, a table of sections — so the hover reads
@@ -68,6 +87,25 @@ class FlowableKeyDocumentationProvider : AbstractDocumentationProvider() {
         if (file.fileSystem is JarFileSystem) return ArchivePaths.displayPath(file)
         val base = project.basePath?.let { LocalFileSystem.getInstance().findFileByPath(it) }
         return base?.let { VfsUtilCore.getRelativePath(file, it) } ?: file.presentableUrl
+    }
+
+    /** A message, signal, task key, activity id or outcome literal, and the models declaring it. */
+    private data class VocabularyName(val value: String, val at: VocabularyScope.At, val owners: List<ModelEntry>, val project: Project) {
+        fun ownerKeys(): String = owners.joinToString(", ") { it.key }
+    }
+
+    /** The name under the caret at a vocabulary site — what Ctrl+click on it resolves to; never a variable. */
+    private fun vocabularyName(element: PsiElement?, originalElement: PsiElement?): VocabularyName? {
+        val literal = literalOf(originalElement) ?: literalOf(element) ?: return null
+        val at = VocabularyScope.siteForLiteral(literal) ?: return null
+        if (at.site.vocabulary == Vocabulary.VARIABLE) return null
+        val value = literal.value as? String ?: return null
+        val project = literal.project
+        val service = project.service<FlowableModelIndexService>()
+        // the cached index or nothing: a hover must never build the index under the read lock
+        val index = service.cachedOrNull() ?: run { service.ensureBuilding(); return null }
+        val owners = VocabularyScope.declaringModels(index, at.site, VocabularyScope.scopeKey(at.call, at.site, project), value)
+        return owners.ifEmpty { null }?.let { VocabularyName(value, at, it, project) }
     }
 
     private data class Resolved(val entries: List<ModelEntry>, val key: String, val service: FlowableModelIndexService, val project: Project)

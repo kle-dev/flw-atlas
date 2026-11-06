@@ -25,5 +25,6 @@ open class ReplaceStringLiteralFix(private val replacement: String, private val 
     companion object {
         const val KNOWN_MODEL_KEY = "Replace with a known model key"
         const val KNOWN_INPUT_VALUE = "Replace with a known input value"
+        const val KNOWN_NAME = "Replace with a known name"
     }
 }

@@ -46,7 +46,8 @@ class FlowableJsonKeyReferenceContributor : PsiReferenceContributor() {
 
 /**
  * Resolves a JSON key to the model file(s) declaring it. Soft: an unknown key is the report's
- * `missingRefs` finding, not a red "cannot resolve" in the editor — the reference exists to navigate.
+ * `missingRefs` finding, which [com.flowable.atlas.inspection.FlowableJsonBrokenKeyInspection] shows as a
+ * warning with a fix to the nearest key — not a red "cannot resolve", which would have no fix and no switch.
  */
 private class FlowableJsonKeyReference(
     literal: JsonStringLiteral,
