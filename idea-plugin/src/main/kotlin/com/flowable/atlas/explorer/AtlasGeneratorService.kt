@@ -11,6 +11,7 @@ import com.flowable.atlas.render.ExplorerHtmlRenderer
 import com.flowable.atlas.render.GraphJsonRenderer
 import com.flowable.atlas.render.OverviewRenderer
 import com.flowable.atlas.render.PlaywrightRenderer
+import com.flowable.atlas.render.Siblings
 import com.flowable.atlas.render.SummaryRenderer
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.openapi.components.Service
@@ -117,9 +118,18 @@ class AtlasGeneratorService(private val project: Project) {
             // The folder is regenerated and may carry client data; waivers.json is the one file in it
             // meant to be kept. The same .gitignore the CLI writes says so.
             Waivers.ensureOutputGitignore(outputDir.toFile())
+            val diagrams = if (AtlasArtifact.DIAGRAMS_SVG in artifacts) DiagramArtifacts.render(result, root) else emptyMap()
+            // The summary and the report point only at the files written beside them: the user picks the
+            // set, and a pointer to a graph that was unticked costs an agent a failed read.
+            val siblings = Siblings(
+                overview = AtlasArtifact.OVERVIEW_MD in artifacts,
+                graph = AtlasArtifact.GRAPH_JSON in artifacts,
+                explorer = AtlasArtifact.EXPLORER_HTML in artifacts,
+                diagrams = diagrams.isNotEmpty(),
+            )
             val renderers = mapOf<AtlasArtifact, () -> String>(
-                AtlasArtifact.SUMMARY_MD to { SummaryRenderer.render(result, root) },
-                AtlasArtifact.OVERVIEW_MD to { OverviewRenderer.render(result, root) },
+                AtlasArtifact.SUMMARY_MD to { SummaryRenderer.render(result, root, siblings) },
+                AtlasArtifact.OVERVIEW_MD to { OverviewRenderer.render(result, root, siblings) },
                 // Projected + minified (GraphJsonRenderer): the raw result duplicated every model body
                 // and pretty-printed it, which on a large project meant a multi-megabyte file in the
                 // user's repo.
@@ -143,7 +153,6 @@ class AtlasGeneratorService(private val project: Project) {
                 // Its lookups point at the graph only when the graph is written beside it.
                 AtlasArtifact.PLAYWRIGHT_MD to { PlaywrightRenderer.render(result, root, guideLayout(outputDir, artifacts)) },
             )
-            val diagrams = if (AtlasArtifact.DIAGRAMS_SVG in artifacts) DiagramArtifacts.render(result, root) else emptyMap()
             val texts = AtlasArtifact.entries
                 .filter { it in artifacts && it != AtlasArtifact.DIAGRAMS_SVG }
                 .associate { "$name${it.suffix}" to renderers.getValue(it)() }

@@ -19,6 +19,7 @@ import com.flowable.atlas.render.GraphJsonRenderer
 import com.flowable.atlas.render.JUnitRenderer
 import com.flowable.atlas.render.OverviewRenderer
 import com.flowable.atlas.render.PlaywrightRenderer
+import com.flowable.atlas.render.Siblings
 import com.flowable.atlas.render.SliceRenderer
 import com.flowable.atlas.render.SummaryRenderer
 import java.io.File
@@ -562,9 +563,17 @@ private fun execute(o: Options): Int {
         // The analysis here is regenerated and may carry client data; waivers.json is a decision a team
         // made and belongs in review. The .gitignore says so; see Waivers.OUTPUT_GITIGNORE.
         Waivers.ensureOutputGitignore(outdir)
+        // Diagrams: render each process/case/decision's DI layout to an SVG in `<name>.diagrams/`.
+        // Additive post-pass over the finished result (never touches the graph); a project with no
+        // BPMN/CMMN/DMN layout produces no files here. Rendered first: the report points at the folder
+        // only when there is something in it.
+        val diagrams = DiagramArtifacts.render(result, root) { key, why ->
+            if (!o.quiet) errln("  $WARN_SIGN diagram $key: $why")
+        }
+        val siblings = Siblings(diagrams = diagrams.isNotEmpty())
         val artifacts = mutableListOf(
-            "$name.summary.md" to SummaryRenderer.render(result, root),
-            "$name.overview.md" to OverviewRenderer.render(result, root),
+            "$name.summary.md" to SummaryRenderer.render(result, root, siblings),
+            "$name.overview.md" to OverviewRenderer.render(result, root, siblings),
             "$name.graph.json" to GraphJsonRenderer.render(result, pretty = o.pretty),
             "$name.explorer.html" to ExplorerHtmlRenderer.render(result, root, waiverAuthor = o.waiverAuthor),
             // The file names its siblings from the project root, so it needs to know where they land.
@@ -591,12 +600,7 @@ private fun execute(o: Options): Int {
         if (delta != null) artifacts.add(changesFile.name to changesReport(delta))
         else if (changesFile.isFile) changesFile.delete()
         val written = artifacts.map { (fn, content) -> File(outdir, fn).also { writeFile(it, content) } } + listOfNotNull(writeJunit())
-        // Diagrams: render each process/case/decision's DI layout to an SVG in `<name>.diagrams/`.
-        // Additive post-pass over the finished result (never touches the graph); a project with no
-        // BPMN/CMMN/DMN layout produces no files here — and loses the drawings of an earlier run.
-        val diagrams = DiagramArtifacts.render(result, root) { key, why ->
-            if (!o.quiet) errln("  $WARN_SIGN diagram $key: $why")
-        }
+        // The diagrams rendered above; a project with none loses the drawings of an earlier run.
         val diagramsDir = File(outdir, "$name.diagrams")
         val drawn = DiagramArtifacts.write(diagramsDir, diagrams)
         if (!o.quiet) {
@@ -651,11 +655,12 @@ private fun execute(o: Options): Int {
         o.playwright -> PlaywrightRenderer.render(result, root, PlaywrightRenderer.Layout(graph = false))
         // parse() refused --changes without --baseline, and the baseline was kept whole for it.
         o.changes -> changesReport(delta!!)
-        o.summary -> SummaryRenderer.render(result, root)
+        // Alone, the summary and the report have nothing beside them to point at either.
+        o.summary -> SummaryRenderer.render(result, root, Siblings.NONE)
         o.html -> ExplorerHtmlRenderer.render(result, root, waiverAuthor = o.waiverAuthor)
         o.erd -> ErdHtmlRenderer.render(result, root)
         o.json -> GraphJsonRenderer.render(result, pretty = o.pretty)
-        else -> OverviewRenderer.render(result, root)
+        else -> OverviewRenderer.render(result, root, Siblings.NONE)
     }
 
     if (target == null) {

@@ -171,6 +171,28 @@ class CliTest {
         assertTrue("stdout mode must not write to disk", out.listFiles()!!.isEmpty())
     }
 
+    /**
+     * Alone, the summary and the report have nothing written beside them, so they name no sibling: the
+     * summary handed to an agent used to send it to `<name>.overview.md` and `<name>.graph.json`, which
+     * only `--all` writes. They say how to produce them instead.
+     */
+    @Test
+    fun aSingleSummaryOrReportNamesNoFileItDidNotWrite() {
+        val out = tempDir()
+        val summary = File(out, "s.md")
+        assertEquals(0, run(arrayOf(fixtureDir().path, "--summary", "-o", summary.path, "-q")))
+        val s = summary.readText()
+        for (sibling in listOf("miniproject.overview.md", "miniproject.graph.json", "miniproject.explorer.html")) {
+            assertFalse("the summary names $sibling", s.contains(sibling))
+        }
+        assertTrue(s, s.contains("--all -o <out-dir>"))
+        val report = File(out, "o.md")
+        assertEquals(0, run(arrayOf(fixtureDir().path, "-o", report.path, "-q")))
+        val o = report.readText()
+        assertFalse("the report names a diagrams folder it did not write", o.contains("miniproject.diagrams/"))
+        assertFalse("the report names a graph it did not write", o.contains("miniproject.graph.json"))
+    }
+
     @Test
     fun missingPathExitsTwo() {
         assertEquals(2, run(arrayOf("/no/such/path")))

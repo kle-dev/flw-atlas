@@ -58,10 +58,13 @@ A few kilobytes, written for an LLM first and a human second. In order: the proj
 parse-failure banner if there is one, the apps, the inventory (models counted in Design's wording, Java
 by role, variables per scope, expressions by dialect), the entry points grouped by who can start what,
 the REST surface, the service and messaging integrations, the Java glue wired to models, the hotspots,
-the external surface, and a health block.
+the external surface, and a health block that names the open defects under its *defects · advice*
+headline, errors first.
 
 Use it to answer "what *is* this project" in one read. It is the right thing to paste into a
-conversation.
+conversation. It sends the reader on to the overview, the graph and the explorer only when they were
+written beside it; a `--summary` run on its own — or a plugin run with them unticked — says how to
+generate them instead, and the overview points at the graph and the diagrams the same way.
 
 ## `<project>.overview.md` — the full report
 

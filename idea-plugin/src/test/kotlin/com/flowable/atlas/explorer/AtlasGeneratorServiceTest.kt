@@ -89,6 +89,22 @@ class AtlasGeneratorServiceTest : BasePlatformTestCase() {
         assertFalse(Files.exists(alone.resolve("${dir.name}.playwright-map.md")))
     }
 
+    /** The summary points only at the artifacts ticked with it: an unticked graph is a file an agent cannot read. */
+    fun testTheSummaryNamesOnlyTheArtifactsWrittenBesideIt() {
+        val service = AtlasGeneratorService.getInstance(project)
+        val alone = dir.toPath().resolve("atlas-output")
+        service.generateAll(dir.toPath(), alone, EmptyProgressIndicator(), setOf(AtlasArtifact.SUMMARY_MD))
+        val summary = Files.readString(alone.resolve("${dir.name}.summary.md"))
+        assertFalse(summary, summary.contains("${dir.name}.graph.json") || summary.contains("${dir.name}.overview.md"))
+        assertTrue(summary, summary.contains("*Tools → Flowable Atlas → Generate → Atlas Explorer…*"))
+
+        val withGraph = dir.toPath().resolve("atlas-output-2")
+        service.generateAll(dir.toPath(), withGraph, EmptyProgressIndicator(), setOf(AtlasArtifact.SUMMARY_MD, AtlasArtifact.GRAPH_JSON))
+        val pointed = Files.readString(withGraph.resolve("${dir.name}.summary.md"))
+        assertTrue(pointed, pointed.contains("`${dir.name}.graph.json`"))
+        assertFalse(pointed, pointed.contains("${dir.name}.overview.md"))
+    }
+
     /** An ER page's own Regenerate rewrites it as an ER page, not as an explorer under the wrong name. */
     fun testRegeneratingAnErPageKeepsItOne() {
         val out = Files.createDirectories(dir.toPath().resolve("atlas-output"))
