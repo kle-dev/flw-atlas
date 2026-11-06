@@ -446,8 +446,12 @@ object Atlas {
                 doc.putIfAbsent("key", key)
                 if (truthyStr(wrapper["name"])) doc.putIfAbsent("name", wrapper["name"])
                 if (truthyStr(wrapper["description"])) doc.putIfAbsent("description", wrapper["description"])
-                // the legacy action wrapper says `form`, the modern parser reads `formKey`
-                if (mtype == "action" && doc["formKey"] == null && truthyStr(doc["form"])) doc["formKey"] = doc["form"]
+                // The legacy action wrapper says `form`, the modern parser reads `formKey`. Design writes it as
+                // `{id, key}` (36 of 38 real exports), so reading only a string lost the form of every action
+                // whose Design export was its only copy — and reported the form as used by nothing.
+                if (mtype == "action" && doc["formKey"] == null) {
+                    (ModelParsers.modelRefKey(doc["form"]) as? String)?.takeIf { truthyStr(it) }?.let { doc["formKey"] = it }
+                }
             }
             dispatch(mtype, com.flowable.atlas.model.MiniJson.stringify(doc).toByteArray(Charsets.UTF_8), label)
         }

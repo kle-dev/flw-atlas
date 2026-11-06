@@ -17,5 +17,5 @@
       "type": "string"
     }
   ],
-  "fullTextVariables": ["customerName"]
+  "fullTextVariables": [{"scopeDefinitionKey": "reviewCase", "name": "customerName"}]
 }

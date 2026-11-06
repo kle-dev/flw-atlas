@@ -250,7 +250,7 @@ object ExplorerHtmlRenderer {
         "changeSets", "columns", "conditions", "dropped", "droppedTables", "includesMissing", "revisions",
         "controller", "correlation", "coverage", "crossedColumns", "dataObjects", "dataObjectType",
         "dataSources",
-        "declaredIn", "decisions",
+        "declaredIn", "decisions", "definitionKeys",
         "destination", "dictionary",
         "documentation", "dynamic", "effectiveTables", "enableApiEndpoint", "endpoints", "escalations",
         "eventKey",

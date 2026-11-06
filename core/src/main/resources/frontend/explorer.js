@@ -463,7 +463,7 @@ const DESIGN_TERMS = {
   'rel:field-service': ['Field → service', 'A component reads its options or rows from that service operation.'],
   'rel:field-agent': ['Field → agent model', 'An agent button on this form asks that agent.'],
   'rel:field-masterData': ['Field → master data', 'A select on this form reads its options from that master-data table.'],
-  'rel:lists-instances': ['Page lists instances', 'A work list on this page shows the instances of that process or case.'],
+  'rel:lists-instances': ['Lists instances', 'A work list, data table or select here shows the instances (or the tasks) of that process or case.'],
   'rel:triggers-action': ['Action button → action', 'A button on this form or page invokes that action.'],
   'rel:starts-process': ['Bot starts process', 'The action’s bot starts an instance of that process.'],
   'rel:starts-case': ['Bot starts case', 'The action’s bot starts an instance of that case.'],
@@ -561,7 +561,7 @@ const DESIGN_TERMS = {
   'rel:document-view-form': ['Document view form', 'Viewing a document opens that form.'],
   'rel:download': ['May download', 'Who may download it.'],
   'rel:escalation-starts': ['Escalation starts', 'Missing the SLA target starts that model.'],
-  'rel:queries-process': ['Queries process', 'The query lists instances of that process.'],
+  'rel:queries-process': ['Queries instances of', 'The query’s template filters on that process or case definition, so it lists its instances or tasks.'],
   'rel:sla-of-process': ['SLA of process', 'The SLA applies to instances of that process.'],
   'rel:dataObjectDataTableCreateFormKey': ['Data table create form', 'Creating a row opens that form.'],
   'rel:dataObjectDataTableEditFormKey': ['Data table edit form', 'Editing a row opens that form.'],
@@ -605,6 +605,7 @@ const DESIGN_TERMS = {
   'via:queryColumn': ['Query column', 'A query shows this variable as a column.'],
   'via:initiator': ['Initiator variable', 'The engine writes the starting user here.'],
   'via:variableExtractor': ['Extracted variable', 'Pulled out of a payload so queries can index it.'],
+  'via:fullTextIndex': ['Full-text search', 'Copied into the type-ahead field that Work’s global search matches against.'],
   'via:javaApi': ['Java', 'A Java class sets or gets the variable through the engine API.'],
 };
 // [label, hint] for a namespaced key, falling back to the raw key with no hint.
@@ -5212,6 +5213,11 @@ const FACTS={
     x.add('Parameters',(d.parameters||[]).map(p=>(p&&typeof p==='object')?p.name:p).filter(Boolean).join(', '));
     x.mono('Sort by',(d.sortParameters||[]).join(', '));
     x.mono('Aggregations',(d.aggregations||[]).join(', '));
+    // the definitions its template is pinned to — a link where the project has the model, the bare key where
+    // it does not (that one is also a missing-model finding)
+    const dk=(d.definitionKeys||[]).filter(Boolean).map(String);
+    if(dk.length) x.rows.push(['Filters by definition',{html:dk.map(k=>{ const id=['process:'+k,'case:'+k].find(i=>byId.get(i));
+      return id?vlink(id,k):'<span class="mono">'+esc(k)+'</span>'; }).join(', '), copy:dk.join(', ')}]);
     // the groups its template filters by, by name — a count said "0" on every query that filters by none
     const gs=(d.groups||[]).filter(Boolean).map(String);
     if(gs.length) x.rows.push(['Filters by groups',{html:gs.map(g=>byId.get('group:'+g)?vlink('group:'+g,g):'<span class="mono">'+esc(g)+'</span>').join(', '), copy:gs.join(', ')}]); },

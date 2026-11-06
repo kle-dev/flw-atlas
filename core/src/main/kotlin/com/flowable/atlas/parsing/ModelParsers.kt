@@ -81,6 +81,54 @@ object ModelParsers {
     }
 
     /**
+     * [url] with the literal entries of a REST data source's `queryParams` — `[{name, value, defaultValue}]`
+     * — appended the way the forms runtime appends them (`value`, else `defaultValue`). An entry the form
+     * fills in at run time (`{{$temp.search}}`) is left out: it names nothing a reader could follow.
+     */
+    private fun withQueryParams(url: String, params: Any?): String {
+        val literal = listOfObjs(params).mapNotNull { p ->
+            val name = (p["name"] as? String)?.trim()?.takeIf { it.isNotEmpty() && !it.contains("{{") } ?: return@mapNotNull null
+            val value = ((p["value"] as? String)?.takeIf { it.isNotBlank() } ?: p["defaultValue"] as? String)
+                ?.trim()?.takeIf { it.isNotEmpty() && !it.contains("{{") } ?: return@mapNotNull null
+            "$name=$value"
+        }
+        if (literal.isEmpty()) return url
+        return url + (if ('?' in url) "&" else "?") + literal.joinToString("&")
+    }
+
+    private val INSTANCE_PARAM_RE = Regex("[?&](caseDefinitionKey|processDefinitionKey|scopeDefinitionKey|rootScopeDefinitionKey)=([^&#\\s\"']+)")
+
+    /**
+     * A data table or select over a platform search (`…/search/case-instances?caseDefinitionKey=X`) lists
+     * the instances of one definition, exactly like a work list naming it on `scopeDefinitionKey` — and a
+     * renamed case left it showing nothing. A scope key says which kind only through a `scopeType` beside it
+     * or the index the path searches; otherwise it is left alone, because `lists-instances` is strict.
+     */
+    private fun instanceListRefs(url: String, key: Any?, mtype: String, ffile: String, ctx: Ctx) {
+        if (!url.contains("DefinitionKey=")) return
+        val path = url.substringBefore('?').lowercase()
+        for (m in INSTANCE_PARAM_RE.findAll(url)) {
+            val param = m.groupValues[1]
+            val kind = when (param) {
+                "caseDefinitionKey" -> "case"
+                "processDefinitionKey" -> "process"
+                else -> {
+                    val typeParam = if (param.startsWith("root")) "rootScopeType" else "scopeType"
+                    val type = Regex("[?&]$typeParam=([^&#\\s\"']+)").find(url)?.groupValues?.get(1)?.lowercase()
+                    when {
+                        type == "cmmn" -> "case"
+                        type == "bpmn" -> "process"
+                        "case-instances" in path -> "case"
+                        "process-instances" in path -> "process"
+                        else -> null
+                    }
+                }
+            } ?: continue
+            ctx.addRef(key, mtype, ffile, "lists-instances", kind, m.groupValues[2])
+        }
+    }
+
+    /**
      * The Oryx editor's bookkeeping maps: `{"id": "id", "url": "extraSettings.url", …}`, a property name
      * → JSON path table on every legacy form body. Walked as content, the map *is* a component — it has an
      * `id` and a `url` — and produced 59 REST calls to `GET extraSettings.url` across five real projects.
@@ -667,8 +715,19 @@ object ModelParsers {
                 for (uk in listOf("queryUrl", "lookupUrl")) {
                     // a data-object source's generated query URL gives way to one the model sets
                     if (!truthy(es[uk]) || !sourceLive(es, n["type"], "Rest", "DataObject")) continue
-                    dataSources.add(linkedMapOf("kind" to "rest", "url" to es[uk]))
-                    ctx.addRestCall(key, ffile, n["id"], "GET", es[uk], "form-query")
+                    val raw = es[uk] as? String
+                    // The forms runtime's REST source appends `queryParams` to the list URL — not to the
+                    // lookup URL, which it builds from `lookupUrl` alone — so that is where Design keeps the
+                    // definition a table lists. Read only from the URL, a table over
+                    // `…/data-object-instances` with its keys in that list was an external call to nowhere.
+                    val url = if (uk == "queryUrl" && raw != null && sourceLive(es, n["type"], "Rest")) {
+                        withQueryParams(raw, es["queryParams"])
+                    } else raw ?: es[uk]
+                    dataSources.add(linkedMapOf("kind" to "rest", "url" to url))
+                    ctx.addRestCall(key, ffile, n["id"], "GET", url, "form-query")
+                    // the raw URL is scanned with every other extraSettings value below
+                    if (url is String && url != raw) recordUrlOpUses(url, key, mtype, ffile, ctx)
+                    if (url is String) instanceListRefs(url, key, mtype, ffile, ctx)
                 }
                 val sm = objOf(es["serviceModel"])
                 if (sm != null && truthy(sm["serviceModelKey"]) && sourceLive(es, n["type"], "ServiceModel")) {
@@ -1315,7 +1374,8 @@ object ModelParsers {
             scriptInfo["language"] as? String)
         val rec = linkedMapOf(
             "key" to key, "name" to doc["name"], "file" to ffile, "botKey" to doc["botKey"],
-            "formKey" to doc["formKey"], "signalName" to doc["signalName"], "channels" to doc["channels"],
+            // a bare key, or Design's `{id, key}` — the reference above unwraps either, the record must too
+            "formKey" to modelRefKey(doc["formKey"]), "signalName" to doc["signalName"], "channels" to doc["channels"],
             "scopeType" to doc["scopeType"], "icon" to doc["icon"], "permissionGroups" to doc["permissionGroups"],
             "script" to script, "scriptLanguage" to scriptInfo["language"],
             "ioParameters" to actionParams(ctx, key, doc, config, script),
@@ -1468,6 +1528,19 @@ object ModelParsers {
             "key" to doc["key"], "name" to doc["name"], "file" to ffile, "modelType" to mtype,
         ), doc)
 
+    /**
+     * A definition filter in a query's Elasticsearch template — `"caseDefinitionKey": "X"` in a `term`, or
+     * `"processDefinitionKey": ["A", "B"]` in a `terms`. None of the real queries carries the top-level
+     * `processDefinitionKey` the legacy shape uses; they all filter here, and a renamed case then made the
+     * query return nothing without a word. Matched on the decoded template, where the quotes are plain.
+     */
+    private val QUERY_DEF_FILTER_RE = Regex(
+        "\"(processDefinitionKey|caseDefinitionKey|scopeDefinitionKey|rootScopeDefinitionKey|parentScopeDefinitionKey|definitionKey)\"" +
+            "\\s*:\\s*(\"[^\"]*\"|\\[[^\\]]*])",
+    )
+    private val QUERY_DEF_VALUE_RE = Regex("\"([^\"]*)\"")
+    private val ES_SORT_ORDERS = setOf("asc", "desc")
+
     /** `.query` — source index, declared parameters/columns, sort keys and the query body itself. */
     fun parseQuery(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {
         val doc = designBody(json(data))
@@ -1519,6 +1592,34 @@ object ModelParsers {
         }
         // demo/legacy shape: the query is pinned to one process definition
         ctx.addRef(key, "query", ffile, "queries-process", "process", doc["processDefinitionKey"])
+        // The platform's shape: the definition is a filter inside the search template itself. Read from the
+        // whole bodies, not the capped copies on the record — a filter past the cap still pins the query.
+        val defKeys = LinkedHashSet<String>()
+        (doc["processDefinitionKey"] as? String)?.trim()?.takeIf { it.isNotEmpty() && it.none { c -> c in "\$<{?" } }?.let { defKeys.add(it) }
+        val index = (doc["sourceIndex"] as? String)?.lowercase().orEmpty()
+        for (k in listOf("templateFilter", "templateContent")) {
+            val body = doc[k] as? String ?: continue
+            for (m in QUERY_DEF_FILTER_RE.findAll(body)) {
+                val kind = when (m.groupValues[1]) {
+                    "caseDefinitionKey" -> "case"
+                    "processDefinitionKey" -> "process"
+                    // the instance index's own field: which kind it is depends on the index searched
+                    "definitionKey" -> if ("case" in index) "case" else if ("process" in index) "process" else null
+                    // a task's scope may be either; the resolver tries a process, then a case
+                    else -> "process"
+                } ?: continue
+                for (q in QUERY_DEF_VALUE_RE.findAll(m.groupValues[2])) {
+                    val v = q.groupValues[1].trim()
+                    // `${caseKey}` / `<#if …>`: the template decides at run time, which names no model. And
+                    // `{"processDefinitionKey": "desc"}` is Elasticsearch's sort shorthand, not a filter — read
+                    // as one, a query sorted by definition reported a missing process called `desc`.
+                    if (v.isEmpty() || v.any { it in "\$<{?" } || v.lowercase() in ES_SORT_ORDERS) continue
+                    ctx.addRef(key, "query", ffile, "queries-process", kind, v)
+                    defKeys.add(v)
+                }
+            }
+        }
+        if (defKeys.isNotEmpty()) info["definitionKeys"] = defKeys.toList()
         // who may run it (same identityLinks shape as a data object's)
         (objOf(doc["identityLinks"]) ?: emptyMap()).forEach { (action, links) ->
             val groups = (objOf(links)?.get("groups") as? List<*>)?.filterIsInstance<String>() ?: return@forEach
@@ -1687,6 +1788,19 @@ object ModelParsers {
         }
         if (extractors.isNotEmpty()) info["extractors"] = extractors
         (doc["fullTextVariables"] as? List<*>)?.takeIf { it.isNotEmpty() }?.let { info["fullTextVariables"] = it }
+        // `[{scopeDefinitionKey, name}]`: the platform turns each entry into a regular extractor that copies
+        // the variable into the type-ahead field Work's global search matches against. So it is the same
+        // scope link as an extractor's filter, and a read of the variable — copied verbatim, a renamed case
+        // silently dropped out of the search, and a variable only the search needed looked unread.
+        for (ft in listOfObjs(doc["fullTextVariables"])) {
+            val scope = ft["scopeDefinitionKey"]
+            ctx.addRef(key, "variableExtractor", ffile, "extracts-from", "process", scope)
+            ctx.addVar(key, ft["name"])
+            ctx.addVarSite(key, ft["name"], Ctx.READ, "fullTextIndex", elementType = "variableExtractor", scope = scope)
+            // The read sits in the extractor, not in the case it indexes, so the scope check would still
+            // call the case's write unread there; the reader that matters — the search — is outside the models.
+            ctx.markReadsUnknown(ft["name"])
+        }
         return info
     }
 

@@ -243,7 +243,7 @@ What each page asks:
   expressions that use them, and its methods against the models that call them;
 - **an agent** — its tools against the models and operations they name, its callers against its
   operations; **an SLA** — the task it watches in each model it governs; **a query** — the variable behind
-  each column against what the queried processes write; **a template** — every variable it prints
+  each column against what the processes or cases its template filters on write; **a template** — every variable it prints
   against the models that render it.
 
 ### Relations

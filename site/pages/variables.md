@@ -41,6 +41,7 @@ The sites come from everywhere a name can appear:
 | A query's literal `"variables.name": "x"` filter and its columns' `variableName` — of a path such as `customer.name`, its root | read |
 | Form fields, form properties, form outcomes | write |
 | Data objects, multi-instance elements and collections, the initiator, variable extractors | write |
+| A variable extractor's full-text variables, copied into the field Work's global search matches against | read |
 | Java `setVariable` / `getVariable` calls — in production sources only; `src/test/**` and every other test source set are not scanned | write and read |
 
 Three kinds of name are dropped before they ever become a site: beans, Flowable's own context roots,
@@ -117,8 +118,8 @@ what makes the names it does report worth acting on.
 
 1. A construct whose direction Flowable does not fix (a variable listener, `hasVariable`).
 2. A value whose consumer is outside the models — an action's response payload, an extracted variable
-   a query indexes, a form's outcome variable the task list shows, a loop counter, a decision output
-   only Java code receives.
+   a query indexes, a variable copied into Work's full-text search, a form's outcome variable the task
+   list shows, a loop counter, a decision output only Java code receives.
 3. A name written into a container object, where only field-level reads would show it is used.
 4. A bare-EL Init-Variables value, which Atlas has no parser for in that position.
 5. A name the `{{…}}` harvester deliberately ignores, so its frontend reads were never collected.

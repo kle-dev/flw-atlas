@@ -54,8 +54,8 @@ object UnusedVariables {
     val SILENCE_RULES = listOf(
         "a construct whose direction Flowable does not fix (a variable listener, `hasVariable`)",
         "a value whose consumer is outside the models — an action's response payload, an extracted " +
-            "variable a query indexes, a form's outcome variable the task list shows, a loop counter, " +
-            "a decision output only Java code receives",
+            "variable a query indexes, a variable copied into Work's full-text search, a form's outcome " +
+            "variable the task list shows, a loop counter, a decision output only Java code receives",
         "a name written into a container object, where only field-level reads would show it is used",
         "a bare-EL Init-Variables value, which Atlas has no parser for in that position",
         "a name the `{{…}}` harvester deliberately ignores, so its frontend reads were never collected",

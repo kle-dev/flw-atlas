@@ -9,6 +9,6 @@
     "minTotal": {"type": "number", "label": "Minimum total"}
   },
   "sortParameters": ["total"],
-  "templateContent": "{\"bool\": {\"must\": [{\"term\": {\"variables.orderId\": \"{{orderId}}\"}}, {\"range\": {\"variables.total\": {\"gte\": \"{{minTotal}}\"}}}]}}",
+  "templateContent": "{\"bool\": {\"must\": [{\"term\": {\"processDefinitionKey\": \"orderProcess\"}}, {\"term\": {\"variables.orderId\": \"{{orderId}}\"}}, {\"range\": {\"variables.total\": {\"gte\": \"{{minTotal}}\"}}}]}}",
   "identityLinks": {"query": {"groups": ["sales"]}}
 }

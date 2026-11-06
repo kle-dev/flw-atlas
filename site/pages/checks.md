@@ -171,6 +171,15 @@ placement reported two missing models). Likewise the event models the platform s
 `_flowableMailEvent` and the `_flowableEngage…Received…` family — resolve to a platform-provided
 external node rather than to a missing model.
 
+Some references sit where nobody looks for one, and renaming the model behind them leaves the
+referencing model silently empty at run time, so they are resolved like any other: a query's
+Elasticsearch template filtering on `caseDefinitionKey`, `processDefinitionKey`, a scope key or the
+instance index's `definitionKey` (in `templateFilter` or `templateContent`); a REST data table or select
+whose query parameters name a `caseDefinitionKey`, `processDefinitionKey` or `dataObjectDefinitionKey`;
+a variable extractor's `fullTextVariables`; and a Design export's action whose form is a `{id, key}`
+object. A value the template or the form fills in at run time — `${caseKey}`, `{{$temp.filter}}` —
+names nothing, and is left alone.
+
 ### `crossedColumns` — the column mapping pairs the wrong two names
 
 A `.service` model pairs a logical field with a physical column. Nothing validates the *pairing*: if
