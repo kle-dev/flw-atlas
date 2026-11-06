@@ -69,7 +69,11 @@ object BackendModelParsers {
             val dataObjects = ArrayList<Any?>()
             val info = linkedMapOf<String, Any?>(
                 "key" to pkey, "name" to proc.attr("name"), "file" to ffile,
-                "documentation" to proc.textOfDescendant("documentation"),
+                // The process's own child: `textOfDescendant` took the first `<documentation>` anywhere below,
+                // so a process without prose of its own was described by its first task's note — a TODO in a
+                // user task became the process description in the report and the explorer. Each element keeps
+                // its own documentation (see withElementExtras).
+                "documentation" to proc.childText("documentation"),
                 "candidateStarterGroups" to proc.attr("candidateStarterGroups"),
                 "userTasks" to userTasks, "serviceTasks" to serviceTasks, "scriptTasks" to scriptTasks,
                 "ruleTasks" to ruleTasks, "callActivities" to callActivities, "subProcesses" to subProcesses,
@@ -796,7 +800,10 @@ object BackendModelParsers {
             val ioParameters = ArrayList<Map<String, Any?>>()
             val info = linkedMapOf<String, Any?>(
                 "key" to ckey, "name" to case.attr("name"), "file" to ffile,
-                "documentation" to case.textOfDescendant("documentation"),
+                // The case's own prose, or the plan model's: the engine writes the case's documentation on
+                // `<case>` (CaseExport), Design keeps the plan model shape's on `<casePlanModel>`. Never a
+                // descendant's — the first one below the case was a sentry's or a task's.
+                "documentation" to (case.childText("documentation") ?: plan?.childText("documentation")),
                 "initiatorVariableName" to case.attr("initiatorVariableName"),
                 "candidateStarterGroups" to case.attr("candidateStarterGroups"),
                 "planModel" to (if (plan != null) cmmnWalk(ctx, ckey, ffile, plan) else null),

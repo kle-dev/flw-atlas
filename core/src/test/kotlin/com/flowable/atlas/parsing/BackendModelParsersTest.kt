@@ -258,6 +258,40 @@ class BackendModelParsersTest {
         assertEquals("unsupported-script-listener", problems.single()["kind"])
     }
 
+    /** A process's documentation is its own `<documentation>` child — never the first one below it, which
+     *  on the public demo turned a user task's TODO into the process description. */
+    @Test
+    fun aProcessIsDescribedOnlyByItsOwnDocumentation() {
+        fun process(own: String) = BackendModelParsers.parseBpmn("""<?xml version="1.0" encoding="UTF-8"?>
+            <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+              <process id="p">$own
+                <userTask id="t"><documentation>DEMO task note</documentation></userTask>
+              </process>
+            </definitions>""".toByteArray(), Ctx(), "p.bpmn")[0]
+        val bare = process("")
+        assertEquals(null, bare["documentation"])
+        assertEquals("DEMO task note", listOfMaps(bare["userTasks"]).single()["documentation"])
+        assertEquals("DEMO process", process("<documentation>DEMO process</documentation>")["documentation"])
+    }
+
+    /** A case's documentation is its own, or its plan model's (where Design keeps the plan model shape's
+     *  prose) — never a sentry's or a task's. */
+    @Test
+    fun aCaseIsDescribedByItsOwnOrItsPlanModelsDocumentation() {
+        fun case(own: String, plan: String) = BackendModelParsers.parseCmmn("""<?xml version="1.0" encoding="UTF-8"?>
+            <definitions xmlns="http://www.omg.org/spec/CMMN/20151109/MODEL">
+              <case id="c">$own
+                <casePlanModel id="plan">$plan
+                  <sentry id="s"><documentation>DEMO sentry note</documentation></sentry>
+                </casePlanModel>
+              </case>
+            </definitions>""".toByteArray(), Ctx(), "c.cmmn")[0]
+        assertEquals(null, case("", "")["documentation"])
+        assertEquals("DEMO plan", case("", "<documentation>DEMO plan</documentation>")["documentation"])
+        assertEquals("DEMO case",
+            case("<documentation>DEMO case</documentation>", "<documentation>DEMO plan</documentation>")["documentation"])
+    }
+
     @Test
     fun aCaseWithoutListenersHasNoListenersKey() {
         val case = BackendModelParsers.parseCmmn(bytes("miniproject/cases/review.cmmn"), Ctx(), "cases/review.cmmn")[0]
