@@ -68,4 +68,24 @@ class FlowableKeyGotoSymbolContributorTest : BasePlatformTestCase() {
         assertEquals("User task · in DEMO-P001", item.presentation?.locationString)
         assertTrue("it can navigate to the declaration", item.canNavigate())
     }
+
+    fun testAFormsVariableIsTheNameItBindsNotTheComponentId() {
+        // Design names the component `text1`; the variable the form reads and writes is `customerName`
+        myFixture.addFileToProject(
+            "models/DEMO-F001.form",
+            """{"metadata":{"key":"DEMO-F001","name":"Customer"},"rows":[[
+                 {"id":"text1","type":"text","label":"Name","value":"{{customerName}}"}]]}""",
+        )
+        project.service<FlowableModelIndexService>().index()
+        val contributor = FlowableKeyGotoSymbolContributor()
+        fun locations(name: String): List<String?> {
+            val items = mutableListOf<NavigationItem>()
+            contributor.processElementsWithName(name, Processor { items.add(it); true }, FindSymbolParameters.simple(project, true))
+            return items.map { it.presentation?.locationString }
+        }
+        assertEquals(listOf("Variable · in DEMO-F001"), locations("customerName"))
+        assertEquals(listOf("Form field · in DEMO-F001"), locations("text1"))
+        assertTrue("the variable is offered project-wide", "customerName" in project.service<FlowableModelIndexService>().variables())
+        assertFalse("the component id is no variable", "text1" in project.service<FlowableModelIndexService>().variables())
+    }
 }

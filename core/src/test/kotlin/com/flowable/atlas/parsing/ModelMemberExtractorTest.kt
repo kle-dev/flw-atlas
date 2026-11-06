@@ -67,6 +67,26 @@ class ModelMemberExtractorTest {
         assertTrue("decision vars: ${m.members.decisionVariables}", m.members.decisionVariables.contains("result"))
     }
 
+    @Test fun a_forms_variables_are_the_names_it_binds_not_its_component_ids() {
+        // Design names components `text1`, `date1`: the variable is what the `{{…}}` value binds. An unbound
+        // input's id is its variable, a result button stores into its binding, the form runtime's own
+        // `$temp` is none, and the outcome variable is one too.
+        val d = "${'$'}"
+        val json = """{"metadata":{"key":"DEMO-F1","name":"F"},"outcomevariablename":"reviewOutcome","rows":[[
+            {"id":"text1","type":"text","label":"Name","value":"{{customerName}}"},
+            {"id":"date1","type":"date","label":"Born","value":"{{customer.birthDate}}"},
+            {"id":"amount","type":"number","label":"Amount"},
+            {"id":"scratch1","type":"text","label":"Scratch","value":"{{${d}temp.x}}"},
+            {"id":"listed","type":"select","label":"Listed","value":"{{item.code}}"},
+            {"id":"calc1","type":"scriptButton","extraSettings":{"text":"Estimate"},"value":"{{estimatedPayout}}"},
+            {"id":"panel1","type":"panel","label":"P","value":"{{customerName}}"}]]}"""
+        for ((file, type) in listOf("f.form" to ModelType.FORM, "p.page" to ModelType.PAGE)) {
+            val m = ModelMemberExtractor.extract(file, bytes(json), type).single().members
+            assertEquals(listOf("customerName", "customer", "amount", "estimatedPayout", "reviewOutcome"), m.variables)
+            assertTrue("navigation keeps the ids: ${m.formFields}", m.formFields.containsAll(listOf("text1", "date1", "amount")))
+        }
+    }
+
     @Test fun action_botKey_is_extracted() {
         val json = """{ "key": "greetAction", "name": "Greet", "botKey": "greeter-bot" }"""
         val m = ModelMemberExtractor.extract("greet.action", bytes(json), ModelType.ACTION).single()

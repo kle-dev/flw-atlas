@@ -7,9 +7,9 @@ package com.flowable.atlas.model
  * The declaration, not the first mention: `sourceRef="approve"` on a flow can come before the task's own
  * `id="approve"`, and a form field called `name` or `type` is spelled like a JSON key long before its
  * `"id": "name"`. So the id attribute is tried first, then a JSON `"id"` member, then the same member in
- * the escaped `editorJson` string a Design workspace export wraps a model in — and only then the first
- * quoted occurrence, which still serves the names that have no declaration of their own (a payload field,
- * a variable).
+ * the escaped `editorJson` string a Design workspace export wraps a model in, then the `{{…}}` binding a
+ * form variable is only ever spelled in — and only then the first quoted occurrence, which still serves the
+ * names that have no declaration of their own (a payload field, a process variable).
  */
 object ModelElementDeclaration {
 
@@ -21,6 +21,10 @@ object ModelElementDeclaration {
         Regex("""(?<![\w:-])id\s*=\s*(["'])($q)\1""").find(text)?.let { return it.groups[2]!!.range.first }
         Regex(""""id"\s*:\s*"($q)"""").find(text)?.let { return it.groups[1]!!.range.first }
         Regex("""\\"id\\"\s*:\s*\\"($q)\\"""").find(text)?.let { return it.groups[1]!!.range.first }
+        // A variable a form binds is spelled nowhere on its own: `customerName` lives in `"{{customerName}}"`
+        // and `customer` in `"{{customer.birthDate}}"`, so the binding that names it is where it is declared.
+        // Tried before the first quoted mention, which for a variable called `type` or `name` is a JSON key.
+        Regex("""\{\{\s*($q)(?![\w$])""").find(text)?.let { return it.groups[1]!!.range.first }
         for (quote in charArrayOf('"', '\'')) {
             val at = text.indexOf("$quote$id$quote")
             if (at >= 0) return at + 1

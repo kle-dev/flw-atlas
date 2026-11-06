@@ -236,7 +236,8 @@ class FlowableExpressionCompletionContributor : CompletionContributor() {
             val scoped = LinkedHashSet<String>()
             scopeModelKey(parameters, service)?.let { key ->
                 val members = if (dialect == ExpressionDialect.FRONTEND) {
-                    service.scopedMembers(key, listOf(ModelType.FORM, ModelType.PAGE))?.formFields
+                    // the variables the form binds — a `{{…}}` names `customerName`, never the component `text1`
+                    service.scopedMembers(key, listOf(ModelType.FORM, ModelType.PAGE))?.variables
                 } else {
                     service.scopedMembers(key, listOf(ModelType.PROCESS, ModelType.CASE))?.variables
                 }

@@ -21,6 +21,13 @@ object Constants {
         "root", "self", "parent", "caseInstanceId", "processInstanceId",
     )
 
+    private val VARIABLE_NAME_RE = Regex("[A-Za-z_]\\w*")
+
+    /** Whether [name] can be a process or case variable at all: an identifier that is neither engine
+     *  context nor a literal. The graph's every site and the IDE's form vocabulary apply this one test. */
+    fun isVariableName(name: String): Boolean =
+        VARIABLE_NAME_RE.matches(name) && name !in FLOWABLE_CONTEXT && name !in JAVA_LITERALS
+
     /**
      * Whether a name is shaped the way Spring beans are named — `orderService`, `pdfGeneratorTask`,
      * `flwTimeUtils` — for a root no declaration vouches for. `${x.method()}` reads like a bean call and

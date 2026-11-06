@@ -16,7 +16,7 @@ import javax.xml.stream.XMLStreamReader
  *    DMN input/output variables) and the file-level BPMN `<message>` / `<signal>` names. Read with
  *    streaming StAX (JDK built-in) — namespaces are ignored via local names.
  *  - JSON models (everything else): top-level `key`/`name` (falling back to `metadata.key/name`),
- *    plus form field/outcome ids and event payload names via [ModelJsonReader].
+ *    plus form/page field ids, outcomes and bound variables, and event payload names via [ModelJsonReader].
  */
 object ModelMemberExtractor {
 
@@ -44,9 +44,11 @@ object ModelMemberExtractor {
     private fun extractJson(bytes: ByteArray, type: ModelType): List<RawModel> {
         val raw = ModelJsonReader.extractKeyName(bytes) ?: return emptyList()
         val members = when (type) {
-            ModelType.FORM -> {
+            // A page is laid out of the same components, and a `{{…}}` inside it completes against the same
+            // vocabulary — with no members of its own, completion in a page found nothing to offer.
+            ModelType.FORM, ModelType.PAGE -> {
                 val fm = ModelJsonReader.readForm(bytes)
-                ModelMembers(variables = fm.fields, formFields = fm.fields, formOutcomes = fm.outcomes)
+                ModelMembers(variables = fm.variables, formFields = fm.fields, formOutcomes = fm.outcomes)
             }
             ModelType.EVENT -> ModelMembers(payload = ModelJsonReader.readEventPayload(bytes))
             // An action carries the `botKey` of the Java BotService it invokes — captured so the live

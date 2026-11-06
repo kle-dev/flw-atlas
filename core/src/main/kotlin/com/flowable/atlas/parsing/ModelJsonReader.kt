@@ -51,12 +51,12 @@ object ModelJsonReader {
     }
 
     /**
-     * A **variable-binding** form field carries `id` + `type` + `label` (the same predicate as the
+     * A **form field** worth listing carries `id` + `type` + `label` (the same predicate as the
      * original `flowable_atlas` `parse_form`) — plain containers have no label, and their ids must not
-     * leak into the variables vocabulary.
+     * leak into the field list.
      *
-     * Deliberately narrower than [isFormComponent]: this one gates the completion vocabulary, where a
-     * button id like `rest-button2` would be noise.
+     * Deliberately narrower than [isFormComponent]: this one gates the form-field list, where a button id
+     * like `rest-button2` would be noise. Which *variable* a field binds is [FormBindings]' to say.
      */
     fun isFormField(node: Map<*, *>): Boolean =
         node["id"] is String && node.containsKey("type") && node.containsKey("label")
@@ -115,13 +115,17 @@ object ModelJsonReader {
         return type in INPUT_TYPES && (node["value"] as? String)?.contains("{{") == true
     }
 
-    /** Form field ids + outcomes of a `.form` model (used to build member vocabularies). */
+    /**
+     * Field ids, outcomes and the variables a `.form` / `.page` binds (used to build member vocabularies).
+     * The ids are what navigation lands on; the variables come from [FormBindings], the rule the CLI's graph
+     * applies — a component's id is its variable only when the component binds no `{{…}}` value of its own.
+     */
     fun readForm(bytes: ByteArray): FormInfo {
         val root = parseMap(bytes) ?: return FormInfo(emptyList(), emptyList())
         val fields = LinkedHashSet<String>()
         val outcomes = LinkedHashSet<String>()
         collectForm(root, fields, outcomes)
-        return FormInfo(fields.toList(), outcomes.toList())
+        return FormInfo(fields.toList(), outcomes.toList(), FormBindings.variablesOf(root))
     }
 
     private fun collectForm(node: Any?, fields: MutableSet<String>, outcomes: MutableSet<String>) {

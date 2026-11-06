@@ -47,23 +47,6 @@ object ModelParsers {
 
     private val GENERIC_KEYS = listOf("key", "name", "description", "type", "subType", "modelType")
 
-    /** Form component types that render/act but never bind a variable of their own. */
-    /** Components that bind no value of their own: without a `{{…}}` value their id is no variable.
-     *  A data table's selection, an HTML component's markup, a subform's children and a service button's
-     *  result go elsewhere, and Design's default ids (`datatable1`) tied unrelated forms together. */
-    private val NON_BINDING_FIELD_TYPES = setOf(
-        "text", "headline", "horizontalLine", "image", "html", "link", "spacer", "expression",
-        "container", "panel", "tabs", "tab", "workAction", "outcomeButton",
-        "dataTable", "htmlComponent", "cellComponent", "subform", "workInvokeService", "linkButton",
-        "workProcessList", "workCaseList", "workTaskList", "iframe", "pdfViewer", "alert",
-    )
-
-    /** Field-id roots that are frontend scratch space, never process/case variables. */
-    private val FIELD_ID_IGNORE = setOf("temp", "response", "payload", "root", "item", "self")
-
-    /** Buttons whose `value` binding is where the call's result is stored, not a caption or a placeholder. */
-    private val RESULT_BINDING_TYPES = setOf("scriptButton", "restButton")
-
     // A data-source / link / navigation URL can invoke a service operation with the target and operation
     // keys as *literal* query params even though the host is a dynamic `{{endpoints.*}}` placeholder — e.g.
     // `{{endpoints.dataobject}}/dataobject-runtime/data-object-instances?dataObjectDefinitionKey=<key>&dataObjectOperationKey=<op>&…`.
@@ -102,7 +85,7 @@ object ModelParsers {
      * → JSON path table on every legacy form body. Walked as content, the map *is* a component — it has an
      * `id` and a `url` — and produced 59 REST calls to `GET extraSettings.url` across five real projects.
      */
-    private val ORYX_METADATA_KEYS = setOf("pathProperties", "pathMappingProperties", "outputmappingproperties", "xmlProperties")
+    internal val ORYX_METADATA_KEYS = setOf("pathProperties", "pathMappingProperties", "outputmappingproperties", "xmlProperties")
 
     /** Recursively visit every JSON object in a tree (ElementTree-free `_walk_json`). */
     private fun walkJson(node: Any?, fn: (Map<String, Any?>) -> Unit) {
@@ -593,18 +576,15 @@ object ModelParsers {
                 // A data-entry field's id is the variable path the form reads/writes at runtime — index
                 // its root so the form joins the variable graph. Buttons don't bind a variable, and a
                 // display component whose value is a {{…}} binding reads through the expression pass.
-                val bound = (n["value"] as? String)?.contains("{{") == true
-                if (!bound && !NON_BINDING_FIELD_TYPES.contains(ftype) && !ftype.lowercase().contains("button")) {
-                    val root = n["id"].toString().trimStart('$').substringBefore('.').substringBefore('[')
-                    if (root !in FIELD_ID_IGNORE) {
-                        ctx.addVar(key, root, "form_field_use")
-                        // A Work form field is prefilled *from* the variable and writes it back on
-                        // submit, and nothing in the model says which of the two a given field is for.
-                        // Recording both is the honest answer — and it means a field alone never makes a
-                        // variable look unread.
-                        for (d in listOf(Ctx.READ, Ctx.WRITE)) {
-                            ctx.addVarSite(key, root, d, "formField", n["id"], label, ftype)
-                        }
+                // [FormBindings] holds the rule, so the IDE's vocabulary names the same variables.
+                FormBindings.idVariable(n)?.let { root ->
+                    ctx.addVar(key, root, "form_field_use")
+                    // A Work form field is prefilled *from* the variable and writes it back on
+                    // submit, and nothing in the model says which of the two a given field is for.
+                    // Recording both is the honest answer — and it means a field alone never makes a
+                    // variable look unread.
+                    for (d in listOf(Ctx.READ, Ctx.WRITE)) {
+                        ctx.addVarSite(key, root, d, "formField", n["id"], label, ftype)
                     }
                 }
                 // An expression button computes a value, a REST button takes one out of its response, and
@@ -614,11 +594,11 @@ object ModelParsers {
                 // Buttons are excluded from the binding pass above because they bind no input, so without
                 // this the target looked neither read nor written. The read side needs nothing: whoever
                 // renders `{{x}}` is picked up already.
-                if (ftype in RESULT_BINDING_TYPES) {
+                if (ftype in FormBindings.RESULT_BINDING_TYPES) {
                     val target = (n["value"] as? String)?.takeIf { it.contains("{{") }
                     if (target != null) component["stores"] = target
                     if (replacesPayload(ftype, n)) component["replacesPayload"] = true
-                    bindingRoot(target)?.let { root ->
+                    FormBindings.storedVariable(n)?.let { root ->
                         ctx.addVar(key, root, "form_field_use")
                         ctx.addVarSite(key, root, Ctx.WRITE, ftype, n["id"], label, ftype)
                     }
@@ -721,7 +701,7 @@ object ModelParsers {
                 // the same form as `{{$temp.info.deploymentId}}` — and on a button bound to `{{customer}}`
                 // a field of `customer`, whose write the binding pass already records. Neither is a
                 // variable called `deploymentId`; eleven "written but never read" on two real projects were.
-                val stores = if ((n["type"] as? String) in RESULT_BINDING_TYPES) (n["value"] as? String)?.takeIf { it.contains("{{") } else null
+                val stores = if ((n["type"] as? String) in FormBindings.RESULT_BINDING_TYPES) (n["value"] as? String)?.takeIf { it.contains("{{") } else null
                 val refOp = calleeOp(es, refKind)
                 val payload = payloadParams(es, refKind, refKey, refOp).map { p ->
                     if (stores == null || p["kind"] !in RESPONSE_MAPPINGS) p
@@ -1099,17 +1079,6 @@ object ModelParsers {
         if (type == "restButton" && (responseMap is List<*> || responseMap is String && responseMap.isNotEmpty())) return false
         val value = n["value"] as? String ?: return true
         return !PLAIN_BINDING.matches(value) || value.removeSurrounding("{{", "}}").isBlank()
-    }
-
-    private fun bindingRoot(value: Any?): String? {
-        val raw = (value as? String)?.trim() ?: return null
-        if (!raw.startsWith("{{") || !raw.endsWith("}}")) return null
-        val inner = raw.removeSurrounding("{{", "}}").trim()
-        if (inner.isEmpty() || !inner.matches(Regex("[A-Za-z_$][A-Za-z0-9_.\\[\\]$]*"))) return null
-        // `{{$temp.x}}`, `{{$currentUser…}}`: the forms runtime's own scope, never a variable
-        if (inner.startsWith("$")) return null
-        val root = inner.substringBefore('.').substringBefore('[')
-        return root.takeIf { it.isNotEmpty() && it !in FIELD_ID_IGNORE }
     }
 
     /** The operation of the service, agent or data object a component calls — null for any other callee. */

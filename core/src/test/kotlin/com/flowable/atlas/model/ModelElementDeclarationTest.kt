@@ -41,6 +41,19 @@ class ModelElementDeclarationTest {
     }
 
     @Test
+    fun aVariableAFormOnlyBindsIsTheBindingThatNamesIt() {
+        val json = """{"name":"DEMO-F3","rows":[[{"id":"text1","type":"text","label":"Name","value":"{{ customerName }}"},
+            {"id":"date1","type":"date","label":"Born","value":"{{customerDetail}}"},{"id":"date2","type":"date","value":"{{customer.birthDate}}"}]]}"""
+        assertEquals("customerName" to "\"{{ ", at(json, "customerName")!!.first to at(json, "customerName")!!.second.takeLast(4))
+        // `customer` is not the head of `{{customerDetail}}`: the name must end where the binding's root does
+        val off = ModelElementDeclaration.offsetOf(json, "customer")!!
+        assertEquals("customer.birthDate", json.substring(off, off + 18))
+        // a variable called like a JSON key is its binding, not the first `"type"` key of the document
+        val typed = """{"name":"DEMO-F4","rows":[[{"id":"select1","type":"select","label":"Kind","value":"{{type}}"}]]}"""
+        assertEquals("type" to "\"{{", at(typed, "type")!!.first to at(typed, "type")!!.second.takeLast(3))
+    }
+
+    @Test
     fun aDecisionRuleIsItsIdAttribute() {
         val dmn = """<decisionTable><rule id="r2"><inputEntry id="r2_in"/></rule></decisionTable>"""
         assertEquals("r2\"", dmn.substring(ModelElementDeclaration.offsetOf(dmn, "r2")!!, ModelElementDeclaration.offsetOf(dmn, "r2")!! + 3))

@@ -16,15 +16,15 @@ data class RawModel(
 
 /**
  * The "members" of a single model that are useful as completion vocabularies:
- *  - [variables]: process/case variable names (BPMN `<dataObject>` names + `<flowable:formProperty>` ids
- *    + referenced/embedded form field ids).
+ *  - [variables]: process/case variable names — BPMN `<dataObject>` names and `<flowable:formProperty>` ids,
+ *    and for a form or page the variables its components bind ([FormBindings]), not their component ids.
  *  - [userTaskIds]: `<userTask id>` — candidates for `taskDefinitionKey(...)`.
  *  - [activityIds]: ids of every flow node — candidates for `activityId(...)`.
  *  - [messages] / [signals]: BPMN top-level `<message name>` / `<signal name>` (file-level, copied onto
  *    every model in that file so a project-wide union can be built cheaply).
  *  - [decisionVariables]: DMN input/output clause variable names — candidates for `variable(...)`.
  *  - [payload]: event payload + correlation parameter names.
- *  - [formFields] / [formOutcomes]: form field / outcome ids.
+ *  - [formFields] / [formOutcomes]: form field / outcome ids — what navigation lands on.
  *  - [botKey]: the `botKey` of an `.action` model — the Java `BotService` (`getKey()`) it invokes.
  */
 data class ModelMembers(
@@ -44,8 +44,8 @@ data class ModelMembers(
     }
 }
 
-/** Form field ids + outcomes of a `.form` model (used to build member vocabularies). */
-data class FormInfo(val fields: List<String>, val outcomes: List<String>)
+/** Form field ids, outcomes and bound variables of a `.form` / `.page` model (used to build member vocabularies). */
+data class FormInfo(val fields: List<String>, val outcomes: List<String>, val variables: List<String> = emptyList())
 
 /** An operation of a service model (a data object's backing service). */
 data class OperationInfo(

@@ -368,17 +368,13 @@ class Ctx {
     }
 
     companion object {
-        private val IDENT = Regex("^[A-Za-z_]\\w*$")
         private val SPLIT = Regex("[,;]")
 
         /** [name] as a project variable, or null when it is not one. A variable is a plain identifier
          *  that is neither one of the engine's own context roots nor a Java literal — everything that
          *  records variable evidence has to agree on that, so the rule lives in one place. */
-        private fun varName(name: Any?): String? {
-            val n = name?.toString()?.trim() ?: return null
-            val known = n in Constants.FLOWABLE_CONTEXT || n in Constants.JAVA_LITERALS
-            return if (IDENT.matches(n) && !known) n else null
-        }
+        private fun varName(name: Any?): String? =
+            name?.toString()?.trim()?.takeIf(Constants::isVariableName)
 
         /** Root identifiers of a bare-EL mapping value — the receiver of `a.b(c)` and each argument. A
          *  name reached through a `.` is a field of something else, not a variable; a method name is not

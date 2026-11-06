@@ -157,7 +157,7 @@ typing filters by key or name.
 | Find Usages | A Java method, field or class | Every model that uses it: a method or field called or read on one of its class's beans inside `${…}` / `#{…}`, a class as an expression's bean or by its exact FQN in a `class` attribute |
 | Find Usages | A bot class | The `.action` models whose `botKey` matches |
 | Find Usages | A Spring REST handler | The models whose HTTP task, REST button, service operation or REST data source calls that URL |
-| Search Everywhere / Go to Symbol | — | Every model key, plus bot keys — from actions and from `BotService` implementations — plus every named element inside a model: user tasks, activities, variables, messages, signals, an event's payload fields, a form's fields and outcomes, each opening its model at the declaration and labelled *User task · in DEMO-P001*. A model row carries its type's icon, a bot row the bot icon, and opens the file at the key's declaration |
+| Search Everywhere / Go to Symbol | — | Every model key, plus bot keys — from actions and from `BotService` implementations — plus every named element inside a model: user tasks, activities, variables, messages, signals, an event's payload fields, a form's or page's fields and outcomes, each opening its model at the declaration — a variable a form or page binds at the `{{…}}` that names it — and labelled *User task · in DEMO-P001*. A model row carries its type's icon, a bot row the bot icon, and opens the file at the key's declaration |
 | Search Everywhere → **Flowable Model** tab | — | Model keys, archive-qualified paths inside `.bar` / `.zip`, the elements inside the models (ranked under the models, shown with their model in grey), and a live full-text search over model content showing the matched line. A model row carries its type's icon, a text hit a magnifier; the typed fragment is highlighted even mid-key, and the row's tooltip holds type, name and archive path. `⇧⏎` hands the whole result set to the Find tool window as a list that stays open |
 
 Two more behaviours belong here even though they are not navigation. Renaming a Java symbol that models
@@ -180,7 +180,7 @@ variable, constant and property icons, a Liquibase column or table the database 
 | Member positions | DMN decision variables, event payload names, master-data field names |
 | Model XML | Cross-reference attribute values, extension-element text, and event payload names from the sibling `eventType` |
 | Liquibase changelogs | Column names and table names from the backing service, plus the matching Liquibase column type ranked first |
-| Expressions | Root objects, namespaces, functions, `flw.*` members (including nested), your own custom functions and values, variables and form fields, and — after `bean.` — that Java class's methods and getter-derived properties |
+| Expressions | Root objects, namespaces, functions, `flw.*` members (including nested), your own custom functions and values, variables — in a form or page, the ones it binds, never its component ids — and, after `bean.`, that Java class's methods and getter-derived properties |
 | Script bodies | The root objects the selected script context binds, and their members **with parameter signatures** |
 
 The catalog covers `org.flowable.*` and `com.flowable.*` across process, case, decision, form, event,
