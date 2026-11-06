@@ -337,6 +337,77 @@ class IoParametersTest {
         )
     }
 
+    /**
+     * The engine accepts both spellings of the result attribute, each converter preferring its own:
+     * ServiceTaskXMLConverter reads `resultVariableName` and falls back to `resultVariable` (the form the
+     * BPMN user guide documents), ScriptTaskXMLConverter the other way round. Only one spelling per task
+     * was read, so the same write had a writer or none depending on how the attribute was spelled.
+     */
+    @Test
+    fun eitherSpellingOfTheResultVariableIsAWrite() {
+        val (p, _) = bpmn(
+            """<serviceTask id="calc" flowable:expression="${'$'}{demoCalc.total(execution)}" flowable:resultVariable="orderTotal"/>
+               <scriptTask id="s2" scriptFormat="groovy" flowable:resultVariableName="scriptTotal"><script>1</script></scriptTask>
+               <serviceTask id="both" flowable:expression="${'$'}{demoCalc.total(execution)}"
+                            flowable:resultVariableName="longForm" flowable:resultVariable="shortForm"/>
+               <scriptTask id="both2" scriptFormat="groovy" flowable:resultVariable="shortForm2"
+                           flowable:resultVariableName="longForm2"><script>1</script></scriptTask>"""
+        )
+        assertEquals(
+            listOf(
+                "out|resultVariable|null->orderTotal",
+                "out|resultVariable|null->longForm",
+                "out|resultVariable|null->scriptTotal",
+                "out|resultVariable|null->shortForm2",
+            ),
+            params(p).sortedBy { listOf("calc", "both", "s2", "both2").indexOf(it["element"]) }.map { sig(it) },
+        )
+        @Suppress("UNCHECKED_CAST")
+        val service = (p["serviceTasks"] as List<Map<String, Any?>>).associateBy { it["id"] }
+        @Suppress("UNCHECKED_CAST")
+        val script = (p["scriptTasks"] as List<Map<String, Any?>>).associateBy { it["id"] }
+        assertEquals("orderTotal", service["calc"]!!["resultVariable"])
+        assertEquals("longForm", service["both"]!!["resultVariable"])
+        assertEquals("scriptTotal", script["s2"]!!["resultVariable"])
+        assertEquals("shortForm2", script["both2"]!!["resultVariable"])
+    }
+
+    /** A CMMN Java or script task's `resultVariableName` writes the variable; on any other task type the
+     *  engine ignores the attribute, so nothing is recorded there. */
+    @Test
+    fun aCmmnJavaOrScriptTaskWritesItsResultVariable() {
+        val xml = """<?xml version="1.0" encoding="UTF-8"?>
+            <definitions xmlns="http://www.omg.org/spec/CMMN/20151109/MODEL"
+                         xmlns:flowable="http://flowable.org/cmmn">
+              <case id="c" name="C">
+                <casePlanModel id="plan">
+                  <planItem id="pi1" definitionRef="calc"/>
+                  <planItem id="pi2" definitionRef="s"/>
+                  <planItem id="pi3" definitionRef="h"/>
+                  <task id="calc" name="Calculate" flowable:type="java"
+                        flowable:expression="${'$'}{demoCalc.total(planItemInstance)}" flowable:resultVariableName="caseTotal"/>
+                  <task id="s" flowable:type="script" flowable:scriptFormat="groovy" flowable:resultVariableName="scriptOut">
+                    <extensionElements>
+                      <flowable:field name="script"><flowable:string>1</flowable:string></flowable:field>
+                    </extensionElements>
+                  </task>
+                  <task id="h" flowable:type="http" flowable:resultVariableName="ignored"/>
+                </casePlanModel>
+              </case>
+            </definitions>"""
+        val case = BackendModelParsers.parseCmmn(xml.toByteArray(), Ctx(), "c.cmmn")[0]
+        assertEquals(
+            listOf("out|resultVariable|null->caseTotal", "out|resultVariable|null->scriptOut"),
+            params(case).map { sig(it) },
+        )
+        assertEquals(listOf("calc", "s"), params(case).map { it["element"] })
+        @Suppress("UNCHECKED_CAST")
+        val items = ((case["planModel"] as Map<String, Any?>)["children"] as List<Map<String, Any?>>).associateBy { it["id"] }
+        assertEquals("caseTotal", items["calc"]!!["resultVariable"])
+        assertEquals("scriptOut", items["s"]!!["resultVariable"])
+        assertTrue("an HTTP task's resultVariableName is not read by the engine", "resultVariable" !in items["h"]!!)
+    }
+
     @Test
     fun httpTaskFieldInjectionsArePersistedNotTreatedAsParameters() {
         val (p, _) = bpmn(

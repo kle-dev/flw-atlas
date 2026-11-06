@@ -27,7 +27,7 @@ object DesignTerms {
         "el:callActivity" to "Call activity",
         "el:subProcess" to "Sub-process",
         "el:transaction" to "Transaction",
-        "el:adhocSubProcess" to "Ad-hoc sub-process",
+        "el:adHocSubProcess" to "Ad-hoc sub-process",
         "el:sendTask" to "Send task",
         "el:receiveTask" to "Receive task",
         "el:manualTask" to "Manual task",
@@ -65,6 +65,7 @@ object DesignTerms {
         "el:executionListener" to "Execution listener",
         "el:taskListener" to "Task listener",
         "el:planItemLifecycleListener" to "Lifecycle listener",
+        "el:caseLifecycleListener" to "Case lifecycle listener",
         // --- model types, singular and lowercase: they are counted mid-sentence ("2 data objects").
         // The explorer's plural sidebar labels live in `TM`; the sync test keeps both in step.
         "type:process" to "process",

@@ -248,7 +248,11 @@ object BackendModelParsers {
                             "id" to eid, "name" to ename, "class" to el.attr("class"),
                             "expression" to el.attr("expression"),
                             "delegateExpression" to el.attr("delegateExpression"),
-                            "type" to el.attr("type"), "resultVariable" to el.attr("resultVariableName"),
+                            "type" to el.attr("type"),
+                            // Either spelling, in the engine's order: ServiceTaskXMLConverter reads
+                            // `resultVariableName` and falls back to `resultVariable`, the form the BPMN user
+                            // guide documents — so hand-written models are the ones that use it.
+                            "resultVariable" to pyOr(el.attr("resultVariableName"), el.attr("resultVariable")),
                         )
                         serviceTasks.add(withElementExtras(st, el, elListeners))
                         ctx.addRef(pkey, "bpmn", ffile, "serviceTask-class", "class", st["class"])
@@ -311,9 +315,12 @@ object BackendModelParsers {
                     }
                     tag == "scriptTask" -> {
                         val body = el.childText("script")
+                        // the mirror image of a service task: ScriptTaskXMLConverter reads `resultVariable`
+                        // and falls back to `resultVariableName`
+                        val rv = pyOr(el.attr("resultVariable"), el.attr("resultVariableName")) as String?
                         val st = linkedMapOf<String, Any?>(
                             "id" to eid, "name" to ename, "format" to el.attr("scriptFormat"),
-                            "script" to body, "resultVariable" to el.attr("resultVariable"),
+                            "script" to body, "resultVariable" to rv,
                         )
                         ScriptValidator.problemDicts(body, el.attr("scriptFormat"), formatRequired = true,
                             context = ScriptContext.BPMN_SCRIPT_TASK)
@@ -321,8 +328,8 @@ object BackendModelParsers {
                         scriptTasks.add(withElementExtras(st, el, elListeners))
                         VarHarvest.collectScriptVars(ctx, body, listOf(pkey), el.attr("scriptFormat"),
                             eid, ename, "scriptTask")
-                        ctx.addVar(pkey, el.attr("resultVariable"))
-                        XmlHelpers.resultVariableParam("resultVariable", el.attr("resultVariable"))
+                        ctx.addVar(pkey, rv)
+                        XmlHelpers.resultVariableParam("resultVariable", rv)
                             ?.let { ctx.addParams(ioParameters, pkey, eid, ename, tag, listOf(it)) }
                     }
                     tag == "businessRuleTask" -> {
@@ -345,7 +352,7 @@ object BackendModelParsers {
                         ctx.addRef(pkey, "bpmn", ffile, "callActivity", "process", called,
                             suspect = calledType.equals("id", ignoreCase = true))
                     }
-                    tag in listOf("subProcess", "transaction", "adhocSubProcess") -> {
+                    tag in XmlHelpers.BPMN_SUB_PROCESS_TAGS -> {
                         val sp = linkedMapOf<String, Any?>(
                             "id" to eid, "name" to ename, "type" to tag,
                             "eventSubProcess" to (el.attr("triggeredByEvent") == "true"),
@@ -444,16 +451,15 @@ object BackendModelParsers {
     // CMMN
     // -----------------------------------------------------------------------
 
-    /** Service-registry / data-object / agent / template mappings on a CMMN task. */
+    /** The Java implementation and the service-registry / data-object / agent / template mappings on a CMMN task. */
     private fun cmmnServiceRefs(ctx: Ctx, caseKey: Any?, ffile: String, el: El): LinkedHashMap<String, Any?> {
         val info = LinkedHashMap<String, Any?>()
-        val ext = XmlHelpers.extEl(el) ?: return info
-        info["serviceTaskType"] = pyOr(el.childText("serviceTaskType"), ext.childText("serviceTaskType"))
-        info.putAll(XmlHelpers.readTaskMappings(ctx, caseKey, "cmmn", ffile, el))
-        for (tk in listOf("templateKey", "subjectTemplateModelKey", "bodyTemplateModelKey")) {
-            val v = ext.childText(tk)
-            if (truthy(v)) ctx.addRef(caseKey, "cmmn", ffile, tk, "template", v)
-        }
+        // The implementation first: the engine reads `flowable:class`, `delegateExpression` and `expression`
+        // straight off the `<task>` (TaskXmlConverter), so a hand-written `<task flowable:type="java"
+        // flowable:class="…"/>` has no extension elements at all — and returning on a missing
+        // `<extensionElements>` used to drop its code link along with it. Design always writes the element,
+        // which is why only hand-written models lost theirs.
+        ctx.addRef(caseKey, "cmmn", ffile, "task-class", "class", el.attr("class"))
         for ((exAttr, exv) in listOf("delegateExpression" to el.attr("delegateExpression"), "expression" to el.attr("expression"))) {
             if (exv.isNullOrEmpty()) continue
             val rel = if (exAttr == "expression") "task-expression" else "task-delegate"
@@ -461,6 +467,13 @@ object BackendModelParsers {
                 val b = m.groupValues[1]
                 if (b !in Constants.FLOWABLE_CONTEXT && b !in Constants.JAVA_LITERALS) ctx.addRef(caseKey, "cmmn", ffile, rel, "bean", b)
             }
+        }
+        val ext = XmlHelpers.extEl(el) ?: return info
+        info["serviceTaskType"] = pyOr(el.childText("serviceTaskType"), ext.childText("serviceTaskType"))
+        info.putAll(XmlHelpers.readTaskMappings(ctx, caseKey, "cmmn", ffile, el))
+        for (tk in listOf("templateKey", "subjectTemplateModelKey", "bodyTemplateModelKey")) {
+            val v = ext.childText(tk)
+            if (truthy(v)) ctx.addRef(caseKey, "cmmn", ffile, tk, "template", v)
         }
         return info
     }
@@ -502,6 +515,13 @@ object BackendModelParsers {
             }
             tag in listOf("task", "serviceTask", "humanTaskWithService") -> {
                 d.putAll(cmmnServiceRefs(ctx, caseKey, ffile, el))
+                // Which code the task runs, on the record as on a BPMN service task: the edge alone said that
+                // the case calls a bean, not which of its tasks does. Only when set, so the record of every
+                // other task keeps its shape.
+                for (a in listOf("class", "expression", "delegateExpression")) {
+                    el.attr(a)?.trim()?.ifEmpty { null }?.let { d[a] = it }
+                }
+                cmmnResultVariable(el)?.let { d["resultVariable"] = it }
                 SecretScan.secretFields(XmlHelpers.readLiteralFields(el)).takeIf { it.isNotEmpty() }
                     ?.let { d["secretFields"] = it }
                 d["formKey"] = el.attr("formKey")
@@ -611,6 +631,15 @@ object BackendModelParsers {
         el.childText("documentation")?.let { d["documentation"] = it }
         return d
     }
+
+    /**
+     * The variable a CMMN task stores its result in. The engine reads `flowable:resultVariableName` on a Java
+     * task and on a script task only (TaskXmlConverter); on any other task type the attribute does nothing,
+     * so a write credited to it there would be a write that never happens.
+     */
+    private fun cmmnResultVariable(el: El): String? =
+        if (el.tag == "task" && el.attr("type") in setOf("java", "script")) el.attr("resultVariableName")?.trim()?.ifEmpty { null }
+        else null
 
     /**
      * The two attributes that decide a stage's or milestone's place in Work's stage overview — the bar a
@@ -778,6 +807,15 @@ object BackendModelParsers {
             val overview = HashMap<String, Int>()   // stage/milestone id → place in the stage overview, below
             // see the same key on a process: users count as much as groups for who may start it
             case.attr("candidateStarterUsers")?.trim()?.ifEmpty { null }?.let { info["candidateStarterUsers"] = it }
+            // The case's own lifecycle listeners (`<flowable:caseLifecycleListener>` on `<case>`): code that runs
+            // when the whole case changes state. Only plan items' listeners were read, so a listener bean on
+            // the case had no edge and its class no `listener` role. Only when declared, like the case's
+            // other optional keys.
+            val caseListeners = XmlHelpers.readListeners(case, cmmn = true)
+            if (caseListeners.isNotEmpty()) {
+                info["listeners"] = caseListeners
+                XmlHelpers.collectListenerRefs(ctx, ckey, "cmmn", ffile, caseListeners, ckey, case.attr("name"))
+            }
             ctx.addAccess(ckey, "case", "start", "start",
                 case.attr("candidateStarterGroups"), case.attr("candidateStarterUsers"))
             if (plan != null) {
@@ -859,8 +897,12 @@ object BackendModelParsers {
                     XmlHelpers.collectDesignExtensionRefs(ctx, ckey, "cmmn", "case", ffile, el)
                     // In/out parameter mappings for the whole plan tree in one pass — process/case tasks,
                     // service-registry / agent / data-object / HTTP tasks and event listeners all use the
-                    // same extension elements (see XmlHelpers.readIoParams).
-                    val elParams = XmlHelpers.readIoParams(el)
+                    // same extension elements (see XmlHelpers.readIoParams). A Java or script task's result
+                    // variable is an attribute, not an element, and joins them here: this loop is where the
+                    // case's rollup lives, and without it the write had no writer — the variable was only
+                    // "declared / mapped", the same name judged differently from its BPMN twin.
+                    val elParams = XmlHelpers.readIoParams(el) +
+                        listOfNotNull(XmlHelpers.resultVariableParam("resultVariable", cmmnResultVariable(el)))
                     if (elParams.isNotEmpty()) {
                         ctx.addParams(
                             ioParameters, ckey, el.attr("id"), el.attr("name"), el.tag, elParams,
@@ -965,9 +1007,6 @@ object BackendModelParsers {
         return rec
     }
 
-    /** Sub-process kinds that scope the elements inside them. */
-    private val SUB_PROCESS_TAGS = setOf("subProcess", "transaction", "adhocSubProcess")
-
     /** Element id → the id of the nearest sub-process around it, for every element that sits in one. */
     private fun enclosingSubProcess(proc: El): Map<String, String> {
         val out = HashMap<String, String>()
@@ -975,7 +1014,7 @@ object BackendModelParsers {
             for (c in e.children) {
                 val id = c.attr("id")
                 if (sp != null && !id.isNullOrEmpty()) out[id] = sp
-                walk(c, if (c.tag in SUB_PROCESS_TAGS && !id.isNullOrEmpty()) id else sp)
+                walk(c, if (c.tag in XmlHelpers.BPMN_SUB_PROCESS_TAGS && !id.isNullOrEmpty()) id else sp)
             }
         }
         walk(proc, null)

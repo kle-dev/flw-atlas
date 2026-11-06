@@ -304,7 +304,7 @@ const DESIGN_TERMS = {
   'el:manualTask': ['Manual task', 'Work done outside the engine — recorded, not executed.'],
   'el:subProcess': ['Sub-process', 'A group of elements that runs inside the parent instance.'],
   'el:transaction': ['Transaction', 'A sub-process whose work is undone by compensation if it fails.'],
-  'el:adhocSubProcess': ['Ad-hoc sub-process', 'Contained activities run in any order, chosen at runtime.'],
+  'el:adHocSubProcess': ['Ad-hoc sub-process', 'Contained activities run in any order, chosen at runtime.'],
   'el:exclusiveGateway': ['Exclusive gateway', 'Takes exactly one outgoing flow — the first condition that is true.'],
   'el:parallelGateway': ['Parallel gateway', 'Splits into all outgoing flows and joins by waiting for all incoming ones.'],
   'el:inclusiveGateway': ['Inclusive gateway', 'Takes every outgoing flow whose condition is true.'],
@@ -399,6 +399,7 @@ const DESIGN_TERMS = {
   'el:executionListener': ['Execution listener', 'Runs when the element starts or ends — a Java class, an expression or a script.'],
   'el:taskListener': ['Task listener', 'Runs on a user task’s lifecycle: create, assignment, complete or delete.'],
   'el:planItemLifecycleListener': ['Lifecycle listener', 'Runs when a plan item changes state — available, active, completed, terminated.'],
+  'el:caseLifecycleListener': ['Case lifecycle listener', 'Runs when the case itself changes state — active, completed, terminated.'],
   // --- data-source kinds on a form/page component ---
   'kind-ds:dataObject': ['Data object', 'Rows or options come from a data object lookup.'],
   'kind-ds:service': ['Service', 'Rows or options come from a Service Registry operation.'],
@@ -442,6 +443,7 @@ const DESIGN_TERMS = {
   'rel:ruleTask-decision': ['Decision task → decision table', 'A decision task evaluates that decision table.'],
   'rel:serviceTask-class': ['Service task → Java class', 'The task runs that class as a JavaDelegate.'],
   'rel:serviceTask-delegate': ['Service task → bean', 'The task runs that Spring bean via a delegate expression.'],
+  'rel:task-class': ['Task → Java class', 'The case task runs that class as a PlanItemJavaDelegate.'],
   'rel:task-delegate': ['Task → bean', 'The case task runs that Spring bean via a delegate expression.'],
   'rel:serviceTask-expression': ['Service task → bean', 'The task calls a method on that Spring bean via an expression.'],
   'rel:task-expression': ['Task → bean', 'The case task calls a method on that Spring bean via an expression.'],
@@ -2693,7 +2695,7 @@ function allScripts(){
       (function walk(nd){
         if(nd.script||(nd.problems||[]).length) add(n,{group:'script', elKind:'serviceTask/script',
           el:nd.id, elName:nd.name, lang:nd.scriptFormat, body:nd.script, doc:nd.documentation,
-          problems:nd.problems||[]});
+          out:nd.resultVariable, problems:nd.problems||[]});
         (nd.children||[]).forEach(walk);
       })(d.planModel);
     }
@@ -2912,7 +2914,7 @@ const PALETTE_CATEGORIES={
     ['Flowable Work', ['serviceTask/init-variables','serviceTask/set-business-status','serviceTask/set-data-policy','serviceTask/generate-document',
       'serviceTask/create-document','serviceTask/merge-document','serviceTask/convert-document-to-pdf','serviceTask/service-registry',
       'serviceTask/audit','serviceTask/data-object','serviceTask/power-automate','serviceTask/agent','serviceTask/trigger-intent-evaluation']],
-    ['Structural', ['subProcess','callActivity','adhocSubProcess','transaction']],
+    ['Structural', ['subProcess','callActivity','adHocSubProcess','transaction']],
     ['Gateways', ['exclusiveGateway','parallelGateway','inclusiveGateway','eventBasedGateway','complexGateway']],
     ['Other events', ['boundaryEvent','intermediateCatchEvent','intermediateThrowEvent']],
     ['End events', ['endEvent']],

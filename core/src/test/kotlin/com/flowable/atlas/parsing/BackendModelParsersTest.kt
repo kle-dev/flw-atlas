@@ -180,4 +180,87 @@ class BackendModelParsersTest {
         assertEquals("customerEventsOut", tasks["announce"]!!["channelKey"])
         assertEquals("a send-event task configured by field", "orderShipped", tasks["legacy"]!!["eventType"])
     }
+
+    /** The engine spells it `adHocSubProcess`, and tags compare case-sensitively: under the misspelling
+     *  `adhocSubProcess` the element was not listed and its tasks had no `parent`. */
+    @Test
+    fun anAdHocSubProcessIsListedAndScopesItsTasks() {
+        val xml = """<?xml version="1.0" encoding="UTF-8"?>
+            <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+              <process id="p">
+                <adHocSubProcess id="adhoc1" name="Pick any">
+                  <userTask id="review"/>
+                </adHocSubProcess>
+              </process>
+            </definitions>"""
+        val p = BackendModelParsers.parseBpmn(xml.toByteArray(), Ctx(), "p.bpmn")[0]
+        val sp = listOfMaps(p["subProcesses"]).single()
+        assertEquals("adhoc1", sp["id"])
+        assertEquals("adHocSubProcess", sp["type"])
+        assertEquals("adhoc1", listOfMaps(p["userTasks"]).single()["parent"])
+    }
+
+    /**
+     * A hand-written CMMN Java task names its implementation on the `<task>` itself, with no
+     * `<extensionElements>` at all — the engine's TaskXmlConverter reads it there. Returning early on the
+     * missing element dropped the bean reference, and `flowable:class` was never a reference at all.
+     */
+    @Test
+    fun aCmmnJavaTaskWithoutExtensionElementsKeepsItsImplementation() {
+        val xml = """<?xml version="1.0" encoding="UTF-8"?>
+            <definitions xmlns="http://www.omg.org/spec/CMMN/20151109/MODEL" xmlns:flowable="http://flowable.org/cmmn">
+              <case id="c">
+                <extensionElements>
+                  <flowable:caseLifecycleListener sourceState="active" targetState="completed" delegateExpression="${'$'}{caseEndListener}"/>
+                </extensionElements>
+                <casePlanModel id="plan">
+                  <planItem id="pi1" definitionRef="byClass"/>
+                  <planItem id="pi2" definitionRef="byBean"/>
+                  <planItem id="pi3" definitionRef="human"/>
+                  <task id="byClass" flowable:type="java" flowable:class="com.example.DemoDelegate"/>
+                  <task id="byBean" flowable:type="java" flowable:delegateExpression="${'$'}{demoBean}"/>
+                  <humanTask id="human"/>
+                </casePlanModel>
+              </case>
+            </definitions>"""
+        val ctx = Ctx()
+        val case = BackendModelParsers.parseCmmn(xml.toByteArray(), ctx, "c.cmmn")[0]
+        assertTrue(refs(ctx).containsAll(setOf(
+            Triple("task-class", "class", "com.example.DemoDelegate"),
+            Triple("task-delegate", "bean", "demoBean"),
+            Triple("caseLifecycleListener:completed", "bean", "caseEndListener"),
+        )))
+        @Suppress("UNCHECKED_CAST")
+        val items = listOfMaps((case["planModel"] as Map<String, Any?>)["children"]).associateBy { it["id"] }
+        assertEquals("com.example.DemoDelegate", items["byClass"]!!["class"])
+        assertEquals("\${demoBean}", items["byBean"]!!["delegateExpression"])
+        assertFalse("a task that names no implementation keeps its shape", items["human"]!!.containsKey("class"))
+        val listener = listOfMaps(case["listeners"]).single()
+        assertEquals("caseLifecycleListener", listener["kind"])
+        assertEquals("completed", listener["event"])
+    }
+
+    /** A case lifecycle listener with a script is a silent no-op: CmmnListenerFactory has no script branch
+     *  for it, as for a plan item's — so it carries the same problem. */
+    @Test
+    fun aScriptOnACaseLifecycleListenerIsFlagged() {
+        val xml = """<?xml version="1.0" encoding="UTF-8"?>
+            <definitions xmlns="http://www.omg.org/spec/CMMN/20151109/MODEL" xmlns:flowable="http://flowable.org/cmmn">
+              <case id="c">
+                <extensionElements>
+                  <flowable:caseLifecycleListener targetState="completed"><flowable:script scriptFormat="groovy">x = 1</flowable:script></flowable:caseLifecycleListener>
+                </extensionElements>
+                <casePlanModel id="plan"/>
+              </case>
+            </definitions>"""
+        val case = BackendModelParsers.parseCmmn(xml.toByteArray(), Ctx(), "c.cmmn")[0]
+        val problems = listOfMaps(listOfMaps(case["listeners"]).single()["problems"])
+        assertEquals("unsupported-script-listener", problems.single()["kind"])
+    }
+
+    @Test
+    fun aCaseWithoutListenersHasNoListenersKey() {
+        val case = BackendModelParsers.parseCmmn(bytes("miniproject/cases/review.cmmn"), Ctx(), "cases/review.cmmn")[0]
+        assertFalse(case.containsKey("listeners"))
+    }
 }

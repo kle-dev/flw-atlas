@@ -229,12 +229,6 @@ object OverviewRenderer {
                 // both cases hid code that runs at runtime.
                 // Element listeners now sit under their element instead of in one block at the end, so a
                 // reader sees the code that runs at a step next to the step.
-                fun listenerLine(ls: Map<String, Any?>): String? {
-                    val impl = orAny(ls["class"], ls["delegateExpression"], ls["expression"],
-                        if (truthy(ls["script"])) "(script)" else null)
-                    if (!truthy(impl)) return null
-                    return "🎧 ${DesignTerms.label("el", ls["kind"])} [${pyStr(ls["event"])}] → ${pyStr(impl)}"
-                }
                 for (bucket in ELEMENT_BUCKETS) {
                     for (elAny in asList(p[bucket])) {
                         val el = asMap(elAny)
@@ -308,6 +302,8 @@ object OverviewRenderer {
                     val t = if (truthy(e["timer"])) " timer=`${pyStr(e["timer"])}`" else ""
                     L.add("- ⏰ ${DesignTerms.label("el", e["type"])} `${pyStr(e["id"])}`$t")
                 }
+                // the case's own lifecycle listeners, as a process's listeners follow its flow
+                for (lsAny in asList(c["listeners"])) listenerLine(asMap(lsAny))?.let { L.add("- $it") }
                 L.add("")
             }
         }
@@ -1154,6 +1150,15 @@ object OverviewRenderer {
         L.add("")
     }
 
+    /** One listener as a report line — what runs, on which event — or null when it names no code at all.
+     *  A script-only listener counts: it has no class or expression, and skipping it hid code that runs. */
+    private fun listenerLine(ls: Map<String, Any?>): String? {
+        val impl = orAny(ls["class"], ls["delegateExpression"], ls["expression"],
+            if (truthy(ls["script"])) "(script)" else null)
+        if (!truthy(impl)) return null
+        return "🎧 ${DesignTerms.label("el", ls["kind"])} [${pyStr(ls["event"])}] → ${pyStr(impl)}"
+    }
+
     /**
      * The plan-model tree, with each plan item's **entry/exit criteria resolved to their sentry's
      * condition**.
@@ -1205,9 +1210,11 @@ object OverviewRenderer {
                 renderStage(ch, L, depth + 1, sentries, criteriaSuffix(ch))
             } else {
                 var extra = ""
+                // the code a Java task runs and where its result goes, as a process's service task line says
                 for (k in listOf(
                     "assignee", "formKey", "processRef", "caseRef", "decisionRef",
                     "serviceModelKey", "agentModelKey", "dataObjectKey",
+                    "class", "delegateExpression", "expression", "resultVariable",
                 )) {
                     if (truthy(ch[k])) extra += " $k=`${pyStr(ch[k])}`"
                 }

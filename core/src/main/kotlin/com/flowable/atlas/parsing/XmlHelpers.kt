@@ -30,6 +30,11 @@ object XmlHelpers {
     val BPMN_GW_TAGS = listOf(
         "exclusiveGateway", "parallelGateway", "inclusiveGateway", "eventBasedGateway", "complexGateway",
     )
+    /** The sub-process kinds, which scope the elements inside them. Tags compare case-sensitively, and the
+     *  engine spells the ad-hoc one `adHocSubProcess` (BpmnXMLConstants.ELEMENT_ADHOC_SUBPROCESS): written
+     *  `adhocSubProcess` in three places, it matched nothing, so an ad-hoc sub-process was not listed, its
+     *  tasks had no `parent`, and the error boundary on it guarded none of them. */
+    val BPMN_SUB_PROCESS_TAGS = setOf("subProcess", "transaction", "adHocSubProcess")
 
     fun extEl(el: El): El? = el.findChild("extensionElements")
 
@@ -387,12 +392,13 @@ object XmlHelpers {
         }
     }
 
-    /** Execution/task/plan-item listeners declared on an element. [cmmn] decides which script
-     *  bindings a task-listener script is validated against (BPMN and CMMN differ). */
+    /** Execution/task/plan-item/case listeners declared on an element. [cmmn] decides which script
+     *  bindings a task-listener script is validated against (BPMN and CMMN differ). A case's own
+     *  `caseLifecycleListener` sits on the `<case>` element (CaseExport writes it there). */
     fun readListeners(el: El, cmmn: Boolean = false): List<Map<String, Any?>> {
         val ext = extEl(el) ?: return emptyList()
         val out = ArrayList<Map<String, Any?>>()
-        for (tag in listOf("executionListener", "taskListener", "planItemLifecycleListener")) {
+        for (tag in listOf("executionListener", "taskListener", "planItemLifecycleListener", "caseLifecycleListener")) {
             for (lst in ext.findChildren(tag)) {
                 val entry = linkedMapOf<String, Any?>(
                     "kind" to tag,
@@ -408,8 +414,9 @@ object XmlHelpers {
                     ?.let { entry["scriptFormat"] = it }
                 if (entry["script"] != null || scriptEl != null) {
                     entry["problems"] = when (tag) {
-                        // the CMMN listener factory has no script branch — such a listener is a no-op
-                        "planItemLifecycleListener" -> ScriptValidator.unsupportedLifecycleListenerDicts()
+                        // the CMMN listener factory has no script branch for either lifecycle listener —
+                        // such a listener is a no-op
+                        "planItemLifecycleListener", "caseLifecycleListener" -> ScriptValidator.unsupportedLifecycleListenerDicts()
                         else -> ScriptValidator.problemDicts(
                             entry["script"] as? String, entry["scriptFormat"] as? String,
                             context = when {

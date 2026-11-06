@@ -100,7 +100,7 @@ internal object ScriptPicker {
         return out.distinctBy { Triple(it.elementId, it.kind, it.body) }
     }
 
-    private val LISTENER_KINDS = setOf("executionListener", "taskListener", "planItemLifecycleListener")
+    private val LISTENER_KINDS = setOf("executionListener", "taskListener", "planItemLifecycleListener", "caseLifecycleListener")
     private const val MAX_DEPTH = 32
 
     /**
@@ -154,7 +154,7 @@ internal object ScriptPicker {
         listenerKind == "executionListener" -> ScriptContext.BPMN_EXECUTION_LISTENER
         listenerKind == "taskListener" && modelType == ModelType.CASE -> ScriptContext.CMMN_TASK_LISTENER
         listenerKind == "taskListener" -> ScriptContext.BPMN_TASK_LISTENER
-        else -> ScriptContext.UNKNOWN   // planItemLifecycleListener has no script support anyway
+        else -> ScriptContext.UNKNOWN   // neither lifecycle listener (plan item, case) has script support anyway
     }
 
     private fun showPopup(panel: FlowableScriptPanel, found: Result<List<ScriptRow>>, anchor: java.awt.Component?) {

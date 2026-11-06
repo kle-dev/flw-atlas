@@ -37,6 +37,19 @@ class ModelMemberExtractorTest {
         assertTrue("activityIds: ${m.members.activityIds}", m.members.activityIds.containsAll(listOf("start", "review", "calc")))
     }
 
+    /** `adHocSubProcess` is the engine's spelling; under `adhocSubProcess` the IDE never offered its id. */
+    @Test fun an_ad_hoc_sub_process_is_an_activity() {
+        val xml = """
+            <definitions>
+              <process id="P1">
+                <adHocSubProcess id="adhoc1"><userTask id="review"/></adHocSubProcess>
+              </process>
+            </definitions>
+        """.trimIndent()
+        val m = ModelMemberExtractor.extract("P1.bpmn20.xml", bytes(xml), ModelType.PROCESS).single()
+        assertTrue("activityIds: ${m.members.activityIds}", m.members.activityIds.containsAll(listOf("adhoc1", "review")))
+    }
+
     @Test fun dmn_decision_variables_are_extracted() {
         val xml = """
             <definitions>

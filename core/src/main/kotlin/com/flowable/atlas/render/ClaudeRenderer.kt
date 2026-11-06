@@ -284,7 +284,8 @@ object ClaudeRenderer {
         val ls = first {
             val rel = it["rel"] as String
             (rel.startsWith("taskListener") || rel.startsWith("executionListener") ||
-                    rel.startsWith("planItemLifecycleListener")) && truthy(it["targetFqn"])
+                    rel.startsWith("planItemLifecycleListener") || rel.startsWith("caseLifecycleListener")) &&
+                truthy(it["targetFqn"])
         }
         if (ls != null) examples.add("- **Listener:** `${ls["from"]}` → `${cls(ls["targetFqn"])}` (${ls["rel"]})")
         val cm = first { (it["rel"] as String).startsWith("calls ") && truthy(it["targetFqn"]) }

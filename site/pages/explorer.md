@@ -269,7 +269,7 @@ and *+N more* opens that side of the list.
 A process or a case lists what it is made of in one **Elements** section: a group per kind — user,
 service, script and decision tasks, call activities, events, gateways, sequence flows with their
 conditions, lanes, multi-instance, declared data objects, listeners and documentation; for a case its
-plan model, sentries and event listeners — each group with its own table and columns, a chip per kind
+plan model, sentries, event listeners and the case's own lifecycle listeners — each group with its own table and columns, a chip per kind
 that keeps only that kind, and one filter over all of them. A group remembers whether you left it open,
 like a section. **Parameters** lists every in/out mapping, grouped by the element that declares it, and
 **Variables & expressions** the variables a model writes and reads — how it writes and reads each one,

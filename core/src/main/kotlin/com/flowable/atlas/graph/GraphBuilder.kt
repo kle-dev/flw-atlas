@@ -244,7 +244,7 @@ object GraphBuilder {
             // method on a bean, which makes the bean no delegate — six plain services carried the role.
             if ((rel == "serviceTask-delegate" || rel == "task-delegate") && r["factory"] != true) delegateFqns.add(fqn)
             else if (rel.startsWith("executionListener") || rel.startsWith("taskListener") ||
-                rel.startsWith("planItemLifecycleListener")
+                rel.startsWith("planItemLifecycleListener") || rel.startsWith("caseLifecycleListener")
             ) listenerFqns.add(fqn)
         }
 

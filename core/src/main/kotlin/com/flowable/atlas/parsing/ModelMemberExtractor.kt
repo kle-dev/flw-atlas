@@ -26,15 +26,16 @@ object ModelMemberExtractor {
         setProperty(XMLInputFactory.SUPPORT_DTD, false)
     }
 
-    /** BPMN/CMMN flow-node local names whose `id` is an `activityId`. */
+    /** BPMN/CMMN flow-node local names whose `id` is an `activityId`. The sub-process kinds come from the
+     *  parser's own list, so the IDE and the graph agree on what one is called. */
     private val FLOW_NODES = setOf(
         "task", "userTask", "serviceTask", "scriptTask", "sendTask", "receiveTask", "manualTask",
-        "businessRuleTask", "subProcess", "transaction", "callActivity", "adhocSubProcess",
+        "businessRuleTask", "callActivity",
         "startEvent", "endEvent", "intermediateCatchEvent", "intermediateThrowEvent", "boundaryEvent",
         "exclusiveGateway", "parallelGateway", "inclusiveGateway", "eventBasedGateway", "complexGateway",
         // CMMN plan items / stages
         "planItem", "humanTask", "stage", "milestone", "processTask", "caseTask", "decisionTask",
-    )
+    ) + XmlHelpers.BPMN_SUB_PROCESS_TAGS
 
     fun extract(fileName: String, bytes: ByteArray, type: ModelType): List<RawModel> =
         if (ModelType.isXmlModel(fileName)) extractXml(bytes, type)
