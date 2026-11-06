@@ -114,10 +114,13 @@ object GraphJsonRenderer {
         "usedBy" to "Node ids that reference this node (app 'contains' membership excluded). The " +
             "relation itself is in `edges`.",
         "findings" to "{check, severity, node, label, message, file?, element?, subject?, line?, " +
-            "snippet?, waived?} — what Atlas thinks is wrong; `checks` counts the open ones per kind " +
-            "plus a `waived` total. `subject` tells apart several findings of one check on one node " +
-            "(the scope, the column), where `message` is prose that rewords. `waived` carries the " +
-            "reason a team accepted it; see `waivers` and waivers.json.",
+            "scriptLine?, models?, snippet?, waived?} — what Atlas thinks is wrong; `checks` counts the open " +
+            "ones per kind plus a `waived` total. `subject` tells apart several findings of one check on one " +
+            "node (the scope, the column), where `message` is prose that rewords. `line` is a line of " +
+            "`file`: the element's declaration, the reference a missing model is named by, or the script " +
+            "line a script problem sits on; `scriptLine` is a line within the script body, given when no " +
+            "file line could be. `models` lists the models an expression or binding finding sits in. " +
+            "`waived` carries the reason a team accepted it; see `waivers` and waivers.json.",
         "waivers" to "{rules: [{check, node, element?, subject?, reason, by?, at?, until?, matched}], " +
             "createdWith?, notes?: [{node, check?, element?, subject?, text, importance, by?, at?}], " +
             "stale?, unexplained?, problems?} — present when a waivers.json was read: what it covered, " +

@@ -103,6 +103,26 @@ object Fmt {
         return stem.ifEmpty { "project" }
     }
 
+    /** Every graph node's label by id — for naming the models an expression finding sits in. */
+    fun nodeLabels(result: Map<String, Any?>): Map<String, String> {
+        val nodes = ((result["graph"] as? Map<*, *>)?.get("nodes") as? List<*>).orEmpty()
+        return nodes.mapNotNull { it as? Map<*, *> }.mapNotNull { n ->
+            val id = n["id"] as? String ?: return@mapNotNull null
+            id to ((n["label"] ?: n["key"])?.toString() ?: id.substringAfter(':'))
+        }.toMap()
+    }
+
+    /**
+     * `` in `Order Process`, `Fulfilment` (+2 more) `` — where an expression or binding finding is: the
+     * models holding the expression, which is no file of its own. `""` for any other finding, so a
+     * reader is never sent to grep for the expression text.
+     */
+    fun findingModels(f: Map<String, Any?>, labels: Map<String, String>, n: Int = 3): String {
+        val ms = (f["models"] as? List<*>)?.map { it.toString() }?.takeIf { it.isNotEmpty() } ?: return ""
+        return "in " + ms.take(n).joinToString(", ") { "`${labels[it] ?: it.substringAfter(':')}`" } +
+            if (ms.size > n) " (+${ms.size - n} more)" else ""
+    }
+
     /** `a, b, c … (+7 more)` — the artifacts' one and only list-truncation shape. */
     fun cap(items: List<String>, n: Int = 15): String {
         val extra = if (items.size > n) " … (+${items.size - n} more)" else ""

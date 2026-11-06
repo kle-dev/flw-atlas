@@ -70,9 +70,13 @@ The explorer and the IDE's findings tool window label every advice finding *advi
 | `guessedVars` | advice | warning | A variable only a script mentions, by bare name. |
 
 Each finding carries the node it belongs to, a message, and — where Atlas knows it — the file, the
-element, the line and a snippet, so it is actionable rather than merely true. Where one check fires
-more than once on the same node it also carries a `subject` naming which one it is: the scope a
-variable was mapped into, the column a schema gap is about, the name an expression could not resolve.
+element, the line and a snippet, so it is actionable rather than merely true. The line is the element's
+declaration in the model file — `id="gw"` — so opening a finding lands on the element, inside an archive
+too; a script problem is on the line of the script it sits on. A finding about a missing model points at
+the first model that references it, which its message names along with how many more do, and a finding
+about an expression names the models that hold the expression. Where one check fires more than once on
+the same node it also carries a `subject` naming which one it is: the scope a variable was mapped into,
+the column a schema gap is about, the name an expression could not resolve.
 The message is prose and rewords as a model changes; the subject is meant to stay put.
 
 ## What each one detects
@@ -370,7 +374,12 @@ to the model it sits in — the process whose element holds it when a deployment
 else the model the file defines. The text after the marker — up to the end of its line, string or
 element — is its subject, so a waiver survives the line moving; a marker with no text of its own in a
 minified JSON model is named by the path of the element holding it (`rows[2].cols[0].label`), which
-survives a re-export where a column would not. In a JSON model the finding also names the element that
+survives a re-export where a column would not. In a BPMN, CMMN or DMN file such a marker is named by the
+element holding it and what carries it — `sentry2/documentation`, *TODO in the documentation* — so a
+waiver survives a line moving there too; two of them in one element are told apart by their order in it
+(`t/string#2`), and only one outside every element with an id falls back to its line. A marker in an XML
+model also names its element, so the finding jumps to it — a sentry by the diamond of its criterion, the
+element the diagram draws. In a JSON model the finding also names the element that
 carries the marker — a form component, by its id — and quotes what it says: *TODO in the label: "Current
 Pod (TODO)"*, where the path alone left a reader to count rows. A minified model is one line, so its
 finding gives no line number. The same model loose, inside an archive, or as a Design export whose

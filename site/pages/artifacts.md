@@ -112,9 +112,13 @@ It is designed to make that easy:
   credentials in a URL and a secret-named query parameter are kept as `***` — see
   [`hardcodedSecrets`](../checks/#hardcodedsecrets-a-secret-written-into-a-model).
 - **`findings`** is the itemised list every other surface summarises, **`checks`** the open count per
-  check plus `open` and `waived`, and **`waivers`** — present when the project carries a
-  `waivers.json` — its rules with how many findings each matched, its notes, and what is wrong with
-  the file. See [Health checks](../checks/) for the two kinds of check, `defect` and `advice`.
+  check plus `open` and `waived`. A finding's `line` is a line of its `file`: the element's
+  declaration, the line that names a missing model, or the line of the script a script problem sits on.
+  A script problem whose file line cannot be found — an action's script lives in a JSON string — carries
+  `scriptLine`, its line within the script, instead. An expression finding carries `models`, the models
+  that hold the expression, and the `file` of the one model when there is one. **`waivers`** — present
+  when the project carries a `waivers.json` — its rules with how many findings each matched, its notes,
+  and what is wrong with the file. See [Health checks](../checks/) for the two kinds of check, `defect` and `advice`.
 - **`stats`** has the scale: `modelCount` is how many models were read, `models` how many loose model
   *files* and `archives` how many `.zip`/`.bar` archives held the rest — and the health headline,
   `defects` and `advice`, the open findings of each kind.

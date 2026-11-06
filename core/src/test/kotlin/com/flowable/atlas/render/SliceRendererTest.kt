@@ -36,6 +36,13 @@ class SliceRendererTest {
     }
 
     @Test
+    fun theSliceOfAModelListsTheProblemsOfTheExpressionsItHolds() {
+        // the finding sits on the expression's node; the process holds it, and its slice must say so
+        val text = SliceRenderer.render(result, "process:orderProcess")!!
+        assertTrue(text, text.contains("Unclosed '(' in `\${vars:bogus(}`"))
+    }
+
+    @Test
     fun aBareKeyMatchesEveryTypeThatCarriesIt() {
         val text = SliceRenderer.render(result, "orderProcess")
         assertNotNull("a bare key must not require the reader to know the type", text)

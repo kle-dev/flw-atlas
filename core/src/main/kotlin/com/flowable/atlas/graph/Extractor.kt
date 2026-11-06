@@ -1,5 +1,6 @@
 package com.flowable.atlas.graph
 
+import com.flowable.atlas.diagram.ModelBytes
 import com.flowable.atlas.model.Dyn
 import com.flowable.atlas.model.MiniJson
 import com.flowable.atlas.model.ModelPaths
@@ -15,6 +16,7 @@ import com.flowable.atlas.parsing.ModelSpans
 import com.flowable.atlas.parsing.ScriptMask
 import com.flowable.atlas.parsing.SpringProperties
 import com.flowable.atlas.parsing.VarHarvest
+import com.flowable.atlas.parsing.XmlPath
 import java.io.File
 
 /**
@@ -65,6 +67,20 @@ object Atlas {
             ((cur as? Map<*, *>)?.get("id") as? String)?.takeIf { it.isNotBlank() }?.let { id = it }
         }
         return (cur as? String)?.replace(Regex("\\s+"), " ")?.trim()?.take(160) to id
+    }
+
+    /**
+     * The element a marker in an XML model is shown on. A CMMN sentry is drawn as the diamond of the
+     * criterion that uses it, and that criterion is the element the explorer and the diagram know — the
+     * sentry's own id would jump nowhere.
+     */
+    private fun xmlMarkerElement(raw: String, site: XmlPath.Site): String? {
+        // the `definitions` root may carry an id, but it is the file, not an element anything draws
+        if (site.ownerTag == "definitions") return null
+        if (site.ownerTag != "sentry") return site.ownerId
+        val crit = Regex("""<(?:[\w.-]+:)?(?:entry|exit)Criterion\b[^>]*\bsentryRef\s*=\s*["']${Regex.escape(site.ownerId)}["'][^>]*>""")
+            .find(raw) ?: return site.ownerId
+        return Regex("""(?<![\w:-])id\s*=\s*["']([^"']+)["']""").find(crit.value)?.groupValues?.get(1) ?: site.ownerId
     }
 
     /**
@@ -268,10 +284,14 @@ object Atlas {
             // several, else every model of the file — so the report can list the ones nobody has kept. The
             // text after the marker is the subject, which survives a line moving; a marker with no text in
             // a minified JSON model gets the path of the element carrying it, which survives a re-export.
+            // In a BPMN, CMMN or DMN file a marker names the element it sits in, and one with no text is
+            // named by that element and what carries it (`sentry2/documentation`) — its line moved with
+            // every edit above it, and a waiver keyed on it lapsed.
             val markerNodes = mkeys.filterNotNull().map { "$nodeType:$it" }
             val spans = ModelSpans.ranges(raw, mtype, mkeys)
             val jsonDoc by lazy { if (mtype in XML_MODEL_TYPES) null else runCatching { MiniJson.parse(raw) }.getOrNull() }
             val minified = raw.indexOf('\n').let { it < 0 || it >= raw.trimEnd().length }
+            val xmlPaths = HashMap<String, Int>()
             // The pattern starts with a lookbehind, so it is tried at every position of the file — costly
             // across a whole project for a handful of matches; a plain search says first whether there is
             // anything to find.
@@ -279,10 +299,11 @@ object Atlas {
             for (m in markers) {
                 val before = raw.substring(0, m.range.first)
                 val owner = spans?.firstOrNull { m.range.first in it.second }?.first
+                val text = markerText(raw, m.range.last + 1)
                 val rec = linkedMapOf<String, Any?>(
                     // a minified model is one line: "line 1" says nothing there, the path does
                     "file" to label, "line" to (if (minified) null else before.count { it == '\n' } + 1),
-                    "marker" to m.groupValues[1], "text" to markerText(raw, m.range.last + 1),
+                    "marker" to m.groupValues[1], "text" to text,
                     "models" to (if (owner != null) listOf("$nodeType:$owner") else markerNodes),
                 )
                 if (mtype !in XML_MODEL_TYPES) JsonPath.at(raw, m.range.first)?.let { path ->
@@ -290,6 +311,17 @@ object Atlas {
                     val (value, element) = markerSite(jsonDoc, path)
                     value?.let { rec["value"] = it }
                     element?.let { rec["element"] = it }
+                } else XmlPath.at(raw, m.range.first)?.let { site ->
+                    if (text.isEmpty()) {
+                        // the n-th textless marker in one element's same holder: the ordinal moves only
+                        // when that element itself changes
+                        val base = "${site.ownerId}/${site.holder}"
+                        val n = xmlPaths.merge(base, 1, Int::plus)!!
+                        rec["path"] = if (n > 1) "$base#$n" else base
+                        site.value?.takeIf { it != m.groupValues[1] }?.let { rec["value"] = it }
+                    }
+                    // a marker in the process's own documentation is about the model: no element to point at
+                    if (site.ownerId !in mkeys) xmlMarkerElement(raw, site)?.let { rec["element"] = it }
                 }
                 bucketList("markers").add(rec)
             }
@@ -755,7 +787,12 @@ object Atlas {
         // Health findings, derived from everything above (graph + buckets + diagnostics + custom fns),
         // so every renderer can state what is wrong instead of pointing at the explorer's Checks tab.
         checkCanceled()
-        Findings.apply(result, waivers)
+        // The files that carry findings are read once more for the line each finding sits on: the parsers
+        // read a DOM, which keeps no positions.
+        Findings.apply(result, waivers) { label ->
+            checkCanceled()
+            ModelBytes.resolve(root, label)?.first?.toString(Charsets.UTF_8)
+        }
         return result
     }
 

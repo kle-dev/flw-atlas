@@ -54,9 +54,9 @@ Agents: orderAssistant
 Defects — unparseable files: 1 · invalid expressions: 2 · script syntax: 2 · missing models: 1 · crossed column mappings: 1 · literal secrets: 1 · schema gaps: 1 · buttons that overwrite the payload: 1
 Advice — calls with no error path: 2 · async without retry: 1 · unused service operations: 1 · variables never read: 3 · unread call parameters: 1 · script-inferred variables: 1
 - ⚠ parse: (form) Expecting property name enclosed in double quotes: line 2 column 1 (char 37) — `broken.form`
-- ⚠ Unclosed '(' — `${vars:bogus(}`
+- ⚠ Unclosed '(' — `${vars:bogus(}` in `Order Process`
 - ⚠ '(' is never closed — `Order Process · badStamp`
-- ⚠ referenced model does not exist in this project — `courierProcess`
+- ⚠ `Fulfilment Process` references process `courierProcess`, which does not exist in this project — `courierProcess`
 - ⚠ `deliveryCity` maps to column `delivery_zip_` and `deliveryZip` maps to `delivery_city_` — the two column mappings look swapped — `Customer Service`
 - … (+1 more errors — see `miniproject.overview.md`)
 

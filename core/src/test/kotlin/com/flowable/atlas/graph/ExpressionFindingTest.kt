@@ -60,4 +60,12 @@ class ExpressionFindingTest {
         // the well-formed call next to it is no finding at all
         assertTrue(findings("suspectExpr").isEmpty())
     }
+
+    @Test
+    fun anExpressionFindingNamesTheModelThatHoldsItAndOpensThere() {
+        val f = findings("invalidExpr").single()
+        assertEquals(listOf("process:DEMO-route"), f["models"])
+        assertEquals("processes/route.bpmn20.xml", f["file"])
+        assertEquals(5, f["line"])
+    }
 }

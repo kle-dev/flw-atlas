@@ -347,10 +347,14 @@ object ClaudeRenderer {
                     "them when something behaves oddly:**")
             // The per-check tallies are the summary's Health block verbatim; the worst few are what an
             // agent needs in front of it before it mirrors one of them as the house style.
+            val labels by lazy { Fmt.nodeLabels(result) }
             for (f in findings.filter { it["severity"] == "error" }.take(3)) {
                 val at = listOfNotNull(f["label"]?.toString(), f["element"]?.toString())
                     .joinToString(" · ")
-                L.add("- ⚠ ${f["message"]}" + (if (at.isEmpty()) "" else " — `$at`"))
+                // an expression is no model: name the models it sits in
+                val models = Fmt.findingModels(f, labels)
+                L.add("- ⚠ ${f["message"]}" + (if (at.isEmpty()) "" else " — `$at`") +
+                    (if (models.isNotEmpty()) " $models" else ""))
             }
             L.add("- Full list: `${art("overview.md")}` §Findings, or `findings` in `${art("graph.json")}`.")
         }

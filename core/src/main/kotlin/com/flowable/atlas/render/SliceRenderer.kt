@@ -158,14 +158,16 @@ object SliceRenderer {
         }
         if (out.isEmpty() && inc.isEmpty()) L.add("_Nothing references this node, and it references nothing._\n")
 
-        // Findings that name this node — the reason it may be misbehaving.
+        // Findings that name this node — the reason it may be misbehaving — and those about an expression
+        // it holds, which sit on the expression's node and would otherwise never reach the model's slice.
         val findings = (result["findings"] as? List<Map<String, Any?>> ?: emptyList())
-            .filter { it["node"] == id }
+            .filter { it["node"] == id || (it["models"] as? List<*>)?.contains(id) == true }
         if (findings.isNotEmpty()) {
             L.add("## Findings (${findings.size})")
             for (f in findings.take(20)) {
                 val mark = if (f["severity"] == "error") "⚠" else "·"
-                val at = f["element"]?.toString()?.let { " at `$it`" } ?: ""
+                val at = f["element"]?.toString()?.let { " at `$it`" }
+                    ?: f["label"]?.takeIf { f["node"] != id }?.let { " in `$it`" } ?: ""
                 // Marked, not filtered: a slice is what an agent reads before changing this node, and
                 // "already accepted" is exactly the context that stops it from re-reporting the finding.
                 val waived = (f["waived"] as? Map<*, *>)?.let { w -> " — waived: ${w["reason"]}" } ?: ""

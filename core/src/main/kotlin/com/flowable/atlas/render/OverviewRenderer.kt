@@ -858,6 +858,7 @@ object OverviewRenderer {
         val checks = asMap(result["checks"])
         val waivedFindings = findings.filter { it["waived"] != null }
         val openFindings = findings.filter { it["waived"] == null }
+        val labels by lazy { Fmt.nodeLabels(result) }
         if (findings.isNotEmpty()) {
             val open = (checks["open"] as? Number)?.toInt() ?: openFindings.size
             val headline = Fmt.healthHeadline(asMap(result["stats"])).ifEmpty { "$open open" }
@@ -879,10 +880,15 @@ object OverviewRenderer {
                     // A parse finding's label *is* its file — don't print the same path twice.
                     val fileText = f["file"]?.toString()?.takeIf { it != f["label"]?.toString() }
                         ?.let { if (truthy(f["line"])) "$it:${pyStr(f["line"])}" else it }
+                    // An expression finding's label is the expression: it is *at* that text, *in* the
+                    // models that hold it.
+                    val models = Fmt.findingModels(f, labels).removePrefix("in ")
                     val where = Fmt.fields(
-                        "in" to Fmt.codeList(f["label"]),
-                        "at" to Fmt.codeList(f["element"]),
+                        "in" to models.ifEmpty { Fmt.codeList(f["label"]) },
+                        "at" to Fmt.codeList(f["element"] ?: f["label"].takeIf { models.isNotEmpty() }),
                         "file" to Fmt.codeList(fileText),
+                        // a script line no file line could be found for: within the script body
+                        "script line" to (f["scriptLine"]?.let { pyStr(it) } ?: ""),
                     )
                     L.add("- $mark ${pyStr(f["message"])}" + (if (where.isEmpty()) "" else " — $where"))
                     if (truthy(f["snippet"])) L.add("    `${pyStr(f["snippet"])}`")

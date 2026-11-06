@@ -1,6 +1,7 @@
 package com.flowable.atlas.graph
 
 import com.flowable.atlas.parsing.Constants
+import java.util.IdentityHashMap
 
 /**
  * The project's health findings — everything Atlas noticed that is probably wrong, as data.
@@ -16,8 +17,9 @@ import com.flowable.atlas.parsing.Constants
  *
  * Three result keys are produced:
  *  - **`findings`** — the itemized list, most severe first: `{check, severity, node, label, message}`
- *    plus `file`/`element`/`subject`/`line`/`snippet` when known, and `waived` on the ones a waiver
- *    covers. This is what a report can name.
+ *    plus `file`/`element`/`subject`/`line`/`snippet` when known, `models` on an expression's, `scriptLine`
+ *    on a script problem no file line could be given, and `waived` on the ones a waiver covers. This is
+ *    what a report can name.
  *  - **`checks`** — `check → count` of the **open** ones, plus `open` (the total) and `waived`.
  *    This is what a badge or a headline shows.
  *  - **`waivers`** — present only when a waiver file was read: what it covered, and what went wrong
@@ -32,12 +34,32 @@ object Findings {
     private const val ERROR = "error"
     private const val WARNING = "warning"
 
+    /**
+     * [source] reads a model file back by its `file` label, for the line of each finding (see
+     * [FindingLines]); without it, findings carry the lines the parsers already knew.
+     */
     @Suppress("UNCHECKED_CAST")
-    fun apply(result: MutableMap<String, Any?>, waivers: Waivers.Set = Waivers.EMPTY) {
+    fun apply(
+        result: MutableMap<String, Any?>, waivers: Waivers.Set = Waivers.EMPTY, source: ((String) -> String?)? = null,
+    ) {
         val graph = result["graph"] as? Map<String, Any?> ?: return
         val nodes = graph["nodes"] as? List<Map<String, Any?>> ?: return
         val edges = graph["edges"] as? List<Map<String, Any?>> ?: emptyList()
         val findings = ArrayList<Map<String, Any?>>()
+        val nodeById = nodes.associateBy { it["id"] as? String }
+        // Who references a node — a missing model is reported where it is named, not on the placeholder
+        // node that has no file. App membership and access are not references.
+        val referrers = HashMap<String, MutableList<Map<String, Any?>>>()
+        for (e in edges) {
+            if (e["rel"] == "contains") continue
+            val s = e["s"] as? String ?: continue
+            if (s.startsWith("group:")) continue
+            val t = e["t"] as? String ?: continue
+            val from = nodeById[s] ?: continue
+            if (from["file"] == null) continue
+            val list = referrers.getOrPut(t) { ArrayList() }
+            if (list.none { it["id"] == s }) list.add(from)
+        }
 
         // A form is unused when nothing functionally references it. Every form sits in an app, so the
         // app's `contains` edge alone does not count as use — and neither does an access edge: a group
@@ -66,10 +88,15 @@ object Findings {
          * only thing separating those findings is [message], which is generated prose carrying counts
          * and "(+N more)": it rewords when something unrelated on the same node changes, so nothing
          * downstream can name one finding and still mean the same one after the next run.
+         *
+         * [file] stands in for a node that has none — the model that holds an expression, the model that
+         * names a missing one; it is a location, never part of the finding's identity (check + node +
+         * element + subject), so a waiver keeps matching.
          */
         fun add(
             check: String, severity: String, node: Map<String, Any?>, message: String,
             element: String? = null, subject: String? = null, line: Any? = null, snippet: String? = null,
+            file: Any? = null, models: List<String>? = null,
         ) {
             val f = linkedMapOf<String, Any?>(
                 "check" to check,
@@ -78,11 +105,12 @@ object Findings {
                 "label" to (node["label"] ?: node["key"]),
                 "message" to message,
             )
-            if (node["file"] != null) f["file"] = node["file"]
+            (node["file"] ?: file)?.let { f["file"] = it }
             if (element != null) f["element"] = element
             if (subject != null) f["subject"] = subject
             if (line != null) f["line"] = line
             if (snippet != null) f["snippet"] = snippet
+            if (!models.isNullOrEmpty()) f["models"] = models
             findings.add(f)
         }
 
@@ -96,6 +124,10 @@ object Findings {
                     // (something is definitely wrong) or merely suspect (unknown name), which is the
                     // distinction a reader acts on — so classify it once, by its worst problem.
                     val invalid = problems.any { it["severity"] == ERROR }
+                    // An expression is no file of its own: the finding names the models that hold it, and
+                    // takes the file of the one model when there is one, so it can be opened there.
+                    val models = (data["usedBy"] as? List<*>).orEmpty().map { it.toString() }.sorted()
+                    val home = models.singleOrNull()?.let { nodeById[it]?.get("file") }
                     for (p in problems) {
                         add(
                             check = if (invalid) "invalidExpr" else "suspectExpr",
@@ -108,6 +140,7 @@ object Findings {
                             subject = p["kind"]?.let { "$it:${p["subject"]}" }
                                 ?: p["start"]?.let { "@$it" },
                             snippet = p["snippet"]?.toString(),
+                            file = home, models = models,
                         )
                     }
                 }
@@ -220,8 +253,17 @@ object Findings {
                 "customFunction" -> if ((data["usedBy"] as? List<*>).isNullOrEmpty()) {
                     add("unusedFns", WARNING, n, "custom function is registered but never used")
                 }
+                // One finding per missing model, as before — the count and every waiver keyed on the node
+                // stay — but it names who references it and points at the first of them, by file.
                 "external" -> if (data["missingModel"] == true) {
-                    add("missingRefs", ERROR, n, "referenced model does not exist in this project")
+                    val from = referrers[n["id"]].orEmpty().sortedBy { it["file"].toString() }
+                    val first = from.firstOrNull()
+                    if (first == null) add("missingRefs", ERROR, n, "referenced model does not exist in this project")
+                    else add("missingRefs", ERROR, n,
+                        "`${first["label"] ?: first["key"]}`" + (if (from.size > 1) " (+${from.size - 1} more)" else "") +
+                            " references ${data["kind"]?.toString()?.removePrefix("model:") ?: "model"} `${n["key"]}`, " +
+                            "which does not exist in this project",
+                        file = first["file"])
                 }
                 // Three independent things can be worth saying about one variable, so this branch must
                 // not `continue` between them the way the others do.
@@ -242,8 +284,11 @@ object Findings {
             }
         }
 
-        // Scripts are not graph nodes: their findings hang off the parsed model buckets.
-        collectScriptFindings(result, findings)
+        // Scripts are not graph nodes: their findings hang off the parsed model buckets. Which script each
+        // finding is about is kept by identity: two findings can be equal maps — one script copied into two
+        // listeners of an element — and still sit in two places.
+        val scriptSites = IdentityHashMap<MutableMap<String, Any?>, FindingLines.ScriptSite>()
+        collectScriptFindings(result, findings, scriptSites)
 
         // Parse/read failures. Custom-function extraction keeps its own diagnostics list.
         for (d in (result["diagnostics"] as? List<Map<String, Any?>> ?: emptyList())) {
@@ -273,7 +318,6 @@ object Findings {
         }
         // Leftover markers — a TODO is a promise; the report lists the ones nobody kept. Keyed by the
         // first model the file defines, or by the file when it defines none.
-        val nodeById = nodes.associateBy { it["id"] as? String }
         // The same model loose and inside a `.bar` is one model with one marker: the model buckets are
         // deduped that way, and so is this — the first file wins, the finding is one.
         val seenMarkers = HashSet<List<Any?>>()
@@ -283,22 +327,32 @@ object Findings {
             val owner = (m["models"] as? List<*>)?.firstNotNullOfOrNull { nodeById[it.toString()] }
             val text = m["text"]?.toString().orEmpty()
             // A marker with no text of its own is told apart by where it sits: the path of the JSON element
-            // holding it (a minified model is one line, and a column moves on every export), else its line.
-            val subject = text.ifEmpty { m["path"]?.toString() ?: "@${m["line"]}" }
+            // holding it (a minified model is one line, and a column moves on every export), or in an XML
+            // model the element and what carries it (`sentry2/documentation`), else its line.
+            val path = m["path"]?.toString()
+            val subject = text.ifEmpty { path ?: "@${m["line"]}" }
             val element = m["element"]?.toString()
             val value = m["value"]?.toString()
-            // The element and what it says name the marker in every copy of the model: a Design export
+            // The element and what it says name the marker in every copy of a JSON model: a Design export
             // (`components[0].components[4]`) and the app's `.bar` (`rows[1].cols[0]`) spell the same label's
-            // path two ways, which made one TODO two findings.
-            val seenKey = if (element != null) listOf(owner?.get("id") ?: m["file"], m["marker"], "@$element", value ?: text)
+            // path two ways, which made one TODO two findings. An XML model's copies are the same text, so
+            // there the subject and line do it — and two text-less markers in one element stay two.
+            val json = path != null && '/' !in path
+            val seenKey = if (element != null && json) listOf(owner?.get("id") ?: m["file"], m["marker"], "@$element", value ?: text)
                           else listOf(owner?.get("id") ?: m["file"], m["marker"], subject, m["line"])
             if (!seenMarkers.add(seenKey)) continue
-            // what carries it — "the label" — from the path's last key
-            val what = (m["path"]?.toString())?.substringAfterLast('.')?.substringBefore('[')?.takeIf { it.isNotBlank() && !it.first().isDigit() }
+            // what carries it — "the label", "the documentation" — from the path's last step
+            val last = path?.substringAfterLast('/')
+            val what = when {
+                last == null -> null
+                last.startsWith("#comment") -> "comment"
+                else -> last.substringAfterLast('.').substringBefore('[').substringBefore('#').removePrefix("@")
+            }?.takeIf { it.isNotBlank() && !it.first().isDigit() }
             val message = when {
                 text.isNotEmpty() -> "${m["marker"]}: $text"
                 value != null && what != null -> "${m["marker"]} in the $what: \"$value\""
                 value != null -> "${m["marker"]} in \"$value\""
+                what != null -> "${m["marker"]} in the $what"
                 else -> "${m["marker"]} left in the model"
             }
             findings.add(linkedMapOf(
@@ -323,6 +377,11 @@ object Findings {
                 // covers a finding by its node or its file
                 "file" to ((customFns?.get("source") ?: customFns?.get("path") ?: "custom-functions").toString()),
             ))
+        }
+
+        if (source != null) {
+            FindingLines.locate(findings.map { it as MutableMap<String, Any?> }, scriptSites,
+                { id -> nodeById[id]?.get("key") as? String }, source)
         }
 
         val order = CheckCatalog.ORDER.withIndex().associate { (i, c) -> c to i }
@@ -1055,17 +1114,23 @@ object Findings {
      * Mirrors the explorer's `allScripts()` sources: BPMN script tasks, scripts anywhere in a CMMN plan
      * tree, execution/task listeners of a model and of its elements, an action's bot script, and a
      * script-type service operation.
+     *
+     * A problem's line counts from the start of its script body, so it travels as `scriptLine`, and
+     * [sites] records which script of the model it is — [FindingLines] turns the two into a line of the
+     * file. The body's line 1 used to be printed as `order.bpmn:1`, and every Open landed on the XML
+     * declaration.
      */
     @Suppress("UNCHECKED_CAST")
     private fun collectScriptFindings(
         result: Map<String, Any?>,
         findings: MutableList<Map<String, Any?>>,
+        sites: MutableMap<MutableMap<String, Any?>, FindingLines.ScriptSite>,
     ) {
         // No `subject` here, deliberately. One script element can carry several problems, but the only
         // things that would tell them apart are the line and the message, and both move when the script
         // is edited above them. The element is the honest grain: a reader judges a script body, not a
         // line of it.
-        fun emit(modelType: String, model: Map<String, Any?>, element: Any?, problems: Any?) {
+        fun emit(modelType: String, model: Map<String, Any?>, element: Any?, problems: Any?, site: FindingLines.ScriptSite?) {
             val list = problems as? List<Map<String, Any?>> ?: return
             for (p in list) {
                 val f = linkedMapOf<String, Any?>(
@@ -1077,17 +1142,28 @@ object Findings {
                 )
                 model["file"]?.let { f["file"] = it }
                 element?.let { f["element"] = it.toString() }
-                p["line"]?.let { f["line"] = it }
+                p["line"]?.let { f["scriptLine"] = it }
                 p["snippet"]?.let { f["snippet"] = it }
                 findings.add(f)
+                if (site != null) sites[f] = site
             }
         }
+        /** The listeners of one element, each with its place among the listeners of its kind. */
+        fun listeners(owner: Map<String, Any?>): List<Pair<Map<String, Any?>, Int>> {
+            val seen = HashMap<String, Int>()
+            return (owner["listeners"] as? List<Map<String, Any?>> ?: emptyList()).map { l ->
+                val kind = l["kind"]?.toString().orEmpty()
+                l to seen.merge(kind, 1, Int::plus)!!.minus(1)
+            }
+        }
+        fun listenerSite(elementId: Any?, l: Map<String, Any?>, index: Int) =
+            elementId?.toString()?.let { FindingLines.ScriptSite(it, l["kind"]?.toString(), index) }
 
         for (pAny in (result["processes"] as? List<Map<String, Any?>> ?: emptyList())) {
             for (t in (pAny["scriptTasks"] as? List<Map<String, Any?>> ?: emptyList())) {
-                emit("process", pAny, t["id"], t["problems"])
+                emit("process", pAny, t["id"], t["problems"], t["id"]?.let { FindingLines.ScriptSite(it.toString()) })
             }
-            emitListeners("process", pAny, findings, ::emit)
+            emitListeners("process", pAny, ::listeners, ::listenerSite, ::emit)
         }
         for (cAny in (result["cases"] as? List<Map<String, Any?>> ?: emptyList())) {
             // CMMN keeps scripts in the plan tree (`<task flowable:type="script">`), and a plan item's
@@ -1095,20 +1171,23 @@ object Findings {
             // `planItemLifecycleListener` with a script is a no-op at runtime and is flagged by the parser;
             // until now that problem was recorded on the item and read by nothing.
             fun walk(node: Map<String, Any?>) {
-                emit("case", cAny, node["id"], node["problems"])
-                for (l in (node["listeners"] as? List<Map<String, Any?>> ?: emptyList())) emit("case", cAny, node["id"], l["problems"])
+                emit("case", cAny, node["id"], node["problems"], node["id"]?.let { FindingLines.ScriptSite(it.toString()) })
+                for ((l, i) in listeners(node)) emit("case", cAny, node["id"], l["problems"], listenerSite(node["id"], l, i))
                 for (ch in (node["children"] as? List<Map<String, Any?>> ?: emptyList())) walk(ch)
             }
             (cAny["planModel"] as? Map<String, Any?>)?.let { walk(it) }
-            emitListeners("case", cAny, findings, ::emit)
+            emitListeners("case", cAny, ::listeners, ::listenerSite, ::emit)
         }
         for (aAny in (result["actions"] as? List<Map<String, Any?>> ?: emptyList())) {
-            emit("action", aAny, null, aAny["scriptProblems"])
+            // an action's script lives in a JSON string: there is no file line to give it
+            emit("action", aAny, null, aAny["scriptProblems"], null)
         }
-        // a script-type service operation: the operation is the element, as a script task is in a process
+        // a script-type service operation: the operation is the element, as a script task is in a process.
+        // Its script is a JSON string, like an action's, so there is no file line to give a problem in it —
+        // the finding opens on the operation instead.
         for (sAny in (result["services"] as? List<Map<String, Any?>> ?: emptyList())) {
             for (op in (sAny["operations"] as? List<Map<String, Any?>> ?: emptyList())) {
-                emit("service", sAny, op["key"], op["scriptProblems"])
+                emit("service", sAny, op["key"], op["scriptProblems"], null)
             }
         }
     }
@@ -1118,20 +1197,18 @@ object Findings {
     private fun emitListeners(
         modelType: String,
         model: Map<String, Any?>,
-        findings: MutableList<Map<String, Any?>>,
-        emit: (String, Map<String, Any?>, Any?, Any?) -> Unit,
+        listeners: (Map<String, Any?>) -> List<Pair<Map<String, Any?>, Int>>,
+        site: (Any?, Map<String, Any?>, Int) -> FindingLines.ScriptSite?,
+        emit: (String, Map<String, Any?>, Any?, Any?, FindingLines.ScriptSite?) -> Unit,
     ) {
-        for (l in (model["listeners"] as? List<Map<String, Any?>> ?: emptyList())) {
-            emit(modelType, model, null, l["problems"])
-        }
+        // the model's own listeners sit on the process (or case) element, whose id is the model's key
+        for ((l, i) in listeners(model)) emit(modelType, model, null, l["problems"], site(model["key"], l, i))
         for (bucket in listOf(
             "userTasks", "serviceTasks", "scriptTasks", "ruleTasks", "callActivities",
             "subProcesses", "events", "gateways", "otherTasks",
         )) {
             for (el in (model[bucket] as? List<Map<String, Any?>> ?: emptyList())) {
-                for (l in (el["listeners"] as? List<Map<String, Any?>> ?: emptyList())) {
-                    emit(modelType, model, el["id"], l["problems"])
-                }
+                for ((l, i) in listeners(el)) emit(modelType, model, el["id"], l["problems"], site(el["id"], l, i))
             }
         }
     }

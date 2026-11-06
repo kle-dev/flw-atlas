@@ -248,10 +248,14 @@ object SummaryRenderer {
                 if (waivedN > 0) " ($waivedN waived)" else "")
             L.addAll(Fmt.healthLines(checks))
             // Name the worst few; the overview lists them all with file/line.
+            val labels by lazy { Fmt.nodeLabels(result) }
             for (f in findings.filter { it["severity"] == "error" }.take(5)) {
                 val where = listOfNotNull(f["label"]?.toString(), f["element"]?.toString())
                     .joinToString(" · ")
-                L.add("- ⚠ ${f["message"]}" + (if (where.isNotEmpty()) " — `$where`" else ""))
+                // an expression is no model: name the models it sits in
+                val models = Fmt.findingModels(f, labels)
+                L.add("- ⚠ ${f["message"]}" + (if (where.isNotEmpty()) " — `$where`" else "") +
+                    (if (models.isNotEmpty()) " $models" else ""))
             }
             val errors = findings.count { it["severity"] == "error" }
             if (errors > 5) L.add("- … (+${errors - 5} more errors — see `$an.overview.md`)")
