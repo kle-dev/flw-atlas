@@ -385,6 +385,10 @@ object BackendModelParsers {
                             el.attr("attachedToRef")?.ifEmpty { null }?.let { ev["attachedTo"] = it }
                             el.attr("cancelActivity")?.ifEmpty { null }?.let { ev["cancelActivity"] = it }
                         }
+                        // The sub-process around an event, as user tasks and sub-processes carry it: an
+                        // embedded sub-process's start event is where its flow begins, not the process's,
+                        // and only this tells the two apart.
+                        enclosing[eid]?.let { ev["parent"] = it }
                         events.add(withElementExtras(ev, el, elListeners))
                         if (tag == "startEvent" && truthy(el.attr("formKey"))) {
                             ctx.addRef(pkey, "bpmn", ffile, "start-form", "form", el.attr("formKey"))

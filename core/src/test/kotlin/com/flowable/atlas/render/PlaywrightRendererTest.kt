@@ -259,6 +259,9 @@ class PlaywrightRendererTest {
     }
 
     // ---- shapes the demo does not have ---------------------------------------------------------------
+    // Hand-built maps, so each edge case stays small. The keys they use are the parser's: WorkUiFactsTest
+    // and CmmnRuntimeFactsTest render the guide from parsed models with the same shapes, so renaming a key
+    // on one side fails there instead of silently dropping a ⚠ line here.
 
     private fun result(
         cases: List<Map<String, Any?>> = emptyList(), forms: List<Map<String, Any?>> = emptyList(),
@@ -539,6 +542,44 @@ class PlaywrightRendererTest {
         assertTrue(out, out.contains("| **Claim process** `claimProcess` | process | `#/work?create=true&definitionKey=claimProcess` | 4 user tasks | users `kermit` |"))
     }
 
+    /**
+     * The walk back from a task stopped at the first start event — inside an embedded sub-process, its own.
+     * The task inside was listed as unconditional, and the guard in front of the sub-process went to the
+     * task after it, which the walk reached through the sub-process as if it were an automatic step.
+     */
+    @Test
+    fun aTaskInAConditionalSubProcessCarriesItsGuard() {
+        val p = mapOf(
+            "key" to "DEMO-review",
+            "userTasks" to listOf(
+                mapOf("id" to "inner", "name" to "Review the request", "candidateGroups" to "DEMO-reviewers", "parent" to "sub"),
+                mapOf("id" to "archive", "name" to "Archive", "candidateGroups" to "DEMO-team"),
+            ),
+            "subProcesses" to listOf(mapOf("id" to "sub", "name" to "Review", "type" to "subProcess", "eventSubProcess" to false)),
+            "gateways" to listOf(mapOf("id" to "gw", "name" to "Needs review?", "type" to "exclusiveGateway")),
+            "events" to listOf(
+                mapOf("id" to "start", "type" to "startEvent"),
+                mapOf("id" to "subStart", "type" to "startEvent", "parent" to "sub"),
+                mapOf("id" to "subEnd", "type" to "endEvent", "parent" to "sub"),
+                mapOf("id" to "end", "type" to "endEvent"),
+            ),
+            "flows" to listOf(
+                mapOf("from" to "start", "to" to "gw"),
+                mapOf("from" to "gw", "to" to "sub", "condition" to "\${needsReview == true}"),
+                mapOf("from" to "gw", "to" to "archive", "default" to true),
+                mapOf("from" to "subStart", "to" to "inner"), mapOf("from" to "inner", "to" to "subEnd"),
+                mapOf("from" to "sub", "to" to "archive"), mapOf("from" to "archive", "to" to "end"),
+            ),
+        )
+        val out = PlaywrightRenderer.render(result(processes = listOf(p)), File("proj"))
+        val inner = out.lines().single { it.startsWith("1. *Review the request*") }
+        assertTrue(inner, inner.contains("reached after *Needs review?* if `\${needsReview == true}`"))
+        val archive = out.lines().single { it.startsWith("2. *Archive*") }
+        assertTrue(archive, archive.contains("after *Needs review?* otherwise (default flow) · or after sub-process *Review*"))
+        assertFalse(archive, archive.contains("needsReview"))
+        assertFalse("the guard is used, not an other branch", out.contains("Other branches"))
+    }
+
     @Test
     fun aTaskBehindACatchEventWaitsForItsEventNotTheStart() {
         // start → event-based gateway → signal catch → service task → task; or → timer catch → task
@@ -604,6 +645,34 @@ class PlaywrightRendererTest {
         // outside code spans, where `<taskId>` is literal text
         assertFalse(legend, Regex("<[A-Za-z]+>").containsMatchIn(legend.replace(Regex("`[^`]*`"), "")))
         assertTrue(legend, legend.contains("**Step N of M — *stage name***"))
+    }
+
+    /**
+     * A placeholder written as `<name>` outside a code span is an HTML tag to CommonMark, and GitHub's and
+     * the IDE's previews drop it: the generic half read "*Create New ?*". The rule held for the legend
+     * only; this holds it for the hand-written half and both generated files.
+     */
+    @Test
+    fun noPlaceholderInEitherFileIsMarkdownHtml() {
+        val guide = javaClass.classLoader.getResource("agents/playwright-guide.md")!!.readText()
+        val layout = PlaywrightRenderer.Layout(map = true)
+        val files = mapOf(
+            "playwright-guide.md" to guide,
+            "playwright.md" to PlaywrightRenderer.render(demoResult, demoDir, layout),
+            "playwright-map.md" to PlaywrightRenderer.renderMap(demoResult, demoDir, layout),
+        )
+        val tag = Regex("<[A-Za-z][A-Za-z0-9-]*(\\s[^<>]*)?/?>") // `<case name>` too; an autolink has a `:`
+        val hits = ArrayList<String>()
+        for ((name, text) in files) {
+            var fence = false
+            for ((i, line) in text.lines().withIndex()) {
+                val t = line.trim()
+                if (t.startsWith("```") || t.startsWith("~~~")) { fence = !fence; continue }
+                if (fence) continue
+                tag.find(line.replace(Regex("(`+)[\\s\\S]*?\\1"), ""))?.let { hits.add("$name:${i + 1} «${it.value}»: $line") }
+            }
+        }
+        assertTrue(hits.joinToString("\n"), hits.isEmpty())
     }
 
     @Test

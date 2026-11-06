@@ -162,6 +162,22 @@ object Fmt {
         return if (code) " $label=`$s`" else " $label=$s"
     }
 
+    /**
+     * A code span on one line that survives what is inside it: whitespace collapsed (a multi-line sentry
+     * condition otherwise spills over a dozen lines and ends the list it sits in), and a fence one
+     * backtick longer than any run inside the value, padded, as CommonMark allows. Inside a span `<` is
+     * literal, so a URL carrying `<cookie …/>` no longer reaches the page as raw HTML.
+     */
+    fun code(s: String): String {
+        val one = s.replace(WS, " ").trim()
+        if ('`' !in one) return "`$one`"
+        val run = Regex("`+").findAll(one).maxOf { it.value.length }
+        val fence = "`".repeat(run + 1)
+        return "$fence $one $fence"
+    }
+
+    private val WS = Regex("\\s+")
+
     /** Join the non-empty parts of a line, so an omitted [opt] never leaves a double space. */
     fun join(vararg parts: String): String =
         parts.filter { it.isNotBlank() }.joinToString(" ") { it.trim() }

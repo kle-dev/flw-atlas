@@ -133,7 +133,7 @@ Hash routes under Work's base URL (§0). Going to the hash you are on does nothi
    start form, or its *Continue* confirmation. This holds only for a definition your user may start (§9 *May
    start*; `platform-api/work-definitions` lists yours). Otherwise Work ignores the key without a message: it
    shows the chooser, or, if you may start exactly one definition, that one's form. Before you submit, check
-   that the dialog is your definition's: the confirmation names it (*Create New <name>?*; *Create <name>?* on
+   that the dialog is your definition's: the confirmation names it (`Create New <name>?`; `Create <name>?` on
    2025.1 and older), a start form shows the fields §9 lists for it. If it is not, press **Cancel** and report the
    missing permission (§1.7); never pick a same-named entry instead. **Create New** opens this dialog only inside
    the Work app. In *Tasks* it opens *Create task*, a standalone task: close it, never save it. *Contacts*,
@@ -170,7 +170,7 @@ Hash routes under Work's base URL (§0). Going to the hash you are on does nothi
     *Completed*.
   - **Reading it:** `.flw-timeline__step-container--current .flw-timeline__step-label` on every version (steps
     are `.flw-timeline__step-container` with `--done`, `--current` or `--pending`). On 2026.1 and newer it is
-    also a list *Progress*, steps named "Step N of M, <stage>, Completed|Current|Not started":
+    also a list *Progress*, steps named `Step N of M, <stage>, Completed|Current|Not started`:
     `getByRole('list', { name: 'Progress' }).getByRole('listitem', { name: /, Current$/ })`. *2025.2 and older:*
     a snapshot shows the labels, not which is current. `stage-overview` (§3) has the same list and is the authority.
 - **Tabs** (`role=tab` from 3.15): *Open tasks*, *Work form*, *Conversation*, *Comments*, *People*, *Sub-items*
@@ -194,11 +194,11 @@ model can restrict an item to one of the two, so look in both.
 |---|---|
 | a manual-activation item | each *enabled* one (§4), named after the plan item or the name the model gives it (§9); when the model lists groups or users, only they get it. Starts the item at once, without confirmation, unless it has a start form, which opens first. A stage that looks stuck often has its next item waiting here: the step agents miss most often |
 | a user event listener | each *available* one, named after the listener. Fires at once, without confirmation, unless it has a form. One that jumps the case (close, reject, reopen) is irreversible: ask first (§1.5) |
-| the project's own actions (§9) | with a form, a form dialog opens; others run at once or ask "Do you want to execute the action '<name>'?": press **OK** |
+| the project's own actions (§9) | with a form, a form dialog opens; others run at once or ask `Do you want to execute the action '<name>'?`: press **OK** |
 | **Terminate** (case), **Cancel** (process) | toolbar only, for the instance's owner and administrators. Irreversible: never without the user's go. If missing, report it |
-| reopen a completed or terminated case | only if its model has a reactivation listener (§9): named after it, or "Reactivate <case name>"; it can ask for a form, be limited to groups and expire after a set time. Only when the user asks |
+| reopen a completed or terminated case | only if its model has a reactivation listener (§9): named after it, or `Reactivate <case name>`; it can ask for a form, be limited to groups and expire after a set time. Only when the user asks |
 
-Success shows "Action '<name>' was correctly executed." (`.flw-funkyNoti--success`, every version): assert the
+Success shows `Action '<name>' was correctly executed.` (`.flw-funkyNoti--success`, every version): assert the
 text, or wait for the response ending in `/execute`. A listener's form started from the toolbar opens in a form
 dialog; a *user-event-listener button* inside a form (2025.1 and newer), like an action button there, opens the
 panel `.flw__modal-panel__dialog` (§7 *Dialogs*), and on 2025.1 its **Submit** enables late. Toolbar actions load
@@ -343,7 +343,7 @@ one instance per element.
 | the label's asterisk | marks a required field and is part of its accessible name: `getByRole('textbox', { name: 'Amount*', exact: true })`. 2025.1 and newer, and 3.17.3+, also set `aria-required` |
 | `[aria-invalid="true"]` (2026.1 and newer) | every rendered input whose rules fail, touched or not; `aria-describedby` points at its messages: `() => [...document.querySelectorAll('[aria-invalid="true"]')].map(e => ({ field: e.closest('[data-flw-id]')?.getAttribute('data-flw-id'), error: document.getElementById(e.getAttribute('aria-describedby') ?? '')?.textContent }))`. *2025.2, 2025.1 and 3.17.15+:* only text fields carry it; older 3.x has none, so read the error list |
 | `.flw__error-list__error-list-item` (every version) | the visible messages ("Field must not be empty", "The typed text is invalid", …), shown once the field was touched or an outcome was pressed; 2025.1 and newer, and 3.17.15+, group them as alerts under *Error messages* |
-| form tabs, wizard pages, collapsed panels | their fields are not on the page, and a required one blocks with no error in sight. Open every tab inside the form, step through the wizard (**Next** / **Previous**), expand every panel whose toggle has `aria-expanded="false"`. On 2026.1 and newer a tab with errors is named "Some parts of <tab> are incomplete or invalid": match form tabs with a regex |
+| form tabs, wizard pages, collapsed panels | their fields are not on the page, and a required one blocks with no error in sight. Open every tab inside the form, step through the wizard (**Next** / **Previous**), expand every panel whose toggle has `aria-expanded="false"`. On 2026.1 and newer a tab with errors is named `Some parts of <tab> are incomplete or invalid`: match form tabs with a regex |
 | a ⚠ in §9 | a required field that can be hidden still counts, also inside a hidden panel or subform, and no error shows anywhere: make it visible (fill what its condition reads), or fill what it depends on. A disabled or ignored field does not count, nor one inside a disabled or ignored container |
 | *rules:* in §9 | a validation pattern matches the whole value; minimum and maximum values and lengths, and date formats, apply too; a custom validation fails when its expression is falsy. Missing in §9: read `validationRegExp` and `extraSettings` in the deployed form (§3) |
 
@@ -479,7 +479,7 @@ fall back to role and visible text, and say in your report which one failed.
 | Confirmation dialogs | `role="alertdialog"` | `.flw-alertDialog` | `.flw-alertDialog` (`[data-cy=bare-alert-dialog]`) | `.flw-alertDialog` |
 | Task header buttons (Claim; Complete without a form; Save) | button | button | no role while enabled: `page.locator('a.flw-headerToolbar__btn', { hasText: /^\s*Claim\s*$/ })` | same |
 | A form's user-event-listener button | `.flw__modal-panel__dialog` | same | 2025.1 same, wait for **Submit**; 3.x has none | none |
-| Assignee link | "Assignee: <name>" | "<name>" | "<name>" | "<name>" |
+| Assignee link | `Assignee: <name>` | `<name>` | `<name>` | `<name>` |
 | After Complete | the next task opens for cases | the next task opens | the next task opens | the next task opens |
 | Form errors | group *Error messages* > alerts; `aria-invalid` on every input | group *Error messages* > alerts; `aria-invalid` on text fields | `.flw__error-list__error-list-item`; on 2025.1 and 3.17.15+ also the group and `aria-invalid` on text fields | `.flw__error-list__error-list-item`, no roles |
 | `aria-required` on inputs | yes | yes | 2025.1 and 3.17.3+ | no |

@@ -1212,6 +1212,8 @@ object PlaywrightRenderer {
             data class Cond(val from: String, val flow: Map<String, Any?>, val cond: String) : Way()
             data class Default(val from: String, val flow: Map<String, Any?>) : Way()
             data class After(val task: String) : Way()
+            /** Out of an embedded sub-process that holds user tasks — after those tasks, like [After]. */
+            data class Sub(val sub: String) : Way()
             data class Start(val event: String) : Way()
             data class Boundary(val event: String) : Way()
             data class Catch(val event: String) : Way()
@@ -1361,6 +1363,18 @@ object PlaywrightRenderer {
             private val userTasks = objs(p["userTasks"]).mapNotNull { str(it["id"]) }.toSet()
             private val events = objs(p["events"]).mapNotNull { e -> str(e["id"])?.let { it to e } }.toMap()
             private val gateways = objs(p["gateways"]).mapNotNull { str(it["id"]) }.toSet()
+            private val subs = objs(p["subProcesses"]).mapNotNull { s -> str(s["id"])?.let { it to s } }.toMap()
+
+            /** A sub-process the flow enters, as opposed to an event sub-process its event starts. */
+            private fun embedded(id: String): Boolean = subs[id]?.let { it["eventSubProcess"] != true } == true
+
+            /** Embedded sub-processes with a user task somewhere inside: passing one is passing that task. */
+            private val withTasks: Set<String> = HashSet<String>().also { out ->
+                for (t in objs(p["userTasks"])) {
+                    var cur = str(t["parent"])
+                    while (cur != null && out.add(cur)) cur = subs[cur]?.let { str(it["parent"]) }
+                }
+            }
             private val names: Map<String, String> = run {
                 val m = HashMap<String, String>()
                 for (bucket in listOf("userTasks", "serviceTasks", "scriptTasks", "ruleTasks", "otherTasks",
@@ -1393,10 +1407,16 @@ object PlaywrightRenderer {
                         val src = str(f["from"]) ?: continue
                         val cond = str(f["condition"])
                         val ev = events[src]
+                        // An embedded sub-process's own start event is not the start of the process: the
+                        // walk goes on from the flows into the sub-process, so a guard in front of it is
+                        // reported on the task inside instead of on the task after it.
+                        val host = str(ev?.get("parent"))?.takeIf { ev?.get("type") == "startEvent" && embedded(it) }
                         when {
                             cond != null -> out.add(Way.Cond(src, f, cond))
                             f["default"] == true -> out.add(Way.Default(src, f))
                             src in userTasks -> out.add(Way.After(src))
+                            host != null -> if (seen.add(host)) queue.add(host)
+                            src in withTasks && embedded(src) -> out.add(Way.Sub(src))
                             ev?.get("type") == "startEvent" -> out.add(Way.Start(src))
                             ev?.get("type") == "boundaryEvent" -> out.add(Way.Boundary(src))
                             // A catch event is a wait, not a step: the task comes only once its signal, timer
@@ -1415,12 +1435,13 @@ object PlaywrightRenderer {
              */
             fun waysIn(taskId: String, start: Boolean = true): String? {
                 val ways = ways(taskId).filter { start || it !is Way.Start }
-                if (ways.all { it is Way.After || it is Way.Start }) return null
+                if (ways.all { it is Way.After || it is Way.Sub || it is Way.Start }) return null
                 return ways.joinToString(" · or ") { w ->
                     when (w) {
                         is Way.Cond -> { used.add(w.flow); "after ${label(w.from, w.flow)} if ${code(condition(w.cond))}${setBy(w.cond, formUse)}" }
                         is Way.Default -> { used.add(w.flow); "after ${label(w.from, w.flow)} otherwise (default flow)" }
                         is Way.After -> "after task ${label(w.task, null)}"
+                        is Way.Sub -> "after sub-process ${names[w.sub]?.let { em(it) } ?: code(w.sub)}"
                         is Way.Start -> "at the start" + (events[w.event]?.let { trig(it) }?.let { " ($it)" } ?: "")
                         is Way.Boundary -> boundary(w.event)
                         is Way.Catch -> catch(w.event)
@@ -1948,14 +1969,8 @@ object PlaywrightRenderer {
         else -> Fmt.scalar(v)
     }
 
-    /** A code span that survives backticks inside it (CommonMark: a longer fence, padded). */
-    internal fun code(s: String): String {
-        val one = s.replace(WS, " ").trim()
-        if ('`' !in one) return "`$one`"
-        val run = Regex("`+").findAll(one).maxOf { it.value.length }
-        val fence = "`".repeat(run + 1)
-        return "$fence $one $fence"
-    }
+    /** A code span that survives backticks inside it — [Fmt.code], which the overview shares. */
+    internal fun code(s: String): String = Fmt.code(s)
 
     /** Model text placed in running Markdown: the characters that would open emphasis, code or HTML are escaped. */
     internal fun inline(s: String): String = s.replace(WS, " ").trim()

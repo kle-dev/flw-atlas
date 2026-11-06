@@ -111,7 +111,9 @@ It is designed to make that easy:
   `designVersion`. In **`cases`**, `planModel.exitCriteria` holds what ends the whole case; a sentry keeps
   its `triggerMode` and the `events` its on-parts wait for; every criterion keeps its `planItemId`, and an
   exit its `exitEventType` and `exitType`; a stage or milestone keeps `displayOrder`,
-  `includeInStageOverview` and `overviewIndex`, its place in Work's stage overview. In **`apps`**, an app
+  `includeInStageOverview` and `overviewIndex`, its place in Work's stage overview. In **`processes`**, a
+  user task, sub-process or event inside a sub-process keeps that sub-process's id as `parent`, and a
+  boundary event its `attachedTo` and `cancelActivity`. In **`apps`**, an app
   keeps `flowApp`, `url` and `order`, and each page its `label` and `url`. The
   [Playwright guide](#playwrightmd-driving-flowable-work-in-a-browser) is built from them, and its §10
   queries them. A credential written into a model is the exception: a secret-named literal, the
@@ -218,7 +220,8 @@ apps the sidebar shows, with their pages. Behind it are the details:
   sentries — *Assessment* completes **and** `${assessmentOutcome == 'approve'}` ← outcome **Approve** on
   task *Assess damage* — whether it completes by itself, and every task, manual item and listener inside
   it, with the groups that get them.
-- **Processes.** Each process's user tasks in flow order, and what leads to each.
+- **Processes.** Each process's user tasks in flow order, and what leads to each — for a task inside an
+  embedded sub-process, the condition in front of that sub-process.
 - **Actions and forms.** The project's own actions, and each form behind the tasks: its required fields and
   their rules, its outcomes and the variable they write, and its conditional buttons — flagging a required
   field that can be hidden, which, on a form saved by Design 3.8 or later, keeps the outcomes disabled with

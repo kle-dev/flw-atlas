@@ -37,7 +37,8 @@ class WorkUiFactsTest {
             File(dir, "forms").mkdirs()
             File(dir, "forms/claim.form").writeText(
                 """{"metadata": {"key": "claimForm", "name": "Claim", "flowableDesignVersion": 3110},
-                    "outcomes": [{"value": "submit", "label": "Submit", "navigationUrl": "#/claims/inbox"}],
+                    "outcomes": [{"value": "submit", "label": "Submit", "navigationUrl": "#/claims/inbox"},
+                                 {"value": "park", "label": "Park", "ignoreValidation": true}],
                     "defaultDateFormat": "dd.MM.yyyy",
                     "rows": [
                       {"cols": [{"id": "policyNumber", "type": "text", "label": "Policy number", "isRequired": true,
@@ -82,6 +83,46 @@ class WorkUiFactsTest {
                        </subProcess>
                      </process>
                    </definitions>""")
+            // a guarded embedded sub-process: the guard belongs to the task inside, not to the one after it
+            File(dir, "processes/review.bpmn20.xml").writeText(
+                """<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn">
+                     <process id="DEMO-reviewProcess" name="Review process">
+                       <startEvent id="start"/>
+                       <exclusiveGateway id="gw" name="Needs review?" default="toArchive"/>
+                       <subProcess id="sub" name="Review">
+                         <startEvent id="subStart"/>
+                         <userTask id="inner" name="Review the request" flowable:candidateGroups="DEMO-reviewers"/>
+                         <endEvent id="subEnd"/>
+                         <sequenceFlow id="s1" sourceRef="subStart" targetRef="inner"/>
+                         <sequenceFlow id="s2" sourceRef="inner" targetRef="subEnd"/>
+                       </subProcess>
+                       <userTask id="archive" name="Archive" flowable:candidateGroups="DEMO-team"/>
+                       <endEvent id="end"/>
+                       <sequenceFlow id="f1" sourceRef="start" targetRef="gw"/>
+                       <sequenceFlow id="toSub" sourceRef="gw" targetRef="sub">
+                         <conditionExpression>${'$'}{needsReview == true}</conditionExpression>
+                       </sequenceFlow>
+                       <sequenceFlow id="toArchive" sourceRef="gw" targetRef="archive"/>
+                       <sequenceFlow id="f2" sourceRef="sub" targetRef="archive"/>
+                       <sequenceFlow id="f3" sourceRef="archive" targetRef="end"/>
+                     </process>
+                   </definitions>""")
+            // a case whose task opens the claim form, so the guide has a reason to describe that form
+            File(dir, "cases").mkdirs()
+            File(dir, "cases/claim.cmmn").writeText(
+                """<definitions xmlns="http://www.omg.org/spec/CMMN/20151109/MODEL" xmlns:flowable="http://flowable.org/cmmn">
+                     <case id="DEMO-claimCase" name="Claim case">
+                       <casePlanModel id="plan">
+                         <planItem id="piIntake" name="Intake" definitionRef="intake"/>
+                         <planItem id="piDecide" name="Decide" definitionRef="decide"/>
+                         <stage id="intake" name="Intake" flowable:displayOrder="1">
+                           <planItem id="piFill" name="Fill in the claim" definitionRef="fill"/>
+                           <humanTask id="fill" name="Fill in the claim" flowable:formKey="claimForm" flowable:candidateGroups="DEMO-team"/>
+                         </stage>
+                         <stage id="decide" name="Decide" flowable:displayOrder="2"/>
+                       </casePlanModel>
+                     </case>
+                   </definitions>""")
             result = Atlas.extract(dir)
         }
 
@@ -107,7 +148,7 @@ class WorkUiFactsTest {
     private fun validation(id: String): Map<String, Any?> = field("claimForm", id)["validation"] as Map<String, Any?>
 
     @Suppress("UNCHECKED_CAST")
-    private fun process(): Map<String, Any?> = bucket("processes").single()
+    private fun process(): Map<String, Any?> = bucket("processes").single { it["key"] == "claimProcess" }
 
     @Suppress("UNCHECKED_CAST")
     private fun list(v: Any?): List<Map<String, Any?>> = v as List<Map<String, Any?>>
@@ -196,7 +237,8 @@ class WorkUiFactsTest {
         val claim = bucket("forms").single { it["key"] == "claimForm" }
         assertEquals(3110, claim["designVersion"])
         assertEquals("dd.MM.yyyy", claim["defaultDateFormat"])
-        assertEquals("#/claims/inbox", list(claim["outcomes"]).single()["navigationUrl"])
+        assertEquals("#/claims/inbox", list(claim["outcomes"]).single { it["value"] == "submit" }["navigationUrl"])
+        assertEquals(true, list(claim["outcomes"]).single { it["value"] == "park" }["ignoreValidation"])
         val legacy = bucket("forms").single { it["key"] == "legacyForm" }
         assertNull("hand-written, no version", legacy["designVersion"])
         assertEquals(true, legacy["doNotCreateOutcomeVariable"])
@@ -212,6 +254,32 @@ class WorkUiFactsTest {
         val subs = list(process()["subProcesses"])
         assertEquals("escalation", subs.single { it["id"] == "inner" }["parent"])
         assertEquals(true, subs.single { it["id"] == "escalation" }["eventSubProcess"])
+    }
+
+    @Test
+    fun anEventKnowsTheSubProcessItSitsIn() {
+        val events = list(bucket("processes").single { it["key"] == "DEMO-reviewProcess" }["events"])
+        assertEquals("sub", events.single { it["id"] == "subStart" }["parent"])
+        assertNull("on the main path", events.single { it["id"] == "start" }["parent"])
+    }
+
+    /**
+     * The guide read from these parsed models, not from hand-built maps. PlaywrightRendererTest pins each
+     * of these shapes with a map it writes itself; this is what fails when a parser key and the renderer
+     * stop agreeing, and the hand-built test, still matching its own map, would stay green.
+     */
+    @Test
+    fun theGuideWarnsAboutWhatTheseFactsHide() {
+        val guide = com.flowable.atlas.render.PlaywrightRenderer.render(result, dir)
+        val hidden = guide.lines().single { it.contains("required but hidden at times") }
+        assertTrue(hidden, hidden.contains("`innerAmount` (with `panel` `detailsPanel`, visible if `{{showDetails}}`)"))
+        assertFalse("its panel is disabled, so it blocks nothing", hidden.contains("deepField"))
+        assertTrue(guide, guide.contains("*Park* `park` (works on an invalid form)"))
+        assertTrue(guide, guide.contains("**Stage bar:** Step 1 *Intake* · Step 2 *Decide*"))
+        // the guard in front of the sub-process is the inner task's, and the task after it waits for that one
+        assertTrue(guide, guide.lines().any { it.startsWith("1. *Review the request*") &&
+            it.contains("reached after *Needs review?* if `\${needsReview == true}`") })
+        assertTrue(guide, guide.lines().any { it.startsWith("2. *Archive*") && it.contains("or after sub-process *Review*") })
     }
 
     @Test

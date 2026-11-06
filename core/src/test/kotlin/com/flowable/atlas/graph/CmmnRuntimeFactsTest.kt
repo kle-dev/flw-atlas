@@ -24,6 +24,7 @@ class CmmnRuntimeFactsTest {
 
     companion object {
         private lateinit var dir: File
+        private lateinit var result: Map<String, Any?>
         private lateinit var case: Map<String, Any?>
 
         @JvmStatic
@@ -44,6 +45,7 @@ class CmmnRuntimeFactsTest {
                            <exitCriterion id="exitSetup" sentryRef="sentryReady" flowable:exitEventType="forceComplete"/>
                          </planItem>
                          <planItem id="piReview" name="Review" definitionRef="stageReview">
+                           <entryCriterion id="entryReview" sentryRef="sentryOnEvent"/>
                            <exitCriterion id="exitReview" sentryRef="sentryReady" flowable:exitType="activeInstances"/>
                          </planItem>
                          <planItem id="piMs" name="Paid" definitionRef="ms"/>
@@ -53,6 +55,10 @@ class CmmnRuntimeFactsTest {
                          <planItem id="piCasePage" name="Documents" definitionRef="casePage"/>
                          <sentry id="sentryReady"><ifPart><condition>${'$'}{ready}</condition></ifPart></sentry>
                          <sentry id="sentryClose"><ifPart><condition>${'$'}{closed}</condition></ifPart></sentry>
+                         <sentry id="sentryOnEvent" flowable:triggerMode="onEvent">
+                           <planItemOnPart id="onSetup" sourceRef="piSetup"><standardEvent>complete</standardEvent></planItemOnPart>
+                           <ifPart><condition>${'$'}{ok}</condition></ifPart>
+                         </sentry>
                          <stage id="stageSetup" name="Setup" flowable:autoCompleteCondition="${'$'}{setupDone}">
                            <planItem id="piCheckA" name="Check (first)" definitionRef="check">
                              <entryCriterion id="entryA" sentryRef="sentryReady"/>
@@ -105,7 +111,7 @@ class CmmnRuntimeFactsTest {
                        </casePlanModel>
                      </case>
                    </definitions>""")
-            val result = Atlas.extract(dir)
+            result = Atlas.extract(dir)
             case = (result["cases"] as List<Map<String, Any?>>).single()
         }
 
@@ -229,6 +235,22 @@ class CmmnRuntimeFactsTest {
         val listeners = case["eventListeners"] as List<Map<String, Any?>>
         assertEquals("signal", listeners.single { it["id"] == "sigListener" }["listenerType"])
         assertEquals("fraud", listeners.single { it["id"] == "sigListener" }["signalRef"])
+    }
+
+    /**
+     * The guide's §9 read from these parsed facts. PlaywrightRendererTest pins each phrase with a map it
+     * builds by hand; this is what fails when a parser key is renamed and only its own test follows.
+     */
+    @Test
+    fun theGuideReadsTheseFactsFromTheParser() {
+        val guide = com.flowable.atlas.render.PlaywrightRenderer.render(result, dir).substringAfter("## 9.")
+        assertTrue(guide, guide.contains("- completes when: `\${ready}` (forceComplete: it ends as *completed*"))
+        assertTrue(guide, guide.contains("**The case completes** when: `\${closed}`"))
+        assertTrue(guide, guide.contains("**and** `\${ok}` (onEvent)"))
+        assertTrue(guide, guide.contains("variable listener *Documents arrived* — fires when case variable `docsReceived` is created"))
+        assertTrue(guide, guide.contains("signal listener *Fraud signal* — waits for signal `fraud`"))
+        assertTrue(guide, guide.contains("Reopen: once the case has completed or been terminated, Work offers **Reopen claim**"))
+        assertTrue(guide, guide.contains("**manual activation**: action button **Ask expert**"))
     }
 
     @Test
