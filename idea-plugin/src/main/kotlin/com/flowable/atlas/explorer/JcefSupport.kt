@@ -12,8 +12,12 @@ package com.flowable.atlas.explorer
  */
 object JcefSupport {
 
+    /** Set by a test to stand for an IDE with (true) or without (false) the embedded browser. */
+    @Volatile
+    internal var overrideForTest: Boolean? = null
+
     /** True when the JCEF plugin is loaded and the platform reports a working browser. */
-    fun isAvailable(): Boolean = try {
+    fun isAvailable(): Boolean = overrideForTest ?: try {
         Probe.supported()
     } catch (e: LinkageError) {
         false

@@ -64,7 +64,8 @@ object AtlasExplorerNotifier {
                     AtlasBrowser.open(explorerHtml)
                 })
             }
-            if (explorerFile != null) {
+            // Without the embedded browser "Open in IDE" would open the same browser as the action above.
+            if (explorerFile != null && JcefSupport.isAvailable()) {
                 notification.addAction(NotificationAction.createSimple("Open in IDE") {
                     AtlasExplorerOpener.openInIde(project, explorerFile)
                 })

@@ -23,8 +23,16 @@ object AtlasBrowser {
      * A generated `explorer.html` lives on the backend's disk, and under Remote Dev the client cannot
      * see that path — there is nothing to route, so the control is honestly disabled.
      */
-    fun canOpenFiles(): Boolean =
-        !AppMode.isRemoteDevHost() && WebBrowserManager.getInstance().activeBrowsers.isNotEmpty()
+    fun canOpenFiles(): Boolean = canOpenFilesForTest
+        ?: (!AppMode.isRemoteDevHost() && WebBrowserManager.getInstance().activeBrowsers.isNotEmpty())
+
+    /** Set by a test: whether a local file can be opened in a browser here. */
+    @Volatile
+    internal var canOpenFilesForTest: Boolean? = null
+
+    /** Set by a test: receives what [open] with a fragment would hand the browser, instead of a browser. */
+    @Volatile
+    internal var openForTest: ((Path, String?) -> Unit)? = null
 
     /**
      * True when a **URL** can be opened — which is nearly always, and deliberately not the same question
@@ -41,6 +49,18 @@ object AtlasBrowser {
     /** Open [path] in the default configured browser (the same as the built-in "Open in Browser"). */
     fun open(path: Path) {
         service<BrowserLauncher>().browse(path)
+    }
+
+    /**
+     * Open [path] on the page [fragment] names — an explorer route, with or without its `#` — in the default
+     * configured browser. Best effort: some OS launchers drop the fragment of a `file:` URL, and the page
+     * then opens at its dashboard, which still beats not opening it.
+     */
+    fun open(path: Path, fragment: String?) {
+        openForTest?.let { return it(path, fragment) }
+        val route = fragment?.removePrefix("#")
+        if (route.isNullOrBlank()) return open(path)
+        service<BrowserLauncher>().browse(path.toUri().toString() + "#" + route, null, null)
     }
 
     /**

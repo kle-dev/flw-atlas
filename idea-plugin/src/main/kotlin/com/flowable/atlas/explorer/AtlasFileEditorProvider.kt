@@ -14,8 +14,9 @@ import org.jdom.Element
  * diagram designer's `*.erd.html`, which uses the same bridges and toolbar — and hides the
  * platform's default HTML "Text" editor for it — a generated, self-contained page isn't meant to be
  * hand-edited, so the rendered explorer is the only editor. Only offered when JCEF is available in the
- * running IDE; otherwise the provider bows out (the default editor stays, and the page can still be
- * opened in an external browser).
+ * running IDE; otherwise the provider bows out, and [AtlasExplorerOpener] opens the page in the external
+ * browser instead of letting the platform show its source (a file opened from the Project view by hand
+ * still gets the default editor).
  */
 class AtlasFileEditorProvider : FileEditorProvider, DumbAware {
 

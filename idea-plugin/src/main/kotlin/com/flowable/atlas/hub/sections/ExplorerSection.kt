@@ -1,6 +1,5 @@
 package com.flowable.atlas.hub.sections
 
-import com.flowable.atlas.AtlasNotifications
 import com.flowable.atlas.FlowableAtlasBundle.message
 import com.flowable.atlas.action.FlowableActionIds
 import com.flowable.atlas.explorer.AtlasBrowser
@@ -10,7 +9,6 @@ import com.flowable.atlas.hub.HubAge
 import com.flowable.atlas.hub.HubLists
 import com.flowable.atlas.hub.HubSnapshot
 import com.flowable.atlas.icons.AtlasIcons
-import com.intellij.notification.NotificationType
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -24,7 +22,6 @@ import com.intellij.ui.PopupHandler
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.Panel
 import com.intellij.ui.dsl.builder.Row
-import com.flowable.atlas.explorer.JcefSupport
 import com.flowable.atlas.hub.HubLayout
 import com.flowable.atlas.hub.HubText
 import com.flowable.atlas.hub.NameMetaRow
@@ -116,15 +113,10 @@ internal class ExplorerSection(private val host: HubHost) : HubSection {
             ApplicationManager.getApplication().invokeLater({
                 if (project.isDisposed) return@invokeLater
                 when {
-                    vf != null && JcefSupport.isAvailable() -> AtlasExplorerOpener.openInIde(project, vf)
-                    AtlasBrowser.canOpenFiles() -> AtlasBrowser.open(artifact.path)   // JCEF unavailable → external browser
-                    else -> AtlasNotifications.group()
-                        .createNotification(
-                            message("hub.explorer.cannotOpen.title"),
-                            message("hub.explorer.cannotOpen", artifact.path.fileName.toString()),
-                            NotificationType.WARNING,
-                        )
-                        .notify(project)
+                    // the opener decides between the editor tab, the browser and saying neither is possible
+                    vf != null -> AtlasExplorerOpener.openInIde(project, vf)
+                    AtlasBrowser.canOpenFiles() -> AtlasBrowser.open(artifact.path)   // not in the VFS → external browser
+                    else -> AtlasExplorerOpener.notifyCannotOpen(project, artifact.path.fileName.toString())
                 }
             }, ModalityState.any())
         }

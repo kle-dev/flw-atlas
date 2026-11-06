@@ -50,7 +50,7 @@ is *Explorer* the buttons read *Generate…* and *Open*. Every tool-window opene
 | Find in Models… | The *Go to Model…* popup, with `⇧⏎` on any row |
 | Copy Model Key | Editor context menu, on a key — a literal or constant at a Flowable API site in Java, a cross-reference or the file's own key in a model file; the Atlas Hub's *Recent Models* context menu |
 | Compare Model with Archive | Project view context menu, on a model file or a `.json`; editor context menu, which is how an entry inside a `.bar`/`.zip` is reached. Its text names the direction it is about to take — *Compare with Model in Archive* on a file in the project, *Compare with Model in Project* on an entry in an archive |
-| Open in Atlas Explorer | Project view context menu, on a model file — the model's page in the newest generated explorer. The editor offers the same step as an intention on a key |
+| Open in Atlas Explorer | Project view context menu, on a model file — the model's page in the newest generated explorer; on a model the index does not hold, a balloon says why: outside the active Flowable project, in a build folder, or no readable key. The editor offers the same step as an intention on a key, and on a Java class, method or REST handler a model uses |
 | Generate Atlas Explorer… | Atlas Hub, *Explorer* block; Project view context menu |
 | Regenerate Atlas Explorer | Atlas Hub attention line, when models changed since the last generation; the explorer tab's banner and toolbar; the balloon after a Design pull. Its icon is the platform's *build* hammer, so it cannot be mistaken for the explorer tab's *Reload* beside it |
 | Generate Model Constants | Atlas Hub ⋮ menu |
@@ -209,8 +209,9 @@ covers every service that extends it.
 - **Open in Atlas Explorer** — on a model key in Java (a literal or a constant at a Flowable API site;
   any literal equal to a known key with *Recognize model keys anywhere in code*), and inside a model file
   on a cross-reference or on the file's own key: opens the newest generated explorer inside the IDE on
-  that model's page — who references it, what it uses, its findings, its diagram. Offers to generate an
-  explorer when there is none.
+  that model's page — who references it, what it uses, its findings, its diagram. On the name of a Java
+  class, method or REST handler that a model uses, it opens that class's, method's or endpoint's page
+  instead; on a class no model knows it is not offered. Offers to generate an explorer when there is none.
 
 ## Settings
 

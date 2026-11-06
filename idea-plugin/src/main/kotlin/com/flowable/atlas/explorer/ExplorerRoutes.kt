@@ -11,6 +11,15 @@ object ExplorerRoutes {
     /** `process%3ADEMO-P001` — the hash (without `#`) that opens the page of [type] `:` [key]. */
     fun node(type: ModelType, key: String): String = encodeUriComponent("${type.id}:$key")
 
+    /** `java%3Acom.example.DemoDelegate` — a Java class's page; the graph's id is `java:<FQCN>`. */
+    fun javaClass(fqcn: String): String = encodeUriComponent("java:$fqcn")
+
+    /** A Java method a model calls — `method:<FQCN>#<name>` in the graph. */
+    fun method(fqcn: String, name: String): String = encodeUriComponent("method:$fqcn#$name")
+
+    /** A REST endpoint the project serves — `endpoint:<VERB> <path>` in the graph, `ANY` for a verb-less mapping. */
+    fun endpoint(verb: String, path: String): String = encodeUriComponent("endpoint:$verb $path")
+
     /**
      * JavaScript's `encodeURIComponent`, minus the four marks it leaves alone (`!*'()`) — every one of
      * those is a character a page route can do without and a JS string literal is happier without.

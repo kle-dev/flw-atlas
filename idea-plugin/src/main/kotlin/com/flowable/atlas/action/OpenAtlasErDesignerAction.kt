@@ -7,7 +7,6 @@ import com.flowable.atlas.explorer.AtlasBrowser
 import com.flowable.atlas.explorer.AtlasExplorerFiles
 import com.flowable.atlas.explorer.AtlasExplorerOpener
 import com.flowable.atlas.explorer.AtlasGenerationRunner
-import com.flowable.atlas.explorer.JcefSupport
 import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
 import com.intellij.openapi.actionSystem.ActionUpdateThread
@@ -19,7 +18,6 @@ import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
-import com.intellij.openapi.vfs.VirtualFile
 import java.nio.file.Path
 
 /**
@@ -60,19 +58,20 @@ class OpenAtlasErDesignerAction : AnAction(), DumbAware {
             override fun onSuccess() {
                 if (project.isDisposed) return
                 val newest = pages.firstOrNull()
-                if (newest != null) open(project, newest) else AtlasGenerationRunner.generateErdPage(project) { vf -> vf?.let { open(project, it) } }
+                if (newest != null) open(project, newest)
+                else AtlasGenerationRunner.generateErdPage(project) { vf -> vf?.let { AtlasExplorerOpener.openInIde(project, it) } }
             }
         })
     }
 
+    /** The editor tab, else the browser, else a balloon saying neither — the opener decides, as for the explorer. */
     private fun open(project: Project, path: Path) {
         val vf = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(path)
-        if (vf != null) open(project, vf) else if (AtlasBrowser.canOpenFiles()) AtlasBrowser.open(path)
-    }
-
-    private fun open(project: Project, vf: VirtualFile) {
-        if (JcefSupport.isAvailable()) AtlasExplorerOpener.openInIde(project, vf)
-        else if (AtlasBrowser.canOpenFiles()) AtlasBrowser.open(vf.toNioPath())
+        when {
+            vf != null -> AtlasExplorerOpener.openInIde(project, vf)
+            AtlasBrowser.canOpenFiles() -> AtlasBrowser.open(path)
+            else -> AtlasExplorerOpener.notifyCannotOpen(project, path.fileName.toString())
+        }
     }
 
     companion object {

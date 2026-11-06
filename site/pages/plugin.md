@@ -492,7 +492,10 @@ form — lists every model that references it (the call activity, the task's for
 mapping) and every Java call site that names it. And Alt+Enter on a key — in Java, or in a model file on
 a cross-reference or the file's own key — offers **Open in Atlas
 Explorer**, which opens that model's page in the generated explorer inside the IDE — the relationship
-view, where Ctrl+click opens the file.
+view, where Ctrl+click opens the file. The same Alt+Enter works from the Java side, on the name of a
+class, method or REST handler the models use: it opens the class's page (its roles, bean names, the models
+using it), the method's, or the endpoint's (its callers and the parameters its handler takes) — what the
+gutter mark only lists the models of.
 
 The IDE and the generated explorer share one matching implementation, so Find Usages in the editor and
 the reference list in the report can never disagree. The search reads every model file and archive entry
