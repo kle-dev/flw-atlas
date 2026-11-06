@@ -1,6 +1,7 @@
 package com.flowable.atlas.explorer
 
 import com.flowable.atlas.diagram.DiagramArtifacts
+import com.flowable.atlas.expr.catalog.FlowableCustomFunctions
 import com.flowable.atlas.graph.Atlas
 import com.flowable.atlas.graph.Waivers
 import com.flowable.atlas.render.ClaudeRenderer
@@ -198,8 +199,8 @@ class AtlasGeneratorService(private val project: Project) {
         val settings = FlowableAtlasProjectSettings.getInstance(project)
         val allowlist = (settings.allowedNamespaces + settings.allowedFunctions)
             .toSet().takeIf { it.isNotEmpty() }
-        val customPath = settings.customFunctionsPath.takeIf { it.isNotBlank() }
-            ?.let { root.resolve(it) }?.takeIf { it.exists() }
+        // Resolved exactly as the editor's catalog resolves it, so the two cannot read different sources.
+        val customPath = FlowableCustomFunctions.customFunctionsSource(root, settings.customFunctionsPath)
         return Atlas.extract(
             root,
             exprAllowlist = allowlist,

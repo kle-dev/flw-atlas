@@ -232,7 +232,7 @@ Applies to every project.
 | Treat `${…}` / `#{…}` in Java string literals as Flowable expressions | **off** |
 | Project allowlist — a table of entries typed *Namespace*, *Function* or *Grounding root* | empty |
 | Discover project custom functions | on |
-| Customisation source (file or folder) — only while discovery is on | empty = auto-discover |
+| Customization source (a file or folder, relative to the active Flowable project) — only while discovery is on | empty = auto-discover |
 
 The allowlist is the same store the Alt-Enter quick fix writes to. See
 [the allowlist](../../expressions/#the-allowlist).

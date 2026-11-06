@@ -142,10 +142,12 @@ class FlowableAtlasProjectSettings(private val project: Project?) :
         /** Root identifiers the grounding inspection must accept (runtime-only variables, custom roots). */
         var allowedGroundingRoots: MutableList<String> = mutableListOf()
 
-        /** Discover project custom functions (externals.additionalData) during Atlas generation. */
+        /** Discover project custom functions (externals.additionalData) — for editor validation and completion,
+         *  and during Atlas generation. */
         var customFunctionsEnabled: Boolean = true
 
-        /** Optional project-relative customization source for custom-function discovery. */
+        /** Optional customization source for custom-function discovery, relative to this scope's project
+         *  directory (the active sub-project). */
         var customFunctionsPath: String = ""
 
         /** Project-relative folder Atlas artifacts are generated into by default. */

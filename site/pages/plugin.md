@@ -528,7 +528,10 @@ that language's own highlighting and inspections, plus completion for the root o
 binds in *that* context.
 
 Custom functions declared by your own customisation source are discovered from the project and folded
-into the catalog, so your team's own helpers complete and validate like built-ins. The rest —
+into the catalog, so your team's own helpers complete and validate like built-ins. The editor reads them
+from the same place generation does — the active Flowable project, or the *Customization source* set for
+it, relative to that project — and reads them again when you apply that setting or switch sub-project, so
+the editor and the explorer never judge the same function differently. The rest —
 including what can and cannot be allowlisted — is on the
 [Expressions & scripts](../expressions/) page.
 

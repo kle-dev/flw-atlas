@@ -14,7 +14,8 @@ import com.intellij.ui.dsl.builder.panel
 /**
  * Settings → Tools → Flowable Atlas → Expressions: validation toggles, the project's expression
  * allowlist (one table over namespaces / functions / grounding roots — the same store the
- * Alt-Enter quick-fix writes to) and custom-function discovery for Atlas generation.
+ * Alt-Enter quick-fix writes to) and custom-function discovery — for the editor's expression checks and
+ * completion as much as for Atlas generation; the editor's catalog follows an Apply of this page.
  */
 class ExpressionsConfigurable(project: Project) : AtlasProjectConfigurable(
     project,
@@ -80,7 +81,7 @@ class ExpressionsConfigurable(project: Project) : AtlasProjectConfigurable(
                 lateinit var discover: com.intellij.ui.dsl.builder.Cell<javax.swing.JCheckBox>
                 row {
                     discover = checkBox("Discover project custom functions")
-                        .comment("Read externals.additionalData functions from the project's frontend customization during Atlas generation (the CLI's default too).")
+                        .comment("Read externals.additionalData functions from the project's frontend customization, for the editor's checks and completion and for Atlas generation (the CLI's default too).")
                         .bindSelected(settings::customFunctionsEnabled)
                 }
                 row("Customization source:") {
@@ -91,7 +92,7 @@ class ExpressionsConfigurable(project: Project) : AtlasProjectConfigurable(
                         projectRelativeChooser(project),
                     )
                         .align(AlignX.FILL)
-                        .comment("Optional: a specific file or folder to read custom functions from (project-relative); leave empty for auto-discovery.")
+                        .comment("Optional: a specific file or folder to read custom functions from (relative to the active Flowable project); leave empty for auto-discovery.")
                         .bindText(settings::customFunctionsPath)
                         // A source for a discovery that is switched off is a field that does nothing.
                         .enabledIf(discover.selected)
