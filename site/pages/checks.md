@@ -91,7 +91,7 @@ in `diagnostics` (the CLI prints it with `-v`) but is no finding: nothing about 
 An archive *inside* an archive (a Design export packing one `.bar` per
 app) is opened one level down and its models are read like any other. A Design-workspace export — the
 legacy editor's `form-models` and `page-models` JSON, whose bodies are a tree of `childShapes` — is read
-in full since {{VERSION}}: its components are rewritten into the shape the current Design writes and
+in full since 0.24.0: its components are rewritten into the shape the current Design writes and
 parsed by the same reader, so such a form has its fields, subforms, references and REST calls instead of
 being an empty shell registered by key.
 
@@ -106,7 +106,7 @@ A **key shared by two model types** is not one of them. A case and its start for
 `DRA-C001`, a data object and the service Design generated for it — this is common and legal. Both
 models are read completely; a reference that states its type (a `formKey`, a `calledElement`) reaches
 the right one; and the expressions, bindings and variables harvested from each file are credited to the
-model of that file's type. (Until {{VERSION}} they went to whichever model was registered first, so a form
+model of that file's type. (Before 0.24.0 they went to whichever model was registered first, so a form
 that shared its case's key showed none of its own bindings and the case showed all of them.) What stays
 ambiguous is a Java string literal that names the key alone, outside a key-taking API — it reaches one of
 the two and is marked *suspect*. The shared key is recorded in `graph.json`'s `diagnostics` as a `conflict`
@@ -119,8 +119,8 @@ a production key, the older version of a migration test — the model's page lis
 
 This is the one check you should never carry. A parse failure does not just cost you that file — every
 reference into and out of it disappears too, which makes the rest of the report quietly less complete.
-That is why it is reported everywhere, including a clickable **⚠ parse issues** badge in the explorer
-header.
+That is why it is reported everywhere, including a clickable **⚠ parse issues** chip in the
+explorer's sidebar footer.
 
 ### `invalidExpr` — the expression does not parse
 
@@ -143,9 +143,8 @@ The count is a count of **findings**, not of scripts carrying them, which is wha
 and `stats.scriptIssues` also mean.
 
 A CMMN plan item's lifecycle listener, or a case's own `caseLifecycleListener`, that carries a script is
-reported here too: the engine's listener
-factory has no script branch, so such a listener is a silent no-op — and until {{VERSION}} the parser's
-note about it was recorded on the plan item and read by nothing.
+reported here too: the engine's listener factory has no script branch, so such a listener is a silent
+no-op — and before 0.24.0 the parser's note about it was recorded on the plan item and read by nothing.
 
 ### `missingRefs` — a key with nothing behind it
 
@@ -157,7 +156,7 @@ or its plan model — where Design writes a case's policy — and on a user task
 name a policy and an SLA of its own. A renamed one is missing whichever of these names it.
 
 An action's `channels` — `menu`, `quick-menu`, `slash-menu`, the mobile menus — say where in the UI the
-action is offered; they are not channel models and are not looked up (until {{VERSION}} every action with a
+action is offered; they are not channel models and are not looked up (before 0.24.0 every action with a
 placement reported two missing models). Likewise the event models the platform ships itself —
 `_flowableMailEvent` and the `_flowableEngage…Received…` family — resolve to a platform-provided
 external node rather than to a missing model.
@@ -469,7 +468,7 @@ count, as long as the table's action is not switched off.
 A service operation a **data object** binds to is used by that data object when it is one the engine
 invokes itself — the operations keyed `findById`, `create`, `update` and `delete` (the service registry
 picks an operation by key, so another operation of the lookup type is not one of them). Nothing in a model names those (a data-object
-task, a page's data table and the REST API all go through the data object), so until {{VERSION}} every
+task, a page's data table and the REST API all go through the data object), so before 0.24.0 every
 generated CRUD operation was "unused": 74 of 74 on one real project. A `search` operation is different —
 something has to name it: a data table's operation key, a select's `searchOperationKey` and
 `lookupOperationKey`, a data-object table's create/edit/delete operation keys while that action is on — and

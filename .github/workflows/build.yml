@@ -67,8 +67,9 @@ jobs:
           echo "CHROME_PATH=$CHROME" >> "$GITHUB_ENV"
           echo "using $CHROME ($("$CHROME" --version))"
 
-      # `build` runs the JVM suite, the goldens, the CLI contract tests, the search self-test and both
-      # headless-Chrome UI tests. With ATLAS_REQUIRE_BROWSER_TESTS=1 the last three cannot silently skip.
+      # `build` runs the JVM suite, the goldens, the CLI contract tests, every node/headless-Chrome
+      # frontend test (site/pages/develop.md, "The browser tests", lists them) and the site check. With
+      # ATLAS_REQUIRE_BROWSER_TESTS=1 none of the node/Chrome tasks can silently skip.
       - name: Build and test
         run: ./gradlew build --stacktrace
 

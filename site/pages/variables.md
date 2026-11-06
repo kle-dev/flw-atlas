@@ -147,5 +147,7 @@ the page cannot describe a policy the code does not implement.
 Each variable's own detail panel carries the full `writes` / `reads` table, which is where a
 "never read" claim is checked rather than believed.
 
-In the IDE the same data appears in the Atlas Hub's *Unused variables* tab, and in the artifacts as
-the `unusedVars`, `unreadInputs` and `guessedVars` [checks](../checks/).
+In the IDE the same findings are in the [Atlas Findings](../plugin/#atlas-findings) tool window under
+*Advice* (switch it on with the eye → *Show Advice*), and the *Unused variables* page is in the
+explorer the IDE opens as an editor tab. In the artifacts they are the `unusedVars`, `unreadInputs` and
+`guessedVars` [checks](../checks/).

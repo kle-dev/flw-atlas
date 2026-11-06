@@ -18,8 +18,11 @@ Building needs a **JDK 21+**. Running the CLI needs only a **JRE 21+**.
 
 That runs the whole gate: the `:core` golden tests against `core/src/test/resources/miniproject`, the
 parser and graph unit tests, the drift/sync tests, the `:cli` contract tests (the artifact names the
-plugin depends on), the shared expression-validator parity suite, and the browser-driven frontend
-tests. It also produces the installable plugin ZIP.
+plugin depends on, and which jar and output folder the `atlas` launcher picks), the shared
+expression-validator parity suite, the browser-driven frontend tests, and `:cli:siteCheck`, which runs
+`scripts/site-build.mjs` over `site/` — the Markdown subset, internal links and images, version
+strings, mockups — non-strict and without the demo, so it needs node but not Chrome. It also produces
+the installable plugin ZIP.
 
 ### The goldens
 
@@ -52,6 +55,7 @@ These tests drive the generated explorer in headless Chrome — or its pure part
 | `:cli:diagramUiTest` | The diagram element card's geometry — that an expanded card escapes its viewport and the scrim covers the modal |
 | `:cli:islandSelfTest` | The explorer's inflater, evaluated out of `explorer.js` in node against zlib: stored, fixed and dynamic blocks, every level and strategy, multi-byte text, truncated or mislabelled input, and a 20 MB island in well under a second |
 | `:cli:explorerUiTestDeflated` | Every `explorerUiTest` check again, on a page whose data island is deflated — written with the system property `atlas.explorer.compressAbove=0`, since the fixture is far below the 1 MB where deflating starts |
+| `:cli:remoteStubUiTest` | The Remote Development stub (`frontend/remote-stub.html`), with the test standing in for the IDE's JS bridge: the first open fetches every part and boots the explorer, a second open in the same profile fetches nothing and boots from the `localStorage` cache, a failing bridge ends in the stub's error card, a stalled part offers a *Retry* that asks only for what is missing, and a ~18 MB report shows progress that only grows |
 | `:cli:erdSelfTest` | The ER diagram designer's core, evaluated out of `erd.js` in node: which tables a project has, column order against a changed schema, the relations the models propose, what a diagram file may contain, the search's ranking, and *Arrange* — one side left of many, no overlaps, no avoidable crossing, stable when repeated, forty tables in well under a second |
 | `:cli:erdUiTest` | The designer's page for the demo project, with real mouse and key input over the DevTools protocol (the canvas captures the pointer, which synthetic events skip): drag a table in, relate, reorder, colour, undo, reload, export, arrange a heap of tables, expand and collapse all, search and go to a column, present — and that the explorer has none of it |
 
@@ -62,8 +66,8 @@ pipeline can never mean "the frontend was never opened".
 `explorerUiTest` and `diagramUiTest` run on Chrome's virtual time, which gives the page an allowance of
 page time rather than wall time. `explorerUiTest` works its allowance out from how many steps its probes
 have, so adding steps never means raising a constant. A probe that stops before its verdict says where it
-got to — *stopped at step 134 of 216, after 238 checks*, and the last check that ran — which tells a run
-cut short apart from a page that failed before the probe started (*never ran its first step*).
+got to — *stopped at step 134 of 216*, how many assertions had run by then, and the last one — which tells
+a run cut short apart from a page that failed before the probe started (*never ran its first step*).
 
 ### Checking against a real corpus
 
@@ -233,24 +237,30 @@ node scripts/plugin-icons.mjs           # regenerate the plugin's icon set (comm
   screenshots and deploys the result; `--strict` makes a missing generated file a build failure there,
   while a local build only warns.
 - It deploys on a pushed **`v*` tag**, not on every push to `main`. The site substitutes the Gradle
-  version into `{{VERSION}}`, so deploying from `main` published a site describing a build with no
+  version into `\{{VERSION}}`, so deploying from `main` published a site describing a build with no
   release behind it — and between a version bump and its tag it advertised a version nobody could
   install. Tag-triggered, the published site and the newest release always describe the same product.
   A documentation fix that cannot wait for the next release goes out via **workflow_dispatch** from the
   Actions tab.
 
-Two tests in `./gradlew build` keep the site honest, so a page cannot quietly go out of date:
+Three gates in `./gradlew build` keep the site honest, so a page cannot quietly go out of date:
 
 | Test | What it holds |
 |---|---|
-| `SiteDocsCoverageTest` | Reads the real check ids, variable silence rules, CLI flags (long and short), explorer routes, inspections and actions out of the source, and fails if any of them is undocumented. A new flag without a line on the [CLI page](../cli/) is a red build, not a stale page. It gates the other way too: a flag, route or check id the pages still list but the code no longer has is a red build as well, because a documented thing that is gone misleads a reader as surely as a missing one. |
+| `:cli:siteCheck` | The site builds: every page is in the Markdown subset the generator renders, every internal link and image resolves, every mockup exists, and no page hardcodes the current version or dates a past change with `\{{VERSION}}`. The same `scripts/site-build.mjs` as a hand run, non-strict and without the demo, so the screenshots and the live demo may be missing; it skips without node, like the browser tests. |
+| `SiteDocsCoverageTest` | Reads the real check ids, variable silence rules, CLI flags (long and short), explorer routes, inspections, actions and the frontend tasks `check` runs out of the source, and fails if any of them is undocumented. A new flag without a line on the [CLI page](../cli/) is a red build, not a stale page. It gates the other way too: a flag, route, check id or test task the pages still list but the code no longer has is a red build as well, because a documented thing that is gone misleads a reader as surely as a missing one. Two facts that are prose rather than lists are held as well: a count of checks spelled out on the site or in `README.md` must be the catalog's size, and a `CLAUDE.md` import line a page documents must be the one the renderer prints for the documented command. |
 | `SiteDemoProjectTest` | `site/flowable-demo` still produces at least one finding for **every** check, and exactly one deliberate parse issue — the screenshots claim all of them are real. |
 
-There is nothing to re-baseline for either: the fix is to write the sentence, because the point is that
-a human describes the new thing. A version number is handled structurally instead — the generator
-rejects a hardcoded one, so a page writes `{{VERSION}}` and cannot go stale.
+There is nothing to re-baseline for any of them: the fix is to write the sentence, because the point is
+that a human describes the new thing. A version number is handled structurally instead, in both
+directions. The generator rejects the current version written as a literal, so a page writes
+`\{{VERSION}}` where it means *this release* and cannot go stale. And it rejects `\{{VERSION}}` after a
+word that dates something — *since*, *until*, *before*, *after*, *as of*, *from*, *in* — because a
+change that shipped in an earlier release is written as that release's number: `\{{VERSION}}` there
+would claim, on every future release, that the change happened in it. (A page that has to show the
+placeholder itself, as this one does, puts a backslash before the braces.)
 
-> These tests read files that live **outside** `:core`'s source sets, so they are declared as inputs of
-> `:core:test` in `core/build.gradle.kts`. Without that, editing a page leaves the task `UP-TO-DATE` and
-> `build` reports success on exactly the drift the test exists to catch — verified: renaming every
-> `guessedVars` mention in `checks.md` was green until the inputs were declared.
+> The two JUnit tests read files that live **outside** `:core`'s source sets, so they are declared as
+> inputs of `:core:test` in `core/build.gradle.kts`. Without that, editing a page leaves the task
+> `UP-TO-DATE` and `build` reports success on exactly the drift the test exists to catch — verified:
+> renaming every `guessedVars` mention in `checks.md` was green until the inputs were declared.

@@ -164,7 +164,7 @@ val diagramUiTest by tasks.registering(Exec::class) {
 
 // The Remote Development stub (frontend/remote-stub.html): the stand-in page the plugin loads instead of the
 // report under Remote Dev, which pulls the report through the JS bridge and caches it in the client's
-// IndexedDB. Its contract with RemoteExplorerPage.kt (placeholders, the part protocol) and the
+// localStorage. Its contract with RemoteExplorerPage.kt (placeholders, the part protocol) and the
 // document.write hand-over are runtime behaviour only a browser can prove; the stub is a :core asset, so
 // its test runs here with the other frontend tests, against the miniproject report.
 val remoteStubUiTest by tasks.registering(Exec::class) {

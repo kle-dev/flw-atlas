@@ -7,8 +7,10 @@ Everything is resolved against the models that *actually live in your repository
 broken expression is caught in the editor, long before deployment.
 
 Zero configuration: open a project containing the models you exported from Design (an app `.zip`, a
-deployment `.bar`, loose `.bpmn` / `.cmmn` / `.dmn` / `.form` / `.data` / `.service` files) or a Flowable
-Design `*-models` workspace, and start typing.
+deployment `.bar`, loose `.bpmn` / `.cmmn` / `.dmn` / `.form` / `.data` / `.service` files) and start
+typing. A Flowable Design `*-models` workspace checked in as loose JSON is one checkbox away: *Also index
+raw Flowable Design workspace sources* under
+[Settings → Tools → Flowable Atlas](../plugin/reference/#settings-tools-flowable-atlas).
 
 > Every screenshot on this page is HTML and CSS rather than a captured PNG — vector-crisp at any zoom,
 > and about 2 KB each. The project shown is the neutral `flowable-demo` sample.
@@ -667,9 +669,9 @@ Both table dialogs read top to bottom in one column of labels — *Source*, the 
 selected rows is pointed at the table. A folder picked with *Browse* is written relative to the project,
 and an absolute one is refused before anything is written.
 
-Every generator is a pure function from model data to a string, which is why they are all unit-tested
-and produce identical output in the IDE and on the command line. Names, packages and patterns are
-configurable in *Settings → Tools → Flowable Atlas → Generation*.
+Every generator is a pure function from model data to a string, which is why they are all unit-tested.
+They run in the IDE only: the CLI writes Atlas's analysis artifacts, not source code. Names, packages and
+patterns are configurable in *Settings → Tools → Flowable Atlas → Generation*.
 
 ### Liquibase awareness
 

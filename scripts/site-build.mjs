@@ -14,7 +14,8 @@
  * blocks (a line starting with `<` at column 0, running to the next blank line). Inline: `code`,
  * **bold**, *italic*, [links](url), ![images](src) and the raw tags listed in RAW_INLINE_TAGS.
  *
- * Page sources may also use {{mockup:<name>}}, which inlines site/mockups/<name>.html.
+ * Page sources may also use {{mockup:<name>}}, which inlines site/mockups/<name>.html, and {{VERSION}},
+ * which becomes the build's version (a backslash before the braces keeps the placeholder as text).
  *
  * Usage:  node scripts/site-build.mjs [--out <dir>] [--demo <dir>] [--serve] [--strict]
  *         --strict turns a missing generated screenshot from a warning into a failure (CI uses it)
@@ -303,7 +304,10 @@ for (let idx = 0; idx < pages.length; idx++) {
     continue;
   }
   const where = path.relative(ROOT, srcPath);
-  const md = read(srcPath).replace(/\{\{VERSION\}\}/g, VERSION);
+  // A backslash before the braces is the placeholder itself, for the page that has to explain it
+  // (develop.md): without an escape that page rendered "a page writes `<the version>`", the very literal
+  // the version check below forbids.
+  const md = read(srcPath).replace(/(\\?)\{\{VERSION\}\}/g, (_, escaped) => escaped ? '{{VERSION}}' : VERSION);
   const rendered = renderMarkdown(md, where);
   const html = inlineIcons(inlineMockups(rendered.html, where), where);
   const headings = rendered.headings;
@@ -410,12 +414,20 @@ if (fs.existsSync(indexHtml)) {
 }
 
 /* --------------------------------------------------------------- version check */
-/* A literal version in a page is how a docs site starts lying. Pages must write {{VERSION}}. */
+/* A literal of the CURRENT version in a page is how a docs site starts lying: it is true on release day
+   and stale from the next bump. Pages write {{VERSION}} where they mean "this release".
+   The opposite mistake is just as easy, and it is what rejecting the current literal invites: a page
+   that dates a change writes "until {{VERSION}}" because "until 0.24.0" was refused on the day 0.24.0
+   was current — and from then on every release claims the change happened in it. {{VERSION}} after a
+   word that dates something is wrong from day one, so a past release is written as its number. */
 for (const page of pages) {
   if (page.source) continue;                       // CHANGELOG.md is a list of versions by definition
   const src = read(path.join(SITE, 'pages', page.file + '.md'));
   for (const m of src.matchAll(/\b\d+\.\d+\.\d+\b/g)) {
     if (m[0] === VERSION) fail(page.file, `hardcoded version "${m[0]}" — write {{VERSION}} instead`);
+  }
+  for (const m of src.matchAll(/\b(?:since|until|before|after|as of|from|in)\s+\{\{VERSION\}\}/gi)) {
+    fail(page.file, `"${m[0]}" — {{VERSION}} is always the current release; write the past release as a literal`);
   }
 }
 

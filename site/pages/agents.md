@@ -9,11 +9,13 @@ invents them.
 ## Four sizes — use the smallest one that answers the question
 
 **1 · `<project>.CLAUDE.md`** — drop it into the repository root as `CLAUDE.md` (or `AGENTS.md`), or
-keep your own `CLAUDE.md` and import it with `@atlas-output/<project>/<project>.CLAUDE.md`. Roughly
-10–15 KB. A Flowable primer, this project's conventions and wiring examples, which model files are Design
-exports not to be edited, its open findings, and the complete list of the expression namespaces, script
-bindings and platform beans that actually exist. That last part is the one that earns its keep: it stops
-an agent inventing APIs.
+write the output into the project — `./atlas <project> <project>/atlas-output`, or the IDE's default
+output folder — and import it from your own `CLAUDE.md` with the `@atlas-output/<project>.CLAUDE.md` line
+its header prints. (The launcher's default folder is beside the launcher, not in the project, and Claude
+Code skips an import it cannot resolve without saying so.) Roughly 10–15 KB. A Flowable primer, this
+project's conventions and wiring examples, which model files are Design exports not to be edited, its
+open findings, and the complete list of the expression namespaces, script bindings and platform beans
+that actually exist. That last part is the one that earns its keep: it stops an agent inventing APIs.
 
 Deliberately *not* in it: the inventory, the counts, the directory layout. Those are the summary's, and a
 repository overview is the one kind of context-file content that measurably does not help.

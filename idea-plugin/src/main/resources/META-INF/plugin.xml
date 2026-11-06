@@ -19,9 +19,10 @@
 
         <p>Zero configuration: open a project that contains the Flowable models you exported from Design
         (the app <code>.zip</code> / deployment <code>.bar</code>, holding
-        <code>.bpmn / .cmmn / .dmn / .form / .data / .service / …</code>) or the Flowable Design
-        <code>*-models</code> workspace, and start typing. The plugin indexes every model and puts that
-        knowledge to work across four areas.</p>
+        <code>.bpmn / .cmmn / .dmn / .form / .data / .service / …</code>) and start typing. The plugin
+        indexes every model and puts that knowledge to work across four areas. A Flowable Design
+        <code>*-models</code> workspace checked in as loose JSON is one checkbox away, in
+        <i>Settings → Tools → Flowable Atlas</i>.</p>
 
         <h3>1 &middot; Model-key intelligence</h3>
         <ul>

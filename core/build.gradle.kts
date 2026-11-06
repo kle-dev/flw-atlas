@@ -38,13 +38,17 @@ tasks.test {
     // the sources those pages must stay in step with, and SiteDemoProjectTest reads the sample project.
     // Without them declared, renaming every `guessedVars` mention in site/pages/checks.md left `test`
     // UP-TO-DATE and `build` reported success on a page that no longer documented the check (verified
-    // the same way as above).
+    // the same way as above). README.md is here because its check count and CLAUDE.md import line are
+    // held to the code, and cli/build.gradle.kts because the frontend tasks `check` runs are held to
+    // the development page.
     inputs.files(
         rootProject.file("CLAUDE.template.md"),
         rootProject.file("CHANGELOG.md"),
+        rootProject.file("README.md"),
         rootProject.file("idea-plugin/src/main/resources/META-INF/plugin.xml"),
         rootProject.file("idea-plugin/src/main/resources/messages/FlowableAtlasBundle.properties"),
         rootProject.file("cli/src/main/kotlin/com/flowable/atlas/cli/Main.kt"),
+        rootProject.file("cli/build.gradle.kts"),
         rootProject.file("build.gradle.kts"),
         rootProject.fileTree("site/pages"),
         rootProject.fileTree("site/flowable-demo"),

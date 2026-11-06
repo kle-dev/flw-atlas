@@ -2,9 +2,11 @@ package com.flowable.atlas
 
 import com.flowable.atlas.graph.CheckCatalog
 import com.flowable.atlas.graph.UnusedVariables
+import com.flowable.atlas.render.ClaudeRenderer
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.nio.file.Files
 
 /**
  * The documentation site at `site/` must document what the code actually has.
@@ -170,6 +172,148 @@ class SiteDocsCoverageTest {
             .findAll(xml).map { it.groupValues[1] }.toSortedSet()
         val expected = if (inspectionNames.isNotEmpty()) inspectionNames else names
         assertDocumented("inspection display name(s)", "plugin-reference", expected)
+    }
+
+    /** Every Markdown page under `site/pages`, plus the repository `README.md`: the prose a reader meets first. */
+    private fun proseFiles(): List<File> {
+        val pages = File(GoldenFiles.repoRoot, "site/pages").listFiles { f -> f.name.endsWith(".md") }!!.sortedBy { it.name }
+        return pages + File(GoldenFiles.repoRoot, "README.md")
+    }
+
+    private fun lineOf(text: String, index: Int) = text.substring(0, index).count { it == '\n' } + 1
+
+    /** English number words up to fifty, hyphenated tens included — how the pages spell a count. */
+    private val numberWords: Map<String, Int> = run {
+        val ones = listOf("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+            "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen")
+        val tens = listOf("twenty" to 20, "thirty" to 30, "forty" to 40, "fifty" to 50)
+        val words = ones.withIndex().associate { (i, w) -> w to i }.toMutableMap()
+        for ((t, n) in tens) {
+            words[t] = n
+            for (i in 1..9) words["$t-${ones[i]}"] = n + i
+        }
+        words
+    }
+
+    /**
+     * A count spelled out in prose — *twenty-five checks* — is the one fact about the checks no list
+     * comparison sees: the table grows by a row and the sentence above it does not. The front page said
+     * "Fourteen health checks" for ten releases after the catalog had passed it, while this file checked
+     * every id. So every stated count must be the catalog's size, wherever a reader meets it.
+     *
+     * Anchored to a number, not to "the … checks": the pages say "the Checks page" and "the checks below"
+     * all the time, and neither is a count. "One" is left out: before the plural it is never a count but
+     * a pronoun and a verb ("each one checks the key"), which would fail the build on a sound sentence.
+     */
+    @Test
+    fun everyStatedCheckCountIsTheCatalogs() {
+        val alternatives = (numberWords.keys - "one").sortedByDescending { it.length }.joinToString("|")
+        val counts = Regex("\\b($alternatives|\\d+)\\s+\\[?(?:health\\s+)?checks\\b", RegexOption.IGNORE_CASE)
+        // README's documentation table states it as "All twenty-five, and what each one detects".
+        val readmeRow = Regex("^\\|\\s*\\[Health checks]\\([^)]*\\)\\s*\\|\\s*All\\s+($alternatives|\\d+)\\b",
+            setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
+        val expected = CheckCatalog.CHECKS.size
+        val stated = ArrayList<String>()
+        val wrong = ArrayList<String>()
+        for (f in proseFiles()) {
+            val text = f.readText()
+            for (m in counts.findAll(text) + readmeRow.findAll(text)) {
+                val said = m.groupValues[1].lowercase()
+                val n = said.toIntOrNull() ?: numberWords.getValue(said)
+                val where = "${f.relativeTo(GoldenFiles.repoRoot).path}:${lineOf(text, m.range.first)}"
+                stated += where
+                if (n != expected) wrong += "$where says \"${m.value.trim()}\""
+            }
+        }
+        assertTrue("no stated check count found — did the checks page stop naming one? This test checks nothing",
+            stated.isNotEmpty())
+        assertTrue(
+            "CheckCatalog has $expected checks, but ${wrong.size} sentence(s) state another count:\n" +
+                wrong.joinToString("\n") + "\nCorrect the count, or drop it where the sentence does not need one. " +
+                "(A sentence that counts something else — tasks, gates — says so without the word \"checks\".)",
+            wrong.isEmpty(),
+        )
+    }
+
+    /**
+     * The `@…CLAUDE.md` import line a page tells a reader to add must be the one the renderer prints for the
+     * command the page documents (`./atlas <project> <project>/atlas-output`, which is also the IDE's default
+     * output folder). Claude Code skips an import it cannot resolve without a word, so a wrong path here is
+     * an agent silently running without its context — the README once documented a nested
+     * `atlas-output/<project>/` path that no documented run produces.
+     */
+    @Test
+    fun everyDocumentedClaudeImportLineIsTheOneTheRendererPrints() {
+        val tmp = Files.createTempDirectory("atlas-docs").toFile()
+        val root = File(tmp, "DEMO-project").apply { mkdirs() }
+        val outDir = File(root, "atlas-output").apply { mkdirs() }
+        val result = mapOf(
+            "stats" to mapOf("models" to 0, "java" to 0, "archives" to 0),
+            "graph" to mapOf("nodes" to emptyList<Any?>(), "edges" to emptyList<Any?>()),
+        )
+        // The folders must exist while it renders: the renderer prints the import line only for an output
+        // folder that really is inside a real project directory.
+        val header = try {
+            ClaudeRenderer.render(result, root, ClaudeRenderer.Layout(outDir, siblings = true))
+        } finally {
+            tmp.deleteRecursively()
+        }
+        val printed = Regex("`(@[^`\\s]+\\.CLAUDE\\.md)`").find(header)?.groupValues?.get(1)
+        assertTrue("the generated CLAUDE.md no longer prints an import line:\n${header.take(600)}", printed != null)
+        val expected = printed!!.replace(root.name, "<project>")
+
+        val documented = ArrayList<String>()
+        val wrong = ArrayList<String>()
+        for (f in proseFiles()) {
+            val text = f.readText()
+            for (m in Regex("`(@[^`\\s]*\\.CLAUDE\\.md)`").findAll(text)) {
+                val where = "${f.relativeTo(GoldenFiles.repoRoot).path}:${lineOf(text, m.range.first)}"
+                documented += where
+                if (m.groupValues[1] != expected) wrong += "$where documents ${m.groupValues[1]}"
+            }
+        }
+        assertTrue("no page documents a CLAUDE.md import line — this test checks nothing", documented.isNotEmpty())
+        assertTrue(
+            "the renderer prints `$expected` for a run into <project>/atlas-output, but:\n" + wrong.joinToString("\n"),
+            wrong.isEmpty(),
+        )
+    }
+
+    /** The task names `tasks.named("check") { dependsOn(…) }` lists in cli/build.gradle.kts — the frontend tests and the site check. */
+    private fun cliCheckTasks(): Set<String> {
+        val kts = source("cli/build.gradle.kts")
+        return Regex("tasks\\.named\\(\"check\"\\)\\s*\\{\\s*dependsOn\\(([^)]*)\\)").findAll(kts)
+            .flatMap { it.groupValues[1].split(',') }.map { it.trim() }.filter { it.isNotEmpty() }.toSortedSet()
+    }
+
+    /**
+     * Every node or Chrome task `./gradlew build` runs is on the development page. They skip without node or
+     * Chrome, so a contributor who does not know one exists cannot tell a green build from one that never ran
+     * it — the Remote Development stub's only test went undocumented for releases that way.
+     */
+    @Test
+    fun everyGateTaskOfTheCliIsOnTheDevelopPage() {
+        // Matched as whole names, not with assertDocumented's substring test: `:cli:explorerUiTestDeflated`
+        // contains `:cli:explorerUiTest`, so a page that lost the plain row would still pass.
+        val tasks = cliCheckTasks()
+        assertTrue("no `check` dependency found in cli/build.gradle.kts — this test checks nothing", tasks.isNotEmpty())
+        val text = page("develop")
+        val missing = tasks.filterNot { Regex(":cli:${Regex.escape(it)}\\b").containsMatchIn(text) }
+        assertTrue(
+            "site/pages/develop.md does not mention ${missing.size} task(s) `./gradlew build` runs: " +
+                missing.map { ":cli:$it" } + "\nA contributor cannot tell a skipped one from a green one it never heard of.",
+            missing.isEmpty(),
+        )
+    }
+
+    /** The other direction: a `:cli:` task the page names must still exist, or a contributor runs nothing. */
+    @Test
+    fun noCliTaskOnTheDevelopPageIsGone() {
+        val registered = Regex("val (\\w+) by tasks\\.registering").findAll(source("cli/build.gradle.kts"))
+            .map { it.groupValues[1] }.toSet() + setOf("shadowJar", "test", "check", "build")
+        val named = Regex(":cli:(\\w+)").findAll(page("develop")).map { it.groupValues[1] }.toSortedSet()
+        val gone = named - registered
+        assertTrue("site/pages/develop.md names :cli task(s) cli/build.gradle.kts does not have: $gone", gone.isEmpty())
     }
 
     @Test

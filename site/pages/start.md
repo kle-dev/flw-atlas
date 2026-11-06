@@ -35,10 +35,14 @@ report submitted from the IDE states what was actually verified, so a newer IDE 
 covered. Releases are signed when a signing key is configured, and `SHA256SUMS.txt` in each release
 carries the checksums.
 
-There is nothing to configure. Open a project that contains Flowable models — an app `.zip` or
-deployment `.bar`, loose `.bpmn` / `.cmmn` / `.dmn` / `.form` / `.data` / `.service` files, or a Flowable
-Design `*-models` workspace — and start typing. The plugin indexes every model it finds and the rest
-follows.
+There is nothing to configure for exported models. Open a project that contains them — an app `.zip` or
+deployment `.bar`, or loose `.bpmn` / `.cmmn` / `.dmn` / `.form` / `.data` / `.service` files — and start
+typing. The plugin indexes every model it finds and the rest follows.
+
+A Flowable Design `*-models` workspace checked in as loose JSON is one checkbox away. The CLI reads it as
+it is; the plugin indexes it once *Settings → Tools → Flowable Atlas → Also index raw Flowable Design
+workspace sources* is on ([settings](../plugin/reference/#settings-tools-flowable-atlas)). Until then
+the explorer generated in the IDE shows those models, but the editor knows none of their keys.
 
 > Building it yourself instead: `./gradlew :idea-plugin:buildPlugin`.
 

@@ -28,7 +28,7 @@ The docs site sources are in `site/`.
 ./gradlew build                     # the gate: must be green before anything is committed
 ATLAS_REQUIRE_BROWSER_TESTS=1 ./gradlew build   # …and set this when you touch the explorer frontend
 ./gradlew :idea-plugin:verifyPlugin # before every release; the only check that sees descriptor defects
-node scripts/site-build.mjs         # when you touch site/ — see below (or ./gradlew site)
+node scripts/site-build.mjs --serve # to look at site/ — build already checks it, see below
 ```
 
 There is no "known failing test" list, and there should never be one. If a golden test fails, read the
@@ -72,14 +72,18 @@ Three questions, every time:
 | The toolchain the plugin builds against (the SDK floor, Gradle, Kotlin, JCEF's module split) | `idea-plugin/README.md` — the only place that explains *why* each pin exists |
 | A new docs page | `site/nav.json` (page order — it drives the sidebar, the pager and the search index) |
 
-Two of these obligations are enforced, and `./gradlew build` fails when you skip them:
-`SiteDocsCoverageTest` (every check id, silence rule, CLI flag, explorer route, inspection and action
-appears on its page) and `SiteDemoProjectTest` (the sample project still demonstrates every check).
-Nothing to re-baseline — the fix is to write the sentence.
+Some of this is enforced, and `./gradlew build` fails when you skip it. `SiteDocsCoverageTest` holds
+the docs to the code: every check id, silence rule, CLI flag, explorer route, inspection and action
+appears on its page, every check count the site or `README.md` states is the catalog's, the `CLAUDE.md`
+import line they give is the one the renderer prints, and the `:cli` tasks `check` runs are the ones
+`site/pages/develop.md` lists. `SiteDemoProjectTest` holds the sample project to every check. And
+`:cli:siteCheck` runs `scripts/site-build.mjs` over `site/`, which fails on Markdown outside its
+supported subset, on an internal link or image that does not resolve, and on a hardcoded version string
+(write `{{VERSION}}`) — it needs node, and skips without it unless `ATLAS_REQUIRE_BROWSER_TESTS=1` is
+set. Nothing to re-baseline — the fix is to write the sentence.
 
-Everything else is on you. When you add a page or move a claim, also run `node scripts/site-build.mjs`
-(or `./gradlew site`): it fails on Markdown outside its supported subset, on an internal link or image
-that does not resolve, and on a hardcoded version string (write `{{VERSION}}`).
+Everything else is on you. To look at what a page change renders to, run
+`node scripts/site-build.mjs --serve` (or `./gradlew site`, which adds the live demo).
 
 **What does *not* need a doc update:** a refactor, a rename or a test that changes nothing a reader can
 observe. Do not pad `CHANGELOG.md` with those — a release-notes list that mixes internals into user

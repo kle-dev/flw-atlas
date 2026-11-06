@@ -31,7 +31,9 @@ it used to repeat, and they are the ones to change when the workflow changes:
 
 ## The short version
 
-Requires **JDK 21**; Node and Chrome for the three browser-driven tests.
+Requires **JDK 21**; Node and Chrome for the browser-driven tests
+([the list](https://kle-dev.github.io/flw-atlas/develop/#the-browser-tests)), and Node for the site check
+that `build` also runs.
 
 ```bash
 ./gradlew build                                  # the gate — green before anything is committed
