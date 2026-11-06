@@ -3,6 +3,7 @@ package com.flowable.atlas.parsing
 import com.flowable.atlas.graph.Callee
 import com.flowable.atlas.graph.Ctx
 import com.flowable.atlas.model.MiniJson
+import com.flowable.atlas.parsing.AtlasXml.El
 import com.flowable.atlas.script.ScriptContext
 import com.flowable.atlas.script.ScriptValidator
 
@@ -155,15 +156,36 @@ object ModelParsers {
     /** How many decision-table rows are kept per decision; beyond that `rulesTruncated` records the real count. */
     private const val DMN_RULE_LIMIT = 500
 
+    /** The decisions a `<decisionService>` runs, as the element ids its hrefs name. */
+    private fun serviceMembers(ds: El): List<String> =
+        (ds.findChildren("outputDecision") + ds.findChildren("encapsulatedDecision"))
+            .mapNotNull { it.attr("href")?.removePrefix("#") }
+
     /** `.dmn` — one entry per `<decision>`, with its decision-table shape when present. */
     fun parseDmn(data: ByteArray, ctx: Ctx, ffile: String): List<Map<String, Any?>> {
         val root = AtlasXml.parse(data)
         val out = ArrayList<Map<String, Any?>>()
+        // A file with a decision service is a DRD. The engine deploys only its services (DmnParse), so the
+        // decisions in it are the service's own, callable by no key of theirs — and a DRD Design exports
+        // holds *copies* of decision tables under generated ids (`decisionElement_1`, `decision1`), each
+        // naming the table it copies in `flowable:decisionKey` (or, in an older export, only in the
+        // service's JSON twin). Each one says which service it belongs to and, when it says so, which
+        // table it copies; DecisionServiceCopies merges a copy into that table once every model is read.
+        val services = root.iter("decisionService").toList()
+        val memberOf = HashMap<String, String>()
+        for (ds in services) for (m in serviceMembers(ds)) memberOf.putIfAbsent(m, ds.attr("id") ?: continue)
         for (dec in root.iter("decision")) {
             val key = dec.attr("id")
             val info = linkedMapOf<String, Any?>(
                 "key" to key, "name" to dec.attr("name"), "file" to ffile,
             )
+            val service = if (services.isEmpty() || key == null) null else memberOf[key] ?: services.first().attr("id")
+            if (service != null) {
+                info["embeddedIn"] = service
+                dec.attr("decisionKey")?.trim()?.takeIf { it.isNotEmpty() && it != key }
+                    ?.let { ctx.addDecisionCopy(service, key!!, it) }
+            }
+            val sitesBefore = ctx.varSites.size
             // The decision's own child element — `textOfDescendant` would have found the first rule's
             // description instead, which is the annotation and belongs to the row, not the table.
             dec.childText("description")?.let { info["description"] = it }
@@ -235,6 +257,10 @@ object ModelParsers {
                         outp.attr("id"), outp.attr("label"), "dmnOutput")
                 }
             }
+            // A service's decision writes its outputs as the table it copies does, through other element
+            // ids: marked, so the copy's sites can go with it when it merges into that table — left in,
+            // every output of the table was written twice.
+            if (service != null) for (s in ctx.varSites.subList(sitesBefore, ctx.varSites.size)) s[Ctx.DRD_FILE] = ffile
             // DRD: a decision may require other decisions (informationRequirement/requiredDecision)
             for (req in dec.findChildren("informationRequirement")) {
                 val href = req.findChild("requiredDecision")?.attr("href")
@@ -244,10 +270,9 @@ object ModelParsers {
         }
         // Decision services are resolvable targets too — a serviceTask type=dmn may reference one
         // via decisionServiceReferenceKey, exactly like a plain decision key.
-        for (ds in root.iter("decisionService")) {
+        for (ds in services) {
             val dsKey = ds.attr("id")
-            val members = (ds.findChildren("outputDecision") + ds.findChildren("encapsulatedDecision"))
-                .mapNotNull { it.attr("href")?.removePrefix("#") }
+            val members = serviceMembers(ds)
             for (m in members) ctx.addRef(dsKey, "dmn", ffile, "contains-decision", "decision", m)
             out.add(linkedMapOf(
                 "key" to dsKey, "name" to ds.attr("name"), "file" to ffile,

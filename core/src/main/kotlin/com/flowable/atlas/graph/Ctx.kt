@@ -71,6 +71,18 @@ class Ctx {
     /** Names a Freemarker model binds itself — `<#list … as x>`, `<#assign x …>`, a macro's parameters —
      *  by model id. Its `${x}` reads that local, not a variable of the scope it renders against. */
     val freemarkerLocals = LinkedHashMap<String, MutableSet<String>>()
+    /**
+     * Decision service key → (element id of a decision in its DRD → key of the decision table that
+     * decision is a copy of). Filled from a DRD's `flowable:decisionKey` and from the service's Design
+     * JSON twin, which may come before or after the DRD in an archive — so it is applied only once every
+     * model is read ([DecisionServiceCopies]). Per service, never global: every DRD Design exports
+     * numbers its decisions from 1.
+     */
+    val decisionCopies = LinkedHashMap<String, LinkedHashMap<String, String>>()
+
+    fun addDecisionCopy(service: String, elementId: String, tableKey: String) {
+        decisionCopies.getOrPut(service) { LinkedHashMap() }.putIfAbsent(elementId, tableKey)
+    }
 
     /** Discovery counts for `result["stats"]` (Python `len(models)/len(archives)/len(javas)`),
      *  set by [com.flowable.atlas.graph.Atlas.extract] just before the graph is built. */
@@ -379,6 +391,10 @@ class Ctx {
 
         const val READ = "read"
         const val WRITE = "write"
+
+        /** The [varSites] field that marks a site of a decision inside a DRD with that DRD's file — see
+         *  [decisionCopies]. Only [DecisionServiceCopies] reads it. */
+        const val DRD_FILE = "drdFile"
 
         /** What one side of a mapping proves: the direction, whose scope the name lives in, and whether
          *  the value's readers are outside anything Atlas parses. */

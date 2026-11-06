@@ -442,7 +442,12 @@ that was renamed away from it, which is the case worth a look. Accept it when a 
 this repository consults it.
 
 A decision *service* — the DRD Design generates around a set of tables — is the caller of its tables, so
-it is never reported as an unused table itself.
+it is never reported as an unused table itself. A DRD Design exports holds a copy of each table under a
+generated id (`decisionElement_1`, `decision1`) and names the table in `flowable:decisionKey` or, in an
+older export, only in the service's JSON twin. Atlas follows either link to the table, so a table only a
+decision service runs counts as called, and the copy is not a decision of its own. A copy whose table is
+not in the project stays as the service's decision, marked `copyOf` that table: the service runs its
+content, so nothing is missing.
 
 ### `unusedForms`, `unusedOps`, `unusedFns` — defined, never used
 

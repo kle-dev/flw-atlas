@@ -199,6 +199,8 @@ object Atlas {
 
             val parser = ModelParsers.PARSERS[mtype]
             val mkeys = ArrayList<Any?>()
+            // a DRD's decisions, whose ids every DRD Design exports numbers from 1 — see the copy check below
+            val drdKeys = HashSet<Any?>()
             val refsBefore = ctx.refs.size
             // Everything the parser and the harvest below record about this file's models carries this
             // type (Ctx.modelId), so a key two types share cannot be mis-credited. The form parser may
@@ -218,6 +220,7 @@ object Atlas {
                             bucketList(bucket).add(p)
                             index(if (mtype == "bpmn") "process" else mtype, p, label)
                             mkeys.add((p as? Map<*, *>)?.get("key"))
+                            if ((p as? Map<*, *>)?.get("embeddedIn") != null) drdKeys.add(p["key"])
                         }
                         else -> {
                             nodeType = ctx.currentModel ?: nodeType
@@ -327,7 +330,9 @@ object Atlas {
             // Compared only within one format: a Design export and a deployment file are read by different
             // readers, and a reference one of them does not reach is no difference between the copies.
             val format = if (label.substringAfterLast('!').substringAfterLast('/').endsWith(".json")) "design" else "file"
-            for (k in mkeys.filterNotNull().map { it.toString() }) {
+            // A DRD's decisions are left out: `decisionElement_1` in two DRDs is two services' decisions, not
+            // two copies of one model, and a copy of a table merges into the table (DecisionServiceCopies).
+            for (k in mkeys.filterNotNull().filter { it !in drdKeys }.map { it.toString() }) {
                 val id = nodeType to "$k|$format"
                 val sig = ctx.refs.subList(refsBefore, ctx.refs.size).asSequence()
                     .filter { it["from"] == k }.map { "${it["rel"]}|${it["kind"]}|${it["value"]}" }.toSortedSet().joinToString(";")
@@ -386,6 +391,9 @@ object Atlas {
             // bpmn/cmmn/dmn json is the Oryx twin of an XML sibling in the same export — skip the copy,
             // but remember it: if no sibling turns up, that was the only copy.
             if (mtype in setOf("bpmn", "cmmn", "dmn")) {
+                // A decision service's twin is the only place an older export says which table each
+                // decision of its DRD is a copy of.
+                if (folder == "decision-service-models") DecisionServiceCopies.readDesignTwin(ctx, key, body)
                 skippedOryxTwins.add(Triple(ModelKinds.NORMALIZE_TYPE[mtype] ?: mtype, key, label)); return
             }
             val oryx = body == null || body.containsKey("childShapes") || body.containsKey("stencil")
@@ -577,6 +585,8 @@ object Atlas {
             try { templateParts.add(relOf(f) to f.readText(Charsets.UTF_8)) } catch (e: Exception) { diag("parse", relOf(f), e.message ?: e.toString()) }
         }
         TemplateParts.attach(result, ctx, templateParts) { kind, path, msg -> diag(kind, path, msg) }
+        // Every DRD and every decision service's twin is read now: a copy of a table merges into the table.
+        DecisionServiceCopies.apply(result, ctx, modelIndex, byKey)
 
         // A skipped Oryx twin whose XML sibling never turned up was the only copy of that model.
         for ((nodeType, key, label) in skippedOryxTwins) {

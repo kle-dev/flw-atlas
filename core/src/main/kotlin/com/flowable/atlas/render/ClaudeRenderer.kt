@@ -101,9 +101,13 @@ object ClaudeRenderer {
          * Only stated when there is actually a pattern: with one model per type it used to emit
          * ``process `orderProcess` (e.g. `orderProcess`)`` — the same string twice, presented as a
          * convention. A convention needs either digits that vary or two keys that agree.
+         *
+         * A decision inside a DRD is no evidence: its id is one Design generated (`decision4`), never a key
+         * anyone calls, and four of them once made "decision `decision#`" the convention an agent was told.
          */
         fun keypat(t: String): String? {
-            val keys = bt(t).mapNotNull { val k = it["key"]; if (truthy(k)) k as String else null }
+            val keys = bt(t).filter { (it["data"] as? Map<*, *>)?.get("embeddedIn") == null }
+                .mapNotNull { val k = it["key"]; if (truthy(k)) k as String else null }
             if (keys.isEmpty()) return null
             val counts = LinkedHashMap<String, Int>()
             for (k in keys) { val p = k.replace(digits, "#"); counts[p] = (counts[p] ?: 0) + 1 }

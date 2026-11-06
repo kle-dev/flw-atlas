@@ -275,7 +275,9 @@ object Findings {
         // deduped that way, and so is this — the first file wins, the finding is one.
         val seenMarkers = HashSet<List<Any?>>()
         for (m in (result["markers"] as? List<Map<String, Any?>> ?: emptyList())) {
-            val owner = (m["models"] as? List<*>)?.firstOrNull()?.toString()?.let { nodeById[it] }
+            // the first of the file's models that is a node: a DRD lists its decisions before its service,
+            // and a decision that was a copy of a table merged into the table (DecisionServiceCopies)
+            val owner = (m["models"] as? List<*>)?.firstNotNullOfOrNull { nodeById[it.toString()] }
             val text = m["text"]?.toString().orEmpty()
             // A marker with no text of its own is told apart by where it sits: the path of the JSON element
             // holding it (a minified model is one line, and a column moves on every export), else its line.
