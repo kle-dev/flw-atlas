@@ -44,9 +44,12 @@ follows.
 
 ## The CLI
 
-Download `cli-<version>-all.jar` into `lib/` and use the launcher:
+Download the launcher `atlas` and `cli-<version>-all.jar` from the
+[latest release](https://github.com/kle-dev/flw-atlas/releases/latest) into one folder, and run the
+launcher from there — it finds the jar beside it:
 
 ```bash
+chmod +x atlas          # a downloaded file loses its executable bit
 ./atlas /path/to/your-flowable-project
 ```
 
@@ -56,11 +59,11 @@ Or run the jar directly, from anywhere:
 java -jar cli-<version>-all.jar /path/to/your-flowable-project --all -o ./reports
 ```
 
-The jar is self-contained — a JRE 21+ and nothing else. If the launcher cannot find a jar it will build
-one with Gradle; set `ATLAS_NO_BUILD=1` on a machine that has no JDK, and it will tell you what to
-download instead.
+The jar is self-contained — a JRE 21+ and nothing else; the launcher is a bash script around it.
 
-> First run not executable? `chmod +x atlas`
+**In a clone of the repository** the launcher is at its root. Put the jar in `lib/`, or let the launcher
+build one with Gradle when it finds none; set `ATLAS_NO_BUILD=1` on a machine that has no JDK, and it
+will tell you what to download instead.
 
 ## Your first run
 
@@ -68,9 +71,10 @@ download instead.
 ./atlas ~/projects/order-management
 ```
 
-Atlas walks the project, resolves every relationship it can, and writes six artifacts to
-`./atlas-output/order-management/` — the guide for driving Flowable Work comes as two files — before
-opening the explorer in your browser:
+Atlas walks the project, resolves every relationship it can, and writes six artifacts — the guide for
+driving Flowable Work comes as two files — to `atlas-output/order-management/` beside the launcher, not
+inside the analysed project (a second argument names another folder). Then it opens the explorer in your
+browser:
 
 ```
 order-management.explorer.html   ← opens automatically

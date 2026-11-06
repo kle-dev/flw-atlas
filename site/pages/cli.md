@@ -14,8 +14,11 @@ interface with every flag.
 ./atlas /path/to/your-flowable-project
 ```
 
-That analyses the project, writes all six artifacts to `./atlas-output/<project>/` (and the ER diagram page, for a project with tables), and opens the
-explorer in your browser. Two optional positionals and one flag of its own:
+That analyses the project, writes all six artifacts (and the ER diagram page, for a project with tables)
+to `atlas-output/<project>/` beside the launcher — not inside the analysed project — and opens the
+explorer in your browser. The launcher is the `atlas` script at the repository's root, and every
+[release](https://github.com/kle-dev/flw-atlas/releases/latest) carries it beside the jar. Two optional
+positionals and one flag of its own:
 
 ```bash
 ./atlas /path/to/project ./reports      # write into ./reports instead
@@ -28,10 +31,13 @@ Anything else you pass is forwarded to the jar unchanged, so `./atlas /path/to/p
 What it does, in order:
 
 1. Refuses to run if `java` is not on the `PATH` — install a JDK 21+, or point `JAVA` at one.
-2. Finds the fat-jar: `$ATLAS_JAR` if set, else the newest `*-all.jar` next to the script, then in
-   `lib/`, then in `cli/build/libs/`.
-3. If there is no jar, builds one with `./gradlew :cli:shadowJar`. Set `ATLAS_NO_BUILD=1` to turn that
-   into an error instead — the right setting on a machine that only has a JRE.
+2. Finds the fat-jar: `$ATLAS_JAR` if set, else the newest `*-all.jar` by modification time across the
+   script's own folder, `lib/` and `cli/build/libs/` — one race, not an ordered search, so a fresh local
+   build wins over an older download in `lib/`.
+3. If there is no jar, builds one with `./gradlew :cli:shadowJar` — in a clone of the repository. A
+   launcher downloaded from a release has no Gradle beside it and says what to download instead. Set
+   `ATLAS_NO_BUILD=1` to turn the build into an error in a clone too — the right setting on a machine
+   that only has a JRE.
 4. Derives the output directory from the target's name unless you gave one.
 5. Runs the jar with `--all -o <outdir>`, plus `--open` unless you passed `--no-open`.
 

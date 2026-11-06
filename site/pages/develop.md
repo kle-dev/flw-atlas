@@ -170,8 +170,9 @@ the version claims in the READMEs and on the getting-started page move with it.
    plugin ZIP, so a pull request can be installed without building it.
 2. **JetBrains Plugin Verifier** — separate, because it downloads gigabytes of IDE. Uploads its report.
 3. **publish release** — only on a pushed `v*` tag, after both gates. Builds the plugin ZIP and the CLI
-   jar, computes `SHA256SUMS.txt`, verifies the tag matches the built version, and creates the GitHub
-   release. Release artifacts are **not** committed to the repository.
+   jar, adds the `atlas` launcher beside it, computes `SHA256SUMS.txt`, verifies the tag matches the
+   built version, and creates the GitHub release. Release artifacts are **not** committed to the
+   repository.
 
 Cutting a release is therefore: update `CHANGELOG.md`, bump the version, `./gradlew
 :core:updateGoldens`, run `verifyPlugin`, then push a `v<version>` tag.

@@ -32,6 +32,10 @@ tasks.shadowJar {
 
 tasks.test {
     useJUnit()
+    // LauncherTest runs the repository-root `atlas` script, which is outside this module's sources: without
+    // it declared, an edit to the launcher alone would leave `test` UP-TO-DATE and the gate green on a
+    // script nothing ran.
+    inputs.file(rootProject.file("atlas")).withPropertyName("launcher")
 }
 
 // ---- explorer search behaviour test ----

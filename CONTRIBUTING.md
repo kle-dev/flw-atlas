@@ -54,9 +54,9 @@ sandbox on the downloaded 2026.2 SDK — the same branch the build compiles agai
 
 Cutting a release: write the `CHANGELOG.md` entry, bump `version` in the root `build.gradle.kts`, run
 `./gradlew :core:updateGoldens`, get both gates green, then push a `v<version>` tag. CI builds from the
-tag, signs, verifies, and publishes the ZIP, the CLI jar, `SHA256SUMS.txt` and `updatePlugins.xml` to a
-GitHub release. The job fails if the tag and the built version disagree, so a mismatched tag cannot
-produce a release.
+tag, signs, verifies, and publishes the ZIP, the CLI jar with its `atlas` launcher, `SHA256SUMS.txt`
+and `updatePlugins.xml` to a GitHub release. The job fails if the tag and the built version disagree, so
+a mismatched tag cannot produce a release.
 
 `updatePlugins.xml` is what makes Atlas updatable without a Marketplace listing. It is generated from
 the **patched** descriptor, never hand-written: a compatibility range that drifted from the plugin it

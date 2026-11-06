@@ -26,8 +26,8 @@ reference between them — and then handing you the answer in whichever shape yo
 ./atlas /path/to/your-flowable-project
 ```
 
-That is the whole thing. Atlas walks the project, resolves what it can, tells you what it could not,
-and writes six artifacts:
+That is the whole thing — [the launcher and its jar](start/#the-cli) come with every release. Atlas walks
+the project, resolves what it can, tells you what it could not, and writes six artifacts:
 
 <div class="cards">
 <a class="card" href="explorer/" style="--tint:var(--c-process)"><h3>explorer.html</h3><p>An offline, interactive explorer. Click through every relationship in both directions, search inside models, read diagrams.</p></a>

@@ -222,6 +222,11 @@ jobs:
             echo "::warning::No signing key configured — publishing an UNSIGNED plugin ZIP."
           fi
           cp cli/build/libs/*-all.jar release/
+          # The launcher, so the site's `./atlas <project>` works from a release download and not only
+          # from a clone: it finds a jar beside itself. The executable bit does not survive a browser
+          # download, which is why the docs keep the `chmod +x atlas` line.
+          cp atlas release/atlas
+          chmod +x release/atlas
 
           # The custom plugin repository. Published as a release asset rather than to GitHub Pages so it
           # has a URL that never changes — /releases/latest/download/ always resolves to the newest
@@ -276,7 +281,8 @@ jobs:
             **Or install by hand** — download the ZIP and use
             *Settings → Plugins → ⚙ → Install Plugin from Disk…*, then restart the IDE.
 
-            **CLI** — `java -jar cli-*-all.jar <project> --all` (needs a JRE 21+).
+            **CLI** — download `atlas` and `cli-*-all.jar` into one folder, then `chmod +x atlas` and
+            `./atlas <project>`; or `java -jar cli-*-all.jar <project> --all` (needs a JRE 21+).
 
             Checksums are in `SHA256SUMS.txt`; the full history is in
             [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md).

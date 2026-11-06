@@ -9,7 +9,7 @@ click through and query. An IntelliJ IDEA plugin and a command-line tool, sharin
 ./atlas /path/to/your-flowable-project
 ```
 
-That writes six artifacts to `./atlas-output/<project>/` — seven for a project with database tables — and opens the explorer in your browser:
+That writes six artifacts to `atlas-output/<project>/` beside the launcher — seven for a project with database tables — and opens the explorer in your browser:
 
 | Artifact | What it is |
 |---|---|
@@ -38,11 +38,11 @@ Both artifacts are attached to every
 - **IntelliJ plugin, by hand** — download `flowable-atlas-<version>.zip`, then *Settings → Plugins →
   ⚙ → Install Plugin from Disk…* and restart. Needs IDEA 2026.2+, which is also what it is verified on. See
   [`idea-plugin/dist/README.md`](idea-plugin/dist/README.md).
-- **CLI** — download `cli-<version>-all.jar` into `lib/` and run `./atlas <project>`, or
-  `java -jar cli-<version>-all.jar <project> --all`. Needs only a JRE 21+. See
-  [`lib/README.md`](lib/README.md). In CI, add `--fail-on error` and the job fails on any error-level
-  finding while the artifacts are still written — or `--fail-on defects` to fail on everything that is
-  wrong now and stay green on advice.
+- **CLI** — download `atlas` and `cli-<version>-all.jar` into one folder and run `./atlas <project>` (in
+  this clone, put the jar in `lib/`), or `java -jar cli-<version>-all.jar <project> --all`. Needs only a
+  JRE 21+. See [`lib/README.md`](lib/README.md). In CI, add `--fail-on error` and the job fails on any
+  error-level finding while the artifacts are still written — or `--fail-on defects` to fail on
+  everything that is wrong now and stay green on advice.
 
 `SHA256SUMS.txt` in each release carries the checksums; releases are signed when a signing key is
 configured. Building from source instead: `./gradlew :idea-plugin:buildPlugin :cli:shadowJar`.
