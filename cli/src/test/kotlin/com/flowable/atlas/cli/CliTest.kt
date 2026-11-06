@@ -79,7 +79,7 @@ class CliTest {
      * pins the projection in `:core` and says where a difference is; this pins that the CLI writes exactly
      * that projection. The contract assertions after it repeat part of what the comparison proves, to say
      * what the shape is for: a model body is stored once and found through `dataIn`, and `usedBy` agrees
-     * with the edges.
+     * with the edges and with the users the extract recorded in a node's data.
      */
     @Suppress("UNCHECKED_CAST")
     @Test
@@ -119,15 +119,17 @@ class CliTest {
         assertTrue("no model node used the dataIn indirection at all", resolved > 0)
         // The reverse index is present and agrees with the edges — plus, for the nodes no edge points at
         // (variables, expressions, operations…), the models their own data names, moved up to the node.
+        // Those come from the extract result: the golden is the projection, which has moved them already.
         val edges = (written["graph"] as Map<String, Any?>)["edges"] as List<Map<String, Any?>>
         val expectedUsers = edges.filter { it["rel"] != "contains" }
             .groupBy({ it["t"] }, { it["s"] }).mapValues { it.value.distinct().toSet() }
-        val goldenNodes = ((golden["graph"] as Map<String, Any?>)["nodes"] as List<Map<String, Any?>>).associateBy { it["id"] }
+        val extracted = com.flowable.atlas.graph.Atlas.extract(fixtureDir())
+        val sourceNodes = ((extracted["graph"] as Map<String, Any?>)["nodes"] as List<Map<String, Any?>>).associateBy { it["id"] }
         for (n in nodes) {
             val declared = (n["usedBy"] as? List<*>)?.toSet() ?: emptySet()
-            val goldenData = goldenNodes[n["id"]]?.get("data") as? Map<String, Any?>
+            val sourceData = sourceNodes[n["id"]]?.get("data") as? Map<String, Any?>
             val own = if ((n["data"] as? Map<*, *>)?.containsKey("dataIn") == true) emptySet()
-                else (goldenData?.get("usedBy") as? List<*>)?.toSet() ?: emptySet()
+                else (sourceData?.get("usedBy") as? List<*>)?.toSet() ?: emptySet()
             assertEquals("usedBy of ${n["id"]}", (expectedUsers[n["id"]] ?: emptySet<Any?>()) + own, declared)
         }
     }

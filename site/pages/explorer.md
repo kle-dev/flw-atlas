@@ -374,7 +374,9 @@ and the ones it encapsulates, drawn under the requirements that cross it; a busi
 its cut corners and a knowledge source its wavy edge. A CMMN event listener is a double ring with its
 name below and, for a user, timer or signal listener, that glyph inside. An event sub-process is
 dashed, and so is a start event that does not interrupt, whether a Design stencil or BPMN's own
-`triggeredByEvent` and `isInterrupting` say so.
+`triggeredByEvent` and `isInterrupting` say so. A label stays inside its shape: a long name or an
+expression breaks at a dot, a bracket or a camelCase hump rather than running over its neighbours, and
+one that still does not fit ends in `…`.
 
 Drag to pan, ⌘/Ctrl-scroll or a trackpad pinch to zoom, `−` `fit` `+` to step, `⤢` for full screen.
 The zoom follows how far the wheel turns, so a trackpad's many small steps zoom smoothly, a mouse notch is

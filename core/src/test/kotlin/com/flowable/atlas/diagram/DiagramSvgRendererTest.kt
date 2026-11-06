@@ -42,6 +42,43 @@ class DiagramSvgRendererTest {
         assertFalse(svg.contains("A<X>"))
     }
 
+    /**
+     * A label broke only at spaces, so a name that is one long token — an expression, a camelCase name —
+     * became one line twice as wide as its task, printed over its neighbours' labels.
+     */
+    @Test
+    fun aLongNameOrExpressionBreaksInsideItsShape() {
+        val g = DiagramGeometry(
+            shapes = listOf(
+                DiaShape("t1", ShapeKind.TASK, 0.0, 0.0, 100.0, 80.0, "setMetadataOfAllDocumentsNow"),
+                DiaShape("t2", ShapeKind.TASK, 130.0, 0.0, 100.0, 80.0, "Check \${vars:get(root.someReference)}"),
+                DiaShape("t3", ShapeKind.TASK, 260.0, 0.0, 100.0, 80.0, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
+                DiaShape("t4", ShapeKind.TASK, 390.0, 0.0, 100.0, 80.0, "Check the \${vars:get(root.someReference)} now please"),
+            ),
+            edges = emptyList(),
+            notation = DiagramGeometry.Notation.BPMN,
+        )
+        val svg = DiagramSvgRenderer.render(g)!!
+        fun lines(id: String) = Regex("<text[^>]*>([^<]*)</text>").findAll(group(svg, id)).map {
+            it.groupValues[1].replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&").replace("&#39;", "'")
+        }.toList()
+        val maxChars = 13   // what a 100-px task fits: (100 - 8) / 6.6
+        for (id in listOf("t1", "t2", "t3", "t4")) {
+            val ls = lines(id)
+            assertTrue("$id: $ls", ls.isNotEmpty() && ls.size <= 4)
+            assertTrue("$id: every line fits its shape: $ls", ls.all { it.length <= maxChars })
+        }
+        assertEquals("a camelCase name breaks at its humps", listOf("setMetadataOf", "AllDocuments", "Now"), lines("t1"))
+        val t2 = lines("t2")
+        assertEquals("the words before the expression keep their own line", "Check", t2.first())
+        assertEquals("nothing is lost", "Check \${vars:get(root.someReference)}", t2.first() + " " + t2.drop(1).joinToString(""))
+        assertTrue("a token with nowhere to break is cut, and an overlong label still ends in …", lines("t3").last().endsWith("…"))
+        assertEquals(
+            "a label cut after a short line says so too",
+            listOf("Check the", "\${vars:get(", "root.some", "Reference)}…"), lines("t4"),
+        )
+    }
+
     @Test
     fun emptyGeometryRendersNull() {
         assertNull(DiagramSvgRenderer.render(DiagramGeometry(emptyList(), emptyList(), DiagramGeometry.Notation.BPMN)))

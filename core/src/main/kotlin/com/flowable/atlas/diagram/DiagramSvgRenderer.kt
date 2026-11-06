@@ -431,12 +431,27 @@ object DiagramSvgRenderer {
 
     private fun maxChars(widthPx: Double): Int = max(4, (widthPx / 6.6).toInt())
 
+    /**
+     * [text] in lines of at most [maxChars], broken at spaces — and inside a word that is longer than a
+     * line on its own. Task names are often one long token: an expression (`${vars:get(root.someReference)}`)
+     * or a camelCase name. Placed whole, such a token ran far past its shape, over its neighbours' labels.
+     */
     private fun wrap(text: String, maxChars: Int, maxLines: Int): List<String> {
         val words = text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
         if (words.isEmpty()) return emptyList()
         val lines = ArrayList<String>()
         var cur = ""
-        for (w in words) {
+        for (word in words) {
+            var w = word
+            if (w.length > maxChars) {
+                // Its pieces are never re-joined with a space; only the last one shares a line with what follows.
+                if (cur.isNotEmpty()) { lines.add(cur); cur = "" }
+                while (w.length > maxChars) {
+                    val cut = breakAt(w, maxChars)
+                    lines.add(w.substring(0, cut))
+                    w = w.substring(cut)
+                }
+            }
             cur = when {
                 cur.isEmpty() -> w
                 cur.length + 1 + w.length <= maxChars -> "$cur $w"
@@ -446,8 +461,24 @@ object DiagramSvgRenderer {
         if (cur.isNotEmpty()) lines.add(cur)
         if (lines.size <= maxLines) return lines
         val kept = lines.take(maxLines).toMutableList()
-        kept[maxLines - 1] = truncate(kept[maxLines - 1], max(1, maxChars - 1))
+        // The `…` goes on however short the last kept line is: a label cut after a line that happens to
+        // fit (`Reference)}` before a dropped `now please`) otherwise reads as complete. Splitting long
+        // tokens makes more labels run past the limit, so this is no longer the rare case.
+        kept[maxLines - 1] = kept[maxLines - 1].take(maxChars - 1).trimEnd() + "…"
         return kept
+    }
+
+    /**
+     * Where to cut a word longer than [max]: after the last `.`, `(`, `:`, `_`, `-`, `/` or `,`, or at the
+     * last camelCase hump, in the back half of the line — so `root.someReference` breaks at the dot and
+     * `setMetadataOfAll` before `Of` — and at [max] itself when the word has no such place.
+     */
+    private fun breakAt(w: String, max: Int): Int {
+        for (i in max downTo maxOf(1, max / 2)) {
+            val before = w[i - 1]
+            if (before in ".(:_-/," || (before.isLowerCase() && w.getOrNull(i)?.isUpperCase() == true)) return i
+        }
+        return max
     }
 
     private fun truncate(s: String, maxChars: Int): String =
