@@ -71,7 +71,9 @@ class FlowableAtlasConfigurable : AtlasApplicationConfigurable(
             }
             row {
                 comment(
-                    "Per project, on the pages below: <b>Environments</b> (the servers), <b>Expressions</b> " +
+                    // Environments are stored once per IDE (AtlasEnvironments is an application service) although
+                    // this page is a project configurable — so the line must not call all three "per project".
+                    "IDE-wide, on the page below: <b>Environments</b> (the servers). Per project: <b>Expressions</b> " +
                         "(validation, allowlist, custom functions), <b>Generation</b> (what Atlas writes, and where).<br>" +
                         "Inspections: Settings → Editor → Inspections → Flowable. Inline hints: Settings → Editor → " +
                         "Inlay Hints → Values.",

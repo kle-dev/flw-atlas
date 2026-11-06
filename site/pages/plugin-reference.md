@@ -64,6 +64,7 @@ is *Explorer* the buttons read *Generate…* and *Open*. Every tool-window opene
 | Switch Design Environment… | Atlas Hub, *Design Pull* block |
 | Pull from Flowable Design | Atlas Hub, *Design Pull* block — the button names the environment |
 | Switch Work Environment… | Atlas Hub, *Playground* block; the playground itself |
+| Open Environment in Browser | Atlas Hub ⋮ menu. A submenu: every address in the catalog — Design, Work, Control, Hub — grouped by environment, one item each, opened in the browser. It follows neither the pull's nor the playground's environment: it asks, every time |
 | Manage Environments… | Atlas Hub ⋮ menu, its attention line when an environment was removed, and the *Design Pull* block while none exists |
 | Rebuild Model Index | Atlas Hub ⋮ menu, and beside the model count in its header |
 | Dump Key Index (Internal) | Only visible in an internal-mode IDE |
@@ -71,10 +72,8 @@ is *Explorer* the buttons read *Generate…* and *Open*. Every tool-window opene
 A question nobody has to answer before they can go on is a balloon, not a dialog: *Open Atlas Explorer*
 with no page to open says so and offers *Generate Atlas Explorer…*, and every *Show Details* — a
 generator log, the index's per-type breakdown — opens as a read-only editor tab, whatever its length.
-The balloons come in two groups under *Settings → Appearance & Behavior → Notifications*, so one can be
-silenced without the other: **Flowable Atlas: finished jobs** (the index was rebuilt, artifacts were
-generated, waivers were saved) and **Flowable Atlas: needs attention** (a warning, a failure, or why
-nothing happened).
+The balloons come in two groups, so one can be silenced without the other — see
+[Notifications](#notifications).
 
 Panel toolbars carry a few more that are not registered actions, so they do not appear in *Find
 Action*: the Hub's *Refresh* (which also re-reads the Flowable Design workspace and app lists) and *Settings*; the Environments page's *Test Connection*; the explorer tab's *Back*, *Forward*, *Reload* and *Open in Browser*; the
@@ -87,7 +86,7 @@ context selectors with *Load Script from Model…*, *Load Example…* and a gear
 
 | Tool window | Where | Contents |
 |---|---|---|
-| **Atlas Hub** | Right stripe | A status header — Flowable project · model count (a link to *Go to Model…*, *Rebuild* beside it) · index age · one attention line when something needs a hand — over four blocks: Explorer · Recent Models (the models opened last, newest first; double-click opens at the key, the context menu copies the key, opens the explorer page, or removes one entry or all) · Design Pull (environment · workspace · apps · pull) · Playground. See [the Hub](../#the-atlas-hub) |
+| **Atlas Hub** | Right stripe | A status header — Flowable project · model count (a link to *Go to Model…*, *Rebuild* beside it) · index age · a health row with the last analysis's defects and advice, a link into Atlas Findings · one attention line when something needs a hand — over four blocks: Explorer · Recent Models (the models opened last, newest first; double-click opens at the key, the context menu copies the key, opens the explorer page, or removes one entry or all) · Design Pull (environment · workspace · apps · pull) · Playground. See [the Hub](../#the-atlas-hub) |
 | **Atlas Findings** | Bottom stripe | Every finding of the project from the same in-process analysis the explorer is built from, as a tree: *Defects*, then — when asked for through the eye — *Advice* and *Accepted*, each by check; an advice finding wears the information icon rather than a warning. A status line says how current the analysis is and offers *Analyze Again* once a model changed since; generating the explorer brings it up to date without a second analysis. A detail pane beside the tree explains the selected check — why it matters, what to do, a link to the checks page — and opens the finding's model in the explorer. Double-click or Enter opens the finding's file at its line; *Accept…* asks for a reason (an empty one is refused) and writes one rule per selected finding to the output folder's `waivers.json`, the file the explorer's Save writes, then analyses again. Swing, so it works under Remote Development and without JCEF |
 | **Atlas Playground** | Bottom stripe (secondary) | Two tabs on one shell — editor and problems · context · result: *Expressions* (Backend / Frontend) and *Scripts*. See [the playgrounds](../#the-playgrounds) |
 
@@ -309,6 +308,8 @@ selects the environment or connection it is about, beside the message saying wha
 | Environment | Name · *Ask before pulling from or evaluating against this environment* (**Protected**) |
 | Flowable Design | Server URL · authentication (username and password *or* an access token, with a *Create Token…* dialog and a link to Design's own token page) · *Test Connection* |
 | Flowable Work | Server URL · *Detect from Project* · username · password · browser session (*Sign in via Browser…*, *Paste Session…*) · *Test Connection* |
+| Flowable Control | Server URL only — handed to the browser by *Open Environment in Browser*, never called: no username, no password, no *Test Connection* |
+| Flowable Hub | Server URL only, the same as Control |
 
 The explanations that used to stand under the sign-in buttons as paragraphs — why *Create Token…* fails
 behind SSO, when a browser session is what gets you in — are help marks beside those buttons now. The
@@ -316,8 +317,9 @@ dialogs behind them refuse what cannot work before they close: *Paste Session…
 Authorization or CSRF header in it, *Sign In to Flowable* until a session cookie for the server has been
 seen, and *Create Token…* a blank username (a blank validity is a token that does not expire).
 
-An environment holds **at most one connection of each kind, and may hold only one of the two** — a QA
-stage with a running app and no Design server is an ordinary thing, shown without any warning. Two
+An environment holds **at most one address of each kind — Design, Work, Control, Hub — and may hold any
+subset of them**: a QA stage with a running app and no Design server is an ordinary thing, shown without
+any warning. Two
 environments **may** point at the same server: one Design server commonly hosts a DEV workspace and a
 QA workspace, and they share the one saved credential that URL has, which is right — same server, same
 login.
@@ -382,10 +384,10 @@ the file is still empty.
 ## Notifications
 
 Two groups, so either can be silenced in *Settings → Appearance & Behavior → Notifications* without the
-other. **Flowable Atlas Results** says a job finished: the model index was rebuilt, artifacts, DTOs or
-changelogs were generated, waivers were saved. **Flowable Atlas** carries what asks for attention: a
-failed pull or generation (with *Show details* or *Open log*), a rename not applied to the models, an
-archive that could not be read.
+other. **Flowable Atlas: finished jobs** says a job finished: the model index was rebuilt, artifacts, DTOs
+or changelogs were generated, waivers were saved. **Flowable Atlas: needs attention** carries what asks for
+attention: a warning, a failed pull or generation (with *Show details* or *Open log*), a rename not applied
+to the models, an archive that could not be read, or why nothing happened.
 
 ## Reporting a problem
 

@@ -18,10 +18,10 @@
         deployment.</p>
 
         <p>Zero configuration: open a project that contains the Flowable models you exported from Design
-        (the app <code>.zip</code> / deployment <code>-bar</code>, holding
+        (the app <code>.zip</code> / deployment <code>.bar</code>, holding
         <code>.bpmn / .cmmn / .dmn / .form / .data / .service / …</code>) or the Flowable Design
         <code>*-models</code> workspace, and start typing. The plugin indexes every model and puts that
-        knowledge to work across three areas.</p>
+        knowledge to work across four areas.</p>
 
         <h3>1 &middot; Model-key intelligence</h3>
         <ul>
@@ -39,21 +39,32 @@
           <li><b>More than keys</b> — completion for message &amp; signal names, process variables,
               task-definition keys and activity IDs, <b>scoped</b> to the
               <code>processDefinitionKey</code> / <code>caseDefinitionKey</code> in the same query chain
-              when present, so you see only that model's ids.</li>
+              when present, so you see only that model's ids. Ctrl/Cmd-click lands on the
+              <code>&lt;signal&gt;</code> or <code>&lt;userTask&gt;</code> that declares one, and a message or
+              signal no model declares is flagged — an unknown message throws at run time, an unknown signal
+              reaches nobody.</li>
           <li><b>Model &rarr; model references in BPMN/CMMN XML</b> — the keys that live inside the models
               themselves (<code>callActivity calledElement</code>, <code>flowable:formKey</code>,
               <code>decisionRef</code>, CMMN <code>caseRef</code> / <code>processRef</code>) get the same
               completion, Ctrl/Cmd-click navigation and broken-key inspection as Java call sites — so a
               <code>calledElement</code> pointing at a missing process is caught before deployment.</li>
-          <li><b>Broken-key inspection</b> — an unknown key (in Java or model XML) is flagged inline with a
+          <li><b>Broken-key inspection</b> — an unknown key (in Java, in model XML, or inside a JSON model:
+              a form's subform, a data object's backing service, an app's models) is flagged inline with a
               <i>"did you mean …?"</i> quick-fix to the closest real key.</li>
           <li><b>Navigation &amp; Find Usages</b> — Ctrl/Cmd-click a key literal to jump straight to the
               model file; hover for its type, name and location. Find Usages on a delegate class or an
               <code>${bean.method()}</code> expression lists the model files that reference it.</li>
+          <li><b>Gutter icons, both ways</b> — on a class or method a model uses, a bot class, a REST handler
+              a model calls, each listing those models; beside a model key, the model with its diagram.</li>
+          <li><b>Go to Model… and Find in Models…</b> — one search over every model key, the elements inside
+              the models and their full text, paths inside <code>.bar</code> / <code>.zip</code> archives
+              included; also the <i>Flowable Model</i> tab of Search Everywhere.</li>
           <li><b>Code generation</b> — generate a typed Java constants class
               (<code>FlowableModelKeys.Process.ORDER_FULFILMENT</code>, model name in Javadoc) that stays
-              in sync as models are added, renamed or removed; or, with Alt/Option-Enter on a data-object
-              <code>definitionKey("…")</code>, a typed Java bean built from the model's field mappings.</li>
+              in sync as models are added, renamed or removed; typed Java DTOs from one data object
+              (Alt/Option-Enter on its <code>definitionKey("…")</code>) or from whole apps; and Liquibase
+              changelogs from a data object or from the apps, with the plan shown before anything is
+              written.</li>
           <li><b>Liquibase aware</b> — inside a changelog it completes <code>&lt;column&gt;</code> names
               and <code>tableName</code> from the backing service model, and flags columns that no
               backing Flowable model defines.</li>
@@ -78,10 +89,12 @@
               bundled in every IDEA; JavaScript lights up on Ultimate. JUEL or unknown script formats
               keep the plain expression injection. Atlas additionally runs its own dependency-free
               structural script check (unterminated strings/comments, unbalanced brackets,
-              <code>scriptFormat</code> typos) in the CLI and the explorer's Checks tab.</li>
+              <code>scriptFormat</code> typos) in the CLI and the explorer's Checks page.</li>
           <li><b>Flowable environments</b> — define your DEV/QA/UAT/PROD servers once for the whole IDE
-              instead of once per repository, and pick them from a list. Each environment holds a Flowable
-              Design connection, a Flowable Work connection, or just one of the two; the Design pull and the
+              instead of once per repository, and pick them from a list. Each environment holds any of a
+              Flowable Design connection, a Flowable Work connection and the Flowable Control and Hub
+              addresses, which Atlas only opens in a browser (Tools → Flowable Atlas → <i>Open Environment in
+              Browser</i>); the Design pull and the
               Atlas Playground point independently, so running against QA while models still come from
               DEV1 is an ordinary way to work. Mark an environment <i>Protected</i> and Atlas asks before
               pulling from it or evaluating against it. Passwords and tokens stay in the IDE password
@@ -97,7 +110,7 @@
               write a Groovy/JavaScript/Python script: the IDE's real language editing (completion,
               coloring) where the language plugin is available, live structural validation with
               squiggles and clickable problem rows (the same checks the CLI and the explorer's Checks
-              tab run), the scope variables the script touches as chips, a picker that loads any
+              page runs), the scope variables the script touches as chips, a picker that loads any
               script task / listener / action-bot script straight from the project's models, and a
               library of worked examples — a complete, commented script for every context and
               language, to start from rather than from an empty editor.</li>
@@ -106,22 +119,28 @@
         <h3>3 &middot; Atlas explorer &amp; hub</h3>
         <ul>
           <li><b>Atlas Hub</b> — a tool window (right stripe) that is the plugin's control center:
-              which Flowable project Atlas is about, how many models it knows and how fresh that is, one
-              attention line when something needs a hand, and three task blocks — the generated explorer,
-              the Flowable Design pull, the playground's runtime — each with its actions beside its state,
-              kept up to date live.</li>
-          <li><b>Map your whole project</b> — Tools → Flowable Atlas → <i>Generate Atlas Explorer…</i>
+              which Flowable project Atlas is about, how many models it knows and how fresh that is, a
+              health row with the last analysis's defects and advice, one attention line when something
+              needs a hand, and four blocks — the generated explorer, the models opened last, the Flowable
+              Design pull, the playground's runtime — each with its actions beside its state, kept up to
+              date live.</li>
+          <li><b>Atlas Findings</b> — a tool window (bottom stripe) listing every defect of the project from
+              the same in-process analysis as the explorer, by check, advice on request, each with why it
+              matters and what to do; double-click opens the finding at its line, and <i>Accept…</i> records a
+              reason in the output folder's <code>waivers.json</code>, the file the explorer and the CLI's
+              gate read. Swing, so it works under Remote Development.</li>
+          <li><b>Map your whole project</b> — Tools → Flowable Atlas → Generate → <i>Atlas Explorer…</i>
               turns your models + Java + Liquibase into a single self-contained, offline, interactive
               HTML page. Save it into the project and open it in your browser or right inside the IDE
               (embedded viewer), then click through every relationship in both directions. In
-              Settings → Generation you pick exactly which artifacts are written — summary &amp;
+              Settings → Tools → Flowable Atlas → Generation you pick exactly which artifacts are written — summary &amp;
               overview Markdown, the graph JSON, the explorer HTML, a CLAUDE.md primer for AI agents,
               and a Playwright guide that lets an agent drive Flowable Work in a browser, with this
               project's stage bars, tasks, required fields and button conditions. Generation runs
               entirely in-process — no external tools required — and honours the project's expression
               allowlist.</li>
           <li><b>An ER diagram designer</b> — tick <i>ER diagram designer (HTML)</i> under Settings →
-              Generation and Atlas writes a page of its own beside the explorer: drag the project's tables
+              Tools → Flowable Atlas → Generation and Atlas writes a page of its own beside the explorer: drag the project's tables
               onto a canvas, show their columns and types, search across every table and column, draw named
               1:1 / 1:n / n:m relations, colour them and let Atlas arrange them — for explaining a data model
               to the business — with SVG/PNG export and a diagram file you can commit; Tools → Flowable Atlas opens it
@@ -134,6 +153,18 @@
               Flowable Atlas) opens an already-generated <code>*.explorer.html</code> — including
               one written by the standalone <code>atlas</code> CLI into the configured output folder — as a
               center editor tab (like a DB table), so you never have to leave the IDE for a browser.</li>
+        </ul>
+
+        <h3>4 &middot; Models in the IDE</h3>
+        <ul>
+          <li><b>Text and picture side by side</b> — a process, case, decision, form or page opens with its
+              diagram, decision table or form wireframe beside the text; click an element in the picture to
+              land on its declaration.</li>
+          <li><b>App archives, opened</b> — a <code>.bar</code> or <code>.zip</code> expands in the Project view,
+              and every model inside it is indexed, navigable and searchable without unpacking.</li>
+          <li><b>Compare Model with Archive</b> — a model generated into the project folder against its
+              entry in the app export, side by side in the IDE's diff viewer, both laid out first so a
+              minified export still compares line by line.</li>
         </ul>
 
         <h3>How it feels</h3>

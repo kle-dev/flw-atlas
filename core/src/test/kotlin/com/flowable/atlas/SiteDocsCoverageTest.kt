@@ -175,13 +175,65 @@ class SiteDocsCoverageTest {
     @Test
     fun everyRegisteredActionIsDocumented() {
         // Action texts live in the message bundle; the descriptor holds the ids. The page lists the
-        // human texts, so compare against those.
+        // human texts, so compare against those. A group's text too: a submenu such as *Open Environment in
+        // Browser* is an entry a reader looks up like any action, and reading `action.` keys alone let one
+        // go unlisted.
         val bundle = source("idea-plugin/src/main/resources/messages/FlowableAtlasBundle.properties")
         val texts = bundle.lineSequence()
-            .filter { it.startsWith("action.") && it.contains(".text=") }
+            .filter { (it.startsWith("action.") || it.startsWith("group.")) && it.contains(".text=") }
             .map { it.substringAfter(".text=").trim() }
             .filter { it.isNotBlank() && !it.contains("{") }
             .toSortedSet()
-        assertDocumented("action text(s)", "plugin-reference", texts)
+        assertDocumented("action or group text(s)", "plugin-reference", texts)
+    }
+
+    /** The `<description>` block of the plugin descriptor — what the plugin manager shows before an install. */
+    private fun pluginDescription(): String {
+        val xml = source("idea-plugin/src/main/resources/META-INF/plugin.xml")
+        val start = xml.indexOf("<description><![CDATA[")
+        val end = xml.indexOf("]]></description>")
+        assertTrue("no <description> CDATA block in plugin.xml", start >= 0 && end > start)
+        return xml.substring(start, end)
+    }
+
+    @Test
+    fun pluginDescriptionNamesEveryToolWindow() {
+        // The description is hand-written and nothing else held it to the descriptor: Atlas Findings, a
+        // whole tool window, went unmentioned in the text the plugin manager shows. A tool window is the
+        // one kind of feature that is never a detail.
+        val xml = source("idea-plugin/src/main/resources/META-INF/plugin.xml")
+        val ids = Regex("<toolWindow\\s+id=\"([^\"]+)\"").findAll(xml).map { it.groupValues[1] }.toSortedSet()
+        assertTrue("no <toolWindow> found in plugin.xml — this test is no longer checking anything", ids.isNotEmpty())
+        val description = pluginDescription()
+        val missing = ids.filterNot { description.contains(it) }
+        assertTrue("the plugin's <description> does not name the tool window(s) $missing", missing.isEmpty())
+    }
+
+    @Test
+    fun pluginDescriptionSpellsSettingsPathsInFull() {
+        // "Settings → Generation" names a page nobody can find: the page is under Tools → Flowable Atlas.
+        // The prose wraps, so a path may break across lines: whitespace, not a single space, between parts.
+        val shortened = Regex("Settings\\s+→(?!\\s*(?:Tools\\s+→\\s+Flowable\\s+Atlas|Editor|Plugins|Appearance))[^<.,;]*")
+            .findAll(pluginDescription()).map { it.value }.toList()
+        assertTrue("the plugin's <description> shortens a settings path: $shortened", shortened.isEmpty())
+    }
+
+    @Test
+    fun everyNotificationGroupIsDocumentedByItsDisplayName() {
+        // Settings → Notifications lists a group by its bundle text, never by its id; the reference named
+        // the ids, which a reader looking for them there could not find.
+        val xml = source("idea-plugin/src/main/resources/META-INF/plugin.xml")
+        val bundle = source("idea-plugin/src/main/resources/messages/FlowableAtlasBundle.properties")
+            .lineSequence().filter { '=' in it }.associate { it.substringBefore('=').trim() to it.substringAfter('=').trim() }
+        val groups = Regex("<notificationGroup\\s+id=\"([^\"]+)\"[^>]*key=\"([^\"]+)\"").findAll(xml)
+            .map { it.groupValues[1] to bundle.getValue(it.groupValues[2]) }.toList()
+        assertTrue("no <notificationGroup> with a key found in plugin.xml", groups.isNotEmpty())
+        val page = page("plugin-reference")
+        val section = page.substringAfter("\n## Notifications").substringBefore("\n## ")
+        assertTrue("plugin-reference.md has no ## Notifications section", section.length < page.length)
+        for ((id, display) in groups) {
+            assertTrue("## Notifications does not name the group '$display'", section.contains(display))
+            if (id != display) assertTrue("## Notifications names the group by its id '$id', which Settings never shows", !section.contains("**$id**"))
+        }
     }
 }

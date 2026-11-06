@@ -23,7 +23,7 @@ import com.intellij.openapi.project.Project
  * an entry that lived only in one of them is what made the two menus disagree.
  */
 class OpenEnvironmentInBrowserGroup :
-    ActionGroup(message("hub.toolbar.openEnvironment"), true), DumbAware {
+    ActionGroup(message("group.Flowable.OpenEnvironmentInBrowser.text"), true), DumbAware {
 
     override fun getChildren(e: AnActionEvent?): Array<AnAction> {
         val project = e?.project ?: return EMPTY_ARRAY
