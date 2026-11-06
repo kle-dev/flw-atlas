@@ -1,5 +1,6 @@
 package com.flowable.atlas.explorer
 
+import com.flowable.atlas.render.Fmt
 import com.flowable.atlas.render.PlaywrightRenderer
 import java.nio.file.Files
 import java.nio.file.Path
@@ -12,11 +13,11 @@ import java.nio.file.Path
  */
 object AtlasArtifactFiles {
 
-    /** The name the generator derives for a project's output files: the analysed folder's name, last extension stripped. */
-    fun projectName(projectDir: Path): String {
-        val base = projectDir.toAbsolutePath().normalize().fileName?.toString().orEmpty()
-        return base.substringBeforeLast('.', base).ifBlank { "project" }
-    }
+    /**
+     * The name the generator derives for a project's output files: the CLI's [Fmt.artifactName], so the Hub
+     * looks for the very files the generator wrote and the CLAUDE.md and the guide point at.
+     */
+    fun projectName(projectDir: Path): String = Fmt.artifactName(projectDir.toFile())
 
     /**
      * The files of the [selected] artifacts, other than explorer pages (those are found by

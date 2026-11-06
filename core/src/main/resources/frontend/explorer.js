@@ -112,6 +112,11 @@ function inflateRaw(src, size){
 // project, that JSON deflated (above): JSON.parse is faster than a JS literal for large payloads and needs
 // no JS escaping.
 const DATA = JSON.parse(atlasIslandText(document.getElementById('atlas-data')));
+// What every localStorage key of this page is scoped by: all pages opened from file:// share one origin, and
+// two projects can share a name — as every project analysed from inside itself once shared `.` — so keyed on
+// the name, one project's unsaved decisions were offered for export in another's waivers.json. The key is a
+// hash of the project's path (Fmt.projectKey); the name is the fallback for a page from before it existed.
+const PROJECT_SCOPE = DATA.projectKey || DATA.project || '_';
 const nodes = DATA.nodes, edges = DATA.edges;
 const byId = new Map(nodes.map(n => [n.id, n]));
 // Node-type labels. Wording follows Flowable Design's own `modelType.*` strings so a term you read here
@@ -2056,7 +2061,7 @@ function wireTree(v){
 // file, and a report silently editing a file in someone's repository would be a surprise even where it
 // can. So the page holds a *diff* over what the file said when it was generated, and says how many
 // changes are waiting.
-const WAIVER_KEY='atlas-waivers-'+(DATA.project||'_');
+const WAIVER_KEY='atlas-waivers-'+PROJECT_SCOPE;
 const waiverId=r=>[r.check, r.node, r.element||'', r.subject||''].join(' ');
 /** The local diff: rules added here, ids of file rules dropped here — each marked `saved` once a Save
  *  or Export wrote it, so the bar can count what is still only in this browser. */
@@ -7840,7 +7845,8 @@ function applySelection(id, ctx){
 // every shared link unreadable and push a history entry per opened tab.
 // 12, not 20: Alt+1..9 only reaches nine, and a strip of twenty tabs is a row of unreadable
 // slivers. Marks are capped at the same number, so "open them all" can always keep its promise.
-const MAX_TABS=12, TABS_STORE='atlas-tabs';
+// One slot per project: a single shared slot meant switching between two reports threw away each one's tabs.
+const MAX_TABS=12, TABS_STORE='atlas-tabs:'+PROJECT_SCOPE;
 // Per-tab view state: scroll offset plus the search term/element the tab was opened with, so
 // switching back to a tab opened from ⌘K still highlights the hit that put it there. Keyed by node
 // id (a node can occupy at most one tab) and pruned on close.
@@ -7852,12 +7858,12 @@ function tabsRemember(){
   // Scoped to the project: every report on a file:// origin shares one localStorage, and two
   // reports of the same codebase share node ids — an unscoped record would restore foreign tabs.
   try{ localStorage.setItem(TABS_STORE,
-    JSON.stringify({p:DATA.project, ids:state.tabs, active:state.tab})); }catch(e){}
+    JSON.stringify({p:PROJECT_SCOPE, ids:state.tabs, active:state.tab})); }catch(e){}
 }
 function tabsRestore(){
   try{
     const p=JSON.parse(localStorage.getItem(TABS_STORE)||'{}')||{};
-    if(p.p!==DATA.project){ state.tabs=[]; state.tab=-1; return; }
+    if(p.p!==PROJECT_SCOPE){ state.tabs=[]; state.tab=-1; return; }
     // A regenerated explorer can have a different node set — drop ids that no longer resolve.
     const ids=(p.ids||[]).filter(id=>byId.get(id)).slice(0,MAX_TABS);
     state.tabs=ids;
@@ -8917,7 +8923,7 @@ function closePalette(){
 // Scoped to the project like the tabs (tabsRemember): every report on a file:// origin shares one
 // localStorage, and an unscoped list filled its eight slots with another report's ids — filtered out
 // on read, so the Recent list shrank every time you switched reports.
-const RECENT_STORE='atlas-recent:'+(DATA.project||'');
+const RECENT_STORE='atlas-recent:'+PROJECT_SCOPE;
 function getRecents(){
   try{ return (JSON.parse(localStorage.getItem(RECENT_STORE)||'[]')||[]).filter(id=>byId.get(id)); }
   catch(e){ return []; }

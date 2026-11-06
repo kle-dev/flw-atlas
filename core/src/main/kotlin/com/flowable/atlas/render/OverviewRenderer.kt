@@ -75,7 +75,7 @@ object OverviewRenderer {
         fun hdr(n: Int, title: String) = L.add("## $n. $title\n")
 
         val s = asMap(result["stats"])
-        val projName = root.absoluteFile.name
+        val projName = Fmt.projectName(root)
         L.add("# Flowable App Overview — `$projName`\n")
         val an = Fmt.artifactName(root)
         L.add(

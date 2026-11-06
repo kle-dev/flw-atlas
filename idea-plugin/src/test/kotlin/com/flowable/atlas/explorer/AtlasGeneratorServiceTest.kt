@@ -101,6 +101,27 @@ class AtlasGeneratorServiceTest : BasePlatformTestCase() {
         assertTrue(AtlasArtifact.isPage("x.erd.html") && AtlasArtifact.isPage("x.explorer.html") && !AtlasArtifact.isPage("x.html"))
     }
 
+    /**
+     * The plugin names its files with the rule the CLI and the artifacts use: a copy of that rule here once
+     * wrote `project.*` for a folder named `.DEMO-solution`, beside a CLAUDE.md naming `.DEMO-solution.*`.
+     */
+    fun testADotPrefixedFolderNamesItsFilesAsItsSiblingsDo() {
+        val root = File(dir, ".DEMO-solution")
+        File(root, "models").mkdirs()
+        File(root, "models/DEMO-P001.bpmn").writeText("""<definitions><process id="DEMO-P001" name="Demo"/></definitions>""")
+        val out = dir.toPath().resolve("atlas-output")
+        // every file artifact, so whatever CLAUDE.md names has been asked for
+        val outcome = AtlasGeneratorService.getInstance(project).generateAll(root.toPath(), out, EmptyProgressIndicator(),
+            AtlasArtifact.entries.toSet() - AtlasArtifact.DIAGRAMS_SVG)
+        assertTrue(outcome.toString(), outcome is AtlasGeneratorService.Outcome.Success)
+        val written = (outcome as AtlasGeneratorService.Outcome.Success).written.map { it.fileName.toString() }
+        assertTrue(written.toString(), written.isNotEmpty() && written.all { it.startsWith(".DEMO-solution.") })
+        val named = Regex("""\.DEMO-solution\.[A-Za-z-]+\.(md|json|html)""")
+            .findAll(Files.readString(out.resolve(".DEMO-solution.CLAUDE.md"))).map { it.value }.toSet()
+        assertTrue("CLAUDE.md names its siblings", named.isNotEmpty())
+        for (n in named) assertTrue("CLAUDE.md names $n, which was not written", Files.exists(out.resolve(n)))
+    }
+
     fun testAPageRemembersTheFolderItWasMadeFrom() {
         val page = dir.toPath().resolve("atlas-output/a.explorer.html")
         assertNull(AtlasExplorerFiles.rootOf(project, page))

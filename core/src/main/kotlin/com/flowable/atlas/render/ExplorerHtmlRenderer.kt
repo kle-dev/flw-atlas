@@ -39,7 +39,9 @@ object ExplorerHtmlRenderer {
             ?: error("result[\"graph\"] is missing or not a map — Atlas.extract must produce it")
         // Same payload object html_render builds, in the same key order.
         val payload = LinkedHashMap<String, Any?>()
-        payload["project"] = root.absoluteFile.name.ifEmpty { "project" }
+        payload["project"] = Fmt.projectName(root)
+        // What the page's browser storage is scoped by — not the name, which two projects can share.
+        payload["projectKey"] = Fmt.projectKey(root)
         // Provenance: a page mailed to a reviewer could be a day or six months old and could not say.
         payload["generatedAt"] = generatedAt.toString()
         payload["atlasVersion"] = version

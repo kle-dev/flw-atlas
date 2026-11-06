@@ -104,6 +104,9 @@ class AtlasGeneratorService(private val project: Project) {
             val result = extract(root, indicator, waiverFile(outputDir))
 
             indicator.text = "Rendering Atlas artifacts…"
+            // The CLI's rule, from :core (through AtlasArtifactFiles): the CLAUDE.md and the guide name their
+            // siblings with it, so a copy of the rule here once wrote `project.*` beside files that pointed at
+            // `.DEMO-solution.*`.
             val name = AtlasArtifactFiles.projectName(projectDir)
             outputDir.toFile().mkdirs()
             // The folder is regenerated and may carry client data; waivers.json is the one file in it

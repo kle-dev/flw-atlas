@@ -45,7 +45,7 @@ object SummaryRenderer {
         val an = Fmt.artifactName(root)
 
         val L = ArrayList<String>()
-        L.add("# Flowable project — `${root.absoluteFile.name}` (quick overview)\n")
+        L.add("# Flowable project — `${Fmt.projectName(root)}` (quick overview)\n")
         L.add("_${Fmt.modelScale(st)} · ${st["java"]} Java files · ${st["nodes"] ?: 0} nodes · " +
                 "${st["edges"] ?: 0} relationships · ${st["groups"] ?: 0} user groups. " +
                 "Compact summary — full report in `$an.overview.md`, full graph in `$an.graph.json`._\n")

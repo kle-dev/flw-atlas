@@ -1597,6 +1597,17 @@ const probe = `<script>
        [...sect.querySelectorAll('.wv-acc')].every(b=>/stays in the report/.test(b.dataset.tip||'')));
     try{ localStorage.removeItem(WAIVER_KEY); }catch(e){}
   });
+  // Storage is scoped by the project's path hash, not its name: every project analysed as "." used to share
+  // "atlas-waivers-.", and one project's unsaved decision was offered for export into another's waivers.json.
+  steps.push(()=>{
+    ok('the page carries a project key apart from its name', !!DATA.projectKey && DATA.projectKey!==DATA.project);
+    ok('and scopes its storage by it', [WAIVER_KEY, TABS_STORE, RECENT_STORE].every(k=>k.endsWith(DATA.projectKey)),
+       [WAIVER_KEY, TABS_STORE, RECENT_STORE].join(' '));
+    const foreign='atlas-waivers-'+DATA.project;
+    try{ localStorage.setItem(foreign, JSON.stringify({add:[{check:'x', node:'y', reason:'other project', saved:false}], remove:[]})); }catch(e){}
+    ok('a decision stored for another project of the same name is not offered here', waiverPending()===0, 'pending='+waiverPending());
+    try{ localStorage.removeItem(foreign); }catch(e){}
+  });
 
   // --- the reference tree: it is the one view that walks the graph more than one hop, so the things
   //     worth asserting are the ones that make an unbounded walk safe: dedup, cycles, and the filter
@@ -1839,7 +1850,7 @@ const narrowProbe = `<script>
   const w=el=>el?Math.round(el.getBoundingClientRect().width):0;
   const steps=[];
   steps.push(()=>{
-    ['atlas-sidebar','atlas-sidebar-w','atlas-list-hidden','atlas-tabs'].forEach(k=>{ try{ localStorage.removeItem(k); }catch(e){} });
+    ['atlas-sidebar','atlas-sidebar-w','atlas-list-hidden',TABS_STORE].forEach(k=>{ try{ localStorage.removeItem(k); }catch(e){} });
     applySidebar(); applyListPref();
     const shell=document.querySelector('.shell'), sb=document.getElementById('sidebar');
     ok('with a mouse the navigation stays on the left, as the icon rail', shell.classList.contains('rail') && w(sb)<=70 && vis(document.getElementById('nav')), 'sidebar='+w(sb));
@@ -1929,7 +1940,7 @@ const ideProbe = `<script>
   const noHScroll=()=>document.documentElement.scrollWidth<=window.innerWidth+1;
   const steps=[];
   steps.push(()=>{
-    ['atlas-sidebar','atlas-sidebar-w','atlas-list-hidden','atlas-tabs'].forEach(k=>{ try{ localStorage.removeItem(k); }catch(e){} });
+    ['atlas-sidebar','atlas-sidebar-w','atlas-list-hidden',TABS_STORE].forEach(k=>{ try{ localStorage.removeItem(k); }catch(e){} });
     applySidebar();
     const shell=document.querySelector('.shell');
     ok('an editor-tab width gets the compact sidebar', shell.classList.contains('compact') && !shell.classList.contains('rail'));

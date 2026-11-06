@@ -881,7 +881,9 @@ function refreshCatalog(){
   S.catalog=erdDiagramCatalog(S.project, active());
   S.byKey=new Map(S.catalog.map(t=>[t.key, t]));
 }
-const storeKey=()=>'atlas-erd:'+DATA.project;   // every report on file:// shares one origin
+// Every report on file:// shares one origin, and two projects can share a name, so the drafts are kept under
+// the project's path hash (Fmt.projectKey) — keyed on the name, one project's diagrams opened in another's page.
+const storeKey=()=>'atlas-erd:'+(DATA.projectKey||DATA.project);
 function load(){
   let st=null;
   try{ st=JSON.parse(localStorage.getItem(storeKey())||'null'); }catch(e){ st=null; }

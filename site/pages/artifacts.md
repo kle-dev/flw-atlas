@@ -18,7 +18,8 @@ atlas-output/order-management/
   order-management.erd.html        the ER diagram designer — when the project has tables
 ```
 
-Only `--all` names files after the project. A single-artifact run writes `APP_OVERVIEW.*` unless you
+Only `--all` names files after the project — after the directory's real name, so a project analysed
+from inside itself as `.` is named like any other. A single-artifact run writes `APP_OVERVIEW.*` unless you
 name the file yourself — see the [CLI reference](../cli/#output-format).
 
 ## `<project>.explorer.html` — the explorer

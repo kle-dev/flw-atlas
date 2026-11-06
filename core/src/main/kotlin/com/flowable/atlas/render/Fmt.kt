@@ -61,9 +61,39 @@ object Fmt {
         return "$n models ($where)"
     }
 
+    /** [root] as the absolute path it names: `.`, `sub/..` and a trailing slash all resolve to the directory. */
+    private fun canonicalRoot(root: java.io.File): java.io.File =
+        java.io.File(root.path.trimEnd('/').ifEmpty { "." }).absoluteFile.normalize()
+
+    /**
+     * The project's name as every artifact shows it — the summary's and the overview's heading, the
+     * explorer's and the ER page's title. Normalized, because `File(".").absoluteFile.name` is `.`: a
+     * project analysed from inside itself was headed `.` and, worse, every such project shared the pages'
+     * browser storage. Unlike [artifactName] it keeps an archive's extension (`app.zip`): it names what was
+     * read, not a file to write.
+     */
+    fun projectName(root: java.io.File): String = canonicalRoot(root).name.ifEmpty { "project" }
+
+    /**
+     * What the generated pages key their browser storage on — accepted findings, open tabs, recents, ER
+     * drafts. Every page opened from `file://` shares one localStorage, and two projects can share a name
+     * (`app`, or every checkout of one repository), so the name alone let one project's unsaved decisions
+     * show up — and get exported — in another's. A hash of the absolute path, not the path itself: a page is
+     * mailed to reviewers, and the author's directory layout is not theirs to read.
+     */
+    fun projectKey(root: java.io.File): String =
+        java.security.MessageDigest.getInstance("SHA-256")
+            .digest(canonicalRoot(root).path.toByteArray(Charsets.UTF_8))
+            .take(8).joinToString("") { "%02x".format(it) }
+
+    /**
+     * The `<name>` of every `<name>.*` artifact: [projectName] with its last extension cut, as Python's
+     * `os.path.splitext` did — a leading-dot name (`.DEMO-solution`) has no extension. The CLI, the plugin
+     * and every artifact that names a sibling file call this one function, so a file never points at a
+     * sibling written under another name.
+     */
     fun artifactName(root: java.io.File): String {
-        // normalized: run from inside the project as `.`, the name is the directory's, as the CLI writes it
-        val base = java.io.File(root.path.trimEnd('/').ifEmpty { "." }).absoluteFile.normalize().name
+        val base = projectName(root)
         val dot = base.lastIndexOf('.')
         val stem = if (dot < 0) base else {
             var allDots = true

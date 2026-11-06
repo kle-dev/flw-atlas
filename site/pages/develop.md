@@ -69,6 +69,11 @@ have, so adding steps never means raising a constant. A probe that stops before 
 got to — *stopped at step 134 of 216*, how many assertions had run by then, and the last one — which tells
 a run cut short apart from a page that failed before the probe started (*never ran its first step*).
 
+`:cli:launcherSmoke`, also part of `check`, runs the `./atlas` launcher the way a user does — from
+inside a copy of the fixture project, as `./atlas .`, against the freshly built fat-jar — and checks that
+the explorer lands in `atlas-output/<project>/` and that the launcher's last line names it. It needs bash,
+the launcher's own requirement, and skips itself without it.
+
 ### Checking against a real corpus
 
 The bundled BPMN, CMMN and DMN schemas turn on the IDE's XML validation for every model file, at error

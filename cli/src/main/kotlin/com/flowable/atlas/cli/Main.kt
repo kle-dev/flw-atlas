@@ -6,6 +6,7 @@ import com.flowable.atlas.graph.Waivers
 import com.flowable.atlas.render.ClaudeRenderer
 import com.flowable.atlas.render.ErdHtmlRenderer
 import com.flowable.atlas.render.ExplorerHtmlRenderer
+import com.flowable.atlas.render.Fmt
 import com.flowable.atlas.render.GraphJsonRenderer
 import com.flowable.atlas.render.OverviewRenderer
 import com.flowable.atlas.render.PlaywrightRenderer
@@ -210,7 +211,7 @@ fun run(args: Array<String>): Int {
     val unresolvedN = (result["unresolvedRefs"] as? List<*>)?.size ?: 0
     val cf = result["customFunctions"] as? Map<*, *>
     val status = buildString {
-        append("${com.flowable.atlas.render.Fmt.modelScale(stats)} $MIDDLE_DOT ${stat("java")} java $MIDDLE_DOT ${stat("nodes")} nodes $MIDDLE_DOT ")
+        append("${Fmt.modelScale(stats)} $MIDDLE_DOT ${stat("java")} java $MIDDLE_DOT ${stat("nodes")} nodes $MIDDLE_DOT ")
         append("${stat("edges")} links $MIDDLE_DOT $resolvedN resolved / $unresolvedN unresolved refs")
         val suspectN = stat("suspectEdges")
         val dynN = stat("dynamicEdges")
@@ -225,7 +226,7 @@ fun run(args: Array<String>): Int {
         val parseIssuesN = (checksOf(result)["parseIssues"] as? Number)?.toInt() ?: 0
         if (parseIssuesN > 0) append(" $MIDDLE_DOT $WARN_SIGN $parseIssuesN parse issue(s), see -v")
         // The two numbers the reports lead with, so the terminal and the summary say the same thing.
-        val health = com.flowable.atlas.render.Fmt.healthHeadline(stats)
+        val health = Fmt.healthHeadline(stats)
         if (health.isNotEmpty()) append(" $MIDDLE_DOT $health")
         val waivedN = (checksOf(result)["waived"] as? Number)?.toInt() ?: 0
         if (waivedN > 0) append(" $MIDDLE_DOT $waivedN waived")
@@ -283,9 +284,9 @@ fun run(args: Array<String>): Int {
         return 1
     }
 
-    // name = os.path.splitext(os.path.basename(os.path.abspath(path.rstrip('/'))))[0] or "project"
-    val abs = File(projectPath.trimEnd('/').ifEmpty { "." }).absoluteFile.normalize()
-    val name = splitextName(abs.name).ifEmpty { "project" }
+    // The one naming rule (os.path.splitext of the directory's real name), shared with the plugin and with
+    // every artifact that names a sibling file.
+    val name = Fmt.artifactName(File(projectPath))
     val root = File(projectPath)
 
     // ---- --all: write all six artifacts (the Playwright guide in two files) into the -o directory (default ".") ----
@@ -457,22 +458,6 @@ private fun checksOf(result: Map<String, Any?>): Map<String, Any?> =
 @Suppress("UNCHECKED_CAST")
 private fun staleWaivers(result: Map<String, Any?>): List<String> =
     ((result["waivers"] as? Map<String, Any?>)?.get("stale") as? List<String>).orEmpty()
-
-/**
- * Faithful port of `os.path.splitext(basename)[0]`: split off the last extension, but treat leading
- * dots as part of the name (a leading-dot file has no extension), matching CPython's `genericpath`.
- */
-private fun splitextName(base: String): String {
-    val dot = base.lastIndexOf('.')
-    if (dot > -1) {
-        var f = 0
-        while (f < dot) {
-            if (base[f] != '.') return base.substring(0, dot)
-            f++
-        }
-    }
-    return base
-}
 
 /** Best-effort open via `open`/`xdg-open`/`start` (Python `_open_file`); silently skips on failure. */
 private fun openFile(path: String) {

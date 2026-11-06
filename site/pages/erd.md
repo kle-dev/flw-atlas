@@ -169,7 +169,8 @@ zoom.
 
 ## Keeping and sharing a diagram
 
-What you draw is kept in the browser, per project: every change is saved as you make it, and a project can
+What you draw is kept in the browser, per project — by where the project is, so two projects of one name
+keep theirs apart: every change is saved as you make it, and a project can
 have several diagrams — *Diagram → New, Rename, Duplicate, Delete*. A browser keeps it for one person on
 one machine, though, so two more ways out:
 

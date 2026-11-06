@@ -221,7 +221,7 @@ class RenderersSmokeTest {
         assertTrue("expected the tab closer from explorer.js", html.contains("function closeTab("))
         assertTrue("expected the tab/hash reconciliation from explorer.js", html.contains("function syncTabsWith("))
         assertTrue("expected the tab store key from explorer.js", html.contains("atlas-tabs"))
-        assertTrue("expected the tab store to be project-scoped", html.contains("p:DATA.project"))
+        assertTrue("expected the tab store to be project-scoped", html.contains("p:PROJECT_SCOPE"))
         assertTrue("expected the tab styling from explorer.css", html.contains(".dtab.on{"))
         assertTrue("expected the scrolling tablist from explorer.css", html.contains(".dtablist{"))
         // One navigation contract for every node link, in one delegated helper: ⌘/Ctrl-click and

@@ -590,13 +590,15 @@ finding of that check on the model. An accepted row stays where it was, muted, w
 and expiry beside the message and **edit** / **restore** in place of the button; the block folds its
 accepted rows under *N accepted* and keeps counting only the open ones.
 
-Nothing is written to disk by itself. The page keeps your decisions as a diff over the
+Nothing is written to disk by itself. The page keeps your decisions in the browser as a diff over the
 [`waivers.json`](../checks/#accepting-a-finding) it was generated from, and a bar under the top bar
-says on every view how many are unsaved. **Save to waivers.json** writes the file inside the IDE — which
-then regenerates the explorer so the counts and the CI gate follow — and **Export waivers.json**
-downloads it anywhere else; **discard** (twice) throws the unsaved decisions away. A rule keeps the day
-it was made, so re-saving an unchanged file produces no diff, and the notes and hand-written fields the
-file already had travel through untouched.
+says on every view how many are unsaved. They are kept per project — by the project's location, not its
+name — so two projects of one name, or two analysed from inside themselves as `.`, never see each other's
+unsaved decisions; the open tabs and the *Recent* list are kept the same way. **Save to waivers.json**
+writes the file inside the IDE — which then regenerates the explorer so the counts and the CI gate
+follow — and **Export waivers.json** downloads it anywhere else; **discard** (twice) throws the unsaved
+decisions away. A rule keeps the day it was made, so re-saving an unchanged file produces no diff, and
+the notes and hand-written fields the file already had travel through untouched.
 
 A decision taken on the page moves every count that depends on it: the Checks page, the health list and the overview's summary, the
 sidebar's *Checks* badge and the review lists' own counts (an *Unused forms* entry counts the open findings,

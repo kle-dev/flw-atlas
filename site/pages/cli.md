@@ -16,9 +16,10 @@ interface with every flag.
 
 That analyses the project, writes all six artifacts (and the ER diagram page, for a project with tables)
 to `atlas-output/<project>/` beside the launcher — not inside the analysed project — and opens the
-explorer in your browser. The launcher is the `atlas` script at the repository's root, and every
-[release](https://github.com/kle-dev/flw-atlas/releases/latest) carries it beside the jar. Two optional
-positionals and one flag of its own:
+explorer in your browser. `<project>` is the real directory's name, so `./atlas .` from inside a project
+writes where `./atlas /path/to/project` would. The launcher is the `atlas` script at the repository's
+root, and every [release](https://github.com/kle-dev/flw-atlas/releases/latest) carries it beside the
+jar. Two optional positionals and one flag of its own:
 
 ```bash
 ./atlas /path/to/project ./reports      # write into ./reports instead
@@ -38,7 +39,8 @@ What it does, in order:
    launcher downloaded from a release has no Gradle beside it and says what to download instead. Set
    `ATLAS_NO_BUILD=1` to turn the build into an error in a clone too — the right setting on a machine
    that only has a JRE.
-4. Derives the output directory from the target's name unless you gave one.
+4. Derives the output directory from the target's name unless you gave one — the name the jar gives the
+   files, so the last line it prints, `✓ Done. Open: …`, names the explorer that was written.
 5. Runs the jar with `--all -o <outdir>`, plus `--open` unless you passed `--no-open`.
 
 | Environment variable | Effect |

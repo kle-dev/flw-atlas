@@ -188,6 +188,12 @@ class CliTest {
             val text = File(out, "$name.$suffix").readText()
             assertFalse("$suffix names a dot file", text.contains("..graph.json") || text.contains("..playwright"))
         }
+        // …and the project is called by that name inside them too: the explorer of every `.` project was
+        // called `.`, and its browser storage — accepted findings, tabs — was shared with every other one.
+        val explorer = File(out, "$name.explorer.html").readText()
+        assertTrue("the explorer names the directory", explorer.contains("\"project\":\"$name\""))
+        assertFalse("not `.`", explorer.contains("\"project\":\".\""))
+        assertTrue(File(out, "$name.summary.md").readText().startsWith("# Flowable project — `$name`"))
     }
 
     /**

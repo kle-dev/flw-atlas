@@ -35,7 +35,9 @@ object ErdHtmlRenderer {
         val graph = Dyn.mapOrNull(result["graph"])
             ?: error("result[\"graph\"] is missing or not a map — Atlas.extract must produce it")
         val payload = LinkedHashMap<String, Any?>()
-        payload["project"] = root.absoluteFile.name.ifEmpty { "project" }
+        payload["project"] = Fmt.projectName(root)
+        // What the drafts kept in the browser are stored under — not the name, which two projects can share.
+        payload["projectKey"] = Fmt.projectKey(root)
         payload["generatedAt"] = generatedAt.toString()
         payload["atlasVersion"] = version
         payload["explorer"] = explorerFile

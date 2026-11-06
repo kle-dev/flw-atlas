@@ -1,3 +1,5 @@
+import java.io.ByteArrayOutputStream
+
 // :cli — the standalone command-line front-end over :core (successor to flowable_atlas.py).
 // Produces a self-contained fat-jar via the Shadow plugin; the repo-root `atlas` script runs it with
 // `java -jar`.
@@ -278,8 +280,52 @@ val explorerUiTestDeflated by tasks.registering(Exec::class) {
     )
 }
 
+// ---- the ./atlas launcher ----
+// The launcher is bash, it runs every user's first `./atlas <project>`, and nothing ever ran it: its name rule
+// turned `.` into an empty name, so every project analysed from inside itself shared atlas-output/ — one
+// waivers.json for all of them — and the Done line pointed at `atlas-output//.explorer.html`. This runs it the
+// way a user does, from inside a project as `.`, against the fat-jar, and checks where the explorer landed and
+// what the last line names. bash is the launcher's own requirement, so without it (Windows) there is nothing
+// to test.
+val launcherSmokeDir = layout.buildDirectory.dir("launcher-smoke")
+val bashExecutable: String? = listOf("/bin/bash", "/usr/bin/bash").firstOrNull { File(it).canExecute() }
+
+val launcherSmoke by tasks.registering(Exec::class) {
+    description = "Runs the ./atlas launcher from inside a project as '.' (skipped without bash)."
+    group = "verification"
+    dependsOn(tasks.shadowJar)
+    val script = rootProject.file("atlas")
+    val fixture = rootProject.file("core/src/test/resources/miniproject")
+    inputs.file(script)
+    inputs.dir(fixture)
+    inputs.files(tasks.shadowJar)
+    val dir = launcherSmokeDir.get().asFile
+    val project = dir.resolve("DEMO-proj")
+    onlyIf { bashExecutable != null }
+    val stdout = ByteArrayOutputStream()
+    standardOutput = stdout
+    workingDir = project
+    commandLine(bashExecutable ?: "bash", dir.resolve("atlas").absolutePath, ".", "--no-open", "-q")
+    environment("ATLAS_NO_BUILD", "1")
+    val java21 = javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) }
+    doFirst {
+        dir.deleteRecursively()
+        fixture.copyRecursively(project)
+        script.copyTo(dir.resolve("atlas"))
+        environment("ATLAS_JAR", tasks.shadowJar.get().archiveFile.get().asFile.absolutePath)
+        environment("JAVA", java21.get().executablePath.asFile.absolutePath)
+    }
+    doLast {
+        val explorer = dir.resolve("atlas-output/DEMO-proj/DEMO-proj.explorer.html")
+        check(explorer.isFile) { "launcherSmoke: $explorer was not written" }
+        val last = stdout.toString(Charsets.UTF_8).trim().lines().last()
+        check(last.endsWith("/atlas-output/DEMO-proj/DEMO-proj.explorer.html")) { "launcherSmoke: the last line names another file: $last" }
+    }
+}
+
 tasks.named("check") {
-    dependsOn(searchSelfTest, explorerUiTest, diagramUiTest, remoteStubUiTest, erdSelfTest, erdUiTest, islandSelfTest, explorerUiTestDeflated)
+    dependsOn(searchSelfTest, explorerUiTest, diagramUiTest, remoteStubUiTest, erdSelfTest, erdUiTest, islandSelfTest, explorerUiTestDeflated,
+        launcherSmoke)
 }
 
 // ---- documentation site (site/ -> build/site) ----
