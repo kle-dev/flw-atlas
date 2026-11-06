@@ -431,8 +431,30 @@ object GraphBuilder {
         // input, a query's request parameter, an agent operation's input — never a process variable: the
         // same name in three unrelated models used to be one variable they shared.
         fun contractScoped(k: String) = k.substringBefore(':') in CONTRACT_SCOPED_TYPES
+
+        // Reads that may only credit a variable something else already names: a name further into a
+        // binding than its head (`{{a && b}}`, `{{flw.formatDate(x, 'DD')}}`), and an instance field
+        // reached through a scope token (`${root.businessKey}`). Taken as variables of their own they made
+        // up names — a lambda's parameter, an enum-like word, the instance's end time — that nothing
+        // writes; as credit they keep a written variable from being reported unread. Applied once every
+        // other site is in.
+        data class Credit(val v: String, val k: String, val snippet: String, val via: String)
+        val credits = ArrayList<Credit>()
+        /** `root.x` and `parent.x` read a variable of another instance — which is all the via says. */
+        fun scopeVia(token: String, own: String) = when (token) {
+            "root" -> "rootScope"
+            "parent" -> "parentScope"
+            else -> own
+        }
+        fun readThroughScope(token: String, v: String, k: String, snippet: String, own: String) {
+            val via = scopeVia(token, own)
+            if (v in Constants.INSTANCE_FIELDS) { credits.add(Credit(v, k, snippet, via)); return }
+            addUsage(v, k, snippet)
+            addSite(v, k, Ctx.READ, via)
+        }
         for ((expr, keys) in ctx.exprUse) {
             if (expr in placeholders) continue
+            val scoped by lazy { Constants.hierarchyReads(exprBody(expr), Constants.HIERARCHY_TOKENS) }
             for (k in keys) {
                 if (contractScoped(k)) continue
                 val type = k.substringBefore(':')
@@ -446,6 +468,9 @@ object GraphBuilder {
                     addUsage(v, k, expr)
                     addSite(v, k, Ctx.READ, "expression")
                 }
+                // `${root.x}` / `${parent.x}` / `${self.x}`: the scope token is context, but the name after
+                // it is a variable of that scope. A template's `${root.x}` is already read as `template`.
+                if (type !in FREEMARKER_MODEL_TYPES) for ((token, v) in scoped) readThroughScope(token, v, k, expr, "expression")
             }
             // `${variables:get('x')}` names its variable as a string, which the identifier scan blanks
             // out — without this a variable read only that way looked as if nothing read it.
@@ -456,11 +481,19 @@ object GraphBuilder {
             }
         }
         for ((ph, keys) in ctx.mustacheUse) {
-            val v = varInMustache(ph) ?: continue
+            val head = varInMustache(ph)
+            val body = bindingBody(ph)
+            // `{{root.x}}` / `{{parent.x}}`: Work hands the form the root and the parent instance's variables
+            val scoped = Constants.hierarchyReads(body, Constants.FRONTEND_HIERARCHY_TOKENS)
+            val later = laterBindingNames(body, head)
             for (k in keys) {
                 if (contractScoped(k)) continue
-                addUsage(v, k, ph)
-                addSite(v, k, Ctx.READ, "binding")
+                if (head != null) {
+                    addUsage(head, k, ph)
+                    addSite(head, k, Ctx.READ, "binding")
+                }
+                for ((token, v) in scoped) readThroughScope(token, v, k, ph, "binding")
+                for (v in later) credits.add(Credit(v, k, ph, "binding"))
             }
         }
         // No site for the undirected bucket: it lumps `resultVariableName` (a write) together with
@@ -527,6 +560,11 @@ object GraphBuilder {
                     addSite(v, fqn, dir, "javaApi", elementType = "java")
                 }
             }
+        }
+        // Every site that may create a variable is in; the credit-only reads join the names that exist.
+        for (c in credits) if (c.v in varUsages) {
+            addUsage(c.v, c.k, c.snippet)
+            addSite(c.v, c.k, Ctx.READ, c.via)
         }
 
         for ((v, perModel) in varUsages) {
@@ -1250,6 +1288,41 @@ object GraphBuilder {
         val root = m.groupValues[1]
         if (root in MUSTACHE_IGNORE) return null
         return root
+    }
+
+    /** An expression's body with its `${ }` and its string literals blanked — what a name scan reads. */
+    private fun exprBody(expr: String): String = STR_IN_EXPR_RE.replace(EXPR_STRIP_RE.replace(expr, ""), " ")
+
+    /** A binding's body the same way; a binding read out of XML still spells `&&` as `&amp;&amp;`. */
+    private fun bindingBody(ph: String): String =
+        STR_IN_EXPR_RE.replace(Constants.htmlUnescape(ph.trim('{', '}', ' ').trim()), " ")
+
+    /** JavaScript's own words, which a frontend binding may hold and which name no variable. */
+    private val FRONTEND_JS_WORDS = setOf(
+        "true", "false", "null", "undefined", "typeof", "instanceof", "new", "in", "NaN", "Infinity",
+        "Math", "JSON", "Date", "Object", "Number", "String", "Array", "Boolean", "BigNumber",
+    )
+    /** `{{$payload.x}}` is the form's own payload, so `x` is read exactly as `{{x}}` would read it. */
+    private val PAYLOAD_MEMBER_RE = Regex("\\\$payload\\s*\\.\\s*([A-Za-z_]\\w*)")
+
+    /**
+     * The names a binding reads past its head: an argument of a call (`{{flw.formatDate(due, 'DD')}}`),
+     * the second operand (`{{a && b}}`), a negation (`{{!done}}`), a member of `$payload`. Only the head was
+     * read before, so a variable a form shows only that way was reported as written but never read. The
+     * same exclusions as the head — a member, a `$` root, a call, the runtime's scratch — plus JavaScript's
+     * own words.
+     */
+    private fun laterBindingNames(body: String, head: String?): Set<String> {
+        val out = LinkedHashSet<String>()
+        for (m in ROOT_IDENT_RE.findAll(body)) {
+            val n = m.groupValues[1]
+            val after = body.substring(m.range.last + 1).trimStart()
+            if (after.startsWith("(") || after.startsWith("=>")) continue
+            if (n == head || n in MUSTACHE_IGNORE || n in FRONTEND_JS_WORDS || n in Constants.JAVA_LITERALS) continue
+            out.add(n)
+        }
+        for (m in PAYLOAD_MEMBER_RE.findAll(body)) out.add(m.groupValues[1])
+        return out
     }
 
     /**

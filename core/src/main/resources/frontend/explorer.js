@@ -588,6 +588,8 @@ const DESIGN_TERMS = {
   'via:expression': ['Expression', 'A ${…} expression reads this variable.'],
   'via:variablesFn': ['variables: function', 'A ${variables:…()} call names this variable as a string.'],
   'via:binding': ['Binding', 'A {{…}} binding reads this variable.'],
+  'via:rootScope': ['Root instance read', 'A ${root.…} or {{root.…}} reads this variable from the root case or process.'],
+  'via:parentScope': ['Parent instance read', 'A ${parent.…} or {{parent.…}} reads this variable from the parent case or process.'],
   'via:formField': ['Form field', 'A form field bound to this variable: prefilled from it, written back on submit.'],
   'via:formProperty': ['Form property', 'A legacy BPMN form property, rendered as a field.'],
   'via:formOutcome': ['Outcome variable', 'The form stores the chosen outcome here.'],
@@ -4194,7 +4196,8 @@ function varScopeIndex(){
   nodes.forEach(v=>{ if(v.type!=='variable') return;
     const d=v.data||{}, k=v.key, ws=d.writes||[], rs=d.reads||[];
     ws.forEach(st=>{ if(st&&st.model) add(st.scope?at(st.scope).inW:at(st.model).w, k, st); });
-    rs.forEach(st=>{ if(st&&st.model) add(st.scope?at(st.scope).outR:at(st.model).r, k, st); });
+    // a `root.x` / `parent.x` read takes the ancestor's x, so it is no input of the reader's own model
+    rs.forEach(st=>{ if(st&&st.model&&st.via!=='rootScope'&&st.via!=='parentScope') add(st.scope?at(st.scope).outR:at(st.model).r, k, st); });
     flags.set(k, {capped:(d.writeCount||0)>ws.length||(d.readCount||0)>rs.length, unknown:!!d.readsUnknown, heuristic:!!d.heuristic,
       external:ws.some(st=>st.via==='javaApi'||st.via==='variableExtractor'||st.scopeUnresolved), literal:byId.has('string:'+k),
       unreadIn:d.unreadIn||[]});
@@ -4321,7 +4324,8 @@ function contractOf(n){
   if(n.type==='decision'&&!d.decisionService){
     // a decision reads its inputs by name from the caller's variables and writes its outputs back there —
     // nobody maps them, so a caller fits by writing the one and reading the other
-    const io=dmnIORows(d), root=e=>{ const m=/^\s*([A-Za-z_$][\w$]*)/.exec(String(e||'')); return m?m[1]:''; };
+    // `root.amount` reads `amount`: the scope token is no input name
+    const io=dmnIORows(d), root=e=>{ const m=/^\s*(?:(?:root|parent|self)\s*\.\s*)?([A-Za-z_$][\w$]*)/.exec(String(e||'')); return m?m[1]:''; };
     const hp=String(d.hitPolicy||'').toUpperCase();
     return {kind:'dmn', exact:false, implicit:true, multi:['COLLECT','RULE ORDER','OUTPUT ORDER'].indexOf(hp)>=0,
       items:io.map(r=>({name:r.dir==='in'?root(r.expr):(r.expr||''), dir:r.dir, type:r.type, label:r.label, expr:r.expr})).filter(it=>it.name)};

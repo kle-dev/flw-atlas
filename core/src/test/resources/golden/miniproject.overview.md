@@ -312,7 +312,7 @@ _component (1):_
 - `courierIndexed` [variableExtractor]
     - used in: orderVarExtractor (declared / mapped)
 - `customer` [form]
-    - used in: orderForm (form field), orderForm {{customer.email}}, orderForm {{customer}}
+    - used in: orderForm (form field), orderForm {{!customer}}, orderForm {{customer.email}}, orderForm {{customer}}
 - `customerName` [template]
     - used in: orderConfirmationTemplate ${customerName}
 - `customerPick` [form]

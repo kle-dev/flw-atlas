@@ -179,6 +179,25 @@ class UnusedVariablesTest {
     }
 
     @Test
+    fun aCalleeReadingTheRootsCopyDoesNotReadTheMapping() {
+        // `${root.subOrderId}` in the callee is the root instance's variable, not the one the mapping wrote
+        // into the callee: the mapping is still unread. The read still keeps the name from being unread.
+        for (via in listOf("rootScope", "parentScope")) {
+            val v = judge(
+                listOf(variable(
+                    "subOrderId",
+                    writes = listOf(write("process:caller", "inParameter", scope = "process:callee")),
+                    reads = listOf(read("process:callee", via)),
+                )),
+                others = listOf(model("process:caller"), model("process:callee")),
+            )
+            assertEquals(via, mapOf("unreadIn" to listOf("process:callee")), v["subOrderId"])
+        }
+        val global = judge(listOf(variable("flag", writes = listOf(write("process:p")), reads = listOf(read("process:child", "rootScope")))))
+        assertEquals(emptyMap<String, Any?>(), global["flag"])
+    }
+
+    @Test
     fun aReadTwoHopsInsideTheCalleeStillCounts() {
         // The callee opens a user-task form which is the only thing that reads the value. Checking only
         // the callee itself would report a mapping that is doing exactly its job.

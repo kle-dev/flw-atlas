@@ -239,7 +239,8 @@ object ModelParsers {
                 // A decision table reads its input variables from, and writes its output names back
                 // into, the calling scope — index both so decisions join the variable graph.
                 for (inp in t.findChildren("input")) {
-                    val v = inp.textOfDescendant("text")?.trim()?.substringBefore('.')
+                    // `root.amount` reads `amount` of the root instance: the scope token is no variable
+                    val v = inp.textOfDescendant("text")?.trim()?.let(Constants::withoutScopePrefix)?.substringBefore('.')
                     ctx.addVar(key, v)
                     ctx.addVarSite(key, v, Ctx.READ, "dmnInput", inp.attr("id"), inp.attr("label"), "dmnInput")
                 }

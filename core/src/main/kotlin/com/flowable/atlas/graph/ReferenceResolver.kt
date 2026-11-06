@@ -488,10 +488,19 @@ object ReferenceResolver {
                 ) continue
                 variables.add(n)
             }
+            // `${root.x}` reads `x` of the root instance — the rule the graph builder applies, so this list
+            // and the variable nodes agree
+            for ((_, n) in Constants.hierarchyReads(body, Constants.HIERARCHY_TOKENS)) {
+                if (n !in Constants.INSTANCE_FIELDS) variables.add(n)
+            }
         }
         for (ph in ctx.mustache) {
-            val m = MUSTACHE_HEAD_RE.find(ph.trim('{', '}', ' ').trim())
+            val inner = ph.trim('{', '}', ' ').trim()
+            val m = MUSTACHE_HEAD_RE.find(inner)
             if (m != null && m.groupValues[1] !in MUSTACHE_IGNORE) variables.add(m.groupValues[1])
+            for ((_, n) in Constants.hierarchyReads(STR_LIT_IN_EXPR_RE.replace(inner, " "), Constants.FRONTEND_HIERARCHY_TOKENS)) {
+                if (n !in Constants.INSTANCE_FIELDS) variables.add(n)
+            }
         }
 
         // ---- Result-section assembly ----

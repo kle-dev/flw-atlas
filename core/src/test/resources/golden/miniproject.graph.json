@@ -5595,6 +5595,7 @@
               "model": "form:orderForm",
               "snippets": [
                 "(form field)",
+                "{{!customer}}",
                 "{{customer.email}}",
                 "{{customer}}"
               ]

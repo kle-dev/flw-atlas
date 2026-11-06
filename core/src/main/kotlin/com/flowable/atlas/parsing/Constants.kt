@@ -68,6 +68,50 @@ object Constants {
     )
 
     /**
+     * The scope tokens of a backend expression. The platform's `HierarchyVariableELResolver` resolves
+     * `root`, `parent` and `self` to the root, parent and current instance and reads the property as a
+     * variable there, so `${root.riskLevel}` reads `riskLevel` — the prefix only says whose. Leaving the
+     * name out (because `root` is engine context and `.riskLevel` looks like a member) reported variables
+     * that a called process branches on as written but never read.
+     */
+    val HIERARCHY_TOKENS = setOf("root", "parent", "self")
+
+    /** The same for a `{{…}}` binding: Work puts the root and the parent instance's variables into the form
+     *  payload under `root` and `parent`. Its `self` holds the instance's own fields only, never a variable. */
+    val FRONTEND_HIERARCHY_TOKENS = setOf("root", "parent")
+
+    /**
+     * What Work and the resolver put beside the variables under a scope token: the instance's own fields.
+     * `${root.businessKey}` reads a variable of that name only when one exists, so such a name credits a
+     * variable something else already names and never makes one up.
+     */
+    val INSTANCE_FIELDS = setOf(
+        "id", "name", "businessKey", "businessStatus", "startTime", "startUserId", "endTime", "tenantId",
+        "processDefinitionId", "processDefinitionKey", "caseDefinitionId", "caseDefinitionKey", "state",
+    )
+
+    // The name is possessive so a method name cannot back off a letter to dodge the `(` check:
+    // `root.getVariable('x')` is a call on the scope, not a variable `getVariabl`.
+    private val HIERARCHY_READ_RE = Regex("(?<![\\w.$])(root|parent|self)\\s*\\.\\s*([A-Za-z_]\\w*+)(?!\\s*\\()")
+
+    /**
+     * `(token, name)` for every `token.name` in [body] whose token is one of [tokens]. [body] must already
+     * have its string literals blanked, or `'root.x'` would read `x`.
+     */
+    fun hierarchyReads(body: String, tokens: Set<String>): List<Pair<String, String>> =
+        HIERARCHY_READ_RE.findAll(body).mapNotNull { m ->
+            val token = m.groupValues[1]
+            val name = m.groupValues[2]
+            if (token !in tokens || name in HIERARCHY_TOKENS || name in JAVA_LITERALS || name in FLOWABLE_CONTEXT) null
+            else token to name
+        }.distinct().toList()
+
+    private val LEADING_SCOPE_RE = Regex("^\\s*(?:root|parent|self)\\s*\\.\\s*")
+
+    /** [text] without a leading scope token — a DMN input expression `root.amount` reads `amount`. */
+    fun withoutScopePrefix(text: String): String = LEADING_SCOPE_RE.replaceFirst(text, "")
+
+    /**
      * Beans the Flowable platform provides (engine-provided, not project source): the delegate Design
      * writes into every task type's `delegateExpression`, and the `flw*Utils` expression helpers the
      * platform registers. One set for every surface: the graph

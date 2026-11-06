@@ -37,6 +37,10 @@ object UnusedVariables {
         "dataObject", "service", "agent", "action", "java", "bot", "event",
     )
 
+    /** The reads of another instance's variable — through `root.` or `parent.` — which say nothing about the
+     *  reader's own scope. */
+    private val ANCESTOR_READS = setOf("rootScope", "parentScope")
+
     /** Human-readable list of what this check cannot see, for the report that shows its findings. */
     val SILENCE_RULES = listOf(
         "a construct whose direction Flowable does not fix (a variable listener, `hasVariable`)",
@@ -103,8 +107,10 @@ object UnusedVariables {
             val unreadIn = if (wouldBeUnread) emptyList() else {
                 // Something reads the name — but not necessarily in the scope the value was written into.
                 // A `<flowable:in>` declares a variable of the *callee*, and the caller reading its own
-                // namesake says nothing about whether the called model ever looks at it.
-                val readModels = reads.mapNotNullTo(HashSet()) { it["model"] as? String }
+                // namesake says nothing about whether the called model ever looks at it. Nor does a callee
+                // reading `${root.x}` or `{{parent.x}}`: that is the root's or the parent's `x`, not the copy
+                // the mapping put into the callee.
+                val readModels = reads.filter { it["via"] !in ANCESTOR_READS }.mapNotNullTo(HashSet()) { it["model"] as? String }
                 writes.mapNotNull { it["scope"] as? String }.distinct()
                     .filter { scope -> closure(scope).none { it in readModels } }
                     .sorted()

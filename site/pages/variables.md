@@ -28,7 +28,8 @@ The sites come from everywhere a name can appear:
 | Source | Counts as |
 |---|---|
 | `${…}` expressions, and `${variables:get('x')}`-style calls | read |
-| `{{…}}` form bindings | read |
+| `{{…}}` form bindings — every name in one, not just the first: `{{flw.formatDate(due, 'DD')}}` reads `due`, `{{a && b}}` reads both, `{{$payload.x}}` reads `x`. A name past the first counts only for a variable something else already names, so a lambda's parameter or a bare word never becomes one | read |
+| `${root.x}`, `${parent.x}` and `${self.x}` in an expression, `{{root.x}}` and `{{parent.x}}` in a binding — the token says whose `x`. `id`, `name`, `businessKey`, `startTime` and the instance's other own fields are no variable there | read |
 | In / out parameters, on both sides of the mapping, with the scope each belongs to | write and read |
 | `resultVariable` / `resultVariableName` — either spelling the engine accepts, on BPMN service and script tasks and on CMMN Java and script tasks — `outputVariableName`, output and error-output parameters | write |
 | Event in / out parameters, variable mappings, signal variables | write |
@@ -94,7 +95,9 @@ wording, so you can go and find them.
 
 **Mapped into a model that never reads it** (`unreadInputs`) — the name *is* read somewhere, but not in
 the scope the value was written into. Atlas follows up to two model hops from the write's scope to
-decide this. The remedy is to delete the mapping, not the variable.
+decide this. A called model reading `${root.x}` or `{{parent.x}}` reads the root's or the caller's `x`,
+not the copy mapped into it, so that read does not count here. The remedy is to delete the mapping, not
+the variable.
 
 A third group appears on the explorer's page but is not a finding: **declared — readers live outside
 the models**, where the value legitimately leaves the project.
