@@ -1,0 +1,18 @@
+{
+  "key": "scoringService",
+  "name": "Scoring Service",
+  "type": "script",
+  "operations": [
+    {
+      "key": "score",
+      "name": "Score an order",
+      "type": "script",
+      "inputParameters": [{"name": "total", "type": "number"}],
+      "outputParameters": [{"name": "band", "type": "string"}],
+      "config": {
+        "scriptLanguage": "groovy",
+        "script": "def band = total > 1000 ? 'high' : 'low'\nflw.setOutput('band', band)"
+      }
+    }
+  ]
+}

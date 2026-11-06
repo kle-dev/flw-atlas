@@ -1199,7 +1199,7 @@ object GraphBuilder {
                 is List<*> -> v.forEach { walk(it) }
             }
         }
-        for (b in listOf("processes", "cases", "actions")) walk(result[b])
+        for (b in listOf("processes", "cases", "actions", "services")) walk(result[b])
         return n
     }
 

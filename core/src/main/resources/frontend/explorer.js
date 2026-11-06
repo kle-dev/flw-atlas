@@ -1218,7 +1218,7 @@ function navItems(){
   const scriptCount=allScripts().length;
   if(scriptCount) items.push({route:'/scripts', label:'Script tasks', sec:'Integration', pri:0, icon:'scripts',
     color:color('process'), count:scriptCount,
-    tip:'Script tasks ('+scriptCount+') — every script task, listener script and bot script'});
+    tip:'Script tasks ('+scriptCount+') — every script task, listener script, bot script and service operation script'});
   items.push({route:'/tree', label:'Reference tree', sec:'Models', pri:0, icon:'tree',
     color:color('process'),
     tip:'What each app starts, and what those models reach — every relation except app membership'});
@@ -2714,15 +2714,19 @@ function allScripts(){
     }
     if(n.type==='action') add(n,{group:'bot', lang:d.scriptLanguage, body:d.script,
       problems:d.scriptProblems||[]});
+    // a script-type service operation: the operation is the element, the service the model
+    if(n.type==='service') (d.operations||[]).forEach(op=>{ if(op) add(n,{group:'service', elKind:'serviceOperation',
+      el:op.key, elName:op.name, lang:op.scriptLanguage, body:op.script, problems:op.scriptProblems||[]}); });
   });
   return out;
 }
 /** Chip buckets, in reading order. A bot script has no Design element of its own — it *is* the action. */
 const SCRIPT_GROUPS=[{id:'script', label:'Script tasks'},{id:'listener', label:'Listeners'},
-                     {id:'bot', label:'Bot scripts'}];
+                     {id:'bot', label:'Bot scripts'},{id:'service', label:'Service scripts'}];
 /** The Design words for one script row: its element term plus the lifecycle event it hangs off. */
 function scriptKindLabel(s){
   if(s.group==='bot') return 'Bot script';
+  if(s.group==='service') return 'Service operation';
   const base=term('el', s.elKind).label || 'Script';
   return s.event ? base+' · '+s.event : base;
 }
@@ -2865,12 +2869,12 @@ function renderScripts(){
   const reg=_sectReg; _sectReg=null;
   let h='<div class="dash" data-fscope>';
   h+=pageHeader({icon:'scripts', color:color('scripts'), title:'Script tasks',
-    sub:all.length?'script tasks, listener scripts and bot scripts — every script body in the project, with the variables each one touches':'no model in this project carries a script',
+    sub:all.length?'script tasks, listener scripts, bot scripts and service operations — every script body in the project, with the variables each one touches':'no model in this project carries a script',
     facts:all.length?[['Scripts',all.length],['Models',models.length],['Lines',totalLines],
       ['With findings',{html:withIssues?'<span class="sev sev-bad">⚠ '+withIssues+'</span>':'0',copy:null}]]:[]});
   if(!all.length){
     h+=estateHtml({icon:typeIcon('scripts',{color:'var(--accent)'}), title:'No script tasks',
-       hint:'Nothing to show — no script task, listener script or bot script was found.'});
+       hint:'Nothing to show — no script task, listener script, bot script or script service operation was found.'});
   } else {
     // chips narrow by kind (same single-select pattern as every filter bar), the text box searches names,
     // languages and the code itself; one control opens or closes every body at once — reading a
@@ -5872,9 +5876,15 @@ S.ops={id:'ops', title:'Operations', hint:'what the service offers, and what eac
       const opid='serviceOperation:'+n.key+'#'+(o.key||'');
       const key=o.key?(byId.get(opid)?'<span class="vlink mono" data-id="'+enc(opid)+'" tabindex="0" role="link" data-tip="Show where '+esc(o.key)+' is used">'+esc(o.key)+'</span>':'<span class="mono">'+esc(o.key)+'</span>'):'';
       const rows=opParamRows(o);
-      return {hay:elHay(o.key,o.name,o.method,o.url,o.fullUrl), name:(o.method?'<span class="tag verb">'+esc(o.method)+'</span> ':'')+'<span class="mono">'+urlCell(n.id, o.fullUrl||o.url||o.name||'', o.method)+'</span>',
-        badges:[o.name&&o.name!==(o.fullUrl||o.url)?'<span class="muted">'+esc(o.name)+'</span>':'', key], right:rows.length?paramSummary(rows.map(r=>({dir:r.cells.dir.indexOf('"in"')>0?'in':'out'}))):'no params',
-        body:rows.length?tbl(OP_PARAM_COLS, rows, {filter:false}):''}; })); }};
+      // A script operation calls no URL — its body is what it does. Shown here, on the operation, because a
+      // scriptIssues finding names the operation as its element and opens this card (`el`), not the Scripts page.
+      const pr=o.scriptProblems||[], scripted=o.script!=null||pr.length>0;
+      const params=rows.length?tbl(OP_PARAM_COLS, rows, {filter:false}):'';
+      return {el:o.key, open:pr.length>0, hay:elHay(o.key,o.name,o.method,o.url,o.fullUrl,o.scriptLanguage),
+        name:scripted?'<span class="tag">script</span> '+esc(o.name||o.key||'')
+          :(o.method?'<span class="tag verb">'+esc(o.method)+'</span> ':'')+'<span class="mono">'+urlCell(n.id, o.fullUrl||o.url||o.name||'', o.method)+'</span>',
+        badges:[!scripted&&o.name&&o.name!==(o.fullUrl||o.url)?'<span class="muted">'+esc(o.name)+'</span>':'', key], right:rows.length?paramSummary(rows.map(r=>({dir:r.cells.dir.indexOf('"in"')>0?'in':'out'}))):'no params',
+        body:params+(scripted?(o.script!=null?codeblk(o.script, o.scriptLanguage, pr, {label:'script'}):scriptProblemsHtml(pr)):'')}; })); }};
 S.coverage={id:'coverage', title:'Schema coverage', hint:'Liquibase → service → data object: every column, and where the chain breaks',
   build:(n,c)=>{ const sc=c.d.schemaCoverage;
     return (sc&&(sc.rows||[]).length)?schemaCoverageHtml(sc, false, null, c.d.crossedColumns, 'coverage'):''; }};

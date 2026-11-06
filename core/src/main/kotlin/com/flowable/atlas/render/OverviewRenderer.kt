@@ -497,8 +497,11 @@ object OverviewRenderer {
                         "in" to Fmt.codeList(asList(op["params"]).map { paramName(it) }.filter { it.isNotEmpty() }),
                         "out" to Fmt.codeList(asList(op["outParams"]).map { paramName(it) }.filter { it.isNotEmpty() }),
                     )
+                    // a script operation calls no URL: what it runs is its script, in its language
+                    val what = if (op["script"] != null) "script" + (op["scriptLanguage"]?.let { " `$it`" } ?: "")
+                        else "`${pyStr(op["method"])}` ${pyStr(orAny(op["fullUrl"], op["url"]))}"
                     L.add(
-                        "    - `${pyStr(op["method"])}` ${pyStr(orAny(op["fullUrl"], op["url"]))} " +
+                        "    - $what " +
                             "(op `${pyStr(op["key"])}`)" + (if (contract.isEmpty()) "" else " · $contract")
                     )
                 }

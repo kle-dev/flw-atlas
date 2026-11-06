@@ -154,9 +154,11 @@ object SummaryRenderer {
                 val loc: Any? = when {
                     truthy(d["baseUrl"]) -> d["baseUrl"]
                     truthy(d["tableName"]) -> d["tableName"]
+                    // a script service runs its operations' scripts — there is nowhere it points to
+                    d["type"] == "script" -> null
                     else -> "?"
                 }
-                L.add("- `${s["key"]}` ${s["label"]} (${pystr(d["type"])} → $loc)")
+                L.add("- `${s["key"]}` ${s["label"]} (${pystr(d["type"])}${if (loc != null) " → $loc" else ""})")
             }
             if (bt("service").size > 15) L.add("- … (+${bt("service").size - 15} more)")
             L.add("")

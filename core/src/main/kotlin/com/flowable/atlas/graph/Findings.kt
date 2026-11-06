@@ -736,7 +736,8 @@ object Findings {
      * Script syntax findings, with the element that carries the script.
      *
      * Mirrors the explorer's `allScripts()` sources: BPMN script tasks, scripts anywhere in a CMMN plan
-     * tree, execution/task listeners of a model and of its elements, and an action's bot script.
+     * tree, execution/task listeners of a model and of its elements, an action's bot script, and a
+     * script-type service operation.
      */
     @Suppress("UNCHECKED_CAST")
     private fun collectScriptFindings(
@@ -786,6 +787,12 @@ object Findings {
         }
         for (aAny in (result["actions"] as? List<Map<String, Any?>> ?: emptyList())) {
             emit("action", aAny, null, aAny["scriptProblems"])
+        }
+        // a script-type service operation: the operation is the element, as a script task is in a process
+        for (sAny in (result["services"] as? List<Map<String, Any?>> ?: emptyList())) {
+            for (op in (sAny["operations"] as? List<Map<String, Any?>> ?: emptyList())) {
+                emit("service", sAny, op["key"], op["scriptProblems"])
+            }
         }
     }
 

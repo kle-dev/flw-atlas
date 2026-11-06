@@ -416,7 +416,7 @@ object ModelParsers {
             if (base != null && full != null && !full.startsWith("http")) {
                 full = base.trimEnd('/') + "/" + full.trimStart('/')
             }
-            operations.add(linkedMapOf(
+            val opRec = linkedMapOf(
                 // `lookup`/`create`/`update`/`delete`/`search`: the engine invokes the first four itself for
                 // every data object bound to the service, which is what tells a generated CRUD operation
                 // that nothing *names* from one that nothing *uses*.
@@ -427,7 +427,9 @@ object ModelParsers {
                 // gets back and can map into a variable. Falls back to the service-level list, which
                 // Flowable shares across operations that declare none of their own.
                 "outParams" to operationParams(op["outputParameters"] ?: doc["outputParameters"]),
-            ))
+            )
+            operations.add(opRec)
+            scriptOperation(oc, op, opRec)
             dictionaryRefs(op["inputParameters"])
             dictionaryRefs(op["outputParameters"])
             ctx.addRef(doc["key"], "service", ffile, "body-template", "template",
@@ -453,6 +455,32 @@ object ModelParsers {
                 p["defaultValue"]?.let { rec["default"] = it }
                 rec
             }
+
+    /**
+     * A script-type operation's body (`config.script` in `config.scriptLanguage`), on the operation's record
+     * with what the script validator says about it. The service registry evaluates it only when something
+     * calls the operation, so an unclosed bracket otherwise surfaced in production, on the first call.
+     *
+     * Validated without `formatRequired`: the invoker falls back to `juel` when no language is given, which
+     * is expression territory, not a missing setting. A wrong-context finding on a name the operation
+     * declares as an input is dropped, because the invoker binds each input under its own name — an input
+     * called `task` is that input, not the task the context lacks. The body is deliberately not harvested
+     * for variables: its names are the call's parameters, which belong to no process or case.
+     */
+    private fun scriptOperation(oc: Map<String, Any?>, op: Map<String, Any?>, rec: MutableMap<String, Any?>) {
+        val script = oc["script"] as? String ?: return
+        val lang = oc["scriptLanguage"] as? String
+        rec["script"] = script
+        if (lang != null) rec["scriptLanguage"] = lang
+        val inputs = listOfObjs(op["inputParameters"]).mapNotNull { it["name"] as? String }.toSet()
+        ScriptValidator.problemDicts(script, lang, formatRequired = false, context = ScriptContext.SERVICE_OPERATION)
+            .filterNot { p ->
+                p["kind"] == "wrong-context-root" &&
+                    script.substring((p["start"] as Int).coerceIn(0, script.length), (p["end"] as Int).coerceIn(0, script.length)) in inputs
+            }
+            // named scriptProblems, as on an action: `problems` already means expression problems to the explorer
+            .ifEmpty { null }?.let { rec["scriptProblems"] = it }
+    }
 
     /** `.policy` — a security policy's permission → roles mapping (dict or list shape). */
     fun parsePolicy(data: ByteArray, ctx: Ctx, ffile: String): Map<String, Any?> {

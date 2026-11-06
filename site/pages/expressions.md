@@ -118,7 +118,8 @@ Script bodies get the same treatment, per script language and per context. Atlas
   scripts at all.
 
 Contexts are distinguished, because the bindings differ: script task (BPMN), execution listener,
-task listener, script task (CMMN), CMMN task listener, and an action's bot script.
+task listener, script task (CMMN), CMMN task listener, an action's bot script, and a script-type service
+operation — which binds the `flw` API and the operation's inputs, and no execution, task or case.
 
 In the IDE the bodies are more than checked — real Groovy and JavaScript are **injected** into them, so
 you get that language's own highlighting and inspections inside a BPMN file, and completion for the

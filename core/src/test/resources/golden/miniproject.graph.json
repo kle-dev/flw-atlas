@@ -366,13 +366,14 @@
     "hardcodedSecrets": 1,
     "invalidExpr": 2,
     "missingRefs": 1,
-    "open": 18,
+    "open": 19,
     "parseIssues": 1,
     "payloadOverwrite": 1,
     "schemaGaps": 1,
     "scriptIssues": 2,
     "unguardedTasks": 2,
     "unreadInputs": 1,
+    "unusedOps": 1,
     "unusedVars": 3
   },
   "customFunctions": null,
@@ -733,6 +734,13 @@
       "node": "variable:orderId",
       "severity": "warning",
       "subject": "process:fulfilmentProcess"
+    },
+    {
+      "check": "unusedOps",
+      "label": "score",
+      "message": "no model or code calls this operation",
+      "node": "serviceOperation:scoringService#score",
+      "severity": "warning"
     },
     {
       "check": "unusedVars",
@@ -3227,6 +3235,49 @@
         "data": {
           "auth": null,
           "baseUrl": null,
+          "columns": [],
+          "file": "services/scoring.service",
+          "key": "scoringService",
+          "name": "Scoring Service",
+          "operations": [
+            {
+              "fullUrl": null,
+              "key": "score",
+              "method": null,
+              "name": "Score an order",
+              "outParams": [
+                {
+                  "name": "band",
+                  "type": "string"
+                }
+              ],
+              "params": [
+                {
+                  "name": "total",
+                  "type": "number"
+                }
+              ],
+              "script": "def band = total > 1000 ? 'high' : 'low'\nflw.setOutput('band', band)",
+              "scriptLanguage": "groovy",
+              "type": "script",
+              "url": null
+            }
+          ],
+          "referenceKey": null,
+          "referencedLiquibaseModelKey": null,
+          "tableName": null,
+          "type": "script"
+        },
+        "file": "services/scoring.service",
+        "id": "service:scoringService",
+        "key": "scoringService",
+        "label": "Scoring Service",
+        "type": "service"
+      },
+      {
+        "data": {
+          "auth": null,
+          "baseUrl": null,
           "columns": [
             {
               "columnName": "delivery_city_",
@@ -4082,6 +4133,34 @@
         "id": "serviceOperation:customerService#findAll",
         "key": "customerService#findAll",
         "label": "findAll",
+        "type": "serviceOperation"
+      },
+      {
+        "data": {
+          "fullUrl": null,
+          "method": null,
+          "name": "Score an order",
+          "operation": "score",
+          "outParams": [
+            {
+              "name": "band",
+              "type": "string"
+            }
+          ],
+          "params": [
+            {
+              "name": "total",
+              "type": "number"
+            }
+          ],
+          "service": "scoringService",
+          "url": null,
+          "usedBy": []
+        },
+        "file": null,
+        "id": "serviceOperation:scoringService#score",
+        "key": "scoringService#score",
+        "label": "score",
         "type": "serviceOperation"
       },
       {
@@ -6604,6 +6683,7 @@
     "securityPolicy:orderPolicy": "policies/case.policy",
     "sequence:orderNumberSequence": "sequences/order-number.sequence",
     "service:customerService": "services/customer.service",
+    "service:scoringService": "services/scoring.service",
     "sla:approvalSla": "slas/approval-sla.sla",
     "template:orderConfirmationTemplate": "templates/order-confirmation.tpl",
     "variableExtractor:orderVarExtractor": "extractors/order-vars.extractor"
@@ -7920,6 +8000,42 @@
     {
       "auth": null,
       "baseUrl": null,
+      "columns": [],
+      "file": "services/scoring.service",
+      "key": "scoringService",
+      "name": "Scoring Service",
+      "operations": [
+        {
+          "fullUrl": null,
+          "key": "score",
+          "method": null,
+          "name": "Score an order",
+          "outParams": [
+            {
+              "name": "band",
+              "type": "string"
+            }
+          ],
+          "params": [
+            {
+              "name": "total",
+              "type": "number"
+            }
+          ],
+          "script": "def band = total > 1000 ? 'high' : 'low'\nflw.setOutput('band', band)",
+          "scriptLanguage": "groovy",
+          "type": "script",
+          "url": null
+        }
+      ],
+      "referenceKey": null,
+      "referencedLiquibaseModelKey": null,
+      "tableName": null,
+      "type": "script"
+    },
+    {
+      "auth": null,
+      "baseUrl": null,
       "columns": [
         {
           "columnName": "delivery_city_",
@@ -8104,7 +8220,7 @@
     }
   ],
   "stats": {
-    "advice": 8,
+    "advice": 9,
     "archives": 1,
     "defects": 10,
     "dynamicEdges": 0,
@@ -8113,9 +8229,9 @@
     "exprSkippedNested": 0,
     "groups": 3,
     "java": 3,
-    "modelCount": 27,
-    "models": 27,
-    "nodes": 119,
+    "modelCount": 28,
+    "models": 28,
+    "nodes": 121,
     "scriptIssues": 2,
     "suspectEdges": 0
   },

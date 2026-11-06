@@ -141,7 +141,11 @@ Every problem on that expression is listed under this check, including any warni
 ### `scriptIssues` — script bodies
 
 Groovy and JavaScript bodies in BPMN script tasks, CMMN plan-item scripts, execution / task /
-lifecycle listeners, and an action's bot script. Two families:
+lifecycle listeners, an action's bot script, and the `config.script` of a script-type service
+operation — which the service registry runs only when something calls the operation, so a body that
+cannot run would otherwise first fail in front of that caller. The operation's input parameters are
+bound by name there, so an input called `task` is not reported as a root the context lacks. Two
+families:
 
 - **Structural** — unterminated string or comment, unclosed interpolation, unmatched or mismatched
   closer, unclosed opener.

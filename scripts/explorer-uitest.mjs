@@ -1345,6 +1345,9 @@ const probe = `<script>
     ok('the Scripts page lists every script as a card', cards.length>0 && cards.length===sv.querySelectorAll('[data-scriptrow]').length);
     ok('grouped under one section per model', sv.querySelectorAll('details.sect[data-sect^="rpt-scripts-"]').length>0);
     ok('the header counts the scripts', /Scripts/.test((sv.querySelector('.facts')||{}).textContent||''));
+    // a script-type service operation is a script like any other, under a chip of its own
+    ok('the script of a service operation has its own chip',!!sv.querySelector('.fbar .pchip[data-fv="service"]'));
+    ok('and its card, under the service', !!sv.querySelector('details.sect[data-sect="'+encodeURIComponent('rpt-scripts-service:scoringService')+'"] [data-scriptrow][data-group="service"]'));
     const pf=sv.querySelector('.pf');
     if(pf){ pf.value='zzzznope'; pf.dispatchEvent(new Event('input')); }
   });
@@ -1354,6 +1357,13 @@ const probe = `<script>
     ok('the scripts filter hides every card for a term matching nothing', shown.length===0, shown.length+' still shown');
     ok('and folds the model sections they were in', [...sv.querySelectorAll('details.sect[data-sect^="rpt-scripts-"]')].every(s=>s.hidden));
     const pf=sv.querySelector('.pf'); if(pf){ pf.value=''; pf.dispatchEvent(new Event('input')); }
+  });
+  // …and the service's own page shows it on the operation, the element a script finding on it opens
+  steps.push(()=>{ location.hash=enc('service:scoringService')+'&e=score'; });
+  steps.push(()=>{
+    const card=document.querySelector('#detail [data-sect="ops"] .card[data-el="score"]');
+    ok('a script operation carries its body on the service page', !!card && !!card.querySelector('.codeblk'), card?card.textContent.slice(0,80):'(no card)');
+    ok('and the operation is the element a link to it opens', !!card && card.classList.contains('hit'));
   });
 
 

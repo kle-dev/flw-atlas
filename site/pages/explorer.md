@@ -339,8 +339,10 @@ fails the build.
 
 The report pages — `#/checks`, `#/scripts`, `#/variables`, `#/schema` — are built from the same parts:
 the same header with the page's own numbers as facts, the same sections, the same tables; there a row of
-chips, one per section, is the page's map. A script on the Scripts page is the card the process page shows; a finding on the Checks page
-is a section the health rows jump to.
+chips, one per section, is the page's map. A script on the Scripts page is the card the process page shows
+— filtered by kind: script tasks, listeners, bot scripts and the scripts of script-type service operations,
+which the service's own page shows on the operation's card; a finding on the Checks page is a section the
+health rows jump to.
 
 ## Diagrams
 

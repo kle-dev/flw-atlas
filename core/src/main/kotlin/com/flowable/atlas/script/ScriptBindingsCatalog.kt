@@ -8,6 +8,7 @@ enum class ScriptContext(val display: String) {
     CMMN_SCRIPT_TASK("Script task (CMMN)"),
     CMMN_TASK_LISTENER("Task listener (CMMN)"),
     ACTION_BOT("Action bot"),
+    SERVICE_OPERATION("Service operation"),
     UNKNOWN("Unknown context"),
 }
 
@@ -345,6 +346,10 @@ object ScriptBindingsCatalog {
         ScriptContext.CMMN_TASK_LISTENER to
             (listOf(DELEGATE_TASK, PLAN_ITEM, CASE_INSTANCE) + FLW_ROOTS + CMMN_SERVICES + PLATFORM_BEAN_ROOTS),
         ScriptContext.ACTION_BOT to (FLW_ROOTS + FLW_ACTION_CONTEXT + PLATFORM_BEAN_ROOTS),
+        // The service registry's script invoker binds the operation's inputs by name and the flw API, and no
+        // scope: an operation is called from a process, a case, a form or Java alike, so `execution` there
+        // is exactly the wrong-context mistake the check exists for.
+        ScriptContext.SERVICE_OPERATION to (FLW_ROOTS + PLATFORM_BEAN_ROOTS),
         ScriptContext.UNKNOWN to emptyList(),
     ).mapValues { (_, roots) -> roots.associateBy { it.name } }
 

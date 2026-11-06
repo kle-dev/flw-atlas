@@ -315,6 +315,17 @@ internal object ScriptExamples {
             flw.setOutput('customerId', payload.path('customerId').asText());
             flw.setOutput('intent', flwActionContext.getIntent());
         """),
+
+        // ---------------------------------------------------------------- service operations
+
+        ex("Compute an operation's outputs", ScriptContext.SERVICE_OPERATION, "groovy", """
+            // A script service operation runs for whoever calls it — a process, a case, a form or Java —
+            // so it sees no execution: its inputs are bound by their parameter names, and what it
+            // hands back are its declared output parameters.
+            def band = total > 1000 ? 'high' : 'low'
+            flw.setOutput('band', band)
+            flw.setOutput('scoredAt', flw.time.now())
+        """),
     )
 
     /**
