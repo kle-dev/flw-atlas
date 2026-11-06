@@ -8,6 +8,8 @@ import com.flowable.atlas.environment.AtlasConnectionSelection
 import com.flowable.atlas.environment.AtlasConnectionSelection.Resolution
 import com.flowable.atlas.environment.AtlasDesignTarget
 import com.flowable.atlas.environment.ConnectionKind
+import com.flowable.atlas.explorer.AtlasArtifact
+import com.flowable.atlas.explorer.AtlasArtifactFiles
 import com.flowable.atlas.explorer.AtlasBrowser
 import com.flowable.atlas.explorer.AtlasExplorerFiles
 import com.flowable.atlas.explorer.AtlasExplorerStaleness
@@ -59,7 +61,7 @@ internal data class HubSnapshot(
     /** The models opened most recently, newest first. */
     val recentModels: List<RecentModel>,
     val explorerStale: Boolean,
-    /** The keys of the models newer than the newest explorer page, when it is stale. */
+    /** The keys of the models newer than the newest explorer page — or selected artifact — when it is stale. */
     val changedModels: List<String>,
     val browserAvailable: Boolean,
     val designResolution: Resolution,
@@ -75,6 +77,8 @@ internal data class HubSnapshot(
     /** Where the explorer search looked — what the empty state has to name to be believable. */
     val searchedIn: String,
     val findings: FindingsHealth = FindingsHealth(running = false, defects = null, advice = null, stale = false),
+    /** Whether the explorer page is among the selected artifacts — what the stale line calls the artifacts. */
+    val explorerSelected: Boolean = true,
 ) {
     val designConnection: AtlasConnection?
         get() = (designResolution as? Resolution.Selected)?.connection
@@ -117,6 +121,11 @@ internal data class HubSnapshot(
                 }
             }.orEmpty()
 
+            val selected = settings.atlasArtifacts
+            val setTimes = base?.let { b -> AtlasArtifactFiles.present(b, settings.atlasOutputDir, selected) }.orEmpty()
+                .map { p -> runCatching { Files.getLastModifiedTime(p).toMillis() }.getOrDefault(0L) }
+            val referenceTimes = staleReference(artifacts.map { it.modified }, setTimes, AtlasArtifact.EXPLORER_HTML in selected)
+
             val designResolution = AtlasConnectionSelection.resolution(project, ConnectionKind.DESIGN)
             val workResolution = AtlasConnectionSelection.resolution(project, ConnectionKind.WORK)
             val designConnection = (designResolution as? Resolution.Selected)?.connection
@@ -135,11 +144,9 @@ internal data class HubSnapshot(
                 skippedArchives = index?.skippedArchives?.toList().orEmpty(),
                 artifacts = artifacts,
                 recentModels = RecentModelsService.getInstance(project).recent(index),
-                // Stale when a model in scope is newer than the newest generated page.
-                explorerStale = AtlasExplorerStaleness.isStale(
-                    artifacts.map { it.modified }, AtlasExplorerStaleness.latestModelChange(project),
-                ),
-                changedModels = artifacts.maxOfOrNull { it.modified }?.let { newest -> index?.let { AtlasExplorerStaleness.changedSince(it, newest) } }.orEmpty(),
+                // Stale when a model in scope is newer than the newest of what Regenerate refreshes.
+                explorerStale = AtlasExplorerStaleness.isStale(referenceTimes, AtlasExplorerStaleness.latestModelChange(project)),
+                changedModels = referenceTimes.maxOrNull()?.let { newest -> index?.let { AtlasExplorerStaleness.changedSince(it, newest) } }.orEmpty(),
                 browserAvailable = AtlasBrowser.canOpenFiles(),
                 designResolution = designResolution,
                 workResolution = workResolution,
@@ -153,7 +160,17 @@ internal data class HubSnapshot(
                     val last = f.last
                     FindingsHealth(f.running, last?.defects, last?.advice, f.stale)
                 },
+                explorerSelected = AtlasArtifact.EXPLORER_HTML in selected,
             )
         }
+
+        /**
+         * The modification times "stale" is judged against: what Regenerate would refresh. With the explorer
+         * selected, the pages and the other selected artifacts. Without it, the selected artifacts alone — an
+         * old page beside them is not regenerated, so counting it kept a stale line that Regenerate could never
+         * clear — unless none of them exists yet, when the page is all there is to compare.
+         */
+        internal fun staleReference(pageTimes: List<Long>, setTimes: List<Long>, explorerSelected: Boolean): List<Long> =
+            if (explorerSelected || setTimes.isEmpty()) pageTimes + setTimes else setTimes
     }
 }

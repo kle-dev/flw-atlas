@@ -67,7 +67,8 @@ object AtlasGenerationRunner {
     /**
      * Refresh already-generated artifacts without a dialog — e.g. after a Design pull made them stale.
      * Regenerates the existing explorer page(s) in place when explorer HTML is the only selected
-     * artifact; otherwise regenerates the full selected set into the configured output folder.
+     * artifact; otherwise regenerates the full selected set into the configured output folder — also when
+     * no page was ever generated but the selected CLAUDE.md, graph or guide are there. See [plan].
      */
     fun regenerate(project: Project) {
         val projectDir = projectDir(project) ?: return
@@ -76,26 +77,43 @@ object AtlasGenerationRunner {
         // from a menu click or the Hub's link (OpenAtlasExplorerAction moved the same walk off the EDT).
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Looking for Atlas explorer files", true) {
             private var existing: List<Path> = emptyList()
+            private var present: List<Path> = emptyList()
 
             override fun run(indicator: ProgressIndicator) {
                 existing = AtlasExplorerFiles.find(projectDir, settings.atlasOutputDir)
+                present = AtlasArtifactFiles.present(projectDir, settings.atlasOutputDir, settings.atlasArtifacts)
             }
 
             override fun onSuccess() {
                 if (project.isDisposed) return
-                when {
+                when (plan(settings.atlasArtifacts, existing, present)) {
                     // One analysis per report, not per page: pages from the same folder, made from the same
                     // sub-project, share it — each page used to start its own full run, all at once.
-                    settings.atlasArtifacts == setOf(AtlasArtifact.EXPLORER_HTML) && existing.isNotEmpty() ->
+                    Plan.IN_PLACE ->
                         existing.groupBy { (AtlasExplorerFiles.rootOf(project, it) ?: projectDir) to it.parent }
                             .forEach { (key, pages) -> generateExplorers(project, key.first, pages) }
-                    // "Regenerate" promises to refresh what exists; with no page on disk the honest answer
-                    // is to say so and offer the generator's dialog, not to write the whole artifact set.
-                    existing.isEmpty() -> AtlasExplorerNotifier.notifyNoExplorer(project, settings.atlasOutputDir)
-                    else -> generateAll(project, projectDir.resolve(settings.atlasOutputDir))
+                    Plan.NOTHING_THERE -> AtlasExplorerNotifier.notifyNoExplorer(project, settings.atlasOutputDir)
+                    Plan.ALL -> generateAll(project, projectDir.resolve(settings.atlasOutputDir))
                 }
             }
         })
+    }
+
+    /** What [regenerate] does. */
+    internal enum class Plan { IN_PLACE, ALL, NOTHING_THERE }
+
+    /**
+     * What Regenerate does with the [selected] artifacts, the explorer pages that [exist] and the other
+     * selected artifacts [present] in the output folder. Only the explorer chosen, and pages there: those
+     * pages, where they are. Nothing generated at all: say so and offer the generator's dialog — Regenerate
+     * promises to refresh what exists, not to write a first artifact set unasked. Anything else refreshes
+     * the selected set in the output folder; it used to answer "No Atlas Explorer yet" to a team whose
+     * selection has no page, with its CLAUDE.md right there.
+     */
+    internal fun plan(selected: Set<AtlasArtifact>, existing: List<Path>, present: List<Path>): Plan = when {
+        selected == setOf(AtlasArtifact.EXPLORER_HTML) && existing.isNotEmpty() -> Plan.IN_PLACE
+        existing.isEmpty() && present.isEmpty() -> Plan.NOTHING_THERE
+        else -> Plan.ALL
     }
 
     /**

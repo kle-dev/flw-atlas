@@ -22,6 +22,7 @@ import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
+import org.jetbrains.annotations.TestOnly
 
 /**
  * Resolves *which* Flowable project Atlas operates on when the open IntelliJ project's root holds
@@ -119,6 +120,12 @@ class AtlasProjectRootService(private val project: Project) : Disposable {
     /** The cached detection result, or `null` if it has not been computed — never scans here. */
     fun detectedOrNull(): List<ProjectDetection.SubProject>? = detectedCache
 
+    /** Stands in for a detection walk in a test. */
+    @TestOnly
+    internal fun setDetectedForTest(detected: List<ProjectDetection.SubProject>?) {
+        detectedCache = detected
+    }
+
     /** Detect sub-projects on a pooled thread (never the EDT), cache it, then run [onDone] with it. */
     fun detectAsync(onDone: (List<ProjectDetection.SubProject>) -> Unit) {
         val base = project.basePath ?: return
@@ -152,5 +159,17 @@ class AtlasProjectRootService(private val project: Project) : Disposable {
         const val PROJECT_CHOSEN_PROPERTY = "flowable.atlas.projectChosen"
 
         fun getInstance(project: Project): AtlasProjectRootService = project.service()
+
+        /**
+         * The detected sub-project [selected] lies in — the deepest one when they nest — or null when it is
+         * in none of them. Compared as paths, not strings: `apps/bill` is no prefix of `apps/billing`.
+         */
+        internal fun owningSubProject(base: Path, detected: List<ProjectDetection.SubProject>, selected: Path): String? {
+            val sel = selected.toAbsolutePath().normalize()
+            val root = base.toAbsolutePath().normalize()
+            return detected.map { it.relPath }
+                .filter { it.isNotBlank() && sel.startsWith(root.resolve(it).normalize()) }
+                .maxByOrNull { root.resolve(it).normalize().nameCount }
+        }
     }
 }

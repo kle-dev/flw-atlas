@@ -114,9 +114,17 @@ internal class HubHeader(private val host: HubHost, private val onAttention: (Hu
             is HubAttention.ChooseProject -> message("hub.attention.chooseProject", attention.count)
             is HubAttention.IndexFailed -> message("hub.attention.indexFailed", attention.reason)
             is HubAttention.UnreadableArchives -> message("hub.attention.archives", attention.names.size)
-            is HubAttention.StaleExplorer ->
-                if (attention.changed.isEmpty()) message("hub.attention.stale")
-                else message("hub.attention.staleChanged", attention.changed.size, attention.changed.take(3).joinToString(", "), (attention.changed.size - 3).coerceAtLeast(0))
+            // "the explorer" only when there is one: a selection without a page has artifacts going stale
+            is HubAttention.StaleExplorer -> {
+                val n = attention.changed.size
+                val shown = attention.changed.take(3).joinToString(", ")
+                val more = (n - 3).coerceAtLeast(0)
+                when {
+                    n == 0 -> message(if (attention.explorer) "hub.attention.stale" else "hub.attention.stale.artifacts")
+                    attention.explorer -> message("hub.attention.staleChanged", n, shown, more)
+                    else -> message("hub.attention.staleChanged.artifacts", n, shown, more)
+                }
+            }
         }
         attentionLink.text = when (attention) {
             is HubAttention.RemovedEnvironment -> FlowableActionIds.text(FlowableActionIds.MANAGE_ENVIRONMENTS)

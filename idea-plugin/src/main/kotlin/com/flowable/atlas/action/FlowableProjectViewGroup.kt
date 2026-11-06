@@ -13,7 +13,9 @@ import com.intellij.openapi.project.DumbAware
  * Archive*, *Generate Atlas Explorer…* — shown on a folder, a model file, an archive or a `.json`, and on
  * nothing else. The Hub stays the plugin's surface; this is the one place a right-click on the models
  * themselves should not come up empty. *Go to Model…* used to be here too; it opens a search and has
- * nothing to do with what was right-clicked, so it made way for the model's own page.
+ * nothing to do with what was right-clicked, so it made way for the model's own page. *Generate Atlas
+ * Explorer…* stays because it does follow the click: on another Flowable sub-project's folder it names
+ * that project and generates it (see [GenerateAtlasExplorerAction.targetSubProject]).
  *
  * The `.json` is there for the comparison: a model generated into the project folder is a `.json` that
  * [ModelFiles.typeOf] only recognises inside a Design `*-models/` folder, and only while *Index Flowable

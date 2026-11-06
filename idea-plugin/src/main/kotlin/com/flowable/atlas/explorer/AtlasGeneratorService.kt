@@ -104,7 +104,7 @@ class AtlasGeneratorService(private val project: Project) {
             val result = extract(root, indicator, waiverFile(outputDir))
 
             indicator.text = "Rendering Atlas artifacts…"
-            val name = atlasProjectName(projectDir)
+            val name = AtlasArtifactFiles.projectName(projectDir)
             outputDir.toFile().mkdirs()
             // The folder is regenerated and may carry client data; waivers.json is the one file in it
             // meant to be kept. The same .gitignore the CLI writes says so.
@@ -223,12 +223,6 @@ class AtlasGeneratorService(private val project: Project) {
             append("${stat("edges")} links · $resolved resolved / $unresolved unresolved refs")
             if (diagnostics > 0) append(" · ⚠ $diagnostics parse issue(s)")
         }
-    }
-
-    /** The project name Atlas derives for output filenames: basename of the dir, last extension stripped. */
-    private fun atlasProjectName(projectDir: Path): String {
-        val base = projectDir.toAbsolutePath().normalize().fileName?.toString().orEmpty()
-        return base.substringBeforeLast('.', base).ifBlank { "project" }
     }
 
     companion object {

@@ -8,6 +8,7 @@ import com.flowable.atlas.environment.AtlasDesignTarget
 import com.flowable.atlas.environment.AtlasProtection
 import com.flowable.atlas.environment.ConnectionKind
 import com.flowable.atlas.events.AtlasEvents
+import com.flowable.atlas.explorer.AtlasArtifactFiles
 import com.flowable.atlas.explorer.AtlasExplorerFiles
 import com.flowable.atlas.explorer.AtlasGenerationRunner
 import com.flowable.atlas.index.FlowableIndex
@@ -406,10 +407,14 @@ class DesignPullService(private val project: Project) {
         }
         val type = if (outsideContent || failed.isNotEmpty() || removedKeys.isNotEmpty()) NotificationType.WARNING else NotificationType.INFORMATION
         val notification = AtlasNotifications.groupFor(type).createNotification(title, body, type)
-        // The index was already rebuilt above, but any generated Atlas Explorer is now out of date —
-        // offer a one-click regenerate when such artifacts exist.
-        val outputDir = FlowableAtlasProjectSettings.getInstance(project).atlasOutputDir
-        if (AtlasExplorerFiles.find(projectDir, outputDir).isNotEmpty()) {
+        // The index was already rebuilt above, but any generated Atlas artifact is now out of date —
+        // offer a one-click regenerate when such artifacts exist: explorer pages, or the other selected
+        // artifacts (a CLAUDE.md an agent reads goes stale on a pull just the same).
+        val settings = FlowableAtlasProjectSettings.getInstance(project)
+        val outputDir = settings.atlasOutputDir
+        if (AtlasExplorerFiles.find(projectDir, outputDir).isNotEmpty() ||
+            AtlasArtifactFiles.present(projectDir, outputDir, settings.atlasArtifacts).isNotEmpty()
+        ) {
             notification.addAction(NotificationAction.createSimple(FlowableActionIds.text(FlowableActionIds.REGENERATE_ATLAS_EXPLORER)) {
                 AtlasGenerationRunner.regenerate(project)
             })

@@ -59,7 +59,9 @@ server, then the whole panel being about the wrong project, then an index that i
 Atlas could not see, then artifact drift. It is the only row in the panel that comes and goes; everything below keeps its place.
 
 A stale explorer means a model in scope is newer than the newest generated page — whether it arrived
-through a Design pull, a `git pull`, an unzipped export or a hand edit. Both places say **which**
+through a Design pull, a `git pull`, an unzipped export or a hand edit. A project that generates no page,
+only what its agents read — CLAUDE.md, the graph, the Playwright guide — is judged by those files instead,
+and the line says *changed since the Atlas artifacts*; Regenerate then rewrites that set. Both places say **which**
 models: the attention line names the first three by key (*3 models changed since the explorer:
 DEMO-P001, DEMO-F002, DEMO-P007*), the banner above an open explorer tab the first five, then a count —
 with *Regenerate Atlas Explorer* on it, so a stale page says what changed where you are reading it. Regenerate is one registered action, and every place that offers it uses its name.

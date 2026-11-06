@@ -29,7 +29,10 @@ popup switches from the first to the second without retyping.
 with Shift-Shift for the hand; rebind it under *Settings → Keymap → Plugins → Flowable Atlas*. A
 right-click on a **folder, a model file, an archive or a `.json`** in the Project view offers *Open in
 Atlas Explorer* (on a model), *Compare Model with Archive* and *Generate Atlas Explorer…* — the actions
-that are about the thing under the cursor — and nothing on any other file. In the editor, *Copy Model Key*
+that are about the thing under the cursor — and nothing on any other file. On a folder of another of the
+repository's Flowable projects than the active one, the last reads *Generate Atlas Explorer for
+apps/billing…*, and makes that project the active one before it generates — the switch the Hub's picker
+makes, so that project's settings apply. In the editor, *Copy Model Key*
 and *Compare Model with Archive* sit together at the bottom of the context menu, behind one separator. The `.json` is in that list for the comparison: a model
 generated into the project folder is a `.json` that counts as a model only inside a Design `*-models/`
 folder, which is precisely the file the comparison is wanted on.
@@ -51,8 +54,8 @@ is *Explorer* the buttons read *Generate…* and *Open*. Every tool-window opene
 | Copy Model Key | Editor context menu, on a key — a literal or constant at a Flowable API site in Java, a cross-reference or the file's own key in a model file; the Atlas Hub's *Recent Models* context menu |
 | Compare Model with Archive | Project view context menu, on a model file or a `.json`; editor context menu, which is how an entry inside a `.bar`/`.zip` is reached. Its text names the direction it is about to take — *Compare with Model in Archive* on a file in the project, *Compare with Model in Project* on an entry in an archive |
 | Open in Atlas Explorer | Project view context menu, on a model file — the model's page in the newest generated explorer; on a model the index does not hold, a balloon says why: outside the active Flowable project, in a build folder, or no readable key. The editor offers the same step as an intention on a key, and on a Java class, method or REST handler a model uses |
-| Generate Atlas Explorer… | Atlas Hub, *Explorer* block; Project view context menu |
-| Regenerate Atlas Explorer | Atlas Hub attention line, when models changed since the last generation; the explorer tab's banner and toolbar; the balloon after a Design pull. Its icon is the platform's *build* hammer, so it cannot be mistaken for the explorer tab's *Reload* beside it |
+| Generate Atlas Explorer… | Atlas Hub, *Explorer* block; Project view context menu, where on another Flowable project's folder it names that project and switches to it first |
+| Regenerate Atlas Explorer | Atlas Hub attention line, when models changed since the last generation; the explorer tab's banner and toolbar; the balloon after a Design pull. Refreshes the explorer pages in place when the explorer is all that is selected, else the whole selected set in the output folder — also when the selection has no page and only its CLAUDE.md, graph or guide are there. Its icon is the platform's *build* hammer, so it cannot be mistaken for the explorer tab's *Reload* beside it |
 | Generate Model Constants | Atlas Hub ⋮ menu |
 | Generate Liquibase Changelog from Data Object… | — |
 | Generate Liquibase Changelogs from Apps… | — |

@@ -28,8 +28,11 @@ internal sealed interface HubAttention {
     /** Archives the index could not open — an unreadable .bar used to look like an empty project. */
     data class UnreadableArchives(val names: List<String>) : HubAttention
 
-    /** A model in scope is newer than the newest generated explorer page — [changed] names them, by key. */
-    data class StaleExplorer(val changed: List<String>) : HubAttention
+    /**
+     * A model in scope is newer than the newest generated explorer page, or selected artifact — [changed]
+     * names them, by key; [explorer] is false when the selection has no page, so the line names the artifacts.
+     */
+    data class StaleExplorer(val changed: List<String>, val explorer: Boolean = true) : HubAttention
 
     companion object {
         fun of(s: HubSnapshot): HubAttention? = when {
@@ -38,7 +41,7 @@ internal sealed interface HubAttention {
             s.projectsAwaitingChoice >= 2 -> ChooseProject(s.projectsAwaitingChoice)
             s.indexFailure != null -> IndexFailed(s.indexFailure)
             s.skippedArchives.isNotEmpty() -> UnreadableArchives(s.skippedArchives)
-            s.explorerStale -> StaleExplorer(s.changedModels)
+            s.explorerStale -> StaleExplorer(s.changedModels, s.explorerSelected)
             else -> null
         }
     }

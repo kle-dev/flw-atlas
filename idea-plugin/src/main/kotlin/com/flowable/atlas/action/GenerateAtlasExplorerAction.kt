@@ -7,9 +7,11 @@ import com.flowable.atlas.explorer.AtlasExplorerOpener
 import com.flowable.atlas.explorer.AtlasGenerationRunner
 import com.flowable.atlas.project.AtlasProjectRootService
 import com.flowable.atlas.settings.FlowableAtlasProjectSettings
+import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
@@ -28,11 +30,19 @@ import java.nio.file.Path
  * default location, not the interaction). On success a balloon offers to open the explorer in the
  * external browser or inside the IDE; generated files stay in the project so they can be reopened
  * later.
+ *
+ * From the Project view it is about the folder under the cursor: on a folder inside another detected
+ * Flowable sub-project than the active one, the entry names that sub-project and makes it the active one
+ * before generating — the switch the Hub's picker makes, so that project's settings apply.
  */
 class GenerateAtlasExplorerAction : AnAction(), DumbAware {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
+        // Right-clicked on another sub-project's folder: generating the active one would ignore the click,
+        // and analysing that folder under the active one's settings would mix the two.
+        targetSubProject(project, e.place, e.getData(CommonDataKeys.VIRTUAL_FILE))
+            ?.let { AtlasProjectRootService.getInstance(project).setActiveSubProject(it) }
         val projectDir = AtlasProjectRootService.getInstance(project).activeProjectDir()
         if (projectDir == null) {
             AtlasNotifications.info(project, message("explorer.noProjectDir"))
@@ -103,7 +113,27 @@ class GenerateAtlasExplorerAction : AnAction(), DumbAware {
     }
 
     override fun update(e: AnActionEvent) {
-        e.presentation.isEnabled = e.project?.basePath != null
+        val project = e.project
+        e.presentation.isEnabled = project?.basePath != null
+        if (project == null) return
+        // The menu says it before the click does it.
+        targetSubProject(project, e.place, e.getData(CommonDataKeys.VIRTUAL_FILE))
+            ?.let { e.presentation.text = message("explorer.generateFor", it) }
+    }
+
+    /**
+     * The sub-project a Project-view click on [file] is about, when that is not the active one — null
+     * anywhere else (the menu, the Hub), on a folder outside every detected sub-project, and before
+     * detection has run: [AtlasProjectRootService.detectedOrNull] is a field read, never a walk, because
+     * this runs on every update.
+     */
+    internal fun targetSubProject(project: Project, place: String, file: VirtualFile?): String? {
+        if (place != ActionPlaces.PROJECT_VIEW_POPUP || file == null) return null
+        val selected = file.fileSystem.getNioPath(file) ?: return null
+        val base = project.basePath?.let { Path.of(it) } ?: return null
+        val roots = AtlasProjectRootService.getInstance(project)
+        val detected = roots.detectedOrNull()?.takeIf { it.size >= 2 } ?: return null
+        return AtlasProjectRootService.owningSubProject(base, detected, selected)?.takeIf { it != roots.activeSubProject() }
     }
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
