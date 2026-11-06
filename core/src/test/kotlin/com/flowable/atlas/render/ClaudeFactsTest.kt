@@ -260,6 +260,97 @@ class ClaudeFactsTest {
         assertTrue(out, out.contains("**Key conventions:** process `DEMO-P#` (e.g. `DEMO-P00"))
     }
 
+    /** Processes given as `key to file`, for the facts that depend on where a model lives. */
+    private fun renderModels(vararg models: Pair<String, String>): String {
+        val result = mapOf(
+            "stats" to mapOf("models" to models.size, "java" to 0, "archives" to 0),
+            "graph" to mapOf(
+                "nodes" to models.map { (key, file) ->
+                    mapOf("id" to "process:$key", "type" to "process", "key" to key, "label" to key, "file" to file,
+                        "data" to emptyMap<String, Any?>())
+                },
+                "edges" to emptyList<Any?>(),
+            ),
+        )
+        return ClaudeRenderer.render(result, tmp.root)
+    }
+
+    /** Each app prefixes its own keys: the convention is the shape after the prefix, and the prefixes are named. */
+    @Test
+    fun perAppKeyPrefixesAreStatedAsOnePatternWithThePrefixesSeen() {
+        val out = renderModels("A-P1" to "a/p1.bpmn", "A-P2" to "a/p2.bpmn", "B-P1" to "b/p1.bpmn", "C-P4" to "c/p4.bpmn")
+        val line = out.lines().single { it.startsWith("- **Key conventions:**") }
+        assertTrue(line, line.contains("process `<APP>-P#` (e.g. `A-P1`)"))
+        assertTrue(line, line.contains("`A`, `B`, `C`"))
+        assertFalse("one app's prefix is not the project's: $line", line.contains("`A-P#`"))
+    }
+
+    /** One stray prefix among a project's own is a slip, not a second app's convention to copy. */
+    @Test
+    fun aStrayPrefixDoesNotTurnTheProjectsOwnIntoAPerAppPattern() {
+        val keys = (1..6).map { "ORD-P$it" to "a/p$it.bpmn" } + ("ORX-P1" to "a/x.bpmn")
+        val line = renderModels(*keys.toTypedArray()).lines().single { it.startsWith("- **Key conventions:**") }
+        assertTrue(line, line.contains("process `ORD-P#` (e.g. `ORD-P1`)"))
+        assertFalse(line, line.contains("<APP>"))
+    }
+
+    /** Two keys of six agreeing is a coincidence, not a convention. */
+    @Test
+    fun aPatternFewKeysFollowIsNotAConvention() {
+        val out = renderModels("xSub1" to "p/1.bpmn", "xSub2" to "p/2.bpmn", "alpha" to "p/a.bpmn",
+            "beta" to "p/b.bpmn", "gamma" to "p/c.bpmn", "delta" to "p/d.bpmn")
+        assertFalse(out, out.contains("**Key conventions:**"))
+    }
+
+    @Test
+    fun aTestFixtureIsNotWhereTheAgentWrites() {
+        val out = renderModels("orderProcess" to "models/q.bpmn", "fixtureProcess" to "src/test/resources/models/p.bpmn")
+        val line = out.lines().single { it.startsWith("- **Where to write, what not to touch:**") }
+        assertTrue(line, line.contains("unpacked files under `models/`"))
+        assertFalse(line, line.contains("src/test"))
+    }
+
+    @Test
+    fun manyArchivesInOneFolderAreNamedByTheirFolderAndCount() {
+        val out = renderModels(*(1..5).map { "p$it" to "apps/app$it.zip!p$it.bpmn" }.toTypedArray())
+        assertTrue(out, out.contains("Design exports packed in 5 archives under `apps/`"))
+        val scattered = renderModels(*(1..5).map { "p$it" to "m$it/app.zip!p$it.bpmn" }.toTypedArray())
+        assertTrue(scattered, scattered.contains("`m1/app.zip`, `m2/app.zip`, `m3/app.zip` … (+2 more)"))
+    }
+
+    /** The backend to start is the module that deploys the models, not the first `*-app` alphabetically. */
+    @Test
+    fun theRunLineNamesTheAppModuleThatHoldsTheModels() {
+        tmp.newFile("pom.xml").writeText("<project/>")
+        // Both boot, as Flowable Control and Work each do: only the models tell them apart.
+        for (module in listOf("a-control-app", "b-engage-app")) {
+            tmp.newFolder(module, "src", "main", "java", "com", "example")
+            tmp.newFile("$module/src/main/java/com/example/DemoApplication.java")
+                .writeText("package com.example;\n\n@SpringBootApplication\npublic class DemoApplication {}\n")
+        }
+        val out = renderModels("demoProcess" to "b-engage-app/src/main/resources/apps/demo.zip!p.bpmn")
+        assertTrue(out, out.contains("Spring Boot app in `b-engage-app/`"))
+    }
+
+    /** A library module can hold the models the app bundles; it starts nothing, so it is not the app to run. */
+    @Test
+    fun theModuleThatBootsWinsOverALibraryHoldingTheModels() {
+        tmp.newFolder("x-app", "src", "main", "java", "com", "example")
+        tmp.newFile("x-app/src/main/java/com/example/DemoApplication.java")
+            .writeText("package com.example;\n\n@SpringBootApplication\npublic class DemoApplication {}\n")
+        tmp.newFolder("x-workflow")
+        val out = renderModels("demoProcess" to "x-workflow/src/main/resources/apps/demo.zip!p.bpmn")
+        assertTrue(out, out.contains("Spring Boot app in `x-app/`"))
+    }
+
+    @Test
+    fun withoutModelsInAnyModuleTheAdminAppIsNotTheOneToRun() {
+        tmp.newFolder("x-control-app")
+        tmp.newFolder("x-work-app")
+        val out = renderModels("demoProcess" to "models/p.bpmn")
+        assertTrue(out, out.contains("Spring Boot app in `x-work-app/`"))
+    }
+
     private fun finding(check: String, severity: String, message: String): Map<String, Any?> = mapOf(
         "check" to check, "kind" to com.flowable.atlas.graph.CheckCatalog.kind(check), "severity" to severity,
         "node" to "process:p", "label" to "p", "message" to message,

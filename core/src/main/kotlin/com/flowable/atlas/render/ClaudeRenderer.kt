@@ -3,6 +3,7 @@ package com.flowable.atlas.render
 import com.flowable.atlas.expr.ExpressionDialect
 import com.flowable.atlas.expr.catalog.FlowableExpressionCatalog
 import com.flowable.atlas.model.MiniJson
+import com.flowable.atlas.model.ModelPaths
 import com.flowable.atlas.script.ScriptBindingsCatalog
 import com.flowable.atlas.script.ScriptContext
 import java.io.File
@@ -78,6 +79,15 @@ object ClaudeRenderer {
         }
     }
 
+    /** A key's leading upper-case segment and its dash — `ORD-` in `ORD-P001`, the prefix an app gives its keys. */
+    private val APP_PREFIX = Regex("^([A-Z][A-Z0-9]*)-")
+
+    /**
+     * Words in a module name that mark a Flowable app which does not deploy the project's models — the
+     * admin (Control) and modelling (Design) applications that sit beside a Work app in one build.
+     */
+    private val NON_DEPLOYING_APPS = listOf("control", "admin", "design", "modeler")
+
     @Suppress("UNCHECKED_CAST")
     fun render(result: Map<String, Any?>, root: File, layout: Layout = Layout()): String {
         // The same name every sibling artifact carries (`.` names the directory, not a file called `.`).
@@ -108,23 +118,48 @@ object ClaudeRenderer {
         /**
          * The naming pattern a model type follows, e.g. ``process `DEMO-P#` (e.g. `DEMO-P041`)``.
          *
-         * Only stated when there is actually a pattern: with one model per type it used to emit
-         * ``process `orderProcess` (e.g. `orderProcess`)`` — the same string twice, presented as a
-         * convention. A convention needs either digits that vary or two keys that agree.
+         * Only stated when it is the convention: at least two keys, and at least half of them, follow it.
+         * The most frequent pattern used to be stated whatever its share — one app's prefix in a project
+         * of six apps (9 of 46 processes), or Design's default `decision#` on 4 of 9 — and an agent adding
+         * a model copied it. Where each app prefixes its own keys (`A-P1`, `B-P1`), the varying leading
+         * segment is generalized to `<APP>` when that covers more keys than any literal pattern does and no
+         * one prefix already holds three quarters of them, and the prefixes seen are named. Models only a
+         * test source set holds are not the project's convention and are not counted.
          *
-         * A decision inside a DRD is no evidence: its id is one Design generated (`decision4`), never a key
-         * anyone calls, and four of them once made "decision `decision#`" the convention an agent was told.
+         * A decision inside a DRD is no evidence either: its id is one Design generated (`decision4`), never
+         * a key anyone calls, and four of them once made "decision `decision#`" the convention an agent was
+         * told.
          */
         fun keypat(t: String): String? {
             val keys = bt(t).filter { (it["data"] as? Map<*, *>)?.get("embeddedIn") == null }
+                .filter { !ModelPaths.isTestSourceModel(it["file"] as? String) }
                 .mapNotNull { val k = it["key"]; if (truthy(k)) k as String else null }
             if (keys.isEmpty()) return null
-            val counts = LinkedHashMap<String, Int>()
-            for (k in keys) { val p = k.replace(digits, "#"); counts[p] = (counts[p] ?: 0) + 1 }
-            val top = counts.entries.maxByOrNull { it.value }!!
-            val pat = top.key
-            val example = keys.firstOrNull { it.replace(digits, "#") == pat } ?: keys[0]
-            if (top.value < 2 && pat == example) return null      // nothing generalizes from one name
+            fun literal(k: String) = k.replace(digits, "#")
+            fun general(k: String): String {
+                val m = APP_PREFIX.find(k) ?: return literal(k)
+                return "<APP>-" + literal(k.substring(m.range.last + 1))
+            }
+            fun top(pattern: (String) -> String): Map.Entry<String, Int> {
+                val counts = LinkedHashMap<String, Int>()
+                for (k in keys) { val p = pattern(k); counts[p] = (counts[p] ?: 0) + 1 }
+                return counts.entries.maxByOrNull { it.value }!!
+            }
+            val lit = top(::literal)
+            val gen = top(::general)
+            val prefixes = keys.filter { general(it) == gen.key }
+                .mapNotNull { APP_PREFIX.find(it)?.groupValues?.get(1) }.distinct()
+            // A single prefix is that project's literal convention (`DEMO-P#`), not a per-app one — and so
+            // is a prefix that holds three quarters of the keys: one stray `ORX-F1` among 160 `ORD-F` forms
+            // is a slip, and stating `<APP>-F#` would name the slip as an app's prefix to copy.
+            val generalized = gen.value > lit.value && prefixes.size >= 2 && 4 * lit.value < 3 * gen.value
+            val (pat, count) = if (generalized) gen.key to gen.value else lit.key to lit.value
+            if (count < 2 || 2 * count < keys.size) return null
+            val example = keys.first { (if (generalized) general(it) else literal(it)) == pat }
+            if (generalized) {
+                return "`$pat` (e.g. `$example`), with the app's own prefix for `<APP>` — " +
+                        Fmt.cap(prefixes.map { "`$it`" }, 5)
+            }
             return if (pat == example) "`$pat`" else "`$pat` (e.g. `$example`)"
         }
 
@@ -222,7 +257,12 @@ object ClaudeRenderer {
         L.add("## 4. This project (auto-discovered by Atlas)\n")
         val mf = LinkedHashMap<String, Int>()
         val archives = LinkedHashSet<String>()
-        for (n in nodes) if (n["type"] in MODEL && truthy(n["file"])) {
+        // A model only a test source set holds is a fixture: naming its folder under "where to write"
+        // sends the agent to change a test instead of the app (Work never deploys it either).
+        val deployedModels = nodes.filter {
+            it["type"] in MODEL && truthy(it["file"]) && !ModelPaths.isTestSourceModel(it["file"].toString())
+        }
+        for (n in deployedModels) {
             val f = n["file"].toString()
             if (f.contains("!")) archives.add(f.substringBefore("!"))
             else { val d = folder(f); mf[d] = (mf[d] ?: 0) + 1 }
@@ -237,7 +277,14 @@ object ClaudeRenderer {
             // §3 hedges ("unless this project's convention is to edit the model files directly"); here the
             // hedge is resolved from what was actually found, so the agent is told rather than sent to check.
             val loose = if (modelDirs.isNotEmpty()) ", plus unpacked model files under ${modelDirs.joinToString(", ")}" else ""
-            where.add("the models are Design exports packed in ${archives.take(3).joinToString(", ") { "`$it`" }}$loose — " +
+            // Three names, or the folder they share: the first three of eight read as all of them.
+            val parents = archives.map { folder(it) }.distinct()
+            val packed = when {
+                archives.size <= 3 -> archives.joinToString(", ") { "`$it`" }
+                parents.size == 1 && parents[0] != "." -> "${archives.size} archives under `${parents[0]}/`"
+                else -> Fmt.cap(archives.map { "`$it`" }, 3)
+            }
+            where.add("the models are Design exports packed in $packed$loose — " +
                     "never edit the exports; describe the model change instead (§3)")
         } else if (modelDirs.isNotEmpty()) {
             where.add("the models are unpacked files under ${modelDirs.joinToString(", ")} — check `git log` on one " +
@@ -276,11 +323,25 @@ object ClaudeRenderer {
                     if (cand.isNotEmpty()) run.add("frontend `cd $feDir && yarn ${cand.sorted().first()}`")
                 } catch (_: Exception) { }
             }
+            // The application that deploys the models. Alphabetical order alone picked `x-control-app` —
+            // Flowable Control, the admin app — over `x-engage-app`, which bundled all eight archives, so
+            // the agent verifying a model change started the wrong application. Among the modules that
+            // boot (several do, in a build with Control and Design beside Work), the one holding the most
+            // models wins. Booting is checked first because the models can sit in a library module the
+            // app depends on (`x-workflow` beside `x-app`), which holds them and starts nothing.
             val appmod = try {
-                (root.listFiles()?.map { it.name }?.sorted() ?: emptyList()).firstOrNull { d ->
+                val candidates = (root.listFiles()?.map { it.name }?.sorted() ?: emptyList()).filter { d ->
                     File(root, d).isDirectory &&
                             (d.endsWith("-app") || d.endsWith("-work") || d.endsWith("-workflow") || d.endsWith("-runtime"))
                 }
+                val pool = if (candidates.size < 2) candidates
+                    else candidates.filter { bootsSpring(File(root, it)) }.ifEmpty { candidates }
+                fun weight(module: String) = deployedModels.count {
+                    it["file"].toString().substringBefore('!').replace('\\', '/').startsWith("$module/")
+                }
+                pool.map { it to weight(it) }.filter { it.second > 0 }.maxByOrNull { it.second }?.first
+                    ?: pool.firstOrNull { c -> NON_DEPLOYING_APPS.none { c.lowercase().contains(it) } }
+                    ?: pool.firstOrNull()
             } catch (_: Exception) { null }
             if (appmod != null) run.add("backend = Spring Boot app in `$appmod/`")
             // Without a detected start script or app module the line used to fall back to a sentence
@@ -381,6 +442,26 @@ object ClaudeRenderer {
         // Reference material goes last: it is looked up, not read top to bottom.
         L.addAll(expressionCheatsheet(result))
         return L.joinToString("\n")
+    }
+
+    /**
+     * Whether [module] holds a `@SpringBootApplication` class. Breadth first, because that class sits at
+     * the root of its package, and bounded, because a module that boots nothing is read to the end.
+     */
+    private fun bootsSpring(module: File): Boolean {
+        val queue = ArrayDeque(listOf("java", "kotlin").map { File(module, "src/main/$it") }.filter { it.isDirectory })
+        var read = 0
+        while (queue.isNotEmpty() && read < 2000) {
+            val children = queue.removeFirst().listFiles()?.sortedBy { it.name } ?: emptyList()
+            for (f in children) {
+                if (f.isDirectory) queue.addLast(f)
+                else if (f.name.endsWith(".java") || f.name.endsWith(".kt")) {
+                    read++
+                    if (f.readText().contains("@SpringBootApplication")) return true
+                }
+            }
+        }
+        return false
     }
 
     /**
